@@ -5,6 +5,10 @@ if __name__ == '__main__':
 
     ticker = "COIN"
 
+    trade = client.get_previous_close_agg(ticker=ticker)
+    data = trade[0]
+    print(data.close)
+    raise AttributeError
     aggs = []
     for a in client.list_aggs(ticker=ticker, multiplier=1, timespan='minute', from_="2023-01-01", to="2023-06-13", limit=50000):
         aggs.append(a)
