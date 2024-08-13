@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"time"
 
 	polygon "github.com/polygon-io/client-go/rest"
@@ -13,15 +13,32 @@ func main() {
 
 	// init client
 	c := polygon.New("ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm")
-
-	params := models.GetTickerDetailsParams{
-		Ticker: "AAPL",
-	}.WithDate(models.Date(time.Date(2021, 7, 22, 0, 0, 0, 0, time.Local)))
-
-	res, err := c.GetTickerDetails(context.Background(), params)
-	if err != nil {
-		log.Fatal(err)
+	fmt.Print("Hello")
+	parameters := &models.ListAggsParams{
+		Ticker:     "COIN",
+		Multiplier: 5,
+		Timespan:   "day",
+		To:         models.Millis(time.Date(2024, 5, 22, 0, 0, 0, 0, time.UTC)),
+		From:       models.Millis(time.Date(2024, 1, 22, 0, 0, 0, 0, time.UTC)),
 	}
-	log.Print(res) // do something with the result
+
+	iter := c.ListAggs(context.Background(), parameters)
+
+	for iter.Next() {
+
+		fmt.Print(iter.Item())
+	}
+	m := AssetClass("stocks")
+	limit * int := 1000
+	listParams := &models.ListTickersParams{
+		Market: &m,
+		Limit:  &limit,
+	}
+	tickerIter := c.ListTickers(context.Background(), listParams)
+
+	for tickerIter.Next() {
+
+		fmt.Print(tickerIter.Item())
+	}
 
 }
