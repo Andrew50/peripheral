@@ -17,9 +17,9 @@ func main() {
 	parameters := &models.ListAggsParams{
 		Ticker:     "COIN",
 		Multiplier: 5,
-		Timespan:   "day",
-		To:         models.Millis(time.Date(2024, 5, 22, 0, 0, 0, 0, time.UTC)),
-		From:       models.Millis(time.Date(2024, 1, 22, 0, 0, 0, 0, time.UTC)),
+		Timespan:   "minute",
+		To:         models.Millis(time.Date(2024, 8, 13, 0, 0, 0, 0, time.UTC)),
+		From:       models.Millis(time.Date(2024, 8, 12, 0, 0, 0, 0, time.UTC)),
 	}
 
 	iter := c.ListAggs(context.Background(), parameters)
@@ -27,18 +27,6 @@ func main() {
 	for iter.Next() {
 
 		fmt.Print(iter.Item())
-	}
-	m := AssetClass("stocks")
-	limit * int := 1000
-	listParams := &models.ListTickersParams{
-		Market: &m,
-		Limit:  &limit,
-	}
-	tickerIter := c.ListTickers(context.Background(), listParams)
-
-	for tickerIter.Next() {
-
-		fmt.Print(tickerIter.Item())
 	}
 
 }
