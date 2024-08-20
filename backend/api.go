@@ -2,56 +2,17 @@ package main
 
 import (
     "fmt"
-    "os"
-    "api/tasks"
+    //"api/tasks"
+    "api/data"
     "encoding/json"
     "log"
     "net/http"
-    "context"
+/*    "context"
     "github.com/jackc/pgx/v4/pgxpool"
     "github.com/go-redis/redis/v8"
-    "time"
+    */
 )
 
-type Conn struct {
-    DB *pgxpool.Pool
-    Cache *redis.Client
-    AI *redisai.Client
-}
-
-func GetConn(container bool) *Conn {
-    var db_url string
-    var cache_url string
-    if container {
-        db_url = "postgres://postgres:pass@db:5432"
-        cache_url="redis:6379"
-    } else {
-        db_url = "postgres://postgres:pass@localhost:5432"
-        cache_url="localhost:6379"
-    }
-    var db *pgxpool.Pool
-    var err error
-    for true {
-        db, err = pgxpool.Connect(context.Background(), db_url)
-        if err != nil {
-            //if strings.Contains(err.Error(), "the database system is starting up") {
-            if true{
-                log.Println("waiting for db")
-            } else {
-                log.Fatalf("Unable to connect to database: %v\n", err)
-            }
-            time.Sleep(5 * time.Second)
-        } else {
-            break
-        }
-    }
-    cache := redis.NewClient(&redis.Options{Addr: cache_url,})
-    err = cache.Ping(context.Background()).Err()
-    if err != nil {
-        log.Fatalf("Unable to connect to cache: %v\n", err)
-    }
-    return &Conn{DB: db, Cache: cache}
-}
 
 var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, error) {
     "signup": Signup,
@@ -59,8 +20,8 @@ var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, erro
 }
 
 var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}, error){
-    "getJournal": tasks.GetJournal,
-    "setJournal": tasks.SetJournal,
+    /*"getJournal": tasks.GetJournal,
+    "setJournal": tasks.SetJournal,*/
 }
 
 type Request struct {
@@ -151,11 +112,7 @@ func private_handler(conn *data.Conn) http.HandlerFunc {
 }
 
 func main() {
-    _, env_exists := os.LookupEnv("IN_CONTAINER")
-    conn := data.GetConn(env_exists)
-    defer conn.DB.Close()
-    quit := data.StartScheduler(conn)
-    defer close(quit)
+    conn := data.InitConn()
     http.HandleFunc("/public", public_handler(conn))
     http.HandleFunc("/private", private_handler(conn))
     fmt.Println("Server running on port 5057")
