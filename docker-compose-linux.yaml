@@ -1,0 +1,26 @@
+version: '3.6'
+
+services:
+    backend:
+        build:
+            context: /home/aj/dev/study/backend
+            dockerfile: Dockerfile
+        restart: always
+          #        ports:
+          #- "5057:5057"
+        volumes:
+            - /home/aj/dev/study/backend/:/app
+        networks:
+            - compose_network
+    db:
+        build:
+           context: /home/aj/dev/study/db
+           dockerfile: Dockerfile
+        ports:
+          - "5432:5432"
+        networks:
+            - compose_network
+
+networks:
+  compose_network:
+    driver: bridge
