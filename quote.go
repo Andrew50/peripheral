@@ -40,18 +40,42 @@ func getQuote(client *polygon.Client, nanoTimestamp models.Nanos, ticker string,
 	res := client.ListQuotes(context.Background(), params)
 	return res
 }
+func listTickers(client *polygon.Client, dateString string, startTicker string, numTickers int) *iter.Iter[models.Ticker] {
+	params := models.ListTickersParams{}.
+		WithTicker(models.GTE, startTicker).
+		WithMarket(models.AssetStocks).
+		WithSort(models.TickerSymbol).
+		WithLimit(numTickers)
+	if dateString != "now" {
+		dt, err := time.Parse(time.DateOnly, dateString)
+		fmt.Print(dt)
+		if err != nil {
+			log.Fatal(err)
+		}
+		dateObj := models.Date(dt)
+		params = params.WithDate(dateObj)
+	}
+	res := client.ListTickers(context.Background(), params)
+	return res
+}
 
 func main() {
 	c := polygon.New("ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm")
-	var ticker string = "COIN"
-	marketTimeZone, tzErr := time.LoadLocation("America/New_York")
+	var marketTimeZone, tzErr = time.LoadLocation("America/New_York")
 	if tzErr != nil {
 		log.Fatal(tzErr)
+		fmt.Print(marketTimeZone)
 	}
+	var ticker string = "COIN"
+
 	fmt.Print(getLastQuote(c, ticker))
 	ticker = "NVDA"
-	timestamp := models.Nanos(time.Date(2020, 3, 16, 9, 35, 0, 0, marketTimeZone))
-	getQuote(c, timestamp, ticker, "desc", 10000)
-	fmt.Print("done")
+	//timestamp := models.Nanos(time.Date(2020, 3, 16, 9, 35, 0, 0, marketTimeZone))
+	//getQuote(c, timestamp, ticker, "desc", 10000)
+	res := listTickers(c, "2024-08-16", "A", 1000)
+	for res.Next() {
+		fmt.Print(res.Item())
+
+	}
 
 }
