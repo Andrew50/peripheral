@@ -1,13 +1,15 @@
 package main
 
 import (
-    "github.com/polygon-io/client-go/rest/models"
-    polygon "github.com/polygon-io/client-go/rest"
-    "context"
-    "fmt"
-    "log"
+	"context"
+	"fmt"
+	"log"
+
+	polygon "github.com/polygon-io/client-go/rest"
+	"github.com/polygon-io/client-go/rest/models"
 )
 
+<<<<<<< HEAD
 const apiKey = "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm"
 
 
@@ -30,36 +32,38 @@ type instance struct {
 
 
 func relatedTickers (ticker string) ([]string, error) {
+=======
+func relatedTickers(ticker string) ([]string, error) {
+>>>>>>> a6035128e1cfadf900e41e6c7309c76b0b7496f1
 	c := polygon.New(apiKey)
 	params := models.GetTickerRelatedCompaniesParams{
 		Ticker: ticker,
 	}
 	r, err := c.GetTickerRelatedCompanies(context.Background(), &params)
-    if err != nil {
-        return nil, err
-    }
-    res := r.Results
-    tickers := make ([]string, len(res))
-    for i, comp := range res {
-        tickers[i] = comp.Ticker
-    }
-    return tickers, err
+	if err != nil {
+		return nil, err
+	}
+	res := r.Results
+	tickers := make([]string, len(res))
+	for i, comp := range res {
+		tickers[i] = comp.Ticker
+	}
+	return tickers, err
 }
-    
-    
-func main() {
 
-    var ticker string
-    for {
-    fmt.Printf("input ticker: ")
-    fmt.Scanf("%s", &ticker)
-    results, err := relatedTickers(ticker)
-    if err != nil {
-        log.Fatal(err)
-    }
-    for _, tick := range results {
-        fmt.Print(tick)
-        fmt.Println()
-    }
-}
+func instance() {
+
+	var ticker string
+	for {
+		fmt.Printf("input ticker: ")
+		fmt.Scanf("%s", &ticker)
+		results, err := relatedTickers(ticker)
+		if err != nil {
+			log.Fatal(err)
+		}
+		for _, tick := range results {
+			fmt.Print(tick)
+			fmt.Println()
+		}
+	}
 }
