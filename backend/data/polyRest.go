@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	polygon "github.com/polygon-io/client-go/rest"
@@ -85,36 +86,23 @@ func listTickers(client *polygon.Client, startTicker string, dateString string, 
 }
 func AllTickers(client *polygon.Client, dateString string) []models.Ticker {
 	tickerList := []models.Ticker{}
-	lastTickerOfRequest := ""
-	for {
-		iter := listTickers(client, lastTickerOfRequest, dateString, models.GT, 1000)
-		if !iter.Next() {
-			break
-		}
-		for iter.Next() {
-			tickerList = append(tickerList, iter.Item())
-		}
-		lastTickerOfRequest = tickerList[len(tickerList)-1].Ticker
-	}
-	return tickerList
-
-}
-func AllTickersTickerOnly(client *polygon.Client, dateString string) []string {
-	tickerList := []string{}
-	lastTickerOfRequest := ""
-	iter := listTickers(client, lastTickerOfRequest, dateString, models.GT, 1000)
-	c := 0
+	iter := listTickers(client, "", dateString, models.GT, 1000)
 	for iter.Next() {
-		ticker := iter.Item().Ticker
-		tickerList = append(tickerList, ticker)
-		fmt.Println(ticker)
-		c++
+		tickerList = append(tickerList, iter.Item())
 	}
-	lastTickerOfRequest = tickerList[len(tickerList)-1]
-	fmt.Println(c)
-	fmt.Println(len(tickerList))
-
 	return tickerList
+}
+func AllTickersTickerOnly(client *polygon.Client, dateString string) *[]string {
+	tickerList := []string{}
+	st := time.Now()
+	iter := listTickers(client, "", dateString, models.GT, 1000)
+	fmt.Println(time.Since(st))
+	start := time.Now()
+	for iter.Next() {
+		tickerList = append(tickerList, iter.Item().Ticker)
+	}
+	fmt.Println(time.Since(start))
+	return &tickerList
 }
 
 func tickerDetails(client *polygon.Client, ticker string, dateString string) *models.Ticker {
@@ -222,5 +210,24 @@ func nanosFromDatetimeString(datetime string) models.Nanos {
 	}
 	log.Fatal(errors.New("invalid datetime string"))
 	return models.Nanos(time.Now())
+}
+func getTickerFromCIK(client *polygon.Client, cik int) string {
+	params := models.ListTickersParams{}.WithCIK(cik)
+	iter := client.ListTickers(context.Background(), params)
+	for iter.Next() {
 
+	}
+	return iter.Item().Ticker
+}
+func getCIK(client *polygon.Client, ticker string) int {
+	params := models.ListTickersParams{}.WithTicker(models.EQ, ticker)
+	iter := client.ListTickers(context.Background(), params)
+	for iter.Next() {
+
+	}
+	cik, err := strconv.Atoi(iter.Item().CIK)
+	if err != nil {
+		log.Fatal("error retreiving cik")
+	}
+	return cik
 }
