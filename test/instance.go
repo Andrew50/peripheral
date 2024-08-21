@@ -11,6 +11,24 @@ import (
 const apiKey = "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm"
 
 
+
+type relatedShit struct {
+    markets []int,
+    sectors []int,
+    stocks []int,
+}
+type instance struct {
+    securityId int,
+    timestamp int,
+    setupId int,
+    relatedTickers relatedShit,
+    entry string,
+}
+
+
+
+
+
 func relatedTickers (ticker string) ([]string, error) {
 	c := polygon.New(apiKey)
 	params := models.GetTickerRelatedCompaniesParams{
