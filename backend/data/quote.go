@@ -1,4 +1,4 @@
-package main
+package data
 
 import (
 	"context"
@@ -11,8 +11,6 @@ import (
 	"github.com/polygon-io/client-go/rest/iter"
 	"github.com/polygon-io/client-go/rest/models"
 )
-
-const apiKey = "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm"
 
 func getLastQuote(client *polygon.Client, ticker string) models.LastQuote {
 
@@ -104,17 +102,17 @@ func AllTickers(client *polygon.Client, dateString string) []models.Ticker {
 func AllTickersTickerOnly(client *polygon.Client, dateString string) []string {
 	tickerList := []string{}
 	lastTickerOfRequest := ""
-    iter := listTickers(client, lastTickerOfRequest, dateString, models.GT, 1000)
-    c := 0
-    for iter.Next() {
-        ticker := iter.Item().Ticker
-        tickerList = append(tickerList, ticker )
-        fmt.Println(ticker)
-        c ++
-    }
-    lastTickerOfRequest = tickerList[len(tickerList)-1]
-    fmt.Println(c)
-    fmt.Println(len(tickerList))
+	iter := listTickers(client, lastTickerOfRequest, dateString, models.GT, 1000)
+	c := 0
+	for iter.Next() {
+		ticker := iter.Item().Ticker
+		tickerList = append(tickerList, ticker)
+		fmt.Println(ticker)
+		c++
+	}
+	lastTickerOfRequest = tickerList[len(tickerList)-1]
+	fmt.Println(c)
+	fmt.Println(len(tickerList))
 
 	return tickerList
 }
