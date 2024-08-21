@@ -21,6 +21,17 @@ services:
         networks:
             - compose_network
 
+    frontend:
+        build:
+            context: /home/aj/dev/study/frontend
+            dockerfile: Dockerfile
+        volumes:
+          - /home/aj/dev/study/frontend:/app
+          - /app/node_modules
+        ports:
+          - "5173:5173"
+        restart: always
+
 networks:
   compose_network:
     driver: bridge
