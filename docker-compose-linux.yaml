@@ -21,6 +21,9 @@ services:
         networks:
             - compose_network
 
+    frontend:
+        
+
 networks:
   compose_network:
     driver: bridge
