@@ -1,15 +1,22 @@
-package main
+package data
 
 import (
 	"fmt"
 
 	polygon "github.com/polygon-io/client-go/rest"
+	"github.com/polygon-io/client-go/rest/models"
 )
 
 func main() {
 
 	c := polygon.New(apiKey)
-	fmt.Println(AllTickersTickerOnly(c, "2024-08-20")[0])
+	count := 0
+	iter := listTickers(c, "", "2024-08-20", models.GT, 1000)
+	for iter.Next() {
+		count++
+	}
+	fmt.Println(count)
+	//fmt.Println(AllTickersTickerOnly(c, "2024-08-20")[0])
 	// // test getLastQuote()
 	// var ticker string = "COIN"
 	// fmt.Print(getLastQuote(c, ticker))
