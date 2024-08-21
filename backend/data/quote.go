@@ -85,36 +85,23 @@ func listTickers(client *polygon.Client, startTicker string, dateString string, 
 }
 func AllTickers(client *polygon.Client, dateString string) []models.Ticker {
 	tickerList := []models.Ticker{}
-	lastTickerOfRequest := ""
-	for {
-		iter := listTickers(client, lastTickerOfRequest, dateString, models.GT, 1000)
-		if !iter.Next() {
-			break
-		}
-		for iter.Next() {
-			tickerList = append(tickerList, iter.Item())
-		}
-		lastTickerOfRequest = tickerList[len(tickerList)-1].Ticker
-	}
-	return tickerList
-
-}
-func AllTickersTickerOnly(client *polygon.Client, dateString string) []string {
-	tickerList := []string{}
-	lastTickerOfRequest := ""
-	iter := listTickers(client, lastTickerOfRequest, dateString, models.GT, 1000)
-	c := 0
+	iter := listTickers(client, "", dateString, models.GT, 1000)
 	for iter.Next() {
-		ticker := iter.Item().Ticker
-		tickerList = append(tickerList, ticker)
-		fmt.Println(ticker)
-		c++
+		tickerList = append(tickerList, iter.Item())
 	}
-	lastTickerOfRequest = tickerList[len(tickerList)-1]
-	fmt.Println(c)
-	fmt.Println(len(tickerList))
-
 	return tickerList
+}
+func AllTickersTickerOnly(client *polygon.Client, dateString string) *[]string {
+	tickerList := []string{}
+	st := time.Now()
+	iter := listTickers(client, "", dateString, models.GT, 1000)
+	fmt.Println(time.Since(st))
+	start := time.Now()
+	for iter.Next() {
+		tickerList = append(tickerList, iter.Item().Ticker)
+	}
+	fmt.Println(time.Since(start))
+	return &tickerList
 }
 
 func tickerDetails(client *polygon.Client, ticker string, dateString string) *models.Ticker {
