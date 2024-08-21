@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	polygon "github.com/polygon-io/client-go/rest"
@@ -209,5 +210,24 @@ func nanosFromDatetimeString(datetime string) models.Nanos {
 	}
 	log.Fatal(errors.New("invalid datetime string"))
 	return models.Nanos(time.Now())
+}
+func getTickerFromCIK(client *polygon.Client, cik int) string {
+	params := models.ListTickersParams{}.WithCIK(cik)
+	iter := client.ListTickers(context.Background(), params)
+	for iter.Next() {
 
+	}
+	return iter.Item().Ticker
+}
+func getCIK(client *polygon.Client, ticker string) int {
+	params := models.ListTickersParams{}.WithTicker(models.EQ, ticker)
+	iter := client.ListTickers(context.Background(), params)
+	for iter.Next() {
+
+	}
+	cik, err := strconv.Atoi(iter.Item().CIK)
+	if err != nil {
+		log.Fatal("error retreiving cik")
+	}
+	return cik
 }
