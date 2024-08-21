@@ -4,6 +4,7 @@ package main
 import (
     "os"
     "fmt"
+    "api/server"
 )
 
 
@@ -13,7 +14,7 @@ func main() {
         fmt.Println("test")
         //test func
     } else {
-        StartServer()
+        server.StartServer()
     }
 
 }

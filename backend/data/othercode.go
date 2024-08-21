@@ -1,4 +1,5 @@
-'''
+package data
+/*'''
 m := AssetClass("stocks")
 limit * int := 1000
 listParams := &models.ListTickersParams{
@@ -101,4 +102,4 @@ func main() {
 	log.Print(res)
 
 }
-
+*/
