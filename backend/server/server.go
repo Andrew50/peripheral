@@ -3,27 +3,25 @@ package server
 import (
     "fmt"
     "api/tasks"
-    "api/data"
     "encoding/json"
     "log"
     "net/http"
+    "api/data"
 )
-/*    "context"
-    "github.com/jackc/pgx/v4/pgxpool"
-    "github.com/go-redis/redis/v8"
-    */
-
 
 var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, error) {
-    "annotate": tasks.Annotate,
-  //  "signup": Signup,
-   // "login": Login,
+    "signup": Signup,
+    "login": Login,
 }
 
-/*var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}, error){
-    /*"getJournal": tasks.GetJournal,
-    "setJournal": tasks.SetJournal,*/
-//}*/
+var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}, error){
+    /*"getAnnotations": tasks.GetAnnotations,
+    "delAnnotation": tasks.DelAnnotation,
+    "setAnnotation": tasks.SetAnnotation,
+    "getAnnotationEntry": tasks.GetAnnotationEntry,
+    "newAnnotation": tasks.NewAnnotation,*/
+    "newInstance": tasks.NewInstance,
+}
 
 type Request struct {
     Function string `json:"func"`
@@ -77,7 +75,7 @@ func public_handler(conn *data.Conn) http.HandlerFunc {
     }
 }
 
-/*func private_handler(conn *data.Conn) http.HandlerFunc {
+func private_handler(conn *data.Conn) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
         addCORSHeaders(w)
         if r.Method != "POST" {
@@ -110,12 +108,13 @@ func public_handler(conn *data.Conn) http.HandlerFunc {
             return
         }
     }
-}*/
+}
+
 
 func StartServer() {
     conn := data.InitConn()
-    http.HandleFunc("/", public_handler(conn))
-  //  http.HandleFunc("/private", private_handler(conn))
+    http.HandleFunc("/public", public_handler(conn))
+    http.HandleFunc("/private", private_handler(conn))
     fmt.Println("Server running on port 5057")
     if err := http.ListenAndServe(":5057",nil); err != nil {
         log.Fatal(err)

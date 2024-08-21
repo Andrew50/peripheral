@@ -16,6 +16,13 @@ func SetAnnotation(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error
         return nil, fmt.Errorf("getAnnotations invalid args: %v", err)
     }
 
+    return actual fucnationtu( struct.param1, struct.param1)
+
+}
+
+
+
+func actualFuncationality (arg1 stinrg, arg2 int) {
     cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE annotations SET entry = $1, completed = true WHERE annotation_id = $2 AND user_id = $3", args.Entry, args.Annotation_id, user_id)
     if err != nil {
         return nil, fmt.Errorf("SetAnnotation execution failed: %v", err)
@@ -27,8 +34,5 @@ func SetAnnotation(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error
     }
 
     return "success", nil
+
 }
-
-
-
-
