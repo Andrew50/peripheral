@@ -1,57 +1,46 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"log"
-	"time"
 
 	polygon "github.com/polygon-io/client-go/rest"
-	"github.com/polygon-io/client-go/rest/models"
 )
 
-func test() {
+func main() {
 
-	var ticker string
-	var dt string
-	var tf string
-	c := polygon.New("ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm")
-	for {
-		fmt.Print("Ticker: ")
-		_, err := fmt.Scan(&ticker)
-		if err != nil {
-			break
-		}
-		fmt.Print("Datetime: ")
-		_, err = fmt.Scan(&dt)
-		if err != nil {
-			break
-		}
+	c := polygon.New(apiKey)
+	fmt.Println(AllTickersTickerOnly(c, "2024-08-20")[0])
+	// // test getLastQuote()
+	// var ticker string = "COIN"
+	// fmt.Print(getLastQuote(c, ticker))
 
-		fmt.Print("Timeframe: ")
-		_, err = fmt.Scan(&tf)
-		if err != nil {
-			break
-		}
-		params := &models.ListAggsParams{
-			Ticker:     ticker,
-			Multiplier: 5,
-			Timespan:   models.Timespan(tf),
-			From:       models.Millis(time.Date(2022, 8, 1, 16, 0, 0, 0, time.UTC)),
-			To:         models.Millis(time.Date(2023, 8, 1, 16, 0, 0, 0, time.UTC)),
-		}
+	// ticker = "NVDA"
+	// var marketTimeZone, tzErr = time.LoadLocation("America/New_York")
+	// if tzErr != nil {
+	// 	log.Fatal(tzErr)
+	// 	fmt.Print(marketTimeZone)
+	// }
+	// timestamp := models.Nanos(time.Date(2020, 3, 16, 9, 35, 0, 0, marketTimeZone))
+	// fmt.Print(time.Time(timestamp))
+	// //getQuote(c, timestamp, ticker, "desc", 10000)
 
-		iter := c.ListAggs(context.Background(), params)
+	// // test listTickers()
+	// res := listTickers(c, "A", "2024-08-16", models.GTE, 1000)
+	// for res.Next() {
 
-		for iter.Next() {
-			row := iter.Item()
-			fmt.Print(row.Close)
-			fmt.Print(" ")
-		}
-		if iter.Err() != nil {
-			log.Fatal(iter.Err())
-		}
-		fmt.Println()
-	}
+	// }
+	// // test tickerDetails()
+	// tickerDetailsRes := tickerDetails(c, "COIN", "2024-08-16")
+	// fmt.Print(tickerDetailsRes)
+
+	// // test getTickerNews()
+	// tickerNews := getTickerNews(c, "SBUX", millisFromDatetimeString("2024-08-13 09:30:00"), "desc", 10, models.GTE)
+	// for tickerNews.Next() {
+	// 	fmt.Print(tickerNews.Item())
+	// }
+
+	// // test getRelatedTickers()
+	// relatedTickers := getRelatedTickers(c, ticker)
+	// fmt.Print(relatedTickers)
 
 }

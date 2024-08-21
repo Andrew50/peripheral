@@ -68,22 +68,59 @@ func getTrade(client *polygon.Client, ticker string, nanoTimestamp models.Nanos,
 // create function listAllTickers(dateString string) that calls several times to listTickers
 func listTickers(client *polygon.Client, startTicker string, dateString string, tickerStringCompareType models.Comparator, numTickers int) *iter.Iter[models.Ticker] {
 	params := models.ListTickersParams{}.
-		WithTicker(tickerStringCompareType, startTicker).
 		WithMarket(models.AssetStocks).
 		WithSort(models.TickerSymbol).
 		WithLimit(numTickers)
+	if startTicker != "" {
+		params = params.WithTicker(tickerStringCompareType, startTicker)
+	}
 	if dateString != "now" {
 		dt, err := time.Parse(time.DateOnly, dateString)
-		fmt.Print(dt)
 		if err != nil {
 			log.Fatal(err)
 		}
 		dateObj := models.Date(dt)
 		params = params.WithDate(dateObj)
 	}
-	res := client.ListTickers(context.Background(), params)
-	return res
+	iter := client.ListTickers(context.Background(), params)
+	return iter
 }
+func AllTickers(client *polygon.Client, dateString string) []models.Ticker {
+	tickerList := []models.Ticker{}
+	lastTickerOfRequest := ""
+	for {
+		iter := listTickers(client, lastTickerOfRequest, dateString, models.GT, 1000)
+		if !iter.Next() {
+			break
+		}
+		for iter.Next() {
+			tickerList = append(tickerList, iter.Item())
+		}
+		lastTickerOfRequest = tickerList[len(tickerList)-1].Ticker
+	}
+	return tickerList
+
+}
+func AllTickersTickerOnly(client *polygon.Client, dateString string) []string {
+	tickerList := []string{}
+	lastTickerOfRequest := ""
+	for {
+		iter := listTickers(client, lastTickerOfRequest, dateString, models.GT, 1000)
+
+		fmt.Print(iter.Item().Ticker)
+		tickerList = append(tickerList, iter.Item().Ticker)
+		if !iter.Next() {
+			break
+		}
+		for iter.Next() {
+			tickerList = append(tickerList, iter.Item().Ticker)
+		}
+		lastTickerOfRequest = tickerList[len(tickerList)-1]
+	}
+	fmt.Println("done")
+	return tickerList
+}
+
 func tickerDetails(client *polygon.Client, ticker string, dateString string) *models.Ticker {
 	var params *models.GetTickerDetailsParams
 	if dateString != "now" {
@@ -189,44 +226,5 @@ func nanosFromDatetimeString(datetime string) models.Nanos {
 	}
 	log.Fatal(errors.New("invalid datetime string"))
 	return models.Nanos(time.Now())
-
-}
-
-func main() {
-
-	c := polygon.New(apiKey)
-
-	// test getLastQuote()
-	var ticker string = "COIN"
-	fmt.Print(getLastQuote(c, ticker))
-
-	ticker = "NVDA"
-	var marketTimeZone, tzErr = time.LoadLocation("America/New_York")
-	if tzErr != nil {
-		log.Fatal(tzErr)
-		fmt.Print(marketTimeZone)
-	}
-	timestamp := models.Nanos(time.Date(2020, 3, 16, 9, 35, 0, 0, marketTimeZone))
-	fmt.Print(time.Time(timestamp))
-	//getQuote(c, timestamp, ticker, "desc", 10000)
-
-	// test listTickers()
-	res := listTickers(c, "A", "2024-08-16", models.GTE, 1000)
-	for res.Next() {
-
-	}
-	// test tickerDetails()
-	tickerDetailsRes := tickerDetails(c, "COIN", "2024-08-16")
-	fmt.Print(tickerDetailsRes)
-
-	// test getTickerNews()
-	tickerNews := getTickerNews(c, "SBUX", millisFromDatetimeString("2024-08-13 09:30:00"), "desc", 10, models.GTE)
-	for tickerNews.Next() {
-		fmt.Print(tickerNews.Item())
-	}
-
-	// test getRelatedTickers()
-	relatedTickers := getRelatedTickers(c, ticker)
-	fmt.Print(relatedTickers)
 
 }
