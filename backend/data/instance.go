@@ -9,10 +9,7 @@ import (
 	"github.com/polygon-io/client-go/rest/models"
 )
 
-<<<<<<< HEAD
 const apiKey = "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm"
-
-
 
 type relatedShit struct {
     markets []int,
@@ -27,14 +24,7 @@ type instance struct {
     entry string,
 }
 
-
-
-
-
 func relatedTickers (ticker string) ([]string, error) {
-=======
-func relatedTickers(ticker string) ([]string, error) {
->>>>>>> a6035128e1cfadf900e41e6c7309c76b0b7496f1
 	c := polygon.New(apiKey)
 	params := models.GetTickerRelatedCompaniesParams{
 		Ticker: ticker,

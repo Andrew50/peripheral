@@ -104,20 +104,18 @@ func AllTickers(client *polygon.Client, dateString string) []models.Ticker {
 func AllTickersTickerOnly(client *polygon.Client, dateString string) []string {
 	tickerList := []string{}
 	lastTickerOfRequest := ""
-	for {
-		iter := listTickers(client, lastTickerOfRequest, dateString, models.GT, 1000)
+    iter := listTickers(client, lastTickerOfRequest, dateString, models.GT, 1000)
+    c := 0
+    for iter.Next() {
+        ticker := iter.Item().Ticker
+        tickerList = append(tickerList, ticker )
+        fmt.Println(ticker)
+        c ++
+    }
+    lastTickerOfRequest = tickerList[len(tickerList)-1]
+    fmt.Println(c)
+    fmt.Println(len(tickerList))
 
-		fmt.Print(iter.Item().Ticker)
-		tickerList = append(tickerList, iter.Item().Ticker)
-		if !iter.Next() {
-			break
-		}
-		for iter.Next() {
-			tickerList = append(tickerList, iter.Item().Ticker)
-		}
-		lastTickerOfRequest = tickerList[len(tickerList)-1]
-	}
-	fmt.Println("done")
 	return tickerList
 }
 
@@ -160,8 +158,8 @@ func getTickerNews(client *polygon.Client, ticker string, millisTime models.Mill
 func getLatestTickerNews(client *polygon.Client, ticker string, numResults int) *iter.Iter[models.TickerNews] {
 	return getTickerNews(client, ticker, models.Millis(time.Now()), "asc", numResults, models.LTE)
 }
-func getRelatedTickers(client *polygon.Client, ticker string) *[]string {
 
+func getRelatedTickers(client *polygon.Client, ticker string) *[]string {
 	params := &models.GetTickerRelatedCompaniesParams{
 		Ticker: ticker,
 	}
