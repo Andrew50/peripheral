@@ -111,7 +111,7 @@ func private_handler(conn *data.Conn) http.HandlerFunc {
     }
 }
 
-func main() {
+func StartServer() {
     conn := data.InitConn()
     http.HandleFunc("/public", public_handler(conn))
     http.HandleFunc("/private", private_handler(conn))
