@@ -4,18 +4,13 @@ import (
 	"fmt"
 
 	polygon "github.com/polygon-io/client-go/rest"
-	"github.com/polygon-io/client-go/rest/models"
 )
 
-func main() {
+func BenTest() {
 
 	c := polygon.New(apiKey)
-	count := 0
-	iter := listTickers(c, "", "2024-08-20", models.GT, 1000)
-	for iter.Next() {
-		count++
-	}
-	fmt.Println(count)
+	AllTickersTickerOnly(c, "2024-08-21")
+	fmt.Println("done")
 	//fmt.Println(AllTickersTickerOnly(c, "2024-08-20")[0])
 	// // test getLastQuote()
 	// var ticker string = "COIN"

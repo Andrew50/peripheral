@@ -1,21 +1,19 @@
 package main
 
-
 import (
-    "os"
-    "fmt"
-    "api/server"
+	"api/data"
+	"api/server"
+	"os"
 )
 
-
 func main() {
-    args := os.Args
-    if len(args) > 1 {
-        fmt.Println("test")
-        //test func
-    } else {
-        server.StartServer()
-    }
+	args := os.Args
+	if len(args) > 1 {
+		//test func
+		data.BenTest()
+
+	} else {
+		server.StartServer()
+	}
 
 }
-
