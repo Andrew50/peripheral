@@ -1,6 +1,7 @@
 package server
 
 import (
+<<<<<<< HEAD
 	"api/data"
 	"api/tasks"
 	"encoding/json"
@@ -24,6 +25,29 @@ var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, erro
   /*"getJournal": tasks.GetJournal,
   "setJournal": tasks.SetJournal,*/
 //}*/
+=======
+    "fmt"
+    "api/tasks"
+    "encoding/json"
+    "log"
+    "net/http"
+    "api/data"
+)
+
+var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, error) {
+    "signup": Signup,
+    "login": Login,
+}
+
+var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}, error){
+    /*"getAnnotations": tasks.GetAnnotations,
+    "delAnnotation": tasks.DelAnnotation,
+    "setAnnotation": tasks.SetAnnotation,
+    "getAnnotationEntry": tasks.GetAnnotationEntry,
+    "newAnnotation": tasks.NewAnnotation,*/
+    "newInstance": tasks.NewInstance,
+}
+>>>>>>> cdb18ee95c1b5167fa76c93191b82896437bc1ce
 
 type Request struct {
 	Function  string          `json:"func"`
@@ -77,7 +101,7 @@ func public_handler(conn *data.Conn) http.HandlerFunc {
 	}
 }
 
-/*func private_handler(conn *data.Conn) http.HandlerFunc {
+func private_handler(conn *data.Conn) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
         addCORSHeaders(w)
         if r.Method != "POST" {
@@ -110,9 +134,11 @@ func public_handler(conn *data.Conn) http.HandlerFunc {
             return
         }
     }
-}*/
+}
+
 
 func StartServer() {
+<<<<<<< HEAD
 	conn := data.InitConn()
 	http.HandleFunc("/", public_handler(conn))
 	//  http.HandleFunc("/private", private_handler(conn))
@@ -120,4 +146,13 @@ func StartServer() {
 	if err := http.ListenAndServe(":5057", nil); err != nil {
 		log.Fatal(err)
 	}
+=======
+    conn := data.InitConn()
+    http.HandleFunc("/public", public_handler(conn))
+    http.HandleFunc("/private", private_handler(conn))
+    fmt.Println("Server running on port 5057")
+    if err := http.ListenAndServe(":5057",nil); err != nil {
+        log.Fatal(err)
+    }
+>>>>>>> cdb18ee95c1b5167fa76c93191b82896437bc1ce
 }
