@@ -13,7 +13,11 @@
 
   function handleKeydown(event) {
     if (event.key === 'Enter') {
-      signIn(username, password);
+        if (login){
+          signIn(username, password);
+        }else{
+            signUp(username,password);
+        }
     }
   }
 
@@ -30,6 +34,7 @@
     }
 
   async function signUp(username, password) {
+      console.log("work")
     try {
         await request(null,false,'signup', username, password);
         await signIn(username, password); // Automatically sign in after account creation
