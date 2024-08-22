@@ -1,7 +1,6 @@
 package server
 
 import (
-<<<<<<< HEAD
 	"api/data"
 	"api/tasks"
 	"encoding/json"
@@ -10,44 +9,19 @@ import (
 	"net/http"
 )
 
-/*    "context"
-"github.com/jackc/pgx/v4/pgxpool"
-"github.com/go-redis/redis/v8"
-*/
-
 var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, error){
-	"annotate": tasks.Annotate,
-	//  "signup": Signup,
-	// "login": Login,
-}
-
-/*var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}, error){
-  /*"getJournal": tasks.GetJournal,
-  "setJournal": tasks.SetJournal,*/
-//}*/
-=======
-    "fmt"
-    "api/tasks"
-    "encoding/json"
-    "log"
-    "net/http"
-    "api/data"
-)
-
-var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, error) {
-    "signup": Signup,
-    "login": Login,
+	"signup": Signup,
+	"login":  Login,
 }
 
 var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}, error){
-    /*"getAnnotations": tasks.GetAnnotations,
-    "delAnnotation": tasks.DelAnnotation,
-    "setAnnotation": tasks.SetAnnotation,
-    "getAnnotationEntry": tasks.GetAnnotationEntry,
-    "newAnnotation": tasks.NewAnnotation,*/
-    "newInstance": tasks.NewInstance,
+	/*"getAnnotations": tasks.GetAnnotations,
+	  "delAnnotation": tasks.DelAnnotation,
+	  "setAnnotation": tasks.SetAnnotation,
+	  "getAnnotationEntry": tasks.GetAnnotationEntry,
+	  "newAnnotation": tasks.NewAnnotation,*/
+	"newInstance": tasks.NewInstance,
 }
->>>>>>> cdb18ee95c1b5167fa76c93191b82896437bc1ce
 
 type Request struct {
 	Function  string          `json:"func"`
@@ -102,57 +76,46 @@ func public_handler(conn *data.Conn) http.HandlerFunc {
 }
 
 func private_handler(conn *data.Conn) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        addCORSHeaders(w)
-        if r.Method != "POST" {
-            return
-        }
-        fmt.Println("got private request")
-        token_string := r.Header.Get("Authorization")
-        user_id, err := validate_token(token_string)
-        if handleError(w, err, "validating token") {
-            return
-        }
-        var req Request
-        if handleError(w, json.NewDecoder(r.Body).Decode(&req), "decoding request") {
-            return
-        }
-        fmt.Println(req.Function)
+	return func(w http.ResponseWriter, r *http.Request) {
+		addCORSHeaders(w)
+		if r.Method != "POST" {
+			return
+		}
+		fmt.Println("got private request")
+		token_string := r.Header.Get("Authorization")
+		user_id, err := validate_token(token_string)
+		if handleError(w, err, "validating token") {
+			return
+		}
+		var req Request
+		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "decoding request") {
+			return
+		}
+		fmt.Println(req.Function)
 
-        if function, ok := privateFunc[req.Function]; ok {
-            result,err := function(conn,user_id, req.Arguments)
-            if handleError(w, err, fmt.Sprintf("executing function %s", req.Function)) {
-                return
-            }
-            err = json.NewEncoder(w).Encode(result)
-            if handleError(w, err, "encoding response") {
-                return
-            }
-        } else {
-            http.Error(w, fmt.Sprintf("invalid function: %s", req.Function), http.StatusBadRequest)
-            fmt.Printf("invalid function: %s", req.Function)
-            return
-        }
-    }
+		if function, ok := privateFunc[req.Function]; ok {
+			result, err := function(conn, user_id, req.Arguments)
+			if handleError(w, err, fmt.Sprintf("executing function %s", req.Function)) {
+				return
+			}
+			err = json.NewEncoder(w).Encode(result)
+			if handleError(w, err, "encoding response") {
+				return
+			}
+		} else {
+			http.Error(w, fmt.Sprintf("invalid function: %s", req.Function), http.StatusBadRequest)
+			fmt.Printf("invalid function: %s", req.Function)
+			return
+		}
+	}
 }
 
-
 func StartServer() {
-<<<<<<< HEAD
 	conn := data.InitConn()
-	http.HandleFunc("/", public_handler(conn))
-	//  http.HandleFunc("/private", private_handler(conn))
+	http.HandleFunc("/public", public_handler(conn))
+	http.HandleFunc("/private", private_handler(conn))
 	fmt.Println("Server running on port 5057")
 	if err := http.ListenAndServe(":5057", nil); err != nil {
 		log.Fatal(err)
 	}
-=======
-    conn := data.InitConn()
-    http.HandleFunc("/public", public_handler(conn))
-    http.HandleFunc("/private", private_handler(conn))
-    fmt.Println("Server running on port 5057")
-    if err := http.ListenAndServe(":5057",nil); err != nil {
-        log.Fatal(err)
-    }
->>>>>>> cdb18ee95c1b5167fa76c93191b82896437bc1ce
 }
