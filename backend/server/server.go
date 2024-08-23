@@ -20,7 +20,7 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	  "setAnnotation": tasks.SetAnnotation,
 	  "getAnnotationEntry": tasks.GetAnnotationEntry,
 	  "newAnnotation": tasks.NewAnnotation,*/
-	"newInstance": tasks.NewInstance,
+	"NewInstance": tasks.NewInstance,
 }
 
 type Request struct {
