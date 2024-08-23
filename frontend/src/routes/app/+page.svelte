@@ -13,7 +13,6 @@
     interface Security {
         ticker: string;
         cik: number;
-
     }
     interface Annotation {
         timeframe: string;
@@ -31,25 +30,26 @@
     }
     function newInstance (): void {
         if (ticker && timestamp) {
-            request(null, true, "NewInstance", ticker, timestamp).then((result)=> errorMessage.set(result))
-            if (!errMessage){
-                const security: Security = {ticker: ticker, cik: res["cik"]}
+            let cik: number;
+            [cik, errorMessage] = request(null, true, "GetCik", ticker)
+           // request(null, true, "NewInstance", ticker, timestamp).then((result)=> errorMessage.set(result))
+           if (!errorMessage) {
+
+            //if (!errorMessage){
+                const security: Security = {ticker: ticker, cik: cik}
+                [instanceId, errorMessage] = request(null, true, "NewInstance", security.sik, timestamp);
                 const instance: Instance = {
                     instance_id: result["instance_id"],
                     security: security,
                     timestamp: timestamp,
-                    annotations: []}
-                instances.push(instance)
+                    annotations: []
+                }
+                instances.update((v) => [instance,...v]);
             }
-
-
         } else {
             errorMessage.set("unfilled form")
         }
     }
-
-
-        
 </script>
 <h1> new instance </h1>
 <div class="form" >
@@ -97,18 +97,5 @@
         {/if}
     {/each}
 </table>
-
-
-
-
-
-
 <style>
-
-
-
 </style>
-
-
-
-
