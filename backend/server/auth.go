@@ -58,7 +58,7 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
     if err != nil {
         return nil, err
     }
-    rows, err := conn.DB.Query(context.Background(), "SELECT setup_id, setup_name, score, i, bars, threshold, dolvol, adr, mcap FROM setups WHERE user_id=$1", user_id)
+    /*rows, err := conn.DB.Query(context.Background(), "SELECT setup_id, setup_name, score, i, bars, threshold, dolvol, adr, mcap FROM setups WHERE user_id=$1", user_id)
     if err != nil {
         return nil, err
     }
@@ -83,6 +83,8 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
     }
     err = rows.Err()
     result := LoginResponse{Token: token, Settings: settings, Setups: setups}
+    */
+    result := LoginResponse{Token: token, Settings: settings}
     return result, err
 }
 

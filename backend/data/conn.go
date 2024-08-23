@@ -16,7 +16,7 @@ type Conn struct {
 	Polygon *polygon.Client
 }
 
-func InitConn() *Conn {
+func InitConn() (*Conn, func()) {
 	//TODO change this shit to use env vars as well
 	db_url := "postgres://postgres:pass@db:5432"
 	var dbConn *pgxpool.Pool
@@ -47,6 +47,9 @@ func InitConn() *Conn {
 	//polygonConn := polygon.New(os.Getenv("POLYGON_API_KEY"))
 	polygonConn := polygon.New("ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm")
 	conn := &Conn{DB: dbConn, Polygon: polygonConn}
-	defer conn.DB.Close()
-	return conn
+
+    cleanup := func () {
+        conn.DB.Close()
+    }
+	return conn, cleanup
 }
