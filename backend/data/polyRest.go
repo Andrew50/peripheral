@@ -160,6 +160,23 @@ func getRelatedTickers(client *polygon.Client, ticker string) *[]string {
 	return &relatedTickers
 }
 
+// func relatedTickers (ticker string) ([]string, error) {
+// 	c := polygon.New(apiKey)
+// 	params := models.GetTickerRelatedCompaniesParams{
+// 		Ticker: ticker,
+// 	}
+// 	r, err := c.GetTickerRelatedCompanies(context.Background(), &params)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	res := r.Results
+// 	tickers := make([]string, len(res))
+// 	for i, comp := range res {
+// 		tickers[i] = comp.Ticker
+// 	}
+// 	return tickers, err
+// }
+
 // QA STATUS: NEEDS TESTING
 func getAggsData(client *polygon.Client, ticker string, barLength int, timeframe string,
 	fromMillis models.Millis, toMillis models.Millis, limit int) *iter.Iter[models.Agg] {
@@ -223,7 +240,7 @@ func getCIK(client *polygon.Client, ticker string) int {
 	params := models.ListTickersParams{}.WithTicker(models.EQ, ticker)
 	iter := client.ListTickers(context.Background(), params)
 	for iter.Next() {
-
+		sfsaf
 	}
 	cik, err := strconv.Atoi(iter.Item().CIK)
 	if err != nil {
