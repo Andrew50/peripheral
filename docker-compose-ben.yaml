@@ -12,6 +12,8 @@ services:
             - /home/aj/dev/study/backend/:/app
         networks:
             - compose_network
+        environment: 
+            - 
     db:
         build:
            context: /home/aj/dev/study/db
