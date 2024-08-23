@@ -5,76 +5,98 @@
     import { browser } from '$app/environment';
     import { writable } from 'svelte/store';
     
+    let instanceId = 1;
     let ticker: string;
     let timestamp: number;
     let errorMessage = writable<string>('')
+    let currentAnnotationId: number;
     interface Security {
         ticker: string;
         id: number;
-
     }
     interface Annotation {
         timeframe: string;
         entry: string;
     }
-
     interface Instance {
         id: number;
         security: Security;
         timestamp: number;
         annotations: Annotation[];
     }
-    let instances: Instance[] = [];
+    let instances = writable<Instance[]>([]);
     $: if ($auth_data == null && browser) {
         goto('/login');
     }
     function newInstance (): void {
         if (ticker && timestamp) {
-            [res, errMessage] = request(null, true, "NewInstance", ticker, timestamp).then((result)=> errorMessage.set(result))
-            if (!errMessage){
-                const security: Security = {ticker: ticker, id: res["instanceId"]}
+           // request(null, true, "NewInstance", ticker, timestamp).then((result)=> errorMessage.set(result))
+           const tickerId = 0;
+           instanceId ++
+            //if (!errorMessage){
+                const security: Security = {ticker: ticker, id: tickerId}
                 const instance: Instance = {
-                    id: result["tickerId"],
+                    id: instanceId,
                     security: security,
-                    timestamp: timestamp
-                    annotations: []}
-                instances.push(instance)
-            }
-
-
+                    timestamp: timestamp,
+                    annotations: []
+                }
+                instances.update((v) => [instance,...v]);
+            //}
         } else {
             errorMessage.set("unfilled form")
         }
     }
+
+
         
 </script>
 <h1> new instance </h1>
 <div class="form" >
-<div>
-<input bind:value={ticker}/>
+    <div>
+        <input bind:value={ticker}/>
+    </div>
+    <div>
+        <input type="date" bind:value={timestamp}/>
+    </div>
+    <div>
+        <button on:click={newInstance}> enter </button>
+    </div>
+    <div>
+        {#if $errorMessage}
+            {$errorMessage}
+        {/if}
+    </div>
 </div>
-<div>
-<input type="date" bind:value={timestamp}/>
-</div>
-<div>
-<button on:click={newInstance}> enter </button>
-</div>
-<div>
-{#if $errorMessage}
-{$errorMessage}
-{/if}
-</div>
-</div>
-
-
 
 <h1> instances </h1>
 <table>
-    <th god />
-    <th god />
-    <th god />
+    <tr>
+        <th> ID </th>
+        <th> Ticker </th>
+        <th> Datetime </th>
+    </tr>
     {#each $instances as instance}
-        <tr> instance
+        <tr>
+            <td> {instance.id}</td>
+            <td> {instance.security.ticker}</td>
+            <td> {instance.timestamp}</td>
+            <td>
+                <button on:click={()=> (currentAnnotationId = instance.id)}> Annotations </button>
+            </td>
+        </tr>
+        {#if currentAnnotationId == instance.id}
+            {#each instance.annotations as annotation}
+                <tr> 
+                    {annotation.timeframe}
+                </tr>
+                <tr> 
+                    {annotation.entry}
+                </tr>
+            {/each}
+        {/if}
+    {/each}
+</table>
 
 
 
