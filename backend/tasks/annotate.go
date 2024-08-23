@@ -8,11 +8,9 @@ import (
 
 )
 
-
-
 type SetAnnotationArgs struct {
-    AnnotationId int `json:"a1"`
-    Entry string `json:"a2"`
+	AnnotationId int    `json:"a1"`
+	Entry        string `json:"a2"`
 }
 
 func SetAnnotation(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -26,10 +24,10 @@ func SetAnnotation(conn *data.Conn, userId int, rawArgs json.RawMessage) (interf
         return nil, fmt.Errorf("SetAnnotation execution failed: %v", err)
     }
 
-    // Check if any rows were affected, this ensures the annotation_id existed
-    if cmdTag.RowsAffected() == 0 {
-        return nil, fmt.Errorf("SetAnnotation no annotation found with the provided annotation_id and user_id")
-    }
+	// Check if any rows were affected, this ensures the annotation_id existed
+	if cmdTag.RowsAffected() == 0 {
+		return nil, fmt.Errorf("SetAnnotation no annotation found with the provided annotation_id and user_id")
+	}
 
     return "success", nil
 
