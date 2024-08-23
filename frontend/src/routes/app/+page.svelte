@@ -3,32 +3,82 @@
     import {auth_data, request} from '../../store.js'
     import { goto } from '$app/navigation';
     import { browser } from '$app/environment';
-    let securityId: string;
+    import { writable } from 'svelte/store';
+    
+    let ticker: string;
     let timestamp: number;
+    let errorMessage = writable<string>('')
+    interface Security {
+        ticker: string;
+        id: number;
 
+    }
+    interface Annotation {
+        timeframe: string;
+        entry: string;
+    }
+
+    interface Instance {
+        id: number;
+        security: Security;
+        timestamp: number;
+        annotations: Annotation[];
+    }
+    let instances: Instance[] = [];
     $: if ($auth_data == null && browser) {
         goto('/login');
     }
-    function submit (): void {
-        if (securityId && timestamp) {
-            request(null, true, "NewInstance", securityId, timestamp)
+    function newInstance (): void {
+        if (ticker && timestamp) {
+            [res, errMessage] = request(null, true, "NewInstance", ticker, timestamp).then((result)=> errorMessage.set(result))
+            if (!errMessage){
+                const security: Security = {ticker: ticker, id: res["instanceId"]}
+                const instance: Instance = {
+                    id: result["tickerId"],
+                    security: security,
+                    timestamp: timestamp
+                    annotations: []}
+                instances.push(instance)
+            }
+
+
+        } else {
+            errorMessage.set("unfilled form")
         }
     }
         
 </script>
-<h1> nedfsfdrm -rf node_modules package-lock.jsonw instance </h1>
-<h1>testes</h1>
+<h1> new instance </h1>
 <div class="form" >
 <div>
-<input bind:value={securityId}/>
+<input bind:value={ticker}/>
 </div>
 <div>
-<input type="number" bind:value={timestamp}/>
+<input type="date" bind:value={timestamp}/>
 </div>
 <div>
-<button on:click={submit}> enter </button>
+<button on:click={newInstance}> enter </button>
+</div>
+<div>
+{#if $errorMessage}
+{$errorMessage}
+{/if}
 </div>
 </div>
+
+
+
+<h1> instances </h1>
+<table>
+    <th god />
+    <th god />
+    <th god />
+    {#each $instances as instance}
+        <tr> instance
+
+
+
+
 
 
 <style>
