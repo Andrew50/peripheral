@@ -1,5 +1,5 @@
 <!-- app/+page.svelte -->
-<script lang"ts">
+<script lang="ts">
     import {auth_data} from '../../store.js'
     import { goto } from '$app/navigation';
     import { browser } from '$app/environment';
@@ -11,5 +11,3 @@
 </script>
 
 
-
-<textarea bind:value={entry}> </textarea>

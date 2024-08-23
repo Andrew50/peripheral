@@ -1,20 +1,18 @@
-version: '3.6'
-
 services:
     backend:
         build:
-            context: /home/aj/dev/study/backend
+            context: ./backend
             dockerfile: Dockerfile
         restart: always
         ports:
           - "5057:5057"
         volumes:
-            - /home/aj/dev/study/backend/:/app
+            - ./backend/:/app
         networks:
             - compose_network
     db:
         build:
-           context: /home/aj/dev/study/db
+           context: ./db
            dockerfile: Dockerfile
         ports:
           - "5432:5432"
@@ -23,11 +21,13 @@ services:
 
     frontend:
         build:
-            context: /home/aj/dev/study/frontend
+            context: ./frontend
             dockerfile: Dockerfile
         volumes:
-          - /home/aj/dev/study/frontend:/app
+          - ./frontend:/app
           - /app/node_modules
+        environment:
+          - WATCHPACK_POLLING=true #enable polling
         ports:
           - "5173:5173"
         restart: always
