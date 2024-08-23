@@ -1,4 +1,5 @@
 package server
+
 //test
 
 import (
@@ -22,6 +23,7 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	  "getAnnotationEntry": tasks.GetAnnotationEntry,
 	  "newAnnotation": tasks.NewAnnotation,*/
 	"NewInstance": tasks.NewInstance,
+	"GetCik":      tasks.GetCik,
 }
 
 type Request struct {
@@ -112,12 +114,12 @@ func private_handler(conn *data.Conn) http.HandlerFunc {
 }
 
 func StartServer() {
-    conn, cleanup := data.InitConn()
-    defer cleanup()
-    http.HandleFunc("/public", public_handler(conn))
-    http.HandleFunc("/private", private_handler(conn))
-    fmt.Println("Server running on port 5057")
-    if err := http.ListenAndServe(":5057",nil); err != nil {
-        log.Fatal(err)
-    }
+	conn, cleanup := data.InitConn()
+	defer cleanup()
+	http.HandleFunc("/public", public_handler(conn))
+	http.HandleFunc("/private", private_handler(conn))
+	fmt.Println("Server running on port 5057")
+	if err := http.ListenAndServe(":5057", nil); err != nil {
+		log.Fatal(err)
+	}
 }

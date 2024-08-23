@@ -10,7 +10,7 @@
     let errorMessage = writable<string>('')
     interface Security {
         ticker: string;
-        id: number;
+        cik: number;
 
     }
     interface Annotation {
@@ -19,7 +19,7 @@
     }
 
     interface Instance {
-        id: number;
+        instance_id: number;
         security: Security;
         timestamp: number;
         annotations: Annotation[];
@@ -30,13 +30,13 @@
     }
     function newInstance (): void {
         if (ticker && timestamp) {
-            [res, errMessage] = request(null, true, "NewInstance", ticker, timestamp).then((result)=> errorMessage.set(result))
+            request(null, true, "NewInstance", ticker, timestamp).then((result)=> errorMessage.set(result))
             if (!errMessage){
-                const security: Security = {ticker: ticker, id: res["instanceId"]}
+                const security: Security = {ticker: ticker, cik: res["cik"]}
                 const instance: Instance = {
-                    id: result["tickerId"],
+                    instance_id: result["instance_id"],
                     security: security,
-                    timestamp: timestamp
+                    timestamp: timestamp,
                     annotations: []}
                 instances.push(instance)
             }
