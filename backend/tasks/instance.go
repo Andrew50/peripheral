@@ -8,8 +8,8 @@ import (
 )
 
 type NewInstanceArgs struct {
-    SecurityId string `json:"a1"`
-    Timestamp int `json:"a2"`
+    Ticker string `json:"a1"`
+    Timestamp string `json:"a2"`
 }
 
 func NewInstance (conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
