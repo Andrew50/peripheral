@@ -19,7 +19,7 @@
         entry: string;
     }
     interface Instance {
-        id: number;
+        instance_id: number;
         security: Security;
         timestamp: number;
         annotations: Annotation[];
@@ -39,7 +39,7 @@
                 const security: Security = {ticker: ticker, cik: cik}
                 [instanceId, errorMessage] = request(null, true, "NewInstance", security.sik, timestamp);
                 const instance: Instance = {
-                    id: instanceId,
+                    instance_id: result["instance_id"],
                     security: security,
                     timestamp: timestamp,
                     annotations: []
