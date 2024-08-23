@@ -13,7 +13,7 @@ import (
 	"github.com/polygon-io/client-go/rest/models"
 )
 
-func getLastQuote(client *polygon.Client, ticker string) models.LastQuote {
+func GetLastQuote(client *polygon.Client, ticker string) models.LastQuote {
 
 	params := &models.GetLastQuoteParams{
 		Ticker: ticker,
@@ -25,7 +25,7 @@ func getLastQuote(client *polygon.Client, ticker string) models.LastQuote {
 	return res.Results
 
 }
-func getQuote(client *polygon.Client, ticker string, nanoTimestamp models.Nanos, ord string, compareType models.Comparator, numResults int) *iter.Iter[models.Quote] {
+func GetQuote(client *polygon.Client, ticker string, nanoTimestamp models.Nanos, ord string, compareType models.Comparator, numResults int) *iter.Iter[models.Quote] {
 	sortOrder := models.Desc
 	if ord == "asc" {
 		sortOrder = models.Asc
@@ -39,7 +39,7 @@ func getQuote(client *polygon.Client, ticker string, nanoTimestamp models.Nanos,
 		WithLimit(numResults)
 	return client.ListQuotes(context.Background(), params)
 }
-func getLastTrade(client *polygon.Client, ticker string) models.LastTrade {
+func GetLastTrade(client *polygon.Client, ticker string) models.LastTrade {
 	params := &models.GetLastTradeParams{
 		Ticker: ticker,
 	}
@@ -50,7 +50,7 @@ func getLastTrade(client *polygon.Client, ticker string) models.LastTrade {
 	return res.Results
 
 }
-func getTrade(client *polygon.Client, ticker string, nanoTimestamp models.Nanos, ord string, compareType models.Comparator, numResults int) *iter.Iter[models.Trade] {
+func GetTrade(client *polygon.Client, ticker string, nanoTimestamp models.Nanos, ord string, compareType models.Comparator, numResults int) *iter.Iter[models.Trade] {
 	sortOrder := models.Desc
 	if ord == "asc" {
 		sortOrder = models.Asc
@@ -65,7 +65,7 @@ func getTrade(client *polygon.Client, ticker string, nanoTimestamp models.Nanos,
 
 // QA STATUS: not QA'd
 // create function listAllTickers(dateString string) that calls several times to listTickers
-func listTickers(client *polygon.Client, startTicker string, dateString string, tickerStringCompareType models.Comparator, numTickers int) *iter.Iter[models.Ticker] {
+func ListTickers(client *polygon.Client, startTicker string, dateString string, tickerStringCompareType models.Comparator, numTickers int) *iter.Iter[models.Ticker] {
 	params := models.ListTickersParams{}.
 		WithMarket(models.AssetStocks).
 		WithSort(models.TickerSymbol).
@@ -86,7 +86,7 @@ func listTickers(client *polygon.Client, startTicker string, dateString string, 
 }
 func AllTickers(client *polygon.Client, dateString string) []models.Ticker {
 	tickerList := []models.Ticker{}
-	iter := listTickers(client, "", dateString, models.GT, 1000)
+	iter := ListTickers(client, "", dateString, models.GT, 1000)
 	for iter.Next() {
 		tickerList = append(tickerList, iter.Item())
 	}
@@ -95,7 +95,7 @@ func AllTickers(client *polygon.Client, dateString string) []models.Ticker {
 func AllTickersTickerOnly(client *polygon.Client, dateString string) *[]string {
 	tickerList := []string{}
 	st := time.Now()
-	iter := listTickers(client, "", dateString, models.GT, 1000)
+	iter := ListTickers(client, "", dateString, models.GT, 1000)
 	fmt.Println(time.Since(st))
 	start := time.Now()
 	for iter.Next() {
@@ -105,7 +105,7 @@ func AllTickersTickerOnly(client *polygon.Client, dateString string) *[]string {
 	return &tickerList
 }
 
-func tickerDetails(client *polygon.Client, ticker string, dateString string) *models.Ticker {
+func TickerDetails(client *polygon.Client, ticker string, dateString string) *models.Ticker {
 	var params *models.GetTickerDetailsParams
 	if dateString != "now" {
 		dt, err := time.Parse(time.DateOnly, dateString)
@@ -126,7 +126,7 @@ func tickerDetails(client *polygon.Client, ticker string, dateString string) *mo
 	}
 	return &res.Results
 }
-func getTickerNews(client *polygon.Client, ticker string, millisTime models.Millis, ord string, limit int, compareType models.Comparator) *iter.Iter[models.TickerNews] {
+func GetTickerNews(client *polygon.Client, ticker string, millisTime models.Millis, ord string, limit int, compareType models.Comparator) *iter.Iter[models.TickerNews] {
 	sortOrder := models.Asc
 	if ord == "desc" {
 		sortOrder = models.Desc
@@ -141,11 +141,11 @@ func getTickerNews(client *polygon.Client, ticker string, millisTime models.Mill
 	return iter
 
 }
-func getLatestTickerNews(client *polygon.Client, ticker string, numResults int) *iter.Iter[models.TickerNews] {
-	return getTickerNews(client, ticker, models.Millis(time.Now()), "asc", numResults, models.LTE)
+func GetLatestTickerNews(client *polygon.Client, ticker string, numResults int) *iter.Iter[models.TickerNews] {
+	return GetTickerNews(client, ticker, models.Millis(time.Now()), "asc", numResults, models.LTE)
 }
 
-func getRelatedTickers(client *polygon.Client, ticker string) *[]string {
+func GetRelatedTickers(client *polygon.Client, ticker string) *[]string {
 	params := &models.GetTickerRelatedCompaniesParams{
 		Ticker: ticker,
 	}
@@ -178,7 +178,7 @@ func getRelatedTickers(client *polygon.Client, ticker string) *[]string {
 // }
 
 // QA STATUS: NEEDS TESTING
-func getAggsData(client *polygon.Client, ticker string, barLength int, timeframe string,
+func GetAggsData(client *polygon.Client, ticker string, barLength int, timeframe string,
 	fromMillis models.Millis, toMillis models.Millis, limit int) *iter.Iter[models.Agg] {
 	timespan := models.Timespan(timeframe)
 	params := models.ListAggsParams{
@@ -193,7 +193,7 @@ func getAggsData(client *polygon.Client, ticker string, barLength int, timeframe
 	return iter
 
 }
-func millisFromDatetimeString(datetime string) models.Millis {
+func MillisFromDatetimeString(datetime string) models.Millis {
 	layouts := []string{
 		time.DateTime,
 		time.DateOnly,
@@ -211,7 +211,7 @@ func millisFromDatetimeString(datetime string) models.Millis {
 	return models.Millis(time.Now())
 
 }
-func nanosFromDatetimeString(datetime string) models.Nanos {
+func NanosFromDatetimeString(datetime string) models.Nanos {
 	layouts := []string{
 		time.RFC3339Nano,
 		time.DateTime,
@@ -228,7 +228,7 @@ func nanosFromDatetimeString(datetime string) models.Nanos {
 	log.Fatal(errors.New("invalid datetime string"))
 	return models.Nanos(time.Now())
 }
-func getTickerFromCIK(client *polygon.Client, cik int) string {
+func GetTickerFromCIK(client *polygon.Client, cik int) string {
 	params := models.ListTickersParams{}.WithCIK(cik)
 	iter := client.ListTickers(context.Background(), params)
 	for iter.Next() {
@@ -236,15 +236,14 @@ func getTickerFromCIK(client *polygon.Client, cik int) string {
 	}
 	return iter.Item().Ticker
 }
-func getCIK(client *polygon.Client, ticker string) int {
+func GetCIK(client *polygon.Client, ticker string) (int, error) {
 	params := models.ListTickersParams{}.WithTicker(models.EQ, ticker)
 	iter := client.ListTickers(context.Background(), params)
 	for iter.Next() {
-		sfsaf
 	}
 	cik, err := strconv.Atoi(iter.Item().CIK)
 	if err != nil {
-		log.Fatal("error retreiving cik")
+		return 0, err
 	}
-	return cik
+	return cik, err
 }
