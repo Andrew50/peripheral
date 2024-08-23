@@ -7,5 +7,6 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 ENV IN_CONTAINER=true
+ENV POLYGON_API_KEY="ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm"
 #EXPOSE 5057
 ENTRYPOINT ["air","-c",".air.toml"]
