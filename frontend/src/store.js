@@ -17,7 +17,7 @@ let base_url;
 
 if (typeof window !== 'undefined') {
     const url = new URL(window.location.origin);
-    url.port = 5057;
+    url.port = "5057";
     base_url = url.toString();
     base_url = base_url.substring(0,base_url.length - 1);
 

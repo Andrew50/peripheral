@@ -19,7 +19,7 @@ func SetAnnotation(conn *data.Conn, userId int, rawArgs json.RawMessage) (interf
         return nil, fmt.Errorf("getAnnotations invalid args: %v", err)
     }
 
-    cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE instances SET entry = $1, completed = true WHERE annotation_id = $2 AND user_id = $3", args.Entry, args.AnnotationId, userId)
+    cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE annotations SET entry = $1, completed = true WHERE annotation_id = $2 AND user_id = $3", args.Entry, args.AnnotationId, userId)
     if err != nil {
         return nil, fmt.Errorf("SetAnnotation execution failed: %v", err)
     }
