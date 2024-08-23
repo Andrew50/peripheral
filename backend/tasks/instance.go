@@ -4,22 +4,22 @@ import (
     "api/data"
     "encoding/json"
     "fmt"
+    "context"
 )
 
-
-
 type NewInstanceArgs struct {
-
+    SecurityId string `json:"a1"`
+    Timestamp int `json:"a2"`
 }
 
-
-
-
-func NewInstance (conn *data.Conn, user_id int, rawArgs json.RawMessage) (interface{}, error) {
+func NewInstance (conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
     var args NewInstanceArgs
     if err := json.Unmarshal(rawArgs, &args); err != nil {
         return nil, fmt.Errorf("NewInstance invalid args: %v", err)
     }
-
+    _, err := conn.DB.Exec(context.Background(), "insert into annotations security_id = $1, timestamp = $2, user_id = $3", args.SecurityId, args.Timestamp, userId)
+    if err != nil {
+        return nil, fmt.Errorf("NewIstance execution failed: %v", err)
+    }
     return nil, nil 
 }
