@@ -2,10 +2,12 @@ package data
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
-	"strconv"
+	"net/http"
 	"time"
 
 	polygon "github.com/polygon-io/client-go/rest"
@@ -228,22 +230,59 @@ func NanosFromDatetimeString(datetime string) models.Nanos {
 	log.Fatal(errors.New("invalid datetime string"))
 	return models.Nanos(time.Now())
 }
-func GetTickerFromCIK(client *polygon.Client, cik int) string {
-	params := models.ListTickersParams{}.WithCIK(cik)
-	iter := client.ListTickers(context.Background(), params)
-	for iter.Next() {
 
-	}
-	return iter.Item().Ticker
+type TickerResponse struct {
+	Results []struct {
+		Ticker string `json:"ticker"`
+	} `json:"results"`
+	Status    string `json:"status"`
+	RequestID string `json:"request_id"`
+	Count     int    `json:"count"`
 }
-func GetCIK(client *polygon.Client, ticker string) (int, error) {
+
+func GetTickerFromCIK(client *polygon.Client, cik string) (string, error) {
+	apiKey := "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm"
+	url := fmt.Sprintf("https://api.polygon.io/v3/reference/tickers?cik=%s&active=true&limit=100&apiKey=%s", cik, apiKey)
+
+	// Make the HTTP request
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read the response body
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Parse the JSON response
+	var tickerResponse TickerResponse
+	err = json.Unmarshal(body, &tickerResponse)
+	if err != nil {
+		return "", fmt.Errorf("failed to unmarshal JSON: %w", err)
+	}
+
+	// Check if results array is not empty and return the ticker
+	if len(tickerResponse.Results) > 0 {
+		return tickerResponse.Results[0].Ticker, nil
+	}
+
+	// Return an error if no ticker was found
+	return "", fmt.Errorf("no ticker found for CIK: %s", cik)
+	// params := models.ListStockFinancialsParams{}.WithCIK(cik)
+	// iter := client.ListTickers(context.Background(), params)
+	// fmt.Print("hello")
+	// for iter.Next() {
+	// 	fmt.Print(iter.Item())
+	// }
+	// return iter.Item().Ticker
+}
+func GetCIK(client *polygon.Client, ticker string) string {
 	params := models.ListTickersParams{}.WithTicker(models.EQ, ticker)
 	iter := client.ListTickers(context.Background(), params)
 	for iter.Next() {
 	}
-	cik, err := strconv.Atoi(iter.Item().CIK)
-	if err != nil {
-		return 0, err
-	}
-	return cik, err
+	return iter.Item().CIK
 }
