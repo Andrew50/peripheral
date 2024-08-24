@@ -1,6 +1,6 @@
 <!-- app/+page.svelte -->
 <script lang="ts">
-    import {auth_data, request} from '../../store.js'
+    import {auth_data, privateRequest} from '../../store'
     import { goto } from '$app/navigation';
     import { browser } from '$app/environment';
     import { writable } from 'svelte/store';
@@ -31,13 +31,13 @@
     function newInstance (): void {
         if (ticker && timestamp) {
             let cik: number;
-            [cik, errorMessage] = request(null, true, "GetCik", ticker)
-           // request(null, true, "NewInstance", ticker, timestamp).then((result)=> errorMessage.set(result))
+            [cik, errorMessage] = privateRequest(null, true, "GetCik", ticker)
+           // privateRequest(null, true, "NewInstance", ticker, timestamp).then((result)=> errorMessage.set(result))
            if (!errorMessage) {
 
             //if (!errorMessage){
                 const security: Security = {ticker: ticker, cik: cik}
-                [instanceId, errorMessage] = request(null, true, "NewInstance", security.sik, timestamp);
+                [instanceId, errorMessage] = privateRequest(null, true, "NewInstance", security.sik, timestamp);
                 const instance: Instance = {
                     instance_id: result["instance_id"],
                     security: security,
