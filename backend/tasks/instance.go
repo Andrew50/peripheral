@@ -8,7 +8,7 @@ import (
 )
 
 type GetCikArgs struct {
-	TickerString string `json:"a1"`
+	TickerString string `json:"ticker"`
 }
 
 func GetCik(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -23,8 +23,8 @@ func GetCik(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, 
 }
 
 type NewInstanceArgs struct {
-	Cik       string `json:"a1"`
-	Timestamp string `json:"a2"`
+	Cik       string `json:"cik"`
+	Timestamp string `json:"timestamp"`
 }
 
 func NewInstance(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
