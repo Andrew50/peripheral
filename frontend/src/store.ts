@@ -46,13 +46,15 @@ export async function publicRequest<T>(func: string, args: any, error: Writable<
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: payload});
-    console.log('request:', payload,'result:', response);
     if (response.ok){
         error.set("")
-        return await response.json() as T;
+        const result = await response.json() as T
+        console.log("payload: ",payload, "result: ", result)
+        return result;
     }else{
         const errorMessage = await response.text()
         error.set(errorMessage);
+        console.error("payload: ",payload, "result: ", errorMessage)
         return Promise.reject();
     }
 }
@@ -74,14 +76,15 @@ export async function privateRequest<T>(func: string, args: any, error: Writable
         method: 'POST',
         headers: headers,
         body: payload});
-    console.log('request:', payload,'result:', response);
     if (response.ok){
         error.set("")
-        return await response.json() as T;
+        const result = await response.json() as T
+        console.log("payload: ",payload, "result: ", result)
+        return result;
     }else{
         const errorMessage = await response.text()
         error.set(errorMessage);
-        console.error(errorMessage);
+        console.error("payload: ",payload, "result: ", errorMessage)
         return Promise.reject();
     }
 }
