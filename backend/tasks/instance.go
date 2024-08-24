@@ -33,10 +33,14 @@ func NewInstance(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfac
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("NewInstance invalid args: %v", err)
 	}
-	var instanceID int
-	err := conn.DB.QueryRow(context.Background(), "insert into instances (user_id, cik, timestamp) values ($1, $2, $3) RETURNING instance_id", userId, args.Cik, args.Timestamp).Scan(&instanceID)
+	_, err := conn.DB.Exec(context.Background(), "insert into instances (user_id, cik, timestamp) values ($1, $2, $3)", userId, args.Cik, args.Timestamp)
 	if err != nil {
 		return nil, fmt.Errorf("NewInstance execution failed: %v", err)
+	}
+	var instanceID int
+	qrErr := conn.DB.QueryRow(context.Background(), "SELECT instance_id FROM instances WHERE user_id = $1 AND cik = $2 and timestamp = $3", userId, args.Cik, args.Timestamp).Scan(&instanceID)
+	if err != nil {
+		return nil, fmt.Errorf("NewInstance execution failed: %v", qrErr)
 	}
 	fmt.Print(instanceID)
 
