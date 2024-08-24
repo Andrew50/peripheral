@@ -37,7 +37,7 @@
         cik: string;
     }
     interface NewInstanceResult {
-        instanceId : string;
+        instanceId : number;
     }
     let instances = writable<Instance[]>([]);
     $: if ($auth_data == "" && browser) {
