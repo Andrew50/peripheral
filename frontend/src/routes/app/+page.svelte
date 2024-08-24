@@ -10,6 +10,14 @@
     let timestamp: number;
     let errorMessage = writable<string>('')
     let currentAnnotationId: number;
+    errorMessage.subscribe((value) => {
+        if (value !== "") {
+            setTimeout(() => {
+                errorMessage.set('');
+            }, 5000);
+        }
+    });
+
     interface Security {
         ticker: string;
         cik: string;
@@ -19,7 +27,7 @@
         entry: string;
     }
     interface Instance {
-        instance_id: number;
+        instanceId: number;
         security: Security;
         timestamp: number;
         annotations: Annotation[];
@@ -42,7 +50,7 @@
                 security = {ticker: ticker, cik: result.cik};
                 privateRequest<NewInstanceResult>("NewInstance", {cik:security.cik, timestamp:timestamp}, errorMessage).then((result : NewInstanceResult) => {
                     const instance: Instance = {
-                        instance_id: instanceId,
+                        instanceId: instanceId,
                         security: security,
                         timestamp: timestamp,
                         annotations: []
@@ -82,14 +90,14 @@
     </tr>
     {#each $instances as instance}
         <tr>
-            <td> {instance.id}</td>
+            <td> {instance.instanceId}</td>
             <td> {instance.security.ticker}</td>
             <td> {instance.timestamp}</td>
             <td>
-                <button on:click={()=> (currentAnnotationId = instance.id)}> Annotations </button>
+                <button on:click={()=> (currentAnnotationId = instance.instanceId)}> Annotations </button>
             </td>
         </tr>
-        {#if currentAnnotationId == instance.id}
+        {#if currentAnnotationId == instance.instanceId}
             {#each instance.annotations as annotation}
                 <tr> 
                     {annotation.timeframe}

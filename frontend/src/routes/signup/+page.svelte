@@ -1,4 +1,4 @@
 <script>
     import Account from '../auth.svelte';
 </script>
-<Account login={false} />
+<Account loginMenu={false} />

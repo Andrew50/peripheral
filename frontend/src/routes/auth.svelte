@@ -5,15 +5,14 @@
     import { goto } from '$app/navigation';
     import { writable } from 'svelte/store';
   
-  export let login: boolean;
-
+  export let loginMenu: boolean = true;
   let username = '';
   let password = '';
   let errorMessage = writable('');
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter') {
-        if (login){
+        if (loginMenu){
           signIn(username, password);
         }else{
             signUp(username,password);
@@ -50,7 +49,7 @@
   <div class="container">
     <input placeholder="Username" bind:value={username} on:keydown={handleKeydown} />
     <input placeholder="Password" bind:value={password} on:keydown={handleKeydown} />
-    {#if login}
+    {#if loginMenu}
       <button on:click={() => signIn(username, password)} class="login-btn">Sign In</button>
     {:else}
       <button on:click={() => signUp(username, password)} class="signup-btn">Create Account</button>
