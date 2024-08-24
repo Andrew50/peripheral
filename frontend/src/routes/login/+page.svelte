@@ -2,4 +2,4 @@
     import Account from '../auth.svelte';
 </script>
 
-<Account login={true} />
+<Account loginMenu={true} />
