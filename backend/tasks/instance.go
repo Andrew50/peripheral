@@ -31,7 +31,7 @@ type NewInstanceArgs struct {
 	Timestamp string `json:"timestamp"`
 }
 type NewInstanceResults struct {
-	InstanceID int `json:"instanceid"`
+	InstanceID int `json:"instanceId"`
 }
 
 func NewInstance(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
