@@ -1,17 +1,17 @@
 <!-- account.svelte -->
-<script>
-  import {request,auth_data,settings,setups_list} from '../store.js'
+<script lang="ts">
+    import {publicRequest,auth_data,settings} from '../store'
     import Header from './header.svelte';
     import { goto } from '$app/navigation';
     import { writable } from 'svelte/store';
   
-  export let login;
+  export let login: boolean;
 
   let username = '';
   let password = '';
   let errorMessage = writable('');
 
-  function handleKeydown(event) {
+  function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter') {
         if (login){
           signIn(username, password);
@@ -21,25 +21,25 @@
     }
   }
 
-    async function signIn(username, password) {
-        let [response, err] = await request(null,false,'login', username, password);
-        if (err){
-            errorMessage.set(err);
-        } else {
-            auth_data.set(response.token);
-            settings.set(response.settings);
-            setups_list.set(response.setups);
-            await goto('/app');
-        }
+  interface Login {
+      token: string;
+      settings: string;
+  }
+
+    async function signIn(username: string, password: string) {
+        publicRequest<Login>('login', {username:username, password:password},errorMessage).then((r : Login) => {
+            auth_data.set(r.token)
+            settings.set(r.settings)
+            goto('/app');
+        })
     }
 
-  async function signUp(username, password) {
-      console.log("work")
+  async function signUp(username : string, password : string) {
     try {
-        await request(null,false,'signup', username, password);
+        await publicRequest('signup', {username:username, password:password},errorMessage);
         await signIn(username, password); // Automatically sign in after account creation
-    } catch (error) {
-        errorMessage.set(error.message || 'Failed to create account');
+    } catch {
+        errorMessage.set('Failed to create account');
     }
 }
 </script>

@@ -23,8 +23,8 @@ type LoginResponse struct {
     Setups [][]interface{} `json:"setups"`
 }
 type SignupArgs struct {
-    Username string `json:"a1"`
-    Password string `json:"a2"`
+    Username string `json:"username"`
+    Password string `json:"password"`
 }
 func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
     var a SignupArgs
@@ -40,8 +40,8 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 }
 
 type LoginArgs struct {
-    Username string `json:"a1"`
-    Password string `json:"a2"`
+    Username string `json:"username"`
+    Password string `json:"password"`
 }
 func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
     var a LoginArgs

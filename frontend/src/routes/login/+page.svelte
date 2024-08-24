@@ -1,5 +1,5 @@
 <script>
-    import Account from '../account.svelte';
+    import Account from '../auth.svelte';
 </script>
 
 <Account login={true} />
