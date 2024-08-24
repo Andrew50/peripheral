@@ -50,7 +50,7 @@
                 security = {ticker: ticker, cik: result.cik};
                 privateRequest<NewInstanceResult>("NewInstance", {cik:security.cik, timestamp:timestamp}, errorMessage).then((result : NewInstanceResult) => {
                     const instance: Instance = {
-                        instanceId: instanceId,
+                        instanceId: result.instanceId,
                         security: security,
                         timestamp: timestamp,
                         annotations: []
