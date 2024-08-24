@@ -1,17 +1,6 @@
 package data
 
-import (
-	"fmt"
-	"time"
-
-	polygon "github.com/polygon-io/client-go/rest"
-)
-
 func BenTest() {
-	c := polygon.New(apiKey)
-	start := time.Now()
-	fmt.Println(getLastQuote(c, "SNOW"))
-	fmt.Println(time.Since(start))
 	//fmt.Println(AllTickersTickerOnly(c, "2024-08-20")[0])
 	// // test getLastQuote()
 	// var ticker string = "COIN"
