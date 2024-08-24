@@ -49,6 +49,7 @@
             privateRequest<CikResult>("GetCik", {ticker:ticker}, errorMessage).then((result : CikResult) => {
                 security = {ticker: ticker, cik: result.cik};
                 privateRequest<NewInstanceResult>("NewInstance", {cik:security.cik, timestamp:timestamp}, errorMessage).then((result : NewInstanceResult) => {
+                    console.log(result)
                     const instance: Instance = {
                         instanceId: result.instanceId,
                         security: security,
