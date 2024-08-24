@@ -1,6 +1,20 @@
 package data
 
+import (
+	"fmt"
+	"log"
+
+	polygon "github.com/polygon-io/client-go/rest"
+)
+
 func BenTest() {
+	client := polygon.New("ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm")
+	res, err := GetTickerFromCIK(client, "0001679788")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Print(res)
+
 	//fmt.Println(AllTickersTickerOnly(c, "2024-08-20")[0])
 	// // test getLastQuote()
 	// var ticker string = "COIN"

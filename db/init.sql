@@ -13,11 +13,11 @@ create table setups (
 CREATE TABLE instances (
     instance_id serial PRIMARY KEY,
     user_id serial references users(user_id) on delete cascade,
-    security_id varchar(100) not null,
+    cik varchar(100) not null,
     timestamp timestamp not null,
-    unique (user_id, security_id, timestamp)
+    unique (user_id, cik, timestamp)
 );
-create index idx_instances on instances (security_id, timestamp);
+create index idx_instances on instances (cik, timestamp);
 create table training_instances (
     instance_id serial references instances(instance_id) on delete cascade,
     setup_id serial references setups(setup_id) on delete cascade,

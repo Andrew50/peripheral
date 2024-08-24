@@ -12,7 +12,7 @@
     let currentAnnotationId: number;
     interface Security {
         ticker: string;
-        cik: number;
+        cik: string;
     }
     interface Annotation {
         timeframe: string;
@@ -30,22 +30,36 @@
     }
     function newInstance (): void {
         if (ticker && timestamp) {
-            let cik: number;
-            [cik, errorMessage] = request(null, true, "GetCik", ticker)
-           // request(null, true, "NewInstance", ticker, timestamp).then((result)=> errorMessage.set(result))
-           if (!errorMessage) {
+            let cik: string;
+            let security: Security;
+            
+            request(null, true, "GetCik", ticker).then((result) => {
+                if(Array.isArray(result)) {
+                const [cik, errorMessage] = result;
+                if(errorMessage) {
+                    errorMessage.set(errorMessage);
+                }
+                
+                security = {ticker: ticker, cik: cik};
+                request(null, true, "NewInstance", security.cik, timestamp).then((result) => {
 
-            //if (!errorMessage){
-                const security: Security = {ticker: ticker, cik: cik}
-                [instanceId, errorMessage] = request(null, true, "NewInstance", security.sik, timestamp);
+                    if(Array.isArray(result)) {
+                        const [instanceId, errorMessage] = result;
+                        errorMessage.set(errorMessage)
+                    }
+                })
                 const instance: Instance = {
-                    instance_id: result["instance_id"],
+                    instance_id: instanceId,
                     security: security,
                     timestamp: timestamp,
                     annotations: []
                 }
                 instances.update((v) => [instance,...v]);
-            }
+                }
+            });
+           // request(null, true, "NewInstance", ticker, timestamp).then((result)=> errorMessage.set(result))
+
+            //if (!errorMessage){
         } else {
             errorMessage.set("unfilled form")
         }
