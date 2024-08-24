@@ -43,6 +43,17 @@
     $: if ($auth_data == "" && browser) {
         goto('/login');
     }
+
+    function newAnnotation (instance : Instance, timeframe: string): void {
+        if (!instance.annotations.map((a) => {a.timeframe}).contains(timeframe)){
+            const newAnnotation: Annotation = {timeframe: timeframe, entry:""}
+            instance.annotation.push(newAnnotation)
+            console.log(instance)
+        } else {
+            errorMessage = "tf already exists"
+        }
+    }
+
     function newInstance (): void {
         if (ticker && timestamp) {
             let security: Security;
@@ -96,6 +107,9 @@
             <td> {instance.timestamp}</td>
             <td>
                 <button on:click={()=> (currentAnnotationId = instance.instanceId)}> Annotations </button>
+            </td>
+            <td>
+                <button on:click={()=> {currentAnnotationId = instance.instanceId; newAnnotation(instance,"1d");}}> Annotations </button>
             </td>
         </tr>
         {#if currentAnnotationId == instance.instanceId}
