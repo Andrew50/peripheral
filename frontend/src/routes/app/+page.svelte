@@ -24,42 +24,32 @@
         timestamp: number;
         annotations: Annotation[];
     }
+
+    interface CikResult {
+        cik: string;
+    }
+    interface NewInstanceResult {
+        instanceId : string;
+    }
     let instances = writable<Instance[]>([]);
-    $: if ($auth_data == null && browser) {
+    $: if ($auth_data == "" && browser) {
         goto('/login');
     }
     function newInstance (): void {
         if (ticker && timestamp) {
-            let cik: string;
             let security: Security;
-            
-            request(null, true, "GetCik", ticker).then((result) => {
-                if(Array.isArray(result)) {
-                const [cik, errorMessage] = result;
-                if(errorMessage) {
-                    errorMessage.set(errorMessage);
-                }
-                
-                security = {ticker: ticker, cik: cik};
-                request(null, true, "NewInstance", security.cik, timestamp).then((result) => {
-
-                    if(Array.isArray(result)) {
-                        const [instanceId, errorMessage] = result;
-                        errorMessage.set(errorMessage)
+            privateRequest<CikResult>("GetCik", {ticker:ticker}, errorMessage).then((result : CikResult) => {
+                security = {ticker: ticker, cik: result.cik};
+                privateRequest<NewInstanceResult>("NewInstance", {cik:security.cik, timestamp:timestamp}, errorMessage).then((result : NewInstanceResult) => {
+                    const instance: Instance = {
+                        instance_id: instanceId,
+                        security: security,
+                        timestamp: timestamp,
+                        annotations: []
                     }
+                    instances.update((v) => [instance,...v]);
                 })
-                const instance: Instance = {
-                    instance_id: instanceId,
-                    security: security,
-                    timestamp: timestamp,
-                    annotations: []
-                }
-                instances.update((v) => [instance,...v]);
-                }
             });
-           // request(null, true, "NewInstance", ticker, timestamp).then((result)=> errorMessage.set(result))
-
-            //if (!errorMessage){
         } else {
             errorMessage.set("unfilled form")
         }
