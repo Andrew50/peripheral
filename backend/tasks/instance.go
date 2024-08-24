@@ -10,6 +10,9 @@ import (
 type GetCikArgs struct {
 	TickerString string `json:"ticker"`
 }
+type GetCikResults struct {
+	Cik string `json:"cik"`
+}
 
 func GetCik(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetCikArgs
@@ -18,13 +21,17 @@ func GetCik(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, 
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
 	cik := data.GetCIK(conn.Polygon, args.TickerString)
-	return cik, err
+	res := GetCikResults{Cik: cik}
+	return res, err
 
 }
 
 type NewInstanceArgs struct {
 	Cik       string `json:"cik"`
 	Timestamp string `json:"timestamp"`
+}
+type NewInstanceResults struct {
+	InstanceID int `json:"instanceid"`
 }
 
 func NewInstance(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -42,7 +49,5 @@ func NewInstance(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfac
 	if err != nil {
 		return nil, fmt.Errorf("NewInstance execution failed: %v", qrErr)
 	}
-	fmt.Print(instanceID)
-
-	return instanceID, err
+	return NewInstanceResults{InstanceID: instanceID}, err
 }
