@@ -13,7 +13,7 @@ create table setups (
 CREATE TABLE instances (
     instance_id serial PRIMARY KEY,
     user_id serial references users(user_id) on delete cascade,
-    cik varchar(100) not null,
+    cik varchar(10) not null,
     timestamp timestamp not null,
     unique (user_id, cik, timestamp)
 );
