@@ -8,7 +8,7 @@ export let journalData = writable([]);
 export let screener_data = writable([]);
 export let chartQuery = writable([]);
 export let match_data = writable([[], [], []]);
-export let auth_data = writable({});
+export let auth_data = writable("");
 export let setups_list = writable([]);
 export let currentEntry = writable("");
 export let watchlist_data = writable({});
@@ -61,18 +61,18 @@ export async function privateRequest<T>(func: string, args: any, error: Writable
     const authToken = get(auth_data)
     const headers = {
         'Content-Type': 'application/json',
-        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        ...(authToken ? { 'Authorization': authToken} : {}),
     };
-    const filteredHeaders = Object.fromEntries(
+    /*const filteredHeaders = Object.fromEntries(
         Object.entries(headers).filter(([_, value]) => value !== undefined)
-    );
+    );*/
     const payload = JSON.stringify({
         func: func,
         args: args
     })
     const response = await fetch(`${base_url}/private`, {
         method: 'POST',
-        headers: filteredHeaders,
+        headers: headers,
         body: payload});
     console.log('request:', payload,'result:', response);
     if (response.ok){
@@ -81,6 +81,7 @@ export async function privateRequest<T>(func: string, args: any, error: Writable
     }else{
         const errorMessage = await response.text()
         error.set(errorMessage);
+        console.error(errorMessage);
         return Promise.reject();
     }
 }
