@@ -1,28 +1,28 @@
 <!-- app/+page.svelte -->
 <script lang="ts">
-    import {auth_data, privateRequest} from '../../store'
+    import { onMount } from 'svelte';
+    import { privateRequest } from '../../store'
     import { goto } from '$app/navigation';
     import { browser } from '$app/environment';
-    import { writable } from 'svelte/store';
-    
-    let instanceId = 1;
+    import { writable , get} from 'svelte/store';
     let ticker: string;
     let timestamp: number;
     let errorMessage = writable<string>('')
     let currentAnnotationId: number;
-    errorMessage.subscribe((value) => {
+    let instances = writable<Instance[]>([]);
+    /*errorMessage.subscribe((value) => {
         if (value !== "") {
             setTimeout(() => {
                 errorMessage.set('');
             }, 5000);
         }
-    });
-
+    });*/
     interface Security {
         ticker: string;
         cik: string;
     }
     interface Annotation {
+        annotationId: number;
         timeframe: string;
         entry: string;
     }
@@ -32,34 +32,52 @@
         timestamp: number;
         annotations: Annotation[];
     }
-
     interface CikResult {
         cik: string;
     }
     interface NewInstanceResult {
         instanceId : number;
     }
-    let instances = writable<Instance[]>([]);
-    $: if ($auth_data == "" && browser) {
+    onMount(() => {
+        privateRequest<Instance[]>("getInstances", {}, errorMessage).then((result: Instance[]) => {
+            //idk why the fuck this needs to be here but somehow for each throws??
+            try {
+                result.forEach((v) => {v.annotations = []})
+            }catch{}
+            instances.set(result);
+        }).catch((r) => { 
+            goto('/login')
+        });
+    });
+    /*$: if ($authToken == "" && browser) {
         goto('/login');
+    }*/
+    function newAnnotation (instance : Instance, timeframe: string): void {
+        console.log(instance)
+        if (!instance.annotations.some((a) => a.timeframe === timeframe)){
+            var annotationId: number;
+            privateRequest<number>("newAnnotation", {timeframe:timeframe, instanceId: instance.instanceId}, errorMessage).then((annotationId: number) => {
+                const newAnnotation: Annotation = {annotationId: annotationId,  timeframe: timeframe, entry:""}
+                instance.annotations.push(newAnnotation)
+            })
+        } else {
+            errorMessage.set("tf already exists")
+        }
     }
 
-    function newAnnotation (instance : Instance, timeframe: string): void {
-        if (!instance.annotations.map((a) => {a.timeframe}).contains(timeframe)){
-            const newAnnotation: Annotation = {timeframe: timeframe, entry:""}
-            instance.annotation.push(newAnnotation)
-            console.log(instance)
-        } else {
-            errorMessage = "tf already exists"
-        }
+    function getAnnotations(instance: Instance): void {
+        privateRequest<Annotation[]>("getAnnotations",{instanceId:instance.instanceId}, errorMessage).then((result: Annotation[]) => {
+            instance.annotations = result
+    })
     }
 
     function newInstance (): void {
         if (ticker && timestamp) {
             let security: Security;
-            privateRequest<CikResult>("GetCik", {ticker:ticker}, errorMessage).then((result : CikResult) => {
+            privateRequest<CikResult>("getCik", {ticker:ticker}, errorMessage).then((result : CikResult) => {
                 security = {ticker: ticker, cik: result.cik};
-                privateRequest<NewInstanceResult>("NewInstance", {cik:security.cik, timestamp:timestamp}, errorMessage).then((result : NewInstanceResult) => {
+                privateRequest<NewInstanceResult>("newInstance", {cik:security.cik, timestamp:timestamp}, errorMessage)
+                .then((result : NewInstanceResult) => {
                     console.log(result)
                     const instance: Instance = {
                         instanceId: result.instanceId,
@@ -67,7 +85,13 @@
                         timestamp: timestamp,
                         annotations: []
                     }
-                    instances.update((v) => [instance,...v]);
+                    instances.update((v) => {
+                        if(v){
+                            return [instance,...v]
+                        } else {
+                            return [instance]
+                        }
+                    })
                 })
             });
         } else {
@@ -100,29 +124,34 @@
         <th> Ticker </th>
         <th> Datetime </th>
     </tr>
+{#if Array.isArray($instances) && $instances.length > 0}
     {#each $instances as instance}
         <tr>
             <td> {instance.instanceId}</td>
             <td> {instance.security.ticker}</td>
             <td> {instance.timestamp}</td>
             <td>
-                <button on:click={()=> (currentAnnotationId = instance.instanceId)}> Annotations </button>
+                <button on:click={()=> {currentAnnotationId = instance.instanceId; getAnnotations(instance)}}> Annotations </button>
             </td>
             <td>
-                <button on:click={()=> {currentAnnotationId = instance.instanceId; newAnnotation(instance,"1d");}}> Annotations </button>
+                <button on:click={()=> {currentAnnotationId = instance.instanceId; newAnnotation(instance,"1d");}}> New </button>
             </td>
         </tr>
         {#if currentAnnotationId == instance.instanceId}
             {#each instance.annotations as annotation}
                 <tr> 
-                    {annotation.timeframe}
-                </tr>
-                <tr> 
-                    {annotation.entry}
+                <td colspan="4">
+                    <div>{annotation.timeframe}</div>
+                    <div><textarea bind:value={annotation.entry}/></div>
+                    <div>
+                        <button on:click={() => {privateRequest("setAnnotation",{annotationId:annotation.annotationId, entry:annotation.entry},errorMessage);}}> Save </button>
+                    </div>
+                </td>
                 </tr>
             {/each}
         {/if}
     {/each}
+{/if}
 </table>
 <style>
 </style>
