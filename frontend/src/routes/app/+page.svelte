@@ -4,12 +4,14 @@
     import { privateRequest } from '../../store'
     import { goto } from '$app/navigation';
     import { browser } from '$app/environment';
-    import { writable , get} from 'svelte/store';
+    import { writable ,  get} from 'svelte/store';
+    import type { Writable } from 'svelte/store';
     let ticker: string;
     let timestamp: number;
     let errorMessage = writable<string>('')
-    let currentAnnotationId: number;
+    let selectedInstanceId = writable(0);
     let instances = writable<Instance[]>([]);
+    let currentAnnotation = "";
     /*errorMessage.subscribe((value) => {
         if (value !== "") {
             setTimeout(() => {
@@ -38,6 +40,7 @@
     interface NewInstanceResult {
         instanceId : number;
     }
+    selectedInstanceId.subscribe((v) => {console.log(v)});
     onMount(() => {
         privateRequest<Instance[]>("getInstances", {}, errorMessage).then((result: Instance[]) => {
             //idk why the fuck this needs to be here but somehow for each throws??
@@ -67,7 +70,7 @@
 
     function getAnnotations(instance: Instance): void {
         privateRequest<Annotation[]>("getAnnotations",{instanceId:instance.instanceId}, errorMessage).then((result: Annotation[]) => {
-            instance.annotations = result
+            currentAnnotation = result;
     })
     }
 
@@ -131,20 +134,20 @@
             <td> {instance.security.ticker}</td>
             <td> {instance.timestamp}</td>
             <td>
-                <button on:click={()=> {currentAnnotationId = instance.instanceId; getAnnotations(instance)}}> Annotations </button>
+                <button on:click={()=> {selectedInstanceId.set(instance.instanceId); getAnnotations(instance); console.log(instance)}}> Annotations </button>
             </td>
             <td>
-                <button on:click={()=> {currentAnnotationId = instance.instanceId; newAnnotation(instance,"1d");}}> New </button>
+                <button on:click={()=> {selectedInstanceId.set(instance.instanceId); newAnnotation(instance,"1d");}}> New </button>
             </td>
         </tr>
-        {#if currentAnnotationId == instance.instanceId}
+        {#if Array.isArray(instance.annotations) && instance.annotations.length > 0 && $selectedInstanceId == instance.instanceId}
             {#each instance.annotations as annotation}
                 <tr> 
                 <td colspan="4">
                     <div>{annotation.timeframe}</div>
-                    <div><textarea bind:value={annotation.entry}/></div>
+                    <div><textarea bind:value={currentAnnotation}/></div>
                     <div>
-                        <button on:click={() => {privateRequest("setAnnotation",{annotationId:annotation.annotationId, entry:annotation.entry},errorMessage);}}> Save </button>
+                        <button on:click={() => {privateRequest("setAnnotation",{annotationId:annotation.annotationId, entry:currentAnnotation},errorMessage);}}> Save </button>
                     </div>
                 </td>
                 </tr>
