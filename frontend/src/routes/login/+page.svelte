@@ -1,5 +1,6 @@
 <script>
     import Account from '../auth.svelte';
+    let key = 1;
 </script>
 
-<Account loginMenu={true} />
+<Account {key} loginMenu={true} />
