@@ -5,7 +5,7 @@
     import { goto } from '$app/navigation';
     import { writable } from 'svelte/store';
   
-  export let loginMenu: boolean = true;
+  export let loginMenu: boolean = false;
   let username = '';
   let password = '';
   let errorMessage = writable('');
