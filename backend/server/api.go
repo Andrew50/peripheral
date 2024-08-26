@@ -1,7 +1,5 @@
 package server
 
-//test
-
 import (
 	"api/data"
 	"api/tasks"
@@ -17,13 +15,12 @@ var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, erro
 }
 
 var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}, error){
-	/*"getAnnotations": tasks.GetAnnotations,
-	  "delAnnotation": tasks.DelAnnotation,
-	  "setAnnotation": tasks.SetAnnotation,
-	  "getAnnotationEntry": tasks.GetAnnotationEntry,
-	  "newAnnotation": tasks.NewAnnotation,*/
-	"NewInstance": tasks.NewInstance,
-	"GetCik":      tasks.GetCik,
+	"newInstance": tasks.NewInstance,
+	"getCik":      tasks.GetCik,
+    "getInstances": tasks.GetInstances,
+    "setAnnotation": tasks.SetAnnotation,
+    "newAnnotation": tasks.NewAnnotation,
+    "getAnnotations": tasks.GetAnnotations,
 }
 
 type Request struct {
