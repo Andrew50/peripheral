@@ -8,7 +8,8 @@ CREATE INDEX idxUsers ON users (username, password);
 
 create table setups (
     setupId serial primary key,
-    name varchar(50) not null
+    name varchar(50) not null,
+    timeframe varchar(10)
 );
 CREATE TABLE instances (
     instanceId serial PRIMARY KEY,
