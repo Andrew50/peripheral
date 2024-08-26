@@ -76,7 +76,6 @@ export async function privateRequest<T>(func: string, args: any, error: Writable
         error.set("")
         const result = await response.json() as T
         console.log("payload: ",payload, "result: ", result)
-        console.log("gooddddd")
         return result;
     }else{
         const errorMessage = await response.text()
