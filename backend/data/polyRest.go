@@ -67,11 +67,12 @@ func GetTrade(client *polygon.Client, ticker string, nanoTimestamp models.Nanos,
 
 // QA STATUS: not QA'd
 // create function listAllTickers(dateString string) that calls several times to listTickers
-func ListTickers(client *polygon.Client, startTicker string, dateString string, tickerStringCompareType models.Comparator, numTickers int) *iter.Iter[models.Ticker] {
+func ListTickers(client *polygon.Client, startTicker string, dateString string, tickerStringCompareType models.Comparator, numTickers int, active bool) *iter.Iter[models.Ticker] {
 	params := models.ListTickersParams{}.
 		WithMarket(models.AssetStocks).
 		WithSort(models.TickerSymbol).
-		WithLimit(numTickers)
+		WithLimit(numTickers).
+		WithActive(active)
 	if startTicker != "" {
 		params = params.WithTicker(tickerStringCompareType, startTicker)
 	}
@@ -87,24 +88,38 @@ func ListTickers(client *polygon.Client, startTicker string, dateString string, 
 	return iter
 }
 func AllTickers(client *polygon.Client, dateString string) []models.Ticker {
+	if dateString == "" {
+		dateString = time.Now().Format(time.DateOnly)
+	}
 	tickerList := []models.Ticker{}
-	iter := ListTickers(client, "", dateString, models.GT, 1000)
+	iter := ListTickers(client, "", dateString, models.GT, 1000, true)
 	for iter.Next() {
 		tickerList = append(tickerList, iter.Item())
 	}
 	return tickerList
 }
 func AllTickersTickerOnly(client *polygon.Client, dateString string) *[]string {
+	if dateString == "" {
+		dateString = time.Now().Format(time.DateOnly)
+	}
 	tickerList := []string{}
-	st := time.Now()
-	iter := ListTickers(client, "", dateString, models.GT, 1000)
-	fmt.Println(time.Since(st))
-	start := time.Now()
+	iter := ListTickers(client, "", dateString, models.GT, 1000, true)
 	for iter.Next() {
 		tickerList = append(tickerList, iter.Item().Ticker)
 	}
-	fmt.Println(time.Since(start))
 	return &tickerList
+}
+func updateTickerDatabase(conn *Conn, cik string) (string, error) {
+	if cik != "" {
+
+	}
+	tickers := AllTickers(conn.Polygon, "")
+	for _, ticker := range tickers {
+		row := conn.DB.QueryRow(context.Background(), "SELECT cik, ticker FROM securities WHERE cik = $1", ticker.CIK)
+		if err := row.Scan(); err != nil {
+			conn.DB.Exec()
+		}
+	}
 }
 
 func TickerDetails(client *polygon.Client, ticker string, dateString string) *models.Ticker {
@@ -242,7 +257,7 @@ type TickerResponse struct {
 
 func GetTickerFromCIK(client *polygon.Client, cik string) (string, error) {
 	apiKey := "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm"
-	url := fmt.Sprintf("https://api.polygon.io/v3/reference/tickers?cik=%s&active=true&limit=100&apiKey=%s", cik, apiKey)
+	url := fmt.Sprintf("https://api.polygon.io/v3/reference/tickers?cik=%s&active=false&limit=100&apiKey=%s", cik, apiKey)
 
 	// Make the HTTP request
 	resp, err := http.Get(url)
