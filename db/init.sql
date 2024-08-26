@@ -5,7 +5,10 @@ CREATE TABLE users (
     settings JSONB DEFAULT '{}'
 );
 CREATE INDEX idxUsers ON users (username, password);
-
+CREATE TABLE securities {
+    cik varchar(10) not null, 
+    ticker varchar(8) not null,
+}
 create table setups (
     setupId serial primary key,
     name varchar(50) not null
