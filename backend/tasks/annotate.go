@@ -8,7 +8,6 @@ import (
 
 )
 
-
 type GetAnnotationArgs struct {
     InstanceId int `json:"instanceId"`
 }
