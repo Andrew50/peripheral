@@ -2,10 +2,10 @@ package tasks
 
 import (
 	"api/data"
-    "time"
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 type GetCikArgs struct {
@@ -27,30 +27,34 @@ func GetCik(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, 
 }
 
 type Security struct {
-    Ticker string `json:"ticker"`
-    Cik string `json:"cik"`
+	Ticker string `json:"ticker"`
+	Cik    string `json:"cik"`
 }
 
 type Instance struct {
-    InstanceId int `json:"instanceId"`
-    Security Security `json:"security"`
-    Timestamp time.Time `json:"timestamp"`
+	InstanceId int       `json:"instanceId"`
+	Security   Security  `json:"security"`
+	Timestamp  time.Time `json:"timestamp"`
 }
 
 func GetInstances(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-    rows, err := conn.DB.Query(context.Background(), "SELECT instanceId, cik, timestamp FROM instances WHERE userId = $1", userId)
-    if err != nil {
-        return nil, fmt.Errorf("358dg: %v", err)
-    }
-    var instances []Instance
-    for rows.Next() {
-        var instance Instance
-        if err := rows.Scan(&instance.InstanceId, &instance.Security.Cik, &instance.Timestamp); err != nil {
-            return nil, fmt.Errorf("dfwb3: %v", err)
-        }
-        instances = append(instances, instance)
-    }
-    return instances, nil
+	rows, err := conn.DB.Query(context.Background(), "SELECT instanceId, cik, timestamp FROM instances WHERE userId = $1", userId)
+	if err != nil {
+		return nil, fmt.Errorf("358dg: %v", err)
+	}
+	var instances []Instance
+	for rows.Next() {
+		var instance Instance
+		if err := rows.Scan(&instance.InstanceId, &instance.Security.Cik, &instance.Timestamp); err != nil {
+			return nil, fmt.Errorf("dfwb3: %v", err)
+		}
+		instance.Security.Ticker, err = data.GetTickerFromCIK(conn.Polygon, instance.Security.Cik)
+		if err != nil {
+			return nil, fmt.Errorf("245jd: %v", err)
+		}
+		instances = append(instances, instance)
+	}
+	return instances, nil
 }
 
 type NewInstanceArgs struct {
