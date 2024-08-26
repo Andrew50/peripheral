@@ -12,7 +12,7 @@ import (
 var private_key = []byte("2dde9fg9")
 
 type Claims struct {
-    UserID int `json:"user_id"`
+    UserID int `json:"userId"`
     jwt.RegisteredClaims
 }
 
@@ -48,17 +48,17 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
     if err := json.Unmarshal(rawArgs, &a); err != nil {
         return nil, fmt.Errorf("Login invalid args: %v", err)
     }
-    var user_id int
+    var userId int
     var settings string
-    err := conn.DB.QueryRow(context.Background(), "SELECT user_id, settings FROM users WHERE username=$1 AND password=$2", a.Username, a.Password).Scan(&user_id, &settings)
+    err := conn.DB.QueryRow(context.Background(), "SELECT userId, settings FROM users WHERE username=$1 AND password=$2", a.Username, a.Password).Scan(&userId, &settings)
     if err != nil {
         return nil, fmt.Errorf("Invalid Credentials")
     }
-    token, err := create_token(user_id)
+    token, err := create_token(userId)
     if err != nil {
         return nil, err
     }
-    /*rows, err := conn.DB.Query(context.Background(), "SELECT setup_id, setup_name, score, i, bars, threshold, dolvol, adr, mcap FROM setups WHERE user_id=$1", user_id)
+    /*rows, err := conn.DB.Query(context.Background(), "SELECT setup_id, setup_name, score, i, bars, threshold, dolvol, adr, mcap FROM setups WHERE userId=$1", user_id)
     if err != nil {
         return nil, err
     }
@@ -88,10 +88,10 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
     return result, err
 }
 
-func create_token(user_id int) (string, error) {
+func create_token(userId int) (string, error) {
     expirationTime := time.Now().Add(1 * time.Hour)
     claims := &Claims{
-        UserID: user_id,
+        UserID: userId,
         RegisteredClaims: jwt.RegisteredClaims{
             ExpiresAt: jwt.NewNumericDate(expirationTime),
         },

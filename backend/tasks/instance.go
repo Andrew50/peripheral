@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"api/data"
+    "time"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -23,7 +24,33 @@ func GetCik(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, 
 	cik := data.GetCIK(conn.Polygon, args.TickerString)
 	res := GetCikResults{Cik: cik}
 	return res, err
+}
 
+type Security struct {
+    Ticker string `json:"ticker"`
+    Cik string `json:"cik"`
+}
+
+type Instance struct {
+    InstanceId int `json:"instanceId"`
+    Security Security `json:"security"`
+    Timestamp time.Time `json:"timestamp"`
+}
+
+func GetInstances(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+    rows, err := conn.DB.Query(context.Background(), "SELECT instanceId, cik, timestamp FROM instances WHERE userId = $1", userId)
+    if err != nil {
+        return nil, fmt.Errorf("358dg: %v", err)
+    }
+    var instances []Instance
+    for rows.Next() {
+        var instance Instance
+        if err := rows.Scan(&instance.InstanceId, &instance.Security.Cik, &instance.Timestamp); err != nil {
+            return nil, fmt.Errorf("dfwb3: %v", err)
+        }
+        instances = append(instances, instance)
+    }
+    return instances, nil
 }
 
 type NewInstanceArgs struct {
@@ -40,14 +67,14 @@ func NewInstance(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfac
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("NewInstance invalid args: %v", err)
 	}
-	_, err := conn.DB.Exec(context.Background(), "insert into instances (user_id, cik, timestamp) values ($1, $2, $3)", userId, args.Cik, args.Timestamp)
+	_, err := conn.DB.Exec(context.Background(), "insert into instances (userId, cik, timestamp) values ($1, $2, $3)", userId, args.Cik, args.Timestamp)
 	if err != nil {
 		return nil, fmt.Errorf("NewInstance execution failed: %v", err)
 	}
 	var instanceID int
-	qrErr := conn.DB.QueryRow(context.Background(), "SELECT instance_id FROM instances WHERE user_id = $1 AND cik = $2 and timestamp = $3", userId, args.Cik, args.Timestamp).Scan(&instanceID)
+	err = conn.DB.QueryRow(context.Background(), "SELECT instanceId FROM instances WHERE userId = $1 AND cik = $2 and timestamp = $3", userId, args.Cik, args.Timestamp).Scan(&instanceID)
 	if err != nil {
-		return nil, fmt.Errorf("NewInstance execution failed: %v", qrErr)
+		return nil, fmt.Errorf("NewInstance execution failed: %v", err)
 	}
 	return NewInstanceResults{InstanceID: instanceID}, err
 }
