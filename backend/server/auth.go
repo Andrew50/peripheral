@@ -49,8 +49,7 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
         return nil, fmt.Errorf("Login invalid args: %v", err)
     }
     var userId int
-    var settings string
-    err := conn.DB.QueryRow(context.Background(), "SELECT userId, settings FROM users WHERE username=$1 AND password=$2", a.Username, a.Password).Scan(&userId, &settings)
+    err := conn.DB.QueryRow(context.Background(), "SELECT userId FROM users WHERE username=$1 AND password=$2", a.Username, a.Password).Scan(&userId)
     if err != nil {
         return nil, fmt.Errorf("Invalid Credentials")
     }
@@ -84,7 +83,7 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
     err = rows.Err()
     result := LoginResponse{Token: token, Settings: settings, Setups: setups}
     */
-    result := LoginResponse{Token: token, Settings: settings}
+    result := LoginResponse{Token: token}
     return result, err
 }
 
