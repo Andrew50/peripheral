@@ -156,5 +156,6 @@
     {/each}
 {/if}
 </table>
+<button on:click={newInstance}> enter </button>
 <style>
 </style>
