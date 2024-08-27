@@ -109,17 +109,34 @@ func AllTickersTickerOnly(client *polygon.Client, dateString string) *[]string {
 	}
 	return &tickerList
 }
-func updateTickerDatabase(conn *Conn, cik string) (string, error) {
+func updateTickerDatabase(conn *Conn, cik string) string {
 	if cik != "" {
-
-	}
-	tickers := AllTickers(conn.Polygon, "")
-	for _, ticker := range tickers {
-		row := conn.DB.QueryRow(context.Background(), "SELECT cik, ticker FROM securities WHERE cik = $1", ticker.CIK)
+		tickerString, tickerRequestError := GetTickerFromCIK(conn.Polygon, cik)
+		if tickerRequestError != nil {
+			return fmt.Sprintf("error with updateTickerDatabase(); invalid CIK: %s", cik)
+		}
+		row := conn.DB.QueryRow(context.Background(), "SELECT ticker FROM securities WHERE cik = $1", cik)
 		if err := row.Scan(); err != nil {
-			conn.DB.Exec()
+			conn.DB.Exec(context.Background(), "insert into securities (cik, ticker) values ($1, $2)", cik, tickerString)
+			return "success"
+		} else {
+			conn.DB.Exec(context.Background(), "UPDATE securities SET ticker = $1 WHERE cik = $2", tickerString, cik)
 		}
 	}
+	tickers := AllTickers(conn.Polygon, "")
+	var returnedTicker string
+	for _, ticker := range tickers {
+		row := conn.DB.QueryRow(context.Background(), "SELECT ticker FROM securities WHERE cik = $1", ticker.CIK)
+		if err := row.Scan(&returnedTicker); err != nil {
+			conn.DB.Exec(context.Background(), "insert into securities (cik, ticker) values ($1, $2)", ticker.CIK, ticker.Ticker)
+		} else {
+			if returnedTicker != ticker.Ticker {
+				conn.DB.Exec(context.Background(), "UPDATE securities SET ticker = $1 WHERE cik = $2", ticker.Ticker, ticker.CIK)
+			}
+
+		}
+	}
+	return "success"
 }
 
 func TickerDetails(client *polygon.Client, ticker string, dateString string) *models.Ticker {
@@ -162,7 +179,7 @@ func GetLatestTickerNews(client *polygon.Client, ticker string, numResults int) 
 	return GetTickerNews(client, ticker, models.Millis(time.Now()), "asc", numResults, models.LTE)
 }
 
-func GetRelatedTickers(client *polygon.Client, ticker string) *[]string {
+func GetPolygonRelatedTickers(client *polygon.Client, ticker string) *[]string {
 	params := &models.GetTickerRelatedCompaniesParams{
 		Ticker: ticker,
 	}
@@ -257,31 +274,49 @@ type TickerResponse struct {
 
 func GetTickerFromCIK(client *polygon.Client, cik string) (string, error) {
 	apiKey := "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm"
-	url := fmt.Sprintf("https://api.polygon.io/v3/reference/tickers?cik=%s&active=false&limit=100&apiKey=%s", cik, apiKey)
-
+	url := fmt.Sprintf("https://api.polygon.io/v3/reference/tickers?cik=%s&active=true&limit=100&apiKey=%s", cik, apiKey)
 	// Make the HTTP request
 	resp, err := http.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("failed to make request: %w", err)
 	}
 	defer resp.Body.Close()
-
 	// Read the response body
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to read response body: %w", err)
 	}
-
 	// Parse the JSON response
 	var tickerResponse TickerResponse
 	err = json.Unmarshal(body, &tickerResponse)
 	if err != nil {
 		return "", fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
-
 	// Check if results array is not empty and return the ticker
 	if len(tickerResponse.Results) > 0 {
 		return tickerResponse.Results[0].Ticker, nil
+	}
+	// retry with active=false if no result
+	resp, err = http.Get(fmt.Sprintf("https://api.polygon.io/v3/reference/tickers?cik=%s&active=false&limit=100&apiKey=%s", cik, apiKey))
+	if err != nil {
+		return "", fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+	// Read the response body
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+	// Parse the JSON response
+	var tickerResponseInactive TickerResponse
+	err = json.Unmarshal(body, &tickerResponseInactive)
+	if err != nil {
+		return "", fmt.Errorf("failed to unmarshal JSON: %w", err)
+	}
+
+	// Check if results array is not empty and return the ticker
+	if len(tickerResponseInactive.Results) > 0 {
+		return tickerResponseInactive.Results[0].Ticker, nil
 	}
 
 	// Return an error if no ticker was found
