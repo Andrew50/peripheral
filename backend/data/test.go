@@ -1,19 +1,14 @@
 package data
 
 import (
-	"fmt"
-	"log"
-
-	polygon "github.com/polygon-io/client-go/rest"
+	"os"
 )
 
 func BenTest() {
-	client := polygon.New("ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm")
-	res, err := GetTickerFromCIK(client, "0001679788")
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Print(res)
+	_, exists := os.LookupEnv("IN_CONTAINER")
+	conn := GetConn(exists)
+	defer conn.DB.Close()
+	updateTickerDatabase(conn, "")
 
 	//fmt.Println(AllTickersTickerOnly(c, "2024-08-20")[0])
 	// // test getLastQuote()
