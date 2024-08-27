@@ -1,5 +1,6 @@
 <!-- app/+page.svelte -->
 <script lang="ts">
+    import Entry from './entry.svelte'
     import { onMount } from 'svelte';
     import { privateRequest } from '../../store'
     import { goto } from '$app/navigation';
@@ -102,7 +103,8 @@
         }
     }
 </script>
-<h1> new instance </h1>
+<Entry/>
+<!--<h1> new instance </h1>
 <div class="form" >
     <div>
         <input bind:value={ticker}/>
@@ -119,6 +121,7 @@
         {/if}
     </div>
 </div>
+
 
 <h1> instances </h1>
 <table>
@@ -156,6 +159,6 @@
     {/each}
 {/if}
 </table>
-<button on:click={newInstance}> enter </button>
+<button on:click={newInstance}> enter </button> -->
 <style>
 </style>
