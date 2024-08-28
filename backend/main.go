@@ -10,7 +10,7 @@ func main() {
 	args := os.Args
 	if len(args) > 1 {
 		//test func
-		data.BenTest()
+		data.ManualTest()
 
 	} else {
 		server.StartServer()
