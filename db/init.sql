@@ -12,8 +12,8 @@ CREATE TABLE securities (
     cik varchar(10) not null,
     tickerStartDate varchar(10) not null,
     tickerEndDate varchar(10), 
-    previousSecurityId int references securities(securityId), 
-    nextSecurityId int references securities(securityId),
+    precedingId int references securities(securityId), 
+    succeedingId int references securities(securityId),
     unique (ticker, tickerEndDate)
 );
 create index idxCik on securities (cik);

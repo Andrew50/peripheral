@@ -77,7 +77,7 @@ func ListTickers(client *polygon.Client, startTicker string, dateString string, 
 	if startTicker != "" {
 		params = params.WithTicker(tickerStringCompareType, startTicker)
 	}
-	if dateString != "now" {
+	if dateString != "" {
 		dt, err := time.Parse(time.DateOnly, dateString)
 		if err != nil {
 			log.Fatal(err)
@@ -109,43 +109,6 @@ func AllTickersTickerOnly(client *polygon.Client, dateString string) *[]string {
 		tickerList = append(tickerList, iter.Item().Ticker)
 	}
 	return &tickerList
-}
-func updateTickerDatabase(conn *Conn, cik string) string {
-	if cik != "" {
-		tickerString, tickerRequestError := GetTickerFromCIK(conn.Polygon, cik)
-		if tickerRequestError != nil {
-			return fmt.Sprintf("error with updateTickerDatabase(); invalid CIK: %s", cik)
-		}
-		row := conn.DB.QueryRow(context.Background(), "SELECT ticker FROM securities WHERE cik = $1", cik)
-		if err := row.Scan(); err != nil {
-			conn.DB.Exec(context.Background(), "insert into securities (cik, ticker) values ($1, $2)", cik, tickerString)
-			return "success"
-		} else {
-			conn.DB.Exec(context.Background(), "UPDATE securities SET ticker = $1 WHERE cik = $2", tickerString, cik)
-		}
-	}
-	tickers := AllTickers(conn.Polygon, "")
-	for _, ticker := range tickers {
-		if ticker.CIK == "" && ticker.CompositeFIGI == "" {
-			fmt.Printf("Processing Ticker: %s, CIK: {%s}, FIGI: {%s}\n", ticker.Ticker, ticker.CIK, ticker.CompositeFIGI)
-		}
-
-		var returnedTicker string
-		err := conn.DB.QueryRow(context.Background(), "SELECT ticker FROM securities WHERE cik = $1", ticker.CIK).Scan(&returnedTicker)
-		//fmt.Println(err)
-		if err != nil {
-			_, err := conn.DB.Exec(context.Background(), "insert into securities (cik, ticker) values ($1, $2)", ticker.CIK, ticker.Ticker)
-			if err != nil {
-				fmt.Printf("NewInstance execution failed: %s", ticker.Ticker)
-				return ""
-			}
-		} else {
-			if returnedTicker != ticker.Ticker {
-				conn.DB.Exec(context.Background(), "UPDATE securities SET ticker = $1 WHERE cik = $2", ticker.Ticker, ticker.CIK)
-			}
-		}
-	}
-	return "success"
 }
 
 func TickerDetails(client *polygon.Client, ticker string, dateString string) *models.Ticker {
@@ -420,18 +383,18 @@ func GetTickerFromFIGI(conn *Conn, figi string, dateOnly string) (string, error)
 	if dateOnly == "" {
 		return tickerEvents[0].Events[0].TickerChange.Ticker, nil
 	}
-	dt, err := time.Parse(time.DateOnly, dateOnly)
-	if err != nil {
-		return "", fmt.Errorf("function GetTickerFromFIGI error parsing date: {%s}", dateOnly)
-	}
-	for i, tickerEvent := range tickerEvents {
-		for j, event := range tickerEvent.Events {
-			event.Date.
-			if j == len(tickerEvent.Events)-1 {
-				return event.TickerChange.Ticker, nil
-			}
-		}
-	}
+	//dt, err := time.Parse(time.DateOnly, dateOnly)
+	//if err != nil {
+	//	return "", fmt.Errorf("function GetTickerFromFIGI error parsing date: {%s}", dateOnly)
+	//}
+	// for i, tickerEvent := range tickerEvents {
+	// 	for j, event := range tickerEvent.Events {
+	// 		time.
+	// 		if j == len(tickerEvent.Events)-1 {
+	// 			return event.TickerChange.Ticker, nil
+	// 		}
+	// 	}
+	// }
 
 	return "", fmt.Errorf("function GetTickerFromFIGI could not find ticker for FIGI: {%s}", figi)
 
