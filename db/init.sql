@@ -6,17 +6,18 @@ CREATE TABLE users (
 );
 CREATE INDEX idxUsers ON users (username, password);
 CREATE TABLE securities (
-    securityId SERIAL PRIMARY KEY,
+    securityId INT,
     ticker varchar(10) not null,
     figi varchar(12) not null,
-    cik varchar(10) not null,
-    tickerStartDate varchar(10) not null,
-    tickerEndDate varchar(10), 
-    precedingId int references securities(securityId), 
-    succeedingId int references securities(securityId),
-    unique (ticker, tickerEndDate)
+    --cik varchar(10) not null,
+    minDate timestamp,
+    maxDate timestamp,
+    unique (ticker, minDate),
+    unique (ticker, maxDate),
+    unique (securityId, minDate),
+    unique (securityId, maxdate)
 );
-create index idxCik on securities (cik);
+create index idxTickerDateRange on securities (ticker, minDate, maxDate);
 create table setups (
     setupId serial primary key,
     userId int references users(userId) on delete cascade, 
