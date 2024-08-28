@@ -194,7 +194,7 @@ func GetPolygonRelatedTickers(client *polygon.Client, ticker string) ([]string, 
 	}
 	res, err := client.GetTickerRelatedCompanies(context.Background(), params)
 	if err != nil {
-        return nil, err
+		return nil, err
 	}
 	relatedTickers := []string{}
 	for _, relatedTicker := range res.Results {
@@ -236,7 +236,15 @@ func GetAggsData(client *polygon.Client, ticker string, barLength int, timeframe
 	return iter
 
 }
-func GetTickerEvents(client *polygon.Client, id string) {
+func GetTickerEvents(client *polygon.Client, id string) ([]models.TickerEventResult, error) {
+	params := &models.GetTickerEventsParams{
+		ID: id,
+	}
+	res, err := client.VX.GetTickerEvents(context.Background(), params)
+	if err != nil {
+		return nil, err
+	}
+	return res.Results, nil
 
 }
 func MillisFromDatetimeString(datetime string) models.Millis {
@@ -341,23 +349,6 @@ func GetTickerFromCIK(client *polygon.Client, cik string) (string, error) {
 	// }
 	// return iter.Item().Ticker
 }
-func GetTickerFromFIGI(conn *Conn, figi string, dateOnly string) (string, error) {
-	// First check securities table
-	var dbTicker string
-	if dateOnly == "" {
-		err := conn.DB.QueryRow(context.Background(), "SELECT ticker FROM securities WHERE figi = $1 AND tickerEndDate is null", figi).Scan(&dbTicker)
-		if err != pgx.ErrNoRows {
-			return dbTicker, nil
-		}
-	} else {
-		err := conn.DB.QueryRow(context.Background(), "SELECT ticker FROM securities WHERE figi = $1 AND tickerStartDate <= $2 AND (tickerEndDate >= $2 OR tickerEndDate IS NULL)", figi, dateOnly).
-			Scan(&dbTicker)
-		if err != pgx.ErrNoRows {
-			return dbTicker, nil
-		}
-	}
-
-}
 func GetCIK(conn *Conn, ticker string, dateOnly string) (string, error) {
 	// First check the securities table to see if we already have the CIK associated with a ticker
 	var dbCIK string
@@ -389,6 +380,44 @@ func GetCIK(conn *Conn, ticker string, dateOnly string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("function GetCIK could not find CIK for ticker: {%s} and date: {%s}", ticker, dateOnly)
+}
+func GetTickerFromFIGI(conn *Conn, figi string, dateOnly string) (string, error) {
+	// First check securities table
+	var dbTicker string
+	if dateOnly == "" {
+		err := conn.DB.QueryRow(context.Background(), "SELECT ticker FROM securities WHERE figi = $1 AND tickerEndDate is null", figi).Scan(&dbTicker)
+		if err != pgx.ErrNoRows {
+			return dbTicker, nil
+		}
+	} else {
+		err := conn.DB.QueryRow(context.Background(), "SELECT ticker FROM securities WHERE figi = $1 AND tickerStartDate <= $2 AND (tickerEndDate >= $2 OR tickerEndDate IS NULL)", figi, dateOnly).
+			Scan(&dbTicker)
+		if err != pgx.ErrNoRows {
+			return dbTicker, nil
+		}
+	}
+	tickerEvents, err := GetTickerEvents(conn.Polygon, figi)
+	if err != nil {
+		return "", fmt.Errorf("function GetTickerFromFIGI error with GetTickerEvents; %v\n}", err)
+	}
+	if dateOnly == "" {
+		return tickerEvents[0].Events[0].TickerChange.Ticker, nil
+	}
+	dt, err := time.Parse(time.DateOnly, dateOnly)
+	if err != nil {
+		return "", fmt.Errorf("function GetTickerFromFIGI error parsing date: {%s}", dateOnly)
+	}
+	for i, tickerEvent := range tickerEvents {
+		for j, event := range tickerEvent.Events {
+			event.Date.
+			if j == len(tickerEvent.Events)-1 {
+				return event.TickerChange.Ticker, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("function GetTickerFromFIGI could not find ticker for FIGI: {%s}", figi)
+
 }
 func GetFIGI(conn *Conn, ticker string, dateOnly string) (string, error) {
 	// First check securities table to see if we already have the CIK associated with a ticker
