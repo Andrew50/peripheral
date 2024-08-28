@@ -6,8 +6,15 @@ CREATE TABLE users (
 );
 CREATE INDEX idxUsers ON users (username, password);
 CREATE TABLE securities (
-    cik varchar(10) primary key, 
-    ticker varchar(8) not null
+    securityId SERIAL PRIMARY KEY,
+    ticker varchar(10) not null,
+    figi varchar(12) not null,
+    cik varchar(10) not null,
+    tickerStartDate varchar(10) not null,
+    tickerEndDate varchar(10), 
+    previousSecurityId int references securities(securityId), 
+    nextSecurityId int references securities(securityId),
+    unique (ticker, tickerEndDate)
 );
 create index idxCik on securities (cik);
 create table setups (
@@ -25,7 +32,7 @@ CREATE TABLE instances (
 );
 create index idxInstances on instances (cik, timestamp);
 create table samples (
-    sampleId serial references instances(instanceId) on delete cascade,
+    sampleId SERIAL PRIMARY KEY,
     instanceId integer references instances(instanceId) on delete cascade,
     setupId serial references setups(setupId) on delete cascade,
     label boolean default null,

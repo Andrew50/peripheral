@@ -37,7 +37,10 @@ func GetCik(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, 
 	if err != nil {
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
-	cik := data.GetCIK(conn.Polygon, args.TickerString)
+	cik, cikErr := data.GetCIK(conn, args.TickerString, "")
+	if cikErr != nil {
+		return nil, cikErr
+	}
 	res := GetCikResults{Cik: cik}
 	return res, err
 }
