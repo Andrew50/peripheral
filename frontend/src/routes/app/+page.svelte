@@ -1,6 +1,7 @@
 <!-- app/+page.svelte -->
 <script lang="ts">
     import Entry from './entry.svelte'
+    import Related from './related.svelte'
     import { onMount } from 'svelte';
     import { privateRequest } from '../../store'
     import { goto } from '$app/navigation';
@@ -106,6 +107,7 @@
     }
 </script>
 <Entry/>
+<Related/>
 <!--<h1> new instance </h1>
 <div class="form" >
     <div>

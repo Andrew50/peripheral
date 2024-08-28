@@ -1,6 +1,6 @@
 <script lang="ts">
     let ticker = '';
-    let datetime = '';
+    let relatedTickers: string[] = [];
     import {privateRequest} from '../../store';
 
     function getRelatedTickers(): void {
@@ -10,15 +10,12 @@
 </script>
 
 <div>
-<input bind:value={ticker} default='ticker'/>
-</div>
-<div>
-<input bind:value={datetime} default='datetime'/>
+<input bind:value={ticker} placeholder='ticker'/>
 </div>
 <div>
 <button on:click={getRelatedTickers}> get related tickers </button>
 </div>
-{#each ticker as relatedTickers}
+{#each relatedTickers as ticker}
 <div>
 {ticker}
 </div>

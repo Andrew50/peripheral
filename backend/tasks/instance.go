@@ -8,6 +8,22 @@ import (
 	"time"
 )
 
+
+type GetRelatedTickersArgs struct {
+    Ticker string `json:"ticker"`
+}
+
+func GetRelatedTickers(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetRelatedTickersArgs
+	err := json.Unmarshal(rawArgs, &args)
+	if err != nil {
+		return nil, fmt.Errorf("GetCik invalid args: %v", err)
+	}
+    tickers, err := data.GetPolygonRelatedTickers(conn.Polygon, args.Ticker)
+    return tickers, err
+}
+
+
 type GetCikArgs struct {
 	TickerString string `json:"ticker"`
 }
