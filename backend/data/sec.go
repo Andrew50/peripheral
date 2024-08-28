@@ -21,7 +21,6 @@ type god struct {
 }
 func writeSecurity(conn *Conn, sec *ActiveSecurity, date time.Time) error {
     fmt.Print(sec.securityId," ", sec.ticker," ", sec.figi," ", sec.tickerActivationDate," ", date, "\n")
-    return nil
     _, err := conn.DB.Exec(context.Background(), "INSERT INTO securities (securityId, ticker, figi, minDate, maxDate) VALUES ($1, $2, $3, $4, $5)", sec.securityId, sec.ticker, sec.figi, sec.tickerActivationDate, date)
     return err
 }
