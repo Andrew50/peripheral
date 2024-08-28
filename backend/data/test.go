@@ -3,12 +3,19 @@ package data
 import (
 	//"fmt"
 	//"github.com/polygon-io/client-go/rest/models"
+    "log"
+    //
 )
 
 func ManualTest() {
 	conn, close := InitConn(false)
 	defer close()
-	initTickerDatabase(conn)
+    err := initTickerDatabase(conn)
+    if err != nil {
+        log.Fatal(err)
+    }
+        
+
 /*
 	iter := ListTickers(conn.Polygon, "", "", models.GTE, 1000, true)
 	ccc := 0
