@@ -341,7 +341,7 @@ func GetTickerFromCIK(client *polygon.Client, cik string) (string, error) {
 	// }
 	// return iter.Item().Ticker
 }
-func GetTickerFromFIGI(conn *Conn, figi string, dateOnly string) (string, error) {
+/*func GetTickerFromFIGI(conn *Conn, figi string, dateOnly string) (string, error) {
 	// First check securities table
 	var dbTicker string
 	if dateOnly == "" {
@@ -357,7 +357,7 @@ func GetTickerFromFIGI(conn *Conn, figi string, dateOnly string) (string, error)
 		}
 	}
 
-}
+}*/
 func GetCIK(conn *Conn, ticker string, dateOnly string) (string, error) {
 	// First check the securities table to see if we already have the CIK associated with a ticker
 	var dbCIK string
