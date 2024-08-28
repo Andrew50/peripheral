@@ -26,11 +26,13 @@
   }
 
     async function signIn(username: string, password: string) {
-        publicRequest<Login>('login', {username:username, password:password},errorMessage).then((r : Login) => {
+        publicRequest<Login>('login', {username:username, password:password}).then((r : Login) => {
             sessionStorage.setItem("authToken",r.token)
             settings.set(r.settings)
             goto('/app');
-        })
+        }).catch((error: string) => {
+            errorMessage.set(error)
+            });
     }
 
   async function signUp(username : string, password : string) {

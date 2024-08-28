@@ -2,9 +2,10 @@
     import { onMount } from 'svelte';
     import { writable } from 'svelte/store'
     import { browser } from '$app/environment';
+    import { privateRequest } from '../../store'
     import 'quill/dist/quill.snow.css';
     import type Quill from 'quill'
-    import type { DeltaStatic, Sources, DeltaOperation, EmbedBlot } from 'quill'
+    import type { DeltaStatic, EmbedBlot } from 'quill'
 
     let Quill;
     let editorContainer: HTMLElement | string;
@@ -14,13 +15,36 @@
     let datetime = "";
     let pm = false;
     let insertInstanceVisible = false;
-
-    function insertInstance(): void {
-        editor.insertEmbed(-1, 'embeddedInstance', {ticker, timeframe, datetime, pm});
+    let errorMessage = writable("");
+    function loadStudy(studyId: number): void {
+        privateRequest<DeltaStatic>("getStudy",{studyId: studyId})
+        .then((response: DeltaStatic) => {
+            editor.setContents(response);
+        }).catch((error) => {
+             errorMessage.set(error);
+        });
     }
 
-    function embeddedInstanceClick(): void {
-        console.log("clicked embedded instance")
+    interface EmbeddedInstance {
+        ticker: string;
+        timeframe: string;
+        datetime: string;
+        pm: boolean;
+    }
+
+    function insertInstance(): void {
+        const range = editor.getSelection()
+        let insertIndex;
+        if (range === null){
+            insertIndex = -1;
+        }else{
+            insertIndex = range.index
+        }
+        editor.insertEmbed(insertIndex, 'embeddedInstance', {ticker, timeframe, datetime, pm});
+    }
+
+    function embeddedInstanceClick(instance: EmbeddedInstance): void {
+        console.log(instance.ticker, instance.datetime)
     }
 
     onMount(() => {
@@ -33,41 +57,21 @@
                     toolbar: false
                 }
             });
-            editor.on('text-change', (delta: DeltaStatic, _, source: Sources) => {
-                if (source === 'user' || source === 'api') {
-                    let text = editor.getText();
-                    /*if (source === 'user') {
-                        currentEntry.set(text); 
-                    }*/
-                    delta.ops.forEach((op: DeltaOperation) => {
-                        if (typeof op.insert === 'string') {
-                            const regex = /\[([^\|]+)\|([^\|]+)\|([^\|]+)\|([^\]]+)\]/g;
-                            let match;
-                            while ((match = regex.exec(op.insert)) !== null) {
-                                const [_, ticker, interval, t, pm] = match;
-                                const index = match.index;
-                                editor.deleteText(index, match[0].length);
-                                editor.insertEmbed(index, 'embeddedInstance', { ticker, interval, t, pm });
-                            }
-                        }
-                    });
-                }
-            });
             class ChartBlot extends (Quill.import('blots/embed') as typeof EmbedBlot) {
-                static create(value: any): HTMLElement {
+                static create(instance: EmbeddedInstance): HTMLElement {
                     let node = super.create();
                     node.setAttribute('type', 'button');
                     node.className = 'btn';
-                    node.textContent = `${value.ticker}`; 
-                    node.onclick = embeddedInstanceClick//() => chartQuery.set([value.ticker, value.interval, value.t, value.pm]);
+                    node.textContent = `${instance.ticker}`; 
+                    node.onclick = () => embeddedInstanceClick(instance)                    
                     return node;
                 }
 
                 static value(node: HTMLElement) {
                     return {
                         ticker: node.dataset.ticker,
-                        interval: node.dataset.interval,
-                        t: node.dataset.t,
+                        timeframe: node.dataset.timeframe,
+                        datetime: node.dataset.datetime,
                         pm: node.dataset.pm
                     };
                 }
