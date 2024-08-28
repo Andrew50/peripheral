@@ -2,6 +2,7 @@
 package data
 import (
     "fmt"
+    "strings"
     "time"
     "context"
 )
@@ -20,6 +21,7 @@ type god struct {
 }
 func writeSecurity(conn *Conn, sec *ActiveSecurity, date time.Time) error {
     fmt.Print(sec.securityId," ", sec.ticker," ", sec.figi," ", sec.tickerActivationDate," ", date, "\n")
+    return nil
     _, err := conn.DB.Exec(context.Background(), "INSERT INTO securities (securityId, ticker, figi, minDate, maxDate) VALUES ($1, $2, $3, $4, $5)", sec.securityId, sec.ticker, sec.figi, sec.tickerActivationDate, date)
     return err
 }
@@ -46,6 +48,9 @@ func initTickerDatabase(conn *Conn) error {
         tickerChanges := 0
         missed := 0
 		for _, polySec := range polygonActiveSecurities {
+            if (strings.Contains(polySec.Ticker,"w")) {
+                continue
+            }
 			if _, exists := activeSecuritiesRecord[polySec.Ticker]; !exists {
                 var tickerChange = false
                 var prevTicker string
@@ -61,9 +66,10 @@ func initTickerDatabase(conn *Conn) error {
                         return err
                     }
      //               fmt.Printf("changed %s -> %s\n", prevTickerRecord.ticker, polySec.Ticker)
+                    delete(activeSecuritiesRecord, prevTickerRecord.ticker)
                     prevTickerRecord.ticker = polySec.Ticker
                     prevTickerRecord.tickerActivationDate = currentDate
-                    activeSecuritiesRecord[prevTicker] = prevTickerRecord
+                    activeSecuritiesRecord[polySec.Ticker] = prevTickerRecord
                 }else{ //listing
                     activeSecuritiesRecord[polySec.Ticker] = ActiveSecurity{
                         securityId: nextSecurityId,
