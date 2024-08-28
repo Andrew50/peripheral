@@ -115,7 +115,7 @@ func private_handler(conn *data.Conn) http.HandlerFunc {
 }
 
 func StartServer() {
-	conn, cleanup := data.InitConn()
+	conn, cleanup := data.InitConn(true)
 	defer cleanup()
 	http.HandleFunc("/public", public_handler(conn))
 	http.HandleFunc("/private", private_handler(conn))
