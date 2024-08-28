@@ -43,15 +43,17 @@
     }
     selectedInstanceId.subscribe((v) => {console.log(v)});
     onMount(() => {
-        privateRequest<Instance[]>("getInstances", {}, errorMessage).then((result: Instance[]) => {
+        privateRequest<string>("verifyAuth", {}).catch((error) => {
+            goto('/login')
+        });
+
+        privateRequest<Instance[]>("getInstances", {}).then((result: Instance[]) => {
             //idk why the fuck this needs to be here but somehow for each throws??
             try {
                 result.forEach((v) => {v.annotations = []})
             }catch{}
             instances.set(result);
-        }).catch((r) => { 
-            goto('/login')
-        });
+        })
     });
     /*$: if ($authToken == "" && browser) {
         goto('/login');
@@ -70,7 +72,7 @@
     }
 
     function getAnnotations(instance: Instance): void {
-        privateRequest<Annotation[]>("getAnnotations",{instanceId:instance.instanceId}, errorMessage).then((result: Annotation[]) => {
+        privateRequest<Annotation[]>("getAnnotations",{instanceId:instance.instanceId}).then((result: Annotation[]) => {
             currentAnnotation = result;
     })
     }
@@ -78,7 +80,7 @@
     function newInstance (): void {
         if (ticker && timestamp) {
             let security: Security;
-            privateRequest<CikResult>("getCik", {ticker:ticker}, errorMessage).then((result : CikResult) => {
+            privateRequest<CikResult>("getCik", {ticker:ticker}).then((result : CikResult) => {
                 security = {ticker: ticker, cik: result.cik};
                 privateRequest<NewInstanceResult>("newInstance", {cik:security.cik, timestamp:timestamp}, errorMessage)
                 .then((result : NewInstanceResult) => {

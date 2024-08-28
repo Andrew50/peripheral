@@ -35,7 +35,7 @@ export function logout() {
     goto('/login');
 }
 
-export async function publicRequest<T>(func: string, args: any, error: Writable<string>): Promise<T> {
+export async function publicRequest<T>(func: string, args: any): Promise<T> {
     const payload = JSON.stringify({
         func: func,
         args: args
@@ -45,19 +45,18 @@ export async function publicRequest<T>(func: string, args: any, error: Writable<
         headers: { 'Content-Type': 'application/json' },
         body: payload});
     if (response.ok){
-        error.set("")
         const result = await response.json() as T
         console.log("payload: ",payload, "result: ", result)
         return result;
     }else{
         const errorMessage = await response.text()
-        error.set(errorMessage);
-        console.error("payload: ",payload, "result: ", errorMessage)
-        return Promise.reject();
+        console.error("payload: ",payload, "error: ", errorMessage)
+        return Promise.reject(errorMessage);
     }
 }
 
-export async function privateRequest<T>(func: string, args: any, error: Writable<string>): Promise<T> {
+
+export async function privateRequest<T>(func: string, args: any): Promise<T> {
     const authToken = sessionStorage.getItem("authToken")
     const headers = {
         'Content-Type': 'application/json',
@@ -73,14 +72,12 @@ export async function privateRequest<T>(func: string, args: any, error: Writable
         body: JSON.stringify(payload)
     });
     if (response.ok){
-        error.set("")
         const result = await response.json() as T
         console.log("payload: ",payload, "result: ", result)
         return result;
     }else{
         const errorMessage = await response.text()
-        error.set(errorMessage);
-       console.error("payload: ",payload, "result: ", errorMessage)
-        return Promise.reject();
+       console.error("payload: ",payload, "error: ", errorMessage)
+        return Promise.reject(errorMessage);
     }
 }
