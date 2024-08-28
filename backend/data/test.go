@@ -1,18 +1,15 @@
 package data
 
 import (
-	"fmt"
-	"os"
-
-	"github.com/polygon-io/client-go/rest/models"
+	//"fmt"
+	//"github.com/polygon-io/client-go/rest/models"
 )
 
-func BenTest() {
-	_, exists := os.LookupEnv("IN_CONTAINER")
-	conn := GetConn(exists)
-	defer conn.DB.Close()
+func ManualTest() {
+	conn, close := InitConn(false)
+	defer close()
 	initTickerDatabase(conn)
-
+/*
 	iter := ListTickers(conn.Polygon, "", "", models.GTE, 1000, true)
 	ccc := 0
 	for iter.Next() {
@@ -21,7 +18,7 @@ func BenTest() {
 			fmt.Println(iter.Item().Ticker)
 		}
 	}
-	fmt.Println(ccc)
+	fmt.Println(ccc)*/
 	//updateTickerDatabase(conn, "")
 
 	//fmt.Println(AllTickersTickerOnly(c, "2024-08-20")[0])
