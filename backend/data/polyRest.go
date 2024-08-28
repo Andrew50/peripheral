@@ -179,19 +179,19 @@ func GetLatestTickerNews(client *polygon.Client, ticker string, numResults int) 
 	return GetTickerNews(client, ticker, models.Millis(time.Now()), "asc", numResults, models.LTE)
 }
 
-func GetPolygonRelatedTickers(client *polygon.Client, ticker string) *[]string {
+func GetPolygonRelatedTickers(client *polygon.Client, ticker string) ([]string, error) {
 	params := &models.GetTickerRelatedCompaniesParams{
 		Ticker: ticker,
 	}
 	res, err := client.GetTickerRelatedCompanies(context.Background(), params)
 	if err != nil {
-		log.Fatal(err)
+        return nil, err
 	}
 	relatedTickers := []string{}
 	for _, relatedTicker := range res.Results {
 		relatedTickers = append(relatedTickers, relatedTicker.Ticker)
 	}
-	return &relatedTickers
+	return relatedTickers, nil
 }
 
 // func relatedTickers (ticker string) ([]string, error) {
