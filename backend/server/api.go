@@ -23,6 +23,7 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
     "newAnnotation": tasks.NewAnnotation,
     "getAnnotations": tasks.GetAnnotations,
     "getRelatedTickers":tasks.GetRelatedTickers,
+    "getSecuritiesFromTicker":tasks.GetSecuritiesFromTicker,
 }
 
 func verifyAuth(_ *data.Conn, _ int, _ json.RawMessage) (interface{}, error){return nil, nil}
