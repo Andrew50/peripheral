@@ -30,6 +30,7 @@
 	},
 	"type": "module",
 	"dependencies": {
+		"lightweight-charts": "^4.2.0",
 		"quill": "^2.0.2"
 	}
 }
