@@ -32,8 +32,8 @@ func writeSecurity(conn *Conn, sec *ActiveSecurity, date *time.Time) error {
 	}
 	_, err := conn.DB.Exec(context.Background(), "INSERT INTO securities (securityid, ticker, figi, minDate, maxDate) VALUES ($1, $2, $3, $4, $5)", sec.securityId, sec.ticker, sec.figi, sec.tickerActivationDate, maxDate)
 	if err != nil {
-		fmt.Printf("Error at 2kfpe, %v \n", err)
-		fmt.Print(sec.securityId, " ", sec.ticker, " ", sec.figi, " ", sec.tickerActivationDate, " ", date, "\n")
+		//fmt.Printf("Error at 2kfpe, %v \n", err)
+        fmt.Print("ERROR: ", err, " , ", sec.securityId, " , ", sec.ticker, " , ", sec.figi, " , ", sec.tickerActivationDate, " , ", date, "\n")
 	}
 	return err
 }
@@ -55,7 +55,8 @@ func containsLowercase(s string) bool {
 	return false
 }
 func initTickerDatabase(conn *Conn) error {
-	startDate := time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
+	//startDate := time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
+	startDate := time.Date(2024, 8, 20, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
 	currentDate := startDate
 	activeSecuritiesRecord := make(map[string]ActiveSecurity) // indexed by ticker
 	nextSecurityId := 1
@@ -116,11 +117,12 @@ func initTickerDatabase(conn *Conn) error {
 			} else if(polySec.CompositeFIGI != "" && sec.figi != polySec.CompositeFIGI){ //figi change
                 err := conn.DB.QueryRow(context.Background(), "SELECT * from securities WHERE figi = $1 AND securityId = $2", polySec.CompositeFIGI, sec.securityId ).Scan()
                 if err == pgx.ErrNoRows {
-                    fmt.Printf("ticker %s figi change: %s -> %s\n",sec.ticker, sec.figi, polySec.CompositeFIGI)
+                    //fmt.Printf("ticker %s figi change: %s -> %s\n",sec.ticker, sec.figi, polySec.CompositeFIGI)
                     if err := writeSecurity(conn,&sec,&currentDate); err != nil {
                         fmt.Printf("figi change error: %v",err)
                     }
                     sec.figi = polySec.CompositeFIGI
+                    sec.tickerActivationDate = currentDate
                     activeSecuritiesRecord[polySec.Ticker] = sec
                     figiChanges ++
                 }
@@ -138,7 +140,7 @@ func initTickerDatabase(conn *Conn) error {
 			}
 		}
 		currentDate = currentDate.AddDate(0, 0, 1)
-		fmt.Printf("%d active securities, %d listings, %d delistings, %d ticker changes, %d figi changes, %d missed, on %s ------------------------ \n", len(activeSecuritiesRecord), listings, delistings, tickerChanges, figiChanges, missed, currentDateString)
+		//fmt.Printf("%d active securities, %d listings, %d delistings, %d ticker changes, %d figi changes, %d missed, on %s ------------------------ \n", len(activeSecuritiesRecord), listings, delistings, tickerChanges, figiChanges, missed, currentDateString)
 
 	}
 	for _, security := range activeSecuritiesRecord {
