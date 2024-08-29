@@ -24,7 +24,6 @@ type god struct {
 }
 
 func writeSecurity(conn *Conn, sec *ActiveSecurity, date *time.Time) error {
-    return nil
 	var maxDate interface{}
 	if date == nil {
 		maxDate = nil
@@ -56,7 +55,7 @@ func containsLowercase(s string) bool {
 	return false
 }
 func initTickerDatabase(conn *Conn) error {
-	startDate := time.Date(2016, 10, 25, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
+	startDate := time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
 	currentDate := startDate
 	activeSecuritiesRecord := make(map[string]ActiveSecurity) // indexed by ticker
 	nextSecurityId := 1
@@ -68,6 +67,7 @@ func initTickerDatabase(conn *Conn) error {
 		delistings := 0
 		tickerChanges := 0
 		missed := 0
+        figiChanges := 0
 		// Loop through the active stocks for the given day
 		for _, polySec := range polygonActiveSecurities {
             polygonActiveTickers[polySec.Ticker] = struct{}{} //empty anonymous struct cause just use key to check existence not retrieve valu
@@ -77,6 +77,9 @@ func initTickerDatabase(conn *Conn) error {
 				continue
 			}
 			// if the ticker does not exist
+            if polySec.Ticker == "ZYNE" {
+                fmt.Println(polySec.CompositeFIGI)
+            }
 			if sec, exists := activeSecuritiesRecord[polySec.Ticker]; !exists {
 				var tickerChange = false
 				var prevTicker string
@@ -115,7 +118,10 @@ func initTickerDatabase(conn *Conn) error {
 					//                fmt.Printf("listed %s\n",polySec.Ticker)
 				}
 			} else if(polySec.CompositeFIGI != "" && sec.figi != polySec.CompositeFIGI){ //figi change
-                err := conn.DB.QueryRow(context.Background(), "SELECT * from securities WHERE figi = $1 AND securityId = $2", sec.securityId, polySec.CompositeFIGI).Scan()
+                if polySec.Ticker == "ZYNE" {
+                    fmt.Println("working")
+                }
+                err := conn.DB.QueryRow(context.Background(), "SELECT * from securities WHERE figi = $1 AND securityId = $2", polySec.CompositeFIGI, sec.securityId ).Scan()
                 if err == pgx.ErrNoRows {
                     fmt.Printf("ticker %s figi change: %s -> %s\n",sec.ticker, sec.figi, polySec.CompositeFIGI)
                     if err := writeSecurity(conn,&sec,&currentDate); err != nil {
@@ -138,10 +144,10 @@ func initTickerDatabase(conn *Conn) error {
 			}
 		}
 		currentDate = currentDate.AddDate(0, 0, 1)
-		fmt.Printf("%d active securities, %d listings, %d delistings, %d ticker changes, %d missed, on %s ------------------------ \n", len(activeSecuritiesRecord), listings, delistings, tickerChanges, missed, currentDateString)
+		fmt.Printf("%d active securities, %d listings, %d delistings, %d ticker changes, %d figi changes, %d missed, on %s ------------------------ \n", len(activeSecuritiesRecord), listings, delistings, tickerChanges, figiChanges, missed, currentDateString)
 
-		var god string
-        fmt.Scanf("%s",god)
+		/*var god string
+        fmt.Scanf("%s",god)*/
 	}
 	for _, security := range activeSecuritiesRecord {
 		writeSecurity(conn, &security, nil)
