@@ -5,6 +5,7 @@ import (
     "strings"
     "time"
     "context"
+    "unicode"
 )
 
 type ActiveSecurity struct {
@@ -19,9 +20,17 @@ type god struct {
     cik string
     typ string
 }
-func writeSecurity(conn *Conn, sec *ActiveSecurity, date time.Time) error {
-    fmt.Print(sec.securityId," ", sec.ticker," ", sec.figi," ", sec.tickerActivationDate," ", date, "\n")
-    _, err := conn.DB.Exec(context.Background(), "INSERT INTO securities (securityId, ticker, figi, minDate, maxDate) VALUES ($1, $2, $3, $4, $5)", sec.securityId, sec.ticker, sec.figi, sec.tickerActivationDate, date)
+func writeSecurity(conn *Conn, sec *ActiveSecurity, date *time.Time) error {
+    var maxDate interface{}
+    if date == nil {
+        maxDate = nil
+    }else{
+        maxDate = *date
+    }
+    _, err := conn.DB.Exec(context.Background(), "INSERT INTO securities (securityId, ticker, figi, minDate, maxDate) VALUES ($1, $2, $3, $4, $5)", sec.securityId, sec.ticker, sec.figi, sec.tickerActivationDate, maxDate)
+    if err != nil {
+        fmt.Print(sec.securityId," ", sec.ticker," ", sec.figi," ", sec.tickerActivationDate," ", date, "\n")
+    }
     return err
 }
 
@@ -32,6 +41,14 @@ func findTickerFromFigi(activeSecurities map[string]ActiveSecurity, figi string)
         }
     }
     return ""
+}
+func containsLowercase(s string) bool {
+    for _, char := range s {
+        if unicode.IsLower(char) {
+            return true
+        }
+    }
+    return false
 }
 func initTickerDatabase(conn *Conn) error { 
 	startDate := time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
@@ -47,7 +64,9 @@ func initTickerDatabase(conn *Conn) error {
         tickerChanges := 0
         missed := 0
 		for _, polySec := range polygonActiveSecurities {
-            if (strings.Contains(polySec.Ticker,"w")) {
+            if (strings.Contains(polySec.Ticker,".") ||
+        containsLowercase(polySec.Ticker)){
+                missed ++
                 continue
             }
 			if _, exists := activeSecuritiesRecord[polySec.Ticker]; !exists {
@@ -60,15 +79,16 @@ func initTickerDatabase(conn *Conn) error {
                 }
                 if tickerChange { //change
                     prevTickerRecord := activeSecuritiesRecord[prevTicker]
-                    err := writeSecurity(conn, &prevTickerRecord, currentDate)
+                    err := writeSecurity(conn, &prevTickerRecord, &currentDate)
                     if err != nil {
-                        return err
+                        //return err
                     }
      //               fmt.Printf("changed %s -> %s\n", prevTickerRecord.ticker, polySec.Ticker)
                     delete(activeSecuritiesRecord, prevTickerRecord.ticker)
                     prevTickerRecord.ticker = polySec.Ticker
                     prevTickerRecord.tickerActivationDate = currentDate
                     activeSecuritiesRecord[polySec.Ticker] = prevTickerRecord
+                    tickerChanges ++
                 }else{ //listing
                     activeSecuritiesRecord[polySec.Ticker] = ActiveSecurity{
                         securityId: nextSecurityId,
@@ -88,11 +108,11 @@ func initTickerDatabase(conn *Conn) error {
         for ticker, security := range activeSecuritiesRecord {
             if _, exists := polygonActiveTickers[ticker]; !exists { //delisted becuase already handled ticker chantges as best as possibel
                 delete(activeSecuritiesRecord, ticker)
-                err := writeSecurity(conn,&security, currentDate)
+                err := writeSecurity(conn,&security, &currentDate)
                 if err != nil {
-                    return err
+                    //return err
                 }
-                fmt.Printf("delisted: %s\n", security.ticker)
+      //          fmt.Printf("delisted: %s\n", security.ticker)
                 delistings ++
             }
         }
@@ -100,5 +120,8 @@ func initTickerDatabase(conn *Conn) error {
         fmt.Printf("%d active securities, %d listings, %d delistings, %d ticker changes, %d missed, on %s ------------------------ \n",len(activeSecuritiesRecord),listings,delistings,tickerChanges,missed,currentDateString )
       //  var god string
 	}
+    for _, security := range activeSecuritiesRecord {
+        writeSecurity(conn,&security,nil)
+    }
     return nil
 }
