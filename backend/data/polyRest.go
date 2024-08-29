@@ -111,7 +111,7 @@ func AllTickersTickerOnly(client *polygon.Client, dateString string) *[]string {
 	return &tickerList
 }
 
-func TickerDetails(client *polygon.Client, ticker string, dateString string) *models.Ticker {
+func GetTickerDetails(client *polygon.Client, ticker string, dateString string) *models.Ticker {
 	var params *models.GetTickerDetailsParams
 	if dateString != "now" {
 		dt, err := time.Parse(time.DateOnly, dateString)
@@ -312,23 +312,26 @@ func GetTickerFromCIK(client *polygon.Client, cik string) (string, error) {
 	// }
 	// return iter.Item().Ticker
 }
-/*func GetTickerFromFIGI(conn *Conn, figi string, dateOnly string) (string, error) {
-	// First check securities table
-	var dbTicker string
-	if dateOnly == "" {
-		err := conn.DB.QueryRow(context.Background(), "SELECT ticker FROM securities WHERE figi = $1 AND tickerEndDate is null", figi).Scan(&dbTicker)
-		if err != pgx.ErrNoRows {
-			return dbTicker, nil
-		}
-	} else {
-		err := conn.DB.QueryRow(context.Background(), "SELECT ticker FROM securities WHERE figi = $1 AND tickerStartDate <= $2 AND (tickerEndDate >= $2 OR tickerEndDate IS NULL)", figi, dateOnly).
-			Scan(&dbTicker)
-		if err != pgx.ErrNoRows {
-			return dbTicker, nil
-		}
-	}
 
-}*/
+/*
+	func GetTickerFromFIGI(conn *Conn, figi string, dateOnly string) (string, error) {
+		// First check securities table
+		var dbTicker string
+		if dateOnly == "" {
+			err := conn.DB.QueryRow(context.Background(), "SELECT ticker FROM securities WHERE figi = $1 AND tickerEndDate is null", figi).Scan(&dbTicker)
+			if err != pgx.ErrNoRows {
+				return dbTicker, nil
+			}
+		} else {
+			err := conn.DB.QueryRow(context.Background(), "SELECT ticker FROM securities WHERE figi = $1 AND tickerStartDate <= $2 AND (tickerEndDate >= $2 OR tickerEndDate IS NULL)", figi, dateOnly).
+				Scan(&dbTicker)
+			if err != pgx.ErrNoRows {
+				return dbTicker, nil
+			}
+		}
+
+}
+*/
 func GetCIK(conn *Conn, ticker string, dateOnly string) (string, error) {
 	// First check the securities table to see if we already have the CIK associated with a ticker
 	var dbCIK string
