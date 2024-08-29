@@ -24,10 +24,6 @@ type god struct {
 }
 
 func writeSecurity(conn *Conn, sec *ActiveSecurity, date *time.Time) error {
-<<<<<<< HEAD
-=======
-	return nil
->>>>>>> ccd79cf1a73c4203ef21fee0ff21514f88731da4
 	var maxDate interface{}
 	if date == nil {
 		maxDate = nil
