@@ -3,29 +3,31 @@ package data
 import (
 	//"fmt"
 	//"github.com/polygon-io/client-go/rest/models"
-    "log"
-    //
+	"fmt"
+	"log"
+	//
 )
 
 func ManualTest() {
 	conn, close := InitConn(false)
 	defer close()
-    err := initTickerDatabase(conn)
-    if err != nil {
-        log.Fatal(err)
-    }
-        
-
-/*
-	iter := ListTickers(conn.Polygon, "", "", models.GTE, 1000, true)
-	ccc := 0
-	for iter.Next() {
-		ccc++
-		if iter.Item().Ticker == "FB" {
-			fmt.Println(iter.Item().Ticker)
-		}
+	ticker := GetTickerDetails(conn.Polygon, "IFN.WD", "2003-09-23")
+	fmt.Printf("Ticker suffix: {%s}", ticker.TickerSuffix)
+	err := initTickerDatabase(conn)
+	if err != nil {
+		log.Fatal(err)
 	}
-	fmt.Println(ccc)*/
+
+	/*
+		iter := ListTickers(conn.Polygon, "", "", models.GTE, 1000, true)
+		ccc := 0
+		for iter.Next() {
+			ccc++
+			if iter.Item().Ticker == "FB" {
+				fmt.Println(iter.Item().Ticker)
+			}
+		}
+		fmt.Println(ccc)*/
 	//updateTickerDatabase(conn, "")
 
 	//fmt.Println(AllTickersTickerOnly(c, "2024-08-20")[0])
