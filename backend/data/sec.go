@@ -24,6 +24,10 @@ type god struct {
 }
 
 func writeSecurity(conn *Conn, sec *ActiveSecurity, date *time.Time) error {
+<<<<<<< HEAD
+=======
+	return nil
+>>>>>>> ccd79cf1a73c4203ef21fee0ff21514f88731da4
 	var maxDate interface{}
 	if date == nil {
 		maxDate = nil
@@ -70,7 +74,7 @@ func initTickerDatabase(conn *Conn) error {
         figiChanges := 0
 		// Loop through the active stocks for the given day
 		for _, polySec := range polygonActiveSecurities {
-            polygonActiveTickers[polySec.Ticker] = struct{}{} //empty anonymous struct cause just use key to check existence not retrieve valu
+			polygonActiveTickers[polySec.Ticker] = struct{}{} //empty anonymous struct cause just use key to check existence not retrieve valu
 			if strings.Contains(polySec.Ticker, ".") ||
 				containsLowercase(polySec.Ticker) {
 				missed++
@@ -92,7 +96,7 @@ func initTickerDatabase(conn *Conn) error {
 					prevTickerRecord := activeSecuritiesRecord[prevTicker]
 					err := writeSecurity(conn, &prevTickerRecord, &currentDate)
 					if err != nil {
-                        fmt.Printf("ticker change error: %v",err)
+						fmt.Printf("ticker change error: %v", err)
 						//return err
 					}
 					//               fmt.Printf("changed %s -> %s\n", prevTickerRecord.ticker, polySec.Ticker)
@@ -140,12 +144,16 @@ func initTickerDatabase(conn *Conn) error {
 		currentDate = currentDate.AddDate(0, 0, 1)
 		fmt.Printf("%d active securities, %d listings, %d delistings, %d ticker changes, %d figi changes, %d missed, on %s ------------------------ \n", len(activeSecuritiesRecord), listings, delistings, tickerChanges, figiChanges, missed, currentDateString)
 
+<<<<<<< HEAD
 		/*var god string
         fmt.Scanf("%s",god)*/
+=======
+		var god string
+		fmt.Scanf("%s", god)
+>>>>>>> ccd79cf1a73c4203ef21fee0ff21514f88731da4
 	}
 	for _, security := range activeSecuritiesRecord {
 		writeSecurity(conn, &security, nil)
 	}
 	return nil
 }
-
