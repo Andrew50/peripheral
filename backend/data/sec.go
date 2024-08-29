@@ -76,10 +76,6 @@ func initTickerDatabase(conn *Conn) error {
 				missed++
 				continue
 			}
-			// if the ticker does not exist
-            if polySec.Ticker == "ZYNE" {
-                fmt.Println(polySec.CompositeFIGI)
-            }
 			if sec, exists := activeSecuritiesRecord[polySec.Ticker]; !exists {
 				var tickerChange = false
 				var prevTicker string
@@ -118,9 +114,6 @@ func initTickerDatabase(conn *Conn) error {
 					//                fmt.Printf("listed %s\n",polySec.Ticker)
 				}
 			} else if(polySec.CompositeFIGI != "" && sec.figi != polySec.CompositeFIGI){ //figi change
-                if polySec.Ticker == "ZYNE" {
-                    fmt.Println("working")
-                }
                 err := conn.DB.QueryRow(context.Background(), "SELECT * from securities WHERE figi = $1 AND securityId = $2", polySec.CompositeFIGI, sec.securityId ).Scan()
                 if err == pgx.ErrNoRows {
                     fmt.Printf("ticker %s figi change: %s -> %s\n",sec.ticker, sec.figi, polySec.CompositeFIGI)
@@ -129,6 +122,7 @@ func initTickerDatabase(conn *Conn) error {
                     }
                     sec.figi = polySec.CompositeFIGI
                     activeSecuritiesRecord[polySec.Ticker] = sec
+                    figiChanges ++
                 }
             }
         }
