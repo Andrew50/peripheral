@@ -29,6 +29,7 @@ func writeSecurity(conn *Conn, sec *ActiveSecurity, date *time.Time) error {
     }
     _, err := conn.DB.Exec(context.Background(), "INSERT INTO securities (securityId, ticker, figi, minDate, maxDate) VALUES ($1, $2, $3, $4, $5)", sec.securityId, sec.ticker, sec.figi, sec.tickerActivationDate, maxDate)
     if err != nil {
+        fmt.Println(err)
         fmt.Print(sec.securityId," ", sec.ticker," ", sec.figi," ", sec.tickerActivationDate," ", date, "\n")
     }
     return err
@@ -51,7 +52,7 @@ func containsLowercase(s string) bool {
     return false
 }
 func initTickerDatabase(conn *Conn) error { 
-	startDate := time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
+	startDate := time.Date(2024, 8, 25, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
 	currentDate := startDate
 	activeSecuritiesRecord := make(map[string]ActiveSecurity)    // indexed by ticker
     nextSecurityId := 1
