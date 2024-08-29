@@ -12,7 +12,7 @@ func ManualTest() {
 	conn, close := InitConn(false)
 	defer close()
 	ticker := GetTickerDetails(conn.Polygon, "IFN.WD", "2003-09-23")
-	fmt.Printf("Ticker suffix: {%s}", ticker.TickerSuffix)
+	fmt.Printf("Ticker suffix: {%s}\n", ticker.TickerSuffix)
 	err := initTickerDatabase(conn)
 	if err != nil {
 		log.Fatal(err)
