@@ -17,6 +17,7 @@ func ManualTest() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
 
 /*
 	iter := ListTickers(conn.Polygon, "", "", models.GTE, 1000, true)
