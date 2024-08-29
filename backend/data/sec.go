@@ -69,13 +69,14 @@ func initTickerDatabase(conn *Conn) error {
 		missed := 0
 		// Loop through the active stocks for the given day
 		for _, polySec := range polygonActiveSecurities {
+            polygonActiveTickers[polySec.Ticker] = struct{}{} //empty anonymous struct cause just use key to check existence not retrieve valu
 			if strings.Contains(polySec.Ticker, ".") ||
 				containsLowercase(polySec.Ticker) {
 				missed++
 				continue
 			}
 			// if the ticker does not exist
-			if _, exists := activeSecuritiesRecord[polySec.Ticker]; !exists {
+			if sec, exists := activeSecuritiesRecord[polySec.Ticker]; !exists {
 				var tickerChange = false
 				var prevTicker string
 				if polySec.CompositeFIGI != "" {
@@ -111,10 +112,14 @@ func initTickerDatabase(conn *Conn) error {
 					listings++
 					//                fmt.Printf("listed %s\n",polySec.Ticker)
 				}
-			}
-			polygonActiveTickers[polySec.Ticker] = struct{}{} //empty anonymous struct cause just use key to check existence not retrieve valu
-		}
-
+			} else if(sec.figi != polySec.CompositeFIGI){ //figi change
+                err := writeSecurity(conn, &sec, &currentDate)
+                if err != nil {
+                    fmt.
+                sec.figi = polySec.CompositeFIGI
+                activeSecuritesRecord[polySec.Ticker] = sec
+            }
+        }
 		for ticker, security := range activeSecuritiesRecord {
 			if _, exists := polygonActiveTickers[ticker]; !exists { //delisted becuase already handled ticker chantges as best as possibel
 				delete(activeSecuritiesRecord, ticker)
