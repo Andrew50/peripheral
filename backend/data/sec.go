@@ -144,13 +144,6 @@ func initTickerDatabase(conn *Conn) error {
 		currentDate = currentDate.AddDate(0, 0, 1)
 		fmt.Printf("%d active securities, %d listings, %d delistings, %d ticker changes, %d figi changes, %d missed, on %s ------------------------ \n", len(activeSecuritiesRecord), listings, delistings, tickerChanges, figiChanges, missed, currentDateString)
 
-<<<<<<< HEAD
-		/*var god string
-        fmt.Scanf("%s",god)*/
-=======
-		var god string
-		fmt.Scanf("%s", god)
->>>>>>> ccd79cf1a73c4203ef21fee0ff21514f88731da4
 	}
 	for _, security := range activeSecuritiesRecord {
 		writeSecurity(conn, &security, nil)
