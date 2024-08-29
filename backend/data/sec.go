@@ -86,6 +86,8 @@ func initTickerDatabase(conn *Conn) error {
 						err := conn.DB.QueryRow(context.Background(), "SELECT * from securities WHERE ticker = $1 AND figi = $2", polySec.Ticker, polySec.CompositeFIGI).Scan()
 						if err == pgx.ErrNoRows {
 							tickerChange = true
+						} else {
+							continue
 						}
 					}
 				}
@@ -103,6 +105,7 @@ func initTickerDatabase(conn *Conn) error {
 					activeSecuritiesRecord[polySec.Ticker] = prevTickerRecord
 					tickerChanges++
 				} else { //listing
+
 					activeSecuritiesRecord[polySec.Ticker] = ActiveSecurity{
 						securityId:           nextSecurityId,
 						ticker:               polySec.Ticker,
