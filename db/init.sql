@@ -5,8 +5,9 @@ CREATE TABLE users (
     password VARCHAR(100) NOT NULL
 );
 CREATE INDEX idxUsers ON users (username, password);
+DROP TABLE IF EXISTS securities;
 CREATE TABLE securities (
-    securityId INT,
+    securityid INT,
     ticker varchar(10) not null,
     figi varchar(12) not null,
     --cik varchar(10) not null,
@@ -14,8 +15,8 @@ CREATE TABLE securities (
     maxDate timestamp,
     unique (ticker, minDate),
     unique (ticker, maxDate),
-    unique (securityId, minDate),
-    unique (securityId, maxdate)
+    unique (securityid, minDate),
+    unique (securityid, maxdate)
 );
 create index idxTickerDateRange on securities (ticker, minDate, maxDate);
 create table setups (
