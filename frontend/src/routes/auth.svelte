@@ -1,6 +1,6 @@
 <!-- account.svelte -->
 <script lang="ts">
-    import {publicRequest,settings} from '../store'
+    import {publicRequest} from '../store'
     import Header from './header.svelte';
     import { goto } from '$app/navigation';
     import { writable } from 'svelte/store';
@@ -28,7 +28,6 @@
     async function signIn(username: string, password: string) {
         publicRequest<Login>('login', {username:username, password:password}).then((r : Login) => {
             sessionStorage.setItem("authToken",r.token)
-            settings.set(r.settings)
             goto('/app');
         }).catch((error: string) => {
             errorMessage.set(error)

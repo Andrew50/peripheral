@@ -1,4 +1,19 @@
 package tasks
+        chartContainer.addEventListener('keydown', event => {
+            
+            if (/^[a-zA-Z]$/.test(event.key)) {
+                event.preventDefault();
+                currentTicker += event.key.toUpperCase();
+                // Perform action for any letter key
+            } else if (event.key === 'Backspace') {
+                event.preventDefault();
+                currentTicker = currentTicker.slice(0, -1);
+            } else if (event.key === 'Enter') {
+                event.preventDefault();
+                updateChart(mainChart);
+            }
+            
+         });
 
 import (
 	"api/data"
