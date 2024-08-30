@@ -15,18 +15,19 @@ var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, erro
 }
 
 var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}, error){
-    "verifyAuth": verifyAuth,
-	"newInstance": tasks.NewInstance,
-	"getCik":      tasks.GetCik,
-    "getInstances": tasks.GetInstances,
-    "setAnnotation": tasks.SetAnnotation,
-    "newAnnotation": tasks.NewAnnotation,
-    "getAnnotations": tasks.GetAnnotations,
-    "getRelatedTickers":tasks.GetRelatedTickers,
-    "getSecuritiesFromTicker":tasks.GetSecuritiesFromTicker,
+	"verifyAuth":              verifyAuth,
+	"newInstance":             tasks.NewInstance,
+	"getCik":                  tasks.GetCik,
+	"getInstances":            tasks.GetInstances,
+	"setAnnotation":           tasks.SetAnnotation,
+	"newAnnotation":           tasks.NewAnnotation,
+	"getAnnotations":          tasks.GetAnnotations,
+	"getRelatedTickers":       tasks.GetRelatedTickers,
+	"getSecuritiesFromTicker": tasks.GetSecuritiesFromTicker,
+	"getChartData":            tasks.GetChartData,
 }
 
-func verifyAuth(_ *data.Conn, _ int, _ json.RawMessage) (interface{}, error){return nil, nil}
+func verifyAuth(_ *data.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
 
 type Request struct {
 	Function  string          `json:"func"`
