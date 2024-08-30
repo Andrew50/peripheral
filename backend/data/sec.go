@@ -55,8 +55,8 @@ func containsLowercase(s string) bool {
 	return false
 }
 func initTickerDatabase(conn *Conn) error {
-	//startDate := time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
-	startDate := time.Date(2024, 8, 20, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
+	startDate := time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
+	//startDate := time.Date(2024, 8, 20, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
 	currentDate := startDate
 	activeSecuritiesRecord := make(map[string]ActiveSecurity) // indexed by ticker
 	nextSecurityId := 1
