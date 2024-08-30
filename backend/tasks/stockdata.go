@@ -27,7 +27,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		return nil, fmt.Errorf("getChartData invalid args: %v", err)
 	}
 	iter := data.GetAggsData(conn.Polygon, args.Ticker, 1, "day", data.MillisFromDatetimeString("2023-01-01"),
-		data.MillisFromDatetimeString("2024-08-29"), 1000)
+		data.MillisFromDatetimeString("2024-08-30"), 1000)
 	var barDataList []GetChartDataResults
 	for iter.Next() {
 		var barData GetChartDataResults

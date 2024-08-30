@@ -18,6 +18,20 @@ function initializeChart()  {
     const chartOptions = { layout: { textColor: 'black', background: { type: ColorType.Solid, color: 'white' } } };
     const chartContainer = document.getElementById('chart_container');
     if (chartContainer) {
+        chartContainer.addEventListener('keydown', event => {
+            if (/^[a-zA-Z]$/.test(event.key)) {
+                event.preventDefault();
+                currentTicker += event.key.toUpperCase();
+                // Perform action for any letter key
+            } else if (event.key === 'Backspace') {
+                event.preventDefault();
+                currentTicker = currentTicker.slice(0, -1);
+            } else if (event.key === 'Enter') {
+                event.preventDefault();
+                updateChart(mainChart);
+            }
+            
+         });
         mainChart = createChart(chartContainer, chartOptions);
 
         mainChartCandleSeries = mainChart.addCandlestickSeries({
@@ -71,17 +85,18 @@ function updateChart(chart: IChartApi) {
 
 }
     onMount(() => {
+    currentTicker = ""
     initializeChart(); // Optionally call Chart function on component mount
   });
 </script>
 <style>
     #chart_container {
-      width: 100%;
-      height: 400px; /* Adjust height as needed */
+      width: 85%;
+      height: 800px; /* Adjust height as needed */
     }
   </style>
 <p> Lightweight Charts</p>
 <input bind:value={currentTicker} placeholder="ticker"/>
 <input bind:value={currentTimeframe} placeholder="timeframe"/>
 <button on:click={() => updateChart(mainChart)}>Get Data</button>
-<div id="chart_container"></div>
+<div id="chart_container" tabindex="0"></div>
