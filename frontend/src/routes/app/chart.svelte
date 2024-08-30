@@ -1,12 +1,20 @@
 <script lang="ts">
 import { createChart, ColorType} from 'lightweight-charts';
 import {privateRequest} from '../../store';
-import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon} from 'lightweight-charts';
-import { onMount } from 'svelte';
+import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, MouseEventParams, UTCTimestamp} from 'lightweight-charts';
+import { onMount, onDestroy } from 'svelte';
+
 let mainChart: IChartApi;
 let mainChartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
 let currentTicker: string;
 let currentTimeframe: string; 
+let latestCrosshairPositionTime: Time;
+// Right Click context menu variables 
+let showMenu = false; 
+let menuStyle = {
+    top: '0px', 
+    left: '0px'
+};
 interface barData {
     time: string;
     open: number; 
@@ -47,9 +55,23 @@ function initializeChart()  {
         ]
 
         mainChartCandleSeries.setData(candleData);
+        mainChart.subscribeCrosshairMove(crosshairMoveEvent);
         mainChart.timeScale().fitContent();
     }
 
+
+}
+function crosshairMoveEvent(param: MouseEventParams) {
+    if (!param.point) {
+        return;
+    }
+    const validCrosshairPoint = !(param === undefined || param.time === undefined || param.point.x < 0 || param.point.y < 0);
+    if(!validCrosshairPoint) { return; }
+    if(!mainChartCandleSeries) {return;}
+
+    const bar = param.seriesData.get(mainChartCandleSeries)
+    if(!bar) {return;}
+    latestCrosshairPositionTime = bar.time 
 
 }
 function updateChart(chart: IChartApi) {
@@ -84,19 +106,75 @@ function updateChart(chart: IChartApi) {
         });
 
 }
-    onMount(() => {
+function chartRightClick(event: MouseEvent) {
+    event.preventDefault();
+    console.log("Chart right clicked")
+    console.log(latestCrosshairPositionTime)
+    menuStyle = {
+            top: `${event.clientY + 10}px`,
+            left: `${event.clientX + 10}px`
+        };
+    showMenu = true;
+    
+
+
+}
+function closeRightClickMenu() {
+    showMenu = false;
+}
+onMount(() => {
     currentTicker = ""
-    initializeChart(); // Optionally call Chart function on component mount
-  });
+    initializeChart(); 
+    const chartContainer = document.getElementById('chart_container');
+    if (chartContainer) {
+        chartContainer.addEventListener('contextmenu', chartRightClick)
+    }
+    return () => {
+        if (chartContainer) {
+                chartContainer.removeEventListener('contextmenu', chartRightClick);
+            }
+    };
+
+});
+document.addEventListener('click', closeRightClickMenu)
+onDestroy(() => {
+        document.removeEventListener('click', closeRightClickMenu)
+})
 </script>
 <style>
     #chart_container {
       width: 85%;
       height: 800px; /* Adjust height as needed */
     }
-  </style>
+    .context-menu {
+        position: absolute;
+        background-color: white;
+        border: 1px solid #ccc;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .context-menu-item {
+        padding: 5px 10px;
+        cursor: pointer;
+    }
+
+    .context-menu-item:hover {
+        background-color: #f0f0f0;
+    }
+</style>
 <p> Lightweight Charts</p>
 <input bind:value={currentTicker} placeholder="ticker"/>
 <input bind:value={currentTimeframe} placeholder="timeframe"/>
 <button on:click={() => updateChart(mainChart)}>Get Data</button>
 <div id="chart_container" tabindex="0"></div>
+{#if showMenu}
+    <div class="context-menu" style="top: {menuStyle.top}; left: {menuStyle.left};">
+        <button class="context-menu-item" on:click={closeRightClickMenu}>Option 1</button>
+        <button class="context-menu-item" on:click={closeRightClickMenu}>Option 2</button>
+        <button class="context-menu-item" on:click={closeRightClickMenu}>Option 3</button>
+    </div>
+{/if}
