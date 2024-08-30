@@ -1,20 +1,14 @@
 import { writable } from 'svelte/store';
 import type { Writable } from 'svelte/store';
-import { get } from 'svelte/store';
 import { goto } from "$app/navigation";
-import { onMount } from 'svelte';
-
-export let menuLeftPos = writable(400);
-export let annotateData = writable([]);
-export let journalData = writable([]);
-export let screener_data = writable([]);
-export let chartQuery = writable([]);
-export let match_data = writable([[], [], []]);
-export let setups_list = writable([]);
-export let currentEntry = writable("");
-export let watchlist_data = writable({});
-export let settings = writable({});
-export const focus = writable(null);
+export interface ChartQuery {
+    securityId: number;
+    timeframe: string;
+    extendedHours: boolean;
+    datetime: string;
+}
+export let chartQuery: Writable<ChartQuery> = writable({securityId:1,timeframe:"1d",extendedHours:false,datetime:""})
+export let instanceInputVisible = writable(false)
 
 let base_url: string;
 
