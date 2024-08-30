@@ -2,12 +2,15 @@
 import { createChart, ColorType} from 'lightweight-charts';
 import {privateRequest} from '../../store';
 import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, MouseEventParams, UTCTimestamp} from 'lightweight-charts';
+import type {HistogramStyleOptions, HistogramSeriesPartialOptions, IChartApiBase, HistogramData, HistogramSeriesOptions} from 'lightweight-charts';
 import { onMount, onDestroy } from 'svelte';
+	import Page from '../+page.svelte';
 
 let mainChart: IChartApi;
 let mainChartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
+let mainChartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
 let currentTicker: string;
-let currentTimeframe: string; 
+let currentTimeframe: string = ""; 
 let latestCrosshairPositionTime: Time;
 // Right Click context menu variables 
 let showMenu = false; 
@@ -15,49 +18,85 @@ let menuStyle = {
     top: '0px', 
     left: '0px'
 };
+let menuCrosshairPositionTime: Time; 
+
 interface barData {
-    time: string;
+    time: UTCTimestamp;
     open: number; 
     high: number;
     low: number;
     close: number;
+    volume: number;
 }
 function initializeChart()  {
-    const chartOptions = { layout: { textColor: 'black', background: { type: ColorType.Solid, color: 'white' } } };
+    const chartOptions = { 
+        layout: { 
+            textColor: 'black', 
+            background: { type: ColorType.Solid, color: 'white' } 
+        },
+        timeScale:  {
+            timeVisible: true
+        },
+    };
     const chartContainer = document.getElementById('chart_container');
-    if (chartContainer) {
-        chartContainer.addEventListener('keydown', event => {
-            if (/^[a-zA-Z]$/.test(event.key)) {
-                event.preventDefault();
-                currentTicker += event.key.toUpperCase();
-                // Perform action for any letter key
-            } else if (event.key === 'Backspace') {
-                event.preventDefault();
-                currentTicker = currentTicker.slice(0, -1);
-            } else if (event.key === 'Enter') {
-                event.preventDefault();
-                updateChart(mainChart);
-            }
-            
-         });
-        mainChart = createChart(chartContainer, chartOptions);
-
-        mainChartCandleSeries = mainChart.addCandlestickSeries({
-            upColor: '#26a69a', downColor: '#ef5350', borderVisible: false,
-            wickUpColor: '#26a69a', wickDownColor: '#ef5350',
+    if (!chartContainer) {return;}
+    chartContainer.addEventListener('keydown', event => {
+        if (/^[a-zA-Z]$/.test(event.key)) {
+            event.preventDefault();
+            currentTicker += event.key.toUpperCase();
+            // Perform action for any letter key
+        } else if (event.key === 'Backspace') {
+            event.preventDefault();
+            currentTicker = currentTicker.slice(0, -1);
+        } else if (event.key === 'Enter') {
+            event.preventDefault();
+            loadNewChart(mainChart);
+        }
+        
         });
-        const candleData = [
-            {time: "2024-08-12", open: 1, high: 2, low: 0.5, close: 2},
-            {time: "2024-08-13", open: 1, high: 2, low: 0.5, close: 2},
-            {time: "2024-08-14", open: 1, high: 2, low: 0.5, close: 2},
-            {time: "2024-08-15", open: 1, high: 2, low: 0.5, close: 2},
-            {time: "2024-08-16", open: 1, high: 2, low: 0.5, close: 2},
-        ]
+    mainChart = createChart(chartContainer, chartOptions);
 
-        mainChartCandleSeries.setData(candleData);
-        mainChart.subscribeCrosshairMove(crosshairMoveEvent);
-        mainChart.timeScale().fitContent();
-    }
+    mainChartCandleSeries = mainChart.addCandlestickSeries({
+        upColor: '#26a69a', downColor: '#ef5350', borderVisible: false,
+        wickUpColor: '#26a69a', wickDownColor: '#ef5350',
+    });
+    const initCandleData = [
+        {time: "2024-08-12", open: 1, high: 2, low: 0.5, close: 2},
+        {time: "2024-08-13", open: 1, high: 2, low: 0.5, close: 2},
+        {time: "2024-08-14", open: 1, high: 2, low: 0.5, close: 2},
+        {time: "2024-08-15", open: 1, high: 2, low: 0.5, close: 2},
+        {time: "2024-08-16", open: 1, high: 2, low: 0.5, close: 2},
+    ]
+    mainChartVolumeSeries = mainChart.addHistogramSeries({
+        priceFormat: {
+            type: 'volume',
+        },
+        priceScaleId: '',
+    });
+    mainChartVolumeSeries.priceScale().applyOptions({
+        scaleMargins: {
+            top: 0.8,
+            bottom: 0,
+        },
+    });
+    mainChartCandleSeries.priceScale().applyOptions({
+        scaleMargins: {
+            top: 0.1,
+            bottom: 0.2,
+        },
+    });
+    const initVolumeData = [
+        {time: "2024-08-12", value: 1000000.0, color:'green'},
+        {time: "2024-08-13", value: 2000000.0, color:'green'},
+        {time: "2024-08-14", value: 3000000.0, color:'red'},
+        {time: "2024-08-15", value: 4000000.0, color:'green'},
+        {time: "2024-08-16", value: 5000000.0, color:'red'},
+
+    ]
+    mainChartCandleSeries.setData(initCandleData);
+    mainChartVolumeSeries.setData(initVolumeData)
+    mainChart.subscribeCrosshairMove(crosshairMoveEvent);
+    mainChart.timeScale().fitContent();
 
 
 }
@@ -74,31 +113,50 @@ function crosshairMoveEvent(param: MouseEventParams) {
     latestCrosshairPositionTime = bar.time 
 
 }
-function updateChart(chart: IChartApi) {
-    console.log(currentTicker)
+function loadNewChart(chart: IChartApi) {
     let barDataList: barData[] = []
     privateRequest<barData[]>("getChartData", {ticker:currentTicker, timeframe:currentTimeframe})
         .then((result: barData[]) => {
             barDataList = result;
 
-            let newData = [];
+            let newCandleData = [];
+            let newVolumeData = [];
             for (let i =0; i < barDataList.length; i++) {
-                newData.push({
-                    time: barDataList[i].time, 
+                newCandleData.push({
+                    time: barDataList[i].time as UTCTimestamp, 
                     open: barDataList[i].open, 
                     high: barDataList[i].high, 
                     low: barDataList[i].low,
-                    close: barDataList[i].close
+                    close: barDataList[i].close, 
                 });
+                const candleColor = barDataList[i].close > barDataList[i].open 
+                newVolumeData.push({
+                    time: barDataList[i].time, 
+                    value: barDataList[i].volume, 
+                    color: candleColor ? 'green' : 'red',
+                })
             }
            
-            console.log(newData)
             mainChart.removeSeries(mainChartCandleSeries)
+            mainChart.removeSeries(mainChartVolumeSeries)
             mainChartCandleSeries = mainChart.addCandlestickSeries({
                     upColor: '#26a69a', downColor: '#ef5350', borderVisible: false,
                     wickUpColor: '#26a69a', wickDownColor: '#ef5350',
                 })
-            mainChartCandleSeries.setData(newData)
+            mainChartVolumeSeries = mainChart.addHistogramSeries({
+                priceFormat: {
+                    type: 'volume',
+                },
+                priceScaleId: '',
+            });
+            mainChartVolumeSeries.priceScale().applyOptions({
+                scaleMargins: {
+                    top: 0.8,
+                    bottom: 0,
+                },
+            });
+            mainChartCandleSeries.setData(newCandleData)
+            mainChartVolumeSeries.setData(newVolumeData)
             mainChart.timeScale().fitContent();
         })
         .catch((error: string) => {
@@ -110,6 +168,7 @@ function chartRightClick(event: MouseEvent) {
     event.preventDefault();
     console.log("Chart right clicked")
     console.log(latestCrosshairPositionTime)
+    menuCrosshairPositionTime = latestCrosshairPositionTime;
     menuStyle = {
             top: `${event.clientY + 10}px`,
             left: `${event.clientX + 10}px`
@@ -169,11 +228,11 @@ onDestroy(() => {
 <p> Lightweight Charts</p>
 <input bind:value={currentTicker} placeholder="ticker"/>
 <input bind:value={currentTimeframe} placeholder="timeframe"/>
-<button on:click={() => updateChart(mainChart)}>Get Data</button>
+<button on:click={() => loadNewChart(mainChart)}>Get Data</button>
 <div id="chart_container" tabindex="0"></div>
 {#if showMenu}
     <div class="context-menu" style="top: {menuStyle.top}; left: {menuStyle.left};">
-        <button class="context-menu-item" on:click={closeRightClickMenu}>Option 1</button>
+        <button class="context-menu-item" on:click={closeRightClickMenu}>Create Instance at {menuCrosshairPositionTime}</button>
         <button class="context-menu-item" on:click={closeRightClickMenu}>Option 2</button>
         <button class="context-menu-item" on:click={closeRightClickMenu}>Option 3</button>
     </div>
