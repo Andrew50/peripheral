@@ -33,7 +33,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if err != nil {
 		return nil, fmt.Errorf("getChartData invalid timeframe: %v", err)
 	}
-	iter := data.GetAggsData(conn.Polygon, args.Ticker, multiplier, timespan, data.MillisFromDatetimeString("2024-08-25"),
+	iter := data.GetAggsData(conn.Polygon, args.Ticker, multiplier, timespan, data.MillisFromDatetimeString("2024-01-01"),
 		data.MillisFromDatetimeString("2024-08-30"), 1000)
 	var barDataList []GetChartDataResults
 	for iter.Next() {
