@@ -41,7 +41,6 @@
         instanceInputTarget.set(null)
         securities = [];
         inputString = "";
-        console.log(inputString)
         inputType = "";
         if (prevFocus){
             prevFocus.focus()
@@ -65,7 +64,7 @@
                     if (Array.isArray(securities) && securities.length > 0) {
                         selectSecurity(0);
                     }
-                }else if (inputType === 'timeframe'){
+                }else if (inputType === 'interval'){
                     get(instanceInputTarget).update((instance: Instance) => {
                         instance.timeframe = inputString
                         return instance
