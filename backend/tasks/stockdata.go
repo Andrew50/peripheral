@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"api/data"
+	"github.com/polygon-io/client-go/rest/models"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,10 +12,10 @@ import (
 )
 
 type GetChartDataArgs struct {
-	SecurityId  string `json:"security"`
+	SecurityId int `json:"securityId"`
 	Timeframe   string `json:"timeframe"`
-	EndDateTime string `json:"datetime"`
-	NumBars     int    `json:"numbars"`
+	EndDate string `json:"endDate"`
+	Bars     int    `json:"bars"`
 	//StartTime string `json:"starttime"`
 	//EndTime   string `json:"endtime"`
 }
@@ -30,17 +31,36 @@ type GetChartDataResults struct {
 func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetChartDataArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		return nil, fmt.Errorf("getChartData invalid args: %v", err)
+		return nil, fmt.Errorf("00s9fjh getChartData invalid args: %v", err)
 	}
 	multiplier, timespan, err := getTimeframe(args.Timeframe)
 	if err != nil {
 		return nil, fmt.Errorf("getChartData invalid timeframe: %v", err)
 	}
-	rows, err := conn.DB.Query(context.Background(), "SELECT ticker, minDate, maxDate FROM securities WHERE securityid = $1 AND (maxDate >= $2 OR maxDate is null) ORDER BY minDate desc", args.SecurityId, args.EndDateTime)
+    var ticker string
+    var maxDate time.Time
+    var minDate time.Time
+
+    // Prepare the query based on whether EndDate is empty
+    var query string
+    if args.EndDate == "" { //if no endDate provided then get the most recent ticker for that security, not necesarily null becuase could be delisted
+        query = `SELECT ticker, minDate, maxDate 
+                 FROM securities 
+                 WHERE securityid = $1 
+                 ORDER BY maxDate IS NULL DESC, maxDate DESC`
+        err = conn.DB.QueryRow(context.Background(), query, args.SecurityId).Scan(&ticker, &minDate, &maxDate)
+    } else {
+        query = `SELECT ticker, minDate, maxDate 
+                 FROM securities 
+                 WHERE securityid = $1 
+                 AND maxDate > $2`
+        err = conn.DB.QueryRow(context.Background(), query, args.SecurityId, args.EndDate).Scan(&ticker, &minDate, &maxDate)
+    }
+
 	if err != nil {
 		return nil, err
 	}
-	for rows.Next() {
+	/*for rows.Next() {
 		var ticker string
 		var maxDate time.Time
 		var minDate time.Time
@@ -48,9 +68,14 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		if err != nil {
 			return nil, err
 		}
-	}
-	iter := data.GetAggsData(conn.Polygon, args.SecurityId, multiplier, timespan, data.MillisFromDatetimeString("2024-01-01"),
-		data.MillisFromDatetimeString("2024-08-30"), 1000)
+	}*/
+    easternTimeLocation, tzErr := time.LoadLocation("America/New_York")
+    if tzErr != nil {
+        return nil, err
+    }
+    start := models.Millis(maxDate.AddDate(0, 0, -20).In(easternTimeLocation))
+    end := models.Millis(maxDate.In(easternTimeLocation))
+    iter := data.GetAggsData(conn.Polygon, ticker, multiplier, timespan, start, end, 1000)
 	var barDataList []GetChartDataResults
 	for iter.Next() {
 		var barData GetChartDataResults
