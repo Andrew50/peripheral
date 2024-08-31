@@ -49,8 +49,8 @@ function initializeChart()  {
     mainChart = createChart(chartContainer, chartOptions);
 
     mainChartCandleSeries = mainChart.addCandlestickSeries({
-        upColor: '#26a69a', downColor: '#ef5350', borderVisible: false,
-        wickUpColor: '#26a69a', wickDownColor: '#ef5350',
+        upColor: '#089981', downColor: '#ef5350', borderVisible: false,
+        wickUpColor: '#089981', wickDownColor: '#ef5350',
     });
     const initCandleData = [
         {time: "2024-08-12", open: 1, high: 2, low: 0.5, close: 2},
@@ -78,8 +78,8 @@ function initializeChart()  {
         },
     });
     const initVolumeData = [
-        {time: "2024-08-12", value: 1000000.0, color:'green'},
-        {time: "2024-08-13", value: 2000000.0, color:'green'},
+        {time: "2024-08-12", value: 1000000.0, color:'#ef5350'},
+        {time: "2024-08-13", value: 2000000.0, color:'#089981'},
         {time: "2024-08-14", value: 3000000.0, color:'red'},
         {time: "2024-08-15", value: 4000000.0, color:'green'},
         {time: "2024-08-16", value: 5000000.0, color:'red'},
@@ -125,15 +125,15 @@ function loadNewChart(chart: IChartApi) {
                 newVolumeData.push({
                     time: barDataList[i].time, 
                     value: barDataList[i].volume, 
-                    color: candleColor ? 'green' : 'red',
+                    color: candleColor ? '#089981' : '#ef5350',
                 })
             }
            
             mainChart.removeSeries(mainChartCandleSeries)
             mainChart.removeSeries(mainChartVolumeSeries)
             mainChartCandleSeries = mainChart.addCandlestickSeries({
-                    upColor: '#26a69a', downColor: '#ef5350', borderVisible: false,
-                    wickUpColor: '#26a69a', wickDownColor: '#ef5350',
+                    upColor: '#089981', downColor: '#ef5350', borderVisible: false,
+                    wickUpColor: '#089981', wickDownColor: '#ef5350',
                 })
             mainChartVolumeSeries = mainChart.addHistogramSeries({
                 priceFormat: {
