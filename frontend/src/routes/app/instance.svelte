@@ -4,19 +4,19 @@
     import { onMount, tick } from 'svelte';
     import { get } from 'svelte/store';
     import type { Writable } from 'svelte/store';
-    import type {Instance} from '../../store';
+    import type {Instance, NullWritable} from '../../store';
     let inputString = "";
     let inputType: string = "";
     let selectedSecurityIndex = 0;
     let prevFocus: HTMLElement | null = null;
     interface Security {
-        securityId?: number;
-        ticker?: string;
-        maxDate?: string | null;
-        name?: string;
+        securityId: number;
+        ticker: string;
+        maxDate: string | null;
+        name: string;
     }
     let securities: Security[] = [];
-    instanceInputTarget.subscribe(async (v:Writable<Instance>) => {
+    instanceInputTarget.subscribe(async (v:NullWritable) => {
         if ( get(v) != null && typeof window !== 'undefined'){
             await tick();
             const element = document.getElementById("instanceInput");
@@ -30,7 +30,7 @@
 
     function selectSecurity(index: number){
         get(instanceInputTarget).update((instance: Instance) => {
-            instance.timeframe = securities[index].securityId
+            instance.securityId = securities[index].securityId
             instance.ticker = securities[index].ticker
             return instance
         })
@@ -99,11 +99,12 @@
     <div>{inputType}</div>
         <table>
             {#if Array.isArray(securities) && securities.length > 0}
+            <th> Ticker <th/>
+            <th> Delist Date </th>
             {#each securities as sec, i}
                 <tr class={selectedSecurityIndex === i ? 'selected' : ''} on:click={() => selectSecurity(i)}> 
                     <td>{sec.ticker}</td>
                     <td>{sec.maxDate}</td> 
-                    <td>{sec.name}</td>
                 </tr>
             {/each}
             {/if}

@@ -9,7 +9,8 @@ export interface Instance {
     extendedHours: boolean;
     datetime: string | null;
 }
-export let instanceInputTarget: Writable<Writable<Instance> | null> = writable(null)
+export type NullWritable = Writable<Writable<Instance> | null>
+export let instanceInputTarget: NullWritable = writable(null)
 
 let base_url: string;
 
@@ -65,7 +66,7 @@ export async function privateRequest<T>(func: string, args: any): Promise<T> {
         method: 'POST',
         headers: headers,
         body: JSON.stringify(payload)
-    });
+    }).catch();
     if (response.ok){
         const result = await response.json() as T
         console.log("payload: ",payload, "result: ", result)

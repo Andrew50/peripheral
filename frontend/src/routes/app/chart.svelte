@@ -18,7 +18,8 @@ let menuStyle = {
     left: '0px'
 };
 let menuCrosshairPositionTime: Time; 
-let chartQuery: Writable<Instance> = writable({})
+let chartQuery: Writable<Instance> = writable({
+    ticker: "ACME", securityId: 70, timeframe: "1d", extndedhours: false, datetime: null})
 
 interface barData {
     time: UTCTimestamp;
@@ -106,7 +107,11 @@ function crosshairMoveEvent(param: MouseEventParams) {
 }
 function loadNewChart(v: Instance): void{
     let barDataList: barData[] = []
-        privateRequest<barData[]>("getChartData", {security:v.securityId, timeframe:v.timeframe, datetime:v.datetime})
+        const timeframe = v.timeframe
+        if (timeframe.length < 1){
+            return
+        }
+        privateRequest<barData[]>("getChartData", {securityId:v.securityId, timeframe:v.timeframe, endDate:v.datetime, Bars:100})
         .then((result: barData[]) => {
             if (! (Array.isArray(result) && result.length > 0)){ return}
             barDataList = result;
