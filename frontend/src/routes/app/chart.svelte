@@ -108,7 +108,7 @@ function crosshairMoveEvent(param: MouseEventParams) {
 }
 function loadNewChart(v: ChartQuery) {
     let barDataList: barData[] = []
-        privateRequest<barData[]>("getChartData", {security:v.securityId, timeframe:v.timeframe})
+        privateRequest<barData[]>("getChartData", {security:v.securityId, timeframe:v.timeframe, datetime:v.datetime})
         .then((result: barData[]) => {
             barDataList = result;
 
