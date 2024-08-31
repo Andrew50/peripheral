@@ -10,10 +10,10 @@
     let selectedSecurityIndex = 0;
     let prevFocus: HTMLElement | null = null;
     interface Security {
-        securityId: number;
-        ticker: string;
-        maxDate: string;
-        name: string;
+        securityId?: number;
+        ticker?: string;
+        maxDate?: string | null;
+        name?: string;
     }
     let securities: Security[] = [];
     instanceInputTarget.subscribe(async (v:Writable<Instance>) => {

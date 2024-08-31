@@ -57,12 +57,19 @@ func containsLowercase(s string) bool {
 func initTickerDatabase(conn *Conn) error {
 	startDate := time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
 	//startDate := time.Date(2024, 8, 20, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
-	currentDate := startDate
+	//currentDate := startDate
 	activeSecuritiesRecord := make(map[string]ActiveSecurity) // indexed by ticker
 	nextSecurityId := 1
-	for currentDate.Before(time.Now()) {
+    prevActiveSecurities := 0 //used to catch polygon supposed mass delisting
+    for currentDate := startDate; currentDate.Before(time.Now()); currentDate = currentDate.AddDate(0, 0, 1) {
 		currentDateString := currentDate.Format("2006-01-02")
 		polygonActiveSecurities := AllTickers(conn.Polygon, currentDateString)
+        supposedDelistings := prevActiveSecurities - len(polygonActiveSecurities)
+        if (supposedDelistings > 50){ // check if polygon data is bad for that day (tons of tickers not active / missing)
+            fmt.Printf("skipped %d delistings on %s\n",supposedDelistings,currentDateString)
+            continue
+        }
+        prevActiveSecurities = len(polygonActiveSecurities)
 		polygonActiveTickers := make(map[string]interface{}) //doesnt actually store a value besides the key so just use empty interface
 		listings := 0
 		delistings := 0
@@ -95,7 +102,7 @@ func initTickerDatabase(conn *Conn) error {
 					prevTickerRecord := activeSecuritiesRecord[prevTicker]
 					err := writeSecurity(conn, &prevTickerRecord, &currentDate)
 					if err != nil {
-						fmt.Printf("ticker change error: %v", err)
+						//fmt.Printf("ticker change error: %v", err)
 						//return err
 					}
 					//               fmt.Printf("changed %s -> %s\n", prevTickerRecord.ticker, polySec.Ticker)
@@ -122,7 +129,7 @@ func initTickerDatabase(conn *Conn) error {
 				if err == pgx.ErrNoRows {
 					//fmt.Printf("ticker %s figi change: %s -> %s\n",sec.ticker, sec.figi, polySec.CompositeFIGI)
 					if err := writeSecurity(conn, &sec, &currentDate); err != nil {
-						fmt.Printf("figi change error: %v", err)
+						//fmt.Printf("figi change error: %v", err)
 					}
 					sec.figi = polySec.CompositeFIGI
 					sec.tickerActivationDate = currentDate
@@ -142,7 +149,6 @@ func initTickerDatabase(conn *Conn) error {
 				delistings++
 			}
 		}
-		currentDate = currentDate.AddDate(0, 0, 1)
 		//fmt.Printf("%d active securities, %d listings, %d delistings, %d ticker changes, %d figi changes, %d missed, on %s ------------------------ \n", len(activeSecuritiesRecord), listings, delistings, tickerChanges, figiChanges, missed, currentDateString)
 
 	}
