@@ -2,6 +2,7 @@
 <script lang="ts">
 import { createChart, ColorType} from 'lightweight-charts';
 import {privateRequest, chartQuery, instanceInputVisible} from '../../store';
+import type {ChartQuery} from '../../store'
 import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, MouseEventParams, UTCTimestamp} from 'lightweight-charts';
 import type {HistogramStyleOptions, HistogramSeriesPartialOptions, IChartApiBase, HistogramData, HistogramSeriesOptions} from 'lightweight-charts';
 import { onMount, onDestroy } from 'svelte';
@@ -105,9 +106,9 @@ function crosshairMoveEvent(param: MouseEventParams) {
     latestCrosshairPositionTime = bar.time 
 
 }
-function loadNewChart(chart: IChartApi) {
+function loadNewChart(v: ChartQuery) {
     let barDataList: barData[] = []
-    privateRequest<barData[]>("getChartData", {ticker:currentTicker, timeframe:currentTimeframe})
+        privateRequest<barData[]>("getChartData", {security:v.securityId, timeframe:v.timeframe})
         .then((result: barData[]) => {
             barDataList = result;
 
@@ -172,8 +173,8 @@ function closeRightClickMenu() {
 }
 
 onMount(() => {
-    chartQuery.subscribe((v:any) => {
-        loadNewChart();
+    chartQuery.subscribe((v:ChartQuery) => {
+        loadNewChart(v);
         /*privateRequest<barData[]>("getChartData", {security:v.securityId, timeframe:v.timeframe})
         .then((result: barData[]) => {
             if (Array.isArray(result)){
