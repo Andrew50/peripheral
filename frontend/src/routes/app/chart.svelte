@@ -106,7 +106,7 @@ function crosshairMoveEvent(param: MouseEventParams) {
 }
 function loadNewChart(v: Instance): void{
     let barDataList: barData[] = []
-        privateRequest<barData[]>("getChartData", {security:v.securityId, timeframe:v.timeframe})
+        privateRequest<barData[]>("getChartData", {security:v.securityId, timeframe:v.timeframe, datetime:v.datetime})
         .then((result: barData[]) => {
             if (! (Array.isArray(result) && result.length > 0)){ return}
             barDataList = result;
