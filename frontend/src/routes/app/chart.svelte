@@ -1,26 +1,24 @@
 <!-- chart.svelte-->
 <script lang="ts">
 import { createChart, ColorType} from 'lightweight-charts';
-import {privateRequest, chartQuery, instanceInputVisible} from '../../store';
-import type {ChartQuery} from '../../store'
+import {privateRequest,  instanceInputTarget} from '../../store';
+import type {Instance} from '../../store'
 import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, MouseEventParams, UTCTimestamp} from 'lightweight-charts';
 import type {HistogramStyleOptions, HistogramSeriesPartialOptions, IChartApiBase, HistogramData, HistogramSeriesOptions} from 'lightweight-charts';
-import { onMount, onDestroy } from 'svelte';
-	import Page from '../+page.svelte';
-
+import type {Writable} from 'svelte/store';
+import {writable} from 'svelte/store';
+import { onMount  } from 'svelte';
 let mainChart: IChartApi;
 let mainChartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
 let mainChartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
-//let currentTicker: string;
-//let currentTimeframe: string = ""; 
 let latestCrosshairPositionTime: Time;
-// Right Click context menu variables 
 let showMenu = false; 
 let menuStyle = {
     top: '0px', 
     left: '0px'
 };
 let menuCrosshairPositionTime: Time; 
+let chartQuery: Writable<Instance> = writable({})
 
 interface barData {
     time: UTCTimestamp;
@@ -44,7 +42,7 @@ function initializeChart()  {
     if (!chartContainer) {return;}
     chartContainer.addEventListener('keydown', event => {
         if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
-            instanceInputVisible.set(true);
+            instanceInputTarget.set(chartQuery);
         }
      });
     mainChart = createChart(chartContainer, chartOptions);
@@ -106,10 +104,11 @@ function crosshairMoveEvent(param: MouseEventParams) {
     latestCrosshairPositionTime = bar.time 
 
 }
-function loadNewChart(v: ChartQuery) {
+function loadNewChart(v: Instance): void{
     let barDataList: barData[] = []
         privateRequest<barData[]>("getChartData", {security:v.securityId, timeframe:v.timeframe})
         .then((result: barData[]) => {
+            if (! (Array.isArray(result) && result.length > 0)){ return}
             barDataList = result;
 
             let newCandleData = [];
@@ -173,39 +172,9 @@ function closeRightClickMenu() {
 }
 
 onMount(() => {
-    chartQuery.subscribe((v:ChartQuery) => {
+    chartQuery.subscribe((v:Instance) => {
         loadNewChart(v);
-        /*privateRequest<barData[]>("getChartData", {security:v.securityId, timeframe:v.timeframe})
-        .then((result: barData[]) => {
-            if (Array.isArray(result)){
-                let barDataList: barData[] = []
-                barDataList = result;
-                let newData = [];
-                for (let i =0; i < barDataList.length; i++) {
-                    newData.push({
-                        time: barDataList[i].time, 
-                        open: barDataList[i].open, 
-                        high: barDataList[i].high, 
-                        low: barDataList[i].low,
-                        close: barDataList[i].close
-                    });
-                }
-                mainChart.removeSeries(mainChartCandleSeries)
-                mainChartCandleSeries = mainChart.addCandlestickSeries({
-                        upColor: '#26a69a', downColor: '#ef5350', borderVisible: false,
-                        wickUpColor: '#26a69a', wickDownColor: '#ef5350',
-                    })
-                mainChartCandleSeries.setData(newData)
-                mainChart.timeScale().fitContent();
-            }else{
-                console.log("39ffdw invalid bar data")
-            }
-        })
-        .catch((error: string) => {
-            console.error("Error fetching chart data:", error);
-        });*/
     });
-
     initializeChart(); 
     const chartContainer = document.getElementById('chart_container');
     if (chartContainer) {

@@ -1,11 +1,12 @@
 <!-- instance.svlete -->
 <script lang="ts">
-    import { privateRequest, chartQuery , instanceInputVisible} from '../../store';
+    import { privateRequest , instanceInputTarget} from '../../store';
     import { onMount, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import type {ChartQuery} from '../../store';
+    import type { Writable } from 'svelte/store';
+    import type {Instance} from '../../store';
     let inputString = "";
-    let inputType = "";
+    let inputType: string = "";
     let selectedSecurityIndex = 0;
     let prevFocus: HTMLElement | null = null;
     interface Security {
@@ -15,8 +16,8 @@
         name: string;
     }
     let securities: Security[] = [];
-    instanceInputVisible.subscribe(async (v) => {
-        if ( v && typeof window !== 'undefined'){
+    instanceInputTarget.subscribe(async (v:Writable<Instance>) => {
+        if ( get(v) != null && typeof window !== 'undefined'){
             await tick();
             const element = document.getElementById("instanceInput");
             if (element){
@@ -28,15 +29,16 @@
 
 
     function selectSecurity(index: number){
-        chartQuery.update((v:ChartQuery) => {
-            v.securityId =  (securities[index].securityId);
-            return v
+        get(instanceInputTarget).update((instance: Instance) => {
+            instance.timeframe = securities[index].securityId
+            instance.ticker = securities[index].ticker
+            return instance
         })
         closePopup();
     }
 
     function closePopup() {
-        instanceInputVisible.set(false)
+        instanceInputTarget.set(null)
         securities = [];
         inputString = "";
         console.log(inputString)
@@ -46,44 +48,52 @@
         }
     }
 
-    function classifyInput(input){
+    function classifyInput(input: string): string{
         if (input) {
             return /^[0-9]$/.test(input[0]) ? "interval" : "ticker";
         }else{
-            return null;
+            return "";
         }
     }
 
     onMount(() => {
         document.addEventListener('keydown',  (event) => {
-            if (get(instanceInputVisible)){
-                if (event.key === 'Escape') {
-                    closePopup();
-                }else if (event.key === 'Enter') {
+            if (event.key === 'Escape') {
+                closePopup();
+            }else if (event.key === 'Enter') {
+                if (inputType === "ticker"){
                     if (Array.isArray(securities) && securities.length > 0) {
                         selectSecurity(0);
                     }
-                    closePopup();
-                }else {
-                    if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
-                        inputString += event.key;
-                        console.log(inputString)
-                    }else if (event.key == "Backspace") {
-                        inputString = inputString.slice(0, -1);
-                    }
-                    inputType = classifyInput(inputString)
-                    if(inputType === "ticker") {
-                        privateRequest<Security[]>("getSecuritiesFromTicker",{ticker:inputString})
-                        .then((result: Security[]) => securities = result)
-                        .catch((error: string) => {});
-                    }
+                }else if (inputType === 'timeframe'){
+                    get(instanceInputTarget).update((instance: Instance) => {
+                        instance.timeframe = inputString
+                        return instance
+                    })
+                }
+
+
+
+                closePopup();
+            }else {
+                if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
+                    inputString += event.key;
+                    console.log(inputString)
+                
+                }else if (event.key == "Backspace") {
+                    inputString = inputString.slice(0, -1);
+                }
+                inputType = classifyInput(inputString)
+                if(inputType === "ticker") {
+                    privateRequest<Security[]>("getSecuritiesFromTicker",{ticker:inputString})
+                    .then((result: Security[]) => securities = result)
                 }
             }
         });
     });
 
 </script>
-{#if $instanceInputVisible}
+{#if $instanceInputTarget !== null}
     <div class="popup">
     <div>{inputString}</div>
     <div>{inputType}</div>
