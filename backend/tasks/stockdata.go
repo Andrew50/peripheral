@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"api/data"
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -10,8 +11,10 @@ import (
 )
 
 type GetChartDataArgs struct {
-	Ticker    string `json:"ticker"`
-	Timeframe string `json:"timeframe"`
+	SecurityId  string `json:"security"`
+	Timeframe   string `json:"timeframe"`
+	EndDateTime string `json:"datetime"`
+	NumBars     int    `json:"numbars"`
 	//StartTime string `json:"starttime"`
 	//EndTime   string `json:"endtime"`
 }
@@ -33,7 +36,20 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if err != nil {
 		return nil, fmt.Errorf("getChartData invalid timeframe: %v", err)
 	}
-	iter := data.GetAggsData(conn.Polygon, args.Ticker, multiplier, timespan, data.MillisFromDatetimeString("2024-01-01"),
+	rows, err := conn.DB.Query(context.Background(), "SELECT ticker, minDate, maxDate FROM securities WHERE securityid = $1 AND (maxDate >= $2 OR maxDate is null) ORDER BY minDate desc", args.SecurityId, args.EndDateTime)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var ticker string
+		var maxDate time.Time
+		var minDate time.Time
+		err := rows.Scan(&ticker, &minDate, &maxDate)
+		if err != nil {
+			return nil, err
+		}
+	}
+	iter := data.GetAggsData(conn.Polygon, args.SecurityId, multiplier, timespan, data.MillisFromDatetimeString("2024-01-01"),
 		data.MillisFromDatetimeString("2024-08-30"), 1000)
 	var barDataList []GetChartDataResults
 	for iter.Next() {

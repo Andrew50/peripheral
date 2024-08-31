@@ -1,22 +1,30 @@
 package data
 
 import (
-	//"fmt"
-	//"github.com/polygon-io/client-go/rest/models"
-	//"fmt"
-	"log"
-	//
+	"fmt"
+	"time"
 )
+
+//"fmt"
+//"github.com/polygon-io/client-go/rest/models"
+//"fmt"
+
+//
 
 func ManualTest() {
 	conn, close := InitConn(false)
 	defer close()
+	iter := GetAggsData(conn.Polygon, "META", 1, "day", MillisFromDatetimeString("2024-01-01"),
+		MillisFromDatetimeString("2024-08-30"), 20)
+	for iter.Next() {
+		fmt.Println(time.Time(iter.Item().Timestamp).Format(time.DateTime))
+	}
 	//ticker := GetTickerDetails(conn.Polygon, "IFN.WD", "2003-09-23")
 	//fmt.Printf("Ticker suffix: {%s}\n", ticker.TickerSuffix)
-	err := initTickerDatabase(conn)
-	if err != nil {
-		log.Fatal(err)
-	}
+	//err := initTickerDatabase(conn)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 }
 
 /*
