@@ -1,14 +1,15 @@
 import { writable } from 'svelte/store';
 import type { Writable } from 'svelte/store';
 import { goto } from "$app/navigation";
-export interface ChartQuery {
+
+export interface Instance {
     securityId: number;
+    ticker: string;
     timeframe: string;
     extendedHours: boolean;
-    datetime: string;
+    datetime: string | null;
 }
-export let chartQuery: Writable<ChartQuery> = writable({securityId:1,timeframe:"1d",extendedHours:false,datetime:""})
-export let instanceInputVisible = writable(false)
+export let instanceInputTarget: Writable<Writable<Instance> | null> = writable(null)
 
 let base_url: string;
 
