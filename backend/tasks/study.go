@@ -41,21 +41,44 @@ func GetStudies(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface
     return studies, nil
 }
 
-type SetStudyEntryArgs struct {
-    StudyId int `json:"studyId"`
+type SaveStudyArgs struct {
+    Id int `json:"id"`
     Entry json.RawMessage `json:"entry"`
 }
 
-func SetStudyEntry(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var args SetStudyEntryArgs
+func SaveStudy(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args SaveStudyArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
-    _, err = conn.DB.Exec(context.Background(), "UPDATE studies Set entry = $1 where studyId = $2",args.Entry, args.StudyId)
+    cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE studies Set entry = $1 where studyId = $2",args.Entry, args.Id)
+    if cmdTag.RowsAffected() == 0 {
+        return nil, fmt.Errorf("0n8912")
+    }
     return nil, err
 }
 
+
+type DeleteStudyArgs struct {
+    Id int `json:"id"`
+}
+
+func DeleteStudy(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args DeleteStudyArgs
+	err := json.Unmarshal(rawArgs, &args)
+	if err != nil {
+		return nil, fmt.Errorf("GetCik invalid args: %v", err)
+	}
+    cmdTag, err := conn.DB.Exec(context.Background(),"DELETE FROM studies where studyId = $1",args.Id)
+    if err != nil {
+        return nil, err
+    }
+    if cmdTag.RowsAffected() == 0 {
+        return nil, fmt.Errorf("ssd7g3")
+    }
+    return nil, err
+}
 
 type GetStudyEntryArgs struct {
     StudyId int `json:"studyId"`
