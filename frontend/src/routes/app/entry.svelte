@@ -1,15 +1,20 @@
+<script lang="ts" context="module">
+</script>
 <script lang="ts">
     import { onMount } from 'svelte';
     import { writable } from 'svelte/store'
     import { browser } from '$app/environment';
+    import {inputBind} from './instance.svelte'
     import { privateRequest } from '../../store'
     import type { Writable} from 'svelte/store'
     import 'quill/dist/quill.snow.css';
     import type Quill from 'quill'
     import type { DeltaStatic, EmbedBlot } from 'quill'
 
-    export let store: Writable<string>;
+    //export let store: Writable<string>;
 
+    export let func: string;
+    export let id: string;
     let Quill;
     let editorContainer: HTMLElement | string;
     let editor: Quill | undefined;
@@ -19,6 +24,13 @@
     let pm = false;
     let insertInstanceVisible = false;
     let errorMessage = writable("");
+
+    function save():void {
+        privateRequest<void>(`save${func}`,{id:id,entry:JSON.stringify(editor?.getContents())})
+    }
+    function del():void{
+        privateRequest<void>(`delete${func}`,{id:id})
+    }
     function loadStudy(studyId: number): void {
         privateRequest<DeltaStatic>("getStudy",{studyId: studyId})
         .then((response: DeltaStatic) => {
@@ -34,6 +46,9 @@
         datetime: string;
         pm: boolean;
     }
+
+    function queryInstance(): void {
+        inputBind.set(instanceQuery)
 
     function insertInstance(): void {
         const range = editor.getSelection()
@@ -86,8 +101,8 @@
     });
 </script>
 <div bind:this={editorContainer}></div>
-<button on:click={() => {insertInstanceVisible = true} }> Insert Instance </button>
-{#if insertInstanceVisible}
+<button on:click={() => {insertInstance} }> Insert Instance </button>
+<!--{#if insertInstanceVisible}
     <div class="form" >
         <div>
             <input bind:value={ticker} placeholder="ticker"/>
@@ -102,9 +117,10 @@
             <button on:click={insertInstance}> enter </button>
         </div>
     </div>
-{/if}
+{/if}-->
 <div>
-    <button on:click={() => {store.set(JSON.stringify(editor?.getContents()))}}> save </button>
+    <button on:click={save}> Save </button>
+    <button on:click={del}> Delete </button>
 </div>
 <style>
   .ql-container {

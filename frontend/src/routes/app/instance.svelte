@@ -11,23 +11,25 @@
     }
     export let rightClickInstance: Writable<RightClickInstance | null> = writable(null);
     export let inputBind: Writable<Writable<Instance> | null> = writable(null);
-</script>
-<script lang="ts">
-    let inputString = "";
-    let inputType: string = "";
-    let selectedSecurityIndex = 0;
-    let prevFocus: HTMLElement | null = null;
     interface Security {
         securityId: number;
         ticker: string;
         maxDate: string | null;
         name: string;
     }
+</script>
+<script lang="ts">
+    let inputString = "";
+    let inputType: string = "";
+    let selectedSecurityIndex = 0;
+    let prevFocus: HTMLElement | null = null;
     let securities: Security[] = [];
 
-    inputBind.subscribe((v:Writable<Instance | null> | null) => {
-        console.log('god')
+    inputBind.subscribe((v:Writable<Instance> | null) => {
+        console.log(v)
+        console.trace()
         if ( v != null && typeof window !== 'undefined'){
+            document.addEventListener('keydown',  handleKeyDown);
             const element = document.getElementById("instanceInput");
             if (element){
                 prevFocus = document.activeElement as HTMLElement;
@@ -35,6 +37,7 @@
             }
         }
     })
+
     function closePopup() {
         inputBind.set(null)
         securities = [];
@@ -43,6 +46,7 @@
         if (prevFocus){
             prevFocus.focus()
         }
+        document.removeEventListener('keydown',handleKeyDown);
     }
 
     function enterInput(index: number = 0):void{
@@ -66,7 +70,29 @@
             })
         }
         closePopup();
+    }
 
+    function handleKeyDown(event:KeyboardEvent):void {
+        if (event.key === 'Escape') {
+            closePopup();
+        }else if (event.key === 'Enter') {
+            enterInput(0)
+        }else {
+            if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
+                inputString += event.key.toUpperCase();
+            }else if (/[-:]/.test(event.key)){ //for datetime
+                inputString += event.key.toUpperCase();
+            }else if (event.key == "Space" && inputType === 'datetime') {
+                inputString += event.key;
+            }else if (event.key == "Backspace") {
+                inputString = inputString.slice(0, -1);
+            }
+            inputType = classifyInput(inputString)
+            if(inputType === "ticker") {
+                privateRequest<Security[]>("getSecuritiesFromTicker",{ticker:inputString})
+                .then((result: Security[]) => securities = result)
+            }
+        }
     }
 
     function classifyInput(input: string): string{
@@ -83,37 +109,8 @@
             return "";
         }
     }
-
-    onMount(() => {
-        document.addEventListener('keydown',  (event) => {
-            if (event.key === 'Escape') {
-                closePopup();
-            }else if (event.key === 'Enter') {
-                enterInput(0)
-            }else {
-                if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
-                    inputString += event.key.toUpperCase();
-                }else if (/[-:]/.test(event.key)){ //for datetime
-                    inputString += event.key.toUpperCase();
-                }else if (event.key == "Space" && inputType === 'datetime') {
-                    inputString += event.key;
-                }else if (event.key == "Backspace") {
-                    inputString = inputString.slice(0, -1);
-                }
-                inputType = classifyInput(inputString)
-                if(inputType === "ticker") {
-                    privateRequest<Security[]>("getSecuritiesFromTicker",{ticker:inputString})
-                    .then((result: Security[]) => securities = result)
-                }
-            }
-        });
-    });
-
-
-    //    document.addEventListener('click', closeRightClickMenu)
-
-
 </script>
+
 {#if $inputBind !== null}
     <div class="popup">
     <div>{inputString}</div>
@@ -121,11 +118,11 @@
         <table>
             {#if Array.isArray(securities) && securities.length > 0}
             <th> Ticker <th/>
-            <th> Delist Date </th>
+            <th> Date </th>
             {#each securities as sec, i}
                 <tr class={selectedSecurityIndex === i ? 'selected' : ''} on:click={() => enterInput(i)}> 
                     <td>{sec.ticker}</td>
-                    <td>{sec.maxDate}</td> 
+                    <td>{sec.maxDate === null ? 'Current' : sec.maxDate}</td> 
                 </tr>
             {/each}
             {/if}
@@ -145,7 +142,6 @@
 {/if}
 
 <style>
-
     .popup {
         display: flex;
         flex-direction: column;
