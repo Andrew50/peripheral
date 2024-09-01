@@ -38,6 +38,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		return nil, fmt.Errorf("getChartData invalid timeframe: %v", err)
 	}
     var ticker string
+    var maxDatePtr *time.Time
     var maxDate time.Time
     var minDate time.Time
 
@@ -48,13 +49,16 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
                  FROM securities 
                  WHERE securityid = $1 
                  ORDER BY maxDate IS NULL DESC, maxDate DESC`
-        err = conn.DB.QueryRow(context.Background(), query, args.SecurityId).Scan(&ticker, &minDate, &maxDate)
+        err = conn.DB.QueryRow(context.Background(), query, args.SecurityId).Scan(&ticker, &minDate, &maxDatePtr)
     } else {
         query = `SELECT ticker, minDate, maxDate 
                  FROM securities 
                  WHERE securityid = $1 
                  AND maxDate > $2`
-        err = conn.DB.QueryRow(context.Background(), query, args.SecurityId, args.EndDate).Scan(&ticker, &minDate, &maxDate)
+        err = conn.DB.QueryRow(context.Background(), query, args.SecurityId, args.EndDate).Scan(&ticker, &minDate, &maxDatePtr)
+    }
+    if maxDatePtr == nil{
+        maxDate = time.Now()
     }
 
 	if err != nil {

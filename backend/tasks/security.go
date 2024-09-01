@@ -16,14 +16,19 @@ type GetSecurityFromTickerArgs struct {
 type GetSecurityFromTickerResults struct {
     SecurityId int `json:"securityId"`
     Ticker string `json:"ticker"`
-    MaxDate time.Time `json:"maxDate"`
+    MaxDate *time.Time `json:"maxDate"`
 }
 func GetSecuritiesFromTicker(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
     var args GetSecurityFromTickerArgs
     if err := json.Unmarshal(rawArgs, &args); err != nil {
         return nil, fmt.Errorf("getAnnotations invalid args: %v", err)
     }
-    rows, err := conn.DB.Query(context.Background(), "SELECT securityId, ticker, maxDate from securities where ticker = $1", args.Ticker)
+    rows, err := conn.DB.Query(context.Background(), `
+    SELECT securityId, ticker, maxDate 
+    from securities where ticker = $1
+    ORDER BY maxDate IS  NULL DESC,
+    maxDate DESC
+    `, args.Ticker)
     if err != nil {
         return nil, err
     }
