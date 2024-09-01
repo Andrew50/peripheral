@@ -27,7 +27,8 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"getChartData":            tasks.GetChartData,
     "getStudies":           tasks.GetStudies,
     "newStudy": tasks.NewStudy,
-    "setStudyEntry": tasks.SetStudyEntry,
+    "saveStudy": tasks.SaveStudy,
+    "deleteStudy": tasks.DeleteStudy,
     "getStudyEntry": tasks.GetStudyEntry,
 }
 

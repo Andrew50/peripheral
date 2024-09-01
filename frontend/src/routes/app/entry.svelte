@@ -1,12 +1,11 @@
 <script lang="ts" context="module">
+    import type {Instance} from '../../store' 
+    import {queryInstanceInput} from './instance.svelte'
 </script>
 <script lang="ts">
     import { onMount } from 'svelte';
     import { writable } from 'svelte/store'
-    import { browser } from '$app/environment';
-    import {inputBind} from './instance.svelte'
     import { privateRequest } from '../../store'
-    import type { Writable} from 'svelte/store'
     import 'quill/dist/quill.snow.css';
     import type Quill from 'quill'
     import type { DeltaStatic, EmbedBlot } from 'quill'
@@ -14,23 +13,12 @@
     //export let store: Writable<string>;
 
     export let func: string;
-    export let id: string;
+    export let id: number;
     let Quill;
     let editorContainer: HTMLElement | string;
     let editor: Quill | undefined;
-    let ticker = "";
-    let timeframe = "";
-    let datetime = "";
-    let pm = false;
-    let insertInstanceVisible = false;
     let errorMessage = writable("");
 
-    function save():void {
-        privateRequest<void>(`save${func}`,{id:id,entry:JSON.stringify(editor?.getContents())})
-    }
-    function del():void{
-        privateRequest<void>(`delete${func}`,{id:id})
-    }
     function loadStudy(studyId: number): void {
         privateRequest<DeltaStatic>("getStudy",{studyId: studyId})
         .then((response: DeltaStatic) => {
@@ -39,29 +27,36 @@
              errorMessage.set(error);
         });
     }
+    function save():void {
+        privateRequest<void>(`save${func}`,{id:id,entry:JSON.stringify(editor?.getContents())})
+    }
+    function del():void{
+        privateRequest<void>(`delete${func}`,{id:id})
+    }
 
-    interface EmbeddedInstance {
+    /*interface EmbeddedInstance {
         ticker: string;
         timeframe: string;
         datetime: string;
         pm: boolean;
-    }
-
-    function queryInstance(): void {
-        inputBind.set(instanceQuery)
+    }*/
 
     function insertInstance(): void {
-        const range = editor.getSelection()
-        let insertIndex;
-        if (range === null){
-            insertIndex = -1;
-        }else{
-            insertIndex = range.index
-        }
-        editor.insertEmbed(insertIndex, 'embeddedInstance', {ticker, timeframe, datetime, pm});
+        console.log('go')
+        queryInstanceInput(["ticker","timeframe","datetime"])
+        .then((instance: Instance) => {
+            const range = editor.getSelection()
+            let insertIndex;
+            if (range === null){
+                insertIndex = -1;
+            }else{
+                insertIndex = range.index
+            }
+            editor.insertEmbed(insertIndex, 'embeddedInstance',instance);
+        })
     }
 
-    function embeddedInstanceClick(instance: EmbeddedInstance): void {
+    function embeddedInstanceClick(instance: Instance): void {
         console.log(instance.ticker, instance.datetime)
     }
 
@@ -76,11 +71,11 @@
                 }
             });
             class ChartBlot extends (Quill.import('blots/embed') as typeof EmbedBlot) {
-                static create(instance: EmbeddedInstance): HTMLElement {
+                static create(instance: Instance): HTMLElement {
                     let node = super.create();
                     node.setAttribute('type', 'button');
                     node.className = 'btn';
-                    node.textContent = `${instance.ticker}`; 
+                    node.textContent = `${instance.ticker} ${instance.datetime}`; 
                     node.onclick = () => embeddedInstanceClick(instance)                    
                     return node;
                 }
@@ -90,7 +85,7 @@
                         ticker: node.dataset.ticker,
                         timeframe: node.dataset.timeframe,
                         datetime: node.dataset.datetime,
-                        pm: node.dataset.pm
+//                        pm: node.dataset.pm
                     };
                 }
             }
@@ -101,24 +96,8 @@
     });
 </script>
 <div bind:this={editorContainer}></div>
-<button on:click={() => {insertInstance} }> Insert Instance </button>
-<!--{#if insertInstanceVisible}
-    <div class="form" >
-        <div>
-            <input bind:value={ticker} placeholder="ticker"/>
-        </div>
-        <div>
-            <input type="date" bind:value={datetime} placeholder="datetime"/>
-        </div>
-        <div>
-            <input  bind:value={timeframe} placeholder="timeframe"/>
-        </div>
-        <div>
-            <button on:click={insertInstance}> enter </button>
-        </div>
-    </div>
-{/if}-->
 <div>
+    <button on:click={insertInstance}> Insert Instance </button>
     <button on:click={save}> Save </button>
     <button on:click={del}> Delete </button>
 </div>

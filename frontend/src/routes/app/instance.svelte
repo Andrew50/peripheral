@@ -1,7 +1,6 @@
 <!-- instance.svlete -->
 <script lang="ts" context="module">
     import { privateRequest} from '../../store';
-    import { onMount, tick } from 'svelte';
     import { get, writable } from 'svelte/store';
     import type { Writable } from 'svelte/store';
     import type {Instance } from '../../store';
@@ -10,91 +9,59 @@
         y: number;
     }
     export let rightClickInstance: Writable<RightClickInstance | null> = writable(null);
-    export let inputBind: Writable<Writable<Instance> | null> = writable(null);
     interface Security {
         securityId: number;
         ticker: string;
         maxDate: string | null;
         name: string;
     }
+    type InstanceQuery = Instance | "cancelled"
+    let isVisible = writable(false);
+    let inputString = writable("")
+    let instanceQuery: Writable<Instance> = writable({})
+    let inputType = writable("")
+    let requiredKeys: Writable<Array<string>> = writable([])
+
+    export async function queryInstanceInput(required: Array<keyof Instance> | "any"): Promise<Instance> {
+        if (required != "any"){
+            requiredKeys.set(required)
+        }
+        function cleanup(){
+            inputString.set("")
+            inputType.set("")
+            isVisible.set(false)
+            instanceQuery.set({})
+        }
+        return new Promise<Instance>((resolve, reject) => {
+            isVisible.set(true);
+            const unsubscribe = instanceQuery.subscribe((ins: InstanceQuery) => {
+                if (ins == "cancelled"){
+                    unsubscribe()
+                    cleanup()
+                    reject()
+                }else{
+                    let complete = true
+                    if(required === "any"){ //otherwise it is completed becuase something was changed so any fullfilled
+                        if (Object.keys(ins).length === 0){complete = false}
+                    }else{
+                        for (const typ of required){
+                            if (!ins[typ]){
+                                complete = false
+                                break;
+                            }
+                        }
+                    }
+                    if (complete){
+                        unsubscribe()
+                        const re = get(instanceQuery)
+                        cleanup()
+                        resolve(re as Instance)
+                    } } }) }) }
+        
 </script>
 <script lang="ts">
-    let inputString = "";
-    let inputType: string = "";
-    let selectedSecurityIndex = 0;
-    let prevFocus: HTMLElement | null = null;
+    import {browser} from '$app/environment'
     let securities: Security[] = [];
-
-    inputBind.subscribe((v:Writable<Instance> | null) => {
-        console.log(v)
-        console.trace()
-        if ( v != null && typeof window !== 'undefined'){
-            document.addEventListener('keydown',  handleKeyDown);
-            const element = document.getElementById("instanceInput");
-            if (element){
-                prevFocus = document.activeElement as HTMLElement;
-                element.focus();
-            }
-        }
-    })
-
-    function closePopup() {
-        inputBind.set(null)
-        securities = [];
-        inputString = "";
-        inputType = "";
-        if (prevFocus){
-            prevFocus.focus()
-        }
-        document.removeEventListener('keydown',handleKeyDown);
-    }
-
-    function enterInput(index: number = 0):void{
-        if (inputType === "ticker"){
-            if (Array.isArray(securities) && securities.length > 0) {
-                get(inputBind)?.update((instance: Instance) => {
-                    instance.securityId = securities[index].securityId
-                    instance.ticker = securities[index].ticker
-                    return instance
-                })
-            }
-        }else if (inputType === 'interval'){
-            get(inputBind)?.update((instance: Instance) => {
-                instance.timeframe = inputString
-                return instance
-            })
-        }else if (inputType === 'datetime'){
-            get(inputBind)?.update((instance: Instance) => {
-                instance.datetime = inputString
-                return instance
-            })
-        }
-        closePopup();
-    }
-
-    function handleKeyDown(event:KeyboardEvent):void {
-        if (event.key === 'Escape') {
-            closePopup();
-        }else if (event.key === 'Enter') {
-            enterInput(0)
-        }else {
-            if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
-                inputString += event.key.toUpperCase();
-            }else if (/[-:]/.test(event.key)){ //for datetime
-                inputString += event.key.toUpperCase();
-            }else if (event.key == "Space" && inputType === 'datetime') {
-                inputString += event.key;
-            }else if (event.key == "Backspace") {
-                inputString = inputString.slice(0, -1);
-            }
-            inputType = classifyInput(inputString)
-            if(inputType === "ticker") {
-                privateRequest<Security[]>("getSecuritiesFromTicker",{ticker:inputString})
-                .then((result: Security[]) => securities = result)
-            }
-        }
-    }
-
     function classifyInput(input: string): string{
         if (input) {
             if(/-/.test(input)){
@@ -109,18 +76,74 @@
             return "";
         }
     }
+    function enterInput(index: number = 0):void{
+        if (get(inputType) === "ticker"){
+            if (Array.isArray(securities) && securities.length > 0) {
+                instanceQuery.update((instance: Instance) => {
+                    instance.securityId = securities[index].securityId
+                    instance.ticker = securities[index].ticker
+                    return instance
+                })
+            }
+        }else if (get(inputType) === 'interval'){
+            instanceQuery.update((instance: Instance) => {
+                instance.timeframe = get(inputString)
+                return instance
+            })
+        }else if (get(inputType) === 'datetime'){
+            instanceQuery.update((instance: Instance) => {
+                instance.datetime = get(inputString)
+                return instance
+            })
+        }
+        inputString.set("")
+    }
+    function handleKeyDown(event:KeyboardEvent):void {
+        if (event.key === 'Escape') {
+            instanceQuery.set("cancelled")
+        }else if (event.key === 'Enter') {
+            event.preventDefault()
+            enterInput(0)
+        }else {
+            if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase()) 
+                || (/[-:]/.test(event.key)) 
+                || (event.key == "Space" && get(inputType) === 'datetime') ) {
+                inputString.update((v:string)=>{return v + event.key.toUpperCase()})
+            }else if (event.key == "Backspace") {
+                inputString.update((v)=>{return v.slice(0, -1)})
+            }
+            inputType.set(classifyInput(get(inputString)))
+            if(get(inputType) === "ticker") {
+                privateRequest<Security[]>("getSecuritiesFromTicker",{ticker:get(inputString)})
+                .then((result: Security[]) => securities = result)
+            }
+        }
+    }
+    isVisible.subscribe((v:boolean)=>{
+        if (browser){
+            if (v){
+                document.addEventListener('keydown',  handleKeyDown);
+            }else{
+                document.removeEventListener('keydown',handleKeyDown);
+            }
+        }
+    })
+
 </script>
 
-{#if $inputBind !== null}
+{#if $isVisible}
     <div class="popup">
-    <div>{inputString}</div>
-    <div>{inputType}</div>
+    {#each $requiredKeys as key}
+        <div>{key} {$instanceQuery[key]}</div>
+    {/each}
+    <div>{$inputString}</div>
+    <div>{$inputType}</div>
         <table>
             {#if Array.isArray(securities) && securities.length > 0}
             <th> Ticker <th/>
             <th> Date </th>
             {#each securities as sec, i}
-                <tr class={selectedSecurityIndex === i ? 'selected' : ''} on:click={() => enterInput(i)}> 
+                <tr on:click={() => enterInput(i)}> 
                     <td>{sec.ticker}</td>
                     <td>{sec.maxDate === null ? 'Current' : sec.maxDate}</td> 
                 </tr>
@@ -135,7 +158,7 @@
         <div>{$rightClickInstance.ticker} {$rightClickInstance.datetime} </div>
         <button class="context-menu-item" on:click={() => {
             if ($rightClickInstance !== null){
-            //    newStudy($rightClickInstance)
+            //    newStudy($rightClickInstance)TODO
             }
         }}> Add to Study </button>
     </div>
