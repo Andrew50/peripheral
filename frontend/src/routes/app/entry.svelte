@@ -3,9 +3,12 @@
     import { writable } from 'svelte/store'
     import { browser } from '$app/environment';
     import { privateRequest } from '../../store'
+    import type { Writable} from 'svelte/store'
     import 'quill/dist/quill.snow.css';
     import type Quill from 'quill'
     import type { DeltaStatic, EmbedBlot } from 'quill'
+
+    export let store: Writable<string>;
 
     let Quill;
     let editorContainer: HTMLElement | string;
@@ -101,7 +104,7 @@
     </div>
 {/if}
 <div>
-    <button on:click={() => {console.log(editor.getContents())}}> save </button>
+    <button on:click={() => {store.set(JSON.stringify(editor?.getContents()))}}> save </button>
 </div>
 <style>
   .ql-container {

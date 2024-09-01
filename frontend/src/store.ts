@@ -1,16 +1,15 @@
-import { writable } from 'svelte/store';
-import type { Writable } from 'svelte/store';
+//import { writable } from 'svelte/store';
+//import type { Writable } from 'svelte/store';
 import { goto } from "$app/navigation";
-
+import { browser } from "$app/environment";
 export interface Instance {
-    securityId: number;
-    ticker: string;
-    timeframe: string;
-    extendedHours: boolean;
-    datetime: string | null;
+    ticker?: string
+    datetime?: string | null
+    securityId?: number
+    timeframe?: string
+    extendedHours?: boolean
 }
-export type NullWritable = Writable<Writable<Instance> | null>
-export let instanceInputTarget: NullWritable = writable(null)
+//export type NullWritable<T> = Writable<Writable<T> | null>
 
 let base_url: string;
 
@@ -53,7 +52,13 @@ export async function publicRequest<T>(func: string, args: any): Promise<T> {
 
 
 export async function privateRequest<T>(func: string, args: any): Promise<T> {
-    const authToken = sessionStorage.getItem("authToken")
+    let authToken;
+    if (browser){
+         authToken = sessionStorage.getItem("authToken")
+    }else{
+        console.log("server: ",func, args)
+        return null as T
+    }
     const headers = {
         'Content-Type': 'application/json',
         ...(authToken ? { 'Authorization': authToken} : {}),

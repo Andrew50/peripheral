@@ -19,12 +19,13 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"newInstance":             tasks.NewInstance,
 	"getCik":                  tasks.GetCik,
 	"getInstances":            tasks.GetInstances,
-	"setAnnotation":           tasks.SetAnnotation,
-	"newAnnotation":           tasks.NewAnnotation,
-	"getAnnotations":          tasks.GetAnnotations,
+	//"setAnnotation":           tasks.SetAnnotation,
+	//"newAnnotation":           tasks.NewAnnotation,
+	//"getAnnotations":          tasks.GetAnnotations,
 	"getRelatedTickers":       tasks.GetRelatedTickers,
 	"getSecuritiesFromTicker": tasks.GetSecuritiesFromTicker,
 	"getChartData":            tasks.GetChartData,
+    "getStudies":           tasks.GetStudies,
 }
 
 func verifyAuth(_ *data.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }

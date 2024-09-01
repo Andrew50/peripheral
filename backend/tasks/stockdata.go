@@ -105,17 +105,17 @@ func getTimeframe(timeframeString string) (int, string, error) {
 	if err != nil {
 		return 0, "", err
 	}
-	if identifier == "s" {
+	if identifier == "s" || identifier == "S" {
 		return num, "second", nil
-	} else if identifier == "h" {
+	} else if identifier == "h" || identifier == "H" {
 		return num, "hour", nil
-	} else if identifier == "d" {
+	} else if identifier == "d" || identifier == "D"{
 		return num, "day", nil
-	} else if identifier == "w" {
+	} else if identifier == "w" || identifier == "W"{
 		return num, "week", nil
-	} else if identifier == "m" {
+	} else if identifier == "m" || identifier == "M"{
 		return num, "month", nil
-	} else if identifier == "y" {
+	} else if identifier == "y" || identifier == "Y"{
 		return num, "year", nil
 	}
 	return 0, "", fmt.Errorf("incorrect timeframe passed")

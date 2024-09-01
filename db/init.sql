@@ -1,4 +1,3 @@
-
 CREATE TABLE users (
     userId SERIAL PRIMARY KEY,
     username VARCHAR(100) UNIQUE NOT NULL,
@@ -10,7 +9,6 @@ CREATE TABLE securities (
     securityid INT,
     ticker varchar(10) not null,
     figi varchar(12) not null,
-    --cik varchar(10) not null,
     minDate timestamp,
     maxDate timestamp,
     unique (ticker, minDate),
@@ -25,31 +23,30 @@ create table setups (
     name varchar(50) not null,
     timeframe varchar(10) not null
 );
-CREATE TABLE instances (
-    instanceId serial PRIMARY KEY,
-    userId serial references users(userId) on delete cascade,
-    cik varchar(10) not null,
-    timestamp timestamp not null,
-    unique (userId, cik, timestamp)
-);
-create index idxInstances on instances (cik, timestamp);
+create index idxUserIdName on setups(userId, name);
 create table samples (
     sampleId SERIAL PRIMARY KEY,
-    instanceId integer references instances(instanceId) on delete cascade,
     setupId serial references setups(setupId) on delete cascade,
-    label boolean default null,
-    unique (instanceId, setupId)
+    securityId int,-- references securities(securityId), -- not unique
+    datetime timestamp not null,
+    label boolean,
+    unique (securityId, datetime, setupId)
 );
-CREATE TABLE annotations (
-    annotationId serial primary key,
-    instanceId serial references instances(instanceId) on delete cascade,
-    entry text not null default '', 
-    completed boolean not null default false
+create index idxSetupId on samples(setupId);
+CREATE TABLE studies (
+    studyId serial primary key,
+    userId serial references users(userId) on delete cascade,
+    securityId int, --references securities(securityId), --cant because not unique
+    datetime timestamp not null,
+    completed boolean not null default false,
+    entry json,
+    unique(userId, securityId, datetime)
 );
+create index idxUserIdCompleted on studies(userId, completed);
 CREATE TABLE journals (
     journalId serial primary key,
     timestamp timestamp not null,
     userId serial references users(userId),
-    entry text,
+    entry json,
     unique (timestamp, userId)
 );

@@ -1,202 +1,178 @@
 <!-- chart.svelte-->
-<script lang="ts">
-import { createChart, ColorType} from 'lightweight-charts';
-import {privateRequest,  instanceInputTarget} from '../../store';
-import type {Instance} from '../../store'
-import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, MouseEventParams, UTCTimestamp} from 'lightweight-charts';
-import type {HistogramStyleOptions, HistogramSeriesPartialOptions, IChartApiBase, HistogramData, HistogramSeriesOptions} from 'lightweight-charts';
-import type {Writable} from 'svelte/store';
-import {writable} from 'svelte/store';
-import { onMount  } from 'svelte';
-let mainChart: IChartApi;
-let mainChartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
-let mainChartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
-let latestCrosshairPositionTime: Time;
-let showMenu = false; 
-let menuStyle = {
-    top: '0px', 
-    left: '0px'
-};
-let menuCrosshairPositionTime: Time; 
-let chartQuery: Writable<Instance> = writable({
-    ticker: "ACME", securityId: 70, timeframe: "1d", extndedhours: false, datetime: null})
-
-interface barData {
-    time: UTCTimestamp;
-    open: number; 
-    high: number;
-    low: number;
-    close: number;
-    volume: number;
-}
-function initializeChart()  {
-    const chartOptions = { 
-        layout: { 
-            textColor: 'black', 
-            background: { type: ColorType.Solid, color: 'white' } 
-        },
-        timeScale:  {
-            timeVisible: true
-        },
-    };
-    const chartContainer = document.getElementById('chart_container');
-    if (!chartContainer) {return;}
-    chartContainer.addEventListener('keydown', event => {
-        if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
-            instanceInputTarget.set(chartQuery);
-        }
-     });
-    mainChart = createChart(chartContainer, chartOptions);
-
-    mainChartCandleSeries = mainChart.addCandlestickSeries({
-        upColor: '#089981', downColor: '#ef5350', borderVisible: false,
-        wickUpColor: '#089981', wickDownColor: '#ef5350',
-    });
-    const initCandleData = [
-        {time: "2024-08-12", open: 1, high: 2, low: 0.5, close: 2},
-        {time: "2024-08-13", open: 1, high: 2, low: 0.5, close: 2},
-        {time: "2024-08-14", open: 1, high: 2, low: 0.5, close: 2},
-        {time: "2024-08-15", open: 1, high: 2, low: 0.5, close: 2},
-        {time: "2024-08-16", open: 1, high: 2, low: 0.5, close: 2},
-    ]
-    mainChartVolumeSeries = mainChart.addHistogramSeries({
-        priceFormat: {
-            type: 'volume',
-        },
-        priceScaleId: '',
-    });
-    mainChartVolumeSeries.priceScale().applyOptions({
-        scaleMargins: {
-            top: 0.8,
-            bottom: 0,
-        },
-    });
-    mainChartCandleSeries.priceScale().applyOptions({
-        scaleMargins: {
-            top: 0.1,
-            bottom: 0.2,
-        },
-    });
-    const initVolumeData = [
-        {time: "2024-08-12", value: 1000000.0, color:'#ef5350'},
-        {time: "2024-08-13", value: 2000000.0, color:'#089981'},
-        {time: "2024-08-14", value: 3000000.0, color:'red'},
-        {time: "2024-08-15", value: 4000000.0, color:'green'},
-        {time: "2024-08-16", value: 5000000.0, color:'red'},
-
-    ]
-    mainChartCandleSeries.setData(initCandleData);
-    mainChartVolumeSeries.setData(initVolumeData)
-    mainChart.subscribeCrosshairMove(crosshairMoveEvent);
-    mainChart.timeScale().fitContent();
-
-
-}
-function crosshairMoveEvent(param: MouseEventParams) {
-    if (!param.point) {
-        return;
+<script lang="ts" context="module">
+    import { createChart, ColorType} from 'lightweight-charts';
+    import {privateRequest} from '../../store';
+    import type {Instance} from '../../store'
+    import type {RightClickInstance} from './instance.svelte'
+    import { inputBind, rightClickInstance } from './instance.svelte'
+    import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, MouseEventParams, UTCTimestamp} from 'lightweight-charts';
+    import type {HistogramStyleOptions, HistogramSeriesPartialOptions, IChartApiBase, HistogramData, HistogramSeriesOptions} from 'lightweight-charts';
+    import type {Writable} from 'svelte/store';
+    import {writable, get} from 'svelte/store';
+    import { onMount  } from 'svelte';
+    let latestCrosshairPositionTime: Time;
+    interface barData {
+        time: UTCTimestamp;
+        open: number; 
+        high: number;
+        low: number;
+        close: number;
+        volume: number;
     }
-    const validCrosshairPoint = !(param === undefined || param.time === undefined || param.point.x < 0 || param.point.y < 0);
-    if(!validCrosshairPoint) { return; }
-    if(!mainChartCandleSeries) {return;}
-
-    const bar = param.seriesData.get(mainChartCandleSeries)
-    if(!bar) {return;}
-    latestCrosshairPositionTime = bar.time 
-
-}
-function loadNewChart(v: Instance): void{
-    let barDataList: barData[] = []
-        const timeframe = v.timeframe
-        if (timeframe.length < 1){
-            return
-        }
-        privateRequest<barData[]>("getChartData", {securityId:v.securityId, timeframe:v.timeframe, endDate:v.datetime, Bars:100})
-        .then((result: barData[]) => {
-            if (! (Array.isArray(result) && result.length > 0)){ return}
-            barDataList = result;
-
-            let newCandleData = [];
-            let newVolumeData = [];
-            for (let i =0; i < barDataList.length; i++) {
-                newCandleData.push({
-                    time: barDataList[i].time as UTCTimestamp, 
-                    open: barDataList[i].open, 
-                    high: barDataList[i].high, 
-                    low: barDataList[i].low,
-                    close: barDataList[i].close, 
-                });
-                const candleColor = barDataList[i].close > barDataList[i].open 
-                newVolumeData.push({
-                    time: barDataList[i].time, 
-                    value: barDataList[i].volume, 
-                    color: candleColor ? '#089981' : '#ef5350',
-                })
-            }
-           
-            mainChart.removeSeries(mainChartCandleSeries)
-            mainChart.removeSeries(mainChartVolumeSeries)
-            mainChartCandleSeries = mainChart.addCandlestickSeries({
-                    upColor: '#089981', downColor: '#ef5350', borderVisible: false,
-                    wickUpColor: '#089981', wickDownColor: '#ef5350',
-                })
-            mainChartVolumeSeries = mainChart.addHistogramSeries({
-                priceFormat: {
-                    type: 'volume',
-                },
-                priceScaleId: '',
-            });
-            mainChartVolumeSeries.priceScale().applyOptions({
-                scaleMargins: {
-                    top: 0.8,
-                    bottom: 0,
-                },
-            });
-            mainChartCandleSeries.setData(newCandleData)
-            mainChartVolumeSeries.setData(newVolumeData)
-            mainChart.timeScale().fitContent();
-        })
-        .catch((error: string) => {
-            console.error("Error fetching chart data:", error);
-        });
-
-}
-function chartRightClick(event: MouseEvent) {
-    event.preventDefault();
-    console.log("Chart right clicked")
-    console.log(latestCrosshairPositionTime)
-    menuCrosshairPositionTime = latestCrosshairPositionTime;
-    menuStyle = {
-            top: `${event.clientY + 10}px`,
-            left: `${event.clientX + 10}px`
-        };
-    showMenu = true;
-}
-function closeRightClickMenu() {
-    showMenu = false;
-}
-
-onMount(() => {
-    chartQuery.subscribe((v:Instance) => {
-        loadNewChart(v);
-    });
-    initializeChart(); 
-    const chartContainer = document.getElementById('chart_container');
-    if (chartContainer) {
-        chartContainer.addEventListener('contextmenu', chartRightClick)
-    }
-//    document.addEventListener('click', closeRightClickMenu)
-    return () => {
-        if (chartContainer) {
-                chartContainer.removeEventListener('contextmenu', chartRightClick);
-            }
-    };
-
-});
-//onDestroy(() => {
- //       document.removeEventListener('click', closeRightClickMenu)
-//})
 </script>
+<script lang="ts">
+    let mainChart: IChartApi;
+    let mainChartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
+    let mainChartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
+    let chartQuery: Writable<Instance> = writable({datetime:null, extendedHours:false, timeframe:"1d"})
+
+    function initializeChart()  {
+        const chartOptions = { 
+            layout: { 
+                textColor: 'black', 
+                background: { type: ColorType.Solid, color: 'white' } 
+            },
+            timeScale:  {
+                timeVisible: true
+            },
+        };
+        const chartContainer = document.getElementById('chart_container');
+        if (!chartContainer) {return;}
+        chartContainer.addEventListener('keydown', event => {
+
+            if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
+                //instanceInputTarget.set(chartQuery);
+                inputBind.set(chartQuery);
+            }
+         });
+        mainChart = createChart(chartContainer, chartOptions);
+
+        mainChartCandleSeries = mainChart.addCandlestickSeries({
+            upColor: '#089981', downColor: '#ef5350', borderVisible: false,
+            wickUpColor: '#089981', wickDownColor: '#ef5350',
+        });
+        mainChartVolumeSeries = mainChart.addHistogramSeries({
+            priceFormat: {
+                type: 'volume',
+            },
+            priceScaleId: '',
+        });
+        mainChartVolumeSeries.priceScale().applyOptions({
+            scaleMargins: {
+                top: 0.8,
+                bottom: 0,
+            },
+        });
+        mainChartCandleSeries.priceScale().applyOptions({
+            scaleMargins: {
+                top: 0.1,
+                bottom: 0.2,
+            },
+        });
+        mainChart.subscribeCrosshairMove(crosshairMoveEvent);
+    }
+    function crosshairMoveEvent(param: MouseEventParams) {
+        if (!param.point) {
+            return;
+        }
+        const validCrosshairPoint = !(param === undefined || param.time === undefined || param.point.x < 0 || param.point.y < 0);
+        if(!validCrosshairPoint) { return; }
+        if(!mainChartCandleSeries) {return;}
+
+        const bar = param.seriesData.get(mainChartCandleSeries)
+        if(!bar) {return;}
+        latestCrosshairPositionTime = bar.time 
+
+    }
+    function loadNewChart(v: Instance): void{
+        let barDataList: barData[] = []
+            const timeframe = v.timeframe
+            if (timeframe && timeframe.length < 1){
+                return
+            }
+            privateRequest<barData[]>("getChartData", {securityId:v.securityId, timeframe:v.timeframe, endDate:v.datetime, Bars:100})
+            .then((result: barData[]) => {
+                if (! (Array.isArray(result) && result.length > 0)){ return}
+                barDataList = result;
+
+                let newCandleData = [];
+                let newVolumeData = [];
+                for (let i =0; i < barDataList.length; i++) {
+                    newCandleData.push({
+                        time: barDataList[i].time as UTCTimestamp, 
+                        open: barDataList[i].open, 
+                        high: barDataList[i].high, 
+                        low: barDataList[i].low,
+                        close: barDataList[i].close, 
+                    });
+                    const candleColor = barDataList[i].close > barDataList[i].open 
+                    newVolumeData.push({
+                        time: barDataList[i].time, 
+                        value: barDataList[i].volume, 
+                        color: candleColor ? '#089981' : '#ef5350',
+                    })
+                }
+               
+                mainChart.removeSeries(mainChartCandleSeries)
+                mainChart.removeSeries(mainChartVolumeSeries)
+                mainChartCandleSeries = mainChart.addCandlestickSeries({
+                        upColor: '#089981', downColor: '#ef5350', borderVisible: false,
+                        wickUpColor: '#089981', wickDownColor: '#ef5350',
+                    })
+                mainChartVolumeSeries = mainChart.addHistogramSeries({
+                    priceFormat: {
+                        type: 'volume',
+                    },
+                    priceScaleId: '',
+                });
+                mainChartVolumeSeries.priceScale().applyOptions({
+                    scaleMargins: {
+                        top: 0.8,
+                        bottom: 0,
+                    },
+                });
+                mainChartCandleSeries.setData(newCandleData)
+                mainChartVolumeSeries.setData(newVolumeData)
+                mainChart.timeScale().fitContent();
+            })
+            .catch((error: string) => {
+                console.error("Error fetching chart data:", error);
+            });
+
+    }
+    function chartRightClick(event: MouseEvent){// {{menuStyle.top}; left: {menuStyle.left
+        event.preventDefault();
+        if (get(chartQuery) !== null){
+            const rightClick: RightClickInstance = {
+                x: event.clientX + 10,
+                y: event.clientY + 10,
+                datetime: latestCrosshairPositionTime,
+                ...get(chartQuery),
+            }
+            rightClickInstance.set(rightClick)
+        }
+    }
+
+    onMount(() => {
+        chartQuery.subscribe((v:Instance) => {
+            if (v.ticker && v.timeframe){
+                loadNewChart(v);
+            }
+        });
+        initializeChart(); 
+        const chartContainer = document.getElementById('chart_container');
+        if (chartContainer) {
+            chartContainer.addEventListener('contextmenu', chartRightClick)
+        }
+        return () => {
+            if (chartContainer) {
+                    chartContainer.removeEventListener('contextmenu', chartRightClick);
+                }
+        };
+
+    });
+</script>
+<div id="chart_container" tabindex="0"></div>
 <style>
     #chart_container {
       width: 85%;
@@ -222,11 +198,3 @@ onMount(() => {
         background-color: #f0f0f0;
     }
 </style>
-<div id="chart_container" tabindex="0"></div>
-{#if showMenu}
-    <div class="context-menu" style="top: {menuStyle.top}; left: {menuStyle.left};">
-        <button class="context-menu-item" on:click={closeRightClickMenu}>Create Instance at {menuCrosshairPositionTime}</button>
-        <button class="context-menu-item" on:click={closeRightClickMenu}>Option 2</button>
-        <button class="context-menu-item" on:click={closeRightClickMenu}>Option 3</button>
-    </div>
-{/if}

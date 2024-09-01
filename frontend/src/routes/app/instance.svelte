@@ -1,10 +1,18 @@
 <!-- instance.svlete -->
-<script lang="ts">
-    import { privateRequest , instanceInputTarget} from '../../store';
+<script lang="ts" context="module">
+    import { privateRequest} from '../../store';
     import { onMount, tick } from 'svelte';
-    import { get } from 'svelte/store';
+    import { get, writable } from 'svelte/store';
     import type { Writable } from 'svelte/store';
-    import type {Instance, NullWritable} from '../../store';
+    import type {Instance } from '../../store';
+    export interface RightClickInstance extends Instance {
+        x: number;
+        y: number;
+    }
+    export let rightClickInstance: Writable<RightClickInstance | null> = writable(null);
+    export let inputBind: Writable<Writable<Instance> | null> = writable(null);
+</script>
+<script lang="ts">
     let inputString = "";
     let inputType: string = "";
     let selectedSecurityIndex = 0;
@@ -16,9 +24,10 @@
         name: string;
     }
     let securities: Security[] = [];
-    instanceInputTarget.subscribe(async (v:NullWritable) => {
-        if ( get(v) != null && typeof window !== 'undefined'){
-            await tick();
+
+    inputBind.subscribe((v:Writable<Instance | null> | null) => {
+        console.log('god')
+        if ( v != null && typeof window !== 'undefined'){
             const element = document.getElementById("instanceInput");
             if (element){
                 prevFocus = document.activeElement as HTMLElement;
@@ -26,19 +35,8 @@
             }
         }
     })
-
-
-    function selectSecurity(index: number){
-        get(instanceInputTarget).update((instance: Instance) => {
-            instance.securityId = securities[index].securityId
-            instance.ticker = securities[index].ticker
-            return instance
-        })
-        closePopup();
-    }
-
     function closePopup() {
-        instanceInputTarget.set(null)
+        inputBind.set(null)
         securities = [];
         inputString = "";
         inputType = "";
@@ -47,9 +45,40 @@
         }
     }
 
+    function enterInput(index: number = 0):void{
+        if (inputType === "ticker"){
+            if (Array.isArray(securities) && securities.length > 0) {
+                get(inputBind)?.update((instance: Instance) => {
+                    instance.securityId = securities[index].securityId
+                    instance.ticker = securities[index].ticker
+                    return instance
+                })
+            }
+        }else if (inputType === 'interval'){
+            get(inputBind)?.update((instance: Instance) => {
+                instance.timeframe = inputString
+                return instance
+            })
+        }else if (inputType === 'datetime'){
+            get(inputBind)?.update((instance: Instance) => {
+                instance.datetime = inputString
+                return instance
+            })
+        }
+        closePopup();
+
+    }
+
     function classifyInput(input: string): string{
         if (input) {
-            return /^[0-9]$/.test(input[0]) ? "interval" : "ticker";
+            if(/-/.test(input)){
+                return "datetime"
+            }
+            else if(/^[0-9]$/.test(input[0])){
+                return "interval"
+            }else{
+                return "ticker"
+            }
         }else{
             return "";
         }
@@ -60,25 +89,14 @@
             if (event.key === 'Escape') {
                 closePopup();
             }else if (event.key === 'Enter') {
-                if (inputType === "ticker"){
-                    if (Array.isArray(securities) && securities.length > 0) {
-                        selectSecurity(0);
-                    }
-                }else if (inputType === 'interval'){
-                    get(instanceInputTarget).update((instance: Instance) => {
-                        instance.timeframe = inputString
-                        return instance
-                    })
-                }
-
-
-
-                closePopup();
+                enterInput(0)
             }else {
                 if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
+                    inputString += event.key.toUpperCase();
+                }else if (/[-:]/.test(event.key)){ //for datetime
+                    inputString += event.key.toUpperCase();
+                }else if (event.key == "Space" && inputType === 'datetime') {
                     inputString += event.key;
-                    console.log(inputString)
-                
                 }else if (event.key == "Backspace") {
                     inputString = inputString.slice(0, -1);
                 }
@@ -91,8 +109,12 @@
         });
     });
 
+
+    //    document.addEventListener('click', closeRightClickMenu)
+
+
 </script>
-{#if $instanceInputTarget !== null}
+{#if $inputBind !== null}
     <div class="popup">
     <div>{inputString}</div>
     <div>{inputType}</div>
@@ -101,7 +123,7 @@
             <th> Ticker <th/>
             <th> Delist Date </th>
             {#each securities as sec, i}
-                <tr class={selectedSecurityIndex === i ? 'selected' : ''} on:click={() => selectSecurity(i)}> 
+                <tr class={selectedSecurityIndex === i ? 'selected' : ''} on:click={() => enterInput(i)}> 
                     <td>{sec.ticker}</td>
                     <td>{sec.maxDate}</td> 
                 </tr>
@@ -111,6 +133,16 @@
     </div>
 {/if}
 
+{#if $rightClickInstance !== null}
+    <div class="context-menu" style="top: {$rightClickInstance.y}; left: {$rightClickInstance.x};">
+        <div>{$rightClickInstance.ticker} {$rightClickInstance.datetime} </div>
+        <button class="context-menu-item" on:click={() => {
+            if ($rightClickInstance !== null){
+            //    newStudy($rightClickInstance)
+            }
+        }}> Add to Study </button>
+    </div>
+{/if}
 
 <style>
 
