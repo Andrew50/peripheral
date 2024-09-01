@@ -2,6 +2,7 @@
 <script lang="ts">
     import Chart from './chart.svelte'
     import Instance from './instance.svelte'
+    import Study from './study.svelte'
     import { onMount } from 'svelte';
     import { privateRequest } from '../../store'
     import { goto } from '$app/navigation';
@@ -15,4 +16,5 @@
 <div class="container">
     <Chart/>
     <Instance/>
+    <Study/>
 </div>
