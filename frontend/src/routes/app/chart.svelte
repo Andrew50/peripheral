@@ -4,7 +4,7 @@
     import {privateRequest} from '../../store';
     import type {Instance} from '../../store'
     import type {RightClickInstance} from './instance.svelte'
-    import { inputBind, rightClickInstance } from './instance.svelte'
+    import { queryInstanceInput, rightClickInstance } from './instance.svelte'
     import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, MouseEventParams, UTCTimestamp} from 'lightweight-charts';
     import type {HistogramStyleOptions, HistogramSeriesPartialOptions, IChartApiBase, HistogramData, HistogramSeriesOptions} from 'lightweight-charts';
     import type {Writable} from 'svelte/store';
@@ -24,7 +24,8 @@
     let mainChart: IChartApi;
     let mainChartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let mainChartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
-    let chartQuery: Writable<Instance> = writable({datetime:null, extendedHours:false, timeframe:"1d"})
+    //let chartQuery: Writable<Instance> = writable({datetime:null, extendedHours:false, timeframe:"1d"})
+    let chartQuery: Instance = {datetime:null, extendedHours:false, timeframe:"1d"}
 
     function initializeChart()  {
         const chartOptions = { 
@@ -42,7 +43,15 @@
 
             if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
                 //instanceInputTarget.set(chartQuery);
-                inputBind.set(chartQuery);
+                queryInstanceInput("any")
+                .then((v:Instance)=>{
+                    chartQuery = {
+                        ...chartQuery,
+                        ...v
+                    }
+                    loadNewChart(chartQuery)
+                })
+                //inputBind.set(chartQuery);
             }
          });
         mainChart = createChart(chartContainer, chartOptions);
@@ -142,23 +151,24 @@
     }
     function chartRightClick(event: MouseEvent){// {{menuStyle.top}; left: {menuStyle.left
         event.preventDefault();
-        if (get(chartQuery) !== null){
+        //if (get(chartQuery) !== null){
             const rightClick: RightClickInstance = {
                 x: event.clientX + 10,
                 y: event.clientY + 10,
                 datetime: latestCrosshairPositionTime,
-                ...get(chartQuery),
+                //...get(chartQuery),
+                ...chartQuery
             }
             rightClickInstance.set(rightClick)
-        }
+        //}
     }
 
     onMount(() => {
-        chartQuery.subscribe((v:Instance) => {
+        /*chartQuery.subscribe((v:Instance) => {
             if (v.ticker && v.timeframe){
                 loadNewChart(v);
             }
-        });
+        });*/
         initializeChart(); 
         const chartContainer = document.getElementById('chart_container');
         if (chartContainer) {
