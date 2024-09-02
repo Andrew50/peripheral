@@ -1,7 +1,7 @@
 package data
 
 import (
-    "log"
+	"log"
 )
 
 //"fmt"
@@ -21,10 +21,10 @@ func ManualTest() {
 	//ticker := GetTickerDetails(conn.Polygon, "IFN.WD", "2003-09-23")
 	//fmt.Printf("Ticker suffix: {%s}\n", ticker.TickerSuffix)
 	err := initTickerDatabase(conn)
-    
-	 if err != nil {
-	 	log.Fatal(err)
-	 }
+
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 /*
