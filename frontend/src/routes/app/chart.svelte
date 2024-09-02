@@ -19,13 +19,23 @@
         close: number;
         volume: number;
     }
+    export let chartQuery: Writable<Instance> = writable({datetime:null, extendedHours:false, timeframe:"1d"})
+    function changeChart(newInstance: Instance):void{
+        chartQuery.update((oldInstance:Instance)=>{
+            return {
+                ...oldInstance,
+                ...newInstance
+            }
+            })}
+
+
+
 </script>
 <script lang="ts">
     let mainChart: IChartApi;
     let mainChartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let mainChartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
-    //let chartQuery: Writable<Instance> = writable({datetime:null, extendedHours:false, timeframe:"1d"})
-    let chartQuery: Instance = {datetime:null, extendedHours:false, timeframe:"1d"}
+
 
     function initializeChart()  {
         const chartOptions = { 
@@ -42,16 +52,10 @@
         chartContainer.addEventListener('keydown', event => {
 
             if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
-                //instanceInputTarget.set(chartQuery);
                 queryInstanceInput("any")
                 .then((v:Instance)=>{
-                    chartQuery = {
-                        ...chartQuery,
-                        ...v
-                    }
-                    loadNewChart(chartQuery)
+                    changeChart(v)
                 })
-                //inputBind.set(chartQuery);
             }
          });
         mainChart = createChart(chartContainer, chartOptions);
@@ -93,8 +97,25 @@
         latestCrosshairPositionTime = bar.time 
 
     }
-    function loadNewChart(v: Instance): void{
-        let barDataList: barData[] = []
+//    function loadNewChart(v: Instance): void{
+    function chartRightClick(event: MouseEvent){// {{menuStyle.top}; left: {menuStyle.left
+        event.preventDefault();
+        //if (get(chartQuery) !== null){
+            const rightClick: RightClickInstance = {
+                x: event.clientX + 10,
+                y: event.clientY + 10,
+                datetime: latestCrosshairPositionTime,
+                //...get(chartQuery),
+                ...chartQuery
+            }
+            rightClickInstance.set(rightClick)
+        //}
+    }
+
+    onMount(() => {
+        chartQuery.subscribe((v:Instance)=>{
+            let barDataList: barData[] = []
+            if (!v.ticker || !v.timeframe || !v.securityId){return}
             const timeframe = v.timeframe
             if (timeframe && timeframe.length < 1){
                 return
@@ -147,28 +168,7 @@
             .catch((error: string) => {
                 console.error("Error fetching chart data:", error);
             });
-
-    }
-    function chartRightClick(event: MouseEvent){// {{menuStyle.top}; left: {menuStyle.left
-        event.preventDefault();
-        //if (get(chartQuery) !== null){
-            const rightClick: RightClickInstance = {
-                x: event.clientX + 10,
-                y: event.clientY + 10,
-                datetime: latestCrosshairPositionTime,
-                //...get(chartQuery),
-                ...chartQuery
-            }
-            rightClickInstance.set(rightClick)
-        //}
-    }
-
-    onMount(() => {
-        /*chartQuery.subscribe((v:Instance) => {
-            if (v.ticker && v.timeframe){
-                loadNewChart(v);
-            }
-        });*/
+        })
         initializeChart(); 
         const chartContainer = document.getElementById('chart_container');
         if (chartContainer) {
