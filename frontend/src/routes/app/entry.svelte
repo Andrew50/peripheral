@@ -1,45 +1,26 @@
 <script lang="ts" context="module">
     import type {Instance} from '../../store' 
     import {queryInstanceInput} from './instance.svelte'
+    import {chartQuery} from './chart.svelte'
 </script>
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { writable } from 'svelte/store'
     import { privateRequest } from '../../store'
     import 'quill/dist/quill.snow.css';
     import type Quill from 'quill'
     import type { DeltaStatic, EmbedBlot } from 'quill'
-
-    //export let store: Writable<string>;
-
     export let func: string;
     export let id: number;
     let Quill;
     let editorContainer: HTMLElement | string;
     let editor: Quill | undefined;
-    let errorMessage = writable("");
 
-    function loadStudy(studyId: number): void {
-        privateRequest<DeltaStatic>("getStudy",{studyId: studyId})
-        .then((response: DeltaStatic) => {
-            editor.setContents(response);
-        }).catch((error) => {
-             errorMessage.set(error);
-        });
-    }
     function save():void {
         privateRequest<void>(`save${func}`,{id:id,entry:JSON.stringify(editor?.getContents())})
     }
     function del():void{
         privateRequest<void>(`delete${func}`,{id:id})
     }
-
-    /*interface EmbeddedInstance {
-        ticker: string;
-        timeframe: string;
-        datetime: string;
-        pm: boolean;
-    }*/
 
     function insertInstance(): void {
         console.log('go')
@@ -57,6 +38,7 @@
     }
 
     function embeddedInstanceClick(instance: Instance): void {
+        chartQuery.set(instance)
         console.log(instance.ticker, instance.datetime)
     }
 
@@ -93,6 +75,12 @@
             ChartBlot.tagName = 'button';
             Quill.register('formats/embeddedInstance', ChartBlot);
         })
+        privateRequest<JSON>("getStudyEntry", { studyId: id })
+        .then((entry: JSON) => {
+            const delta: DeltaStatic = JSON.parse(entry as unknown as string);
+            editor?.setContents(delta);
+            console.log(editor.getContents())
+        });
     });
 </script>
 <div bind:this={editorContainer}></div>
