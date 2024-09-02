@@ -51,7 +51,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		query = `SELECT ticker, minDate, maxDate 
                  FROM securities 
                  WHERE securityid = $1 
-                 ORDER BY maxDate IS NULL DESC, maxDate DESC`
+                 ORDER BY smaxDate IS NULL DESC, maxDate DESC`
 		err = conn.DB.QueryRow(context.Background(), query, args.SecurityId).Scan(&ticker, &minDate, &maxDatePtr)
 		if maxDatePtr == nil {
 			maxDate = time.Now()

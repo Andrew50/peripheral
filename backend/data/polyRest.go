@@ -307,13 +307,6 @@ func GetTickerFromCIK(client *polygon.Client, cik string) (string, error) {
 
 	// Return an error if no ticker was found
 	return "", fmt.Errorf("no ticker found for CIK: %s", cik)
-	// params := models.ListStockFinancialsParams{}.WithCIK(cik)
-	// iter := client.ListTickers(context.Background(), params)
-	// fmt.Print("hello")
-	// for iter.Next() {
-	// 	fmt.Print(iter.Item())
-	// }
-	// return iter.Item().Ticker
 }
 
 /*
