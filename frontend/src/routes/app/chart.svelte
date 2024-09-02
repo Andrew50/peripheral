@@ -120,7 +120,7 @@
             if (timeframe && timeframe.length < 1){
                 return
             }
-            privateRequest<barData[]>("getChartData", {securityId:v.securityId, timeframe:v.timeframe, endDate:v.datetime, Bars:100})
+            privateRequest<barData[]>("getChartData", {securityId:v.securityId, timeframe:v.timeframe, datetime:v.datetime, bars:100})
             .then((result: barData[]) => {
                 if (! (Array.isArray(result) && result.length > 0)){ return}
                 barDataList = result;

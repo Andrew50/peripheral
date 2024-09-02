@@ -14,7 +14,7 @@ import (
 type GetChartDataArgs struct {
 	SecurityId int `json:"securityId"`
 	Timeframe   string `json:"timeframe"`
-	EndDate string `json:"endDate"`
+	datetime string `json:"datetime`
 	Bars     int    `json:"bars"`
 	//StartTime string `json:"starttime"`
 	//EndTime   string `json:"endtime"`
@@ -31,7 +31,7 @@ type GetChartDataResults struct {
 func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetChartDataArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		return nil, fmt.Errorf("00s9fjh getChartData invalid args: %v", err)
+		return nil, fmt.Errorf("0sjh getChartData invalid args: %v", err)
 	}
 	multiplier, timespan, err := getTimeframe(args.Timeframe)
 	if err != nil {
@@ -42,27 +42,32 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
     var maxDate time.Time
     var minDate time.Time
 
-    // Prepare the query based on whether EndDate is empty
+    // Prepare the query based on whether datetime is empty
     var query string
-    if args.EndDate == "" { //if no endDate provided then get the most recent ticker for that security, not necesarily null becuase could be delisted
+    if args.datetime == "" { //if no endDate provided then get the most recent ticker for that security, not necesarily null becuase could be delisted
         query = `SELECT ticker, minDate, maxDate 
                  FROM securities 
                  WHERE securityid = $1 
                  ORDER BY maxDate IS NULL DESC, maxDate DESC`
         err = conn.DB.QueryRow(context.Background(), query, args.SecurityId).Scan(&ticker, &minDate, &maxDatePtr)
+        if maxDatePtr == nil{
+            maxDate = time.Now()
+        }
     } else {
-        query = `SELECT ticker, minDate, maxDate 
+        maxDate, err = data.StringToTime(args.datetime)
+        if err != nil {
+            return nil, fmt.Errorf("cd0f %v",err)
+        }
+        query = `SELECT ticker, minDate
                  FROM securities 
                  WHERE securityid = $1 
-                 AND maxDate > $2`
-        err = conn.DB.QueryRow(context.Background(), query, args.SecurityId, args.EndDate).Scan(&ticker, &minDate, &maxDatePtr)
-    }
-    if maxDatePtr == nil{
-        maxDate = time.Now()
+                 AND (maxDate > $2 OR maxDate IS NULL)
+                 ORDER BY maxDate IS NULL DESC, maxDate DESC`
+        err = conn.DB.QueryRow(context.Background(), query, args.SecurityId, args.datetime).Scan(&ticker, &minDate)
     }
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("3srg %v",err)
 	}
 	/*for rows.Next() {
 		var ticker string
@@ -79,7 +84,11 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
     }
     start := models.Millis(maxDate.AddDate(0, 0, -20).In(easternTimeLocation))
     end := models.Millis(maxDate.In(easternTimeLocation))
-    iter := data.GetAggsData(conn.Polygon, ticker, multiplier, timespan, start, end, 1000)
+    //fmt.Printf(ticker, multiplier,timespan,start,end)
+    iter, err := data.GetAggsData(conn.Polygon, ticker, multiplier, timespan, start, end, 1000)
+    if err != nil {
+        return nil, err
+    }
 	var barDataList []GetChartDataResults
 	for iter.Next() {
 		var barData GetChartDataResults

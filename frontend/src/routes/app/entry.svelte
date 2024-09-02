@@ -11,25 +11,34 @@
     import type { DeltaStatic, EmbedBlot } from 'quill'
     export let func: string;
     export let id: number;
+    export let completed: boolean;
     let Quill;
     let editorContainer: HTMLElement | string;
     let editor: Quill | undefined;
+    
 
     function save():void {
-        privateRequest<void>(`save${func}`,{id:id,entry:JSON.stringify(editor?.getContents())})
+        privateRequest<void>(`save${func}`,
+        {id:id,
+//        entry:JSON.stringify(editor?.getContents())})
+        entry:editor?.getContents()})
+   
     }
     function del():void{
         privateRequest<void>(`delete${func}`,{id:id})
     }
+    function complete():void{
+        completed = !completed
+        privateRequest<void>(`complete${func}`,{id:id,completed:completed})
+    }
 
     function insertInstance(): void {
-        console.log('go')
         queryInstanceInput(["ticker","timeframe","datetime"])
         .then((instance: Instance) => {
             const range = editor.getSelection()
             let insertIndex;
             if (range === null){
-                insertIndex = -1;
+                insertIndex = editor.getLength()
             }else{
                 insertIndex = range.index
             }
@@ -38,6 +47,9 @@
     }
 
     function embeddedInstanceClick(instance: Instance): void {
+
+        console.log(instance)
+        instance.securityId = parseInt(instance.securityId)
         chartQuery.set(instance)
         console.log(instance.ticker, instance.datetime)
     }
@@ -57,6 +69,10 @@
                     let node = super.create();
                     node.setAttribute('type', 'button');
                     node.className = 'btn';
+                    node.dataset.securityId = instance.securityId
+                    node.dataset.ticker = instance.ticker
+                    node.dataset.datetime = instance.datetime
+                    node.dataset.timeframe = instance.timeframe
                     node.textContent = `${instance.ticker} ${instance.datetime}`; 
                     node.onclick = () => embeddedInstanceClick(instance)                    
                     return node;
@@ -67,6 +83,7 @@
                         ticker: node.dataset.ticker,
                         timeframe: node.dataset.timeframe,
                         datetime: node.dataset.datetime,
+                        securityId: node.dataset.securityId
 //                        pm: node.dataset.pm
                     };
                 }
@@ -74,18 +91,20 @@
             ChartBlot.blotName = 'embeddedInstance';
             ChartBlot.tagName = 'button';
             Quill.register('formats/embeddedInstance', ChartBlot);
+            privateRequest<JSON>("getStudyEntry", { studyId: id })
+            .then((entry: JSON) => {
+                //const delta: DeltaStatic = JSON.parse(entry as unknown as string);
+                const delta: DeltaStatic = entry// as unknown as string;
+                editor?.setContents(delta);
+                console.log(editor.getContents())
+            });
         })
-        privateRequest<JSON>("getStudyEntry", { studyId: id })
-        .then((entry: JSON) => {
-            const delta: DeltaStatic = JSON.parse(entry as unknown as string);
-            editor?.setContents(delta);
-            console.log(editor.getContents())
-        });
     });
 </script>
 <div bind:this={editorContainer}></div>
 <div>
-    <button on:click={insertInstance}> Insert Instance </button>
+    <button on:click={insertInstance}> Insert </button>
+    <button on:click={complete}> {completed ? "Complete" : "Uncomplete"} </button>
     <button on:click={save}> Save </button>
     <button on:click={del}> Delete </button>
 </div>

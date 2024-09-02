@@ -16,6 +16,7 @@ type GetStudiesResult struct {
     SecurityId int `json:"securityId"`
     Ticker string `json:"ticker"`
     Datetime time.Time `json:"datetime"`
+    Completed bool `json:"completed"`
 }
 
 func GetStudies(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -25,14 +26,14 @@ func GetStudies(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
     rows, err := conn.DB.Query(context.Background(),`
-    SELECT s.studyId, s.securityId, sec.ticker, s.datetime from studies as s 
+    SELECT s.studyId, s.securityId, sec.ticker, s.datetime, s.completed from studies as s 
     JOIN securities as sec on s.securityId = sec.securityId
     where s.userId = $1 and s.completed = $2
     `,userId, args.Completed)
     var studies []GetStudiesResult
     for rows.Next(){
         var study GetStudiesResult
-        err := rows.Scan(&study.StudyId,&study.SecurityId, &study.Ticker, &study.Datetime)
+        err := rows.Scan(&study.StudyId,&study.SecurityId, &study.Ticker, &study.Datetime, &study.Completed)
         if err != nil {
             return nil, err
         }
@@ -50,9 +51,27 @@ func SaveStudy(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{
 	var args SaveStudyArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
-		return nil, fmt.Errorf("GetCik invalid args: %v", err)
+		return nil, fmt.Errorf("3og9 invalid args: %v", err)
 	}
     cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE studies Set entry = $1 where studyId = $2",args.Entry, args.Id)
+    if cmdTag.RowsAffected() == 0 {
+        return nil, fmt.Errorf("0n8912")
+    }
+    return nil, err
+}
+
+type CompleteStudyArgs struct {
+    Id int `json:"id"`
+    Completed bool `json:"completed"`
+}
+
+func CompleteStudy(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args CompleteStudyArgs
+	err := json.Unmarshal(rawArgs, &args)
+	if err != nil {
+		return nil, fmt.Errorf("215d invalid args: %v", err)
+	}
+    cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE studies Set completed = $1 where studyId = $2",args.Completed, args.Id)
     if cmdTag.RowsAffected() == 0 {
         return nil, fmt.Errorf("0n8912")
     }

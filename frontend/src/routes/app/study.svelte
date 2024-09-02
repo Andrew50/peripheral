@@ -9,12 +9,15 @@
     import {queryInstanceInput} from './instance.svelte'
     interface Study extends Instance{
         studyId: number;
+        completed: boolean;
     }
     let studies : Writable<Study[]> = writable([])
+
 </script>
 <script lang="ts">
     let selectedStudyId: number | null = null;
     let entryStore = writable('');
+    let completedFilter = false;
     entryStore.subscribe((v:string)=>{
         if (v !== ""){
         }
@@ -24,7 +27,7 @@
         .then((v:Instance) => {
             privateRequest<number>("newStudy",{securityId:v.securityId,datetime:v.datetime})
             .then((studyId:number) => {
-                const study: Study = {studyId:studyId,...v}
+                const study: Study = {completed:false,studyId:studyId,...v}
                 studies.update((vv:Study[]) => {
                     if (Array.isArray(vv)){
                         return [...vv,study]
@@ -37,10 +40,14 @@
         })
     }
     function selectStudy(study: Study) : void {
-        privateRequest<JSON>("getStudyEntry",{studyId:study.studyId})
-        .then((entry: JSON) => {
-            selectedStudyId = study.studyId
-        })
+        if (study.studyId === selectedStudyId){
+            selectedStudyId = 0
+        }else{
+            privateRequest<JSON>("getStudyEntry",{studyId:study.studyId})
+            .then((entry: JSON) => {
+                selectedStudyId = study.studyId
+            })
+        }
     }
     function deleteStudy(study: Study):void{
         privateRequest<void>('deleteStudy',{studyId:study.studyId})
@@ -48,18 +55,29 @@
             return v.filter(item => item.studyId !== study.studyId)});
         })}
 
-    onMount(() => {
-        privateRequest<Study[]>("getStudies",{})
+    function toggleCompletionFilter():void{
+        completedFilter = !completedFilter
+        loadStudies()
+    }
+
+
+    function loadStudies():void{
+        privateRequest<Study[]>("getStudies",{completed:completedFilter})
         .then((result: Study[]) => {studies.set(result)})
+    }
+    onMount(() => {
+        loadStudies()
     })
 
 </script>
 
+<h1> Study </h1>
+<button on:click={toggleCompletionFilter}> {completedFilter ? "Completed" : "Uncompeted"}</button>
 <button on:click={newStudy}> new </button>
-{#if Array.isArray($studies) && $studies.length > 0 }
     <table>
         <th> Ticker </th>
         <th> Date </th>
+{#if Array.isArray($studies) && $studies.length > 0 }
         {#each $studies as study}
             <tr on:click={()=>selectStudy(study)}>
                 <td> {study.ticker} </td>
@@ -68,9 +86,9 @@
 
             {#if selectedStudyId == study.studyId}
                 <tr>
-                <Entry func="Study" id={study.studyId}/>
+                <Entry completed={study.complete} func="Study" id={study.studyId}/>
                 </tr>
             {/if}
         {/each}
-    </table>
 {/if}
+    </table>

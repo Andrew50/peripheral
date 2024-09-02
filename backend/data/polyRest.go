@@ -185,7 +185,7 @@ func GetPolygonRelatedTickers(client *polygon.Client, ticker string) ([]string, 
 
 // QA STATUS: NEEDS TESTING
 func GetAggsData(client *polygon.Client, ticker string, barLength int, timeframe string,
-	fromMillis models.Millis, toMillis models.Millis, limit int) *iter.Iter[models.Agg] {
+	fromMillis models.Millis, toMillis models.Millis, limit int) (*iter.Iter[models.Agg],error) {
 	timespan := models.Timespan(timeframe)
 	params := models.ListAggsParams{
 		Ticker:     ticker,
@@ -195,8 +195,10 @@ func GetAggsData(client *polygon.Client, ticker string, barLength int, timeframe
 		To:         toMillis,
 	}.WithOrder(models.Asc).WithLimit(limit)
 	iter := client.ListAggs(context.Background(), params, models.WithTrace(true))
-
-	return iter
+    if iter == nil {
+        return nil, fmt.Errorf("no data for ticker %s, bars %d, tf %s, from %v, to %v, limit %d",ticker, barLength, timeframe, fromMillis, toMillis, limit)
+    }
+	return iter, nil
 
 }
 func GetTickerEvents(client *polygon.Client, id string) ([]models.TickerEventResult, error) {
