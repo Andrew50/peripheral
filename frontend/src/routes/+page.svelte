@@ -1,15 +1,16 @@
 <script>
-    import  Header  from './header.svelte';
+    import  Header  from '$lib/utils//header.svelte';
 </script>
 <Header />
 <main class="main-container">
   <div class="content">
-    <h1 class="title" style="font-size: 32px;">EdgeFinder</h1>
+    <h1 class="title" style="font-size: 32px;">Study</h1>
     <!-- Add more content about services here -->
   </div>
 </main>
 <style>
-    @import "../global.css";
+    @import "$lib/core/colors.css";
+    @import "$lib/core/components.css";
   .main-container {
     top: 10vh;
     display: flex;
