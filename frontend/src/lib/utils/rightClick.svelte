@@ -77,7 +77,6 @@
         
 </script>
 
-
 <script lang="ts">
     import {browser} from '$app/environment'
     import {onMount} from 'svelte'
@@ -140,7 +139,7 @@
 
 
 </script>
-{#if $rightClickQuery !== null}
+{#if $rightClickQuery.status === "active"}
     <div bind:this={rightClickMenu} class="context-menu" style="top: {$rightClickQuery.y}px; left: {$rightClickQuery.x}px;">
         <div>{$rightClickQuery.ticker} {$rightClickQuery.datetime} </div>
         <div><button on:click={()=>newStudy(get(rightClickQuery).instance)}> Add to Study </button></div>

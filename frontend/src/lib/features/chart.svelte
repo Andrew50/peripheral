@@ -38,50 +38,22 @@ import { queryInstanceRightClick } from '$lib/utils/rightClick.svelte'
 
 
     function initializeChart()  {
-        const chartOptions = { 
-            layout: { 
-                textColor: 'black', 
-                background: { type: ColorType.Solid, color: 'white' } 
-            },
-            timeScale:  {
-                timeVisible: true
-            },
-        };
+        const chartOptions = { layout: { textColor: 'black', background: { type: ColorType.Solid, color: 'white' } }, timeScale:  { timeVisible: true }, };
         const chartContainer = document.getElementById('chart_container');
         if (!chartContainer) {return;}
         chartContainer.addEventListener('keydown', event => {
-
             if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
-                queryInstanceInput("any")
+                queryInstanceInput("any",get(chartQuery))
                 .then((v:Instance)=>{
                     changeChart(v)
                 })
             }
          });
         mainChart = createChart(chartContainer, chartOptions);
-
-        mainChartCandleSeries = mainChart.addCandlestickSeries({
-            upColor: '#089981', downColor: '#ef5350', borderVisible: false,
-            wickUpColor: '#089981', wickDownColor: '#ef5350',
-        });
-        mainChartVolumeSeries = mainChart.addHistogramSeries({
-            priceFormat: {
-                type: 'volume',
-            },
-            priceScaleId: '',
-        });
-        mainChartVolumeSeries.priceScale().applyOptions({
-            scaleMargins: {
-                top: 0.8,
-                bottom: 0,
-            },
-        });
-        mainChartCandleSeries.priceScale().applyOptions({
-            scaleMargins: {
-                top: 0.1,
-                bottom: 0.2,
-            },
-        });
+        mainChartCandleSeries = mainChart.addCandlestickSeries({ upColor: '#089981', downColor: '#ef5350', borderVisible: false, wickUpColor: '#089981', wickDownColor: '#ef5350', });
+        mainChartVolumeSeries = mainChart.addHistogramSeries({ priceFormat: { type: 'volume', }, priceScaleId: '', });
+        mainChartVolumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0, }, });
+        mainChartCandleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.2, }, });
         mainChart.subscribeCrosshairMove(crosshairMoveEvent);
     }
     function crosshairMoveEvent(param: MouseEventParams) {
@@ -97,23 +69,13 @@ import { queryInstanceRightClick } from '$lib/utils/rightClick.svelte'
         latestCrosshairPositionTime = bar.time 
 
     }
-//    function loadNewChart(v: Instance): void{
     function chartRightClick(event: MouseEvent){// {{menuStyle.top}; left: {menuStyle.left
         event.preventDefault();
         const dt = new Date(1000*latestCrosshairPositionTime);
         const datePart = dt.toLocaleDateString('en-CA'); // 'en-CA' gives you the yyyy-mm-dd format
-        const timePart = dt.toLocaleTimeString('en-US', {
-            hour12: false, // 24-hour format
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        });
-
+        const timePart = dt.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
         const formattedDate = `${datePart} ${timePart}`;
-        const ins: Instance = {
-            ...get(chartQuery),
-            datetime: formattedDate,
-        }
+        const ins: Instance = { ...get(chartQuery), datetime: formattedDate, }
         queryInstanceRightClick(event,ins,"chart")
     }
 
