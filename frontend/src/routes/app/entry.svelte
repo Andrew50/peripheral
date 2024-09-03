@@ -1,7 +1,8 @@
 <script lang="ts" context="module">
     import type {Instance} from '../../store' 
-    import {queryInstanceInput} from './instance.svelte'
+    import {queryInstanceInput, queryInstanceRightClick} from './instance.svelte'
     import {chartQuery} from './chart.svelte'
+    import type {RightClickResult} from './instance.svelte'
 </script>
 <script lang="ts">
     import { onMount } from 'svelte';
@@ -20,7 +21,6 @@
     function save():void {
         privateRequest<void>(`save${func}`,
         {id:id,
-//        entry:JSON.stringify(editor?.getContents())})
         entry:editor?.getContents()})
    
     }
@@ -46,13 +46,47 @@
         })
     }
 
-    function embeddedInstanceClick(instance: Instance): void {
+    function embeddedInstanceLeftClick(instance: Instance): void {
 
         console.log(instance)
         instance.securityId = parseInt(instance.securityId)
         chartQuery.set(instance)
         console.log(instance.ticker, instance.datetime)
     }
+
+    function embeddedInstanceRightClick(instance: Instance, event:MouseEvent): void {
+        event.preventDefault()
+        instance.securityId = parseInt(instance.securityId)
+        queryInstanceRightClick(event,instance,"embedded")
+        .then((res:RightClickResult)=>{
+            console.log(res)
+            if (res.result == "edit"){
+                editEmbeddedInstance(instance)
+            }
+
+        })
+
+    }
+    function editEmbeddedInstance(instance:Instance): void{
+        queryInstanceInput(["ticker", "timeframe", "datetime"],instance)
+        .then((updatedInstance: Instance) => {
+            // Find the embedded instance in the editor content
+            const delta = editor?.getContents();
+            delta?.ops?.forEach(op => {
+                if (op.insert && op.insert.embeddedInstance) {
+                    const embedded = op.insert.embeddedInstance;
+                    if (embedded.ticker === instance.ticker && embedded.datetime === instance.datetime) {
+                        embedded.ticker = updatedInstance.ticker;
+                        embedded.timeframe = updatedInstance.timeframe;
+                        embedded.datetime = updatedInstance.datetime;
+                    }
+                }
+            });
+            editor?.setContents(delta);
+        });
+    }
+
+
 
     onMount(() => {
         import('quill').then(QuillModule => {
@@ -74,7 +108,8 @@
                     node.dataset.datetime = instance.datetime
                     node.dataset.timeframe = instance.timeframe
                     node.textContent = `${instance.ticker} ${instance.datetime}`; 
-                    node.onclick = () => embeddedInstanceClick(instance)                    
+                    node.onclick = () => embeddedInstanceLeftClick(instance)                    
+                    node.oncontextmenu = (event:MouseEvent) => embeddedInstanceRightClick(instance,event)                    
                     return node;
                 }
 
@@ -93,7 +128,6 @@
             Quill.register('formats/embeddedInstance', ChartBlot);
             privateRequest<JSON>("getStudyEntry", { studyId: id })
             .then((entry: JSON) => {
-                //const delta: DeltaStatic = JSON.parse(entry as unknown as string);
                 const delta: DeltaStatic = entry// as unknown as string;
                 editor?.setContents(delta);
                 console.log(editor.getContents())

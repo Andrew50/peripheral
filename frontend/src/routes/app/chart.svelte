@@ -4,7 +4,7 @@
     import {privateRequest} from '../../store';
     import type {Instance} from '../../store'
     import type {RightClickInstance} from './instance.svelte'
-    import { queryInstanceInput, rightClickInstance } from './instance.svelte'
+    import { queryInstanceInput, queryInstanceRightClick } from './instance.svelte'
     import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, MouseEventParams, UTCTimestamp} from 'lightweight-charts';
     import type {HistogramStyleOptions, HistogramSeriesPartialOptions, IChartApiBase, HistogramData, HistogramSeriesOptions} from 'lightweight-charts';
     import type {Writable} from 'svelte/store';
@@ -20,7 +20,7 @@
         volume: number;
     }
     export let chartQuery: Writable<Instance> = writable({datetime:null, extendedHours:false, timeframe:"1d"})
-    function changeChart(newInstance: Instance):void{
+    export function changeChart(newInstance: Instance):void{
         chartQuery.update((oldInstance:Instance)=>{
             return {
                 ...oldInstance,
@@ -100,16 +100,21 @@
 //    function loadNewChart(v: Instance): void{
     function chartRightClick(event: MouseEvent){// {{menuStyle.top}; left: {menuStyle.left
         event.preventDefault();
-        //if (get(chartQuery) !== null){
-            const rightClick: RightClickInstance = {
-                x: event.clientX + 10,
-                y: event.clientY + 10,
-                datetime: latestCrosshairPositionTime,
-                //...get(chartQuery),
-                ...chartQuery
-            }
-            rightClickInstance.set(rightClick)
-        //}
+        const dt = new Date(1000*latestCrosshairPositionTime);
+        const datePart = dt.toLocaleDateString('en-CA'); // 'en-CA' gives you the yyyy-mm-dd format
+        const timePart = dt.toLocaleTimeString('en-US', {
+            hour12: false, // 24-hour format
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+
+        const formattedDate = `${datePart} ${timePart}`;
+        const ins: Instance = {
+            ...get(chartQuery),
+            datetime: formattedDate,
+        }
+        queryInstanceRightClick(event,ins,"chart")
     }
 
     onMount(() => {
@@ -182,7 +187,7 @@
 
     });
 </script>
-<div id="chart_container" tabindex="0"></div>
+<div autofocus id="chart_container" tabindex="0"></div>
 <style>
     #chart_container {
       width: 85%;

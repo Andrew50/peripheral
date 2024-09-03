@@ -30,6 +30,7 @@
 	},
 	"type": "module",
 	"dependencies": {
+		"date-fns": "^3.6.0",
 		"lightweight-charts": "^4.2.0",
 		"quill": "^2.0.2"
 	}

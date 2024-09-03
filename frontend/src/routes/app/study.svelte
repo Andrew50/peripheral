@@ -12,19 +12,7 @@
         completed: boolean;
     }
     let studies : Writable<Study[]> = writable([])
-
-</script>
-<script lang="ts">
-    let selectedStudyId: number | null = null;
-    let entryStore = writable('');
-    let completedFilter = false;
-    entryStore.subscribe((v:string)=>{
-        if (v !== ""){
-        }
-    })
-    function newStudy():void{
-        queryInstanceInput(["ticker", "datetime"])
-        .then((v:Instance) => {
+    export function newStudy(v:Instance):void{
             privateRequest<number>("newStudy",{securityId:v.securityId,datetime:v.datetime})
             .then((studyId:number) => {
                 const study: Study = {completed:false,studyId:studyId,...v}
@@ -36,8 +24,20 @@
                     }
                 })
             })
+    }
 
-        })
+</script>
+<script lang="ts">
+    let selectedStudyId: number | null = null;
+    let entryStore = writable('');
+    let completedFilter = false;
+    entryStore.subscribe((v:string)=>{
+        if (v !== ""){
+        }
+    })
+    function newStudyRequest():void{
+        queryInstanceInput(["ticker", "datetime"])
+        .then((v:Instance) => {newStudy(v)})
     }
     function selectStudy(study: Study) : void {
         if (study.studyId === selectedStudyId){
@@ -73,7 +73,7 @@
 
 <h1> Study </h1>
 <button on:click={toggleCompletionFilter}> {completedFilter ? "Completed" : "Uncompeted"}</button>
-<button on:click={newStudy}> new </button>
+<button on:click={newStudyRequest}> new </button>
     <table>
         <th> Ticker </th>
         <th> Date </th>
