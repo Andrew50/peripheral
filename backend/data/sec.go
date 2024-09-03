@@ -60,16 +60,16 @@ func initTickerDatabase(conn *Conn) error {
 	//currentDate := startDate
 	activeSecuritiesRecord := make(map[string]ActiveSecurity) // indexed by ticker
 	nextSecurityId := 1
-    prevActiveSecurities := 0 //used to catch polygon supposed mass delisting
-    for currentDate := startDate; currentDate.Before(time.Now()); currentDate = currentDate.AddDate(0, 0, 1) {
+	prevActiveSecurities := 0 //used to catch polygon supposed mass delisting
+	for currentDate := startDate; currentDate.Before(time.Now()); currentDate = currentDate.AddDate(0, 0, 1) {
 		currentDateString := currentDate.Format("2006-01-02")
 		polygonActiveSecurities := AllTickers(conn.Polygon, currentDateString)
-        supposedDelistings := prevActiveSecurities - len(polygonActiveSecurities)
-        if (supposedDelistings > 50){ // check if polygon data is bad for that day (tons of tickers not active / missing)
-            fmt.Printf("skipped %d delistings on %s\n",supposedDelistings,currentDateString)
-            continue
-        }
-        prevActiveSecurities = len(polygonActiveSecurities)
+		supposedDelistings := prevActiveSecurities - len(polygonActiveSecurities)
+		if supposedDelistings > 50 { // check if polygon data is bad for that day (tons of tickers not active / missing)
+			fmt.Printf("skipped %d delistings on %s\n", supposedDelistings, currentDateString)
+			continue
+		}
+		prevActiveSecurities = len(polygonActiveSecurities)
 		polygonActiveTickers := make(map[string]interface{}) //doesnt actually store a value besides the key so just use empty interface
 		listings := 0
 		delistings := 0
