@@ -1,7 +1,7 @@
 <script lang="ts">
     let ticker = '';
     let relatedTickers: string[] = [];
-    import {privateRequest} from '../../store';
+    import {privateRequest} from '$lib/api/backend';
 
     function getRelatedTickers(): void {
         privateRequest<string[]>("getRelatedTickers",{ticker:ticker})

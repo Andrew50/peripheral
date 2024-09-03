@@ -1,10 +1,10 @@
 <!-- instance.svlete -->
 <script lang="ts" context="module">
-    import { privateRequest} from '../../store';
+    import { privateRequest} from '$lib/api/backend';
     import { get, writable } from 'svelte/store';
     import { parse} from 'date-fns';
     import type { Writable } from 'svelte/store';
-    import type {Instance } from '../../store';
+    import type {Instance } from '$lib/api/backend';
     interface Security {
         securityId: number;
         ticker: string;
@@ -21,6 +21,7 @@
         status: "inactive" | "initializing" | "active" | "complete" | "cancelled"
         inputString: string
         inputType: string
+        inputValid: boolean
         instance: Instance
         requiredKeys: InstanceAttributes[] | "any"
         securities?: Security[]
@@ -29,6 +30,7 @@
     const inactiveInputQuery: InputQuery = {
         status: "inactive",
         inputString: "",
+        inputValid: true,
         inputType:"",
         requiredKeys: "any",
         instance: {}
@@ -60,11 +62,10 @@
                             }
                         }
                     }
-                    if (complete){
-                        const re = iQ.instance
-                        deactivate()
-                        resolve(re)
-                    }
+                }else if(iQ.status === "complete")
+                    const re = iQ.instance
+                    deactivate()
+                    resolve(re)
                 }
             })
             function deactivate(){
@@ -78,10 +79,9 @@
 <script lang="ts">
     import {browser} from '$app/environment'
     import {onMount} from 'svelte'
-    let securities: Security[] = [];
-    let isValid = false;
     function validateInput(inputString = get(inputQuery).inputString, inputType = get(inputQuery).inputType):boolean{
         if (inputType == "ticker"){
+            const securities = get(inputQuery).securities
             if (!(Array.isArray(securities) && securities.length > 0)){
                 return false
             }
@@ -120,9 +120,11 @@
         }
     }
     function enterInput(tickerIndex: number = 0):void{
-        const inputType = get(inputQuery).inputType
-        const inputString = get(inputQuery).inputString
+        const iQ = get(inputQuery)
+        const inputType = iQ.inputType
+        const inputString = iQ.inputString
         if (inputType === "ticker"){
+            const securities = iQ.securities
             if (Array.isArray(securities) && securities.length > 0) {
                 inputQuery.update((instance: Instance) => {
                     instance.securityId = securities[tickerIndex].securityId
@@ -147,44 +149,44 @@
         })
     }
     function handleKeyDown(event:KeyboardEvent):void {
-        let inputType = get(inputQuery).inputType
-        let inputString = get(inputQuery).inputString
-        let status = get(inputQuery).status
+        console.log("god")
+        const iQ = get(inputQuery)
         if (event.key === 'Escape') {
-            status = "cancelled"
+            iQ.status = "cancelled"
         }else if (event.key === 'Enter') {
             event.preventDefault()
             enterInput(0)
         }else {
             if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase()) 
                 || (/[-:]/.test(event.key)) 
-                || (event.key == " " && get(inputType) === 'datetime') ) {
+                || (event.key == " " && iQ.inputType === 'datetime') ) {
                 let key: string;
-                if (inputType === 'timeframe'){
+                if (iQ.inputType === 'timeframe'){
                     key = event.key
                 }else{
                     key = event.key.toUpperCase()
                 }
-                inputString += key
+                iQ.inputString += key
             }else if (event.key == "Backspace") {
-                inputString = inputString.slice(0,-1)
+                iQ.inputString = iQ.inputString.slice(0,-1)
             }
-            inputType = classifyInput(inputString)
-            if(inputType === "ticker") {
-                isValid = true
-                privateRequest<Security[]>("getSecuritiesFromTicker",{ticker:get(inputString)})
+            iQ.inputType = classifyInput(iQ.inputString)
+            if(iQ.inputType === "ticker") {
+                privateRequest<Security[]>("getSecuritiesFromTicker",{ticker:iQ.inputString})
                 .then((result: Security[]) => {
-                    securities = result
-                    isValid = validateInput()
+                    inputQuery.update((v:InputQuery)=>{
+                    const valid = validateInput()
+                        v.inputValid = valid
+                        v.securities = result
+                        return v
                     })
+                })
             }else{
-               isValid = validateInput() 
-               securities = []
+               iQ.inputValid = validateInput() 
+               iQ.securities = []
             }
         }
-        inputQuery.update((v:InputQuery)=>{
-            return {...v, inputType:inputType,inputString:inputString}
-        })
+        inputQuery.set(iQ)
     }
     onMount(()=>{
         inputQuery.subscribe((v:InputQuery)=>{
@@ -193,11 +195,12 @@
                     document.addEventListener('keydown',  handleKeyDown);
                     v.status = "active"
                     return v
-                }else if(v.status==="inactive"){
+                }else if(v.status === "inactive"){
                     document.removeEventListener('keydown',handleKeyDown);
                 }
             }
         })
+    })
 
 
 </script>
@@ -205,16 +208,21 @@
 
 {#if $inputQuery.status === "active"}
     <div class="popup">
-    {#each $inputQuery.requiredKeys as key}
+    {#if $inputQuery.instance && Object.keys($inputQuery.instance).length > 0}
+        {#each Object.entries($inputQuery.instance) as [key, value] }
+            <div>{key}: {value}</div>
+        {/each}
+    {/if}
+    <!--{#each $inputQuery.requiredKeys as key}
         <div class="{validateInput(key, $inputQuery.instance[key]) ? 'normal' : 'red'}">{key} {$inputQuery.instance[key]}</div>
-    {/each}
+    {/each}-->
     <div>{$inputQuery.inputString}</div>
-    <div class="{isValid ? 'normal' : 'red'}">{$inputQuery.inputType}</div>
+    <div class="{$inputQuery.inputValid ? 'normal' : 'red'}">{$inputQuery.inputType}</div>
         <table>
-            {#if Array.isArray(securities) && securities.length > 0}
+            {#if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
             <th> Ticker <th/>
             <th> Date </th>
-            {#each inputQuery.securities as sec, i}
+            {#each $inputQuery.securities as sec, i}
                 <tr on:click={() => enterInput(i)}> 
                     <td>{sec.ticker}</td>
                     <td>{sec.maxDate === null ? 'Current' : sec.maxDate}</td> 

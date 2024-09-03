@@ -1,15 +1,4 @@
-//import { writable } from 'svelte/store';
-//import type { Writable } from 'svelte/store';
-import { goto } from "$app/navigation";
-import { browser } from "$app/environment";
-export interface Instance {
-    ticker?: string
-    datetime?: string | null
-    securityId?: number
-    timeframe?: string
-    extendedHours?: boolean
-}
-//export type NullWritable<T> = Writable<Writable<T> | null>
+//import { browser } from "$app/environment";
 
 let base_url: string;
 
@@ -23,11 +12,6 @@ if (typeof window !== 'undefined') {
     } else {
         base_url = window.location.origin; //prod
     }*/
-}
-
-export function logout() {
-    sessionStorage.setItem("authToken","")
-    goto('/login');
 }
 
 export async function publicRequest<T>(func: string, args: any): Promise<T> {
@@ -53,12 +37,13 @@ export async function publicRequest<T>(func: string, args: any): Promise<T> {
 
 export async function privateRequest<T>(func: string, args: any): Promise<T> {
     let authToken;
-    if (browser){
+    authToken = sessionStorage.getItem("authToken")
+ /*   if (browser){
          authToken = sessionStorage.getItem("authToken")
     }else{
         console.log("server: ",func, args)
         return null as T
-    }
+    }*/
     const headers = {
         'Content-Type': 'application/json',
         ...(authToken ? { 'Authorization': authToken} : {}),

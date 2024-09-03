@@ -1,13 +1,13 @@
 <!-- instance.svlete -->
 <script lang="ts" context="module">
-    import {changeChart} from './chart.svelte'
+    import {changeChart} from '$lib/features/chart.svelte'
     import type { Writable } from 'svelte/store';
-    import type {Instance } from '../../store';
+    import type {Instance } from '$lib/api/backend';
     let similarInstance: Writable<SimilarInstance> = writable({});
-    import { privateRequest} from '../../store';
-    import {newStudy} from './study.svelte';
-    import {newJournal} from './journal.svelte';
-    import {newSample} from './sample.svelte'
+    import { privateRequest} from '$lib/api/backend';
+    import {newStudy} from '$lib/features/study.svelte';
+    import {newJournal} from '$lib/features/journal.svelte';
+    import {newSample} from '$lib/features/sample.svelte'
     import { get, writable } from 'svelte/store';
     interface SimilarInstance {
         x: number
@@ -31,7 +31,7 @@
         instance: {}
     }
 
-    let rightClickQuery: Writable<RightClickQuery> = writable({})
+    let rightClickQuery: Writable<RightClickQuery> = writable(inactiveRightClickQuery)
 
     export async function queryInstanceRightClick(event:MouseEvent,instance:Instance,source:Source):Promise<RightClickResult>{
         const rqQ: RightClickQuery = {

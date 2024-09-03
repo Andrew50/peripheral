@@ -1,10 +1,10 @@
 <!-- chart.svelte-->
 <script lang="ts" context="module">
     import { createChart, ColorType} from 'lightweight-charts';
-    import {privateRequest} from '../../store';
-    import type {Instance} from '../../store'
-    import type {RightClickInstance} from './instance.svelte'
-    import { queryInstanceInput, queryInstanceRightClick } from './instance.svelte'
+    import {privateRequest} from '$lib/api/backend';
+    import type {Instance} from '$lib/api/backend'
+    import { queryInstanceInput } from '$lib/utils/input.svelte'
+import { queryInstanceRightClick } from '$lib/utils/rightClick.svelte'
     import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, MouseEventParams, UTCTimestamp} from 'lightweight-charts';
     import type {HistogramStyleOptions, HistogramSeriesPartialOptions, IChartApiBase, HistogramData, HistogramSeriesOptions} from 'lightweight-charts';
     import type {Writable} from 'svelte/store';
