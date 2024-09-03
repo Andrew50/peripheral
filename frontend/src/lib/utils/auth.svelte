@@ -1,7 +1,7 @@
 <!-- account.svelte -->
 <script lang="ts">
-    import {publicRequest} from '../store'
-    import Header from './header.svelte';
+    import {publicRequest} from '$lib/api/backend'
+    import Header from '$lib/utils/header.svelte';
     import { goto } from '$app/navigation';
     import { writable } from 'svelte/store';
   
@@ -61,7 +61,8 @@
 </div>
 
 <style>
-    @import "../global.css";
+    @import "$lib/core/colors.css";
+    @import "$lib/core/components.css";
   main {
     display: flex; 
     justify-content: center;

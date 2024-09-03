@@ -4,7 +4,7 @@
     import Entry from './entry.svelte'
     import Related from './related.svelte'
     import { onMount } from 'svelte';
-    import { privateRequest } from '../../store'
+    import { privateRequest } from '$lib/api/backend'
     import { goto } from '$app/navigation';
     import { browser } from '$app/environment';
     import { writable ,  get} from 'svelte/store';

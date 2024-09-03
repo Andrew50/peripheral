@@ -4,9 +4,9 @@
     import { writable } from 'svelte/store'
     import Entry from './entry.svelte'
     import {onMount} from 'svelte'
-    import {privateRequest} from '../../store'
-    import type {Instance} from '../../store'
-    import {queryInstanceInput} from './instance.svelte'
+    import {privateRequest} from '$lib/api/backend'
+    import type {Instance} from '$lib/api/backend'
+    import {queryInstanceInput} from '$lib/utils/input.svelte'
     interface Study extends Instance{
         studyId: number;
         completed: boolean;

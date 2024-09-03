@@ -1,6 +1,6 @@
 <!-- instance.svlete -->
 <script lang="ts" context="module">
-    import { privateRequest} from '../../store';
+    import { privateRequest} from '$lib/api/backend';
     import {newStudy} from './study.svelte';
     import {newJournal} from './journal.svelte';
     import {newSample} from './sample.svelte'
@@ -8,7 +8,7 @@
     import { get, writable } from 'svelte/store';
     import { parse} from 'date-fns';
     import type { Writable } from 'svelte/store';
-    import type {Instance } from '../../store';
+    import type {Instance } from '$lib/api/backend';
     interface RightClickQuery extends Instance {
         x: number;
         y: number;

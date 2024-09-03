@@ -3,7 +3,7 @@
     import {changeChart} from './chart.svelte'
     import { writable } from 'svelte/store';
     import type { Writable } from 'svelte/store';
-    import type {Instance } from '../../store';
+    import type {Instance } from '$lib/api/backend';
     import {queryInstanceRightClick} from './rightClick.svelte'
     interface SimilarInstance {
         x: number

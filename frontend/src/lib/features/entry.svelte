@@ -1,12 +1,12 @@
 <script lang="ts" context="module">
-    import type {Instance} from '../../store' 
-    import {queryInstanceInput, queryInstanceRightClick} from './instance.svelte'
+    import type {Instance} from '$lib/api/backend' 
+    import {queryInstanceInput } from '$lib/utils/input.svelte'
+    import {queryInstanceRightClick} from '$lib/utils/rightClick.svelte'
     import {chartQuery} from './chart.svelte'
-    import type {RightClickResult} from './instance.svelte'
 </script>
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { privateRequest } from '../../store'
+    import { privateRequest } from '$lib/api/backend'
     import 'quill/dist/quill.snow.css';
     import type Quill from 'quill'
     import type { DeltaStatic, EmbedBlot } from 'quill'
