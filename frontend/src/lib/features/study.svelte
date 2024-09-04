@@ -70,25 +70,106 @@
     })
 
 </script>
-
 <h1> Study </h1>
-<button on:click={toggleCompletionFilter}> {completedFilter ? "Completed" : "Uncompeted"}</button>
-<button on:click={newStudyRequest}> new </button>
-    <table>
-        <th> Ticker </th>
-        <th> Date </th>
-{#if Array.isArray($studies) && $studies.length > 0 }
-        {#each $studies as study}
-            <tr on:click={()=>selectStudy(study)}>
-                <td> {study.ticker} </td>
-                <td> {study.datetime} </td>
-            </tr>
 
-            {#if selectedStudyId == study.studyId}
-                <tr>
-                <Entry completed={study.complete} func="Study" id={study.studyId}/>
-                </tr>
+<div class="controls">
+    <button on:click={toggleCompletionFilter} class="action-btn"> 
+        {completedFilter ? "Completed" : "Uncompleted"} 
+    </button>
+    <button on:click={newStudyRequest} class="action-btn"> New </button>
+</div>
+
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Ticker</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {#if Array.isArray($studies) && $studies.length > 0}
+                {#each $studies as study}
+                    <tr class="table-row" on:click={() => selectStudy(study)}>
+                        <td>{study.ticker}</td>
+                        <td>{study.datetime}</td>
+                    </tr>
+
+                    {#if selectedStudyId == study.studyId}
+                        <tr>
+                            <td colspan="2">
+                                <Entry completed={study.complete} func="Study" id={study.studyId} />
+                            </td>
+                        </tr>
+                    {/if}
+                {/each}
             {/if}
-        {/each}
-{/if}
+        </tbody>
     </table>
+</div>
+<style>
+    @import "$lib/core/colors.css";
+
+    /* Button styling */
+    .controls {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 20px;
+    }
+
+    .action-btn {
+        background-color: var(--c3);
+        color: var(--f1);
+        border: none;
+        padding: 10px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1rem;
+    }
+
+    .action-btn:hover {
+        background-color: var(--c3-hover);
+    }
+
+    /* Table styling */
+    .table-container {
+        border: 1px solid var(--c4);
+        border-radius: 4px;
+        overflow: hidden;
+        margin-top: 10px;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    th, td {
+        padding: 10px;
+        text-align: left;
+    }
+
+    th {
+        background-color: var(--c1);
+        color: var(--f1);
+    }
+
+    tr {
+        border-bottom: 1px solid var(--c4);
+    }
+
+    .table-row:hover {
+        background-color: var(--c1);
+        cursor: pointer;
+    }
+
+    /* Highlight selected study */
+    tr.selected {
+        background-color: var(--c6);
+    }
+
+    .highlight {
+        color: var(--c3);
+        font-weight: bold;
+    }
+</style>

@@ -5,16 +5,12 @@
     import type {Instance } from '$lib/api/backend';
     let similarInstance: Writable<SimilarInstance> = writable({});
     import { privateRequest} from '$lib/api/backend';
+    import {embedInstance} from "$lib/features/entry.svelte";
     import {newStudy} from '$lib/features/study.svelte';
     import {newJournal} from '$lib/features/journal.svelte';
     import {newSample} from '$lib/features/sample.svelte'
     import { get, writable } from 'svelte/store';
-    interface SimilarInstance {
-        x: number
-        y: number
-        similarInstances: Instance[]
-        status: "active" | "inactive"
-    }
+    import {querySimilarInstances} from '$lib/utils/similar.svelte'
     interface RightClickQuery {
         x?: number;
         y?: number;
@@ -23,7 +19,7 @@
         status: "inactive" | "active" | "initializing" | "cancelled" | "complete"
         result: RightClickResult
     }
-    type RightClickResult = "edit" | "embed" | "alert" | "embdedSimilar" | "none" 
+    export type RightClickResult = "edit" | "embed" | "alert" | "embedSimilar" | "none" 
     type Source = "chart" | "embedded" | "similar"
     const inactiveRightClickQuery: RightClickQuery = {
         status:"inactive",
@@ -34,6 +30,7 @@
     let rightClickQuery: Writable<RightClickQuery> = writable(inactiveRightClickQuery)
 
     export async function queryInstanceRightClick(event:MouseEvent,instance:Instance,source:Source):Promise<RightClickResult>{
+        console.log(instance,source)
         const rqQ: RightClickQuery = {
             x: event.clientX,
             y: event.clientY,
@@ -60,20 +57,6 @@
             }
         })
     }
-    function getSimilarInstances(event:MouseEvent):void{
-        const baseIns = get(rightClickQuery)
-        privateRequest<Instance[]>("getSimilarInstances",{ticker:baseIns.ticker,securityId:baseIns.securityId,timeframe:baseIns.timeframe,datetime:baseIns.datetime})
-        .then((v:Instance[])=>{
-            console.log(v)
-            const simInst: SimilarInstance = {
-                x: event.clientX,
-                y: event.clientY,
-                instances: v
-            }
-            console.log(simInst)
-            similarInstance.set(simInst)
-        })
-    }
         
 </script>
 
@@ -97,14 +80,20 @@
         })
     })
     function handleClick(event:MouseEvent):void{
-        if (rightClickMenu && !rightClickMenu.contains(event.target as Node)) {
+        //if (rightClickMenu && !rightClickMenu.contains(event.target as Node)) {
             closeRightClickMenu()
-        }
+        //}
     }
     function handleKeyDown(event:KeyboardEvent):void{
         if (event.key == "Escape"){
             closeRightClickMenu()
         }
+    }
+    function closeRightClickMenu():void{
+        rightClickQuery.update((v:RightClickQuery)=>{
+            v.status = "complete"
+            return v
+        })
     }
 
     function getStats():void{}
@@ -123,12 +112,16 @@
             return v
         })
     }
-    function completeRequest(result:RightClickResult){
+    function completeRequest(result:RightClickResult,func:Function|null=null){
         rightClickQuery.update((v:RightClickQuery)=>{
             v.status = "complete"
             v.result = result
             return v
         })
+        if (func !== null)
+        {
+            func(rightClickQuery.instance)
+        }
     }
     function embedSimilar():void{
         rightClickQuery.update((v:RightClickQuery)=>{
@@ -141,68 +134,74 @@
 </script>
 {#if $rightClickQuery.status === "active"}
     <div bind:this={rightClickMenu} class="context-menu" style="top: {$rightClickQuery.y}px; left: {$rightClickQuery.x}px;">
-        <div>{$rightClickQuery.ticker} {$rightClickQuery.datetime} </div>
-        <div><button on:click={()=>newStudy(get(rightClickQuery).instance)}> Add to Study </button></div>
+        <div class="menu-item">{$rightClickQuery.instance.ticker} {$rightClickQuery.instance.datetime} </div>
+        <div class="menu-item"><button on:click={()=>newStudy(get(rightClickQuery).instance)}> Add to Study </button></div>
         <!--<div><button on:click={()=>newSample(get(rightClickQuery).instance)}> Add to Sample </button></div>
         <div><button on:click={()=>newJournal(get(rightClickQuery).instance)}> Add to Journal </button></div>-->
-        <div><button on:click={()=>getSimilarInstances(get(rightClickQuery).instance)}> Similar Instances </button></div>
+        <div class="menu-item"><button on:click={(event)=>querySimilarInstances(event,get(rightClickQuery).instance)}> Similar Instances </button></div>
         <!--<div><button on:click={getStats}> Instance Stats </button></div>
         <div><button on:click={replay}> Replay </button></div>-->
         {#if $rightClickQuery.source === "chart"}
             <!--<div><button on:click={()=>completeRequest("alert")}>Add Alert </button></div>-->
-            <div><button on:click={()=>completeRequest("embed")}> Embed </button></div>
+            <div class="menu-item"><button on:click={()=>embedInstance(get(rightClickQuery).instance)}> Embed </button></div>
         {:else if $rightClickQuery.source === "embedded"}
-            <div><button on:click={()=>completeRequest("edit")}> Edit </button></div>
+            <div class="menu-item"><button on:click={()=>completeRequest("edit")}> Edit </button></div>
             <!--<div><button on:click={()=>completeRequest("embdedSimilar")}> Embed Similar </button></div>-->
         {/if}
     </div>
 {/if}
-{#if $similarInstance.status === "active"}
-    <div class="context-menu" style="top: {$similarInstance.y}px; left: {$similarInstance.x}px;">
-        <table>
-        {#each $similarInstance.instances as instance} 
-            <tr>
-                <td on:click={()=>changeChart(instance)} 
-                on:contextmenu={(e)=>{e.preventDefault();
-                queryInstanceRightClick(e,instance,"similar")}}>{instance.ticker}</td>
-            </tr>
-        {/each}
-        </table>
-    </div>
-{/if}
-
 
 <style>
-    .red {
-        color: red;
-    }
-    .normal {
-        color: black;
-    }
+    @import "$lib/core/colors.css";
+
+    /* Style the context menu similarly to the popup */
     .context-menu {
+        display: flex;
+        flex-direction: column;
         position: absolute;
-        background-color: white;
-        border: 1px solid #ccc;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        background-color: var(--c2);
+        border: 1px solid var(--c4);
         z-index: 1000;
         padding: 10px;
-        border-radius: 4px;
+        width: 250px;
+        box-shadow: 0px 0px 20px rgba(0, 0, 0, 0.7);
+        border-radius: 8px;
+        color: var(--f1);
     }
 
-    .context-menu-item {
-        background-color: transparent;
+    /* Add styling for the buttons inside the menu */
+    .menu-item {
+        padding: 10px;
+        border-bottom: 1px solid var(--c4);
+        display: flex;
+        justify-content: space-between;
+        color: var(--f1);
+        cursor: pointer;
+    }
+
+    .menu-item:last-child {
+        border-bottom: none;
+    }
+
+    button {
+        background-color: var(--c3);
+        color: var(--f1);
         border: none;
-        padding: 5px 10px;
-        text-align: left;
+        padding: 8px 16px;
+        border-radius: 4px;
         cursor: pointer;
         width: 100%;
     }
 
-    .context-menu-item:hover {
-        background-color: #f0f0f0;
+    button:hover {
+        background-color: var(--c3-hover);
     }
+
+    .menu-item:hover {
+        background-color: var(--c1);
+    }
+
     .hidden {
         display: none;
     }
 </style>
-

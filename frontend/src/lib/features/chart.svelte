@@ -4,7 +4,7 @@
     import {privateRequest} from '$lib/api/backend';
     import type {Instance} from '$lib/api/backend'
     import { queryInstanceInput } from '$lib/utils/input.svelte'
-import { queryInstanceRightClick } from '$lib/utils/rightClick.svelte'
+    import { queryInstanceRightClick } from '$lib/utils/rightClick.svelte'
     import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, MouseEventParams, UTCTimestamp} from 'lightweight-charts';
     import type {HistogramStyleOptions, HistogramSeriesPartialOptions, IChartApiBase, HistogramData, HistogramSeriesOptions} from 'lightweight-charts';
     import type {Writable} from 'svelte/store';
@@ -19,16 +19,12 @@ import { queryInstanceRightClick } from '$lib/utils/rightClick.svelte'
         close: number;
         volume: number;
     }
-    export let chartQuery: Writable<Instance> = writable({datetime:null, extendedHours:false, timeframe:"1d"})
+    export let chartQuery: Writable<Instance> = writable({datetime:"", extendedHours:false, timeframe:"1d",ticker:""})
     export function changeChart(newInstance: Instance):void{
         chartQuery.update((oldInstance:Instance)=>{
-            return {
-                ...oldInstance,
-                ...newInstance
-            }
-            })}
-
-
+            return { ...oldInstance, ...newInstance }
+        })
+    }
 
 </script>
 <script lang="ts">
