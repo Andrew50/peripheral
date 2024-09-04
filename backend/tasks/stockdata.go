@@ -15,7 +15,7 @@ type GetChartDataArgs struct {
 	Timeframe     string `json:"timeframe"`
 	Datetime      string `json:"datetime"`  // If this datetime is just a date, it needs to grab the end of the day as opposed to the beginning of the day
 	Direction     string `json:"direction"` // to ensure that we get the data from that date
-	NumBars       int    `json:"numbars"`
+	Bars          int    `json:"bars"`
 	ExtendedHours bool   `json:"extendedhours"`
 	//EndTime   string `json:"endtime"`
 }
@@ -84,7 +84,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	// this allows us to handle ticker changes if the data request requires pulling across
 	// two different tickers.
 	var barDataList []GetChartDataResults
-	numBarsRemaining := args.NumBars
+	numBarsRemaining := args.Bars
 	for rows.Next() {
 		var ticker string
 		var minDateFromSQL *time.Time
@@ -172,8 +172,8 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		// if we have undershot with the current row of information in security db
 
 	}
-	return nil, fmt.Errorf("c34lg: Did not return bar data for securityid {%v}, timeframe {%v}, datetime {%v}, direction {%v}, numBars {%v}, extendedHours {%v}",
-		args.SecurityId, args.Timeframe, args.Datetime, args.Direction, args.NumBars, args.ExtendedHours)
+	return nil, fmt.Errorf("c34lg: Did not return bar data for securityid {%v}, timeframe {%v}, datetime {%v}, direction {%v}, Bars {%v}, extendedHours {%v}",
+		args.SecurityId, args.Timeframe, args.Datetime, args.Direction, args.Bars, args.ExtendedHours)
 }
 
 /*
