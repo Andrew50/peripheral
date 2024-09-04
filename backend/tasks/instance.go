@@ -8,18 +8,66 @@ import (
 	"time"
 )
 
-type GetRelatedTickersArgs struct {
-	Ticker string `json:"ticker"`
+
+type GetSimilarInstancesArgs struct {
+    Ticker string `json:"ticker"`
+	SecurityId int `json:"securityId"`
+    Datetime string `json:"datetime"`
+    Timeframe string `json:"timeframe"`
+}
+type GetSimilarInstancesResults struct {
+    Ticker string `json:"ticker"`
+    SecurityId int `json:"securityId"`
+    Datetime string `json:"datetime"`
+    Timeframe string `json:"timeframe"`
 }
 
-func GetRelatedTickers(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var args GetRelatedTickersArgs
+func GetSimilarInstances(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetSimilarInstancesArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
-		return nil, fmt.Errorf("GetCik invalid args: %v", err)
+		return nil, fmt.Errorf("9hsdf invalid args: %v", err)
 	}
-	tickers, err := data.GetPolygonRelatedTickers(conn.Polygon, args.Ticker)
-	return tickers, err
+    var  queryTicker string
+    conn.DB.QueryRow(context.Background(),`SELECT ticker from securities where securityId = $1
+         ORDER BY maxDate IS NULL DESC, maxDate DESC`,args.SecurityId).Scan(&queryTicker)
+	tickers, err := data.GetPolygonRelatedTickers(conn.Polygon, queryTicker)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get related tickers: %v", err)
+	}
+    if len(tickers) == 0 {
+        return nil, fmt.Errorf("49sb no related tickers")
+    }
+	/*parsedDatetime, err := data.StringToTime(args.Datetime)
+	if err != nil {
+		return nil, fmt.Errorf("invalid datetime format: %v", err)
+	}*/
+	query := `
+		SELECT ticker, securityId
+		FROM securities
+		WHERE ticker = ANY($1) AND (maxDate IS NULL OR maxDate >= $2) AND minDate <= $2
+	`
+	rows, err := conn.DB.Query(context.Background(), query, tickers, args.Datetime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query securities: %v", err)
+	}
+	defer rows.Close()
+	var results []GetSimilarInstancesResults
+	for rows.Next() {
+		var result GetSimilarInstancesResults
+		err := rows.Scan(&result.Ticker, &result.SecurityId)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan row: %v", err)
+		}
+        fmt.Print(result.Ticker)
+		result.Datetime = args.Datetime
+		result.Timeframe = args.Timeframe
+		results = append(results, result)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over rows: %v", err)
+	}
+	return results, nil
 }
 
 type GetCikArgs struct {
