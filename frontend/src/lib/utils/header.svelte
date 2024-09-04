@@ -10,8 +10,8 @@
 
 <header class="header">
   <div class="left">
-    <a href="/" on:click={() => navigateTo('/')} class="logo">EdgeFinder</a>
-    <a href="/features" on:click={() => navigateTo('/features')}>Features</a>
+    <a href="/" on:click={() => navigateTo('/')} class="logo">Home</a>
+    <!--<a href="/features" on:click={() => navigateTo('/features')}>Features</a>-->
   </div>
   <div class="right">
     <a href="/login" on:click={() => navigateTo('/login')}>Log In</a>
@@ -27,7 +27,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 0 20px;
-    background-color: var(--c1); /* Example header background color */
+    background-color: var(--c1);
     color: var(--f1);
     position: fixed;
     top: 0;
