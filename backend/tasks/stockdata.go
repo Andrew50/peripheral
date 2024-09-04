@@ -188,6 +188,10 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		// if we have undershot with the current row of information in security db
 
 	}
+	if len(barDataList) != 0 {
+		return barDataList, nil
+	}
+
 	return nil, fmt.Errorf("c34lg: Did not return bar data for securityid {%v}, timeframe {%v}, datetime {%v}, direction {%v}, Bars {%v}, extendedHours {%v}",
 		args.SecurityId, args.Timeframe, args.Datetime, args.Direction, args.Bars, args.ExtendedHours)
 }
