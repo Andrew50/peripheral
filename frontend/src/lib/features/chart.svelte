@@ -19,6 +19,11 @@
         close: number;
         volume: number;
     }
+    interface chartRequest extends Instance{
+        bars: number;
+        direction: string;
+        extendedhours: boolean;
+    }
     export let chartQuery: Writable<Instance> = writable({datetime:"", extendedHours:false, timeframe:"1d",ticker:""})
     export function changeChart(newInstance: Instance):void{
         chartQuery.update((oldInstance:Instance)=>{
@@ -82,6 +87,38 @@
         const formattedDate = `${datePart} ${timePart}`;
         const ins: Instance = { ...get(chartQuery), datetime: formattedDate, }
         queryInstanceRightClick(event,ins,"chart")
+    }
+    function backendGetChartData(inst:chartRequest) {
+        if (!inst.ticker || !inst.timeframe || !inst.securityId) {return}
+        const timeframe = inst.timeframe 
+        if (timeframe && timeframe.length < 1) {
+            return
+        }
+        let barDataList: barData[] = []
+        privateRequest<barData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, datetime:inst.datetime, direction:"backward", bars:100, extendedhours:false})
+            .then((result: barData[]) => {
+                if (! (Array.isArray(result) && result.length > 0)){ return}
+                barDataList = result;
+
+                let newCandleData = [];
+                let newVolumeData = [];
+                for (let i =0; i < barDataList.length; i++) {
+                    newCandleData.push({
+                        time: barDataList[i].time as UTCTimestamp, 
+                        open: barDataList[i].open, 
+                        high: barDataList[i].high, 
+                        low: barDataList[i].low,
+                        close: barDataList[i].close, 
+                    });
+                    const candleColor = barDataList[i].close > barDataList[i].open 
+                    newVolumeData.push({
+                        time: barDataList[i].time, 
+                        value: barDataList[i].volume, 
+                        color: candleColor ? '#089981' : '#ef5350',
+                    })
+                }
+            })
+        
     }
 
     onMount(() => {
