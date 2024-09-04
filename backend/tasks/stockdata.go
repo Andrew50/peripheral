@@ -106,43 +106,45 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 				maxDate = *maxDateFromSQL
 			}
 
-			var estimatedStartTime time.Time
-			if dataConsolidationType == "d" {
-				estimatedStartTime = maxDate.AddDate(0, 0, -(numBarsRemaining * baseAggregateMultiplier * multiplier))
-			} else if dataConsolidationType == "m" {
-				estimatedStartTime = maxDate.Add(time.Duration(-numBarsRemaining*baseAggregateMultiplier*multiplier) * time.Minute)
-				// estimatedStartTime = maxDate.AddDate(0, 0, 0, -(numBarsRemaining * baseAggregateMultiplier * multiplier), 0, 0, 0)
-			} else if dataConsolidationType == "s" {
-				// ESTIMATE THE start date
-				estimatedStartTime = maxDate.Add(time.Duration(-numBarsRemaining*baseAggregateMultiplier*multiplier) * time.Second)
-			} else {
-				return nil, fmt.Errorf("34kgf Invalid dataConsolidationType {%v}", dataConsolidationType)
-			}
-			// if estimated Start time is greater than the ticker min date, then use the estimatedStartTime as the request start
-			if estimatedStartTime.Compare(minDate) == 1 {
-				queryStartTime = estimatedStartTime
-			} else {
-				queryStartTime = minDate
-			}
+			// var estimatedStartTime time.Time
+			// if dataConsolidationType == "d" {
+			// 	estimatedStartTime = maxDate.AddDate(0, 0, -(numBarsRemaining * baseAggregateMultiplier * multiplier))
+			// } else if dataConsolidationType == "m" {
+			// 	estimatedStartTime = maxDate.Add(time.Duration(-numBarsRemaining*baseAggregateMultiplier*multiplier) * time.Minute)
+			// 	// estimatedStartTime = maxDate.AddDate(0, 0, 0, -(numBarsRemaining * baseAggregateMultiplier * multiplier), 0, 0, 0)
+			// } else if dataConsolidationType == "s" {
+			// 	// ESTIMATE THE start date
+			// 	estimatedStartTime = maxDate.Add(time.Duration(-numBarsRemaining*baseAggregateMultiplier*multiplier) * time.Second)
+			// } else {
+			// 	return nil, fmt.Errorf("34kgf Invalid dataConsolidationType {%v}", dataConsolidationType)
+			// }
+			// // if estimated Start time is greater than the ticker min date, then use the estimatedStartTime as the request start
+			// if estimatedStartTime.Compare(minDate) == 1 {
+			// 	queryStartTime = estimatedStartTime
+			// } else {
+			// 	queryStartTime = minDate
+			// }
+			queryStartTime = *minDateFromSQL
 			queryEndTime = maxDate
 			maxDate = queryStartTime
 		} else if args.Direction == "forward" { // MIGHT NOT NEED THIS CHECK AS INCORRECT DIRCTIONS GET FILTERED OUT ABOVE
 			if minDate.Compare(*minDateFromSQL) == -1 {
 				minDate = *minDateFromSQL
 			}
-			var estimatedEndTime time.Time
-			if dataConsolidationType == "d" {
-				estimatedEndTime = minDate.AddDate(0, 0, (numBarsRemaining * baseAggregateMultiplier * multiplier)) // going to need some flexibilty for weekends
-			} else if dataConsolidationType == "m" {
-				// ESTIMATE MINUTE END TIME
-			} else if dataConsolidationType == "s" {
-				// ESTIMATE SECOND END TIME
-			}
-			if estimatedEndTime.Compare(maxDate) == -1 {
-				queryEndTime = estimatedEndTime
-			} else {
-				queryEndTime = maxDate
-			}
+			// var estimatedEndTime time.Time
+			// if dataConsolidationType == "d" {
+			// 	estimatedEndTime = minDate.AddDate(0, 0, (numBarsRemaining * baseAggregateMultiplier * multiplier)) // going to need some flexibilty for weekends
+			// } else if dataConsolidationType == "m" {
+			// 	// ESTIMATE MINUTE END TIME
+			// } else if dataConsolidationType == "s" {
+			// 	// ESTIMATE SECOND END TIME
+			// }
+			// if estimatedEndTime.Compare(maxDate) == -1 {
+			// 	queryEndTime = estimatedEndTime
+			// } else {
+			// 	queryEndTime = maxDate
+			// }
+			queryEndTime = *maxDateFromSQL
 			queryStartTime = minDate
 			minDate = queryEndTime
 		}
