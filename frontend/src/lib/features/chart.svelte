@@ -54,6 +54,10 @@
         mainChart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
             if(logicalRange) {
                 console.log(logicalRange?.from, logicalRange?.to)
+                if(logicalRange.from < 10) {
+                    const barsToRequest = 50 - logicalRange.from; 
+                    privateRequest
+                }
             }
         })
     }
@@ -90,7 +94,6 @@
             }
             privateRequest<barData[]>("getChartData", {securityId:v.securityId, timeframe:v.timeframe, datetime:v.datetime, direction:"backward", bars:100, extendedhours:false})
             .then((result: barData[]) => {
-                console.log("TEST")
                 if (! (Array.isArray(result) && result.length > 0)){ return}
                 barDataList = result;
 
