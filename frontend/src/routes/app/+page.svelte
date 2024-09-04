@@ -1,10 +1,12 @@
 <!-- app/+page.svelte -->
 <script lang="ts">
-    import Chart from './chart.svelte'
-    import Instance from './instance.svelte'
-    import Study from './study.svelte'
+    import Chart from '$lib/features/chart.svelte'
+    import RightClick from '$lib/utils/rightClick.svelte'
+    import Input from '$lib/utils/input.svelte'
+    import Similar from '$lib/utils/similar.svelte'
+    import Study from '$lib/features/study.svelte'
     import { onMount } from 'svelte';
-    import { privateRequest } from '../../store'
+    import { privateRequest } from '$lib/api/backend'
     import { goto } from '$app/navigation';
     onMount(() => {
         privateRequest<string>("verifyAuth", {}).catch((error) => {
@@ -14,7 +16,9 @@
 </script>
 
 <div class="container">
+    <Input/>
+    <RightClick/>
+    <Similar/>
     <Chart/>
-    <Instance/>
     <Study/>
 </div>

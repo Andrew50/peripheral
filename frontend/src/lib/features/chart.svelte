@@ -1,10 +1,10 @@
 <!-- chart.svelte-->
 <script lang="ts" context="module">
     import { createChart, ColorType} from 'lightweight-charts';
-    import {privateRequest} from '../../store';
-    import type {Instance} from '../../store'
-    import type {RightClickInstance} from './instance.svelte'
-    import { queryInstanceInput, rightClickInstance } from './instance.svelte'
+    import {privateRequest} from '$lib/api/backend';
+    import type {Instance} from '$lib/api/backend'
+    import { queryInstanceInput } from '$lib/utils/input.svelte'
+    import { queryInstanceRightClick } from '$lib/utils/rightClick.svelte'
     import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, MouseEventParams, UTCTimestamp} from 'lightweight-charts';
     import type {HistogramStyleOptions, HistogramSeriesPartialOptions, IChartApiBase, HistogramData, HistogramSeriesOptions} from 'lightweight-charts';
     import type {Writable} from 'svelte/store';
@@ -19,16 +19,12 @@
         close: number;
         volume: number;
     }
-    export let chartQuery: Writable<Instance> = writable({datetime:null, extendedHours:false, timeframe:"1d"})
-    function changeChart(newInstance: Instance):void{
+    export let chartQuery: Writable<Instance> = writable({datetime:"", extendedHours:false, timeframe:"1d",ticker:""})
+    export function changeChart(newInstance: Instance):void{
         chartQuery.update((oldInstance:Instance)=>{
-            return {
-                ...oldInstance,
-                ...newInstance
-            }
-            })}
-
-
+            return { ...oldInstance, ...newInstance }
+        })
+    }
 
 </script>
 <script lang="ts">
@@ -38,50 +34,22 @@
 
 
     function initializeChart()  {
-        const chartOptions = { 
-            layout: { 
-                textColor: 'black', 
-                background: { type: ColorType.Solid, color: 'white' } 
-            },
-            timeScale:  {
-                timeVisible: true
-            },
-        };
+        const chartOptions = { layout: { textColor: 'black', background: { type: ColorType.Solid, color: 'white' } }, timeScale:  { timeVisible: true }, };
         const chartContainer = document.getElementById('chart_container');
         if (!chartContainer) {return;}
         chartContainer.addEventListener('keydown', event => {
-
             if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
-                queryInstanceInput("any")
+                queryInstanceInput("any",get(chartQuery))
                 .then((v:Instance)=>{
                     changeChart(v)
                 })
             }
          });
         mainChart = createChart(chartContainer, chartOptions);
-
-        mainChartCandleSeries = mainChart.addCandlestickSeries({
-            upColor: '#089981', downColor: '#ef5350', borderVisible: false,
-            wickUpColor: '#089981', wickDownColor: '#ef5350',
-        });
-        mainChartVolumeSeries = mainChart.addHistogramSeries({
-            priceFormat: {
-                type: 'volume',
-            },
-            priceScaleId: '',
-        });
-        mainChartVolumeSeries.priceScale().applyOptions({
-            scaleMargins: {
-                top: 0.8,
-                bottom: 0,
-            },
-        });
-        mainChartCandleSeries.priceScale().applyOptions({
-            scaleMargins: {
-                top: 0.1,
-                bottom: 0.2,
-            },
-        });
+        mainChartCandleSeries = mainChart.addCandlestickSeries({ upColor: '#089981', downColor: '#ef5350', borderVisible: false, wickUpColor: '#089981', wickDownColor: '#ef5350', });
+        mainChartVolumeSeries = mainChart.addHistogramSeries({ priceFormat: { type: 'volume', }, priceScaleId: '', });
+        mainChartVolumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0, }, });
+        mainChartCandleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.2, }, });
         mainChart.subscribeCrosshairMove(crosshairMoveEvent);
     }
     function crosshairMoveEvent(param: MouseEventParams) {
@@ -97,19 +65,14 @@
         latestCrosshairPositionTime = bar.time 
 
     }
-//    function loadNewChart(v: Instance): void{
     function chartRightClick(event: MouseEvent){// {{menuStyle.top}; left: {menuStyle.left
         event.preventDefault();
-        //if (get(chartQuery) !== null){
-            const rightClick: RightClickInstance = {
-                x: event.clientX + 10,
-                y: event.clientY + 10,
-                datetime: latestCrosshairPositionTime,
-                //...get(chartQuery),
-                ...chartQuery
-            }
-            rightClickInstance.set(rightClick)
-        //}
+        const dt = new Date(1000*latestCrosshairPositionTime);
+        const datePart = dt.toLocaleDateString('en-CA'); // 'en-CA' gives you the yyyy-mm-dd format
+        const timePart = dt.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const formattedDate = `${datePart} ${timePart}`;
+        const ins: Instance = { ...get(chartQuery), datetime: formattedDate, }
+        queryInstanceRightClick(event,ins,"chart")
     }
 
     onMount(() => {
@@ -182,7 +145,7 @@
 
     });
 </script>
-<div id="chart_container" tabindex="0"></div>
+<div autofocus id="chart_container" tabindex="0"></div>
 <style>
     #chart_container {
       width: 85%;
