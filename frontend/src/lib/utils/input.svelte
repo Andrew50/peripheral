@@ -41,12 +41,13 @@
         //init the query with passsed info
         inputQuery.update((v:InputQuery)=>{
             v.requiredKeys = requiredKeys
-            v.instance = {
+        /*    v.instance = {
                 ticker:"",
                 datetime:"",
                 timeframe:"",
                 ...instance
-            },
+            },*/
+            v.instance = instance //instance must be set up to have required fields as blank
             v.status = "initializing"
             return v
         })
