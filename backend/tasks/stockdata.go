@@ -110,9 +110,11 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			if dataConsolidationType == "d" {
 				estimatedStartTime = maxDate.AddDate(0, 0, -(numBarsRemaining * baseAggregateMultiplier * multiplier))
 			} else if dataConsolidationType == "m" {
+				estimatedStartTime = maxDate.Add(time.Duration(-numBarsRemaining*baseAggregateMultiplier*multiplier) * time.Minute)
 				// estimatedStartTime = maxDate.AddDate(0, 0, 0, -(numBarsRemaining * baseAggregateMultiplier * multiplier), 0, 0, 0)
 			} else if dataConsolidationType == "s" {
 				// ESTIMATE THE start date
+				estimatedStartTime = maxDate.Add(time.Duration(-numBarsRemaining*baseAggregateMultiplier*multiplier) * time.Second)
 			} else {
 				return nil, fmt.Errorf("34kgf Invalid dataConsolidationType {%v}", dataConsolidationType)
 			}
@@ -167,8 +169,10 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 				return barDataList, nil
 			}
 		}
+		// if we have undershot with the current row of information in security db
+
 	}
-	return nil, fmt.Errorf("c34lg: Did not return bar data for securityid {%s}, timeframe {%s}, datetime {%s}, direction {%s}, numBars {%s}, extendedHours {%s}",
+	return nil, fmt.Errorf("c34lg: Did not return bar data for securityid {%v}, timeframe {%v}, datetime {%v}, direction {%v}, numBars {%v}, extendedHours {%v}",
 		args.SecurityId, args.Timeframe, args.Datetime, args.Direction, args.NumBars, args.ExtendedHours)
 }
 

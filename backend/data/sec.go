@@ -62,6 +62,7 @@ func initTickerDatabase(conn *Conn) error {
 	nextSecurityId := 1
 	prevActiveSecurities := 0 //used to catch polygon supposed mass delisting
 	for currentDate := startDate; currentDate.Before(time.Now()); currentDate = currentDate.AddDate(0, 0, 1) {
+		fmt.Println(currentDate)
 		currentDateString := currentDate.Format("2006-01-02")
 		polygonActiveSecurities := AllTickers(conn.Polygon, currentDateString)
 		supposedDelistings := prevActiveSecurities - len(polygonActiveSecurities)
