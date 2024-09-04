@@ -1,7 +1,9 @@
 package data
 
 import (
+	"fmt"
 	"log"
+	"time"
 )
 
 //"fmt"
@@ -13,14 +15,26 @@ import (
 func ManualTest() {
 	conn, close := InitConn(false)
 	defer close()
-	/*iter := GetAggsData(conn.Polygon, "META", 1, "day", MillisFromDatetimeString("2024-01-01"),
-		MillisFromDatetimeString("2024-08-30"), 20)
+	iter, err := GetAggsData(conn.Polygon, "META", 1, "second", MillisFromDatetimeString("2023-01-01"),
+		MillisFromDatetimeString("2024-08-30"), 5000, "asc")
+	if err != nil {
+		fmt.Errorf("error")
+	}
+	start := time.Now()
+	c := 0
 	for iter.Next() {
 		fmt.Println(time.Time(iter.Item().Timestamp).Format(time.DateTime))
-	}*/
+		c++
+		if c == 2000 {
+			break
+		}
+	}
+	elapsed := time.Since(start)
+	fmt.Printf("Runtime %s\n", elapsed)
+	fmt.Errorf("Done %s", "done")
 	//ticker := GetTickerDetails(conn.Polygon, "IFN.WD", "2003-09-23")
 	//fmt.Printf("Ticker suffix: {%s}\n", ticker.TickerSuffix)
-	err := initTickerDatabase(conn)
+	err = initTickerDatabase(conn)
 
 	if err != nil {
 		log.Fatal(err)
