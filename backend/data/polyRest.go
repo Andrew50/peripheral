@@ -197,7 +197,9 @@ func GetAggsData(client *polygon.Client, ticker string, barLength int, timeframe
 		To:         toMillis,
 	}.WithOrder(models.Order(resultsOrder)).WithLimit(limit)
 	iter := client.ListAggs(context.Background(), params)
-
+    if iter == nil{
+        return nil, fmt.Errorf("empty return")
+    }
 	return iter, nil
 
 }

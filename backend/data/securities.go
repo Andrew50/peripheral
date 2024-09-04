@@ -16,6 +16,7 @@ type ActiveSecurity struct {
 	cik                  string
 	figi                 string
 	tickerActivationDate time.Time
+    falseDelist bool
 }
 type god struct {
 	ticker string
@@ -54,23 +55,25 @@ func containsLowercase(s string) bool {
 	}
 	return false
 }
+
 func initTickerDatabase(conn *Conn) error {
 	startDate := time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
 	//startDate := time.Date(2024, 8, 20, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
 	//currentDate := startDate
 	activeSecuritiesRecord := make(map[string]ActiveSecurity) // indexed by ticker
 	nextSecurityId := 1
-	prevActiveSecurities := 0 //used to catch polygon supposed mass delisting
+	//prevActiveSecurities := 0 //used to catch polygon supposed mass delisting
 	for currentDate := startDate; currentDate.Before(time.Now()); currentDate = currentDate.AddDate(0, 0, 1) {
 		fmt.Println(currentDate)
 		currentDateString := currentDate.Format("2006-01-02")
+        currentDateMillis := MillisFromDatetimeString(currentDateString)
 		polygonActiveSecurities := AllTickers(conn.Polygon, currentDateString)
-		supposedDelistings := prevActiveSecurities - len(polygonActiveSecurities)
+		/*supposedDelistings := prevActiveSecurities - len(polygonActiveSecurities)
 		if supposedDelistings > 50 { // check if polygon data is bad for that day (tons of tickers not active / missing)
 			fmt.Printf("skipped %d delistings on %s\n", supposedDelistings, currentDateString)
 			continue
 		}
-		prevActiveSecurities = len(polygonActiveSecurities)
+		prevActiveSecurities = len(polygonActiveSecurities)*/
 		polygonActiveTickers := make(map[string]interface{}) //doesnt actually store a value besides the key so just use empty interface
 		listings := 0
 		delistings := 0
@@ -113,13 +116,13 @@ func initTickerDatabase(conn *Conn) error {
 					activeSecuritiesRecord[polySec.Ticker] = prevTickerRecord
 					tickerChanges++
 				} else { //listing
-
 					activeSecuritiesRecord[polySec.Ticker] = ActiveSecurity{
 						securityId:           nextSecurityId,
 						ticker:               polySec.Ticker,
 						cik:                  polySec.CIK,
 						figi:                 polySec.CompositeFIGI,
 						tickerActivationDate: currentDate,
+                        falseDelist: false,
 					}
 					nextSecurityId++
 					listings++
@@ -133,25 +136,36 @@ func initTickerDatabase(conn *Conn) error {
 						//fmt.Printf("figi change error: %v", err)
 					}
 					sec.figi = polySec.CompositeFIGI
+                    sec.falseDelist = false
 					sec.tickerActivationDate = currentDate
 					activeSecuritiesRecord[polySec.Ticker] = sec
 					figiChanges++
 				}
-			}
+			} else if (sec.falseDelist){
+                sec.falseDelist = true
+                activeSecuritiesRecord[polySec.Ticker] = sec
+            }
 		}
 		for ticker, security := range activeSecuritiesRecord {
-			if _, exists := polygonActiveTickers[ticker]; !exists { //delisted becuase already handled ticker chantges as best as possibel
-				delete(activeSecuritiesRecord, ticker)
-				err := writeSecurity(conn, &security, &currentDate)
-				if err != nil {
-					//return err
-				}
-				//          fmt.Printf("delisted: %s\n", security.ticker)
-				delistings++
-			}
+            if !security.falseDelist{
+                if _, exists := polygonActiveTickers[ticker]; !exists { //delisted becuase already handled ticker chantges as best as possibel
+                    _, err := GetAggsData(conn.Polygon,ticker,1,"1d",currentDateMillis,currentDateMillis,100,"asc")
+                    if err != nil{
+                        delete(activeSecuritiesRecord, ticker)
+                        err = writeSecurity(conn, &security, &currentDate)
+                        if err != nil {
+                            //return err
+                        }
+                        //          fmt.Printf("delisted: %s\n", security.ticker)
+                        delistings++
+                    }else{
+                        security.falseDelist = true
+                        activeSecuritiesRecord[ticker] = security
+                    }
+                }
+            }
 		}
 		//fmt.Printf("%d active securities, %d listings, %d delistings, %d ticker changes, %d figi changes, %d missed, on %s ------------------------ \n", len(activeSecuritiesRecord), listings, delistings, tickerChanges, figiChanges, missed, currentDateString)
-
 	}
 	for _, security := range activeSecuritiesRecord {
 		writeSecurity(conn, &security, nil)
