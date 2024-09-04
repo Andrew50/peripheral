@@ -50,7 +50,16 @@
         mainChartVolumeSeries = mainChart.addHistogramSeries({ priceFormat: { type: 'volume', }, priceScaleId: '', });
         mainChartVolumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0, }, });
         mainChartCandleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.2, }, });
-        mainChart.subscribeCrosshairMove(crosshairMoveEvent);
+        mainChart.subscribeCrosshairMove(crosshairMoveEvent); 
+        mainChart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
+            if(logicalRange) {
+                console.log(logicalRange?.from, logicalRange?.to)
+                if(logicalRange.from < 10) {
+                    const barsToRequest = 50 - logicalRange.from; 
+                    privateRequest
+                }
+            }
+        })
     }
     function crosshairMoveEvent(param: MouseEventParams) {
         if (!param.point) {
@@ -83,7 +92,7 @@
             if (timeframe && timeframe.length < 1){
                 return
             }
-            privateRequest<barData[]>("getChartData", {securityId:v.securityId, timeframe:v.timeframe, datetime:v.datetime, direction:"backward", numbars:100, extendedhours:false})
+            privateRequest<barData[]>("getChartData", {securityId:v.securityId, timeframe:v.timeframe, datetime:v.datetime, direction:"backward", bars:100, extendedhours:false})
             .then((result: barData[]) => {
                 if (! (Array.isArray(result) && result.length > 0)){ return}
                 barDataList = result;
@@ -127,6 +136,7 @@
                 mainChartCandleSeries.setData(newCandleData)
                 mainChartVolumeSeries.setData(newVolumeData)
                 mainChart.timeScale().fitContent();
+                console.log("Done updating chart!")
             })
             .catch((error: string) => {
                 console.error("Error fetching chart data:", error);
