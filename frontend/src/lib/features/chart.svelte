@@ -2,7 +2,7 @@
 <script lang="ts" context="module">
     import { createChart, ColorType} from 'lightweight-charts';
     import {privateRequest} from '$lib/api/backend';
-    import type {Instance} from '$lib/api/backend'
+    import type {Instance} from '$lib/core/types'
     import { queryInstanceInput } from '$lib/utils/input.svelte'
     import { queryInstanceRightClick } from '$lib/utils/rightClick.svelte'
     import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, MouseEventParams, UTCTimestamp} from 'lightweight-charts';

@@ -57,14 +57,14 @@ func containsLowercase(s string) bool {
 }
 
 func initTickerDatabase(conn *Conn) error {
-	startDate := time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
-	//startDate := time.Date(2024, 8, 20, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
+	//startDate := time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
+	startDate := time.Date(2016, 5, 16, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
 	//currentDate := startDate
 	activeSecuritiesRecord := make(map[string]ActiveSecurity) // indexed by ticker
 	nextSecurityId := 1
 	//prevActiveSecurities := 0 //used to catch polygon supposed mass delisting
 	for currentDate := startDate; currentDate.Before(time.Now()); currentDate = currentDate.AddDate(0, 0, 1) {
-		fmt.Println(currentDate)
+		//fmt.Println(currentDate)
 		currentDateString := currentDate.Format("2006-01-02")
         currentDateMillis := MillisFromDatetimeString(currentDateString)
 		polygonActiveSecurities := AllTickers(conn.Polygon, currentDateString)
@@ -159,6 +159,7 @@ func initTickerDatabase(conn *Conn) error {
                         //          fmt.Printf("delisted: %s\n", security.ticker)
                         delistings++
                     }else{
+                        fmt.Printf("skipped delist on %s %s",ticker,currentDateString)
                         security.falseDelist = true
                         activeSecuritiesRecord[ticker] = security
                     }
