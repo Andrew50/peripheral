@@ -11,7 +11,7 @@ import (
 )
 
 type GetChartDataArgs struct {
-	SecurityId    string `json:"security"`
+	SecurityId    int    `json:"securityId"`
 	Timeframe     string `json:"timeframe"`
 	Datetime      string `json:"datetime"`  // If this datetime is just a date, it needs to grab the end of the day as opposed to the beginning of the day
 	Direction     string `json:"direction"` // to ensure that we get the data from that date
@@ -35,11 +35,11 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("0sjh getChartData invalid args: %v", err)
 	}
-	multiplier, timespan, dataConsolidationType, baseAggregateMultiplier, err := getTimeframe(args.Timeframe)
+	multiplier, timespan, _, _, err := getTimeframe(args.Timeframe)
 	if err != nil {
 		return nil, fmt.Errorf("getChartData invalid timeframe: %v", err)
 	}
-
+	fmt.Printf("Passed Datetime: {%s}, Passed bars :{%v}", args.Datetime, args.Bars)
 	var query string
 	var polyResultOrder string
 	var minDate time.Time
@@ -49,7 +49,8 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if args.Datetime == "" {
 		query = `SELECT ticker, minDate, maxDate 
                  FROM securities 
-                 WHERE securityid = $1 
+                 WHERE securityid = $1 AND 
+				 $2 = $2
 				 ORDER BY minDate DESC`
 		polyResultOrder = "desc"
 	} else if args.Direction == "backward" {
@@ -75,7 +76,8 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	} else {
 		return nil, fmt.Errorf("9d83j: Incorrect direction passed")
 	}
-	rows, err := conn.DB.Query(context.Background(), query, args.SecurityId)
+	fmt.Println(query)
+	rows, err := conn.DB.Query(context.Background(), query, args.SecurityId, args.Datetime)
 	if err != nil {
 		return nil, fmt.Errorf("2fg0 %w", err)
 	}
@@ -97,6 +99,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			now := time.Now()
 			maxDateFromSQL = &now
 		}
+		fmt.Println(minDateFromSQL, maxDateFromSQL, maxDate)
 		// Estimate the start date to be sent to polygon. This should ideally overestimate the amount of data
 		// Needed to fulfill the number of requested bars
 		var queryStartTime time.Time // Used solely as the start date for polygon query
@@ -151,6 +154,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		// SIDE NOTE: We need to figure out how often GetAggs is updated
 		// within polygon to see what endpoint we need to call
 		// for live intraday data.
+		fmt.Printf("Query Start Date: %s, Query End Date: %s \n", queryStartTime, queryEndTime)
 		iter, err := data.GetAggsData(conn.Polygon, ticker, multiplier, timespan,
 			data.MillisFromDatetimeString(queryStartTime.Format(time.DateTime)), data.MillisFromDatetimeString(queryEndTime.Format(time.DateTime)),
 			5000, polyResultOrder)
@@ -158,6 +162,19 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			return nil, fmt.Errorf("rfk3f, %v", err)
 		}
 		for iter.Next() {
+			if numBarsRemaining <= 0 {
+				if args.Direction == "forward" {
+					return barDataList, nil
+				} else {
+					left, right := 0, len(barDataList)-1
+					for left < right {
+						barDataList[left], barDataList[right] = barDataList[right], barDataList[left]
+						left++
+						right--
+					}
+					return barDataList, nil
+				}
+			}
 			var barData GetChartDataResults
 			barData.Datetime = float64(time.Time(iter.Item().Timestamp).Unix())
 			barData.Open = iter.Item().Open
@@ -167,13 +184,14 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			barData.Volume = iter.Item().Volume
 			barDataList = append(barDataList, barData)
 			numBarsRemaining--
-			if numBarsRemaining <= 0 {
-				return barDataList, nil
-			}
 		}
 		// if we have undershot with the current row of information in security db
 
 	}
+	if len(barDataList) != 0 {
+		return barDataList, nil
+	}
+
 	return nil, fmt.Errorf("c34lg: Did not return bar data for securityid {%v}, timeframe {%v}, datetime {%v}, direction {%v}, Bars {%v}, extendedHours {%v}",
 		args.SecurityId, args.Timeframe, args.Datetime, args.Direction, args.Bars, args.ExtendedHours)
 }
