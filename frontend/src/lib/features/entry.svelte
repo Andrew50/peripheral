@@ -2,7 +2,16 @@
     import type {Instance} from '$lib/api/backend' 
     import {queryInstanceInput } from '$lib/utils/input.svelte'
     import {queryInstanceRightClick} from '$lib/utils/rightClick.svelte'
-    import {chartQuery} from './chart.svelte'
+    import {chartQuery} from '$lib/features/chart.svelte'
+    import type {RightClickResult} from '$lib/utils/rightClick.svelte'
+    import {writable} from 'svelte/store'
+    import type {Writable} from 'svelte/store'
+    let externalEmbed: Writable<Instance> = writable({})
+    export function embedInstance(instance:Instance):void{
+        if (instance.ticker && instance.datetime && instance.securityId && instance.timeframe){
+            externalEmbed.set(instance)
+        }
+    }
 </script>
 <script lang="ts">
     import { onMount } from 'svelte';
@@ -32,26 +41,33 @@
         privateRequest<void>(`complete${func}`,{id:id,completed:completed})
     }
 
-    function insertInstance(): void {
-        queryInstanceInput(["ticker","timeframe","datetime"])
+    externalEmbed.subscribe((v:Instance)=>{
+        if (Object.keys(v).length > 0){
+            insertEmbeddedInstance(v)
+        }
+    })
+    function insertEmbeddedInstance(instance:Instance):void{
+        const range = editor.getSelection()
+        let insertIndex;
+        if (range === null){
+            insertIndex = editor.getLength()
+        }else{
+            insertIndex = range.index
+        }
+        editor.insertEmbed(insertIndex, 'embeddedInstance',instance);
+    }
+
+    function inputAndEmbedInstance(): void {
+        const blankInstance: Instance = {ticker:"",datetime:"",timeframe:""}
+        queryInstanceInput(["ticker","timeframe","datetime"],blankInstance)
         .then((instance: Instance) => {
-            const range = editor.getSelection()
-            let insertIndex;
-            if (range === null){
-                insertIndex = editor.getLength()
-            }else{
-                insertIndex = range.index
-            }
-            editor.insertEmbed(insertIndex, 'embeddedInstance',instance);
+            insertEmbeddedInstance(instance)
         })
     }
 
     function embeddedInstanceLeftClick(instance: Instance): void {
-
-        console.log(instance)
         instance.securityId = parseInt(instance.securityId)
         chartQuery.set(instance)
-        console.log(instance.ticker, instance.datetime)
     }
 
     function embeddedInstanceRightClick(instance: Instance, event:MouseEvent): void {
@@ -59,8 +75,7 @@
         instance.securityId = parseInt(instance.securityId)
         queryInstanceRightClick(event,instance,"embedded")
         .then((res:RightClickResult)=>{
-            console.log(res)
-            if (res.result == "edit"){
+            if (res === "edit"){
                 editEmbeddedInstance(instance)
             }
 
@@ -68,20 +83,31 @@
 
     }
     function editEmbeddedInstance(instance:Instance): void{
-        queryInstanceInput(["ticker", "timeframe", "datetime"],instance)
+        const ins = {...instance} //make a copy
+        queryInstanceInput(["ticker", "timeframe", "datetime"],ins)
         .then((updatedInstance: Instance) => {
             // Find the embedded instance in the editor content
             const delta = editor?.getContents();
+            completed = false;
             delta?.ops?.forEach(op => {
+                console.log(op)
                 if (op.insert && op.insert.embeddedInstance) {
                     const embedded = op.insert.embeddedInstance;
+                    console.log(embedded)
+                    console.log(instance)
                     if (embedded.ticker === instance.ticker && embedded.datetime === instance.datetime) {
                         embedded.ticker = updatedInstance.ticker;
                         embedded.timeframe = updatedInstance.timeframe;
                         embedded.datetime = updatedInstance.datetime;
+                        embedded.securityId = updatedInstance.securityId;
+                        completed = true;
+                        
                     }
                 }
             });
+            if (!completed){
+                console.error("failed edit")
+            }
             editor?.setContents(delta);
         });
     }
@@ -136,31 +162,58 @@
     });
 </script>
 <div bind:this={editorContainer}></div>
-<div>
-    <button on:click={insertInstance}> Insert </button>
-    <button on:click={complete}> {completed ? "Complete" : "Uncomplete"} </button>
-    <button on:click={save}> Save </button>
-    <button on:click={del}> Delete </button>
+<div class="button-container">
+    <button on:click={inputAndEmbedInstance} class="action-btn"> Insert </button>
+    <button on:click={complete} class="action-btn"> {completed ? "Complete" : "Uncomplete"} </button>
+    <button on:click={save} class="action-btn"> Save </button>
+    <button on:click={del} class="action-btn"> Delete </button>
 </div>
 <style>
-  .ql-container {
-    /*height: 200px;*/
-    max-height: 75%;
-    width: 100%;
-    height: auto;
-    overflow-y: auto;
-    border: none;
-  }
-  :global(.btn) {
-    background-color: #f1f1f1;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    color: #333;
-    cursor: pointer;
-    display: inline-block;
-    font-size: 14px;
-    margin: 5px;
-    padding: 5px 10px;
-    text-align: center;
-  }
+    @import "$lib/core/colors.css";
+
+    /* Quill container styling */
+    .ql-container {
+        max-height: 75%;
+        width: 100%;
+        overflow-y: auto;
+        border: none;
+    }
+
+    /* Global styling for embedded buttons */
+    :global(.btn) {
+        background-color: var(--c1);
+        border: 1px solid var(--c4);
+        border-radius: 4px;
+        color: var(--f1);
+        cursor: pointer;
+        display: inline-block;
+        font-size: 14px;
+        margin: 5px;
+        padding: 5px 10px;
+        text-align: center;
+    }
+
+    :global(.btn:hover) {
+        background-color: var(--c3-hover);
+    }
+
+    /* Button styling for action buttons */
+    .button-container {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 10px;
+    }
+
+    .action-btn {
+        background-color: var(--c3);
+        color: var(--f1);
+        border: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .action-btn:hover {
+        background-color: var(--c3-hover);
+    }
 </style>
