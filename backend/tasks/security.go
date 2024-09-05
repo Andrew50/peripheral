@@ -9,6 +9,16 @@ import (
 
 )
 
+/*type ValidateDatetimeArgs struct {
+    Securityid
+
+func ValidateDatetime(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+    var args ValidateDatetimeArgs
+    if err := json.Unmarshal(rawArgs, &args); err != nil {
+        return nil, fmt.Errorf("getAnnotations invalid args: %v", err)
+    }*/
+
+
 type GetSecurityFromTickerArgs struct {
     Ticker string `json:"ticker"`
 }
