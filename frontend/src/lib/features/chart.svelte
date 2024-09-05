@@ -2,7 +2,7 @@
 <script lang="ts" context="module">
     import { createChart, ColorType} from 'lightweight-charts';
     import {privateRequest} from '$lib/api/backend';
-    import type {Instance} from '$lib/core/types'
+    import type {Instance, chartRequest} from '$lib/core/types'
     import { queryInstanceInput } from '$lib/utils/input.svelte'
     import { queryInstanceRightClick } from '$lib/utils/rightClick.svelte'
     import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, MouseEventParams, UTCTimestamp} from 'lightweight-charts';
@@ -19,15 +19,10 @@
         close: number;
         volume: number;
     }
-    interface chartRequest extends Instance{
-        bars: number;
-        direction: string;
-        extendedhours: boolean;
-    }
-    export let chartQuery: Writable<Instance> = writable({datetime:"", extendedHours:false, timeframe:"1d",ticker:""})
-    export function changeChart(newInstance: Instance):void{
-        chartQuery.update((oldInstance:Instance)=>{
-            return { ...oldInstance, ...newInstance }
+    export let chartQuery: Writable<chartRequest> = writable({datetime:"", extendedHours:false, timeframe:"1d",ticker:"", direction:"",bars:100, requestType:""})
+    export function changeChart(newChartRequest : chartRequest):void{
+        chartQuery.update((oldChartRequest:chartRequest)=>{
+            return { ...oldChartRequest, ...newChartRequest}
         })
     }
 
@@ -45,7 +40,7 @@
         chartContainer.addEventListener('keydown', event => {
             if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
                 queryInstanceInput("any",get(chartQuery))
-                .then((v:Instance)=>{
+                .then((v:chartRequest)=>{
                     changeChart(v)
                 })
             }
@@ -61,7 +56,17 @@
                 console.log(logicalRange?.from, logicalRange?.to)
                 if(logicalRange.from < 10) {
                     const barsToRequest = 50 - logicalRange.from; 
-                    privateRequest
+                    const req : chartRequest = {
+                        ticker: get(chartQuery).ticker, 
+                        datetime: mainChartCandleSeries.data()[0].time.toString(),
+                        securityId: get(chartQuery).securityId, 
+                        timeframe: get(chartQuery).timeframe, 
+                        extendedHours: get(chartQuery).extendedHours, 
+                        bars: barsToRequest, 
+                        direction: "backward",
+                        requestType: "loadAdditionalData"
+                    }
+                    changeChart(req)
                 }
             }
         })
@@ -88,14 +93,14 @@
         const ins: Instance = { ...get(chartQuery), datetime: formattedDate, }
         queryInstanceRightClick(event,ins,"chart")
     }
-    function backendGetChartData(inst:chartRequest) {
+    function backendLoadChartData(inst:chartRequest) {
         if (!inst.ticker || !inst.timeframe || !inst.securityId) {return}
         const timeframe = inst.timeframe 
         if (timeframe && timeframe.length < 1) {
             return
         }
         let barDataList: barData[] = []
-        privateRequest<barData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, datetime:inst.datetime, direction:"backward", bars:100, extendedhours:false})
+        privateRequest<barData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, datetime:inst.datetime, direction:inst.direction, bars:inst.bars, extendedhours:inst.extendedHours})
             .then((result: barData[]) => {
                 if (! (Array.isArray(result) && result.length > 0)){ return}
                 barDataList = result;
@@ -117,68 +122,32 @@
                         color: candleColor ? '#089981' : '#ef5350',
                     })
                 }
-            })
+                if (inst.requestType == 'loadAdditionalData') {
+                    if(inst.direction == 'backward') {
+                        newCandleData = [...newCandleData, ...mainChartCandleSeries.data()]
+                        newVolumeData = [...newVolumeData, ...mainChartVolumeSeries.data()]
+                    } else{
+                        newCandleData = [...mainChartCandleSeries.data(), ...newCandleData]
+                        newVolumeData = [...mainChartVolumeSeries.data(), ...newVolumeData]
+                    }
+                }
+                mainChartCandleSeries.setData(newCandleData)
+                mainChartVolumeSeries.setData(newVolumeData)
+                if (inst.requestType == 'loadNewTicker') {
+                    mainChart.timeScale().fitContent();
+                }
+                console.log("Done updating chart!")
+            }).catch((error: string) => {
+                console.error("Error fetching chart data:", error);
+            });
+        
         
     }
 
     onMount(() => {
-        chartQuery.subscribe((v:Instance)=>{
-            let barDataList: barData[] = []
-            if (!v.ticker || !v.timeframe || !v.securityId){return}
-            const timeframe = v.timeframe
-            if (timeframe && timeframe.length < 1){
-                return
-            }
-            privateRequest<barData[]>("getChartData", {securityId:v.securityId, timeframe:v.timeframe, datetime:v.datetime, direction:"backward", bars:100, extendedhours:false})
-            .then((result: barData[]) => {
-                if (! (Array.isArray(result) && result.length > 0)){ return}
-                barDataList = result;
-
-                let newCandleData = [];
-                let newVolumeData = [];
-                for (let i =0; i < barDataList.length; i++) {
-                    newCandleData.push({
-                        time: barDataList[i].time as UTCTimestamp, 
-                        open: barDataList[i].open, 
-                        high: barDataList[i].high, 
-                        low: barDataList[i].low,
-                        close: barDataList[i].close, 
-                    });
-                    const candleColor = barDataList[i].close > barDataList[i].open 
-                    newVolumeData.push({
-                        time: barDataList[i].time, 
-                        value: barDataList[i].volume, 
-                        color: candleColor ? '#089981' : '#ef5350',
-                    })
-                }
-               
-                mainChart.removeSeries(mainChartCandleSeries)
-                mainChart.removeSeries(mainChartVolumeSeries)
-                mainChartCandleSeries = mainChart.addCandlestickSeries({
-                        upColor: '#089981', downColor: '#ef5350', borderVisible: false,
-                        wickUpColor: '#089981', wickDownColor: '#ef5350',
-                    })
-                mainChartVolumeSeries = mainChart.addHistogramSeries({
-                    priceFormat: {
-                        type: 'volume',
-                    },
-                    priceScaleId: '',
-                });
-                mainChartVolumeSeries.priceScale().applyOptions({
-                    scaleMargins: {
-                        top: 0.8,
-                        bottom: 0,
-                    },
-                });
-                mainChartCandleSeries.setData(newCandleData)
-                mainChartVolumeSeries.setData(newVolumeData)
-                mainChart.timeScale().fitContent();
-                console.log("Done updating chart!")
-            })
-            .catch((error: string) => {
-                console.error("Error fetching chart data:", error);
-            });
-        })
+       chartQuery.subscribe((v:chartRequest)=>{
+            backendLoadChartData(v)
+        }) 
         initializeChart(); 
         const chartContainer = document.getElementById('chart_container');
         if (chartContainer) {

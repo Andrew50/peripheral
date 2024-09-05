@@ -5,3 +5,8 @@ export interface Instance {
     timeframe?: string
     extendedHours?: boolean
 }
+export interface chartRequest extends Instance{
+    bars: number;
+    direction: string;
+    requestType: string;
+}
