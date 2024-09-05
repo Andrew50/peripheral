@@ -6,7 +6,7 @@ CREATE TABLE users (
 CREATE INDEX idxUsers ON users (username, password);
 DROP TABLE IF EXISTS securities;
 CREATE TABLE securities (
-    securityid INT,
+    securityid SERIAL,
     ticker varchar(10) not null,
     figi varchar(12) not null,
     minDate timestamp,

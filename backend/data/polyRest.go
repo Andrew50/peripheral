@@ -182,6 +182,7 @@ func GetPolygonRelatedTickers(client *polygon.Client, ticker string) ([]string, 
 // 	return tickers, err
 // }
 
+
 // QA STATUS: NEEDS TESTING
 func GetAggsData(client *polygon.Client, ticker string, barLength int, timeframe string,
 	fromMillis models.Millis, toMillis models.Millis, limit int, resultsOrder string) (*iter.Iter[models.Agg], error) {
@@ -197,9 +198,6 @@ func GetAggsData(client *polygon.Client, ticker string, barLength int, timeframe
 		To:         toMillis,
 	}.WithOrder(models.Order(resultsOrder)).WithLimit(limit)
 	iter := client.ListAggs(context.Background(), params)
-    if iter == nil{
-        return nil, fmt.Errorf("empty return")
-    }
 	return iter, nil
 
 }
