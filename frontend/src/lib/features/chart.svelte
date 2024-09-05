@@ -19,10 +19,10 @@
         close: number;
         volume: number;
     }
-    export let chartQuery: Writable<chartRequest> = writable({datetime:"", extendedHours:false, timeframe:"1d",ticker:"", direction:"",bars:100, requestType:""})
-    export function changeChart(newChartRequest : chartRequest):void{
-        chartQuery.update((oldChartRequest:chartRequest)=>{
-            return { ...oldChartRequest, ...newChartRequest}
+    export let chartQuery: Writable<Instance> = writable({datetime:"", extendedHours:false, timeframe:"1d",ticker:""})
+    export function changeChart(newInstance : Instance):void{
+        chartQuery.update((oldInstance:Instance)=>{
+            return { ...oldInstance, ...newInstance}
         })
     }
 
@@ -40,7 +40,7 @@
         chartContainer.addEventListener('keydown', event => {
             if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
                 queryInstanceInput("any",get(chartQuery))
-                .then((v:chartRequest)=>{
+                .then((v:Instance)=>{
                     changeChart(v)
                 })
             }
@@ -55,7 +55,7 @@
             if(logicalRange) {
                 console.log(logicalRange?.from, logicalRange?.to)
                 if(logicalRange.from < 10) {
-                    const barsToRequest = 50 - logicalRange.from; 
+                    const barsToRequest = 50 - Math.floor(logicalRange.from); 
                     const req : chartRequest = {
                         ticker: get(chartQuery).ticker, 
                         datetime: mainChartCandleSeries.data()[0].time.toString(),
@@ -66,7 +66,8 @@
                         direction: "backward",
                         requestType: "loadAdditionalData"
                     }
-                    changeChart(req)
+                    backendLoadChartData(req)
+                    
                 }
             }
         })
@@ -145,8 +146,19 @@
     }
 
     onMount(() => {
-       chartQuery.subscribe((v:chartRequest)=>{
-            backendLoadChartData(v)
+       chartQuery.subscribe((v:Instance)=>{
+            const req : chartRequest = {
+                ticker: v.ticker,
+                datetime: v.datetime,
+                securityId: v.securityId,
+                timeframe: v.timeframe,
+                extendedHours: v.extendedHours,
+                bars: 100,
+                direction: "backward",
+                requestType: "loadNewTicker"
+
+            }
+            backendLoadChartData(req)
         }) 
         initializeChart(); 
         const chartContainer = document.getElementById('chart_container');

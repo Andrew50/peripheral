@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 	"unicode"
 )
@@ -39,6 +40,14 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if err != nil {
 		return nil, fmt.Errorf("getChartData invalid timeframe: %v", err)
 	}
+	if !strings.Contains(args.Datetime, "-") && args.Datetime != "" {
+		seconds, err := strconv.ParseInt(args.Datetime, 10, 64)
+		if err != nil {
+			fmt.Println("3k5lv: Error converting string to int:", err)
+		}
+		t := time.Unix(seconds, 0)
+		args.Datetime = t.Format(time.DateTime)
+	}
 	fmt.Printf("Passed Datetime: {%s}, Passed bars :{%v}", args.Datetime, args.Bars)
 	var query string
 	var polyResultOrder string
@@ -50,7 +59,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		query = `SELECT ticker, minDate, maxDate 
                  FROM securities 
                  WHERE securityid = $1 AND 
-				 $2 = $2
+				 ticker != $2
 				 ORDER BY minDate DESC`
 		polyResultOrder = "desc"
 	} else if args.Direction == "backward" {
@@ -76,7 +85,6 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	} else {
 		return nil, fmt.Errorf("9d83j: Incorrect direction passed")
 	}
-	fmt.Println(query)
 	rows, err := conn.DB.Query(context.Background(), query, args.SecurityId, args.Datetime)
 	if err != nil {
 		return nil, fmt.Errorf("2fg0 %w", err)
@@ -95,6 +103,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		if err != nil {
 			return nil, fmt.Errorf("3tyl %w", err)
 		}
+		fmt.Printf("Ticker {%s}", ticker)
 		if maxDateFromSQL == nil {
 			now := time.Now()
 			maxDateFromSQL = &now
@@ -105,7 +114,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		var queryStartTime time.Time // Used solely as the start date for polygon query
 		var queryEndTime time.Time   // Used solely as the end date for polygon query
 		if args.Direction == "backward" {
-			if maxDate.Compare(*maxDateFromSQL) == 1 { // if maxdate from the securities is before the current max date
+			if maxDate.Compare(*maxDateFromSQL) == 1 || maxDate.IsZero() { // if maxdate from the securities is before the current max date
 				maxDate = *maxDateFromSQL
 			}
 
