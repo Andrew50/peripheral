@@ -89,7 +89,7 @@ func toFilteredMap(tickers []models.Ticker) map[string]models.Ticker {
 }
 
 func initTickerDatabase(conn *Conn) error {
-    test := true
+    test := false
     if test{
         query := fmt.Sprintf("TRUNCATE TABLE securities RESTART IDENTITY CASCADE")
         _, err := conn.DB.Exec(context.Background(), query)
@@ -104,7 +104,6 @@ func initTickerDatabase(conn *Conn) error {
         startDate = time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
     }
     activeYesterday := make(map[string]models.Ticker) //posibly change to get filtereMap (Alltickers) of startdate.SubDate(0,0,1)
-    arbLargeDate := time.Date(3000,12,31,0,0,0,0,time.UTC)
 	for currentDate := startDate; currentDate.Before(time.Now()); currentDate = currentDate.AddDate(0, 0, 1) {
 		currentDateString := currentDate.Format("2006-01-02")
         yesterdayDateString := currentDate.AddDate(0,0,-1).Format("2006-01-02")
@@ -128,28 +127,33 @@ func initTickerDatabase(conn *Conn) error {
             var maxDate time.Time
             tickerMatchFromFigiLookup := ""
             if sec.CompositeFIGI != ""{
-                err := conn.DB.QueryRow(context.Background(),"SELECT ticker FROM securities where figi = $1 order by COALESCE(maxDate, '3001-01-01') DESC LIMIT 1",sec.CompositeFIGI).Scan(&tickerMatchFromFigiLookup)
+                err := conn.DB.QueryRow(context.Background(),"SELECT ticker FROM securities where figi = $1 order by COALESCE(maxDate, '2200-01-01') DESC LIMIT 1",sec.CompositeFIGI).Scan(&tickerMatchFromFigiLookup)
                 if err != nil && err != pgx.ErrNoRows {
                     fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString)
                     fmt.Printf("32gerf %v \n",err)
                     continue
                 }
             }
-            err := conn.DB.QueryRow(context.Background(),"SELECT COALESCE(maxDate, '2200-12-31'::timestamp) FROM securities where ticker = $1 order by COALESCE(maxDate, '2200-01-01') DESC LIMIT 1",sec.Ticker).Scan(&maxDate)
-            fmt.Print(maxDate.Compare(arbLargeDate))
+            err := conn.DB.QueryRow(context.Background(),"SELECT COALESCE(maxDate, '2200-12-31') FROM securities where ticker = $1 order by COALESCE(maxDate, '2200-01-01') DESC LIMIT 1",sec.Ticker).Scan(&maxDate)
+            var tickerInDb bool
+            if err == pgx.ErrNoRows {
+                tickerInDb = false
+            }else{
+                tickerInDb = true
+            }
+            maxDateString := maxDate.Format("2006-01-01")
 
             if err != nil && err != pgx.ErrNoRows {
                 fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString)
                 fmt.Printf("vm2d: %v\n",err)
             }
-            maxDateString := maxDate.Format("2008-01-01")
             if tickerMatchFromFigiLookup != ""{ //means there is a figi and it exists in db at some point
                 if tickerMatchFromFigiLookup == sec.Ticker{ //figi and ticker matches
                     diagnoses = "false delist"
                 }else{ //ticker is different but figi found means trackable ticker change
                     diagnoses = "ticker change"
                 }
-            }else if (maxDate.Compare(arbLargeDate) == -1 && dataExists(conn.Polygon,sec.Ticker,maxDateString,yesterdayDateString)){ //no figi but ticker exists and there is data since supposed delist
+            }else if (tickerInDb && dataExists(conn.Polygon,sec.Ticker,maxDateString,yesterdayDateString)){ //no figi but ticker exists and there is data since supposed delist
                 diagnoses = "false delist" 
             }else{
                 diagnoses = "listing"
@@ -182,7 +186,7 @@ func initTickerDatabase(conn *Conn) error {
             
         }
         for _,sec := range(removals){
-            _,err:= conn.DB.Exec(context.Background(),"UPDATE securities SET maxDate = $1 where ticker = $2 and maxDate = NULL",yesterdayDateString,sec.Ticker)
+            _,err:= conn.DB.Exec(context.Background(),"UPDATE securities SET maxDate = $1 where ticker = $2 and maxDate is NULL",yesterdayDateString,sec.Ticker)
             if err != nil {
                 fmt.Println("91md")
                 fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString)
