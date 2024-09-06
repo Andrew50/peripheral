@@ -164,8 +164,16 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		// within polygon to see what endpoint we need to call
 		// for live intraday data.
 		fmt.Printf("Query Start Date: %s, Query End Date: %s \n", queryStartTime, queryEndTime)
+        date1, err :=data.MillisFromDatetimeString(queryStartTime.Format(time.DateTime)) 
+        if err != nil {
+            return nil, fmt.Errorf("1n0f %v", err)
+        }
+        date2, err := data.MillisFromDatetimeString(queryEndTime.Format(time.DateTime))
+        if err != nil {
+            return nil, fmt.Errorf("n91ve2n0 %v",err)
+        }
 		iter, err := data.GetAggsData(conn.Polygon, ticker, multiplier, timespan,
-			data.MillisFromDatetimeString(queryStartTime.Format(time.DateTime)), data.MillisFromDatetimeString(queryEndTime.Format(time.DateTime)),
+			date1,date2 ,
 			5000, polyResultOrder)
 		if err != nil {
 			return nil, fmt.Errorf("rfk3f, %v", err)
