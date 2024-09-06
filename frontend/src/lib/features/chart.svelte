@@ -45,7 +45,6 @@
                 })
             }
          });
-        loadingChartData = false;
         mainChart = createChart(chartContainer, chartOptions);
         mainChartCandleSeries = mainChart.addCandlestickSeries({ upColor: '#089981', downColor: '#ef5350', borderVisible: false, wickUpColor: '#089981', wickDownColor: '#ef5350', });
         mainChartVolumeSeries = mainChart.addHistogramSeries({ priceFormat: { type: 'volume', }, priceScaleId: '', });
@@ -53,9 +52,9 @@
         mainChartCandleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.2, }, });
         mainChart.subscribeCrosshairMove(crosshairMoveEvent); 
         mainChart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
+            if (!loadingChartData){
             if(logicalRange) {
-                console.log(logicalRange.from)
-                if(logicalRange.from < 10 && loadingChartData == false) {
+                if(logicalRange.from < 10) {
                     loadingChartData = true
                     const barsToRequest = 50 - Math.floor(logicalRange.from); 
                     const req : chartRequest = {
@@ -71,6 +70,7 @@
                     backendLoadChartData(req)
                     
                 }
+            }
             }
         })
     }
@@ -102,7 +102,6 @@
         if (timeframe && timeframe.length < 1) {
             return
         }
-        loadingChartData = true
         let barDataList: barData[] = []
         privateRequest<barData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, datetime:inst.datetime, direction:inst.direction, bars:inst.bars, extendedhours:inst.extendedHours})
             .then((result: barData[]) => {
@@ -149,7 +148,7 @@
                 }
             })
             .finally(() => {
-                loadingChartData = false;  // Ensure this runs after data is loaded
+                loadingChartData = false; // Ensure this runs after data is loaded
             })
             .catch((error: string) => {
                 console.error("Error fetching chart data:", error);
