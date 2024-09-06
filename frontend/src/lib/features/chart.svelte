@@ -79,6 +79,19 @@
                     }
                     debouncedLoadChartData(req);
                     
+                } else if (logicalRange.to > mainChartCandleSeries.data().length-10) {
+                    const barsToRequest = 50 + Math.floor(logicalRange.to) - mainChartCandleSeries.data().length; 
+                    const req : chartRequest = {
+                        ticker: get(chartQuery).ticker, 
+                        datetime: mainChartCandleSeries.data()[0].time.toString(),
+                        securityId: get(chartQuery).securityId, 
+                        timeframe: get(chartQuery).timeframe, 
+                        extendedHours: get(chartQuery).extendedHours, 
+                        bars: barsToRequest, 
+                        direction: "forward",
+                        requestType: "loadAdditionalData"
+                    }
+                    debouncedLoadChartData(req);
                 }
             }
         })
