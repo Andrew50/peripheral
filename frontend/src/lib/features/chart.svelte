@@ -31,7 +31,19 @@
     let mainChart: IChartApi;
     let mainChartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let mainChartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
-    let loadingChartData: boolean = false
+    let isRequestPending = false; 
+    let maxDateReached = false;
+
+    function debounce<T extends (...args: any[]) => any>(func: T, delay: number): (...args: Parameters<T>) => void {
+        let timeoutId: number | undefined;
+        return function (...args: Parameters<T>) {
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+            timeoutId = setTimeout(() => func(...args), delay);
+        };
+    }
+    const debouncedLoadChartData = debounce(backendLoadChartData, 300);
 
     function initializeChart()  {
         const chartOptions = { layout: { textColor: 'black', background: { type: ColorType.Solid, color: 'white' } }, timeScale:  { timeVisible: true }, };
@@ -52,10 +64,8 @@
         mainChartCandleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.2, }, });
         mainChart.subscribeCrosshairMove(crosshairMoveEvent); 
         mainChart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
-            if (!loadingChartData){
             if(logicalRange) {
                 if(logicalRange.from < 10) {
-                    loadingChartData = true
                     const barsToRequest = 50 - Math.floor(logicalRange.from); 
                     const req : chartRequest = {
                         ticker: get(chartQuery).ticker, 
@@ -67,10 +77,9 @@
                         direction: "backward",
                         requestType: "loadAdditionalData"
                     }
-                    backendLoadChartData(req)
+                    debouncedLoadChartData(req);
                     
                 }
-            }
             }
         })
     }
@@ -96,12 +105,16 @@
         const ins: Instance = { ...get(chartQuery), datetime: formattedDate, }
         queryInstanceRightClick(event,ins,"chart")
     }
-    function backendLoadChartData(inst:chartRequest): void{
-        if (!inst.ticker || !inst.timeframe || !inst.securityId) {return;}
+    function backendLoadChartData(inst:chartRequest): Promise<void>{
+        if (!inst.ticker || !inst.timeframe || !inst.securityId) {return Promise.resolve();}
         const timeframe = inst.timeframe 
         if (timeframe && timeframe.length < 1) {
-            return
+            return Promise.resolve();
         }
+        if(isRequestPending) {
+            return Promise.resolve();
+        }
+        isRequestPending = true; 
         let barDataList: barData[] = []
         privateRequest<barData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, datetime:inst.datetime, direction:inst.direction, bars:inst.bars, extendedhours:inst.extendedHours})
             .then((result: barData[]) => {
@@ -146,14 +159,20 @@
                 if (inst.requestType == 'loadNewTicker') {
                     mainChart.timeScale().fitContent();
                 }
+                console.log("Done updating chart!")
+                console.log(mainChartCandleSeries.data())
+                return Promise.resolve();
             })
             .finally(() => {
-                loadingChartData = false; // Ensure this runs after data is loaded
+                isRequestPending = false; // Ensure this runs after data is loaded
             })
             .catch((error: string) => {
                 console.error("Error fetching chart data:", error);
-                loadingChartData = false; 
+                isRequestPending = false; 
             });
+        return Promise.resolve();
+        
+        
     }
 
     onMount(() => {
@@ -169,6 +188,7 @@
                 requestType: "loadNewTicker"
 
             }
+            maxDateReached = false;
             backendLoadChartData(req)
         }) 
         initializeChart(); 
