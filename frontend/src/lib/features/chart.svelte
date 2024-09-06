@@ -33,6 +33,7 @@
     let mainChartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
     let sma10Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
     let sma20Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
+    let maxDateReached = false;
 
     let loadingChartData: boolean = false
     let shiftDown = false
@@ -168,7 +169,6 @@
     });
         mainChart.subscribeCrosshairMove(crosshairMoveEvent); 
         mainChart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
-            if (!loadingChartData){
             if(logicalRange) {
                 if(logicalRange.from < 10) {
                     loadingChartData = true
@@ -188,10 +188,22 @@
                         direction: "backward",
                         requestType: "loadAdditionalData"
                     }
-                    backendLoadChartData(req)
+                   backendLoadChartData(req);
                     
+                } else if (logicalRange.to > mainChartCandleSeries.data().length-10) {
+                    const barsToRequest = 50 + Math.floor(logicalRange.to) - mainChartCandleSeries.data().length; 
+                    const req : chartRequest = {
+                        ticker: get(chartQuery).ticker, 
+                        datetime: mainChartCandleSeries.data()[0].time.toString(),
+                        securityId: get(chartQuery).securityId, 
+                        timeframe: get(chartQuery).timeframe, 
+                        extendedHours: get(chartQuery).extendedHours, 
+                        bars: barsToRequest, 
+                        direction: "forward",
+                        requestType: "loadAdditionalData"
+                    }
+                    backendLoadChartData(req);
                 }
-            }
             }
         })
     }
@@ -221,7 +233,7 @@
         if (!inst.ticker || !inst.timeframe || !inst.securityId) {return;}
         const timeframe = inst.timeframe 
         if (timeframe && timeframe.length < 1) {
-            return
+            return 
         }
         let barDataList: barData[] = []
         privateRequest<barData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, datetime:inst.datetime, direction:inst.direction, bars:inst.bars, extendedhours:inst.extendedHours})
@@ -272,14 +284,20 @@
                 if (inst.requestType == 'loadNewTicker') {
                     mainChart.timeScale().fitContent();
                 }
+                console.log("Done updating chart!")
+                console.log(mainChartCandleSeries.data())
+                return Promise.resolve();
             })
             .finally(() => {
-                loadingChartData = false; // Ensure this runs after data is loaded
+            loadingChartData = false; // Ensure this runs after data is loaded
             })
             .catch((error: string) => {
                 console.error("Error fetching chart data:", error);
-                loadingChartData = false; 
+            loadingChartData = false; // Ensure this runs after data is loaded
             });
+            
+        
+        
     }
 
     onMount(() => {
@@ -295,6 +313,7 @@
                 requestType: "loadNewTicker"
 
             }
+            maxDateReached = false;
             backendLoadChartData(req)
         }) 
        initializeChart()
