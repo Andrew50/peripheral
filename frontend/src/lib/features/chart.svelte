@@ -31,7 +31,7 @@
     let mainChart: IChartApi;
     let mainChartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let mainChartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
-
+    let loadingChartData: boolean;
 
     function initializeChart()  {
         const chartOptions = { layout: { textColor: 'black', background: { type: ColorType.Solid, color: 'white' } }, timeScale:  { timeVisible: true }, };
@@ -45,6 +45,7 @@
                 })
             }
          });
+        loadingChartData = false;
         mainChart = createChart(chartContainer, chartOptions);
         mainChartCandleSeries = mainChart.addCandlestickSeries({ upColor: '#089981', downColor: '#ef5350', borderVisible: false, wickUpColor: '#089981', wickDownColor: '#ef5350', });
         mainChartVolumeSeries = mainChart.addHistogramSeries({ priceFormat: { type: 'volume', }, priceScaleId: '', });
@@ -53,8 +54,9 @@
         mainChart.subscribeCrosshairMove(crosshairMoveEvent); 
         mainChart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
             if(logicalRange) {
-                console.log(logicalRange?.from, logicalRange?.to)
-                if(logicalRange.from < 10) {
+                console.log(logicalRange.from)
+                if(logicalRange.from < 10 && loadingChartData == false) {
+                    loadingChartData = true
                     const barsToRequest = 50 - Math.floor(logicalRange.from); 
                     const req : chartRequest = {
                         ticker: get(chartQuery).ticker, 
@@ -94,12 +96,13 @@
         const ins: Instance = { ...get(chartQuery), datetime: formattedDate, }
         queryInstanceRightClick(event,ins,"chart")
     }
-    function backendLoadChartData(inst:chartRequest) {
-        if (!inst.ticker || !inst.timeframe || !inst.securityId) {return}
+    function backendLoadChartData(inst:chartRequest): Promise<void>{
+        if (!inst.ticker || !inst.timeframe || !inst.securityId) {return Promise.resolve();}
         const timeframe = inst.timeframe 
         if (timeframe && timeframe.length < 1) {
-            return
+            return Promise.resolve();
         }
+        loadingChartData = true
         let barDataList: barData[] = []
         privateRequest<barData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, datetime:inst.datetime, direction:inst.direction, bars:inst.bars, extendedhours:inst.extendedHours})
             .then((result: barData[]) => {
@@ -125,22 +128,40 @@
                 }
                 if (inst.requestType == 'loadAdditionalData') {
                     if(inst.direction == 'backward') {
-                        newCandleData = [...newCandleData, ...mainChartCandleSeries.data()]
-                        newVolumeData = [...newVolumeData, ...mainChartVolumeSeries.data()]
+                        const lastCandleTime = mainChartCandleSeries.data()[0].time;
+                        if (typeof lastCandleTime === 'number') {
+                            if (newCandleData[newCandleData.length-1].time < lastCandleTime) {
+                                newCandleData = [...newCandleData, ...mainChartCandleSeries.data()]
+                                newVolumeData = [...newVolumeData, ...mainChartVolumeSeries.data()]
+                            }
+                        }
+                        console.log("loaded more data")
                     } else{
                         newCandleData = [...mainChartCandleSeries.data(), ...newCandleData]
                         newVolumeData = [...mainChartVolumeSeries.data(), ...newVolumeData]
+
                     }
                 }
-                mainChartCandleSeries.setData(newCandleData)
-                mainChartVolumeSeries.setData(newVolumeData)
+                setTimeout(() => {
+                    mainChartCandleSeries.setData(newCandleData)
+                    mainChartVolumeSeries.setData(newVolumeData)
+
+                }, 250);
                 if (inst.requestType == 'loadNewTicker') {
                     mainChart.timeScale().fitContent();
                 }
                 console.log("Done updating chart!")
-            }).catch((error: string) => {
+                console.log(mainChartCandleSeries.data())
+                return Promise.resolve();
+            })
+            .finally(() => {
+                loadingChartData = false;  // Ensure this runs after data is loaded
+            })
+            .catch((error: string) => {
                 console.error("Error fetching chart data:", error);
+                loadingChartData = false; 
             });
+        return Promise.resolve();
         
         
     }
@@ -153,7 +174,7 @@
                 securityId: v.securityId,
                 timeframe: v.timeframe,
                 extendedHours: v.extendedHours,
-                bars: 100,
+                bars: 150,
                 direction: "backward",
                 requestType: "loadNewTicker"
 
