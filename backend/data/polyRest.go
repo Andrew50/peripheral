@@ -164,6 +164,7 @@ func GetPolygonRelatedTickers(client *polygon.Client, ticker string) ([]string, 
 	}
 	return relatedTickers, nil
 }
+func GetPreviousDailyBar(client *polygon.Client)
 
 // func relatedTickers (ticker string) ([]string, error) {
 // 	c := polygon.New(apiKey)
@@ -181,7 +182,6 @@ func GetPolygonRelatedTickers(client *polygon.Client, ticker string) ([]string, 
 // 	}
 // 	return tickers, err
 // }
-
 
 // QA STATUS: NEEDS TESTING
 func GetAggsData(client *polygon.Client, ticker string, barLength int, timeframe string,
