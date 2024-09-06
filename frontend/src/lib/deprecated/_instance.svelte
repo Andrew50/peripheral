@@ -121,7 +121,6 @@
             }
             return true
         }else if(typ == "timeframe"){
-            console.log("gid")
             const regex = /^\d{1,3}[yqmwds]?$/i;
             return regex.test(input)
         }else if(typ == "datetime"){
@@ -266,13 +265,11 @@
         const baseIns = get(rightClickQuery)
         privateRequest<Instance[]>("getSimilarInstances",{ticker:baseIns.ticker,securityId:baseIns.securityId,timeframe:baseIns.timeframe,datetime:baseIns.datetime})
         .then((v:Instance[])=>{
-            console.log(v)
             const simInst: SimilarInstance = {
                 x: event.clientX,
                 y: event.clientY,
                 instances: v
             }
-            console.log(simInst)
             similarInstance.set(simInst)
         })
     }
