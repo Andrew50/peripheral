@@ -31,7 +31,18 @@
     let mainChart: IChartApi;
     let mainChartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let mainChartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
-    let loadingChartData: boolean;
+    let isRequestPending = false; 
+
+    function debounce<T extends (...args: any[]) => any>(func: T, delay: number): (...args: Parameters<T>) => void {
+        let timeoutId: number | undefined;
+        return function (...args: Parameters<T>) {
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+            timeoutId = setTimeout(() => func(...args), delay);
+        };
+    }
+    const debouncedLoadChartData = debounce(backendLoadChartData, 300);
 
     function initializeChart()  {
         const chartOptions = { layout: { textColor: 'black', background: { type: ColorType.Solid, color: 'white' } }, timeScale:  { timeVisible: true }, };
@@ -45,7 +56,6 @@
                 })
             }
          });
-        loadingChartData = false;
         mainChart = createChart(chartContainer, chartOptions);
         mainChartCandleSeries = mainChart.addCandlestickSeries({ upColor: '#089981', downColor: '#ef5350', borderVisible: false, wickUpColor: '#089981', wickDownColor: '#ef5350', });
         mainChartVolumeSeries = mainChart.addHistogramSeries({ priceFormat: { type: 'volume', }, priceScaleId: '', });
@@ -55,8 +65,7 @@
         mainChart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
             if(logicalRange) {
                 console.log(logicalRange.from)
-                if(logicalRange.from < 10 && loadingChartData == false) {
-                    loadingChartData = true
+                if(logicalRange.from < 10) {
                     const barsToRequest = 50 - Math.floor(logicalRange.from); 
                     const req : chartRequest = {
                         ticker: get(chartQuery).ticker, 
@@ -68,7 +77,7 @@
                         direction: "backward",
                         requestType: "loadAdditionalData"
                     }
-                    backendLoadChartData(req)
+                    debouncedLoadChartData(req);
                     
                 }
             }
@@ -102,7 +111,10 @@
         if (timeframe && timeframe.length < 1) {
             return Promise.resolve();
         }
-        loadingChartData = true
+        if(isRequestPending) {
+            return Promise.resolve();
+        }
+        isRequestPending = true; 
         let barDataList: barData[] = []
         privateRequest<barData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, datetime:inst.datetime, direction:inst.direction, bars:inst.bars, extendedhours:inst.extendedHours})
             .then((result: barData[]) => {
@@ -155,11 +167,11 @@
                 return Promise.resolve();
             })
             .finally(() => {
-                loadingChartData = false;  // Ensure this runs after data is loaded
+                isRequestPending = false; // Ensure this runs after data is loaded
             })
             .catch((error: string) => {
                 console.error("Error fetching chart data:", error);
-                loadingChartData = false; 
+                isRequestPending = false; 
             });
         return Promise.resolve();
         
