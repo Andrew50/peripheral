@@ -31,7 +31,7 @@
     let mainChart: IChartApi;
     let mainChartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let mainChartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
-    let loadingChartData: boolean;
+    let loadingChartData: boolean = false
 
     function initializeChart()  {
         const chartOptions = { layout: { textColor: 'black', background: { type: ColorType.Solid, color: 'white' } }, timeScale:  { timeVisible: true }, };
@@ -96,11 +96,11 @@
         const ins: Instance = { ...get(chartQuery), datetime: formattedDate, }
         queryInstanceRightClick(event,ins,"chart")
     }
-    function backendLoadChartData(inst:chartRequest): Promise<void>{
-        if (!inst.ticker || !inst.timeframe || !inst.securityId) {return Promise.resolve();}
+    function backendLoadChartData(inst:chartRequest): void{
+        if (!inst.ticker || !inst.timeframe || !inst.securityId) {return;}
         const timeframe = inst.timeframe 
         if (timeframe && timeframe.length < 1) {
-            return Promise.resolve();
+            return
         }
         loadingChartData = true
         let barDataList: barData[] = []
@@ -142,17 +142,11 @@
 
                     }
                 }
-                setTimeout(() => {
-                    mainChartCandleSeries.setData(newCandleData)
-                    mainChartVolumeSeries.setData(newVolumeData)
-
-                }, 250);
+                mainChartCandleSeries.setData(newCandleData)
+                mainChartVolumeSeries.setData(newVolumeData)
                 if (inst.requestType == 'loadNewTicker') {
                     mainChart.timeScale().fitContent();
                 }
-                console.log("Done updating chart!")
-                console.log(mainChartCandleSeries.data())
-                return Promise.resolve();
             })
             .finally(() => {
                 loadingChartData = false;  // Ensure this runs after data is loaded
@@ -161,9 +155,6 @@
                 console.error("Error fetching chart data:", error);
                 loadingChartData = false; 
             });
-        return Promise.resolve();
-        
-        
     }
 
     onMount(() => {
