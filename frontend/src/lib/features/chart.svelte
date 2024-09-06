@@ -64,7 +64,6 @@
         mainChart.subscribeCrosshairMove(crosshairMoveEvent); 
         mainChart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
             if(logicalRange) {
-                console.log(logicalRange.from)
                 if(logicalRange.from < 10) {
                     const barsToRequest = 50 - Math.floor(logicalRange.from); 
                     const req : chartRequest = {
@@ -154,11 +153,8 @@
 
                     }
                 }
-                setTimeout(() => {
-                    mainChartCandleSeries.setData(newCandleData)
-                    mainChartVolumeSeries.setData(newVolumeData)
-
-                }, 250);
+                mainChartCandleSeries.setData(newCandleData)
+                mainChartVolumeSeries.setData(newVolumeData)
                 if (inst.requestType == 'loadNewTicker') {
                     mainChart.timeScale().fitContent();
                 }
