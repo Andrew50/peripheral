@@ -90,7 +90,7 @@ func toFilteredMap(tickers []models.Ticker) map[string]models.Ticker {
 
 func initTickerDatabase(conn *Conn) error {
     test := false
-    if test{
+    if true{
         query := fmt.Sprintf("TRUNCATE TABLE securities RESTART IDENTITY CASCADE")
         _, err := conn.DB.Exec(context.Background(), query)
         if err != nil {
@@ -99,7 +99,7 @@ func initTickerDatabase(conn *Conn) error {
     }
     var startDate time.Time
 	if test{
-        startDate = time.Date(2016, 5, 16, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
+        startDate = time.Date(2004, 11, 30, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
     }else{
         startDate = time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
     }
@@ -131,7 +131,6 @@ func initTickerDatabase(conn *Conn) error {
                 if err != nil && err != pgx.ErrNoRows {
                     fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString)
                     fmt.Printf("32gerf %v \n",err)
-                    continue
                 }
             }
             err := conn.DB.QueryRow(context.Background(),"SELECT COALESCE(maxDate, '2200-12-31') FROM securities where ticker = $1 order by COALESCE(maxDate, '2200-01-01') DESC LIMIT 1",sec.Ticker).Scan(&maxDate)
@@ -167,12 +166,22 @@ func initTickerDatabase(conn *Conn) error {
                   fmt.Printf("listed %s\n",sec.Ticker)
                 }
             }else if diagnoses == "ticker change"{
-                _,err = conn.DB.Exec(context.Background(),"INSERT INTO securities (securityId, figi, ticker, minDate) SELECT securityID, figi, $2, $3 from securities where figi = $1",sec.CompositeFIGI,sec.Ticker,yesterdayDateString)
-                if err != nil {
-                    fmt.Printf("mh93: %v\n",err)
-                    fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString," ",maxDateString)
-                }else if test{
-                    fmt.Printf("ticker change %s\n",sec.Ticker)
+                err = conn.DB.QueryRow(context.Background(),"SELECT 1 FROM securities where ticker = $1 and figi = $2",sec.Ticker,sec.CompositeFIGI).Scan(new(interface{}))
+                if err == pgx.ErrNoRows {
+                    fmt.Printf("Inserting: Ticker: %s, FIGI: %s, MinDate: %s\n", sec.Ticker, sec.CompositeFIGI, currentDateString)
+                    _,err = conn.DB.Exec(context.Background(),"INSERT INTO securities (securityId, figi, ticker, minDate) SELECT securityID, figi, $1, $2 from securities where figi = $3",sec.Ticker,yesterdayDateString,sec.CompositeFIGI)
+                    if err != nil {
+                        fmt.Printf("mh93: %v\n",err)
+                        fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString," ",maxDateString)
+                        fmt.Println(yesterdayDateString)
+                    }else if test{
+                        fmt.Printf("ticker change %s\n",sec.Ticker)
+                    }
+                }else if err != nil{
+                    fmt.Printf("29jgk: %v\n",err)
+                        fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString," ",maxDateString)
+                }else{
+                    fmt.Printf("skipped supposed ticker change %s %s",sec.Ticker,sec.CompositeFIGI)
                 }
             }else if diagnoses == "false delist"{
                 _,err = conn.DB.Exec(context.Background(),"UPDATE securities set maxDate = NULL where ticker = $1 AND maxDate = (SELECT max(maxDate) FROM securities WHERE ticker = $1)",sec.Ticker)

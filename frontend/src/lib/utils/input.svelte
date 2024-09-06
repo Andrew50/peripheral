@@ -37,45 +37,48 @@
         requiredKeys: "any",
         instance: {}
     }
-    let inputQuery: Writable<InputQuery> = writable(inactiveInputQuery)
+    let inputQuery: Writable<InputQuery> = writable({...inactiveInputQuery})
 
     export async function queryInstanceInput(requiredKeys: InstanceAttributes[] | "any",instance:Instance={}): Promise<Instance> {
         //init the query with passsed info
-        inputQuery.update((v:InputQuery)=>{
-            v.requiredKeys = requiredKeys
-        /*    v.instance = {
-                ticker:"",
-                datetime:"",
-                timeframe:"",
-                ...instance
-            },*/
-            v.instance = instance //instance must be set up to have required fields as blank
-            v.status = "initializing"
-            return v
-        })
-        return new Promise<Instance>((resolve, reject) => {
-            const unsubscribe = inputQuery.subscribe((iQ: InputQuery) => {
-                if (iQ.status === "cancelled"){
-                    deactivate()
-                    tick()
-                    reject()
-                }else if(iQ.status === "complete"){
-                    const re = iQ.instance
-                    deactivate()
-                    resolve(re)
+        if (get(inputQuery).status === "inactive"){
+            inputQuery.update((v:InputQuery)=>{
+                v.requiredKeys = requiredKeys
+            /*    v.instance = {
+                    ticker:"",
+                    datetime:"",
+                    timeframe:"",
+                    ...instance
+                },*/
+                v.instance = instance //instance must be set up to have required fields as blank
+                v.status = "initializing"
+                return v
+            })
+            return new Promise<Instance>((resolve, reject) => {
+                const unsubscribe = inputQuery.subscribe((iQ: InputQuery) => {
+                    if (iQ.status === "cancelled"){
+                        deactivate()
+                        tick()
+                        reject()
+                    }else if(iQ.status === "complete"){
+                        const re = iQ.instance
+                        deactivate()
+                        resolve(re)
+                    }
+                })
+                function deactivate(){
+                    unsubscribe()
+                    inputQuery.set({...inactiveInputQuery})
                 }
             })
-            function deactivate(){
-                unsubscribe()
-                inputQuery.set({...inactiveInputQuery})
-            }
-        })
+        }
     }
         
 </script>
 <script lang="ts">
     import {browser} from '$app/environment'
     import {onMount} from 'svelte'
+    let prevFocusedElement: Element | null
 
     interface ValidateResponse {
         inputValid: boolean
@@ -98,7 +101,6 @@
             for (const format of formats) {
                 try {
                     const parsedDate = parse(inputString, format, new Date())
-                    console.log(parsedDate)
                     if (parsedDate != "Invalid Date"){
                     //if (isNaN(parsedDate.getTime())){
                         //return {inputValid: await privateRequest<boolean>("validateDateString",{dateString:inputString}),securities:[]}
@@ -133,12 +135,16 @@
                 }
             }
         }
+        console.log(iQ.status)
+
         iQ.inputString = ""
         iQ.inputType = ""
         iQ.inputValid = true
         return iQ
     }
     function handleKeyDown(event:KeyboardEvent):void {
+        event.stopPropagation();
+        //event.preventDefault()
         let iQ = get(inputQuery)
         if (event.key === 'Escape') {
             iQ.status = "cancelled"
@@ -188,11 +194,10 @@
             }else{
                 iQ.inputType = ""
             }
-            inputQuery.set(iQ)
             validateInput(iQ.inputString,iQ.inputType).then((validateResponse:ValidateResponse)=>{
                 inputQuery.update((v:InputQuery)=>{
                     return {
-                        ...v,
+                        ...iQ,
                         ...validateResponse
                     }
 
