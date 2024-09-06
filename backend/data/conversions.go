@@ -44,7 +44,7 @@ func StringToTime(datetimeStr string) (time.Time, error) {
 	return parsedTime, nil*/
 
 }
-func MillisFromDatetimeString(datetime string) models.Millis {
+func MillisFromDatetimeString(datetime string) (models.Millis, error){
 	layouts := []string{
 		time.DateTime,
 		time.DateOnly,
@@ -55,11 +55,10 @@ func MillisFromDatetimeString(datetime string) models.Millis {
 			if tzErr != nil {
 				log.Fatal(tzErr)
 			}
-			return models.Millis(dt.In(easternTimeLocation))
+			return models.Millis(dt.In(easternTimeLocation)), nil
 		}
 	}
-	log.Fatal(errors.New("invalid datetime string"))
-	return models.Millis(time.Now())
+    return models.Millis(time.Now()), fmt.Errorf("212k invalid string datetime")
 
 }
 func NanosFromDatetimeString(datetime string) models.Nanos {
