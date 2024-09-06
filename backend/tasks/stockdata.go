@@ -48,7 +48,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		t := time.Unix(seconds, 0)
 		args.Datetime = t.Format(time.DateTime)
 	}
-	fmt.Printf("Passed Datetime: {%s}, Passed bars :{%v}", args.Datetime, args.Bars)
+	fmt.Printf("Passed Datetime: {%s}, Passed bars :{%v}\n", args.Datetime, args.Bars)
 	var query string
 	var polyResultOrder string
 	var minDate time.Time
