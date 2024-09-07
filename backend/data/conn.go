@@ -29,12 +29,8 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		dbConn, err = pgxpool.Connect(context.Background(), dbUrl)
 		if err != nil {
 			//if strings.Contains(err.Error(), "the database system is starting up") {
-			if true {
-				log.Println("waiting for db")
-			} else {
-				log.Fatalf("Unable to connect to database: %v\n", err)
-			}
-			time.Sleep(5 * time.Second)
+            log.Println("waiting for db")
+            time.Sleep(5 * time.Second)
 		} else {
 			break
 		}
@@ -44,7 +40,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	   cache := redis.NewClient(&redis.Options{Addr: cache_url,})
 	   err = cache.Ping(context.Background()).Err()
 	   if err != nil {
-	       log.Fatalf("Unable to connect to cache: %v\n", err)
+           //god
 	   }
 	*/
 	//return &Conn{DB: db, Cache: cache}
