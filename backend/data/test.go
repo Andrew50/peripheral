@@ -21,7 +21,6 @@ func ManualTest() {
 	// start := time.Now()
 	// c := 0
 	// for iter.Next() {
-	// 	fmt.Println(time.Time(iter.Item().Timestamp).Format(time.DateTime))
 	// 	c++
 	// 	if c == 2000 {
 	// 		break
@@ -30,7 +29,7 @@ func ManualTest() {
 	// elapsed := time.Since(start)
 	// fmt.Printf("Runtime %s\n", elapsed)
 	// fmt.Errorf("Done %s", "done")
-	//ticker := GetTickerDetails(conn.Polygon, "IFN.WD", "2003-09-23")
+	//ticker, err:= GetTickerDetails(conn.Polygon, "IFN.WD", "2003-09-23")
 	//fmt.Printf("Ticker suffix: {%s}\n", ticker.TickerSuffix)
 	err := initTickerDatabase(conn)
 
@@ -59,7 +58,6 @@ func ManualTest() {
 // ticker = "NVDA"
 // var marketTimeZone, tzErr = time.LoadLocation("America/New_York")
 // if tzErr != nil {
-// 	log.Fatal(tzErr)
 // 	fmt.Print(marketTimeZone)
 // }
 // timestamp := models.Nanos(time.Date(2020, 3, 16, 9, 35, 0, 0, marketTimeZone))

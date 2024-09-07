@@ -1,9 +1,7 @@
 package data
 
 import (
-	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/polygon-io/client-go/rest/models"
@@ -51,9 +49,9 @@ func MillisFromDatetimeString(datetime string) (models.Millis, error){
 	}
 	for _, layout := range layouts {
 		if dt, err := time.Parse(layout, datetime); err == nil {
-			easternTimeLocation, tzErr := time.LoadLocation("America/New_York")
-			if tzErr != nil {
-				log.Fatal(tzErr)
+			easternTimeLocation, err := time.LoadLocation("America/New_York")
+			if err != nil {
+                return models.Millis(time.Now()), err
 			}
 			return models.Millis(dt.In(easternTimeLocation)), nil
 		}
@@ -61,20 +59,19 @@ func MillisFromDatetimeString(datetime string) (models.Millis, error){
     return models.Millis(time.Now()), fmt.Errorf("212k invalid string datetime")
 
 }
-func NanosFromDatetimeString(datetime string) models.Nanos {
+func NanosFromDatetimeString(datetime string) (models.Nanos, error) {
 	layouts := []string{
 		time.RFC3339Nano,
 		time.DateTime,
 	}
 	for _, layout := range layouts {
 		if dt, err := time.Parse(layout, datetime); err == nil {
-			easternTimeLocation, tzErr := time.LoadLocation("America/New_York")
-			if tzErr != nil {
-				fmt.Print("eastern timezone error")
+			easternTimeLocation, err := time.LoadLocation("America/New_York")
+			if err != nil {
+                return models.Nanos(time.Now()), fmt.Errorf("gw9ni2f3 %v",err)
 			}
-			return models.Nanos(dt.In(easternTimeLocation))
+			return models.Nanos(dt.In(easternTimeLocation)), nil
 		}
 	}
-	log.Fatal(errors.New("invalid datetime string"))
-	return models.Nanos(time.Now())
+	return models.Nanos(time.Now()), nil
 }

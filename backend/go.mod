@@ -5,6 +5,7 @@ go 1.22.2
 require (
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/jackc/pgx/v4 v4.18.3
+	github.com/lib/pq v1.10.9
 	github.com/polygon-io/client-go v1.16.5
 )
 

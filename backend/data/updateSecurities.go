@@ -10,6 +10,8 @@ import (
 
 	polygon "github.com/polygon-io/client-go/rest"
 	"github.com/polygon-io/client-go/rest/models"
+    _ "github.com/lib/pq"
+    "database/sql"
 )
 
 type ActiveSecurity struct {
@@ -94,7 +96,7 @@ func initTickerDatabase(conn *Conn) error {
         query := fmt.Sprintf("TRUNCATE TABLE securities RESTART IDENTITY CASCADE")
         _, err := conn.DB.Exec(context.Background(), query)
         if err != nil {
-            panic(err)
+            return fmt.Errorf("unable to truncate table for test")
         }
     }
     var startDate time.Time
@@ -104,10 +106,14 @@ func initTickerDatabase(conn *Conn) error {
         startDate = time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
     }
     activeYesterday := make(map[string]models.Ticker) //posibly change to get filtereMap (Alltickers) of startdate.SubDate(0,0,1)
+    dateFormat := "2006-01-02"
 	for currentDate := startDate; currentDate.Before(time.Now()); currentDate = currentDate.AddDate(0, 0, 1) {
-		currentDateString := currentDate.Format("2006-01-02")
-        yesterdayDateString := currentDate.AddDate(0,0,-1).Format("2006-01-02")
-        polyTickers := AllTickers(conn.Polygon, currentDateString)
+		currentDateString := currentDate.Format(dateFormat)
+        yesterdayDateString := currentDate.AddDate(0,0,-1).Format(dateFormat)
+        polyTickers, err := AllTickers(conn.Polygon, currentDateString)
+        if err != nil {
+            return fmt.Errorf("423n %v", err)
+        }
         activeToday := toFilteredMap(polyTickers)
         additions, removals, figiChanges := diff(activeToday,activeYesterday)
         if test{
@@ -124,8 +130,8 @@ func initTickerDatabase(conn *Conn) error {
         }
         for _,sec := range(additions){
             var diagnoses string
-            var maxDate time.Time
             tickerMatchFromFigiLookup := ""
+            prevTicker := sec.Ticker
             if sec.CompositeFIGI != ""{
                 err := conn.DB.QueryRow(context.Background(),"SELECT ticker FROM securities where figi = $1 order by COALESCE(maxDate, '2200-01-01') DESC LIMIT 1",sec.CompositeFIGI).Scan(&tickerMatchFromFigiLookup)
                 if err != nil && err != pgx.ErrNoRows {
@@ -133,26 +139,35 @@ func initTickerDatabase(conn *Conn) error {
                     fmt.Printf("32gerf %v \n",err)
                 }
             }
-            err := conn.DB.QueryRow(context.Background(),"SELECT COALESCE(maxDate, '2200-12-31') FROM securities where ticker = $1 order by COALESCE(maxDate, '2200-01-01') DESC LIMIT 1",sec.Ticker).Scan(&maxDate)
-            var tickerInDb bool
-            if err == pgx.ErrNoRows {
-                tickerInDb = false
-            }else{
-                tickerInDb = true
-            }
-            maxDateString := maxDate.Format("2006-01-01")
-
-            if err != nil && err != pgx.ErrNoRows {
+            var maxDate sql.NullTime
+            err := conn.DB.QueryRow(context.Background(),"SELECT maxDate FROM securities where ticker = $1 order by COALESCE(maxDate, '2200-01-01') DESC LIMIT 1",sec.Ticker).Scan(&maxDate)
+            var maxDateString string
+            if err == pgx.ErrNoRows { //the ticker doesnt exists in the database already
+                maxDateString = "DNE"
+            }else if err != nil{ //real error with db
                 fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString)
                 fmt.Printf("vm2d: %v\n",err)
+            }else{ //ticker is in db
+                if (!maxDate.Valid){
+                    maxDateString = "NULL"
+                    fmt.Printf("god its so fucked up %s\n",maxDate.Time.Format(dateFormat))
+                }else{
+                    maxDateString = maxDate.Time.Format(dateFormat)
+                }
             }
             if tickerMatchFromFigiLookup != ""{ //means there is a figi and it exists in db at some point
-                if tickerMatchFromFigiLookup == sec.Ticker{ //figi and ticker matches
+                if tickerMatchFromFigiLookup == sec.Ticker{ //figi and ticker matches a previous entry so therefore its the same securitiy
                     diagnoses = "false delist"
-                }else{ //ticker is different but figi found means trackable ticker change
-                    diagnoses = "ticker change"
+                }else{ //ticker is different but figi found means trackable ticker change with possible false delist
+                    if (maxDateString != "NULL"){
+                        fmt.Printf("ticker change and false delist %s -> %s @ %s\n",tickerMatchFromFigiLookup, sec.Ticker,maxDateString)
+                        diagnoses = "ticker change and false delist"
+                    }else{
+                        fmt.Printf("ticker change no delist\n")
+                        diagnoses = "ticker change"
+                    }
                 }
-            }else if (tickerInDb && dataExists(conn.Polygon,sec.Ticker,maxDateString,yesterdayDateString)){ //no figi but ticker exists and there is data since supposed delist
+            }else if (maxDateString != "DNE" && dataExists(conn.Polygon,sec.Ticker,maxDateString,yesterdayDateString)){ //no figi but ticker exists and there is data since supposed delist
                 diagnoses = "false delist" 
             }else{
                 diagnoses = "listing"
@@ -165,7 +180,8 @@ func initTickerDatabase(conn *Conn) error {
                 }else if test{
                   fmt.Printf("listed %s\n",sec.Ticker)
                 }
-            }else if diagnoses == "ticker change"{
+            }
+            if diagnoses == "ticker change" || diagnoses == "ticker change and false delist"{
                 err = conn.DB.QueryRow(context.Background(),"SELECT 1 FROM securities where ticker = $1 and figi = $2",sec.Ticker,sec.CompositeFIGI).Scan(new(interface{}))
                 if err == pgx.ErrNoRows {
                     //fmt.Printf("Inserting: Ticker: %s, FIGI: %s, MinDate: %s\n", sec.Ticker, sec.CompositeFIGI, currentDateString)
@@ -183,7 +199,8 @@ func initTickerDatabase(conn *Conn) error {
                 }else{
                     //fmt.Printf("skipped supposed ticker change %s %s\n",sec.Ticker,sec.CompositeFIGI)
                 }
-            }else if diagnoses == "false delist"{
+            }
+            if diagnoses == "false delist" || diagnoses == "ticker change and false delist"{
                 _,err = conn.DB.Exec(context.Background(),"UPDATE securities set maxDate = NULL where ticker = $1 AND maxDate = (SELECT max(maxDate) FROM securities WHERE ticker = $1)",sec.Ticker)
                 if err != nil {
                     fmt.Printf("swe9fo: %v\n",err)
