@@ -26,7 +26,6 @@ func GetSecurityDateBounds(conn *data.Conn, userId int, rawArgs json.RawMessage)
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("3k5pv GetSecurityDateBounds invalid args: %v", err)
 	}
-	fmt.Println(args.SecurityId)
 	query := `SELECT MIN(minDate) as minDate, 
 			CASE WHEN COUNT(maxDate) = COUNT(*) THEN MAX(maxDate)
 				ELSE NULL 
@@ -115,7 +114,6 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		t := time.Unix(seconds, 0)
 		args.Datetime = t.Format(time.DateTime)
 	}
-	fmt.Printf("Passed Datetime: {%s}, Passed bars :{%v}\n", args.Datetime, args.Bars)
 	var query string
 	var polyResultOrder string
 	var minDate time.Time
@@ -129,9 +127,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 				 ticker != $2
 				 ORDER BY minDate DESC`
 		polyResultOrder = "desc"
-		fmt.Println("Datetime is null")
 	} else if args.Direction == "backward" {
-		fmt.Println("BACKWARDS")
 		query = `SELECT ticker, minDate, maxDate
 				 FROM securities 
 				 WHERE securityid = $1 AND (maxDate > $2 OR maxDate IS NULL)
@@ -139,11 +135,9 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		polyResultOrder = "desc"
 		maxDate, err = data.StringToTime(args.Datetime)
 		if err != nil {
-			fmt.Println("ISSUEEEEEEEEEEEEEEEEEEEEEE")
 			return nil, fmt.Errorf("zdk4g: Datetime parse error %v", err)
 		}
 	} else if args.Direction == "forward" {
-		fmt.Println("FORWARD")
 		query = `SELECT ticker, minDate, maxDate
 				 FROM securities 
 				 WHERE securityid = $1 AND (minDate < $2)
@@ -154,7 +148,6 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			return nil, fmt.Errorf("3ktng: Datetime parse error %v", err)
 		}
 	} else {
-		fmt.Println("ELSE")
 		return nil, fmt.Errorf("9d83j: Incorrect direction passed")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
@@ -162,10 +155,8 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	rows, err := conn.DB.Query(ctx, query, args.SecurityId, args.Datetime)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			fmt.Println("Query timed out")
 			return nil, fmt.Errorf("query timed out: %w", err)
 		}
-		fmt.Printf("Query error: %v\n", err)
 		return nil, fmt.Errorf("2fg0 %w", err)
 	}
 	defer rows.Close()
@@ -242,7 +233,6 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		// SIDE NOTE: We need to figure out how often GetAggs is updated
 		// within polygon to see what endpoint we need to call
 		// for live intraday data.
-		fmt.Printf("Query Start Date: %s, Query End Date: %s \n", queryStartTime, queryEndTime)
 		date1, err := data.MillisFromDatetimeString(queryStartTime.Format(time.DateTime))
 		if err != nil {
 			return nil, fmt.Errorf("1n0f %v", err)
@@ -302,47 +292,6 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		args.SecurityId, args.Timeframe, args.Datetime, args.Direction, args.Bars, args.ExtendedHours)
 }
 
-/*
-	} else {
-			maxDate, err = data.StringToTime(args.datetime)
-			if err != nil {
-				return nil, fmt.Errorf("cd0f %v", err)
-			}
-			query = `SELECT ticker, minDate
-	                 FROM securities
-	                 WHERE securityid = $1
-	                 AND (maxDate > $2 OR maxDate IS NULL)
-	                 ORDER BY maxDate IS NULL DESC, maxDate DESC`
-			err = conn.DB.QueryRow(context.Background(), query, args.SecurityId, args.datetime).Scan(&ticker, &minDate)
-		}
-
-		rows, err := conn.DB.Query(context.Background(), "SELECT ticker, minDate, maxDate FROM securities WHERE securityid = $1 AND (maxDate >= $2 OR maxDate is null) ORDER BY minDate desc", args.SecurityId, args.EndDateTime)
-		if err != nil {
-			return nil, fmt.Errorf("3srg %v", err)
-		}
-		easternTimeLocation, tzErr := time.LoadLocation("America/New_York")
-		if tzErr != nil {
-			return nil, err
-		}
-		start := models.Millis(maxDate.AddDate(0, 0, -20).In(easternTimeLocation))
-		end := models.Millis(maxDate.In(easternTimeLocation))
-		//fmt.Printf(ticker, multiplier,timespan,start,end)
-		iter, err := data.GetAggsData(conn.Polygon, ticker, multiplier, timespan, start, end, 1000)
-		if err != nil {
-			return nil, err
-		}
-		for iter.Next() {
-			var barData GetChartDataResults
-			barData.Datetime = float64(time.Time(iter.Item().Timestamp).Unix())
-			barData.Open = iter.Item().Open
-			barData.High = iter.Item().High
-			barData.Low = iter.Item().Low
-			barData.Close = iter.Item().Close
-			barData.Volume = iter.Item().Volume
-			barDataList = append(barDataList, barData)
-		}
-		return barDataList, nil
-*/
 func getTimeframe(timeframeString string) (int, string, string, int, error) {
 	// if no identifer is passed, it means that it should be minute data
 	lastChar := rune(timeframeString[len(timeframeString)-1])

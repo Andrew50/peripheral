@@ -104,8 +104,8 @@
         })
         function shiftOverlayTrack(event:MouseEvent):void{
             shiftOverlay.update((v:ShiftOverlay) => {
+                const god = {
 
-                return {
                     ...v,
                     width: Math.abs(event.clientX - v.startX),
                     height: Math.abs(event.clientY - v.startY),
@@ -113,9 +113,12 @@
                     y: Math.min(event.clientY, v.startY),
                     currentPrice: mainChartCandleSeries.coordinateToPrice(event.clientY) || 0,
                 }
+                console.log(god)
+                return god
             })
         }
         chartContainer.addEventListener('mousedown',event  => {
+            console.log(get(shiftOverlay))
             if (shiftDown || get(shiftOverlay).isActive){
                 shiftOverlay.update((v:ShiftOverlay) => {
                     v.isActive = !v.isActive
@@ -144,12 +147,17 @@
             }else if (event.key == "Shift"){
                 shiftDown = true
             }else if (event.key == "Escape"){
-                shiftOverlay.update((v:ShiftOverlay) => {
-                    if (v.isActive){
-                        v.isActive = false
-                        return v
-                    }
-                 });
+                if (get(shiftOverlay).isActive){
+                    shiftOverlay.update((v:ShiftOverlay) => {
+                        if (v.isActive){
+                            v.isActive = false
+                            return {
+                                ...v,
+                                isActive: false
+                            }
+                        }
+                     });
+        }
             }
         })
 
@@ -351,9 +359,9 @@
     });
 </script>
 <div autofocus id="chart_container" tabindex="0"></div>
-{#if $shiftOverlay.isActive}
+{#if ($shiftOverlay).isActive}
     
-    <div class="shiftOverlay" style="left: {$shiftOverlay.x}px; top: {$shiftOverlay.y}px;
+    <div class="shiftOverlayStyle" style="left: {$shiftOverlay.x}px; top: {$shiftOverlay.y}px;
     width: {$shiftOverlay.width}px; height: {$shiftOverlay.height}px;">
     <div class="percentageText">
     {Math.round(($shiftOverlay.currentPrice / $shiftOverlay.startPrice - 1) * 10000)/100}%
@@ -374,7 +382,7 @@
       width: 85%;
       height: 800px; /* Adjust height as needed */
     }
-    .shiftOverlay {
+    .shiftOverlayStyle {
         position: absolute;
         border: 2px dashed lightgrey;
         background-color: rgba(211, 211, 211, 0.2); /* Light grey with transparency */
