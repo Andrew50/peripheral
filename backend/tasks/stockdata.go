@@ -109,7 +109,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if !strings.Contains(args.Datetime, "-") && args.Datetime != "" {
 		seconds, err := strconv.ParseInt(args.Datetime, 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("3k5lv: Error converting string to int:", err)
+			return nil, fmt.Errorf("3k5lv: Error converting string to int: %v", err)
 		}
 		t := time.Unix(seconds, 0)
 		args.Datetime = t.Format(time.DateTime)
@@ -128,7 +128,9 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 				 ticker != $2
 				 ORDER BY minDate DESC`
 		polyResultOrder = "desc"
+		fmt.Println("Datetime is null")
 	} else if args.Direction == "backward" {
+		fmt.Println("BACKWARDS")
 		query = `SELECT ticker, minDate, maxDate
 				 FROM securities 
 				 WHERE securityid = $1 AND (maxDate > $2 OR maxDate IS NULL)
@@ -136,9 +138,11 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		polyResultOrder = "desc"
 		maxDate, err = data.StringToTime(args.Datetime)
 		if err != nil {
+			fmt.Println("ISSUEEEEEEEEEEEEEEEEEEEEEE")
 			return nil, fmt.Errorf("zdk4g: Datetime parse error %v", err)
 		}
 	} else if args.Direction == "forward" {
+		fmt.Println("FORWARD")
 		query = `SELECT ticker, minDate, maxDate
 				 FROM securities 
 				 WHERE securityid = $1 AND (minDate < $2)
@@ -149,12 +153,24 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			return nil, fmt.Errorf("3ktng: Datetime parse error %v", err)
 		}
 	} else {
+		fmt.Println("ELSE")
 		return nil, fmt.Errorf("9d83j: Incorrect direction passed")
 	}
-	rows, err := conn.DB.Query(context.Background(), query, args.SecurityId, args.Datetime)
+	fmt.Println(query)
+	fmt.Println(args.Datetime)
+	fmt.Println(args.SecurityId)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	rows, err := conn.DB.Query(ctx, query, args.SecurityId, args.Datetime)
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			fmt.Println("Query timed out")
+			return nil, fmt.Errorf("query timed out: %w", err)
+		}
+		fmt.Printf("Query error: %v\n", err)
 		return nil, fmt.Errorf("2fg0 %w", err)
 	}
+	fmt.Printf("SQL QUERY COMPLETE: Datetime: {%s}, Passed bars :{%v}\n", args.Datetime, args.Bars)
 	// we will iterate through each entry in ticker db for the given security id
 	// until we have completed the request, starting with the most recent.
 	// this allows us to handle ticker changes if the data request requires pulling across
