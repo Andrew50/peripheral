@@ -38,6 +38,7 @@ func GetSecurityDateBounds(conn *data.Conn, userId int, rawArgs json.RawMessage)
 	if err != nil {
 		return nil, fmt.Errorf("2j6kld: %v", err)
 	}
+	defer rows.Close()
 	var result GetSecurityDateBoundsResults
 	for rows.Next() {
 		var tableMinDate *time.Time
@@ -156,9 +157,6 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		fmt.Println("ELSE")
 		return nil, fmt.Errorf("9d83j: Incorrect direction passed")
 	}
-	fmt.Println(query)
-	fmt.Println(args.Datetime)
-	fmt.Println(args.SecurityId)
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 	rows, err := conn.DB.Query(ctx, query, args.SecurityId, args.Datetime)
@@ -170,7 +168,8 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		fmt.Printf("Query error: %v\n", err)
 		return nil, fmt.Errorf("2fg0 %w", err)
 	}
-	fmt.Printf("SQL QUERY COMPLETE: Datetime: {%s}, Passed bars :{%v}\n", args.Datetime, args.Bars)
+	defer rows.Close()
+
 	// we will iterate through each entry in ticker db for the given security id
 	// until we have completed the request, starting with the most recent.
 	// this allows us to handle ticker changes if the data request requires pulling across
