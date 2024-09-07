@@ -12,13 +12,16 @@ func StringToTime(datetimeStr string) (time.Time, error) {
 		time.DateTime,
 		time.DateOnly,
 	}
+	easternLocation, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return time.Time{}, fmt.Errorf("issue loading eastern location 3klffk")
+
+	}
 	for _, layout := range layouts {
-		if dt, err := time.Parse(layout, datetimeStr); err == nil {
-			easternTimeLocation, tzErr := time.LoadLocation("America/New_York")
-			if tzErr != nil {
-				return time.Time{}, fmt.Errorf("Failed to load EST timezone: %w", err)
-			}
-			return dt.In(easternTimeLocation), nil
+
+		if dt, err := time.ParseInLocation(layout, datetimeStr, easternLocation); err == nil {
+
+			return dt, nil
 		}
 	}
 	return time.Time{}, fmt.Errorf("unsupported datetime format: %s", datetimeStr)
@@ -42,7 +45,7 @@ func StringToTime(datetimeStr string) (time.Time, error) {
 	return parsedTime, nil*/
 
 }
-func MillisFromDatetimeString(datetime string) (models.Millis, error){
+func MillisFromDatetimeString(datetime string) (models.Millis, error) {
 	layouts := []string{
 		time.DateTime,
 		time.DateOnly,
@@ -56,7 +59,7 @@ func MillisFromDatetimeString(datetime string) (models.Millis, error){
 			return models.Millis(dt.In(easternTimeLocation)), nil
 		}
 	}
-    return models.Millis(time.Now()), fmt.Errorf("212k invalid string datetime")
+	return models.Millis(time.Now()), fmt.Errorf("212k invalid string datetime")
 
 }
 func NanosFromDatetimeString(datetime string) (models.Nanos, error) {

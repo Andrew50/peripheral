@@ -10,6 +10,7 @@
     import type {Writable} from 'svelte/store';
     import {writable, get} from 'svelte/store';
     import { onMount  } from 'svelte';
+    import { UTCtoEST, ESTtoUTC } from '$lib/core/datetime';
     let latestCrosshairPositionTime: Time;
     interface barData {
         time: UTCTimestamp;
@@ -194,9 +195,10 @@
                             return;
                         }
                         const barsToRequest = 50 - Math.floor(logicalRange.from); 
+                        const datetimeToRequest = ESTtoUTC(mainChartCandleSeries.data()[0].time as UTCTimestamp) as UTCTimestamp
                         const req : chartRequest = {
                             ticker: get(chartQuery).ticker, 
-                            datetime: mainChartCandleSeries.data()[0].time.toString(),
+                            datetime: datetimeToRequest.toString(),
                             securityId: get(chartQuery).securityId, 
                             timeframe: get(chartQuery).timeframe, 
                             extendedHours: get(chartQuery).extendedHours, 
@@ -212,9 +214,10 @@
                 } else if (logicalRange.to > mainChartCandleSeries.data().length-10) {
                     if(mainChartLatestDataReached) {return;}
                     const barsToRequest = 50 + Math.floor(logicalRange.to) - mainChartCandleSeries.data().length; 
+                    const datetimeToRequest = ESTtoUTC(mainChartCandleSeries.data()[mainChartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp
                     const req : chartRequest = {
                         ticker: get(chartQuery).ticker, 
-                        datetime: mainChartCandleSeries.data()[mainChartCandleSeries.data().length-1].time.toString(),
+                        datetime: datetimeToRequest.toString(),
                         securityId: get(chartQuery).securityId, 
                         timeframe: get(chartQuery).timeframe, 
                         extendedHours: get(chartQuery).extendedHours, 
@@ -271,8 +274,9 @@
                 let newCandleData = [];
                 let newVolumeData = [];
                 for (let i =0; i < barDataList.length; i++) {
+                    var dataTime = UTCtoEST(barDataList[i].time as UTCTimestamp) as UTCTimestamp
                     newCandleData.push({
-                        time: barDataList[i].time as UTCTimestamp, 
+                        time: dataTime, 
                         open: barDataList[i].open, 
                         high: barDataList[i].high, 
                         low: barDataList[i].low,
@@ -280,24 +284,33 @@
                     });
                     const candleColor = barDataList[i].close > barDataList[i].open 
                     newVolumeData.push({
-                        time: barDataList[i].time, 
+                        time: dataTime, 
                         value: barDataList[i].volume, 
                         color: candleColor ? '#089981' : '#ef5350',
                     })
                 }
                 if (inst.requestType == 'loadAdditionalData') {
                     if(inst.direction == 'backward') {
-                        const lastCandleTime = mainChartCandleSeries.data()[0].time;
-                        if (typeof lastCandleTime === 'number') {
-                            if (newCandleData[newCandleData.length-1].time < lastCandleTime) {
+                        const earliestCandleTime = mainChartCandleSeries.data()[0].time;
+                        if (typeof earliestCandleTime === 'number') {
+                            if (newCandleData[newCandleData.length-1].time <= earliestCandleTime) {
+                                newCandleData = newCandleData.slice(0, newCandleData.length-1)
+                                newVolumeData = newVolumeData.slice(0, newVolumeData.length -1)
                                 newCandleData = [...newCandleData, ...mainChartCandleSeries.data()]
                                 newVolumeData = [...newVolumeData, ...mainChartVolumeSeries.data()]
                             }
                         }
                         console.log("loaded more data")
                     } else{
-                        newCandleData = [...mainChartCandleSeries.data(), ...newCandleData]
-                        newVolumeData = [...mainChartVolumeSeries.data(), ...newVolumeData]
+                        const latestCandleTime = mainChartCandleSeries.data()[mainChartCandleSeries.data().length-1].time;
+                        if (typeof latestCandleTime === 'number') {
+                            if(newCandleData[0].time >= latestCandleTime) {
+                                newCandleData = newCandleData.slice(1, newCandleData.length)
+                                newVolumeData = newVolumeData.slice(1, newVolumeData.length)
+                                newCandleData = [...mainChartCandleSeries.data(), ...newCandleData]
+                                newVolumeData = [...mainChartVolumeSeries.data(), ...newVolumeData]
+                            }
+                        }
 
                     }
                 }
@@ -312,8 +325,17 @@
                         mainChartLatestDataReached = true;
                     }
                 }
-                mainChartCandleSeries.setData(newCandleData);
-                mainChartVolumeSeries.setData(newVolumeData);
+                if (inst.direction == "forward") {
+                    const visibleRange = mainChart.timeScale().getVisibleRange()
+                    const vrFrom = visibleRange?.from as Time
+                    const vrTo = visibleRange?.to as Time
+                    mainChartCandleSeries.setData(newCandleData);
+                    mainChartVolumeSeries.setData(newVolumeData);
+                    mainChart.timeScale().setVisibleRange({from: vrFrom, to: vrTo})
+                } else {
+                    mainChartCandleSeries.setData(newCandleData);
+                    mainChartVolumeSeries.setData(newVolumeData);
+                }
                 const sma10Data = calculateSMA(newCandleData, 10);
                 const sma20Data = calculateSMA(newCandleData, 20);
 
@@ -336,7 +358,9 @@
         
         
     }
-    function 
+    export function consoleLogChartData() {
+        console.log(mainChartCandleSeries.data())
+    }
     onMount(() => {
        chartQuery.subscribe((v:Instance)=>{
             const req : chartRequest = {
@@ -375,7 +399,9 @@
     C: {$hoveredCandleData.close}
     V: {$hoveredCandleData.volume}
 </div>
-
+<div class="testingbutton">
+    <button on:click={consoleLogChartData}>Test</button>
+</div>
 
 <style>
     #chart_container {
