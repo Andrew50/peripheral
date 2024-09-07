@@ -181,7 +181,7 @@ func initTickerDatabase(conn *Conn) error {
                     fmt.Printf("29jgk: %v\n",err)
                         fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString," ",maxDateString)
                 }else{
-                    fmt.Printf("skipped supposed ticker change %s %s",sec.Ticker,sec.CompositeFIGI)
+                    fmt.Printf("skipped supposed ticker change %s %s\n",sec.Ticker,sec.CompositeFIGI)
                 }
             }else if diagnoses == "false delist"{
                 _,err = conn.DB.Exec(context.Background(),"UPDATE securities set maxDate = NULL where ticker = $1 AND maxDate = (SELECT max(maxDate) FROM securities WHERE ticker = $1)",sec.Ticker)
