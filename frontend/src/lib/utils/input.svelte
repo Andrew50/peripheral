@@ -248,7 +248,7 @@
                         <thead>
                             <tr>
                                 <th>Ticker</th>
-                                <th>Date</th>
+                                <th>Delist Date</th>
                             </tr>
                         </thead>
                         <tbody>
