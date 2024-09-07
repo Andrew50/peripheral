@@ -11,6 +11,73 @@ import (
 	"unicode"
 )
 
+type GetSecurityDateBoundsArgs struct {
+	SecurityId int `json:"securityId"`
+}
+
+type GetSecurityDateBoundsResults struct {
+	MinDate float64 `json:"minDate"`
+	MaxDate float64 `json:"maxDate"`
+}
+
+// 1m should only load ~4 days worth of data at a time, at maximum scroll out
+func GetSecurityDateBounds(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetSecurityDateBoundsArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("3k5pv GetSecurityDateBounds invalid args: %v", err)
+	}
+	fmt.Println(args.SecurityId)
+	query := `SELECT MIN(minDate) as minDate, 
+			CASE WHEN COUNT(maxDate) = COUNT(*) THEN MAX(maxDate)
+				ELSE NULL 
+			END AS maxDate
+				FROM SECURITIES 
+				WHERE securityid = $1 
+				GROUP BY securityid`
+	rows, err := conn.DB.Query(context.Background(), query, args.SecurityId)
+	if err != nil {
+		return nil, fmt.Errorf("2j6kld: %v", err)
+	}
+	var result GetSecurityDateBoundsResults
+	for rows.Next() {
+		var tableMinDate *time.Time
+		var tableMaxDate *time.Time
+		err := rows.Scan(&tableMinDate, &tableMaxDate)
+		if err != nil {
+			return nil, fmt.Errorf("43lg: %v", err)
+		}
+		result.MinDate = float64(tableMinDate.Unix())
+		if tableMaxDate == nil {
+			var ticker string
+			tickerQuery := `SELECT ticker FROM SECURITIES WHERE securityId = $1 ORDER BY minDate DESC`
+			err := conn.DB.QueryRow(context.Background(), tickerQuery).Scan(&ticker)
+			if err != nil {
+				return nil, fmt.Errorf("3pgkv: %v", err)
+			}
+			queryStart, err := data.MillisFromDatetimeString(time.Now().Add(-24 * time.Hour).Format(time.DateTime))
+			if err != nil {
+				return nil, fmt.Errorf("k4lvm, %v", err)
+			}
+			queryEnd, err := data.MillisFromDatetimeString(time.Now().Format(time.DateTime))
+			if err != nil {
+				return nil, fmt.Errorf("4lgkv, %v", err)
+			}
+			iter, err := data.GetAggsData(conn.Polygon, ticker, 1, "day", queryStart, queryEnd, 1000, "desc")
+			if err != nil {
+				return nil, fmt.Errorf("5jk4lv, %v", err)
+			}
+			for iter.Next() {
+				result.MaxDate = float64(time.Time(iter.Item().Timestamp).Unix())
+				return result, nil
+			}
+		} else {
+			result.MaxDate = float64(tableMaxDate.Unix())
+			return result, nil
+		}
+	}
+	return nil, fmt.Errorf("did not return bounds for securityId {%v}", args.SecurityId)
+}
+
 type GetChartDataArgs struct {
 	SecurityId    int    `json:"securityId"`
 	Timeframe     string `json:"timeframe"`
@@ -29,7 +96,6 @@ type GetChartDataResults struct {
 	Volume   float64 `json:"volume"`
 }
 
-// 1m should only load ~4 days worth of data at a time, at maximum scroll out
 func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	// CHECK TO MAKE SURE EndDateTime > StartDateTime ***********
 	var args GetChartDataArgs
@@ -43,7 +109,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if !strings.Contains(args.Datetime, "-") && args.Datetime != "" {
 		seconds, err := strconv.ParseInt(args.Datetime, 10, 64)
 		if err != nil {
-			fmt.Println("3k5lv: Error converting string to int:", err)
+			return nil, fmt.Errorf("3k5lv: Error converting string to int: %v", err)
 		}
 		t := time.Unix(seconds, 0)
 		args.Datetime = t.Format(time.DateTime)
@@ -62,7 +128,9 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 				 ticker != $2
 				 ORDER BY minDate DESC`
 		polyResultOrder = "desc"
+		fmt.Println("Datetime is null")
 	} else if args.Direction == "backward" {
+		fmt.Println("BACKWARDS")
 		query = `SELECT ticker, minDate, maxDate
 				 FROM securities 
 				 WHERE securityid = $1 AND (maxDate > $2 OR maxDate IS NULL)
@@ -70,9 +138,11 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		polyResultOrder = "desc"
 		maxDate, err = data.StringToTime(args.Datetime)
 		if err != nil {
+			fmt.Println("ISSUEEEEEEEEEEEEEEEEEEEEEE")
 			return nil, fmt.Errorf("zdk4g: Datetime parse error %v", err)
 		}
 	} else if args.Direction == "forward" {
+		fmt.Println("FORWARD")
 		query = `SELECT ticker, minDate, maxDate
 				 FROM securities 
 				 WHERE securityid = $1 AND (minDate < $2)
@@ -83,12 +153,24 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			return nil, fmt.Errorf("3ktng: Datetime parse error %v", err)
 		}
 	} else {
+		fmt.Println("ELSE")
 		return nil, fmt.Errorf("9d83j: Incorrect direction passed")
 	}
-	rows, err := conn.DB.Query(context.Background(), query, args.SecurityId, args.Datetime)
+	fmt.Println(query)
+	fmt.Println(args.Datetime)
+	fmt.Println(args.SecurityId)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	rows, err := conn.DB.Query(ctx, query, args.SecurityId, args.Datetime)
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			fmt.Println("Query timed out")
+			return nil, fmt.Errorf("query timed out: %w", err)
+		}
+		fmt.Printf("Query error: %v\n", err)
 		return nil, fmt.Errorf("2fg0 %w", err)
 	}
+	fmt.Printf("SQL QUERY COMPLETE: Datetime: {%s}, Passed bars :{%v}\n", args.Datetime, args.Bars)
 	// we will iterate through each entry in ticker db for the given security id
 	// until we have completed the request, starting with the most recent.
 	// this allows us to handle ticker changes if the data request requires pulling across
@@ -103,12 +185,10 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		if err != nil {
 			return nil, fmt.Errorf("3tyl %w", err)
 		}
-		fmt.Printf("Ticker {%s}", ticker)
 		if maxDateFromSQL == nil {
 			now := time.Now()
 			maxDateFromSQL = &now
 		}
-		fmt.Println(minDateFromSQL, maxDateFromSQL, maxDate)
 		// Estimate the start date to be sent to polygon. This should ideally overestimate the amount of data
 		// Needed to fulfill the number of requested bars
 		var queryStartTime time.Time // Used solely as the start date for polygon query

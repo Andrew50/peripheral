@@ -19,6 +19,10 @@
         close: number;
         volume: number;
     }
+    interface securityDateBounds {
+        minDate: number;
+        maxDate: number;
+    }
     export let chartQuery: Writable<Instance> = writable({datetime:"", extendedHours:false, timeframe:"1d",ticker:""})
     export function changeChart(newInstance : Instance):void{
         chartQuery.update((oldInstance:Instance)=>{
@@ -31,11 +35,14 @@
     let mainChart: IChartApi;
     let mainChartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let mainChartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
+    let mainChartEarliestDataReached = false;
+    let mainChartLatestDataReached = false;  
     let sma10Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
     let sma20Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
-    let maxDateReached = false;
 
-    let loadingChartData: boolean = false
+    let isloadingChartData: boolean = false
+    let lastChartRequestTime = 0; 
+    const chartRequestThrottleDuration = 200; 
     let shiftDown = false
     const hoveredCandleData = writable({
         open: 0,
@@ -170,31 +177,36 @@
         mainChart.subscribeCrosshairMove(crosshairMoveEvent); 
         mainChart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
             if(logicalRange) {
+                if (Date.now() - lastChartRequestTime < chartRequestThrottleDuration) {return;}
                 if(logicalRange.from < 10) {
-                    loadingChartData = true
-                    const candleData = mainChartCandleSeries.data();
-            if (candleData.length === 0) {
-                console.error("No candle data to request additional bars");
-                return;
-            }
-                    const barsToRequest = 50 - Math.floor(logicalRange.from); 
-                    const req : chartRequest = {
-                        ticker: get(chartQuery).ticker, 
-                        datetime: mainChartCandleSeries.data()[0].time.toString(),
-                        securityId: get(chartQuery).securityId, 
-                        timeframe: get(chartQuery).timeframe, 
-                        extendedHours: get(chartQuery).extendedHours, 
-                        bars: barsToRequest, 
-                        direction: "backward",
-                        requestType: "loadAdditionalData"
+                    if (!mainChartEarliestDataReached) {
+                        const candleData = mainChartCandleSeries.data();
+                        if (candleData.length === 0) {
+                            console.error("No candle data to request additional bars");
+                            return;
+                        }
+                        const barsToRequest = 50 - Math.floor(logicalRange.from); 
+                        const req : chartRequest = {
+                            ticker: get(chartQuery).ticker, 
+                            datetime: mainChartCandleSeries.data()[0].time.toString(),
+                            securityId: get(chartQuery).securityId, 
+                            timeframe: get(chartQuery).timeframe, 
+                            extendedHours: get(chartQuery).extendedHours, 
+                            bars: barsToRequest, 
+                            direction: "backward",
+                            requestType: "loadAdditionalData"
+                        }
+                       backendLoadChartData(req);
+                    } else {
+                        console.log("LIMIT REACHED!")
                     }
-                   backendLoadChartData(req);
                     
                 } else if (logicalRange.to > mainChartCandleSeries.data().length-10) {
+                    if(mainChartLatestDataReached) {return;}
                     const barsToRequest = 50 + Math.floor(logicalRange.to) - mainChartCandleSeries.data().length; 
                     const req : chartRequest = {
                         ticker: get(chartQuery).ticker, 
-                        datetime: mainChartCandleSeries.data()[0].time.toString(),
+                        datetime: mainChartCandleSeries.data()[mainChartCandleSeries.data().length-1].time.toString(),
                         securityId: get(chartQuery).securityId, 
                         timeframe: get(chartQuery).timeframe, 
                         extendedHours: get(chartQuery).extendedHours, 
@@ -230,9 +242,16 @@
 
     }
     function backendLoadChartData(inst:chartRequest): void{
-        if (!inst.ticker || !inst.timeframe || !inst.securityId) {return;}
+        if(isloadingChartData) {return;}
+        isloadingChartData = true;
+        lastChartRequestTime = Date.now()
+        if (!inst.ticker || !inst.timeframe || !inst.securityId) {
+            isloadingChartData = false;
+            return;
+        }
         const timeframe = inst.timeframe 
         if (timeframe && timeframe.length < 1) {
+            isloadingChartData = false;
             return 
         }
         let barDataList: barData[] = []
@@ -274,26 +293,36 @@
 
                     }
                 }
+                // Check if we reach end of avaliable data 
+                if (inst.datetime == '' ) {
+                    mainChartLatestDataReached = true;
+                }
+                else if (result.length < inst.bars) {
+                    if(inst.direction == 'backward') {
+                        mainChartEarliestDataReached = true;
+                    } else {
+                        mainChartLatestDataReached = true;
+                    }
+                }
+                mainChartCandleSeries.setData(newCandleData);
+                mainChartVolumeSeries.setData(newVolumeData);
                 const sma10Data = calculateSMA(newCandleData, 10);
                 const sma20Data = calculateSMA(newCandleData, 20);
 
                 sma10Series.setData(sma10Data);
                 sma20Series.setData(sma20Data);
-                mainChartCandleSeries.setData(newCandleData)
-                mainChartVolumeSeries.setData(newVolumeData)
                 if (inst.requestType == 'loadNewTicker') {
                     mainChart.timeScale().fitContent();
                 }
                 console.log("Done updating chart!")
-                console.log(mainChartCandleSeries.data())
-                return Promise.resolve();
+                return;
             })
             .finally(() => {
-            loadingChartData = false; // Ensure this runs after data is loaded
+                isloadingChartData = false; // Ensure this runs after data is loaded
             })
             .catch((error: string) => {
                 console.error("Error fetching chart data:", error);
-            loadingChartData = false; // Ensure this runs after data is loaded
+                isloadingChartData = false; // Ensure this runs after data is loaded
             });
             
         
@@ -313,7 +342,8 @@
                 requestType: "loadNewTicker"
 
             }
-            maxDateReached = false;
+            mainChartEarliestDataReached = false;
+            mainChartLatestDataReached = false; 
             backendLoadChartData(req)
         }) 
        initializeChart()
