@@ -336,7 +336,7 @@
         
         
     }
-
+    function 
     onMount(() => {
        chartQuery.subscribe((v:Instance)=>{
             const req : chartRequest = {
