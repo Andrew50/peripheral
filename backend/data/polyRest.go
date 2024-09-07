@@ -164,7 +164,6 @@ func GetPolygonRelatedTickers(client *polygon.Client, ticker string) ([]string, 
 	}
 	return relatedTickers, nil
 }
-func GetPreviousDailyBar(client *polygon.Client)
 
 // func relatedTickers (ticker string) ([]string, error) {
 // 	c := polygon.New(apiKey)
@@ -188,7 +187,7 @@ func GetAggsData(client *polygon.Client, ticker string, barLength int, timeframe
 	fromMillis models.Millis, toMillis models.Millis, limit int, resultsOrder string) (*iter.Iter[models.Agg], error) {
 	timespan := models.Timespan(timeframe)
 	if resultsOrder != "asc" && resultsOrder != "desc" {
-		return nil, fmt.Errorf("Incorrect Order String passed %s", resultsOrder)
+		return nil, fmt.Errorf("incorrect order string passed %s", resultsOrder)
 	}
 	params := models.ListAggsParams{
 		Ticker:     ticker,
