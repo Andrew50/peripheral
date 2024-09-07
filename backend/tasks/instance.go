@@ -8,18 +8,17 @@ import (
 	"time"
 )
 
-
 type GetSimilarInstancesArgs struct {
-    Ticker string `json:"ticker"`
-	SecurityId int `json:"securityId"`
-    Datetime string `json:"datetime"`
-    Timeframe string `json:"timeframe"`
+	Ticker     string `json:"ticker"`
+	SecurityId int    `json:"securityId"`
+	Datetime   string `json:"datetime"`
+	Timeframe  string `json:"timeframe"`
 }
 type GetSimilarInstancesResults struct {
-    Ticker string `json:"ticker"`
-    SecurityId int `json:"securityId"`
-    Datetime string `json:"datetime"`
-    Timeframe string `json:"timeframe"`
+	Ticker     string `json:"ticker"`
+	SecurityId int    `json:"securityId"`
+	Datetime   string `json:"datetime"`
+	Timeframe  string `json:"timeframe"`
 }
 
 func GetSimilarInstances(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -28,16 +27,16 @@ func GetSimilarInstances(conn *data.Conn, userId int, rawArgs json.RawMessage) (
 	if err != nil {
 		return nil, fmt.Errorf("9hsdf invalid args: %v", err)
 	}
-    var  queryTicker string
-    conn.DB.QueryRow(context.Background(),`SELECT ticker from securities where securityId = $1
-         ORDER BY maxDate IS NULL DESC, maxDate DESC`,args.SecurityId).Scan(&queryTicker)
+	var queryTicker string
+	conn.DB.QueryRow(context.Background(), `SELECT ticker from securities where securityId = $1
+         ORDER BY maxDate IS NULL DESC, maxDate DESC`, args.SecurityId).Scan(&queryTicker)
 	tickers, err := data.GetPolygonRelatedTickers(conn.Polygon, queryTicker)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get related tickers: %v", err)
 	}
-    if len(tickers) == 0 {
-        return nil, fmt.Errorf("49sb no related tickers")
-    }
+	if len(tickers) == 0 {
+		return nil, fmt.Errorf("49sb no related tickers")
+	}
 	/*parsedDatetime, err := data.StringToTime(args.Datetime)
 	if err != nil {
 		return nil, fmt.Errorf("invalid datetime format: %v", err)
@@ -59,7 +58,7 @@ func GetSimilarInstances(conn *data.Conn, userId int, rawArgs json.RawMessage) (
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %v", err)
 		}
-        fmt.Print(result.Ticker)
+		fmt.Print(result.Ticker)
 		result.Datetime = args.Datetime
 		result.Timeframe = args.Timeframe
 		results = append(results, result)
@@ -107,6 +106,7 @@ func GetInstances(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if err != nil {
 		return nil, fmt.Errorf("358dg: %v", err)
 	}
+	defer rows.Close()
 	var instances []Instance
 	for rows.Next() {
 		var instance Instance
