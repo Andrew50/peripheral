@@ -36,7 +36,7 @@
 
   async function signUp(username : string, password : string) {
     try {
-        await publicRequest('signup', {username:username, password:password},errorMessage);
+        await publicRequest('signup', {username:username, password:password});
         await signIn(username, password); // Automatically sign in after account creation
     } catch {
         errorMessage.set('Failed to create account');
@@ -48,10 +48,10 @@
 <Header />
 <main>
   <div class="container">
-    <input placeholder="Username" bind:value={username} on:keydown={handleKeydown} />
+    <input autofocus placeholder="Username" bind:value={username} on:keydown={handleKeydown} />
     <input placeholder="Password" bind:value={password} on:keydown={handleKeydown} />
     {#if loginMenu}
-      <button on:click={() => signIn(username, password)} class="login-btn">Sign In</button>
+      <button  on:click={() => signIn(username, password)} class="login-btn">Sign In</button>
     {:else}
       <button on:click={() => signUp(username, password)} class="signup-btn">Create Account</button>
     {/if}
