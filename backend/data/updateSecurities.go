@@ -90,6 +90,15 @@ func toFilteredMap(tickers []models.Ticker) map[string]models.Ticker {
 	return tickerMap
 }
 
+func contains(slice []string, item string) bool {
+	for _, str := range slice {
+		if str == item {
+			return true
+		}
+	}
+	return false
+}
+
 func initTickerDatabase(conn *Conn) error {
     test := false
     if true{
@@ -123,88 +132,94 @@ func initTickerDatabase(conn *Conn) error {
             cmdTag, err := conn.DB.Exec(context.Background(),"UPDATE securities set figi = $1 where ticker = $2 and maxDate is NULL",sec.CompositeFIGI,sec.Ticker)
             if err != nil || cmdTag.RowsAffected() == 0 {
                 fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString)
-                fmt.Printf("2mi0d %v \n",err)
+                fmt.Printf("22m9i0d %v \n",err)
             }else if test{
                 fmt.Printf("figi change: %s\n",sec.Ticker)
             }
         }
         for _,sec := range(additions){
-            var diagnoses string
-            tickerMatchFromFigiLookup := ""
-            prevTicker := sec.Ticker
-            if sec.CompositeFIGI != ""{
-                err := conn.DB.QueryRow(context.Background(),"SELECT ticker FROM securities where figi = $1 order by COALESCE(maxDate, '2200-01-01') DESC LIMIT 1",sec.CompositeFIGI).Scan(&tickerMatchFromFigiLookup)
-                if err != nil && err != pgx.ErrNoRows {
+            diagnoses := make([]string,0)
+            var maxDate sql.NullTime
+            tickerInDB := ""
+            if sec.CompositeFIGI != ""{ //if figi exists
+                err := conn.DB.QueryRow(context.Background(),"SELECT ticker, maxDate FROM securities where figi = $1 order by COALESCE(maxDate, '2200-01-01') DESC LIMIT 1",sec.CompositeFIGI).Scan(&tickerInDB,&maxDate)
+                if err == nil{ //if figi exists in db
+                    if tickerInDB == sec.Ticker{
+                        diagnoses = append(diagnoses,"false delist")
+                    }else{
+                        diagnoses = append(diagnoses,"ticker change")
+                        if (dataExists(conn.Polygon,sec.Ticker,maxDate.Time.Format(dateFormat),yesterdayDateString)){
+                            diagnoses = append(diagnoses,"false delist")
+                        }
+                    }
+                }else if err == pgx.ErrNoRows { //figi doesnt exist in db
+                    err := conn.DB.QueryRow(context.Background(),"SELECT maxDate from securities where ticker = $1",sec.Ticker).Scan(&maxDate)
+                    if err == nil {
+                        if dataExists(conn.Polygon,sec.Ticker,maxDate.Time.Format(dateFormat),yesterdayDateString){
+                            diagnoses = append(diagnoses,"false delist")
+                            diagnoses = append(diagnoses,"figi change")
+                        }else{
+                            diagnoses = append(diagnoses,"listing")
+                        }
+                    }else if err == pgx.ErrNoRows{
+                        diagnoses = append(diagnoses,"listing")
+                    }else{
+                        fmt.Printf("n9i0v2 %v\n",err)
+                        fmt.Println(sec.Ticker)
+                    }
+                }else{ //valid error
                     fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString)
                     fmt.Printf("32gerf %v \n",err)
                 }
-            }
-            var maxDate sql.NullTime
-            err := conn.DB.QueryRow(context.Background(),"SELECT maxDate FROM securities where ticker = $1 order by COALESCE(maxDate, '2200-01-01') DESC LIMIT 1",sec.Ticker).Scan(&maxDate)
-            var maxDateString string
-            if err == pgx.ErrNoRows { //the ticker doesnt exists in the database already
-                maxDateString = "DNE"
-            }else if err != nil{ //real error with db
-                fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString)
-                fmt.Printf("vm2d: %v\n",err)
-            }else{ //ticker is in db
-                if (!maxDate.Valid){
-                    maxDateString = "NULL"
-                    fmt.Printf("god its so fucked up %s\n",maxDate.Time.Format(dateFormat))
-                }else{
-                    maxDateString = maxDate.Time.Format(dateFormat)
-                }
-            }
-            if tickerMatchFromFigiLookup != ""{ //means there is a figi and it exists in db at some point
-                if tickerMatchFromFigiLookup == sec.Ticker{ //figi and ticker matches a previous entry so therefore its the same securitiy
-                    diagnoses = "false delist"
-                }else{ //ticker is different but figi found means trackable ticker change with possible false delist
-                    if (maxDateString != "NULL"){
-                        fmt.Printf("ticker change and false delist %s -> %s @ %s\n",tickerMatchFromFigiLookup, sec.Ticker,maxDateString)
-                        diagnoses = "ticker change and false delist"
+            }else{ //deal with tickers
+                var figiInDB string
+                err := conn.DB.QueryRow(context.Background(),"SELECT figi, maxDate FROM securities where ticker = $1 order by COALESCE(maxDate, '2200-01-01') DESC LIMIT 1",sec.Ticker).Scan(&figiInDB,&maxDate)
+                if (err == nil){ // ticker exists in db and data exists
+                    if dataExists(conn.Polygon,sec.Ticker,maxDate.Time.Format(dateFormat),yesterdayDateString){
+                        diagnoses = append(diagnoses, "false delist")
                     }else{
-                        fmt.Printf("ticker change no delist\n")
-                        diagnoses = "ticker change"
+                        diagnoses = append(diagnoses, "listing")
                     }
+                }else if err == pgx.ErrNoRows{
+                    diagnoses = append(diagnoses,"listing")
+                }else{
+                    fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString)
+                    fmt.Printf("321mf %v \n",err)
                 }
-            }else if (maxDateString != "DNE" && dataExists(conn.Polygon,sec.Ticker,maxDateString,yesterdayDateString)){ //no figi but ticker exists and there is data since supposed delist
-                diagnoses = "false delist" 
-            }else{
-                diagnoses = "listing"
             }
-            if diagnoses == "listing" {
+            if contains(diagnoses, "ticker change"){
+                _,err = conn.DB.Exec(context.Background(),"INSERT INTO securities (securityId, figi, ticker, minDate) SELECT securityID, figi, $1, $2 from securities where figi = $3",sec.Ticker,yesterdayDateString,sec.CompositeFIGI)
+                if err != nil {
+                    fmt.Printf("mh93: %v\n",err)
+                    fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString,  " ", yesterdayDateString)
+                }else if test{
+                    fmt.Printf("ticker change %s\n",sec.Ticker)
+                }
+            }
+            if contains(diagnoses, "figi change"){
+                fmt.Println(diagnoses)
+                cmdTag, err := conn.DB.Exec(context.Background(),"UPDATE securities set figi = $1 where ticker = $2 and (maxDate = (SELECT max(maxDate) FROM securities where ticker = $1) or maxDate IS NULL)",sec.CompositeFIGI,sec.Ticker)
+                if err != nil || cmdTag.RowsAffected() == 0 {
+                    fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString)
+                    fmt.Printf("2mi0d %v \n",err)
+                }else if test{
+                    fmt.Printf("figi change: %s\n",sec.Ticker)
+                }
+            }
+            if contains(diagnoses,"listing") {
                 _,err = conn.DB.Exec(context.Background(),"INSERT INTO securities (figi, ticker, minDate) values ($1,$2,$3)",sec.CompositeFIGI, sec.Ticker, currentDateString)
                 if err != nil {
                     fmt.Println("swedfo")
-                    fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString," ",maxDateString)
+                    fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString)
                 }else if test{
                   fmt.Printf("listed %s\n",sec.Ticker)
                 }
             }
-            if diagnoses == "ticker change" || diagnoses == "ticker change and false delist"{
-                err = conn.DB.QueryRow(context.Background(),"SELECT 1 FROM securities where ticker = $1 and figi = $2",sec.Ticker,sec.CompositeFIGI).Scan(new(interface{}))
-                if err == pgx.ErrNoRows {
-                    //fmt.Printf("Inserting: Ticker: %s, FIGI: %s, MinDate: %s\n", sec.Ticker, sec.CompositeFIGI, currentDateString)
-                    _,err = conn.DB.Exec(context.Background(),"INSERT INTO securities (securityId, figi, ticker, minDate) SELECT securityID, figi, $1, $2 from securities where figi = $3",sec.Ticker,yesterdayDateString,sec.CompositeFIGI)
-                    if err != nil {
-                        fmt.Printf("mh93: %v\n",err)
-                        fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString," ",maxDateString)
-                        fmt.Println(yesterdayDateString)
-                    }else if test{
-                        fmt.Printf("ticker change %s\n",sec.Ticker)
-                    }
-                }else if err != nil{
-                    fmt.Printf("29jgk: %v\n",err)
-                        fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString," ",maxDateString)
-                }else{
-                    //fmt.Printf("skipped supposed ticker change %s %s\n",sec.Ticker,sec.CompositeFIGI)
-                }
-            }
-            if diagnoses == "false delist" || diagnoses == "ticker change and false delist"{
-                _,err = conn.DB.Exec(context.Background(),"UPDATE securities set maxDate = NULL where ticker = $1 AND maxDate = (SELECT max(maxDate) FROM securities WHERE ticker = $1)",sec.Ticker)
-                if err != nil {
+            if contains(diagnoses, "false delist") {
+                cmdTag,err := conn.DB.Exec(context.Background(),"UPDATE securities set maxDate = NULL where ticker = $1 AND (maxDate = (SELECT max(maxDate) FROM securities WHERE ticker = $1) or maxDate IS NULL)",sec.Ticker)
+                if err != nil || cmdTag.RowsAffected() == 0 {
                     fmt.Printf("swe9fo: %v\n",err)
-                    fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString," ",maxDateString)
+                    fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString)
                 }else if test{
                     fmt.Printf("false delist %s\n",sec.Ticker)
                 }
@@ -212,8 +227,8 @@ func initTickerDatabase(conn *Conn) error {
             
         }
         for _,sec := range(removals){
-            _,err:= conn.DB.Exec(context.Background(),"UPDATE securities SET maxDate = $1 where ticker = $2 and maxDate is NULL",yesterdayDateString,sec.Ticker)
-            if err != nil {
+            cmdTag,err:= conn.DB.Exec(context.Background(),"UPDATE securities SET maxDate = $1 where ticker = $2 and maxDate is NULL",yesterdayDateString,sec.Ticker)
+            if err != nil || cmdTag.RowsAffected() == 0 {
                 fmt.Println("91md")
                 fmt.Println(sec.Ticker," ",sec.CompositeFIGI," ",currentDateString)
             }else if test{
