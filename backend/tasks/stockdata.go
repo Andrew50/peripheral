@@ -106,6 +106,11 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if err != nil {
 		return nil, fmt.Errorf("getChartData invalid timeframe: %v", err)
 	}
+	easternLocation, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return nil, fmt.Errorf("issue loading eastern location 3klffk")
+
+	}
 	if !strings.Contains(args.Datetime, "-") && args.Datetime != "" {
 		seconds, err := strconv.ParseInt(args.Datetime, 10, 64)
 		if err != nil {
@@ -167,6 +172,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	// two different tickers.
 	var barDataList []GetChartDataResults
 	numBarsRemaining := args.Bars
+
 	for rows.Next() {
 		var ticker string
 		var minDateFromSQL *time.Time
@@ -179,13 +185,24 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			now := time.Now()
 			maxDateFromSQL = &now
 		}
+		var minDateSQL time.Time
+		var maxDateSQL time.Time
+		if minDateFromSQL != nil {
+			minDateET := (*minDateFromSQL).In(easternLocation)
+			minDateSQL = time.Date(minDateET.Year(), minDateET.Month(), minDateET.Day(), 0, 0, 0, 0, easternLocation).AddDate(0, 0, 1).Add(4 * time.Hour)
+		}
+		if maxDateFromSQL != nil {
+			maxDateET := (*maxDateFromSQL).In(easternLocation)
+			maxDateSQL = time.Date(maxDateET.Year(), maxDateET.Month(), maxDateET.Day(), 0, 0, 0, 0, easternLocation).AddDate(0, 0, 1).Add(4 * time.Hour)
+		}
+
 		// Estimate the start date to be sent to polygon. This should ideally overestimate the amount of data
 		// Needed to fulfill the number of requested bars
 		var queryStartTime time.Time // Used solely as the start date for polygon query
 		var queryEndTime time.Time   // Used solely as the end date for polygon query
 		if args.Direction == "backward" {
-			if maxDate.Compare(*maxDateFromSQL) == 1 || maxDate.IsZero() { // if maxdate from the securities is before the current max date
-				maxDate = *maxDateFromSQL
+			if maxDate.Compare(maxDateSQL) == 1 || maxDate.IsZero() { // if maxdate from the securities is before the current max date
+				maxDate = maxDateSQL
 			}
 
 			// var estimatedStartTime time.Time
@@ -206,12 +223,12 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			// } else {
 			// 	queryStartTime = minDate
 			// }
-			queryStartTime = *minDateFromSQL
+			queryStartTime = minDateSQL
 			queryEndTime = maxDate
 			maxDate = queryStartTime
 		} else if args.Direction == "forward" { // MIGHT NOT NEED THIS CHECK AS INCORRECT DIRCTIONS GET FILTERED OUT ABOVE
-			if minDate.Compare(*minDateFromSQL) == -1 {
-				minDate = *minDateFromSQL
+			if minDate.Compare(minDateSQL) == -1 {
+				minDate = minDateSQL
 			}
 			// var estimatedEndTime time.Time
 			// if dataConsolidationType == "d" {
@@ -226,7 +243,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			// } else {
 			// 	queryEndTime = maxDate
 			// }
-			queryEndTime = *maxDateFromSQL
+			queryEndTime = maxDateSQL
 			queryStartTime = minDate
 			minDate = queryEndTime
 		}
@@ -241,6 +258,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		if err != nil {
 			return nil, fmt.Errorf("n91ve2n0 %v", err)
 		}
+		fmt.Printf("Query Start Date: %s, Query End Date: %s \n", time.Time(date1), time.Time(date2))
 		iter, err := data.GetAggsData(conn.Polygon, ticker, multiplier, timespan,
 			date1, date2,
 			5000, polyResultOrder)
