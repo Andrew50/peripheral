@@ -298,7 +298,6 @@ func GetCIK(conn *Conn, ticker string, dateOnly string) (string, error) {
 	if dateOnly == "" {
 		err = conn.DB.QueryRow(context.Background(), "SELECT cik FROM securities WHERE ticker = $1 AND tickerEndDate is null", ticker).
 			Scan(&dbCIK)
-
 	} else {
 		err = conn.DB.QueryRow(context.Background(), "SELECT cik FROM securities WHERE ticker = $1 AND tickerStartDate <= $2 AND (tickerEndDate >= $2 OR tickerEndDate IS NULL)", ticker, dateOnly).
 			Scan(&dbCIK)
