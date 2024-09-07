@@ -134,7 +134,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		query = `SELECT ticker, minDate, maxDate
 				 FROM securities 
 				 WHERE securityid = $1 AND (maxDate > $2 OR maxDate IS NULL)
-				 ORDER BY minDate DESC`
+				 ORDER BY minDate DESC limit 1`
 		polyResultOrder = "desc"
 		maxDate, err = data.StringToTime(args.Datetime)
 		if err != nil {
