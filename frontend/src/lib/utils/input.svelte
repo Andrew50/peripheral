@@ -89,6 +89,7 @@
         if (inputType === "ticker"){
             const securities = await privateRequest<Security[]>("getSecuritiesFromTicker",{ticker:inputString})
             if (Array.isArray(securities) && securities.length > 0){
+                console.log(securities)
                 return {inputValid: securities.some((v:Security)=>v.ticker === inputString), securities: securities}
             }else{
                 return {inputValid: false, securities: []}
@@ -253,7 +254,7 @@
                         </thead>
                         <tbody>
                             {#each $inputQuery.securities as sec, i}
-                                <tr on:click={() => {inputQuery.set(enterInput(get(inputQuery,i)))}}>
+                                <tr on:click={() => {inputQuery.set(enterInput(get(inputQuery),i))}}>
                                     <td>{sec.ticker}</td>
                                     <td>{sec.maxDate === null ? 'Current' : sec.maxDate}</td> 
                                 </tr>
