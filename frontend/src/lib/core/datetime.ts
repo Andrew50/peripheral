@@ -33,3 +33,14 @@ export function ESTtoUTC(easternTimestamp : number) {
         return easternTimestamp - offset2 
     } 
 }
+export function StringESTtoUTC(easternString : string) {
+    const dateEST = new Date(easternString) // ig this interprets in EST, so no shifting necessary
+    const offset1 = getEasternTimeOffset(dateEST)
+    const offset2 = getEasternTimeOffset(new Date(dateEST.getTime() - offset1*1000))
+    if((offset1 == offset2) || (offset1 < offset2)) {
+        return dateEST.getTime()/1000 - offset1
+    } else if (offset1 > offset2) {
+        return dateEST.getTime()/1000 - offset2 
+    } 
+
+}
