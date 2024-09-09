@@ -20,10 +20,6 @@
         close: number;
         volume: number;
     }
-    interface securityDateBounds {
-        minDate: number;
-        maxDate: number;
-    }
     export let chartQuery: Writable<Instance> = writable({datetime:"", extendedHours:false, timeframe:"1d",ticker:""})
     export function changeChart(newInstance : Instance):void{
         chartQuery.update((oldInstance:Instance)=>{
@@ -73,6 +69,8 @@
         currentPrice: 0,
     })
 
+    let queuedForwardLoad: Function | null = null
+
     function calculateSMA(data: CandlestickData[], period: number): { time: UTCTimestamp, value: number }[] {
         let smaData: { time: UTCTimestamp, value: number }[] = [];
         for (let i = 0; i < data.length; i++) {
@@ -118,6 +116,11 @@
                 return god
             })
         }
+        chartContainer.addEventListener('mouseup', (event) => {
+            if (queuedForwardLoad != null){
+                queuedForwardLoad()
+            }
+        })
         chartContainer.addEventListener('mousedown',event  => {
             console.log(get(shiftOverlay))
             if (shiftDown || get(shiftOverlay).isActive){
@@ -212,24 +215,28 @@
                     }
                     
                 } else if (logicalRange.to > mainChartCandleSeries.data().length-10) {
-                    if(mainChartLatestDataReached) {return;}
-                    const barsToRequest = 50 + Math.floor(logicalRange.to) - mainChartCandleSeries.data().length; 
-                    const datetimeToRequest = ESTtoUTC(mainChartCandleSeries.data()[mainChartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp
-                    const req : chartRequest = {
-                        ticker: get(chartQuery).ticker, 
-                        datetime: datetimeToRequest.toString(),
-                        securityId: get(chartQuery).securityId, 
-                        timeframe: get(chartQuery).timeframe, 
-                        extendedHours: get(chartQuery).extendedHours, 
-                        bars: barsToRequest, 
-                        direction: "forward",
-                        requestType: "loadAdditionalData"
-                    }
-                    backendLoadChartData(req);
+                    const barsToRequest = 150 + 2*Math.floor(logicalRange.to) - mainChartCandleSeries.data().length; 
+                    forwardLoad(barsToRequest)
                 }
             }
         })
     }
+    function forwardLoad(bars:number){
+        if(mainChartLatestDataReached) {return;}
+        const datetimeToRequest = ESTtoUTC(mainChartCandleSeries.data()[mainChartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp
+        const req : chartRequest = {
+            ticker: get(chartQuery).ticker, 
+            datetime: datetimeToRequest.toString(),
+            securityId: get(chartQuery).securityId, 
+            timeframe: get(chartQuery).timeframe, 
+            extendedHours: get(chartQuery).extendedHours, 
+            bars: bars,
+            direction: "forward",
+            requestType: "loadAdditionalData"
+        }
+        backendLoadChartData(req);
+    }
+
     function crosshairMoveEvent(param: MouseEventParams) {
         if (!param.point) {
             return;
@@ -327,29 +334,46 @@
                     }
                 }
                 if (inst.direction == "forward") {
-                    const visibleRange = mainChart.timeScale().getVisibleRange()
-                    const vrFrom = visibleRange?.from as Time
-                    const vrTo = visibleRange?.to as Time
-                    mainChartCandleSeries.setData(newCandleData);
-                    mainChartVolumeSeries.setData(newVolumeData);
-                    mainChart.timeScale().setVisibleRange({from: vrFrom, to: vrTo})
+                    console.log("queued forward load")
+                    queuedForwardLoad = () => {
+                        const visibleRange = mainChart.timeScale().getVisibleRange()
+                        const vrFrom = visibleRange?.from as Time
+                        const vrTo = visibleRange?.to as Time
+                        mainChartCandleSeries.setData(newCandleData);
+                        mainChartVolumeSeries.setData(newVolumeData);
+                        mainChart.timeScale().setVisibleRange({from: vrFrom, to: vrTo})
+                        queuedForwardLoad = null
+                        const sma10Data = calculateSMA(newCandleData, 10);
+                        const sma20Data = calculateSMA(newCandleData, 20);
+
+                        sma10Series.setData(sma10Data);
+                        sma20Series.setData(sma20Data);
+                        if (inst.requestType == 'loadNewTicker') {
+                            mainChart.timeScale().fitContent();
+                        }
+                        console.log("ran queued forward load")
+                        isloadingChartData = false; // Ensure this runs after data is loaded
+                    }
+                    if (inst.requestType == "loadNewTicker"){
+                        queuedForwardLoad()
+                        queuedForwardLoad = null
+                    }
+
                 } else {
                     mainChartCandleSeries.setData(newCandleData);
                     mainChartVolumeSeries.setData(newVolumeData);
-                }
-                const sma10Data = calculateSMA(newCandleData, 10);
-                const sma20Data = calculateSMA(newCandleData, 20);
+                    const sma10Data = calculateSMA(newCandleData, 10);
+                    const sma20Data = calculateSMA(newCandleData, 20);
 
-                sma10Series.setData(sma10Data);
-                sma20Series.setData(sma20Data);
-                if (inst.requestType == 'loadNewTicker') {
-                    mainChart.timeScale().fitContent();
+                    sma10Series.setData(sma10Data);
+                    sma20Series.setData(sma20Data);
+                    if (inst.requestType == 'loadNewTicker') {
+                        mainChart.timeScale().fitContent();
+                    }
+                    isloadingChartData = false; // Ensure this runs after data is loaded
+                    console.log("Done updating chart!")
                 }
-                console.log("Done updating chart!")
                 return;
-            })
-            .finally(() => {
-                isloadingChartData = false; // Ensure this runs after data is loaded
             })
             .catch((error: string) => {
                 console.error("Error fetching chart data:", error);
@@ -395,6 +419,9 @@
                 mainChart.applyOptions({timeScale: {timeVisible: true}});
             }
             backendLoadChartData(req)
+            if (v.datetime != ""){
+                forwardLoad(150)
+            }
         }) 
 
     });
@@ -409,6 +436,7 @@
     </div>
     </div>
 {/if}
+
 <div class="legend">
     O: {$hoveredCandleData.open}
     H: {$hoveredCandleData.high}
