@@ -51,12 +51,12 @@ func MillisFromDatetimeString(datetime string) (models.Millis, error) {
 		time.DateOnly,
 	}
 	for _, layout := range layouts {
-		if dt, err := time.Parse(layout, datetime); err == nil {
-			easternTimeLocation, err := time.LoadLocation("America/New_York")
-			if err != nil {
-                return models.Millis(time.Now()), err
-			}
-			return models.Millis(dt.In(easternTimeLocation)), nil
+		easternTimeLocation, err := time.LoadLocation("America/New_York")
+		if err != nil {
+			return models.Millis(time.Now()), err
+		}
+		if dt, err := time.ParseInLocation(layout, datetime, easternTimeLocation); err == nil {
+			return models.Millis(dt), nil
 		}
 	}
 	return models.Millis(time.Now()), fmt.Errorf("212k invalid string datetime")
@@ -71,7 +71,7 @@ func NanosFromDatetimeString(datetime string) (models.Nanos, error) {
 		if dt, err := time.Parse(layout, datetime); err == nil {
 			easternTimeLocation, err := time.LoadLocation("America/New_York")
 			if err != nil {
-                return models.Nanos(time.Now()), fmt.Errorf("gw9ni2f3 %v",err)
+				return models.Nanos(time.Now()), fmt.Errorf("gw9ni2f3 %v", err)
 			}
 			return models.Nanos(dt.In(easternTimeLocation)), nil
 		}

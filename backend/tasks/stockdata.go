@@ -38,6 +38,10 @@ func GetSecurityDateBounds(conn *data.Conn, userId int, rawArgs json.RawMessage)
 		return nil, fmt.Errorf("2j6kld: %v", err)
 	}
 	defer rows.Close()
+	easternTimeLocation, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return nil, err
+	}
 	var result GetSecurityDateBoundsResults
 	for rows.Next() {
 		var tableMinDate *time.Time
@@ -54,11 +58,11 @@ func GetSecurityDateBounds(conn *data.Conn, userId int, rawArgs json.RawMessage)
 			if err != nil {
 				return nil, fmt.Errorf("3pgkv: %v", err)
 			}
-			queryStart, err := data.MillisFromDatetimeString(time.Now().Add(-24 * time.Hour).Format(time.DateTime))
+			queryStart, err := data.MillisFromDatetimeString(time.Now().Add(-24 * time.Hour).In(easternTimeLocation).Format(time.DateTime))
 			if err != nil {
 				return nil, fmt.Errorf("k4lvm, %v", err)
 			}
-			queryEnd, err := data.MillisFromDatetimeString(time.Now().Format(time.DateTime))
+			queryEnd, err := data.MillisFromDatetimeString(time.Now().In(easternTimeLocation).Format(time.DateTime))
 			if err != nil {
 				return nil, fmt.Errorf("4lgkv, %v", err)
 			}
@@ -138,17 +142,18 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 				 WHERE securityid = $1 AND (maxDate > $2 OR maxDate IS NULL)
 				 ORDER BY minDate DESC limit 1`
 		polyResultOrder = "desc"
-		maxDate, err = data.StringToTime(args.Datetime)
+		maxDate, err = time.ParseInLocation(time.DateTime, args.Datetime, easternLocation)
+		fmt.Println(maxDate)
 		if err != nil {
 			return nil, fmt.Errorf("zdk4g: Datetime parse error %v", err)
 		}
 	} else if args.Direction == "forward" {
 		query = `SELECT ticker, minDate, maxDate
 				 FROM securities 
-				 WHERE securityid = $1 AND (minDate < $2)
+				 WHERE securityid = $1 AND  (minDate < $2)
 				 ORDER BY minDate ASC`
 		polyResultOrder = "asc"
-		minDate, err = data.StringToTime(args.Datetime)
+		minDate, err = time.ParseInLocation(time.DateTime, args.Datetime, easternLocation)
 		if err != nil {
 			return nil, fmt.Errorf("3ktng: Datetime parse error %v", err)
 		}
@@ -189,11 +194,11 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		var maxDateSQL time.Time
 		if minDateFromSQL != nil {
 			minDateET := (*minDateFromSQL).In(easternLocation)
-			minDateSQL = time.Date(minDateET.Year(), minDateET.Month(), minDateET.Day(), 0, 0, 0, 0, easternLocation).AddDate(0, 0, 1).Add(4 * time.Hour)
+			minDateSQL = time.Date(minDateET.Year(), minDateET.Month(), minDateET.Day(), 0, 0, 0, 0, easternLocation).AddDate(0, 0, 1)
 		}
 		if maxDateFromSQL != nil {
 			maxDateET := (*maxDateFromSQL).In(easternLocation)
-			maxDateSQL = time.Date(maxDateET.Year(), maxDateET.Month(), maxDateET.Day(), 0, 0, 0, 0, easternLocation).AddDate(0, 0, 1).Add(4 * time.Hour)
+			maxDateSQL = time.Date(maxDateET.Year(), maxDateET.Month(), maxDateET.Day(), 0, 0, 0, 0, easternLocation).AddDate(0, 0, 1)
 		}
 
 		// Estimate the start date to be sent to polygon. This should ideally overestimate the amount of data
@@ -250,6 +255,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		// SIDE NOTE: We need to figure out how often GetAggs is updated
 		// within polygon to see what endpoint we need to call
 		// for live intraday data.
+		fmt.Printf("Query Params Start Date: %s, Query End Date: %s \n", time.Time(queryStartTime), time.Time(queryEndTime))
 		date1, err := data.MillisFromDatetimeString(queryStartTime.Format(time.DateTime))
 		if err != nil {
 			return nil, fmt.Errorf("1n0f %v", err)

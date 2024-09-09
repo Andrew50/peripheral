@@ -10,7 +10,7 @@
     import type {Writable} from 'svelte/store';
     import {writable, get} from 'svelte/store';
     import { onMount  } from 'svelte';
-    import { UTCtoEST, ESTtoUTC } from '$lib/core/datetime';
+    import { UTCtoEST, ESTtoUTC, StringESTtoUTC } from '$lib/core/datetime';
     let latestCrosshairPositionTime: Time;
     interface barData {
         time: UTCTimestamp;
@@ -293,6 +293,7 @@
                     if(inst.direction == 'backward') {
                         const earliestCandleTime = mainChartCandleSeries.data()[0].time;
                         if (typeof earliestCandleTime === 'number') {
+                            console.log("is Number")
                             if (newCandleData[newCandleData.length-1].time <= earliestCandleTime) {
                                 newCandleData = newCandleData.slice(0, newCandleData.length-1)
                                 newVolumeData = newVolumeData.slice(0, newVolumeData.length -1)
@@ -362,10 +363,19 @@
         console.log(mainChartCandleSeries.data())
     }
     onMount(() => {
+        initializeChart()
        chartQuery.subscribe((v:Instance)=>{
+        const dateTimeToRequest = v.datetime;
+        // if (v.datetime != "") {
+        //     dateTimeToRequest = StringESTtoUTC(v.datetime).toString();
+        // }
+        // else {
+        //     dateTimeToRequest = v.datetime;
+        // }
+        console.log(dateTimeToRequest)
             const req : chartRequest = {
                 ticker: v.ticker,
-                datetime: v.datetime,
+                datetime: dateTimeToRequest,
                 securityId: v.securityId,
                 timeframe: v.timeframe,
                 extendedHours: v.extendedHours,
@@ -376,9 +386,16 @@
             }
             mainChartEarliestDataReached = false;
             mainChartLatestDataReached = false; 
+            if (v.timeframe?.includes('m') || v.timeframe?.includes('w') || 
+                    v.timeframe?.includes('d') || v.timeframe?.includes('q'))
+                {
+                    mainChart.applyOptions({timeScale: {timeVisible: false}});
+                }
+            else {
+                mainChart.applyOptions({timeScale: {timeVisible: true}});
+            }
             backendLoadChartData(req)
         }) 
-       initializeChart()
 
     });
 </script>
