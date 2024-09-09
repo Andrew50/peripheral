@@ -10,7 +10,7 @@
     import type {Writable} from 'svelte/store';
     import {writable, get} from 'svelte/store';
     import { onMount  } from 'svelte';
-    import { UTCtoEST, ESTtoUTC, StringESTtoUTC } from '$lib/core/datetime';
+    import { UTCtoEST, ESTtoUTC,  ESTStringToUTCTimestamp, UTCTimestampToESTString } from '$lib/core/datetime';
     let latestCrosshairPositionTime: Time;
     interface barData {
         time: UTCTimestamp;
@@ -20,7 +20,11 @@
         close: number;
         volume: number;
     }
-    export let chartQuery: Writable<Instance> = writable({datetime:"", extendedHours:false, timeframe:"1d",ticker:""})
+    interface securityDateBounds {
+        minDate: number;
+        maxDate: number;
+    }
+    export let chartQuery: Writable<Instance> = writable({datetime:0, extendedHours:false, timeframe:"1d",ticker:""})
     export function changeChart(newInstance : Instance):void{
         chartQuery.update((oldInstance:Instance)=>{
             return { ...oldInstance, ...newInstance}
@@ -198,10 +202,10 @@
                             return;
                         }
                         const barsToRequest = 50 - Math.floor(logicalRange.from); 
-                        const datetimeToRequest = ESTtoUTC(mainChartCandleSeries.data()[0].time as UTCTimestamp) as UTCTimestamp
+                        const datetimeToRequest = ESTtoUTC(mainChartCandleSeries.data()[0].time as UTCTimestamp)*1000 as number
                         const req : chartRequest = {
                             ticker: get(chartQuery).ticker, 
-                            datetime: datetimeToRequest.toString(),
+                            datetime: datetimeToRequest,
                             securityId: get(chartQuery).securityId, 
                             timeframe: get(chartQuery).timeframe, 
                             extendedHours: get(chartQuery).extendedHours, 
@@ -386,17 +390,13 @@
     export function consoleLogChartData() {
         console.log(mainChartCandleSeries.data())
     }
+    export function testDatetime() {
+        console.log(ESTStringToUTCTimestamp(inputValue));
+    }
     onMount(() => {
         initializeChart()
        chartQuery.subscribe((v:Instance)=>{
-        const dateTimeToRequest = v.datetime;
-        // if (v.datetime != "") {
-        //     dateTimeToRequest = StringESTtoUTC(v.datetime).toString();
-        // }
-        // else {
-        //     dateTimeToRequest = v.datetime;
-        // }
-        console.log(dateTimeToRequest)
+        const dateTimeToRequest = v.datetime; // this should be in UTC timestamp (milliseconds) by the time it reaches here 
             const req : chartRequest = {
                 ticker: v.ticker,
                 datetime: dateTimeToRequest,
@@ -446,6 +446,8 @@
 </div>
 <div class="testingbutton">
     <button on:click={consoleLogChartData}>Test</button>
+    <input bind:value={inputValue}/>
+    <button on:click={testDatetime}>Submit</button>
 </div>
 
 <style>

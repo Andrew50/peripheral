@@ -1,3 +1,5 @@
+import {DateTime} from 'luxon';
+
 function getEasternTimeOffset(date : Date)  {
     const options: Intl.DateTimeFormatOptions= { timeZone: 'America/New_York', timeZoneName: 'short' };
     const formatter = new Intl.DateTimeFormat([], options);
@@ -18,12 +20,12 @@ function getEasternTimeOffset(date : Date)  {
     return 0; // Fallback (shouldn't happen)
 }
 
-export function UTCtoEST(utcTimestamp : number) {
+export function UTCtoEST(utcTimestamp : number): number{
     const dateUTC = new Date(utcTimestamp * 1000);
     const offset = getEasternTimeOffset(dateUTC)
     return utcTimestamp + offset;
 }
-export function ESTtoUTC(easternTimestamp : number) {
+export function ESTtoUTC(easternTimestamp : number): number {
     const dateEST = new Date(easternTimestamp * 1000) 
     const offset1 = getEasternTimeOffset(dateEST)
     const offset2 = getEasternTimeOffset(new Date((easternTimestamp - offset1)*1000))
@@ -32,19 +34,17 @@ export function ESTtoUTC(easternTimestamp : number) {
     } else if (offset1 > offset2) {
         return easternTimestamp - offset2 
     } 
+    return -1
 }
-export function StringESTtoUTC(easternString : string) {
-    const dateEST = new Date(easternString) // ig this interprets in EST, so no shifting necessary
-    const offset1 = getEasternTimeOffset(dateEST)
-    const offset2 = getEasternTimeOffset(new Date(dateEST.getTime() - offset1*1000))
-    if((offset1 == offset2) || (offset1 < offset2)) {
-        return dateEST.getTime()/1000 - offset1
-    } else if (offset1 > offset2) {
-        return dateEST.getTime()/1000 - offset2 
-    } 
+export function ESTStringToUTCTimestamp(easternString : string): number{
+    const easternTime = DateTime.fromFormat(easternString, 'yyyy-MM-dd HH:mm:ss', {zone: 'America/New_York'})
 
+    const utcTimestamp: number = easternTime.toUTC().toMillis();
+
+    return utcTimestamp; 
 }
-export function StringESTtoUTCTimestamp(easternString : string) {
-    const localETDate = new Date(easternString + 'GMT-0500');
-    
+export function UTCTimestampToESTString(utcTimestamp : number): string {
+    const utcDatetime = DateTime.fromMillis(utcTimestamp, {zone: 'utc'})
+    const easternTime = utcDatetime.setZone('America/New_York')
+    return easternTime.toFormat('yyyy-MM-dd HH:mm:ss')
 }
