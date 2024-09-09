@@ -8,12 +8,14 @@ import (
 	"strings"
 	"time"
 	"unicode"
-    "github.com/jackc/pgx/v4"
 
+	"github.com/jackc/pgx/v4"
+
+	"database/sql"
+
+	_ "github.com/lib/pq"
 	polygon "github.com/polygon-io/client-go/rest"
 	"github.com/polygon-io/client-go/rest/models"
-    _ "github.com/lib/pq"
-    "database/sql"
 )
 
 type ActiveSecurity struct {
@@ -22,7 +24,7 @@ type ActiveSecurity struct {
 	cik                  string
 	figi                 string
 	tickerActivationDate time.Time
-    falseDelist bool
+	falseDelist          bool
 }
 
 func logAction(test bool,loop int, ticker string, targetTicker string, figi string, currentDate string, action string, err error) {
@@ -51,9 +53,9 @@ func logAction(test bool,loop int, ticker string, targetTicker string, figi stri
 
 
 func validateTickerString(ticker string) bool {
-    if strings.Contains(ticker, "."){
-        return false
-    }
+	if strings.Contains(ticker, ".") {
+		return false
+	}
 	for _, char := range ticker {
 		if unicode.IsLower(char) {
 			return false
@@ -77,18 +79,18 @@ func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []mode
 			if _, exists := usedTickers[ticker]; !exists {
 				additions = append(additions, sec)
 				usedTickers[ticker] = struct{}{}
-			}else{
-                    fmt.Printf("duplicate %s\n",ticker)
-            }
+			} else {
+				fmt.Printf("duplicate %s\n", ticker)
+			}
 		} else {
 			if yesterdaySec.CompositeFIGI != sec.CompositeFIGI {
 				// Check if already in the figi changes set
 				if _, exists := usedTickers[ticker]; !exists {
 					figiChanges = append(figiChanges, sec)
 					usedTickers[ticker] = struct{}{}
-				}else{
-                    fmt.Printf("duplicate %s\n",ticker)
-                }
+				} else {
+					fmt.Printf("duplicate %s\n", ticker)
+				}
 			}
 		}
 	}
@@ -100,9 +102,9 @@ func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []mode
 			if _, exists := usedTickers[ticker]; !exists {
 				removals = append(removals, sec)
 				usedTickers[ticker] = struct{}{}
-			}else{
-                    fmt.Printf("duplicate %s\n",ticker)
-                }
+			} else {
+				fmt.Printf("duplicate %s\n", ticker)
+			}
 		}
 	}
 
@@ -110,14 +112,14 @@ func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []mode
 }
 func dataExists(client *polygon.Client, ticker string, fromDate string, toDate string) bool {
 	timespan := models.Timespan("day")
-    fromMillis, err := MillisFromDatetimeString(fromDate)
-    if err != nil {
-        fmt.Println(fromDate)
-    }
-    toMillis, err := MillisFromDatetimeString(toDate)
-    if err != nil {
-        fmt.Println(toDate)
-    }
+	fromMillis, err := MillisFromDatetimeString(fromDate)
+	if err != nil {
+		fmt.Println(fromDate)
+	}
+	toMillis, err := MillisFromDatetimeString(toDate)
+	if err != nil {
+		fmt.Println(toDate)
+	}
 	params := models.ListAggsParams{
 		Ticker:     ticker,
 		Multiplier: 1,
@@ -126,24 +128,24 @@ func dataExists(client *polygon.Client, ticker string, fromDate string, toDate s
 		To:         toMillis,
 	}
 	iter := client.ListAggs(context.Background(), &params)
-    return iter.Next()
-    /*c := 0
-    for iter.Next(){
-        if (c > 1){
-            return true
-        }
-        c++
-    }
-    return false*/
+	return iter.Next()
+	/*c := 0
+	  for iter.Next(){
+	      if (c > 1){
+	          return true
+	      }
+	      c++
+	  }
+	  return false*/
 }
 
 func toFilteredMap(tickers []models.Ticker) map[string]models.Ticker {
 	tickerMap := make(map[string]models.Ticker)
-    for _,sec := range(tickers){
-        if validateTickerString(sec.Ticker){
-            tickerMap[sec.Ticker] = sec
-        }
-    }
+	for _, sec := range tickers {
+		if validateTickerString(sec.Ticker) {
+			tickerMap[sec.Ticker] = sec
+		}
+	}
 	return tickerMap
 }
 
