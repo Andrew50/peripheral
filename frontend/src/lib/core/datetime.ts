@@ -44,3 +44,7 @@ export function StringESTtoUTC(easternString : string) {
     } 
 
 }
+export function StringESTtoUTCTimestamp(easternString : string) {
+    const localETDate = new Date(easternString + 'GMT-0500');
+    
+}
