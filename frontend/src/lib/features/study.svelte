@@ -6,6 +6,7 @@
     import {onMount} from 'svelte'
     import {privateRequest} from '$lib/api/backend'
     import type {Instance} from '$lib/api/backend'
+    import  {UTCTimestampToESTString} from '$lib/core/datetime'
     import {queryInstanceInput} from '$lib/utils/input.svelte'
     interface Study extends Instance{
         studyId: number;
@@ -93,7 +94,7 @@
                 {#each $studies as study}
                     <tr class="table-row" on:click={() => selectStudy(study)}>
                         <td>{study.ticker}</td>
-                        <td>{study.datetime}</td>
+                        <td>{UTCTimestampToESTString(study.timestamp)}</td>
                     </tr>
 
                     {#if selectedStudyId == study.studyId}
