@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 	"unicode"
 )
@@ -85,7 +84,7 @@ func GetSecurityDateBounds(conn *data.Conn, userId int, rawArgs json.RawMessage)
 type GetChartDataArgs struct {
 	SecurityId    int    `json:"securityId"`
 	Timeframe     string `json:"timeframe"`
-	Datetime      string `json:"datetime"`  // If this datetime is just a date, it needs to grab the end of the day as opposed to the beginning of the day
+	Timestamp     int64  `json:"datetime"`  // If this datetime is just a date, it needs to grab the end of the day as opposed to the beginning of the day
 	Direction     string `json:"direction"` // to ensure that we get the data from that date
 	Bars          int    `json:"bars"`
 	ExtendedHours bool   `json:"extendedhours"`
@@ -115,21 +114,22 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		return nil, fmt.Errorf("issue loading eastern location 3klffk")
 
 	}
-	if !strings.Contains(args.Datetime, "-") && args.Datetime != "" {
-		seconds, err := strconv.ParseInt(args.Datetime, 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("3k5lv: Error converting string to int: %v", err)
-		}
-		t := time.Unix(seconds, 0)
-		args.Datetime = t.Format(time.DateTime)
-	}
+	// if !strings.Contains(args.Datetime, "-") && args.Datetime != "" {
+	// 	seconds, err := strconv.ParseInt(args.Datetime, 10, 64)
+	// 	if err != nil {
+	// 		return nil, fmt.Errorf("3k5lv: Error converting string to int: %v", err)
+	// 	}
+	// 	t := time.Unix(seconds, 0)
+	// 	args.Datetime = t.Format(time.DateTime)
+	// }
+	inputTimestamp := time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).UTC()
 	var query string
 	var polyResultOrder string
 	var minDate time.Time
 	var maxDate time.Time
 	// This probably could be optimized to just having a variable for the comparison sign
 	// but its fine for now
-	if args.Datetime == "" {
+	if args.Timestamp == 0 { // default value
 		query = `SELECT ticker, minDate, maxDate 
                  FROM securities 
                  WHERE securityid = $1 AND 
@@ -142,27 +142,22 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 				 WHERE securityid = $1 AND (maxDate > $2 OR maxDate IS NULL)
 				 ORDER BY minDate DESC limit 1`
 		polyResultOrder = "desc"
-		maxDate, err = time.ParseInLocation(time.DateTime, args.Datetime, easternLocation)
+		maxDate = inputTimestamp
 		fmt.Println(maxDate)
-		if err != nil {
-			return nil, fmt.Errorf("zdk4g: Datetime parse error %v", err)
-		}
 	} else if args.Direction == "forward" {
 		query = `SELECT ticker, minDate, maxDate
 				 FROM securities 
 				 WHERE securityid = $1 AND  (minDate < $2)
 				 ORDER BY minDate ASC`
 		polyResultOrder = "asc"
-		minDate, err = time.ParseInLocation(time.DateTime, args.Datetime, easternLocation)
-		if err != nil {
-			return nil, fmt.Errorf("3ktng: Datetime parse error %v", err)
-		}
+		minDate = inputTimestamp
+
 	} else {
 		return nil, fmt.Errorf("9d83j: Incorrect direction passed")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
-	rows, err := conn.DB.Query(ctx, query, args.SecurityId, args.Datetime)
+	rows, err := conn.DB.Query(ctx, query, args.SecurityId, inputTimestamp.In(easternLocation).Format(time.DateTime))
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return nil, fmt.Errorf("query timed out: %w", err)
