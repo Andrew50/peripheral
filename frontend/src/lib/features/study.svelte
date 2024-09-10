@@ -5,7 +5,7 @@
     import Entry from './entry.svelte'
     import {onMount} from 'svelte'
     import {privateRequest} from '$lib/api/backend'
-    import type {Instance} from '$lib/api/backend'
+    import type {Instance} from '$lib/core/types'
     import  {UTCTimestampToESTString} from '$lib/core/datetime'
     import {queryInstanceInput} from '$lib/utils/input.svelte'
     interface Study extends Instance{
@@ -100,7 +100,7 @@
                     {#if selectedStudyId == study.studyId}
                         <tr>
                             <td colspan="2">
-                                <Entry completed={study.complete} func="Study" id={study.studyId} />
+                                <Entry completed={study.completed} func="Study" id={study.studyId} />
                             </td>
                         </tr>
                     {/if}
