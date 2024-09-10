@@ -84,7 +84,7 @@ func GetSecurityDateBounds(conn *data.Conn, userId int, rawArgs json.RawMessage)
 type GetChartDataArgs struct {
 	SecurityId    int    `json:"securityId"`
 	Timeframe     string `json:"timeframe"`
-	Timestamp     int64  `json:"datetime"`  // If this datetime is just a date, it needs to grab the end of the day as opposed to the beginning of the day
+	Timestamp     int64  `json:"timestamp"` // If this datetime is just a date, it needs to grab the end of the day as opposed to the beginning of the day
 	Direction     string `json:"direction"` // to ensure that we get the data from that date
 	Bars          int    `json:"bars"`
 	ExtendedHours bool   `json:"extendedhours"`

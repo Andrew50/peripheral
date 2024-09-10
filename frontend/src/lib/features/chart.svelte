@@ -202,10 +202,10 @@
                             return;
                         }
                         const barsToRequest = 50 - Math.floor(logicalRange.from); 
-                        const datetimeToRequest = ESTtoUTC(mainChartCandleSeries.data()[0].time as UTCTimestamp)*1000 as number
+                        const timestampToRequest = ESTtoUTC(mainChartCandleSeries.data()[0].time as UTCTimestamp)*1000 as number
                         const req : chartRequest = {
                             ticker: get(chartQuery).ticker, 
-                            datetime: datetimeToRequest,
+                            timestamp: timestampToRequest,
                             securityId: get(chartQuery).securityId, 
                             timeframe: get(chartQuery).timeframe, 
                             extendedHours: get(chartQuery).extendedHours, 
@@ -277,7 +277,7 @@
             return 
         }
         let barDataList: barData[] = []
-        privateRequest<barData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, datetime:inst.datetime, direction:inst.direction, bars:inst.bars, extendedhours:inst.extendedHours})
+        privateRequest<barData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, timestamp:inst.timestamp, direction:inst.direction, bars:inst.bars, extendedhours:inst.extendedHours})
             .then((result: barData[]) => {
                 if (! (Array.isArray(result) && result.length > 0)){ return}
                 barDataList = result;
