@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
+    "time"
 )
 
 type GetStudiesArgs struct {
@@ -16,7 +16,8 @@ type GetStudiesResult struct {
 	StudyId    int       `json:"studyId"`
 	SecurityId int       `json:"securityId"`
 	Ticker     string    `json:"ticker"`
-	Datetime   time.Time `json:"datetime"`
+	//Datetime   time.Time `json:"datetime"`
+    Timestamp  int64  `json:"timestamp"`
 	Completed  bool      `json:"completed"`
 }
 
@@ -38,10 +39,12 @@ func GetStudies(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface
 	var studies []GetStudiesResult
 	for rows.Next() {
 		var study GetStudiesResult
-		err := rows.Scan(&study.StudyId, &study.SecurityId, &study.Ticker, &study.Datetime, &study.Completed)
+        var studyTime time.Time
+		err := rows.Scan(&study.StudyId, &study.SecurityId, &study.Ticker, &studyTime, &study.Completed)
 		if err != nil {
 			return nil, err
 		}
+        study.Timestamp = studyTime.Unix()
 		studies = append(studies, study)
 	}
 	return studies, nil
