@@ -390,9 +390,9 @@
     export function consoleLogChartData() {
         console.log(mainChartCandleSeries.data())
     }
-    export function testDatetime() {
+   /* export function testDatetime() {
         console.log(ESTStringToUTCTimestamp(inputValue));
-    }
+    }*/
     onMount(() => {
         initializeChart()
        chartQuery.subscribe((v:Instance)=>{
@@ -443,11 +443,6 @@
     L: {$hoveredCandleData.low}
     C: {$hoveredCandleData.close}
     V: {$hoveredCandleData.volume}
-</div>
-<div class="testingbutton">
-    <button on:click={consoleLogChartData}>Test</button>
-    <input bind:value={inputValue}/>
-    <button on:click={testDatetime}>Submit</button>
 </div>
 
 <style>

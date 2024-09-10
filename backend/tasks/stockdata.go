@@ -308,7 +308,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	}
 
 	return nil, fmt.Errorf("c34lg: Did not return bar data for securityid {%v}, timeframe {%v}, datetime {%v}, direction {%v}, Bars {%v}, extendedHours {%v}",
-		args.SecurityId, args.Timeframe, args.Datetime, args.Direction, args.Bars, args.ExtendedHours)
+		args.SecurityId, args.Timeframe, args.Timestamp, args.Direction, args.Bars, args.ExtendedHours)
 }
 
 func getTimeframe(timeframeString string) (int, string, string, int, error) {
