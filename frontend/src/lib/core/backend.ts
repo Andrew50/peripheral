@@ -1,5 +1,3 @@
-//import { browser } from "$app/environment";
-
 let base_url: string;
 
 if (typeof window !== 'undefined') {
@@ -38,12 +36,6 @@ export async function publicRequest<T>(func: string, args: any): Promise<T> {
 export async function privateRequest<T>(func: string, args: any): Promise<T> {
     let authToken;
     authToken = sessionStorage.getItem("authToken")
- /*   if (browser){
-         authToken = sessionStorage.getItem("authToken")
-    }else{
-        console.log("server: ",func, args)
-        return null as T
-    }*/
     const headers = {
         'Content-Type': 'application/json',
         ...(authToken ? { 'Authorization': authToken} : {}),
@@ -67,3 +59,6 @@ export async function privateRequest<T>(func: string, args: any): Promise<T> {
         return Promise.reject(errorMessage);
     }
 }
+
+
+//export async function queueRequest
