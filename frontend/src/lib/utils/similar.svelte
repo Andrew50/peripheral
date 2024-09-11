@@ -1,9 +1,9 @@
 <script lang="ts" context="module">
-    import {changeChart} from '$lib/features/chart.svelte'
+    import {changeChart} from '$lib/features/chart/interface'
     import { writable } from 'svelte/store';
     import type { Writable } from 'svelte/store';
     import type {Instance } from '$lib/core/types';
-    import {privateRequest} from '$lib/api/backend';
+    import {privateRequest} from '$lib/core/backend';
     import {queryInstanceRightClick} from './rightClick.svelte'
     
     interface SimilarQuery {

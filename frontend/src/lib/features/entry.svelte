@@ -1,8 +1,9 @@
 <script lang="ts" context="module">
-    import type {Instance} from '$lib/api/backend' 
+    import type {Instance} from '$lib/core/types' 
     import {queryInstanceInput } from '$lib/utils/input.svelte'
     import {queryInstanceRightClick} from '$lib/utils/rightClick.svelte'
-    import {chartQuery} from '$lib/features/chart.svelte'
+    //import {chartQuery} from '$lib/features/chart/chart.svelte'
+    import {changeChart} from '$lib/features/chart/interface'
     import type {RightClickResult} from '$lib/utils/rightClick.svelte'
     import {writable} from 'svelte/store'
     import type {Writable} from 'svelte/store'
@@ -15,7 +16,7 @@
 </script>
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { privateRequest } from '$lib/api/backend'
+    import { privateRequest } from '$lib/core/backend'
     import 'quill/dist/quill.snow.css';
     import type Quill from 'quill'
     import type { DeltaStatic, EmbedBlot } from 'quill'
@@ -67,7 +68,9 @@
 
     function embeddedInstanceLeftClick(instance: Instance): void {
         instance.securityId = parseInt(instance.securityId)
-        chartQuery.set(instance)
+        changeChart(instance)
+
+        //chartQuery.set(instance)
     }
 
     function embeddedInstanceRightClick(instance: Instance, event:MouseEvent): void {

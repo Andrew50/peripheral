@@ -1,6 +1,6 @@
 <!-- account.svelte -->
 <script lang="ts">
-    import {publicRequest} from '$lib/api/backend'
+    import {publicRequest} from '$lib/core/backend'
     import Header from '$lib/utils/header.svelte';
     import { goto } from '$app/navigation';
     import { writable } from 'svelte/store';

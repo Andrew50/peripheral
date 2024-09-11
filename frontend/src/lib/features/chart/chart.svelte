@@ -1,8 +1,9 @@
 <!-- chart.svelte-->
-<script lang="ts" context="module">
+<script lang="ts">
     import { createChart, ColorType} from 'lightweight-charts';
-    import {privateRequest} from '$lib/api/backend';
-    import type {Instance, chartRequest} from '$lib/core/types'
+    import {chartQuery, changeChart} from './interface'
+    import {privateRequest} from '$lib/core/backend';
+    import type {Instance} from '$lib/core/types'
     import { queryInstanceInput } from '$lib/utils/input.svelte'
     import { queryInstanceRightClick } from '$lib/utils/rightClick.svelte'
     import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, MouseEventParams, UTCTimestamp} from 'lightweight-charts';
@@ -12,37 +13,20 @@
     import { onMount  } from 'svelte';
     import { UTCtoEST, ESTtoUTC,  ESTStringToUTCTimestamp, UTCTimestampToESTString } from '$lib/core/datetime';
     let latestCrosshairPositionTime: Time;
-    interface barData {
-        time: UTCTimestamp;
-        open: number; 
-        high: number;
-        low: number;
-        close: number;
-        volume: number;
-    }
-    interface securityDateBounds {
-        minDate: number;
-        maxDate: number;
-    }
-    export let chartQuery: Writable<Instance> = writable({datetime:0, extendedHours:false, timeframe:"1d",ticker:""})
-    export function changeChart(newInstance : Instance):void{
-        chartQuery.update((oldInstance:Instance)=>{
-            return { ...oldInstance, ...newInstance}
-        })
-    }
-
-</script>
-<script lang="ts">
-    let mainChart: IChartApi;
-    let mainChartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
-    let mainChartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
-    let mainChartEarliestDataReached = false;
-    let mainChartLatestDataReached = false;  
+    import Legend from './legend.svelte'
+    import Shift from './shift.svelte'
+    let chart: IChartApi;
+    let chartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
+    let chartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
+    let chartEarliestDataReached = false;
+    let chartLatestDataReached = false;  
     let sma10Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
     let sma20Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
-
-    let isloadingChartData: boolean = false
+    import type {ShiftOverlay, BarData, ChartRequest} from './interface'
+    let isloadingChartData: boolean = false    
     let lastChartRequestTime = 0; 
+
+
     const chartRequestThrottleDuration = 200; 
     let shiftDown = false
     const hoveredCandleData = writable({
@@ -52,17 +36,6 @@
         close: 0,
         volume: 0,
     })
-    interface ShiftOverlay {
-        startX: number
-        startY: number
-        x: number
-        y: number
-        width: number
-        height: number
-        isActive: boolean
-        startPrice: number
-        currentPrice: number
-    }
     const shiftOverlay: Writable<ShiftOverlay> = writable({
         startX: 0,
         startY: 0,
@@ -72,9 +45,7 @@
         startPrice: 0,
         currentPrice: 0,
     })
-
     let queuedForwardLoad: Function | null = null
-
     function calculateSMA(data: CandlestickData[], period: number): { time: UTCTimestamp, value: number }[] {
         let smaData: { time: UTCTimestamp, value: number }[] = [];
         for (let i = 0; i < data.length; i++) {
@@ -90,179 +61,6 @@
         return smaData;
     }
 
-    function initializeEventListeners(chartContainer:HTMLElement) {
-        chartContainer.addEventListener('contextmenu', (event:MouseEvent) => {
-            event.preventDefault();
-            const dt = new Date(1000*latestCrosshairPositionTime);
-            const datePart = dt.toLocaleDateString('en-CA'); // 'en-CA' gives you the yyyy-mm-dd format
-            const timePart = dt.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            const formattedDate = `${datePart} ${timePart}`;
-            const ins: Instance = { ...get(chartQuery), datetime: formattedDate, }
-            queryInstanceRightClick(event,ins,"chart")
-        })
-        chartContainer.addEventListener('keyup', event => {
-            if (event.key == "Shift"){
-                shiftDown = false
-            }
-        })
-        function shiftOverlayTrack(event:MouseEvent):void{
-            shiftOverlay.update((v:ShiftOverlay) => {
-                const god = {
-
-                    ...v,
-                    width: Math.abs(event.clientX - v.startX),
-                    height: Math.abs(event.clientY - v.startY),
-                    x: Math.min(event.clientX, v.startX),
-                    y: Math.min(event.clientY, v.startY),
-                    currentPrice: mainChartCandleSeries.coordinateToPrice(event.clientY) || 0,
-                }
-                console.log(god)
-                return god
-            })
-        }
-        chartContainer.addEventListener('mouseup', (event) => {
-            if (queuedForwardLoad != null){
-                queuedForwardLoad()
-            }
-        })
-        chartContainer.addEventListener('mousedown',event  => {
-            console.log(get(shiftOverlay))
-            if (shiftDown || get(shiftOverlay).isActive){
-                shiftOverlay.update((v:ShiftOverlay) => {
-                    v.isActive = !v.isActive
-                    if (v.isActive){
-                        v.startX = event.clientX
-                        v.startY = event.clientY
-                        v.width = 0
-                        v.height = 0
-                        v.x = v.startX
-                        v.y = v.startY
-                        v.startPrice = mainChartCandleSeries.coordinateToPrice(v.startY) || 0
-                        chartContainer.addEventListener("mousemove",shiftOverlayTrack)
-                    }else{
-                        chartContainer.removeEventListener("mousemove",shiftOverlayTrack)
-                    }
-                    return v
-                })
-            }
-        })
-        chartContainer.addEventListener('keydown', event => {
-            if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
-                queryInstanceInput("any",get(chartQuery))
-                .then((v:Instance)=>{
-                    changeChart(v)
-                })
-            }else if (event.key == "Shift"){
-                shiftDown = true
-            }else if (event.key == "Escape"){
-                if (get(shiftOverlay).isActive){
-                    shiftOverlay.update((v:ShiftOverlay) => {
-                        if (v.isActive){
-                            v.isActive = false
-                            return {
-                                ...v,
-                                isActive: false
-                            }
-                        }
-                     });
-        }
-            }
-        })
-
-    }
-
-    function initializeChart()  {
-        const chartOptions = { layout: { textColor: 'black', background: { type: ColorType.Solid, color: 'white' } }, timeScale:  { timeVisible: true }, };
-        const chartContainer = document.getElementById('chart_container');
-        if (!chartContainer) {return;}
-        initializeEventListeners(chartContainer)
-        mainChart = createChart(chartContainer, chartOptions);
-        mainChartCandleSeries = mainChart.addCandlestickSeries({ upColor: '#089981', downColor: '#ef5350', borderVisible: false, wickUpColor: '#089981', wickDownColor: '#ef5350', });
-        mainChartVolumeSeries = mainChart.addHistogramSeries({ priceFormat: { type: 'volume', }, priceScaleId: '', });
-        mainChartVolumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0, }, });
-        mainChartCandleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.2, }, });
-        sma10Series = mainChart.addLineSeries({
-        color: 'blue', // Color of the 10-period moving average
-        lineWidth: 2,
-    });
-
-    sma20Series = mainChart.addLineSeries({
-        color: 'orange', // Color of the 20-period moving average
-        lineWidth: 2,
-    });
-        mainChart.subscribeCrosshairMove(crosshairMoveEvent); 
-        mainChart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
-            if(logicalRange) {
-                if (Date.now() - lastChartRequestTime < chartRequestThrottleDuration) {return;}
-                if(logicalRange.from < 10) {
-                    if (!mainChartEarliestDataReached) {
-                        const candleData = mainChartCandleSeries.data();
-                        if (candleData.length === 0) {
-                            console.error("No candle data to request additional bars");
-                            return;
-                        }
-                        const barsToRequest = 50 - Math.floor(logicalRange.from); 
-                        const timestampToRequest = ESTtoUTC(mainChartCandleSeries.data()[0].time as UTCTimestamp)*1000 as number
-                        const req : chartRequest = {
-                            ticker: get(chartQuery).ticker, 
-                            timestamp: timestampToRequest,
-                            securityId: get(chartQuery).securityId, 
-                            timeframe: get(chartQuery).timeframe, 
-                            extendedHours: get(chartQuery).extendedHours, 
-                            bars: barsToRequest, 
-                            direction: "backward",
-                            requestType: "loadAdditionalData"
-                        }
-                       backendLoadChartData(req);
-                    } else {
-                        console.log("LIMIT REACHED!")
-                    }
-                    
-                } else if (logicalRange.to > mainChartCandleSeries.data().length-10) {
-                    const barsToRequest = 150 + 2*Math.floor(logicalRange.to) - mainChartCandleSeries.data().length; 
-                    forwardLoad(barsToRequest)
-                }
-            }
-        })
-    }
-    function forwardLoad(bars:number){
-        if(mainChartLatestDataReached) {return;}
-        const datetimeToRequest = ESTtoUTC(mainChartCandleSeries.data()[mainChartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp
-        const req : chartRequest = {
-            ticker: get(chartQuery).ticker, 
-            datetime: datetimeToRequest.toString(),
-            securityId: get(chartQuery).securityId, 
-            timeframe: get(chartQuery).timeframe, 
-            extendedHours: get(chartQuery).extendedHours, 
-            bars: bars,
-            direction: "forward",
-            requestType: "loadAdditionalData"
-        }
-        backendLoadChartData(req);
-    }
-
-    function crosshairMoveEvent(param: MouseEventParams) {
-        if (!param.point) {
-            return;
-        }
-        const validCrosshairPoint = !(param === undefined || param.time === undefined || param.point.x < 0 || param.point.y < 0);
-        if(!validCrosshairPoint) { return; }
-        if(!mainChartCandleSeries) {return;}
-
-        const bar = param.seriesData.get(mainChartCandleSeries)
-        if(!bar) {return;}
-        const volumeData = param.seriesData.get(mainChartVolumeSeries);
-        const volume = volumeData ? volumeData.value : 0;
-        hoveredCandleData.set({
-            open: bar.open,
-            high: bar.high,
-            low: bar.low,
-            close: bar.close,
-            volume: volume
-        })
-        latestCrosshairPositionTime = bar.time 
-
-    }
     function backendLoadChartData(inst:chartRequest): void{
         if(isloadingChartData) {return;}
         isloadingChartData = true;
@@ -302,25 +100,25 @@
                 }
                 if (inst.requestType == 'loadAdditionalData') {
                     if(inst.direction == 'backward') {
-                        const earliestCandleTime = mainChartCandleSeries.data()[0].time;
+                        const earliestCandleTime = chartCandleSeries.data()[0].time;
                         if (typeof earliestCandleTime === 'number') {
                             console.log("is Number")
                             if (newCandleData[newCandleData.length-1].time <= earliestCandleTime) {
                                 newCandleData = newCandleData.slice(0, newCandleData.length-1)
                                 newVolumeData = newVolumeData.slice(0, newVolumeData.length -1)
-                                newCandleData = [...newCandleData, ...mainChartCandleSeries.data()]
-                                newVolumeData = [...newVolumeData, ...mainChartVolumeSeries.data()]
+                                newCandleData = [...newCandleData, ...chartCandleSeries.data()]
+                                newVolumeData = [...newVolumeData, ...chartVolumeSeries.data()]
                             }
                         }
                         console.log("loaded more data")
                     } else{
-                        const latestCandleTime = mainChartCandleSeries.data()[mainChartCandleSeries.data().length-1].time;
+                        const latestCandleTime = chartCandleSeries.data()[chartCandleSeries.data().length-1].time;
                         if (typeof latestCandleTime === 'number') {
                             if(newCandleData[0].time >= latestCandleTime) {
                                 newCandleData = newCandleData.slice(1, newCandleData.length)
                                 newVolumeData = newVolumeData.slice(1, newVolumeData.length)
-                                newCandleData = [...mainChartCandleSeries.data(), ...newCandleData]
-                                newVolumeData = [...mainChartVolumeSeries.data(), ...newVolumeData]
+                                newCandleData = [...chartCandleSeries.data(), ...newCandleData]
+                                newVolumeData = [...chartVolumeSeries.data(), ...newVolumeData]
                             }
                         }
 
@@ -328,24 +126,24 @@
                 }
                 // Check if we reach end of avaliable data 
                 if (inst.datetime == '' ) {
-                    mainChartLatestDataReached = true;
+                    chartLatestDataReached = true;
                 }
                 else if (result.length < inst.bars) {
                     if(inst.direction == 'backward') {
-                        mainChartEarliestDataReached = true;
+                        chartEarliestDataReached = true;
                     } else {
-                        mainChartLatestDataReached = true;
+                        chartLatestDataReached = true;
                     }
                 }
                 if (inst.direction == "forward") {
                     console.log("queued forward load")
                     queuedForwardLoad = () => {
-                        const visibleRange = mainChart.timeScale().getVisibleRange()
+                        const visibleRange = chart.timeScale().getVisibleRange()
                         const vrFrom = visibleRange?.from as Time
                         const vrTo = visibleRange?.to as Time
-                        mainChartCandleSeries.setData(newCandleData);
-                        mainChartVolumeSeries.setData(newVolumeData);
-                        mainChart.timeScale().setVisibleRange({from: vrFrom, to: vrTo})
+                        chartCandleSeries.setData(newCandleData);
+                        chartVolumeSeries.setData(newVolumeData);
+                        chart.timeScale().setVisibleRange({from: vrFrom, to: vrTo})
                         queuedForwardLoad = null
                         const sma10Data = calculateSMA(newCandleData, 10);
                         const sma20Data = calculateSMA(newCandleData, 20);
@@ -353,7 +151,7 @@
                         sma10Series.setData(sma10Data);
                         sma20Series.setData(sma20Data);
                         if (inst.requestType == 'loadNewTicker') {
-                            mainChart.timeScale().fitContent();
+                            chart.timeScale().fitContent();
                         }
                         console.log("ran queued forward load")
                         isloadingChartData = false; // Ensure this runs after data is loaded
@@ -364,15 +162,15 @@
                     }
 
                 } else {
-                    mainChartCandleSeries.setData(newCandleData);
-                    mainChartVolumeSeries.setData(newVolumeData);
+                    chartCandleSeries.setData(newCandleData);
+                    chartVolumeSeries.setData(newVolumeData);
                     const sma10Data = calculateSMA(newCandleData, 10);
                     const sma20Data = calculateSMA(newCandleData, 20);
 
                     sma10Series.setData(sma10Data);
                     sma20Series.setData(sma20Data);
                     if (inst.requestType == 'loadNewTicker') {
-                        mainChart.timeScale().fitContent();
+                        chart.timeScale().fitContent();
                     }
                     isloadingChartData = false; // Ensure this runs after data is loaded
                     console.log("Done updating chart!")
@@ -387,14 +185,181 @@
         
         
     }
+    function forwardLoad(bars:number){
+        if(chartLatestDataReached) {return;}
+        const datetimeToRequest = ESTtoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp
+        const req : chartRequest = {
+            ticker: get(chartQuery).ticker, 
+            datetime: datetimeToRequest.toString(),
+            securityId: get(chartQuery).securityId, 
+            timeframe: get(chartQuery).timeframe, 
+            extendedHours: get(chartQuery).extendedHours, 
+            bars: bars,
+            direction: "forward",
+            requestType: "loadAdditionalData"
+        }
+        backendLoadChartData(req);
+    }
+
+    function crosshairMoveEvent(param: MouseEventParams) {
+
+    }
     export function consoleLogChartData() {
-        console.log(mainChartCandleSeries.data())
+        console.log(chartCandleSeries.data())
     }
    /* export function testDatetime() {
         console.log(ESTStringToUTCTimestamp(inputValue));
     }*/
     onMount(() => {
-        initializeChart()
+        const chartOptions = { layout: { textColor: 'black', background: { type: ColorType.Solid, color: 'white' } }, timeScale:  { timeVisible: true }, };
+        const chartContainer = document.getElementById('chart_container');
+        if (!chartContainer) {return;}
+        //init event listeners
+        chartContainer.addEventListener('contextmenu', (event:MouseEvent) => {
+            event.preventDefault();
+            const dt = new Date(1000*latestCrosshairPositionTime);
+            const datePart = dt.toLocaleDateString('en-CA'); // 'en-CA' gives you the yyyy-mm-dd format
+            const timePart = dt.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const formattedDate = `${datePart} ${timePart}`;
+            const ins: Instance = { ...get(chartQuery), datetime: formattedDate, }
+            queryInstanceRightClick(event,ins,"chart")
+        })
+        chartContainer.addEventListener('keyup', event => {
+            if (event.key == "Shift"){
+                shiftDown = false
+            }
+        })
+        function shiftOverlayTrack(event:MouseEvent):void{
+            shiftOverlay.update((v:ShiftOverlay) => {
+                const god = {
+
+                    ...v,
+                    width: Math.abs(event.clientX - v.startX),
+                    height: Math.abs(event.clientY - v.startY),
+                    x: Math.min(event.clientX, v.startX),
+                    y: Math.min(event.clientY, v.startY),
+                    currentPrice: chartCandleSeries.coordinateToPrice(event.clientY) || 0,
+                }
+                console.log(god)
+                return god
+            })
+        }
+        chartContainer.addEventListener('mouseup', (event) => {
+            if (queuedForwardLoad != null){
+                queuedForwardLoad()
+            }
+        })
+        chartContainer.addEventListener('mousedown',event  => {
+            console.log(get(shiftOverlay))
+            if (shiftDown || get(shiftOverlay).isActive){
+                shiftOverlay.update((v:ShiftOverlay) => {
+                    v.isActive = !v.isActive
+                    if (v.isActive){
+                        v.startX = event.clientX
+                        v.startY = event.clientY
+                        v.width = 0
+                        v.height = 0
+                        v.x = v.startX
+                        v.y = v.startY
+                        v.startPrice = chartCandleSeries.coordinateToPrice(v.startY) || 0
+                        chartContainer.addEventListener("mousemove",shiftOverlayTrack)
+                    }else{
+                        chartContainer.removeEventListener("mousemove",shiftOverlayTrack)
+                    }
+                    return v
+                })
+            }
+        })
+        chartContainer.addEventListener('keydown', event => {
+            if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
+                queryInstanceInput("any",get(chartQuery))
+                .then((v:Instance)=>{
+                    changeChart(v)
+                })
+            }else if (event.key == "Shift"){
+                shiftDown = true
+            }else if (event.key == "Escape"){
+                if (get(shiftOverlay).isActive){
+                    shiftOverlay.update((v:ShiftOverlay) => {
+                        if (v.isActive){
+                            v.isActive = false
+                            return {
+                                ...v,
+                                isActive: false
+                            }
+                        }
+                     });
+        }
+            }
+        })
+        chart = createChart(chartContainer, chartOptions);
+        chartCandleSeries = chart.addCandlestickSeries({ upColor: '#089981', downColor: '#ef5350', borderVisible: false, wickUpColor: '#089981', wickDownColor: '#ef5350', });
+        chartVolumeSeries = chart.addHistogramSeries({ priceFormat: { type: 'volume', }, priceScaleId: '', });
+        chartVolumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0, }, });
+        chartCandleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.2, }, });
+        sma10Series = chart.addLineSeries({
+        color: 'blue', // Color of the 10-period moving average
+        lineWidth: 2,
+    });
+
+    sma20Series = chart.addLineSeries({
+        color: 'orange', // Color of the 20-period moving average
+        lineWidth: 2,
+    });
+        chart.subscribeCrosshairMove((param)=>{
+            if (!param.point) {
+                return;
+            }
+            const validCrosshairPoint = !(param === undefined || param.time === undefined || param.point.x < 0 || param.point.y < 0);
+            if(!validCrosshairPoint) { return; }
+            if(!chartCandleSeries) {return;}
+
+            const bar = param.seriesData.get(chartCandleSeries)
+            if(!bar) {return;}
+            const volumeData = param.seriesData.get(chartVolumeSeries);
+            const volume = volumeData ? volumeData.value : 0;
+            hoveredCandleData.set({
+                open: bar.open,
+                high: bar.high,
+                low: bar.low,
+                close: bar.close,
+                volume: volume
+            })
+            latestCrosshairPositionTime = bar.time 
+        }); 
+        chart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
+            if(logicalRange) {
+                if (Date.now() - lastChartRequestTime < chartRequestThrottleDuration) {return;}
+                if(logicalRange.from < 10) {
+                    if (!chartEarliestDataReached) {
+                        const candleData = chartCandleSeries.data();
+                        if (candleData.length === 0) {
+                            console.error("No candle data to request additional bars");
+                            return;
+                        }
+                        const barsToRequest = 50 - Math.floor(logicalRange.from); 
+                        const timestampToRequest = ESTtoUTC(chartCandleSeries.data()[0].time as UTCTimestamp)*1000 as number
+                        const req : chartRequest = {
+                            ticker: get(chartQuery).ticker, 
+                            timestamp: timestampToRequest,
+                            securityId: get(chartQuery).securityId, 
+                            timeframe: get(chartQuery).timeframe, 
+                            extendedHours: get(chartQuery).extendedHours, 
+                            bars: barsToRequest, 
+                            direction: "backward",
+                            requestType: "loadAdditionalData"
+                        }
+                       backendLoadChartData(req);
+                    } else {
+                        console.log("LIMIT REACHED!")
+                    }
+                    
+                } else if (logicalRange.to > chartCandleSeries.data().length-10) {
+                    const barsToRequest = 150 + 2*Math.floor(logicalRange.to) - chartCandleSeries.data().length; 
+                    forwardLoad(barsToRequest)
+                }
+            }
+        })
        chartQuery.subscribe((v:Instance)=>{
         const dateTimeToRequest = v.datetime; // this should be in UTC timestamp (milliseconds) by the time it reaches here 
             const req : chartRequest = {
@@ -408,79 +373,33 @@
                 requestType: "loadNewTicker"
 
             }
-            mainChartEarliestDataReached = false;
-            mainChartLatestDataReached = false; 
+            chartEarliestDataReached = false;
+            chartLatestDataReached = false; 
             if (v.timeframe?.includes('m') || v.timeframe?.includes('w') || 
                     v.timeframe?.includes('d') || v.timeframe?.includes('q'))
                 {
-                    mainChart.applyOptions({timeScale: {timeVisible: false}});
+                    chart.applyOptions({timeScale: {timeVisible: false}});
                 }
             else {
-                mainChart.applyOptions({timeScale: {timeVisible: true}});
+                chart.applyOptions({timeScale: {timeVisible: true}});
             }
             backendLoadChartData(req)
             if (v.datetime != ""){
-                forwardLoad(150)
+   //             forwardLoad(150)
             }
         }) 
 
     });
 </script>
 <div autofocus id="chart_container" tabindex="0"></div>
-{#if ($shiftOverlay).isActive}
-    
-    <div class="shiftOverlayStyle" style="left: {$shiftOverlay.x}px; top: {$shiftOverlay.y}px;
-    width: {$shiftOverlay.width}px; height: {$shiftOverlay.height}px;">
-    <div class="percentageText">
-    {Math.round(($shiftOverlay.currentPrice / $shiftOverlay.startPrice - 1) * 10000)/100}%
-    </div>
-    </div>
-{/if}
+<Legend hoveredCandleData={hoveredCandleData} />
+<Shift shiftOverlay={shiftOverlay}/>
 
-<div class="legend">
-    O: {$hoveredCandleData.open}
-    H: {$hoveredCandleData.high}
-    L: {$hoveredCandleData.low}
-    C: {$hoveredCandleData.close}
-    V: {$hoveredCandleData.volume}
-</div>
 
 <style>
     #chart_container {
       width: 85%;
       height: 800px; /* Adjust height as needed */
-    }
-    .shiftOverlayStyle {
-        position: absolute;
-        border: 2px dashed lightgrey;
-        background-color: rgba(211, 211, 211, 0.2); /* Light grey with transparency */
-        z-index: 1000; /* Ensure the overlay is on top of everything */
-        pointer-events: none; /* Prevent blocking clicks on other elements */
-        display: flex;
-        justify-content: center;
-        align-items: center;
-    }
-    .legend {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    background-color: rgba(255, 255, 255, 0.7); /* More transparency */
-    padding: 5px; /* Smaller padding */
-    border-radius: 5px;
-    font-size: 12px; /* Smaller font */
-    font-family: Arial, sans-serif;
-    color: grey; /* Grey text color */
-    z-index: 1000;
-}
-
-
-
-
-    .percentageText {
-        color: var(--highlight-color); /* Use your theme's highlight color */
-        font-size: 1.5rem;
-        font-weight: bold;
-        text-align: center;
     }
     .context-menu {
         position: absolute;

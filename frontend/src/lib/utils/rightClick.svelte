@@ -1,10 +1,10 @@
-<!-- instance.svlete -->
+<!-- rightClick.svlete -->
 <script lang="ts" context="module">
-    import {changeChart} from '$lib/features/chart.svelte'
+    //import {changeChart} from '$lib/features/chart/chart.svelte'
     import type { Writable } from 'svelte/store';
-    import type {Instance } from '$lib/api/backend';
+    import type {Instance } from '$lib/core/types';
     let similarInstance: Writable<SimilarInstance> = writable({});
-    import { privateRequest} from '$lib/api/backend';
+    import { privateRequest} from '$lib/core/backend';
     import {embedInstance} from "$lib/features/entry.svelte";
     import {newStudy} from '$lib/features/study.svelte';
     import {newJournal} from '$lib/features/journal.svelte';
