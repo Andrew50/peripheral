@@ -25,27 +25,11 @@
     import type {ShiftOverlay, BarData, ChartRequest} from './interface'
     let isloadingChartData: boolean = false    
     let lastChartRequestTime = 0; 
-
-
+    let queuedLoad: Function | null = null
     const chartRequestThrottleDuration = 200; 
     let shiftDown = false
-    const hoveredCandleData = writable({
-        open: 0,
-        high: 0, 
-        low: 0,
-        close: 0,
-        volume: 0,
-    })
-    const shiftOverlay: Writable<ShiftOverlay> = writable({
-        startX: 0,
-        startY: 0,
-        width: 0,
-        height: 0,
-        isActive: false,
-        startPrice: 0,
-        currentPrice: 0,
-    })
-    let queuedForwardLoad: Function | null = null
+    const hoveredCandleData = writable({ open: 0, high: 0, low: 0, close: 0, volume: 0, })
+    const shiftOverlay: Writable<ShiftOverlay> = writable({ x: 0, y: 0, startX: 0, startY: 0, width: 0, height: 0, isActive: false, startPrice: 0, currentPrice: 0, })
     function calculateSMA(data: CandlestickData[], period: number): { time: UTCTimestamp, value: number }[] {
         let smaData: { time: UTCTimestamp, value: number }[] = [];
         for (let i = 0; i < data.length; i++) {
@@ -95,7 +79,6 @@
                     newVolumeData = [...chartVolumeSeries.data(), ...newVolumeData.slice(1)];
                   }
                 }
-                // Check if we reach end of avaliable data 
                 if (inst.datetime == '' ) {
                     chartLatestDataReached = true;
                 }
@@ -106,55 +89,33 @@
                         chartLatestDataReached = true;
                     }
                 }
-                if (inst.direction == "forward") {
-                    console.log("queued forward load")
-                    queuedForwardLoad = () => {
+                queuedLoad = () => {
+                    if (inst.direction == "forward") {
                         const visibleRange = chart.timeScale().getVisibleRange()
                         const vrFrom = visibleRange?.from as Time
                         const vrTo = visibleRange?.to as Time
                         chartCandleSeries.setData(newCandleData);
                         chartVolumeSeries.setData(newVolumeData);
                         chart.timeScale().setVisibleRange({from: vrFrom, to: vrTo})
-                        queuedForwardLoad = null
-                        const sma10Data = calculateSMA(newCandleData, 10);
-                        const sma20Data = calculateSMA(newCandleData, 20);
-
-                        sma10Series.setData(sma10Data);
-                        sma20Series.setData(sma20Data);
-                        if (inst.requestType == 'loadNewTicker') {
-                            chart.timeScale().fitContent();
-                        }
-                        console.log("ran queued forward load")
-                        isloadingChartData = false; // Ensure this runs after data is loaded
+                    }else if (inst.direction == "backward"){
+                        chartCandleSeries.setData(newCandleData);
+                        chartVolumeSeries.setData(newVolumeData);
                     }
-                    if (inst.requestType == "loadNewTicker"){
-                        queuedForwardLoad()
-                        queuedForwardLoad = null
-                    }
-
-                } else {
-                    chartCandleSeries.setData(newCandleData);
-                    chartVolumeSeries.setData(newVolumeData);
-                    const sma10Data = calculateSMA(newCandleData, 10);
-                    const sma20Data = calculateSMA(newCandleData, 20);
-
-                    sma10Series.setData(sma10Data);
-                    sma20Series.setData(sma20Data);
+                    queuedLoad = null
+                    sma10Series.setData(calculateSMA(newCandleData, 10));
+                    sma20Series.setData(calculateSMA(newCandleData, 20));
                     if (inst.requestType == 'loadNewTicker') {
                         chart.timeScale().fitContent();
                     }
                     isloadingChartData = false; // Ensure this runs after data is loaded
-                    console.log("Done updating chart!")
                 }
-                return;
+                if (inst.direction == "backward" || inst.requestType == "loadNewTicker"){
+                    queuedLoad()
+                }
             })
             .catch((error: string) => {
-                console.error("Error fetching chart data:", error);
                 isloadingChartData = false; // Ensure this runs after data is loaded
             });
-            
-        
-        
     }
     function forwardLoad(bars:number){
         if(chartLatestDataReached) {return;}
