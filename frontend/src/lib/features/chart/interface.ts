@@ -11,7 +11,7 @@ export interface ShiftOverlay {
     startPrice: number
     currentPrice: number
 }
-export interface chartRequest extends Instance{
+export interface ChartRequest extends Instance{
     bars: number;
     direction: string;
     requestType: string;
@@ -36,6 +36,13 @@ import {writable} from 'svelte/store'
 export let chartQuery: Writable<Instance> = writable({timestamp:0, extendedHours:false, timeframe:"1d",ticker:""})
 export function changeChart(newInstance : Instance):void{
     chartQuery.update((oldInstance:Instance)=>{
-        return { ...oldInstance, ...newInstance}
+        const req: ChartRequest = {
+            ...oldInstance,
+            ...newInstance,
+            bars: 150,
+            direction: "backward",
+            requestType: "loadNewTicker"
+        }
+        return req
     })
 }
