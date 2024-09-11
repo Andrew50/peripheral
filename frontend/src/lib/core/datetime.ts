@@ -36,6 +36,17 @@ export function ESTtoUTC(easternTimestamp : number): number {
     } 
     return -1
 }
+export function ESTSecondstoUTC(easternTimestamp : number): number {
+    const dateEST = new Date(easternTimestamp * 1000) 
+    const offset1 = getEasternTimeOffset(dateEST)
+    const offset2 = getEasternTimeOffset(new Date((easternTimestamp - offset1)*1000))
+    if((offset1 == offset2) || (offset1 < offset2)) {
+        return (easternTimestamp - offset1)*1000
+    } else if (offset1 > offset2) {
+        return (easternTimestamp - offset2)*1000
+    } 
+    return -1
+}
 export function ESTStringToUTCTimestamp(easternString : string): number{
     const easternTime = DateTime.fromFormat(easternString, 'yyyy-MM-dd HH:mm:ss', {zone: 'America/New_York'})
 
