@@ -14,7 +14,7 @@ CREATE TABLE securities (
     unique (ticker, minDate),
     unique (ticker, maxDate),
     unique (securityid, minDate),
-    unique (securityid, maxdate)
+    unique (securityid, maxDate)
 );
 create index idxTickerDateRange on securities (ticker, minDate, maxDate);
 create table setups (
@@ -28,19 +28,19 @@ create table samples (
     sampleId SERIAL PRIMARY KEY,
     setupId serial references setups(setupId) on delete cascade,
     securityId int,-- references securities(securityId), -- not unique
-    datetime timestamp not null,
+    timestamp timestamp not null,
     label boolean,
-    unique (securityId, datetime, setupId)
+    unique (securityId, timestamp, setupId)
 );
 create index idxSetupId on samples(setupId);
 CREATE TABLE studies (
     studyId serial primary key,
     userId serial references users(userId) on delete cascade,
     securityId int, --references securities(securityId), --cant because not unique
-    datetime timestamp not null,
+    timestamp timestamp not null,
     completed boolean not null default false,
     entry json,
-    unique(userId, securityId, datetime)
+    unique(userId, securityId, timestamp)
 );
 create index idxUserIdCompleted on studies(userId, completed);
 CREATE TABLE journals (

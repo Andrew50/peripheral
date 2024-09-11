@@ -6,7 +6,7 @@
     import {onMount} from 'svelte'
     import {privateRequest} from '$lib/core/backend'
     import type {Instance} from '$lib/core/types'
-    import  {UTCTimestampToESTString} from '$lib/core/datetime'
+    import  {UTCTimestampToESTString} from '$lib/core/timestamp'
     import {queryInstanceInput} from '$lib/utils/input.svelte'
     interface Study extends Instance{
         studyId: number;
@@ -14,7 +14,7 @@
     }
     let studies : Writable<Study[]> = writable([])
     export function newStudy(v:Instance):void{
-            privateRequest<number>("newStudy",{securityId:v.securityId,datetime:v.datetime})
+            privateRequest<number>("newStudy",{securityId:v.securityId,timestamp:v.timestamp})
             .then((studyId:number) => {
                 const study: Study = {completed:false,studyId:studyId,...v}
                 studies.update((vv:Study[]) => {
@@ -37,8 +37,8 @@
         }
     })
     function newStudyRequest():void{
-        const insTemplate: Instance = {ticker:"",datetime:""}
-        queryInstanceInput(["ticker", "datetime"],insTemplate)
+        const insTemplate: Instance = {ticker:"",timestamp:0}
+        queryInstanceInput(["ticker", "timestamp"],insTemplate)
         .then((v:Instance) => {newStudy(v)})
     }
     function selectStudy(study: Study) : void {

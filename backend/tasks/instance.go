@@ -11,13 +11,13 @@ import (
 type GetSimilarInstancesArgs struct {
 	Ticker     string `json:"ticker"`
 	SecurityId int    `json:"securityId"`
-	Datetime   string `json:"datetime"`
+	Timestamp   int64 `json:"timestamp"`
 	Timeframe  string `json:"timeframe"`
 }
 type GetSimilarInstancesResults struct {
 	Ticker     string `json:"ticker"`
 	SecurityId int    `json:"securityId"`
-	Datetime   string `json:"datetime"`
+	Timestamp   int64 `json:"timestamp"`
 	Timeframe  string `json:"timeframe"`
 }
 
@@ -37,16 +37,12 @@ func GetSimilarInstances(conn *data.Conn, userId int, rawArgs json.RawMessage) (
 	if len(tickers) == 0 {
 		return nil, fmt.Errorf("49sb no related tickers")
 	}
-	/*parsedDatetime, err := data.StringToTime(args.Datetime)
-	if err != nil {
-		return nil, fmt.Errorf("invalid datetime format: %v", err)
-	}*/
 	query := `
 		SELECT ticker, securityId
 		FROM securities
 		WHERE ticker = ANY($1) AND (maxDate IS NULL OR maxDate >= $2) AND minDate <= $2
 	`
-	rows, err := conn.DB.Query(context.Background(), query, tickers, args.Datetime)
+	rows, err := conn.DB.Query(context.Background(), query, tickers, args.Timestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query securities: %v", err)
 	}
@@ -59,7 +55,7 @@ func GetSimilarInstances(conn *data.Conn, userId int, rawArgs json.RawMessage) (
 			return nil, fmt.Errorf("failed to scan row: %v", err)
 		}
 		fmt.Print(result.Ticker)
-		result.Datetime = args.Datetime
+		result.Timestamp = args.Timestamp
 		result.Timeframe = args.Timeframe
 		results = append(results, result)
 	}
@@ -90,7 +86,7 @@ func GetCik(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, 
 	return res, err
 }
 
-type Security struct {
+/*type Security struct {
 	Ticker string `json:"ticker"`
 	Cik    string `json:"cik"`
 }
@@ -146,4 +142,4 @@ func NewInstance(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfac
 		return nil, fmt.Errorf("NewInstance execution failed: %v", err)
 	}
 	return NewInstanceResults{InstanceID: instanceID}, err
-}
+}*/
