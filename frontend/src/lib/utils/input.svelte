@@ -1,11 +1,11 @@
 <!-- instance.svlete -->
 <script lang="ts" context="module">
-    import { privateRequest} from '$lib/api/backend';
+    import { privateRequest} from '$lib/core/backend';
     import { get, writable } from 'svelte/store';
     import { parse} from 'date-fns';
     import {tick} from 'svelte';
     import type { Writable } from 'svelte/store';
-    import type {Instance } from '$lib/api/backend';
+    import type {Instance } from '$lib/core/backend';
     interface Security {
         securityId: number;
         ticker: string;
