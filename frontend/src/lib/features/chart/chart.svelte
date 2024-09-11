@@ -33,6 +33,7 @@
 
 </script>
 <script lang="ts">
+    import {initializeEventListeners} from '$lib/features/chartUtils'
     let mainChart: IChartApi;
     let mainChartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let mainChartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
@@ -227,18 +228,24 @@
     }
     function forwardLoad(bars:number){
         if(mainChartLatestDataReached) {return;}
-        const datetimeToRequest = ESTtoUTC(mainChartCandleSeries.data()[mainChartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp
-        const req : chartRequest = {
-            ticker: get(chartQuery).ticker, 
-            datetime: datetimeToRequest.toString(),
-            securityId: get(chartQuery).securityId, 
-            timeframe: get(chartQuery).timeframe, 
-            extendedHours: get(chartQuery).extendedHours, 
-            bars: bars,
-            direction: "forward",
-            requestType: "loadAdditionalData"
+        //console.log(mainChartCandleSeries.data())
+        if (mainChartCandleSeries.data().length > 0){
+            const datetimeToRequest = ESTtoUTC(mainChartCandleSeries.data()[mainChartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp
+            const req : chartRequest = {
+                ticker: get(chartQuery).ticker, 
+                datetime: datetimeToRequest.toString(),
+                securityId: get(chartQuery).securityId, 
+                timeframe: get(chartQuery).timeframe, 
+                extendedHours: get(chartQuery).extendedHours, 
+                bars: bars,
+                direction: "forward",
+                requestType: "loadAdditionalData"
+            }
+            backendLoadChartData(req);
+        }else{
+            console.log("no data in chart -> abort forward load")
         }
-        backendLoadChartData(req);
+            
     }
 
     function crosshairMoveEvent(param: MouseEventParams) {
