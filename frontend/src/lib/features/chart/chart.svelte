@@ -61,7 +61,7 @@
         return smaData;
     }
 
-    function backendLoadChartData(inst:chartRequest): void{
+    function backendLoadChartData(inst:ChartRequest): void{
         if(isloadingChartData) {return;}
         isloadingChartData = true;
         lastChartRequestTime = Date.now()
@@ -74,39 +74,26 @@
             isloadingChartData = false;
             return 
         }
-        let barDataList: barData[] = []
-        privateRequest<barData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, timestamp:inst.timestamp, direction:inst.direction, bars:inst.bars, extendedhours:inst.extendedHours})
-            .then((barDataList: barData[]) => {
+        privateRequest<BarData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, timestamp:inst.timestamp, direction:inst.direction, bars:inst.bars, extendedhours:inst.extendedHours})
+            .then((barDataList: BarData[]) => {
                 if (! (Array.isArray(barDataList) && barDataList.length > 0)){ return}
                 let newCandleData = barDataList.map((bar) => ({
                   time: UTCtoEST(bar.time as UTCTimestamp) as UTCTimestamp,open: bar.open, high: bar.high, low: bar.low, close: bar.close, }));
                 let newVolumeData = barDataList.map((bar) => ({
                   time: UTCtoEST(bar.time as UTCTimestamp) as UTCTimestamp, value: bar.volume, color: bar.close > bar.open ? '#089981' : '#ef5350', }));
-                if (inst.requestType == 'loadAdditionalData') {
-                    if(inst.direction == 'backward') {
-                        const earliestCandleTime = chartCandleSeries.data()[0].time;
-                        if (typeof earliestCandleTime === 'number') {
-                            console.log("is Number")
-                            if (newCandleData[newCandleData.length-1].time <= earliestCandleTime) {
-                                newCandleData = newCandleData.slice(0, newCandleData.length-1)
-                                newVolumeData = newVolumeData.slice(0, newVolumeData.length -1)
-                                newCandleData = [...newCandleData, ...chartCandleSeries.data()]
-                                newVolumeData = [...newVolumeData, ...chartVolumeSeries.data()]
-                            }
-                        }
-                        console.log("loaded more data")
-                    } else{
-                        const latestCandleTime = chartCandleSeries.data()[chartCandleSeries.data().length-1].time;
-                        if (typeof latestCandleTime === 'number') {
-                            if(newCandleData[0].time >= latestCandleTime) {
-                                newCandleData = newCandleData.slice(1, newCandleData.length)
-                                newVolumeData = newVolumeData.slice(1, newVolumeData.length)
-                                newCandleData = [...chartCandleSeries.data(), ...newCandleData]
-                                newVolumeData = [...chartVolumeSeries.data(), ...newVolumeData]
-                            }
-                        }
-
-                    }
+                if (inst.requestType === 'loadAdditionalData' && inst.direction === 'backward') {
+                  const earliestCandleTime = chartCandleSeries.data()[0]?.time;
+                  if (typeof earliestCandleTime === 'number' && newCandleData[newCandleData.length - 1].time <= earliestCandleTime) {
+                    newCandleData = [...newCandleData.slice(0, -1), ...chartCandleSeries.data()];
+                    newVolumeData = [...newVolumeData.slice(0, -1), ...chartVolumeSeries.data()];
+                  }
+                  console.log("loaded more data");
+                } else if (inst.requestType === 'loadAdditionalData') {
+                  const latestCandleTime = chartCandleSeries.data()[chartCandleSeries.data().length - 1]?.time;
+                  if (typeof latestCandleTime === 'number' && newCandleData[0].time >= latestCandleTime) {
+                    newCandleData = [...chartCandleSeries.data(), ...newCandleData.slice(1)];
+                    newVolumeData = [...chartVolumeSeries.data(), ...newVolumeData.slice(1)];
+                  }
                 }
                 // Check if we reach end of avaliable data 
                 if (inst.datetime == '' ) {
