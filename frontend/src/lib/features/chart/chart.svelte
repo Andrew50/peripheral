@@ -101,6 +101,7 @@
                 }
                 else if (barDataList.length < inst.bars) {
                     if(inst.direction == 'backward') {
+                        console.log("TESTSTESTESTSTETSTS")
                         chartEarliestDataReached = true;
                     } else {
                         chartLatestDataReached = true;
