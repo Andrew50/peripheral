@@ -14,7 +14,7 @@
     import type {Writable} from 'svelte/store';
     import {writable, get} from 'svelte/store';
     import { onMount  } from 'svelte';
-    import { UTCtoEST, ESTtoUTC, ESTSecondstoUTC} from '$lib/core/datetime';
+    import { UTCtoEST, ESTtoUTC, ESTSecondstoUTC} from '$lib/core/timestamp';
     let chartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let chartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
     let sma10Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
@@ -106,7 +106,7 @@
             const datePart = dt.toLocaleDateString('en-CA'); // 'en-CA' gives you the yyyy-mm-dd format
             const timePart = dt.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
             const formattedDate = `${datePart} ${timePart}`;
-            const ins: Instance = { ...get(chartQuery), datetime: formattedDate, timestamp: timestamp}
+            const ins: Instance = { ...get(chartQuery), timestamp: timestamp}
             queryInstanceRightClick(event,ins,"chart")
         })
         chartContainer.addEventListener('keyup', event => {
@@ -124,7 +124,6 @@
                     y: Math.min(event.clientY, v.startY),
                     currentPrice: chartCandleSeries.coordinateToPrice(event.clientY) || 0,
                 }
-                console.log(god)
                 return god
             })
         }
@@ -134,7 +133,6 @@
             }
         })
         chartContainer.addEventListener('mousedown',event  => {
-            console.log(get(shiftOverlay))
             if (shiftDown || get(shiftOverlay).isActive){
                 shiftOverlay.update((v:ShiftOverlay) => {
                     v.isActive = !v.isActive
@@ -154,7 +152,7 @@
                 })
             }
         })
-        chartContainer.addEventListener('keydown', event => {
+        chartContainer.addEventListener('keydown', (event) => {
             if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
                 queryInstanceInput("any",get(chartQuery))
                 .then((v:Instance)=>{
