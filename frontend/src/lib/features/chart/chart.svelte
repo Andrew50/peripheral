@@ -20,7 +20,7 @@
     let sma10Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
     let sma20Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
     let chart: IChartApi;
-    let latestCrosshairPositionTime: Time;
+    let latestCrosshairPositionTime: number;
     let chartEarliestDataReached = false;
     let chartLatestDataReached = false;  
     let isLoadingChartData = false    
@@ -45,15 +45,14 @@
                 if (inst.requestType === 'loadAdditionalData' && inst.direction === 'backward') {
                   const earliestCandleTime = chartCandleSeries.data()[0]?.time;
                   if (typeof earliestCandleTime === 'number' && newCandleData[newCandleData.length - 1].time <= earliestCandleTime) {
-                    newCandleData = [...newCandleData.slice(0, -1), ...chartCandleSeries.data()];
-                    newVolumeData = [...newVolumeData.slice(0, -1), ...chartVolumeSeries.data()];
+                    newCandleData = [...newCandleData.slice(0, -1), ...chartCandleSeries.data()] as any;
+                    newVolumeData = [...newVolumeData.slice(0, -1), ...chartVolumeSeries.data()] as any;
                   }
-                  console.log("loaded more data");
                 } else if (inst.requestType === 'loadAdditionalData') {
                   const latestCandleTime = chartCandleSeries.data()[chartCandleSeries.data().length - 1]?.time;
                   if (typeof latestCandleTime === 'number' && newCandleData[0].time >= latestCandleTime) {
-                    newCandleData = [...chartCandleSeries.data(), ...newCandleData.slice(1)];
-                    newVolumeData = [...chartVolumeSeries.data(), ...newVolumeData.slice(1)];
+                    newCandleData = [...chartCandleSeries.data(), ...newCandleData.slice(1)] as any;
+                    newVolumeData = [...chartVolumeSeries.data(), ...newVolumeData.slice(1)] as any;
                   }
                 }
                 // Check if we reach end of avaliable data 
@@ -197,7 +196,7 @@
             const volumeData = param.seriesData.get(chartVolumeSeries);
             const volume = volumeData ? volumeData.value : 0;
             hoveredCandleData.set({ open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: volume })
-            latestCrosshairPositionTime = bar.time 
+            latestCrosshairPositionTime = bar.time as number //god
         }); 
         chart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
             if (!logicalRange || Date.now() - lastChartRequestTime < chartRequestThrottleDuration) {return;}
