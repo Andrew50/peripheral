@@ -35,7 +35,7 @@
         if (isLoadingChartData ||!inst.ticker || !inst.timeframe || !inst.securityId) { return; }
         isLoadingChartData = true;
         lastChartRequestTime = Date.now()
-        privateRequest<BarData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, timestamp:inst.timestamp, direction:inst.direction, bars:inst.bars, extendedhours:inst.extendedHours})
+        privateRequest<BarData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, timestamp:inst.timestamp, direction:inst.direction, bars:inst.bars,extendedhours:inst.extendedHours})
             .then((barDataList: BarData[]) => {
                 if (! (Array.isArray(barDataList) && barDataList.length > 0)){ return}
                 let newCandleData = barDataList.map((bar) => ({
@@ -198,29 +198,24 @@
         }); 
         chart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
             if (!logicalRange || Date.now() - lastChartRequestTime < chartRequestThrottleDuration) {return;}
-            let direction: string;
-            let timestampToRequest: number;
-            let barsToRequest: number;
             if(logicalRange.from < 10) {
                 if(chartLatestDataReached) {return;}
-                chartQuery.update((v:ChartRequest) => {
-                    return {
-                        timestamp: ESTSecondstoUTC(chartCandleSeries.data()[0].time as UTCTimestamp) as number,
-                        bars: barsToRequest = 50 - Math.floor(logicalRange.from),
-                        direction: "backward",
-                        requestType: "loadAdditionalData",
-                    }
+                const v = get(chartQuery)
+                backendLoadChartData({
+                    timestamp: ESTSecondstoUTC(chartCandleSeries.data()[0].time as UTCTimestamp) as number,
+                    bars: 50 - Math.floor(logicalRange.from),
+                    direction: "backward",
+                    requestType: "loadAdditionalData",
                 })
             } else if (logicalRange.to > chartCandleSeries.data().length-10) {
                 if(chartEarliestDataReached) {return;}
-                chartQuery.update((v:ChartRequest) => {
-                    return {
-                        ...v,
-                        timestamp: ESTSecondstoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp,
-                        bars: barsToRequest = 150 + 2*Math.floor(logicalRange.to) - chartCandleSeries.data().length,
-                        direction: "forward",
-                        requestType: "loadAdditionalData",
-                    }
+                const v = get(chartQuery)
+                backendLoadChartData({
+                    ...v,
+                    timestamp: ESTSecondstoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp,
+                    bars:  150 + 2*Math.floor(logicalRange.to) - chartCandleSeries.data().length,
+                    direction: "forward",
+                    requestType: "loadAdditionalData",
                 })
             }
         })
