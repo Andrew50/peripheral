@@ -14,7 +14,7 @@
     import type {Writable} from 'svelte/store';
     import {writable, get} from 'svelte/store';
     import { onMount  } from 'svelte';
-    import { UTCtoEST, ESTtoUTC} from '$lib/core/datetime';
+    import { UTCtoEST, ESTtoUTC, ESTSecondstoUTC} from '$lib/core/datetime';
     let chartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let chartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
     let sma10Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
@@ -101,7 +101,7 @@
         //init event listeners
         chartContainer.addEventListener('contextmenu', (event:MouseEvent) => {
             event.preventDefault();
-            const timestamp = 1000*ESTtoUTC(latestCrosshairPositionTime);
+            const timestamp = ESTSecondstoUTC(latestCrosshairPositionTime);
             const dt = new Date(timestamp);
             const datePart = dt.toLocaleDateString('en-CA'); // 'en-CA' gives you the yyyy-mm-dd format
             const timePart = dt.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -208,7 +208,7 @@
                         return;
                     }
                     const barsToRequest = 50 - Math.floor(logicalRange.from); 
-                    const timestampToRequest = ESTtoUTC(chartCandleSeries.data()[0].time as UTCTimestamp)*1000 as number
+                    const timestampToRequest = ESTSecondstoUTC(chartCandleSeries.data()[0].time as UTCTimestamp) as number
                     const req : ChartRequest = {
                         ticker: get(chartQuery).ticker, 
                         timestamp: timestampToRequest,
@@ -227,10 +227,10 @@
             } else if (logicalRange.to > chartCandleSeries.data().length-10) {
                 const barsToRequest = 150 + 2*Math.floor(logicalRange.to) - chartCandleSeries.data().length; 
                 if(chartLatestDataReached) {return;}
-                const datetimeToRequest = ESTtoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp
+                const timestampToRequest = ESTSecondstoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp
                 const req : ChartRequest = {
                     ticker: get(chartQuery).ticker, 
-                    datetime: datetimeToRequest.toString(),
+                    timestamp: timestampToRequest,
                     securityId: get(chartQuery).securityId, 
                     timeframe: get(chartQuery).timeframe, 
                     extendedHours: get(chartQuery).extendedHours, 
