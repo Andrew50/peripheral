@@ -78,6 +78,7 @@
 <script lang="ts">
     import {browser} from '$app/environment'
     import {onMount} from 'svelte'
+	import { ESTStringToUTCTimestamp } from '$lib/core/datetime';
     let prevFocusedElement: Element | null
 
     interface ValidateResponse {
@@ -124,6 +125,8 @@
             iQ.instance.timeframe = iQ.inputString
         }else if (iQ.inputType === 'datetime'){
             iQ.instance.datetime = iQ.inputString
+            iQ.instance.timestamp = ESTStringToUTCTimestamp(iQ.inputString)
+            console.log("Testing", iQ.instance.timestamp)
         }
         iQ.status = "complete" // temp setting, following code will set back to active
         if(iQ.requiredKeys === "any"){ 
