@@ -4,7 +4,7 @@
     import { writable } from 'svelte/store'
     import Entry from './entry.svelte'
     import {onMount} from 'svelte'
-    import {privateRequest} from '$lib/api/backend'
+    import {privateRequest} from '$lib/core/backend'
     import type {Instance} from '$lib/core/types'
     import  {UTCTimestampToESTString} from '$lib/core/datetime'
     import {queryInstanceInput} from '$lib/utils/input.svelte'
