@@ -76,28 +76,12 @@
         }
         let barDataList: barData[] = []
         privateRequest<barData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, timestamp:inst.timestamp, direction:inst.direction, bars:inst.bars, extendedhours:inst.extendedHours})
-            .then((result: barData[]) => {
-                if (! (Array.isArray(result) && result.length > 0)){ return}
-                barDataList = result;
-
-                let newCandleData = [];
-                let newVolumeData = [];
-                for (let i =0; i < barDataList.length; i++) {
-                    var dataTime = UTCtoEST(barDataList[i].time as UTCTimestamp) as UTCTimestamp
-                    newCandleData.push({
-                        time: dataTime, 
-                        open: barDataList[i].open, 
-                        high: barDataList[i].high, 
-                        low: barDataList[i].low,
-                        close: barDataList[i].close, 
-                    });
-                    const candleColor = barDataList[i].close > barDataList[i].open 
-                    newVolumeData.push({
-                        time: dataTime, 
-                        value: barDataList[i].volume, 
-                        color: candleColor ? '#089981' : '#ef5350',
-                    })
-                }
+            .then((barDataList: barData[]) => {
+                if (! (Array.isArray(barDataList) && barDataList.length > 0)){ return}
+                let newCandleData = barDataList.map((bar) => ({
+                  time: UTCtoEST(bar.time as UTCTimestamp) as UTCTimestamp,open: bar.open, high: bar.high, low: bar.low, close: bar.close, }));
+                let newVolumeData = barDataList.map((bar) => ({
+                  time: UTCtoEST(bar.time as UTCTimestamp) as UTCTimestamp, value: bar.volume, color: bar.close > bar.open ? '#089981' : '#ef5350', }));
                 if (inst.requestType == 'loadAdditionalData') {
                     if(inst.direction == 'backward') {
                         const earliestCandleTime = chartCandleSeries.data()[0].time;
@@ -128,7 +112,7 @@
                 if (inst.datetime == '' ) {
                     chartLatestDataReached = true;
                 }
-                else if (result.length < inst.bars) {
+                else if (barDataList.length < inst.bars) {
                     if(inst.direction == 'backward') {
                         chartEarliestDataReached = true;
                     } else {
