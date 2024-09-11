@@ -45,6 +45,10 @@ func StringToTime(datetimeStr string) (time.Time, error) {
 	return parsedTime, nil*/
 
 }
+
+func MillisFromUTCTime(timeObj time.Time) (models.Millis, error) {
+	return models.Millis(timeObj), nil
+}
 func MillisFromDatetimeString(datetime string) (models.Millis, error) {
 	layouts := []string{
 		time.DateTime,

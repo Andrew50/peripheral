@@ -123,6 +123,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	// 	args.Datetime = t.Format(time.DateTime)
 	// }
 	inputTimestamp := time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).UTC()
+	fmt.Println(inputTimestamp)
 	var query string
 	var polyResultOrder string
 	var minDate time.Time
@@ -251,11 +252,11 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		// within polygon to see what endpoint we need to call
 		// for live intraday data.
 		fmt.Printf("Query Params Start Date: %s, Query End Date: %s \n", time.Time(queryStartTime), time.Time(queryEndTime))
-		date1, err := data.MillisFromDatetimeString(queryStartTime.Format(time.DateTime))
+		date1, err := data.MillisFromUTCTime(queryStartTime)
 		if err != nil {
 			return nil, fmt.Errorf("1n0f %v", err)
 		}
-		date2, err := data.MillisFromDatetimeString(queryEndTime.Format(time.DateTime))
+		date2, err := data.MillisFromUTCTime(queryEndTime)
 		if err != nil {
 			return nil, fmt.Errorf("n91ve2n0 %v", err)
 		}
@@ -269,6 +270,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		for iter.Next() {
 			if numBarsRemaining <= 0 {
 				if args.Direction == "forward" {
+					fmt.Println("forward working")
 					return barDataList, nil
 				} else {
 					left, right := 0, len(barDataList)-1
@@ -295,6 +297,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	}
 	if len(barDataList) != 0 {
 		if args.Direction == "forward" {
+			fmt.Println("forward working")
 			return barDataList, nil
 		} else {
 			left, right := 0, len(barDataList)-1

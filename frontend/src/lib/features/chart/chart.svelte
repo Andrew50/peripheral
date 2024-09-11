@@ -56,7 +56,8 @@
                     newVolumeData = [...chartVolumeSeries.data(), ...newVolumeData.slice(1)];
                   }
                 }
-                if (inst.datetime == '' ) {
+                // Check if we reach end of avaliable data 
+                if (inst.timestamp == 0) {
                     chartLatestDataReached = true;
                 }else if (barDataList.length < inst.bars) {
                     if(inst.direction == 'backward') {
