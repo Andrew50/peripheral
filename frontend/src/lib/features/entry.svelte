@@ -69,6 +69,7 @@
 
     function embeddedInstanceLeftClick(instance: Instance): void {
         instance.securityId = parseInt(instance.securityId)
+        instance.timestamp = parseInt(instance.timestamp)
         changeChart(instance)
 
         //chartQuery.set(instance)
@@ -77,6 +78,7 @@
     function embeddedInstanceRightClick(instance: Instance, event:MouseEvent): void {
         event.preventDefault()
         instance.securityId = parseInt(instance.securityId)
+        instance.timestamp = parseInt(instance.timestamp)
         queryInstanceRightClick(event,instance,"embedded")
         .then((res:RightClickResult)=>{
             if (res === "edit"){
@@ -133,11 +135,11 @@
                     let node = super.create();
                     node.setAttribute('type', 'button');
                     node.className = 'btn';
-                    node.dataset.securityId = instance.securityId
+                    node.dataset.securityId = instance.securityId.toString()
                     node.dataset.ticker = instance.ticker
-                    node.dataset.timestamp = instance.timestamp
+                    node.dataset.timestamp = instance.timestamp.toString()
                     node.dataset.timeframe = instance.timeframe
-                    node.textContent = `${instance.ticker} ${UTCTimestampToESTString(instance.timestamp)}`; 
+                    node.textContent = `${instance.ticker} ${UTCTimestampToESTString(parseInt(instance.timestamp))}`; 
                     node.onclick = () => embeddedInstanceLeftClick(instance)                    
                     node.oncontextmenu = (event:MouseEvent) => embeddedInstanceRightClick(instance,event)                    
                     return node;
@@ -147,8 +149,8 @@
                     return {
                         ticker: node.dataset.ticker,
                         timeframe: node.dataset.timeframe,
-                        datetime: node.dataset.datetime,
-                        securityId: node.dataset.securityId
+                        timestamp: parseInt(node.dataset.timestamp),
+                        securityId: parseInt(node.dataset.securityId)
 //                        pm: node.dataset.pm
                     };
                 }

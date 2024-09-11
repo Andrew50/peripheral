@@ -47,13 +47,25 @@ export function ESTSecondstoUTC(easternTimestamp : number): number {
     } 
     return -1
 }
-export function ESTStringToUTCTimestamp(easternString : string): number{
-    const easternTime = DateTime.fromFormat(easternString, 'yyyy-MM-dd HH:mm:ss', {zone: 'America/New_York'})
-
-    const utcTimestamp: number = easternTime.toUTC().toMillis();
-
-    return utcTimestamp; 
+export function ESTStringToUTCTimestamp(easternString: string): number {
+    const formats = ["yyyy-MM-dd H:m:ss", "yyyy-MM-dd H:m", "yyyy-MM-dd H", "yyyy-MM-dd"];
+    for (const format of formats) {
+        try {
+            const easternTime = DateTime.fromFormat(easternString, format, { zone: 'America/New_York' });
+            if (easternTime.isValid) {
+                const utcTimestamp: number = easternTime.toUTC().toMillis();
+                return utcTimestamp;
+            }
+        } catch (error) {
+            console.error(`Error parsing date with format ${format}: `, error);
+        }
+    }
+    return 0;
 }
+    /*const easternTime = DateTime.fromFormat(easternString, 'yyyy-MM-dd HH:mm:ss', {zone: 'America/New_York'})
+    const utcTimestamp: number = easternTime.toUTC().toMillis();
+    return utcTimestamp; */
+
 export function UTCTimestampToESTString(utcTimestamp : number): string {
     if (utcTimestamp === 0){
         return "Current"

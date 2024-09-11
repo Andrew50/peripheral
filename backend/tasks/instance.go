@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
+    "time"
 )
 
 type GetSimilarInstancesArgs struct {
@@ -42,9 +42,10 @@ func GetSimilarInstances(conn *data.Conn, userId int, rawArgs json.RawMessage) (
 		FROM securities
 		WHERE ticker = ANY($1) AND (maxDate IS NULL OR maxDate >= $2) AND minDate <= $2
 	`
-	rows, err := conn.DB.Query(context.Background(), query, tickers, args.Timestamp)
+    timestamp := time.Unix(args.Timestamp,0)
+	rows, err := conn.DB.Query(context.Background(), query, tickers,timestamp)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query securities: %v", err)
+		return nil, fmt.Errorf("1imvd: %v", err)
 	}
 	defer rows.Close()
 	var results []GetSimilarInstancesResults

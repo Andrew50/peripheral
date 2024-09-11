@@ -75,7 +75,7 @@
 <script lang="ts">
     import {browser} from '$app/environment'
     import {onMount} from 'svelte'
-	import { ESTStringToUTCTimestamp } from '$lib/core/timestamp';
+	import { ESTStringToUTCTimestamp, UTCTimestampToESTString } from '$lib/core/timestamp';
     let prevFocusedElement: Element | null
 
     interface ValidateResponse {
@@ -101,6 +101,7 @@
                 try {
                     const parsedDate = parse(inputString, format, new Date())
                     if (parsedDate != "Invalid Date"){
+                        console.log('valid')
                     //if (isNaN(parsedDate.getTime())){
                         //return {inputValid: await privateRequest<boolean>("validateDateString",{dateString:inputString}),securities:[]}
                         return {inputValid:true,securities:[]}
@@ -121,6 +122,7 @@
         }else if (iQ.inputType === 'timeframe'){
             iQ.instance.timeframe = iQ.inputString
         }else if (iQ.inputType === 'timestamp'){
+            console.log(iQ.inputString)
             iQ.instance.timestamp = ESTStringToUTCTimestamp(iQ.inputString)
             console.log("Testing", iQ.instance.timestamp)
         }
@@ -214,6 +216,9 @@
     };*/
     })
 
+    function displayValue(key:string, val:number|string):string{
+    }
+
 
 </script>
 
@@ -227,7 +232,7 @@
                         <div class="entry">
                             <span class={$inputQuery.requiredKeys.includes(key) && !$inputQuery.instance[key] ? 'red' : 'normal'}>{key}</span>
                             <span class={key === $inputQuery.inputType ? $inputQuery.inputValid ? 'highlight' : 'red' : 'normal'}> 
-                                {key === $inputQuery.inputType ? $inputQuery.inputString : $inputQuery.instance[key] ? $inputQuery.instance[key] : ""}
+                                {(key === $inputQuery.inputType ? $inputQuery.inputString : ($inputQuery.instance[key] ? (key === "timestamp" ? UTCTimestampToESTString($inputQuery.instance[key]):$inputQuery.instance[key] ) : ""))}
                             </span>
                         </div>
                     <!--{/if}-->

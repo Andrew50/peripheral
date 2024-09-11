@@ -5,15 +5,16 @@
     import type {Instance } from '$lib/core/types';
     import {privateRequest} from '$lib/core/backend';
     import {queryInstanceRightClick} from './rightClick.svelte'
+    type Status = "active" | "inactive"
     
     interface SimilarQuery {
         x: number
         y: number
         similarInstances: Instance[]
-        status: "active" | "inactive"
+        status: Status
     }
     
-    const inactiveSimilarQuery = {x:0,y:0,similarInstances:[],status:"inactive"}
+    const inactiveSimilarQuery = {x:0,y:0,similarInstances:[],status:"inactive" as Status}
     let similarQuery: Writable<SimilarQuery> = writable(inactiveSimilarQuery);
     
     export function querySimilarInstances(event:MouseEvent,baseIns:Instance):void{
@@ -70,7 +71,7 @@
     }
 
     function closeMenu():void {
-        similarQuery.update(() => {
+        similarQuery.update((v:SimilarQuery) => {
             return inactiveSimilarQuery;
         })
     }
@@ -132,15 +133,6 @@
 
 <style>
     @import '$lib/core/colors.css';
-
-    .red {
-        color: var(--c5);
-    }
-    
-    .normal {
-        color: var(--f1);
-    }
-
     .context-menu {
         position: absolute;
         background-color: var(--c2);

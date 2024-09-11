@@ -125,7 +125,7 @@ func GetStudyEntry(conn *data.Conn, userId int, rawArgs json.RawMessage) (interf
 
 type NewStudyArgs struct {
 	SecurityId int    `json:"securityId"`
-	Timestamp   string `json:"timestamp"`
+	Timestamp   int64 `json:"timestamp"`
 }
 
 func NewStudy(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -134,8 +134,9 @@ func NewStudy(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}
 	if err != nil {
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
+    timestamp := time.Unix(args.Timestamp, 0)
 	var studyId int
-	err = conn.DB.QueryRow(context.Background(), "INSERT into studies (userId,securityId, timestamp) values ($1,$2,$3) RETURNING studyId", userId, args.SecurityId, args.Timestamp).Scan(&studyId)
+	err = conn.DB.QueryRow(context.Background(), "INSERT into studies (userId,securityId, timestamp) values ($1,$2,$3) RETURNING studyId", userId, args.SecurityId, timestamp).Scan(&studyId)
 	if err != nil {
 		return nil, err
 	}

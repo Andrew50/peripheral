@@ -24,7 +24,7 @@
                         return [study]
                     }
                 })
-            })
+            }).catch()
     }
 
 </script>
