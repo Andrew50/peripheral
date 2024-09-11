@@ -102,7 +102,7 @@
         //init event listeners
         chartContainer.addEventListener('contextmenu', (event:MouseEvent) => {
             event.preventDefault();
-            const timestamp = 1000*ESTtoUTC(latestCrosshairPositionTime);
+            const timestamp = ESTSecondstoUTC(latestCrosshairPositionTime);
             const dt = new Date(timestamp);
             const datePart = dt.toLocaleDateString('en-CA'); // 'en-CA' gives you the yyyy-mm-dd format
             const timePart = dt.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
