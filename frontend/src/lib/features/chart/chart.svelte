@@ -201,11 +201,12 @@
         //init event listeners
         chartContainer.addEventListener('contextmenu', (event:MouseEvent) => {
             event.preventDefault();
-            const dt = new Date(1000*latestCrosshairPositionTime);
+            const timestamp = 1000*ESTtoUTC(latestCrosshairPositionTime);
+            const dt = new Date(timestamp);
             const datePart = dt.toLocaleDateString('en-CA'); // 'en-CA' gives you the yyyy-mm-dd format
             const timePart = dt.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
             const formattedDate = `${datePart} ${timePart}`;
-            const ins: Instance = { ...get(chartQuery), datetime: formattedDate, }
+            const ins: Instance = { ...get(chartQuery), datetime: formattedDate, timestamp: timestamp}
             queryInstanceRightClick(event,ins,"chart")
         })
         chartContainer.addEventListener('keyup', event => {
@@ -346,9 +347,11 @@
         })
        chartQuery.subscribe((v:Instance)=>{
         const dateTimeToRequest = v.datetime; // this should be in UTC timestamp (milliseconds) by the time it reaches here 
+        const timestampToRequest = v.timestamp;
             const req : chartRequest = {
                 ticker: v.ticker,
                 datetime: dateTimeToRequest,
+                timestamp: timestampToRequest,
                 securityId: v.securityId,
                 timeframe: v.timeframe,
                 extendedHours: v.extendedHours,
