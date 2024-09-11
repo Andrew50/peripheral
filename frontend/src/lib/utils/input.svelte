@@ -5,14 +5,14 @@
     import { parse} from 'date-fns';
     import {tick} from 'svelte';
     import type { Writable } from 'svelte/store';
-    import type {Instance } from '$lib/core/backend';
+    import type {Instance } from '$lib/core/types';
     interface Security {
         securityId: number;
         ticker: string;
         maxDate: string | null;
         name: string;
     }
-    const possibleDisplayKeys = ["ticker","datetime","timeframe","extended hours"]
+    const possibleDisplayKeys = ["ticker","timestamp","timeframe","extended hours"]
     type InstanceAttributes = typeof possibleDisplayKeys[number];
     interface InputQuery {
         //inactive is default, no ui shown | complete is succesful completeion, return instance
@@ -44,12 +44,6 @@
         if (get(inputQuery).status === "inactive"){
             inputQuery.update((v:InputQuery)=>{
                 v.requiredKeys = requiredKeys
-            /*    v.instance = {
-                    ticker:"",
-                    datetime:"",
-                    timeframe:"",
-                    ...instance
-                },*/
                 v.instance = instance //instance must be set up to have required fields as blank
                 v.status = "initializing"
                 return v
@@ -71,14 +65,17 @@
                     inputQuery.set({...inactiveInputQuery})
                 }
             })
+        }else{
+            return Promise.reject(new Error("input query already active"))
         }
+
     }
         
 </script>
 <script lang="ts">
     import {browser} from '$app/environment'
     import {onMount} from 'svelte'
-	import { ESTStringToUTCTimestamp } from '$lib/core/datetime';
+	import { ESTStringToUTCTimestamp } from '$lib/core/timestamp';
     let prevFocusedElement: Element | null
 
     interface ValidateResponse {
@@ -98,7 +95,7 @@
         }else if(inputType == "timeframe"){
             const regex = /^\d{1,3}[yqmwds]?$/i;
             return {inputValid:regex.test(inputString),securities:[]}
-        }else if(inputType == "datetime"){
+        }else if(inputType == "timestamp"){
             const formats = ["yyyy-MM-dd H:m:ss","yyyy-MM-dd H:m","yyyy-MM-dd H","yyyy-MM-dd",];
             for (const format of formats) {
                 try {
@@ -123,8 +120,7 @@
             }
         }else if (iQ.inputType === 'timeframe'){
             iQ.instance.timeframe = iQ.inputString
-        }else if (iQ.inputType === 'datetime'){
-            iQ.instance.datetime = iQ.inputString
+        }else if (iQ.inputType === 'timestamp'){
             iQ.instance.timestamp = ESTStringToUTCTimestamp(iQ.inputString)
             console.log("Testing", iQ.instance.timestamp)
         }
@@ -162,7 +158,7 @@
         }else {
             if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase()) 
                 || (/[-:]/.test(event.key)) 
-                || (event.key == " " && iQ.inputType === 'datetime') ) {
+                || (event.key == " " && iQ.inputType === 'timestamp') ) {
                 let key: string;
                 if (iQ.inputType === 'timeframe'){
                     key = event.key
@@ -175,22 +171,13 @@
             }
             //classify input
             if (iQ.inputString !== "") { 
-                /*if(/^\d{1,2}(?:[dwmqs])$/.test(iQ.inputString[0])){
-                    iQ.inputType = "timeframe"
-                   iQ.securities = []
-                }else if(/^\d{3,4}.*$/.test(iQ.inputString) || /-/.test(iQ.inputString)){
-                    iQ.inputType = "datetime"
-                   iQ.securities = []
-                }else{
-                    iQ.inputType =  "ticker"
-                }*/
                 if (/^[A-Z]$/.test(iQ.inputString)) {
                     iQ.inputType = "ticker";
                 }else if (/^\d{1,2}(?:[dwmqs])?$/.test(iQ.inputString)) {
                     iQ.inputType = "timeframe";
                     iQ.securities = [];
                 } else if (/^\d{3}?.*$/.test(iQ.inputString)) {
-                    iQ.inputType = "datetime";
+                    iQ.inputType = "timestamp";
                     iQ.securities = [];
                 } else { //assume its 
                     iQ.inputType = "ticker"

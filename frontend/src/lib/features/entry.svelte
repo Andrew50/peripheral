@@ -8,8 +8,9 @@
     import {writable} from 'svelte/store'
     import type {Writable} from 'svelte/store'
     let externalEmbed: Writable<Instance> = writable({})
+    import {UTCTimestampToESTString} from '$lib/core/timestamp'
     export function embedInstance(instance:Instance):void{
-        if (instance.ticker && instance.datetime && instance.securityId && instance.timeframe){
+        if (instance.ticker && instance.timestamp && instance.securityId && instance.timeframe){
             externalEmbed.set(instance)
         }
     }
@@ -59,8 +60,8 @@
     }
 
     function inputAndEmbedInstance(): void {
-        const blankInstance: Instance = {ticker:"",datetime:"",timeframe:""}
-        queryInstanceInput(["ticker","timeframe","datetime"],blankInstance)
+        const blankInstance: Instance = {ticker:"",timestamp:0,timeframe:""}
+        queryInstanceInput(["ticker","timeframe","timestamp"],blankInstance)
         .then((instance: Instance) => {
             insertEmbeddedInstance(instance)
         })
@@ -87,7 +88,7 @@
     }
     function editEmbeddedInstance(instance:Instance): void{
         const ins = {...instance} //make a copy
-        queryInstanceInput(["ticker", "timeframe", "datetime"],ins)
+        queryInstanceInput(["ticker", "timeframe", "timestamp"],ins)
         .then((updatedInstance: Instance) => {
             // Find the embedded instance in the editor content
             const delta = editor?.getContents();
@@ -98,10 +99,10 @@
                     const embedded = op.insert.embeddedInstance;
                     console.log(embedded)
                     console.log(instance)
-                    if (embedded.ticker === instance.ticker && embedded.datetime === instance.datetime) {
+                    if (embedded.ticker === instance.ticker && embedded.timestamp === instance.timestamp) {
                         embedded.ticker = updatedInstance.ticker;
                         embedded.timeframe = updatedInstance.timeframe;
-                        embedded.datetime = updatedInstance.datetime;
+                        embedded.timestamp = updatedInstance.timestamp;
                         embedded.securityId = updatedInstance.securityId;
                         completed = true;
                         
@@ -134,9 +135,9 @@
                     node.className = 'btn';
                     node.dataset.securityId = instance.securityId
                     node.dataset.ticker = instance.ticker
-                    node.dataset.datetime = instance.datetime
+                    node.dataset.timestamp = instance.timestamp
                     node.dataset.timeframe = instance.timeframe
-                    node.textContent = `${instance.ticker} ${instance.datetime}`; 
+                    node.textContent = `${instance.ticker} ${UTCTimestampToESTString(instance.timestamp)}`; 
                     node.onclick = () => embeddedInstanceLeftClick(instance)                    
                     node.oncontextmenu = (event:MouseEvent) => embeddedInstanceRightClick(instance,event)                    
                     return node;

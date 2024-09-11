@@ -3,7 +3,8 @@
     //import {changeChart} from '$lib/features/chart/chart.svelte'
     import type { Writable } from 'svelte/store';
     import type {Instance } from '$lib/core/types';
-    let similarInstance: Writable<SimilarInstance> = writable({});
+    import {UTCTimestampToESTString} from '$lib/core/timestamp'
+//    let similarInstance: Writable<SimilarInstance> = writable({});
     import { privateRequest} from '$lib/core/backend';
     import {embedInstance} from "$lib/features/entry.svelte";
     import {newStudy} from '$lib/features/study.svelte';
@@ -134,7 +135,7 @@
 </script>
 {#if $rightClickQuery.status === "active"}
     <div bind:this={rightClickMenu} class="context-menu" style="top: {$rightClickQuery.y}px; left: {$rightClickQuery.x}px;">
-        <div class="menu-item">{$rightClickQuery.instance.ticker} {$rightClickQuery.instance.datetime} </div>
+        <div class="menu-item">{$rightClickQuery.instance.ticker} {UTCTimestampToESTString($rightClickQuery.instance.timestamp)} </div>
         <div class="menu-item"><button on:click={()=>newStudy(get(rightClickQuery).instance)}> Add to Study </button></div>
         <!--<div><button on:click={()=>newSample(get(rightClickQuery).instance)}> Add to Sample </button></div>
         <div><button on:click={()=>newJournal(get(rightClickQuery).instance)}> Add to Journal </button></div>-->

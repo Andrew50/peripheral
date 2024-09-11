@@ -16,7 +16,6 @@ type GetStudiesResult struct {
 	StudyId    int       `json:"studyId"`
 	SecurityId int       `json:"securityId"`
 	Ticker     string    `json:"ticker"`
-	//Datetime   time.Time `json:"datetime"`
     Timestamp  int64  `json:"timestamp"`
 	Completed  bool      `json:"completed"`
 }
@@ -28,7 +27,7 @@ func GetStudies(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
 	rows, err := conn.DB.Query(context.Background(), `
-    SELECT s.studyId, s.securityId, sec.ticker, s.datetime, s.completed from studies as s 
+    SELECT s.studyId, s.securityId, sec.ticker, s.timestamp, s.completed from studies as s 
     JOIN securities as sec on s.securityId = sec.securityId
     where s.userId = $1 and s.completed = $2
     `, userId, args.Completed)
@@ -126,7 +125,7 @@ func GetStudyEntry(conn *data.Conn, userId int, rawArgs json.RawMessage) (interf
 
 type NewStudyArgs struct {
 	SecurityId int    `json:"securityId"`
-	Datetime   string `json:"datetime"`
+	Timestamp   string `json:"timestamp"`
 }
 
 func NewStudy(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -136,7 +135,7 @@ func NewStudy(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
 	var studyId int
-	err = conn.DB.QueryRow(context.Background(), "INSERT into studies (userId,securityId, datetime) values ($1,$2,$3) RETURNING studyId", userId, args.SecurityId, args.Datetime).Scan(&studyId)
+	err = conn.DB.QueryRow(context.Background(), "INSERT into studies (userId,securityId, timestamp) values ($1,$2,$3) RETURNING studyId", userId, args.SecurityId, args.Timestamp).Scan(&studyId)
 	if err != nil {
 		return nil, err
 	}

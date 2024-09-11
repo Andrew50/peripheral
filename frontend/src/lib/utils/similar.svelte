@@ -17,7 +17,7 @@
     let similarQuery: Writable<SimilarQuery> = writable(inactiveSimilarQuery);
     
     export function querySimilarInstances(event:MouseEvent,baseIns:Instance):void{
-        privateRequest<Instance[]>("getSimilarInstances",{ticker:baseIns.ticker, securityId:baseIns.securityId, timeframe:baseIns.timeframe, datetime:baseIns.datetime})
+        privateRequest<Instance[]>("getSimilarInstances",{ticker:baseIns.ticker, securityId:baseIns.securityId, timeframe:baseIns.timeframe, timestamp:baseIns.timestamp})
         .then((v:Instance[])=>{
             const simInst: SimilarQuery = {
                 x: event.clientX,

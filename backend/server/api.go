@@ -16,12 +16,9 @@ var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, erro
 
 var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}, error){
 	"verifyAuth":   verifyAuth,
-	"newInstance":  tasks.NewInstance,
-	"getCik":       tasks.GetCik,
-	"getInstances": tasks.GetInstances,
-	//"setAnnotation":           tasks.SetAnnotation,
-	//"newAnnotation":           tasks.NewAnnotation,
-	//"getAnnotations":          tasks.GetAnnotations,
+//	"newInstance":  tasks.NewInstance,
+//	"getCik":       tasks.GetCik,
+//	"getInstances": tasks.GetInstances,
 	"getSimilarInstances":     tasks.GetSimilarInstances,
 	"getSecuritiesFromTicker": tasks.GetSecuritiesFromTicker,
 	"getChartData":            tasks.GetChartData,

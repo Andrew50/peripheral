@@ -91,7 +91,7 @@ type GetChartDataArgs struct {
 	//EndTime   string `json:"endtime"`
 }
 type GetChartDataResults struct {
-	Datetime float64 `json:"time"`
+	Timestamp float64 `json:"time"`
 	Open     float64 `json:"open"`
 	High     float64 `json:"high"`
 	Low      float64 `json:"low"`
@@ -283,7 +283,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 				}
 			}
 			var barData GetChartDataResults
-			barData.Datetime = float64(time.Time(iter.Item().Timestamp).Unix())
+			barData.Timestamp = float64(time.Time(iter.Item().Timestamp).Unix())
 			barData.Open = iter.Item().Open
 			barData.High = iter.Item().High
 			barData.Low = iter.Item().Low
