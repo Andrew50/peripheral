@@ -14,14 +14,14 @@ import (
 	"github.com/polygon-io/client-go/rest/models"
 )
 
-func GetLastQuote(client *polygon.Client, ticker string) (models.LastQuote,error) {
+func GetLastQuote(client *polygon.Client, ticker string) (models.LastQuote, error) {
 
 	params := &models.GetLastQuoteParams{
 		Ticker: ticker,
 	}
 	res, err := client.GetLastQuote(context.Background(), params)
 	if err != nil {
-        return res.Results, err
+		return res.Results, err
 	}
 	return res.Results, nil
 
@@ -46,7 +46,7 @@ func GetLastTrade(client *polygon.Client, ticker string) (models.LastTrade, erro
 	}
 	res, err := client.GetLastTrade(context.Background(), params)
 	if err != nil {
-        return res.Results, err
+		return res.Results, err
 	}
 	return res.Results, nil
 
@@ -66,7 +66,7 @@ func GetTrade(client *polygon.Client, ticker string, nanoTimestamp models.Nanos,
 
 // QA STATUS: not QA'd
 // create function listAllTickers(dateString string) that calls several times to listTickers
-func ListTickers(client *polygon.Client, startTicker string, dateString string, tickerStringCompareType models.Comparator, numTickers int, active bool) (*iter.Iter[models.Ticker],error) {
+func ListTickers(client *polygon.Client, startTicker string, dateString string, tickerStringCompareType models.Comparator, numTickers int, active bool) (*iter.Iter[models.Ticker], error) {
 	params := models.ListTickersParams{}.
 		WithMarket(models.AssetStocks).
 		WithSort(models.TickerSymbol).
@@ -78,7 +78,7 @@ func ListTickers(client *polygon.Client, startTicker string, dateString string, 
 	if dateString != "" {
 		dt, err := time.Parse(time.DateOnly, dateString)
 		if err != nil {
-            return nil, err
+			return nil, err
 		}
 		dateObj := models.Date(dt)
 		params = params.WithDate(dateObj)
@@ -86,41 +86,41 @@ func ListTickers(client *polygon.Client, startTicker string, dateString string, 
 	iter := client.ListTickers(context.Background(), params)
 	return iter, nil
 }
-func AllTickers(client *polygon.Client, dateString string) ([]models.Ticker,error) {
+func AllTickers(client *polygon.Client, dateString string) ([]models.Ticker, error) {
 	if dateString == "" {
 		dateString = time.Now().Format(time.DateOnly)
 	}
 	tickerList := []models.Ticker{}
 	iter, err := ListTickers(client, "", dateString, models.GT, 1000, true)
-    if err != nil {
-        return nil, err
-    }
+	if err != nil {
+		return nil, err
+	}
 	for iter.Next() {
 		tickerList = append(tickerList, iter.Item())
 	}
 	return tickerList, nil
 }
-func AllTickersTickerOnly(client *polygon.Client, dateString string) (*[]string, error){
+func AllTickersTickerOnly(client *polygon.Client, dateString string) (*[]string, error) {
 	if dateString == "" {
 		dateString = time.Now().Format(time.DateOnly)
 	}
 	tickerList := []string{}
 	iter, err := ListTickers(client, "", dateString, models.GT, 1000, true)
-    if err != nil {
-        return nil, err
-    }
+	if err != nil {
+		return nil, err
+	}
 	for iter.Next() {
 		tickerList = append(tickerList, iter.Item().Ticker)
 	}
 	return &tickerList, nil
 }
 
-func GetTickerDetails(client *polygon.Client, ticker string, dateString string) (*models.Ticker,error) {
+func GetTickerDetails(client *polygon.Client, ticker string, dateString string) (*models.Ticker, error) {
 	var params *models.GetTickerDetailsParams
 	if dateString != "now" {
 		dt, err := time.Parse(time.DateOnly, dateString)
 		if err != nil {
-            return nil, err
+			return nil, err
 		}
 		params = models.GetTickerDetailsParams{
 			Ticker: ticker,
@@ -132,7 +132,7 @@ func GetTickerDetails(client *polygon.Client, ticker string, dateString string) 
 	}
 	res, err := client.GetTickerDetails(context.Background(), params)
 	if err != nil {
-        return nil, err
+		return nil, err
 	}
 	return &res.Results, nil
 }
