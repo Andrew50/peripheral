@@ -3,7 +3,7 @@ services:
         build:
             context: ./backend
             dockerfile: Dockerfile
-        restart: always
+        restart: unless-stopped
         ports:
           - "5057:5057"
         volumes:
@@ -18,6 +18,10 @@ services:
           - "5432:5432"
         networks:
             - compose_network
+        volumes:
+            - db:/var/lib/postgresql/data
+        restart: unless-stopped
+
 
     frontend:
         build:
@@ -30,7 +34,51 @@ services:
           - WATCHPACK_POLLING=true #enable polling
         ports:
           - "5173:5173"
-        restart: always
+        restart: unless-stopped
+
+    tf:
+        build:
+            context: ./tf
+            dockerfile: Dockerfile
+        restart: unless-stopped
+        ports:
+        - "8501:8501"
+        - "8500:8500"
+        volumes:
+            - tf:/models
+        networks:
+          - compose_network
+
+
+    ml: 
+        build: #satish was here
+            context: ./ml
+            dockerfile: Dockerfile
+        networks:
+            - compose_network
+        volumes:
+            - ./ml:/app #for hot reload
+        restart: unless-stopped
+
+    cache:
+        build:
+            context: ./cache
+            dockerfile: Dockerfile
+        ports:
+          - 6379:6379
+        networks:
+          - compose_network
+        hostname: redis
+        volumes:
+          - cache:/data
+        command: redis-server
+        mem_limit: 8G
+        restart: unless-stopped
+
+volumes:
+  db:
+  cache:
+  tf:
 
 networks:
   compose_network:

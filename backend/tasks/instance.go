@@ -1,7 +1,8 @@
 package tasks
 
 import (
-	"api/data"
+	"backend/utils"
+    "backend/data"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -21,7 +22,7 @@ type GetSimilarInstancesResults struct {
 	Timeframe  string `json:"timeframe"`
 }
 
-func GetSimilarInstances(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetSimilarInstances(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetSimilarInstancesArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
@@ -73,7 +74,7 @@ type GetCikResults struct {
 	Cik string `json:"cik"`
 }
 
-func GetCik(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetCik(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetCikArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
@@ -98,7 +99,7 @@ type Instance struct {
 	Timestamp  time.Time `json:"timestamp"`
 }
 
-func GetInstances(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetInstances(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(), "SELECT instanceId, cik, timestamp FROM instances WHERE userId = $1", userId)
 	if err != nil {
 		return nil, fmt.Errorf("358dg: %v", err)
@@ -127,7 +128,7 @@ type NewInstanceResults struct {
 	InstanceID int `json:"instanceId"`
 }
 
-func NewInstance(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func NewInstance(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args NewInstanceArgs
 	fmt.Print("NewInstance hit")
 	if err := json.Unmarshal(rawArgs, &args); err != nil {

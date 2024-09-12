@@ -2,7 +2,7 @@ package server
 
 import (
     "context"
-    "api/data"
+    "backend/utils"
     "github.com/golang-jwt/jwt/v4"
     "time"
     "fmt"
@@ -26,7 +26,7 @@ type SignupArgs struct {
     Username string `json:"username"`
     Password string `json:"password"`
 }
-func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
+func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
     var a SignupArgs
     if err := json.Unmarshal(rawArgs, &a); err != nil {
         return nil, fmt.Errorf("Signup invalid args: %v", err)
@@ -43,7 +43,7 @@ type LoginArgs struct {
     Username string `json:"username"`
     Password string `json:"password"`
 }
-func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
+func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
     var a LoginArgs
     if err := json.Unmarshal(rawArgs, &a); err != nil {
         return nil, fmt.Errorf("Login invalid args: %v", err)

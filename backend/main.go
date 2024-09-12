@@ -1,8 +1,8 @@
 package main
 
 import (
-	"api/data"
-	"api/server"
+	"backend/data"
+	"backend/server"
 	"os"
 )
 
@@ -10,8 +10,12 @@ func main() {
 	args := os.Args
 	if len(args) > 1 {
 		//test func
-		data.ManualTest()
-
+        conn, close := data.InitConn(false)
+        defer close()
+        err := data.InitTickerDatabase(conn)
+        if err != nil {
+            panic(err)
+        }
 	} else {
 		server.StartServer()
 	}

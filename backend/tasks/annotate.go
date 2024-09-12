@@ -1,7 +1,7 @@
 package tasks
 
 import (
-	"api/data"
+    "backend/utils"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -17,7 +17,7 @@ type GetAnnotationResults struct {
 	Entry        string `json:"entry"`
 }
 
-func GetAnnotations(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetAnnotations(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetAnnotationArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("getAnnotations invalid args: %v", err)
@@ -43,7 +43,7 @@ type NewAnnotationArgs struct {
 	Timeframe  string `json:"timeframe"`
 }
 
-func NewAnnotation(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func NewAnnotation(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args NewAnnotationArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("getAnnotations invalid args: %v", err)
@@ -61,7 +61,7 @@ type SetAnnotationArgs struct {
 	Entry        string `json:"entry"`
 }
 
-func SetAnnotation(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func SetAnnotation(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args SetAnnotationArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("getAnnotations invalid args: %v", err)

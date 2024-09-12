@@ -1,7 +1,7 @@
 package tasks
 
 import (
-	"api/data"
+	"backend/utils"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,7 +11,7 @@ import (
 /*type ValidateDatetimeArgs struct {
     Securityid
 
-func ValidateDatetime(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func ValidateDatetime(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
     var args ValidateDatetimeArgs
     if err := json.Unmarshal(rawArgs, &args); err != nil {
         return nil, fmt.Errorf("getAnnotations invalid args: %v", err)
@@ -27,7 +27,7 @@ type GetSecurityFromTickerResults struct {
 	MaxDate    *time.Time `json:"maxDate"`
 }
 
-func GetSecuritiesFromTicker(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetSecuritiesFromTicker(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetSecurityFromTickerArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("getAnnotations invalid args: %v", err)
