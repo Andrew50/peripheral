@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+    "backend/utils"
 
 	"github.com/jackc/pgx/v4"
 
@@ -158,7 +159,7 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
-func initTickerDatabase(conn *Conn) error {
+func InitTickerDatabase(conn *utils.Conn) error {
     //fmt.Print(dataExists(conn.Polygon,"VBR","2003-09-24","2004-01-29"))
     //return nil
     shouldClearLog := true // Set this based on your requirements

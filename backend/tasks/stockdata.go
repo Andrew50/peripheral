@@ -1,7 +1,8 @@
 package tasks
 
 import (
-	"api/data"
+	"backend/data"
+    "backend/utils"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -20,7 +21,7 @@ type GetSecurityDateBoundsResults struct {
 }
 
 // 1m should only load ~4 days worth of data at a time, at maximum scroll out
-func GetSecurityDateBounds(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetSecurityDateBounds(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetSecurityDateBoundsArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("3k5pv GetSecurityDateBounds invalid args: %v", err)
@@ -99,7 +100,7 @@ type GetChartDataResults struct {
 	Volume   float64 `json:"volume"`
 }
 
-func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	// CHECK TO MAKE SURE EndDateTime > StartDateTime ***********
 	var args GetChartDataArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {

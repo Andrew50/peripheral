@@ -1,20 +1,20 @@
 package server
 
 import (
-	"api/data"
-	"api/tasks"
+	"backend/tasks"
+    "backend/utils"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 )
 
-var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, error){
+var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, error){
 	"signup": Signup,
 	"login":  Login,
 }
 
-var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}, error){
+var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{}, error){
 	"verifyAuth":   verifyAuth,
 //	"newInstance":  tasks.NewInstance,
 //	"getCik":       tasks.GetCik,
@@ -31,7 +31,7 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"completeStudy":           tasks.CompleteStudy,
 }
 
-func verifyAuth(_ *data.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
+func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
 
 type Request struct {
 	Function  string          `json:"func"`
@@ -54,7 +54,7 @@ func handleError(w http.ResponseWriter, err error, context string) bool {
 	return false
 }
 
-func public_handler(conn *data.Conn) http.HandlerFunc {
+func public_handler(conn *utils.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		addCORSHeaders(w)
 		if r.Method == "OPTIONS" {
@@ -85,7 +85,7 @@ func public_handler(conn *data.Conn) http.HandlerFunc {
 	}
 }
 
-func private_handler(conn *data.Conn) http.HandlerFunc {
+func private_handler(conn *utils.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		addCORSHeaders(w)
 		if r.Method != "POST" {
@@ -120,11 +120,74 @@ func private_handler(conn *data.Conn) http.HandlerFunc {
 	}
 }
 
+
+func queueHandler(conn *utils.Conn) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+		addCORSHeaders(w)
+		if r.Method != "POST" {
+			return
+		}
+		fmt.Println("got poll request")
+		token_string := r.Header.Get("Authorization")
+		_, err := validate_token(token_string)
+		if handleError(w, err, "validating token") {
+			return
+		}
+		var req Request
+		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "decoding request") {
+			return
+		}
+        taskId, err := utils.Queue(conn,req.Function,req.Arguments)
+        if handleError(w,err,"queue"){
+            return
+        }
+        err = json.NewEncoder(w).Encode(taskId)
+        if handleError(w, err, "encoding response") {
+            return
+        }
+
+    }
+}
+
+type PollRequest struct {
+    TaskId string `json:"taskId"`
+}
+
+func pollHandler(conn *utils.Conn) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+		addCORSHeaders(w)
+		if r.Method != "POST" {
+			return
+		}
+		fmt.Println("got poll request")
+		token_string := r.Header.Get("Authorization")
+		_, err := validate_token(token_string)
+		if handleError(w, err, "validating token") {
+			return
+		}
+		var req PollRequest
+		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "decoding request") {
+			return
+		}
+		fmt.Println(req.TaskId)
+        result, err := utils.Poll(conn, req.TaskId)
+        if handleError(w, err, fmt.Sprintf("executing function %s", req.TaskId)) {
+            return
+        }
+        err = json.NewEncoder(w).Encode(result)
+        if handleError(w, err, "encoding response") {
+            return
+        }
+    }
+}
+
 func StartServer() {
-	conn, cleanup := data.InitConn(true)
+	conn, cleanup := utils.InitConn(true)
 	defer cleanup()
 	http.HandleFunc("/public", public_handler(conn))
 	http.HandleFunc("/private", private_handler(conn))
+    http.HandleFunc("/queue", queueHandler(conn))
+    http.HandleFunc("/poll", pollHandler(conn))
 	fmt.Println("Server running on port 5057")
 	if err := http.ListenAndServe(":5057", nil); err != nil {
 		log.Fatal(err)

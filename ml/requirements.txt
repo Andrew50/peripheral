@@ -1,0 +1,6 @@
+redis
+#grpcio
+#grpcio-tools
+watchdog
+tqdm==4.65.0
+psycopg2
