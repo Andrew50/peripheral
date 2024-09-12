@@ -1,11 +1,13 @@
 package utils
 
 import (
-	polygon "github.com/polygon-io/client-go/rest"
 	"context"
+	"fmt"
 	"log"
 	"time"
     "github.com/go-redis/redis/v8"
+	polygon "github.com/polygon-io/client-go/rest"
+	polygonws "github.com/polygon-io/client-go/websocket"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
@@ -14,6 +16,7 @@ type Conn struct {
 	DB      *pgxpool.Pool
 	Polygon *polygon.Client
     Cache   *redis.Client
+	PolygonWS *polygonws.Client
 }
 
 func InitConn(inContainer bool) (*Conn, func()) {
@@ -33,8 +36,8 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		dbConn, err = pgxpool.Connect(context.Background(), dbUrl)
 		if err != nil {
 			//if strings.Contains(err.Error(), "the database system is starting up") {
-            log.Println("waiting for db")
-            time.Sleep(5 * time.Second)
+			log.Println("waiting for db")
+			time.Sleep(5 * time.Second)
 		} else {
 			break
 		}
@@ -52,7 +55,19 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		}
 	}
 	polygonConn := polygon.New("ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm")
-    conn := &Conn{DB: dbConn, Cache: cache, Polygon: polygonConn}
+	polygonWSConn, err := polygonws.New(polygonws.Config{
+		APIKey: "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm",
+		Feed:   polygonws.RealTime,
+		Market: polygonws.Stocks,
+	})
+	if err != nil {
+		fmt.Printf("Error init polygonWs connection")
+	}
+	defer polygonWSConn.Close()
+	if err := polygonWSConn.Connect(); err != nil {
+		fmt.Printf("Error connecting to polygonWS")
+	}
+    conn := &Conn{DB: dbConn, Cache:cache,Polygon: polygonConn, PolygonWS: polygonWSConn}
 
 	cleanup := func() {
 		conn.DB.Close()
