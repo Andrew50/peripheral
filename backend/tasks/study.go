@@ -1,7 +1,7 @@
 package tasks
 
 import (
-	"api/data"
+	"backend/utils"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -20,7 +20,7 @@ type GetStudiesResult struct {
 	Completed  bool      `json:"completed"`
 }
 
-func GetStudies(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetStudies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetStudiesArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
@@ -54,7 +54,7 @@ type SaveStudyArgs struct {
 	Entry json.RawMessage `json:"entry"`
 }
 
-func SaveStudy(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func SaveStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args SaveStudyArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
@@ -72,7 +72,7 @@ type CompleteStudyArgs struct {
 	Completed bool `json:"completed"`
 }
 
-func CompleteStudy(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func CompleteStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args CompleteStudyArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
@@ -89,7 +89,7 @@ type DeleteStudyArgs struct {
 	Id int `json:"id"`
 }
 
-func DeleteStudy(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func DeleteStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteStudyArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
@@ -109,7 +109,7 @@ type GetStudyEntryArgs struct {
 	StudyId int `json:"studyId"`
 }
 
-func GetStudyEntry(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetStudyEntry(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetStudyEntryArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
@@ -128,7 +128,7 @@ type NewStudyArgs struct {
 	Timestamp   int64 `json:"timestamp"`
 }
 
-func NewStudy(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func NewStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args NewStudyArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {

@@ -60,5 +60,41 @@ export async function privateRequest<T>(func: string, args: any): Promise<T> {
     }
 }
 
-
-//export async function queueRequest
+export async function queueRequest<T>(func: string, args: any): Promise<T> {
+    const payload = JSON.stringify({
+        func: func,
+        args: args
+    });
+    const queueResponse = await fetch(`${base_url}/queue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload
+    });
+    if (!queueResponse.ok) {
+        const errorMessage = await queueResponse.text();
+        console.error("Error queuing task:", errorMessage);
+        return Promise.reject(errorMessage);
+    }
+    const { taskID } = await queueResponse.json();
+    console.log("Task queued with ID:", taskID);
+    return new Promise<T>((resolve, reject) => {
+        const eventSource = new EventSource(`${base_url}/${taskID}`);
+        eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.status === 'completed') {
+                console.log("Task completed:", data.result);
+                eventSource.close();
+                resolve(data.result);
+            } else if (data.status === 'error') {
+                console.error("Task error:", data.error);
+                eventSource.close();
+                reject(data.error);
+            }
+        };
+        eventSource.onerror = (err) => {
+            console.error("SSE error:", err);
+            eventSource.close();
+            reject("An error occurred during SSE connection");
+        };
+    });
+}
