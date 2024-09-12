@@ -157,7 +157,7 @@
                 queryInstanceInput("any",get(chartQuery))
                 .then((v:Instance)=>{
                     changeChart(v)
-                })
+                }).catch()
             }else if (event.key == "Shift"){
                 shiftDown = true
             }else if (event.key == "Escape"){
@@ -199,16 +199,18 @@
         chart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
             if (!logicalRange || Date.now() - lastChartRequestTime < chartRequestThrottleDuration) {return;}
             if(logicalRange.from < 10) {
-                if(chartLatestDataReached) {return;}
+                if(chartEarliestDataReached) {return;}
+                console.log("gid")
                 const v = get(chartQuery)
                 backendLoadChartData({
+                    ...v,
                     timestamp: ESTSecondstoUTC(chartCandleSeries.data()[0].time as UTCTimestamp) as number,
                     bars: 50 - Math.floor(logicalRange.from),
                     direction: "backward",
                     requestType: "loadAdditionalData",
                 })
             } else if (logicalRange.to > chartCandleSeries.data().length-10) {
-                if(chartEarliestDataReached) {return;}
+                if(chartLatestDataReached) {return;}
                 const v = get(chartQuery)
                 backendLoadChartData({
                     ...v,
