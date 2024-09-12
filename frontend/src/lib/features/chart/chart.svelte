@@ -200,7 +200,6 @@
             if (!logicalRange || Date.now() - lastChartRequestTime < chartRequestThrottleDuration) {return;}
             if(logicalRange.from < 10) {
                 if(chartEarliestDataReached) {return;}
-                console.log("gid")
                 const v = get(chartQuery)
                 backendLoadChartData({
                     ...v,
