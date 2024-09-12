@@ -12,6 +12,8 @@ func main() {
 		//test func
 		data.ManualTest()
 
+	} else if len(args) >= 2 {
+		data.WSTest()
 	} else {
 		server.StartServer()
 	}
