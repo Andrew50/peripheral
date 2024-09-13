@@ -17,6 +17,13 @@ func StreamPolygonDataToRedis(conn *Conn) {
 	} else {
 		fmt.Printf("successfully connected to Polygon")
 	}
+	err = conn.PolygonWS.Subscribe(polygonws.StocksMinAggs)
+	if err != nil {
+		log.Println("Error subscribing to Polygon WebSocket: ", err)
+		return
+	} else {
+		fmt.Printf("successfully connected to Polygon")
+	}
 	for {
 		select {
 		case err := <-conn.PolygonWS.Error():
@@ -25,11 +32,16 @@ func StreamPolygonDataToRedis(conn *Conn) {
 			switch msg := out.(type) {
 			case models.EquityAgg:
 				data := fmt.Sprintf(`{"ticker": "%s", "open": %f, "close": %f}`, msg.Symbol, msg.Open, msg.Close)
-				err = conn.Cache.Publish(context.Background(), "polygon-aggregates", data).Err()
+				err = conn.Cache.Publish(context.Background(), fmt.Sprintf("aggs-%s", msg.Symbol), data).Err()
 				if err != nil {
 					log.Println("Error publishing to Redis:", err)
-				} else {
-					log.Printf("Published to Redis: %s\n", data)
+				}
+			case models.EquityTrade:
+				data := fmt.Sprintf(`{"ticker": "%s", "price": %v, "size": %v, "timestamp": %v}`, msg.Symbol, msg.Price, msg.Size, msg.Timestamp)
+				channelName := fmt.Sprintf("trades-%s", msg.Symbol)
+				err = conn.Cache.Publish(context.Background(), channelName, data).Err()
+				if err != nil {
+					fmt.Println("error publishing to redis:", err)
 				}
 			}
 
