@@ -260,10 +260,10 @@ function connectWebSocket() {
         console.log('WebSocket connection established')
 
         subscribeToChannel("websocket-test")
+        subscribeToChannel("aggs-NVDA")
     });
     socket.addEventListener('message', (event) => {
         const data = JSON.parse(event.data);
-        console.log('Received data:', data)
         handleIncomingData(data);
     });
     socket.addEventListener('close', () => {
