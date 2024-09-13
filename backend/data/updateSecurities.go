@@ -179,7 +179,7 @@ func InitTickerDatabase(conn *utils.Conn) error {
     log.SetOutput(file)
 
     var startDate time.Time
-    test := true
+    test := false
     if test{
         query := fmt.Sprintf("TRUNCATE TABLE securities RESTART IDENTITY CASCADE")
         _, err := conn.DB.Exec(context.Background(), query)
