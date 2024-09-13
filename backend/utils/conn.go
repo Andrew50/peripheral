@@ -42,7 +42,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		dbConn, err = pgxpool.Connect(context.Background(), dbUrl)
 		if err != nil {
 			//if strings.Contains(err.Error(), "the database system is starting up") {
-			log.Println("waiting for db %v",err)
+			log.Println("waiting for db %v", err)
 			time.Sleep(5 * time.Second)
 		} else {
 			break
