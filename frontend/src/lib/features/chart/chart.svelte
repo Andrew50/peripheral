@@ -32,6 +32,10 @@
     const chartRequestThrottleDuration = 200; 
     const hoveredCandleData = writable({ open: 0, high: 0, low: 0, close: 0, volume: 0, })
     const shiftOverlay: Writable<ShiftOverlay> = writable({ x: 0, y: 0, startX: 0, startY: 0, width: 0, height: 0, isActive: false, startPrice: 0, currentPrice: 0, })
+    
+
+    let socket: WebSocket; 
+
 
     function backendLoadChartData(inst:ChartRequest): void{
         if (isLoadingChartData ||!inst.ticker || !inst.timeframe || !inst.securityId) { return; }
@@ -95,6 +99,9 @@
                 console.error(error)
                 isLoadingChartData = false; // Ensure this runs after data is loaded
             });
+    }
+    function handleIncomingData(data) {
+        console.log(data)
     }
     onMount(() => {
         const chartOptions = { autoSize: true,layout: { textColor: 'black', background: { type: ColorType.Solid, color: 'white' } }, timeScale:  { timeVisible: true }, };
@@ -238,12 +245,48 @@
             }else { chart.applyOptions({timeScale: {timeVisible: true}}); }
             backendLoadChartData(req)
         }) 
-    });
-    onDestroy(() => {
-        if (resizeObserver) {
-              resizeObserver.disconnect();
+        connectWebSocket()
+
+
+        return () => {
+            if(socket && socket.readyState === WebSocket.OPEN) {
+                socket.close()
+            }
         }
-    })
+    });
+function connectWebSocket() {
+    socket = new WebSocket('ws://localhost:5057/ws')
+    socket.addEventListener('open', () => {
+        console.log('WebSocket connection established')
+
+        subscribeToChannel("websocket-test")
+    });
+    socket.addEventListener('message', (event) => {
+        const data = JSON.parse(event.data);
+        console.log('Received data:', data)
+        handleIncomingData(data);
+    });
+    socket.addEventListener('close', () => {
+            console.log('WebSocket connection closed');
+    });
+    socket.addEventListener('error', (error) => {
+            console.error('WebSocket error:', error);
+        });
+}
+function subscribeToChannel(channelName : string) {
+    const subscriptionRequest = {
+                action: 'subscribe',
+                channelName: channelName,
+    }
+    socket.send(JSON.stringify(subscriptionRequest))
+}
+function unsubscribeToChannel(channelName : string) {
+    const unsubscribeRequest = {
+        action: 'unsubscribe',
+        channelName: channelName,
+    }
+    socket.send(JSON.stringify(unsubscribeRequest))
+}
 </script>
 
 <div autofocus id="chart_container" style="width: {width}px" tabindex="0"></div>
