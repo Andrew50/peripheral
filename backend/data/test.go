@@ -1,5 +1,5 @@
 package data
-
+/*
 import (
 	"log"
 	"os"
@@ -66,4 +66,4 @@ func WSTest() {
 		}
 	}
 
-}
+}*/

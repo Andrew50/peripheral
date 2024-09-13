@@ -1,4 +1,5 @@
 let base_url: string;
+const pollInterval = 100; // Poll every 100ms
 
 if (typeof window !== 'undefined') {
     const url = new URL(window.location.origin);
@@ -75,26 +76,30 @@ export async function queueRequest<T>(func: string, args: any): Promise<T> {
         console.error("Error queuing task:", errorMessage);
         return Promise.reject(errorMessage);
     }
-    const { taskID } = await queueResponse.json();
-    console.log("Task queued with ID:", taskID);
+    const taskID = await queueResponse.text()
     return new Promise<T>((resolve, reject) => {
-        const eventSource = new EventSource(`${base_url}/${taskID}`);
-        eventSource.onmessage = (event) => {
-            const data = JSON.parse(event.data);
+        const intervalID = setInterval(async () => {
+            const pollResponse = await fetch(`${base_url}/poll`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({taskId:taskID})
+            }).catch()
+            if (!pollResponse.ok) {
+                const errorMessage = await pollResponse.text();
+                console.error("Error polling task:", errorMessage);
+                clearInterval(intervalID);
+                reject(errorMessage);
+            }
+            const data = await pollResponse.json();
             if (data.status === 'completed') {
                 console.log("Task completed:", data.result);
-                eventSource.close();
+                clearInterval(intervalID); // Stop polling
                 resolve(data.result);
             } else if (data.status === 'error') {
                 console.error("Task error:", data.error);
-                eventSource.close();
+                clearInterval(intervalID); // Stop polling
                 reject(data.error);
             }
-        };
-        eventSource.onerror = (err) => {
-            console.error("SSE error:", err);
-            eventSource.close();
-            reject("An error occurred during SSE connection");
-        };
+        }, pollInterval);
     });
 }
