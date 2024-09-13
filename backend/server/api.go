@@ -2,7 +2,7 @@ package server
 
 import (
 	"backend/tasks"
-    "backend/utils"
+	"backend/utils"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -15,10 +15,10 @@ var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, err
 }
 
 var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{}, error){
-	"verifyAuth":   verifyAuth,
-//	"newInstance":  tasks.NewInstance,
-//	"getCik":       tasks.GetCik,
-//	"getInstances": tasks.GetInstances,
+	"verifyAuth": verifyAuth,
+	//	"newInstance":  tasks.NewInstance,
+	//	"getCik":       tasks.GetCik,
+	//	"getInstances": tasks.GetInstances,
 	"getSimilarInstances":     tasks.GetSimilarInstances,
 	"getSecuritiesFromTicker": tasks.GetSecuritiesFromTicker,
 	"getChartData":            tasks.GetChartData,
@@ -120,9 +120,8 @@ func private_handler(conn *utils.Conn) http.HandlerFunc {
 	}
 }
 
-
 func queueHandler(conn *utils.Conn) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		addCORSHeaders(w)
 		if r.Method != "POST" {
 			return
@@ -137,24 +136,24 @@ func queueHandler(conn *utils.Conn) http.HandlerFunc {
 		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "decoding request") {
 			return
 		}
-        taskId, err := utils.Queue(conn,req.Function,req.Arguments)
-        if handleError(w,err,"queue"){
-            return
-        }
-        err = json.NewEncoder(w).Encode(taskId)
-        if handleError(w, err, "encoding response") {
-            return
-        }
+		taskId, err := utils.Queue(conn, req.Function, req.Arguments)
+		if handleError(w, err, "queue") {
+			return
+		}
+		err = json.NewEncoder(w).Encode(taskId)
+		if handleError(w, err, "encoding response") {
+			return
+		}
 
-    }
+	}
 }
 
 type PollRequest struct {
-    TaskId string `json:"taskId"`
+	TaskId string `json:"taskId"`
 }
 
 func pollHandler(conn *utils.Conn) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		addCORSHeaders(w)
 		if r.Method != "POST" {
 			return
@@ -170,15 +169,15 @@ func pollHandler(conn *utils.Conn) http.HandlerFunc {
 			return
 		}
 		fmt.Println(req.TaskId)
-        result, err := utils.Poll(conn, req.TaskId)
-        if handleError(w, err, fmt.Sprintf("executing function %s", req.TaskId)) {
-            return
-        }
-        err = json.NewEncoder(w).Encode(result)
-        if handleError(w, err, "encoding response") {
-            return
-        }
-    }
+		result, err := utils.Poll(conn, req.TaskId)
+		if handleError(w, err, fmt.Sprintf("executing function %s", req.TaskId)) {
+			return
+		}
+		err = json.NewEncoder(w).Encode(result)
+		if handleError(w, err, "encoding response") {
+			return
+		}
+	}
 }
 
 func StartServer() {
@@ -186,8 +185,8 @@ func StartServer() {
 	defer cleanup()
 	http.HandleFunc("/public", public_handler(conn))
 	http.HandleFunc("/private", private_handler(conn))
-    http.HandleFunc("/queue", queueHandler(conn))
-    http.HandleFunc("/poll", pollHandler(conn))
+	http.HandleFunc("/queue", queueHandler(conn))
+	http.HandleFunc("/poll", pollHandler(conn))
 	fmt.Println("Server running on port 5057")
 	if err := http.ListenAndServe(":5057", nil); err != nil {
 		log.Fatal(err)

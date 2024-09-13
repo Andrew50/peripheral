@@ -1,5 +1,6 @@
 <!-- chart.svelte-->
 <script lang="ts">
+    export let width: number;
     import Legend from './legend.svelte'
     import Shift from './shift.svelte'
     import {privateRequest} from '$lib/core/backend';
@@ -13,7 +14,7 @@
     import {calculateSMA} from './indicators'
     import type {Writable} from 'svelte/store';
     import {writable, get} from 'svelte/store';
-    import { onMount  } from 'svelte';
+    import { onMount, onDestroy  } from 'svelte';
     import { UTCtoEST, ESTtoUTC, ESTSecondstoUTC} from '$lib/core/timestamp';
     let chartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let chartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
@@ -27,6 +28,7 @@
     let lastChartRequestTime = 0; 
     let queuedLoad: Function | null = null
     let shiftDown = false
+    let resizeObserver: ResizeObserver;
     const chartRequestThrottleDuration = 200; 
     const hoveredCandleData = writable({ open: 0, high: 0, low: 0, close: 0, volume: 0, })
     const shiftOverlay: Writable<ShiftOverlay> = writable({ x: 0, y: 0, startX: 0, startY: 0, width: 0, height: 0, isActive: false, startPrice: 0, currentPrice: 0, })
@@ -95,7 +97,7 @@
             });
     }
     onMount(() => {
-        const chartOptions = { layout: { textColor: 'black', background: { type: ColorType.Solid, color: 'white' } }, timeScale:  { timeVisible: true }, };
+        const chartOptions = { autoSize: true,layout: { textColor: 'black', background: { type: ColorType.Solid, color: 'white' } }, timeScale:  { timeVisible: true }, };
         const chartContainer = document.getElementById('chart_container');
         if (!chartContainer) {return;}
         //init event listeners
@@ -153,7 +155,7 @@
             }
         })
         chartContainer.addEventListener('keydown', (event) => {
-            if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
+            if (event.key == "Tab" || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
                 queryInstanceInput("any",get(chartQuery))
                 .then((v:Instance)=>{
                     changeChart(v)
@@ -220,6 +222,13 @@
                 })
             }
         })
+        resizeObserver = new ResizeObserver(entries => {
+            for (let entry of entries) {
+                const {width, height} = entry.contentRect;
+                chart.resize(width,height);
+                }
+        });
+        resizeObserver.observe(chartContainer);
        chartQuery.subscribe((req:ChartRequest)=>{
             chartEarliestDataReached = false;
             chartLatestDataReached = false; 
@@ -230,15 +239,20 @@
             backendLoadChartData(req)
         }) 
     });
+    onDestroy(() => {
+        if (resizeObserver) {
+              resizeObserver.disconnect();
+        }
+    })
 </script>
 
-<div autofocus id="chart_container" tabindex="0"></div>
+<div autofocus id="chart_container" style="width: {width}px" tabindex="0"></div>
 <Legend hoveredCandleData={hoveredCandleData} />
 <Shift shiftOverlay={shiftOverlay}/>
 
 <style>
     #chart_container {
-      width: 85%;
-      height: 800px;
+      /*width: 100%;*/
+      height: 100%;
     }
 </style>

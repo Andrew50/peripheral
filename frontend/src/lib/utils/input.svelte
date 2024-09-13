@@ -12,7 +12,7 @@
         maxDate: string | null;
         name: string;
     }
-    const possibleDisplayKeys = ["ticker","timestamp","timeframe","extended hours"]
+    const possibleDisplayKeys = ["ticker","timestamp","timeframe","extendedHours"]
     type InstanceAttributes = typeof possibleDisplayKeys[number];
     interface InputQuery {
         //inactive is default, no ui shown | complete is succesful completeion, return instance
@@ -157,6 +157,12 @@
                 iQ = enterInput(iQ,0)
             }
             inputQuery.set(iQ)
+        }else if(event.key == "Tab"){
+            console.log("god")
+            event.preventDefault()
+            iQ.instance.extendedHours = ! iQ.instance.extendedHours
+            console.log(iQ)
+            inputQuery.set({...iQ})
         }else {
             if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase()) 
                 || (/[-:]/.test(event.key)) 
@@ -216,8 +222,22 @@
     };*/
     })
 
-    function displayValue(key:string, val:number|string):string{
+    function displayValue(q:InputQuery,key:string):string{
+        if (key === q.inputType){
+            return q.inputString
+        }else if(q.instance[key] !== undefined){
+            if (key === 'timestamp'){
+                return UTCTimestampToESTString(q.instance.timestamp)
+            }else if (key === 'extendedHours'){
+                return q.instance.extendedHours ? "True" : "False"
+            }else{
+                return q.instance[key]
+            }
+        }
+        return ""
     }
+    /*    key === $inputQuery.inputType ? $inputQuery.inputString : ($inputQuery.instance[key] ? (key === "timestamp" ? UTCTimestampToESTString($inputQuery.instance[key]):$inputQuery.instance[key] ) : ""))}
+    }*/
 
 
 </script>
@@ -232,8 +252,7 @@
                         <div class="entry">
                             <span class={$inputQuery.requiredKeys.includes(key) && !$inputQuery.instance[key] ? 'red' : 'normal'}>{key}</span>
                             <span class={key === $inputQuery.inputType ? $inputQuery.inputValid ? 'highlight' : 'red' : 'normal'}> 
-                                {(key === $inputQuery.inputType ? $inputQuery.inputString : ($inputQuery.instance[key] ? (key === "timestamp" ? UTCTimestampToESTString($inputQuery.instance[key]):$inputQuery.instance[key] ) : ""))}
-                            </span>
+                            {displayValue($inputQuery,key)} </span>
                         </div>
                     <!--{/if}-->
                 {/each}
