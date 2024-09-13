@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-
-	"github.com/gorilla/websocket"
 )
 
 var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, error){
@@ -182,44 +180,9 @@ func pollHandler(conn *utils.Conn) http.HandlerFunc {
 	}
 }
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
-
-func wsHandler(conn *utils.Conn) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		addCORSHeaders(w)
-
-		ws, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			log.Println("Failed to upgrade to WebSocket:", err)
-			return
-		}
-		defer ws.Close()
-
-		for {
-			messageType, message, err := ws.ReadMessage()
-			if err != nil {
-				log.Println("Failed to upgrade to WebSocket:", err)
-				break
-			}
-			fmt.Printf("receieved WebSocket message %s\n", message)
-
-			err = ws.WriteMessage(messageType, []byte("Receieved your message: "+string(message)))
-			if err != nil {
-				fmt.Println("Error writing WebSocket message:", err)
-				break
-			}
-
-		}
-	}
-}
 func StartServer() {
 	conn, cleanup := utils.InitConn(true)
 	defer cleanup()
-	http.HandleFunc("/ws", wsHandler(conn))
 	http.HandleFunc("/public", public_handler(conn))
 	http.HandleFunc("/private", private_handler(conn))
 	http.HandleFunc("/queue", queueHandler(conn))
