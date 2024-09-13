@@ -16,6 +16,7 @@
     import {writable, get} from 'svelte/store';
     import { onMount, onDestroy  } from 'svelte';
     import { UTCtoEST, ESTtoUTC, ESTSecondstoUTC} from '$lib/core/timestamp';
+	import {websocketManager} from '$lib/utils/webSocketManagerInstance';
     let chartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let chartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
     let sma10Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
@@ -33,8 +34,11 @@
     const hoveredCandleData = writable({ open: 0, high: 0, low: 0, close: 0, volume: 0, })
     const shiftOverlay: Writable<ShiftOverlay> = writable({ x: 0, y: 0, startX: 0, startY: 0, width: 0, height: 0, isActive: false, startPrice: 0, currentPrice: 0, })
     
+    let chartTicker: string;
+    let tickerStore; 
+    let unsubscribeTickerStore; 
 
-    let socket: WebSocket; 
+
 
 
     function backendLoadChartData(inst:ChartRequest): void{
@@ -245,48 +249,11 @@
             }else { chart.applyOptions({timeScale: {timeVisible: true}}); }
             backendLoadChartData(req)
         }) 
-        connectWebSocket()
+        
 
 
-        return () => {
-            if(socket && socket.readyState === WebSocket.OPEN) {
-                socket.close()
-            }
-        }
     });
-function connectWebSocket() {
-    socket = new WebSocket('ws://localhost:5057/ws')
-    socket.addEventListener('open', () => {
-        console.log('WebSocket connection established')
 
-        subscribeToChannel("websocket-test")
-        subscribeToChannel("aggs-NVDA")
-    });
-    socket.addEventListener('message', (event) => {
-        const data = JSON.parse(event.data);
-        handleIncomingData(data);
-    });
-    socket.addEventListener('close', () => {
-            console.log('WebSocket connection closed');
-    });
-    socket.addEventListener('error', (error) => {
-            console.error('WebSocket error:', error);
-        });
-}
-function subscribeToChannel(channelName : string) {
-    const subscriptionRequest = {
-                action: 'subscribe',
-                channelName: channelName,
-    }
-    socket.send(JSON.stringify(subscriptionRequest))
-}
-function unsubscribeToChannel(channelName : string) {
-    const unsubscribeRequest = {
-        action: 'unsubscribe',
-        channelName: channelName,
-    }
-    socket.send(JSON.stringify(unsubscribeRequest))
-}
 </script>
 
 <div autofocus id="chart_container" style="width: {width}px" tabindex="0"></div>
