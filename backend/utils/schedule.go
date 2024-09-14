@@ -38,7 +38,7 @@ func StreamPolygonDataToRedis(conn *Conn) {
 				}
 			case models.EquityTrade:
 				data := fmt.Sprintf(`{"ticker": "%s", "price": %v, "size": %v, "timestamp": %v}`, msg.Symbol, msg.Price, msg.Size, msg.Timestamp)
-				channelName := fmt.Sprintf("trades-%s", msg.Symbol)
+				channelName := fmt.Sprintf("trades-fast-%s", msg.Symbol)
 				err = conn.Cache.Publish(context.Background(), channelName, data).Err()
 				if err != nil {
 					fmt.Println("error publishing to redis:", err)
