@@ -33,8 +33,9 @@ def getData(conn,instances, timeframe,bars, pm=False):
     multiplier, timespan = get_timeframe(timeframe)
     num_tickers = len(instances)
     #data_array = np.zeros((num_tickers, bars, 5))  # 5 columns: Open, High, Low, Close, Volume
-    data_array = np.zeros((num_tickers, bars, 4))  # 4 columns: Open, High, Low, Close
+    data_array = np.zeros((num_tickers, bars, 4),dtype=np.float64)  # 4 columns: Open, High, Low, Close
     labels = np.zeros((num_tickers))
+    mask = np.zeroes((num_tickers),dtype=np.bool)
     print("total length = ",num_tickers,flush=True)
     for i, (ticker, dt,label) in enumerate(instances):
         print(i,flush=True)
@@ -73,8 +74,10 @@ def getData(conn,instances, timeframe,bars, pm=False):
             data_array[i, j, 3] = bar['c']  # Close
             #data_array[i, j, 4] = bar['v']  # Volume
         labels[i] = label
+        mask[i] = True
         #time.sleep(1)
-    return normalize(data_array), labels
+
+    return normalize(data_array[mask]), labels[mask]
 
 def createModel():
     model = Sequential()
