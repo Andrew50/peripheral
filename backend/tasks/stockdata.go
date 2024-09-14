@@ -315,6 +315,29 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		args.SecurityId, args.Timeframe, args.Timestamp, args.Direction, args.Bars, args.ExtendedHours)
 }
 
+type GetTradeDataArgs struct {
+	SecurityID    int64 `json:"securityId"`
+	Timestamp     int64 `json:"time"`
+	ExtendedHours bool  `json:"extendedhours"`
+}
+
+type GetTradeDataResults struct {
+	Timestamp int64   `json:"time"`
+	Price     float64 `json:"price"`
+	Volume    float64 `json:"volume"`
+	Exchange  float64 `json:"exchange"`
+}
+
+func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetTradeDataArgs
+	err := json.Unmarshal(rawArgs, &args)
+	if err != nil {
+		return nil, fmt.Errorf("0sj33gh getTradeData invalid args: %v", err)
+	}
+	query := `SELECT ticker FROM securities WHERE securityid=$1`
+
+}
+
 func getTimeframe(timeframeString string) (int, string, string, int, error) {
 	// if no identifer is passed, it means that it should be minute data
 	lastChar := rune(timeframeString[len(timeframeString)-1])

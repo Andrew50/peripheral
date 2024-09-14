@@ -142,6 +142,7 @@
         <div class="menu-item"><button on:click={(event)=>querySimilarInstances(event,get(rightClickQuery).instance)}> Similar Instances </button></div>
         <!--<div><button on:click={getStats}> Instance Stats </button></div>
         <div><button on:click={replay}> Replay </button></div>-->
+        <div class="menu-item"><button on:click={console.log($rightClickQuery.instance.timestamp)}>Begin Replay</button></div>
         {#if $rightClickQuery.source === "chart"}
             <!--<div><button on:click={()=>completeRequest("alert")}>Add Alert </button></div>-->
             <div class="menu-item"><button on:click={()=>embedInstance(get(rightClickQuery).instance)}> Embed </button></div>
