@@ -62,26 +62,32 @@ export async function privateRequest<T>(func: string, args: any): Promise<T> {
 }
 
 export async function queueRequest<T>(func: string, args: any): Promise<T> {
-    const payload = JSON.stringify({
+    let authToken;
+    authToken = sessionStorage.getItem("authToken")
+    const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { 'Authorization': authToken} : {}),
+    };
+    const payload = {
         func: func,
         args: args
-    });
-    const queueResponse = await fetch(`${base_url}/queue`, {
+    }
+    const response = await fetch(`${base_url}/queue`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: payload
-    });
-    if (!queueResponse.ok) {
-        const errorMessage = await queueResponse.text();
+        headers: headers,
+        body: JSON.stringify(payload)
+    }).catch();
+    if (!response.ok) {
+        const errorMessage = await response.text();
         console.error("Error queuing task:", errorMessage);
         return Promise.reject(errorMessage);
     }
-    const taskID = await queueResponse.text()
+    const taskID = await response.json()
     return new Promise<T>((resolve, reject) => {
         const intervalID = setInterval(async () => {
             const pollResponse = await fetch(`${base_url}/poll`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: headers,
                 body: JSON.stringify({taskId:taskID})
             }).catch()
             if (!pollResponse.ok) {
@@ -89,8 +95,10 @@ export async function queueRequest<T>(func: string, args: any): Promise<T> {
                 console.error("Error polling task:", errorMessage);
                 clearInterval(intervalID);
                 reject(errorMessage);
+                return
             }
             const data = await pollResponse.json();
+            console.log(data)
             if (data.status === 'completed') {
                 console.log("Task completed:", data.result);
                 clearInterval(intervalID); // Stop polling

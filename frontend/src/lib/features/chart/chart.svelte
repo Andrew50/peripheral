@@ -28,7 +28,6 @@
     let lastChartRequestTime = 0; 
     let queuedLoad: Function | null = null
     let shiftDown = false
-    let resizeObserver: ResizeObserver;
     const chartRequestThrottleDuration = 200; 
     const hoveredCandleData = writable({ open: 0, high: 0, low: 0, close: 0, volume: 0, })
     const shiftOverlay: Writable<ShiftOverlay> = writable({ x: 0, y: 0, startX: 0, startY: 0, width: 0, height: 0, isActive: false, startPrice: 0, currentPrice: 0, })
@@ -222,13 +221,6 @@
                 })
             }
         })
-        resizeObserver = new ResizeObserver(entries => {
-            for (let entry of entries) {
-                const {width, height} = entry.contentRect;
-                chart.resize(width,height);
-                }
-        });
-        resizeObserver.observe(chartContainer);
        chartQuery.subscribe((req:ChartRequest)=>{
             chartEarliestDataReached = false;
             chartLatestDataReached = false; 
@@ -239,20 +231,9 @@
             backendLoadChartData(req)
         }) 
     });
-    onDestroy(() => {
-        if (resizeObserver) {
-              resizeObserver.disconnect();
-        }
-    })
 </script>
 
 <div autofocus id="chart_container" style="width: {width}px" tabindex="0"></div>
 <Legend hoveredCandleData={hoveredCandleData} />
 <Shift shiftOverlay={shiftOverlay}/>
 
-<style>
-    #chart_container {
-      /*width: 100%;*/
-      height: 100%;
-    }
-</style>

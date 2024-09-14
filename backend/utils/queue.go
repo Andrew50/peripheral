@@ -17,10 +17,14 @@ func Poll(conn *Conn, taskId string)(json.RawMessage, error){
 type QueueArgs struct {
     ID string `json:"id"`
     Func string `json:"func"`
-    Args json.RawMessage `json:"args"`
+    Args interface{} `json:"args"`
 }
 
-func Queue(conn *Conn, funcName string, arguments json.RawMessage) (string, error){
+type queueResponse struct {
+    TaskId string `json:"taskId"`
+}
+
+func Queue(conn *Conn, funcName string, arguments interface{}) (string, error){
     id := uuid.New().String()
     taskArgs := QueueArgs{
         ID: id,
@@ -32,10 +36,15 @@ func Queue(conn *Conn, funcName string, arguments json.RawMessage) (string, erro
         return "", err
     }
 
+    fmt.Println(funcName)
+    fmt.Println(arguments)
     if err := conn.Cache.LPush(context.Background(), "queue", serializedTask).Err(); err != nil {
         return "", err
     }
-
+    err = conn.Cache.Set(context.Background(), id, "queued",0).Err()
+    if err != nil {
+        return "", err
+    }
     return id, nil
 }
     

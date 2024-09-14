@@ -4,7 +4,6 @@ CREATE TABLE users (
     password VARCHAR(100) NOT NULL
 );
 CREATE INDEX idxUsers ON users (username, password);
-DROP TABLE IF EXISTS securities;
 CREATE TABLE securities (
     securityid SERIAL,
     ticker varchar(10) not null,
@@ -21,7 +20,15 @@ create table setups (
     setupId serial primary key,
     userId int references users(userId) on delete cascade, 
     name varchar(50) not null,
-    timeframe varchar(10) not null
+    timeframe varchar(10) not null,
+    bars int not null,
+    threshold int not null,
+    modelVersion int not null default 0,
+    score int,
+    sampleSize int default 0,
+    dolvol float not null,
+    adr float not null,
+    mcap float not null
 );
 create index idxUserIdName on setups(userId, name);
 create table samples (
@@ -50,3 +57,40 @@ CREATE TABLE journals (
     entry json,
     unique (timestamp, userId)
 );
+COPY securities(securityid, ticker, figi, minDate, maxDate) 
+FROM '/docker-entrypoint-initdb.d/securities.csv' DELIMITER ',' CSV HEADER;
+INSERT INTO users (userId, username, password) VALUES (0, 'user', 'pass');
+
+INSERT INTO setups (setupId,userId,name,timeframe,bars,threshold,dolvol,adr,mcap) VALUES 
+(1,0, 'EP', '1d', 30, 30, 5000000, 2.5, 0),
+(2,0, 'F', '1d', 60, 30, 5000000, 2.5, 0),
+(3,0, 'MR', '1d', 30, 30, 5000000, 2.5, 0),
+(4,0, 'NEP', '1d', 30, 30, 5000000, 2.5, 0),
+(5,0, 'NF', '1d', 60, 30, 5000000, 2.5, 0),
+(6,0, 'NP', '1d', 30, 30, 5000000, 2.5, 0),
+(7,0, 'P', '1d', 30, 30, 5000000, 2.5, 0);
+CREATE TEMP TABLE temp (
+    setupId INTEGER NOT NULL,
+    ticker VARCHAR(10) NOT NULL,
+    timestamp INTEGER NOT NULL,
+    label BOOLEAN
+);
+
+COPY temp(setupId,ticker,timestamp,label) 
+FROM '/docker-entrypoint-initdb.d/samples.csv' 
+WITH (FORMAT csv, HEADER true, DELIMITER ',');
+
+INSERT INTO samples (setupId, securityId, timestamp, label)
+SELECT
+    ts.setupId,
+    sec.securityId,
+    TO_TIMESTAMP(ts.timestamp), 
+    ts.label
+FROM
+    temp ts
+JOIN
+    securities sec
+ON ts.ticker = sec.ticker
+WHERE (sec.minDate <= TO_TIMESTAMP(ts.timestamp) OR sec.minDate IS NULL)
+  AND (sec.maxDate > TO_TIMESTAMP(ts.timestamp) OR sec.maxDate IS NULL);
+

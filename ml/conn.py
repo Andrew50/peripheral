@@ -16,11 +16,13 @@ class Conn:
                 self.cache = redis.Redis(host=cache_host, port=6379)
                 self.db = psycopg2.connect(host=db_host,port='5432',user='postgres',password='pass')
                 self.tf = tf_host
+                self.polygon = "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm"
             except  psycopg2.OperationalError:
                 print("waiting for db", flush = True)
                 time.sleep(5)
             else:
                 break
+
 
     def check_connection(self):
         try:

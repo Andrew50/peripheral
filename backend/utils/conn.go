@@ -44,7 +44,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	}
     var cache *redis.Client
 	for true {
-       cache := redis.NewClient(&redis.Options{Addr: cacheUrl,})
+       cache = redis.NewClient(&redis.Options{Addr: cacheUrl,})
        err = cache.Ping(context.Background()).Err()
 		if err != nil {
 			//if strings.Contains(err.Error(), "the database system is starting up") {
