@@ -4,3 +4,5 @@ redis
 watchdog
 tqdm==4.65.0
 psycopg2
+numpy
+pandas

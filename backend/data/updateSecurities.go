@@ -160,6 +160,7 @@ func contains(slice []string, item string) bool {
 }
 
 func InitTickerDatabase(conn *utils.Conn) error {
+    test := true;
     //fmt.Print(dataExists(conn.Polygon,"VBR","2003-09-24","2004-01-29"))
     //return nil
     shouldClearLog := true // Set this based on your requirements
@@ -179,14 +180,16 @@ func InitTickerDatabase(conn *utils.Conn) error {
     log.SetOutput(file)
 
     var startDate time.Time
-    test := false
     if test{
         query := fmt.Sprintf("TRUNCATE TABLE securities RESTART IDENTITY CASCADE")
         _, err := conn.DB.Exec(context.Background(), query)
         if err != nil {
             return fmt.Errorf("unable to truncate table for test")
         }
-        startDate = time.Date(2004, 11, 1, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
+        startDate = time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
+        //startDate = time.Date(2005, 1, 3, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
+        //startDate = time.Date(2004, 11, 1, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
+
     }else{
         startDate = time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
     }
@@ -406,6 +409,7 @@ func InitTickerDatabase(conn *utils.Conn) error {
                             }
                         }
                     }
+                    rows.Close()
                 }
                 if !ok {
                     logAction(test,i,sec.Ticker,targetTicker,sec.CompositeFIGI, currentDateString,"remove valid skip", err)
