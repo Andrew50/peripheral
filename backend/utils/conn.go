@@ -20,6 +20,8 @@ type Conn struct {
 	PolygonWS *polygonws.Client
 }
 
+var conn *Conn
+
 func InitConn(inContainer bool) (*Conn, func()) {
 	//TODO change this sahit to use env vars as well
 	var dbUrl string
@@ -67,7 +69,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	if err := polygonWSConn.Connect(); err != nil {
 		fmt.Printf("Error connecting to polygonWS")
 	}
-	conn := &Conn{DB: dbConn, Cache: cache, Polygon: polygonConn, PolygonWS: polygonWSConn}
+	conn = &Conn{DB: dbConn, Cache: cache, Polygon: polygonConn, PolygonWS: polygonWSConn}
 
 	go StreamPolygonDataToRedis(conn)
 	cleanup := func() {
