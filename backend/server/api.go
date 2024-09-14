@@ -194,6 +194,8 @@ func StartServer() {
 	http.HandleFunc("/private", private_handler(conn))
 	http.HandleFunc("/queue", queueHandler(conn))
 	http.HandleFunc("/poll", pollHandler(conn))
+
+	http.HandleFunc("/ws", utils.WsFrontendHandler(conn))
 	fmt.Println("Server running on port 5057")
 	if err := http.ListenAndServe(":5057", nil); err != nil {
 		log.Fatal(err)

@@ -16,6 +16,7 @@
     import {writable, get} from 'svelte/store';
     import { onMount, onDestroy  } from 'svelte';
     import { UTCtoEST, ESTtoUTC, ESTSecondstoUTC} from '$lib/core/timestamp';
+	import {websocketManager} from '$lib/utils/webSocketManagerInstance';
     let chartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let chartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
     let sma10Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
@@ -31,6 +32,13 @@
     const chartRequestThrottleDuration = 200; 
     const hoveredCandleData = writable({ open: 0, high: 0, low: 0, close: 0, volume: 0, })
     const shiftOverlay: Writable<ShiftOverlay> = writable({ x: 0, y: 0, startX: 0, startY: 0, width: 0, height: 0, isActive: false, startPrice: 0, currentPrice: 0, })
+    
+    let chartTicker: string;
+    let tickerStore; 
+    let unsubscribeTickerStore; 
+
+
+
 
     function backendLoadChartData(inst:ChartRequest): void{
         if (isLoadingChartData ||!inst.ticker || !inst.timeframe || !inst.securityId) { return; }
@@ -94,6 +102,9 @@
                 console.error(error)
                 isLoadingChartData = false; // Ensure this runs after data is loaded
             });
+    }
+    function handleIncomingData(data) {
+        console.log(data)
     }
     onMount(() => {
         const chartOptions = { autoSize: true,layout: { textColor: 'black', background: { type: ColorType.Solid, color: 'white' } }, timeScale:  { timeVisible: true }, };
@@ -230,6 +241,9 @@
             }else { chart.applyOptions({timeScale: {timeVisible: true}}); }
             backendLoadChartData(req)
         }) 
+        
+
+
     });
 </script>
 
