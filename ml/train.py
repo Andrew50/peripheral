@@ -233,7 +233,7 @@ def getSample(data, setupID, interval, TRAINING_CLASS_RATIO, VALIDATION_CLASS_RA
         ORDER BY s.timestamp;
         """
         cursor.execute(yesQuery, (setupID,))
-        yesInstances = cursor.fetchall()[:3]
+        yesInstances = cursor.fetchall()
         numYes = len(yesInstances)
 
 
