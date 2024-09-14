@@ -30,19 +30,16 @@ func StreamPolygonDataToRedis(conn *Conn) {
 			fmt.Printf("PolygonWS Error: %v", err)
 		case out := <-conn.PolygonWS.Output():
 			switch msg := out.(type) {
-			case models.EquityAgg:
-				data := fmt.Sprintf(`{"ticker": "%s", "open": %f, "close": %f}`, msg.Symbol, msg.Open, msg.Close)
-				err = conn.Cache.Publish(context.Background(), fmt.Sprintf("aggs-%s", msg.Symbol), data).Err()
-				if err != nil {
-					log.Println("Error publishing to Redis:", err)
-				}
 			case models.EquityTrade:
 				data := fmt.Sprintf(`{"ticker": "%s", "price": %v, "size": %v, "timestamp": %v}`, msg.Symbol, msg.Price, msg.Size, msg.Timestamp)
+				conn.Cache.Publish(context.Background(), "trades-agg", data)
 				channelName := fmt.Sprintf("trades-fast-%s", msg.Symbol)
-				err = conn.Cache.Publish(context.Background(), channelName, data).Err()
-				if err != nil {
-					fmt.Println("error publishing to redis:", err)
-				}
+				conn.Cache.Publish(context.Background(), channelName, data)
+			case models.EquityQuote:
+				data := fmt.Sprintf(`{"ticker": "%s", "bidprice": %v, "bidsize": %v, "bidex": %v, "askprice": %v, "asksize": %v, "askex": %v, "timestamp":%v}`,
+					msg.Symbol, msg.BidPrice, msg.BidSize, msg.BidExchangeID, msg.AskPrice, msg.AskSize, msg.AskExchangeID, msg.Timestamp)
+				channelName := fmt.Sprintf("quotes-%s", msg.Symbol)
+				conn.Cache.Publish(context.Background(), channelName, data)
 			}
 
 		}
