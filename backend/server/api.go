@@ -29,7 +29,9 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"deleteStudy":             tasks.DeleteStudy,
 	"getStudyEntry":           tasks.GetStudyEntry,
 	"completeStudy":           tasks.CompleteStudy,
+    "getSetups":            tasks.GetSetups,
 }
+
 
 func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
 
@@ -120,13 +122,18 @@ func private_handler(conn *utils.Conn) http.HandlerFunc {
 	}
 }
 
+type QueueRequest struct {
+	Function  string          `json:"func"`
+	Arguments interface{} `json:"args"`
+}
+
 func queueHandler(conn *utils.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		addCORSHeaders(w)
 		if r.Method != "POST" {
 			return
 		}
-		fmt.Println("got poll request")
+		fmt.Println("got queue request")
 		token_string := r.Header.Get("Authorization")
 		_, err := validate_token(token_string)
 		if handleError(w, err, "validating token") {
@@ -136,11 +143,11 @@ func queueHandler(conn *utils.Conn) http.HandlerFunc {
 		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "decoding request") {
 			return
 		}
-		taskId, err := utils.Queue(conn, req.Function, req.Arguments)
+		queueResponse, err := utils.Queue(conn, req.Function, req.Arguments)
 		if handleError(w, err, "queue") {
 			return
 		}
-		err = json.NewEncoder(w).Encode(taskId)
+		err = json.NewEncoder(w).Encode(queueResponse)
 		if handleError(w, err, "encoding response") {
 			return
 		}
@@ -158,7 +165,7 @@ func pollHandler(conn *utils.Conn) http.HandlerFunc {
 		if r.Method != "POST" {
 			return
 		}
-		fmt.Println("got poll request")
+//		fmt.Println("got poll request")
 		token_string := r.Header.Get("Authorization")
 		_, err := validate_token(token_string)
 		if handleError(w, err, "validating token") {
@@ -168,7 +175,7 @@ func pollHandler(conn *utils.Conn) http.HandlerFunc {
 		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "decoding request") {
 			return
 		}
-		fmt.Println(req.TaskId)
+//		fmt.Println(req.TaskId)
 		result, err := utils.Poll(conn, req.TaskId)
 		if handleError(w, err, fmt.Sprintf("executing function %s", req.TaskId)) {
 			return
