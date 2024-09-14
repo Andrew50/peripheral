@@ -24,11 +24,18 @@ export interface BarData {
     close: number;
     volume: number;
 }
+export interface TradeData {
+    time: UTCTimestamp; 
+    price: number; 
+    volume: number; 
+    exchange: number; 
+}
 export interface SecurityDateBounds {
     minDate: number;
     maxDate: number;
 }
 import type {Instance} from '$lib/core/types'
+import type { UTCTimestamp } from 'lightweight-charts'
 import type {Writable} from 'svelte/store'
 import {writable} from 'svelte/store'
 

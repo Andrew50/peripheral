@@ -34,8 +34,6 @@
     const shiftOverlay: Writable<ShiftOverlay> = writable({ x: 0, y: 0, startX: 0, startY: 0, width: 0, height: 0, isActive: false, startPrice: 0, currentPrice: 0, })
     
     let chartTicker: string;
-    let tickerStore; 
-    let unsubscribeTickerStore; 
 
 
 
@@ -103,7 +101,7 @@
                 isLoadingChartData = false; // Ensure this runs after data is loaded
             });
     }
-    function handleIncomingData(data) {
+    function updateLatestChartBar(data) {
         console.log(data)
     }
     onMount(() => {
