@@ -26,9 +26,12 @@ export class WebSocketManager {
 
     constructor(url: string) {
         this.url = url;
-        this.connect();
+        if (typeof window !== 'undefined') {
+          this.connect();
+        }
       }
     private connect() {
+      if(typeof window === 'undefined') return; 
     this.socket = new WebSocket(this.url);
 
     this.socket.addEventListener('open', () => {

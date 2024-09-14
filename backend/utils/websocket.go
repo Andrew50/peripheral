@@ -103,7 +103,10 @@ func (c *Client) readPump() {
 	for {
 		_, message, err := c.ws.ReadMessage()
 		if err != nil {
-			fmt.Println("4kltyvk, WebSocket read error:", err)
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				fmt.Println("4kltyvk, WebSocket read error:", err)
+			}
+			break
 		}
 		var clientMsg struct {
 			Action      string `json:"action"`
