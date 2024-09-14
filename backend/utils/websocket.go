@@ -20,9 +20,9 @@ var (
 )
 
 type Client struct {
-	ws       *websocket.Conn
-	mu       sync.Mutex
-	channels map[string]*redis.PubSub
+	ws   *websocket.Conn
+	mu   sync.Mutex
+	send chan []byte
 }
 
 func WsFrontendHandler(conn *Conn) http.HandlerFunc {
@@ -38,116 +38,127 @@ func WsFrontendHandler(conn *Conn) http.HandlerFunc {
 			fmt.Println("failed to upgrade to websocket: ", err)
 			return
 		}
-		defer ws.Close()
 		client := &Client{
-			ws:       ws,
-			channels: make(map[string]*redis.PubSub),
+			ws:   ws,
+			send: make(chan []byte, 256),
 		}
-		redisMessages := make(chan *redis.Message)
+		go client.writePump()
 
-		go func() {
-			for {
-				_, message, err := ws.ReadMessage()
-				if err != nil {
-					log.Println("WebSocket read error:", err)
-					break
-				}
-				var clientMsg struct {
-					Action      string `json:"action"`
-					ChannelName string `json:"channelName"`
-				}
-				if err := json.Unmarshal(message, &clientMsg); err != nil {
-					fmt.Println("Invalid message format", err)
-					continue
-				}
-				switch clientMsg.Action {
-				case "subscribe":
-					client.subscribe(conn.Cache, clientMsg.ChannelName, redisMessages)
-				case "unsubscribe":
-					client.unsubscribe(clientMsg.ChannelName)
-				default:
-					fmt.Println("4lgkdvv, Unknown action received from WebSocket client:", clientMsg.Action)
-
-				}
-			}
-			client.close()
-		}()
-		for msg := range redisMessages {
-			err := ws.WriteMessage(websocket.TextMessage, []byte(msg.Payload))
-			if err != nil {
-				fmt.Println("l4ifjv, WebSocket write error:", err)
-				break
-			}
-		}
+		client.readPump()
 	}
 }
-func (c *Client) subscribe(redisClient *redis.Client, channelName string, redisMessages chan<- *redis.Message) {
-	c.mu.Lock()
-	if _, exists := c.channels[channelName]; exists {
-		c.mu.Unlock()
-		return
-	}
-
-	pubsub := redisClient.Subscribe(context.Background(), channelName)
-	c.channels[channelName] = pubsub
-	c.mu.Unlock()
-
+func (c *Client) subscribe(channelName string) {
 	channelsMutex.Lock()
-	channelSubscriberCounts[channelName]++
-	channelsMutex.Unlock()
+	defer channelsMutex.Unlock()
 
-	go func() {
-		for msg := range pubsub.Channel() {
-			redisMessages <- msg
-		}
-	}()
+	subscribers, exists := channelSubscribers[channelName]
+	if !exists {
+		subscribers = make(map[*Client]bool)
+		channelSubscribers[channelName] = subscribers
+	}
+	subscribers[c] = true
 
+	if !exists {
+		pubsub := conn.Cache.Subscribe(context.Background(), channelName)
+		redisSubscriptions[channelName] = pubsub
+
+		go handleRedisChannel(pubsub, channelName)
+	}
 }
 func (c *Client) unsubscribe(channelName string) {
-	c.mu.Lock()
-	pubsub, exists := c.channels[channelName]
-	if !exists {
-		c.mu.Unlock()
-		return
-	}
-	pubsub.Close()
-	delete(c.channels, channelName)
-	c.mu.Unlock()
-
 	channelsMutex.Lock()
-	channelSubscriberCounts[channelName]--
-	if channelSubscriberCounts[channelName] <= 0 {
-		delete(channelSubscriberCounts, channelName)
+	defer channelsMutex.Unlock()
+
+	if subscribers, exists := channelSubscribers[channelName]; exists {
+		delete(subscribers, c)
+		if len(subscribers) == 0 {
+			delete(channelSubscribers, channelName)
+			if pubsub, ok := redisSubscriptions[channelName]; ok {
+				pubsub.Close()
+				delete(redisSubscriptions, channelName)
+			}
+		}
+	}
+}
+func handleRedisChannel(pubsub *redis.PubSub, channelName string) {
+	for msg := range pubsub.Channel() {
+		channelsMutex.RLock()
+		subscribers := channelSubscribers[channelName]
+		channelsMutex.RUnlock()
+
+		for client := range subscribers {
+			select {
+			case client.send <- []byte(msg.Payload):
+			default:
+				go client.close()
+			}
+		}
+	}
+}
+func (c *Client) readPump() {
+	defer func() {
+		c.close()
+		c.ws.Close()
+	}()
+	for {
+		_, message, err := c.ws.ReadMessage()
+		if err != nil {
+			fmt.Println("4kltyvk, WebSocket read error:", err)
+		}
+		var clientMsg struct {
+			Action      string `json:"action"`
+			ChannelName string `json:"channelName"`
+		}
+		if err := json.Unmarshal(message, &clientMsg); err != nil {
+			fmt.Println("Invalid message format", err)
+			continue
+		}
+		switch clientMsg.Action {
+		case "subscribe":
+			c.subscribe(clientMsg.ChannelName)
+		case "unsubscribe":
+			c.unsubscribe(clientMsg.ChannelName)
+		default:
+			fmt.Println("Unknown Action:", clientMsg.Action)
+		}
+
+	}
+}
+func (c *Client) writePump() {
+	defer c.ws.Close()
+	for {
+		select {
+		case message, ok := <-c.send:
+			if !ok {
+				return
+			}
+			c.mu.Lock()
+			err := c.ws.WriteMessage(websocket.TextMessage, message)
+			c.mu.Unlock()
+			if err != nil {
+				log.Println("WebSocket write error:", err)
+				return
+			}
+		}
 	}
 
 }
 func (c *Client) close() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	channelsMutex.Lock()
+	defer channelsMutex.Unlock()
 
-	for channelName, pubsub := range c.channels {
-		pubsub.Close()
-
-		channelsMutex.Lock()
-		channelSubscriberCounts[channelName]--
-		if channelSubscriberCounts[channelName] <= 0 {
-			delete(channelSubscriberCounts, channelName)
+	for channelName, subscribers := range channelSubscribers {
+		if _, ok := subscribers[c]; ok {
+			delete(subscribers, c)
+			if len(subscribers) == 0 {
+				if pubsub, exists := redisSubscriptions[channelName]; exists {
+					pubsub.Close()
+					delete(redisSubscriptions, channelName)
+				}
+			}
+			delete(channelSubscribers, channelName)
 		}
-		channelsMutex.Unlock()
 	}
-	c.channels = nil
-	c.ws.Close()
-}
-func GetChannelsWithSubscribers() []string {
-	channelsMutex.RLock()
-	defer channelsMutex.RUnlock()
-
-	var channels []string
-
-	for channelName := range channelSubscriberCounts {
-		channels = append(channels, channelName)
-	}
-
-	return channels
+	close(c.send)
 
 }
