@@ -42,7 +42,7 @@
 
     $: if (browser) {
         pix = window.innerWidth;
-        minWidth = pix * 0.15;
+        minWidth = pix * 0.2;
         maxWidth = pix * 0.7;
         buttonWidth = pix * 0.04;
         close = 0;
@@ -168,6 +168,8 @@
         overflow-y: auto;
         display: flex;
         flex-direction: column;
+        margin-right: 5px;
+
     }
     .resize-handle {
         position: absolute;
@@ -179,7 +181,7 @@
         z-index: 2;
     }
     .resize-handle:hover {
-        background-color: var(--c4);
+        background-color: var(--c2);
     }
     .button-container {
         align-items: center;

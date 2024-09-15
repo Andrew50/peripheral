@@ -1,7 +1,7 @@
 <!-- study.svelte-->
 <script lang="ts" context="module">
     import type { Writable } from 'svelte/store'
-    import { writable } from 'svelte/store'
+    import { get,writable } from 'svelte/store'
     import Entry from './entry.svelte'
     import {onMount} from 'svelte'
     import {privateRequest} from '$lib/core/backend'
@@ -31,7 +31,7 @@
 <script lang="ts">
     let selectedStudyId: number | null = null;
     let entryStore = writable('');
-    let completedFilter = false;
+    let completedFilter = writable(false);
     entryStore.subscribe((v:string)=>{
         if (v !== ""){
         }
@@ -58,13 +58,13 @@
         })}
 
     function toggleCompletionFilter():void{
-        completedFilter = !completedFilter
+        completedFilter.update(v=>!v)// = !completedFilter
         loadStudies()
     }
 
 
     function loadStudies():void{
-        privateRequest<Study[]>("getStudies",{completed:completedFilter})
+        privateRequest<Study[]>("getStudies",{completed:get(completedFilter)})
         .then((result: Study[]) => {studies.set(result)})
     }
     onMount(() => {
@@ -72,11 +72,10 @@
     })
 
 </script>
-<h1> Study </h1>
 
 <div class="controls">
     <button on:click={toggleCompletionFilter} class="action-btn"> 
-        {completedFilter ? "Completed" : "Uncompleted"} 
+        {$completedFilter ? "Completed" : "Uncompleted"} 
     </button>
     <button on:click={newStudyRequest} class="action-btn"> New </button>
 </div>
@@ -115,8 +114,9 @@
     /* Button styling */
     .controls {
         display: flex;
-        justify-content: space-between;
-        margin-bottom: 20px;
+        justify-content: left;
+        margin-bottom: 5px;
+        margin-top: 5px;
     }
 
     .action-btn {
@@ -124,6 +124,7 @@
         color: var(--f1);
         border: none;
         padding: 10px 15px;
+        margin: 5px;
         border-radius: 4px;
         cursor: pointer;
         font-size: 1rem;
@@ -135,10 +136,11 @@
 
     /* Table styling */
     .table-container {
-        border: 1px solid var(--c4);
         border-radius: 4px;
         overflow: hidden;
-        margin-top: 10px;
+        margin-top: 0px;
+        margin-left: 0px;
+        margin-right: 0px;
     }
 
     table {
@@ -158,6 +160,7 @@
 
     tr {
         border-bottom: 1px solid var(--c4);
+        color: var(--f1);
     }
 
     .table-row:hover {
@@ -170,8 +173,4 @@
         background-color: var(--c6);
     }
 
-    .highlight {
-        color: var(--c3);
-        font-weight: bold;
-    }
 </style>
