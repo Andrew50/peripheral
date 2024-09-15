@@ -25,6 +25,7 @@ type Client struct {
 	send chan []byte
 }
 
+
 func WsFrontendHandler(conn *Conn) http.HandlerFunc {
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -44,10 +45,10 @@ func WsFrontendHandler(conn *Conn) http.HandlerFunc {
 		}
 		go client.writePump()
 
-		client.readPump()
+		client.readPump(conn)
 	}
 }
-func (c *Client) subscribe(channelName string) {
+func (c *Client) subscribe(conn *Conn,channelName string) {
 	channelsMutex.Lock()
 	defer channelsMutex.Unlock()
 
@@ -95,7 +96,7 @@ func handleRedisChannel(pubsub *redis.PubSub, channelName string) {
 		}
 	}
 }
-func (c *Client) readPump() {
+func (c *Client) readPump(conn *Conn) {
 	defer func() {
 		c.close()
 		c.ws.Close()
@@ -118,7 +119,7 @@ func (c *Client) readPump() {
 		}
 		switch clientMsg.Action {
 		case "subscribe":
-			c.subscribe(clientMsg.ChannelName)
+			c.subscribe(conn,clientMsg.ChannelName)
 		case "unsubscribe":
 			c.unsubscribe(clientMsg.ChannelName)
 		default:

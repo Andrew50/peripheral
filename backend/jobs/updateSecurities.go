@@ -1,4 +1,4 @@
-package data
+package jobs
 
 import (
 	"context"
@@ -113,11 +113,11 @@ func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []mode
 }
 func dataExists(client *polygon.Client, ticker string, fromDate string, toDate string) bool {
 	timespan := models.Timespan("day")
-	fromMillis, err := MillisFromDatetimeString(fromDate)
+	fromMillis, err := utils.MillisFromDatetimeString(fromDate)
 	if err != nil {
 		fmt.Println(fromDate)
 	}
-	toMillis, err := MillisFromDatetimeString(toDate)
+	toMillis, err := utils.MillisFromDatetimeString(toDate)
 	if err != nil {
 		fmt.Println(toDate)
 	}
@@ -198,7 +198,7 @@ func InitTickerDatabase(conn *utils.Conn) error {
 	for currentDate := startDate; currentDate.Before(time.Now()); currentDate = currentDate.AddDate(0, 0, 1) {
 		currentDateString := currentDate.Format(dateFormat)
         yesterdayDateString := currentDate.AddDate(0,0,-1).Format(dateFormat)
-        polyTickers, err := AllTickers(conn.Polygon, currentDateString)
+        polyTickers, err := utils.AllTickers(conn.Polygon, currentDateString)
         if err != nil {
             return fmt.Errorf("423n %v", err)
         }

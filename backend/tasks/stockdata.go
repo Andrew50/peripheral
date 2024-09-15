@@ -1,7 +1,6 @@
 package tasks
 
 import (
-	"backend/data"
 	"backend/utils"
 	"context"
 	"encoding/json"
@@ -58,15 +57,15 @@ func GetSecurityDateBounds(conn *utils.Conn, userId int, rawArgs json.RawMessage
 			if err != nil {
 				return nil, fmt.Errorf("3pgkv: %v", err)
 			}
-			queryStart, err := data.MillisFromDatetimeString(time.Now().Add(-24 * time.Hour).In(easternTimeLocation).Format(time.DateTime))
+			queryStart, err := utils.MillisFromDatetimeString(time.Now().Add(-24 * time.Hour).In(easternTimeLocation).Format(time.DateTime))
 			if err != nil {
 				return nil, fmt.Errorf("k4lvm, %v", err)
 			}
-			queryEnd, err := data.MillisFromDatetimeString(time.Now().In(easternTimeLocation).Format(time.DateTime))
+			queryEnd, err := utils.MillisFromDatetimeString(time.Now().In(easternTimeLocation).Format(time.DateTime))
 			if err != nil {
 				return nil, fmt.Errorf("4lgkv, %v", err)
 			}
-			iter, err := data.GetAggsData(conn.Polygon, ticker, 1, "day", queryStart, queryEnd, 1000, "desc")
+			iter, err := utils.GetAggsData(conn.Polygon, ticker, 1, "day", queryStart, queryEnd, 1000, "desc")
 			if err != nil {
 				return nil, fmt.Errorf("5jk4lv, %v", err)
 			}
@@ -253,16 +252,16 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		// within polygon to see what endpoint we need to call
 		// for live intraday data.
 		fmt.Printf("Query Params Start Date: %s, Query End Date: %s \n", time.Time(queryStartTime), time.Time(queryEndTime))
-		date1, err := data.MillisFromUTCTime(queryStartTime)
+		date1, err := utils.MillisFromUTCTime(queryStartTime)
 		if err != nil {
 			return nil, fmt.Errorf("1n0f %v", err)
 		}
-		date2, err := data.MillisFromUTCTime(queryEndTime)
+		date2, err := utils.MillisFromUTCTime(queryEndTime)
 		if err != nil {
 			return nil, fmt.Errorf("n91ve2n0 %v", err)
 		}
 		fmt.Printf("Query Start Date: %s, Query End Date: %s \n", time.Time(date1), time.Time(date2))
-		iter, err := data.GetAggsData(conn.Polygon, ticker, multiplier, timespan,
+		iter, err := utils.GetAggsData(conn.Polygon, ticker, multiplier, timespan,
 			date1, date2,
 			5000, polyResultOrder)
 		if err != nil {

@@ -2,7 +2,6 @@ package tasks
 
 import (
 	"backend/utils"
-    "backend/data"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -31,7 +30,7 @@ func GetSimilarInstances(conn *utils.Conn, userId int, rawArgs json.RawMessage) 
 	var queryTicker string
 	conn.DB.QueryRow(context.Background(), `SELECT ticker from securities where securityId = $1
          ORDER BY maxDate IS NULL DESC, maxDate DESC`, args.SecurityId).Scan(&queryTicker)
-	tickers, err := data.GetPolygonRelatedTickers(conn.Polygon, queryTicker)
+	tickers, err := utils.GetPolygonRelatedTickers(conn.Polygon, queryTicker)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get related tickers: %v", err)
 	}
@@ -80,7 +79,7 @@ func GetCik(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{},
 	if err != nil {
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
-	cik, cikErr := data.GetCIK(conn, args.TickerString, "")
+	cik, cikErr := utils.GetCIK(conn, args.TickerString, "")
 	if cikErr != nil {
 		return nil, cikErr
 	}

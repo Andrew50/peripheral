@@ -1,9 +1,9 @@
 package main
 
 import (
-	"backend/data"
 	"backend/server"
 	"backend/utils"
+	"backend/jobs"
 	"fmt"
 	"os"
 )
@@ -13,13 +13,13 @@ func main() {
 	if len(args) > 2 {
 		conn, close := utils.InitConn(false)
 		defer close()
-		utils.PolygonDataToRedis(conn)
+		jobs.PolygonDataToRedis(conn)
 	}
 	if len(args) > 1 {
 		//test func
 		conn, close := utils.InitConn(false)
 		defer close()
-		err := data.InitTickerDatabase(conn)
+		err := jobs.InitTickerDatabase(conn)
 		fmt.Printf("ERROR: %v", err)
 		if err != nil {
 			panic(err)
