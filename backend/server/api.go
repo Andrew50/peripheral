@@ -2,6 +2,7 @@ package server
 
 import (
 	"backend/tasks"
+    "backend/jobs"
 	"backend/utils"
 	"encoding/json"
 	"fmt"
@@ -16,9 +17,6 @@ var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, err
 
 var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{}, error){
 	"verifyAuth": verifyAuth,
-	//	"newInstance":  tasks.NewInstance,
-	//	"getCik":       tasks.GetCik,
-	//	"getInstances": tasks.GetInstances,
 	"getSimilarInstances":     tasks.GetSimilarInstances,
 	"getSecuritiesFromTicker": tasks.GetSecuritiesFromTicker,
 	"getChartData":            tasks.GetChartData,
@@ -190,12 +188,14 @@ func pollHandler(conn *utils.Conn) http.HandlerFunc {
 func StartServer() {
 	conn, cleanup := utils.InitConn(true)
 	defer cleanup()
+    stopScheduler := jobs.StartScheduler(conn)
+    defer close(stopScheduler)
 	http.HandleFunc("/public", public_handler(conn))
 	http.HandleFunc("/private", private_handler(conn))
 	http.HandleFunc("/queue", queueHandler(conn))
 	http.HandleFunc("/poll", pollHandler(conn))
-
 	http.HandleFunc("/ws", utils.WsFrontendHandler(conn))
+
 	fmt.Println("Server running on port 5057")
 	if err := http.ListenAndServe(":5057", nil); err != nil {
 		log.Fatal(err)
