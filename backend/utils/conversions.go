@@ -66,6 +66,9 @@ func MillisFromDatetimeString(datetime string) (models.Millis, error) {
 	return models.Millis(time.Now()), fmt.Errorf("212k invalid string datetime")
 
 }
+func NanosFromUTCTime(timeObj time.Time) (models.Nanos, error) {
+	return models.Nanos(timeObj), nil
+}
 func NanosFromDatetimeString(datetime string) (models.Nanos, error) {
 	layouts := []string{
 		time.RFC3339Nano,
