@@ -3,32 +3,11 @@
   import { writable } from 'svelte/store';
   import { privateRequest , queueRequest} from '$lib/core/backend';
   import type { Writable } from 'svelte/store';
+  import type {Setup} from '$lib/core/types'
+  import {setups} from '$lib/core/stores'
 
-  interface Setup {
-    setupId: number;
-    name: string;
-    timeframe: string;
-    bars: number;
-    threshold: number;
-    dolvol: number;
-    adr: number;
-    mcap: number;
-  }
-
-  let setups: Writable<Setup[]> = writable([]);
   let selectedSetupId: number | null = null;
   let editedSetup: Setup | null = null;
-
-  // Fetch setups on component mount
-  onMount(() => {
-    privateRequest<Setup[]>('getSetups', {})
-      .then((v: Setup[]) => {
-        setups.set(v);
-      })
-      .catch((error) => {
-        console.error('Error fetching setups:', error);
-      });
-  });
 
   // Function to start editing a setup
   function editSetup(setup: Setup) {

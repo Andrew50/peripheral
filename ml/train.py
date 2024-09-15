@@ -1,4 +1,4 @@
-import tensorflow as tf,  datetime, time, random , numpy as np, os, requests
+import tensorflow as tf,  datetime,random , numpy as np, os
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Dense, LSTM, Bidirectional, Dropout, Conv1D, Flatten, Lambda, Input
 from tensorflow.keras.optimizers import Adam
@@ -7,77 +7,10 @@ from tensorflow.keras.callbacks import EarlyStopping
 #from imblearn.over_sampling import SMOTE
 from google.protobuf import text_format
 from tensorflow_serving.config import model_server_config_pb2
+from data import getTensor
 SPLIT_RATIO = .8
 TRAINING_CLASS_RATIO = .35
 VALIDATION_CLASS_RATIO = .1
-
-
-def get_timeframe(timeframe):
-    last_char = timeframe[-1]
-    num = int(timeframe[:-1])
-    if last_char == 'm':
-        return num, 'month'
-    elif last_char == 'h':
-        return num, 'hour'
-    elif last_char == 'd':
-        return num, 'day'
-    elif last_char == 'w':
-        return num, 'week'
-    else:
-        return num, 'minute'
-        #raise ValueError("Incorrect timeframe passed")
-
-
-def getData(conn,instances, timeframe,bars, pm=False):
-    base_url = "https://api.polygon.io/v2/aggs/ticker/{ticker}/range/{multiplier}/{timespan}/{start}/{end}"
-    multiplier, timespan = get_timeframe(timeframe)
-    num_tickers = len(instances)
-    #data_array = np.zeros((num_tickers, bars, 5))  # 5 columns: Open, High, Low, Close, Volume
-    data_array = np.zeros((num_tickers, bars, 4),dtype=np.float64)  # 4 columns: Open, High, Low, Close
-    labels = np.zeros((num_tickers))
-    mask = np.zeroes((num_tickers),dtype=np.bool)
-    print("total length = ",num_tickers,flush=True)
-    for i, (ticker, dt,label) in enumerate(instances):
-        print(i,flush=True)
-        end_time = dt
-        #end_time = datetime.datetime.utcfromtimestamp(timestamp)
-        #TODO needs to handle no data better as it will just be zeroes in the tensor
-
-        if timespan == 'minute':
-            start_time = end_time - datetime.timedelta(minutes=bars * multiplier * 2)
-        elif timespan == 'hour':
-            start_time = end_time - datetime.timedelta(hours=bars * multiplier * 2)
-        elif timespan == 'day':
-            start_time = end_time - datetime.timedelta(days=bars * multiplier * 2)
-        elif timespan == 'week':
-            start_time = end_time - datetime.timedelta(days=bars * multiplier * 7 * 2)
-        else:
-            start_time = end_time - datetime.timedelta(days=bars * multiplier * 7 * 2)
-
-
-        url = base_url.format(ticker=ticker, multiplier=multiplier, timespan=timespan,
-                              start=start_time.strftime('%Y-%m-%d'), end=end_time.strftime('%Y-%m-%d'))
-        params = {"apiKey": conn.polygon}
-        response = requests.get(url, params=params)
-        if response.status_code != 200:
-            print(f"Failed to retrieve data for {ticker} at {dt}: {response.text}")
-            continue
-        stock_data = response.json()
-        if 'results' not in stock_data:
-            print(f"No data available for {ticker} at {dt}")
-            continue
-        results = stock_data['results']
-        for j, bar in enumerate(results[:bars]):
-            data_array[i, j, 0] = bar['o']  # Open
-            data_array[i, j, 1] = bar['h']  # High
-            data_array[i, j, 2] = bar['l']  # Low
-            data_array[i, j, 3] = bar['c']  # Close
-            #data_array[i, j, 4] = bar['v']  # Volume
-        labels[i] = label
-        mask[i] = True
-        #time.sleep(1)
-
-    return normalize(data_array[mask]), labels[mask]
 
 def createModel():
     model = Sequential()
@@ -97,15 +30,6 @@ def createModel():
     return model
     
 
-def normalize(data_3d: np.ndarray) -> np.ndarray:
-    result = np.empty_like(data_3d)
-    for i in range(data_3d.shape[0]):
-        df_2d = np.log(data_3d[i])
-        close_col = np.roll(df_2d[:, 3], shift=-1)
-        df_2d = df_2d - close_col[:, np.newaxis]
-        df_2d = df_2d[:-1]
-        result[i, :-1] = df_2d
-    return result
 
 def train_model(conn,setupID):
     with conn.db.cursor() as cursor:
@@ -118,17 +42,20 @@ def train_model(conn,setupID):
     modelVersion = traits[2] + 1
     model = createModel()
     trainingSample, validationSample = getSample(conn,setupID,interval,TRAINING_CLASS_RATIO, VALIDATION_CLASS_RATIO, SPLIT_RATIO)
-    xTrainingData, yTrainingData = getData(conn,trainingSample,interval,bars)
-    xValidationData, yValidationData = getData(conn,validationSample,interval,bars)
-    failure = 1 - (len(xTrainingData) + len(xValidationData)) / (len(trainingSample) + len(validationSample))
-    validationRatio = np.mean(yValidationData)
-    trainingRatio = np.mean(yTrainingData)
+    xTrainingData, yTrainingData = getTensor(conn,trainingSample,interval,bars)
+    xValidationData, yValidationData = getTensor(conn,validationSample,interval,bars)
+
+    #failure = 1 - (len(xTrainingData) + len(xValidationData)) / (len(trainingSample) + len(validationSample))
+    #validationRatio = np.mean(yValidationData)
+    #trainingRatio = np.mean(yTrainingData)
     #TODO all this needs to be sent to frontend instead of just logged
-    print(f"{failure * 100}% failure of {len(trainingSample) + len(validationSample)} samples")
-    print(f"{len(xValidationData) * validationRatio + len(xTrainingData) * trainingRatio} yes samples")
-    print("training class ratio",trainingRatio)
-    print("validation class ratio", validationRatio)
+    #print(f"{failure * 100}% failure of {len(trainingSample) + len(validationSample)} samples")
+    #print(f"{len(xValidationData) * validationRatio + len(xTrainingData) * trainingRatio} yes samples")
+    #print("training class ratio",trainingRatio)
+    #print("validation class ratio", validationRatio)
     print("training sample size", len(xTrainingData))
+    print(xTrainingData.shape)
+    print(xValidationData.shape)
     early_stopping = EarlyStopping(
         monitor='val_auc_pr',
         patience=50,
@@ -299,8 +226,10 @@ def getSample(data, setupID, interval, TRAINING_CLASS_RATIO, VALIDATION_CLASS_RA
 
         random.shuffle(trainingInstances)
         random.shuffle(validationInstances)
+        trainingDicts = [{'ticker': instance[0], 'dt': instance[1], 'label': instance[2]} for instance in trainingInstances]
+        validationDicts = [{'ticker': instance[0], 'dt': instance[1], 'label': instance[2]} for instance in validationInstances]
 
-        return np.array(trainingInstances), np.array(validationInstances)
+        return trainingDicts,validationDicts
 
 
 def train(data,setupId):

@@ -5,3 +5,14 @@ export interface Instance {
     timeframe?: string
     extendedHours?: boolean
 }
+export interface Setup {
+    setupId: number;
+    name: string;
+    timeframe: string;
+    bars: number;
+    threshold: number;
+    dolvol: number;
+    adr: number;
+    mcap: number;
+    activeScreen: boolean
+}
