@@ -4,7 +4,7 @@
     import Legend from './legend.svelte'
     import Shift from './shift.svelte'
     import {privateRequest} from '$lib/core/backend';
-    import type {Instance} from '$lib/core/types'
+    import type {Instance, TradeData} from '$lib/core/types'
     import {chartQuery, changeChart} from './interface'
     import type {ShiftOverlay, BarData, ChartRequest} from './interface'
     import { queryInstanceInput } from '$lib/utils/input.svelte'
@@ -101,7 +101,7 @@
                 isLoadingChartData = false; // Ensure this runs after data is loaded
             });
     }
-    function updateLatestChartBar(data) {
+    export function updateLatestChartBar(data : TradeData) {
         console.log(data)
     }
     onMount(() => {
