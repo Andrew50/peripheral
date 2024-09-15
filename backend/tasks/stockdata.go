@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"time"
 	"unicode"
+
+	"github.com/polygon-io/client-go/rest/models"
 )
 
 type GetSecurityDateBoundsArgs struct {
@@ -123,7 +125,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	// 	args.Datetime = t.Format(time.DateTime)
 	// }
 	inputTimestamp := time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).UTC()
-	fmt.Println(inputTimestamp)
 	var query string
 	var polyResultOrder string
 	var minDate time.Time
@@ -317,6 +318,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 type GetTradeDataArgs struct {
 	SecurityID    int64 `json:"securityId"`
 	Timestamp     int64 `json:"time"`
+	LengthOfTime  int64 `json:"lengthOfTime"`
 	ExtendedHours bool  `json:"extendedhours"`
 }
 
@@ -324,7 +326,7 @@ type GetTradeDataResults struct {
 	Timestamp int64   `json:"time"`
 	Price     float64 `json:"price"`
 	Volume    float64 `json:"volume"`
-	Exchange  float64 `json:"exchange"`
+	Exchange  int     `json:"exchange"`
 }
 
 func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -333,9 +335,69 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	if err != nil {
 		return nil, fmt.Errorf("0sj33gh getTradeData invalid args: %v", err)
 	}
-	//query := `SELECT ticker FROM securities WHERE securityid=$1`
+	easternLocation, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return nil, fmt.Errorf("issue loading eastern location 3355767uh")
 
-    return nil, nil
+	}
+	inputTime := time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).UTC()
+
+	query := `SELECT ticker, minDate, maxDate FROM securities WHERE securityid=$1 AND (minDate <= $2) ORDER BY minDate ASC`
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	rows, err := conn.DB.Query(ctx, query, args.SecurityID, inputTime.In(easternLocation).Format(time.DateTime))
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("query timed out: %w", err)
+		}
+		return nil, fmt.Errorf("45lgkv %w", err)
+	}
+	defer rows.Close()
+
+	var tradeDataList []GetTradeDataResults
+	windowStartTime := args.Timestamp
+	windowEndTime := args.Timestamp + args.LengthOfTime
+	fmt.Printf("\nWindow Start: {%v}, Window End: {%v}", windowStartTime, windowEndTime)
+	for rows.Next() {
+		var ticker string
+		var minDateFromSQL *time.Time
+		var maxDateFromSQL *time.Time
+		err := rows.Scan(&ticker, &minDateFromSQL, &maxDateFromSQL)
+		if err != nil {
+			return nil, fmt.Errorf("vfm4l %w", err)
+		}
+		windowStartTimeNanos, err := data.NanosFromUTCTime(time.Unix(windowStartTime/1000, (windowStartTime % 1000 * 1e6)).UTC())
+		if err != nil {
+			return nil, fmt.Errorf("45l6k6lkgjl, %v", err)
+		}
+		iter, err := data.GetTrade(conn.Polygon, ticker, windowStartTimeNanos, "asc", models.GTE, 30000)
+		if err != nil {
+			return nil, fmt.Errorf("4lyoh, %v", err)
+		}
+		for iter.Next() {
+			if int64(time.Time(iter.Item().ParticipantTimestamp).Unix())*1000 > windowEndTime {
+				fmt.Println("Testing working")
+				return tradeDataList, nil
+			}
+			var tradeData GetTradeDataResults
+			tradeData.Timestamp = int64(time.Time(iter.Item().ParticipantTimestamp).Unix())
+			tradeData.Price = iter.Item().Price
+			tradeData.Volume = iter.Item().Size
+			tradeData.Exchange = iter.Item().Exchange
+			tradeDataList = append(tradeDataList, tradeData)
+		}
+		windowStartTime = tradeDataList[len(tradeDataList)-1].Timestamp
+	}
+	if len(tradeDataList) != 0 {
+		fmt.Println("Testing working")
+		return tradeDataList, nil
+	}
+	return nil, fmt.Errorf("3l6yykh0, Did not return trade data for securityid {%v}, timestamp {%v}, lengthOfTime {%v}, extendedHours {%v}",
+		args.SecurityID, args.Timestamp, args.LengthOfTime, args.ExtendedHours)
+
+	return nil, nil
 }
 
 func getTimeframe(timeframeString string) (int, string, string, int, error) {
