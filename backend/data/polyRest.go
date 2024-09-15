@@ -1,8 +1,8 @@
 package data
 
 import (
+	"backend/utils"
 	"context"
-    "backend/utils"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
