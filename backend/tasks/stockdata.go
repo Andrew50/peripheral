@@ -368,11 +368,11 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		if err != nil {
 			return nil, fmt.Errorf("vfm4l %w", err)
 		}
-		windowStartTimeNanos, err := data.NanosFromUTCTime(time.Unix(windowStartTime/1000, (windowStartTime % 1000 * 1e6)).UTC())
+		windowStartTimeNanos, err := utils.NanosFromUTCTime(time.Unix(windowStartTime/1000, (windowStartTime % 1000 * 1e6)).UTC())
 		if err != nil {
 			return nil, fmt.Errorf("45l6k6lkgjl, %v", err)
 		}
-		iter, err := data.GetTrade(conn.Polygon, ticker, windowStartTimeNanos, "asc", models.GTE, 30000)
+		iter, err := utils.GetTrade(conn.Polygon, ticker, windowStartTimeNanos, "asc", models.GTE, 30000)
 		if err != nil {
 			return nil, fmt.Errorf("4lyoh, %v", err)
 		}
@@ -382,7 +382,7 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				return tradeDataList, nil
 			}
 			var tradeData GetTradeDataResults
-			tradeData.Timestamp = int64(time.Time(iter.Item().ParticipantTimestamp).Unix())
+			tradeData.Timestamp = time.Time(iter.Item().ParticipantTimestamp).UnixNano() / int64(time.Millisecond)
 			tradeData.Price = iter.Item().Price
 			tradeData.Volume = iter.Item().Size
 			tradeData.Exchange = iter.Item().Exchange
