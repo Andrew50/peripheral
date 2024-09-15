@@ -1,4 +1,7 @@
 import requests
+import datetime
+from data import getTensor
+import numpy as np
 
 
 def historicalTickersAndPrice(conn,dolvolReq,adrRewq,mcapReq):
@@ -16,7 +19,6 @@ def currentTickersAndPrice(conn, dolvolReq, adrReq, mcapReq):
     filtered_tickers = []
     for ticker_data in dataByTicker:
         ticker = ticker_data['ticker']
-        print(ticker)
         #market_cap = ticker_data.get('market_cap', 0)
         mcap = 1000** 1000
         prevDailyCandle = ticker_data.get('prevDay', {})
@@ -28,16 +30,55 @@ def currentTickersAndPrice(conn, dolvolReq, adrReq, mcapReq):
         dolvol = close * volume
         adr = (high / low - 1) * 100 if low != 0 else 0
         if dolvol>= dolvolReq and adr>= adrReq and mcap>= mcapReq:
-            filtered_tickers.append([ticker,currentPrice])
+            filtered_tickers.append({"ticker":ticker,
+                                     "dt": datetime.datetime.now(),
+                                     "label": ticker,
+                                     "currentPrice":currentPrice})
 
     return filtered_tickers
 
 
+def getCurrentSecId(conn,ticker):
+    query = f"SELECT securityID from securities where ticker = %s Order by maxdate is null desc,maxdate desc"
+    with conn.db.cursor() as cursor:
+        cursor.execute(query,(ticker,))
+        return cursor.fetchone()[0]
+
+def filter(conn, df,tickers, setupId, threshold):
+    url = f"{conn.tf}/v1/models/{setupId}:predict"
+    print(url)
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "instances": df.tolist()  # Convert numpy array to list for JSON serialization
+    }
+    response = requests.post(url, json=payload, headers=headers)
+    if response.status_code != 200:
+        raise Exception(f"Failed to make prediction: {response.text}")
+    scores = response.json().get("predictions", [])
+    results = []
+    for ticker, score in zip(tickers, scores):
+        if score[0] * 100 >= threshold:
+            results.append({"ticker":ticker,"setupId":setupId,"score":score[0]*100,
+                            "securityId":getCurrentSecId(conn,ticker)})
+    return results
+
 
 def screen(conn,setupIds):
-    filteredTickerPriceList = (currentTickersAndPrice(conn,100000000,2,9))
-    data, tickers = getData(conn,filteredTickerPriceList)
-    return None
+    adr = 3
+    dolvol = 10 * 1000000
+    tf = "1d"
+    bars = 60
+    threshold = 20
+    filteredTickerPriceList = (currentTickersAndPrice(conn,dolvol,adr,0))
+    data, tickers =getTensor(conn,filteredTickerPriceList,tf,bars)
+    results =[]
+    for setupId in setupIds:
+        results += filter(conn,data,tickers,setupId,threshold)
+
+
+    sorted_results = sorted(results, key=lambda x: x['score'], reverse=True)
+
+    return sorted_results
 
 
 

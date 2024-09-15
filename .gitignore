@@ -2,3 +2,4 @@
 backend/tmp/main
 backend/app.log
 ml/__pycache__/train.cpython-311.pyc
+ml/core
