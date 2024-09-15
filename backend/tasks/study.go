@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-    "time"
+	"time"
 )
 
 type GetStudiesArgs struct {
@@ -13,11 +13,11 @@ type GetStudiesArgs struct {
 }
 
 type GetStudiesResult struct {
-	StudyId    int       `json:"studyId"`
-	SecurityId int       `json:"securityId"`
-	Ticker     string    `json:"ticker"`
-    Timestamp  int64  `json:"timestamp"`
-	Completed  bool      `json:"completed"`
+	StudyId    int    `json:"studyId"`
+	SecurityId int    `json:"securityId"`
+	Ticker     string `json:"ticker"`
+	Timestamp  int64  `json:"timestamp"`
+	Completed  bool   `json:"completed"`
 }
 
 func GetStudies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -38,12 +38,12 @@ func GetStudies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfac
 	var studies []GetStudiesResult
 	for rows.Next() {
 		var study GetStudiesResult
-        var studyTime time.Time
+		var studyTime time.Time
 		err := rows.Scan(&study.StudyId, &study.SecurityId, &study.Ticker, &studyTime, &study.Completed)
 		if err != nil {
 			return nil, err
 		}
-        study.Timestamp = studyTime.Unix()
+		study.Timestamp = studyTime.Unix()
 		studies = append(studies, study)
 	}
 	return studies, nil
@@ -124,8 +124,8 @@ func GetStudyEntry(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inter
 }
 
 type NewStudyArgs struct {
-	SecurityId int    `json:"securityId"`
-	Timestamp   int64 `json:"timestamp"`
+	SecurityId int   `json:"securityId"`
+	Timestamp  int64 `json:"timestamp"`
 }
 
 func NewStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -134,7 +134,7 @@ func NewStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 	if err != nil {
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
-    timestamp := time.Unix(args.Timestamp, 0)
+	timestamp := time.Unix(args.Timestamp, 0)
 	var studyId int
 	err = conn.DB.QueryRow(context.Background(), "INSERT into studies (userId,securityId, timestamp) values ($1,$2,$3) RETURNING studyId", userId, args.SecurityId, timestamp).Scan(&studyId)
 	if err != nil {

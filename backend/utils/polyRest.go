@@ -51,8 +51,11 @@ func GetLastTrade(client *polygon.Client, ticker string) (models.LastTrade, erro
 	return res.Results, nil
 
 }
-func GetTrade(client *polygon.Client, ticker string, nanoTimestamp models.Nanos, ord string, compareType models.Comparator, numResults int) *iter.Iter[models.Trade] {
+func GetTrade(client *polygon.Client, ticker string, nanoTimestamp models.Nanos, ord string, compareType models.Comparator, numResults int) (*iter.Iter[models.Trade], error) {
 	sortOrder := models.Desc
+	if ord != "asc" && ord != "desc" {
+		return nil, fmt.Errorf("incorrect order string passed 35ltkg")
+	}
 	if ord == "asc" {
 		sortOrder = models.Asc
 	}
@@ -61,7 +64,7 @@ func GetTrade(client *polygon.Client, ticker string, nanoTimestamp models.Nanos,
 	}.WithTimestamp(compareType, nanoTimestamp).
 		WithOrder(sortOrder).
 		WithLimit(numResults)
-	return client.ListTrades(context.Background(), params)
+	return client.ListTrades(context.Background(), params), nil
 }
 
 // QA STATUS: not QA'd
