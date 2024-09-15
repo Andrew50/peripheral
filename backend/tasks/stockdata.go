@@ -334,8 +334,9 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	if err != nil {
 		return nil, fmt.Errorf("0sj33gh getTradeData invalid args: %v", err)
 	}
-	query := `SELECT ticker FROM securities WHERE securityid=$1`
+	//query := `SELECT ticker FROM securities WHERE securityid=$1`
 
+    return nil, nil
 }
 
 func getTimeframe(timeframeString string) (int, string, string, int, error) {

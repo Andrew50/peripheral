@@ -11,7 +11,6 @@
     import { goto } from '$app/navigation';
     import { get, writable } from 'svelte/store';
     import { browser } from '$app/environment';
-
     type Menu = 'study' | 'screen' | 'setups' | 'none';
     let active_menu: Menu = 'none';
     let minWidth: number;

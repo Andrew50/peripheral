@@ -1,0 +1,31 @@
+# Stage 1: Build the SvelteKit app
+FROM node:18-alpine AS builder
+WORKDIR /app
+
+# Copy package.json and package-lock.json
+COPY package*.json ./
+RUN npm ci
+
+# Copy the entire app
+COPY . .
+
+# Build the app for production
+RUN npm run build
+
+# Stage 2: Run the production build
+FROM node:18-alpine
+WORKDIR /app
+
+# Copy the built app from the builder stage
+COPY --from=builder /app/build /app/build
+COPY --from=builder /app/package*.json ./
+
+# Install only production dependencies
+RUN npm ci --only=production
+
+# Expose the port
+EXPOSE 3000
+
+# Start the app in production mode
+CMD ["node", "build"]
+

@@ -1,0 +1,97 @@
+services:
+    backend:
+        build:
+            context: ./backend
+            dockerfile: Dockerfile.prod
+        restart: unless-stopped
+        networks:
+            - compose_network_prod
+
+    db:
+        build:
+           context: ./db
+           dockerfile: Dockerfile
+        networks:
+            - compose_network_prod
+        volumes:
+            - db_prod:/var/lib/postgresql/data
+        restart: unless-stopped
+
+
+    frontend:
+        build:
+            context: ./frontend
+            dockerfile: Dockerfile.prod
+        environment:
+          - WATCHPACK_POLLING=true #enable polling
+        restart: unless-stopped
+        networks:
+            - compose_network_prod
+
+    tf:
+        build:
+            context: ./tf
+            dockerfile: Dockerfile
+        restart: unless-stopped
+        volumes:
+            - tf_prod:/models
+        networks:
+          - compose_network_prod
+
+
+    ml: 
+        build: #satish was here
+            context: ./ml
+            dockerfile: Dockerfile
+        networks:
+            - compose_network_prod
+        volumes:
+          #- ./ml:/app #for hot reload
+            - tf_prod:/app/models
+        restart: unless-stopped
+
+    cache:
+        build:
+            context: ./cache
+            dockerfile: Dockerfile
+        networks:
+          - compose_network_prod
+        hostname: redis
+        volumes:
+          - cache_prod:/data
+        command: redis-server
+        restart: unless-stopped
+
+
+    nginx:
+        build:
+            context: ./nginx
+            dockerfile: Dockerfile
+        ports:
+          - "80:80"
+        depends_on:
+          - backend
+          - frontend
+        networks:
+          - compose_network_prod
+
+    ngrok:
+      image: wernight/ngrok
+      environment:
+        - NGROK_AUTHTOKEN=1SmYb49nNgTSmpcCXYkB7iRejpA_5XsS79e9YixEFoMgzYZTT
+        - NGROK_PORT=nginx:80
+      networks:
+        - compose_network_prod
+      ports:
+        - "4040:4040"
+
+        
+
+volumes:
+  db_prod:
+  cache_prod:
+  tf_prod:
+
+networks:
+  compose_network_prod:
+    driver: bridge

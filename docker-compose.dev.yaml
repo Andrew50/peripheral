@@ -2,7 +2,7 @@ services:
     backend:
         build:
             context: ./backend
-            dockerfile: Dockerfile
+            dockerfile: Dockerfile.dev
         restart: unless-stopped
         ports:
           - "5057:5057"
@@ -26,7 +26,7 @@ services:
     frontend:
         build:
             context: ./frontend
-            dockerfile: Dockerfile
+            dockerfile: Dockerfile.dev
         volumes:
           - ./frontend:/app
           - /app/node_modules
@@ -73,8 +73,8 @@ services:
         volumes:
           - cache:/data
         command: redis-server
-        mem_limit: 8G
         restart: unless-stopped
+        
 
 volumes:
   db:

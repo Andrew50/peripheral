@@ -2,15 +2,15 @@ let base_url: string;
 const pollInterval = 100; // Poll every 100ms
 
 if (typeof window !== 'undefined') {
-    const url = new URL(window.location.origin);
-    url.port = "5057";
-    base_url = url.toString();
-    base_url = base_url.substring(0,base_url.length - 1);
-/*    if (window.location.hostname === 'localhost') {
+    if (window.location.hostname === 'localhost') {
+        const url = new URL(window.location.origin);
+        url.port = "5057";
+        base_url = url.toString();
+        base_url = base_url.substring(0,base_url.length - 1);
         base_url = 'http://localhost:5057'; //dev
     } else {
         base_url = window.location.origin; //prod
-    }*/
+    }
 }
 
 export async function publicRequest<T>(func: string, args: any): Promise<T> {

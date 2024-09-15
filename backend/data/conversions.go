@@ -14,7 +14,7 @@ func StringToTime(datetimeStr string) (time.Time, error) {
 	}
 	easternLocation, err := time.LoadLocation("America/New_York")
 	if err != nil {
-		return time.Time{}, fmt.Errorf("issue loading eastern location 3klffk")
+		return time.Time{}, fmt.Errorf("issue loading eastern location 31m9lffk")
 
 	}
 	for _, layout := range layouts {
