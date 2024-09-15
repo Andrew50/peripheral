@@ -1,23 +1,25 @@
-package utils
+
+package jobs
 
 import (
 	"context"
 	"fmt"
+    "backend/utils"
 	"log"
 
 	polygonws "github.com/polygon-io/client-go/websocket"
 	"github.com/polygon-io/client-go/websocket/models"
 )
 
-func StreamPolygonDataToRedis(conn *Conn) {
-	err := conn.PolygonWS.Subscribe(polygonws.StocksTrades)
+func StreamPolygonDataToRedis(conn *utils.Conn,polygonWS *polygonws.Client) {
+	err := polygonWS.Subscribe(polygonws.StocksTrades)
 	if err != nil {
 		log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	} else {
 		fmt.Printf("successfully connected to Polygon")
 	}
-	err = conn.PolygonWS.Subscribe(polygonws.StocksMinAggs)
+	err = polygonWS.Subscribe(polygonws.StocksMinAggs)
 	if err != nil {
 		log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
@@ -26,9 +28,9 @@ func StreamPolygonDataToRedis(conn *Conn) {
 	}
 	for {
 		select {
-		case err := <-conn.PolygonWS.Error():
+		case err := <-polygonWS.Error():
 			fmt.Printf("PolygonWS Error: %v", err)
-		case out := <-conn.PolygonWS.Output():
+		case out := <-polygonWS.Output():
 			switch msg := out.(type) {
 			case models.EquityTrade:
 				data := fmt.Sprintf(`{"ticker": "%s", "price": %v, "size": %v, "timestamp": %v}`, msg.Symbol, msg.Price, msg.Size, msg.Timestamp)
@@ -45,11 +47,26 @@ func StreamPolygonDataToRedis(conn *Conn) {
 		}
 	}
 }
-func PolygonDataToRedis(conn *Conn) {
+func PolygonDataToRedis(conn *utils.Conn) {
 	jsonData := `{"message": "Hello, WebSocket!", "value": 123}`
 	err := conn.Cache.Publish(context.Background(), "websocket-test", jsonData).Err()
 	fmt.Println("Done.")
 	if err != nil {
 		log.Println("Error publishing to Redis:", err)
 	}
+}
+func startPolygonWS(conn *utils.Conn) error {
+	polygonWSConn, err := polygonws.New(polygonws.Config{
+		APIKey: "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm",
+		Feed:   polygonws.RealTime,
+		Market: polygonws.Stocks,
+	})
+	if err != nil {
+		fmt.Printf("Error init polygonWs connection")
+	}
+	if err := polygonWSConn.Connect(); err != nil {
+		fmt.Printf("Error connecting to polygonWS")
+	}
+	go StreamPolygonDataToRedis(conn,polygonWSConn)
+    return nil
 }
