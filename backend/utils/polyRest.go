@@ -1,7 +1,6 @@
-package data
+package utils
 
 import (
-	"backend/utils"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -297,7 +296,7 @@ func GetTickerFromCIK(client *polygon.Client, cik string) (string, error) {
 
 }
 */
-func GetCIK(conn *utils.Conn, ticker string, dateOnly string) (string, error) {
+func GetCIK(conn *Conn, ticker string, dateOnly string) (string, error) {
 	// First check the securities table to see if we already have the CIK associated with a ticker
 	var dbCIK string
 	var err error
@@ -328,7 +327,7 @@ func GetCIK(conn *utils.Conn, ticker string, dateOnly string) (string, error) {
 	}
 	return "", fmt.Errorf("function GetCIK could not find CIK for ticker: {%s} and date: {%s}", ticker, dateOnly)
 }
-func GetTickerFromFIGI(conn *utils.Conn, figi string, dateOnly string) (string, error) {
+func GetTickerFromFIGI(conn *Conn, figi string, dateOnly string) (string, error) {
 	// First check securities table
 	var dbTicker string
 	if dateOnly == "" {
@@ -366,7 +365,7 @@ func GetTickerFromFIGI(conn *utils.Conn, figi string, dateOnly string) (string, 
 	return "", fmt.Errorf("function GetTickerFromFIGI could not find ticker for FIGI: {%s}", figi)
 
 }
-func GetFIGI(conn *utils.Conn, ticker string, dateOnly string) (string, error) {
+func GetFIGI(conn *Conn, ticker string, dateOnly string) (string, error) {
 	// First check securities table to see if we already have the CIK associated with a ticker
 	var dbFIGI string
 	var err error
