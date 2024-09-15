@@ -27,14 +27,26 @@
     let Quill;
     let editorContainer: HTMLElement | string;
     let editor: Quill | undefined;
+    let lastSaveTimeout: ReturnType<typeof setTimeout> | undefined;
     
+    function debounceSave(): void {
+        if (lastSaveTimeout) {
+            clearTimeout(lastSaveTimeout);
+        }
+        lastSaveTimeout = setTimeout(() => {
+            privateRequest<void>(`save${func}`, {
+                id: id,
+                entry: editor?.getContents(),
+            });
+        }, 1000);
+    }
 
-    function save():void {
+    /*function save():void {
         privateRequest<void>(`save${func}`,
         {id:id,
         entry:editor?.getContents()})
    
-    }
+    }*/
     function del():void{
         privateRequest<void>(`delete${func}`,{id:id})
     }
@@ -57,6 +69,7 @@
             insertIndex = range.index
         }
         editor.insertEmbed(insertIndex, 'embeddedInstance',instance);
+        debounceSave()
     }
 
     function inputAndEmbedInstance(): void {
@@ -115,6 +128,7 @@
                 console.error("failed edit")
             }
             editor?.setContents(delta);
+            debounceSave()
         });
     }
 
@@ -130,6 +144,9 @@
                     toolbar: false
                 }
             });
+            editor.on('text-change',() => {
+                debounceSave();
+            })
             class ChartBlot extends (Quill.import('blots/embed') as typeof EmbedBlot) {
                 static create(instance: Instance): HTMLElement {
                     let node = super.create();
@@ -171,7 +188,7 @@
 <div class="button-container">
     <button on:click={inputAndEmbedInstance} class="action-btn"> Insert </button>
     <button on:click={complete} class="action-btn"> {completed ? "Complete" : "Uncomplete"} </button>
-    <button on:click={save} class="action-btn"> Save </button>
+    <!--<button on:click={save} class="action-btn"> Save </button>-->
     <button on:click={del} class="action-btn"> Delete </button>
 </div>
 <style>

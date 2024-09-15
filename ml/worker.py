@@ -1,9 +1,11 @@
-import json, traceback
+import json, traceback, datetime
 from conn import Conn
 from train import train
+from screen import screen
 
 funcMap = {
-    "train": train
+    "train": train,
+    "screen": screen
 }
 
 
@@ -26,10 +28,11 @@ def process_tasks():
             print(f"starting {func_ident} {args} {task_id}", flush=True)
             try:
                 data.cache.set(task_id, json.dumps('running'))
+                start = datetime.datetime.now()
                 result = funcMap[func_ident](data,**args)
 
                 data.cache.set(task_id, packageResponse(result,"completed"))
-                print(f"finished {func_ident} {args} result: {result}", flush=True)
+                print(f"finished {func_ident} {args} time: {datetime.datetime.now() - start} result: {result}", flush=True)
             except:
                 exception = traceback.format_exc()
                 data.cache.set(task_id, packageResponse(exception,"error"))
