@@ -8,26 +8,31 @@ from tensorflow.keras.callbacks import EarlyStopping
 from google.protobuf import text_format
 from tensorflow_serving.config import model_server_config_pb2
 from data import getTensor
-SPLIT_RATIO = .8
-TRAINING_CLASS_RATIO = .25
-VALIDATION_CLASS_RATIO = .1
 tf.get_logger().setLevel('DEBUG')
 tf.config.threading.set_intra_op_parallelism_threads(8)
 tf.config.threading.set_inter_op_parallelism_threads(8)
+
+SPLIT_RATIO = .8
+TRAINING_CLASS_RATIO = .30
+VALIDATION_CLASS_RATIO = .10
+MIN_RANDOM_NOS = .5
+MAX_EPOCHS = 1000
+PATIENCE_EPOCHS = 80
+BATCH_SIZE = 64
 
 def createModel():
     model = Sequential()
     model.add(Input(shape=(None, 4))) # assuming o h l c
     conv_filter = 64 #32
     kernal_size = 3
-    lstm_list = [64]#[64, 32]
-    dropout = .2
+    lstm_list = [64, 32]
+    dropout = .1
     model.add(Conv1D(filters=conv_filter, kernel_size=kernal_size, activation='relu'))
     for units in lstm_list[:-1]:
         model.add(Bidirectional(LSTM(units=units, return_sequences=True)))
         model.add(Dropout(dropout))
     model.add(Bidirectional(LSTM(units=lstm_list[-1], return_sequences=False)))
-    model.add(Flatten())
+#    model.add(Flatten()) no need becuase return squecnes = false
     model.add(Dense(1, activation='sigmoid'))
     model.compile(optimizer=Adam(learning_rate=1e-3), loss='binary_crossentropy', metrics=[tf.keras.metrics.AUC(curve='PR', name='auc_pr')])
     return model
@@ -45,8 +50,10 @@ def train_model(conn,setupID):
     modelVersion = traits[2] + 1
     model = createModel()
     trainingSample, validationSample = getSample(conn,setupID,interval,TRAINING_CLASS_RATIO, VALIDATION_CLASS_RATIO, SPLIT_RATIO)
+    #print(trainingSample)
     xTrainingData, yTrainingData = getTensor(conn,trainingSample,interval,bars)
     xValidationData, yValidationData = getTensor(conn,validationSample,interval,bars)
+    yTrainingData, yValidationData = np.array(yTrainingData,dtype=np.int32),np.array(yValidationData,dtype=np.int32)
 
     validationRatio = np.mean(yValidationData)
     trainingRatio = np.mean(yTrainingData)
@@ -57,12 +64,12 @@ def train_model(conn,setupID):
     print("training sample size", len(xTrainingData))
     early_stopping = EarlyStopping(
         monitor='val_auc_pr',
-        patience=50,
+        patience=PATIENCE_EPOCHS,
         restore_best_weights=True,
         mode='max',
         verbose =1
     )
-    history = model.fit(xTrainingData, yTrainingData,epochs=300,batch_size=128,validation_data=(xValidationData, yValidationData),callbacks=[early_stopping])
+    history = model.fit(xTrainingData, yTrainingData,epochs=MAX_EPOCHS,batch_size=BATCH_SIZE,validation_data=(xValidationData, yValidationData),callbacks=[early_stopping])
     tf.keras.backend.clear_session()
     score = round(history.history['val_auc_pr'][-1] * 100)
     with conn.db.cursor() as cursor:
@@ -109,32 +116,6 @@ def save(setupID,modelVersion,model):
         config.model_config_list.config.extend(new_model_config.model_config_list.config)
         with open(configPath, 'w') as f:
             f.write(text_format.MessageToString(config))
-#        url = "http://tf:8501/v1/config/reload"
-#        #data.tf + "v1/config/reload"
-#        response = requests.post((url))
-#        if response.status_code == 200:
-#            print("reloaded tf")
-#        else:
-#            print(f"reload failed {response.text}")
-    if False: #reload request, might work to just have the auto reload handle it
-        try:
-            channel = grpc.insecure_channel('tf:8500')
-            stub = model_management_pb2_grpc.ModelServiceStub(channel)
-            request = model_management_pb2.ReloadConfigRequest()
-            #with open(configPath, 'r') as f:
-                #                config_text = f.read()
-            #new_config = model_server_config_pb2.ModelServerConfig()
-            #text_format.Merge(config_text, new_config)
-            request.config.CopyFrom(config)
-            response = stub.HandleReloadConfigRequest(request)
-            if response.status.error_code == 0:
-                print("Successfully reloaded config")
-            else:
-                print(f"Failed to reload config: {response.status.error_message}")
-        except grpc.RpcError as e:
-            print(f"gRPC call failed: {e}")
-        if config_exists:
-            print(f"Model {setupID} already exists in the configuration.")
 
 def getSample(data, setupID, interval, TRAINING_CLASS_RATIO, VALIDATION_CLASS_RATIO, SPLIT_RATIO):
     b = 3  # exclusive interval scaling factor
@@ -178,6 +159,7 @@ def getSample(data, setupID, interval, TRAINING_CLASS_RATIO, VALIDATION_CLASS_RA
         totalNo = numNoTraining + numNoValidation
 
         # Construct the query to find negative (FALSE label) samples around the positive samples
+        max_nearby_no = int(totalNo * (1-MIN_RANDOM_NOS))
         unionQuery = []
         for ticker, timestamp,label,securityId, minDate, maxDate in yesInstances:
             unionQuery.append(f"""
@@ -188,12 +170,17 @@ def getSample(data, setupID, interval, TRAINING_CLASS_RATIO, VALIDATION_CLASS_RA
              AND s.setupId = {setupID}
              AND s.label IS FALSE
              AND s.timestamp >= '{max(minDate, timestamp - timedelta)}'
-             AND (sec.maxDate IS NULL OR s.timestamp < '{min(maxDate or timestamp + timedelta, timestamp + timedelta)}')
-             LIMIT {totalNo})
+             AND (sec.maxDate IS NULL OR s.timestamp < '{min(maxDate or timestamp + timedelta, timestamp + timedelta)}'))
             """)
         
         # Combine all queries with UNION
-        noQuery = ' UNION '.join(unionQuery)
+#        noQuery = ' UNION '.join(unionQuery)
+        noQuery = f"""
+        SELECT * FROM (
+            {' UNION '.join(unionQuery)}
+        ) AS combined_results
+        LIMIT {max_nearby_no};
+        """
         cursor.execute(noQuery)
         noInstances = cursor.fetchall()
 
@@ -208,7 +195,7 @@ def getSample(data, setupID, interval, TRAINING_CLASS_RATIO, VALIDATION_CLASS_RA
             randomNoQuery = f"""
             SELECT sec.ticker, s.timestamp, s.label
             FROM samples s
-            JOIN securites sec ON s.securityId = sec.securityId
+            JOIN securities sec ON s.securityId = sec.securityId
             WHERE s.setupId = {setupID}
             AND s.label IS FALSE
             AND s.sampleId NOT IN ({','.join(map(str, noIDs))})
