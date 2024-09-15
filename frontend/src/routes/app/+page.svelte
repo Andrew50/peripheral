@@ -5,13 +5,14 @@
     import Similar from '$lib/utils/similar.svelte';
     import Study from '$lib/features/study.svelte';
     import Setups from '$lib/features/setups.svelte';
+    import Screen from '$lib/features/screen.svelte';
     import { onMount } from 'svelte';
     import { privateRequest } from '$lib/core/backend';
     import { goto } from '$app/navigation';
     import { get, writable } from 'svelte/store';
     import { browser } from '$app/environment';
 
-    type Menu = 'study' | 'screener' | 'setups' | 'none';
+    type Menu = 'study' | 'screen' | 'setups' | 'none';
     let active_menu: Menu = 'none';
     let minWidth: number;
     let maxWidth: number;
@@ -63,7 +64,6 @@
     let resizing = false;
 
     function startResize(event: MouseEvent) {
-        console.log('starting resize')
         event.preventDefault();  
         resizing = true;
         document.addEventListener('mousemove', resize);
@@ -71,7 +71,6 @@
     }
 
     function resize(event: MouseEvent) {
-        console.log('god')
         if (resizing) {
             let width = window.innerWidth - event.clientX - buttonWidth;
             if (width > maxWidth) {
@@ -79,14 +78,12 @@
             } else if (width < minWidth) {
                 width = minWidth;
             }
-            console.log(width)
             menuWidth.set(width);
         }
     }
 
     function stopResize(event: MouseEvent) {
         if (resizing) {
-            console.log('stop resize')
             document.removeEventListener('mousemove', resize);
             document.removeEventListener('mouseup', stopResize);
             resizing = false;
@@ -109,10 +106,12 @@
             class="menu-container"
             style="width: {$menuWidth}px; right: {buttonWidth}px"
         >
-            {#if active_menu == 'study'}
+            {#if active_menu === 'study'}
                 <Study/>
             {:else if active_menu === "setups"}
                 <Setups/>
+            {:else if active_menu === 'screen'}
+                <Screen/>
             {/if}
         </div>
     </div>
@@ -124,10 +123,10 @@
             <img class="icon" src="/study.png" alt="" />
         </button>
         <button
-            class="button {active_menu == 'screener' ? 'active' : ''}"
-            on:click={() => toggle_menu('screener')}
+            class="button {active_menu == 'screen' ? 'active' : ''}"
+            on:click={() => toggle_menu('screen')}
         >
-            <img class="icon" src="/screener.png" alt="" />
+            <img class="icon" src="/screen.png" alt="" />
         </button>
         <button
             class="button {active_menu == 'setups' ? 'active' : ''}"
