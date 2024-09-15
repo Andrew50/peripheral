@@ -83,7 +83,7 @@ async def get_instance_data(session, args):
         else:
             data_array[-1:] = data_array[-1, 0]
 
-        #data_array = normalize(data_array)
+        data_array = normalize(data_array)
         return data_array, label
 
 async def async_get_tensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm=False):

@@ -1,10 +1,10 @@
 <script>
-    import Header from '../header.svelte';
+    import Header from '$lib/utils/header.svelte';
 </script>
 <div class="page">
 <Header />
 </div>
 
 <style>
-    @import "../../global.css";
+    @import "$lib/core/components.css";
 </style>
