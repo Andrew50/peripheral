@@ -9,8 +9,11 @@ from google.protobuf import text_format
 from tensorflow_serving.config import model_server_config_pb2
 from data import getTensor
 SPLIT_RATIO = .8
-TRAINING_CLASS_RATIO = .35
+TRAINING_CLASS_RATIO = .25
 VALIDATION_CLASS_RATIO = .1
+tf.get_logger().setLevel('DEBUG')
+tf.config.threading.set_intra_op_parallelism_threads(8)
+tf.config.threading.set_inter_op_parallelism_threads(8)
 
 def createModel():
     model = Sequential()
@@ -45,17 +48,13 @@ def train_model(conn,setupID):
     xTrainingData, yTrainingData = getTensor(conn,trainingSample,interval,bars)
     xValidationData, yValidationData = getTensor(conn,validationSample,interval,bars)
 
-    #failure = 1 - (len(xTrainingData) + len(xValidationData)) / (len(trainingSample) + len(validationSample))
-    #validationRatio = np.mean(yValidationData)
-    #trainingRatio = np.mean(yTrainingData)
-    #TODO all this needs to be sent to frontend instead of just logged
-    #print(f"{failure * 100}% failure of {len(trainingSample) + len(validationSample)} samples")
-    #print(f"{len(xValidationData) * validationRatio + len(xTrainingData) * trainingRatio} yes samples")
-    #print("training class ratio",trainingRatio)
-    #print("validation class ratio", validationRatio)
+    validationRatio = np.mean(yValidationData)
+    trainingRatio = np.mean(yTrainingData)
+   # TODO all this needs to be sent to frontend instead of just logged
+    print(f"{len(xValidationData) * validationRatio + len(xTrainingData) * trainingRatio} yes samples")
+    print("training class ratio",trainingRatio)
+    print("validation class ratio", validationRatio)
     print("training sample size", len(xTrainingData))
-    print(xTrainingData.shape)
-    print(xValidationData.shape)
     early_stopping = EarlyStopping(
         monitor='val_auc_pr',
         patience=50,
@@ -63,7 +62,7 @@ def train_model(conn,setupID):
         mode='max',
         verbose =1
     )
-    history = model.fit(xTrainingData, yTrainingData,epochs=300,batch_size=64,validation_data=(xValidationData, yValidationData),callbacks=[early_stopping])
+    history = model.fit(xTrainingData, yTrainingData,epochs=300,batch_size=128,validation_data=(xValidationData, yValidationData),callbacks=[early_stopping])
     tf.keras.backend.clear_session()
     score = round(history.history['val_auc_pr'][-1] * 100)
     with conn.db.cursor() as cursor:
