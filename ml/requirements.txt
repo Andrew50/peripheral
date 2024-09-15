@@ -1,7 +1,6 @@
 redis
+aiohttp
 tqdm
-#grpcio
-#grpcio-tools
 watchdog
 tqdm==4.65.0
 psycopg2-binary

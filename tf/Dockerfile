@@ -10,6 +10,7 @@ RUN mkdir -p /default-models && chmod -R 777 /default-models
 #ENV MODEL_CONFIG_FILE=/models/models.config
 RUN ls -l /models
 ENV TF_CPP_MIN_VLOG_LEVEL=4
+ENV PYTHONFAULTHANDLER=1
 EXPOSE 8500
 EXPOSE 8501
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
