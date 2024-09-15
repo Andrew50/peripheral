@@ -4,7 +4,6 @@ import (
 	"backend/server"
 	"backend/utils"
 	"backend/jobs"
-	"fmt"
 	"os"
 )
 
@@ -17,13 +16,8 @@ func main() {
 	}
 	if len(args) > 1 {
 		//test func
-		conn, close := utils.InitConn(false)
-		defer close()
-		err := jobs.InitTickerDatabase(conn)
-		fmt.Printf("ERROR: %v", err)
-		if err != nil {
-			panic(err)
-		}
+//		conn, close := utils.InitConn(false)
+//		defer close()
 
 	} else {
 		server.StartServer()

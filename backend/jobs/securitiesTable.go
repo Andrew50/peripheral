@@ -159,42 +159,47 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
-func InitTickerDatabase(conn *utils.Conn) error {
-    test := true;
+func updateSecurities(conn *utils.Conn,test bool) error {
+    var startDate time.Time
     //fmt.Print(dataExists(conn.Polygon,"VBR","2003-09-24","2004-01-29"))
     //return nil
-    shouldClearLog := true // Set this based on your requirements
-    flags := os.O_CREATE | os.O_WRONLY
-    if shouldClearLog {
-        flags |= os.O_TRUNC
-    } else {
-        flags |= os.O_APPEND
-    }
+    if test {
+        shouldClearLog := true // Set this based on your requirements
+        flags := os.O_CREATE | os.O_WRONLY
+        if shouldClearLog {
+            flags |= os.O_TRUNC
+        } else {
+            flags |= os.O_APPEND
+        }
 
-    file, err := os.OpenFile("app.log", flags, 0666)
-    if err != nil {
-        log.Fatalf("Failed to open log file: %v", err)
-    }
-    defer file.Close()
+        file, err := os.OpenFile("app.log", flags, 0666)
+        if err != nil {
+            log.Fatalf("Failed to open log file: %v", err)
+        }
+        defer file.Close()
 
-    log.SetOutput(file)
-
-    var startDate time.Time
-    if test{
+        log.SetOutput(file)
         query := fmt.Sprintf("TRUNCATE TABLE securities RESTART IDENTITY CASCADE")
-        _, err := conn.DB.Exec(context.Background(), query)
+        _, err = conn.DB.Exec(context.Background(), query)
         if err != nil {
             return fmt.Errorf("unable to truncate table for test")
         }
         startDate = time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
         //startDate = time.Date(2005, 1, 3, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
         //startDate = time.Date(2004, 11, 1, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
-
     }else{
-        startDate = time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
+        err := conn.DB.QueryRow(context.Background(),"SELECT MAX(minDate) from securities").Scan(&startDate)
+        if err != nil {
+            return err
+        }
+        //startDate = time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
     }
-    activeYesterday := make(map[string]models.Ticker) //posibly change to get filtereMap (Alltickers) of startdate.SubDate(0,0,1)
     dateFormat := "2006-01-02"
+    yesterdayPolyTickers, err := utils.AllTickers(conn.Polygon,startDate.AddDate(0,0,-1).Format(dateFormat))
+    if err != nil {
+        return fmt.Errorf("1j9v %v",err)
+    }
+    activeYesterday := toFilteredMap(yesterdayPolyTickers)
 	for currentDate := startDate; currentDate.Before(time.Now()); currentDate = currentDate.AddDate(0, 0, 1) {
 		currentDateString := currentDate.Format(dateFormat)
         yesterdayDateString := currentDate.AddDate(0,0,-1).Format(dateFormat)
