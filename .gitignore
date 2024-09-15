@@ -1,5 +1,5 @@
 /backend/tmp/
 backend/tmp/main
 backend/app.log
-ml/__pycache__/train.cpython-311.pyc
+ml/__pycache__
 ml/core
