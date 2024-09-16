@@ -323,9 +323,9 @@ type GetTradeDataArgs struct {
 }
 
 type GetTradeDataResults struct {
-	Timestamp int64   `json:"time"`
+	Timestamp int64   `json:"timestamp"`
 	Price     float64 `json:"price"`
-	Volume    float64 `json:"volume"`
+	Size      float64 `json:"size"`
 	Exchange  int     `json:"exchange"`
 }
 
@@ -367,6 +367,7 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		if err != nil {
 			return nil, fmt.Errorf("vfm4l %w", err)
 		}
+		fmt.Println(ticker)
 		windowStartTimeNanos, err := utils.NanosFromUTCTime(time.Unix(windowStartTime/1000, (windowStartTime % 1000 * 1e6)).UTC())
 		if err != nil {
 			return nil, fmt.Errorf("45l6k6lkgjl, %v", err)
@@ -384,7 +385,7 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			var tradeData GetTradeDataResults
 			tradeData.Timestamp = time.Time(iter.Item().ParticipantTimestamp).UnixNano() / int64(time.Millisecond)
 			tradeData.Price = iter.Item().Price
-			tradeData.Volume = iter.Item().Size
+			tradeData.Size = iter.Item().Size
 			tradeData.Exchange = iter.Item().Exchange
 			tradeDataList = append(tradeDataList, tradeData)
 		}

@@ -15,6 +15,7 @@ export interface ChartRequest extends Instance{
     bars: number;
     direction: string;
     requestType: string;
+    includeLastBar: boolean;
 }
 export interface BarData {
     time: UTCTimestamp;
@@ -25,9 +26,9 @@ export interface BarData {
     volume: number;
 }
 export interface TradeData {
-    time: number;
+    timestamp: number;
     price: number;
-    volume: number;
+    size: number;
     exchange: number;
 }
 export interface SecurityDateBounds {
@@ -41,14 +42,15 @@ import {writable} from 'svelte/store'
 
 
 export let chartQuery: Writable<Instance> = writable({timestamp:0, extendedHours:false, timeframe:"1d",ticker:""})
-export function changeChart(newInstance : Instance):void{
+export function changeChart(newInstance : Instance, includeLast : boolean):void{
     chartQuery.update((oldInstance:Instance)=>{
         const req: ChartRequest = {
             ...oldInstance,
             ...newInstance,
             bars: 150,
             direction: "backward",
-            requestType: "loadNewTicker"
+            requestType: "loadNewTicker",
+            includeLastBar: includeLast,
         }
         return req
     })
