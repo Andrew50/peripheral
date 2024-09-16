@@ -6,7 +6,7 @@ import {get} from 'svelte/store'
 export class ReplayStream implements Stream {
     private replayStatus: boolean = false;
     private playbackSpeed = 1;
-    private buffer = 50000;
+    private buffer = 20000;
     private loopCooldown = 20;
     private isPaused: boolean = false;
     private accumulatedPauseTime: number = 0;
@@ -57,6 +57,7 @@ export class ReplayStream implements Stream {
                     extendedHours: false
                 },true).then((n:Array<any>)=>{
                     this.tickMap.get(channel).ticks.push(...n)
+                    this.tickMap.get(channel).reqInbound = false
                     //this.tickMap.set(channel,this.tickMap.get(channel).concat(v));
                 })
             }
