@@ -181,7 +181,7 @@
             if (iQ.inputString !== "") { 
                 if (/^[A-Z]$/.test(iQ.inputString)) {
                     iQ.inputType = "ticker";
-                }else if (/^\d{1,2}(?:[dwmqs])?$/.test(iQ.inputString)) {
+                }else if (/^\d{1,2}(?:[hdwmqs])?$/.test(iQ.inputString)) {
                     iQ.inputType = "timeframe";
                     iQ.securities = [];
                 } else if (/^\d{3}?.*$/.test(iQ.inputString)) {

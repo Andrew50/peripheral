@@ -74,3 +74,23 @@ export function UTCTimestampToESTString(utcTimestamp : number): string {
     const easternTime = utcDatetime.setZone('America/New_York')
     return easternTime.toFormat('yyyy-MM-dd HH:mm:ss')
 }
+export function timeframeToSeconds(timeframe : string): number {
+    if (timeframe.includes('s')) {
+        return parseInt(timeframe)
+    }
+    else if (!(timeframe.includes('m') || timeframe.includes('w') || 
+    timeframe.includes('q') || timeframe.includes('d') || timeframe.includes('h'))) {
+        return 60 * parseInt(timeframe)
+    } 
+    const 
+    return 0 
+}
+export function getReferenceStartTimeForDate(timestamp : number, extendedHours? : boolean): number {
+    const date = new Date(timestamp); 
+
+    if(extendedHours) {
+        return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 4, 0, 0)).getTime();
+    } else {
+        return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 9, 30, 0)).getTime();
+    }
+}
