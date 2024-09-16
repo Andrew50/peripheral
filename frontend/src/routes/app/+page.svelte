@@ -157,6 +157,7 @@
         width: 100%;
         height: 100%;
         display: flex;
+        flex-direction: row;
 
     }
     .chart {
@@ -173,17 +174,21 @@
         height: 100%;
         background-color: var(--c2);
         z-index: 1;
-        overflow-x: hidden;
-        overflow-y: auto;
+        overflow-y:scroll;
+        overflow-x:auto;
         display: flex;
         flex-direction: column;
-        margin-right: 5px;
+        padding: 10px;
+        padding-left: 0px;
+        /*scrollbar-color: var(--c4) var(--c1);
+        scrollbar-width: thin;*/
+        scrollbar-width: none;
 
     }
     .resize-handle {
         position: absolute;
         top: 0;
-        width: 5px;
+        width: 10px;
         height: 100%;
         cursor: ew-resize;
         background-color: var(--c2);

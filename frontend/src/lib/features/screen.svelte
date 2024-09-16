@@ -1,3 +1,4 @@
+<!-- screen.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { writable, get } from 'svelte/store';
@@ -39,28 +40,25 @@
 
         })
     }
+function toggleSetup(setup) {
+      setup.activeScreen = !setup.activeScreen;
+      setups.update(s => s); // Trigger update to rerender
+      console.log(setup)
+  }
 
 
 </script>
 
-<div class="table-container">
+<div class="setup-buttons-container">
   {#if Array.isArray($setups) && $setups.length > 0}
-  <table>
-    <thead>
-      <tr>
-        <th>Setup</th>
-        <th>Status</th>
-      </tr>
-    </thead>
-    <tbody>
-      {#each $setups as setup (setup.setupId)}
-      <tr class:selected={setup.activeScreen} on:click={() => setup.activeScreen = ! setup.activeScreen}>
-        <td>{setup.name}</td>
-        <td>{setup.activeScreen ? 'Active' : 'Inactive'}</td>
-      </tr>
-      {/each}
-    </tbody>
-  </table>
+   {#each $setups as setup (setup.setupId)}
+    <button 
+      class="setup-button {setup.activeScreen ? 'active' : ''}" 
+      on:click={() => {setup.activeScreen = !setup.activeScreen}}
+    >
+      {setup.name}
+    </button>
+  {/each}
   {/if}
 </div>
 
@@ -98,31 +96,40 @@
 
 <style>
   @import "$lib/core/colors.css";
-
-  .controls {
+  @import "$lib/core/features.css";
+  .setup-buttons-container {
     display: flex;
-    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
     margin-bottom: 20px;
-  }
+}
 
-  .action-btn {
-    background-color: var(--c3);
-    color: var(--f1);
-    border: none;
-    padding: 10px 15px;
-    border-radius: 4px;
+.setup-button {
+    padding: 10px 20px;
+    background-color: var(--c2);
+    border: 1px solid var(--c4);
+    border-radius: 8px;
     cursor: pointer;
-    font-size: 1rem;
-  }
+    transition: background-color 0.3s ease;
+    font-size: 16px;
+    display: inline-block;
+}
 
-  .action-btn:hover {
+.setup-button:hover {
     background-color: var(--c3-hover);
-  }
+}
+
+.setup-button.active {
+    background-color: var(--c3); /* Change to blue or another color when active */
+    color: var(--f1);
+}
+
+
+
 
   .table-container {
     border: 1px solid var(--c4);
     border-radius: 4px;
-    overflow: hidden;
     margin-top: 10px;
     width: 100%;
   }
@@ -152,9 +159,5 @@
     cursor: pointer;
   }
 
-  /* Highlight selected row */
-  tr.selected {
-    background-color: var(--c6);
-  }
 </style>
 

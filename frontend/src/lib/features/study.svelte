@@ -169,8 +169,5 @@
     }
 
     /* Highlight selected study */
-    tr.selected {
-        background-color: var(--c6);
-    }
 
 </style>
