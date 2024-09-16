@@ -25,7 +25,6 @@ type Client struct {
 	send chan []byte
 }
 
-
 func WsFrontendHandler(conn *Conn) http.HandlerFunc {
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -48,7 +47,7 @@ func WsFrontendHandler(conn *Conn) http.HandlerFunc {
 		client.readPump(conn)
 	}
 }
-func (c *Client) subscribe(conn *Conn,channelName string) {
+func (c *Client) subscribe(conn *Conn, channelName string) {
 	channelsMutex.Lock()
 	defer channelsMutex.Unlock()
 
@@ -117,9 +116,10 @@ func (c *Client) readPump(conn *Conn) {
 			fmt.Println("Invalid message format", err)
 			continue
 		}
+		fmt.Printf("message receieved %s", clientMsg)
 		switch clientMsg.Action {
 		case "subscribe":
-			c.subscribe(conn,clientMsg.ChannelName)
+			c.subscribe(conn, clientMsg.ChannelName)
 		case "unsubscribe":
 			c.unsubscribe(clientMsg.ChannelName)
 		default:

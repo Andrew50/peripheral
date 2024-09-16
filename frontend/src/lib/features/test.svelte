@@ -5,8 +5,8 @@ import {startReplay,getStream} from "$lib/utils/stream"
 let store = writable("blank")
 
 function test(){
-    startReplay(1725894480000)
-    store = getStream(2383,"fast")
+    //startReplay(1725894480000)
+    store = getStream("NVDA","fast")
 }
 
 </script>
