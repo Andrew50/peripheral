@@ -16,6 +16,7 @@ let trades: TradeData[] = [];
 let pendingTrades: TradeData[] = [];
 let lastUpdateTime: number = 0;
 let updateInterval: number = 20; 
+export class ReplayStream{}
 export function beginReplay(inst? : Instance) {
     if (!inst) {return}
     if (!inst.timestamp) {return}

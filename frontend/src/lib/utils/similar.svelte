@@ -1,4 +1,10 @@
 <script lang="ts" context="module">
+export interface ActiveStream {
+    securityId: number;
+    streamType: "fast" | "slow" | "quote";
+    openCount: number;
+}
+
     import {changeChart} from '$lib/features/chart/interface'
     import { writable } from 'svelte/store';
     import type { Writable } from 'svelte/store';
