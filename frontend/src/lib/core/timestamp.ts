@@ -82,7 +82,6 @@ export function timeframeToSeconds(timeframe : string): number {
     timeframe.includes('q') || timeframe.includes('d') || timeframe.includes('h'))) {
         return 60 * parseInt(timeframe)
     } 
-    const 
     return 0 
 }
 export function getReferenceStartTimeForDate(timestamp : number, extendedHours? : boolean): number {
