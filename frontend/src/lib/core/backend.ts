@@ -34,7 +34,7 @@ export async function publicRequest<T>(func: string, args: any): Promise<T> {
 }
 
 
-export async function privateRequest<T>(func: string, args: any): Promise<T> {
+export async function privateRequest<T>(func: string, args: any,verbose=true): Promise<T> {
     let authToken;
     authToken = sessionStorage.getItem("authToken")
     const headers = {
@@ -52,7 +52,9 @@ export async function privateRequest<T>(func: string, args: any): Promise<T> {
     }).catch();
     if (response.ok){
         const result = await response.json() as T
-        console.log("payload: ",payload, "result: ", result)
+        if (verbose){
+            console.log("payload: ",payload, "result: ", result)
+        }
         return result;
     }else{
         const errorMessage = await response.text()
