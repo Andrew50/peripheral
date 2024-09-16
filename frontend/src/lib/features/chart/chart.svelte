@@ -6,7 +6,7 @@
     import {privateRequest} from '$lib/core/backend';
     //import type {Instance, TradeData} from '$lib/core/types'
     import {chartQuery, changeChart} from './interface'
-    import type {ShiftOverlay, BarData, ChartRequest} from './interface'
+    import type {ShiftOverlay, BarData, ChartRequest, TradeData} from './interface'
     import { queryInstanceInput } from '$lib/utils/input.svelte'
     import { queryInstanceRightClick } from '$lib/utils/rightClick.svelte'
     import { createChart, ColorType} from 'lightweight-charts';
@@ -16,6 +16,7 @@
     import {writable, get} from 'svelte/store';
     import { onMount, onDestroy  } from 'svelte';
     import { UTCtoEST, ESTtoUTC, ESTSecondstoUTC, getReferenceStartTimeForDate} from '$lib/core/timestamp';
+	import { getStream } from '$lib/utils/stream';
 	//import {websocketManager} from '$lib/utils/webSocketManagerInstance';
     let chartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let chartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
@@ -103,6 +104,7 @@
             });
     }
     export function updateLatestChartBar(data : TradeData) {
+        if (!data.price || !data.volume || !data.time) {return}
         var mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
         if (UTCtoEST(data.time/1000) < (mostRecentBar.time as number) + chartTimeframeInSeconds) {
             if(data.volume >= 100) {
@@ -276,6 +278,11 @@
                     chart.applyOptions({timeScale: {timeVisible: false}});
             }else { chart.applyOptions({timeScale: {timeVisible: true}}); }
             backendLoadChartData(req)
+            if(!req.securityId) {return}
+            getStream(req.securityId, 'fast').subscribe((v) => {
+                console.log(v)
+                updateLatestChartBar(v)
+            })
         }) 
         
 
