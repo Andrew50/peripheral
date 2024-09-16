@@ -15,7 +15,7 @@
     import type {Writable} from 'svelte/store';
     import {writable, get} from 'svelte/store';
     import { onMount, onDestroy  } from 'svelte';
-    import { UTCtoEST, ESTtoUTC, ESTSecondstoUTC} from '$lib/core/timestamp';
+    import { UTCtoEST, ESTtoUTC, ESTSecondstoUTC, getReferenceStartTimeForDate} from '$lib/core/timestamp';
 	//import {websocketManager} from '$lib/utils/webSocketManagerInstance';
     let chartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let chartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
@@ -34,7 +34,8 @@
     const shiftOverlay: Writable<ShiftOverlay> = writable({ x: 0, y: 0, startX: 0, startY: 0, width: 0, height: 0, isActive: false, startPrice: 0, currentPrice: 0, })
     
     let chartTicker: string;
-
+    let chartTimeframe: string; 
+    let chartTimeframeInSeconds: number; 
 
 
 
@@ -100,6 +101,46 @@
                 console.error(error)
                 isLoadingChartData = false; // Ensure this runs after data is loaded
             });
+    }
+    export function updateLatestChartBar(data : TradeData) {
+        var mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
+        if (UTCtoEST(data.time/1000) < (mostRecentBar.time as number) + chartTimeframeInSeconds) {
+            if(data.volume >= 100) {
+                chartCandleSeries.update({
+                time: mostRecentBar.time, 
+                open: mostRecentBar.open, 
+                high: Math.max(mostRecentBar.high, data.price), 
+                low: Math.min(mostRecentBar.low, data.price),
+                close: data.price 
+                })  
+            }
+            chartVolumeSeries.update({
+                time: mostRecentBar.time, 
+                value: chartVolumeSeries.data()[chartVolumeSeries.data().length-1].value
+            })
+            return 
+        } else  { // if not hourly, daily, weekly, monthly at this point 
+            if(data.volume < 100) {return }
+            var referenceStartTime = getReferenceStartTimeForDate(data.time, get(chartQuery).extendedHours)
+            var timeDiff = (data.time - referenceStartTime/1000)
+            var flooredDifference = Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds
+            var newTime = UTCtoEST(referenceStartTime + flooredDifference) as UTCTimestamp
+
+            chartCandleSeries.update({
+                time: newTime,
+                open: data.price, 
+                high: data.price,
+                low: data.price,
+                close: data.price
+            })
+            chartVolumeSeries.update({
+                time: newTime, 
+                value: data.volume
+            })
+            return 
+            
+        }
+
     }
     onMount(() => {
         const chartOptions = { autoSize: true,layout: { textColor: 'black', background: { type: ColorType.Solid, color: 'white' } }, timeScale:  { timeVisible: true }, };

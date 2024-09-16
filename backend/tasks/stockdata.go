@@ -342,7 +342,7 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	}
 	inputTime := time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).UTC()
 
-	query := `SELECT ticker, minDate, maxDate FROM securities WHERE securityid=$1 AND (minDate <= $2) ORDER BY minDate ASC`
+	query := `SELECT ticker, minDate, maxDate FROM securities WHERE securityid=$1 AND (minDate <= $2 AND (maxDate IS NULL or maxDate >= $2)) ORDER BY minDate ASC`
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -359,7 +359,6 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	var tradeDataList []GetTradeDataResults
 	windowStartTime := args.Timestamp
 	windowEndTime := args.Timestamp + args.LengthOfTime
-	fmt.Printf("\nWindow Start: {%v}, Window End: {%v}", windowStartTime, windowEndTime)
 	for rows.Next() {
 		var ticker string
 		var minDateFromSQL *time.Time
@@ -372,13 +371,14 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		if err != nil {
 			return nil, fmt.Errorf("45l6k6lkgjl, %v", err)
 		}
+		fmt.Printf("\nWindow Start: {%v}, Window End: {%v}", windowStartTime, windowEndTime)
+		fmt.Printf("Ticker {%v}", ticker)
 		iter, err := utils.GetTrade(conn.Polygon, ticker, windowStartTimeNanos, "asc", models.GTE, 30000)
 		if err != nil {
 			return nil, fmt.Errorf("4lyoh, %v", err)
 		}
 		for iter.Next() {
 			if int64(time.Time(iter.Item().ParticipantTimestamp).Unix())*1000 > windowEndTime {
-				fmt.Println("Testing working")
 				return tradeDataList, nil
 			}
 			var tradeData GetTradeDataResults
