@@ -1,3 +1,4 @@
+import type { Instance } from "$lib/core/types"
 import {RealtimeStream} from "$lib/utils/realtimeStream"
 import {ReplayStream} from "$lib/utils/replayStream"
 import type {Writable} from 'svelte/store'
@@ -7,7 +8,7 @@ export type ChannelType = "fast" | "slow" | "quote"
 export const activeChannels: Map<string,{count:number,store:Writable<any>}> = new Map()
 
 const realtimeStream = new RealtimeStream;
-const replayStream = new ReplayStream;
+export const replayStream = new ReplayStream;
 let currentStream = realtimeStream;
 currentStream.start();
 export interface Stream {
@@ -63,10 +64,10 @@ export function releaseStream(ticker:string,channelType:ChannelType) {
 }
   
 
-export function startReplay(timestamp:number){
+export function startReplay(instance : Instance){
     currentStream.stop()
     currentStream = replayStream
-    currentStream.start(timestamp)
+    currentStream.start(instance)
 }
 export function stopReplay(){
     currentStream.stop()
