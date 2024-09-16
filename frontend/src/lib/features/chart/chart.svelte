@@ -110,7 +110,7 @@
             });
     }
     export function updateLatestChartBar(data) {
-        console.log(data)
+        //console.log(data)
         if (!data.price || !data.size || !data.timestamp) {return}
         if(chartCandleSeries.data().length == 0 || !chartCandleSeries) {return}
         var mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
@@ -143,6 +143,7 @@
             }).then((barDataList : BarData[]) => {
                 if (! (Array.isArray(barDataList) && barDataList.length > 0)){ return}
                 const bar = barDataList[0];
+                console.log(bar)
                 chartCandleSeries.update({
                     time: UTCtoEST(bar.time) as UTCTimestamp, 
                     open: bar.open, 
@@ -157,6 +158,7 @@
                 })
                 console.log("Updated with aggregate from polygon")
             })
+            
             if(data.size < 100) {return }
 
             var referenceStartTime = getReferenceStartTimeForDate(data.timestamp, get(chartQuery).extendedHours) // this is in milliseconds 
@@ -179,7 +181,6 @@
                 value: data.size
             })
             return 
-            
         }
 
     }
@@ -329,7 +330,7 @@
                     chart.applyOptions({timeScale: {timeVisible: false}});
             }else { chart.applyOptions({timeScale: {timeVisible: true}}); }
             backendLoadChartData(req)
-            
+
             unsubscribe = getStream(req.ticker, 'fast').subscribe((v) => {
                 updateLatestChartBar(v)
             })
