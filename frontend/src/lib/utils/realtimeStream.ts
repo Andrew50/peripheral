@@ -68,7 +68,7 @@ export class RealtimeStream implements Stream{
         }
     }
 
-    private subscribe(channelName:string){
+    public subscribe(channelName:string){
         if(this.socket?.readyState === WebSocket.OPEN) {
             const subscriptionRequest : SubscriptionRequest = {
                 action : 'subscribe',

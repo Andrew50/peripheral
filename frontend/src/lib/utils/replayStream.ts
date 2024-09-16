@@ -1,111 +1,109 @@
-import { privateRequest } from "$lib/core/backend";
-import type { Instance } from "$lib/core/types";
+import { privateRequest } from '$lib/core/backend';
+import { activeChannels } from '$lib/utils/stream';
+import type { Stream } from '$lib/utils/stream';
+import {get} from 'svelte/store'
 
-import type { TradeData, ChartRequest } from "$lib/features/chart/interface";
+export class ReplayStream implements Stream {
+    private replayStatus: boolean = false;
+    private playbackSpeed = 10;
+    private buffer = 5000000;
+    private loopCooldown = 10;
+    private isPaused: boolean = false;
+    private accumulatedPauseTime: number = 0;
+    private pauseStartTime: number = 0;
+    private startTime: number = 0;
+    private initialTimestamp: number = 0;
+    private tickMap: Map<string,Array<any>> = new Map()
 
-let replayStatus : boolean = false; 
-let globalCurrentTimestamp : number = 0; // 0 means realTime 
-let playbackSpeed = 1;
-let isPaused: boolean = false;
-let accumulatedPauseTime: number = 0;
-let pauseStartTime: number = 0;
-let startTime: number = 0;
-let initialTimestamp: number = 0;
-let index: number = 0;
-let trades: TradeData[] = [];
-let pendingTrades: TradeData[] = [];
-let lastUpdateTime: number = 0;
-let updateInterval: number = 20; 
-export class ReplayStream{}
-export function beginReplay(inst? : Instance) {
-    if (!inst) {return}
-    if (!inst.timestamp) {return}
-    replayStatus = true; 
-    requestReplayTrades(inst, inst.timestamp).then((tradeDataList) => {
-        if(!(Array.isArray(tradeDataList) && tradeDataList.length > 1)) { 
-            console.error("No trades to replay")
-            return; 
+    public subscribe(channelName: string) {
+        this.tickMap.set(channelName,[])
+    }
+    public unsubscribe(channelName: string) {
+        this.tickMap.delete(channelName)
+    }
+
+    public start(timestamp: number) {
+        if (!timestamp) return;
+        this.startTime = Date.now()
+        this.initialTimestamp = timestamp
+        this.replayStatus = true; 
+        for (const channel of activeChannels.keys()){
+            this.tickMap.set(channel,[])
         }
-        trades = tradeDataList.sort((a,b) => a.time - b.time); 
-        replayTrades();
-    })
-    .catch((error) => {
-        console.error("Failed to retrieve trades:", error)
-    })
-}
-
-
-
-function requestReplayTrades (inst: Instance, timestamp : number): Promise<TradeData[]> { 
-    return privateRequest<TradeData[]>("getTradeData", {
-        securityId:inst.securityId, 
-        time:timestamp, 
-        lengthOfTime:60000, 
-        extendedHours:false}
-    );
-}
-function replayTrades() {
-    console.log("Starting replay.")
-    if (trades.length === 0) {
-        console.error("No trades available for replay.")
-        return; 
+        this.loop()
     }
-    index = 0;
-    accumulatedPauseTime = 0;
-    startTime = Date.now(); 
-    initialTimestamp = trades[0].time || Date.now(); 
-    lastUpdateTime = Date.now();
 
-    processTrades(); 
-}
-function processTrades() {
-    if (!replayStatus || isPaused) return; 
-    const currentTime = Date.now();
-    const elapsedTime = currentTime - startTime - accumulatedPauseTime;
-    const simulatedTime = initialTimestamp + elapsedTime * playbackSpeed;
-    
-    while(index < trades.length && trades[index].time <= simulatedTime) {
-        pendingTrades.push(trades[index])
-        index++; 
-    }
-    if(currentTime - lastUpdateTime >= updateInterval) {
-        if(pendingTrades.length > 0) {
-            updateChartHandler(pendingTrades);
-            pendingTrades = [];
+    private loop(){
+        for (let [channel,ticks] of this.tickMap.entries()){
+            const currentTime = Date.now();
+            const elapsedTime = currentTime - this.startTime - this.accumulatedPauseTime;
+            const simulatedTime = this.initialTimestamp + elapsedTime * this.playbackSpeed;
+            const latestTime = ticks[ticks.length-1]?.time
+            console.log(latestTime,simulatedTime + this.buffer)
+            if (ticks.length === 0 || latestTime < simulatedTime + this.buffer){
+                const [securityId, type] = channel.split("-")
+                let req;
+                if (type === "quote"){
+                     req = "getQuoteData"
+                }else{
+                     req = "getTradeData"
+                }
+                privateRequest<[]>(req, {
+                    securityId: parseInt(securityId),
+                    time: latestTime ?? this.initialTimestamp,
+                    lengthOfTime: this.buffer,
+                    extendedHours: false
+                }).then((v:Array<any>)=>{
+                    this.tickMap.set(channel,this.tickMap.get(channel).concat(v));
+                })
+            }
+            if (ticks.length > 0){
+                let i = 0
+                const store = activeChannels.get(channel)?.store
+                while (i < ticks.length && ticks[i].time <= simulatedTime) {
+                    store?.set(ticks[i])
+                    i ++ 
+                }
+                this.tickMap.set(channel,this.tickMap.get(channel).slice(i));
+            }
         }
-        lastUpdateTime = currentTime; 
+        if (this.replayStatus && !this.isPaused){
+            setTimeout(()=>this.loop(), this.loopCooldown);
+        }
     }
-    if (index < trades.length) {
-        requestAnimationFrame(processTrades);
-    } else {
-        replayStatus = false; 
-        console.log("Replay completed")
-    }
-}
-function pauseReplay() {
-    if (!isPaused) {
-        isPaused = true;
-        pauseStartTime = Date.now() 
-    }
-}
-function resumeReplay() {
-    if(isPaused) {
-        isPaused = false;
-        accumulatedPauseTime += Date.now() - pauseStartTime;
-        processTrades();
-    }
-}
-function changePlaybackSpeed(newSpeed: number) {
-    const currentTime = Date.now();
-    const elapsedTime = currentTime - startTime - accumulatedPauseTime; 
-    const simulatedTime = initialTimestamp + elapsedTime*playbackSpeed; 
 
-    playbackSpeed = newSpeed;
+    public stop() {
+        this.replayStatus = false;
+        this.isPaused = false;
+        console.log('Replay stopped.');
+    }
 
-    startTime = currentTime - (simulatedTime - initialTimestamp) / playbackSpeed; 
-}
-function updateChartHandler(pendingTradesToUpdate : TradeData[]) {
-    for (const trade of pendingTradesToUpdate) {
-        console.log(trade, new Date(trade.time).toString())
+    public pause() {
+        if (!this.isPaused) {
+            this.isPaused = true;
+            this.pauseStartTime = Date.now();
+            console.log('Replay paused.');
+        }
+    }
+
+    public resume() {
+        if (this.isPaused) {
+            this.isPaused = false;
+            this.accumulatedPauseTime += Date.now() - this.pauseStartTime;
+            console.log('Replay resumed.');
+            this.loop()
+        }
+    }
+
+    public changeSpeed(newSpeed: number) {
+        const currentTime = Date.now();
+        const elapsedTime = currentTime - this.startTime - this.accumulatedPauseTime;
+        const simulatedTime = this.initialTimestamp + elapsedTime * this.playbackSpeed;
+
+        this.playbackSpeed = newSpeed;
+        this.startTime = currentTime - (simulatedTime - this.initialTimestamp) / this.playbackSpeed;
+
+        console.log(`Playback speed changed to ${newSpeed}`);
     }
 }
+

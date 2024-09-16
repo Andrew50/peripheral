@@ -6,12 +6,13 @@
     import Study from '$lib/features/study.svelte';
     import Setups from '$lib/features/setups.svelte';
     import Screen from '$lib/features/screen.svelte';
+    import Test from '$lib/features/test.svelte';
     import { onMount } from 'svelte';
     import { privateRequest } from '$lib/core/backend';
     import { goto } from '$app/navigation';
     import { get, writable } from 'svelte/store';
     import { browser } from '$app/environment';
-    type Menu = 'study' | 'screen' | 'setups' | 'none';
+    type Menu = 'study' | 'screen' | 'setups' | 'test' | 'none';
     let active_menu: Menu = 'none';
     let minWidth: number;
     let maxWidth: number;
@@ -111,6 +112,8 @@
                 <Setups/>
             {:else if active_menu === 'screen'}
                 <Screen/>
+            {:else if active_menu === 'test'}
+                <Test/>
             {/if}
         </div>
     </div>
@@ -130,6 +133,12 @@
         <button
             class="button {active_menu == 'setups' ? 'active' : ''}"
             on:click={() => toggle_menu('setups')}
+        >
+            <img class="icon" src="/setups.png" alt="" />
+        </button>
+        <button
+            class="button {active_menu == 'test' ? 'active' : ''}"
+            on:click={() => toggle_menu('test')}
         >
             <img class="icon" src="/setups.png" alt="" />
         </button>
