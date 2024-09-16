@@ -1,4 +1,4 @@
-let base_url: string;
+export let base_url: string;
 const pollInterval = 100; // Poll every 100ms
 
 if (typeof window !== 'undefined') {
