@@ -21,8 +21,8 @@
         status: "inactive" | "active" | "initializing" | "cancelled" | "complete"
         result: RightClickResult
     }
-    export type RightClickResult = "edit" | "embed" | "alert" | "embedSimilar" | "none" 
-    type Source = "chart" | "embedded" | "similar"
+    export type RightClickResult = "edit" | "embed" | "alert" | "embedSimilar" | "none" | "flag"
+    type Source = "chart" | "embedded" | "similar" | "list"
     const inactiveRightClickQuery: RightClickQuery = {
         status:"inactive",
         result: "none",
@@ -150,6 +150,8 @@
         {:else if $rightClickQuery.source === "embedded"}
             <div class="menu-item"><button on:click={()=>completeRequest("edit")}> Edit </button></div>
             <!--<div><button on:click={()=>completeRequest("embdedSimilar")}> Embed Similar </button></div>-->
+        {:else if $rightClickQuery.source === "list"}
+            <div class ="menu-item"><button on:click={()=>completeRequest("flag")}>{$rightClickQuery.instance.flagged ? "Unflag" : "Flag"}</button></div>
         {/if}
     </div>
 {/if}

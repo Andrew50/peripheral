@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import { writable, get } from 'svelte/store';
   import { privateRequest, queueRequest } from '$lib/core/backend';
+  import {queryInstanceRightClick} from '$lib/utils/rightClick.svelte'
+  import type {RightClickResult} from "$lib/utils/rightClick.svelte"
   import type { Writable } from 'svelte/store';
   import type {Instance} from '$lib/core/types'
   import {setups} from '$lib/core/stores'
@@ -11,7 +13,7 @@
   interface Screen extends Instance {
       setupType: string
       score: number
-      marked: boolean
+      flagged: boolean
   }
 
   function runScreen() {
@@ -21,11 +23,23 @@
           screens.set(response)
       });
   }
-  $: markedScreens = $screens.filter(setup => setup.marked);
-  $: unmarkedScreens = $screens.filter(setup => !setup.marked);
-  function getSetupName(setupId){
+  $: markedScreens = $screens.filter(setup => setup.flagged);
+  $: unmarkedScreens = $screens.filter(setup => !setup.flagged);
+  function getSetupName(setupId:number){
       return get(setups).find(v=> v.setupId == setupId).name
-      }
+  }
+
+    function rowRightClick(event:MouseEvent,screen:Screen){
+        event.preventDefault();
+        queryInstanceRightClick(event,screen,'list').then((v:RightClickResult)=>{
+            if (v === "flag"){
+                screen.flagged = ! screen.flagged
+                screens.update(s=>s)
+            }
+
+        })
+    }
+
 
 </script>
 
@@ -66,7 +80,10 @@
     </thead>
     <tbody>
         {#each s as screen}
-          <tr on:click={()=>changeChart(screen)}>
+          <tr on:click={()=>changeChart(screen)}
+
+            on:contextmenu={(event)=>rowRightClick(event,screen)}
+          >
               <td>{screen.ticker}</td>
               <td>{getSetupName(screen.setupId)}</td>
               <td>{screen.score}</td>
