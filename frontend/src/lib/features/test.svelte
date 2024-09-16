@@ -6,11 +6,12 @@ let store = writable("blank")
 
 function test(){
     startReplay(1725894480000)
-    store = getStream(4363,"fast")
+    store = getStream(2383,"fast")
 }
 
 </script>
 
 <button on:click={test}>test</button>
-
+<div style="margin-left:10px;">
 {$store.price}
+</div>
