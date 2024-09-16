@@ -35,6 +35,7 @@ export class RealtimeStream implements Stream{
             this.reconnectAttempts = 0; // Reset reconnect attempts
             this.reconnectInterval = 5000; // Reset reconnect interval
             for (const [channelName] of activeChannels.keys()){
+                console.log("Channel Name: ", channelName)
                 this.subscribe(channelName)
             }
         });
