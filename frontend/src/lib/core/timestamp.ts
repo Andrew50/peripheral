@@ -84,12 +84,37 @@ export function timeframeToSeconds(timeframe : string): number {
     } 
     return 0 
 }
-export function getReferenceStartTimeForDate(timestamp : number, extendedHours? : boolean): number {
-    const date = new Date(timestamp); 
+export function getReferenceStartTimeForDate(timestamp: number, extendedHours?: boolean): number {
+    const date = new Date(timestamp);
 
-    if(extendedHours) {
-        return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 4, 0, 0)).getTime();
-    } else {
-        return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 9, 30, 0)).getTime();
+    // Use Intl.DateTimeFormat to determine the offset for America/New_York (Eastern Time)
+    const options = {
+        timeZone: 'America/New_York',
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+        second: 'numeric',
+        hour12: false,
+    };
+
+    // Get the year, month, day in the correct time zone
+    const formatter = new Intl.DateTimeFormat('en-US', options);
+    const parts = formatter.formatToParts(date);
+
+    const getPart = (type: string) => parseInt(parts.find(p => p.type === type)?.value || '0', 10);
+
+    const year = getPart('year');
+    const month = getPart('month') - 1; // JavaScript months are 0-indexed
+    const day = getPart('day');
+
+    let hours = 9, minutes = 30;
+    if (extendedHours) {
+        hours = 4;
+        minutes = 0;
     }
+
+    // Now construct the Date in Eastern Time with the correct offset
+    return new Date(Date.UTC(year, month, day, hours, minutes, 0)).getTime();
 }

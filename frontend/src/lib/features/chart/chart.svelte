@@ -15,7 +15,7 @@
     import type {Writable} from 'svelte/store';
     import {writable, get} from 'svelte/store';
     import { onMount, onDestroy  } from 'svelte';
-    import { UTCtoEST, ESTtoUTC, ESTSecondstoUTC, getReferenceStartTimeForDate} from '$lib/core/timestamp';
+    import { UTCtoEST, ESTtoUTC, ESTSecondstoUTC, getReferenceStartTimeForDate, timeframeToSeconds} from '$lib/core/timestamp';
 	import { getStream } from '$lib/utils/stream';
 	//import {websocketManager} from '$lib/utils/webSocketManagerInstance';
     let chartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
@@ -103,11 +103,13 @@
                 isLoadingChartData = false; // Ensure this runs after data is loaded
             });
     }
-    export function updateLatestChartBar(data : TradeData) {
-        if (!data.price || !data.volume || !data.time) {return}
+    export function updateLatestChartBar(data) {
+        console.log(data)
+        if (!data.price || !data.size || !data.timestamp) {return}
+        if(chartCandleSeries.data().length == 0 || !chartCandleSeries) {return}
         var mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
-        if (UTCtoEST(data.time/1000) < (mostRecentBar.time as number) + chartTimeframeInSeconds) {
-            if(data.volume >= 100) {
+        if (UTCtoEST(data.timestamp/1000) < (mostRecentBar.time as number) + chartTimeframeInSeconds) {
+            if(data.size >= 100) {
                 chartCandleSeries.update({
                 time: mostRecentBar.time, 
                 open: mostRecentBar.open, 
@@ -116,17 +118,23 @@
                 close: data.price 
                 })  
             }
+            mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
             chartVolumeSeries.update({
                 time: mostRecentBar.time, 
-                value: chartVolumeSeries.data()[chartVolumeSeries.data().length-1].value
+                value: chartVolumeSeries.data()[chartVolumeSeries.data().length-1].value + data.size,
+                color: mostRecentBar.close > mostRecentBar.open ? '#089981' : '#ef5350'
             })
             return 
         } else  { // if not hourly, daily, weekly, monthly at this point 
-            if(data.volume < 100) {return }
-            var referenceStartTime = getReferenceStartTimeForDate(data.time, get(chartQuery).extendedHours)
-            var timeDiff = (data.time - referenceStartTime/1000)
-            var flooredDifference = Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds
-            var newTime = UTCtoEST(referenceStartTime + flooredDifference) as UTCTimestamp
+            console.log("Attempted to Update")
+            if(data.size < 100) {return }
+            var referenceStartTime = getReferenceStartTimeForDate(data.timestamp, get(chartQuery).extendedHours) // this is in milliseconds 
+            console.log("Reference Start Time:", referenceStartTime)
+            var timeDiff = (data.timestamp - referenceStartTime)/1000 // this is in seconds
+            console.log("Time Diff:", timeDiff)
+            var flooredDifference = Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds 
+            console.log("Floored Difference:", flooredDifference)
+            var newTime = UTCtoEST((referenceStartTime/1000 + flooredDifference)) as UTCTimestamp
 
             chartCandleSeries.update({
                 time: newTime,
@@ -137,7 +145,7 @@
             })
             chartVolumeSeries.update({
                 time: newTime, 
-                value: data.volume
+                value: data.size
             })
             return 
             
@@ -277,10 +285,11 @@
                     req.timeframe?.includes('d') || req.timeframe?.includes('q')){
                     chart.applyOptions({timeScale: {timeVisible: false}});
             }else { chart.applyOptions({timeScale: {timeVisible: true}}); }
+            chartTimeframeInSeconds = timeframeToSeconds(req.timeframe)
             backendLoadChartData(req)
             if(!req.securityId) {return}
-            getStream(req.securityId, 'fast').subscribe((v) => {
-                console.log(v)
+            if (!req.ticker) {return}
+            getStream(req.ticker, 'fast').subscribe((v) => {
                 updateLatestChartBar(v)
             })
         }) 

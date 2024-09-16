@@ -9,6 +9,7 @@ export const activeChannels: Map<string,{count:number,store:Writable<any>}> = ne
 const realtimeStream = new RealtimeStream;
 const replayStream = new ReplayStream;
 let currentStream = realtimeStream;
+currentStream.start();
 export interface Stream {
     start(timestamp?:number): void;
     stop(): void;
@@ -34,8 +35,9 @@ export interface Quote {
     askSize: number;
 }*/
 
-export function getStream(securityId:number,channelType:ChannelType) {
-    const channelName = `${securityId}-${channelType}`
+export function getStream(ticker:string,channelType:ChannelType) {
+    const channelName = `${ticker}-${channelType}`
+    console.log(channelName)
     let channel = activeChannels.get(channelName)
     if (channel){
         channel.count += 1
@@ -46,8 +48,8 @@ export function getStream(securityId:number,channelType:ChannelType) {
     activeChannels.set(channelName,channel)
     return channel.store
 }
-export function releaseStream(securityId:number,channelType:ChannelType) {
-    const channelName = `${securityId}-${channelType}`
+export function releaseStream(ticker:string,channelType:ChannelType) {
+    const channelName = `${ticker}-${channelType}`
     const activeChannel = activeChannels.get(channelName)
     if (activeChannel){
         activeChannel.count -= 1
