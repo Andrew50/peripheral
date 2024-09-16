@@ -3,7 +3,6 @@ import {writable} from 'svelte/store'
 import type {Writable} from 'svelte/store'
 import {privateRequest} from '$lib/core/backend'
 
-export let setups: Writable<Setup[]> = writable([]);
 privateRequest<Setup[]>('getSetups', {})
 .then((v: Setup[]) => {
     v = v.map((v:Setup) => {
@@ -16,3 +15,4 @@ privateRequest<Setup[]>('getSetups', {})
 .catch((error) => {
     console.error('Error fetching setups:', error);
 });
+export let setups: Writable<Setup[]> = writable([]);

@@ -46,8 +46,8 @@ def getCurrentSecId(conn,ticker):
 
 def filter(conn, df,tickers, setupId, threshold):
     url = f"{conn.tf}/v1/models/{setupId}:predict"
-    print(url)
     headers = {"Content-Type": "application/json"}
+    print(df.shape)
     payload = {
         "instances": df.tolist()  # Convert numpy array to list for JSON serialization
     }
@@ -59,26 +59,28 @@ def filter(conn, df,tickers, setupId, threshold):
     for ticker, score in zip(tickers, scores):
         if score[0] * 100 >= threshold:
             results.append({"ticker":ticker,"setupId":setupId,"score":score[0]*100,
-                            "securityId":getCurrentSecId(conn,ticker)})
+                            "securityId":getCurrentSecId(conn,ticker),
+                            "timestamp":0})
     return results
 
 
-def screen(conn,setupIds):
+def screen(conn, setupIds):
     adr = 3
     dolvol = 10 * 1000000
     tf = "1d"
-    bars = 60
-    threshold = 20
-    filteredTickerPriceList = (currentTickersAndPrice(conn,dolvol,adr,0))
-    data, tickers =getTensor(conn,filteredTickerPriceList,tf,bars)
-    results =[]
+    threshold = 1
+    with conn.db.cursor() as cursor:
+        cursor.execute('SELECT MAX(bars) FROM setups WHERE setupId = ANY(%s)', (setupIds,))
+        maxBars = cursor.fetchone()[0]
+    filteredTickerPriceList = currentTickersAndPrice(conn, dolvol, adr, 0)
+    data, tickers = getTensor(conn, filteredTickerPriceList, tf, maxBars)
+    results = []
     for setupId in setupIds:
-        results += filter(conn,data,tickers,setupId,threshold)
-
-
+        with conn.db.cursor() as cursor:
+            cursor.execute('SELECT bars FROM setups WHERE setupId = %s', (setupId,))
+            bars = cursor.fetchone()[0]
+        cropped_data = data[-bars:, :, :]  # Take the last `bars` from the data
+        results += filter(conn, cropped_data, tickers, setupId, threshold)
     sorted_results = sorted(results, key=lambda x: x['score'], reverse=True)
 
     return sorted_results
-
-
-
