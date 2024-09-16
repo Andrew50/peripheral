@@ -87,7 +87,6 @@
         if (inputType === "ticker"){
             const securities = await privateRequest<Security[]>("getSecuritiesFromTicker",{ticker:inputString})
             if (Array.isArray(securities) && securities.length > 0){
-                console.log(securities)
                 return {inputValid: securities.some((v:Security)=>v.ticker === inputString), securities: securities}
             }else{
                 return {inputValid: false, securities: []}

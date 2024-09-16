@@ -63,7 +63,7 @@ export async function privateRequest<T>(func: string, args: any,verbose=true): P
     }
 }
 
-export async function queueRequest<T>(func: string, args: any): Promise<T> {
+export async function queueRequest<T>(func: string, args: any,verbose=true): Promise<T> {
     let authToken;
     authToken = sessionStorage.getItem("authToken")
     const headers = {
@@ -83,6 +83,9 @@ export async function queueRequest<T>(func: string, args: any): Promise<T> {
         const errorMessage = await response.text();
         console.error("Error queuing task:", errorMessage);
         return Promise.reject(errorMessage);
+    }
+    if (verbose){
+        console.log(payload)
     }
     const taskID = await response.json()
     return new Promise<T>((resolve, reject) => {

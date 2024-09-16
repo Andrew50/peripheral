@@ -69,6 +69,8 @@ def train_model(conn,setupID):
         mode='max',
         verbose =1
     )
+    print(xTrainingData.shape)
+    print(xValidationData.shape)
     history = model.fit(xTrainingData, yTrainingData,epochs=MAX_EPOCHS,batch_size=BATCH_SIZE,validation_data=(xValidationData, yValidationData),callbacks=[early_stopping])
     tf.keras.backend.clear_session()
     score = round(history.history['val_auc_pr'][-1] * 100)
