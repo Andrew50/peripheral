@@ -24,12 +24,6 @@ export interface BarData {
     close: number;
     volume: number;
 }
-export interface TradeData {
-    time: UTCTimestamp; 
-    price: number; 
-    volume: number; 
-    exchange: number; 
-}
 export interface SecurityDateBounds {
     minDate: number;
     maxDate: number;
