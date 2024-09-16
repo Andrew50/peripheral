@@ -8,6 +8,8 @@
     background-color: var(--c2);
     overflow: hidden;
 }
+
+    /* Highlight selected study */
 /*p {
     font-weight: 500;
     color: var(--f1);
