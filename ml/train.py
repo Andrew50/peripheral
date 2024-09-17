@@ -9,8 +9,8 @@ from google.protobuf import text_format
 from tensorflow_serving.config import model_server_config_pb2
 from data import getTensor
 tf.get_logger().setLevel('DEBUG')
-tf.config.threading.set_intra_op_parallelism_threads(8)
-tf.config.threading.set_inter_op_parallelism_threads(8)
+tf.config.threading.set_intra_op_parallelism_threads(4)
+tf.config.threading.set_inter_op_parallelism_threads(4)
 
 SPLIT_RATIO = .8
 TRAINING_CLASS_RATIO = .30
@@ -160,7 +160,49 @@ def getSample(data, setupID, interval, TRAINING_CLASS_RATIO, VALIDATION_CLASS_RA
         numNoValidation = int(numYesValidation * (1 / v - 1))
         totalNo = numNoTraining + numNoValidation
 
-        # Construct the query to find negative (FALSE label) samples around the positive samples
+        batch_size = 100
+        all_noInstances = []
+        max_nearby_no = int(totalNo * (1 - MIN_RANDOM_NOS))
+        gotten_nearby_nos = 0
+
+        for i in range(0, len(yesInstances), batch_size):
+            # Create a batch of 100 positive instances
+            batch = yesInstances[i:i + batch_size]
+            unionQuery = []
+
+            for ticker, timestamp, label, securityId, minDate, maxDate in batch:
+                unionQuery.append(f"""
+                (SELECT s.sampleId, sec.ticker, s.timestamp, s.label
+                FROM samples s
+                JOIN securities sec ON s.securityId = sec.securityId
+                WHERE s.securityId = {securityId}
+                AND s.setupId = {setupID}
+                AND s.label IS FALSE
+                AND s.timestamp >= '{max(minDate, timestamp - timedelta)}'
+                AND (sec.maxDate IS NULL OR s.timestamp < '{min(maxDate or timestamp + timedelta, timestamp + timedelta)}'))
+                """)
+
+            # Combine the batch queries with UNION
+            noQuery = f"""
+            SELECT * FROM (
+                {' UNION '.join(unionQuery)}
+            ) AS combined_results
+            LIMIT {max_nearby_no - gotten_nearby_nos};
+            """
+            # Execute the batch query
+            cursor.execute(noQuery)
+            batch_noInstances = cursor.fetchall()
+            all_noInstances.extend(batch_noInstances)
+            gotten_nearby_nos += len(batch_noInstances)
+            if gotten_nearby_nos >= max_nearby_no:
+                break
+
+        # Collect sampleIds of the negative samples (noInstances)
+        noIDs = [x[0] for x in all_noInstances]
+        noInstances = [x[1:] for x in all_noInstances]  # Exclude sampleId from noInstances
+        yesInstances = [x[:3] for x in yesInstances]
+
+        ''' # Construct the query to find negative (FALSE label) samples around the positive samples
         max_nearby_no = int(totalNo * (1-MIN_RANDOM_NOS))
         unionQuery = []
         for ticker, timestamp,label,securityId, minDate, maxDate in yesInstances:
@@ -189,7 +231,7 @@ def getSample(data, setupID, interval, TRAINING_CLASS_RATIO, VALIDATION_CLASS_RA
         # Collect sampleIds of the negative samples (noInstances)
         noIDs = [x[0] for x in noInstances]
         noInstances = [x[1:] for x in noInstances]  # Exclude sampleId from noInstances
-        yesInstances = [x[:3] for x in yesInstances]
+        yesInstances = [x[:3] for x in yesInstances]'''
 
         # Handle case where additional negative samples are needed
         neededNo = totalNo - len(noInstances)

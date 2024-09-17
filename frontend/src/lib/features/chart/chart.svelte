@@ -265,7 +265,17 @@
             }
         })
         chartContainer.addEventListener('keydown', (event) => {
-            if (event.key == "Tab" || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
+            if (event.key == "r" && event.altKey){
+                const da = chartCandleSeries.data()
+                const chartWidthPix = chartContainer ? chartContainer.offsetWidth : window.innerWidth;
+                const numBars = Math.floor(chartWidthPix / 10);
+                console.log(numBars)
+                chart.timeScale().setVisibleRange({
+                    from: da[da.length-numBars].time, // start from the beginning of the data
+                    to: da[da.length-1].time, // end at the last point
+                })
+     //           chart.timeScale().fitContent()
+            }else if (event.key == "Tab" || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
                 queryInstanceInput("any",get(chartQuery))
                 .then((v:Instance)=>{
                     changeChart(v, true)

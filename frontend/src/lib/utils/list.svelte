@@ -41,12 +41,13 @@
         })
     }
     function handleKeydown(event: KeyboardEvent,watch:Watch) {
-    if (event.key === 'ArrowDown' || event.key === ' ') {
-      event.preventDefault();
-      moveDown();
-    } else if (event.key === 'ArrowUp' || (event.key === ' ' && event.shiftKey)) {
+        console.log(event)
+    if (event.key === 'ArrowUp' || (event.key === ' ' && event.shiftKey)) {
       event.preventDefault();
       moveUp();
+    }else if (event.key === 'ArrowDown' || event.key === ' ') {
+      event.preventDefault();
+      moveDown();
     }else{
         return
     }
@@ -105,7 +106,7 @@
     </thead>
     <tbody>
         {#each $list as watch, i}
-          <tr on:click={()=>changeChart(watch)}
+          <tr on:click={()=>{selectedRowIndex = i;changeChart(watch)}}
           id="row-{i}"
           class:selected={i===selectedRowIndex}
             on:contextmenu={(event)=>rowRightClick(event,watch)}

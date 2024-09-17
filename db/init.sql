@@ -52,8 +52,9 @@ CREATE TABLE studies (
 create index idxUserIdCompleted on studies(userId, completed);
 CREATE TABLE journals (
     journalId serial primary key,
-    timestamp timestamp not null,
     userId serial references users(userId),
+    timestamp timestamp not null,
+    completed boolean not null default false,
     entry json,
     unique (timestamp, userId)
 );

@@ -27,7 +27,8 @@ class Conn:
     def check_connection(self):
         try:
             self.cache.ping()
-            self.db.ping()
-        except:
-            print('Connection error')
+            with self.db.cursor() as cursor:
+                cursor.execute('SELECT 1')
+        except Exception as e:
+            print('Connection error: ',e)
             self.__init__()
