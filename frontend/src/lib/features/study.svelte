@@ -2,6 +2,7 @@
 <script lang="ts" context="module">
     import type { Writable } from 'svelte/store'
     import { get,writable } from 'svelte/store'
+    import {changeChart} from "$lib/features/chart/interface"
     import Entry from './entry.svelte'
     import {onMount} from 'svelte'
     import {privateRequest} from '$lib/core/backend'
@@ -45,6 +46,7 @@
         if (study.studyId === selectedStudyId){
             selectedStudyId = 0
         }else{
+            changeChart(study)
             privateRequest<JSON>("getStudyEntry",{studyId:study.studyId})
             .then((entry: JSON) => {
                 selectedStudyId = study.studyId

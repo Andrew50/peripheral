@@ -2,6 +2,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { writable, get } from 'svelte/store';
+  import List from '$lib/utils/list.svelte'
   import { privateRequest, queueRequest } from '$lib/core/backend';
   import {queryInstanceRightClick} from '$lib/utils/rightClick.svelte'
   import type {RightClickResult} from "$lib/utils/rightClick.svelte"
@@ -24,27 +25,10 @@
           screens.set(response)
       });
   }
-  $: markedScreens = $screens.filter(setup => setup.flagged);
-  $: unmarkedScreens = $screens.filter(setup => !setup.flagged);
-  function getSetupName(setupId:number){
+/*  function getSetupName(setupId:number){
       return get(setups).find(v=> v.setupId == setupId).name
-  }
+  }*/
 
-    function rowRightClick(event:MouseEvent,screen:Screen){
-        event.preventDefault();
-        queryInstanceRightClick(event,screen,'list').then((v:RightClickResult)=>{
-            if (v === "flag"){
-                screen.flagged = ! screen.flagged
-                screens.update(s=>s)
-            }
-
-        })
-    }
-function toggleSetup(setup) {
-      setup.activeScreen = !setup.activeScreen;
-      setups.update(s => s); // Trigger update to rerender
-      console.log(setup)
-  }
 
 
 </script>
@@ -64,34 +48,9 @@ function toggleSetup(setup) {
 
 <button on:click={runScreen}> Screen </button>
 
+<List list={screens} columns={["ticker","setup","score"]}/>
 
-{#each [markedScreens,unmarkedScreens] as s}
-<div class="table-container">
-  {#if Array.isArray(s) && s.length > 0}
-  <table>
-    <thead>
-      <tr>
-        <th>Ticker</th>
-        <th>Setup</th>
-        <th>Score</th>
-      </tr>
-    </thead>
-    <tbody>
-        {#each s as screen}
-          <tr on:click={()=>changeChart(screen)}
 
-            on:contextmenu={(event)=>rowRightClick(event,screen)}
-          >
-              <td>{screen.ticker}</td>
-              <td>{getSetupName(screen.setupId)}</td>
-              <td>{screen.score}</td>
-          </tr>
-        {/each}
-    </tbody>
-  </table>
-  {/if}
-</div>
-{/each}
 
 
 <style>

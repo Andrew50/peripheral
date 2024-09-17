@@ -9,7 +9,7 @@
     import type {ShiftOverlay, BarData, ChartRequest, TradeData} from './interface'
     import { queryInstanceInput } from '$lib/utils/input.svelte'
     import { queryInstanceRightClick } from '$lib/utils/rightClick.svelte'
-    import { createChart, ColorType} from 'lightweight-charts';
+    import { createChart, ColorType,CrosshairMode} from 'lightweight-charts';
     import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, UTCTimestamp,HistogramStyleOptions, HistogramData, HistogramSeriesOptions} from 'lightweight-charts';
     import {calculateSMA} from './indicators'
     import type {Writable} from 'svelte/store';
@@ -153,7 +153,29 @@
 
     }
     onMount(() => {
-        const chartOptions = { autoSize: true,layout: { textColor: 'black', background: { type: ColorType.Solid, color: 'white' } }, timeScale:  { timeVisible: true }, };
+        const chartOptions = { 
+            autoSize: true,
+            crosshair: {
+                mode: CrosshairMode.Normal,
+            },
+            layout: {
+                textColor: 'white',
+                background: {
+                    type: ColorType.Solid,
+                    color: 'black'
+                } 
+            }, 
+            grid: {
+                vertLines: {
+                    visible: false,
+                },
+                horzLines: {
+                    visible: false
+                }
+            },
+            timeScale:  { 
+                timeVisible: true },
+            };
         const chartContainer = document.getElementById('chart_container');
         if (!chartContainer) {return;}
         //init event listeners
@@ -233,12 +255,13 @@
             }
         })
         chart = createChart(chartContainer, chartOptions);
-        chartCandleSeries = chart.addCandlestickSeries({ upColor: '#089981', downColor: '#ef5350', borderVisible: false, wickUpColor: '#089981', wickDownColor: '#ef5350', });
-        chartVolumeSeries = chart.addHistogramSeries({ priceFormat: { type: 'volume', }, priceScaleId: '', });
+        chartCandleSeries = chart.addCandlestickSeries({ priceLineVisible:false,upColor: '#089981', downColor: '#ef5350', borderVisible: false, wickUpColor: '#089981', wickDownColor: '#ef5350', });
+        chartVolumeSeries = chart.addHistogramSeries({ lastValueVisible:true,priceLineVisible:false,priceFormat: { type: 'volume', }, priceScaleId: '', });
         chartVolumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0, }, });
         chartCandleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.2, }, });
-        sma10Series = chart.addLineSeries({ color: 'blue', lineWidth: 2, });
-        sma20Series = chart.addLineSeries({ color: 'orange', lineWidth: 2, });
+        const smaOptions = { lineWidth: 1, priceLineVisible: false, lastValueVisible:false} as DeepPartial<LineWidth>
+        sma10Series = chart.addLineSeries({ color: 'purple',...smaOptions});
+        sma20Series = chart.addLineSeries({ color: 'blue', ...smaOptions});
         chart.subscribeCrosshairMove((param)=>{
             if (!param.point) {
                 return;

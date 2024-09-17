@@ -44,7 +44,7 @@ def getCurrentSecId(conn,ticker):
         cursor.execute(query,(ticker,))
         return cursor.fetchone()[0]
 
-def filter(conn, df,tickers, setupId, threshold):
+def filter(conn, df,tickers, setupId,setupName, threshold):
     url = f"{conn.tf}/v1/models/{setupId}:predict"
     headers = {"Content-Type": "application/json"}
     print(df.shape)
@@ -58,17 +58,18 @@ def filter(conn, df,tickers, setupId, threshold):
     results = []
     for ticker, score in zip(tickers, scores):
         if score[0] * 100 >= threshold:
-            results.append({"ticker":ticker,"setupId":setupId,"score":score[0]*100,
+            results.append({"ticker":ticker,"setupId":setupId,"score":round(score[0]*100),
                             "securityId":getCurrentSecId(conn,ticker),
-                            "timestamp":0})
+                            "timestamp":0,
+                            "setup":setupName})
     return results
 
 
 def screen(conn, setupIds):
-    adr = 3
+    adr = 2
     dolvol = 10 * 1000000
     tf = "1d"
-    threshold = 1
+    threshold = 10
     with conn.db.cursor() as cursor:
         cursor.execute('SELECT MAX(bars) FROM setups WHERE setupId = ANY(%s)', (setupIds,))
         maxBars = cursor.fetchone()[0]
@@ -77,10 +78,10 @@ def screen(conn, setupIds):
     results = []
     for setupId in setupIds:
         with conn.db.cursor() as cursor:
-            cursor.execute('SELECT bars FROM setups WHERE setupId = %s', (setupId,))
-            bars = cursor.fetchone()[0]
+            cursor.execute('SELECT bars, name FROM setups WHERE setupId = %s', (setupId,))
+            bars,setupName = cursor.fetchone()[0:2]
         cropped_data = data[-bars:, :, :]  # Take the last `bars` from the data
-        results += filter(conn, cropped_data, tickers, setupId, threshold)
+        results += filter(conn, cropped_data, tickers, setupId,setupName, threshold)
     sorted_results = sorted(results, key=lambda x: x['score'], reverse=True)
 
     return sorted_results
