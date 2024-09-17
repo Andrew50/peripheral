@@ -1,8 +1,7 @@
 <script lang='ts'>
-import {startReplay, stopReplay} from '$lib/utils/stream'
-import {replayStream} from '$lib/utils/stream'
-
-
+import {startReplay, stopReplay} from '$lib/utils/stream';
+import {replayStream} from '$lib/utils/stream';
+import { writable } from 'svelte/store'; 
 function toggleReplay() {
     if(replayStream.replayStatus) {
         stopReplay()
