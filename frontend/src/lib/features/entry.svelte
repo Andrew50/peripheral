@@ -83,7 +83,7 @@
     function embeddedInstanceLeftClick(instance: Instance): void {
         instance.securityId = parseInt(instance.securityId)
         instance.timestamp = parseInt(instance.timestamp)
-        changeChart(instance)
+        changeChart(instance, true)
 
         //chartQuery.set(instance)
     }

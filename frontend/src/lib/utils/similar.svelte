@@ -124,7 +124,7 @@ export interface ActiveStream {
                     <tbody>
                         {#each $similarQuery.similarInstances as instance} 
                             <tr>
-                                <td on:click={()=>changeChart(instance)} 
+                                <td on:click={()=>changeChart(instance, true)} 
                                 on:contextmenu={(e)=>{e.preventDefault();
                                 closeMenu();
                                 queryInstanceRightClick(e,instance,"similar")}}>{instance.ticker}</td>
