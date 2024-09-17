@@ -49,7 +49,12 @@
             .then((barDataList: BarData[]) => {
                 if (! (Array.isArray(barDataList) && barDataList.length > 0)){ return}
                 let newCandleData = barDataList.map((bar) => ({
-                  time: UTCtoEST(bar.time as UTCTimestamp) as UTCTimestamp,open: bar.open, high: bar.high, low: bar.low, close: bar.close, }));
+                  time: UTCtoEST(bar.time as UTCTimestamp) as UTCTimestamp,
+                  open: bar.open, 
+                  high: bar.high, 
+                  low: bar.low, 
+                  close: bar.close, 
+                }));
                 let newVolumeData = barDataList.map((bar) => ({
                   time: UTCtoEST(bar.time as UTCTimestamp) as UTCTimestamp, value: bar.volume, color: bar.close > bar.open ? '#089981' : '#ef5350', }));
                 if (inst.requestType === 'loadAdditionalData' && inst.direction === 'backward') {
