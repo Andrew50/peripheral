@@ -16,7 +16,7 @@
     import {writable, get} from 'svelte/store';
     import { onMount, onDestroy  } from 'svelte';
     import { UTCtoEST, ESTtoUTC, ESTSecondstoUTC, getReferenceStartTimeForDate, timeframeToSeconds} from '$lib/core/timestamp';
-	import { getStream } from '$lib/utils/stream';
+	import { getStream, replayStream } from '$lib/utils/stream';
 	//import {websocketManager} from '$lib/utils/webSocketManagerInstance';
     let chartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let chartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
@@ -30,15 +30,16 @@
     let lastChartRequestTime = 0; 
     let queuedLoad: Function | null = null
     let shiftDown = false
-    const chartRequestThrottleDuration = 200; 
+    const chartRequestThrottleDuration = 150; 
     const hoveredCandleData = writable({ open: 0, high: 0, low: 0, close: 0, volume: 0, })
     const shiftOverlay: Writable<ShiftOverlay> = writable({ x: 0, y: 0, startX: 0, startY: 0, width: 0, height: 0, isActive: false, startPrice: 0, currentPrice: 0, })
     
     let chartTicker: string;
+    let chartSecurityId: number; 
     let chartTimeframe: string; 
     let chartTimeframeInSeconds: number; 
-
-
+    let chartExtendedHours: boolean;
+    let unsubscribe = () => {} 
 
     function backendLoadChartData(inst:ChartRequest): void{
         if (isLoadingChartData ||!inst.ticker || !inst.timeframe || !inst.securityId) { return; }
@@ -63,6 +64,11 @@
                     newCandleData = [...chartCandleSeries.data(), ...newCandleData.slice(1)] as any;
                     newVolumeData = [...chartVolumeSeries.data(), ...newVolumeData.slice(1)] as any;
                   }
+                } else if(inst.requestType === 'loadNewTicker') {
+                    if(inst.includeLastBar == false) {
+                        newCandleData = newCandleData.slice(0, newCandleData.length-1)
+                        newVolumeData = newVolumeData.slice(0, newVolumeData.length-1)
+                    }
                 }
                 // Check if we reach end of avaliable data 
                 if (inst.timestamp == 0) {
@@ -104,7 +110,7 @@
             });
     }
     export function updateLatestChartBar(data) {
-        console.log(data)
+        //console.log(data)
         if (!data.price || !data.size || !data.timestamp) {return}
         if(chartCandleSeries.data().length == 0 || !chartCandleSeries) {return}
         var mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
@@ -127,7 +133,34 @@
             return 
         } else  { // if not hourly, daily, weekly, monthly at this point 
             console.log("Attempted to Update")
+            privateRequest<BarData[]>("getChartData", {
+                securityId:chartSecurityId, 
+                timeframe:chartTimeframe, 
+                timestamp:ESTtoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as number)*1000,
+                direction:"backward",
+                bars:1,
+                extendedHours: chartExtendedHours
+            }).then((barDataList : BarData[]) => {
+                if (! (Array.isArray(barDataList) && barDataList.length > 0)){ return}
+                const bar = barDataList[0];
+                console.log(bar)
+                chartCandleSeries.update({
+                    time: UTCtoEST(bar.time) as UTCTimestamp, 
+                    open: bar.open, 
+                    high: bar.high,
+                    low: bar.low,
+                    close: bar.close
+                })
+                chartVolumeSeries.update({
+                    time: UTCtoEST(bar.time) as UTCTimestamp,
+                    value: bar.volume,
+                    color: bar.close > bar.open ? '#089981' : '#ef5350'
+                })
+                console.log("Updated with aggregate from polygon")
+            })
+            
             if(data.size < 100) {return }
+
             var referenceStartTime = getReferenceStartTimeForDate(data.timestamp, get(chartQuery).extendedHours) // this is in milliseconds 
             console.log("Reference Start Time:", referenceStartTime)
             var timeDiff = (data.timestamp - referenceStartTime)/1000 // this is in seconds
@@ -148,7 +181,6 @@
                 value: data.size
             })
             return 
-            
         }
 
     }
@@ -236,7 +268,7 @@
             if (event.key == "Tab" || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
                 queryInstanceInput("any",get(chartQuery))
                 .then((v:Instance)=>{
-                    changeChart(v)
+                    changeChart(v, true)
                 }).catch()
             }else if (event.key == "Shift"){
                 shiftDown = true
@@ -288,9 +320,11 @@
                     bars: 50 - Math.floor(logicalRange.from),
                     direction: "backward",
                     requestType: "loadAdditionalData",
+                    includeLastBar: true,
                 })
-            } else if (logicalRange.to > chartCandleSeries.data().length-10) {
+            } else if (logicalRange.to > chartCandleSeries.data().length-10) { // forward load
                 if(chartLatestDataReached) {return;}
+                if(replayStream.replayStatus == true) { return;}
                 const v = get(chartQuery)
                 backendLoadChartData({
                     ...v,
@@ -298,23 +332,32 @@
                     bars:  150 + 2*Math.floor(logicalRange.to) - chartCandleSeries.data().length,
                     direction: "forward",
                     requestType: "loadAdditionalData",
+                    includeLastBar: true, 
                 })
             }
         })
        chartQuery.subscribe((req:ChartRequest)=>{
+            unsubscribe() 
+
             chartEarliestDataReached = false;
             chartLatestDataReached = false; 
+            if(!req.securityId || !req.ticker || !req.timeframe) {return}
+
+            chartTicker = req.ticker;
+            chartSecurityId = req.securityId ;
+            chartTimeframe = req.timeframe;
+            chartTimeframeInSeconds = timeframeToSeconds(req.timeframe);
+            chartExtendedHours = req.extendedHours;
             if (req.timeframe?.includes('m') || req.timeframe?.includes('w') || 
                     req.timeframe?.includes('d') || req.timeframe?.includes('q')){
                     chart.applyOptions({timeScale: {timeVisible: false}});
             }else { chart.applyOptions({timeScale: {timeVisible: true}}); }
-            chartTimeframeInSeconds = timeframeToSeconds(req.timeframe)
             backendLoadChartData(req)
-            if(!req.securityId) {return}
-            if (!req.ticker) {return}
-            getStream(req.ticker, 'fast').subscribe((v) => {
+
+            unsubscribe = getStream(req.ticker, 'fast').subscribe((v) => {
                 updateLatestChartBar(v)
             })
+            
         }) 
         
 
