@@ -3,7 +3,7 @@
     import type { Writable } from 'svelte/store'
     import { get,writable } from 'svelte/store'
     import {changeChart} from "$lib/features/chart/interface"
-    import Entry from './entry.svelte'
+    import Entry from '$lib/utils/entry.svelte'
     import {onMount} from 'svelte'
     import {privateRequest} from '$lib/core/backend'
     import {queryInstanceRightClick} from '$lib/utils/rightClick.svelte'

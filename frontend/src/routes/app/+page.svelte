@@ -9,13 +9,14 @@
     import Screen from '$lib/features/screen.svelte';
     import Test from '$lib/features/test.svelte';
     import Watchlist from '$lib/features/watchlist.svelte'
+    import Screensaver from '$lib/features/screensaver.svelte'
     import { onMount } from 'svelte';
     import { privateRequest } from '$lib/core/backend';
     import { goto } from '$app/navigation';
     import { get, writable } from 'svelte/store';
     import { browser } from '$app/environment';
-    type Menu = 'study' | 'screen' | 'setups' | 'test' | 'none' | 'watchlist' | "journal";
-    const menus: Menu[] = ['watchlist' ,'screen' ,'study' ,"journal", 'setups' , 'test' ]
+    type Menu = 'study' | 'screen' | 'setups' | 'test' | 'none' | 'watchlist' | "journal"|'screensaver';
+    const menus: Menu[] = ['watchlist' ,'screen' ,'study' ,"journal", 'setups' , 'test','screensaver' ]
     let active_menu: Menu = 'none';
     let minWidth: number;
     let maxWidth: number;
@@ -122,6 +123,8 @@
                 <Watchlist/>
             {:else if active_menu === "journal"}
                 <Journal/>
+            {:else if active_menu === "screensaver"}
+                <Screensaver/>
             {/if}
         </div>
     </div>

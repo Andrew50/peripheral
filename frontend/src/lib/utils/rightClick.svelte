@@ -6,9 +6,9 @@
     import {UTCTimestampToESTString} from '$lib/core/timestamp'
 //    let similarInstance: Writable<SimilarInstance> = writable({});
     import { privateRequest} from '$lib/core/backend';
-    import {embedInstance} from "$lib/features/entry.svelte";
+    import {embedInstance} from "$lib/utils/entry.svelte";
     import {newStudy} from '$lib/features/study.svelte';
-    import {newJournal} from '$lib/features/journal.svelte';
+    //import {newJournal} from '$lib/features/journal.svelte';
     import {newSample} from '$lib/features/sample.svelte'
     import { get, writable } from 'svelte/store';
     import {querySimilarInstances} from '$lib/utils/similar.svelte'

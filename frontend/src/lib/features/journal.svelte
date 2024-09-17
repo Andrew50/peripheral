@@ -1,8 +1,7 @@
-<script lang="ts" context="module">
-    import type {Instance} from '$lib/core/types'
-    export function newJournal(instance:Instance):void{
-        console.log("new journal to implement")
-    }
+<script lang="ts">
+    import {privateRequest} from '$lib/core/backend'
+    import Entry from "$lib/utils/entry.svelte"
+    import {onMount} from 'svelte'
     import {UTCTimestampToESTString} from '$lib/core/timestamp'
     import type {Writable} from 'svelte/store'
     import {writable} from 'svelte/store'
@@ -13,6 +12,10 @@
         completed: boolean
     }
     let journals: Writable<Journal[]> = writable([])
+    onMount(() => {
+        privateRequest<Journal[]>("getJournals",{})
+        .then((v:Journal[]) => { journals.set(v)})
+    })
     function selectJournal(journal: Journal) : void {
         if (journal.journalId === selectedJournalId){
             selectedJournalId = 0
@@ -32,7 +35,7 @@
         <tbody>
             {#if Array.isArray($journals) && $journals.length > 0}
                 {#each $journals as journal}
-                    <tr class="table-row"  on:click={()=>selectJournal(journal)}>
+                    <tr class={journal.completed ? "table-row" : "table-row-red"}  on:click={()=>selectJournal(journal)}>
                         <td>{UTCTimestampToESTString(journal.timestamp)}</td>
                     </tr>
 
@@ -52,6 +55,7 @@
     @import "$lib/core/colors.css";
 
     /* Button styling */
+
     .controls {
         display: flex;
         justify-content: left;
@@ -102,8 +106,16 @@
         border-bottom: 1px solid var(--c4);
         color: var(--f1);
     }
+    .table-row-red {
+        background-color: var(--c3);
+        cursor: pointer;
+    }
 
     .table-row:hover {
+        background-color: var(--c1);
+        cursor: pointer;
+    }
+    .table-row-red:hover {
         background-color: var(--c1);
         cursor: pointer;
     }
