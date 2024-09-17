@@ -10,11 +10,12 @@ services:
     db:
         build:
            context: ./db
-           dockerfile: Dockerfile
+           dockerfile: Dockerfile.prod
         networks:
             - compose_network_prod
         volumes:
             - db_prod:/var/lib/postgresql/data
+            - ./backups:/backups
         restart: unless-stopped
 
 

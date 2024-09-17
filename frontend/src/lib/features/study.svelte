@@ -6,6 +6,7 @@
     import Entry from './entry.svelte'
     import {onMount} from 'svelte'
     import {privateRequest} from '$lib/core/backend'
+    import {queryInstanceRightClick} from '$lib/utils/rightClick.svelte'
     import type {Instance} from '$lib/core/types'
     import  {UTCTimestampToESTString} from '$lib/core/timestamp'
     import {queryInstanceInput} from '$lib/utils/input.svelte'
@@ -47,10 +48,11 @@
             selectedStudyId = 0
         }else{
             changeChart(study)
-            privateRequest<JSON>("getStudyEntry",{studyId:study.studyId})
+            selectedStudyId = study.studyId
+/*            privateRequest<JSON>("getStudyEntry",{studyId:study.studyId})
             .then((entry: JSON) => {
                 selectedStudyId = study.studyId
-            })
+            })*/
         }
     }
     function deleteStudy(study: Study):void{
@@ -93,7 +95,7 @@
         <tbody>
             {#if Array.isArray($studies) && $studies.length > 0}
                 {#each $studies as study}
-                    <tr class="table-row" on:click={() => selectStudy(study)}>
+                    <tr class="table-row" on:contextmenu={(event)=>queryInstanceRightClick(event,study,"header")} on:click={() => selectStudy(study)}>
                         <td>{study.ticker}</td>
                         <td>{UTCTimestampToESTString(study.timestamp)}</td>
                     </tr>

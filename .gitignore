@@ -3,3 +3,4 @@ backend/tmp/main
 backend/app.log
 ml/__pycache__
 ml/core
+db/backups
