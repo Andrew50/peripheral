@@ -1,10 +1,12 @@
 import { privateRequest } from '$lib/core/backend';
+import { changeChart } from '$lib/features/chart/interface';
 import { activeChannels } from '$lib/utils/stream';
 import type { Stream } from '$lib/utils/stream';
+import type { Instance } from '$lib/core/types';
 import {get} from 'svelte/store'
 
 export class ReplayStream implements Stream {
-    private replayStatus: boolean = false;
+    public replayStatus: boolean = false;
     private playbackSpeed = 1;
     private buffer = 20000;
     private loopCooldown = 20;
@@ -14,7 +16,7 @@ export class ReplayStream implements Stream {
     private startTime: number = 0;
     private initialTimestamp: number = 0;
     private tickMap: Map<string,{reqInbound:boolean,ticks:Array<any>}> = new Map()
-
+    private securityId = 0;
     public subscribe(channelName: string) {
         this.tickMap.set(channelName,{reqInbound:false,ticks:[]})
     }
@@ -22,10 +24,15 @@ export class ReplayStream implements Stream {
         this.tickMap.delete(channelName)
     }
 
-    public start(timestamp: number) {
+    public start(instance : Instance) {
+        if (!instance) return;
+        var timestamp = instance.timestamp
         if (!timestamp) return;
+        if (!instance.securityId) {return;}
+        changeChart(instance, false)
         this.startTime = Date.now()
         this.initialTimestamp = timestamp
+        this.securityId = instance.securityId
         this.replayStatus = true; 
         for (const channel of activeChannels.keys()){
             this.tickMap.set(channel,{reqInbound:false,ticks:[]})
@@ -39,7 +46,7 @@ export class ReplayStream implements Stream {
             //console.log(ticks.length)
             const elapsedTime = currentTime - this.startTime - this.accumulatedPauseTime;
             const simulatedTime = this.initialTimestamp + elapsedTime * this.playbackSpeed;
-            const latestTime = v.ticks[v.ticks.length-1]?.time
+            const latestTime = v.ticks[v.ticks.length-1]?.timestamp
             if (!v.reqInbound && (!latestTime || latestTime < simulatedTime + this.buffer)){
                 v.reqInbound = true
                 const [securityId, type] = channel.split("-")
@@ -51,7 +58,7 @@ export class ReplayStream implements Stream {
                 }
                 console.log("reg")
                 privateRequest<[]>(req, {
-                    securityId: parseInt(securityId),
+                    securityId: this.securityId,
                     time: latestTime ?? this.initialTimestamp,
                     lengthOfTime: this.buffer,
                     extendedHours: false
@@ -64,7 +71,7 @@ export class ReplayStream implements Stream {
             if (v.ticks.length > 0){
                 let i = 0
                 const store = activeChannels.get(channel)?.store
-                while (i < v.ticks.length && v.ticks[i].time <= simulatedTime) {
+                while (i < v.ticks.length && v.ticks[i].timestamp <= simulatedTime) {
                     store?.set(v.ticks[i])
                     i ++ 
                 }
