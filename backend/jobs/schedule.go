@@ -40,6 +40,7 @@ func eventLoop(now time.Time,conn *utils.Conn) {
     if !eOpenRun && now.After(eOpen) && now.Before(eClose) {
         fmt.Println("running open update")
         startPolygonWS(conn)
+        pushJournals(conn,year,month,day)
         eOpenRun = true
         eCloseRun = false
     }
@@ -52,3 +53,4 @@ func eventLoop(now time.Time,conn *utils.Conn) {
     }
 
 }
+

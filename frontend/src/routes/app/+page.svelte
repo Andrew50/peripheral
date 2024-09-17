@@ -2,6 +2,7 @@
     import Chart from '$lib/features/chart/chart.svelte';
     import RightClick from '$lib/utils/rightClick.svelte';
     import Input from '$lib/utils/input.svelte';
+    import Journal from "$lib/features/journal.svelte"
     import Similar from '$lib/utils/similar.svelte';
     import Study from '$lib/features/study.svelte';
     import Setups from '$lib/features/setups.svelte';
@@ -13,7 +14,8 @@
     import { goto } from '$app/navigation';
     import { get, writable } from 'svelte/store';
     import { browser } from '$app/environment';
-    type Menu = 'study' | 'screen' | 'setups' | 'test' | 'none' | 'watchlist';
+    type Menu = 'study' | 'screen' | 'setups' | 'test' | 'none' | 'watchlist' | "journal";
+    const menus: Menu[] = ['watchlist' ,'screen' ,'study' ,"journal", 'setups' , 'test' ]
     let active_menu: Menu = 'none';
     let minWidth: number;
     let maxWidth: number;
@@ -107,6 +109,7 @@
             class="menu-container"
             style="width: {$menuWidth}px; right: {buttonWidth}px"
         >
+            
             {#if active_menu === 'study'}
                 <Study/>
             {:else if active_menu === "setups"}
@@ -117,40 +120,21 @@
                 <Test/>
             {:else if active_menu === 'watchlist'}
                 <Watchlist/>
+            {:else if active_menu === "journal"}
+                <Journal/>
             {/if}
         </div>
     </div>
     <div class="button-container">
+        {#each menus as menu}
+
         <button
-            class="button {active_menu == 'study' ? 'active' : ''}"
-            on:click={() => toggle_menu('study')}
+            class="button {active_menu == menu ? 'active' : ''}"
+            on:click={() => toggle_menu(menu)}
         >
-            <img class="icon" src="/study.png" alt="" />
+            <img class="icon" src={`${menu}.png`} alt="" />
         </button>
-        <button
-            class="button {active_menu == 'screen' ? 'active' : ''}"
-            on:click={() => toggle_menu('screen')}
-        >
-            <img class="icon" src="/screen.png" alt="" />
-        </button>
-        <button
-            class="button {active_menu == 'setups' ? 'active' : ''}"
-            on:click={() => toggle_menu('setups')}
-        >
-            <img class="icon" src="/setups.png" alt="" />
-        </button>
-        <button
-            class="button {active_menu == 'watchlist' ? 'active' : ''}"
-            on:click={() => toggle_menu('watchlist')}
-        >
-            <img class="icon" src="/watchlist.png" alt="" />
-        </button>
-        <button
-            class="button {active_menu == 'test' ? 'active' : ''}"
-            on:click={() => toggle_menu('test')}
-        >
-            <img class="icon" src="/test.png" alt="" />
-        </button>
+        {/each}
     </div>
 </div>
 

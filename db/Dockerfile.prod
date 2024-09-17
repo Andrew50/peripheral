@@ -1,0 +1,13 @@
+FROM postgres:latest
+ENV POSTGRES_PASSWORD=pass
+RUN apt-get update && apt-get install -y cron
+EXPOSE 5432
+COPY init.sql /docker-entrypoint-initdb.d/init.sql
+COPY securities.csv /docker-entrypoint-initdb.d/securities.csv
+COPY samples.csv /docker-entrypoint-initdb.d/samples.csv
+COPY backup.sh /usr/local/bin/backup.sh
+COPY start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/backup.sh /usr/local/bin/start.sh
+#midnight every day
+RUN (echo "0 0 * * * /usr/local/bin/backup.sh >> /var/log/cron.log 2>&1") | crontab -
+ENTRYPOINT ["usr/local/bin/start.sh"]

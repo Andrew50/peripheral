@@ -22,7 +22,7 @@
         result: RightClickResult
     }
     export type RightClickResult = "edit" | "embed" | "alert" | "embedSimilar" | "none" | "flag"
-    type Source = "chart" | "embedded" | "similar" | "list"
+    type Source = "chart" | "embedded" | "similar" | "list" | "header"
     const inactiveRightClickQuery: RightClickQuery = {
         status:"inactive",
         result: "none",
@@ -32,6 +32,7 @@
     let rightClickQuery: Writable<RightClickQuery> = writable(inactiveRightClickQuery)
 
     export async function queryInstanceRightClick(event:MouseEvent,instance:Instance,source:Source):Promise<RightClickResult>{
+        event.preventDefault()
         console.log(instance,source)
         const rqQ: RightClickQuery = {
             x: event.clientX,

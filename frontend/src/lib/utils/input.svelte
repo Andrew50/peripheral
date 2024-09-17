@@ -92,7 +92,7 @@
                 return {inputValid: false, securities: []}
             }
         }else if(inputType == "timeframe"){
-            const regex = /^\d{1,3}[yqmwds]?$/i;
+            const regex = /^\d{1,3}[yqmwhds]?$/i;
             return {inputValid:regex.test(inputString),securities:[]}
         }else if(inputType == "timestamp"){
             const formats = ["yyyy-MM-dd H:m:ss","yyyy-MM-dd H:m","yyyy-MM-dd H","yyyy-MM-dd",];
