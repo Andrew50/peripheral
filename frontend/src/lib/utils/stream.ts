@@ -69,6 +69,15 @@ export function startReplay(instance : Instance){
     currentStream = replayStream
     currentStream.start(instance)
 }
+export function pauseReplay() {
+    if(currentStream != replayStream) {return;} 
+    currentStream.pause();
+
+}
+export function resumeReplay() {
+    if(currentStream != replayStream) {return;} 
+    currentStream.resume();
+}
 export function stopReplay(){
     currentStream.stop()
     currentStream = realtimeStream
