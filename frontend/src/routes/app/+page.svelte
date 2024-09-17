@@ -7,12 +7,13 @@
     import Setups from '$lib/features/setups.svelte';
     import Screen from '$lib/features/screen.svelte';
     import Test from '$lib/features/test.svelte';
+    import Watchlist from '$lib/features/watchlist.svelte'
     import { onMount } from 'svelte';
     import { privateRequest } from '$lib/core/backend';
     import { goto } from '$app/navigation';
     import { get, writable } from 'svelte/store';
     import { browser } from '$app/environment';
-    type Menu = 'study' | 'screen' | 'setups' | 'test' | 'none';
+    type Menu = 'study' | 'screen' | 'setups' | 'test' | 'none' | 'watchlist';
     let active_menu: Menu = 'none';
     let minWidth: number;
     let maxWidth: number;
@@ -114,6 +115,8 @@
                 <Screen/>
             {:else if active_menu === 'test'}
                 <Test/>
+            {:else if active_menu === 'watchlist'}
+                <Watchlist/>
             {/if}
         </div>
     </div>
@@ -137,10 +140,16 @@
             <img class="icon" src="/setups.png" alt="" />
         </button>
         <button
+            class="button {active_menu == 'watchlist' ? 'active' : ''}"
+            on:click={() => toggle_menu('watchlist')}
+        >
+            <img class="icon" src="/watchlist.png" alt="" />
+        </button>
+        <button
             class="button {active_menu == 'test' ? 'active' : ''}"
             on:click={() => toggle_menu('test')}
         >
-            <img class="icon" src="/setups.png" alt="" />
+            <img class="icon" src="/test.png" alt="" />
         </button>
     </div>
 </div>
