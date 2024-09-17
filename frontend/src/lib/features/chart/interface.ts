@@ -42,7 +42,7 @@ import {writable} from 'svelte/store'
 
 
 export let chartQuery: Writable<Instance> = writable({timestamp:0, extendedHours:false, timeframe:"1d",ticker:""})
-export function changeChart(newInstance : Instance, includeLast : boolean):void{
+export function changeChart(newInstance : Instance, includeLast : boolean = true):void{
     chartQuery.update((oldInstance:Instance)=>{
         const req: ChartRequest = {
             ...oldInstance,
