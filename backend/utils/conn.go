@@ -15,6 +15,7 @@ type Conn struct {
 	DB        *pgxpool.Pool
 	Polygon   *polygon.Client
 	Cache     *redis.Client
+    PolygonKey string
 }
 
 var conn *Conn
@@ -54,8 +55,9 @@ func InitConn(inContainer bool) (*Conn, func()) {
 			break
 		}
 	}
-	polygonConn := polygon.New("ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm")
-	conn = &Conn{DB: dbConn, Cache: cache, Polygon: polygonConn}
+    polygonKey := "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm"
+	polygonConn := polygon.New(polygonKey)
+    conn = &Conn{DB: dbConn, Cache: cache, Polygon: polygonConn,PolygonKey:polygonKey}
 
 	cleanup := func() {
 		conn.DB.Close()
