@@ -15,7 +15,7 @@
     import type {Writable} from 'svelte/store';
     import {writable, get} from 'svelte/store';
     import { onMount, onDestroy  } from 'svelte';
-    import { UTCtoEST, ESTtoUTC, ESTSecondstoUTC, getReferenceStartTimeForDate, timeframeToSeconds} from '$lib/core/timestamp';
+    import { UTCtoEST, ESTtoUTC, ESTSecondstoUTC, getReferenceStartTimeForDateMilliseconds, timeframeToSeconds} from '$lib/core/timestamp';
 	import { getStream, replayStream } from '$lib/utils/stream';
 	//import {websocketManager} from '$lib/utils/webSocketManagerInstance';
     let chartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
@@ -85,6 +85,35 @@
                         chartLatestDataReached = true;
                     }
                 }
+                // Handling the aggregation of the most recent candle 
+                if(inst.timestamp == 0) { // IF REAL TIME DATA 
+
+                    var referenceStartTime = getReferenceStartTimeForDateMilliseconds(newCandleData[newCandleData.length-1].time*1000, inst.extendedHours) // this is in milliseconds 
+                    var timediff = (Date.now() - referenceStartTime)/1000 // this is in seconds
+                    var flooredDifference = Math.floor(timediff/chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds
+                    var newTime = referenceStartTime + flooredDifference*1000
+                    privateRequest<TradeData[]>("getTradeData", {securityId: inst.securityId, time: newTime, lengthOfTime: chartTimeframeInSeconds, extendedHours: inst.extendedHours})
+                    .then((res:Array<any>)=> {
+                        if (!Array.isArray(res) || res.length === 0) {
+                            return 
+                        }
+                        const aggregateOpen = res[0].price;
+                        const aggregateClose = res[res.length-1].price;
+                        var aggregateHigh = res[0].price;
+                        var aggregateLow = res[0].price;
+                        for (let i = 1; i < res.length; i++) {
+                            if (res[i].price > aggregateHigh.price) {
+                                aggregateHigh = res[i].price;
+                            }
+                            if (res[i].price < aggregateLow.price) {
+                                aggregateLow = res[i];
+                            }
+                        }       
+                        newCandleData.push({time: UTCtoEST(newTime / 1000) as UTCTimestamp, open: aggregateOpen, high: aggregateHigh, low: aggregateLow, close: aggregateClose});
+                        newVolumeData.push({time:UTCtoEST(newTime/1000) as UTCTimestamp, value: res.reduce((acc, trade) => acc + trade.size, 0), color: aggregateClose > aggregateOpen ? '#089981' : '#ef5350',});
+                        console.log("added latest candle")
+                    });
+                }
                 queuedLoad = () => {
                     if (inst.direction == "forward") {
                         const visibleRange = chart.timeScale().getVisibleRange()
@@ -115,7 +144,8 @@
             });
     }
     export function updateLatestChartBar(data) {
-        //console.log(data)
+        console.log(data)
+
         if (!data.price || !data.size || !data.timestamp) {return}
         if(chartCandleSeries.data().length == 0 || !chartCandleSeries) {return}
         var mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
@@ -166,7 +196,7 @@
             
             if(data.size < 100) {return }
 
-            var referenceStartTime = getReferenceStartTimeForDate(data.timestamp, get(chartQuery).extendedHours) // this is in milliseconds 
+            var referenceStartTime = getReferenceStartTimeForDateMilliseconds(data.timestamp, get(chartQuery).extendedHours) // this is in milliseconds 
             console.log("Reference Start Time:", referenceStartTime)
             var timeDiff = (data.timestamp - referenceStartTime)/1000 // this is in seconds
             console.log("Time Diff:", timeDiff)
