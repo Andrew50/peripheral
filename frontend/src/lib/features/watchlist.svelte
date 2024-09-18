@@ -8,19 +8,14 @@
     import {privateRequest} from "$lib/core/backend"
     let activeList: Writable<Instance[]> = writable([])
     import {queryInstanceInput} from '$lib/utils/input.svelte'
-    import {flagWatchlistId} from '$lib/core/stores'
+    import {flagWatchlistId,watchlists} from '$lib/core/stores'
 
-    let watchlists: Writable<Watchlist[]> = writable([])
+
     let newWatchlistName="";
     let currentWatchlistId: number;
 
 
     onMount(()=>{
-        privateRequest<Watchlist[]>("getWatchlists",{})
-        .then((v:Watchlist[])=>{
-            console.log(v)
-            watchlists.set(v)
-        })
         selectWatchlist(flagWatchlistId)
     })
 
@@ -66,6 +61,7 @@
     }
     function selectWatchlist(watchlistIdString:string){
         const watchlistId = parseInt(watchlistIdString)
+        currentWatchlistId = watchlistId
         privateRequest<Instance[]>("getWatchlistItems",{watchlistId:watchlistId})
         .then((v:Instance[])=>{
             activeList.set(v)
@@ -78,7 +74,7 @@
 <div class="buttons-container">
 
 {#if Array.isArray($watchlists)}
-    <select id="watchlists" on:change={(event) => selectWatchlist(event.target.value)}>
+    <select id="watchlists" bind:value={currentWatchlistId} on:change={(event) => selectWatchlist(event.target.value)}>
     {#each $watchlists as watchlist}
         <option value={watchlist.watchlistId}>
             {watchlist.watchlistName}
