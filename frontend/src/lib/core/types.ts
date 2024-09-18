@@ -16,11 +16,6 @@ export interface Setup {
     mcap: number;
     activeScreen: boolean
 }
-
-export interface Watch extends Instance {
-  flagged: boolean,
-  itemId?: number
-}
 export interface Watchlist {
     watchlistName: string
     watchlistId: number
