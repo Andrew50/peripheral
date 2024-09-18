@@ -76,7 +76,7 @@
     import {browser} from '$app/environment'
     import {onMount} from 'svelte'
 	import { ESTStringToUTCTimestamp, UTCTimestampToESTString } from '$lib/core/timestamp';
-    let prevFocusedElement: Element | null
+    let prevFocusedElement: HTMLElement | null;
 
     interface ValidateResponse {
         inputValid: boolean
@@ -100,7 +100,6 @@
                 try {
                     const parsedDate = parse(inputString, format, new Date())
                     if (parsedDate != "Invalid Date"){
-                        console.log('valid')
                     //if (isNaN(parsedDate.getTime())){
                         //return {inputValid: await privateRequest<boolean>("validateDateString",{dateString:inputString}),securities:[]}
                         return {inputValid:true,securities:[]}
@@ -121,9 +120,7 @@
         }else if (iQ.inputType === 'timeframe'){
             iQ.instance.timeframe = iQ.inputString
         }else if (iQ.inputType === 'timestamp'){
-            console.log(iQ.inputString)
             iQ.instance.timestamp = ESTStringToUTCTimestamp(iQ.inputString)
-            console.log("Testing", iQ.instance.timestamp)
         }
         iQ.status = "complete" // temp setting, following code will set back to active
         if(iQ.requiredKeys === "any"){ 
@@ -136,16 +133,12 @@
                 }
             }
         }
-        console.log(iQ.status)
-
         iQ.inputString = ""
         iQ.inputType = ""
         iQ.inputValid = true
         return iQ
     }
     function handleKeyDown(event:KeyboardEvent):void {
-        event.stopPropagation();
-        //event.preventDefault()
         let iQ = get(inputQuery)
         if (event.key === 'Escape') {
             iQ.status = "cancelled"
@@ -157,10 +150,8 @@
             }
             inputQuery.set(iQ)
         }else if(event.key == "Tab"){
-            console.log("god")
             event.preventDefault()
             iQ.instance.extendedHours = ! iQ.instance.extendedHours
-            console.log(iQ)
             inputQuery.set({...iQ})
         }else {
             if (/^[a-zA-Z0-9]$/.test(event.key.toLowerCase()) 
@@ -205,13 +196,18 @@
     }
 
     onMount(()=>{
-        inputQuery.subscribe((v:InputQuery)=>{
+        inputQuery.subscribe(async(v:InputQuery)=>{
             if (browser){
                 if (v.status === "initializing"){
                     document.addEventListener('keydown',  handleKeyDown);
+                    prevFocusedElement = document.activeElement as HTMLElement;
                     v.status = "active"
+                    await tick()
+                    const inputWindow = document.getElementById("input-window")
+                    inputWindow.focus()
                     return v
                 }else if(v.status === "inactive"){
+                    prevFocusedElement?.focus()
                     document.removeEventListener('keydown',handleKeyDown);
                 }
             }
@@ -242,7 +238,7 @@
 </script>
 
 {#if $inputQuery.status === "active"}
-    <div class="popup">
+    <div class="popup" id="input-window" tabindex="-1">
         <div class="content">
             {#if $inputQuery.instance && Object.keys($inputQuery.instance).length > 0}
                 <!--{#each Object.entries($inputQuery.instance) as [key, value]}-->
