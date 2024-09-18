@@ -1,8 +1,9 @@
 <!-- rightClick.svlete -->
 <script lang="ts" context="module">
     //import {changeChart} from '$lib/features/chart/chart.svelte'
+    import {flagWatchlist,flagWatchlistId} from '$lib/core/stores'
     import type { Writable } from 'svelte/store';
-    import type {Instance } from '$lib/core/types';
+    import type {Instance,Watch } from '$lib/core/types';
     import {UTCTimestampToESTString} from '$lib/core/timestamp'
 //    let similarInstance: Writable<SimilarInstance> = writable({});
     import { privateRequest} from '$lib/core/backend';
@@ -133,6 +134,30 @@
         })
     }
 
+    function flagSecurity(instance:Instance){
+        const flagInstance = get(flagWatchlist)?.find((v:Watch[]) => v.ticker === instance.ticker)
+        if (flagInstance){
+            privateRequest<void>("deleteWatchlistItem",{watchlistItemId:flagInstance.watchlistItemId})
+            .then(()=>{
+                flagWatchlist.update((v:Watch[])=>{
+                    return v.filter((v:Watch)=>{v.watchlistItemId !== flagInstance})
+                })
+            })
+        }else{
+            privateRequest<number>("newWatchlistItem",{securityId:instance.securityId,watchlistId:flagWatchlistId})
+            .then((watchlistItemId:number)=>{
+                instance = {watchlistItemId:watchlistItemId, ...instance}
+                flagWatchlist.update((v:Watch[])=>{
+                    if (!Array.isArray(v)){
+                        return [v]
+                    }
+                    return [instance,...v]
+                })
+            })
+        }
+    }
+
+
 
 </script>
 {#if $rightClickQuery.status === "active"}
@@ -152,7 +177,7 @@
             <div class="menu-item"><button on:click={()=>completeRequest("edit")}> Edit </button></div>
             <!--<div><button on:click={()=>completeRequest("embdedSimilar")}> Embed Similar </button></div>-->
         {:else if $rightClickQuery.source === "list"}
-            <div class ="menu-item"><button on:click={()=>completeRequest("flag")}>{$rightClickQuery.instance.flagged ? "Unflag" : "Flag"}</button></div>
+            <div class ="menu-item"><button on:click={()=>flagSecurity($rightClickQuery.instance)}>{$rightClickQuery.instance.flagged ? "Unflag" : "Flag"}</button></div>
         {/if}
     </div>
 {/if}

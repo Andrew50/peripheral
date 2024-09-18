@@ -3,15 +3,16 @@
     import List from '$lib/utils/list.svelte'
     import type {Writable} from 'svelte/store'
     import {writable,get} from 'svelte/store'
-    import type {Instance,Watch,Watchlist} from '$lib/core/types'
+    import type {Instance,Watchlist} from '$lib/core/types'
     import {onMount} from "svelte"
     import {privateRequest} from "$lib/core/backend"
-    let activeList: Writable<Watch[]> = writable([])
+    let activeList: Writable<Instance[]> = writable([])
     import {queryInstanceInput} from '$lib/utils/input.svelte'
+    import {flagWatchlistId} from '$lib/core/stores'
 
     let watchlists: Writable<Watchlist[]> = writable([])
     let newWatchlistName="";
-    let currentWatchlistId = 1;
+    let currentWatchlistId: number;
 
 
     onMount(()=>{
@@ -20,7 +21,7 @@
             console.log(v)
             watchlists.set(v)
         })
-        selectWatchlist("1")
+        selectWatchlist(flagWatchlistId)
     })
 
 
@@ -28,7 +29,7 @@
         const inst = {ticker:"",timestamp:0}
         queryInstanceInput(["ticker"],inst).then((i:Instance)=>{
             if (!get(activeList).find((l:Instance)=>l.ticker === i.ticker)){
-                activeList.update((v:Watch[])=>{
+                activeList.update((v:Instance[])=>{
                     privateRequest<number>("newWatchlistItem",{watchlistId:currentWatchlistId,securityId:i.securityId})
                     if (!Array.isArray(v)){
                         return [i]
@@ -57,7 +58,7 @@
             })
         })
     }
-    function deleteItem(item:Watch){
+    function deleteItem(item:Instance){
         if (!item.watchlistItemId){
             throw new Error("missing id on delete")
         }
@@ -65,8 +66,8 @@
     }
     function selectWatchlist(watchlistIdString:string){
         const watchlistId = parseInt(watchlistIdString)
-        privateRequest<Watch[]>("getWatchlistItems",{watchlistId:watchlistId})
-        .then((v:Watch[])=>{
+        privateRequest<Instance[]>("getWatchlistItems",{watchlistId:watchlistId})
+        .then((v:Instance[])=>{
             activeList.set(v)
         })
     }

@@ -36,7 +36,11 @@ export async function publicRequest<T>(func: string, args: any): Promise<T> {
 
 export async function privateRequest<T>(func: string, args: any,verbose=true): Promise<T> {
     let authToken;
-    authToken = sessionStorage.getItem("authToken")
+    try{
+        authToken = sessionStorage.getItem("authToken")
+    }catch{
+        return
+    }
     const headers = {
         'Content-Type': 'application/json',
         ...(authToken ? { 'Authorization': authToken} : {}),
