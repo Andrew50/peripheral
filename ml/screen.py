@@ -31,7 +31,7 @@ def currentTickersAndPrice(conn, dolvolReq, adrReq, mcapReq):
         adr = (high / low - 1) * 100 if low != 0 else 0
         if dolvol>= dolvolReq and adr>= adrReq and mcap>= mcapReq:
             filtered_tickers.append({"ticker":ticker,
-                                     "dt": datetime.datetime.now(),
+                                     "dt": 0,
                                      "label": ticker,
                                      "currentPrice":currentPrice})
 
@@ -42,19 +42,24 @@ def getCurrentSecId(conn,ticker):
     query = f"SELECT securityID from securities where ticker = %s Order by maxdate is null desc,maxdate desc"
     with conn.db.cursor() as cursor:
         cursor.execute(query,(ticker,))
-        return cursor.fetchone()[0]
+
+        val = cursor.fetchone()
+        if val is not None:
+            return val[0]
+        else:
+            return None
 
 def filter(conn, df,tickers, setupId,setupName, threshold):
     url = f"{conn.tf}/v1/models/{setupId}:predict"
     headers = {"Content-Type": "application/json"}
-    print(df.shape)
     payload = {
         "instances": df.tolist()  # Convert numpy array to list for JSON serialization
     }
     response = requests.post(url, json=payload, headers=headers)
     if response.status_code != 200:
         raise Exception(f"Failed to make prediction: {response.text}")
-    scores = response.json().get("predictions", [])
+    result = response.json()
+    scores= result.get("predictions", [])
     results = []
     for ticker, score in zip(tickers, scores):
         if score[0] * 100 >= threshold:
@@ -80,7 +85,7 @@ def screen(conn, setupIds):
         with conn.db.cursor() as cursor:
             cursor.execute('SELECT bars, name FROM setups WHERE setupId = %s', (setupId,))
             bars,setupName = cursor.fetchone()[0:2]
-        cropped_data = data[-bars:, :, :]  # Take the last `bars` from the data
+        cropped_data = data[:, -bars:, :]  # Take the last `bars` from the data
         results += filter(conn, cropped_data, tickers, setupId,setupName, threshold)
     sorted_results = sorted(results, key=lambda x: x['score'], reverse=True)
 

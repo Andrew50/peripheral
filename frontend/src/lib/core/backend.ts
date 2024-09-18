@@ -87,13 +87,14 @@ export async function queueRequest<T>(func: string, args: any,verbose=true): Pro
     if (verbose){
         console.log(payload)
     }
-    const taskID = await response.json()
+    const result = await response.json()
+    const taskId = result.taskId
     return new Promise<T>((resolve, reject) => {
         const intervalID = setInterval(async () => {
             const pollResponse = await fetch(`${base_url}/poll`, {
                 method: 'POST',
                 headers: headers,
-                body: JSON.stringify({taskId:taskID})
+                body: JSON.stringify({taskId:taskId})
             }).catch()
             if (!pollResponse.ok) {
                 const errorMessage = await pollResponse.text();

@@ -1,8 +1,11 @@
-import type {Setup} from '$lib/core/types'
+import type {Setup, Watch,Watchlist} from '$lib/core/types'
 import {writable} from 'svelte/store'
 import type {Writable} from 'svelte/store'
 import {privateRequest} from '$lib/core/backend'
 
+export let setups: Writable<Setup[]> = writable([]);
+export let watchlists: Writable<Watchlist[]> writable([]);
+export let todaysWatchlistId: number;
 privateRequest<Setup[]>('getSetups', {})
 .then((v: Setup[]) => {
     v = v.map((v:Setup) => {
@@ -15,4 +18,14 @@ privateRequest<Setup[]>('getSetups', {})
 .catch((error) => {
     console.error('Error fetching setups:', error);
 });
-export let setups: Writable<Setup[]> = writable([]);
+
+
+
+privateRequest<Watch[]>("getWatchlists",{})
+.then((lists:Watchlist[])=>{
+    todaysWatchlistName = 
+    const todaysWatchlistId = lists.find((v:Watchlist)=>v.watchlistName === "flag")
+    if (!todaysWatchlistId){
+
+
+

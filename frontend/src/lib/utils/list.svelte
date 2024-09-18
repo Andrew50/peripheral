@@ -15,9 +15,8 @@
 
   export let list: Writable<Watch[]> = writable([])
   export let columns: Array<string>;
-  interface Watch extends Instance {
-      flagged: boolean,
-  }
+  export let parentDelete = (v:Instance) => {}
+  import type {Watch} from '$lib/core/types'
 
 
     
@@ -39,6 +38,7 @@
         list.update((v:Watch[])=>{
             return v.filter(s => s !== watch)
         })
+        parentDelete(watch)
     }
     function handleKeydown(event: KeyboardEvent,watch:Watch) {
         console.log(event)

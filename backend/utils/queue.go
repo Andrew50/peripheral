@@ -12,7 +12,8 @@ func Poll(conn *Conn, taskId string)(json.RawMessage, error){
     if task == "" {
         return nil, fmt.Errorf("weh3")
     }
-    return json.RawMessage([]byte(task)), nil
+    result := json.RawMessage([]byte(task)) //its already json and you dont care about its contents utnil frontend so just push the json
+    return result,nil
 }
 type QueueArgs struct {
     ID string `json:"id"`
@@ -36,14 +37,15 @@ func Queue(conn *Conn, funcName string, arguments interface{}) (string, error){
         return "", err
     }
 
-    fmt.Println(funcName)
-    fmt.Println(arguments)
     if err := conn.Cache.LPush(context.Background(), "queue", serializedTask).Err(); err != nil {
         return "", err
     }
-    err = conn.Cache.Set(context.Background(), id, "queued",0).Err()
+    serializedStatus, err := json.Marshal("queued")
     if err != nil {
-        return "", err
+        return "", fmt.Errorf("error marshaling task status: %w", err)
+    }
+    if err := conn.Cache.Set(context.Background(), id, serializedStatus, 0).Err(); err != nil {
+        return "", fmt.Errorf("error setting task status: %w", err)
     }
     return id, nil
 }
