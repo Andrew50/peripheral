@@ -9,32 +9,34 @@ from google.protobuf import text_format
 from tensorflow_serving.config import model_server_config_pb2
 from data import getTensor
 tf.get_logger().setLevel('DEBUG')
-tf.config.threading.set_intra_op_parallelism_threads(4)
-tf.config.threading.set_inter_op_parallelism_threads(4)
+tf.config.threading.set_intra_op_parallelism_threads(6)
+tf.config.threading.set_inter_op_parallelism_threads(6)
 
 SPLIT_RATIO = .8
-TRAINING_CLASS_RATIO = .30
-VALIDATION_CLASS_RATIO = .10
-MIN_RANDOM_NOS = .5
+TRAINING_CLASS_RATIO = .20
+VALIDATION_CLASS_RATIO = .08
+MIN_RANDOM_NOS = .7
 MAX_EPOCHS = 1000
-PATIENCE_EPOCHS = 80
+PATIENCE_EPOCHS = 100
+MIN_EPOCHS = 50
 BATCH_SIZE = 64
+CONV_FILTER_UNITS= [32]
+CONV_FILTER_KERNAL_SIZES = [3]
+BI_LSTM_UNITS = [32,16]
+DROPOUT_PERCENTS = [.2]
 
 def createModel():
     model = Sequential()
     model.add(Input(shape=(None, 4))) # assuming o h l c
-    conv_filter = 64 #32
-    kernal_size = 3
-    lstm_list = [64, 32]
-    dropout = .1
-    model.add(Conv1D(filters=conv_filter, kernel_size=kernal_size, activation='relu'))
-    for units in lstm_list[:-1]:
+    for units,kernal_size in zip(CONV_FILTER_UNITS,CONV_FILTER_KERNAL_SIZES):
+        model.add(Conv1D(filters=units, kernel_size=kernal_size, activation='relu'))
+    for units,dropout in zip(BI_LSTM_UNITS[:-1],DROPOUT_PERCENTS):
         model.add(Bidirectional(LSTM(units=units, return_sequences=True)))
         model.add(Dropout(dropout))
-    model.add(Bidirectional(LSTM(units=lstm_list[-1], return_sequences=False)))
-#    model.add(Flatten()) no need becuase return squecnes = false
+    model.add(Bidirectional(LSTM(units=BI_LSTM_UNITS[-1], return_sequences=False)))
     model.add(Dense(1, activation='sigmoid'))
-    model.compile(optimizer=Adam(learning_rate=1e-3), loss='binary_crossentropy', metrics=[tf.keras.metrics.AUC(curve='PR', name='auc_pr')])
+    model.compile(optimizer=Adam(learning_rate=1e-3), loss='binary_crossentropy', 
+                  metrics=[tf.keras.metrics.AUC(curve='PR', name='auc_pr')])
     return model
     
 
@@ -66,6 +68,7 @@ def train_model(conn,setupID):
         monitor='val_auc_pr',
         patience=PATIENCE_EPOCHS,
         restore_best_weights=True,
+        start_from_epoch=MIN_EPOCHS,
         mode='max',
         verbose =1
     )

@@ -35,6 +35,12 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"getJournalEntry":           tasks.GetJournalEntry,
 	"completeJournal":           tasks.CompleteJournal,
     "getScreensavers":          tasks.GetScreensavers,
+    "getWatchlists": tasks.GetWatchlists,
+    "deleteWatchlist": tasks.DeleteWatchlist,
+    "newWatchlist": tasks.NewWatchlist,
+    "getWatchlistItems":tasks.GetWatchlistItems,
+    "deleteWatchlistItem":tasks.DeleteWatchlistItem,
+    "newWatchlistItem":tasks.NewWatchlistItem,
 }
 
 func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
@@ -52,7 +58,7 @@ func addCORSHeaders(w http.ResponseWriter) {
 
 func handleError(w http.ResponseWriter, err error, context string) bool {
 	if err != nil {
-		logMessage := fmt.Sprintf("Error in %s: %v", context, err)
+		logMessage := fmt.Sprintf("%s: %v", context, err)
 		fmt.Println(logMessage)
 		http.Error(w, logMessage, http.StatusBadRequest)
 		return true
@@ -75,7 +81,7 @@ func public_handler(conn *utils.Conn) http.HandlerFunc {
 		fmt.Println(req.Function)
 		if function, ok := publicFunc[req.Function]; ok {
 			result, err := function(conn, req.Arguments)
-			if handleError(w, err, fmt.Sprintf("executing function %s", req.Function)) {
+			if handleError(w, err, req.Function) {
 				return
 			}
 			err = json.NewEncoder(w).Encode(result)
@@ -111,7 +117,7 @@ func private_handler(conn *utils.Conn) http.HandlerFunc {
 
 		if function, ok := privateFunc[req.Function]; ok {
 			result, err := function(conn, user_id, req.Arguments)
-			if handleError(w, err, fmt.Sprintf("executing function %s", req.Function)) {
+			if handleError(w, err,  req.Function) {
 				return
 			}
 			err = json.NewEncoder(w).Encode(result)
@@ -131,6 +137,7 @@ type QueueRequest struct {
 	Arguments interface{} `json:"args"`
 }
 
+
 func queueHandler(conn *utils.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		addCORSHeaders(w)
@@ -147,12 +154,15 @@ func queueHandler(conn *utils.Conn) http.HandlerFunc {
 		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "decoding request") {
 			return
 		}
-		queueResponse, err := utils.Queue(conn, req.Function, req.Arguments)
+		taskId, err := utils.Queue(conn, req.Function, req.Arguments)
 		if handleError(w, err, "queue") {
 			return
 		}
-		err = json.NewEncoder(w).Encode(queueResponse)
-		if handleError(w, err, "encoding response") {
+        response:=map[string]string{
+            "taskId":taskId,
+        }
+		err = json.NewEncoder(w).Encode(response)
+		if handleError(w, err, "190v0id") {
 			return
 		}
 
@@ -169,23 +179,21 @@ func pollHandler(conn *utils.Conn) http.HandlerFunc {
 		if r.Method != "POST" {
 			return
 		}
-		//		fmt.Println("got poll request")
 		token_string := r.Header.Get("Authorization")
 		_, err := validate_token(token_string)
 		if handleError(w, err, "validating token") {
 			return
 		}
 		var req PollRequest
-		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "decoding request") {
+		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "1m99c") {
 			return
 		}
-		//		fmt.Println(req.TaskId)
 		result, err := utils.Poll(conn, req.TaskId)
 		if handleError(w, err, fmt.Sprintf("executing function %s", req.TaskId)) {
 			return
 		}
 		err = json.NewEncoder(w).Encode(result)
-		if handleError(w, err, "encoding response") {
+		if handleError(w, err, "19inv0id") {
 			return
 		}
 	}
