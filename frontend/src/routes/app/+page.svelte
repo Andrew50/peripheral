@@ -16,6 +16,7 @@
     import { goto } from '$app/navigation';
     import { get, writable } from 'svelte/store';
     import { browser } from '$app/environment';
+    import { currentTimestamp, formatTimestamp, updateTime } from '$lib/core/stores';
     type Menu = 'study' | 'screen' | 'setups' | 'test' | 'none' | 'watchlist' | "journal"|'screensaver' | "replay";
     const menus: Menu[] = ['watchlist' ,'screen' ,'study' ,"journal", 'setups' , 'test','screensaver' , "replay"]
     let active_menu: Menu = 'none';
@@ -25,8 +26,8 @@
     let pix: number;
     let menuWidth = writable(0);
     let buttonWidth: number;
-
-    onMount(() => {
+    let interval;
+    onMount(() => { 
         privateRequest<string>("verifyAuth", {}).catch(() => {
             goto('/login');
         });
@@ -39,7 +40,7 @@
 
             // Set initial value
             handleResize();
-
+            interval = setInterval(updateTime, 1000);
             return () => {
                 window.removeEventListener('resize', handleResize);
             };
@@ -130,6 +131,7 @@
                 <Replay/>
 >>>>>>> 46ff8f08508b21a2c71c9cf54ec85b1dc6833cc7
             {/if}
+
         </div>
     </div>
     <div class="button-container">
@@ -142,6 +144,7 @@
             <img class="icon" src={`${menu}.png`} alt="" />
         </button>
         {/each}
+        <h3>{$currentTimestamp ? formatTimestamp($currentTimestamp) : 'Loading Time...'}</h3>
     </div>
 </div>
 
