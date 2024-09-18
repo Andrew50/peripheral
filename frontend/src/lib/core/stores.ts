@@ -32,6 +32,7 @@ function loadFlagWatchlist(){
 
 privateRequest<Watchlist[]>("getWatchlists",{})
 .then((list:Watchlist[])=>{
+    watchlists.set(list)
     flagWatchlistId = list?.find((v:Watchlist)=>v.watchlistName === "flag").watchlistId
     if (!flagWatchlistId){
         privateRequest<number>("newWatchlist",{watchlistName:"flag"}).then((v:number)=>{
