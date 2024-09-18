@@ -16,7 +16,6 @@
   export let list: Writable<Watch[]> = writable([])
   export let columns: Array<string>;
   export let parentDelete = (v:Instance) => {}
-  import type {Watch} from '$lib/core/types'
 
 
     

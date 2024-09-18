@@ -40,11 +40,13 @@ func NewWatchlist(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	if err != nil {
 		return nil, fmt.Errorf("3og9 invalid args: %v", err)
 	}
-	_,err = conn.DB.Exec(context.Background(), "INSERT INTO watchlists (watchlistName,userId) values ($1,$2) RETURNING watchlistId", args.WatchlistName, userId)
+    var watchlistId int
+    err = conn.DB.QueryRow(context.Background(), "INSERT INTO watchlists (watchlistName,userId) values ($1,$2) RETURNING watchlistId", args.WatchlistName, userId).Scan(&watchlistId)
 	if err != nil {
 		return nil, fmt.Errorf("0n8912")
 	}
-	return nil, err
+
+	return watchlistId, err
 }
 
 
