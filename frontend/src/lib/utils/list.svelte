@@ -11,7 +11,9 @@
   import type {RightClickResult} from "$lib/utils/rightClick.svelte"
   import type { Writable } from 'svelte/store';
   import type {Instance} from '$lib/core/types'
+  import StreamCell from '$lib/utils/streamCell.svelte'
   import {changeChart} from '$lib/features/chart/interface'
+  import {getStream} from "$lib/utils/stream"
 
   export let list: Writable<Watch[]> = writable([])
   export let columns: Array<string>;
@@ -51,16 +53,12 @@
         return
     }
   }
-
-  // Move selection down
   function moveDown() {
     if (selectedRowIndex < $list.length - 1) {
       selectedRowIndex++;
       scrollToRow(selectedRowIndex);
     }
   }
-
-  // Move selection up
   function moveUp() {
     if (selectedRowIndex > 0) {
       selectedRowIndex--;
@@ -69,9 +67,6 @@
     }
     scrollToRow(selectedRowIndex);
     }
-
-
-  // Scroll to selected row
   function scrollToRow(index: number) {
     const row = document.getElementById(`row-${index}`);
     if (row) {
@@ -79,13 +74,9 @@
         changeChart(get(list)[selectedRowIndex])
     }
   }
-
-  // Attach keydown event listener on mount
   onMount(() => {
     window.addEventListener('keydown', handleKeydown);
   });
-
-  // Remove event listener on destroy
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown);
   });
@@ -111,7 +102,12 @@
             on:contextmenu={(event)=>rowRightClick(event,watch)}
           >
           {#each columns as col}
+            {#if col === "change"}
+                <StreamCell ticker={watch.ticker}/>
+            {:else}
                 <td>{watch[col]}</td>
+            {/if}
+
           {/each}
           <td class="delete-cell">
                 <button class="delete-btn" on:click={(event) => {deleteRow(event,watch)}}> ✕ </button>

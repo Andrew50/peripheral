@@ -20,3 +20,9 @@ export interface Watchlist {
     watchlistName: string
     watchlistId: number
 }
+export interface TradeData {
+    timestamp: number;
+    price: number;
+    size: number;
+    exchange: number;
+}
