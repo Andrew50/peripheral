@@ -48,7 +48,7 @@
 
 <button on:click={runScreen}> Screen </button>
 
-<List list={screens} columns={["ticker","setup","score"]}/>
+<List list={screens} columns={["ticker","change","setup","score"]}/>
 
 
 
