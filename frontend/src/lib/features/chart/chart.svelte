@@ -5,6 +5,7 @@
     import Shift from './shift.svelte'
     import {privateRequest} from '$lib/core/backend';
     //import type {Instance, TradeData} from '$lib/core/types'
+    import type {TradeData} from '$lib/core/types'
     import {chartQuery, changeChart} from './interface'
     import type {ShiftOverlay, BarData, ChartRequest, TradeData} from './interface'
     import { queryInstanceInput } from '$lib/utils/input.svelte'
@@ -40,6 +41,8 @@
     let chartTimeframeInSeconds: number; 
     let chartExtendedHours: boolean;
     let unsubscribe = () => {} 
+    let release = () => {}
+    let priceStore: Writable<TradeData>;
 
     function backendLoadChartData(inst:ChartRequest): void{
         if (isLoadingChartData ||!inst.ticker || !inst.timeframe || !inst.securityId) { return; }
@@ -383,6 +386,7 @@
         })
        chartQuery.subscribe((req:ChartRequest)=>{
             unsubscribe() 
+            release()
 
             chartEarliestDataReached = false;
             chartLatestDataReached = false; 
@@ -399,7 +403,8 @@
             }else { chart.applyOptions({timeScale: {timeVisible: true}}); }
             backendLoadChartData(req)
 
-            unsubscribe = getStream(req.ticker, 'fast').subscribe((v) => {
+            [priceStore, release] = getStream(req.ticker, 'fast')
+            unsubscribe = priceStore.subscribe((v) => {
                 updateLatestChartBar(v)
             })
             

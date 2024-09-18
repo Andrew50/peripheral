@@ -18,39 +18,7 @@ export interface Stream {
     unsubscribe(channelName:string): void;
 }
 
-
-/*export interface SlowTrade {
-    time: number; 
-    price: number; 
-}
-
-export interface FastTrade extends SlowTrade{
-    volume: number; 
-    exchange: number; 
-}
-
-export interface Quote {
-    bid: number;
-    ask: number;
-    bidSize: number;
-    askSize: number;
-}*/
-
-export function getStream(ticker:string,channelType:ChannelType) {
-    const channelName = `${ticker}-${channelType}`
-    console.log(channelName)
-    let channel = activeChannels.get(channelName)
-    if (channel){
-        channel.count += 1
-    }else{
-        currentStream.subscribe(channelName)
-        channel = {count:1,store:writable({})}
-    }
-    activeChannels.set(channelName,channel)
-    return channel.store
-}
-export function releaseStream(ticker:string,channelType:ChannelType) {
-    const channelName = `${ticker}-${channelType}`
+export function releaseStream(channelName:string) {
     const activeChannel = activeChannels.get(channelName)
     if (activeChannel){
         activeChannel.count -= 1
@@ -61,6 +29,20 @@ export function releaseStream(ticker:string,channelType:ChannelType) {
             activeChannels.set(channelName,activeChannel)
         }
     }
+}
+
+export function getStream(ticker:string,channelType:ChannelType): [Writable<any>,Function]{
+    const channelName = `${ticker}-${channelType}`
+    console.log(channelName)
+    let channel = activeChannels.get(channelName)
+    if (channel){
+        channel.count += 1
+    }else{
+        currentStream.subscribe(channelName)
+        channel = {count:1,store:writable({})}
+    }
+    activeChannels.set(channelName,channel)
+    return [channel.store, () => releaseStream(channelName)]
 }
   
 

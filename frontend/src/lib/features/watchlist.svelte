@@ -23,12 +23,12 @@
     function addInstance(){
         const inst = {ticker:"",timestamp:0}
         queryInstanceInput(["ticker"],inst).then((i:Instance)=>{
+            if (!Array.isArray(get(activeList))){
+                activeList.set( [i])
+            }
             if (!get(activeList).find((l:Instance)=>l.ticker === i.ticker)){
                 activeList.update((v:Instance[])=>{
                     privateRequest<number>("newWatchlistItem",{watchlistId:currentWatchlistId,securityId:i.securityId})
-                    if (!Array.isArray(v)){
-                        return [i]
-                    }
                     return [i,...v]
                 })
             }
