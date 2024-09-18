@@ -58,6 +58,22 @@ CREATE TABLE journals (
     entry json,
     unique (timestamp, userId)
 );
+CREATE INDEX idxJournalIdUserId on journals(journalId,userId);
+CREATE INDEX idxTimestamp on journals(timestamp);
+CREATE TABLE watchlists (
+    watchlistId serial primary key,
+    userId serial references users(userId) on delete cascade,
+    watchlistName varchar(50) not null,
+    unique(watchlistName,userId)
+);
+CREATE INDEX idxWatchlistIdUserId on watchlists(watchlistId,userId);
+CREATE TABLE watchlistItems (
+    watchlistItemId serial primary key,
+    watchlistId serial references watchlists(watchlistId) on delete cascade,
+    securityId serial references securities(securityId),
+    unqiue(watchlistId,securityId)
+);
+CREATE INDEX idxWatchlistId on watchlistItems(watchlistId);
 COPY securities(securityid, ticker, figi, minDate, maxDate) 
 FROM '/docker-entrypoint-initdb.d/securities.csv' DELIMITER ',' CSV HEADER;
 INSERT INTO users (userId, username, password) VALUES (0, 'user', 'pass');
