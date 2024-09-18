@@ -13,7 +13,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 )
 
 type GetWatchlistsResult struct {
@@ -137,14 +136,19 @@ type NewWatchlistArgs struct {
     WatchlistName string `json:"watchlistName"`
 }
 
-func NewWatchlist(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var args NewWatchlistArgs
+type NewWatchlistItemArgs struct {
+    WatchlistId int `json:"watchlistId"`
+    SecurityId int `json:"securityId"`
+}
+
+func NewWatchlistItem(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args NewWatchlistItemArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
 		return nil, fmt.Errorf("m0ivn0d %v", err)
 	}
 	var watchlistId int
-	err = conn.DB.QueryRow(context.Background(), "INSERT into watchlists (userId,securityId, timestamp) values ($1,$2,$3) RETURNING watchlistId", userId, args.SecurityId, timestamp).Scan(&watchlistId)
+	err = conn.DB.QueryRow(context.Background(), "INSERT into watchlistItems (userId,securityId,watchlistId) values ($1,$2) RETURNING watchlistId", userId, args.SecurityId, args.WatchlistId).Scan(&watchlistId)
 	if err != nil {
 		return nil, err
 	}
