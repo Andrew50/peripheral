@@ -70,8 +70,8 @@ CREATE INDEX idxWatchlistIdUserId on watchlists(watchlistId,userId);
 CREATE TABLE watchlistItems (
     watchlistItemId serial primary key,
     watchlistId serial references watchlists(watchlistId) on delete cascade,
-    securityId serial references securities(securityId),
-    unqiue(watchlistId,securityId)
+    securityId int, --serial references securities(securityId) on delete cascade,
+    unique (watchlistId, securityId)
 );
 CREATE INDEX idxWatchlistId on watchlistItems(watchlistId);
 COPY securities(securityid, ticker, figi, minDate, maxDate) 

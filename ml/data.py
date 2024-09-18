@@ -4,13 +4,12 @@ from tqdm import tqdm
 import requests, numpy as np, datetime, multiprocessing, sys, time
 import asyncio
 import aiohttp
-import numpy as np
 import datetime
 
 def normalize(df: np.ndarray) -> np.ndarray:
     df = np.log(df)
     close_col = np.roll(df[:, 3], shift=1)
-    df = df - close_col[:, np.newaxis]
+    df = df - close_col[:,np.newaxis]
     df = df[1:]
     return df
 
@@ -32,10 +31,16 @@ def get_timeframe(timeframe):
 
 
 async def get_instance_data(session, args):
-    apiKey, ticker, dt, tf, label,bars, currentPrice, pm = args
-    end_time = dt
+    #this shit is uses bandaids and only works for daily
+    apiKey, ticker, dt, tf, label,bars, currentPrice, pm = [args["polygonKey"],
+    args["ticker"],args["dt"],args["tf"],args["label"],args["bars"], args["currentPrice"],args["pm"]]
+    if dt == 0:
+        end_time = datetime.datetime.now() - datetime.timedelta(days=1)
+    else:
+        end_time = dt
     multiplier, timespan = get_timeframe(tf)
-
+    bars += 1 #normalizaton will steal a bar
+ 
     if timespan == 'minute':
         start_time = end_time - datetime.timedelta(minutes=bars * multiplier * 2)
     elif timespan == 'hour':
@@ -69,7 +74,7 @@ async def get_instance_data(session, args):
             return None
 
         data_array = np.zeros((bars, 4))
-        if currentPrice is not None:
+        if currentPrice is not None and currentPrice != 0:
             bars -= 1  # Adjust because a new bar will be added
 
         for j, bar in enumerate(results[-bars:]):
@@ -78,17 +83,19 @@ async def get_instance_data(session, args):
             data_array[j, 2] = bar['l']  # Low
             data_array[j, 3] = bar['c']  # Close
 
-        if currentPrice is not None:
-            data_array[-1, :] = np.float64(currentPrice)
-        else:
-            data_array[-1:] = data_array[-1, 0]
 
+        if dt == 0: #current
+            if currentPrice is not None and currentPrice != 0:
+                data_array[-1, :] = np.float64(currentPrice)
+            else:
+                data_array[-1,:] = data_array[-2, 0]
+        else: #historical
+            data_array[-1,:] = data_array[-1, 0]
         data_array = normalize(data_array)
         return data_array, label
 
 async def async_get_tensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm=False):
-    args = [
-        [conn.polygon, instance["ticker"], instance["dt"], tf, instance["label"], bars, instance.get("currentPrice", None), pm]
+    args = [{"tf":tf,"bars":bars,"pm":pm,"polygonKey":conn.polygon,"ticker":instance["ticker"],"dt":instance["dt"],"label":instance["label"],"currentPrice":instance.get("currentPrice",None)}
         for instance in ticker_dt_label_currentPrice_dict
     ]
     
