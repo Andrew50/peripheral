@@ -84,7 +84,7 @@ export function timeframeToSeconds(timeframe : string): number {
     } 
     return 0 
 }
-export function getReferenceStartTimeForDate(timestamp: number, extendedHours?: boolean): number {
+export function getReferenceStartTimeForDateMilliseconds(timestamp: number, extendedHours?: boolean): number {
     const date = new Date(timestamp);
 
     // Use Intl.DateTimeFormat to determine the offset for America/New_York (Eastern Time)
