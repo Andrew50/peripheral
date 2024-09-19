@@ -79,7 +79,7 @@ services:
 
     cloudflared:
       image: cloudflare/cloudflared:latest
-      command: tunnel run --token eyJhIjoiYTAxOGU0Yzg4YmUwZWQ0NGRhN2VhNTY4YjMxMTZiM2MiLCJ0IjoiMjdjMzY2MGUtMmI4YS00YTE1LWIwMDAtOGVjZWYxMjFmYjdjIiwicyI6IllXUmhPVE5pT0dFdE5qUTBOUzAwWTJZM0xXSTVZV0l0TlRaaU9XVTRObVJoWkdFMiJ9 --no-quic
+      command: tunnel run --token eyJhIjoiYTAxOGU0Yzg4YmUwZWQ0NGRhN2VhNTY4YjMxMTZiM2MiLCJ0IjoiMjdjMzY2MGUtMmI4YS00YTE1LWIwMDAtOGVjZWYxMjFmYjdjIiwicyI6IllXUmhPVE5pT0dFdE5qUTBOUzAwWTJZM0xXSTVZV0l0TlRaaU9XVTRObVJoWkdFMiJ9
       restart: unless-stopped
       networks:
         - compose_network_prod
