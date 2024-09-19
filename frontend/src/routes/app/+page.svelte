@@ -139,6 +139,9 @@
             {/if}
 
         </div>
+        <div class="system-clock">
+            <h3>{$currentTimestamp ? formatTimestamp($currentTimestamp) : 'Loading Time...'}</h3>
+        </div>
     </div>
     <div class="button-container">
         {#each menus as menu}
@@ -150,17 +153,12 @@
             <img class="icon" src={`${menu}.png`} alt="" />
         </button>
         {/each}
-        <h3>{$currentTimestamp ? formatTimestamp($currentTimestamp) : 'Loading Time...'}</h3>
     </div>
 </div>
 
 <style>
     @import "$lib/core/colors.css";
     @import "$lib/core/components.css";
-    .chart {
-        flex: 1;
-        height: 100%;
-    }
     .container {
         /*position: relative;*/
         width: 100%;
@@ -169,9 +167,16 @@
         flex-direction: row;
 
     }
-    .chart {
-        width: 100%;
-        height: 100%;
+    .system-clock {
+        position: absolute;
+        bottom: 5px; /* Adjust this to move it up a bit from the bottom */
+        left: 5px; /* Adjust to align with the menu's width */
+        z-index: 4;
+        background-color: var(--c2);
+        padding: 0px 10px;
+        font-size: 1rem;
+        color: var(--f1);
+        /*box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);*/
     }
     .menu-container {
         max-width: 100%;
