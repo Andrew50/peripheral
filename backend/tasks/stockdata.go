@@ -357,8 +357,8 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	defer rows.Close()
 
 	var tradeDataList []GetTradeDataResults
-	windowStartTime := args.Timestamp
-	windowEndTime := args.Timestamp + args.LengthOfTime
+	windowStartTime := args.Timestamp                        // milliseconds
+	windowEndTime := args.Timestamp + args.LengthOfTime*1000 // milliseconds
 	for rows.Next() {
 		var ticker string
 		var minDateFromSQL *time.Time

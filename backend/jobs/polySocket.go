@@ -16,14 +16,14 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 		log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	} else {
-		fmt.Printf("successfully connected to Polygon")
+		fmt.Printf("\n successfully connected to Polygon Trades \n ")
 	}
 	err = polygonWS.Subscribe(polygonws.StocksMinAggs)
 	if err != nil {
 		log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	} else {
-		fmt.Printf("successfully connected to Polygon")
+		fmt.Printf("\n successfully connected to Polygon \n")
 	}
 	for {
 		select {
