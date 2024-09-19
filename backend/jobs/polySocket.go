@@ -3,6 +3,7 @@ package jobs
 import (
 	"backend/utils"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 
@@ -33,9 +34,27 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 			switch msg := out.(type) {
 			case models.EquityTrade:
 				channelName := fmt.Sprintf("%s-fast", msg.Symbol)
-				data := fmt.Sprintf(`{"ticker": "%s", "price": %v, "size": %v, "timestamp": %v, "channel": "%v"}`, msg.Symbol, msg.Price, msg.Size, msg.Timestamp, channelName)
-				conn.Cache.Publish(context.Background(), "trades-agg", data)
-				conn.Cache.Publish(context.Background(), channelName, data)
+				data := struct {
+					Ticker     string  `json:"ticker"`
+					Price      float64 `json:"price"`
+					Size       int64   `json:"size"`
+					Timestamp  int64   `json:"timestamp"`
+					Conditions []int32 `json:"conditions"`
+					Channel    string  `json:"channel"`
+				}{
+					Ticker:     msg.Symbol,
+					Price:      msg.Price,
+					Size:       msg.Size,
+					Timestamp:  msg.Timestamp,
+					Conditions: msg.Conditions,
+					Channel:    channelName,
+				}
+				jsonData, err := json.Marshal(data)
+				if err != nil {
+					fmt.Println("Error marshling JSON:", err)
+				}
+				conn.Cache.Publish(context.Background(), "trades-agg", string(jsonData))
+				conn.Cache.Publish(context.Background(), channelName, string(jsonData))
 			case models.EquityQuote:
 				data := fmt.Sprintf(`{"ticker": "%s", "bidprice": %v, "bidsize": %v, "bidex": %v, "askprice": %v, "asksize": %v, "askex": %v, "timestamp":%v}`,
 					msg.Symbol, msg.BidPrice, msg.BidSize, msg.BidExchangeID, msg.AskPrice, msg.AskSize, msg.AskExchangeID, msg.Timestamp)
