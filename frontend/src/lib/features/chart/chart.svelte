@@ -210,27 +210,28 @@
                     color: bar.close > bar.open ? '#089981' : '#ef5350'
                 })
                 console.log("Updated with aggregate from polygon")
-            })
-            
-            if(data.size < 100) {return }
 
-            var referenceStartTime = getReferenceStartTimeForDateMilliseconds(data.timestamp, get(chartQuery).extendedHours) // this is in milliseconds 
-            var timeDiff = (data.timestamp - referenceStartTime)/1000 // this is in seconds
-            var flooredDifference = Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds 
-            var newTime = UTCtoEST((referenceStartTime/1000 + flooredDifference)) as UTCTimestamp
+                if(data.size < 100) {return }
 
-            chartCandleSeries.update({
-                time: newTime,
-                open: data.price, 
-                high: data.price,
-                low: data.price,
-                close: data.price
+                var referenceStartTime = getReferenceStartTimeForDateMilliseconds(data.timestamp, get(chartQuery).extendedHours) // this is in milliseconds 
+                var timeDiff = (data.timestamp - referenceStartTime)/1000 // this is in seconds
+                var flooredDifference = Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds 
+                var newTime = UTCtoEST((referenceStartTime/1000 + flooredDifference)) as UTCTimestamp
+
+                chartCandleSeries.update({
+                    time: newTime,
+                    open: data.price, 
+                    high: data.price,
+                    low: data.price,
+                    close: data.price
+                })
+                chartVolumeSeries.update({
+                    time: newTime, 
+                    value: data.size
+                })
+                return 
             })
-            chartVolumeSeries.update({
-                time: newTime, 
-                value: data.size
-            })
-            return 
+
         }
 
     }
