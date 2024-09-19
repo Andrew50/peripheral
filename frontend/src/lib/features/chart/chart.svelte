@@ -104,49 +104,56 @@
                         if (!Array.isArray(res) || res.length === 0) {
                             return 
                         }
-                        const aggregateOpen = res[0].price;
-                        const aggregateClose = res[res.length-1].price;
-                        var aggregateHigh = res[0].price;
-                        var aggregateLow = res[0].price;
-                        for (let i = 1; i < res.length; i++) {
-                            if (res[i].price > aggregateHigh.price) {
-                                aggregateHigh = res[i].price;
+                        var aggregateOpen = 0;
+                        var aggregateClose = 0;
+                        var aggregateHigh = 0;
+                        var aggregateLow = 0;
+                        for (let i = 0; i < res.length; i++) {
+                            if(res[i].size <= 100) {continue;}
+                            if(aggregateOpen == 0) {
+                                aggregateOpen = res[i].price;
                             }
-                            if (res[i].price < aggregateLow.price) {
-                                aggregateLow = res[i];
+                            if(res[i].price > aggregateHigh) {
+                                aggregateHigh = res[i].price
+                            } else if (aggregateLow == 0 || res[i].price < aggregateLow) {
+                                aggregateLow = res[i].price
                             }
-                        }       
+                            aggregateClose = res[i].price
+                        }
+                        console.log(newTime/1000, aggregateOpen, aggregateHigh, aggregateLow, aggregateClose)
                         newCandleData.push({time: UTCtoEST(newTime / 1000) as UTCTimestamp, open: aggregateOpen, high: aggregateHigh, low: aggregateLow, close: aggregateClose});
                         newVolumeData.push({time:UTCtoEST(newTime/1000) as UTCTimestamp, value: res.reduce((acc, trade) => acc + trade.size, 0), color: aggregateClose > aggregateOpen ? '#089981' : '#ef5350',});
                         console.log("added latest candle")
-                    });
-                }
-                queuedLoad = () => {
-                    if (inst.direction == "forward") {
-                        const visibleRange = chart.timeScale().getVisibleRange()
-                        const vrFrom = visibleRange?.from as Time
-                        const vrTo = visibleRange?.to as Time
-                        chartCandleSeries.setData(newCandleData);
-                        chartVolumeSeries.setData(newVolumeData);
-                        chart.timeScale().setVisibleRange({from: vrFrom, to: vrTo})
-                    }else if (inst.direction == "backward"){
-                        chartCandleSeries.setData(newCandleData);
-                        chartVolumeSeries.setData(newVolumeData);
-                    }
-                    queuedLoad = null
-                    sma10Series.setData(calculateSMA(newCandleData, 10));
-                    sma20Series.setData(calculateSMA(newCandleData, 20));
-                    adr20Series.setData(calculateADR(newCandleData,20));
-                    if (inst.requestType == 'loadNewTicker') {
-                        chart.timeScale().fitContent();
-                        chart.timeScale().applyOptions({
+
+                        queuedLoad = () => {
+                        if (inst.direction == "forward") {
+                            const visibleRange = chart.timeScale().getVisibleRange()
+                            const vrFrom = visibleRange?.from as Time
+                            const vrTo = visibleRange?.to as Time
+                            chartCandleSeries.setData(newCandleData);
+                            chartVolumeSeries.setData(newVolumeData);
+                            chart.timeScale().setVisibleRange({from: vrFrom, to: vrTo})
+                        }else if (inst.direction == "backward"){
+                            console.log(newCandleData)
+                            chartCandleSeries.setData(newCandleData);
+                            chartVolumeSeries.setData(newVolumeData);
+                        }
+                        queuedLoad = null
+                        sma10Series.setData(calculateSMA(newCandleData, 10));
+                        sma20Series.setData(calculateSMA(newCandleData, 20));
+                        adr20Series.setData(calculateADR(newCandleData,20));
+                        if (inst.requestType == 'loadNewTicker') {
+                            chart.timeScale().fitContent();
+                            chart.timeScale().applyOptions({
                             rightOffset: 10
-                        });
-                    }
-                    isLoadingChartData = false; // Ensure this runs after data is loaded
-                }
-                if (inst.direction == "backward" || inst.requestType == "loadNewTicker"){
-                    queuedLoad()
+                            });
+                        }
+                        isLoadingChartData = false; // Ensure this runs after data is loaded
+                        }
+                        if (inst.direction == "backward" || inst.requestType == "loadNewTicker"){
+                            queuedLoad()
+                        }
+                    });
                 }
             })
             .catch((error: string) => {
@@ -155,7 +162,7 @@
             });
     }
     export function updateLatestChartBar(data) {
-        console.log(data)
+
 
         if (!data.price || !data.size || !data.timestamp) {return}
         if(chartCandleSeries.data().length == 0 || !chartCandleSeries) {return}
@@ -203,30 +210,28 @@
                     color: bar.close > bar.open ? '#089981' : '#ef5350'
                 })
                 console.log("Updated with aggregate from polygon")
-            })
-            
-            if(data.size < 100) {return }
 
-            var referenceStartTime = getReferenceStartTimeForDateMilliseconds(data.timestamp, get(chartQuery).extendedHours) // this is in milliseconds 
-            console.log("Reference Start Time:", referenceStartTime)
-            var timeDiff = (data.timestamp - referenceStartTime)/1000 // this is in seconds
-            console.log("Time Diff:", timeDiff)
-            var flooredDifference = Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds 
-            console.log("Floored Difference:", flooredDifference)
-            var newTime = UTCtoEST((referenceStartTime/1000 + flooredDifference)) as UTCTimestamp
+                if(data.size < 100) {return }
 
-            chartCandleSeries.update({
-                time: newTime,
-                open: data.price, 
-                high: data.price,
-                low: data.price,
-                close: data.price
+                var referenceStartTime = getReferenceStartTimeForDateMilliseconds(data.timestamp, get(chartQuery).extendedHours) // this is in milliseconds 
+                var timeDiff = (data.timestamp - referenceStartTime)/1000 // this is in seconds
+                var flooredDifference = Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds 
+                var newTime = UTCtoEST((referenceStartTime/1000 + flooredDifference)) as UTCTimestamp
+
+                chartCandleSeries.update({
+                    time: newTime,
+                    open: data.price, 
+                    high: data.price,
+                    low: data.price,
+                    close: data.price
+                })
+                chartVolumeSeries.update({
+                    time: newTime, 
+                    value: data.size
+                })
+                return 
             })
-            chartVolumeSeries.update({
-                time: newTime, 
-                value: data.size
-            })
-            return 
+
         }
 
     }
