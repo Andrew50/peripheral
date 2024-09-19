@@ -37,7 +37,7 @@ func eventLoop(now time.Time,conn *utils.Conn) {
     eClose := time.Date(year,month,day,16,0,0,0,now.Location())
     //open := time.Date(year, month, day, 9, 30, 0, 0, now.Location())
     //close_ := time.Date(year, month, day, 16, 0, 0, 0, now.Location())
-    if !eOpenRun && now.After(eOpen) {
+    if !eOpenRun && now.After(eOpen) && now.Before(eClose) {
         fmt.Println("running open update")
         startPolygonWS(conn)
         pushJournals(conn,year,month,day)
