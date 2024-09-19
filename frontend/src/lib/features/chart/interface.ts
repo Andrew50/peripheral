@@ -34,6 +34,9 @@ import type { UTCTimestamp } from 'lightweight-charts'
 import type {Writable} from 'svelte/store'
 import {writable} from 'svelte/store'
 
+export let selectedChartId: number
+
+export function setActiveChart(chartId:number){selectedChartId = chartId}
 
 export let chartQuery: Writable<Instance> = writable({timestamp:0, extendedHours:false, timeframe:"1d",ticker:""})
 export function changeChart(newInstance : Instance, includeLast : boolean = true):void{
