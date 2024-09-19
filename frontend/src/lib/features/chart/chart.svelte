@@ -4,7 +4,7 @@
     import Shift from './shift.svelte'
     import {privateRequest} from '$lib/core/backend';
     import type {Instance, TradeData} from '$lib/core/types'
-    import {chartQuery, changeChart} from './interface'
+    import {setActiveChart,chartQuery, changeChart,selectedChartId} from './interface'
     import type {ShiftOverlay, BarData, ChartRequest} from './interface'
     import { queryInstanceInput } from '$lib/utils/input.svelte'
     import { queryInstanceRightClick } from '$lib/utils/rightClick.svelte'
@@ -35,6 +35,7 @@
     const shiftOverlay: Writable<ShiftOverlay> = writable({ x: 0, y: 0, startX: 0, startY: 0, width: 0, height: 0, isActive: false, startPrice: 0, currentPrice: 0, })
     
     export let chartId: number;
+    export let width: number;
     let chartTicker: string;
     let chartSecurityId: number; 
     let chartTimeframe: string; 
@@ -45,6 +46,7 @@
     let priceStore: Writable<TradeData>;
     let touchStartX: number;
     let touchStartY: number;
+    let chartInstance: Instance;
 
     function backendLoadChartData(inst:ChartRequest): void{
         if (isLoadingChartData ||!inst.ticker || !inst.timeframe || !inst.securityId) { return; }
@@ -252,7 +254,7 @@
             timeScale:  { 
                 timeVisible: true },
             };
-        const chartContainer = document.getElementById('chart_container');
+        const chartContainer = document.getElementById(`chart_container-${chartId}`);
         if (!chartContainer) {return;}
         //init event listeners
         chartContainer.addEventListener('contextmenu', (event:MouseEvent) => {
@@ -289,6 +291,7 @@
             }
         })
         chartContainer.addEventListener('mousedown',event  => {
+            setActiveChart(chartId)
             if (shiftDown || get(shiftOverlay).isActive){
                 shiftOverlay.update((v:ShiftOverlay) => {
                     v.isActive = !v.isActive
@@ -309,6 +312,7 @@
             }
         })
         chartContainer.addEventListener('touchstart',(event) => {
+            setActiveChart(chartId)
             const touch = event.touches[0];
             touchStartX = touch.clientX
             touchStartY = touch.clientY
@@ -326,6 +330,7 @@
         })
 
         chartContainer.addEventListener('keydown', (event) => {
+            setActiveChart(chartId)
             if (event.key == "r" && event.altKey){
                 chart.timeScale().resetTimeScale()
             }else if (event.key == "Tab" || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
@@ -357,7 +362,7 @@
         const smaOptions = { lineWidth: 1, priceLineVisible: false, lastValueVisible:false} as DeepPartial<LineWidth>
         sma10Series = chart.addLineSeries({ color: 'purple',...smaOptions});
         sma20Series = chart.addLineSeries({ color: 'blue', ...smaOptions});
-        adr20Series = chart.addLineSeries({ color: 'orange', lineWidth:1,priceLineVisible:false,priceScaleId:'left'});
+        //adr20Series = chart.addLineSeries({ color: 'orange', lineWidth:1,priceLineVisible:false,priceScaleId:'left'});
         chart.subscribeCrosshairMove((param)=>{
             if (!param.point) {
                 return;
@@ -401,6 +406,7 @@
             }
         })
        chartQuery.subscribe((req:ChartRequest)=>{
+           if (chartId !== selectedChartId){return}
             unsubscribe() 
             release()
 
@@ -411,6 +417,7 @@
             chartTicker = req.ticker;
             chartSecurityId = req.securityId ;
             chartTimeframe = req.timeframe;
+            chartInstance = req
             chartTimeframeInSeconds = timeframeToSeconds(req.timeframe);
             chartExtendedHours = req.extendedHours;
             if (req.timeframe?.includes('m') || req.timeframe?.includes('w') || 
@@ -433,7 +440,13 @@
     });
 </script>
 
-<div autofocus id="chart_container" style="width: {width}px" tabindex="0"></div>
-<Legend hoveredCandleData={hoveredCandleData} />
+<div autofocus class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
+<Legend instance={chartInstance} hoveredCandleData={hoveredCandleData} />
 <Shift shiftOverlay={shiftOverlay}/>
+</div>
+<style>
+.chart {
+    position:relative;
+}
+</style>
 

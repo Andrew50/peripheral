@@ -3,6 +3,7 @@
     import ChartContainer from "$lib/features/chart/chartContainer.svelte"
     import RightClick from '$lib/utils/rightClick.svelte';
     import Input from '$lib/utils/input.svelte';
+    import Settings from "$lib/features/settings.svelte"
     import Journal from "$lib/features/journal.svelte"
     import Similar from '$lib/utils/similar.svelte';
     import Study from '$lib/features/study.svelte';
@@ -19,8 +20,8 @@
     import { browser } from '$app/environment';
     import {initStores} from '$lib/core/stores'
     import { currentTimestamp, formatTimestamp, updateTime } from '$lib/core/stores';
-    type Menu = 'study' | 'screen' | 'setups' | 'test' | 'none' | 'watchlist' | "journal"|'screensaver' | "replay";
-    const menus: Menu[] = ['watchlist' ,'screen' ,'study' ,"journal", 'setups' , 'test','screensaver' , "replay"]
+    type Menu = 'study' | 'screen' | 'setups' | 'test' | 'none' | 'watchlist' | "journal"|'screensaver' | "replay" | "settings";
+    const menus: Menu[] = ['watchlist' ,'screen' ,'study' ,"journal", 'setups' ,'screensaver' , "replay", "settings"] //,'test'
     let active_menu: Menu = 'none';
     let minWidth: number;
     let maxWidth: number;
@@ -105,7 +106,8 @@
     <RightClick/>
     <Similar/>
     <div class="container">
-        <Chart width = {pix - $menuWidth - buttonWidth}/>
+        <!--<Chart width={pix - $menuWidth - buttonWidth}/>-->
+       <ChartContainer width={pix - $menuWidth - buttonWidth}/>
         <div
             on:mousedown={startResize}
             class="resize-handle"
@@ -122,8 +124,8 @@
                 <Setups/>
             {:else if active_menu === 'screen'}
                 <Screen/>
-            {:else if active_menu === 'test'}
-                <Test/>
+            <!--{:else if active_menu === 'test'}
+                <Test/>-->
             {:else if active_menu === 'watchlist'}
                 <Watchlist/>
             {:else if active_menu === "journal"}
@@ -132,7 +134,8 @@
                 <Screensaver/>
             {:else if active_menu === 'replay'}
                 <Replay/>
->>>>>>> 46ff8f08508b21a2c71c9cf54ec85b1dc6833cc7
+            {:else if active_menu === "settings"}
+                <Settings/>
             {/if}
 
         </div>

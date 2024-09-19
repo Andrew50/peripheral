@@ -2,11 +2,13 @@
 <script lang='ts'>
     export let hoveredCandleData;
     import {chartQuery} from './interface'
+    import type {Instance} from '$lib/core/types'
+    export let instance: Instance
 </script>
 <div class="legend">
     <div class="query">
-    {$chartQuery.ticker ?? "NA"}
-    {$chartQuery.timeframe ?? "NA"}
+    {instance?.ticker ?? "NA"}
+    {instance?.timeframe ?? "NA"}
     </div>
     <div class="ohlcv">
         O: {$hoveredCandleData.open}
@@ -26,7 +28,7 @@
     border-radius: 2px;
     font-family: Arial, sans-serif;
     color: white; /* Grey text color */
-    z-index: 1000;
+    z-index: 900;
 }
     .query {
         font-size: 30px;
