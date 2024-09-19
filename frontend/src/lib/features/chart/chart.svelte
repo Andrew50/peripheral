@@ -1,18 +1,16 @@
 <!-- chart.svelte-->
 <script lang="ts">
-    export let width: number;
     import Legend from './legend.svelte'
     import Shift from './shift.svelte'
     import {privateRequest} from '$lib/core/backend';
-    //import type {Instance, TradeData} from '$lib/core/types'
-    import type {TradeData} from '$lib/core/types'
+    import type {Instance, TradeData} from '$lib/core/types'
     import {chartQuery, changeChart} from './interface'
-    import type {ShiftOverlay, BarData, ChartRequest, TradeData} from './interface'
+    import type {ShiftOverlay, BarData, ChartRequest} from './interface'
     import { queryInstanceInput } from '$lib/utils/input.svelte'
     import { queryInstanceRightClick } from '$lib/utils/rightClick.svelte'
     import { createChart, ColorType,CrosshairMode} from 'lightweight-charts';
     import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, UTCTimestamp,HistogramStyleOptions, HistogramData, HistogramSeriesOptions} from 'lightweight-charts';
-    import {calculateSMA} from './indicators'
+    import {calculateSMA,calculateADR,calculateRVOL} from './indicators'
     import type {Writable} from 'svelte/store';
     import {writable, get} from 'svelte/store';
     import { onMount, onDestroy  } from 'svelte';
@@ -22,6 +20,7 @@
     let chartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let chartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
     let sma10Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
+    let adr20Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
     let sma20Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
     let chart: IChartApi;
     let latestCrosshairPositionTime: number;
@@ -35,6 +34,7 @@
     const hoveredCandleData = writable({ open: 0, high: 0, low: 0, close: 0, volume: 0, })
     const shiftOverlay: Writable<ShiftOverlay> = writable({ x: 0, y: 0, startX: 0, startY: 0, width: 0, height: 0, isActive: false, startPrice: 0, currentPrice: 0, })
     
+    export let chartId: number;
     let chartTicker: string;
     let chartSecurityId: number; 
     let chartTimeframe: string; 
@@ -43,6 +43,8 @@
     let unsubscribe = () => {} 
     let release = () => {}
     let priceStore: Writable<TradeData>;
+    let touchStartX: number;
+    let touchStartY: number;
 
     function backendLoadChartData(inst:ChartRequest): void{
         if (isLoadingChartData ||!inst.ticker || !inst.timeframe || !inst.securityId) { return; }
@@ -132,8 +134,12 @@
                     queuedLoad = null
                     sma10Series.setData(calculateSMA(newCandleData, 10));
                     sma20Series.setData(calculateSMA(newCandleData, 20));
+                    adr20Series.setData(calculateADR(newCandleData,20));
                     if (inst.requestType == 'loadNewTicker') {
                         chart.timeScale().fitContent();
+                        chart.timeScale().applyOptions({
+                            rightOffset: 10
+                        });
                     }
                     isLoadingChartData = false; // Ensure this runs after data is loaded
                 }
@@ -302,17 +308,26 @@
                 })
             }
         })
+        chartContainer.addEventListener('touchstart',(event) => {
+            const touch = event.touches[0];
+            touchStartX = touch.clientX
+            touchStartY = touch.clientY
+        })
+        chartContainer.addEventListener('touchend',(event) => {
+            const touch = event.changedTouches[0]
+            const distX = Math.abs(touch.clientX - touchStartX)
+            const distY = Math.abs(touch.clientY - touchStartY)
+            if (distX < 10 && distY << 10){
+                queryInstanceInput("any",get(chartQuery))
+                .then((v:Instance)=>{
+                    changeChart(v, true)
+                }).catch()
+            }
+        })
+
         chartContainer.addEventListener('keydown', (event) => {
             if (event.key == "r" && event.altKey){
-                const da = chartCandleSeries.data()
-                const chartWidthPix = chartContainer ? chartContainer.offsetWidth : window.innerWidth;
-                const numBars = Math.floor(chartWidthPix / 10);
-                console.log(numBars)
-                chart.timeScale().setVisibleRange({
-                    from: da[da.length-numBars].time, // start from the beginning of the data
-                    to: da[da.length-1].time, // end at the last point
-                })
-     //           chart.timeScale().fitContent()
+                chart.timeScale().resetTimeScale()
             }else if (event.key == "Tab" || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
                 queryInstanceInput("any",get(chartQuery))
                 .then((v:Instance)=>{
@@ -342,6 +357,7 @@
         const smaOptions = { lineWidth: 1, priceLineVisible: false, lastValueVisible:false} as DeepPartial<LineWidth>
         sma10Series = chart.addLineSeries({ color: 'purple',...smaOptions});
         sma20Series = chart.addLineSeries({ color: 'blue', ...smaOptions});
+        adr20Series = chart.addLineSeries({ color: 'orange', lineWidth:1,priceLineVisible:false,priceScaleId:'left'});
         chart.subscribeCrosshairMove((param)=>{
             if (!param.point) {
                 return;
@@ -403,7 +419,9 @@
             }else { chart.applyOptions({timeScale: {timeVisible: true}}); }
             backendLoadChartData(req)
 
-            [priceStore, release] = getStream(req.ticker, 'fast')
+            const [s, r] = getStream(req.ticker, 'fast')
+            priceStore = s
+            release = r
             unsubscribe = priceStore.subscribe((v) => {
                 updateLatestChartBar(v)
             })

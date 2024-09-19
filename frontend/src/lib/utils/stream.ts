@@ -42,7 +42,7 @@ export function getStream(ticker:string,channelType:ChannelType): [Writable<any>
         channel = {count:1,store:writable({})}
     }
     activeChannels.set(channelName,channel)
-    return [channel.store, () => releaseStream(channelName)]
+    return [channel.store, (()=>releaseStream(channelName))]
 }
   
 

@@ -1,5 +1,6 @@
 <script lang='ts'>
     import Chart from '$lib/features/chart/chart.svelte';
+    import ChartContainer from "$lib/features/chart/chartContainer.svelte"
     import RightClick from '$lib/utils/rightClick.svelte';
     import Input from '$lib/utils/input.svelte';
     import Journal from "$lib/features/journal.svelte"
@@ -16,6 +17,7 @@
     import { goto } from '$app/navigation';
     import { get, writable } from 'svelte/store';
     import { browser } from '$app/environment';
+    import {initStores} from '$lib/core/stores'
     import { currentTimestamp, formatTimestamp, updateTime } from '$lib/core/stores';
     type Menu = 'study' | 'screen' | 'setups' | 'test' | 'none' | 'watchlist' | "journal"|'screensaver' | "replay";
     const menus: Menu[] = ['watchlist' ,'screen' ,'study' ,"journal", 'setups' , 'test','screensaver' , "replay"]
@@ -31,6 +33,7 @@
         privateRequest<string>("verifyAuth", {}).catch(() => {
             goto('/login');
         });
+        initStores()
         if (browser) {
             function handleResize() {
                 pix = window.innerWidth;

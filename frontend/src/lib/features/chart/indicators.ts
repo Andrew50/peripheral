@@ -31,4 +31,8 @@ export function calculateADR(data: CandlestickData[],period: number): {time: UTC
 }
 
 
-export function calculateRVOL(data: CandlestickData[],volume:VolumeData){}
+export function calculateRVOL(data: CandlestickData[],volume:VolumeData){
+
+
+
+}
