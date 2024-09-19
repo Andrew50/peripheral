@@ -68,24 +68,24 @@ services:
         build:
             context: ./nginx
             dockerfile: Dockerfile
-        ports:
-          - "80:80"
+              #ports:
+              #- "80:80"
         depends_on:
           - backend
           - frontend
         networks:
           - compose_network_prod
 
-    ngrok:
-      image: wernight/ngrok
+
+    cloudflared:
+      image: cloudflare/cloudflared:latest
+      container_name: cloudflared
+      command: tunnel --no-autoupdate run --token eyJhIjoiYTAxOGU0Yzg4YmUwZWQ0NGRhN2VhNTY4YjMxMTZiM2MiLCJ0IjoiMjdjMzY2MGUtMmI4YS00YTE1LWIwMDAtOGVjZWYxMjFmYjdjIiwicyI6IllXUmhPVE5pT0dFdE5qUTBOUzAwWTJZM0xXSTVZV0l0TlRaaU9XVTRObVJoWkdFMiJ9
       environment:
-        - NGROK_AUTHTOKEN=1SmYb49nNgTSmpcCXYkB7iRejpA_5XsS79e9YixEFoMgzYZTT
-        - NGROK_PORT=nginx:80
+        - TUNNEL_URL=http://nginx:80
+      restart: unless-stopped
       networks:
         - compose_network_prod
-      ports:
-        - "4040:4040"
-
         
 
 volumes:
