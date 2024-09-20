@@ -14,6 +14,7 @@
   export let parentDelete = (v:Instance) => {}
 
     function isFlagged(instance:Instance, flagWatch: Instance[]){
+        if (!Array.isArray(flagWatch)) return false;
       return flagWatch.some(item => item.ticker === instance.ticker);
   }
 
@@ -180,10 +181,6 @@
     border-bottom: 1px solid var(--c4);
   }
 
-  tr:hover {
-    background-color: var(--c2);
-    cursor: pointer;
-  }
 
 </style>
 

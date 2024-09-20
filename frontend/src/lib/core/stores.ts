@@ -35,12 +35,14 @@ export function initStores(){
     privateRequest<Watchlist[]>("getWatchlists",{})
     .then((list:Watchlist[])=>{
         watchlists.set(list)
-        flagWatchlistId = list?.find((v:Watchlist)=>v.watchlistName === "flag").watchlistId
-        if (!flagWatchlistId){
+        const flagWatch = list?.find((v:Watchlist)=>v.watchlistName === "flag")
+        if (flagWatch === undefined){
             privateRequest<number>("newWatchlist",{watchlistName:"flag"}).then((v:number)=>{
                 flagWatchlistId = v
                 loadFlagWatchlist()
             })
+        }else{
+            flagWatchlistId = flagWatch.watchlistId
         }
         loadFlagWatchlist()
 

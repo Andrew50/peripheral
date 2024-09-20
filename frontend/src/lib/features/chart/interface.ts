@@ -35,7 +35,7 @@ import type { UTCTimestamp } from 'lightweight-charts'
 import type {Writable} from 'svelte/store'
 import {writable} from 'svelte/store'
 
-export let selectedChartId: number
+export let selectedChartId: number = 1
 
 export function setActiveChart(chartId:number){selectedChartId = chartId}
 
