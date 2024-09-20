@@ -1,13 +1,12 @@
 package utils
 
-
 import (
 	"context"
 	"encoding/json"
-    "os"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/go-redis/redis/v8"
@@ -27,11 +26,13 @@ type Client struct {
 	send chan []byte
 }
 
-/*return a fuction to be run when /ws endpoint is hit.
-this function (when hit) will make the connection a websocket and then 
+/*
+return a fuction to be run when /ws endpoint is hit.
+this function (when hit) will make the connection a websocket and then
 makes a new client. it then starts the goroutine that will handle chan updates caused by the redis pubsub
 asynynchrnously and then syncronolously (not really because the server is already running this whole thing as a goroutine)
-checks for websocket messages from the frontend.*/
+checks for websocket messages from the frontend.
+*/
 func WsFrontendHandler(conn *Conn) http.HandlerFunc {
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -52,9 +53,12 @@ func WsFrontendHandler(conn *Conn) http.HandlerFunc {
 		client.readPump(conn)
 	}
 }
-/*handles updates to the channel of the client. these updates are sent by a goruotine that listens to 
+
+/*
+handles updates to the channel of the client. these updates are sent by a goruotine that listens to
 pub sub from redis and then iterates through all the subscribeers (possibly one of them being this client).
-this function simply sends the message to the frontend. it has to lock to prevent concurrent writes to the socket*/
+this function simply sends the message to the frontend. it has to lock to prevent concurrent writes to the socket
+*/
 func (c *Client) writePump() {
 	defer c.ws.Close()
 	for {
@@ -73,7 +77,10 @@ func (c *Client) writePump() {
 		}
 	}
 }
-/* "blocking" function that listens to the client webscoket (not polygon) for subscrib
+
+/*
+	"blocking" function that listens to the client webscoket (not polygon) for subscrib
+
 and unsubscribe messages. breaks the loop when the socket is closed
 */
 func (c *Client) readPump(conn *Conn) {
@@ -98,7 +105,7 @@ func (c *Client) readPump(conn *Conn) {
 			continue
 		}
 		fmt.Printf("message receieved %s\n", clientMsg)
-        os.Stdout.Sync()
+		os.Stdout.Sync()
 		switch clientMsg.Action {
 		case "subscribe":
 			c.subscribe(conn, clientMsg.ChannelName)
@@ -110,14 +117,18 @@ func (c *Client) readPump(conn *Conn) {
 
 	}
 }
-/* subscribes the client webscoket (client struct really) to the redis pub/sub
-for the requested channel name. if the redis pub sub doenst exist yet then it creates it, and then runs the 
+
+/*
+	subscribes the client webscoket (client struct really) to the redis pub/sub
+
+for the requested channel name. if the redis pub sub doenst exist yet then it creates it, and then runs the
 goroutine that handles the redis pubsubs. if it already exists the pushing of updates to the subscribers (Client structs /
-client webscokets) is already happening. either way it 
-adds the client to the list of client subsrcibed to that channel (subscribers variable)*/
+client webscokets) is already happening. either way it
+adds the client to the list of client subsrcibed to that channel (subscribers variable)
+*/
 func (c *Client) subscribe(conn *Conn, channelName string) {
 	channelsMutex.Lock()
-        os.Stdout.Sync()
+	os.Stdout.Sync()
 
 	subscribers, exists := channelSubscribers[channelName]
 	if !exists {
@@ -132,21 +143,21 @@ func (c *Client) subscribe(conn *Conn, channelName string) {
 		go handleRedisChannel(pubsub, channelName)
 	}
 	channelsMutex.Unlock()
-    go func() {
-        initialValue,err := getInitialStreamValue(channelName,conn)
-        fmt.Println(initialValue)
-        if err != nil {
-            fmt.Println("Error fetching initial value from API:", err)
-            return
-        }
-        c.mu.Lock()
-        fmt.Println(initialValue)
-        defer c.mu.Unlock()
-        err = c.ws.WriteMessage(websocket.TextMessage, []byte(initialValue))
-        if err != nil {
-            log.Println("WebSocket write error while sending initial value:", err)
-        }
-    }()
+	go func() {
+		initialValue, err := getInitialStreamValue(channelName, conn)
+		fmt.Println(initialValue)
+		if err != nil {
+			fmt.Println("Error fetching initial value from API:", err)
+			return
+		}
+		c.mu.Lock()
+		fmt.Println(initialValue)
+		defer c.mu.Unlock()
+		err = c.ws.WriteMessage(websocket.TextMessage, []byte(initialValue))
+		if err != nil {
+			log.Println("WebSocket write error while sending initial value:", err)
+		}
+	}()
 }
 
 func (c *Client) unsubscribe(channelName string) {
@@ -164,10 +175,13 @@ func (c *Client) unsubscribe(channelName string) {
 		}
 	}
 }
-/*ones of the is ran as a goroutine for each redis pubsub channel (ticker + channel type)
+
+/*
+ones of the is ran as a goroutine for each redis pubsub channel (ticker + channel type)
 when a message comes it iteraties through the list of clients structs subscribed to the channel
 and sends a message to the chan of each which will then be handled by the gourtoune running the writePump
-function for that client*/
+function for that client
+*/
 func handleRedisChannel(pubsub *redis.PubSub, channelName string) {
 	for msg := range pubsub.Channel() {
 		channelsMutex.RLock()
@@ -183,9 +197,13 @@ func handleRedisChannel(pubsub *redis.PubSub, channelName string) {
 		}
 	}
 }
-/* when a client unsubscribes from a channel (ticker + channel type) then it removes the client from the
+
+/*
+	when a client unsubscribes from a channel (ticker + channel type) then it removes the client from the
+
 list of clients subscribed to that channel. if there are no more subscribes then it also removes the subscription
-to the red pub sub*/
+to the red pub sub
+*/
 func (c *Client) close() {
 	channelsMutex.Lock()
 	defer channelsMutex.Unlock()
