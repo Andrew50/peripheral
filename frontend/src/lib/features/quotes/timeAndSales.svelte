@@ -36,7 +36,7 @@
         unsubscribeTrade = store.subscribe((newTrade: TradeData) => {
             if (newTrade.timestamp !== undefined) {
                 const newRow: TaS = {color:getPriceColor(newTrade.price),...newTrade}
-                allTrades = [newRow,...allTrades].slice(-maxLength);
+                allTrades = [newRow,...allTrades].slice(0,maxLength);
             }
         });
         unsubscribeQuote = quoteStore.subscribe((quote) => {
