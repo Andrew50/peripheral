@@ -250,7 +250,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		// SIDE NOTE: We need to figure out how often GetAggs is updated
 		// within polygon to see what endpoint we need to call
 		// for live intraday data.
-		fmt.Printf("Query Params Start Date: %s, Query End Date: %s \n", time.Time(queryStartTime), time.Time(queryEndTime))
+		//fmt.Printf("Query Params Start Date: %s, Query End Date: %s \n", time.Time(queryStartTime), time.Time(queryEndTime))
 		date1, err := utils.MillisFromUTCTime(queryStartTime)
 		if err != nil {
 			return nil, fmt.Errorf("1n0f %v", err)
@@ -370,8 +370,8 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		if err != nil {
 			return nil, fmt.Errorf("45l6k6lkgjl, %v", err)
 		}
-		fmt.Printf("\nWindow Start: {%v}, Window End: {%v}", windowStartTime, windowEndTime)
-		fmt.Printf("Ticker {%v}", ticker)
+		//fmt.Printf("\nWindow Start: {%v}, Window End: {%v}", windowStartTime, windowEndTime)
+		//fmt.Printf("Ticker {%v}", ticker)
 		iter, err := utils.GetTrade(conn.Polygon, ticker, windowStartTimeNanos, "asc", models.GTE, 30000)
 		if err != nil {
 			return nil, fmt.Errorf("4lyoh, %v", err)
@@ -390,7 +390,6 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		windowStartTime = tradeDataList[len(tradeDataList)-1].Timestamp
 	}
 	if len(tradeDataList) != 0 {
-		fmt.Println("Testing working")
 		return tradeDataList, nil
 	}
 	return nil, fmt.Errorf("3l6yykh0, Did not return trade data for securityid {%v}, timestamp {%v}, lengthOfTime {%v}, extendedHours {%v}",
@@ -399,82 +398,79 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	return nil, nil
 }
 
-
 type GetQuoteDataArgs struct {
-    SecurityID    int64 `json:"securityId"`
-    Timestamp     int64 `json:"time"`
-    LengthOfTime  int64 `json:"lengthOfTime"`
-    ExtendedHours bool  `json:"extendedhours"`
+	SecurityID    int64 `json:"securityId"`
+	Timestamp     int64 `json:"time"`
+	LengthOfTime  int64 `json:"lengthOfTime"`
+	ExtendedHours bool  `json:"extendedhours"`
 }
 
 type GetQuoteDataResults struct {
-    Timestamp int64   `json:"timestamp"`
-    BidPrice  float64 `json:"bidPrice"`
-    AskPrice  float64 `json:"askPrice"`
-    BidSize   float64 `json:"bidSize"`
-    AskSize   float64 `json:"askSize"`
+	Timestamp int64   `json:"timestamp"`
+	BidPrice  float64 `json:"bidPrice"`
+	AskPrice  float64 `json:"askPrice"`
+	BidSize   float64 `json:"bidSize"`
+	AskSize   float64 `json:"askSize"`
 }
 
 func GetQuoteData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-    var args GetQuoteDataArgs
-    err := json.Unmarshal(rawArgs, &args)
-    if err != nil {
-        return nil, fmt.Errorf("getQuoteData invalid args: %v", err)
-    }
-    easternLocation, err := time.LoadLocation("America/New_York")
-    if err != nil {
-        return nil, fmt.Errorf("issue loading eastern location: %v", err)
-    }
-    inputTime := time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).UTC()
-    query := `SELECT ticker, minDate, maxDate FROM securities WHERE securityid=$1 AND (minDate <= $2 AND (maxDate IS NULL or maxDate >= $2)) ORDER BY minDate ASC`
-    ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-    defer cancel()
-    rows, err := conn.DB.Query(ctx, query, args.SecurityID, inputTime.In(easternLocation).Format(time.DateTime))
-    if err != nil {
-        if ctx.Err() == context.DeadlineExceeded {
-            return nil, fmt.Errorf("query timed out: %w", err)
-        }
-        return nil, fmt.Errorf("error executing query: %w", err)
-    }
-    defer rows.Close()
-    var quoteDataList []GetQuoteDataResults
-    windowStartTime := args.Timestamp                        // milliseconds
-    windowEndTime := args.Timestamp + args.LengthOfTime*1000 // milliseconds
-    for rows.Next() {
-        var ticker string
-        var minDateFromSQL *time.Time
-        var maxDateFromSQL *time.Time
-        err := rows.Scan(&ticker, &minDateFromSQL, &maxDateFromSQL)
-        if err != nil {
-            return nil, fmt.Errorf("error scanning row: %w", err)
-        }
-        windowStartTimeNanos, err := utils.NanosFromUTCTime(time.Unix(windowStartTime/1000, (windowStartTime%1000)*1e6).UTC())
-        if err != nil {
-            return nil, fmt.Errorf("error converting time: %v", err)
-        }
-        iter := utils.GetQuote(conn.Polygon, ticker, windowStartTimeNanos, "asc", models.GTE, 30000)
-        if err != nil {
-            return nil, fmt.Errorf("error fetching quotes: %v", err)
-        }
-        for iter.Next() {
-            if int64(time.Time(iter.Item().ParticipantTimestamp).Unix())*1000 > windowEndTime {
-                return quoteDataList, nil
-            }
-            var quoteData GetQuoteDataResults
-            quoteData.Timestamp = time.Time(iter.Item().ParticipantTimestamp).UnixNano() / int64(time.Millisecond)
-            quoteData.BidPrice = iter.Item().BidPrice
-            quoteData.AskPrice = iter.Item().AskPrice
-            quoteData.BidSize = iter.Item().BidSize
-            quoteData.AskSize = iter.Item().AskSize
-            quoteDataList = append(quoteDataList, quoteData)
-        }
-        windowStartTime = quoteDataList[len(quoteDataList)-1].Timestamp
-    }
-    if len(quoteDataList) != 0 {
-        return quoteDataList, nil
-    }
-    return nil, fmt.Errorf("no quote data returned for securityId: %v, timestamp: %v, lengthOfTime: %v, extendedHours: %v", 
-        args.SecurityID, args.Timestamp, args.LengthOfTime, args.ExtendedHours)
+	var args GetQuoteDataArgs
+	err := json.Unmarshal(rawArgs, &args)
+	if err != nil {
+		return nil, fmt.Errorf("getQuoteData invalid args: %v", err)
+	}
+	easternLocation, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return nil, fmt.Errorf("issue loading eastern location: %v", err)
+	}
+	inputTime := time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).UTC()
+	query := `SELECT ticker, minDate, maxDate FROM securities WHERE securityid=$1 AND (minDate <= $2 AND (maxDate IS NULL or maxDate >= $2)) ORDER BY minDate ASC`
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	rows, err := conn.DB.Query(ctx, query, args.SecurityID, inputTime.In(easternLocation).Format(time.DateTime))
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("query timed out: %w", err)
+		}
+		return nil, fmt.Errorf("error executing query: %w", err)
+	}
+	defer rows.Close()
+	var quoteDataList []GetQuoteDataResults
+	windowStartTime := args.Timestamp                        // milliseconds
+	windowEndTime := args.Timestamp + args.LengthOfTime*1000 // milliseconds
+	for rows.Next() {
+		var ticker string
+		var minDateFromSQL *time.Time
+		var maxDateFromSQL *time.Time
+		err := rows.Scan(&ticker, &minDateFromSQL, &maxDateFromSQL)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		windowStartTimeNanos, err := utils.NanosFromUTCTime(time.Unix(windowStartTime/1000, (windowStartTime%1000)*1e6).UTC())
+		if err != nil {
+			return nil, fmt.Errorf("error converting time: %v", err)
+		}
+		iter := utils.GetQuote(conn.Polygon, ticker, windowStartTimeNanos, "asc", models.GTE, 30000)
+		if err != nil {
+			return nil, fmt.Errorf("error fetching quotes: %v", err)
+		}
+		for iter.Next() {
+			if int64(time.Time(iter.Item().ParticipantTimestamp).Unix())*1000 > windowEndTime {
+				return quoteDataList, nil
+			}
+			var quoteData GetQuoteDataResults
+			quoteData.Timestamp = time.Time(iter.Item().ParticipantTimestamp).UnixNano() / int64(time.Millisecond)
+			quoteData.BidPrice = iter.Item().BidPrice
+			quoteData.AskPrice = iter.Item().AskPrice
+			quoteData.BidSize = iter.Item().BidSize
+			quoteData.AskSize = iter.Item().AskSize
+			quoteDataList = append(quoteDataList, quoteData)
+		}
+		windowStartTime = quoteDataList[len(quoteDataList)-1].Timestamp
+	}
+	if len(quoteDataList) != 0 {
+		return quoteDataList, nil
+	}
+	return nil, fmt.Errorf("no quote data returned for securityId: %v, timestamp: %v, lengthOfTime: %v, extendedHours: %v",
+		args.SecurityID, args.Timestamp, args.LengthOfTime, args.ExtendedHours)
 }
-
-
