@@ -259,7 +259,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		if err != nil {
 			return nil, fmt.Errorf("n91ve2n0 %v", err)
 		}
-		fmt.Printf("Query Start Date: %s, Query End Date: %s \n", time.Time(date1), time.Time(date2))
+		//fmt.Printf("Query Start Date: %s, Query End Date: %s \n", time.Time(date1), time.Time(date2))
 		iter, err := utils.GetAggsData(conn.Polygon, ticker, multiplier, timespan,
 			date1, date2,
 			5000, polyResultOrder)
@@ -365,7 +365,7 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		if err != nil {
 			return nil, fmt.Errorf("vfm4l %w", err)
 		}
-		fmt.Println(ticker)
+		//fmt.Println(ticker)
 		windowStartTimeNanos, err := utils.NanosFromUTCTime(time.Unix(windowStartTime/1000, (windowStartTime % 1000 * 1e6)).UTC())
 		if err != nil {
 			return nil, fmt.Errorf("45l6k6lkgjl, %v", err)
