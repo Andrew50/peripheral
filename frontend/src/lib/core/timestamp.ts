@@ -67,7 +67,7 @@ export function ESTStringToUTCTimestamp(easternString: string): number {
     return utcTimestamp; */
 
 export function UTCTimestampToESTString(utcTimestamp : number): string {
-    if (utcTimestamp === 0){
+    if (utcTimestamp === 0 || utcTimestamp === undefined){
         return "Current"
     }
     const utcDatetime = DateTime.fromMillis(utcTimestamp, {zone: 'utc'})

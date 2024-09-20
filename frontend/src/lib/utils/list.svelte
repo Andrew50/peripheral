@@ -1,46 +1,36 @@
 <!-- screen.svelte -->
-<script lang='ts' context='module'>
-  export interface Watch extends Instance {
-      flagged: boolean
-  }
-  </script>
 <script lang="ts">
   import { onMount,onDestroy } from 'svelte';
   import { writable,get} from 'svelte/store';
   import {queryInstanceRightClick} from '$lib/utils/rightClick.svelte'
-  import type {RightClickResult} from "$lib/utils/rightClick.svelte"
   import type { Writable } from 'svelte/store';
   import type {Instance} from '$lib/core/types'
   import StreamCell from '$lib/utils/streamCell.svelte'
   import {changeChart} from '$lib/features/chart/interface'
-
-  export let list: Writable<Watch[]> = writable([])
+  import {flagWatchlist} from '$lib/core/stores'
+    import {flagSecurity} from '$lib/utils/flag'
+  export let list: Writable<Instance[]> = writable([])
   export let columns: Array<string>;
   export let parentDelete = (v:Instance) => {}
 
-
-    
+    function isFlagged(instance:Instance, flagWatch: Instance[]){
+      return flagWatch.some(item => item.ticker === instance.ticker);
+  }
 
   let selectedRowIndex = -1;
 
-    function rowRightClick(event:MouseEvent,watch:Watch){
+    function rowRightClick(event:MouseEvent,watch:Instance){
         event.preventDefault();
-        queryInstanceRightClick(event,watch,'list').then((v:RightClickResult)=>{
-            if (v === "flag"){
-                watch.flagged = ! watch.flagged
-                list.update(s=>s)
-            }
-
-        })
+        queryInstanceRightClick(event,watch,'list')
     }
-    function deleteRow(event:MouseEvent,watch:Watch){
+    function deleteRow(event:MouseEvent,watch:Instance){
         event.stopPropagation()
-        list.update((v:Watch[])=>{
+        list.update((v:Instance[])=>{
             return v.filter(s => s !== watch)
         })
         parentDelete(watch)
     }
-    function handleKeydown(event: KeyboardEvent,watch:Watch) {
+    function handleKeydown(event: KeyboardEvent,watch:Instance) {
     if (event.key === 'ArrowUp' || (event.key === ' ' && event.shiftKey)) {
       event.preventDefault();
       moveUp();
@@ -65,6 +55,7 @@
     }
     scrollToRow(selectedRowIndex);
     }
+
   function scrollToRow(index: number) {
     const row = document.getElementById(`row-${index}`);
     if (row) {
@@ -78,6 +69,17 @@
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown);
   });
+  function clickHandler(event:MouseEvent,instance:Instance,index:number){
+        event.preventDefault()
+      if (event.button === 0) {
+        selectedRowIndex = index;
+        changeChart(instance)
+      }else if (event.button === 1){
+          flagSecurity(instance)
+      }else if (event.button === 2){
+        rowRightClick(event,instance)
+      }
+  }
 </script>
 
 
@@ -94,11 +96,15 @@
     </thead>
     <tbody>
         {#each $list as watch, i}
-          <tr on:click={()=>{selectedRowIndex = i;changeChart(watch)}}
+          <tr on:mousedown={(event)=>clickHandler(event,watch,i)}
           id="row-{i}"
           class:selected={i===selectedRowIndex}
-            on:contextmenu={(event)=>rowRightClick(event,watch)}
           >
+          <td>
+            {#if isFlagged(watch,$flagWatchlist)}
+              <span class="flag-icon">⚑</span> <!-- Example flag icon -->
+            {/if}
+          </td>
           {#each columns as col}
             {#if col === "change"}
                 <StreamCell ticker={watch.ticker}/>
@@ -120,6 +126,11 @@
 
 <style>
   @import "$lib/core/colors.css";
+  .flag-icon {
+    color: var(--c3);
+    font-size: 16px;
+    margin-right: 5px;
+  }
   tr.selected {
     background-color: var(--c3);
     color: var(--f1);

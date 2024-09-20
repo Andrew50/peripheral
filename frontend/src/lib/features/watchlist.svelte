@@ -8,7 +8,7 @@
     import {privateRequest} from "$lib/core/backend"
     let activeList: Writable<Instance[]> = writable([])
     import {queryInstanceInput} from '$lib/utils/input.svelte'
-    import {flagWatchlistId,watchlists} from '$lib/core/stores'
+    import {flagWatchlistId,watchlists, flagWatchlist} from '$lib/core/stores'
 
 
     let newWatchlistName="";
@@ -23,19 +23,25 @@
     function addInstance(){
         const inst = {ticker:"",timestamp:0}
         queryInstanceInput(["ticker"],inst).then((i:Instance)=>{
-            if (!Array.isArray(get(activeList))){
-                activeList.set( [i])
-            }
-            if (!get(activeList).find((l:Instance)=>l.ticker === i.ticker)){
-                activeList.update((v:Instance[])=>{
-                    privateRequest<number>("newWatchlistItem",{watchlistId:currentWatchlistId,securityId:i.securityId})
-                    return [i,...v]
+            const aList = get(activeList)
+            const empty = !Array.isArray(aList) 
+            if (empty || !aList.find((l:Instance)=>l.ticker === i.ticker)){
+                privateRequest<number>("newWatchlistItem",{watchlistId:currentWatchlistId,securityId:i.securityId})
+                .then((watchlistItemId:number)=>{
+                    activeList.update((v:Instance[])=>{
+                        i.watchlistItemId = watchlistItemId
+                        if (empty){
+                            return [i]
+                        }else{
+                            return [i,...v]
+                        }
+                    })
                 })
             }
            setTimeout(()=>{
                 addInstance()
             },10)
-        }).catch()
+        })
     }
 
     function newWatchlist(){
@@ -61,6 +67,11 @@
     }
     function selectWatchlist(watchlistIdString:string){
         const watchlistId = parseInt(watchlistIdString)
+        if (watchlistId === flagWatchlistId){
+            activeList = flagWatchlist
+        }else{
+            activeList = writable<Instance[]>([])
+        }
         currentWatchlistId = watchlistId
         privateRequest<Instance[]>("getWatchlistItems",{watchlistId:watchlistId})
         .then((v:Instance[])=>{
