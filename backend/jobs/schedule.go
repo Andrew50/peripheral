@@ -10,9 +10,8 @@ var eOpenRun = false
 var eCloseRun = false
 
 func StartScheduler(conn *utils.Conn) chan struct{} {
+    go initialize(conn)
     location, err := time.LoadLocation("EST")
-    now := time.Now().In(location)
-    eventLoop(now,conn)
     ticker := time.NewTicker(1 * time.Minute)
     quit := make(chan struct{})
     if err != nil {
@@ -33,6 +32,11 @@ func StartScheduler(conn *utils.Conn) chan struct{} {
     return quit
 }
 
+func initialize(conn *utils.Conn){
+    //startPolygonWS(conn)
+}
+
+
 func eventLoop(now time.Time,conn *utils.Conn) {
     year, month, day := now.Date()
     eOpen := time.Date(year,month,day,4,0,0,0,now.Location())
@@ -41,7 +45,7 @@ func eventLoop(now time.Time,conn *utils.Conn) {
     //close_ := time.Date(year, month, day, 16, 0, 0, 0, now.Location())
     if !eOpenRun && now.After(eOpen) && now.Before(eClose) {
         fmt.Println("running open update")
-        startPolygonWS(conn)
+     //   startPolygonWS(conn)
         pushJournals(conn,year,month,day)
         eOpenRun = true
         eCloseRun = false
