@@ -51,7 +51,7 @@ func NewWatchlist(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 
 
 type DeleteWatchlistArgs struct {
-	Id int `json:"id"`
+	Id int `json:"watchlistId"`
 }
 
 func DeleteWatchlist(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -143,7 +143,7 @@ func NewWatchlistItem(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 		return nil, fmt.Errorf("m0ivn0d %v", err)
 	}
 	var watchlistId int
-	err = conn.DB.QueryRow(context.Background(), "INSERT into watchlistItems (securityId,watchlistId) values ($1,$2) RETURNING watchlistId", args.SecurityId, args.WatchlistId).Scan(&watchlistId)
+	err = conn.DB.QueryRow(context.Background(), "INSERT into watchlistItems (securityId,watchlistId) values ($1,$2) RETURNING watchlistItemId", args.SecurityId, args.WatchlistId).Scan(&watchlistId)
 	if err != nil {
 		return nil, err
 	}
