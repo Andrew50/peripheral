@@ -41,7 +41,6 @@ export class RealtimeStream implements Stream{
         });
         this.socket.addEventListener('message', (event) => {
             const data = JSON.parse(event.data);
-            console.log(data)
             const channelName = data.channel;
             if (channelName) {
                 let activeChannel = activeChannels.get(channelName)
