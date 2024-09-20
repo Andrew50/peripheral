@@ -48,7 +48,9 @@
     let touchStartY: number;
     let chartInstance: Instance;
 
+    const tradeConditionsToCheck = new Set([2, 5, 7, 10, 12, 13, 15, 16, 20, 21, 22, 29, 33, 37, 52, 53])
     function backendLoadChartData(inst:ChartRequest): void{
+        console.log(isLoadingChartData, inst)
         if (isLoadingChartData ||!inst.ticker || !inst.timeframe || !inst.securityId) { return; }
         isLoadingChartData = true;
         lastChartRequestTime = Date.now()
@@ -120,11 +122,8 @@
                             }
                             aggregateClose = res[i].price
                         }
-                        console.log(newTime/1000, aggregateOpen, aggregateHigh, aggregateLow, aggregateClose)
                         newCandleData.push({time: UTCtoEST(newTime / 1000) as UTCTimestamp, open: aggregateOpen, high: aggregateHigh, low: aggregateLow, close: aggregateClose});
                         newVolumeData.push({time:UTCtoEST(newTime/1000) as UTCTimestamp, value: res.reduce((acc, trade) => acc + trade.size, 0), color: aggregateClose > aggregateOpen ? '#089981' : '#ef5350',});
-                        console.log("added latest candle")
-
                         queuedLoad = () => {
                         if (inst.direction == "forward") {
                             const visibleRange = chart.timeScale().getVisibleRange()
@@ -141,7 +140,7 @@
                         queuedLoad = null
                         sma10Series.setData(calculateSMA(newCandleData, 10));
                         sma20Series.setData(calculateSMA(newCandleData, 20));
-                        adr20Series.setData(calculateADR(newCandleData,20));
+                        //adr20Series.setData(calculateADR(newCandleData,20));
                         if (inst.requestType == 'loadNewTicker') {
                             chart.timeScale().fitContent();
                             chart.timeScale().applyOptions({
@@ -155,6 +154,36 @@
                         }
                     });
                 }
+                else { // REQUEST IS NOT FOR REAL TIME DATA // IT IS FOR BACK/FRONT LOAD or something else like replay 
+                    queuedLoad = () => {
+                        if (inst.direction == "forward") {
+                            const visibleRange = chart.timeScale().getVisibleRange()
+                            const vrFrom = visibleRange?.from as Time
+                            const vrTo = visibleRange?.to as Time
+                            chartCandleSeries.setData(newCandleData);
+                            chartVolumeSeries.setData(newVolumeData);
+                            chart.timeScale().setVisibleRange({from: vrFrom, to: vrTo})
+                        }else if (inst.direction == "backward"){
+                            console.log(newCandleData)
+                            chartCandleSeries.setData(newCandleData);
+                            chartVolumeSeries.setData(newVolumeData);
+                        }
+                        queuedLoad = null
+                        sma10Series.setData(calculateSMA(newCandleData, 10));
+                        sma20Series.setData(calculateSMA(newCandleData, 20));
+                        //adr20Series.setData(calculateADR(newCandleData,20));
+                        if (inst.requestType == 'loadNewTicker') {
+                            chart.timeScale().fitContent();
+                            chart.timeScale().applyOptions({
+                            rightOffset: 10
+                            });
+                        }
+                        isLoadingChartData = false; // Ensure this runs after data is loaded
+                        }
+                        if (inst.direction == "backward" || inst.requestType == "loadNewTicker"){
+                            queuedLoad()
+                        }
+                }
             })
             .catch((error: string) => {
                 console.error(error)
@@ -162,13 +191,17 @@
             });
     }
     export function updateLatestChartBar(data) {
-
-
         if (!data.price || !data.size || !data.timestamp) {return}
         if(chartCandleSeries.data().length == 0 || !chartCandleSeries) {return}
         var mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
         if (UTCtoEST(data.timestamp/1000) < (mostRecentBar.time as number) + chartTimeframeInSeconds) {
-            if(data.size >= 100) {
+            mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
+            chartVolumeSeries.update({
+                time: mostRecentBar.time, 
+                value: chartVolumeSeries.data()[chartVolumeSeries.data().length-1].value + data.size,
+                color: mostRecentBar.close > mostRecentBar.open ? '#089981' : '#ef5350'
+            })
+            if(data.conditions == null || (data.size >= 100 && !data.conditions.some(condition => tradeConditionsToCheck.has(condition)))) {
                 chartCandleSeries.update({
                 time: mostRecentBar.time, 
                 open: mostRecentBar.open, 
@@ -177,14 +210,8 @@
                 close: data.price 
                 })  
             }
-            mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
-            chartVolumeSeries.update({
-                time: mostRecentBar.time, 
-                value: chartVolumeSeries.data()[chartVolumeSeries.data().length-1].value + data.size,
-                color: mostRecentBar.close > mostRecentBar.open ? '#089981' : '#ef5350'
-            })
             return 
-        } else  { // if not hourly, daily, weekly, monthly at this point 
+        } else  { // if not hourly, daily, weekly, monthly at this point; this updates when a new bar has to be created 
             console.log("Attempted to Update")
             privateRequest<BarData[]>("getChartData", {
                 securityId:chartSecurityId, 
@@ -386,6 +413,7 @@
         chart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
             if (!logicalRange || Date.now() - lastChartRequestTime < chartRequestThrottleDuration) {return;}
             if(logicalRange.from < 10) {
+                //console.log(logicalRange.from, Date.now()-lastChartRequestTime, chartEarliestDataReached)
                 if(chartEarliestDataReached) {return;}
                 const v = get(chartQuery)
                 backendLoadChartData({
