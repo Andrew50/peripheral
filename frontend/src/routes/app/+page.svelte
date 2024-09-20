@@ -12,6 +12,7 @@
     import Test from '$lib/features/test.svelte';
     import Watchlist from '$lib/features/watchlist.svelte'
     import Screensaver from '$lib/features/screensaver.svelte'
+    import Quotes from '$lib/features/quotes/quotes.svelte'
     import Replay from '$lib/features/replay.svelte';
     import { onMount } from 'svelte';
     import { privateRequest } from '$lib/core/backend';
@@ -20,8 +21,8 @@
     import { browser } from '$app/environment';
     import {initStores} from '$lib/core/stores'
     import { currentTimestamp, formatTimestamp, updateTime } from '$lib/core/stores';
-    type Menu = 'study' | 'screen' | 'setups' | 'test' | 'none' | 'watchlist' | "journal"|'screensaver' | "replay" | "settings";
-    const menus: Menu[] = ['watchlist' ,'screen' ,'study' ,"journal", 'setups' ,'screensaver' , "replay", "settings"] //,'test'
+    type Menu = 'study' | 'screen' |'quotes'| 'setups' | 'test' | 'none' | 'watchlist' | "journal"|'screensaver' | "replay" | "settings";
+    const menus: Menu[] = ['quotes','watchlist' ,'screen' ,'study' ,"journal", 'setups' ,'screensaver' , "replay", "settings"] //,'test'
     let active_menu: Menu = 'none';
     let minWidth: number;
     let maxWidth: number;
@@ -136,6 +137,8 @@
                 <Replay/>
             {:else if active_menu === "settings"}
                 <Settings/>
+            {:else if active_menu === "quotes"}
+                <Quotes/>
             {/if}
 
         </div>
@@ -178,6 +181,7 @@
         color: var(--f1);
         /*box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);*/
     }
+
     .menu-container {
         max-width: 100%;
         box-sizing: border-box;

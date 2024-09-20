@@ -20,3 +20,17 @@ export interface Watchlist {
     watchlistName: string
     watchlistId: number
 }
+export interface TradeData {
+    timestamp: number;
+    price: number;
+    size: number;
+    exchange: number;
+    conditions: Array<number>;
+}
+export interface QuoteData {
+    timestamp: number;
+    bidPrice: number;
+    askPrice: number;
+    bidSize: number;
+    askSize: number;
+}
