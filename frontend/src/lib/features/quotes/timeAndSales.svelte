@@ -36,7 +36,7 @@
         unsubscribeTrade = store.subscribe((newTrade: TradeData) => {
             if (newTrade.timestamp !== undefined) {
                 const newRow: TaS = {color:getPriceColor(newTrade.price),...newTrade}
-                allTrades = [...allTrades, newRow].slice(-maxLength);
+                allTrades = [newRow,...allTrades].slice(-maxLength);
             }
         });
         unsubscribeQuote = quoteStore.subscribe((quote) => {
@@ -81,18 +81,18 @@
                 </tr>
             </thead>
             <tbody>
-            {#each Array(maxLength - allTrades.length).fill(0) as _}
-                <tr>
-                    <td>&nbsp;</td>  <!-- Empty cell -->
-                    <td>&nbsp;</td>  <!-- Empty cell -->
-                    <td>&nbsp;</td>  <!-- Empty cell -->
-                </tr>
-            {/each}
             {#each allTrades as trade}
                 <tr class="{trade.color}">
                     <td>{new Date(trade.timestamp).toLocaleTimeString()}</td>
                     <td>{trade.price?.toFixed(3)}</td>
                     <td>{trade.size}</td>
+                </tr>
+            {/each}
+            {#each Array(maxLength - allTrades.length).fill(0) as _}
+                <tr>
+                    <td>&nbsp;</td>  <!-- Empty cell -->
+                    <td>&nbsp;</td>  <!-- Empty cell -->
+                    <td>&nbsp;</td>  <!-- Empty cell -->
                 </tr>
             {/each}
             

@@ -3,7 +3,7 @@
     import Legend from './legend.svelte'
     import Shift from './shift.svelte'
     import {privateRequest} from '$lib/core/backend';
-    import type {Instance, TradeData} from '$lib/core/types'
+    import type {Instance, TradeData,QuoteData} from '$lib/core/types'
     import {setActiveChart,chartQuery, changeChart,selectedChartId} from './interface'
     import type {ShiftOverlay, BarData, ChartRequest} from './interface'
     import { queryInstanceInput } from '$lib/utils/input.svelte'
@@ -16,7 +16,9 @@
     import { onMount, onDestroy  } from 'svelte';
     import { UTCtoEST, ESTtoUTC, ESTSecondstoUTC, getReferenceStartTimeForDateMilliseconds, timeframeToSeconds} from '$lib/core/timestamp';
 	import { getStream, replayStream } from '$lib/utils/stream';
-	//import {websocketManager} from '$lib/utils/webSocketManagerInstance';
+    let bidLine: any
+    let askLine: any
+    let askPriceLine: any
     let chartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let chartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
     let sma10Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
@@ -43,7 +45,8 @@
     let chartExtendedHours: boolean;
     let unsubscribe = () => {} 
     let release = () => {}
-    let priceStore: Writable<TradeData>;
+    let releaseQuote = () => {}
+    let unsubscribeQuote = () => {}
     let touchStartX: number;
     let touchStartY: number;
     let chartInstance: Instance;
@@ -101,8 +104,8 @@
                     var timediff = (Date.now() - referenceStartTime)/1000 // this is in seconds
                     var flooredDifference = Math.floor(timediff/chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds
                     var newTime = referenceStartTime + flooredDifference*1000
-                    privateRequest<TradeData[]>("getTradeData", {securityId: inst.securityId, time: newTime, lengthOfTime: chartTimeframeInSeconds, extendedHours: inst.extendedHours})
-                    .then((res:Array<any>)=> {
+                   /* privateRequest<TradeData[]>("getTradeData", {securityId: inst.securityId, time: newTime, lengthOfTime: chartTimeframeInSeconds, extendedHours: inst.extendedHours})
+                  .then((res:Array<any>)=> {
                         if (!Array.isArray(res) || res.length === 0) {
                             return 
                         }
@@ -124,6 +127,7 @@
                         }
                         newCandleData.push({time: UTCtoEST(newTime / 1000) as UTCTimestamp, open: aggregateOpen, high: aggregateHigh, low: aggregateLow, close: aggregateClose});
                         newVolumeData.push({time:UTCtoEST(newTime/1000) as UTCTimestamp, value: res.reduce((acc, trade) => acc + trade.size, 0), color: aggregateClose > aggregateOpen ? '#089981' : '#ef5350',});
+                        */
                         queuedLoad = () => {
                         if (inst.direction == "forward") {
                             const visibleRange = chart.timeScale().getVisibleRange()
@@ -152,7 +156,7 @@
                         if (inst.direction == "backward" || inst.requestType == "loadNewTicker"){
                             queuedLoad()
                         }
-                    });
+                    //});
                 }
                 else { // REQUEST IS NOT FOR REAL TIME DATA // IT IS FOR BACK/FRONT LOAD or something else like replay 
                     queuedLoad = () => {
@@ -190,7 +194,44 @@
                 isLoadingChartData = false; // Ensure this runs after data is loaded
             });
     }
-    export function updateLatestChartBar(data) {
+    
+    function updateLatestQuote(data:QuoteData) {
+        if (!data.bidPrice || !data.askPrice){return}
+        console.log('updating quote')
+        
+    const candle = chartCandleSeries.data()[chartCandleSeries.data().length - 1]
+    if (!candle)return;
+    const time = candle.time
+    bidLine.setData([
+        { time: time, value: data.bidPrice },
+    ]);
+    askLine.setData([
+        { time: time, value: data.askPrice },
+    ]);
+
+        /*const tim = Math.floor(Date.now() / 1000) as UTCTimestamp
+        if (bidPriceLine) chartCandleSeries.removePriceLine(bidPriceLine);
+        if (askPriceLine) chartCandleSeries.removePriceLine(askPriceLine);
+        bidPriceLine = chartCandleSeries.createPriceLine({
+            price: data.bidPrice,
+            color: 'red',
+            lineWidth: 2,
+            lineStyle: 0,  // Solid line
+            axisLabelVisible: true,
+            title: 'Bid',
+        });
+
+        askPriceLine = chartCandleSeries.createPriceLine({
+            price: data.askPrice,
+            color: 'green',
+            lineWidth: 2,
+            lineStyle: 0,  // Solid line
+            axisLabelVisible: true,
+            title: 'Ask',
+        });*/
+
+    }
+    function updateLatestChartBar(data:TradeData) {
         if (!data.price || !data.size || !data.timestamp) {return}
         if(chartCandleSeries.data().length == 0 || !chartCandleSeries) {return}
         var mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
@@ -394,7 +435,20 @@
         const smaOptions = { lineWidth: 1, priceLineVisible: false, lastValueVisible:false} as DeepPartial<LineWidth>
         sma10Series = chart.addLineSeries({ color: 'purple',...smaOptions});
         sma20Series = chart.addLineSeries({ color: 'blue', ...smaOptions});
+        bidLine = chart.addLineSeries({
+            color: 'green',
+            lineWidth: 2,
+            lastValueVisible: true, // Shows the price on the right
+            priceLineVisible: false,
+        });
+        askLine = chart.addLineSeries({
+            color: 'red',
+            lineWidth: 2,
+            lastValueVisible: true, // Shows the price on the right
+            priceLineVisible: false,
+        });
         //adr20Series = chart.addLineSeries({ color: 'orange', lineWidth:1,priceLineVisible:false,priceScaleId:'left'});
+
         chart.subscribeCrosshairMove((param)=>{
             if (!param.point) {
                 return;
@@ -442,6 +496,8 @@
            if (chartId !== selectedChartId){return}
             unsubscribe() 
             release()
+            unsubscribeQuote()
+            releaseQuote()
 
             chartEarliestDataReached = false;
             chartLatestDataReached = false; 
@@ -459,11 +515,15 @@
             }else { chart.applyOptions({timeScale: {timeVisible: true}}); }
             backendLoadChartData(req)
 
-            const [s, r] = getStream(req.ticker, 'fast')
-            priceStore = s
+            const [priceStore, r] = getStream<TradeData>(req.ticker, 'fast')
             release = r
-            unsubscribe = priceStore.subscribe((v) => {
+            unsubscribe = priceStore.subscribe((v:TradeData) => {
                 updateLatestChartBar(v)
+            })
+            const [quoteStore, rq] = getStream<QuoteData>(req.ticker, 'quote')
+            releaseQuote = rq
+            unsubscribeQuote = quoteStore.subscribe((v:QuoteData) => {
+                updateLatestQuote(v)
             })
             
         }) 
