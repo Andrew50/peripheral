@@ -208,28 +208,6 @@
     askLine.setData([
         { time: time, value: data.askPrice },
     ]);
-
-        /*const tim = Math.floor(Date.now() / 1000) as UTCTimestamp
-        if (bidPriceLine) chartCandleSeries.removePriceLine(bidPriceLine);
-        if (askPriceLine) chartCandleSeries.removePriceLine(askPriceLine);
-        bidPriceLine = chartCandleSeries.createPriceLine({
-            price: data.bidPrice,
-            color: 'red',
-            lineWidth: 2,
-            lineStyle: 0,  // Solid line
-            axisLabelVisible: true,
-            title: 'Bid',
-        });
-
-        askPriceLine = chartCandleSeries.createPriceLine({
-            price: data.askPrice,
-            color: 'green',
-            lineWidth: 2,
-            lineStyle: 0,  // Solid line
-            axisLabelVisible: true,
-            title: 'Ask',
-        });*/
-
     }
     function updateLatestChartBar(data:TradeData) {
         if (!data.price || !data.size || !data.timestamp) {return}
@@ -436,13 +414,13 @@
         sma10Series = chart.addLineSeries({ color: 'purple',...smaOptions});
         sma20Series = chart.addLineSeries({ color: 'blue', ...smaOptions});
         bidLine = chart.addLineSeries({
-            color: 'green',
+            color: 'white',
             lineWidth: 2,
             lastValueVisible: true, // Shows the price on the right
             priceLineVisible: false,
         });
         askLine = chart.addLineSeries({
-            color: 'red',
+            color: 'white',
             lineWidth: 2,
             lastValueVisible: true, // Shows the price on the right
             priceLineVisible: false,
