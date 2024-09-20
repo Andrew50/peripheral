@@ -11,6 +11,7 @@ def normalize(df: np.ndarray) -> np.ndarray:
     close_col = np.roll(df[:, 3], shift=1)
     df = df - close_col[:,np.newaxis]
     df = df[1:]
+    df = df[::-1]
     return df
 
 def get_timeframe(timeframe):
@@ -74,14 +75,15 @@ async def get_instance_data(session, args):
             return None
 
         data_array = np.zeros((bars, 4))
-        if currentPrice is not None and currentPrice != 0:
+        if dt == 0:
             bars -= 1  # Adjust because a new bar will be added
-
         for j, bar in enumerate(results[-bars:]):
             data_array[j, 0] = bar['o']  # Open
             data_array[j, 1] = bar['h']  # High
             data_array[j, 2] = bar['l']  # Low
             data_array[j, 3] = bar['c']  # Close
+
+
 
 
         if dt == 0: #current
@@ -91,6 +93,8 @@ async def get_instance_data(session, args):
                 data_array[-1,:] = data_array[-2, 0]
         else: #historical
             data_array[-1,:] = data_array[-1, 0]
+        #if ticker == "EWTX":
+            #print(data_array)
         data_array = normalize(data_array)
         return data_array, label
 
