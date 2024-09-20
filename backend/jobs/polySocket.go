@@ -12,44 +12,55 @@ import (
 )
 
 type TradeData struct {
-    Ticker     string  `json:"ticker"`
-    Price      float64 `json:"price"`
-    Size       int64   `json:"size"`
-    Timestamp  int64   `json:"timestamp"`
-    Conditions []int32 `json:"conditions"`
-    Channel    string  `json:"channel"`
+	Ticker     string  `json:"ticker"`
+	Price      float64 `json:"price"`
+	Size       int64   `json:"size"`
+	Timestamp  int64   `json:"timestamp"`
+	Conditions []int32 `json:"conditions"`
+	Channel    string  `json:"channel"`
 }
 type QuoteData struct {
-    Ticker  string `json:"ticker"`
-    BidPrice float64 `json:"bidPrice"`
-    AskPrice float64  `json:"askPrice"`
-    BidSize int32 `json:"bidSize"`
-    AskSize int32 `json:"askSize"`
-    Timestamp int64 `json:"timestamp"`
-    Channel string `json:"channel"`
+	Ticker    string  `json:"ticker"`
+	BidPrice  float64 `json:"bidPrice"`
+	AskPrice  float64 `json:"askPrice"`
+	BidSize   int32   `json:"bidSize"`
+	AskSize   int32   `json:"askSize"`
+	Timestamp int64   `json:"timestamp"`
+	Channel   string  `json:"channel"`
 }
+
 func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 	err := polygonWS.Subscribe(polygonws.StocksQuotes)
 	if err != nil {
 		log.Println("niv0: ", err)
 		return
-	} else { fmt.Printf("\n successfully connected to Polygon Quotes\n ") }
+	} else {
+		fmt.Printf("\n successfully connected to Polygon Quotes\n ")
+	}
 	err = polygonWS.Subscribe(polygonws.StocksTrades)
 	if err != nil {
 		log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
-	} else { fmt.Printf("\n successfully connected to Polygon Trades \n ") }
+	} else {
+		fmt.Printf("\n successfully connected to Polygon Trades \n ")
+	}
 	err = polygonWS.Subscribe(polygonws.StocksMinAggs)
 	if err != nil {
 		log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
-	} else { fmt.Printf("\n successfully connected to Polygon \n") }
+	} else {
+		fmt.Printf("\n successfully connected to Polygon \n")
+	}
 	for {
 		select {
 		case err := <-polygonWS.Error():
 			fmt.Printf("PolygonWS Error: %v", err)
 		case out := <-polygonWS.Output():
 			switch msg := out.(type) {
+			case models.EquityAgg:
+				if msg.Symbol == "TSLA" {
+					fmt.Printf("%v %v %v", msg.StartTimestamp, msg.EndTimestamp, msg.Close)
+				}
 			case models.EquityTrade:
 				channelName := fmt.Sprintf("%s-fast", msg.Symbol)
 				data := TradeData{
@@ -68,23 +79,20 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 				conn.Cache.Publish(context.Background(), channelName, string(jsonData))
 			case models.EquityQuote:
 				channelName := fmt.Sprintf("%s-quote", msg.Symbol)
-                data := QuoteData{
-                    Ticker:msg.Symbol, 
-                    Timestamp:msg.Timestamp,
-                    BidPrice: msg.BidPrice,
-                    AskPrice: msg.AskPrice,
-                    BidSize: msg.BidSize,
-                    AskSize:msg.AskSize,
-                    Channel: channelName,
-                }
-		//		data := fmt.Sprintf(`{"ticker": "%s", "bidprice": %v, "bidsize": %v, "bidex": %v, "askprice": %v, "asksize": %v, "askex": %v, "timestamp":%v}`,
-		//			msg.Symbol, msg.BidPrice, msg.BidSize, msg.BidExchangeID, msg.AskPrice, msg.AskSize, msg.AskExchangeID, msg.Timestamp)
-       //         fmt.Println(data)
-                jsonData, err := json.Marshal(data)
-                if err != nil {
-                    fmt.Printf("io1nv %v\n",err)
-                    continue
-                }
+				data := QuoteData{
+					Ticker:    msg.Symbol,
+					Timestamp: msg.Timestamp,
+					BidPrice:  msg.BidPrice,
+					AskPrice:  msg.AskPrice,
+					BidSize:   msg.BidSize,
+					AskSize:   msg.AskSize,
+					Channel:   channelName,
+				}
+				jsonData, err := json.Marshal(data)
+				if err != nil {
+					fmt.Printf("io1nv %v\n", err)
+					continue
+				}
 
 				conn.Cache.Publish(context.Background(), channelName, jsonData)
 			}
