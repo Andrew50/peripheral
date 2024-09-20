@@ -24,7 +24,7 @@
         }).catch((err) => {
             console.error('Error loading initial values:', err);
         });
-        [priceStream, releaseStream] = getStream(ticker, "fast")
+        [priceStream, releaseStream] = getStream(ticker, "slow")
         priceStream.subscribe((v) => {
             if (prevClose !== null) {  // Ensure prevClose is available before calculating change
                 if (v.price){

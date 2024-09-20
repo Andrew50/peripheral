@@ -13,17 +13,17 @@ tf.config.threading.set_intra_op_parallelism_threads(6)
 tf.config.threading.set_inter_op_parallelism_threads(6)
 
 SPLIT_RATIO = .8
-TRAINING_CLASS_RATIO = .20
-VALIDATION_CLASS_RATIO = .08
+TRAINING_CLASS_RATIO = .18
+VALIDATION_CLASS_RATIO = .065
 MIN_RANDOM_NOS = .7
-MAX_EPOCHS = 1000
-PATIENCE_EPOCHS = 100
+MAX_EPOCHS = 2000
+PATIENCE_EPOCHS = 150
 MIN_EPOCHS = 50
 BATCH_SIZE = 64
 CONV_FILTER_UNITS= [32]
 CONV_FILTER_KERNAL_SIZES = [3]
 BI_LSTM_UNITS = [32,16]
-DROPOUT_PERCENTS = [.2]
+DROPOUT_PERCENTS = [.4]
 
 def createModel():
     model = Sequential()
@@ -72,11 +72,11 @@ def train_model(conn,setupID):
         mode='max',
         verbose =1
     )
-    print(xTrainingData.shape)
-    print(xValidationData.shape)
+    #print(xTrainingData.shape)
+    #print(xValidationData.shape)
     history = model.fit(xTrainingData, yTrainingData,epochs=MAX_EPOCHS,batch_size=BATCH_SIZE,validation_data=(xValidationData, yValidationData),callbacks=[early_stopping])
     tf.keras.backend.clear_session()
-    score = round(history.history['val_auc_pr'][-1] * 100)
+    score = round(history.history['val_auc_pr'][-50] * 100)
     with conn.db.cursor() as cursor:
         cursor.execute("UPDATE setups SET score = %s, modelVersion = %s WHERE setupId = %s;", (score, modelVersion, setupID))
     conn.db.commit()
