@@ -9,7 +9,7 @@ export class ReplayStream implements Stream {
     public replayStatus: boolean = false;
     private playbackSpeed = 1;
     private buffer = 20000;
-    private loopCooldown = 20;
+    private loopCooldown = 1000000;
     private isPaused: boolean = false;
     private accumulatedPauseTime: number = 0;
     private pauseStartTime: number = 0;
@@ -43,7 +43,6 @@ export class ReplayStream implements Stream {
     private loop(){
         const currentTime = Date.now();
         for (let [channel,v] of this.tickMap.entries()){
-            //console.log(ticks.length)
             const elapsedTime = currentTime - this.startTime - this.accumulatedPauseTime;
             const simulatedTime = this.initialTimestamp + elapsedTime * this.playbackSpeed;
             const latestTime = v.ticks[v.ticks.length-1]?.timestamp
@@ -56,7 +55,6 @@ export class ReplayStream implements Stream {
                 }else{
                      req = "getTradeData"
                 }
-                console.log("reg")
                 privateRequest<[]>(req, {
                     securityId: this.securityId,
                     time: latestTime ?? this.initialTimestamp,

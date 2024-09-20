@@ -52,10 +52,9 @@
         font-size: 24px;       /* Larger font size for ticker display */
         color: white;          /* White color for the ticker */
         background-color: black; /* Black background for contrast */
-        padding: 10px;         /* Add padding for space around the text */
         border: 1px solid #333; /* Border around the ticker */
         border-radius:5px;
-        width: 200px;          /* Fixed width for consistent display */
+        width: 100%;          /* Fixed width for consistent display */
         text-align: center;    /* Center-align the ticker text */
         height: 40px;          /* Fixed height for consistent layout */
         display: flex;
