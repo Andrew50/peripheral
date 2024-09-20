@@ -76,7 +76,7 @@ def train_model(conn,setupID):
     #print(xValidationData.shape)
     history = model.fit(xTrainingData, yTrainingData,epochs=MAX_EPOCHS,batch_size=BATCH_SIZE,validation_data=(xValidationData, yValidationData),callbacks=[early_stopping])
     tf.keras.backend.clear_session()
-    score = round(history.history['val_auc_pr'][-50] * 100)
+    score = round(max(history.history['val_auc_pr']) * 100)
     with conn.db.cursor() as cursor:
         cursor.execute("UPDATE setups SET score = %s, modelVersion = %s WHERE setupId = %s;", (score, modelVersion, setupID))
     conn.db.commit()
@@ -92,8 +92,8 @@ def train_model(conn,setupID):
     return score 
 
 def save(setupID,modelVersion,model):
-    model_folder = f"models/{setupID}/{modelVersion}"
-    configPath = "models/models.config"
+    model_folder = f"/models/{setupID}/{modelVersion}"
+    configPath = "/models/models.config"
     if not os.path.exists(model_folder):
         os.makedirs(model_folder)
     model.export(model_folder)

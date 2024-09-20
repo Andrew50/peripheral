@@ -14,7 +14,7 @@ export class RealtimeStream implements Stream{
     private reconnectAttempts: number = 0;
     private maxReconnectAttempts: number = 5; 
     private shouldReconnect: boolean = true;
-    public connectionStatus = writable<'connected' | 'disconnected' | 'connecting'>('connecting');
+    private connectionStatus = writable<'connected' | 'disconnected' | 'connecting'>('connecting');
 
     public start(){
       if(typeof window === 'undefined') return; 

@@ -13,7 +13,6 @@
   import type {Instance} from '$lib/core/types'
   import StreamCell from '$lib/utils/streamCell.svelte'
   import {changeChart} from '$lib/features/chart/interface'
-  import {getStream} from "$lib/utils/stream"
 
   export let list: Writable<Watch[]> = writable([])
   export let columns: Array<string>;
@@ -42,7 +41,6 @@
         parentDelete(watch)
     }
     function handleKeydown(event: KeyboardEvent,watch:Watch) {
-        console.log(event)
     if (event.key === 'ArrowUp' || (event.key === ' ' && event.shiftKey)) {
       event.preventDefault();
       moveUp();
