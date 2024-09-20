@@ -8,7 +8,7 @@ export let setups: Writable<Setup[]> = writable([]);
 export let watchlists: Writable<Watchlist[]> = writable([]);
 export let flagWatchlistId: number | undefined;
 export let flagWatchlist: Writable<Watch[]>
-export let chartLayout = writable({rows:1,columns:2})
+export let chartLayout = writable({rows:1,columns:1})
 export let currentTimestamp = writable(0);
 export function initStores(){
     privateRequest<Setup[]>('getSetups', {})
