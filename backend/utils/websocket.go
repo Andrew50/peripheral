@@ -117,7 +117,7 @@ client webscokets) is already happening. either way it
 adds the client to the list of client subsrcibed to that channel (subscribers variable)*/
 func (c *Client) subscribe(conn *Conn, channelName string) {
 	channelsMutex.Lock()
-	defer channelsMutex.Unlock()
+        os.Stdout.Sync()
 
 	subscribers, exists := channelSubscribers[channelName]
 	if !exists {
@@ -125,14 +125,30 @@ func (c *Client) subscribe(conn *Conn, channelName string) {
 		channelSubscribers[channelName] = subscribers
 	}
 	subscribers[c] = true
-
 	if !exists {
 		pubsub := conn.Cache.Subscribe(context.Background(), channelName)
 		redisSubscriptions[channelName] = pubsub
 
 		go handleRedisChannel(pubsub, channelName)
 	}
+	channelsMutex.Unlock()
+    go func() {
+        initialValue,err := getInitialStreamValue(channelName,conn)
+        fmt.Println(initialValue)
+        if err != nil {
+            fmt.Println("Error fetching initial value from API:", err)
+            return
+        }
+        c.mu.Lock()
+        fmt.Println(initialValue)
+        defer c.mu.Unlock()
+        err = c.ws.WriteMessage(websocket.TextMessage, []byte(initialValue))
+        if err != nil {
+            log.Println("WebSocket write error while sending initial value:", err)
+        }
+    }()
 }
+
 func (c *Client) unsubscribe(channelName string) {
 	channelsMutex.Lock()
 	defer channelsMutex.Unlock()

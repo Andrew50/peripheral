@@ -13,18 +13,13 @@
     let priceStream: Writable<TradeData>;
     
     onMount(() => {
-        Promise.all([
-            privateRequest<number>("getPrevClose", { ticker }),
-            privateRequest<number>("getLastTrade", { ticker })
-        ]).then(([prevCloseValue, lastTradeValue]) => {
-            const cha = (getChange(lastTradeValue, prevCloseValue));
-            console.log(cha)
-            change.set(cha)
+        privateRequest<number>("getPrevClose", { ticker })
+        .then((prevCloseValue) => {
             prevClose = prevCloseValue
         }).catch((err) => {
             console.error('Error loading initial values:', err);
         });
-        [priceStream, releaseStream] = getStream(ticker, "slow")
+        [priceStream, releaseStream] = getStream(ticker, "fast")
         priceStream.subscribe((v) => {
             if (prevClose !== null) {  // Ensure prevClose is available before calculating change
                 if (v.price){
