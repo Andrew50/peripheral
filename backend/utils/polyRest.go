@@ -40,6 +40,7 @@ func GetQuote(client *polygon.Client, ticker string, nanoTimestamp models.Nanos,
 		WithLimit(numResults)
 	return client.ListQuotes(context.Background(), params)
 }
+
 func GetLastTrade(client *polygon.Client, ticker string) (float64, error) {
 	params := &models.GetLastTradeParams{
 		Ticker: ticker,
