@@ -1,9 +1,9 @@
 package jobs
 
 import (
-    "time"
-    "backend/utils"
-    "fmt"
+	"backend/utils"
+	"fmt"
+	"time"
 )
 
 var eOpenRun = false
@@ -50,11 +50,10 @@ func eventLoop(now time.Time,conn *utils.Conn) {
         eOpenRun = true
         eCloseRun = false
     }
-
-    if !eCloseRun && now.After(eClose) {
-        fmt.Println("running close update")
-        updateSecurities(conn,false)
-        eOpenRun = false
-        eCloseRun = true
-    }
+	if !eCloseRun && now.After(eClose) {
+		//fmt.Println("running close update")
+		//updateSecurities(conn,false)
+		//eOpenRun = false
+		//eCloseRun = true
+	}
 }
