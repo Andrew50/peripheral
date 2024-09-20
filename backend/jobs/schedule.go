@@ -10,9 +10,11 @@ var eOpenRun = false
 var eCloseRun = false
 
 func StartScheduler(conn *utils.Conn) chan struct{} {
+    location, err := time.LoadLocation("EST")
+    now := time.Now().In(location)
+    eventLoop(now,conn)
     ticker := time.NewTicker(1 * time.Minute)
     quit := make(chan struct{})
-    location, err := time.LoadLocation("EST")
     if err != nil {
         panic(fmt.Errorf("219jv %v",err))
     }
@@ -51,6 +53,4 @@ func eventLoop(now time.Time,conn *utils.Conn) {
         eOpenRun = false
         eCloseRun = true
     }
-
 }
-

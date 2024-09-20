@@ -48,7 +48,7 @@ services:
             - compose_network_prod
         volumes:
           #- ./ml:/app #for hot reload
-            - tf_prod:/app/models
+            - tf_prod:/models
         restart: unless-stopped
 
     cache:

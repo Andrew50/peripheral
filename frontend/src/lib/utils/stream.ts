@@ -1,4 +1,4 @@
-import type { Instance } from "$lib/core/types"
+import type { Instance,TradeData,QuoteData } from "$lib/core/types"
 import {RealtimeStream} from "$lib/utils/realtimeStream"
 import {ReplayStream} from "$lib/utils/replayStream"
 import type {Writable} from 'svelte/store'
@@ -9,7 +9,7 @@ export const activeChannels: Map<string,{count:number,store:Writable<any>}> = ne
 
 const realtimeStream = new RealtimeStream;
 export const replayStream = new ReplayStream;
-let currentStream = realtimeStream;
+let currentStream: RealtimeStream | ReplayStream = realtimeStream;
 currentStream.start();
 export interface Stream {
     start(timestamp?:number): void;
@@ -31,7 +31,7 @@ export function releaseStream(channelName:string) {
     }
 }
 
-export function getStream(ticker:string,channelType:ChannelType): [Writable<any>,Function]{
+export function getStream<T extends TradeData|QuoteData>(ticker:string,channelType:ChannelType): [Writable<T>,Function]{
     const channelName = `${ticker}-${channelType}`
     console.log(channelName)
     let channel = activeChannels.get(channelName)
@@ -42,7 +42,8 @@ export function getStream(ticker:string,channelType:ChannelType): [Writable<any>
         channel = {count:1,store:writable({})}
     }
     activeChannels.set(channelName,channel)
-    return [channel.store, (()=>releaseStream(channelName))]
+    const store = channel.store as Writable<T>
+    return [store, (()=>releaseStream(channelName))]
 }
   
 

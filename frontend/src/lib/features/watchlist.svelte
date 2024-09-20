@@ -75,18 +75,16 @@
 
 {#if Array.isArray($watchlists)}
     <select id="watchlists" bind:value={currentWatchlistId} on:change={(event) => selectWatchlist(event.target.value)}>
-    {#each $watchlists as watchlist}
-        <option value={watchlist.watchlistId}>
-            {watchlist.watchlistName}
-        </option>
-    {/each}
-</select>
+        {#each $watchlists as watchlist}
+            <option value={watchlist.watchlistId}>
+                {watchlist.watchlistName}
+            </option>
+        {/each}
+    </select>
     {/if}
     <button class="button" on:click={newWatchlist}>New</button>
     <input bind:value={newWatchlistName} placeholder="Name"/>
-    <button class="button" on:click={addInstance}>
-      Add
-    </button>
+    <button class="button" on:click={addInstance}> Add </button>
 </div>
 <List parentDelete={deleteItem} columns={["ticker", "change"]} list={activeList}/>
 

@@ -1,4 +1,5 @@
 FROM tensorflow/serving
+WORKDIR /app
 COPY models.config /tmp/models.config
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 #ADD default /models/default/1
