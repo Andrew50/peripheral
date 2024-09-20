@@ -4,6 +4,10 @@
     import type { TradeData, QuoteData } from '$lib/core/types';
     import { getStream } from '$lib/utils/stream';
 
+
+
+
+
     export let ticker: Writable<string>;
     let store: Writable<TradeData>;
     let quoteStore: Writable<QuoteData>;
