@@ -17,8 +17,8 @@ export class ReplayStream implements Stream {
     private startTime: number = 0; // milliseconds
     private initialTimestamp: number = 0;
     private tickMap: Map<string,{reqInbound:boolean,ticks:Array<any>}> = new Map()
-    private securityId = 0;
     public subscribe(channelName: string) {
+        console.log("Subscribed in Replay: ", channelName)
         this.tickMap.set(channelName,{reqInbound:false,ticks:[]})
     }
     public unsubscribe(channelName: string) {
@@ -29,11 +29,9 @@ export class ReplayStream implements Stream {
         if (!instance) return;
         var timestamp = instance.timestamp
         if (!timestamp) return;
-        if (!instance.securityId) {return;}
         changeChart(instance, false)
         this.startTime = Date.now()
         this.initialTimestamp = timestamp
-        this.securityId = instance.securityId
         this.replayStatus = true; 
         for (const channel of activeChannels.keys()){
             this.subscribe(channel)
@@ -58,7 +56,7 @@ export class ReplayStream implements Stream {
                      req = "getTradeData"
                 }
                 privateRequest<[]>(req, {
-                    securityId: this.securityId,
+                    securityId: securityId,
                     time: latestTime ?? this.initialTimestamp,
                     lengthOfTime: this.buffer,
                     extendedHours: false
@@ -72,7 +70,6 @@ export class ReplayStream implements Stream {
                 let i = 0
                 const store = activeChannels.get(channel)?.store
                 while (i < v.ticks.length && v.ticks[i].timestamp <= this.simulatedTime) {
-                    console.log(v.ticks[i])
                     store?.set(v.ticks[i])
                     i ++ 
                 }

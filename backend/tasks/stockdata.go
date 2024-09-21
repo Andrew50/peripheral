@@ -314,17 +314,18 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 }
 
 type GetTradeDataArgs struct {
-	SecurityID    int64 `json:"securityId"`
-	Timestamp     int64 `json:"time"`
-	LengthOfTime  int64 `json:"lengthOfTime"` //length of time in milliseconds
-	ExtendedHours bool  `json:"extendedhours"`
+	SecurityID    string `json:"securityId"`
+	Timestamp     int64  `json:"time"`
+	LengthOfTime  int64  `json:"lengthOfTime"` //length of time in milliseconds
+	ExtendedHours bool   `json:"extendedhours"`
 }
 
 type GetTradeDataResults struct {
-	Timestamp int64   `json:"timestamp"`
-	Price     float64 `json:"price"`
-	Size      float64 `json:"size"`
-	Exchange  int     `json:"exchange"`
+	Timestamp  int64   `json:"timestamp"`
+	Price      float64 `json:"price"`
+	Size       float64 `json:"size"`
+	Exchange   int     `json:"exchange"`
+	Conditions []int32 `json:"conditions"`
 }
 
 func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -385,6 +386,7 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			tradeData.Price = iter.Item().Price
 			tradeData.Size = iter.Item().Size
 			tradeData.Exchange = iter.Item().Exchange
+			tradeData.Conditions = iter.Item().Conditions
 			tradeDataList = append(tradeDataList, tradeData)
 		}
 		windowStartTime = tradeDataList[len(tradeDataList)-1].Timestamp
@@ -399,10 +401,10 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 }
 
 type GetQuoteDataArgs struct {
-	SecurityID    int64 `json:"securityId"`
-	Timestamp     int64 `json:"time"`
-	LengthOfTime  int64 `json:"lengthOfTime"`
-	ExtendedHours bool  `json:"extendedhours"`
+	SecurityID    string `json:"securityId"`
+	Timestamp     int64  `json:"time"`
+	LengthOfTime  int64  `json:"lengthOfTime"`
+	ExtendedHours bool   `json:"extendedhours"`
 }
 
 type GetQuoteDataResults struct {
