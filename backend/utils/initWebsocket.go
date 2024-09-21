@@ -59,13 +59,13 @@ func getInitialStreamValue(channelName string, conn *Conn) (string, error) {
 		return string(jsonData), nil
 
 	} else if streamType == "slow" || streamType == "fast" {
-		price, err := GetLastTrade(conn.Polygon, ticker)
+		res, err := GetLastTrade(conn.Polygon, ticker)
 		if err != nil {
 			return "", fmt.Errorf("failed to get last trade: %v", err)
 		}
 		data := TradeData{
 			Ticker:     ticker,
-			Price:      price,
+			Price:      res.Price,
 			Size:       0,
 			Timestamp:  0,
 			Conditions: []int32{},
