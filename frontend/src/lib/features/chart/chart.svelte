@@ -197,7 +197,7 @@
     function updateLatestQuote(data:QuoteData) {
         if(isLoadingChartData) {return}
         if (!data.bidPrice || !data.askPrice){return}
-        console.log('updating quote')
+        //console.log('updating quote')
         
     const candle = chartCandleSeries.data()[chartCandleSeries.data().length - 1]
     if (!candle)return;
@@ -210,7 +210,7 @@
     ]);
     }
     async function updateLatestChartBar(data:TradeData) {
-        console.log(data)
+        //console.log(data)
         if(isLoadingChartData) {return}
         if (!data.price || !data.size || !data.timestamp) {return}
         if(chartCandleSeries.data().length == 0 || !chartCandleSeries) {return}
