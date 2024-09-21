@@ -5,12 +5,13 @@
     import {privateRequest} from '$lib/core/backend';
     import type {Instance, TradeData,QuoteData} from '$lib/core/types'
     import {setActiveChart,chartQuery, changeChart,selectedChartId} from './interface'
+    import {settings} from '$lib/core/stores'
     import type {ShiftOverlay, BarData, ChartRequest} from './interface'
     import { queryInstanceInput } from '$lib/utils/input.svelte'
     import { queryInstanceRightClick } from '$lib/utils/rightClick.svelte'
     import { createChart, ColorType,CrosshairMode} from 'lightweight-charts';
     import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, UTCTimestamp,HistogramStyleOptions, HistogramData, HistogramSeriesOptions} from 'lightweight-charts';
-    import {calculateSMA,calculateADR,calculateRVOL} from './indicators'
+    import {calculateSMA,calculateSingleADR} from './indicators'
     import type {Writable} from 'svelte/store';
     import {writable, get} from 'svelte/store';
     import { onMount, onDestroy  } from 'svelte';
@@ -23,7 +24,6 @@
     let chartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let chartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
     let sma10Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
-    let adr20Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
     let sma20Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
     let chart: IChartApi;
     let latestCrosshairPositionTime: number;
@@ -34,7 +34,7 @@
     let queuedLoad: Function | null = null
     let shiftDown = false
     const chartRequestThrottleDuration = 150; 
-    const hoveredCandleData = writable({ open: 0, high: 0, low: 0, close: 0, volume: 0, })
+    const hoveredCandleData = writable({ open: 0, high: 0, low: 0, close: 0, volume: 0, adr:0})
     const shiftOverlay: Writable<ShiftOverlay> = writable({ x: 0, y: 0, startX: 0, startY: 0, width: 0, height: 0, isActive: false, startPrice: 0, currentPrice: 0, })
     
     export let chartId: number;
@@ -67,8 +67,14 @@
                   low: bar.low, 
                   close: bar.close, 
                 }));
-                let newVolumeData = barDataList.map((bar) => ({
-                  time: UTCtoEST(bar.time as UTCTimestamp) as UTCTimestamp, value: bar.volume, color: bar.close > bar.open ? '#089981' : '#ef5350', }));
+                let newVolumeData: any
+                if (get(settings).dolvol){
+                    newVolumeData = barDataList.map((bar) => ({
+                      time: UTCtoEST(bar.time as UTCTimestamp) as UTCTimestamp, value: bar.volume * (bar.close + bar.open) / 2, color: bar.close > bar.open ? '#089981' : '#ef5350', }));
+                }else{
+                    newVolumeData = barDataList.map((bar) => ({
+                      time: UTCtoEST(bar.time as UTCTimestamp) as UTCTimestamp, value: bar.volume, color: bar.close > bar.open ? '#089981' : '#ef5350', }));
+                }
                 if (inst.requestType === 'loadAdditionalData' && inst.direction === 'backward') {
                   const earliestCandleTime = chartCandleSeries.data()[0]?.time;
                   if (typeof earliestCandleTime === 'number' && newCandleData[newCandleData.length - 1].time <= earliestCandleTime) {
@@ -144,7 +150,6 @@
                         queuedLoad = null
                         sma10Series.setData(calculateSMA(newCandleData, 10));
                         sma20Series.setData(calculateSMA(newCandleData, 20));
-                        //adr20Series.setData(calculateADR(newCandleData,20));
                         if (inst.requestType == 'loadNewTicker') {
                             chart.timeScale().fitContent();
                             chart.timeScale().applyOptions({
@@ -174,7 +179,6 @@
                         queuedLoad = null
                         sma10Series.setData(calculateSMA(newCandleData, 10));
                         sma20Series.setData(calculateSMA(newCandleData, 20));
-                        //adr20Series.setData(calculateADR(newCandleData,20));
                         if (inst.requestType == 'loadNewTicker') {
                             chart.timeScale().fitContent();
                             chart.timeScale().applyOptions({
@@ -459,7 +463,6 @@
             lastValueVisible: true, // Shows the price on the right
             priceLineVisible: false,
         });
-        //adr20Series = chart.addLineSeries({ color: 'orange', lineWidth:1,priceLineVisible:false,priceScaleId:'left'});
 
         chart.subscribeCrosshairMove((param)=>{
             if (!param.point) {
@@ -473,7 +476,19 @@
             if(!bar) {return;}
             const volumeData = param.seriesData.get(chartVolumeSeries);
             const volume = volumeData ? volumeData.value : 0;
-            hoveredCandleData.set({ open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: volume })
+            const cursorTime = bar.time as number;
+            const allCandleData = chartCandleSeries.data()
+            const cursorBarIndex = allCandleData.findIndex(candle => candle.time === cursorTime);
+
+            // Extract the 20 bars ending at the cursor's position
+            let barsForADR;
+            if (cursorBarIndex >= 20) {
+                barsForADR = allCandleData.slice(cursorBarIndex - 20, cursorBarIndex);
+            } else {
+                // If there are less than 20 bars available, get whatever is available up to the cursor
+                barsForADR = allCandleData.slice(0, cursorBarIndex);
+            }
+            hoveredCandleData.set({ open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: volume, adr:calculateSingleADR(barsForADR)})
             latestCrosshairPositionTime = bar.time as number //god
         }); 
         chart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {

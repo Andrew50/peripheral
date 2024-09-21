@@ -3,6 +3,7 @@
     import { get } from 'svelte/store';
     import type { Settings } from '$lib/core/types';
     import {privateRequest} from '$lib/core/backend'
+    import {chartQuery} from '$lib/features/chart/interface'
     
     let errorMessage: string = '';
     let tempSettings: Settings = { ...get(settings) }; // Create a local copy to work with
@@ -12,10 +13,11 @@
             privateRequest<void>("setSettings",{settings:tempSettings})
             .then(()=>{
                 settings.set(tempSettings); // Update the store with new settings
+                chartQuery.set({...get(chartQuery)})
                 errorMessage = '';
             })
         } else {
-            errorMessage = 'Please enter valid numbers greater than 0 for both rows and columns.';
+            errorMessage = 'invalid settings';
         }
     }
 
@@ -53,6 +55,16 @@
             <option value={true}>Yes</option>
             <option value={false}>No</option>
         </select>
+    </div>
+    <div>
+        <label for="adr period">Chart Columns:</label>
+        <input 
+            type="number" 
+            id="adrPeriod" 
+            bind:value={tempSettings.chartColumns} 
+            min="1" 
+            on:keypress={handleKeyPress} 
+        />
     </div>
     {#if errorMessage}
         <p style="color: red;">{errorMessage}</p>

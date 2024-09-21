@@ -19,20 +19,48 @@ func ValidateDatetime(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
         return nil, fmt.Errorf("getAnnotations invalid args: %v", err)
     }*/
 
-type GetLastTradeArgs struct {
-    Ticker string `json:"ticker"`
+    type GetPrevCloseArgs struct {
+	SecurityId int `json:"securityId"`
+	Timestamp  int `json:"timestamp"`
 }
 
-func GetLastTrade(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var args GetLastTradeArgs
+type PolygonBar struct {
+	Close float64 `json:"close"`
+}
+
+func GetPrevClose(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetPrevCloseArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		return nil, fmt.Errorf("getAnnotations invalid args: %v", err)
+		return nil, fmt.Errorf("getPrevClose invalid args: %v", err)
 	}
-    return utils.GetLastTrade(conn.Polygon,args.Ticker)
+	date := time.Unix(int64(args.Timestamp/1000), 0).UTC().Format("2006-01-02")
+	query := `SELECT ticker, minDate, maxDate FROM securities WHERE securityid=$1 AND (minDate <= $2 AND (maxDate IS NULL or maxDate >= $2)) ORDER BY minDate ASC`
+	var ticker string
+	err := conn.DB.QueryRow(context.Background(), query, args.SecurityId, date).Scan(&ticker)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve ticker: %v", err)
+	}
+	endpoint := fmt.Sprintf("https://api.polygon.io/v1/open-close/%s/%s?adjusted=true&apiKey=%s", ticker, date, conn.PolygonKey)
+	resp, err := http.Get(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch Polygon snapshot: %v", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %v", err)
+	}
+	var bar PolygonBar
+	if err := json.Unmarshal(body, &bar); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON: %v", err)
+	}
+	if bar.Close != 0 {
+		return bar.Close, nil
+	}
+
+	return nil, fmt.Errorf("no close price found for ticker %s on date %s", ticker, date)
 }
-
-
-type GetPrevCloseArgs struct {
+/*type GetPrevCloseArgs struct {
     Ticker string `json:"ticker"`
 }
 
@@ -66,7 +94,7 @@ func GetPrevClose(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
     }
     return nil, fmt.Errorf("lkmk2")
 
-}
+}*/
 
 
 

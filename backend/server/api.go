@@ -42,7 +42,7 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"deleteWatchlistItem":     tasks.DeleteWatchlistItem,
 	"newWatchlistItem":        tasks.NewWatchlistItem,
 	"getPrevClose":            tasks.GetPrevClose,
-	"getLastTrade":            tasks.GetLastTrade,
+//	"getLastTrade":            tasks.GetLastTrade,
 	"getQuoteData":            tasks.GetQuoteData,
     "getSettings": tasks.GetSettings,
     "setSettings": tasks.SetSettings,

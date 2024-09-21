@@ -16,6 +16,7 @@
         L: {$hoveredCandleData.low}
         C: {$hoveredCandleData.close}
         V: {$hoveredCandleData.volume}
+        AR: {$hoveredCandleData.adr?.toFixed(2)}
     </div>
 </div>
 <style>

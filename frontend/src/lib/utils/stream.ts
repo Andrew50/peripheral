@@ -1,12 +1,14 @@
+//stream.ts
 import type { Instance,TradeData,QuoteData } from "$lib/core/types"
 import {RealtimeStream} from "$lib/utils/realtimeStream"
 import {ReplayStream} from "$lib/utils/replayStream"
 import type {Writable} from 'svelte/store'
 import {writable} from 'svelte/store'
-
-export type ChannelType = "fast" | "slow" | "quote"
+import {privateRequest} from '$lib/core/backend'
+export type ChannelType = "fast" | "slow" | "quote" | "close"
 export const activeChannels: Map<string,{count:number,store:Writable<any>}> = new Map()
-
+import {timeEvent} from '$lib/core/stores'
+import type {TimeEvent} from '$lib/core/stores'
 const realtimeStream = new RealtimeStream;
 export const replayStream = new ReplayStream;
 let currentStream: RealtimeStream | ReplayStream = realtimeStream;
@@ -31,9 +33,20 @@ export function releaseStream(channelName:string) {
     }
 }
 
-export function getStream<T extends TradeData|QuoteData>(ticker:string,channelType:ChannelType): [Writable<T>,Function]{
-    const channelName = `${ticker}-${channelType}`
-    console.log(channelName)
+export function getStream<T extends TradeData|QuoteData|number>(securityId:number,channelType:ChannelType): [Writable<T>,Function]{
+    if (channelType == "close"){
+        const s = writable(0) as Writable<T>
+        const unsubscribe = timeEvent.subscribe((v:TimeEvent)=>{
+            if (v.event === "newDay" || v.event === "replay"){
+                 privateRequest<number>("getPrevClose",{timestamp:v.UTCtimestamp,securityId:securityId})
+                 .then((price:number)=>{
+                     s.set(price as T)
+                 })
+            }
+        })
+        return [s, unsubscribe]
+    }
+    const channelName = `${securityId}-${channelType}`
     let channel = activeChannels.get(channelName)
     if (channel){
         channel.count += 1
