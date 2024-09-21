@@ -8,14 +8,20 @@ export let setups: Writable<Setup[]> = writable([]);
 export let watchlists: Writable<Watchlist[]> = writable([]);
 export let flagWatchlistId: number | undefined;
 export let flagWatchlist: Writable<Instance[]>
-export let settings:Writable<Settings> = writable()
+export let settings:Writable<Settings> = writable({chartRows:1,chartColumns:1,dolvol:false})
 export let currentTimestamp = writable(0);
+const defaultSettings = {
+    chartRows: 1, chartColumns:1, dolvol:false
+}
 
 import { replayStream } from '$lib/utils/stream';
 export function initStores(){
-    privateRequest<Settings>("getOptions",{})
+    privateRequest<Settings>("getSettings",{})
     .then((s:Settings)=>{
-        settings.set(s)
+        if (!s){
+            s = defaultSettings
+        }
+            settings.set(s)
     })
     privateRequest<Setup[]>('getSetups', {})
     .then((v: Setup[]) => {
