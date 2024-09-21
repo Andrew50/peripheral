@@ -1,27 +1,29 @@
-import type {Settings,Setup,Instance,Watchlist} from '$lib/core/types'
+//stores.ts
 import {writable} from 'svelte/store'
+export let currentTimestamp = writable(0);
+import type {Settings,Setup,Instance,Watchlist} from '$lib/core/types'
 import type {Writable} from 'svelte/store'
 import {privateRequest} from '$lib/core/backend'
-import { onMount } from 'svelte';
-
 export let setups: Writable<Setup[]> = writable([]);
+import {UTCtoEST} from '$lib/core/timestamp'
 export let watchlists: Writable<Watchlist[]> = writable([]);
 export let flagWatchlistId: number | undefined;
 export let flagWatchlist: Writable<Instance[]>
-export let settings:Writable<Settings> = writable({chartRows:1,chartColumns:1,dolvol:false})
-export let currentTimestamp = writable(0);
-const defaultSettings = {
-    chartRows: 1, chartColumns:1, dolvol:false
+export interface TimeEvent {
+    event:"newDay" | "replay" | null,
+    UTCtimestamp: number
 }
-
+export let timeEvent: Writable<TimeEvent> = writable({event:null,UTCtimestamp:0})
+const defaultSettings = {
+    chartRows: 1, chartColumns:1, dolvol:false, adrPeriod:20,
+}
+export let settings:Writable<Settings> = writable(defaultSettings)
+let prevTimestamp: number | null = null;
 import { replayStream } from '$lib/utils/stream';
 export function initStores(){
     privateRequest<Settings>("getSettings",{})
     .then((s:Settings)=>{
-        if (!s){
-            s = defaultSettings
-        }
-            settings.set(s)
+        settings.set({...defaultSettings,...s})
     })
     privateRequest<Setup[]>('getSetups', {})
     .then((v: Setup[]) => {
@@ -59,6 +61,18 @@ export function initStores(){
         loadFlagWatchlist()
 
     })
+
+
+    currentTimestamp.subscribe((newTimestamp: number ) => {
+        if (prevTimestamp !== null) {
+            const prevDay = new Date(prevTimestamp).setHours(0, 0, 0, 0);
+            const newDay = new Date(newTimestamp).setHours(0, 0, 0, 0);
+            if (newDay !== prevDay) {
+                timeEvent.set({event:"newDay",UTCtimestamp:UTCtoEST(newTimestamp)})
+            }
+        }
+        prevTimestamp = newTimestamp;
+    });
 }
 
 
