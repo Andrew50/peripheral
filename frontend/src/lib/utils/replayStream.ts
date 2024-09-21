@@ -56,7 +56,7 @@ export class ReplayStream implements Stream {
                      req = "getTradeData"
                 }
                 privateRequest<[]>(req, {
-                    securityId: securityId,
+                    securityId: parseInt(securityId),
                     time: latestTime ?? this.initialTimestamp,
                     lengthOfTime: this.buffer,
                     extendedHours: false
