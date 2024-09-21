@@ -314,10 +314,10 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 }
 
 type GetTradeDataArgs struct {
-	SecurityID    int64 `json:"securityId"`
-	Timestamp     int64 `json:"time"`
-	LengthOfTime  int64 `json:"lengthOfTime"` //length of time in milliseconds
-	ExtendedHours bool  `json:"extendedhours"`
+	SecurityID    string `json:"securityId"`
+	Timestamp     int64  `json:"time"`
+	LengthOfTime  int64  `json:"lengthOfTime"` //length of time in milliseconds
+	ExtendedHours bool   `json:"extendedhours"`
 }
 
 type GetTradeDataResults struct {
@@ -401,10 +401,10 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 }
 
 type GetQuoteDataArgs struct {
-	SecurityID    int64 `json:"securityId"`
-	Timestamp     int64 `json:"time"`
-	LengthOfTime  int64 `json:"lengthOfTime"`
-	ExtendedHours bool  `json:"extendedhours"`
+	SecurityID    string `json:"securityId"`
+	Timestamp     int64  `json:"time"`
+	LengthOfTime  int64  `json:"lengthOfTime"`
+	ExtendedHours bool   `json:"extendedhours"`
 }
 
 type GetQuoteDataResults struct {
