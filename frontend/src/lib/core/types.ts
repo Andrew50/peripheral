@@ -34,3 +34,8 @@ export interface QuoteData {
     bidSize: number;
     askSize: number;
 }
+export interface Settings {
+    chartColumns: number
+    chartRows: number
+    dolvol: boolean
+}
