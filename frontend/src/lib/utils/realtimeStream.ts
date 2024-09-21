@@ -32,10 +32,9 @@ export class RealtimeStream implements Stream{
         this.socket.addEventListener('open', () => {
             console.log('WebSocket connection established');
             this.connectionStatus.set('connected');
-            this.reconnectAttempts = 0; // Reset reconnect attempts
-            this.reconnectInterval = 5000; // Reset reconnect interval
+            this.reconnectAttempts = 0; 
+            this.reconnectInterval = 5000; 
             for (const [channelName] of activeChannels.keys()){
-                console.log("Channel Name: ", channelName)
                 this.subscribe(channelName)
             }
         });
@@ -56,19 +55,17 @@ export class RealtimeStream implements Stream{
     }
     public stop() {
         console.log('Stopping WebSocket connection and clearing subscriptions...');
-        this.shouldReconnect = false; // Prevent reconnection
+        this.shouldReconnect = false; 
         this.connectionStatus.set('disconnected');
 
         if (this.socket) {
             for (const channelName of activeChannels.keys()) {
-                this.unsubscribe(channelName); // Unsubscribe from all active channels
+                this.unsubscribe(channelName); 
             }
-
-            this.socket.close(); // Close WebSocket connection
+            this.socket.close();
             this.socket = null;
         }
     }
-
     public subscribe(channelName:string){
         if(this.socket?.readyState === WebSocket.OPEN) {
             const subscriptionRequest : SubscriptionRequest = {
@@ -87,7 +84,6 @@ export class RealtimeStream implements Stream{
             this.socket.send(JSON.stringify(unsubscriptionRequest))
         }
     }
-
     private reconnect() {
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
           this.reconnectAttempts++;

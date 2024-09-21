@@ -25,7 +25,7 @@ export class ReplayStream implements Stream {
         this.tickMap.delete(channelName)
     }
 
-    public start(instance : Instance) {
+    public start(streams:instance : Instance) {
         if (!instance) return;
         var timestamp = instance.timestamp
         if (!timestamp) return;
