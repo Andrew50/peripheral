@@ -41,16 +41,15 @@ func GetQuote(client *polygon.Client, ticker string, nanoTimestamp models.Nanos,
 	return client.ListQuotes(context.Background(), params)
 }
 
-func GetLastTrade(client *polygon.Client, ticker string) (float64, error) {
+func GetLastTrade(client *polygon.Client, ticker string) (models.LastTrade, error) {
 	params := &models.GetLastTradeParams{
 		Ticker: ticker,
 	}
 	res, err := client.GetLastTrade(context.Background(), params)
 	if err != nil {
-		return 0, err
+		return res.Results, err
 	}
-	res.Results.ParticipantTimestamp
-	return res.Results.Price, nil
+	return res.Results, nil
 
 }
 func GetTrade(client *polygon.Client, ticker string, nanoTimestamp models.Nanos, ord string, compareType models.Comparator, numResults int) (*iter.Iter[models.Trade], error) {

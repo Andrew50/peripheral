@@ -210,7 +210,7 @@
     ]);
     }
     async function updateLatestChartBar(data:TradeData) {
-        //console.log(data)
+        //zconsole.log(data)
         if(isLoadingChartData) {return}
         if (!data.price || !data.size || !data.timestamp) {return}
         if(chartCandleSeries.data().length == 0 || !chartCandleSeries) {return}
