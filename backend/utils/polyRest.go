@@ -65,7 +65,7 @@ func GetTrade(client *polygon.Client, ticker string, nanoTimestamp models.Nanos,
 	}.WithTimestamp(compareType, nanoTimestamp).
 		WithOrder(sortOrder).
 		WithLimit(numResults).
-		WithSort(models.Sort("timestamp"))
+		WithSort(models.Timestamp)
 	return client.ListTrades(context.Background(), params), nil
 }
 

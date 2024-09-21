@@ -10,6 +10,8 @@ export let flagWatchlistId: number | undefined;
 export let flagWatchlist: Writable<Watch[]>
 export let chartLayout = writable({rows:1,columns:1})
 export let currentTimestamp = writable(0);
+
+import { replayStream } from '$lib/utils/stream';
 export function initStores(){
     privateRequest<Setup[]>('getSetups', {})
     .then((v: Setup[]) => {
@@ -54,7 +56,12 @@ export function initStores(){
 export function updateTime() {
 
     // ADD IF REPLAY 
-    currentTimestamp.set(Date.now()); 
+    if(replayStream.replayStatus) {
+        currentTimestamp.set(replayStream.simulatedTime);
+    }
+    else {
+        currentTimestamp.set(Date.now()); 
+    }
 }
 
 

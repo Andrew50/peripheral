@@ -316,7 +316,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 type GetTradeDataArgs struct {
 	SecurityID    int64 `json:"securityId"`
 	Timestamp     int64 `json:"time"`
-	LengthOfTime  int64 `json:"lengthOfTime"`
+	LengthOfTime  int64 `json:"lengthOfTime"` //length of time in milliseconds
 	ExtendedHours bool  `json:"extendedhours"`
 }
 
@@ -355,8 +355,8 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	defer rows.Close()
 
 	var tradeDataList []GetTradeDataResults
-	windowStartTime := args.Timestamp                        // milliseconds
-	windowEndTime := args.Timestamp + args.LengthOfTime*1000 // milliseconds
+	windowStartTime := args.Timestamp                   // milliseconds
+	windowEndTime := args.Timestamp + args.LengthOfTime // milliseconds
 	for rows.Next() {
 		var ticker string
 		var minDateFromSQL *time.Time
@@ -436,8 +436,8 @@ func GetQuoteData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	}
 	defer rows.Close()
 	var quoteDataList []GetQuoteDataResults
-	windowStartTime := args.Timestamp                        // milliseconds
-	windowEndTime := args.Timestamp + args.LengthOfTime*1000 // milliseconds
+	windowStartTime := args.Timestamp                   // milliseconds
+	windowEndTime := args.Timestamp + args.LengthOfTime // milliseconds
 	for rows.Next() {
 		var ticker string
 		var minDateFromSQL *time.Time

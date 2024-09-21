@@ -7,13 +7,14 @@ import {get} from 'svelte/store'
 
 export class ReplayStream implements Stream {
     public replayStatus: boolean = false;
+    public simulatedTime: number = 0; 
     private playbackSpeed = 1;
-    private buffer = 20000;
-    private loopCooldown = 1000000;
+    private buffer = 10000; // milliseconds
+    private loopCooldown = 20;
     private isPaused: boolean = false;
     private accumulatedPauseTime: number = 0;
     private pauseStartTime: number = 0;
-    private startTime: number = 0;
+    private startTime: number = 0; // milliseconds
     private initialTimestamp: number = 0;
     private tickMap: Map<string,{reqInbound:boolean,ticks:Array<any>}> = new Map()
     private securityId = 0;
@@ -37,6 +38,7 @@ export class ReplayStream implements Stream {
         for (const channel of activeChannels.keys()){
             this.tickMap.set(channel,{reqInbound:false,ticks:[]})
         }
+        console.log("Replay starting....")
         this.loop()
     }
 
@@ -44,9 +46,9 @@ export class ReplayStream implements Stream {
         const currentTime = Date.now();
         for (let [channel,v] of this.tickMap.entries()){
             const elapsedTime = currentTime - this.startTime - this.accumulatedPauseTime;
-            const simulatedTime = this.initialTimestamp + elapsedTime * this.playbackSpeed;
+            this.simulatedTime = this.initialTimestamp + elapsedTime * this.playbackSpeed;
             const latestTime = v.ticks[v.ticks.length-1]?.timestamp
-            if (!v.reqInbound && (!latestTime || latestTime < simulatedTime + this.buffer)){
+            if (!v.reqInbound && (!latestTime || latestTime < this.simulatedTime + this.buffer)){
                 v.reqInbound = true
                 const [securityId, type] = channel.split("-")
                 let req;
@@ -69,7 +71,8 @@ export class ReplayStream implements Stream {
             if (v.ticks.length > 0){
                 let i = 0
                 const store = activeChannels.get(channel)?.store
-                while (i < v.ticks.length && v.ticks[i].timestamp <= simulatedTime) {
+                while (i < v.ticks.length && v.ticks[i].timestamp <= this.simulatedTime) {
+                    console.log(v.ticks[i])
                     store?.set(v.ticks[i])
                     i ++ 
                 }

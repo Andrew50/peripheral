@@ -1,8 +1,8 @@
 package server
 
 import (
+	"backend/jobs"
 	"backend/tasks"
-    "backend/jobs"
 	"backend/utils"
 	"encoding/json"
 	"fmt"
@@ -16,7 +16,7 @@ var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, err
 }
 
 var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{}, error){
-	"verifyAuth": verifyAuth,
+	"verifyAuth":              verifyAuth,
 	"getSimilarInstances":     tasks.GetSimilarInstances,
 	"getSecuritiesFromTicker": tasks.GetSecuritiesFromTicker,
 	"getChartData":            tasks.GetChartData,
@@ -29,20 +29,21 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"completeStudy":           tasks.CompleteStudy,
 	"getSetups":               tasks.GetSetups,
 	"getTradeData":            tasks.GetTradeData,
-    "getJournals":              tasks.GetJournals,
-	"saveJournal":               tasks.SaveJournal,
-	"deleteJournal":             tasks.DeleteJournal,
-	"getJournalEntry":           tasks.GetJournalEntry,
-	"completeJournal":           tasks.CompleteJournal,
-    "getScreensavers":          tasks.GetScreensavers,
-    "getWatchlists": tasks.GetWatchlists,
-    "deleteWatchlist": tasks.DeleteWatchlist,
-    "newWatchlist": tasks.NewWatchlist,
-    "getWatchlistItems":tasks.GetWatchlistItems,
-    "deleteWatchlistItem":tasks.DeleteWatchlistItem,
-    "newWatchlistItem":tasks.NewWatchlistItem,
-    "getPrevClose" : tasks.GetPrevClose,
-    "getLastTrade" : tasks.GetLastTrade,
+	"getJournals":             tasks.GetJournals,
+	"saveJournal":             tasks.SaveJournal,
+	"deleteJournal":           tasks.DeleteJournal,
+	"getJournalEntry":         tasks.GetJournalEntry,
+	"completeJournal":         tasks.CompleteJournal,
+	"getScreensavers":         tasks.GetScreensavers,
+	"getWatchlists":           tasks.GetWatchlists,
+	"deleteWatchlist":         tasks.DeleteWatchlist,
+	"newWatchlist":            tasks.NewWatchlist,
+	"getWatchlistItems":       tasks.GetWatchlistItems,
+	"deleteWatchlistItem":     tasks.DeleteWatchlistItem,
+	"newWatchlistItem":        tasks.NewWatchlistItem,
+	"getPrevClose":            tasks.GetPrevClose,
+	"getLastTrade":            tasks.GetLastTrade,
+	"getQuoteData":            tasks.GetQuoteData,
 }
 
 func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
@@ -119,7 +120,7 @@ func private_handler(conn *utils.Conn) http.HandlerFunc {
 
 		if function, ok := privateFunc[req.Function]; ok {
 			result, err := function(conn, user_id, req.Arguments)
-			if handleError(w, err,  req.Function) {
+			if handleError(w, err, req.Function) {
 				return
 			}
 			err = json.NewEncoder(w).Encode(result)
@@ -138,7 +139,6 @@ type QueueRequest struct {
 	Function  string      `json:"func"`
 	Arguments interface{} `json:"args"`
 }
-
 
 func queueHandler(conn *utils.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -160,9 +160,9 @@ func queueHandler(conn *utils.Conn) http.HandlerFunc {
 		if handleError(w, err, "queue") {
 			return
 		}
-        response:=map[string]string{
-            "taskId":taskId,
-        }
+		response := map[string]string{
+			"taskId": taskId,
+		}
 		err = json.NewEncoder(w).Encode(response)
 		if handleError(w, err, "190v0id") {
 			return
@@ -204,8 +204,8 @@ func pollHandler(conn *utils.Conn) http.HandlerFunc {
 func StartServer() {
 	conn, cleanup := utils.InitConn(true)
 	defer cleanup()
-    stopScheduler := jobs.StartScheduler(conn)
-    defer close(stopScheduler)
+	stopScheduler := jobs.StartScheduler(conn)
+	defer close(stopScheduler)
 	http.HandleFunc("/public", public_handler(conn))
 	http.HandleFunc("/private", private_handler(conn))
 	http.HandleFunc("/queue", queueHandler(conn))

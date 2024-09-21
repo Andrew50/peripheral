@@ -168,7 +168,6 @@
                             chartVolumeSeries.setData(newVolumeData);
                             chart.timeScale().setVisibleRange({from: vrFrom, to: vrTo})
                         }else if (inst.direction == "backward"){
-                            console.log(newCandleData)
                             chartCandleSeries.setData(newCandleData);
                             chartVolumeSeries.setData(newVolumeData);
                         }
@@ -211,6 +210,7 @@
     ]);
     }
     async function updateLatestChartBar(data:TradeData) {
+        console.log(data)
         if(isLoadingChartData) {return}
         if (!data.price || !data.size || !data.timestamp) {return}
         if(chartCandleSeries.data().length == 0 || !chartCandleSeries) {return}
@@ -253,6 +253,7 @@
                 value: data.size
             })
         }
+        await new Promise(resolve => setTimeout(resolve, 3000));
         try {
             const barDataList: BarData[] = await privateRequest<BarData[]>("getChartData", {
             securityId:chartSecurityId, 
@@ -313,18 +314,6 @@
         // })
 
 
-    }
-    function testingChart() {
-        console.log("test")
-        // var currentData = chartCandleSeries.data()
-        // currentData[currentData.length-3] = {
-        //     time: currentData[currentData.length-3].time,
-        //     open: 200, 
-        //     high: 500,
-        //     low: 100, 
-        //     close: 300
-        // }
-        // chartCandleSeries.setData(currentData)
     }
     onMount(() => {
         const chartOptions = { 
