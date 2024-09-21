@@ -1,13 +1,13 @@
 <script lang="ts">
     import Chart from './chart.svelte';
-    import {chartLayout} from '$lib/core/stores'
+    import {settings} from '$lib/core/stores'
     export let width: number;
 </script>
 <div class="chart-container">
-    {#each Array.from({ length: $chartLayout.rows }) as _, j}
-        <div class="row" style="height: calc(100% / {$chartLayout.rows})">
-            {#each Array.from({length: $chartLayout.columns }) as _, i}
-                    <Chart width={width / $chartLayout.columns} chartId={i + j * $chartLayout.columns} />
+    {#each Array.from({ length: $settings.chartRows }) as _, j}
+        <div class="row" style="height: calc(100% / {$settings.chartRows})">
+            {#each Array.from({length: $settings.chartColumns }) as _, i}
+                    <Chart width={width / $settings.chartColumns} chartId={i + j * $settings.chartColumns} />
             {/each}
         </div>
     {/each}
