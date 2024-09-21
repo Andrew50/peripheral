@@ -9,7 +9,7 @@ import type {Stream} from '$lib/utils/stream'
 export class RealtimeStream implements Stream{
     private socket: WebSocket | null = null;
     private url: string = base_url + "/ws"
-    private reconnectInterval: number = 5000; // Reconnect interval in milliseconds 
+    private reconnectInterval: number = 5000; //ms
     private maxReconnectInterval: number = 30000;
     private reconnectAttempts: number = 0;
     private maxReconnectAttempts: number = 5; 
