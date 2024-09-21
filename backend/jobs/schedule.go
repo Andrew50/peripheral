@@ -10,26 +10,26 @@ var eOpenRun = false
 var eCloseRun = false
 
 func StartScheduler(conn *utils.Conn) chan struct{} {
-    go initialize(conn)
-    location, err := time.LoadLocation("EST")
-    ticker := time.NewTicker(1 * time.Minute)
-    quit := make(chan struct{})
-    if err != nil {
-        panic(fmt.Errorf("219jv %v",err))
-    }
-    go func() {
-        for {
-            select {
-            case <-ticker.C:
-                now := time.Now().In(location)
-                eventLoop(now,conn)
-            case <-quit:
-                ticker.Stop()
-                return
-            }
-        }
-    }()
-    return quit
+	go initialize(conn)
+	location, err := time.LoadLocation("EST")
+	ticker := time.NewTicker(1 * time.Minute)
+	quit := make(chan struct{})
+	if err != nil {
+		panic(fmt.Errorf("219jv %v", err))
+	}
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				now := time.Now().In(location)
+				eventLoop(now, conn)
+			case <-quit:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+	return quit
 }
 
 func initialize(conn *utils.Conn){
