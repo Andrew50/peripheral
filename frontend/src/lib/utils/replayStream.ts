@@ -36,7 +36,7 @@ export class ReplayStream implements Stream {
         this.securityId = instance.securityId
         this.replayStatus = true; 
         for (const channel of activeChannels.keys()){
-            this.tickMap.set(channel,{reqInbound:false,ticks:[]})
+            this.subscribe(channel)
         }
         console.log("Replay starting....")
         this.loop()

@@ -25,6 +25,7 @@ export interface TradeData {
     price: number;
     size: number;
     exchange: number;
+    prevClose: number;
     conditions: Array<number>;
 }
 export interface QuoteData {
@@ -38,4 +39,5 @@ export interface Settings {
     chartColumns: number
     chartRows: number
     dolvol: boolean
+    adrPeriod: number
 }

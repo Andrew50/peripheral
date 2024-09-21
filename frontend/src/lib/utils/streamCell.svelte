@@ -13,17 +13,17 @@
     let priceStream: Writable<TradeData>;
     
     onMount(() => {
-        privateRequest<number>("getPrevClose", { ticker })
+        /*privateRequest<number>("getPrevClose", { ticker:ticker })
         .then((prevCloseValue) => {
             prevClose = prevCloseValue
         }).catch((err) => {
             console.error('Error loading initial values:', err);
-        });
+        });*/
         [priceStream, releaseStream] = getStream(ticker, "fast")
         priceStream.subscribe((v) => {
             if (prevClose !== null) {  // Ensure prevClose is available before calculating change
                 if (v.price){
-                    change.set(getChange(v.price, prevClose));
+                    change.set(getChange(v.price, v.prevClose));
                 }
             }
         });
