@@ -1,4 +1,4 @@
-import type {Setup, Watch,Watchlist} from '$lib/core/types'
+import type {Settings,Setup,Instance,Watchlist} from '$lib/core/types'
 import {writable} from 'svelte/store'
 import type {Writable} from 'svelte/store'
 import {privateRequest} from '$lib/core/backend'
@@ -7,10 +7,14 @@ import { onMount } from 'svelte';
 export let setups: Writable<Setup[]> = writable([]);
 export let watchlists: Writable<Watchlist[]> = writable([]);
 export let flagWatchlistId: number | undefined;
-export let flagWatchlist: Writable<Watch[]>
-export let chartLayout = writable({rows:1,columns:1})
+export let flagWatchlist: Writable<Instance[]>
+export let settings:Writable<Settings> = writable()
 export let currentTimestamp = writable(0);
 export function initStores(){
+    privateRequest<Settings>("getOptions",{})
+    .then((s:Settings)=>{
+        settings.set(s)
+    })
     privateRequest<Setup[]>('getSetups', {})
     .then((v: Setup[]) => {
         v = v.map((v:Setup) => {
@@ -25,8 +29,8 @@ export function initStores(){
     });
 
     function loadFlagWatchlist(){
-        privateRequest<Watch[]>("getWatchlistItems",{watchlistId:flagWatchlistId})
-        .then((v:Watch[])=>{
+        privateRequest<Instance[]>("getWatchlistItems",{watchlistId:flagWatchlistId})
+        .then((v:Instance[])=>{
             flagWatchlist = writable(v)
         })
     }
