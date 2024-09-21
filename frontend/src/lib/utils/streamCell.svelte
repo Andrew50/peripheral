@@ -6,40 +6,54 @@
     import { privateRequest } from '$lib/core/backend';
     import type { TradeData } from '$lib/core/types';
     
-    export let ticker: string;
+    export let securityId: string;
     let releaseStream: Function;
+    let unsubscribe: Function
     let change = writable(0)// Initialize `change` with a default value
     let prevClose: number | null = null;  // Initialize as null to handle when it's not available yet
     let priceStream: Writable<TradeData>;
+    let prevCloseStream: Writable<number>;
+    interface ChangeStore {
+        price?: number
+        prevClose?: number
+        change: number 
+    }
+    let changeStore = writable<ChangeStore>({change:0})
     
     onMount(() => {
-        /*privateRequest<number>("getPrevClose", { ticker:ticker })
-        .then((prevCloseValue) => {
-            prevClose = prevCloseValue
-        }).catch((err) => {
-            console.error('Error loading initial values:', err);
-        });*/
-        [priceStream, releaseStream] = getStream(ticker, "fast")
+        [priceStream, releaseStream] = getStream<TradeData>(securityId, "fast")
+        [prevCloseStream, unsubscribe] = getStream<number>(securityId,"close")
         priceStream.subscribe((v) => {
             if (prevClose !== null) {  // Ensure prevClose is available before calculating change
                 if (v.price){
-                    change.set(getChange(v.price, v.prevClose));
+                    changeStore.update((s:ChangeStore)=>{
+                        s.price = v.price
+                        if (s.price && s.prevClose) s.change = getChange(s.price,s.prevClose)
+                        return s
+                    })
                 }
             }
         });
+        prevCloseStream.subscribe((v:number)=>{
+            changeStore.update((s:ChangeStore)=>{
+                s.prevClose = v
+                if (s.price && s.prevClose) s.change = getChange(s.price,s.prevClose)
+                return s
+            })
+        })
     });
 
     onDestroy(() => {
         releaseStream();
+        unsubscribe();
     });
 
-    // Utility function to calculate the percentage change
     function getChange(price: number, prevClose: number) {
-        return (price / prevClose - 1) * 100;
+        return ((price / prevClose - 1) * 100)
     }
 </script>
 
-<td class={$change < 0 ? "red" : "green"}> {$change.toFixed(2) ?? ""}% </td>
+<td class={$changeStore.change < 0 ? "red" : "green"}> {$changeStore.change.toFixed(2) ?? ""}% </td>
 
 <style>
     .green {

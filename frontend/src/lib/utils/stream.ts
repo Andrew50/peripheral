@@ -6,7 +6,7 @@ import type {Writable} from 'svelte/store'
 import {writable} from 'svelte/store'
 import {privateRequest} from '$lib/core/backend'
 export type ChannelType = "fast" | "slow" | "quote" | "close"
-export const activeChannels: Map<string,{count:number,store:Writable<any>}> = new Map()
+export type Channels = Map<string,{count:number,store:Writable<any>}>
 import {timeEvent} from '$lib/core/stores'
 import type {TimeEvent} from '$lib/core/stores'
 const realtimeStream = new RealtimeStream;
