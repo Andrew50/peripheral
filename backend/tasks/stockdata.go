@@ -321,10 +321,11 @@ type GetTradeDataArgs struct {
 }
 
 type GetTradeDataResults struct {
-	Timestamp int64   `json:"timestamp"`
-	Price     float64 `json:"price"`
-	Size      float64 `json:"size"`
-	Exchange  int     `json:"exchange"`
+	Timestamp  int64   `json:"timestamp"`
+	Price      float64 `json:"price"`
+	Size       float64 `json:"size"`
+	Exchange   int     `json:"exchange"`
+	Conditions []int32 `json:"conditions"`
 }
 
 func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -385,6 +386,7 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			tradeData.Price = iter.Item().Price
 			tradeData.Size = iter.Item().Size
 			tradeData.Exchange = iter.Item().Exchange
+			tradeData.Conditions = iter.Item().Conditions
 			tradeDataList = append(tradeDataList, tradeData)
 		}
 		windowStartTime = tradeDataList[len(tradeDataList)-1].Timestamp

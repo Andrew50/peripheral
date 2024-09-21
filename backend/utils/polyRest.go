@@ -49,6 +49,7 @@ func GetLastTrade(client *polygon.Client, ticker string) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
+	res.Results.ParticipantTimestamp
 	return res.Results.Price, nil
 
 }
