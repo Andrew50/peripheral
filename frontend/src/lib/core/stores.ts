@@ -5,14 +5,18 @@ import type {Settings,Setup,Instance,Watchlist} from '$lib/core/types'
 import type {Writable} from 'svelte/store'
 import {privateRequest} from '$lib/core/backend'
 export let setups: Writable<Setup[]> = writable([]);
-import {UTCtoEST} from '$lib/core/timestamp'
 export let watchlists: Writable<Watchlist[]> = writable([]);
 export let flagWatchlistId: number | undefined;
 export let flagWatchlist: Writable<Instance[]>
+export let replayInfo = writable<ReplayInfo>({status:"inactive",startTimestamp:0})
+export interface ReplayInfo {
+    status: "inactive" | "active" | "paused"
+    startTimestamp: number
+}
 export interface TimeEvent {
     event:"newDay" | "replay" | null,
     UTCtimestamp: number
-    ESTtimestamp: number
+    //ESTtimestamp: number
 }
 export let timeEvent: Writable<TimeEvent> = writable({event:null,UTCtimestamp:0})
 const defaultSettings = {
@@ -65,7 +69,7 @@ export function initStores(){
             const prevDay = new Date(prevTimestamp).setHours(0, 0, 0, 0);
             const newDay = new Date(newTimestamp).setHours(0, 0, 0, 0);
             if (newDay !== prevDay) {
-                timeEvent.set({event:"newDay",UTCtimestamp:UTCtoEST(newTimestamp),ESTtimestamp:newTimestamp})
+                timeEvent.set({event:"newDay",UTCtimestamp:(newTimestamp)})
             }
         }
         prevTimestamp = newTimestamp;
