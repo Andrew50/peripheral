@@ -66,34 +66,48 @@ export class RealtimeStream implements Stream{
     }
     public subscribe(channelName:string){
         const [securityId,streamType] = channelName.split("-")
-        const store = activeChannels.get(channelName).store
-        privateRequest<string>("getCurrentTicker",{securityId:securityId})
+        const channel = activeChannels.get(channelName)
+        if (!channel){
+            console.log("couldnt find active channel for", channel)
+                return 
+        }
+        const store = channel.store
+
+        privateRequest<string>("getCurrentTicker",{securityId:parseInt(securityId)})
         .then((ticker:string)=>{
-            const streamName = `${ticker}-${streamType}`
-            this.streamNameToStore.set(streamName,store)
-            if(this.socket?.readyState === WebSocket.OPEN) {
-                const subscriptionRequest : SubscriptionRequest = {
-                    action : 'subscribe',
-                    channelName: streamName,
-                };
-                this.socket?.send(JSON.stringify(subscriptionRequest));
+            if (ticker == "delisted"){
+                console.log("no realtime for ",securityId)
+            }else{
+                const streamName = `${ticker}-${streamType}`
+                this.streamNameToStore.set(streamName,store)
+                if(this.socket?.readyState === WebSocket.OPEN) {
+                    const subscriptionRequest : SubscriptionRequest = {
+                        action : 'subscribe',
+                        channelName: streamName,
+                    };
+                    this.socket?.send(JSON.stringify(subscriptionRequest));
+                }
             }
         })
     }
     public unsubscribe(channelName:string){
         const [securityId,streamType] = channelName.split("-")
-        privateRequest<string>("getCurrentTicker",{securityId:securityId})
+        privateRequest<string>("getCurrentTicker",{securityId:parseInt(securityId)})
         .then((ticker:string)=>{
-            const streamName = `${ticker}-${streamType}`
-        if(this.socket?.readyState === WebSocket.OPEN) {
-            const unsubscriptionRequest : SubscriptionRequest = {
-                action: 'unsubscribe',
-                channelName: streamName,
-            };
-            this.streamNameToStore.delete(streamName)
-            this.socket.send(JSON.stringify(unsubscriptionRequest))
-        }
-        })
+            if (ticker == "delisted"){
+                console.log("no realtime for ",securityId)
+            }else{
+                const streamName = `${ticker}-${streamType}`
+                if(this.socket?.readyState === WebSocket.OPEN) {
+                    const unsubscriptionRequest : SubscriptionRequest = {
+                        action: 'unsubscribe',
+                        channelName: streamName,
+                    };
+                    this.streamNameToStore.delete(streamName)
+                    this.socket.send(JSON.stringify(unsubscriptionRequest))
+                }
+            }
+        })    
     }
     private reconnect() {
         if (this.reconnectAttempts < this.maxReconnectAttempts) {

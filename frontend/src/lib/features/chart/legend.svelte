@@ -1,7 +1,6 @@
 
 <script lang='ts'>
     export let hoveredCandleData;
-    import {chartQuery} from './interface'
     import type {Instance} from '$lib/core/types'
     export let instance: Instance
 </script>

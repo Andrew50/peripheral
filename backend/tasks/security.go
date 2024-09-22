@@ -8,6 +8,7 @@ import (
 	"time"
     "io"
     "net/http"
+	"github.com/jackc/pgx/v4"
 )
 
 /*type ValidateDatetimeArgs struct {
@@ -20,7 +21,7 @@ func ValidateDatetime(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
     }*/
 
 type GetCurrentTickerArgs struct {
-    SecurityId string `json:"securityId"`
+    SecurityId int `json:"securityId"`
 }
 
 func GetCurrentTicker(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -30,7 +31,9 @@ func GetCurrentTicker(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 	}
 	var ticker string
 	err := conn.DB.QueryRow(context.Background(),  "SELECT ticker FROM securities WHERE securityid=$1 AND maxDate is NULL",args.SecurityId).Scan(&ticker)
-	if err != nil {
+    if err == pgx.ErrNoRows {
+        return "delisted" , nil
+    } else if err != nil {
 		return nil, fmt.Errorf("k01n0v0e: %v", err)
 	}
     return ticker, nil
