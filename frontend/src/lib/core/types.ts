@@ -41,4 +41,5 @@ export interface Settings {
     dolvol: boolean
     adrPeriod: number
     divideTaS: boolean
+    filterTaS: boolean
 }
