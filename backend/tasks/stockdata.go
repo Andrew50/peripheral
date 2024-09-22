@@ -87,7 +87,7 @@ type GetChartDataArgs struct {
 	Timestamp     int64  `json:"timestamp"` // If this datetime is just a date, it needs to grab the end of the day as opposed to the beginning of the day
 	Direction     string `json:"direction"` // to ensure that we get the data from that date
 	Bars          int    `json:"bars"`
-	ExtendedHours bool   `json:"extendedhours"`
+	ExtendedHours bool   `json:"extendedHours"`
 	IsReplay      bool   `json:"isreplay"`
 	//EndTime   string `json:"endtime"`
 }
@@ -268,6 +268,14 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			return nil, fmt.Errorf("rfk3f, %v", err)
 		}
 		for iter.Next() {
+            if !args.ExtendedHours {
+                timestamp := time.Time(iter.Item().Timestamp).In(easternLocation)
+                hour := timestamp.Hour()
+                minute := timestamp.Minute()
+                if hour < 9 || (hour == 9 && minute < 30) || hour >= 16 {
+                    continue
+                }
+            }
 			if numBarsRemaining <= 0 {
 				if args.Direction == "forward" {
 					fmt.Println("forward working")
@@ -310,15 +318,14 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		}
 	}
 
-	return nil, fmt.Errorf("c34lg: Did not return bar data for securityid {%v}, timeframe {%v}, timestamp {%v}, direction {%v}, Bars {%v}, extendedHours {%v}",
-		args.SecurityId, args.Timeframe, args.Timestamp, args.Direction, args.Bars, args.ExtendedHours)
+	return nil, fmt.Errorf("c34lg")
 }
 
 type GetTradeDataArgs struct {
 	SecurityID    int64 `json:"securityId"`
 	Timestamp     int64 `json:"time"`
 	LengthOfTime  int64 `json:"lengthOfTime"` //length of time in milliseconds
-	ExtendedHours bool  `json:"extendedhours"`
+	ExtendedHours bool  `json:"extendedHours"`
 }
 
 type GetTradeDataResults struct {
@@ -382,6 +389,14 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			if int64(time.Time(iter.Item().ParticipantTimestamp).Unix())*1000 > windowEndTime {
 				return tradeDataList, nil
 			}
+            if !args.ExtendedHours {
+                timestamp := time.Time(iter.Item().ParticipantTimestamp).In(easternLocation)
+                hour := timestamp.Hour()
+                minute := timestamp.Minute()
+                if hour < 9 || (hour == 9 && minute < 30) || hour >= 16 {
+                    continue
+                }
+            }
 			var tradeData GetTradeDataResults
 			tradeData.Timestamp = time.Time(iter.Item().ParticipantTimestamp).UnixNano() / int64(time.Millisecond)
 			tradeData.Price = iter.Item().Price
@@ -395,14 +410,14 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	if len(tradeDataList) != 0 {
 		return tradeDataList, nil
 	}
-	return nil, fmt.Errorf("3l6yykh0, Did not return trade data for securityid {%v}, timestamp {%v}, lengthOfTime {%v}, extendedHours {%v}", args.SecurityID, args.Timestamp, args.LengthOfTime, args.ExtendedHours)
+    return nil, fmt.Errorf("on0fi01in0f")
 }
 
 type GetQuoteDataArgs struct {
 	SecurityID    int64 `json:"securityId"`
 	Timestamp     int64 `json:"time"`
 	LengthOfTime  int64 `json:"lengthOfTime"`
-	ExtendedHours bool  `json:"extendedhours"`
+	ExtendedHours bool  `json:"extendedHours"`
 }
 
 type GetQuoteDataResults struct {
@@ -451,13 +466,18 @@ func GetQuoteData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			return nil, fmt.Errorf("error converting time: %v", err)
 		}
 		iter := utils.GetQuote(conn.Polygon, ticker, windowStartTimeNanos, "asc", models.GTE, 30000)
-		if err != nil {
-			return nil, fmt.Errorf("error fetching quotes: %v", err)
-		}
 		for iter.Next() {
 			if int64(time.Time(iter.Item().ParticipantTimestamp).Unix())*1000 > windowEndTime {
 				return quoteDataList, nil
 			}
+            if !args.ExtendedHours {
+                timestamp := time.Time(iter.Item().ParticipantTimestamp).In(easternLocation)
+                hour := timestamp.Hour()
+                minute := timestamp.Minute()
+                if hour < 9 || (hour == 9 && minute < 30) || hour >= 16 {
+                    continue
+                }
+            }
 			var quoteData GetQuoteDataResults
 			quoteData.Timestamp = time.Time(iter.Item().ParticipantTimestamp).UnixNano() / int64(time.Millisecond)
 			quoteData.BidPrice = iter.Item().BidPrice
@@ -471,6 +491,5 @@ func GetQuoteData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	if len(quoteDataList) != 0 {
 		return quoteDataList, nil
 	}
-	return nil, fmt.Errorf("no quote data returned for securityId: %v, timestamp: %v, lengthOfTime: %v, extendedHours: %v",
-		args.SecurityID, args.Timestamp, args.LengthOfTime, args.ExtendedHours)
+	return nil, fmt.Errorf("kn20vke0")
 }
