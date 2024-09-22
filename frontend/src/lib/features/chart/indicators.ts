@@ -19,11 +19,10 @@ export function calculateSMA(data: CandlestickData[], period: number): { time: U
 export function calculateSingleADR(data: CandlestickData[]): number {
     const period = get(settings).adrPeriod
     let sum = 0;
-    for (let j = 0; j < period; j++) {
+    for (let j = 0; j < period && j < data.length; j++) {
         sum += (( data[j].high / data[j].low - 1) * 100)
     }
     const average = sum / period
-    console.log(average)
     return average
 }
 

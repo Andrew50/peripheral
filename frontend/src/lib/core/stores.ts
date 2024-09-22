@@ -12,6 +12,7 @@ export let flagWatchlist: Writable<Instance[]>
 export interface TimeEvent {
     event:"newDay" | "replay" | null,
     UTCtimestamp: number
+    ESTtimestamp: number
 }
 export let timeEvent: Writable<TimeEvent> = writable({event:null,UTCtimestamp:0})
 const defaultSettings = {
@@ -31,12 +32,8 @@ export function initStores(){
             return {...v,
               activeScreen: true}
         })
-        console.log(v)
         setups.set(v);
     })
-    .catch((error) => {
-        console.error('Error fetching setups:', error);
-    });
 
     function loadFlagWatchlist(){
         privateRequest<Instance[]>("getWatchlistItems",{watchlistId:flagWatchlistId})
@@ -68,7 +65,7 @@ export function initStores(){
             const prevDay = new Date(prevTimestamp).setHours(0, 0, 0, 0);
             const newDay = new Date(newTimestamp).setHours(0, 0, 0, 0);
             if (newDay !== prevDay) {
-                timeEvent.set({event:"newDay",UTCtimestamp:UTCtoEST(newTimestamp)})
+                timeEvent.set({event:"newDay",UTCtimestamp:UTCtoEST(newTimestamp),ESTtimestamp:newTimestamp})
             }
         }
         prevTimestamp = newTimestamp;

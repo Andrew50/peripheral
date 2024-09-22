@@ -1,10 +1,10 @@
 <script lang='ts'>
     import { onMount, onDestroy } from 'svelte';
     import type { Writable } from 'svelte/store';
-    import type { QuoteData } from '$lib/core/types';
+    import type { QuoteData, Instance } from '$lib/core/types';
     import { getStream } from '$lib/utils/stream';
 
-    export let ticker: Writable<string>;
+    export let instance: Writable<Instance>;
     let store: Writable<QuoteData>;
     let release: Function = () => {};
 
@@ -13,9 +13,9 @@
     let bidPriceChange = 'no-change';  // Can be 'increase', 'decrease', or 'no-change'
     let askPriceChange = 'no-change';  // Can be 'increase', 'decrease', or 'no-change'
 
-    ticker.subscribe((tick: string) => {
+    instance.subscribe((inst: Instance) => {
         release();
-        const [s, r] = getStream(tick, "quote");
+        const [s, r] = getStream(inst, "quote");
         store = s;
         release = r;
 

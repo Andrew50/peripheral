@@ -6,7 +6,7 @@ let store = writable("blank")
 
 function test(){
     //startReplay(1725894480000)
-    store = getStream("NVDA","fast")
+    //store = geeam(400,"fast")
 }
 
 </script>
