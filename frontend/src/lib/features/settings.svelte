@@ -13,6 +13,7 @@
         if (tempSettings.chartRows > 0 && tempSettings.chartColumns > 0) {
             privateRequest<void>("setSettings",{settings:tempSettings})
             .then(()=>{
+                console.log(tempSettings)
                 settings.set(tempSettings); // Update the store with new settings
                 errorMessage = '';
             })

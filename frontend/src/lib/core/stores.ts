@@ -20,7 +20,7 @@ export interface TimeEvent {
 }
 export let timeEvent: Writable<TimeEvent> = writable({event:null,UTCtimestamp:0})
 const defaultSettings = {
-    chartRows: 1, chartColumns:1, dolvol:false, adrPeriod:20, tsLotFilter:false, tsDivide100:false,
+    chartRows: 1, chartColumns:1, dolvol:false, adrPeriod:20, divideTaS:false, filterTaS:false,
 }
 export let settings:Writable<Settings> = writable(defaultSettings)
 let prevTimestamp: number | null = null;
