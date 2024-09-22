@@ -5,7 +5,7 @@
     import {privateRequest} from '$lib/core/backend';
     import type {Instance, TradeData,QuoteData} from '$lib/core/types'
     import {setActiveChart,chartQuery, changeChart,selectedChartId} from './interface'
-    import {settings} from '$lib/core/stores'
+    import {currentTimestamp,settings} from '$lib/core/stores'
     import type {ShiftOverlay, BarData, ChartRequest} from './interface'
     import { queryInstanceInput } from '$lib/utils/input.svelte'
     import { queryInstanceRightClick } from '$lib/utils/rightClick.svelte'
@@ -14,15 +14,13 @@
     import {calculateSMA,calculateSingleADR} from './indicators'
     import type {Writable} from 'svelte/store';
     import {writable, get} from 'svelte/store';
-    import { onMount, onDestroy  } from 'svelte';
+    import { onMount  } from 'svelte';
     import { UTCtoEST, ESTtoUTC, ESTSecondstoUTC, getReferenceStartTimeForDateMilliseconds, timeframeToSeconds} from '$lib/core/timestamp';
 	import { getStream, replayStream } from '$lib/utils/stream';
-    import {timeEvent} from '$lib/core/stores'
+    import {timeEvent,replayInfo} from '$lib/core/stores'
     import type {TimeEvent} from '$lib/core/stores'
     let bidLine: any
     let askLine: any
-
-
     let chartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let chartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
     let sma10Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
@@ -38,10 +36,8 @@
     const chartRequestThrottleDuration = 150; 
     const hoveredCandleData = writable({ open: 0, high: 0, low: 0, close: 0, volume: 0, adr:0})
     const shiftOverlay: Writable<ShiftOverlay> = writable({ x: 0, y: 0, startX: 0, startY: 0, width: 0, height: 0, isActive: false, startPrice: 0, currentPrice: 0, })
-    
     export let chartId: number;
     export let width: number;
-    let chartTicker: string;
     let chartSecurityId: number; 
     let chartTimeframe: string; 
     let chartTimeframeInSeconds: number; 
@@ -52,15 +48,20 @@
     let unsubscribeQuote = () => {}
     let touchStartX: number;
     let touchStartY: number;
-    let chartInstance: Instance;
-    
+    let currentChartInstance: Instance = {ticker:"",timestamp:0,timeframe:""}
+    let blockingChartRequest = {}
+    let isPanning = false
     const tradeConditionsToCheck = new Set([2, 5, 7, 10, 12, 13, 15, 16, 20, 21, 22, 29, 33, 37, 52, 53])
+
     function backendLoadChartData(inst:ChartRequest): void{
+        console.log(isLoadingChartData)
+        console.log(blockingChartRequest)
         if (isLoadingChartData ||!inst.ticker || !inst.timeframe || !inst.securityId) { return; }
         isLoadingChartData = true;
         lastChartRequestTime = Date.now()
         privateRequest<BarData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, timestamp:inst.timestamp, direction:inst.direction, bars:inst.bars,extendedhours:inst.extendedHours},false)
             .then((barDataList: BarData[]) => {
+                blockingChartRequest = inst
                 if (! (Array.isArray(barDataList) && barDataList.length > 0)){ return}
                 let newCandleData = barDataList.map((bar) => ({
                   time: UTCtoEST(bar.time as UTCTimestamp) as UTCTimestamp,
@@ -90,7 +91,12 @@
                     newVolumeData = [...chartVolumeSeries.data(), ...newVolumeData.slice(1)] as any;
                   }
                 } else if(inst.requestType === 'loadNewTicker') {
+                    const lastBar = newCandleData[newCandleData.length - 1]
+                    //bidLine.setData([{time:lastBar.time,value:lastBar.close}])
+                    bidLine.setData([])
+                    askLine.setData([])
                     if(inst.includeLastBar == false) {
+                        //what does this do ???
                         newCandleData = newCandleData.slice(0, newCandleData.length-1)
                         newVolumeData = newVolumeData.slice(0, newVolumeData.length-1)
                     }
@@ -159,7 +165,8 @@
                         }
                         isLoadingChartData = false; // Ensure this runs after data is loaded
                         }
-                        if (inst.direction == "backward" || inst.requestType == "loadNewTicker"){
+                        if (inst.direction == "backward" || inst.requestType == "loadNewTicker"
+                        || inst.requestType == "forward" && !isPanning){
                             queuedLoad()
                         }
                     //});
@@ -186,14 +193,24 @@
                             rightOffset: 10
                             });
                         }
-                        isLoadingChartData = false; // Ensure this runs after data is loaded
-                        }
-                        if (inst.direction == "backward" || inst.requestType == "loadNewTicker"){
-                            queuedLoad()
-                        }
+                       if(inst.requestType === "loadNewTicker" && !chartLatestDataReached && get(replayInfo).status === "inactive"){
+                        backendLoadChartData({
+                            ...currentChartInstance,
+                            timestamp: ESTSecondstoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp,
+                            bars:  150, //+ 2*Math.floor(chart.getLogicalRange.to) - chartCandleSeries.data().length,
+                            direction: "forward",
+                            requestType: "loadAdditionalData",
+                            includeLastBar: true, 
+                        })
+            }
+         isLoadingChartData = false; // Ensure this runs after data is loaded
+                    }
+                    if (inst.direction == "backward" || inst.requestType == "loadNewTicker"
+                        || inst.requestType == "forward" && !isPanning){
+                        queuedLoad()
+                    }
                 }
-            })
-            .catch((error: string) => {
+            }) .catch((error: string) => {
                 console.error(error)
                 isLoadingChartData = false; // Ensure this runs after data is loaded
             });
@@ -202,17 +219,15 @@
     function updateLatestQuote(data:QuoteData) {
         if(isLoadingChartData) {return}
         if (!data.bidPrice || !data.askPrice){return}
-        //console.log('updating quote')
-        
-    const candle = chartCandleSeries.data()[chartCandleSeries.data().length - 1]
-    if (!candle)return;
-    const time = candle.time
-    bidLine.setData([
-        { time: time, value: data.bidPrice },
-    ]);
-    askLine.setData([
-        { time: time, value: data.askPrice },
-    ]);
+        const candle = chartCandleSeries.data()[chartCandleSeries.data().length - 1]
+        if (!candle)return;
+        const time = candle.time
+        bidLine.setData([
+            { time: time, value: data.bidPrice },
+        ]);
+        askLine.setData([
+            { time: time, value: data.askPrice },
+        ]);
     }
     async function updateLatestChartBar(data:TradeData) {
         if(isLoadingChartData) {return}
@@ -239,7 +254,7 @@
         } 
         // if not hourly, daily, weekly, monthly at this point; this updates when a new bar has to be created 
         if(data.size >= 100) {
-            var referenceStartTime = getReferenceStartTimeForDateMilliseconds(data.timestamp, get(chartQuery).extendedHours) // this is in milliseconds 
+            var referenceStartTime = getReferenceStartTimeForDateMilliseconds(data.timestamp, currentChartInstance.extendedHours) // this is in milliseconds 
             var timeDiff = (data.timestamp - referenceStartTime)/1000 // this is in seconds
             var flooredDifference = Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds 
             var newTime = UTCtoEST((referenceStartTime/1000 + flooredDifference)) as UTCTimestamp
@@ -259,12 +274,12 @@
         await new Promise(resolve => setTimeout(resolve, 3000));
         try {
             const barDataList: BarData[] = await privateRequest<BarData[]>("getChartData", {
-            securityId:chartSecurityId, 
-            timeframe:chartTimeframe, 
-            timestamp:ESTtoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as number)*1000,
-            direction:"backward",
-            bars:1,
-            extendedHours: chartExtendedHours
+                securityId:chartSecurityId, 
+                timeframe:chartTimeframe, 
+                timestamp:ESTtoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as number)*1000,
+                direction:"backward",
+                bars:1,
+                extendedHours: chartExtendedHours
             });
 
             if (! (Array.isArray(barDataList) && barDataList.length > 0)){ return}
@@ -348,11 +363,7 @@
         chartContainer.addEventListener('contextmenu', (event:MouseEvent) => {
             event.preventDefault();
             const timestamp = ESTSecondstoUTC(latestCrosshairPositionTime);
-            const dt = new Date(timestamp);
-            const datePart = dt.toLocaleDateString('en-CA'); // 'en-CA' gives you the yyyy-mm-dd format
-            const timePart = dt.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            const formattedDate = `${datePart} ${timePart}`;
-            const ins: Instance = { ...get(chartQuery), timestamp: timestamp}
+            const ins: Instance = { ...currentChartInstance, timestamp: timestamp}
             queryInstanceRightClick(event,ins,"chart")
         })
         chartContainer.addEventListener('keyup', event => {
@@ -374,12 +385,14 @@
             })
         }
         chartContainer.addEventListener('mouseup', () => {
+            isPanning = false
             if (queuedLoad != null){
                 queuedLoad()
             }
         })
         chartContainer.addEventListener('mousedown',event  => {
             setActiveChart(chartId)
+            isPanning = true
             if (shiftDown || get(shiftOverlay).isActive){
                 shiftOverlay.update((v:ShiftOverlay) => {
                     v.isActive = !v.isActive
@@ -410,9 +423,10 @@
             const distX = Math.abs(touch.clientX - touchStartX)
             const distY = Math.abs(touch.clientY - touchStartY)
             if (distX < 10 && distY << 10){
-                queryInstanceInput("any",get(chartQuery))
+                queryInstanceInput("any",currentChartInstance)
                 .then((v:Instance)=>{
                     changeChart(v, true)
+                    currentChartInstance = v
                 }).catch()
             }
         })
@@ -423,8 +437,9 @@
                 chart.timeScale().resetTimeScale()
             }else if (event.key == "Tab" || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
                 console.log("god")
-                queryInstanceInput("any",get(chartQuery))
+                queryInstanceInput("any",currentChartInstance)
                 .then((v:Instance)=>{
+                    currentChartInstance = v
                     changeChart(v, true)
                 }).catch()
             }else if (event.key == "Shift"){
@@ -496,21 +511,19 @@
             if(logicalRange.from < 10) {
                 //console.log(logicalRange.from, Date.now()-lastChartRequestTime, chartEarliestDataReached)
                 if(chartEarliestDataReached) {return;}
-                const v = get(chartQuery)
                 backendLoadChartData({
-                    ...v,
+                    ...currentChartInstance,
                     timestamp: ESTSecondstoUTC(chartCandleSeries.data()[0].time as UTCTimestamp) as number,
                     bars: 50 - Math.floor(logicalRange.from),
                     direction: "backward",
                     requestType: "loadAdditionalData",
                     includeLastBar: true,
                 })
-            } else if (logicalRange.to > chartCandleSeries.data().length-10) { // forward load
+            } else if (logicalRange.to > chartCandleSeries.data().length-10) { // forward loa
                 if(chartLatestDataReached) {return;}
                 if(replayStream.replayStatus == true) { return;}
-                const v = get(chartQuery)
                 backendLoadChartData({
-                    ...v,
+                    ...currentChartInstance,
                     timestamp: ESTSecondstoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp,
                     bars:  150 + 2*Math.floor(logicalRange.to) - chartCandleSeries.data().length,
                     direction: "forward",
@@ -519,8 +532,9 @@
                 })
             }
         })
-        function change(req:ChartRequest){
-           if (chartId !== selectedChartId){return}
+        function change(newReq:ChartRequest,ignoreId=false){
+           if (!ignoreId && chartId !== selectedChartId){return}
+           const req = {...currentChartInstance,...newReq}
             unsubscribe() 
             release()
             unsubscribeQuote()
@@ -530,10 +544,9 @@
             chartLatestDataReached = false; 
             if(!req.securityId || !req.ticker || !req.timeframe) {return}
 
-            chartTicker = req.ticker;
             chartSecurityId = req.securityId ;
             chartTimeframe = req.timeframe;
-            chartInstance = req
+            currentChartInstance = {...req}
             chartTimeframeInSeconds = timeframeToSeconds(req.timeframe);
             chartExtendedHours = req.extendedHours;
             if (req.timeframe?.includes('m') || req.timeframe?.includes('w') || 
@@ -541,7 +554,6 @@
                     chart.applyOptions({timeScale: {timeVisible: false}});
             }else { chart.applyOptions({timeScale: {timeVisible: true}}); }
             backendLoadChartData(req)
-
             const [priceStore, r] = getStream<TradeData>(req, 'fast')
             release = r
             unsubscribe = priceStore.subscribe((v:TradeData) => {
@@ -556,21 +568,21 @@
        chartQuery.subscribe((req:ChartRequest)=>{
            change(req)
         }) 
-      /* timeEvent.subscribe((e:TimeEvent)=>{
-           console.log(e)
-           if (!chartInstance || !chartInstance.securityId) return;
+       timeEvent.subscribe((e:TimeEvent)=>{
+           if (!currentChartInstance || !currentChartInstance.securityId) return;
+           console.log(currentChartInstance,chartId)
            if (e.event == "replay"){
-               chartInstance.timestamp = e.ESTtimestamp
+               currentChartInstance.timestamp = get(currentTimestamp)
                 const req: ChartRequest = {
-                    ...chartInstance,
+                    ...currentChartInstance,
                     bars: 150,
                     direction: "backward",
                     requestType: "loadNewTicker",
                     includeLastBar: false,
                 }
-                change(req)
+                change(req,true)
            }
-       })*/
+       })
 
 
         
@@ -580,7 +592,7 @@
 </script>
 
 <div autofocus class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
-<Legend instance={chartInstance} hoveredCandleData={hoveredCandleData} />
+<Legend instance={currentChartInstance} hoveredCandleData={hoveredCandleData} />
 <Shift shiftOverlay={shiftOverlay}/>
 </div>
 <style>

@@ -3,7 +3,6 @@
     import { get } from 'svelte/store';
     import type { Settings } from '$lib/core/types';
     import {privateRequest} from '$lib/core/backend'
-    import {chartQuery} from '$lib/features/chart/interface'
     
     let errorMessage: string = '';
     let tempSettings: Settings = { ...get(settings) }; // Create a local copy to work with
@@ -13,7 +12,6 @@
             privateRequest<void>("setSettings",{settings:tempSettings})
             .then(()=>{
                 settings.set(tempSettings); // Update the store with new settings
-                chartQuery.set({...get(chartQuery)})
                 errorMessage = '';
             })
         } else {

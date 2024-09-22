@@ -4,6 +4,7 @@ import {RealtimeStream} from "$lib/utils/realtimeStream"
 import {ReplayStream} from "$lib/utils/replayStream"
 import type {Writable} from 'svelte/store'
 import {writable} from 'svelte/store'
+import {ESTtoUTC} from '$lib/core/timestamp'
 import {privateRequest} from '$lib/core/backend'
 export type ChannelType = "fast" | "slow" | "quote" | "close"
 export type Channels = Map<string,{count:number,store:Writable<any>}>
@@ -35,6 +36,7 @@ export function releaseStream(channelName:string) {
 }
 
 export function getStream<T extends TradeData|QuoteData|number>(instance:Instance,channelType:ChannelType): [Writable<T>,Function]{
+    if (!instance.securityId)return;
     if (channelType == "close"){
         const s = writable(0) as Writable<T>
         const unsubscribe = timeEvent.subscribe((v:TimeEvent)=>{
@@ -47,29 +49,30 @@ export function getStream<T extends TradeData|QuoteData|number>(instance:Instanc
         })
         return [s, unsubscribe]
     }
-    const channelName = `${instance.securityId}-${channelType}`
-    let channel = activeChannels.get(channelName)
-    if (channel){
-        channel.count += 1
-        activeChannels.set(channelName,channel)
-    }else{
-        channel = {count:1,store:writable({})}
-        activeChannels.set(channelName,channel)
-        currentStream.subscribe(channelName)
+    if (["fast","slow","quote"].includes(channelType)){
+        const channelName = `${instance.securityId}-${channelType}`
+        let channel = activeChannels.get(channelName)
+        if (channel){
+            channel.count += 1
+            activeChannels.set(channelName,channel)
+        }else{
+            channel = {count:1,store:writable({})}
+            activeChannels.set(channelName,channel)
+            currentStream.subscribe(channelName)
+        }
+        const store = channel.store as Writable<T>
+        return [store, (()=>releaseStream(channelName))]
     }
-    const store = channel.store as Writable<T>
-    return [store, (()=>releaseStream(channelName))]
 }
   
 
-export function startReplay(instance : Instance){
+export function startReplay(timestamp : number){
     currentStream.stop()
     currentStream = replayStream
-    currentStream.start(instance)
-    currentTimestamp.set(instance.timestamp)
+    currentStream.start(timestamp)
+    currentTimestamp.set(timestamp)
     timeEvent.update((v:TimeEvent)=>{
         v.event = "replay"
-        v.ESTtimestamp = instance.timestamp
         return {...v}
     })
 }

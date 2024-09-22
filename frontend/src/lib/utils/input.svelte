@@ -20,7 +20,7 @@
         // active is window is open, waiting for cancellation or completion
         //init is setting up event handlers |  c
 
-        status: "inactive" | "initializing" | "active" | "complete" | "cancelled" 
+        status: "inactive" | "initializing" | "active" | "complete" | "cancelled" | "shutdown"
         inputString: string
         inputType: string
         inputValid: boolean
@@ -41,6 +41,7 @@
 
     export async function queryInstanceInput(requiredKeys: InstanceAttributes[] | "any",instance:Instance={}): Promise<Instance> {
         //init the query with passsed info
+        await tick()
         if (get(inputQuery).status === "inactive"){
             inputQuery.update((v:InputQuery)=>{
                 v.requiredKeys = requiredKeys
@@ -62,7 +63,12 @@
                 })
                 function deactivate(){
                     unsubscribe()
-                    inputQuery.set({...inactiveInputQuery})
+                    inputQuery.update((v:InputQuery)=>{
+                        v.status = "shutdown"
+                        return v
+                        })
+
+                   // ({...inactiveInputQuery})
                 }
             })
         }else{
@@ -199,21 +205,22 @@
         inputQuery.subscribe(async(v:InputQuery)=>{
             if (browser){
                 if (v.status === "initializing"){
+                    await tick()
                     document.addEventListener('keydown',  handleKeyDown);
                     prevFocusedElement = document.activeElement as HTMLElement;
-                    v.status = "active"
-                    await tick()
                     const inputWindow = document.getElementById("input-window")
                     inputWindow.focus()
-                    return v
-                }else if(v.status === "inactive"){
+                    v.status = "active"
+                    //await tick()
+                }else if(v.status === "shutdown"){
                     prevFocusedElement?.focus()
                     document.removeEventListener('keydown',handleKeyDown);
+                    v.status = "inactive"
                 }
             }
         })
         /*return () => {
-        document.removeEventListener('keydown', handleKeyDown);
+        document.removeEventListener('keydown', handleKeyDown);When you use inputQuery.update(), it triggers reactivity and updates the subscribers of the store after the update() function completes.
     };*/
     })
 
@@ -237,7 +244,7 @@
 
 </script>
 
-{#if $inputQuery.status === "active"}
+{#if $inputQuery.status === "active" || $inputQuery.status === "initializing"}
     <div class="popup" id="input-window" tabindex="-1">
         <div class="content">
             {#if $inputQuery.instance && Object.keys($inputQuery.instance).length > 0}

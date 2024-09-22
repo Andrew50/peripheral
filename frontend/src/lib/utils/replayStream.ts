@@ -1,17 +1,17 @@
 import { privateRequest } from '$lib/core/backend';
-import { changeChart } from '$lib/features/chart/interface';
 import { activeChannels } from '$lib/utils/stream';
 import type { Stream } from '$lib/utils/stream';
-import type { Instance } from '$lib/core/types';
-import {get} from 'svelte/store'
+import {replayInfo} from '$lib/core/stores'
+import type{ReplayInfo} from '$lib/core/stores'
 
 export class ReplayStream implements Stream {
     public replayStatus: boolean = false;
     public simulatedTime: number = 0; 
     private playbackSpeed = 1;
-    private buffer = 10000; // milliseconds
+    private baseBuffer = 10000 // milliseconds
+    private buffer = this.baseBuffer;
     private loopCooldown = 20;
-    private isPaused: boolean = false;
+    public isPaused: boolean = false;
     private accumulatedPauseTime: number = 0;
     private pauseStartTime: number = 0;
     private startTime: number = 0; // milliseconds
@@ -24,10 +24,7 @@ export class ReplayStream implements Stream {
         this.tickMap.delete(channelName)
     }
 
-    public start(instance : Instance) {
-        if (!instance) return;
-        var timestamp = instance.timestamp
-        if (!timestamp) return;
+    public start(timestamp: number) {
         //changeChart(instance, false)
         this.startTime = Date.now()
         this.initialTimestamp = timestamp
@@ -35,10 +32,18 @@ export class ReplayStream implements Stream {
         for (const channel of activeChannels.keys()){
             this.subscribe(channel)
         }
+        replayInfo.update((r:ReplayInfo)=>{
+            r.startTimestamp = timestamp
+            return r
+        })
         this.loop()
     }
 
     private loop(){
+        replayInfo.update((r:ReplayInfo)=>{
+            r.status = "active"
+            return r
+        })
         const currentTime = Date.now();
         for (let [channel,v] of this.tickMap.entries()){
             const elapsedTime = currentTime - this.startTime - this.accumulatedPauseTime;
@@ -59,9 +64,10 @@ export class ReplayStream implements Stream {
                     lengthOfTime: this.buffer,
                     extendedHours: false
                 },false).then((n:Array<any>)=>{
-                    this.tickMap.get(channel).ticks.push(...n)
-                    this.tickMap.get(channel).reqInbound = false
-                    //this.tickMap.set(channel,this.tickMap.get(channel).concat(v));
+                    if(Array.isArray(n)){
+                        this.tickMap.get(channel).ticks.push(...n)
+                        this.tickMap.get(channel).reqInbound = false
+                    }
                 })
             }
             if (v.ticks.length > 0){
@@ -83,12 +89,20 @@ export class ReplayStream implements Stream {
     public stop() {
         this.replayStatus = false;
         this.isPaused = false;
+        replayInfo.update((r:ReplayInfo)=>{
+            r.status = "inactive"
+            return r
+        })
     }
 
     public pause() {
         if (!this.isPaused) {
             this.isPaused = true;
             this.pauseStartTime = Date.now();
+        replayInfo.update((r:ReplayInfo)=>{
+            r.status = "paused"
+            return r
+        })
         }
     }
 
@@ -104,7 +118,7 @@ export class ReplayStream implements Stream {
         const currentTime = Date.now();
         const elapsedTime = currentTime - this.startTime - this.accumulatedPauseTime;
         const simulatedTime = this.initialTimestamp + elapsedTime * this.playbackSpeed;
-
+        this.buffer = Math.floor(this.baseBuffer * this.playbackSpeed)
         this.playbackSpeed = newSpeed;
         this.startTime = currentTime - (simulatedTime - this.initialTimestamp) / this.playbackSpeed;
 

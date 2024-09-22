@@ -20,6 +20,9 @@
         if (tfIndex >= tfs.length){
             tfIndex = 0
             securityIndex ++
+            if (securityIndex >= instances.length){
+                securityIndex = 0
+            }
         }
         if (loopActive){
             setTimeout(()=>{

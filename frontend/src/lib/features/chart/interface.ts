@@ -41,15 +41,15 @@ export function setActiveChart(chartId:number){selectedChartId = chartId}
 
 export let chartQuery: Writable<Instance> = writable({timestamp:0, extendedHours:false, timeframe:"1d",ticker:""})
 export function changeChart(newInstance : Instance, includeLast : boolean = true):void{
-    chartQuery.update((oldInstance:Instance)=>{
         const req: ChartRequest = {
-            ...oldInstance,
+///            ...oldInstance,
             ...newInstance,
             bars: 150,
             direction: "backward",
             requestType: "loadNewTicker",
             includeLastBar: includeLast,
         }
-        return req
-    })
+        ///return req
+        chartQuery.set(req)
+    //})
 }

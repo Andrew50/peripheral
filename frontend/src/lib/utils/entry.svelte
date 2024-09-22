@@ -2,7 +2,6 @@
     import type {Instance} from '$lib/core/types' 
     import {queryInstanceInput } from '$lib/utils/input.svelte'
     import {queryInstanceRightClick} from '$lib/utils/rightClick.svelte'
-    //import {chartQuery} from '$lib/features/chart/chart.svelte'
     import {changeChart} from '$lib/features/chart/interface'
     import type {RightClickResult} from '$lib/utils/rightClick.svelte'
     import {writable} from 'svelte/store'
@@ -85,7 +84,6 @@
         instance.timestamp = parseInt(instance.timestamp)
         changeChart(instance, true)
 
-        //chartQuery.set(instance)
     }
 
     function embeddedInstanceRightClick(instance: Instance, event:MouseEvent): void {
