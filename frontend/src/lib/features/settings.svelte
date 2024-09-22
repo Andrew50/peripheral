@@ -3,6 +3,8 @@
     import { get } from 'svelte/store';
     import type { Settings } from '$lib/core/types';
     import {privateRequest} from '$lib/core/backend'
+    import '$lib/core/global.css'
+
     
     let errorMessage: string = '';
     let tempSettings: Settings = { ...get(settings) }; // Create a local copy to work with
@@ -28,58 +30,49 @@
 
 <div>
     <div>
-        <label for="chart rows">Chart Rows:</label>
+        <label>Chart Rows:</label>
         <input 
             type="number" 
-            id="rows" 
             bind:value={tempSettings.chartRows} 
             min="1" 
             on:keypress={handleKeyPress} 
         />
     </div>
     <div>
-        <label for="chart columns">Chart Columns:</label>
+        <label>Chart Columns:</label>
         <input 
             type="number" 
-            id="columns" 
             bind:value={tempSettings.chartColumns} 
             min="1" 
             on:keypress={handleKeyPress} 
         />
     </div>
     <div>
-        <label for="dollar volume">Dollar Volume:</label>
+        <label>Dollar Volume:</label>
         <select id="dolvol" bind:value={tempSettings.dolvol} on:keypress={handleKeyPress}>
             <option value={true}>Yes</option>
             <option value={false}>No</option>
         </select>
     </div>
     <div>
-        <label for="adr period">Chart Columns:</label>
+        <label>AR Period:</label>
         <input 
             type="number" 
-            id="adrPeriod" 
-            bind:value={tempSettings.chartColumns} 
+            bind:value={tempSettings.adrPeriod} 
             min="1" 
             on:keypress={handleKeyPress} 
         />
+    </div>
+    <div>
+        <label>Divide Time and Sales by 100:</label>
+        <select bind:value={tempSettings.divideTaS} on:keypress={handleKeyPress}>
+            <option value={true}>Yes</option>
+            <option value={false}>No</option>
+        </select>
     </div>
     {#if errorMessage}
         <p style="color: red;">{errorMessage}</p>
     {/if}
     <button on:click={updateLayout}>Apply</button>
 </div>
-
-<style>
-  /* Add some basic styles to make the form look better */
-  div {
-      margin-bottom: 10px;
-  }
-  label {
-      margin-right: 10px;
-  }
-  input, select, button {
-      font-size: 14px;
-  }
-</style>
 

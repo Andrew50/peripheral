@@ -1,5 +1,5 @@
 <script lang='ts'>
-    import Chart from '$lib/features/chart/chart.svelte';
+    import '$lib/core/global.css'
     import ChartContainer from "$lib/features/chart/chartContainer.svelte"
     import RightClick from '$lib/utils/rightClick.svelte';
     import Input from '$lib/utils/input.svelte';
@@ -106,7 +106,7 @@
     <Input/>
     <RightClick/>
     <Similar/>
-    <div class="container">
+    <div class="dcontainer">
         <!--<Chart width={pix - $menuWidth - buttonWidth}/>-->
        <ChartContainer width={pix - $menuWidth - buttonWidth}/>
         <div
@@ -160,9 +160,7 @@
 </div>
 
 <style>
-    @import "$lib/core/colors.css";
-    @import "$lib/core/components.css";
-    .container {
+    .dcontainer {
         /*position: relative;*/
         width: 100%;
         height: 100%;
@@ -190,6 +188,7 @@
         top: 0;
         right: 0;
         height: 100%;
+        width: 100%;
         background-color: var(--c2);
         z-index: 1;
         overflow-y:scroll;
@@ -232,8 +231,8 @@
         background-color: var(--c2);
     }
     .button {
-        width: 4vw;
-        height: 4vw;
+        width: 3vw;
+        height: 3vw;
         background-color: var(--c1);
         border: none; 
         padding: 0; 

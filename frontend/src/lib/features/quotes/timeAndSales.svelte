@@ -3,11 +3,9 @@
     import type { Writable } from 'svelte/store';
     import type { TradeData, QuoteData ,Instance} from '$lib/core/types';
     import { getStream } from '$lib/utils/stream';
-
-
-
-
-
+    import '$lib/core/global.css'
+    import {settings} from '$lib/core/stores'
+    import type{Settings} from '$lib/core/stores'
     export let instance: Writable<Instance>;
     let store: Writable<TradeData>;
     let quoteStore: Writable<QuoteData>;
@@ -23,6 +21,10 @@
     let currentAsk = 0;
     const maxLength = 20;
     let prevSecId = -1;
+    let divideTaS = false
+    settings.subscribe((v:Settings)=>{
+        divideTaS = v.divideTaS
+    })
 
     instance.subscribe((instance: Instance) => {
         if (!instance.securityId || instance.securityId === prevSecId) return;
@@ -39,6 +41,9 @@
         allTrades = []
         unsubscribeTrade = store.subscribe((newTrade: TradeData) => {
             if (newTrade.timestamp !== undefined && newTrade.timestamp !== 0) {
+                if (divideTaS){
+                    newTrade.size = Math.floor(newTrade.size / 100)
+                }
                 const newRow: TaS = {color:getPriceColor(newTrade.price),...newTrade}
                 allTrades = [newRow,...allTrades].slice(0,maxLength);
             }
@@ -80,7 +85,7 @@
                 <tr>
                     <th>Time</th>
                     <th>Price</th>
-                    <th>Size</th>
+                    <th>{settings.dividTaS?"Size" : "Size*100"}</th>
                 </tr>
             </thead>
             <tbody>
@@ -105,29 +110,6 @@
 </div>
 
 <style>
-    @import "$lib/core/colors.css";
-    .dark-green td{
-        color: #006400;  /* Dark green */
-        font-weight: bold;
-    }
-
-    .green td{
-        color: #00ff00;  /* Bright green */
-    }
-
-    .red td{
-        color: #ff0000;  /* Bright red */
-    }
-
-    .dark-red td{
-        color: #8b0000;  /* Dark red */
-        font-weight: bold;
-    }
-
-    .white td{
-        color: white;
-    }
-
     .time-and-sales {
         font-family: Arial, sans-serif;
         font-size: 12px;

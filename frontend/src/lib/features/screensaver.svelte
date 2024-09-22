@@ -3,6 +3,7 @@
     import type {Instance} from '$lib/core/types'
     import {changeChart} from '$lib/features/chart/interface'
     import {onMount, onDestroy} from 'svelte'
+    import '$lib/core/global.css'
 
     const tfs = ["1w","1d","1h","1"]
     let instances: Instance[] = [];
@@ -55,3 +56,4 @@ Speed
 
 
         
+

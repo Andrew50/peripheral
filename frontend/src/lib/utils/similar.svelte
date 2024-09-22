@@ -1,5 +1,7 @@
 <script lang="ts" context="module">
 export interface ActiveStream {
+        import '$lib/core/global.css'
+
     securityId: number;
     streamType: "fast" | "slow" | "quote";
     openCount: number;
@@ -112,8 +114,8 @@ export interface ActiveStream {
 </script>
 
 {#if $similarQuery.status === "active"}
-    <div class="context-menu" bind:this={menu} style="top: {$similarQuery.y}px; left: {$similarQuery.x}px;">
-        <div class="content">
+    <div class="popup-container" bind:this={menu} style="top: {$similarQuery.y}px; left: {$similarQuery.x}px;">
+        <div class="content-container">
             {#if $similarQuery.similarInstances && $similarQuery.similarInstances.length > 0}
                 <table>
                     <thead>
@@ -136,53 +138,3 @@ export interface ActiveStream {
         </div>
     </div>
 {/if}
-
-<style>
-    @import '$lib/core/colors.css';
-    .context-menu {
-        position: absolute;
-        background-color: var(--c2);
-        border: 1px solid var(--c4);
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        z-index: 1000;
-        padding: 20px;
-        width: 200px;
-        height: 500px; /* Fixed height */
-        border-radius: 4px;
-        overflow: hidden;
-    }
-
-    .content {
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-    }
-
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        overflow-y: auto;
-    }
-
-    th, td {
-        padding: 10px;
-        text-align: left;
-    }
-
-    th {
-        background-color: var(--c1);
-        color: var(--f1);
-    }
-
-    tr {
-        border-bottom: 1px solid var(--c4);
-    }
-
-    tr:hover {
-        background-color: var(--c1);
-    }
-</style>
-

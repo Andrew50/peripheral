@@ -3,4 +3,6 @@
     export function newSample(instance:Instance):void{
         console.log("new study to implement")
     }
+    import '$lib/core/global.css'
+
 </script>

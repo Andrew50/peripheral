@@ -2,6 +2,8 @@
 
 import {writable} from 'svelte/store'
 import {startReplay,getStream} from "$lib/utils/stream"
+    import '$lib/core/global.css'
+
 let store = writable("blank")
 
 function test(){

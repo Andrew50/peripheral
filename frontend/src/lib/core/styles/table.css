@@ -1,0 +1,43 @@
+
+.table-row-red {
+    background-color: var(--c3);
+    cursor: pointer;
+}
+
+.table-row:hover {
+    background-color: var(--c1);
+    cursor: pointer;
+}
+.table-row-red:hover {
+    background-color: var(--c1);
+    cursor: pointer;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    padding: 1px;
+    text-align: left;
+}
+
+th {
+    background-color: var(--c1);
+    color: var(--f1);
+}
+
+tr {
+    border-bottom: 1px solid var(--c4);
+    color: var(--f1);
+}
+tr.selected {
+background-color: var(--c3);
+color: var(--f1);
+}
+
+tr:hover {
+    background-color: var(--c1);
+    cursor: pointer;
+}

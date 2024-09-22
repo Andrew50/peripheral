@@ -1,6 +1,8 @@
 <!-- study.svelte-->
 <script lang="ts" context="module">
     import type { Writable } from 'svelte/store'
+    import '$lib/core/global.css'
+
     import { get,writable } from 'svelte/store'
     import {changeChart} from "$lib/features/chart/interface"
     import Entry from '$lib/utils/entry.svelte'
@@ -77,11 +79,11 @@
 
 </script>
 
-<div class="controls">
-    <button on:click={toggleCompletionFilter} class="action-btn"> 
+<div class="controls-container">
+    <button on:click={toggleCompletionFilter}> 
         {$completedFilter ? "Completed" : "Uncompleted"} 
     </button>
-    <button on:click={newStudyRequest} class="action-btn"> New </button>
+    <button on:click={newStudyRequest}> New </button>
 </div>
 
 <div class="table-container">
@@ -95,7 +97,7 @@
         <tbody>
             {#if Array.isArray($studies) && $studies.length > 0}
                 {#each $studies as study}
-                    <tr class="table-row" on:contextmenu={(event)=>queryInstanceRightClick(event,study,"header")} on:click={() => selectStudy(study)}>
+                    <tr on:contextmenu={(event)=>queryInstanceRightClick(event,study,"header")} on:click={() => selectStudy(study)}>
                         <td>{study.ticker}</td>
                         <td>{UTCTimestampToESTString(study.timestamp)}</td>
                     </tr>
@@ -112,66 +114,3 @@
         </tbody>
     </table>
 </div>
-<style>
-    @import "$lib/core/colors.css";
-
-    /* Button styling */
-    .controls {
-        display: flex;
-        justify-content: left;
-        margin-bottom: 5px;
-        margin-top: 5px;
-    }
-
-    .action-btn {
-        background-color: var(--c3);
-        color: var(--f1);
-        border: none;
-        padding: 10px 15px;
-        margin: 5px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 1rem;
-    }
-
-    .action-btn:hover {
-        background-color: var(--c3-hover);
-    }
-
-    /* Table styling */
-    .table-container {
-        border-radius: 4px;
-        overflow: hidden;
-        margin-top: 0px;
-        margin-left: 0px;
-        margin-right: 0px;
-    }
-
-    table {
-        width: 100%;
-        border-collapse: collapse;
-    }
-
-    th, td {
-        padding: 10px;
-        text-align: left;
-    }
-
-    th {
-        background-color: var(--c1);
-        color: var(--f1);
-    }
-
-    tr {
-        border-bottom: 1px solid var(--c4);
-        color: var(--f1);
-    }
-
-    .table-row:hover {
-        background-color: var(--c1);
-        cursor: pointer;
-    }
-
-    /* Highlight selected study */
-
-</style>

@@ -1,5 +1,7 @@
 <!-- instance.svlete -->
 <script lang="ts" context="module">
+    import '$lib/core/global.css'
+
     import { privateRequest} from '$lib/core/backend';
     import { get, writable } from 'svelte/store';
     import { parse} from 'date-fns';
@@ -245,18 +247,15 @@
 </script>
 
 {#if $inputQuery.status === "active" || $inputQuery.status === "initializing"}
-    <div class="popup" id="input-window" tabindex="-1">
-        <div class="content">
+    <div class="popup-container" id="input-window" tabindex="-1">
+        <div class="content-container">
             {#if $inputQuery.instance && Object.keys($inputQuery.instance).length > 0}
-                <!--{#each Object.entries($inputQuery.instance) as [key, value]}-->
                 {#each possibleDisplayKeys as key}
-                    <!--{#if possibleDisplayKeys.includes(key)}-->
-                        <div class="entry">
-                            <span class={$inputQuery.requiredKeys.includes(key) && !$inputQuery.instance[key] ? 'red' : 'normal'}>{key}</span>
-                            <span class={key === $inputQuery.inputType ? $inputQuery.inputValid ? 'highlight' : 'red' : 'normal'}> 
-                            {displayValue($inputQuery,key)} </span>
-                        </div>
-                    <!--{/if}-->
+                    <div class="span-container">
+                        <span class={$inputQuery.requiredKeys.includes(key) && !$inputQuery.instance[key] ? 'red' : ''}>{key}</span>
+                        <span class={key === $inputQuery.inputType ? $inputQuery.inputValid ? 'blue' : 'red' : ''}> 
+                        {displayValue($inputQuery,key)} </span>
+                    </div>
                 {/each}
             {/if}
             <div class="table-container">
@@ -284,96 +283,9 @@
 {/if}
 
 <style>
-    @import "$lib/core/colors.css";
-
-    .popup {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background-color: var(--c2);
-        border: 1px solid var(--c4);
-        z-index: 1000;
-        padding: 20px;
+    .popup-container {
         width: 400px;
-        height: 500px; /* Fixed height */
-        box-shadow: 0px 0px 20px rgba(0, 0, 0, 0.7);
-        color: var(--f1);
-        overflow: hidden; /* Prevent content from overflowing */
-    }
-
-    .content {
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-    }
-
-    .entry {
-        display: flex;
-        justify-content: space-between;
-        width: 100%;
-        padding: 10px 0;
-        border-bottom: 1px solid var(--c4);
-    }
-
-    .key {
-        color: var(--f2);
-    }
-
-    .red {
-        color: var(--c5);
-        font-weight: bold;
-    }
-
-    .normal {
-        color: var(--f1);
-    }
-
-    .highlight {
-        color: var(--c3);
-        font-weight: bold;
-    }
-
-    .table-container {
-        flex-grow: 1; /* Ensures the table can grow to fill available space */
-        overflow-y: auto; /* Make the table scrollable */
-        margin-top: 10px;
-        border-top: 1px solid var(--c4); /* Visual separation */
-    }
-
-    table {
-        width: 100%;
-        border-collapse: collapse;
-    }
-
-    th, td {
-        padding: 10px;
-        text-align: left;
-    }
-
-    th {
-        background-color: var(--c1);
-        color: var(--f1);
-    }
-
-    tr {
-        border-bottom: 1px solid var(--c4);
-    }
-
-    tr:hover {
-        background-color: var(--c1);
-    }
-
-    .input-display {
-        margin-top: 10px;
-        font-size: 1.2em;
+        height: 500px;
     }
 </style>
 

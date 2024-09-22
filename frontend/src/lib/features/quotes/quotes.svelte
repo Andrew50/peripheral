@@ -36,15 +36,6 @@
 </div>
 
 <style>
-    .container {
-        outline: none;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        width:100%;
-        justify-content: flex-start;
-    }
 
     .ticker-display {
         font-family: Arial, sans-serif;

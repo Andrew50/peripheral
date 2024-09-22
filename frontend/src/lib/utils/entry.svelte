@@ -1,4 +1,5 @@
 <script lang="ts" context="module">
+    import '$lib/core/global.css'
     import type {Instance} from '$lib/core/types' 
     import {queryInstanceInput } from '$lib/utils/input.svelte'
     import {queryInstanceRightClick} from '$lib/utils/rightClick.svelte'
@@ -135,6 +136,9 @@
     onMount(() => {
         import('quill').then(QuillModule => {
             Quill = QuillModule.default;
+            //const Block = Quill.import('blots/block');
+            //Block.tagName = 'div';
+            //Quill.register(Block);
             editor = new Quill(editorContainer, {
                 theme: 'snow',
                 placeholder: 'Entry ...',
@@ -149,7 +153,7 @@
                 static create(instance: Instance): HTMLElement {
                     let node = super.create();
                     node.setAttribute('type', 'button');
-                    node.className = 'btn';
+                    node.className = 'embedded-button';
                     node.dataset.securityId = instance.securityId.toString()
                     node.dataset.ticker = instance.ticker
                     node.dataset.timestamp = instance.timestamp.toString()
@@ -182,59 +186,25 @@
         })
     });
 </script>
-<div bind:this={editorContainer}></div>
-<div class="button-container">
-    <button on:click={inputAndEmbedInstance} class="action-btn"> Insert </button>
-    <button on:click={complete} class="action-btn"> {completed ? "Complete" : "Uncomplete"} </button>
+<div class="editor-container">
+    <div bind:this={editorContainer}></div>
+</div>
+<div class="controls-container">
+    <button on:click={inputAndEmbedInstance}> Insert </button>
+    <button on:click={complete}> {completed ? "Complete" : "Uncomplete"} </button>
     <!--<button on:click={save} class="action-btn"> Save </button>-->
-    <button on:click={del} class="action-btn"> Delete </button>
+    <button on:click={del}> Delete </button>
 </div>
 <style>
-    @import "$lib/core/colors.css";
+  .editor-container {
+      overflow: hidden; /* Prevent overflowing */
+      box-sizing: border-box;
+      border: 1px solid #ccc; /* Optional: add border around editor */
+      max-width: 100%;
+  }
 
-    /* Quill container styling */
-    .ql-container {
-        max-height: 75%;
-        width: 100%;
-        overflow-y: auto;
-        border: none;
-    }
-
-    /* Global styling for embedded buttons */
-    :global(.btn) {
-        background-color: var(--c1);
-        border: 1px solid var(--c4);
-        border-radius: 4px;
-        color: var(--f1);
-        cursor: pointer;
-        display: inline-block;
-        font-size: 14px;
-        margin: 5px;
-        padding: 5px 10px;
-        text-align: center;
-    }
-
-    :global(.btn:hover) {
-        background-color: var(--c3-hover);
-    }
-
-    /* Button styling for action buttons */
-    .button-container {
-        display: flex;
-        justify-content: space-between;
-        margin-top: 10px;
-    }
-
-    .action-btn {
-        background-color: var(--c3);
-        color: var(--f1);
-        border: none;
-        padding: 8px 16px;
-        border-radius: 4px;
-        cursor: pointer;
-    }
-
-    .action-btn:hover {
-        background-color: var(--c3-hover);
+  /* Ensure the content within Quill wraps and doesn't overflow horizontally */
+    :global(.embedded-button) {
+        padding:1px
     }
 </style>

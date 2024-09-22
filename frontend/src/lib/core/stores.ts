@@ -16,11 +16,10 @@ export interface ReplayInfo {
 export interface TimeEvent {
     event:"newDay" | "replay" | null,
     UTCtimestamp: number
-    //ESTtimestamp: number
 }
 export let timeEvent: Writable<TimeEvent> = writable({event:null,UTCtimestamp:0})
 const defaultSettings = {
-    chartRows: 1, chartColumns:1, dolvol:false, adrPeriod:20,
+    chartRows: 1, chartColumns:1, dolvol:false, adrPeriod:20, divideTaS:false
 }
 export let settings:Writable<Settings> = writable(defaultSettings)
 let prevTimestamp: number | null = null;

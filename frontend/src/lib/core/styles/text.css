@@ -1,0 +1,11 @@
+span {
+    color: var(--f1);
+}
+.error-message {
+    color: var(--c5);
+    margin-top: 10px;
+    width: 80%;
+}
+label {
+      margin-right: 10px;
+}
