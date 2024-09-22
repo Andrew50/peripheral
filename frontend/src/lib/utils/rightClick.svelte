@@ -35,7 +35,6 @@
 
     export async function queryInstanceRightClick(event:MouseEvent,instance:Instance,source:Source):Promise<RightClickResult>{
         event.preventDefault()
-        console.log(instance,source)
         const rqQ: RightClickQuery = {
             x: event.clientX,
             y: event.clientY,

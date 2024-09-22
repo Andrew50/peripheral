@@ -17,6 +17,8 @@
     import { onMount, onDestroy  } from 'svelte';
     import { UTCtoEST, ESTtoUTC, ESTSecondstoUTC, getReferenceStartTimeForDateMilliseconds, timeframeToSeconds} from '$lib/core/timestamp';
 	import { getStream, replayStream } from '$lib/utils/stream';
+    import {timeEvent} from '$lib/core/stores'
+    import type {TimeEvent} from '$lib/core/stores'
     let bidLine: any
     let askLine: any
 
@@ -57,7 +59,7 @@
         if (isLoadingChartData ||!inst.ticker || !inst.timeframe || !inst.securityId) { return; }
         isLoadingChartData = true;
         lastChartRequestTime = Date.now()
-        privateRequest<BarData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, timestamp:inst.timestamp, direction:inst.direction, bars:inst.bars,extendedhours:inst.extendedHours})
+        privateRequest<BarData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, timestamp:inst.timestamp, direction:inst.direction, bars:inst.bars,extendedhours:inst.extendedHours},false)
             .then((barDataList: BarData[]) => {
                 if (! (Array.isArray(barDataList) && barDataList.length > 0)){ return}
                 let newCandleData = barDataList.map((bar) => ({
@@ -143,7 +145,6 @@
                             chartVolumeSeries.setData(newVolumeData);
                             chart.timeScale().setVisibleRange({from: vrFrom, to: vrTo})
                         }else if (inst.direction == "backward"){
-                            console.log(newCandleData)
                             chartCandleSeries.setData(newCandleData);
                             chartVolumeSeries.setData(newVolumeData);
                         }
@@ -214,7 +215,6 @@
     ]);
     }
     async function updateLatestChartBar(data:TradeData) {
-        //zconsole.log(data)
         if(isLoadingChartData) {return}
         if (!data.price || !data.size || !data.timestamp) {return}
         if(chartCandleSeries.data().length == 0 || !chartCandleSeries) {return}
@@ -238,7 +238,6 @@
             return 
         } 
         // if not hourly, daily, weekly, monthly at this point; this updates when a new bar has to be created 
-        console.log("Attempted to Update")
         if(data.size >= 100) {
             var referenceStartTime = getReferenceStartTimeForDateMilliseconds(data.timestamp, get(chartQuery).extendedHours) // this is in milliseconds 
             var timeDiff = (data.timestamp - referenceStartTime)/1000 // this is in seconds
@@ -423,6 +422,7 @@
             if (event.key == "r" && event.altKey){
                 chart.timeScale().resetTimeScale()
             }else if (event.key == "Tab" || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
+                console.log("god")
                 queryInstanceInput("any",get(chartQuery))
                 .then((v:Instance)=>{
                     changeChart(v, true)
@@ -519,7 +519,7 @@
                 })
             }
         })
-       chartQuery.subscribe((req:ChartRequest)=>{
+        function change(req:ChartRequest){
            if (chartId !== selectedChartId){return}
             unsubscribe() 
             release()
@@ -542,18 +542,37 @@
             }else { chart.applyOptions({timeScale: {timeVisible: true}}); }
             backendLoadChartData(req)
 
-            const [priceStore, r] = getStream<TradeData>(req.ticker, 'fast')
+            const [priceStore, r] = getStream<TradeData>(req, 'fast')
             release = r
             unsubscribe = priceStore.subscribe((v:TradeData) => {
                 updateLatestChartBar(v)
             })
-            const [quoteStore, rq] = getStream<QuoteData>(req.ticker, 'quote')
+            const [quoteStore, rq] = getStream<QuoteData>(req, 'quote')
             releaseQuote = rq
             unsubscribeQuote = quoteStore.subscribe((v:QuoteData) => {
                 updateLatestQuote(v)
             })
-            
+        }
+       chartQuery.subscribe((req:ChartRequest)=>{
+           change(req)
         }) 
+      /* timeEvent.subscribe((e:TimeEvent)=>{
+           console.log(e)
+           if (!chartInstance || !chartInstance.securityId) return;
+           if (e.event == "replay"){
+               chartInstance.timestamp = e.ESTtimestamp
+                const req: ChartRequest = {
+                    ...chartInstance,
+                    bars: 150,
+                    direction: "backward",
+                    requestType: "loadNewTicker",
+                    includeLastBar: false,
+                }
+                change(req)
+           }
+       })*/
+
+
         
 
 

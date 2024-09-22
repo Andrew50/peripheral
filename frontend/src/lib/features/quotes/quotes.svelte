@@ -4,18 +4,17 @@
     import { get, writable } from 'svelte/store';
     import { queryInstanceInput } from '$lib/utils/input.svelte';
     import type { Instance } from '$lib/core/types';
+    import type {Writable} from 'svelte/store'
 
-    let ticker = writable("");  // Ticker store
+    let instance :Writable<Instance> = writable({})
     let container: HTMLDivElement;
 
     function handleKey(event: KeyboardEvent) {
         if (event.key == "Tab" || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
-            const inst = { ticker: get(ticker), timestamp: 0 };
-            queryInstanceInput(["ticker"], inst)
+            const v = get(instance)
+            queryInstanceInput(["ticker"], v)
                 .then((i: Instance) => {
-                    if (i.ticker) {
-                        ticker.set(i.ticker);
-                    }
+                    instance.set(i)
                 })
                 .catch();
         }
@@ -28,11 +27,11 @@
 
 <div bind:this={container} tabindex="-1" class="container">
     <div class="ticker-display">
-        <span>{$ticker || "--"}</span>  <!-- Display '--' when there's no ticker -->
+        <span>{$instance.ticker || "--"}</span>  <!-- Display '--' when there's no ticker -->
     </div>
     <div class="content-wrapper">
-    <L1 ticker={ticker} />
-    <TimeAndSales ticker={ticker} />
+    <L1 instance={instance} />
+    <TimeAndSales instance={instance} />
     </div>
 </div>
 

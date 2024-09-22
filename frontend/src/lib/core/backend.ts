@@ -34,7 +34,7 @@ export async function publicRequest<T>(func: string, args: any): Promise<T> {
 }
 
 
-export async function privateRequest<T>(func: string, args: any,verbose=true): Promise<T> {
+export async function privateRequest<T>(func: string, args: any,verbose=false): Promise<T> {
     let authToken;
     try{
         authToken = sessionStorage.getItem("authToken")

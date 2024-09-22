@@ -1,5 +1,6 @@
 import {writable } from 'svelte/store';
-import {base_url} from '$lib/core/backend'
+import type{Writable } from 'svelte/store';
+import {privateRequest,base_url} from '$lib/core/backend'
 import {activeChannels} from '$lib/utils/stream'
 type SubscriptionRequest = {
     action: 'subscribe' | 'unsubscribe';
@@ -15,6 +16,7 @@ export class RealtimeStream implements Stream{
     private maxReconnectAttempts: number = 5; 
     private shouldReconnect: boolean = true;
     private connectionStatus = writable<'connected' | 'disconnected' | 'connecting'>('connecting');
+    private streamNameToStore: Map<string,Writable<any>> = new Map()
 
     public start(){
       if(typeof window === 'undefined') return; 
@@ -23,14 +25,12 @@ export class RealtimeStream implements Stream{
         }
         this.socket = new WebSocket(this.url);
         this.socket.addEventListener('close', () => {
-            console.log('WebSocket connection closed');
             this.connectionStatus.set('disconnected');
             if (this.shouldReconnect) {
                 this.reconnect();
             }
         });
         this.socket.addEventListener('open', () => {
-            console.log('WebSocket connection established');
             this.connectionStatus.set('connected');
             this.reconnectAttempts = 0; 
             this.reconnectInterval = 5000; 
@@ -42,19 +42,17 @@ export class RealtimeStream implements Stream{
             const data = JSON.parse(event.data);
             const channelName = data.channel;
             if (channelName) {
-                let activeChannel = activeChannels.get(channelName)
-                if (activeChannel) {
-                    activeChannel.store.set(data);
+                const store = this.streamNameToStore.get(channelName)
+                if (store) {
+                    store.set(data);
                 } 
             }
         });
         this.socket.addEventListener('error', (error) => {
-            console.error('WebSocket error:', error);
             this.socket?.close();
         });
     }
     public stop() {
-        console.log('Stopping WebSocket connection and clearing subscriptions...');
         this.shouldReconnect = false; 
         this.connectionStatus.set('disconnected');
 
@@ -67,22 +65,35 @@ export class RealtimeStream implements Stream{
         }
     }
     public subscribe(channelName:string){
-        if(this.socket?.readyState === WebSocket.OPEN) {
-            const subscriptionRequest : SubscriptionRequest = {
-                action : 'subscribe',
-                channelName: channelName,
-            };
-            this.socket?.send(JSON.stringify(subscriptionRequest));
-        }
+        const [securityId,streamType] = channelName.split("-")
+        const store = activeChannels.get(channelName).store
+        privateRequest<string>("getCurrentTicker",{securityId:securityId})
+        .then((ticker:string)=>{
+            const streamName = `${ticker}-${streamType}`
+            this.streamNameToStore.set(streamName,store)
+            if(this.socket?.readyState === WebSocket.OPEN) {
+                const subscriptionRequest : SubscriptionRequest = {
+                    action : 'subscribe',
+                    channelName: streamName,
+                };
+                this.socket?.send(JSON.stringify(subscriptionRequest));
+            }
+        })
     }
     public unsubscribe(channelName:string){
+        const [securityId,streamType] = channelName.split("-")
+        privateRequest<string>("getCurrentTicker",{securityId:securityId})
+        .then((ticker:string)=>{
+            const streamName = `${ticker}-${streamType}`
         if(this.socket?.readyState === WebSocket.OPEN) {
             const unsubscriptionRequest : SubscriptionRequest = {
                 action: 'unsubscribe',
-                channelName: channelName,
+                channelName: streamName,
             };
+            this.streamNameToStore.delete(streamName)
             this.socket.send(JSON.stringify(unsubscriptionRequest))
         }
+        })
     }
     private reconnect() {
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -91,12 +102,10 @@ export class RealtimeStream implements Stream{
             this.reconnectInterval * this.reconnectAttempts,
             this.maxReconnectInterval
           );
-          console.log(`Reconnecting in ${reconnectDelay / 1000} seconds...`);
           setTimeout(() => {
             this.start();
           }, reconnectDelay);
         } else {
-          console.error('Max reconnect attempts reached.');
         }
       }
 }

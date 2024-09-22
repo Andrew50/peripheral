@@ -108,7 +108,7 @@
           </td>
           {#each columns as col}
             {#if col === "change"}
-                <StreamCell ticker={watch.ticker}/>
+                <StreamCell instance={watch}/>
             {:else}
                 <td>{watch[col]}</td>
             {/if}

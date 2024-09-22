@@ -1,14 +1,14 @@
 <script lang="ts">
     import { onDestroy } from 'svelte';
     import type { Writable } from 'svelte/store';
-    import type { TradeData, QuoteData } from '$lib/core/types';
+    import type { TradeData, QuoteData ,Instance} from '$lib/core/types';
     import { getStream } from '$lib/utils/stream';
 
 
 
 
 
-    export let ticker: Writable<string>;
+    export let instance: Writable<Instance>;
     let store: Writable<TradeData>;
     let quoteStore: Writable<QuoteData>;
     let releaseTrade: Function = () => {};
@@ -22,18 +22,18 @@
     let currentBid = 0;
     let currentAsk = 0;
     const maxLength = 20;
-    let prevTick = "";
+    let prevSecId = -1;
 
-    ticker.subscribe((tick: string) => {
-        if (tick !== prevTick){
+    instance.subscribe((instance: Instance) => {
+        if (instance.securityId !== prevSecId){
         unsubscribeTrade();
         releaseTrade();
         unsubscribeQuote();
         releaseQuote();
-        const [s, r] = getStream<TradeData>(tick, "fast");
+        const [s, r] = getStream<TradeData>(instance, "fast");
         store = s;
         releaseTrade = r;
-        const [qs, qr] = getStream<QuoteData>(tick,"quote");
+        const [qs, qr] = getStream<QuoteData>(instance,"quote");
         quoteStore = qs;
         releaseQuote = qr;
         allTrades = []
@@ -47,7 +47,7 @@
             currentBid = quote.bidPrice;
             currentAsk = quote.askPrice;
         });
-        prevTick = tick
+        prevSecId = instance.securityId ?? -1
         }
     });
 
