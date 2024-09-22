@@ -64,6 +64,13 @@
         />
     </div>
     <div>
+        <label for="time and sales <100 filter">Display Trades Less than 100 shares</label>
+        <select bind:value={tempSettings.filterTaS} on:keypress={handleKeyPress}>
+            <option value={true}>Yes</option>
+            <option value={false}>No</option>
+        </select>
+    </div>
+    <div>
         <label>Divide Time and Sales by 100:</label>
         <select bind:value={tempSettings.divideTaS} on:keypress={handleKeyPress}>
             <option value={true}>Yes</option>
