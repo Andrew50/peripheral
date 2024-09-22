@@ -1,6 +1,7 @@
 
 <script>
   import { goto } from "$app/navigation";
+  import '$lib/core/global.css'
 
   function navigateTo(page) {
     goto(page);

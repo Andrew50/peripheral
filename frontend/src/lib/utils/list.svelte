@@ -89,10 +89,11 @@
   <table>
     <thead>
       <tr>
+      <th></th>
       {#each columns as col}
       <th>{col}</th>
-      <th></th>
       {/each}
+      <th></th>
       </tr>
     </thead>
     <tbody>
@@ -114,9 +115,7 @@
             {/if}
 
           {/each}
-          <td class="delete-cell">
-                <button class="delete-btn" on:click={(event) => {deleteRow(event,watch)}}> ✕ </button>
-              </td>
+          <td> <button class="delete-button" on:click={(event) => {deleteRow(event,watch)}}> ✕ </button> </td>
           </tr>
         {/each}
     </tbody>
@@ -126,59 +125,13 @@
 
 
 <style>
-  @import "$lib/core/colors.css";
   .flag-icon {
     color: var(--c3);
     font-size: 16px;
     margin-right: 5px;
   }
-  tr.selected {
-    background-color: var(--c3);
-    color: var(--f1);
-  }
-
-  .table-container {
-    border: 1px solid var(--c4);
-    border-radius: 4px;
-    margin-top: 10px;
-    width: 100%;
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: Arial, sans-serif;
-  }
-
-  th, td {
-    padding: 10px;
-    text-align: left;
-  }
-
-  th {
-    background-color: var(--c1);
-    color: var(--f1);
-  }
-  .delete-btn {
-    background-color: var(--c3);
-    color: var(--f1);
-    border: none;
-    padding: 5px;
-    font-size: 12px;
-    cursor: pointer;
-    border-radius: 3px;
-  }
-  .delete-cell {
-    text-align: right;
-    padding-right: 10px;
-  }
-
-  .delete-btn:hover {
-    background-color: var(--c3-hover);
-  }
-
-  tr {
-    border-bottom: 1px solid var(--c4);
+  .delete-button {
+      padding:1px;
   }
 
 

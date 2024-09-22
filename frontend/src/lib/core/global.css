@@ -1,0 +1,7 @@
+/*global.css*/
+@import './styles/table.css';
+@import './styles/div.css';
+@import './styles/misc.css';
+@import './styles/colors.css';
+@import './styles/input.css';
+@import './styles/text.css';

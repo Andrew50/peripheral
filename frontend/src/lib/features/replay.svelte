@@ -5,6 +5,8 @@ import {queryInstanceInput} from '$lib/utils/input.svelte'
 import {UTCTimestampToESTString} from '$lib/core/timestamp'
 import {replayInfo} from '$lib/core/stores'
 import type{ReplayInfo} from '$lib/core/stores'
+import '$lib/core/global.css'
+
 import type {Instance} from '$lib/core/types'
     function strtReplay(){
         queryInstanceInput(["timestamp"],{timestamp:0})
@@ -29,7 +31,9 @@ import type {Instance} from '$lib/core/types'
 <div class='replay-controls' tabindex="-1"> 
     {#if ["active","paused"].includes($replayInfo.status)}
         <button on:click={stopReplay}>Stop</button>
-        <button on:click={()=>{stopReplay;startReplay($replayInfo.startTimestamp);}}>Reset to {UTCTimestampToESTString($replayInfo.startTimestamp)}</button>
+        <button on:click={()=>{stopReplay;startReplay($replayInfo.startTimestamp);}}>Reset
+       <!-- to {UTCTimestampToESTString($replayInfo.startTimestamp)}-->
+        </button>
         {#if $replayInfo.status === "paused"}
             <button on:click={replayStream.resume}>Play </button>
         {:else}
@@ -43,31 +47,3 @@ import type {Instance} from '$lib/core/types'
         <button on:click={strtReplay}>Start</button>
     {/if}
 </div> 
-
-<style>
-  @import "$lib/core/colors.css";
-  .buttons-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 20px;
-}
-    .button {
-        padding: 10px 20px;
-        background-color: var(--c2);
-        border: 1px solid var(--c4);
-        border-radius: 8px;
-        cursor: pointer;
-        transition: background-color 0.3s ease;
-        font-size: 16px;
-        display: inline-block;
-    }
-
-    .button:hover {
-        background-color: var(--c3-hover);
-    }
-    input[type="number"] {
-    margin-left: 4px;
-    font-size: 14px;
-  }
-</style>
