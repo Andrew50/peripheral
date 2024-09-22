@@ -253,6 +253,8 @@
             return 
         } 
         // if not hourly, daily, weekly, monthly at this point; this updates when a new bar has to be created 
+        var timeToRequestForUpdatingAggregate = ESTtoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as number) * 1000;
+        console.log(timeToRequestForUpdatingAggregate);
         if(data.size >= 100) {
             var referenceStartTime = getReferenceStartTimeForDateMilliseconds(data.timestamp, currentChartInstance.extendedHours) // this is in milliseconds 
             var timeDiff = (data.timestamp - referenceStartTime)/1000 // this is in seconds
@@ -276,7 +278,7 @@
             const barDataList: BarData[] = await privateRequest<BarData[]>("getChartData", {
                 securityId:chartSecurityId, 
                 timeframe:chartTimeframe, 
-                timestamp:ESTtoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as number)*1000,
+                timestamp: timeToRequestForUpdatingAggregate,
                 direction:"backward",
                 bars:1,
                 extendedHours: chartExtendedHours
@@ -285,7 +287,7 @@
             if (! (Array.isArray(barDataList) && barDataList.length > 0)){ return}
             const bar = barDataList[0];
             var currentCandleData = chartCandleSeries.data()
-            for(var c = currentCandleData.length-1; c > 0; c++) {
+            for(var c = currentCandleData.length-1; c > 0; c--) {
                 if (currentCandleData[c].time == UTCtoEST(bar.time)) {
                     currentCandleData[c] = {
                         time: UTCtoEST(bar.time) as UTCTimestamp,
