@@ -1,4 +1,4 @@
-<!-- rightClick.svlete -->
+ <!-- rightClick.svlete -->
 <script lang="ts" context="module">
     //import {changeChart} from '$lib/features/chart/chart.svelte'
     import {flagWatchlist,flagWatchlistId} from '$lib/core/stores'
