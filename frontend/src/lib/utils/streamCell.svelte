@@ -3,14 +3,10 @@
     import type { Writable } from 'svelte/store';
     import {writable} from 'svelte/store'
     import { getStream } from '$lib/utils/stream';
-    import { privateRequest } from '$lib/core/backend';
     import type { TradeData,Instance } from '$lib/core/types';
-    
     export let instance: Instance;
     let releaseStream: Function = () => {}
     let unsubscribe: Function = () => {}
-    let change = writable(0)// Initialize `change` with a default value
-    let prevClose: number | null = null;  // Initialize as null to handle when it's not available yet
     let priceStream: Writable<TradeData>;
     let prevCloseStream: Writable<number>;
     interface ChangeStore {
@@ -58,15 +54,4 @@
 
 <td class={$changeStore.price - $changeStore.prevClose < 0 ? "red" : $changeStore.change === "--"? "white":"green"}> {$changeStore.change} </td>
 
-<style>
-    .green {
-        color: green;
-    }
-    .red {
-        color: red;
-    }
-    .white {
-        color: white;
-    }
-</style>
 

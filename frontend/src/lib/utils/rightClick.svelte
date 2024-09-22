@@ -2,6 +2,8 @@
 <script lang="ts" context="module">
     //import {changeChart} from '$lib/features/chart/chart.svelte'
     import {flagWatchlist,flagWatchlistId} from '$lib/core/stores'
+        import '$lib/core/global.css'
+
     import type { Writable } from 'svelte/store';
     import type {Instance} from '$lib/core/types';
     import {UTCTimestampToESTString} from '$lib/core/timestamp'
@@ -134,83 +136,30 @@
         })
     }
 
-
-
-
 </script>
 {#if $rightClickQuery.status === "active"}
-    <div bind:this={rightClickMenu} class="context-menu" style="top: {$rightClickQuery.y}px; left: {$rightClickQuery.x}px;">
-        <div class="menu-item">{$rightClickQuery.instance.ticker} {UTCTimestampToESTString($rightClickQuery.instance.timestamp)} </div>
-        <div class="menu-item"><button on:click={()=>newStudy(get(rightClickQuery).instance)}> Add to Study </button></div>
+    <div bind:this={rightClickMenu} class="popup-container" style="top: {$rightClickQuery.y}px; left: {$rightClickQuery.x}px;">
+        <div >{$rightClickQuery.instance.ticker} {UTCTimestampToESTString($rightClickQuery.instance.timestamp)} </div>
+        <div ><button on:click={()=>newStudy(get(rightClickQuery).instance)}> Add to Study </button></div>
         <!--<div><button on:click={()=>newSample(get(rightClickQuery).instance)}> Add to Sample </button></div>
         <div><button on:click={()=>newJournal(get(rightClickQuery).instance)}> Add to Journal </button></div>-->
-        <div class="menu-item"><button on:click={(event)=>querySimilarInstances(event,get(rightClickQuery).instance)}> Similar Instances </button></div>
-        <!--<div><button on:click={getStats}> Instance Stats </button></div>
-        <div><button on:click={replay}> Replay </button></div>-->
-        <div class="menu-item"><button on:click={()=>startReplay($rightClickQuery.instance.timestamp)}>Begin Replay</button></div>
+        <div ><button on:click={(event)=>querySimilarInstances(event,get(rightClickQuery).instance)}> Similar Instances </button></div>
+        <!--<div><button on:click={getStats}> Instance Stats </button></div>-->
+        <div ><button on:click={()=>startReplay($rightClickQuery.instance.timestamp)}>Begin Replay</button></div>
         {#if $rightClickQuery.source === "chart"}
             <!--<div><button on:click={()=>completeRequest("alert")}>Add Alert </button></div>-->
-            <div class="menu-item"><button on:click={()=>embedInstance(get(rightClickQuery).instance)}> Embed </button></div>
+            <div ><button on:click={()=>embedInstance(get(rightClickQuery).instance)}> Embed </button></div>
         {:else if $rightClickQuery.source === "embedded"}
-            <div class="menu-item"><button on:click={()=>completeRequest("edit")}> Edit </button></div>
+            <div ><button on:click={()=>completeRequest("edit")}> Edit </button></div>
             <!--<div><button on:click={()=>completeRequest("embdedSimilar")}> Embed Similar </button></div>-->
         {:else if $rightClickQuery.source === "list"}
-            <div class ="menu-item"><button on:click={()=>flagSecurity($rightClickQuery.instance)}>{$rightClickQuery.instance.flagged ? "Unflag" : "Flag"}</button></div>
+            <div><button on:click={()=>flagSecurity($rightClickQuery.instance)}>{$rightClickQuery.instance.flagged ? "Unflag" : "Flag"}</button></div>
         {/if}
     </div>
 {/if}
 
 <style>
-    @import "$lib/core/colors.css";
-
-    /* Style the context menu similarly to the popup */
-    .context-menu {
-        display: flex;
-        flex-direction: column;
-        position: absolute;
-        background-color: var(--c2);
-        border: 1px solid var(--c4);
-        z-index: 1000;
-        padding: 10px;
-        width: 250px;
-        box-shadow: 0px 0px 20px rgba(0, 0, 0, 0.7);
-        border-radius: 8px;
-        color: var(--f1);
-    }
-
-    /* Add styling for the buttons inside the menu */
-    .menu-item {
-        padding: 10px;
-        border-bottom: 1px solid var(--c4);
-        display: flex;
-        justify-content: space-between;
-        color: var(--f1);
-        cursor: pointer;
-    }
-
-    .menu-item:last-child {
-        border-bottom: none;
-    }
-
     button {
-        background-color: var(--c3);
-        color: var(--f1);
-        border: none;
-        padding: 8px 16px;
-        border-radius: 4px;
-        cursor: pointer;
         width: 100%;
-    }
-
-    button:hover {
-        background-color: var(--c3-hover);
-    }
-
-    .menu-item:hover {
-        background-color: var(--c1);
-    }
-
-    .hidden {
-        display: none;
     }
 </style>

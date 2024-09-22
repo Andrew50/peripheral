@@ -9,6 +9,8 @@
     let activeList: Writable<Instance[]> = writable([])
     import {queryInstanceInput} from '$lib/utils/input.svelte'
     import {flagWatchlistId,watchlists, flagWatchlist} from '$lib/core/stores'
+    import '$lib/core/global.css'
+
 
 
     let newWatchlistName="";
@@ -52,6 +54,7 @@
     }
 
     function newWatchlist(){
+        if (newWatchlistName === "") return;
         privateRequest<number>("newWatchlist",{watchlistName:newWatchlistName})
         .then((newId:number)=>{
             watchlists.update((v:Watchlist[])=>{
@@ -99,9 +102,8 @@
 
 </script>
 
-<div tabindex="-1" class="container" bind:this={container}>
-    <div  class="buttons-container">
-
+<div tabindex="-1" class="feature-container" bind:this={container}>
+    <div  class="controls-container">
     {#if Array.isArray($watchlists)}
       <div class="watchlist-container">
         <select id="watchlists" bind:value={currentWatchlistId} on:change={(event) => selectWatchlist(event.target.value)}>
@@ -122,81 +124,12 @@
 </div>
 
 <style>
-  @import "$lib/core/colors.css";
-
-    .container {
-        outline: none;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        width:100%;
-        justify-content: flex-start;
-    }
-  .buttons-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 20px;
-  }
-
-  .button {
-    padding: 10px 20px;
-    background-color: var(--c2);
-    border: 1px solid var(--c4);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-    font-size: 16px;
-  }
-  .input {
-    padding: 10px 20px;
-    background-color: var(--c2);
-    border: 1px solid var(--c4);
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 16px;
-
-  }
-
-  .button:hover {
-    background-color: var(--c3-hover);
-  }
-
-  /* Style for select dropdown */
   .watchlist-container {
     display: flex;
     align-items: center;
     gap: 10px;
   }
 
-  select {
-    padding: 10px;
-    background-color: var(--c1);
-    color: var(--f1);
-    border: 1px solid var(--c4);
-    border-radius: 8px;
-    font-size: 16px;
-    transition: background-color 0.3s ease;
-  }
 
-  select:hover {
-    background-color: var(--c2);
-  }
-
-  /* Style for delete watchlist button */
-  .delete-watchlist {
-    background-color: var(--c3);
-    color: var(--f1);
-    border: none;
-    padding: 5px 10px;
-    cursor: pointer;
-    border-radius: 8px;
-    font-size: 16px;
-  }
-
-  .delete-watchlist:hover {
-    background-color: var(--c3-hover);
-  }
   
 </style>

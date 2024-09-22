@@ -40,4 +40,5 @@ export interface Settings {
     chartRows: number
     dolvol: boolean
     adrPeriod: number
+    divideTaS: boolean
 }
