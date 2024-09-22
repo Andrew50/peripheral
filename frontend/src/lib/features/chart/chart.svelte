@@ -52,6 +52,7 @@
     let blockingChartRequest = {}
     let isPanning = false
     const tradeConditionsToCheck = new Set([2, 5, 7, 10, 12, 13, 15, 16, 20, 21, 22, 29, 33, 37, 52, 53])
+    const tradeConditionsToCheckVolume = new Set([15, 16, 38])
 
     function backendLoadChartData(inst:ChartRequest): void{
         if (isLoadingChartData ||!inst.ticker || !inst.timeframe || !inst.securityId) { return; }
@@ -245,22 +246,23 @@
                 close: data.price 
                 })  
             }
-            chartVolumeSeries.update({
-                time: mostRecentBar.time, 
-                value: chartVolumeSeries.data()[chartVolumeSeries.data().length-1].value + data.size,
-                color: mostRecentBar.close > mostRecentBar.open ? '#089981' : '#ef5350'
-            })
+            if(data.conditions == null || !data.conditions.some(condition => tradeConditionsToCheckVolume.has(condition))) {
+                chartVolumeSeries.update({
+                    time: mostRecentBar.time, 
+                    value: chartVolumeSeries.data()[chartVolumeSeries.data().length-1].value + data.size,
+                    color: mostRecentBar.close > mostRecentBar.open ? '#089981' : '#ef5350'
+                }) 
+            }
             return 
         } 
         // if not hourly, daily, weekly, monthly at this point; this updates when a new bar has to be created 
         var timeToRequestForUpdatingAggregate = ESTtoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as number) * 1000;
         console.log(timeToRequestForUpdatingAggregate);
-        if(data.size >= 100) {
+        if(data.conditions == null || (data.size >= 100 && !data.conditions.some(condition => tradeConditionsToCheck.has(condition)))) {
             var referenceStartTime = getReferenceStartTimeForDateMilliseconds(data.timestamp, currentChartInstance.extendedHours) // this is in milliseconds 
             var timeDiff = (data.timestamp - referenceStartTime)/1000 // this is in seconds
             var flooredDifference = Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds 
             var newTime = UTCtoEST((referenceStartTime/1000 + flooredDifference)) as UTCTimestamp
-
             chartCandleSeries.update({
                 time: newTime,
                 open: data.price, 
