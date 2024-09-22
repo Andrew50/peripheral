@@ -236,12 +236,6 @@
         if(chartCandleSeries.data().length == 0 || !chartCandleSeries) {return}
         var mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
         if (UTCtoEST(data.timestamp/1000) < (mostRecentBar.time as number) + chartTimeframeInSeconds) {
-            mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
-            chartVolumeSeries.update({
-                time: mostRecentBar.time, 
-                value: chartVolumeSeries.data()[chartVolumeSeries.data().length-1].value + data.size,
-                color: mostRecentBar.close > mostRecentBar.open ? '#089981' : '#ef5350'
-            })
             if(data.conditions == null || (data.size >= 100 && !data.conditions.some(condition => tradeConditionsToCheck.has(condition)))) {
                 chartCandleSeries.update({
                 time: mostRecentBar.time, 
@@ -251,6 +245,11 @@
                 close: data.price 
                 })  
             }
+            chartVolumeSeries.update({
+                time: mostRecentBar.time, 
+                value: chartVolumeSeries.data()[chartVolumeSeries.data().length-1].value + data.size,
+                color: mostRecentBar.close > mostRecentBar.open ? '#089981' : '#ef5350'
+            })
             return 
         } 
         // if not hourly, daily, weekly, monthly at this point; this updates when a new bar has to be created 
@@ -285,22 +284,28 @@
 
             if (! (Array.isArray(barDataList) && barDataList.length > 0)){ return}
             const bar = barDataList[0];
-            var currentCandleData = chartCandleSeries.data() 
-            currentCandleData[currentCandleData.length-2] = {
-                time: UTCtoEST(bar.time) as UTCTimestamp, 
-                open: bar.open, 
-                high: bar.high, 
-                low: bar.low,
-                close: bar.close
-            }
-            chartCandleSeries.setData(currentCandleData)
-            var currentVolumeData = chartVolumeSeries.data() 
-            currentVolumeData[currentVolumeData.length-2] = {
-                time: UTCtoEST(bar.time) as UTCTimestamp,
-                value: bar.volume,
-                color: bar.close > bar.open ? '#089981' : '#ef5350'
-            }
-            chartVolumeSeries.setData(currentVolumeData)
+            var currentCandleData = chartCandleSeries.data()
+            for(var c = currentCandleData.length-1; c > 0; c++) {
+                if (currentCandleData[c].time == UTCtoEST(bar.time)) {
+                    currentCandleData[c] = {
+                        time: UTCtoEST(bar.time) as UTCTimestamp,
+                        open: bar.open,
+                        high: bar.high, 
+                        low: bar.low,
+                        close: bar.close
+                    }
+                    chartCandleSeries.setData(currentCandleData)
+                    var currentVolumeData = chartVolumeSeries.data()
+                    currentVolumeData[c] = {
+                        time: UTCtoEST(bar.time) as UTCTimestamp, 
+                        value: bar.volume, 
+                        color: bar.close > bar.open ? '#089981' : '#ef5350'
+                    }
+                    chartVolumeSeries.setData(currentVolumeData)
+                    console.log("Updated aggregate on time ", bar.time)
+                    break
+                }
+            } 
         }
         catch (error) {
             console.log("Error fetching polygon aggregate 4k6lg", error)
