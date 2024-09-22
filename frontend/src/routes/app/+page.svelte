@@ -19,7 +19,7 @@
     import { goto } from '$app/navigation';
     import { get, writable } from 'svelte/store';
     import { browser } from '$app/environment';
-    import {initStores} from '$lib/core/stores'
+    import {initStores, replayInfo, type ReplayInfo} from '$lib/core/stores'
     import { currentTimestamp, formatTimestamp, updateTime } from '$lib/core/stores';
     type Menu = 'study' | 'screen' |'quotes'| 'setups' | 'test' | 'none' | 'watchlist' | "journal"|'screensaver' | "replay" | "settings";
     const menus: Menu[] = ['quotes','watchlist' ,'screen' ,'study' ,"journal", 'setups' ,'screensaver' , "replay", "settings"] //,'test'
@@ -31,11 +31,18 @@
     let menuWidth = writable(0);
     let buttonWidth: number;
     let interval;
+    let latestReplaySpeed: number;
     onMount(() => { 
         privateRequest<string>("verifyAuth", {}).catch(() => {
             goto('/login');
         });
         initStores()
+        replayInfo.subscribe((v:ReplayInfo) => {
+            if (v.replaySpeed == latestReplaySpeed) {return}
+            interval = setInterval(updateTime, 1000/v.replaySpeed)
+            latestReplaySpeed = v.replaySpeed
+            return 
+        })
         if (browser) {
             function handleResize() {
                 pix = window.innerWidth;
@@ -45,7 +52,8 @@
 
             // Set initial value
             handleResize();
-            interval = setInterval(updateTime, 1000);
+            interval = setInterval(updateTime, 1000/get(replayInfo).replaySpeed);
+            latestReplaySpeed = get(replayInfo).replaySpeed;
             return () => {
                 window.removeEventListener('resize', handleResize);
             };

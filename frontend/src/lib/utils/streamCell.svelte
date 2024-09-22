@@ -26,7 +26,7 @@
         prevCloseStream = p
         unsubscribe = u
         priceStream.subscribe((v) => {
-            console.log(v)
+            //console.log(v)
             if (v.price){
                 changeStore.update((s:ChangeStore)=>{
                     s.price = v.price
@@ -36,7 +36,7 @@
             }
         });
         prevCloseStream.subscribe((v:number)=>{
-            console.log(v)
+            //console.log(v)
             changeStore.update((s:ChangeStore)=>{
                 s.prevClose = v
                 if (s.price && s.prevClose) s.change = getChange(s.price,s.prevClose)

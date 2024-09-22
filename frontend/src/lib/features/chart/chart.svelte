@@ -15,7 +15,7 @@
     import type {Writable} from 'svelte/store';
     import {writable, get} from 'svelte/store';
     import { onMount  } from 'svelte';
-    import { UTCtoEST, ESTtoUTC, ESTSecondstoUTC, getReferenceStartTimeForDateMilliseconds, timeframeToSeconds} from '$lib/core/timestamp';
+    import { UTCSecondstoESTSeconds, ESTSecondstoUTCSeconds, ESTSecondstoUTCMillis, getReferenceStartTimeForDateMilliseconds, timeframeToSeconds} from '$lib/core/timestamp';
 	import { getStream, replayStream } from '$lib/utils/stream';
     import {timeEvent,replayInfo} from '$lib/core/stores'
     import type {TimeEvent} from '$lib/core/stores'
@@ -58,12 +58,23 @@
         if (isLoadingChartData ||!inst.ticker || !inst.timeframe || !inst.securityId) { return; }
         isLoadingChartData = true;
         lastChartRequestTime = Date.now()
-        privateRequest<BarData[]>("getChartData", {securityId:inst.securityId, timeframe:inst.timeframe, timestamp:inst.timestamp, direction:inst.direction, bars:inst.bars,extendedhours:inst.extendedHours},false)
+        if((get(replayInfo).status == "active" || get(replayInfo).status == "paused") && inst.timestamp == 0) {
+            inst.timestamp = Math.floor(get(currentTimestamp))
+        }
+        privateRequest<BarData[]>("getChartData", {
+            securityId:inst.securityId, 
+            timeframe:inst.timeframe, 
+            timestamp:inst.timestamp, 
+            direction:inst.direction, 
+            bars:inst.bars,
+            extendedhours:inst.extendedHours, 
+            isreplay: (get(replayInfo).status == "active" || get(replayInfo).status == "paused") ? true : false,}
+            ,false)
             .then((barDataList: BarData[]) => {
                 blockingChartRequest = inst
                 if (! (Array.isArray(barDataList) && barDataList.length > 0)){ return}
                 let newCandleData = barDataList.map((bar) => ({
-                  time: UTCtoEST(bar.time as UTCTimestamp) as UTCTimestamp,
+                  time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
                   open: bar.open, 
                   high: bar.high, 
                   low: bar.low, 
@@ -72,10 +83,10 @@
                 let newVolumeData: any
                 if (get(settings).dolvol){
                     newVolumeData = barDataList.map((bar) => ({
-                      time: UTCtoEST(bar.time as UTCTimestamp) as UTCTimestamp, value: bar.volume * (bar.close + bar.open) / 2, color: bar.close > bar.open ? '#089981' : '#ef5350', }));
+                      time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp, value: bar.volume * (bar.close + bar.open) / 2, color: bar.close > bar.open ? '#089981' : '#ef5350', }));
                 }else{
                     newVolumeData = barDataList.map((bar) => ({
-                      time: UTCtoEST(bar.time as UTCTimestamp) as UTCTimestamp, value: bar.volume, color: bar.close > bar.open ? '#089981' : '#ef5350', }));
+                      time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp, value: bar.volume, color: bar.close > bar.open ? '#089981' : '#ef5350', }));
                 }
                 if (inst.requestType === 'loadAdditionalData' && inst.direction === 'backward') {
                   const earliestCandleTime = chartCandleSeries.data()[0]?.time;
@@ -203,7 +214,7 @@
                            console.log('god')
                             backendLoadChartData({
                                 ...currentChartInstance,
-                                timestamp: ESTSecondstoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp,
+                                timestamp: ESTSecondstoUTCMillis(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp,
                                 bars:  150, //+ 2*Math.floor(chart.getLogicalRange.to) - chartCandleSeries.data().length,
                                 direction: "forward",
                                 requestType: "loadAdditionalData",
@@ -232,19 +243,20 @@
         ]);
     }
     async function updateLatestChartBar(data:TradeData) {
-        if(isLoadingChartData) {return}
-        if (!data.price || !data.size || !data.timestamp) {return}
-        if(chartCandleSeries.data().length == 0 || !chartCandleSeries) {return}
+        if(isLoadingChartData || !data.price || !data.size || !data.timestamp || !chartCandleSeries 
+        || chartCandleSeries.data().length == 0) {return}
         var mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
-        if (UTCtoEST(data.timestamp/1000) < (mostRecentBar.time as number) + chartTimeframeInSeconds) {
+        if (UTCSecondstoESTSeconds(data.timestamp/1000) < (mostRecentBar.time as number) + chartTimeframeInSeconds) {
             if(data.conditions == null || (data.size >= 100 && !data.conditions.some(condition => tradeConditionsToCheck.has(condition)))) {
-                chartCandleSeries.update({
-                time: mostRecentBar.time, 
-                open: mostRecentBar.open, 
-                high: Math.max(mostRecentBar.high, data.price), 
-                low: Math.min(mostRecentBar.low, data.price),
-                close: data.price 
-                })  
+                if(!(mostRecentBar.close == data.price)) {
+                    chartCandleSeries.update({
+                        time: mostRecentBar.time, 
+                        open: mostRecentBar.open, 
+                        high: Math.max(mostRecentBar.high, data.price), 
+                        low: Math.min(mostRecentBar.low, data.price),
+                        close: data.price 
+                    })  
+                }
             }
             if(data.conditions == null || !data.conditions.some(condition => tradeConditionsToCheckVolume.has(condition))) {
                 chartVolumeSeries.update({
@@ -256,13 +268,12 @@
             return 
         } 
         // if not hourly, daily, weekly, monthly at this point; this updates when a new bar has to be created 
-        var timeToRequestForUpdatingAggregate = ESTtoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as number) * 1000;
-        console.log(timeToRequestForUpdatingAggregate);
+        var timeToRequestForUpdatingAggregate = ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
         if(data.conditions == null || (data.size >= 100 && !data.conditions.some(condition => tradeConditionsToCheck.has(condition)))) {
             var referenceStartTime = getReferenceStartTimeForDateMilliseconds(data.timestamp, currentChartInstance.extendedHours) // this is in milliseconds 
             var timeDiff = (data.timestamp - referenceStartTime)/1000 // this is in seconds
             var flooredDifference = Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds 
-            var newTime = UTCtoEST((referenceStartTime/1000 + flooredDifference)) as UTCTimestamp
+            var newTime = UTCSecondstoESTSeconds((referenceStartTime/1000 + flooredDifference)) as UTCTimestamp
             chartCandleSeries.update({
                 time: newTime,
                 open: data.price, 
@@ -283,16 +294,17 @@
                 timestamp: timeToRequestForUpdatingAggregate,
                 direction:"backward",
                 bars:1,
-                extendedHours: chartExtendedHours
+                extendedHours: chartExtendedHours,
+                isreplay: (get(replayInfo).status == "active" || get(replayInfo).status == "paused") ? true : false,
             });
 
             if (! (Array.isArray(barDataList) && barDataList.length > 0)){ return}
             const bar = barDataList[0];
             var currentCandleData = chartCandleSeries.data()
             for(var c = currentCandleData.length-1; c > 0; c--) {
-                if (currentCandleData[c].time == UTCtoEST(bar.time)) {
+                if (currentCandleData[c].time == UTCSecondstoESTSeconds(bar.time)) {
                     currentCandleData[c] = {
-                        time: UTCtoEST(bar.time) as UTCTimestamp,
+                        time: UTCSecondstoESTSeconds(bar.time) as UTCTimestamp,
                         open: bar.open,
                         high: bar.high, 
                         low: bar.low,
@@ -301,7 +313,7 @@
                     chartCandleSeries.setData(currentCandleData)
                     var currentVolumeData = chartVolumeSeries.data()
                     currentVolumeData[c] = {
-                        time: UTCtoEST(bar.time) as UTCTimestamp, 
+                        time: UTCSecondstoESTSeconds(bar.time) as UTCTimestamp, 
                         value: bar.volume, 
                         color: bar.close > bar.open ? '#089981' : '#ef5350'
                     }
@@ -344,7 +356,7 @@
         //init event listeners
         chartContainer.addEventListener('contextmenu', (event:MouseEvent) => {
             event.preventDefault();
-            const timestamp = ESTSecondstoUTC(latestCrosshairPositionTime);
+            const timestamp = ESTSecondstoUTCMillis(latestCrosshairPositionTime);
             const ins: Instance = { ...currentChartInstance, timestamp: timestamp}
             queryInstanceRightClick(event,ins,"chart")
         })
@@ -418,6 +430,9 @@
             if (event.key == "r" && event.altKey){
                 chart.timeScale().resetTimeScale()
             }else if (event.key == "Tab" || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
+                if(get(replayInfo).status == "active" || get(replayInfo).status == "paused") {
+                    currentChartInstance.timestamp = 0
+                }
                 queryInstanceInput("any",currentChartInstance)
                 .then((v:Instance)=>{
                     currentChartInstance = v
@@ -494,7 +509,7 @@
                 if(chartEarliestDataReached) {return;}
                 backendLoadChartData({
                     ...currentChartInstance,
-                    timestamp: ESTSecondstoUTC(chartCandleSeries.data()[0].time as UTCTimestamp) as number,
+                    timestamp: ESTSecondstoUTCMillis(chartCandleSeries.data()[0].time as UTCTimestamp) as number,
                     bars: 50 - Math.floor(logicalRange.from),
                     direction: "backward",
                     requestType: "loadAdditionalData",
@@ -505,7 +520,7 @@
                 if(replayStream.replayStatus == true) { return;}
                 backendLoadChartData({
                     ...currentChartInstance,
-                    timestamp: ESTSecondstoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp,
+                    timestamp: ESTSecondstoUTCMillis(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp,
                     bars:  150 + 2*Math.floor(logicalRange.to) - chartCandleSeries.data().length,
                     direction: "forward",
                     requestType: "loadAdditionalData",
