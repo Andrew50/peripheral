@@ -145,13 +145,11 @@ func (c *Client) subscribe(conn *Conn, channelName string) {
 	channelsMutex.Unlock()
 	go func() {
 		initialValue, err := getInitialStreamValue(channelName, conn)
-		fmt.Println(initialValue)
 		if err != nil {
 			fmt.Println("Error fetching initial value from API:", err)
 			return
 		}
 		c.mu.Lock()
-		fmt.Println(initialValue)
 		defer c.mu.Unlock()
 		err = c.ws.WriteMessage(websocket.TextMessage, []byte(initialValue))
 		if err != nil {

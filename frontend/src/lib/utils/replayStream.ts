@@ -18,25 +18,23 @@ export class ReplayStream implements Stream {
     private initialTimestamp: number = 0;
     private tickMap: Map<string,{reqInbound:boolean,ticks:Array<any>}> = new Map()
     public subscribe(channelName: string) {
-        console.log("Subscribed in Replay: ", channelName)
         this.tickMap.set(channelName,{reqInbound:false,ticks:[]})
     }
     public unsubscribe(channelName: string) {
         this.tickMap.delete(channelName)
     }
 
-    public start(streams:instance : Instance) {
+    public start(instance : Instance) {
         if (!instance) return;
         var timestamp = instance.timestamp
         if (!timestamp) return;
-        changeChart(instance, false)
+        //changeChart(instance, false)
         this.startTime = Date.now()
         this.initialTimestamp = timestamp
         this.replayStatus = true; 
         for (const channel of activeChannels.keys()){
             this.subscribe(channel)
         }
-        console.log("Replay starting....")
         this.loop()
     }
 
@@ -60,7 +58,7 @@ export class ReplayStream implements Stream {
                     time: latestTime ?? this.initialTimestamp,
                     lengthOfTime: this.buffer,
                     extendedHours: false
-                },true).then((n:Array<any>)=>{
+                },false).then((n:Array<any>)=>{
                     this.tickMap.get(channel).ticks.push(...n)
                     this.tickMap.get(channel).reqInbound = false
                     //this.tickMap.set(channel,this.tickMap.get(channel).concat(v));
@@ -85,14 +83,12 @@ export class ReplayStream implements Stream {
     public stop() {
         this.replayStatus = false;
         this.isPaused = false;
-        console.log('Replay stopped.');
     }
 
     public pause() {
         if (!this.isPaused) {
             this.isPaused = true;
             this.pauseStartTime = Date.now();
-            console.log('Replay paused.');
         }
     }
 
@@ -100,7 +96,6 @@ export class ReplayStream implements Stream {
         if (this.isPaused) {
             this.isPaused = false;
             this.accumulatedPauseTime += Date.now() - this.pauseStartTime;
-            console.log('Replay resumed.');
             this.loop()
         }
     }
@@ -113,7 +108,6 @@ export class ReplayStream implements Stream {
         this.playbackSpeed = newSpeed;
         this.startTime = currentTime - (simulatedTime - this.initialTimestamp) / this.playbackSpeed;
 
-        console.log(`Playback speed changed to ${newSpeed}`);
     }
 }
 
