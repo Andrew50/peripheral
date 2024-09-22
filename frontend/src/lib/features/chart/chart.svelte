@@ -54,8 +54,6 @@
     const tradeConditionsToCheck = new Set([2, 5, 7, 10, 12, 13, 15, 16, 20, 21, 22, 29, 33, 37, 52, 53])
 
     function backendLoadChartData(inst:ChartRequest): void{
-        console.log(isLoadingChartData)
-        console.log(blockingChartRequest)
         if (isLoadingChartData ||!inst.ticker || !inst.timeframe || !inst.securityId) { return; }
         isLoadingChartData = true;
         lastChartRequestTime = Date.now()
@@ -193,21 +191,24 @@
                             rightOffset: 10
                             });
                         }
-                       if(inst.requestType === "loadNewTicker" && !chartLatestDataReached && get(replayInfo).status === "inactive"){
-                        backendLoadChartData({
-                            ...currentChartInstance,
-                            timestamp: ESTSecondstoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp,
-                            bars:  150, //+ 2*Math.floor(chart.getLogicalRange.to) - chartCandleSeries.data().length,
-                            direction: "forward",
-                            requestType: "loadAdditionalData",
-                            includeLastBar: true, 
-                        })
-            }
-         isLoadingChartData = false; // Ensure this runs after data is loaded
+                     isLoadingChartData = false; // Ensure this runs after data is loaded
                     }
+                    console.log(inst.requestType, isPanning)
                     if (inst.direction == "backward" || inst.requestType == "loadNewTicker"
-                        || inst.requestType == "forward" && !isPanning){
+                        || inst.direction == "forward" && !isPanning){
                         queuedLoad()
+                       if(inst.requestType === "loadNewTicker" && !chartLatestDataReached 
+                           && get(replayInfo).status === "inactive"){
+                           console.log('god')
+                            backendLoadChartData({
+                                ...currentChartInstance,
+                                timestamp: ESTSecondstoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp,
+                                bars:  150, //+ 2*Math.floor(chart.getLogicalRange.to) - chartCandleSeries.data().length,
+                                direction: "forward",
+                                requestType: "loadAdditionalData",
+                                includeLastBar: true, 
+                            })
+                        }
                     }
                 }
             }) .catch((error: string) => {
@@ -304,34 +305,6 @@
         catch (error) {
             console.log("Error fetching polygon aggregate 4k6lg", error)
         }
-        // privateRequest<BarData[]>("getChartData", {
-        //     securityId:chartSecurityId, 
-        //     timeframe:chartTimeframe, 
-        //     timestamp:ESTtoUTC(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as number)*1000,
-        //     direction:"backward",
-        //     bars:1,
-        //     extendedHours: chartExtendedHours
-        // }).then((barDataList : BarData[]) => {
-        //     if (! (Array.isArray(barDataList) && barDataList.length > 0)){ return}
-        //     const bar = barDataList[0];
-        //     console.log(bar)
-        //     chartCandleSeries.update({
-        //         time: UTCtoEST(bar.time) as UTCTimestamp, 
-        //         open: bar.open, 
-        //         high: bar.high,
-        //         low: bar.low,
-        //         close: bar.close
-        //     })
-        //     chartVolumeSeries.update({
-        //         time: UTCtoEST(bar.time) as UTCTimestamp,
-        //         value: bar.volume,
-        //         color: bar.close > bar.open ? '#089981' : '#ef5350'
-        //     })
-        //     console.log("Updated with aggregate from polygon")
-        //     return 
-        // })
-
-
     }
     onMount(() => {
         const chartOptions = { 
@@ -436,7 +409,6 @@
             if (event.key == "r" && event.altKey){
                 chart.timeScale().resetTimeScale()
             }else if (event.key == "Tab" || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
-                console.log("god")
                 queryInstanceInput("any",currentChartInstance)
                 .then((v:Instance)=>{
                     currentChartInstance = v
@@ -504,7 +476,7 @@
                 barsForADR = allCandleData.slice(0, cursorBarIndex);
             }
             hoveredCandleData.set({ open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: volume, adr:calculateSingleADR(barsForADR)})
-            latestCrosshairPositionTime = bar.time as number //god
+            latestCrosshairPositionTime = bar.time as number 
         }); 
         chart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
             if (!logicalRange || Date.now() - lastChartRequestTime < chartRequestThrottleDuration) {return;}
@@ -534,7 +506,11 @@
         })
         function change(newReq:ChartRequest,ignoreId=false){
            if (!ignoreId && chartId !== selectedChartId){return}
+           console.log(currentChartInstance)
            const req = {...currentChartInstance,...newReq}
+          /* if (["active","paused"].includes(get(replayInfo).status)){
+               req.timestamp = get(currentTimestamp)
+           }*/
             unsubscribe() 
             release()
             unsubscribeQuote()
@@ -544,7 +520,7 @@
             chartLatestDataReached = false; 
             if(!req.securityId || !req.ticker || !req.timeframe) {return}
 
-            chartSecurityId = req.securityId ;
+            chartSecurityId = req.securityId;
             chartTimeframe = req.timeframe;
             currentChartInstance = {...req}
             chartTimeframeInSeconds = timeframeToSeconds(req.timeframe);
@@ -570,7 +546,6 @@
         }) 
        timeEvent.subscribe((e:TimeEvent)=>{
            if (!currentChartInstance || !currentChartInstance.securityId) return;
-           console.log(currentChartInstance,chartId)
            if (e.event == "replay"){
                currentChartInstance.timestamp = get(currentTimestamp)
                 const req: ChartRequest = {

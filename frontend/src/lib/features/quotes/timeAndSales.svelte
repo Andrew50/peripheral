@@ -25,7 +25,7 @@
     let prevSecId = -1;
 
     instance.subscribe((instance: Instance) => {
-        if (instance.securityId !== prevSecId){
+        if (!instance.securityId || instance.securityId === prevSecId) return;
         unsubscribeTrade();
         releaseTrade();
         unsubscribeQuote();
@@ -38,7 +38,7 @@
         releaseQuote = qr;
         allTrades = []
         unsubscribeTrade = store.subscribe((newTrade: TradeData) => {
-            if (newTrade.timestamp !== undefined) {
+            if (newTrade.timestamp !== undefined && newTrade.timestamp !== 0) {
                 const newRow: TaS = {color:getPriceColor(newTrade.price),...newTrade}
                 allTrades = [newRow,...allTrades].slice(0,maxLength);
             }
@@ -48,7 +48,6 @@
             currentAsk = quote.askPrice;
         });
         prevSecId = instance.securityId ?? -1
-        }
     });
 
     onDestroy(() => {
