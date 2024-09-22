@@ -52,6 +52,7 @@ export class ReplayStream implements Stream {
             if (!v.reqInbound && (!latestTime || latestTime < this.simulatedTime + this.buffer)){
                 v.reqInbound = true
                 const [securityId, type] = channel.split("-")
+                console.log(securityId)
                 let req;
                 if (type === "quote"){
                      req = "getQuoteData"
