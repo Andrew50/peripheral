@@ -42,25 +42,29 @@
 
 <div class="quote-container">
     <div class="quote-row">
-        <div class="price">
-            <span class="label">Ask:</span> 
-            <span class="value {askPriceChange}">{$store?.askPrice?.toFixed(2) ?? "--"}</span>
+        <!-- Bid section on the left -->
+        <div class="bid">
+            <div class="price">
+                <span class="label">Bid:</span>
+                <span class="value {bidPriceChange}">{$store?.bidPrice?.toFixed(2) ?? "--"}</span>
+            </div>
+            <div class="size">
+                <span class="value">x {$store?.bidSize ?? "--"}</span>
+            </div>
         </div>
-        <div class="size">
-            <span class="value">x {$store?.askSize ?? "--"}</span>
-        </div>
-    </div>
-    <div class="quote-row">
-        <div class="price">
-            <span class="label">Bid:</span> 
-            <span class="value {bidPriceChange}">{$store?.bidPrice?.toFixed(2) ?? "--"}</span>
-        </div>
-        <div class="size">
-            <span class="value">x {$store?.bidSize ?? "--"}</span>
+
+        <!-- Ask section on the right -->
+        <div class="ask">
+            <div class="price">
+                <span class="label">Ask:</span>
+                <span class="value {askPriceChange}">{$store?.askPrice?.toFixed(2) ?? "--"}</span>
+            </div>
+            <div class="size">
+                <span class="value">x {$store?.askSize ?? "--"}</span>
+            </div>
         </div>
     </div>
 </div>
-
 <style>
     .quote-container {
         font-family: Arial, sans-serif;
@@ -75,20 +79,26 @@
 
     .quote-row {
         display: flex;
+        justify-content: space-between;
         padding: 10px;
-        flex-direction: column;
         margin-bottom: 2px;
+    }
+
+    .bid, .ask {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
     }
 
     .price {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 2px;
+        margin-right: 5px;
+        font-weight: bold;
     }
 
     .size {
-        text-align: right;
+        margin-left: 5px;
     }
+
 
     .label {
         font-weight: bold;
