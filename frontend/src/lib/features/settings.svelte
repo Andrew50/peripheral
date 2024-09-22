@@ -64,6 +64,12 @@
             on:keypress={handleKeyPress} 
         />
     </div>
+    <div>
+        <label for="time and sales <100 filter">Display Trades Less than 100 shares</label>
+    </div>
+    <div>
+        <label for="time and sales divide size by 100">Time and Sales Size divided by 100</label>
+    </div>
     {#if errorMessage}
         <p style="color: red;">{errorMessage}</p>
     {/if}
