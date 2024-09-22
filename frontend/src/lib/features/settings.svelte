@@ -79,7 +79,6 @@
       margin-right: 10px;
   }
   input, select, button {
-      padding: 5px;
       font-size: 14px;
   }
 </style>

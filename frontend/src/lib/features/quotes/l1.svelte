@@ -14,6 +14,7 @@
     let askPriceChange = 'no-change';  // Can be 'increase', 'decrease', or 'no-change'
 
     instance.subscribe((inst: Instance) => {
+        if (!inst.securityId) return;
         release();
         const [s, r] = getStream(inst, "quote");
         store = s;
@@ -43,19 +44,19 @@
     <div class="quote-row">
         <div class="price">
             <span class="label">Ask:</span> 
-            <span class="value {askPriceChange}">{$store.askPrice?.toFixed(2) ?? "--"}</span>
+            <span class="value {askPriceChange}">{$store?.askPrice?.toFixed(2) ?? "--"}</span>
         </div>
         <div class="size">
-            <span class="value">x {$store.askSize ?? "--"}</span>
+            <span class="value">x {$store?.askSize ?? "--"}</span>
         </div>
     </div>
     <div class="quote-row">
         <div class="price">
             <span class="label">Bid:</span> 
-            <span class="value {bidPriceChange}">{$store.bidPrice?.toFixed(2) ?? "--"}</span>
+            <span class="value {bidPriceChange}">{$store?.bidPrice?.toFixed(2) ?? "--"}</span>
         </div>
         <div class="size">
-            <span class="value">x {$store.bidSize ?? "--"}</span>
+            <span class="value">x {$store?.bidSize ?? "--"}</span>
         </div>
     </div>
 </div>
