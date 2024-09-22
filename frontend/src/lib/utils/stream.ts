@@ -4,7 +4,7 @@ import {RealtimeStream} from "$lib/utils/realtimeStream"
 import {ReplayStream} from "$lib/utils/replayStream"
 import type {Writable} from 'svelte/store'
 import {writable} from 'svelte/store'
-import {ESTtoUTC} from '$lib/core/timestamp'
+import {ESTSecondstoUTCSeconds} from '$lib/core/timestamp'
 import {privateRequest} from '$lib/core/backend'
 export type ChannelType = "fast" | "slow" | "quote" | "close"
 export type Channels = Map<string,{count:number,store:Writable<any>}>

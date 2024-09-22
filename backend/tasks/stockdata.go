@@ -65,7 +65,7 @@ func GetSecurityDateBounds(conn *utils.Conn, userId int, rawArgs json.RawMessage
 			if err != nil {
 				return nil, fmt.Errorf("4lgkv, %v", err)
 			}
-			iter, err := utils.GetAggsData(conn.Polygon, ticker, 1, "day", queryStart, queryEnd, 1000, "desc")
+			iter, err := utils.GetAggsData(conn.Polygon, ticker, 1, "day", queryStart, queryEnd, 1000, "desc", false)
 			if err != nil {
 				return nil, fmt.Errorf("5jk4lv, %v", err)
 			}
@@ -88,6 +88,7 @@ type GetChartDataArgs struct {
 	Direction     string `json:"direction"` // to ensure that we get the data from that date
 	Bars          int    `json:"bars"`
 	ExtendedHours bool   `json:"extendedhours"`
+	IsReplay      bool   `json:"isreplay"`
 	//EndTime   string `json:"endtime"`
 }
 type GetChartDataResults struct {
@@ -262,7 +263,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		//fmt.Printf("Query Start Date: %s, Query End Date: %s \n", time.Time(date1), time.Time(date2))
 		iter, err := utils.GetAggsData(conn.Polygon, ticker, multiplier, timespan,
 			date1, date2,
-			5000, polyResultOrder)
+			5000, polyResultOrder, !args.IsReplay)
 		if err != nil {
 			return nil, fmt.Errorf("rfk3f, %v", err)
 		}
@@ -315,9 +316,9 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 
 type GetTradeDataArgs struct {
 	SecurityID    int64 `json:"securityId"`
-	Timestamp     int64  `json:"time"`
-	LengthOfTime  int64  `json:"lengthOfTime"` //length of time in milliseconds
-	ExtendedHours bool   `json:"extendedhours"`
+	Timestamp     int64 `json:"time"`
+	LengthOfTime  int64 `json:"lengthOfTime"` //length of time in milliseconds
+	ExtendedHours bool  `json:"extendedhours"`
 }
 
 type GetTradeDataResults struct {
@@ -399,9 +400,9 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 
 type GetQuoteDataArgs struct {
 	SecurityID    int64 `json:"securityId"`
-	Timestamp     int64  `json:"time"`
-	LengthOfTime  int64  `json:"lengthOfTime"`
-	ExtendedHours bool   `json:"extendedhours"`
+	Timestamp     int64 `json:"time"`
+	LengthOfTime  int64 `json:"lengthOfTime"`
+	ExtendedHours bool  `json:"extendedhours"`
 }
 
 type GetQuoteDataResults struct {

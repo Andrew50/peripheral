@@ -52,7 +52,7 @@ export class ReplayStream implements Stream {
             if (!v.reqInbound && (!latestTime || latestTime < this.simulatedTime + this.buffer)){
                 v.reqInbound = true
                 const [securityId, type] = channel.split("-")
-                console.log(securityId)
+                //console.log(securityId)
                 let req;
                 if (type === "quote"){
                      req = "getQuoteData"
@@ -92,6 +92,7 @@ export class ReplayStream implements Stream {
         this.isPaused = false;
         replayInfo.update((r:ReplayInfo)=>{
             r.status = "inactive"
+            r.replaySpeed = 1 
             return r
         })
     }
@@ -122,7 +123,10 @@ export class ReplayStream implements Stream {
         this.buffer = Math.floor(this.baseBuffer * this.playbackSpeed)
         this.playbackSpeed = newSpeed;
         this.startTime = currentTime - (simulatedTime - this.initialTimestamp) / this.playbackSpeed;
-
+        replayInfo.update((r:ReplayInfo)=> {
+            r.replaySpeed = newSpeed
+            return r 
+        })
     }
 }
 

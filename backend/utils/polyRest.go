@@ -194,7 +194,7 @@ func GetPolygonRelatedTickers(client *polygon.Client, ticker string) ([]string, 
 
 // QA STATUS: NEEDS TESTING
 func GetAggsData(client *polygon.Client, ticker string, barLength int, timeframe string,
-	fromMillis models.Millis, toMillis models.Millis, limit int, resultsOrder string) (*iter.Iter[models.Agg], error) {
+	fromMillis models.Millis, toMillis models.Millis, limit int, resultsOrder string, isAdjusted bool) (*iter.Iter[models.Agg], error) {
 	timespan := models.Timespan(timeframe)
 	if resultsOrder != "asc" && resultsOrder != "desc" {
 		return nil, fmt.Errorf("incorrect order string passed %s", resultsOrder)
@@ -205,7 +205,7 @@ func GetAggsData(client *polygon.Client, ticker string, barLength int, timeframe
 		Timespan:   timespan,
 		From:       fromMillis,
 		To:         toMillis,
-	}.WithOrder(models.Order(resultsOrder)).WithLimit(limit)
+	}.WithOrder(models.Order(resultsOrder)).WithLimit(limit).WithAdjusted(isAdjusted)
 	iter := client.ListAggs(context.Background(), params)
 	return iter, nil
 

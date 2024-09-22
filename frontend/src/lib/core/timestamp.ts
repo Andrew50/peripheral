@@ -20,12 +20,12 @@ function getEasternTimeOffset(date : Date)  {
     return 0; // Fallback (shouldn't happen)
 }
 
-export function UTCtoEST(utcTimestamp : number): number{
+export function UTCSecondstoESTSeconds(utcTimestamp : number): number{
     const dateUTC = new Date(utcTimestamp * 1000);
     const offset = getEasternTimeOffset(dateUTC)
     return utcTimestamp + offset;
 }
-export function ESTtoUTC(easternTimestamp : number): number {
+export function ESTSecondstoUTCSeconds(easternTimestamp : number): number {
     const dateEST = new Date(easternTimestamp * 1000) 
     const offset1 = getEasternTimeOffset(dateEST)
     const offset2 = getEasternTimeOffset(new Date((easternTimestamp - offset1)*1000))
@@ -36,7 +36,7 @@ export function ESTtoUTC(easternTimestamp : number): number {
     } 
     return -1
 }
-export function ESTSecondstoUTC(easternTimestamp : number): number {
+export function ESTSecondstoUTCMillis(easternTimestamp : number): number {
     const dateEST = new Date(easternTimestamp * 1000) 
     const offset1 = getEasternTimeOffset(dateEST)
     const offset2 = getEasternTimeOffset(new Date((easternTimestamp - offset1)*1000))
