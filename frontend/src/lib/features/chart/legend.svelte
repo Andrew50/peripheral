@@ -2,14 +2,23 @@
 <script lang='ts'>
     export let hoveredCandleData;
     import type {Instance} from '$lib/core/types'
+    import {changeChart} from './interface'
     export let instance: Instance
+    import {queryInstanceInput} from '$lib/utils/input.svelte'
+    function handleClick(event:MouseEvent |TouchEvent){
+        queryInstanceInput("any",instance)
+        .then((v:Instance)=>{
+            changeChart(instance)
+        })
+
+    }
 </script>
-<div class="legend">
+<div tabindex="-1" on:click={handleClick} on:touchstart={handleClick} class="legend">
     <div class="query">
     {instance?.ticker ?? "NA"}
     {instance?.timeframe ?? "NA"}
     </div>
-    <div class="ohlcv" style="color: {$hoveredCandleData.chgprct < 0 ? 'red' : 'green'}">
+    <div  class="ohlcv" style="color: {$hoveredCandleData.chgprct < 0 ? 'red' : 'green'}">
         O: {$hoveredCandleData.open.toFixed(2)}
         H: {$hoveredCandleData.high.toFixed(2)}
         L: {$hoveredCandleData.low.toFixed(2)}
@@ -45,14 +54,5 @@
     gap: 4px;
 }
 
-.label {
-    text-align: left;
-}
-
-.value {
-    text-align: right;
-    width: 80px; /* Adjust this value to suit the longest expected number */
-    font-family: monospace; /* This will ensure equal spacing for each character */
-}
 
 </style>

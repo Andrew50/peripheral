@@ -168,10 +168,18 @@
                         sma10Series.setData(calculateSMA(newCandleData, 10));
                         sma20Series.setData(calculateSMA(newCandleData, 20));
                         if (inst.requestType == 'loadNewTicker') {
-                            chart.timeScale().fitContent();
-                            chart.timeScale().applyOptions({
-                            rightOffset: 10
-                            });
+                            chart.timeScale().resetTimeScale()
+                            //chart.timeScale().fitContent();
+                            if (currentChartInstance.timestamp === 0){
+                                chart.timeScale().applyOptions({
+                                rightOffset: 10
+                                });
+                            }else{
+                                chart.timeScale().applyOptions({
+                                rightOffset: 0
+                                });
+                            }
+
                         }
                         isLoadingChartData = false; // Ensure this runs after data is loaded
                         }
@@ -198,10 +206,17 @@
                         sma10Series.setData(calculateSMA(newCandleData, 10));
                         sma20Series.setData(calculateSMA(newCandleData, 20));
                         if (inst.requestType == 'loadNewTicker') {
-                            chart.timeScale().fitContent();
-                            chart.timeScale().applyOptions({
-                            rightOffset: 10
-                            });
+                            chart.timeScale().resetTimeScale()
+                            //chart.timeScale().fitContent();
+                            if (currentChartInstance.timestamp === 0){
+                                chart.timeScale().applyOptions({
+                                rightOffset: 10
+                                });
+                            }else{
+                                chart.timeScale().applyOptions({
+                                rightOffset: 0
+                                });
+                            }
                         }
                      isLoadingChartData = false; // Ensure this runs after data is loaded
                     }
@@ -402,24 +417,6 @@
                     }
                     return v
                 })
-            }
-        })
-        chartContainer.addEventListener('touchstart',(event) => {
-            setActiveChart(chartId)
-            const touch = event.touches[0];
-            touchStartX = touch.clientX
-            touchStartY = touch.clientY
-        })
-        chartContainer.addEventListener('touchend',(event) => {
-            const touch = event.changedTouches[0]
-            const distX = Math.abs(touch.clientX - touchStartX)
-            const distY = Math.abs(touch.clientY - touchStartY)
-            if (distX < 10 && distY << 10){
-                queryInstanceInput("any",currentChartInstance)
-                .then((v:Instance)=>{
-                    changeChart(v, true)
-                    currentChartInstance = v
-                }).catch()
             }
         })
 

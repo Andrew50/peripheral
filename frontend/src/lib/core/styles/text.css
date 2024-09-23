@@ -9,3 +9,7 @@ span {
 label {
       margin-right: 10px;
 }
+
+* {
+    font-family: monospace; /* Monospace font for numbers */
+}
