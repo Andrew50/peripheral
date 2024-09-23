@@ -49,7 +49,7 @@
         allTrades = []
         unsubscribeTrade = store.subscribe((newTrade: TradeData) => {
             if (newTrade.timestamp !== undefined && newTrade.timestamp !== 0) {
-                if(filterTaS){
+                if(!filterTaS){
                     if (newTrade.size < 100) return;
                 }
 
