@@ -101,9 +101,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
     } else {
         return nil, fmt.Errorf("Incorrect direction passed")
     }
-    if polyResultOrder == "desc" && haveToAggregate {
-        polyResultOrder = "asc"
-    }
 
     ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
     defer cancel()
@@ -188,6 +185,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
         }
 
         if haveToAggregate {
+            polyResultOrder = "asc"
             iter, err := utils.GetAggsData(conn.Polygon, ticker, lowerMultiplier, lowerTimeframe, date1, date2, 2000, polyResultOrder, !args.IsReplay)
             if err != nil {
                 return nil, fmt.Errorf("error fetching data from Polygon: %v", err)
@@ -253,6 +251,32 @@ func reverse(data []GetChartDataResults) {
         left++
         right--
     }
+}
+func estimateNumBars(timespan string, extendedHours bool, date1, date2 time.Time) int {
+    totalMinutes := 0
+    marketMinutes := 390 // Regular market hours (9:30 AM to 4:00 PM) = 390 minutes
+
+    if extendedHours {
+        marketMinutes = 960 // Extended market hours (4:00 AM to 8:00 PM) = 960 minutes
+    }
+
+    // Calculate total trading minutes between the given dates
+    for date := date1; date.Before(date2) || date.Equal(date2); date = date.AddDate(0, 0, 1) {
+        // Skip weekends
+        if date.Weekday() != time.Saturday && date.Weekday() != time.Sunday {
+            totalMinutes += marketMinutes
+        }
+    }
+
+    // Convert the timespan to duration and estimate the number of bars
+    timespanDuration := timespanToDuration(timespan)
+    if timespanDuration.Minutes() == 0 {
+        return 0 // Prevent division by zero
+    }
+
+    // Estimate the number of bars
+    estimatedBars := totalMinutes / int(timespanDuration.Minutes())
+    return estimatedBars
 }
 
 // Helper function to convert timespan string to time.Duration

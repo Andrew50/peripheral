@@ -56,6 +56,7 @@
                 if (divideTaS){
                     newTrade.size = Math.floor(newTrade.size / 100)
                 }
+                console.log(newTrade)
                 const exchangeName = exchanges[newTrade.exchange]
                 const newRow: TaS = {color:getPriceColor(newTrade.price),...newTrade,exchangeName:exchangeName}
                 allTrades = [newRow,...allTrades].slice(0,maxLength);
