@@ -50,6 +50,8 @@
     border: 1px solid var(--c4);
     z-index: 1000;
     padding: 20px;
+    max-width: 80vw;
+    max-height: 50vw;
     color: var(--f1);
     overflow: hidden; /* Prevent content from overflowing */
 }

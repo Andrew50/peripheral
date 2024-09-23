@@ -26,8 +26,10 @@
     export let completed: boolean;
     let Quill;
     let editorContainer: HTMLElement | string;
+    let controlsContainer: HTMLElement | string;
     let editor: Quill | undefined;
     let lastSaveTimeout: ReturnType<typeof setTimeout> | undefined;
+    let quillWidth = writable(0);
     
     function debounceSave(): void {
         if (lastSaveTimeout) {
@@ -41,12 +43,6 @@
         }, 1000);
     }
 
-    /*function save():void {
-        privateRequest<void>(`save${func}`,
-        {id:id,
-        entry:editor?.getContents()})
-   
-    }*/
     function del():void{
         privateRequest<void>(`delete${func}`,{id:id})
     }
@@ -136,9 +132,9 @@
     onMount(() => {
         import('quill').then(QuillModule => {
             Quill = QuillModule.default;
-            //const Block = Quill.import('blots/block');
-            //Block.tagName = 'div';
-            //Quill.register(Block);
+            const Block = Quill.import('blots/block');
+            Block.tagName = 'div';
+            Quill.register(Block);
             editor = new Quill(editorContainer, {
                 theme: 'snow',
                 placeholder: 'Entry ...',
@@ -184,12 +180,34 @@
                 console.log(editor.getContents())
             });
         })
+        window.addEventListener('mousemove', updateEditorWidth);
+        updateEditorWidth();
+        return () => {
+            window.removeEventListener('mousemove', updateEditorWidth);
+        };
     });
+    function updateEditorWidth(): void {
+    const parentElement = controlsContainer?.parentElement
+    
+    console.log(parentElement)
+    if (parentElement) {
+        const parentWidth = parentElement.clientWidth;
+        const calculatedWidth = parentWidth * .95;
+
+        // Update the editor width (stored in a writable store)
+        quillWidth.set(calculatedWidth);
+
+        // You can also directly set the editor container width:
+        if (typeof editorContainer === 'object' && editorContainer.style) {
+            editorContainer.style.width = `${calculatedWidth}px`;
+        }
+    }
+}
 </script>
-<div class="editor-container">
+<div class="editor-container" style="width: {$quillWidth}px">
     <div bind:this={editorContainer}></div>
 </div>
-<div class="controls-container">
+<div class="controls-container" bind:this={controlsContainer}>
     <button on:click={inputAndEmbedInstance}> Insert </button>
     <button on:click={complete}> {completed ? "Complete" : "Uncomplete"} </button>
     <!--<button on:click={save} class="action-btn"> Save </button>-->
@@ -199,11 +217,10 @@
   .editor-container {
       overflow: hidden; /* Prevent overflowing */
       box-sizing: border-box;
-      border: 1px solid #ccc; /* Optional: add border around editor */
-      max-width: 100%;
+      border: none;
+      align-items: center;
+      justify-content: center;
   }
-
-  /* Ensure the content within Quill wraps and doesn't overflow horizontally */
     :global(.embedded-button) {
         padding:1px
     }
