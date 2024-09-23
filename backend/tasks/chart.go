@@ -44,7 +44,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
     var lowerTimeframe string
     var lowerMultiplier int
     haveToAggregate := false
-    if (timespan == "second" || timespan == "minute") && (60%multiplier != 0) {
+    if (timespan == "second" || timespan == "minute") && (30%multiplier != 0) {
         lowerTimeframe = timespan
         lowerMultiplier = 1
         haveToAggregate = true
@@ -64,7 +64,13 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
         return nil, fmt.Errorf("issue loading eastern location: %v", err)
     }
 
-	inputTimestamp := time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).UTC()
+    var inputTimestamp time.Time
+    if (args.Timestamp == 0){
+
+        inputTimestamp = time.Now().In(easternLocation)
+    }else{
+        inputTimestamp = time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).UTC()
+    }
     fmt.Println(inputTimestamp)
 
     var query string
@@ -120,6 +126,10 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
         }
 
         // Handle NULL dates from the database
+		if maxDateFromSQL == nil {
+			now := time.Now()
+			maxDateFromSQL = &now
+		}
         var minDateSQL, maxDateSQL time.Time
         if minDateFromSQL != nil {
             minDateSQL = minDateFromSQL.In(easternLocation)
@@ -129,7 +139,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
         }
 
         if maxDateFromSQL != nil {
-            maxDateSQL = maxDateFromSQL.In(easternLocation)
+            maxDateSQL = (maxDateFromSQL).In(easternLocation)
         } else {
             // Default to current time if maxDate is NULL
             maxDateSQL = time.Now().In(easternLocation)
@@ -138,14 +148,15 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
         var queryStartTime, queryEndTime time.Time
 
         if args.Direction == "backward" {
-            // For backward direction, get data before inputTimestamp
             queryEndTime = inputTimestamp
             if maxDateSQL.Before(queryEndTime) {
                 queryEndTime = maxDateSQL
             }
             queryStartTime = minDateSQL
             if queryStartTime.After(queryEndTime) {
-                // No data in this range
+                fmt.Println(queryStartTime)
+                fmt.Println(queryEndTime)
+                fmt.Println("skippping")
                 continue
             }
         } else if args.Direction == "forward" {
@@ -178,7 +189,10 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
             if err != nil {
                 return nil, fmt.Errorf("error fetching data from Polygon: %v", err)
             }
-            aggregatedData := buildHigherTimeframeFromLower(iter, multiplier, timespan, args.ExtendedHours, easternLocation, &numBarsRemaining)
+            aggregatedData,err := buildHigherTimeframeFromLower(iter, multiplier, timespan, args.ExtendedHours, easternLocation, &numBarsRemaining)
+            if err != nil {
+                return nil, err
+            }
             barDataList = append(barDataList, aggregatedData...)
             if numBarsRemaining <= 0 {
                 break
@@ -190,6 +204,9 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
             }
             for iter.Next() {
                 item := iter.Item()
+                if iter.Err() != nil {
+                    return nil, fmt.Errorf("dkn0w")
+                }
                 timestamp := time.Time(item.Timestamp).In(easternLocation)
                 marketOpenTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 9, 30, 0, 0, easternLocation)
                 marketCloseTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 16, 0, 0, 0, easternLocation)
@@ -238,6 +255,8 @@ func reverse(data []GetChartDataResults) {
 // Helper function to convert timespan string to time.Duration
 func timespanToDuration(timespan string) time.Duration {
     switch timespan {
+    case "second":
+        return time.Second
     case "minute":
         return time.Minute
     case "hour":
@@ -255,13 +274,17 @@ func timespanToDuration(timespan string) time.Duration {
     }
 }
 
-func buildHigherTimeframeFromLower(iter *iter.Iter[models.Agg], multiplier int, timespan string, extendedHours bool, easternLocation *time.Location, numBarsRemaining *int) []GetChartDataResults {
+func buildHigherTimeframeFromLower(iter *iter.Iter[models.Agg], multiplier int, timespan string, extendedHours bool, easternLocation *time.Location, numBarsRemaining *int) ([]GetChartDataResults,error) {
     var barDataList []GetChartDataResults
     var currentBar GetChartDataResults
     var barStartTime time.Time
 
     for iter.Next() {
         item := iter.Item()
+        err := iter.Err()
+        if err != nil {
+            return nil, fmt.Errorf("din0wi %v",err)
+        }
         timestamp := time.Time(item.Timestamp).In(easternLocation)
         marketOpenTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 9, 30, 0, 0, easternLocation)
         marketCloseTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 16, 0, 0, 0, easternLocation)
@@ -270,6 +293,7 @@ func buildHigherTimeframeFromLower(iter *iter.Iter[models.Agg], multiplier int, 
         }
 
         if barStartTime.IsZero() || timestamp.Sub(barStartTime) >= time.Duration(multiplier)*timespanToDuration(timespan) {
+            fmt.Println("god")
             if !barStartTime.IsZero() {
                 barDataList = append(barDataList, currentBar)
                 *numBarsRemaining--
@@ -298,7 +322,7 @@ func buildHigherTimeframeFromLower(iter *iter.Iter[models.Agg], multiplier int, 
         *numBarsRemaining--
     }
 
-    return barDataList
+    return barDataList, nil
 }
 
 func max(a, b float64) float64 {
