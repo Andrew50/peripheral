@@ -17,15 +17,17 @@
     align-items: flex-start;
     width:100%;
     justify-content: flex-start;
+    overflow-y: auto;
 }
 .table-container {
     border-radius: 4px;
-    overflow: hidden;
+    overflow: scroll;
     margin-top: 5px;
     margin-left: 0px;
     margin-right: 0px;
     width: 100%;
     flex-grow: 1;
+    scrollbar-width: none;
 }
 .controls-container {
     display: flex;

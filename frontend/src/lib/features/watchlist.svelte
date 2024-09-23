@@ -48,6 +48,11 @@
     }
 
     function handleKey(event: KeyboardEvent) {
+        const target = event.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+            // Do nothing if the target is an input, textarea, or contentEditable element
+            return;
+        }
         if (event.key == "Tab" || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
             addInstance()
         }
@@ -62,6 +67,7 @@
                     watchlistName: newWatchlistName,
                     watchlistId: newId
                 }
+                newWatchlistName = ""
                 if(!Array.isArray(v)){
                     return [w]
                 }
@@ -117,7 +123,7 @@
       </div>
     {/if}
     <button class="button" on:click={newWatchlist}>New</button>
-    <input class="input" bind:value={newWatchlistName} placeholder="Name"/>
+    <input class="input" on:keydown={(event)=>{if (event.key == "Enter"){newWatchlist()}}} bind:value={newWatchlistName} placeholder="Name"/>
     </div>
 
     <List parentDelete={deleteItem} columns={["ticker", "change"]} list={activeList}/>
