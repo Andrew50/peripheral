@@ -34,7 +34,7 @@
     let queuedLoad: Function | null = null
     let shiftDown = false
     const chartRequestThrottleDuration = 150; 
-    const hoveredCandleData = writable({ open: 0, high: 0, low: 0, close: 0, volume: 0, adr:0})
+    const hoveredCandleData = writable({ open: 0, high: 0, low: 0, close: 0, volume: 0, adr:0, chg: 0, chgprct: 0})
     const shiftOverlay: Writable<ShiftOverlay> = writable({ x: 0, y: 0, startX: 0, startY: 0, width: 0, height: 0, isActive: false, startPrice: 0, currentPrice: 0, })
     export let chartId: number;
     export let width: number;
@@ -492,7 +492,6 @@
             const cursorTime = bar.time as number;
             const allCandleData = chartCandleSeries.data()
             const cursorBarIndex = allCandleData.findIndex(candle => candle.time === cursorTime);
-
             // Extract the 20 bars ending at the cursor's position
             let barsForADR;
             if (cursorBarIndex >= 20) {
@@ -501,7 +500,11 @@
                 // If there are less than 20 bars available, get whatever is available up to the cursor
                 barsForADR = allCandleData.slice(0, cursorBarIndex);
             }
-            hoveredCandleData.set({ open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: volume, adr:calculateSingleADR(barsForADR)})
+            let chg;    
+            let chgprct; 
+            chg = bar.close - allCandleData[cursorBarIndex - 1].close 
+            chgprct = bar.close/allCandleData[cursorBarIndex -1].close - 1 
+            hoveredCandleData.set({ open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: volume, adr:calculateSingleADR(barsForADR), chg:chg, chgprct:chgprct})
             latestCrosshairPositionTime = bar.time as number 
         }); 
         chart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
