@@ -26,6 +26,7 @@
     }
     function deleteRow(event:MouseEvent,watch:Instance){
         event.stopPropagation()
+        event.preventDefault();
         list.update((v:Instance[])=>{
             return v.filter(s => s !== watch)
         })
@@ -66,12 +67,23 @@
   }
   onMount(() => {
     window.addEventListener('keydown', handleKeydown);
+    const preventContextMenu = (event) => {
+      event.preventDefault();
+    };
+
+    window.addEventListener('contextmenu', preventContextMenu);
+
+    return () => {
+      window.removeEventListener('contextmenu', preventContextMenu);
+    };
   });
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown);
   });
   function clickHandler(event:MouseEvent,instance:Instance,index:number){
+      console.log(event)
         event.preventDefault()
+        event.stopPropagation()
       if (event.button === 0) {
         selectedRowIndex = index;
         changeChart(instance)
@@ -101,17 +113,23 @@
           <tr on:mousedown={(event)=>clickHandler(event,watch,i)}
           id="row-{i}"
           class:selected={i===selectedRowIndex}
+          on:contextmenu={(event)=>{event.preventDefault()}}
           >
-          <td>
+          <td
+          >
             {#if isFlagged(watch,$flagWatchlist)}
               <span class="flag-icon">⚑</span> <!-- Example flag icon -->
             {/if}
           </td>
           {#each columns as col}
             {#if col === "change"}
-                <StreamCell instance={watch}/>
+                <StreamCell
+          on:contextmenu={(event)=>{event.preventDefault();event.stopPropagation()}}
+                instance={watch}/>
             {:else}
-                <td>{watch[col]}</td>
+                <td
+          on:contextmenu={(event)=>{event.preventDefault();event.stopPropagation()}}
+                >{watch[col]}</td>
             {/if}
 
           {/each}

@@ -74,7 +74,7 @@ func GetPrevClose(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		date := currentDay.Format("2006-01-02")
 
 		// Query the ticker for the given securityId and date range
-		query := `SELECT ticker FROM securities WHERE securityid=$1 AND (minDate <= $2 AND (maxDate IS NULL or maxDate >= $2)) ORDER BY minDate ASC`
+		query := `SELECT ticker FROM securities WHERE securityid=$1 AND (minDate <= $2 AND (maxDate IS NULL or maxDate >= $2))`
 		err := conn.DB.QueryRow(context.Background(), query, args.SecurityId, date).Scan(&ticker)
 		if err != nil {
 			return nil, fmt.Errorf("failed to retrieve ticker: %v", err)

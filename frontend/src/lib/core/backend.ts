@@ -53,7 +53,10 @@ export async function privateRequest<T>(func: string, args: any,verbose=false): 
         method: 'POST',
         headers: headers,
         body: JSON.stringify(payload)
-    }).catch();
+    }).catch((e)=>{
+        return Promise.reject(e);
+    });
+
     if (response.ok){
         const result = await response.json() as T
         if (verbose){

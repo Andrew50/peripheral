@@ -17,13 +17,15 @@
     let changeStore = writable<ChangeStore>({change:"--"})
     
     onMount(() => {
-        [priceStream, releaseStream] = getStream<TradeData>(instance, "fast")
+        const [ps,rs] = getStream<TradeData>(instance, "fast")
+        priceStream = ps 
+        releaseStream = rs
         const [p, u] = getStream<number>(instance,"close")
         prevCloseStream = p
         unsubscribe = u
         priceStream.subscribe((v) => {
             //console.log(v)
-            if (v.price){
+            if (v && v.price){
                 changeStore.update((s:ChangeStore)=>{
                     s.price = v.price
                     if (s.price && s.prevClose) s.change = getChange(s.price,s.prevClose)
@@ -32,7 +34,6 @@
             }
         });
         prevCloseStream.subscribe((v:number)=>{
-            //console.log(v)
             changeStore.update((s:ChangeStore)=>{
                 s.prevClose = v
                 if (s.price && s.prevClose) s.change = getChange(s.price,s.prevClose)
