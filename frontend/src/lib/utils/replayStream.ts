@@ -42,10 +42,11 @@ export class ReplayStream implements Stream {
     }
 
     private loop(){
-        console.log(this.isPaused)
         if(this.isPaused) {return;}
         replayInfo.update((r:ReplayInfo)=>{
-            r.status = "active"
+            if(r.status !== "paused") {
+                r.status = "active"
+            }
             return r
         })
         const currentTime = Date.now();
@@ -118,7 +119,6 @@ export class ReplayStream implements Stream {
 
     public resume() {
         if (this.isPaused) {
-            console.log("TEST WTF")
             this.isPaused = false;
             replayInfo.update((r:ReplayInfo) => {
                 r.status = "active"

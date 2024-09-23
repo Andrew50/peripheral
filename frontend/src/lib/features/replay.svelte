@@ -1,5 +1,5 @@
 <script lang='ts'>
-import {startReplay, stopReplay} from '$lib/utils/stream';
+import {startReplay, stopReplay, pauseReplay, resumeReplay} from '$lib/utils/stream';
 import {replayStream} from '$lib/utils/stream';
 import {queryInstanceInput} from '$lib/utils/input.svelte'
 import {UTCTimestampToESTString} from '$lib/core/timestamp'
@@ -35,9 +35,9 @@ import type {Instance} from '$lib/core/types'
        <!-- to {UTCTimestampToESTString($replayInfo.startTimestamp)}-->
         </button>
         {#if $replayInfo.status === "paused"}
-            <button on:click={replayStream.resume}>Play </button>
+            <button on:click={resumeReplay}>Play </button>
         {:else}
-            <button on:click={replayStream.pause}>Pause</button>
+            <button on:click={pauseReplay}>Pause</button>
         <div>
         <label for="speed-input">Speed:</label>
         <input id="speed-input" type="number" step="0.1" min="0.1" value="1.0" on:input={changeReplaySpeed} />
