@@ -16,6 +16,7 @@ type TradeData struct {
 	Price      float64 `json:"price"`
 	Size       int64   `json:"size"`
 	Timestamp  int64   `json:"timestamp"`
+    ExchangeId int32    `json:"exchange"`
 	Conditions []int32 `json:"conditions"`
 	Channel    string  `json:"channel"`
 }
@@ -69,13 +70,14 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 					Size:       msg.Size,
 					Timestamp:  msg.Timestamp,
 					Conditions: msg.Conditions,
+                    ExchangeId: msg.Exchange,
 					Channel:    channelName,
 				}
 				jsonData, err := json.Marshal(data)
 				if err != nil {
 					fmt.Println("Error marshling JSON:", err)
 				}
-				conn.Cache.Publish(context.Background(), "trades-agg", string(jsonData))
+			//	conn.Cache.Publish(context.Background(), "trades-agg", string(jsonData))
 				conn.Cache.Publish(context.Background(), channelName, string(jsonData))
 			case models.EquityQuote:
 				channelName := fmt.Sprintf("%s-quote", msg.Symbol)
@@ -93,7 +95,6 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 					fmt.Printf("io1nv %v\n", err)
 					continue
 				}
-
 				conn.Cache.Publish(context.Background(), channelName, jsonData)
 			}
 
