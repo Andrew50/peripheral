@@ -29,6 +29,14 @@ type GetChartDataResults struct {
     Close     float64 `json:"close"`
     Volume    float64 `json:"volume"`
 }
+func MaxDivisorOf30(n int) int {
+    for k := n; k >= 1; k-- {
+        if 30%k == 0 && n%k == 0 {
+            return k
+        }
+    }
+    return 1 // 1 divides all integers, so we return 1 if no other common divisor is found.
+}
 
 func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
     var args GetChartDataArgs
@@ -41,17 +49,25 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
         return nil, fmt.Errorf("invalid timeframe: %v", err)
     }
 
-    var lowerTimeframe string
-    var lowerMultiplier int
+    var queryTimespan string
+    var queryMultiplier int
+    var queryBars int
     haveToAggregate := false
     if (timespan == "second" || timespan == "minute") && (30%multiplier != 0) {
-        lowerTimeframe = timespan
-        lowerMultiplier = 1
+        queryTimespan = timespan
+        queryMultiplier = MaxDivisorOf30(multiplier)
+        queryMultiplier = 1
+        queryBars = args.Bars * multiplier / queryMultiplier
         haveToAggregate = true
     } else if timespan == "hour" && !args.ExtendedHours {
-        lowerTimeframe = "minute"
-        lowerMultiplier = 1
+        queryTimespan = "minute"
+        queryMultiplier = 30
+        queryBars = multiplier * 2
         haveToAggregate = true
+    }else{
+        queryTimespan = timespan
+        queryMultiplier = multiplier
+        queryBars = args.Bars
     }
 
     // For daily and higher timeframes, always include extended hours
@@ -71,7 +87,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
     }else{
         inputTimestamp = time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).UTC()
     }
-    fmt.Println(inputTimestamp)
 
     var query string
     var queryParams []interface{}
@@ -154,43 +169,30 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
             }
             queryStartTime = minDateSQL
             if queryStartTime.After(queryEndTime) {
-                fmt.Println(queryStartTime)
-                fmt.Println(queryEndTime)
-                fmt.Println("skippping")
-                continue
+                return nil, fmt.Errorf("i10i0v")
             }
         } else if args.Direction == "forward" {
-            // For forward direction, get data after inputTimestamp
             queryStartTime = inputTimestamp
             if minDateSQL.After(queryStartTime) {
                 queryStartTime = minDateSQL
             }
             queryEndTime = maxDateSQL
             if queryEndTime.Before(queryStartTime) {
-                // No data in this range
                 continue
             }
         }
-        fmt.Println(queryStartTime)
-        fmt.Println("enddate")
-        fmt.Println(queryEndTime)
 
-        date1, err := utils.MillisFromUTCTime(queryStartTime)
+        date1, date2, err := getRequestDates(queryStartTime,queryEndTime,args.Direction,queryTimespan,queryMultiplier,queryBars)
         if err != nil {
             return nil, fmt.Errorf("dkn0 %v",err)
         }
-        date2, err := utils.MillisFromUTCTime(queryEndTime)
-        if err != nil {
-            return nil, fmt.Errorf("dk10 %v",err)
-        }
 
         if haveToAggregate {
-            polyResultOrder = "asc"
-            iter, err := utils.GetAggsData(conn.Polygon, ticker, lowerMultiplier, lowerTimeframe, date1, date2, 2000, polyResultOrder, !args.IsReplay)
+            iter, err := utils.GetAggsData(conn.Polygon, ticker, queryMultiplier, queryTimespan, date1, date2, 50000, "asc", !args.IsReplay)
             if err != nil {
                 return nil, fmt.Errorf("error fetching data from Polygon: %v", err)
             }
-            aggregatedData,err := buildHigherTimeframeFromLower(iter, multiplier, timespan, args.ExtendedHours, easternLocation, &numBarsRemaining)
+            aggregatedData,err := buildHigherTimeframeFromLower(iter, multiplier, timespan, args.ExtendedHours, easternLocation, &numBarsRemaining,args.Direction)
             if err != nil {
                 return nil, err
             }
@@ -199,7 +201,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
                 break
             }
         } else {
-            iter, err := utils.GetAggsData(conn.Polygon, ticker, multiplier, timespan, date1, date2, 2000, polyResultOrder, !args.IsReplay)
+            iter, err := utils.GetAggsData(conn.Polygon, ticker, queryMultiplier, queryTimespan, date1, date2, 50000, polyResultOrder, !args.IsReplay)
             if err != nil {
                 return nil, fmt.Errorf("error fetching data from Polygon: %v", err)
             }
@@ -211,21 +213,20 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
                 timestamp := time.Time(item.Timestamp).In(easternLocation)
                 marketOpenTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 9, 30, 0, 0, easternLocation)
                 marketCloseTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 16, 0, 0, 0, easternLocation)
-                if !args.ExtendedHours && !(!timestamp.Before(marketOpenTime) && timestamp.Before(marketCloseTime)) {
-                    continue
-                }
-                barData := GetChartDataResults{
-                    Timestamp: float64(timestamp.Unix()),
-                    Open:      item.Open,
-                    High:      item.High,
-                    Low:       item.Low,
-                    Close:     item.Close,
-                    Volume:    item.Volume,
-                }
-                barDataList = append(barDataList, barData)
-                numBarsRemaining--
-                if numBarsRemaining <= 0 {
-                    break
+                if args.ExtendedHours || (!timestamp.Before(marketOpenTime) && timestamp.Before(marketCloseTime)) {
+                    barData := GetChartDataResults{
+                        Timestamp: float64(timestamp.Unix()),
+                        Open:      item.Open,
+                        High:      item.High,
+                        Low:       item.Low,
+                        Close:     item.Close,
+                        Volume:    item.Volume,
+                    }
+                    barDataList = append(barDataList, barData)
+                    numBarsRemaining--
+                    if numBarsRemaining <= 0 {
+                        break
+                    }
                 }
             }
             if numBarsRemaining <= 0 {
@@ -234,7 +235,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
         }
     }
     if len(barDataList) != 0 {
-        if args.Direction == "forward" {
+        if haveToAggregate || args.Direction == "forward" {
             return barDataList, nil
         } else {
             reverse(barDataList)
@@ -244,42 +245,58 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
     return nil, fmt.Errorf("no data found")
 }
 
-func reverse(data []GetChartDataResults) {
-    left, right := 0, len(data)-1
-    for left < right {
-        data[left], data[right] = data[right], data[left]
-        left++
-        right--
+func getRequestDates(
+    lowerDate time.Time,
+    upperDate time.Time,
+    direction string,
+    timespan string,
+    multiplier int,
+    bars int,
+) (models.Millis, models.Millis, error) {
+    overestimate := 1.2
+    badReturn, err := utils.MillisFromUTCTime(time.Now())
+    if direction != "backward" && direction != "forward" {
+        return badReturn, badReturn, fmt.Errorf("invalid direction; must be 'back' or 'forward'")
     }
-}
-func estimateNumBars(timespan string, extendedHours bool, date1, date2 time.Time) int {
-    totalMinutes := 0
-    marketMinutes := 390 // Regular market hours (9:30 AM to 4:00 PM) = 390 minutes
-
-    if extendedHours {
-        marketMinutes = 960 // Extended market hours (4:00 AM to 8:00 PM) = 960 minutes
+    barDuration := timespanToDuration(timespan) * time.Duration(multiplier)
+    totalDuration := barDuration * time.Duration(bars)
+    tradingMinutesPerDay := 960.0 // 16 hours * 60 minutes
+    tradingDurationPerDay := time.Duration(int(tradingMinutesPerDay * overestimate)) * time.Minute
+    totalTradingDays := totalDuration / tradingDurationPerDay
+    if totalDuration%tradingDurationPerDay != 0 {
+        totalTradingDays += 1
     }
-
-    // Calculate total trading minutes between the given dates
-    for date := date1; date.Before(date2) || date.Equal(date2); date = date.AddDate(0, 0, 1) {
-        // Skip weekends
-        if date.Weekday() != time.Saturday && date.Weekday() != time.Sunday {
-            totalMinutes += marketMinutes
+    totalTradingDays += 5 //overestimate cause weekends
+    var queryStartTime, queryEndTime time.Time
+    if direction == "backward" {
+        // Subtract totalTradingDays from upperDate
+        queryStartTime = upperDate.AddDate(0, 0, -int(totalTradingDays))
+        // Ensure queryStartTime is not before lowerDate
+        if queryStartTime.Before(lowerDate) {
+            queryStartTime = lowerDate
         }
+        queryEndTime = upperDate
+    } else {
+        // Add totalTradingDays to lowerDate
+        queryEndTime = lowerDate.AddDate(0, 0, int(totalTradingDays))
+        // Ensure queryEndTime is not after upperDate
+        if queryEndTime.After(upperDate) {
+            queryEndTime = upperDate
+        }
+        queryStartTime = lowerDate
     }
-
-    // Convert the timespan to duration and estimate the number of bars
-    timespanDuration := timespanToDuration(timespan)
-    if timespanDuration.Minutes() == 0 {
-        return 0 // Prevent division by zero
+    queryStartTime = time.Date(queryStartTime.Year(), queryStartTime.Month(), queryStartTime.Day(), 0, 0, 0, 0, queryStartTime.Location())
+    startMillis, err := utils.MillisFromUTCTime(queryStartTime)
+    if err != nil {
+        return badReturn,badReturn,err
     }
-
-    // Estimate the number of bars
-    estimatedBars := totalMinutes / int(timespanDuration.Minutes())
-    return estimatedBars
+    endMillis, err := utils.MillisFromUTCTime(queryEndTime)
+    if err != nil {
+        return badReturn,badReturn, err
+    }
+    return startMillis, endMillis, nil
 }
 
-// Helper function to convert timespan string to time.Duration
 func timespanToDuration(timespan string) time.Duration {
     switch timespan {
     case "second":
@@ -301,10 +318,20 @@ func timespanToDuration(timespan string) time.Duration {
     }
 }
 
-func buildHigherTimeframeFromLower(iter *iter.Iter[models.Agg], multiplier int, timespan string, extendedHours bool, easternLocation *time.Location, numBarsRemaining *int) ([]GetChartDataResults,error) {
+func reverse(data []GetChartDataResults) {
+    left, right := 0, len(data)-1
+    for left < right {
+        data[left], data[right] = data[right], data[left]
+        left++
+        right--
+    }
+}
+
+func buildHigherTimeframeFromLower(iter *iter.Iter[models.Agg], multiplier int, timespan string, extendedHours bool, easternLocation *time.Location, numBarsRemaining *int,direction string) ([]GetChartDataResults,error) {
     var barDataList []GetChartDataResults
     var currentBar GetChartDataResults
     var barStartTime time.Time
+
 
     for iter.Next() {
         item := iter.Item()
@@ -315,38 +342,49 @@ func buildHigherTimeframeFromLower(iter *iter.Iter[models.Agg], multiplier int, 
         timestamp := time.Time(item.Timestamp).In(easternLocation)
         marketOpenTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 9, 30, 0, 0, easternLocation)
         marketCloseTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 16, 0, 0, 0, easternLocation)
-        if !extendedHours && (timestamp.Before(marketOpenTime) || !timestamp.Before(marketCloseTime)) {
-            continue
-        }
-        diff := barStartTime.Sub(timestamp)
-
-        if barStartTime.IsZero() || diff >= time.Duration(multiplier)*timespanToDuration(timespan) {
-            if !barStartTime.IsZero() {
-                barDataList = append(barDataList, currentBar)
-                *numBarsRemaining--
-                if *numBarsRemaining <= 0 {
-                    break
+        if extendedHours || (!timestamp.Before(marketOpenTime) && timestamp.Before(marketCloseTime)) {
+            diff := timestamp.Sub(barStartTime)
+            if barStartTime.IsZero() || diff >= time.Duration(multiplier)*timespanToDuration(timespan) {
+                if !barStartTime.IsZero() {
+                    barDataList = append(barDataList, currentBar)
+                    if direction == "forwards" {
+                        *numBarsRemaining--
+                        if *numBarsRemaining <= 0 {
+                            break
+                        }
+                    }
                 }
+                currentBar = GetChartDataResults{
+                    Timestamp: float64(timestamp.Unix()),
+                    Open:      item.Open,
+                    High:      item.High,
+                    Low:       item.Low,
+                    Close:     item.Close,
+                    Volume:    item.Volume,
+                }
+                barStartTime = timestamp
+            } else {
+                currentBar.High = max(currentBar.High, item.High)
+                currentBar.Low = min(currentBar.Low, item.Low)
+                currentBar.Close = item.Close
+                currentBar.Volume += item.Volume
             }
-            currentBar = GetChartDataResults{
-                Timestamp: float64(timestamp.Unix()),
-                Open:      item.Open,
-                High:      item.High,
-                Low:       item.Low,
-                Close:     item.Close,
-                Volume:    item.Volume,
-            }
-            barStartTime = timestamp
-        } else {
-            currentBar.High = max(currentBar.High, item.High)
-            currentBar.Low = min(currentBar.Low, item.Low)
-            currentBar.Close = item.Close
-            currentBar.Volume += item.Volume
         }
     }
-    if !barStartTime.IsZero() && *numBarsRemaining > 0 {
-        barDataList = append(barDataList, currentBar)
-        *numBarsRemaining--
+    if direction == "forwards" {
+        if !barStartTime.IsZero() && *numBarsRemaining > 0 {
+            barDataList = append(barDataList, currentBar)
+            *numBarsRemaining--
+        }
+    }else{
+        barsToKeep := len(barDataList) - *numBarsRemaining
+        if barsToKeep < 0 {
+            barsToKeep = 0
+            *numBarsRemaining -= len(barDataList)
+        }else{
+            *numBarsRemaining = 0
+        }
+        barDataList = barDataList[barsToKeep:]
     }
 
     return barDataList, nil

@@ -239,11 +239,12 @@
         background-color: var(--c2);
     }
     .button {
-        width: 3vw;
-        height: 3vw;
+        width: 4vw;
+        height: 4vw;
         background-color: var(--c1);
         border: none; 
-        padding: 0; 
+        padding: 0px;
+        margin: 0px;
         cursor: pointer;
         border-radius: 0; 
         font-size: 1.5vw;

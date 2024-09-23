@@ -36,7 +36,7 @@ export function releaseStream(channelName:string) {
 }
 
 export function getStream<T extends TradeData|QuoteData|number>(instance:Instance,channelType:ChannelType): [Writable<T>,Function]{
-    if (!instance.securityId)return;
+    if (!instance.securityId) return [writable(),()=>{}];
     if (channelType == "close"){
         const s = writable(0) as Writable<T>
         const unsubscribe = timeEvent.subscribe((v:TimeEvent)=>{
@@ -44,7 +44,7 @@ export function getStream<T extends TradeData|QuoteData|number>(instance:Instanc
                  privateRequest<number>("getPrevClose",{timestamp:v.UTCtimestamp,securityId:instance.securityId})
                  .then((price:number)=>{
                      s.set(price as T)
-                 })
+                 }).catch((error)=>{})
             }
         })
         return [s, unsubscribe]

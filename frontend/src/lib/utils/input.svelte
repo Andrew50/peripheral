@@ -53,6 +53,7 @@
             })
             return new Promise<Instance>((resolve, reject) => {
                 const unsubscribe = inputQuery.subscribe((iQ: InputQuery) => {
+                    console.log(iQ)
                     if (iQ.status === "cancelled"){
                         deactivate()
                         tick()
@@ -69,8 +70,6 @@
                         v.status = "shutdown"
                         return v
                         })
-
-                   // ({...inactiveInputQuery})
                 }
             })
         }else{
@@ -82,7 +81,7 @@
 </script>
 <script lang="ts">
     import {browser} from '$app/environment'
-    import {onMount} from 'svelte'
+    import {onDestroy,onMount} from 'svelte'
 	import { ESTStringToUTCTimestamp, UTCTimestampToESTString } from '$lib/core/timestamp';
     let prevFocusedElement: HTMLElement | null;
 
@@ -218,12 +217,15 @@
                     prevFocusedElement?.focus()
                     document.removeEventListener('keydown',handleKeyDown);
                     v.status = "inactive"
+                    v.inputString = ""
                 }
             }
         })
-        /*return () => {
-        document.removeEventListener('keydown', handleKeyDown);When you use inputQuery.update(), it triggers reactivity and updates the subscribers of the store after the update() function completes.
-    };*/
+    })
+    onDestroy(()=>{
+        try {
+            document.removeEventListener('keydown',handleKeyDown);
+        }catch{}
     })
 
     function displayValue(q:InputQuery,key:string):string{

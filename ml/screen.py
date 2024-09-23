@@ -39,7 +39,7 @@ def currentTickersAndPrice(conn, dolvolReq, adrReq, mcapReq):
 
 
 def getCurrentSecId(conn,ticker):
-    query = f"SELECT securityID from securities where ticker = %s Order by maxdate is null desc,maxdate desc"
+    query = f"SELECT securityId from securities where ticker = %s Order by maxdate is null desc,maxdate desc"
     with conn.db.cursor() as cursor:
         cursor.execute(query,(ticker,))
 
@@ -63,10 +63,14 @@ def filter(conn, df,tickers, setupId,setupName, threshold):
     results = []
     for ticker, score in zip(tickers, scores):
         if score[0] * 100 >= threshold:
-            results.append({"ticker":ticker,"setupId":setupId,"score":round(score[0]*100),
-                            "securityId":getCurrentSecId(conn,ticker),
-                            "timestamp":0,
-                            "setup":setupName})
+            secId = getCurrentSecId(conn,ticker)
+            if secId:
+                results.append({"ticker":ticker,"setupId":setupId,"score":round(score[0]*100),
+                                "securityId":secId,
+                                "timestamp":0,
+                                "setup":setupName})
+            else:
+                print("FAILED TO GET SEC ID FOR ",ticker)
     return results
 
 

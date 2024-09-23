@@ -1,18 +1,12 @@
 <!-- screen.svelte -->
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { writable, get } from 'svelte/store';
   import List from '$lib/utils/list.svelte'
   import '$lib/core/global.css'
-
-  import { privateRequest, queueRequest } from '$lib/core/backend';
-  import {queryInstanceRightClick} from '$lib/utils/rightClick.svelte'
-  import type {RightClickResult} from "$lib/utils/rightClick.svelte"
+  import {queueRequest } from '$lib/core/backend';
   import type { Writable } from 'svelte/store';
   import type {Instance} from '$lib/core/types'
   import {setups} from '$lib/core/stores'
-  import {changeChart} from '$lib/features/chart/interface'
-
   let screens:Writable<Screen[]> = writable([])
   interface Screen extends Instance {
       setupType: string
@@ -27,12 +21,6 @@
           screens.set(response)
       });
   }
-/*  function getSetupName(setupId:number){
-      return get(setups).find(v=> v.setupId == setupId).name
-  }*/
-
-
-
 </script>
 
 <div class="controls-container">
@@ -50,4 +38,5 @@
 
 <button on:click={runScreen}> Screen </button>
 
-<List list={screens} columns={["ticker","change","setup","score"]}/>
+<List on:contextmenu={(event)=>{event.preventDefault()}} list={screens} columns={["ticker","change","setup","score"]}/>
+
