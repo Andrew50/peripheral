@@ -101,6 +101,9 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
     } else {
         return nil, fmt.Errorf("Incorrect direction passed")
     }
+    if polyResultOrder == "desc" && haveToAggregate {
+        polyResultOrder = "asc"
+    }
 
     ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
     defer cancel()
@@ -288,12 +291,12 @@ func buildHigherTimeframeFromLower(iter *iter.Iter[models.Agg], multiplier int, 
         timestamp := time.Time(item.Timestamp).In(easternLocation)
         marketOpenTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 9, 30, 0, 0, easternLocation)
         marketCloseTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 16, 0, 0, 0, easternLocation)
-        if !extendedHours && !(!timestamp.Before(marketOpenTime) && timestamp.Before(marketCloseTime)) {
+        if !extendedHours && (timestamp.Before(marketOpenTime) || !timestamp.Before(marketCloseTime)) {
             continue
         }
+        diff := barStartTime.Sub(timestamp)
 
-        if barStartTime.IsZero() || timestamp.Sub(barStartTime) >= time.Duration(multiplier)*timespanToDuration(timespan) {
-            fmt.Println("god")
+        if barStartTime.IsZero() || diff >= time.Duration(multiplier)*timespanToDuration(timespan) {
             if !barStartTime.IsZero() {
                 barDataList = append(barDataList, currentBar)
                 *numBarsRemaining--
