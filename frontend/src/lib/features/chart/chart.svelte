@@ -503,7 +503,7 @@
             let chg;    
             let chgprct; 
             chg = bar.close - allCandleData[cursorBarIndex - 1].close 
-            chgprct = bar.close/allCandleData[cursorBarIndex -1].close - 1 
+            chgprct = (bar.close/allCandleData[cursorBarIndex -1].close - 1)*100
             hoveredCandleData.set({ open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: volume, adr:calculateSingleADR(barsForADR), chg:chg, chgprct:chgprct})
             latestCrosshairPositionTime = bar.time as number 
         }); 
