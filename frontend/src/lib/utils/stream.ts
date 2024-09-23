@@ -77,12 +77,12 @@ export function startReplay(timestamp : number){
     })
 }
 export function pauseReplay() {
-    if(currentStream != replayStream) {return;} 
+    if(currentStream !== replayStream) {return;} 
     currentStream.pause();
 
 }
 export function resumeReplay() {
-    if(currentStream != replayStream) {return;} 
+    if(currentStream !== replayStream) {return;} 
     currentStream.resume();
 }
 export function stopReplay(){
