@@ -201,21 +201,37 @@
            })
         }
     }
+    function onTouch(event:TouchEvent){
+        inputQuery.update((v:InputQuery)=>{
+            v.status = "cancelled"
+            return v
+        })
+
+    }
 
     onMount(()=>{
+        document.addEventListener('touchstart',onTouch)
         inputQuery.subscribe(async(v:InputQuery)=>{
             if (browser){
                 if (v.status === "initializing"){
+                    try{
+                        document.removeEventListener('keydown',handleKeyDown);
+                    }catch{}
+
                     await tick()
                     document.addEventListener('keydown',  handleKeyDown);
                     prevFocusedElement = document.activeElement as HTMLElement;
-                    const inputWindow = document.getElementById("input-window")
+                    //const inputWindow = document.getElementById("input-window")
+                    const inputWindow = document.getElementById("hidden-input")
                     inputWindow.focus()
                     v.status = "active"
                     //await tick()
                 }else if(v.status === "shutdown"){
                     prevFocusedElement?.focus()
                     document.removeEventListener('keydown',handleKeyDown);
+                    try{
+                    document.removeEventListener('onTouch',onTouch);
+                    }catch{}
                     v.status = "inactive"
                     v.inputString = ""
                 }
@@ -225,6 +241,9 @@
     onDestroy(()=>{
         try {
             document.removeEventListener('keydown',handleKeyDown);
+        }catch{}
+        try{
+        document.removeEventListener('onTouch',onTouch);
         }catch{}
     })
 
@@ -283,6 +302,9 @@
         </div>
     </div>
 {/if}
+<input type="text" id="hidden-input" style="position: absolute; opacity: 0; z-index: -1;" />
+
+
 
 <style>
     .popup-container {

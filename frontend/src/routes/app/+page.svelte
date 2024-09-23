@@ -87,11 +87,19 @@
         resizing = true;
         document.addEventListener('mousemove', resize);
         document.addEventListener('mouseup', stopResize);
+        document.addEventListener('touchmove', resize);
+        document.addEventListener('touchend', stopResize);
     }
 
-    function resize(event: MouseEvent) {
+    function resize(event: MouseEvent | TouchEvent) {
         if (resizing) {
-            let width = window.innerWidth - event.clientX - buttonWidth;
+            let clientX = 0
+            if (event instanceof MouseEvent) {
+                clientX = event.clientX;
+            } else if (event instanceof TouchEvent) {
+                clientX = event.touches[0].clientX;
+            }
+            let width = window.innerWidth - clientX - buttonWidth;
             if (width > maxWidth) {
                 width = maxWidth;
             } else if (width < minWidth) {
@@ -101,10 +109,12 @@
         }
     }
 
-    function stopResize(event: MouseEvent) {
+    function stopResize(event: MouseEvent|TouchEvent) {
         if (resizing) {
             document.removeEventListener('mousemove', resize);
             document.removeEventListener('mouseup', stopResize);
+            document.removeEventListener('touchmove', resize);
+            document.removeEventListener('touchend', stopResize);
             resizing = false;
         }
     }
@@ -119,6 +129,7 @@
        <ChartContainer width={pix - $menuWidth - buttonWidth}/>
         <div
             on:mousedown={startResize}
+            on:touchstart={startResize}
             class="resize-handle"
             style="right: {$menuWidth + buttonWidth}px"
         ></div>

@@ -9,6 +9,7 @@
   import {changeChart} from '$lib/features/chart/interface'
   import {flagWatchlist} from '$lib/core/stores'
     import {flagSecurity} from '$lib/utils/flag'
+    let longPressTimer: any
   export let list: Writable<Instance[]> = writable([])
   export let columns: Array<string>;
   export let parentDelete = (v:Instance) => {}
@@ -80,19 +81,34 @@
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown);
   });
-  function clickHandler(event:MouseEvent,instance:Instance,index:number){
+  function clickHandler(event:MouseEvent,instance:Instance,index:number,force:number|null=null){
+      let even
+      if (force !== null){
+          even = force
+      }else{
+          even = event.button
+      }
       console.log(event)
         event.preventDefault()
         event.stopPropagation()
-      if (event.button === 0) {
+      if (even === 0) {
         selectedRowIndex = index;
         changeChart(instance)
-      }else if (event.button === 1){
+      }else if (even === 1){
           flagSecurity(instance)
-      }else if (event.button === 2){
+      }else if (even === 2){
         rowRightClick(event,instance)
       }
   }
+  function handleTouchStart(event,watch,i) {
+  longPressTimer = setTimeout(() => {
+    clickHandler(event,watch,i,2); // The action you want to trigger
+  }, 600); // Time in milliseconds to consider a long press
+}
+
+function handleTouchEnd() {
+  clearTimeout(longPressTimer); // Clear if it's a short tap
+}
 </script>
 
 
@@ -111,6 +127,8 @@
     <tbody>
         {#each $list as watch, i}
           <tr on:mousedown={(event)=>clickHandler(event,watch,i)}
+          on:touchstart={handleTouchStart}
+          on:touchend={handleTouchEnd}
           id="row-{i}"
           class:selected={i===selectedRowIndex}
           on:contextmenu={(event)=>{event.preventDefault()}}
