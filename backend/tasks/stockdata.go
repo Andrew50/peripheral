@@ -81,7 +81,7 @@ func GetSecurityDateBounds(conn *utils.Conn, userId int, rawArgs json.RawMessage
 	return nil, fmt.Errorf("did not return bounds for securityId {%v}", args.SecurityId)
 }
 
-type GetChartDataArgs struct {
+/*type GetChartDataArgs struct {
 	SecurityId    int    `json:"securityId"`
 	Timeframe     string `json:"timeframe"`
 	Timestamp     int64  `json:"timestamp"` // If this datetime is just a date, it needs to grab the end of the day as opposed to the beginning of the day
@@ -98,9 +98,9 @@ type GetChartDataResults struct {
 	Low       float64 `json:"low"`
 	Close     float64 `json:"close"`
 	Volume    float64 `json:"volume"`
-}
+}*/
 
-func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+/*func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	// CHECK TO MAKE SURE EndDateTime > StartDateTime ***********
 	var args GetChartDataArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -319,7 +319,8 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	}
 
 	return nil, fmt.Errorf("c34lg")
-}
+}*/
+
 
 type GetTradeDataArgs struct {
 	SecurityID    int64 `json:"securityId"`

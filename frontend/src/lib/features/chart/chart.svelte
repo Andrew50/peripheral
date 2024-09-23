@@ -69,7 +69,7 @@
             bars:inst.bars,
             extendedhours:inst.extendedHours, 
             isreplay: (get(replayInfo).status == "active" || get(replayInfo).status == "paused") ? true : false,}
-            ,false)
+            ,true)
             .then((barDataList: BarData[]) => {
                 blockingChartRequest = inst
                 if (! (Array.isArray(barDataList) && barDataList.length > 0)){ return}
@@ -225,6 +225,7 @@
                 }
             }) .catch((error: string) => {
                 console.error(error)
+
                 isLoadingChartData = false; // Ensure this runs after data is loaded
             });
     }
