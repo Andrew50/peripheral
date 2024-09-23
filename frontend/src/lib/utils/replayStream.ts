@@ -17,6 +17,8 @@ export class ReplayStream implements Stream {
     private startTime: number = 0; // milliseconds
     private initialTimestamp: number = 0;
     private tickMap: Map<string,{reqInbound:boolean,ticks:Array<any>}> = new Map()
+
+    private timeoutID: number | null = null;
     public subscribe(channelName: string) {
         this.tickMap.set(channelName,{reqInbound:false,ticks:[]})
     }
@@ -40,6 +42,8 @@ export class ReplayStream implements Stream {
     }
 
     private loop(){
+        console.log(this.isPaused)
+        if(this.isPaused) {return;}
         replayInfo.update((r:ReplayInfo)=>{
             r.status = "active"
             return r
@@ -61,7 +65,7 @@ export class ReplayStream implements Stream {
                 }
                 privateRequest<[]>(req, {
                     securityId: parseInt(securityId),
-                    time: latestTime ?? this.initialTimestamp,
+                    time: latestTime ?? Math.floor(this.simulatedTime),
                     lengthOfTime: this.buffer,
                     extendedHours: false
                 },false).then((n:Array<any>)=>{
@@ -83,7 +87,7 @@ export class ReplayStream implements Stream {
             }
         }
         if (this.replayStatus && !this.isPaused){
-            setTimeout(()=>this.loop(), this.loopCooldown);
+            this.timeoutID = setTimeout(()=>this.loop(), this.loopCooldown) as unknown as number;
         }
     }
 
@@ -101,16 +105,25 @@ export class ReplayStream implements Stream {
         if (!this.isPaused) {
             this.isPaused = true;
             this.pauseStartTime = Date.now();
+        if (this.timeoutID !== null) {
+            clearTimeout(this.timeoutID);
+            this.timeoutID = null;
+        }
         replayInfo.update((r:ReplayInfo)=>{
             r.status = "paused"
             return r
-        })
+        });
         }
     }
 
     public resume() {
         if (this.isPaused) {
+            console.log("TEST WTF")
             this.isPaused = false;
+            replayInfo.update((r:ReplayInfo) => {
+                r.status = "active"
+                return r 
+            })
             this.accumulatedPauseTime += Date.now() - this.pauseStartTime;
             this.loop()
         }
