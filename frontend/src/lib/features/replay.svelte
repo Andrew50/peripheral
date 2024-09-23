@@ -37,7 +37,7 @@ import type {Instance} from '$lib/core/types'
         {#if $replayInfo.status === "paused"}
             <button on:click={replayStream.resume}>Play </button>
         {:else}
-            <button on:click={replayStream.pause}> Pause</button>
+            <button on:click={replayStream.pause}>Pause</button>
         <div>
         <label for="speed-input">Speed:</label>
         <input id="speed-input" type="number" step="0.1" min="0.1" value="1.0" on:input={changeReplaySpeed} />
