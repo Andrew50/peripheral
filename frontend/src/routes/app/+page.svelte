@@ -28,7 +28,7 @@
     let maxWidth: number;
     let close: number;
     let pix: number;
-    let menuWidth = writable(0);
+    import {menuWidth} from "$lib/core/stores"
     let buttonWidth: number;
     let interval;
     let latestReplaySpeed: number;
