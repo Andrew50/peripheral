@@ -62,7 +62,9 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
     } else if timespan == "hour" && !args.ExtendedHours {
         queryTimespan = "minute"
         queryMultiplier = 30
-        queryBars = multiplier * 2
+        queryBars = multiplier * 2 * args.Bars
+        timespan = "minute"
+        multiplier *= 60
         haveToAggregate = true
     }else{
         queryTimespan = timespan
@@ -182,7 +184,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
             }
         }
 
-        date1, date2, err := getRequestDates(queryStartTime,queryEndTime,args.Direction,queryTimespan,queryMultiplier,queryBars)
+        date1, date2, err := getRequestDates(queryStartTime,queryEndTime,args.Direction,timespan,multiplier,queryBars)
         if err != nil {
             return nil, fmt.Errorf("dkn0 %v",err)
         }
@@ -253,39 +255,35 @@ func getRequestDates(
     multiplier int,
     bars int,
 ) (models.Millis, models.Millis, error) {
-    overestimate := 1.2
+    overestimate := 2.0
     badReturn, err := utils.MillisFromUTCTime(time.Now())
     if direction != "backward" && direction != "forward" {
         return badReturn, badReturn, fmt.Errorf("invalid direction; must be 'back' or 'forward'")
     }
     barDuration := timespanToDuration(timespan) * time.Duration(multiplier)
-    totalDuration := barDuration * time.Duration(bars)
+    totalDuration := barDuration * time.Duration(int(float64(bars)*overestimate))
+    fmt.Println(totalDuration)
     tradingMinutesPerDay := 960.0 // 16 hours * 60 minutes
-    tradingDurationPerDay := time.Duration(int(tradingMinutesPerDay * overestimate)) * time.Minute
+    tradingDurationPerDay := time.Duration(int(tradingMinutesPerDay)) * time.Minute
     totalTradingDays := totalDuration / tradingDurationPerDay
-    if totalDuration%tradingDurationPerDay != 0 {
-        totalTradingDays += 1
-    }
-    totalTradingDays += 5 //overestimate cause weekends
+    totalTradingDays += 1 //overestimate cause weekends
     var queryStartTime, queryEndTime time.Time
     if direction == "backward" {
-        // Subtract totalTradingDays from upperDate
         queryStartTime = upperDate.AddDate(0, 0, -int(totalTradingDays))
-        // Ensure queryStartTime is not before lowerDate
         if queryStartTime.Before(lowerDate) {
             queryStartTime = lowerDate
         }
         queryEndTime = upperDate
     } else {
-        // Add totalTradingDays to lowerDate
         queryEndTime = lowerDate.AddDate(0, 0, int(totalTradingDays))
-        // Ensure queryEndTime is not after upperDate
         if queryEndTime.After(upperDate) {
             queryEndTime = upperDate
         }
         queryStartTime = lowerDate
     }
     queryStartTime = time.Date(queryStartTime.Year(), queryStartTime.Month(), queryStartTime.Day(), 0, 0, 0, 0, queryStartTime.Location())
+
+    fmt.Println(queryStartTime,queryEndTime)
     startMillis, err := utils.MillisFromUTCTime(queryStartTime)
     if err != nil {
         return badReturn,badReturn,err
@@ -332,6 +330,7 @@ func buildHigherTimeframeFromLower(iter *iter.Iter[models.Agg], multiplier int, 
     var currentBar GetChartDataResults
     var barStartTime time.Time
 
+    b := 0
 
     for iter.Next() {
         item := iter.Item()
@@ -370,7 +369,9 @@ func buildHigherTimeframeFromLower(iter *iter.Iter[models.Agg], multiplier int, 
                 currentBar.Volume += item.Volume
             }
         }
+        b ++
     }
+    fmt.Println(b)
     if direction == "forwards" {
         if !barStartTime.IsZero() && *numBarsRemaining > 0 {
             barDataList = append(barDataList, currentBar)
@@ -378,6 +379,7 @@ func buildHigherTimeframeFromLower(iter *iter.Iter[models.Agg], multiplier int, 
         }
     }else{
         barsToKeep := len(barDataList) - *numBarsRemaining
+        fmt.Println("bars aggregated: ",len(barDataList)," bars needed: ",*numBarsRemaining)
         if barsToKeep < 0 {
             barsToKeep = 0
             *numBarsRemaining -= len(barDataList)
