@@ -158,7 +158,7 @@
 
     .trade-table td {
         padding: 5px;
-        font-family: monospace; /* Monospace font for numbers */
+/*        font-family: monospace; /* Monospace font for numbers */
     }
 
 </style>

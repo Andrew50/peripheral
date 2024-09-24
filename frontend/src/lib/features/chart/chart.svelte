@@ -55,6 +55,7 @@
     const tradeConditionsToCheckVolume = new Set([15, 16, 38])
 
     function backendLoadChartData(inst:ChartRequest): void{
+        console.log("request")
         if (isLoadingChartData ||!inst.ticker || !inst.timeframe || !inst.securityId) { return; }
         isLoadingChartData = true;
         lastChartRequestTime = Date.now()
@@ -112,9 +113,12 @@
                     }
                 }
                 // Check if we reach end of avaliable data 
+                console.log("result diff: ",barDataList.length, inst.bars)
                 if (inst.timestamp == 0) {
                     chartLatestDataReached = true;
                 }else if (barDataList.length < inst.bars) {
+                    console.log("hit")
+
                     if(inst.direction == 'backward') {
                         chartEarliestDataReached = true;
                     } else if (inst.direction == "forward"){
@@ -497,10 +501,12 @@
                 // If there are less than 20 bars available, get whatever is available up to the cursor
                 barsForADR = allCandleData.slice(0, cursorBarIndex);
             }
-            let chg;    
-            let chgprct; 
-            chg = bar.close - allCandleData[cursorBarIndex - 1].close 
-            chgprct = (bar.close/allCandleData[cursorBarIndex -1].close - 1)*100
+            let chg = 0;
+            let chgprct = 0
+            if (cursorBarIndex > 0){
+                chg = bar.close - allCandleData[cursorBarIndex - 1].close 
+                chgprct = (bar.close/allCandleData[cursorBarIndex -1].close - 1)*100
+            }
             hoveredCandleData.set({ open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: volume, adr:calculateSingleADR(barsForADR), chg:chg, chgprct:chgprct})
             latestCrosshairPositionTime = bar.time as number 
         }); 
