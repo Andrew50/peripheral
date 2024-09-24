@@ -89,6 +89,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
     }else{
         inputTimestamp = time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).UTC()
     }
+    fmt.Println(inputTimestamp)
 
     var query string
     var queryParams []interface{}
@@ -241,6 +242,11 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
             return barDataList, nil
         } else {
             reverse(barDataList)
+            starTim := int64(barDataList[0].Timestamp)
+            endTim := int64(barDataList[len(barDataList)-1].Timestamp)
+            strt := time.Unix(starTim, (starTim)*1e6).UTC()
+            end := time.Unix(endTim, (endTim)*1e6).UTC()
+            fmt.Println("got", strt,end)
             return barDataList, nil
         }
     }
@@ -262,11 +268,10 @@ func getRequestDates(
     }
     barDuration := timespanToDuration(timespan) * time.Duration(multiplier)
     totalDuration := barDuration * time.Duration(int(float64(bars)*overestimate))
-    fmt.Println(totalDuration)
     tradingMinutesPerDay := 960.0 // 16 hours * 60 minutes
     tradingDurationPerDay := time.Duration(int(tradingMinutesPerDay)) * time.Minute
     totalTradingDays := totalDuration / tradingDurationPerDay
-    totalTradingDays += 1 //overestimate cause weekends
+    totalTradingDays += 3 //overestimate cause weekends
     var queryStartTime, queryEndTime time.Time
     if direction == "backward" {
         queryStartTime = upperDate.AddDate(0, 0, -int(totalTradingDays))
@@ -274,6 +279,7 @@ func getRequestDates(
             queryStartTime = lowerDate
         }
         queryEndTime = upperDate
+        queryStartTime = time.Date(queryStartTime.Year(), queryStartTime.Month(), queryStartTime.Day(), 0, 0, 0, 0, queryStartTime.Location())
     } else {
         queryEndTime = lowerDate.AddDate(0, 0, int(totalTradingDays))
         if queryEndTime.After(upperDate) {
@@ -281,9 +287,8 @@ func getRequestDates(
         }
         queryStartTime = lowerDate
     }
-    queryStartTime = time.Date(queryStartTime.Year(), queryStartTime.Month(), queryStartTime.Day(), 0, 0, 0, 0, queryStartTime.Location())
-
     fmt.Println(queryStartTime,queryEndTime)
+
     startMillis, err := utils.MillisFromUTCTime(queryStartTime)
     if err != nil {
         return badReturn,badReturn,err
@@ -371,7 +376,6 @@ func buildHigherTimeframeFromLower(iter *iter.Iter[models.Agg], multiplier int, 
         }
         b ++
     }
-    fmt.Println(b)
     if direction == "forwards" {
         if !barStartTime.IsZero() && *numBarsRemaining > 0 {
             barDataList = append(barDataList, currentBar)
@@ -379,7 +383,6 @@ func buildHigherTimeframeFromLower(iter *iter.Iter[models.Agg], multiplier int, 
         }
     }else{
         barsToKeep := len(barDataList) - *numBarsRemaining
-        fmt.Println("bars aggregated: ",len(barDataList)," bars needed: ",*numBarsRemaining)
         if barsToKeep < 0 {
             barsToKeep = 0
             *numBarsRemaining -= len(barDataList)
