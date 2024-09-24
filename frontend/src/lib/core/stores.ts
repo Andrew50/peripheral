@@ -6,6 +6,7 @@ import type {Writable} from 'svelte/store'
 import {privateRequest} from '$lib/core/backend'
 export let setups: Writable<Setup[]> = writable([]);
 export let watchlists: Writable<Watchlist[]> = writable([]);
+export let menuWidth = writable(0);
 export let flagWatchlistId: number | undefined;
 export let flagWatchlist: Writable<Instance[]>
 export let replayInfo = writable<ReplayInfo>({status:"inactive",startTimestamp:0, replaySpeed:1,})

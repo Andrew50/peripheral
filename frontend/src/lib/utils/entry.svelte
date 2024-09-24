@@ -4,6 +4,7 @@
     import {queryInstanceInput } from '$lib/utils/input.svelte'
     import {queryInstanceRightClick} from '$lib/utils/rightClick.svelte'
     import {changeChart} from '$lib/features/chart/interface'
+    import {menuWidth} from '$lib/core/stores'
     import type {RightClickResult} from '$lib/utils/rightClick.svelte'
     import {writable} from 'svelte/store'
     import type {Writable} from 'svelte/store'
@@ -104,11 +105,8 @@
             const delta = editor?.getContents();
             completed = false;
             delta?.ops?.forEach(op => {
-                console.log(op)
                 if (op.insert && op.insert.embeddedInstance) {
                     const embedded = op.insert.embeddedInstance;
-                    console.log(embedded)
-                    console.log(instance)
                     if (embedded.ticker === instance.ticker && embedded.timestamp === instance.timestamp) {
                         embedded.ticker = updatedInstance.ticker;
                         embedded.timeframe = updatedInstance.timeframe;
@@ -180,31 +178,9 @@
                 console.log(editor.getContents())
             });
         })
-        window.addEventListener('mousemove', updateEditorWidth);
-        updateEditorWidth();
-        return () => {
-            window.removeEventListener('mousemove', updateEditorWidth);
-        };
     });
-    function updateEditorWidth(): void {
-    const parentElement = controlsContainer?.parentElement
-    
-    console.log(parentElement)
-    if (parentElement) {
-        const parentWidth = parentElement.clientWidth;
-        const calculatedWidth = parentWidth * .95;
-
-        // Update the editor width (stored in a writable store)
-        quillWidth.set(calculatedWidth);
-
-        // You can also directly set the editor container width:
-        if (typeof editorContainer === 'object' && editorContainer.style) {
-            editorContainer.style.width = `${calculatedWidth}px`;
-        }
-    }
-}
 </script>
-<div class="editor-container" style="width: {$quillWidth}px">
+<div class="editor-container" style="width: {$menuWidth - 11}px">
     <div bind:this={editorContainer}></div>
 </div>
 <div class="controls-container" bind:this={controlsContainer}>
@@ -220,6 +196,7 @@
       border: none;
       align-items: center;
       justify-content: center;
+      width:100px;
   }
     :global(.embedded-button) {
         padding:1px
