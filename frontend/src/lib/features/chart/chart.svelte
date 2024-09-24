@@ -291,6 +291,7 @@
             var referenceStartTime = getReferenceStartTimeForDateMilliseconds(data.timestamp, currentChartInstance.extendedHours) // this is in milliseconds 
             var timeDiff = (data.timestamp - referenceStartTime)/1000 // this is in seconds
             var flooredDifference = Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds 
+            console.log("Attempted Timestamp", referenceStartTime, flooredDifference, (referenceStartTime/1000 + flooredDifference))
             var newTime = UTCSecondstoESTSeconds((referenceStartTime/1000 + flooredDifference)) as UTCTimestamp
             chartCandleSeries.update({
                 time: newTime,
