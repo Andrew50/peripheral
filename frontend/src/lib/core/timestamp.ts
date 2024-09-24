@@ -118,3 +118,36 @@ export function getReferenceStartTimeForDateMilliseconds(timestamp: number, exte
     // Now construct the Date in Eastern Time with the correct offset
     return new Date(Date.UTC(year, month, day, hours, minutes, 0)).getTime();
 }
+export function isOutsideMarketHours(timestamp: number): boolean {
+    // Create a date object from the timestamp
+    const date = new Date(timestamp);
+
+    // Determine if daylight saving is in effect for EST/EDT
+    const isDST = isDaylightSavingTime(date);
+
+    // Convert to EST or EDT depending on DST
+    const timezoneOffset = isDST ? -4 : -5; // EDT is UTC-4, EST is UTC-5
+    const estDate = new Date(date.getTime() + (timezoneOffset * 60 * 60 * 1000));
+
+    // Get the hours in EST/EDT
+    const hours = estDate.getUTCHours(); // Hours in EST or EDT time
+
+    // Define the start and end hours for market time in 24-hour format (EST)
+    const startHour = 4; // 4:00 AM
+    const endHour = 20;  // 8:00 PM
+
+    // Check if the timestamp is outside the market hours
+    return hours < startHour || hours >= endHour;
+}
+
+function isDaylightSavingTime(date: Date): boolean {
+    // Get the current year
+    const year = date.getUTCFullYear();
+
+    // Start and end dates of DST in the US for the given year
+    const dstStart = new Date(Date.UTC(year, 2, 8, 7)); // 2nd Sunday of March at 2:00 AM (UTC-4)
+    const dstEnd = new Date(Date.UTC(year, 10, 1, 6)); // 1st Sunday of November at 2:00 AM (UTC-5)
+
+    // Return whether the date falls within DST
+    return date >= dstStart && date < dstEnd;
+}
