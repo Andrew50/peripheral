@@ -78,6 +78,12 @@ export function timeframeToSeconds(timeframe : string): number {
     if (timeframe.includes('s')) {
         return parseInt(timeframe)
     }
+    else if(timeframe.includes('h')) {
+        return 3600*parseInt(timeframe)
+    }
+    else if(timeframe.includes('d')) {
+        return 86400*parseInt(timeframe)
+    }
     else if (!(timeframe.includes('m') || timeframe.includes('w') || 
     timeframe.includes('q') || timeframe.includes('d') || timeframe.includes('h'))) {
         return 60 * parseInt(timeframe)

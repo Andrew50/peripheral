@@ -131,6 +131,7 @@ export class ReplayStream implements Stream {
                 r.status = "active"
                 return r 
             })
+            console.log('Test')
             this.accumulatedPauseTime += Date.now() - this.pauseStartTime;
             this.loop()
         }
@@ -138,11 +139,16 @@ export class ReplayStream implements Stream {
 
     public changeSpeed(newSpeed: number) {
         const currentTime = Date.now();
+        if (this.isPaused) {
+            this.accumulatedPauseTime += currentTime - this.pauseStartTime;
+            this.pauseStartTime = currentTime;
+        }
+
         const elapsedTime = currentTime - this.startTime - this.accumulatedPauseTime;
         const simulatedTime = this.initialTimestamp + elapsedTime * this.playbackSpeed;
         this.buffer = Math.floor(this.baseBuffer * this.playbackSpeed)
         this.playbackSpeed = newSpeed;
-        this.startTime = currentTime - (simulatedTime - this.initialTimestamp) / this.playbackSpeed;
+        this.startTime = currentTime - (simulatedTime - this.initialTimestamp) / this.playbackSpeed - this.accumulatedPauseTime;
         replayInfo.update((r:ReplayInfo)=> {
             r.replaySpeed = newSpeed
             return r 
