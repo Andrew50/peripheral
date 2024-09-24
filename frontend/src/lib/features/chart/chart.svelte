@@ -107,7 +107,7 @@
                     bidLine.setData([])
                     askLine.setData([])
                     if(inst.includeLastBar == false) {
-                        //what does this do ???
+                        // cuts off the last bar 
                         newCandleData = newCandleData.slice(0, newCandleData.length-1)
                         newVolumeData = newVolumeData.slice(0, newVolumeData.length-1)
                     }
@@ -194,6 +194,7 @@
                     //});
                 }
                 else { // REQUEST IS NOT FOR REAL TIME DATA // IT IS FOR BACK/FRONT LOAD or something else like replay 
+                    console.log("testing", chartCandleSeries.data()[chartCandleSeries.data().length-1].time)
                     queuedLoad = () => {
                         if (inst.direction == "forward") {
                             const visibleRange = chart.timeScale().getVisibleRange()
@@ -286,6 +287,7 @@
             return 
         } 
         // if not hourly, daily, weekly, monthly at this point; this updates when a new bar has to be created 
+        
         var timeToRequestForUpdatingAggregate = ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
         if(data.conditions == null || (data.size >= 100 && !data.conditions.some(condition => tradeConditionsToCheck.has(condition)))) {
             var referenceStartTime = getReferenceStartTimeForDateMilliseconds(data.timestamp, currentChartInstance.extendedHours) // this is in milliseconds 
