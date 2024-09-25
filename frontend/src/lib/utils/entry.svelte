@@ -58,14 +58,18 @@
         }
     })
     function insertEmbeddedInstance(instance:Instance):void{
+        editor.focus()
         const range = editor.getSelection()
         let insertIndex;
+        console.log(range)
         if (range === null){
             insertIndex = editor.getLength()
         }else{
             insertIndex = range.index
         }
+        console.log(insertIndex)
         editor.insertEmbed(insertIndex, 'embeddedInstance',instance);
+        editor.setSelection(insertIndex + 1, 0);
         debounceSave()
     }
 
