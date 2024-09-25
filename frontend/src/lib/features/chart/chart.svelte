@@ -34,7 +34,8 @@
     let queuedLoad: Function | null = null
     let shiftDown = false
     const chartRequestThrottleDuration = 150; 
-    const hoveredCandleData = writable({ open: 0, high: 0, low: 0, close: 0, volume: 0, adr:0, chg: 0, chgprct: 0})
+    const defaultHoveredCandleData = { open: 0, high: 0, low: 0, close: 0, volume: 0, adr:0, chg: 0, chgprct: 0}
+    const hoveredCandleData = writable(defaultHoveredCandleData)
     const shiftOverlay: Writable<ShiftOverlay> = writable({ x: 0, y: 0, startX: 0, startY: 0, width: 0, height: 0, isActive: false, startPrice: 0, currentPrice: 0, })
     export let chartId: number;
     export let width: number;
@@ -194,7 +195,7 @@
                     //});
                 }
                 else { // REQUEST IS NOT FOR REAL TIME DATA // IT IS FOR BACK/FRONT LOAD or something else like replay 
-                    console.log("testing", chartCandleSeries.data()[chartCandleSeries.data().length-1].time)
+                    //console.log("testing", chartCandleSeries.data()[chartCandleSeries.data().length-1].time)
                     queuedLoad = () => {
                         if (inst.direction == "forward") {
                             const visibleRange = chart.timeScale().getVisibleRange()
@@ -288,7 +289,6 @@
             return 
         } 
         // if not hourly, daily, weekly, monthly at this point; this updates when a new bar has to be created 
-        
         var timeToRequestForUpdatingAggregate = ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
         if(data.conditions == null || (data.size >= 100 && !data.conditions.some(condition => tradeConditionsToCheck.has(condition)))) {
             var referenceStartTime = getReferenceStartTimeForDateMilliseconds(data.timestamp, currentChartInstance.extendedHours) // this is in milliseconds 
@@ -556,7 +556,7 @@
             release()
             unsubscribeQuote()
             releaseQuote()
-
+            hoveredCandleData.set(defaultHoveredCandleData)
             chartEarliestDataReached = false;
             chartLatestDataReached = false; 
             if(!req.securityId || !req.ticker || !req.timeframe) {return}
@@ -599,11 +599,6 @@
                 change(req,true)
            }
        })
-
-
-        
-
-
     });
 </script>
 
