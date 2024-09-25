@@ -6,10 +6,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+    "time"
+    "sync"
 
 	polygonws "github.com/polygon-io/client-go/websocket"
 	"github.com/polygon-io/client-go/websocket/models"
 )
+
+var nextDispatchTimes = struct {
+	sync.RWMutex
+	times map[string]time.Time
+}{times: make(map[string]time.Time)}
 
 type TradeData struct {
 	Ticker     string  `json:"ticker"`
@@ -29,6 +36,7 @@ type QuoteData struct {
 	Timestamp int64   `json:"timestamp"`
 	Channel   string  `json:"channel"`
 }
+const slowRedisTimeout = 5 * time.Second // Adjust the timeout as needed
 
 func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 	err := polygonWS.Subscribe(polygonws.StocksQuotes)
@@ -79,6 +87,17 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 				}
 			//	conn.Cache.Publish(context.Background(), "trades-agg", string(jsonData))
 				conn.Cache.Publish(context.Background(), channelName, string(jsonData))
+				now := time.Now()
+				nextDispatchTimes.RLock()
+				nextDispatch, exists := nextDispatchTimes.times[msg.Symbol]
+				nextDispatchTimes.RUnlock()
+				if !exists || now.After(nextDispatch) {
+                    slowChannelName := fmt.Sprintf("%s-slow", msg.Symbol)
+					conn.Cache.Publish(context.Background(), slowChannelName, string(jsonData))
+					nextDispatchTimes.Lock()
+					nextDispatchTimes.times[msg.Symbol] = now.Add(slowRedisTimeout)
+					nextDispatchTimes.Unlock()
+				}
 			case models.EquityQuote:
 				channelName := fmt.Sprintf("%s-quote", msg.Symbol)
 				data := QuoteData{
