@@ -17,7 +17,7 @@
     let changeStore = writable<ChangeStore>({change:"--"})
     
     onMount(() => {
-        const [ps,rs] = getStream<TradeData>(instance, "fast")
+        const [ps,rs] = getStream<TradeData>(instance, "slow")
         priceStream = ps 
         releaseStream = rs
         const [p, u] = getStream<number>(instance,"close")

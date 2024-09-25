@@ -16,7 +16,7 @@ type GetJournalsResult struct {
 }
 
 func GetJournals(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	rows, err := conn.DB.Query(context.Background(), "SELECT journalId, timestamp, completed from journals where userId = $1", userId)
+	rows, err := conn.DB.Query(context.Background(), "SELECT journalId, timestamp, completed from journals where userId = $1 order by timestamp desc", userId)
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +29,7 @@ func GetJournals(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 		if err != nil {
 			return nil, fmt.Errorf("19nv %v",err)
 		}
-		journal.Timestamp = journalTime.Unix()
+		journal.Timestamp = journalTime.Unix() * 1000
 		journals = append(journals, journal)
 	}
 	return journals, nil

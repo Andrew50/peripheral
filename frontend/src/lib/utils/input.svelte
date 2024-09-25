@@ -84,6 +84,7 @@
     import {onDestroy,onMount} from 'svelte'
 	import { ESTStringToUTCTimestamp, UTCTimestampToESTString } from '$lib/core/timestamp';
     let prevFocusedElement: HTMLElement | null;
+    let secQueryActive = false;
 
     interface ValidateResponse {
         inputValid: boolean
@@ -92,7 +93,9 @@
 
     async function validateInput(inputString: string, inputType: string):Promise<ValidateResponse>{ //auto wraps sync returns in Promise.resolve()
         if (inputType === "ticker"){
+            secQueryActive = true
             const securities = await privateRequest<Security[]>("getSecuritiesFromTicker",{ticker:inputString})
+            secQueryActive = false
             if (Array.isArray(securities) && securities.length > 0){
                 return {inputValid: securities.some((v:Security)=>v.ticker === inputString), securities: securities}
             }else{
@@ -152,6 +155,7 @@
             inputQuery.set(iQ)
         }else if (event.key === 'Enter') {
             event.preventDefault()
+            while (secQueryActive){}
             if (iQ.inputValid) {
                 iQ = enterInput(iQ,0)
             }

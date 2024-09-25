@@ -66,13 +66,27 @@ export function ESTStringToUTCTimestamp(easternString: string): number {
     const utcTimestamp: number = easternTime.toUTC().toMillis();
     return utcTimestamp; */
 
-export function UTCTimestampToESTString(utcTimestamp : number): string {
+export function UTCTimestampToESTString(utcTimestamp : number,dateOnly=false): string {
     if (utcTimestamp === 0 || utcTimestamp === undefined){
         return "Current"
     }
     const utcDatetime = DateTime.fromMillis(utcTimestamp, {zone: 'utc'})
     const easternTime = utcDatetime.setZone('America/New_York')
+    if (dateOnly) {
+        return easternTime.toFormat('yyyy-MM-dd'); // Date only
+    }
     return easternTime.toFormat('yyyy-MM-dd HH:mm:ss')
+}
+export function ESTTimestampToESTString(utcTimestamp : number,dateOnly=false): string {
+    if (utcTimestamp === 0 || utcTimestamp === undefined){
+        return "Current"
+    }
+    const utcDatetime = DateTime.fromMillis(utcTimestamp, {zone: 'utc'})
+    //const easternTime = utcDatetime.setZone('America/New_York')
+    if (dateOnly) {
+        return utcDatetime.toFormat('yyyy-MM-dd'); // Date only
+    }
+    return utcDatetime.toFormat('yyyy-MM-dd HH:mm:ss')
 }
 export function timeframeToSeconds(timeframe : string): number {
     if (timeframe.includes('s')) {
