@@ -1,19 +1,12 @@
  <!-- rightClick.svlete -->
 <script lang="ts" context="module">
-    //import {changeChart} from '$lib/features/chart/chart.svelte'
-    import {flagWatchlist,flagWatchlistId} from '$lib/core/stores'
-        import '$lib/core/global.css'
-
+    import '$lib/core/global.css'
     import type { Writable } from 'svelte/store';
     import type {Instance} from '$lib/core/types';
     import {UTCTimestampToESTString} from '$lib/core/timestamp'
     import {flagSecurity} from '$lib/utils/flag'
-//    let similarInstance: Writable<SimilarInstance> = writable({});
-    import { privateRequest} from '$lib/core/backend';
     import {embedInstance} from "$lib/utils/entry.svelte";
     import {newStudy} from '$lib/features/study.svelte';
-    //import {newJournal} from '$lib/features/journal.svelte';
-    import {newSample} from '$lib/features/sample.svelte'
     import { get, writable } from 'svelte/store';
     import {querySimilarInstances} from '$lib/utils/similar.svelte'
     import {startReplay} from '$lib/utils/stream'
@@ -67,17 +60,48 @@
 </script>
 
 <script lang="ts">
+    import {entryOpen} from '$lib/core/stores'
     import {browser} from '$app/environment'
-    import {onMount} from 'svelte'
+    import {onMount,tick} from 'svelte'
     let rightClickMenu: HTMLElement;
     onMount(()=>{
-        rightClickQuery.subscribe((v:RightClickQuery) => {
+        rightClickQuery.subscribe( async(v:RightClickQuery) => {
             if (browser){
                 if (v.status === "initializing"){
                     document.addEventListener('click',handleClick)
                     document.addEventListener('keydown', handleKeyDown)
+                    await tick()
+                    const menu = rightClickMenu;
+                    const menuRect = menu.getBoundingClientRect();
+                    const windowWidth = window.innerWidth;
+                    const windowHeight = window.innerHeight;
+                    console.log(v.y)
+                    let newX = v.x
+                    let newY = v.y
+                    const halfMenuWidth = Math.floor(menuRect.width * .5)
+                    const halfMenuHeight = Math.floor(menuRect.height * .5)
+                    if (v.x && v.y){
+                        if (v.x + halfMenuWidth > windowWidth) {
+                            newX = windowWidth - halfMenuWidth - 40; // Add a small margin from the edge
+                        }else if(v.x - halfMenuWidth< 0){
+                            newX = halfMenuWidth + 40
+                        }
+                        if (v.y + menuRect.height > windowHeight) {
+                            newY = windowHeight - halfMenuHeight - 40; // Add a small margin from the edge
+                        }else if (v.y - halfMenuWidth < 0){
+                            newY = halfMenuWidth + 40
+                        }
+                    }
+                    console.log(v.y)
                     v.status = "active"
-                    return v
+                    rightClickQuery.update((c:RightClickQuery)=>{
+                        return {
+                            ...c,
+                            x:newX,
+                            y:newY,
+                            status: "active"
+                        }
+                    })
                 }else if(v.status == "inactive"){
                     document.removeEventListener('click',handleClick)
                     document.removeEventListener('keydown', handleKeyDown)
@@ -137,7 +161,7 @@
     }
 
 </script>
-{#if $rightClickQuery.status === "active"}
+{#if ["initializing","active"].includes($rightClickQuery.status)}
     <div bind:this={rightClickMenu} class="popup-container" style="top: {$rightClickQuery.y}px; left: {$rightClickQuery.x}px;">
         <div >{$rightClickQuery.instance.ticker} {UTCTimestampToESTString($rightClickQuery.instance.timestamp)} </div>
         <div ><button on:click={()=>newStudy(get(rightClickQuery).instance)}> Add to Study </button></div>
@@ -146,9 +170,11 @@
         <div ><button on:click={(event)=>querySimilarInstances(event,get(rightClickQuery).instance)}> Similar Instances </button></div>
         <!--<div><button on:click={getStats}> Instance Stats </button></div>-->
         <div ><button on:click={()=>startReplay($rightClickQuery.instance.timestamp)}>Begin Replay</button></div>
-        {#if $rightClickQuery.source === "chart"}
-            <!--<div><button on:click={()=>completeRequest("alert")}>Add Alert </button></div>-->
+        {#if $entryOpen}
             <div ><button on:click={()=>embedInstance(get(rightClickQuery).instance)}> Embed </button></div>
+        {/if}
+        {#if $rightClickQuery.source === "chart"}
+            <div><button on:click={()=>completeRequest("alert")}>Add Alert </button></div>
         {:else if $rightClickQuery.source === "embedded"}
             <div ><button on:click={()=>completeRequest("edit")}> Edit </button></div>
             <!--<div><button on:click={()=>completeRequest("embdedSimilar")}> Embed Similar </button></div>-->
@@ -159,6 +185,9 @@
 {/if}
 
 <style>
+    .popup-container {
+        width: 180px;
+    }
     button {
         width: 100%;
     }

@@ -5,12 +5,29 @@
     import {changeChart} from './interface'
     export let instance: Instance
     import {queryInstanceInput} from '$lib/utils/input.svelte'
+    import {settings} from '$lib/core/stores'
     function handleClick(event:MouseEvent |TouchEvent){
         queryInstanceInput("any",instance)
         .then((v:Instance)=>{
             changeChart(instance)
         })
 
+    }
+    function formatVolume(volume: number,dolvol:boolean): string {
+        let vol
+        if (volume >= 1e9) {
+            vol = (volume / 1e9).toFixed(2) + 'B';
+        } else if (volume >= 1e6) {
+            vol = (volume / 1e6).toFixed(2) + 'M';
+        } else if (volume >= 1e3) {
+            vol = (volume / 1e3).toFixed(2) + 'K';
+        } else {
+            vol = volume.toFixed(0);
+        }
+        if (dolvol){
+            vol += "$"
+        }
+        return vol
     }
 </script>
 <div tabindex="-1" on:click={handleClick} on:touchstart={handleClick} class="legend">
@@ -26,7 +43,7 @@
         AR: {$hoveredCandleData.adr?.toFixed(2)}
         CHG: {$hoveredCandleData.chg.toFixed(2)}
         ({$hoveredCandleData.chgprct.toFixed(2)}%)
-        V: {$hoveredCandleData.volume}
+        V: {formatVolume($hoveredCandleData.volume, $settings.dolvol) }
     </div>
 </div>
 <style>

@@ -1,6 +1,10 @@
 <script>
     import  Header  from '$lib/utils/header.svelte';
     import '$lib/core/global.css'
+    import {browser} from '$app/environment'
+    if (browser){
+        document.title = "Atlantis"
+    }
 
 </script>
 <Header />

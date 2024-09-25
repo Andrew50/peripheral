@@ -278,9 +278,10 @@
                 }
             }
             if(data.conditions == null || !data.conditions.some(condition => tradeConditionsToCheckVolume.has(condition))) {
+                const size = get(settings).dolvol ? data.size * data.price : data.size
                 chartVolumeSeries.update({
                     time: mostRecentBar.time, 
-                    value: chartVolumeSeries.data()[chartVolumeSeries.data().length-1].value + data.size,
+                    value: chartVolumeSeries.data()[chartVolumeSeries.data().length-1].value + size,
                     color: mostRecentBar.close > mostRecentBar.open ? '#089981' : '#ef5350'
                 }) 
             }
@@ -295,6 +296,7 @@
             var flooredDifference = Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds 
             console.log("Attempted Timestamp", referenceStartTime, flooredDifference, (referenceStartTime/1000 + flooredDifference))
             var newTime = UTCSecondstoESTSeconds((referenceStartTime/1000 + flooredDifference)) as UTCTimestamp
+            const size = get(settings).dolvol ? data.size * data.price : data.size
             chartCandleSeries.update({
                 time: newTime,
                 open: data.price, 
@@ -304,7 +306,7 @@
             })
             chartVolumeSeries.update({
                 time: newTime, 
-                value: data.size
+                value: size,
             })
         }
         await new Promise(resolve => setTimeout(resolve, 3000));
@@ -324,6 +326,7 @@
             var currentCandleData = chartCandleSeries.data()
             for(var c = currentCandleData.length-1; c > 0; c--) {
                 if (currentCandleData[c].time == UTCSecondstoESTSeconds(bar.time)) {
+                    const size = get(settings).dolvol ? bar.volume * bar.close : bar.volume
                     currentCandleData[c] = {
                         time: UTCSecondstoESTSeconds(bar.time) as UTCTimestamp,
                         open: bar.open,

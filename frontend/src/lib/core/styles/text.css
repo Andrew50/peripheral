@@ -9,6 +9,9 @@ span {
 label {
       margin-right: 10px;
 }
+hr {
+    color: var(--f2);
+}
 
 * {
     font-family: monospace; /* Monospace font for numbers */

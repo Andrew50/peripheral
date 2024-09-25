@@ -78,7 +78,7 @@ def screen(conn, setupIds):
     adr = 2
     dolvol = 10 * 1000000
     tf = "1d"
-    threshold = 10
+    threshold = 25
     with conn.db.cursor() as cursor:
         cursor.execute('SELECT MAX(bars) FROM setups WHERE setupId = ANY(%s)', (setupIds,))
         maxBars = cursor.fetchone()[0]

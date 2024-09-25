@@ -2,7 +2,7 @@
     import {privateRequest} from '$lib/core/backend'
     import Entry from "$lib/utils/entry.svelte"
     import {onMount} from 'svelte'
-    import {UTCTimestampToESTString} from '$lib/core/timestamp'
+    import {ESTTimestampToESTString} from '$lib/core/timestamp'
     import type {Writable} from 'svelte/store'
     import {writable} from 'svelte/store'
     let selectedJournalId: number | null = null;
@@ -37,7 +37,7 @@
             {#if Array.isArray($journals) && $journals.length > 0}
                 {#each $journals as journal}
                     <tr class={journal.completed ? "" : "active"}  on:click={()=>selectJournal(journal)}>
-                        <td>{UTCTimestampToESTString(journal.timestamp)}</td>
+                        <td>{ESTTimestampToESTString(journal.timestamp,true)}</td>
                     </tr>
 
                     {#if selectedJournalId == journal.journalId}

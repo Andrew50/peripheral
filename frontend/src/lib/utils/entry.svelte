@@ -4,7 +4,7 @@
     import {queryInstanceInput } from '$lib/utils/input.svelte'
     import {queryInstanceRightClick} from '$lib/utils/rightClick.svelte'
     import {changeChart} from '$lib/features/chart/interface'
-    import {menuWidth} from '$lib/core/stores'
+    import {menuWidth,entryOpen} from '$lib/core/stores'
     import type {RightClickResult} from '$lib/utils/rightClick.svelte'
     import {writable} from 'svelte/store'
     import type {Writable} from 'svelte/store'
@@ -17,7 +17,7 @@
     }
 </script>
 <script lang="ts">
-    import { onMount } from 'svelte';
+    import { onDestroy,onMount } from 'svelte';
     import { privateRequest } from '$lib/core/backend'
     import 'quill/dist/quill.snow.css';
     import type Quill from 'quill'
@@ -128,6 +128,7 @@
 
 
     onMount(() => {
+        entryOpen.set(true)
         import('quill').then(QuillModule => {
             Quill = QuillModule.default;
             const Block = Quill.import('blots/block');
@@ -179,6 +180,9 @@
             });
         })
     });
+    onDestroy(()=>{
+        entryOpen.set(false)
+    })
 </script>
 <div class="editor-container" style="width: {$menuWidth - 11}px">
     <div bind:this={editorContainer}></div>
@@ -199,6 +203,7 @@
       width:100px;
   }
     :global(.embedded-button) {
-        padding:1px
+        padding:1px;
+        margin: 1px;
     }
 </style>
