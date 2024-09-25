@@ -36,7 +36,7 @@ type QuoteData struct {
 	Timestamp int64   `json:"timestamp"`
 	Channel   string  `json:"channel"`
 }
-const slowRedisTimeout = 5 * time.Second // Adjust the timeout as needed
+const slowRedisTimeout = 1 * time.Second // Adjust the timeout as needed
 
 func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 	err := polygonWS.Subscribe(polygonws.StocksQuotes)
@@ -93,6 +93,8 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 				nextDispatchTimes.RUnlock()
 				if !exists || now.After(nextDispatch) {
                     slowChannelName := fmt.Sprintf("%s-slow", msg.Symbol)
+                    data.Channel = slowChannelName
+                    jsonData, err = json.Marshal(data)
 					conn.Cache.Publish(context.Background(), slowChannelName, string(jsonData))
 					nextDispatchTimes.Lock()
 					nextDispatchTimes.times[msg.Symbol] = now.Add(slowRedisTimeout)

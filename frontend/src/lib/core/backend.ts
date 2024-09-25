@@ -1,5 +1,6 @@
 export let base_url: string;
 const pollInterval = 300; // Poll every 100ms
+import { goto } from '$app/navigation';
 
 if (typeof window !== 'undefined') {
     if (window.location.hostname === 'localhost') {
@@ -57,7 +58,9 @@ export async function privateRequest<T>(func: string, args: any,verbose=false): 
         return Promise.reject(e);
     });
 
-    if (response.ok){
+    if (response.status === 401){
+            goto('/login')
+    }else if (response.ok){
         const result = await response.json() as T
         if (verbose){
             console.log("payload: ",payload, "result: ", result)
@@ -86,7 +89,10 @@ export async function queueRequest<T>(func: string, args: any,verbose=true): Pro
         headers: headers,
         body: JSON.stringify(payload)
     }).catch();
-    if (!response.ok) {
+
+    if (response.status === 401){
+        goto('/login')
+    }else if (!response.ok) {
         const errorMessage = await response.text();
         console.error("Error queuing task:", errorMessage);
         return Promise.reject(errorMessage);
@@ -103,7 +109,7 @@ export async function queueRequest<T>(func: string, args: any,verbose=true): Pro
                 headers: headers,
                 body: JSON.stringify({taskId:taskId})
             }).catch()
-            if (!pollResponse.ok) {
+        if (!pollResponse.ok) {
                 const errorMessage = await pollResponse.text();
                 console.error("Error polling task:", errorMessage);
                 clearInterval(intervalID);

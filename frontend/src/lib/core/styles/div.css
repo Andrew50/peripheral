@@ -58,6 +58,10 @@
 }
 .center-container {
     text-align:center;
+     display: flex;
+    flex-direction: column;
+    align-items: center; /* Center items horizontally */
+    justify-content: center; /* Center items vertically */
 }
 .content-container {
     width: 100%;

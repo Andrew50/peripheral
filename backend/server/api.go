@@ -67,7 +67,11 @@ func handleError(w http.ResponseWriter, err error, context string) bool {
 	if err != nil {
 		logMessage := fmt.Sprintf("%s: %v", context, err)
 		fmt.Println(logMessage)
-		http.Error(w, logMessage, http.StatusBadRequest)
+        if (context == "auth"){
+            http.Error(w, logMessage, http.StatusUnauthorized)
+        }else{
+            http.Error(w, logMessage, http.StatusBadRequest)
+        }
 		return true
 	}
 	return false
@@ -113,7 +117,7 @@ func private_handler(conn *utils.Conn) http.HandlerFunc {
 		fmt.Println("got private request")
 		token_string := r.Header.Get("Authorization")
 		user_id, err := validate_token(token_string)
-		if handleError(w, err, "validating token") {
+		if handleError(w, err, "auth") {
 			return
 		}
 		var req Request
@@ -153,7 +157,7 @@ func queueHandler(conn *utils.Conn) http.HandlerFunc {
 		fmt.Println("got queue request")
 		token_string := r.Header.Get("Authorization")
 		_, err := validate_token(token_string)
-		if handleError(w, err, "validating token") {
+		if handleError(w, err, "auth") {
 			return
 		}
 		var req Request
@@ -187,7 +191,7 @@ func pollHandler(conn *utils.Conn) http.HandlerFunc {
 		}
 		token_string := r.Header.Get("Authorization")
 		_, err := validate_token(token_string)
-		if handleError(w, err, "validating token") {
+		if handleError(w, err, "auth") {
 			return
 		}
 		var req PollRequest

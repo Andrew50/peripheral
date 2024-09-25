@@ -24,7 +24,6 @@
         prevCloseStream = p
         unsubscribe = u
         priceStream.subscribe((v) => {
-            //console.log(v)
             if (v && v.price){
                 changeStore.update((s:ChangeStore)=>{
                     s.price = v.price
@@ -46,7 +45,6 @@
         releaseStream();
         unsubscribe();
     });
-
     function getChange(price: number, prevClose: number): string {
         if (!price || !prevClose) return "--"
         return ((price / prevClose - 1) * 100).toFixed(2) + "%"

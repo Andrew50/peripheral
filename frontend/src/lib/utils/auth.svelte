@@ -49,7 +49,7 @@
 <div class="page">
 <Header />
 <main>
-  <div class="dcontainer">
+  <div class="center-container">
     <input autofocus placeholder="Username" bind:value={username} on:keydown={handleKeydown} />
     <input placeholder="Password" bind:value={password} on:keydown={handleKeydown} />
     {#if loginMenu}
