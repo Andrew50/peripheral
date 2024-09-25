@@ -98,8 +98,10 @@ export function timeframeToSeconds(timeframe : string): number {
     else if(timeframe.includes('d')) {
         return 86400*parseInt(timeframe)
     }
-    else if (!(timeframe.includes('m') || timeframe.includes('w') || 
-    timeframe.includes('q') || timeframe.includes('d') || timeframe.includes('h'))) {
+    else if(timeframe.includes('w')) {
+        return 604800*parseInt(timeframe)
+    }
+    else if (!(timeframe.includes('m') ||timeframe.includes('q') )) {
         return 60 * parseInt(timeframe)
     } 
     return 0 
