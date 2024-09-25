@@ -75,7 +75,7 @@ export class ReplayStream implements Stream {
                     securityId: parseInt(securityId),
                     time: latestTime ?? Math.floor(this.simulatedTime),
                     lengthOfTime: this.buffer,
-                    extendedHours: false
+                    extendedHours: get(chartQuery).extendedHours
                 },false).then((n:Array<any>)=>{
                     if(Array.isArray(n)){
                         this.tickMap.get(channel).ticks.push(...n)
