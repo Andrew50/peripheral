@@ -66,6 +66,7 @@ export class RealtimeStream implements Stream{
     }
     public subscribe(channelName:string){
         const [securityId,streamType] = channelName.split("-")
+        console.log(channelName)
         const channel = activeChannels.get(channelName)
         if (!channel){
             console.log("couldnt find active channel for", channel)
