@@ -1,8 +1,10 @@
 package utils
+
 import (
+	"fmt"
 	"strconv"
+	"time"
 	"unicode"
-    "fmt"
 )
 
 func GetTimeFrame(timeframeString string) (int, string, string, int, error) {
@@ -38,4 +40,29 @@ func GetTimeFrame(timeframeString string) (int, string, string, int, error) {
 		return num, "year", "d", 365, nil
 	}
 	return 0, "", "", 0, fmt.Errorf("incorrect timeframe passed")
+}
+func getStartOfTimeWindow(timestamp time.Time, multiplier int, timespan string, extendedHours bool, location *time.Location) (time.Time, error) {
+	
+	timestamp = timestamp.In(location)
+
+    switch timespan {
+    case "s":
+        // Seconds
+        duration := time.Duration(multiplier) * time.Second
+        return timestamp.Truncate(duration), nil
+
+    case "m":
+        // Minutes
+        duration := time.Duration(multiplier) * time.Minute
+        return timestamp.Truncate(duration), nil
+
+    case "h":
+        // Hours
+        duration := time.Duration(multiplier) * time.Hour
+        return timestamp.Truncate(duration), nil
+
+    case "d":
+        // Days
+        duration := time.Duration(multiplier*24) * time.Hour
+        return timestamp.Truncate(duration), nil
 }
