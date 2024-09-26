@@ -88,7 +88,7 @@ export function ESTTimestampToESTString(utcTimestamp : number,dateOnly=false): s
     }
     return utcDatetime.toFormat('yyyy-MM-dd HH:mm:ss')
 }
-export function timeframeToSeconds(timeframe : string): number {
+export function timeframeToSeconds(timeframe : string, timestamp : number): number {
     if (timeframe.includes('s')) {
         return parseInt(timeframe)
     }
@@ -101,10 +101,20 @@ export function timeframeToSeconds(timeframe : string): number {
     else if(timeframe.includes('w')) {
         return 604800*parseInt(timeframe)
     }
+    else if(timeframe.includes('m')) {
+        return 2592000*parseInt(timeframe)
+    }
     else if (!(timeframe.includes('m') ||timeframe.includes('q') )) {
         return 60 * parseInt(timeframe)
     } 
     return 0 
+}
+export function getStartOfMonthXMonthsOut(startTimestamp: number, monthsOut: number) {
+    const timeZone = 'America/New_York';
+    let dt = DateTime.fromMillis(startTimestamp, {zone:timeZone});
+    dt = dt.plus({months: monthsOut})
+    dt = dt.startOf('month').startOf('day');
+    return dt.toMillis();
 }
 export function getReferenceStartTimeForDateMilliseconds(timestamp: number, extendedHours?: boolean): number {
     const date = new Date(timestamp);
