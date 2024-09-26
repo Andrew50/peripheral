@@ -104,3 +104,11 @@ export function stopReplay(){
     currentStream = realtimeStream
     currentStream.start()
 }
+export function replayJumpToNextDay() {
+    if(currentStream !== replayStream) {return;}
+    currentStream.jumpToNextDay()
+}
+export function replayJumpToNextMarketOpen() {
+    if(currentStream !== replayStream) {return;}
+    currentStream.jumpToNextMarketOpen()
+}

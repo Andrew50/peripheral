@@ -1,15 +1,15 @@
 import { privateRequest } from '$lib/core/backend';
 import { activeChannels } from '$lib/utils/stream';
 import type { Stream } from '$lib/utils/stream';
-import {replayInfo} from '$lib/core/stores';
-import type{ReplayInfo} from '$lib/core/stores';
+import {currentTimestamp, replayInfo, timeEvent} from '$lib/core/stores';
+import type{ReplayInfo, TimeEvent} from '$lib/core/stores';
 import { getReferenceStartTimeForDateMilliseconds, isOutsideMarketHours } from '$lib/core/timestamp';
 import { chartQuery } from '$lib/features/chart/interface';
 import type {Writable} from 'svelte/store';
 import { ESTSecondstoUTCMillis } from '$lib/core/timestamp';
 import {writable, get} from 'svelte/store';
 
-
+import {DateTime} from 'luxon';
 
 export class ReplayStream implements Stream {
     public replayStatus: boolean = false;
@@ -62,7 +62,7 @@ export class ReplayStream implements Stream {
             this.simulatedTime = this.initialTimestamp + elapsedTime * this.playbackSpeed;
             const latestTime = v.ticks[v.ticks.length-1]?.timestamp
             if (!v.reqInbound && (!latestTime || latestTime < this.simulatedTime + this.buffer)){
-                v.reqInbound = true
+                v.reqInbound = true  
                 const [securityId, type] = channel.split("-")
                 //console.log(securityId)
                 let req;
@@ -153,6 +153,110 @@ export class ReplayStream implements Stream {
             r.replaySpeed = newSpeed
             return r 
         })
+    }
+    public jumpToNextMarketOpen() {
+        // Get the current simulated time
+        this.pause()
+        const currentSimulatedTime = this.simulatedTime;
+    
+        // Create a DateTime object in UTC
+        let dateTime = DateTime.fromMillis(currentSimulatedTime, { zone: 'UTC' });
+    
+        // Convert to America/New_York time zone
+        dateTime = dateTime.setZone('America/New_York');
+    
+        // Increment the date by one day
+        dateTime = dateTime.plus({ days: 1 });
+    
+        // Find the next weekday (Monday to Friday)
+        while (dateTime.weekday === 6 || dateTime.weekday === 7) {
+            dateTime = dateTime.plus({ days: 1 });
+        }
+    
+        // Set the time to 9 am
+        dateTime = dateTime.set({ hour: 9, minute: 30, second: 0, millisecond: 0 });
+    
+        // Convert back to UTC
+        const newSimulatedTime = dateTime.toUTC().toMillis();
+    
+        // Adjust initialTimestamp
+        const currentTime = Date.now();
+        const elapsedTime =
+            currentTime - this.startTime - this.accumulatedPauseTime;
+        this.initialTimestamp =
+            newSimulatedTime - elapsedTime * this.playbackSpeed;
+    
+        // Clear tickMap and reset
+        for (const v of this.tickMap.values()) {
+            v.ticks = [];
+            v.reqInbound = false;
+        }
+    
+        // Update replayInfo
+        replayInfo.update((r: ReplayInfo) => {
+            r.startTimestamp = this.initialTimestamp;
+            return r;
+        });   
+        currentTimestamp.set(newSimulatedTime)
+        timeEvent.update((v:TimeEvent)=>{
+            v.event = "replay"
+            return {...v}
+        })
+        this.resume()
+    }
+    public jumpToNextDay() {
+        // Pause the replay
+        this.pause();
+        const currentTime = Date.now();
+        const currentSimulatedTime = this.simulatedTime;
+    
+        // Create a DateTime object in UTC
+        let dateTime = DateTime.fromMillis(currentSimulatedTime, { zone: 'UTC' });
+    
+        // Convert to America/New_York time zone
+        dateTime = dateTime.setZone('America/New_York');
+    
+        // Increment the date by one day
+        dateTime = dateTime.plus({ days: 1 });
+    
+        // Find the next weekday (Monday to Friday)
+        while (dateTime.weekday === 6 || dateTime.weekday === 7) {
+            dateTime = dateTime.plus({ days: 1 });
+        }
+    
+        // Set the time to 4 am
+        dateTime = dateTime.set({ hour: 4, minute: 0, second: 0, millisecond: 0 });
+    
+        // Convert back to UTC
+        const newSimulatedTime = dateTime.toUTC().toMillis();
+    
+        // Adjust initialTimestamp
+        const elapsedTime = currentTime - this.startTime - this.accumulatedPauseTime;
+        this.initialTimestamp = newSimulatedTime - elapsedTime * this.playbackSpeed;
+    
+        // Adjust startTime
+        this.startTime = currentTime - this.accumulatedPauseTime;
+    
+        // Clear tickMap and reset
+        for (const v of this.tickMap.values()) {
+            v.ticks = [];
+            v.reqInbound = false;
+        }
+    
+        // Update replayInfo
+        replayInfo.update((r: ReplayInfo) => {
+            r.startTimestamp = this.initialTimestamp;
+            return r;
+        });
+        currentTimestamp.set(newSimulatedTime)
+        // Notify timeEvent
+        timeEvent.update((v: TimeEvent) => {
+            v.event = "replay";
+            return { ...v };
+        });
+    
+        // Resume the replay
+        this.resume();
     }
 }
 
