@@ -1,5 +1,5 @@
 <script lang='ts'>
-import {startReplay, stopReplay, pauseReplay, resumeReplay} from '$lib/utils/stream';
+import {startReplay, stopReplay, pauseReplay, resumeReplay, replayJumpToNextMarketOpen, replayJumpToNextDay} from '$lib/utils/stream';
 import {replayStream} from '$lib/utils/stream';
 import {queryInstanceInput} from '$lib/utils/input.svelte'
 import {UTCTimestampToESTString} from '$lib/core/timestamp'
@@ -41,6 +41,10 @@ import type {Instance} from '$lib/core/types'
         <div>
         <label for="speed-input">Speed:</label>
         <input id="speed-input" type="number" step="0.1" min="0.1" value="1.0" on:input={changeReplaySpeed} />
+        </div>
+        <div>
+        <button on:click={replayJumpToNextMarketOpen} >Jump to next market open (9:30 AM EST)</button>
+        <button on:click={replayJumpToNextDay} >Jump to next day (4 AM EST)</button>    
         </div>
         {/if}
     {:else}

@@ -37,7 +37,25 @@ func MaxDivisorOf30(n int) int {
     }
     return 1 // 1 divides all integers, so we return 1 if no other common divisor is found.
 }
+type GetChartIncompleteAggregateCandleArgs struct {
+    SecurityId int `json:"securityId"`
+    Timeframe string `json:"timeframe"`
+    Timestamp int64 `json:timestamp` // any time within the candle 
+    IsReplay bool `json:"isreplay`
 
+}
+func GetChartIncompleteAggregateCandle(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+    var args GetChartIncompleteAggregateCandleArgs 
+    if err := json.Unmarshal(rawArgs, &args); err !=  nil {
+        return nil, fmt.Errorf("invalid args: %v", err)
+    }
+    multiplier, timespan, _, _, err := utils.GetTimeFrame(args.Timeframe)
+    if err != nil {
+        return nil, fmt.Errorf("invalid timeframe: %v", err)
+    }
+    startOfTimeframe := utils.getStartOfTimeWindow(, args)
+
+}
 func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
     var args GetChartDataArgs
     if err := json.Unmarshal(rawArgs, &args); err != nil {
