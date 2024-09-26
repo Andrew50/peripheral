@@ -133,7 +133,7 @@
                     var timediff = (Date.now() - referenceStartTime)/1000 // this is in seconds
                     var flooredDifference = Math.floor(timediff/chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds
                     var newTime = referenceStartTime + flooredDifference*1000
-                    privateRequest<TradeData[]>("getTradeData", {securityId: inst.securityId, time: newTime, lengthOfTime: chartTimeframeInSeconds, extendedHours: inst.extendedHours})
+                   /* privateRequest<TradeData[]>("getTradeData", {securityId: inst.securityId, time: newTime, lengthOfTime: chartTimeframeInSeconds, extendedHours: inst.extendedHours})
                   .then((res:Array<any>)=> {
                         if (!Array.isArray(res) || res.length === 0) {
                             return 
@@ -143,7 +143,7 @@
                         var aggregateHigh = 0;
                         var aggregateLow = 0;
                         for (let i = 0; i < res.length; i++) {
-                            if(res[i].size < 100) {continue;}
+                            if(res[i].size <= 100) {continue;}
                             if(aggregateOpen == 0) {
                                 aggregateOpen = res[i].price;
                             }
@@ -154,8 +154,9 @@
                             }
                             aggregateClose = res[i].price
                         }
-                        newCandleData.push({time: UTCSecondstoESTSeconds(newTime / 1000) as UTCTimestamp, open: aggregateOpen, high: aggregateHigh, low: aggregateLow, close: aggregateClose});
-                        newVolumeData.push({time:UTCSecondstoESTSeconds(newTime/1000) as UTCTimestamp, value: res.reduce((acc, trade) => acc + trade.size, 0), color: aggregateClose > aggregateOpen ? '#089981' : '#ef5350',});
+                        newCandleData.push({time: UTCtoEST(newTime / 1000) as UTCTimestamp, open: aggregateOpen, high: aggregateHigh, low: aggregateLow, close: aggregateClose});
+                        newVolumeData.push({time:UTCtoEST(newTime/1000) as UTCTimestamp, value: res.reduce((acc, trade) => acc + trade.size, 0), color: aggregateClose > aggregateOpen ? '#089981' : '#ef5350',});
+                        */
                         queuedLoad = () => {
                         if (inst.direction == "forward") {
                             const visibleRange = chart.timeScale().getVisibleRange()
@@ -167,7 +168,6 @@
                         }else if (inst.direction == "backward"){
                             chartCandleSeries.setData(newCandleData);
                             chartVolumeSeries.setData(newVolumeData);
-                            console.log("DONE")
                         }
                         queuedLoad = null
                         sma10Series.setData(calculateSMA(newCandleData, 10));
@@ -192,8 +192,16 @@
                         || inst.requestType == "forward" && !isPanning){
                             queuedLoad()
                         }
-                    });
+                    //});
                 }
+                /*else if(get(replayInfo).status == "active" || get(replayInfo).status == "paused") {
+                    var timestamp = get(currentTimestamp)
+                    var referenceStartTime = getReferenceStartTimeForDateMilliseconds(timestamp, inst.extendedHours) // this is in milliseconds 
+                    var timediff = (timestamp - referenceStartTime)/1000 // this is in seconds
+                    var flooredDifference = Math.floor(timediff/chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds
+                    var newTime = referenceStartTime + flooredDifference*1000
+
+                }*/
                 else { // REQUEST IS NOT FOR REAL TIME DATA // IT IS FOR BACK/FRONT LOAD or something else like replay 
                     //console.log("testing", chartCandleSeries.data()[chartCandleSeries.data().length-1].time)
                     queuedLoad = () => {
@@ -279,10 +287,9 @@
                 }
             }
             if(data.conditions == null || !data.conditions.some(condition => tradeConditionsToCheckVolume.has(condition))) {
-                const size = get(settings).dolvol ? data.size * data.price : data.size
                 chartVolumeSeries.update({
                     time: mostRecentBar.time, 
-                    value: chartVolumeSeries.data()[chartVolumeSeries.data().length-1].value + size,
+                    value: chartVolumeSeries.data()[chartVolumeSeries.data().length-1].value + data.size,
                     color: mostRecentBar.close > mostRecentBar.open ? '#089981' : '#ef5350'
                 }) 
             }
@@ -296,7 +303,6 @@
             var flooredDifference = Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds 
             console.log("Attempted Timestamp", referenceStartTime, flooredDifference, (referenceStartTime/1000 + flooredDifference))
             var newTime = UTCSecondstoESTSeconds((referenceStartTime/1000 + flooredDifference)) as UTCTimestamp
-            const size = get(settings).dolvol ? data.size * data.price : data.size
             chartCandleSeries.update({
                 time: newTime,
                 open: data.price, 
@@ -306,7 +312,7 @@
             })
             chartVolumeSeries.update({
                 time: newTime, 
-                value: size,
+                value: data.size
             })
         }
         await new Promise(resolve => setTimeout(resolve, 3000));
@@ -326,7 +332,6 @@
             var currentCandleData = chartCandleSeries.data()
             for(var c = currentCandleData.length-1; c > 0; c--) {
                 if (currentCandleData[c].time == UTCSecondstoESTSeconds(bar.time)) {
-                    const size = get(settings).dolvol ? bar.volume * bar.close : bar.volume
                     currentCandleData[c] = {
                         time: UTCSecondstoESTSeconds(bar.time) as UTCTimestamp,
                         open: bar.open,
