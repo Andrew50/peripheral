@@ -11,6 +11,7 @@ export let flagWatchlistId: number | undefined;
 export let entryOpen = writable(false)
 export let flagWatchlist: Writable<Instance[]>
 export let replayInfo = writable<ReplayInfo>({status:"inactive",startTimestamp:0, replaySpeed:1,})
+let systemClockOffset = 0;
 export interface ReplayInfo {
     status: "inactive" | "active" | "paused",
     startTimestamp: number,
@@ -40,15 +41,12 @@ export function initStores(){
         })
         setups.set(v);
     })
-
     function loadFlagWatchlist(){
         privateRequest<Instance[]>("getWatchlistItems",{watchlistId:flagWatchlistId})
         .then((v:Instance[])=>{
             flagWatchlist = writable(v)
         })
     }
-
-
     privateRequest<Watchlist[]>("getWatchlists",{})
     .then((list:Watchlist[])=>{
         watchlists.set(list)
@@ -62,10 +60,7 @@ export function initStores(){
             flagWatchlistId = flagWatch.watchlistId
         }
         loadFlagWatchlist()
-
     })
-
-
     currentTimestamp.subscribe((newTimestamp: number ) => {
         if (prevTimestamp !== null) {
             const prevDay = new Date(prevTimestamp).setHours(0, 0, 0, 0);
@@ -76,6 +71,24 @@ export function initStores(){
         }
         prevTimestamp = newTimestamp;
     });
+    async function getSystemClockOffset() {
+        try {
+            const response = await fetch('http://worldtimeapi.org/api/ip');
+            if (!response.ok) {
+                throw new Error('Failed to fetch time data');
+            }
+            const data = await response.json();
+            const serverTime = new Date(data.utc_datetime).getTime(); // Server time in milliseconds
+            const localTime = Date.now();
+
+            // Calculate the offset
+            systemClockOffset = serverTime - localTime;
+            console.log(`System clock offset: ${systemClockOffset} ms`);
+        } catch (error) {
+            console.error('Error fetching system time:', error);
+        }
+    }
+    getSystemClockOffset()
 }
 
 
@@ -87,7 +100,7 @@ export function updateTime() {
         currentTimestamp.set(replayStream.simulatedTime);
     }
     else {
-        currentTimestamp.set(Date.now()); 
+        currentTimestamp.set(Date.now() + systemClockOffset); 
     }
 }
 

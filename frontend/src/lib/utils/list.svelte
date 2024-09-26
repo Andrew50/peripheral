@@ -47,17 +47,19 @@
   function moveDown() {
     if (selectedRowIndex < $list.length - 1) {
       selectedRowIndex++;
-      scrollToRow(selectedRowIndex);
+    }else{
+        selectedRowIndex = 0
     }
+  scrollToRow(selectedRowIndex);
   }
   function moveUp() {
     if (selectedRowIndex > 0) {
       selectedRowIndex--;
     }else{
-        selectedRowIndex = 0
+        selectedRowIndex = $list.length - 1
     }
     scrollToRow(selectedRowIndex);
-    }
+}
 
   function scrollToRow(index: number) {
     const row = document.getElementById(`row-${index}`);
