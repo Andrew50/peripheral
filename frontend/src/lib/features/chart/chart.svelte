@@ -2,6 +2,7 @@
 <script lang="ts">
     import Legend from './legend.svelte'
     import Shift from './shift.svelte'
+    import Countdown from './countdown.svelte'
     import {privateRequest} from '$lib/core/backend';
     import type {Instance, TradeData,QuoteData} from '$lib/core/types'
     import {setActiveChart,chartQuery, changeChart,selectedChartId} from './interface'
@@ -21,6 +22,7 @@
     import type {TimeEvent} from '$lib/core/stores'
     let bidLine: any
     let askLine: any
+    let currentBarTimestamp: number;
     let chartCandleSeries: ISeriesApi<"Candlestick", Time, WhitespaceData<Time> | CandlestickData<Time>, CandlestickSeriesOptions, DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>>
     let chartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
     let sma10Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
@@ -48,8 +50,6 @@
     let release = () => {}
     let releaseQuote = () => {}
     let unsubscribeQuote = () => {}
-    let touchStartX: number;
-    let touchStartY: number;
     let currentChartInstance: Instance = {ticker:"",timestamp:0,timeframe:""}
     let blockingChartRequest = {}
     let isPanning = false
@@ -57,6 +57,11 @@
     const tradeConditionsToCheckVolume = new Set([15, 16, 38])
 
     function backendLoadChartData(inst:ChartRequest): void{
+        if (inst.requestType === "loadNewTicker"){
+            bidLine.setData([])
+            askLine.setData([])
+        }
+
         if (isLoadingChartData ||!inst.ticker || !inst.timeframe || !inst.securityId) { return; }
         isLoadingChartData = true;
         lastChartRequestTime = Date.now()
@@ -105,13 +110,21 @@
                 } else if(inst.requestType === 'loadNewTicker') {
                     const lastBar = newCandleData[newCandleData.length - 1]
                     //bidLine.setData([{time:lastBar.time,value:lastBar.close}])
-                    bidLine.setData([])
-                    askLine.setData([])
                     if(inst.includeLastBar == false) {
                         // cuts off the last bar 
                         newCandleData = newCandleData.slice(0, newCandleData.length-1)
                         newVolumeData = newVolumeData.slice(0, newVolumeData.length-1)
                     }
+                    const [priceStore, r] = getStream<TradeData[]>(inst, 'fast')
+                    release = r
+                    unsubscribe = priceStore.subscribe((v:TradeData[]) => {
+                        updateLatestChartBar(v)
+                    })
+                    const [quoteStore, rq] = getStream<QuoteData[]>(inst, 'quote')
+                    releaseQuote = rq
+                    unsubscribeQuote = quoteStore.subscribe((v:QuoteData[]) => {
+                        updateLatestQuote(v)
+                    })
                 }
                 // Check if we reach end of avaliable data 
                 if (inst.timestamp == 0) {
@@ -266,8 +279,9 @@
     
     function updateLatestQuote(quotes:QuoteData[]) {
         const data = quotes[quotes.length-1]
-        if(isLoadingChartData) {return}
-        if (!data.bidPrice || !data.askPrice){return}
+        console.log(data)
+        //if(isLoadingChartData) {return}
+        if (!data?.bidPrice || !data?.askPrice){return}
         const candle = chartCandleSeries.data()[chartCandleSeries.data().length - 1]
         if (!candle)return;
         const time = candle.time
@@ -295,8 +309,9 @@
         const consolidatedTrade = {timestamp:null,price:0,size:0}
         const consolidatedTrade2 = {timestamp:null,price:0,size:0}
         var mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
+        currentBarTimestamp = mostRecentBar.time as number
         trades.forEach((data:TradeData)=>{
-            if (UTCSecondstoESTSeconds(data.timestamp/1000) < (mostRecentBar.time as number) + chartTimeframeInSeconds) {
+            if (UTCSecondstoESTSeconds(data.timestamp/1000) < (currentBarTimestamp) + chartTimeframeInSeconds) {
                 updateConsolidation(consolidatedTrade,data)
             }else{
                 updateConsolidation(consolidatedTrade2,data)
@@ -541,8 +556,8 @@
             let chg = 0;
             let chgprct = 0
             if (cursorBarIndex > 0){
-                chg = bar.close - allCandleData[cursorBarIndex - 1].close 
-                chgprct = (bar.close/allCandleData[cursorBarIndex -1].close - 1)*100
+                chg = bar.close - allCandleData[cursorBarIndex - 2].close 
+                chgprct = (bar.close/allCandleData[cursorBarIndex -2].close - 1)*100
             }
             hoveredCandleData.set({ open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: volume, adr:calculateSingleADR(barsForADR), chg:chg, chgprct:chgprct,rvol:0})
             if (/^\d+$/.test(currentChartInstance.timeframe)) {
@@ -612,16 +627,6 @@
                     chart.applyOptions({timeScale: {timeVisible: false}});
             }else { chart.applyOptions({timeScale: {timeVisible: true}}); }
             backendLoadChartData(req)
-            const [priceStore, r] = getStream<TradeData[]>(req, 'fast')
-            release = r
-            unsubscribe = priceStore.subscribe((v:TradeData[]) => {
-                updateLatestChartBar(v)
-            })
-            const [quoteStore, rq] = getStream<QuoteData[]>(req, 'quote')
-            releaseQuote = rq
-            unsubscribeQuote = quoteStore.subscribe((v:QuoteData[]) => {
-                updateLatestQuote(v)
-            })
         }
        chartQuery.subscribe((req:ChartRequest)=>{
            change(req)
@@ -646,6 +651,7 @@
 <div autofocus class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
 <Legend instance={currentChartInstance} hoveredCandleData={hoveredCandleData} />
 <Shift shiftOverlay={shiftOverlay}/>
+<Countdown instance={currentChartInstance} currentBarTimestamp={currentBarTimestamp}/>
 </div>
 <style>
 .chart {

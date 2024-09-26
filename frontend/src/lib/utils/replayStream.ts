@@ -22,7 +22,7 @@ export class ReplayStream implements Stream {
 
     private timeoutID: number | null = null;
     public subscribe(channelName: string) {
-        this.tickMap.set(channelName,{reqInbound:false,ticks:[]})
+        this.tickMap.set(channelName,{reqInbound:false,lastUpdateTime:0,ticks:[]})
     }
     public unsubscribe(channelName: string) {
         this.tickMap.delete(channelName)
@@ -52,13 +52,13 @@ export class ReplayStream implements Stream {
             return r
         })
         const currentTime = Date.now();
+        const elapsedTime = currentTime - this.startTime - this.accumulatedPauseTime;
+        this.simulatedTime = this.initialTimestamp + elapsedTime * this.playbackSpeed;
         for (let [channel,v] of this.tickMap.entries()){
-            const elapsedTime = currentTime - this.startTime - this.accumulatedPauseTime;
-            this.simulatedTime = this.initialTimestamp + elapsedTime * this.playbackSpeed;
             const latestTime = v.ticks[v.ticks.length-1]?.timestamp
+            const [securityId, type] = channel.split("-")
             if (!v.reqInbound && (!latestTime || latestTime < this.simulatedTime + this.buffer)){
                 v.reqInbound = true  
-                const [securityId, type] = channel.split("-")
                 let req;
                 if (type === "quote"){
                      req = "getQuoteData"
@@ -82,8 +82,15 @@ export class ReplayStream implements Stream {
                 while (i < v.ticks.length && v.ticks[i].timestamp <= this.simulatedTime) {
                     i ++ 
                 }
-                if (!onCooldown && i > 0){
-                    activeChannels.get(channel)?.store.set(v.ticks.splice(0,i))
+                if ( i > 0){
+                    if (type === "slow"){
+                         if (v.lastUpdateTime < this.simulatedTime  ){
+                            activeChannels.get(channel)?.store.set(v.ticks.splice(0,i))
+                            v.lastUpdateTime = 1000 + this.simulatedTime
+                         }
+                     }else {
+                        activeChannels.get(channel)?.store.set(v.ticks.splice(0,i))
+                    }
                 }
             }
         }
