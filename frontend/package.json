@@ -33,6 +33,7 @@
 	},
 	"type": "module",
 	"dependencies": {
+		"collections": "^5.1.13",
 		"date-fns": "^3.6.0",
 		"lightweight-charts": "^4.2.0",
 		"luxon": "^3.5.0",

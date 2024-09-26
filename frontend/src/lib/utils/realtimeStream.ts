@@ -44,7 +44,7 @@ export class RealtimeStream implements Stream{
             if (channelName) {
                 const store = this.streamNameToStore.get(channelName)
                 if (store) {
-                    store.set(data);
+                    store.set([data]);
                 } 
             }
         });

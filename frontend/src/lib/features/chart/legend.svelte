@@ -3,15 +3,16 @@
     export let hoveredCandleData;
     import type {Instance} from '$lib/core/types'
     import {changeChart} from './interface'
+    import {writable} from 'svelte/store'
     export let instance: Instance
     import {queryInstanceInput} from '$lib/utils/input.svelte'
     import {settings} from '$lib/core/stores'
     function handleClick(event:MouseEvent |TouchEvent){
+        event.preventDefault()
         queryInstanceInput("any",instance)
         .then((v:Instance)=>{
             changeChart(instance)
         })
-
     }
     function formatVolume(volume: number,dolvol:boolean): string {
         let vol
@@ -40,10 +41,11 @@
         H: {$hoveredCandleData.high.toFixed(2)}
         L: {$hoveredCandleData.low.toFixed(2)}
         C: {$hoveredCandleData.close.toFixed(2)}
-        AR: {$hoveredCandleData.adr?.toFixed(2)}
         CHG: {$hoveredCandleData.chg.toFixed(2)}
         ({$hoveredCandleData.chgprct.toFixed(2)}%)
         V: {formatVolume($hoveredCandleData.volume, $settings.dolvol) }
+        AR: {$hoveredCandleData.adr?.toFixed(2)}
+        RVOL: {$hoveredCandleData.rvol?.toFixed(2)}
     </div>
 </div>
 <style>
