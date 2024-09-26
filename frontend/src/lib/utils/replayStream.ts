@@ -208,10 +208,9 @@ export class ReplayStream implements Stream {
         // Pause the replay
         this.pause();
         const currentTime = Date.now();
-        const currentSimulatedTime = this.simulatedTime;
     
         // Create a DateTime object in UTC
-        let dateTime = DateTime.fromMillis(currentSimulatedTime, { zone: 'UTC' });
+        let dateTime = DateTime.fromMillis(this.simulatedTime, { zone: 'UTC' });
     
         // Convert to America/New_York time zone
         dateTime = dateTime.setZone('America/New_York');
@@ -224,17 +223,14 @@ export class ReplayStream implements Stream {
             dateTime = dateTime.plus({ days: 1 });
         }
     
-        // Set the time to 4 am
+        // Set the time to 4:00 AM
         dateTime = dateTime.set({ hour: 4, minute: 0, second: 0, millisecond: 0 });
     
         // Convert back to UTC
         const newSimulatedTime = dateTime.toUTC().toMillis();
     
-        // Adjust initialTimestamp
-        const elapsedTime = currentTime - this.startTime - this.accumulatedPauseTime;
-        this.initialTimestamp = newSimulatedTime - elapsedTime * this.playbackSpeed;
-    
-        // Adjust startTime
+        // Adjust initialTimestamp and startTime
+        this.initialTimestamp = newSimulatedTime;
         this.startTime = currentTime - this.accumulatedPauseTime;
     
         // Clear tickMap and reset
@@ -248,7 +244,9 @@ export class ReplayStream implements Stream {
             r.startTimestamp = this.initialTimestamp;
             return r;
         });
-        currentTimestamp.set(newSimulatedTime)
+    
+        currentTimestamp.set(newSimulatedTime);
+    
         // Notify timeEvent
         timeEvent.update((v: TimeEvent) => {
             v.event = "replay";
@@ -258,5 +256,6 @@ export class ReplayStream implements Stream {
         // Resume the replay
         this.resume();
     }
+    
 }
 

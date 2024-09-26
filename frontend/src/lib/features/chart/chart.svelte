@@ -140,10 +140,76 @@
                 // Handling the aggregation of the most recent candle 
                 if(inst.timestamp == 0) { // IF REAL TIME DATA 
 
-                    var referenceStartTime = getReferenceStartTimeForDateMilliseconds(newCandleData[newCandleData.length-1].time*1000, inst.extendedHours) // this is in milliseconds 
-                    var timediff = (Date.now() - referenceStartTime)/1000 // this is in seconds
-                    var flooredDifference = Math.floor(timediff/chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds
-                    var newTime = referenceStartTime + flooredDifference*1000
+                    // var referenceStartTime = getReferenceStartTimeForDateMilliseconds(newCandleData[newCandleData.length-1].time*1000, inst.extendedHours) // this is in milliseconds 
+                    // var timediff = (Date.now() - referenceStartTime)/1000 // this is in seconds
+                    // var flooredDifference = Math.floor(timediff/chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds
+                    // var newTime = referenceStartTime + flooredDifference*1000
+
+                    var referenceStartTime: number; 
+                    var aggregateOpen: number;
+                    var aggregateHigh: number;
+                    var aggregateLow: number;
+                    var aggregateClose: number; 
+                    if(inst.timeframe?.includes('m')) {
+                        
+                        if(Date.now() - ESTSecondstoUTCMillis(newCandleData[newCandleData.length-1].time) > parseInt(inst.timeframe)*2678400000) {
+                            const d = new Date(ESTSecondstoUTCMillis(newCandleData[newCandleData.length-1].time));
+                            referenceStartTime = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+                            privateRequest<BarData[]>("getChartData", {
+                                securityId:inst.securityId, 
+                                timeframe:"1d", 
+                                timestamp:referenceStartTime, 
+                                direction:inst.direction, 
+                                bars:31,
+                                extendedhours:inst.extendedHours, 
+                                isreplay: (get(replayInfo).status == "active" || get(replayInfo).status == "paused") ? true : false,})
+                                .then((barDataL: BarData[]) => {       
+                                    aggregateOpen = barDataL[0].open;
+
+                                    // Initialize aggregateHigh and aggregateLow with the first bar's values
+                                    aggregateHigh = barDataL[0].high;
+                                    aggregateLow = barDataL[0].low;
+
+                                    // Iterate over the barDataL array to find the highest high and lowest low
+                                    for (let i = 1; i < barDataL.length; i++) {
+                                        if (barDataL[i].high > aggregateHigh) {
+                                            aggregateHigh = barDataL[i].high;
+                                        }
+                                        if (barDataL[i].low < aggregateLow) {
+                                            aggregateLow = barDataL[i].low;
+                                        }
+                                    }
+
+                                    // Optionally, set aggregateClose to the close of the last bar
+                                    aggregateClose = barDataL[barDataL.length - 1].close;
+                                });
+                        } else {
+                            referenceStartTime = newCandleData[newCandleData.length-1].time
+                            aggregateOpen = newCandleData[newCandleData.length-1].open 
+                            aggregateHigh =  newCandleData[newCandleData.length-1].high
+                            aggregateLow =  newCandleData[newCandleData.length-1].low
+                        }
+                    }
+                    else if(inst.timeframe?.includes('w')) {
+                        if(Date.now() - ESTSecondstoUTCMillis(newCandleData[newCandleData.length-1].time) > parseInt(inst.timeframe)*604800) {
+                            //const d = new Date(ESTSecondstoUTCMillis())
+                        } else {
+                            referenceStartTime = newCandleData[newCandleData.length-1].time 
+                            aggregateOpen = newCandleData[newCandleData.length-1].open 
+                            aggregateHigh =  newCandleData[newCandleData.length-1].high
+                            aggregateLow =  newCandleData[newCandleData.length-1].low
+
+                        }
+                    }
+                    else if(inst.timeframe?.includes('h')) {
+
+                    }
+                    else if(inst.timeframe?.includes('s')) {
+
+                    }
+                    else { // minute data 
+
+                    }
                    /* privateRequest<TradeData[]>("getTradeData", {securityId: inst.securityId, time: newTime, lengthOfTime: chartTimeframeInSeconds, extendedHours: inst.extendedHours})
                   .then((res:Array<any>)=> {
                         if (!Array.isArray(res) || res.length === 0) {
@@ -633,7 +699,7 @@
             chartSecurityId = req.securityId;
             chartTimeframe = req.timeframe;
             currentChartInstance = {...req}
-            chartTimeframeInSeconds = timeframeToSeconds(req.timeframe);
+            chartTimeframeInSeconds = timeframeToSeconds(req.timeframe, (req.timestamp == 0 ? Date.now() : req.timestamp) as number);
             chartExtendedHours = req.extendedHours;
             if (req.timeframe?.includes('m') || req.timeframe?.includes('w') || 
                     req.timeframe?.includes('d') || req.timeframe?.includes('q')){
