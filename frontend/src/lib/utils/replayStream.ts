@@ -2,8 +2,6 @@
 import { privateRequest } from '$lib/core/backend';
 import { activeChannels } from '$lib/utils/stream';
 import type { Stream } from '$lib/utils/stream';
-import {replayInfo} from '$lib/core/stores';
-import type{ReplayInfo} from '$lib/core/stores';
 import {currentTimestamp, replayInfo, timeEvent} from '$lib/core/stores';
 import type{ReplayInfo, TimeEvent} from '$lib/core/stores';
 import {DateTime} from 'luxon';
