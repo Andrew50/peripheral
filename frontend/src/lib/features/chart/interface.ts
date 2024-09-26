@@ -44,7 +44,7 @@ export function changeChart(newInstance : Instance, includeLast : boolean = true
         const req: ChartRequest = {
 ///            ...oldInstance,
             ...newInstance,
-            bars: 400,
+            bars: 600,
             direction: "backward",
             requestType: "loadNewTicker",
             includeLastBar: includeLast,
