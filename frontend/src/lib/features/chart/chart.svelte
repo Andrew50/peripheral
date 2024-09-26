@@ -197,6 +197,14 @@
                         }
                     //});
                 }
+                /*else if(get(replayInfo).status == "active" || get(replayInfo).status == "paused") {
+                    var timestamp = get(currentTimestamp)
+                    var referenceStartTime = getReferenceStartTimeForDateMilliseconds(timestamp, inst.extendedHours) // this is in milliseconds 
+                    var timediff = (timestamp - referenceStartTime)/1000 // this is in seconds
+                    var flooredDifference = Math.floor(timediff/chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds
+                    var newTime = referenceStartTime + flooredDifference*1000
+
+                }*/
                 else { // REQUEST IS NOT FOR REAL TIME DATA // IT IS FOR BACK/FRONT LOAD or something else like replay 
                     queuedLoad = () => {
                         if (inst.direction == "forward") {
@@ -317,7 +325,6 @@
             var flooredDifference = Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds 
             console.log("Attempted Timestamp", referenceStartTime, flooredDifference, (referenceStartTime/1000 + flooredDifference))
             var newTime = UTCSecondstoESTSeconds((referenceStartTime/1000 + flooredDifference)) as UTCTimestamp
-            const size = get(settings).dolvol ? data.size * data.price : data.size
             chartCandleSeries.update({
                 time: newTime,
                 open: data.price, 
@@ -327,7 +334,7 @@
             })
             chartVolumeSeries.update({
                 time: newTime, 
-                value: size,
+                value: data.size
             })
         } else{
             return 
@@ -349,7 +356,6 @@
             var currentCandleData = chartCandleSeries.data()
             for(var c = currentCandleData.length-1; c > 0; c--) {
                 if (currentCandleData[c].time == UTCSecondstoESTSeconds(bar.time)) {
-                    const size = get(settings).dolvol ? bar.volume * bar.close : bar.volume
                     currentCandleData[c] = {
                         time: UTCSecondstoESTSeconds(bar.time) as UTCTimestamp,
                         open: bar.open,
