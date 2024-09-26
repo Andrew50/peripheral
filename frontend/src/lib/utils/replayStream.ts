@@ -1,15 +1,9 @@
+//replayStream.ts
 import { privateRequest } from '$lib/core/backend';
 import { activeChannels } from '$lib/utils/stream';
 import type { Stream } from '$lib/utils/stream';
 import {replayInfo} from '$lib/core/stores';
 import type{ReplayInfo} from '$lib/core/stores';
-import { getReferenceStartTimeForDateMilliseconds, isOutsideMarketHours } from '$lib/core/timestamp';
-import { chartQuery } from '$lib/features/chart/interface';
-import type {Writable} from 'svelte/store';
-import { ESTSecondstoUTCMillis } from '$lib/core/timestamp';
-import {writable, get} from 'svelte/store';
-
-
 
 export class ReplayStream implements Stream {
     public replayStatus: boolean = false;
@@ -17,13 +11,13 @@ export class ReplayStream implements Stream {
     private playbackSpeed = 1;
     private baseBuffer = 10000 // milliseconds
     private buffer = this.baseBuffer;
-    private loopCooldown = 20;
+    private loopCooldown = 100;
     public isPaused: boolean = false;
     private accumulatedPauseTime: number = 0;
     private pauseStartTime: number = 0;
     private startTime: number = 0; // milliseconds
     private initialTimestamp: number = 0;
-    private tickMap: Map<string,{reqInbound:boolean,ticks:Array<any>}> = new Map()
+    private tickMap: Map<string,{reqInbound:boolean,lastUpdateTime:number,ticks:Array<any>}> = new Map()
 
     private timeoutID: number | null = null;
     public subscribe(channelName: string) {
@@ -64,7 +58,6 @@ export class ReplayStream implements Stream {
             if (!v.reqInbound && (!latestTime || latestTime < this.simulatedTime + this.buffer)){
                 v.reqInbound = true
                 const [securityId, type] = channel.split("-")
-                //console.log(securityId)
                 let req;
                 if (type === "quote"){
                      req = "getQuoteData"
@@ -75,7 +68,7 @@ export class ReplayStream implements Stream {
                     securityId: parseInt(securityId),
                     time: latestTime ?? Math.floor(this.simulatedTime),
                     lengthOfTime: this.buffer,
-                    extendedHours: get(chartQuery).extendedHours
+                    extendedHours: false
                 },false).then((n:Array<any>)=>{
                     if(Array.isArray(n)){
                         this.tickMap.get(channel).ticks.push(...n)
@@ -85,13 +78,12 @@ export class ReplayStream implements Stream {
             }
             if (v.ticks.length > 0){
                 let i = 0
-                const store = activeChannels.get(channel)?.store
                 while (i < v.ticks.length && v.ticks[i].timestamp <= this.simulatedTime) {
-                    store?.set(v.ticks[i])
                     i ++ 
                 }
-                v.ticks.splice(0,i)
-                //this.tickMap.set(channel,this.tickMap.get(channel).slice(i));
+                if (!onCooldown && i > 0){
+                    activeChannels.get(channel)?.store.set(v.ticks.splice(0,i))
+                }
             }
         }
         if (this.replayStatus && !this.isPaused){

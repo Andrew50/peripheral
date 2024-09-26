@@ -104,7 +104,7 @@ func (c *Client) readPump(conn *Conn) {
 			fmt.Println("Invalid message format", err)
 			continue
 		}
-		fmt.Printf("message receieved %s\n", clientMsg)
+		//fmt.Printf("message receieved %s\n", clientMsg)
 		os.Stdout.Sync()
 		switch clientMsg.Action {
 		case "subscribe":

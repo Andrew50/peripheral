@@ -40,31 +40,36 @@
         releaseTrade();
         unsubscribeQuote();
         releaseQuote();
-        const [s, r] = getStream<TradeData>(instance, "fast");
+        const [s, r] = getStream<TradeData[]>(instance, "fast");
         store = s;
         releaseTrade = r;
-        const [qs, qr] = getStream<QuoteData>(instance,"quote");
+        const [qs, qr] = getStream<QuoteData[]>(instance,"quote");
         quoteStore = qs;
         releaseQuote = qr;
         allTrades = []
-        unsubscribeTrade = store.subscribe((newTrade: TradeData) => {
-            if (newTrade.timestamp !== undefined && newTrade.timestamp !== 0) {
-                if(!filterTaS){
-                    if (newTrade.size < 100) return;
+        unsubscribeTrade = store.subscribe((newTrades: TradeData[]) => {
+            allTrades = allTrades.slice(0, maxLength);
+            const modifiedTrades: TaS[] = [];
+            if (!Array.isArray(newTrades)){return}
+            newTrades.forEach((newTrade) => {
+                if (newTrade.timestamp === undefined || newTrade.timestamp === 0) {
+                    return; // Skip invalid trades
                 }
-
-                if (divideTaS){
-                    newTrade.size = Math.floor(newTrade.size / 100)
+                if (!filterTaS && newTrade.size < 100) {
+                    return;
                 }
-                //console.log(newTrade)
-                const exchangeName = exchanges[newTrade.exchange]
-                const newRow: TaS = {color:getPriceColor(newTrade.price),...newTrade,exchangeName:exchangeName}
-                allTrades = [newRow,...allTrades].slice(0,maxLength);
-            }
+                if (divideTaS) {
+                    newTrade.size = Math.floor(newTrade.size / 100);
+                }
+                const exchangeName = exchanges[newTrade.exchange];
+                const newRow: TaS = { color: getPriceColor(newTrade.price), ...newTrade, exchangeName };
+                modifiedTrades.push(newRow);
+            });
+            allTrades = [...modifiedTrades, ...allTrades].slice(0, maxLength);
         });
-        unsubscribeQuote = quoteStore.subscribe((quote) => {
-            currentBid = quote.bidPrice;
-            currentAsk = quote.askPrice;
+        unsubscribeQuote = quoteStore.subscribe((quotes:QuoteData[]) => {
+            currentBid = quotes[quotes.length-1].bidPrice;
+            currentAsk = quotes[quotes.length-1].askPrice;
         });
         prevSecId = instance.securityId ?? -1
     });

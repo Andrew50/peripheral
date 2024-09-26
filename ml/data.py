@@ -36,7 +36,7 @@ async def get_instance_data(session, args):
     apiKey, ticker, dt, tf, label,bars, currentPrice, pm = [args["polygonKey"],
     args["ticker"],args["dt"],args["tf"],args["label"],args["bars"], args["currentPrice"],args["pm"]]
     if dt == 0:
-        end_time = datetime.datetime.now() - datetime.timedelta(days=1)
+        end_time = datetime.datetime.now() #- datetime.timedelta(days=1)
     else:
         end_time = dt
     multiplier, timespan = get_timeframe(tf)
@@ -85,6 +85,8 @@ async def get_instance_data(session, args):
 
 
 
+        if ticker == "SGH":
+            print(data_array)
 
         if dt == 0: #current
             if currentPrice is not None and currentPrice != 0:
@@ -93,8 +95,8 @@ async def get_instance_data(session, args):
                 data_array[-1,:] = data_array[-2, 0]
         else: #historical
             data_array[-1,:] = data_array[-1, 0]
-        #if ticker == "EWTX":
-            #print(data_array)
+        if ticker == "SGH":
+            print(data_array)
         data_array = normalize(data_array)
         return data_array, label
 

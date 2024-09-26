@@ -41,7 +41,7 @@ export function releaseStream(channelName:string) {
     }
 }
 
-export function getStream<T extends TradeData|QuoteData|number>(instance:Instance,channelType:ChannelType): [Writable<T>,Function]{
+export function getStream<T extends TradeData[]|QuoteData[]|number>(instance:Instance,channelType:ChannelType): [Writable<T>,Function]{
     if (!instance.securityId) return [writable(),()=>{}];
     if (channelType == "close"){
         const s = writable(0) as Writable<T>

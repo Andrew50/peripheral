@@ -11,7 +11,7 @@
     import { queryInstanceRightClick } from '$lib/utils/rightClick.svelte'
     import { createChart, ColorType,CrosshairMode} from 'lightweight-charts';
     import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, UTCTimestamp,HistogramStyleOptions, HistogramData, HistogramSeriesOptions} from 'lightweight-charts';
-    import {calculateSMA,calculateSingleADR} from './indicators'
+    import {calculateRVOL,calculateSMA,calculateSingleADR,calculateVWAP} from './indicators'
     import type {Writable} from 'svelte/store';
     import {writable, get} from 'svelte/store';
     import { onMount  } from 'svelte';
@@ -25,6 +25,7 @@
     let chartVolumeSeries: ISeriesApi<"Histogram", Time, WhitespaceData<Time> | HistogramData<Time>, HistogramSeriesOptions, DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>>;
     let sma10Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
     let sma20Series: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
+    let vwapSeries: ISeriesApi<"Line", Time, WhitespaceData<Time> | { time: UTCTimestamp, value: number }, any, any>;
     let chart: IChartApi;
     let latestCrosshairPositionTime: number;
     let chartEarliestDataReached = false;
@@ -34,7 +35,7 @@
     let queuedLoad: Function | null = null
     let shiftDown = false
     const chartRequestThrottleDuration = 150; 
-    const defaultHoveredCandleData = { open: 0, high: 0, low: 0, close: 0, volume: 0, adr:0, chg: 0, chgprct: 0}
+    const defaultHoveredCandleData = { rvol:0,open: 0, high: 0, low: 0, close: 0, volume: 0, adr:0, chg: 0, chgprct: 0}
     const hoveredCandleData = writable(defaultHoveredCandleData)
     const shiftOverlay: Writable<ShiftOverlay> = writable({ x: 0, y: 0, startX: 0, startY: 0, width: 0, height: 0, isActive: false, startPrice: 0, currentPrice: 0, })
     export let chartId: number;
@@ -56,7 +57,6 @@
     const tradeConditionsToCheckVolume = new Set([15, 16, 38])
 
     function backendLoadChartData(inst:ChartRequest): void{
-        console.log("request")
         if (isLoadingChartData ||!inst.ticker || !inst.timeframe || !inst.securityId) { return; }
         isLoadingChartData = true;
         lastChartRequestTime = Date.now()
@@ -114,11 +114,9 @@
                     }
                 }
                 // Check if we reach end of avaliable data 
-                console.log("result diff: ",barDataList.length, inst.bars)
                 if (inst.timestamp == 0) {
                     chartLatestDataReached = true;
                 }else if (barDataList.length < inst.bars) {
-                    console.log("hit")
 
                     if(inst.direction == 'backward') {
                         chartEarliestDataReached = true;
@@ -133,7 +131,7 @@
                     var timediff = (Date.now() - referenceStartTime)/1000 // this is in seconds
                     var flooredDifference = Math.floor(timediff/chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds
                     var newTime = referenceStartTime + flooredDifference*1000
-                    privateRequest<TradeData[]>("getTradeData", {securityId: inst.securityId, time: newTime, lengthOfTime: chartTimeframeInSeconds, extendedHours: inst.extendedHours})
+                   /* privateRequest<TradeData[]>("getTradeData", {securityId: inst.securityId, time: newTime, lengthOfTime: chartTimeframeInSeconds, extendedHours: inst.extendedHours})
                   .then((res:Array<any>)=> {
                         if (!Array.isArray(res) || res.length === 0) {
                             return 
@@ -143,7 +141,7 @@
                         var aggregateHigh = 0;
                         var aggregateLow = 0;
                         for (let i = 0; i < res.length; i++) {
-                            if(res[i].size < 100) {continue;}
+                            if(res[i].size <= 100) {continue;}
                             if(aggregateOpen == 0) {
                                 aggregateOpen = res[i].price;
                             }
@@ -154,8 +152,9 @@
                             }
                             aggregateClose = res[i].price
                         }
-                        newCandleData.push({time: UTCSecondstoESTSeconds(newTime / 1000) as UTCTimestamp, open: aggregateOpen, high: aggregateHigh, low: aggregateLow, close: aggregateClose});
-                        newVolumeData.push({time:UTCSecondstoESTSeconds(newTime/1000) as UTCTimestamp, value: res.reduce((acc, trade) => acc + trade.size, 0), color: aggregateClose > aggregateOpen ? '#089981' : '#ef5350',});
+                        newCandleData.push({time: UTCtoEST(newTime / 1000) as UTCTimestamp, open: aggregateOpen, high: aggregateHigh, low: aggregateLow, close: aggregateClose});
+                        newVolumeData.push({time:UTCtoEST(newTime/1000) as UTCTimestamp, value: res.reduce((acc, trade) => acc + trade.size, 0), color: aggregateClose > aggregateOpen ? '#089981' : '#ef5350',});
+                        */
                         queuedLoad = () => {
                         if (inst.direction == "forward") {
                             const visibleRange = chart.timeScale().getVisibleRange()
@@ -167,11 +166,15 @@
                         }else if (inst.direction == "backward"){
                             chartCandleSeries.setData(newCandleData);
                             chartVolumeSeries.setData(newVolumeData);
-                            console.log("DONE")
                         }
                         queuedLoad = null
                         sma10Series.setData(calculateSMA(newCandleData, 10));
                         sma20Series.setData(calculateSMA(newCandleData, 20));
+                        if (/^\d+$/.test(inst.timeframe)) {
+                            vwapSeries.setData(calculateVWAP(newCandleData,newVolumeData));
+                        }else{
+                            vwapSeries.setData([])
+                        }
                         if (inst.requestType == 'loadNewTicker') {
                             chart.timeScale().resetTimeScale()
                             //chart.timeScale().fitContent();
@@ -192,10 +195,9 @@
                         || inst.requestType == "forward" && !isPanning){
                             queuedLoad()
                         }
-                    });
+                    //});
                 }
                 else { // REQUEST IS NOT FOR REAL TIME DATA // IT IS FOR BACK/FRONT LOAD or something else like replay 
-                    //console.log("testing", chartCandleSeries.data()[chartCandleSeries.data().length-1].time)
                     queuedLoad = () => {
                         if (inst.direction == "forward") {
                             const visibleRange = chart.timeScale().getVisibleRange()
@@ -211,6 +213,11 @@
                         queuedLoad = null
                         sma10Series.setData(calculateSMA(newCandleData, 10));
                         sma20Series.setData(calculateSMA(newCandleData, 20));
+                        if (/^\d+$/.test(inst.timeframe)) {
+                            vwapSeries.setData(calculateVWAP(newCandleData,newVolumeData));
+                        }else{
+                            vwapSeries.setData([])
+                        }
                         if (inst.requestType == 'loadNewTicker') {
                             chart.timeScale().resetTimeScale()
                             //chart.timeScale().fitContent();
@@ -249,7 +256,8 @@
             });
     }
     
-    function updateLatestQuote(data:QuoteData) {
+    function updateLatestQuote(quotes:QuoteData[]) {
+        const data = quotes[quotes.length-1]
         if(isLoadingChartData) {return}
         if (!data.bidPrice || !data.askPrice){return}
         const candle = chartCandleSeries.data()[chartCandleSeries.data().length - 1]
@@ -262,35 +270,48 @@
             { time: time, value: data.askPrice },
         ]);
     }
-    async function updateLatestChartBar(data:TradeData) {
-        if(isLoadingChartData || !data.price || !data.size || !data.timestamp || !chartCandleSeries 
-        || chartCandleSeries.data().length == 0) {return}
-        var mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
-        if (UTCSecondstoESTSeconds(data.timestamp/1000) < (mostRecentBar.time as number) + chartTimeframeInSeconds) {
+    async function updateLatestChartBar(trades:TradeData[]) {
+        const dolvol = get(settings).dolvol
+        function updateConsolidation(consolidatedTrade:TradeData,data:TradeData){
             if(data.conditions == null || (data.size >= 100 && !data.conditions.some(condition => tradeConditionsToCheck.has(condition)))) {
-                if(!(mostRecentBar.close == data.price)) {
-                    chartCandleSeries.update({
-                        time: mostRecentBar.time, 
-                        open: mostRecentBar.open, 
-                        high: Math.max(mostRecentBar.high, data.price), 
-                        low: Math.min(mostRecentBar.low, data.price),
-                        close: data.price 
-                    })  
-                }
+                //if(!(mostRecentBar.close == data.price)) {
+                consolidatedTrade.timestamp = data.timestamp
+                consolidatedTrade.price = data.price
             }
             if(data.conditions == null || !data.conditions.some(condition => tradeConditionsToCheckVolume.has(condition))) {
-                const size = get(settings).dolvol ? data.size * data.price : data.size
-                chartVolumeSeries.update({
-                    time: mostRecentBar.time, 
-                    value: chartVolumeSeries.data()[chartVolumeSeries.data().length-1].value + size,
-                    color: mostRecentBar.close > mostRecentBar.open ? '#089981' : '#ef5350'
-                }) 
+                consolidatedTrade.size += data.size * (dolvol ? data.price : 1)
             }
-            return 
-        } 
-        // if not hourly, daily, weekly, monthly at this point; this updates when a new bar has to be created 
+        }
+        if(isLoadingChartData || !trades[0].price || !trades[0].size || !trades[0].timestamp || !chartCandleSeries 
+        || chartCandleSeries.data().length == 0) {return}
+        const consolidatedTrade = {timestamp:null,price:0,size:0}
+        const consolidatedTrade2 = {timestamp:null,price:0,size:0}
+        var mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
+        trades.forEach((data:TradeData)=>{
+            if (UTCSecondstoESTSeconds(data.timestamp/1000) < (mostRecentBar.time as number) + chartTimeframeInSeconds) {
+                updateConsolidation(consolidatedTrade,data)
+            }else{
+                updateConsolidation(consolidatedTrade2,data)
+            }
+        })
+        if (consolidatedTrade.timestamp !== null){
+            chartCandleSeries.update({
+                time: mostRecentBar.time, 
+                open: mostRecentBar.open, 
+                high: Math.max(mostRecentBar.high, consolidatedTrade.price), 
+                low: Math.min(mostRecentBar.low, consolidatedTrade.price),
+                close: consolidatedTrade.price 
+            })  
+            chartVolumeSeries.update({
+                time: mostRecentBar.time, 
+                value: chartVolumeSeries.data()[chartVolumeSeries.data().length-1].value + consolidatedTrade.size,
+                color: mostRecentBar.close > mostRecentBar.open ? '#089981' : '#ef5350'
+            }) 
+        }
+        //new bar
         var timeToRequestForUpdatingAggregate = ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
-        if(data.conditions == null || (data.size >= 100 && !data.conditions.some(condition => tradeConditionsToCheck.has(condition)))) {
+        if (consolidatedTrade2.timestamp !== null){
+            const data = consolidatedTrade2
             var referenceStartTime = getReferenceStartTimeForDateMilliseconds(data.timestamp, currentChartInstance.extendedHours) // this is in milliseconds 
             var timeDiff = (data.timestamp - referenceStartTime)/1000 // this is in seconds
             var flooredDifference = Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds 
@@ -308,6 +329,8 @@
                 time: newTime, 
                 value: size,
             })
+        } else{
+            return 
         }
         await new Promise(resolve => setTimeout(resolve, 3000));
         try {
@@ -338,7 +361,7 @@
                     var currentVolumeData = chartVolumeSeries.data()
                     currentVolumeData[c] = {
                         time: UTCSecondstoESTSeconds(bar.time) as UTCTimestamp, 
-                        value: bar.volume, 
+                        value: size, 
                         color: bar.close > bar.open ? '#089981' : '#ef5350'
                     }
                     chartVolumeSeries.setData(currentVolumeData)
@@ -471,6 +494,8 @@
         const smaOptions = { lineWidth: 1, priceLineVisible: false, lastValueVisible:false} as DeepPartial<LineWidth>
         sma10Series = chart.addLineSeries({ color: 'purple',...smaOptions});
         sma20Series = chart.addLineSeries({ color: 'blue', ...smaOptions});
+        vwapSeries = chart.addLineSeries({color:'white',...smaOptions})
+        //rvolSeries = chart.addLineSeries({color:'green',...smaOptions})
         bidLine = chart.addLineSeries({
             color: 'white',
             lineWidth: 2,
@@ -498,7 +523,7 @@
             const volume = volumeData ? volumeData.value : 0;
             const cursorTime = bar.time as number;
             const allCandleData = chartCandleSeries.data()
-            const cursorBarIndex = allCandleData.findIndex(candle => candle.time === cursorTime);
+            const cursorBarIndex = allCandleData.findIndex(candle => candle.time === cursorTime) + 1;
             // Extract the 20 bars ending at the cursor's position
             let barsForADR;
             if (cursorBarIndex >= 20) {
@@ -513,7 +538,17 @@
                 chg = bar.close - allCandleData[cursorBarIndex - 1].close 
                 chgprct = (bar.close/allCandleData[cursorBarIndex -1].close - 1)*100
             }
-            hoveredCandleData.set({ open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: volume, adr:calculateSingleADR(barsForADR), chg:chg, chgprct:chgprct})
+            hoveredCandleData.set({ open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: volume, adr:calculateSingleADR(barsForADR), chg:chg, chgprct:chgprct,rvol:0})
+            if (/^\d+$/.test(currentChartInstance.timeframe)) {
+                const barsForRVOL = chartVolumeSeries.data().slice(0,cursorBarIndex);
+                calculateRVOL(barsForRVOL,currentChartInstance.securityId)
+                .then((r:any)=>{
+                    hoveredCandleData.update((v)=>{
+                        v.rvol = r
+                        return v
+                    })
+                })
+            }
             latestCrosshairPositionTime = bar.time as number 
         }); 
         chart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
@@ -571,14 +606,14 @@
                     chart.applyOptions({timeScale: {timeVisible: false}});
             }else { chart.applyOptions({timeScale: {timeVisible: true}}); }
             backendLoadChartData(req)
-            const [priceStore, r] = getStream<TradeData>(req, 'fast')
+            const [priceStore, r] = getStream<TradeData[]>(req, 'fast')
             release = r
-            unsubscribe = priceStore.subscribe((v:TradeData) => {
+            unsubscribe = priceStore.subscribe((v:TradeData[]) => {
                 updateLatestChartBar(v)
             })
-            const [quoteStore, rq] = getStream<QuoteData>(req, 'quote')
+            const [quoteStore, rq] = getStream<QuoteData[]>(req, 'quote')
             releaseQuote = rq
-            unsubscribeQuote = quoteStore.subscribe((v:QuoteData) => {
+            unsubscribeQuote = quoteStore.subscribe((v:QuoteData[]) => {
                 updateLatestQuote(v)
             })
         }

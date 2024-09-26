@@ -214,7 +214,7 @@
     }
 
     onMount(()=>{
-        document.addEventListener('touchstart',onTouch)
+        //document.addEventListener('touchstart',onTouch)
         inputQuery.subscribe(async(v:InputQuery)=>{
             if (browser){
                 if (v.status === "initializing"){
@@ -306,7 +306,7 @@
         </div>
     </div>
 {/if}
-<input type="text" id="hidden-input" style="position: absolute; opacity: 0; z-index: -1;" />
+<input autocomplete="off" type="text" id="hidden-input" style="position: absolute; opacity: 0; z-index: -1;" />
 
 
 

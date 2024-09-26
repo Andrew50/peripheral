@@ -24,6 +24,7 @@
         prevCloseStream = p
         unsubscribe = u
         priceStream.subscribe((v) => {
+            v = v[v.length-1]
             if (v && v.price){
                 changeStore.update((s:ChangeStore)=>{
                     s.price = v.price
