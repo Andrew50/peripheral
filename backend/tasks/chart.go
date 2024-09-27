@@ -234,6 +234,11 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 					return nil, fmt.Errorf("dkn0w")
 				}
 				timestamp := time.Time(item.Timestamp).In(easternLocation)
+                if queryTimespan == "week" || queryTimespan == "month" || queryTimespan == "year" {
+                    for timestamp.Weekday() == time.Saturday || timestamp.Weekday() == time.Sunday {
+                        timestamp = timestamp.AddDate(0, 0, 1)
+                    }
+                }
 				marketOpenTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 9, 30, 0, 0, easternLocation)
 				marketCloseTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 16, 0, 0, 0, easternLocation)
 				if args.ExtendedHours || (!timestamp.Before(marketOpenTime) && timestamp.Before(marketCloseTime)) {
