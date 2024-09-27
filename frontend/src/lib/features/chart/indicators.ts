@@ -24,10 +24,12 @@ export function calculateSMA(data: CandlestickData[], period: number): { time: U
 export function calculateSingleADR(data: CandlestickData[]): number {
     const period = get(settings).adrPeriod
     let sum = 0;
+    let l = 0
     for (let j = 0; j < period && j < data.length; j++) {
         sum += (( data[j].high / data[j].low - 1) * 100)
+        l ++ 
     }
-    const average = sum / period
+    const average = sum / l
     return average
 }
 
