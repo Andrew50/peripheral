@@ -531,37 +531,50 @@
         });
 
         chart.subscribeCrosshairMove((param)=>{
-            if (!param.point) {
+            if (!chartCandleSeries||!param.point) {
                 return;
             }
-            const validCrosshairPoint = !(param === undefined || param.time === undefined || param.point.x < 0 || param.point.y < 0);
-            if(!validCrosshairPoint) { return; }
-            if(!chartCandleSeries) {return;}
-
-            const bar = param.seriesData.get(chartCandleSeries)
-            if(!bar) {return;}
             const volumeData = param.seriesData.get(chartVolumeSeries);
             const volume = volumeData ? volumeData.value : 0;
-            const cursorTime = bar.time as number;
             const allCandleData = chartCandleSeries.data()
-            const cursorBarIndex = allCandleData.findIndex(candle => candle.time === cursorTime) + 1;
-            // Extract the 20 bars ending at the cursor's position
+            const validCrosshairPoint = !(param === undefined || param.time === undefined || param.point.x < 0 || param.point.y < 0);
+            let bar;
+            let cursorBarIndex
+            if(!validCrosshairPoint) {
+                if (param.logical < 0){
+                    bar = allCandleData[0]
+                    cursorBarIndex = 0
+                }else{
+                    cursorBarIndex = allCandleData.length - 1
+                    bar = allCandleData[cursorBarIndex]
+                }
+            }else{
+                bar = param.seriesData.get(chartCandleSeries)
+                if(!bar) {return;}
+                const cursorTime = bar.time as number;
+                cursorBarIndex = allCandleData.findIndex(candle => candle.time === cursorTime);
+            }
             let barsForADR;
             if (cursorBarIndex >= 20) {
-                barsForADR = allCandleData.slice(cursorBarIndex - 20, cursorBarIndex);
+                barsForADR = allCandleData.slice(cursorBarIndex-19, cursorBarIndex+1);
             } else {
-                // If there are less than 20 bars available, get whatever is available up to the cursor
-                barsForADR = allCandleData.slice(0, cursorBarIndex);
+                barsForADR = allCandleData.slice(0, cursorBarIndex + 1);
             }
             let chg = 0;
             let chgprct = 0
             if (cursorBarIndex > 0){
-                chg = bar.close - allCandleData[cursorBarIndex - 2].close 
-                chgprct = (bar.close/allCandleData[cursorBarIndex -2].close - 1)*100
+                chg = bar.close - allCandleData[cursorBarIndex - 1].close 
+                chgprct = (bar.close/allCandleData[cursorBarIndex -1].close - 1)*100
             }
+            console.log(barsForADR)
             hoveredCandleData.set({ open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: volume, adr:calculateSingleADR(barsForADR), chg:chg, chgprct:chgprct,rvol:0})
             if (/^\d+$/.test(currentChartInstance.timeframe)) {
-                const barsForRVOL = chartVolumeSeries.data().slice(0,cursorBarIndex);
+                let barsForRVOL
+                if (cursorBarIndex >= 1000) {
+                    barsForADR = allCandleData.slice(cursorBarIndex-1000, cursorBarIndex+1);
+                } else {
+                    barsForRVOL = chartVolumeSeries.data().slice(0,cursorBarIndex+1);
+                }
                 calculateRVOL(barsForRVOL,currentChartInstance.securityId)
                 .then((r:any)=>{
                     hoveredCandleData.update((v)=>{
