@@ -22,6 +22,7 @@ export class ReplayStream implements Stream {
 
     private timeoutID: number | null = null;
     public subscribe(channelName: string) {
+        console.log(channelName)
         this.tickMap.set(channelName,{reqInbound:false,lastUpdateTime:0,ticks:[]})
     }
     public unsubscribe(channelName: string) {

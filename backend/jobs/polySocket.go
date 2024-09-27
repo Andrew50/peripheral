@@ -86,9 +86,6 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 					fmt.Println("Error marshling JSON:", err)
 				}
 			//	conn.Cache.Publish(context.Background(), "trades-agg", string(jsonData))
-                if (msg.Symbol == "NVDA"){
-                    fmt.Println(data.Timestamp,data.ExchangeId,data.Price,data.Size)
-                }
 
 				conn.Cache.Publish(context.Background(), channelName, string(jsonData))
 				now := time.Now()

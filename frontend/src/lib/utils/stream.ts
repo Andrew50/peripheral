@@ -73,11 +73,13 @@ export function getStream<T extends TradeData[]|QuoteData[]|number>(instance:Ins
   
 
 export function startReplay(timestamp : number){
+    console.log(timestamp)
     currentStream.stop()
     currentStream = replayStream
     var timestampToUse = timestamp
     if(isOutsideMarketHours(timestampToUse)) {
         timestampToUse = ESTSecondstoUTCMillis(getReferenceStartTimeForDateMilliseconds(timestampToUse, get(chartQuery).extendedHours)/1000)
+        console.log("-----",timestamp,timestampToUse)
     }
     currentStream.start(timestampToUse)
     currentTimestamp.set(timestampToUse)

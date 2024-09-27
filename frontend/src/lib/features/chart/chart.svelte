@@ -467,7 +467,6 @@
                                 if(allPrices.length > 0 && aggregateOpen !== undefined && aggregateClose !== undefined) {
                                     aggregateHigh = Math.max(...allPrices);
                                     aggregateLow = Math.min(...allPrices);
-                                    console.log(allPrices)
                                     console.log({
                                         time: UTCSecondstoESTSeconds(candleStartTimeUTC /1000) as UTCTimestamp, 
                                         open: aggregateOpen, 
@@ -946,6 +945,7 @@
            change(req)
         }) 
        timeEvent.subscribe((e:TimeEvent)=>{
+           console.log(e)
            if (!currentChartInstance || !currentChartInstance.securityId) return;
            if (e.event == "replay"){
                currentChartInstance.timestamp = get(currentTimestamp)
