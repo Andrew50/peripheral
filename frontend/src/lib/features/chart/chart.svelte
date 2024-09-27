@@ -233,7 +233,7 @@
                         }
                     }
                     else if(inst.timeframe?.includes('d')) {
-
+                        
                     }
                     else if(inst.timeframe?.includes('s')) {
                         referenceStartTime =  getReferenceStartTimeForDateMilliseconds(newCandleData[newCandleData.length-1].time*1000, inst.extendedHours)
