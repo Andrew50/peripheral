@@ -3,6 +3,7 @@
     import type { Writable } from 'svelte/store';
     import type { QuoteData, Instance } from '$lib/core/types';
     import { getStream } from '$lib/utils/stream';
+    import {derived} from 'svelte/store'
 
     export let instance: Writable<Instance>;
     let store: Writable<QuoteData>;
@@ -17,22 +18,24 @@
         if (!inst.securityId) return;
         release();
         const [s, r] = getStream(inst, "quote");
-        store = s;
+        const stream = s;
         release = r;
 
-        store.subscribe(($store: QuoteData) => {
-            // Check bid price change
-            if ($store.bidPrice !== undefined && $store.bidPrice !== previousBidPrice) {
-                bidPriceChange = $store.bidPrice > previousBidPrice ? 'increase' : 'decrease';
-                previousBidPrice = $store.bidPrice;
+        store = derived(stream,(v:QuoteData[])=>{
+            const last = v[v.length-1]
+            if (last){
+                // Check bid price change
+                if (last.bidPrice !== undefined && last.bidPrice !== previousBidPrice) {
+                    bidPriceChange = last.bidPrice > previousBidPrice ? 'increase' : 'decrease';
+                    previousBidPrice = last.bidPrice;
+                }
+                if (last.askPrice !== undefined && last.askPrice !== previousAskPrice) {
+                    askPriceChange = last.askPrice > previousAskPrice ? 'increase' : 'decrease';
+                    previousAskPrice = last.askPrice;
+                }
+                return {...last}
             }
-
-            // Check ask price change
-            if ($store.askPrice !== undefined && $store.askPrice !== previousAskPrice) {
-                askPriceChange = $store.askPrice > previousAskPrice ? 'increase' : 'decrease';
-                previousAskPrice = $store.askPrice;
-            }
-        });
+        })
     });
 
     onDestroy(() => {
