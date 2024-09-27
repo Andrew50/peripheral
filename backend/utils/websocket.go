@@ -181,7 +181,12 @@ and sends a message to the chan of each which will then be handled by the gourto
 function for that client
 */
 func handleRedisChannel(pubsub *redis.PubSub, channelName string) {
+    var lastMessage string
 	for msg := range pubsub.Channel() {
+        if msg.Payload == lastMessage {
+			continue // filter out duplicate prints
+		}
+        lastMessage = msg.Payload
 		channelsMutex.RLock()
 		subscribers := channelSubscribers[channelName]
 		channelsMutex.RUnlock()
