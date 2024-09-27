@@ -17,7 +17,7 @@
         const days = Math.floor(($countdown % (7 * 24 * 60 * 60)) / (24 * 60 * 60));
         const hours = Math.floor(($countdown % (24 * 60 * 60)) / (60 * 60));
         const minutes = Math.floor(($countdown % (60 * 60)) / 60);
-        const seconds = $countdown % 60;
+        const seconds = Math.floor($countdown % 60);
 
         if (years > 0) {
             return `${years}y ${months}m`;
