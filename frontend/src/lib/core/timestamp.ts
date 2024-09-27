@@ -1,6 +1,6 @@
 import {DateTime} from 'luxon';
 
-function getEasternTimeOffset(date : Date)  {
+function getEasternTimeOffset(date : Date)  { //helper function 
     const options: Intl.DateTimeFormatOptions= { timeZone: 'America/New_York', timeZoneName: 'short' };
     const formatter = new Intl.DateTimeFormat([], options);
     const parts: Intl.DateTimeFormatPart[] = formatter.formatToParts(date);
@@ -182,4 +182,7 @@ function isDaylightSavingTime(date: Date): boolean {
 
     // Return whether the date falls within DST
     return date >= dstStart && date < dstEnd;
+}
+export function getRealTimeTime(): number {
+    return Date.now()
 }

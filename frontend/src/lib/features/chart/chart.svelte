@@ -16,10 +16,14 @@
     import type {Writable} from 'svelte/store';
     import {writable, get} from 'svelte/store';
     import { onMount  } from 'svelte';
-    import { UTCSecondstoESTSeconds, ESTSecondstoUTCSeconds, ESTSecondstoUTCMillis, getReferenceStartTimeForDateMilliseconds, timeframeToSeconds} from '$lib/core/timestamp';
+    import { UTCSecondstoESTSeconds, ESTSecondstoUTCSeconds, ESTSecondstoUTCMillis, getReferenceStartTimeForDateMilliseconds, timeframeToSeconds, getRealTimeTime} from '$lib/core/timestamp';
 	import { getStream, replayStream } from '$lib/utils/stream';
     import {timeEvent,replayInfo} from '$lib/core/stores'
     import type {TimeEvent} from '$lib/core/stores'
+
+    import {DateTime} from 'luxon';
+
+
     let bidLine: any
     let askLine: any
     let currentBarTimestamp: number;
@@ -68,6 +72,7 @@
         if((get(replayInfo).status == "active" || get(replayInfo).status == "paused") && inst.timestamp == 0) {
             inst.timestamp = Math.floor(get(currentTimestamp))
         }
+        
         privateRequest<BarData[]>("getChartData", {
             securityId:inst.securityId, 
             timeframe:inst.timeframe, 
@@ -137,14 +142,40 @@
                         chartLatestDataReached = true;
                     }
                 }
+                queuedLoad = () => {
+                        console.log("queued load time", Date.now())
+                        if (inst.direction == "forward") {
+                            const visibleRange = chart.timeScale().getVisibleRange()
+                            const vrFrom = visibleRange?.from as Time
+                            const vrTo = visibleRange?.to as Time
+                            chartCandleSeries.setData(newCandleData);
+                            chartVolumeSeries.setData(newVolumeData);
+                            chart.timeScale().setVisibleRange({from: vrFrom, to: vrTo})
+                        }else if (inst.direction == "backward"){
+                            chartCandleSeries.setData(newCandleData);
+                            chartVolumeSeries.setData(newVolumeData);
+                        }
+                        queuedLoad = null
+                        sma10Series.setData(calculateSMA(newCandleData, 10));
+                        sma20Series.setData(calculateSMA(newCandleData, 20));
+                        if (inst.requestType == 'loadNewTicker') {
+                            chart.timeScale().resetTimeScale()
+                            //chart.timeScale().fitContent();
+                            if (currentChartInstance.timestamp === 0){
+                                chart.timeScale().applyOptions({
+                                rightOffset: 10
+                                });
+                            }else{
+                                chart.timeScale().applyOptions({
+                                rightOffset: 0
+                                });
+                            }
+
+                        }
+                        isLoadingChartData = false; // Ensure this runs after data is loaded
+                }
                 // Handling the aggregation of the most recent candle 
                 if(inst.timestamp == 0) { // IF REAL TIME DATA 
-
-                    // var referenceStartTime = getReferenceStartTimeForDateMilliseconds(newCandleData[newCandleData.length-1].time*1000, inst.extendedHours) // this is in milliseconds 
-                    // var timediff = (Date.now() - referenceStartTime)/1000 // this is in seconds
-                    // var flooredDifference = Math.floor(timediff/chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds
-                    // var newTime = referenceStartTime + flooredDifference*1000
-
                     var referenceStartTime: number; 
                     var aggregateOpen: number;
                     var aggregateHigh: number;
@@ -174,7 +205,7 @@
                                     for (let i = 1; i < barDataL.length; i++) {
                                         if (barDataL[i].high > aggregateHigh) {
                                             aggregateHigh = barDataL[i].high;
-                                        }
+                                        } 
                                         if (barDataL[i].low < aggregateLow) {
                                             aggregateLow = barDataL[i].low;
                                         }
@@ -201,90 +232,287 @@
 
                         }
                     }
-                    else if(inst.timeframe?.includes('h')) {
+                    else if(inst.timeframe?.includes('d')) {
 
                     }
                     else if(inst.timeframe?.includes('s')) {
-
+                        referenceStartTime =  getReferenceStartTimeForDateMilliseconds(newCandleData[newCandleData.length-1].time*1000, inst.extendedHours)
+                        const now = getRealTimeTime();
+                        const elapsedTime = now - referenceStartTime; 
+                        if(elapsedTime <0) {
+                            queuedLoad() //if the market hasn't opened yet 12am-3:59:59am
+                        }
+                        else {
+                            const timeframeMs = chartTimeframeInSeconds * 1000;
+                            const numFullBars = Math.floor(elapsedTime / timeframeMs); 
+                            // const candleStartTimeUTC
+                        }
                     }
-                    else { // minute data 
-
-                    }
-                   /* privateRequest<TradeData[]>("getTradeData", {securityId: inst.securityId, time: newTime, lengthOfTime: chartTimeframeInSeconds, extendedHours: inst.extendedHours})
-                  .then((res:Array<any>)=> {
-                        if (!Array.isArray(res) || res.length === 0) {
-                            return 
-                        }
-                        var aggregateOpen = 0;
-                        var aggregateClose = 0;
-                        var aggregateHigh = 0;
-                        var aggregateLow = 0;
-                        for (let i = 0; i < res.length; i++) {
-                            if(res[i].size <= 100) {continue;}
-                            if(aggregateOpen == 0) {
-                                aggregateOpen = res[i].price;
-                            }
-                            if(res[i].price > aggregateHigh) {
-                                aggregateHigh = res[i].price
-                            } else if (aggregateLow == 0 || res[i].price < aggregateLow) {
-                                aggregateLow = res[i].price
-                            }
-                            aggregateClose = res[i].price
-                        }
-                        newCandleData.push({time: UTCtoEST(newTime / 1000) as UTCTimestamp, open: aggregateOpen, high: aggregateHigh, low: aggregateLow, close: aggregateClose});
-                        newVolumeData.push({time:UTCtoEST(newTime/1000) as UTCTimestamp, value: res.reduce((acc, trade) => acc + trade.size, 0), color: aggregateClose > aggregateOpen ? '#089981' : '#ef5350',});
-                        */
-                        queuedLoad = () => {
-                        if (inst.direction == "forward") {
-                            const visibleRange = chart.timeScale().getVisibleRange()
-                            const vrFrom = visibleRange?.from as Time
-                            const vrTo = visibleRange?.to as Time
-                            chartCandleSeries.setData(newCandleData);
-                            chartVolumeSeries.setData(newVolumeData);
-                            chart.timeScale().setVisibleRange({from: vrFrom, to: vrTo})
-                        }else if (inst.direction == "backward"){
-                            chartCandleSeries.setData(newCandleData);
-                            chartVolumeSeries.setData(newVolumeData);
-                        }
-                        queuedLoad = null
-                        sma10Series.setData(calculateSMA(newCandleData, 10));
-                        sma20Series.setData(calculateSMA(newCandleData, 20));
-                        if (/^\d+$/.test(inst.timeframe)) {
-                            vwapSeries.setData(calculateVWAP(newCandleData,newVolumeData));
-                        }else{
-                            vwapSeries.setData([])
-                        }
-                        if (inst.requestType == 'loadNewTicker') {
-                            chart.timeScale().resetTimeScale()
-                            //chart.timeScale().fitContent();
-                            if (currentChartInstance.timestamp === 0){
-                                chart.timeScale().applyOptions({
-                                rightOffset: 10
-                                });
-                            }else{
-                                chart.timeScale().applyOptions({
-                                rightOffset: 0
-                                });
-                            }
-
-                        }
-                        isLoadingChartData = false; // Ensure this runs after data is loaded
-                        }
-                        if (inst.direction == "backward" || inst.requestType == "loadNewTicker"
-                        || inst.requestType == "forward" && !isPanning){
+                    else { // minute data OR HOURLY 
+                        referenceStartTime =  getReferenceStartTimeForDateMilliseconds(newCandleData[newCandleData.length-1].time*1000, inst.extendedHours)
+                        
+                        const now = getRealTimeTime(); 
+                        const elapsedTime = now - referenceStartTime; 
+                        console.log("elapsed time is:", elapsedTime)
+                        if(elapsedTime < 0) {
+                            console.log("Trading session has not started yet.")
                             queuedLoad()
-                        }
-                    //});
-                }
-                /*else if(get(replayInfo).status == "active" || get(replayInfo).status == "paused") {
-                    var timestamp = get(currentTimestamp)
-                    var referenceStartTime = getReferenceStartTimeForDateMilliseconds(timestamp, inst.extendedHours) // this is in milliseconds 
-                    var timediff = (timestamp - referenceStartTime)/1000 // this is in seconds
-                    var flooredDifference = Math.floor(timediff/chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds
-                    var newTime = referenceStartTime + flooredDifference*1000
+                        } 
+                        else {
+                            const timeframeMs = chartTimeframeInSeconds * 1000; 
+                            const numFullBars = Math.floor(elapsedTime / timeframeMs);
+                            const candleStartTimeUTC = referenceStartTime + numFullBars*timeframeMs;
+                            console.log("Candle Start Time UTC:", candleStartTimeUTC)
+                            const lastBar = newCandleData[newCandleData.length - 1];
+                            const lastBarTimeMs = ESTSecondstoUTCMillis(lastBar.time); 
 
-                }*/
-                else { // REQUEST IS NOT FOR REAL TIME DATA // IT IS FOR BACK/FRONT LOAD or something else like replay 
+                            const lastCompleteMinuteUTC = DateTime.utc().startOf('minute')
+                            let minuteBarsEndTimeUTC = lastCompleteMinuteUTC.toMillis();
+                            if(lastCompleteMinuteUTC.toMillis() <= candleStartTimeUTC) {
+                                minuteBarsEndTimeUTC = candleStartTimeUTC;
+                            }
+                            const minuteBarsDurationMs = minuteBarsEndTimeUTC - candleStartTimeUTC;
+                            console.log("minuteBarsDurationMs", minuteBarsDurationMs)
+                            const numMinuteBars = Math.floor(minuteBarsDurationMs / (60*1000))
+                            let minuteBarsPromise: Promise<BarData[]> = Promise.resolve([]);
+                            if(numMinuteBars > 0) {
+                                minuteBarsPromise = privateRequest<BarData[]>("getChartData", {
+                                    securityId: inst.securityId,
+                                    timeframe: "1",
+                                    timestamp: candleStartTimeUTC,
+                                    direction: "forward",
+                                    bars: numMinuteBars, 
+                                    extendedhours: inst.extendedHours, 
+                                    isreplay: (get(replayInfo).status === "active" || get(replayInfo).status === "paused"),
+                                });
+                            }
+                            const tickDataStartTimeUTC = minuteBarsEndTimeUTC; 
+                            const tickDataDurationMs = now - tickDataStartTimeUTC; 
+                            let tickDataPromise: Promise<TradeData[]> = Promise.resolve([]);
+                            if(tickDataDurationMs >0) {
+                                tickDataPromise = privateRequest<TradeData[]>("getTradeData", {
+                                    securityId: inst.securityId,
+                                    time: tickDataStartTimeUTC, 
+                                    lengthOfTime: tickDataDurationMs, 
+                                    extendedHours: inst.extendedHours,
+                                });
+                            }
+                            Promise.all([minuteBarsPromise, tickDataPromise]).then(([minuteBars, tickData]) => {
+                                const allPrices: number[] = [];
+                                if(minuteBars && minuteBars.length >0) {
+                                    console.log(minuteBars)
+                                    aggregateOpen = minuteBars[0].open;
+                                    aggregateClose = minuteBars[minuteBars.length-1].close;
+                                    minuteBars.forEach(bar => {
+                                        allPrices.push(bar.high, bar.low)
+                                    })
+                                }
+                                if(tickData && tickData.length > 0) {
+                                    const filteredTickData = tickData.filter(tick => tick.size >= 100);
+
+                                    if (filteredTickData.length > 0) {
+                                        const tickPrices = filteredTickData.map(tick => tick.price);
+                                        allPrices.push(...tickPrices);
+
+                                        if (aggregateOpen === undefined) {
+                                            aggregateOpen = tickPrices[0];
+                                        }
+                                        aggregateClose = tickPrices[tickPrices.length - 1];
+                                    }
+                                } 
+                                if(allPrices.length > 0 && aggregateOpen !== undefined && aggregateClose !== undefined) {
+                                    aggregateHigh = Math.max(...allPrices);
+                                    aggregateLow = Math.min(...allPrices);
+                                    console.log(allPrices)
+                                    console.log({
+                                        time: UTCSecondstoESTSeconds(candleStartTimeUTC /1000) as UTCTimestamp, 
+                                        open: aggregateOpen, 
+                                        high: aggregateHigh,
+                                        low: aggregateLow,
+                                        close: aggregateClose,
+                                    })
+                                    if(candleStartTimeUTC > lastBarTimeMs) {
+                                        newCandleData.push({
+                                        time: UTCSecondstoESTSeconds(candleStartTimeUTC /1000) as UTCTimestamp, 
+                                        open: aggregateOpen, 
+                                        high: aggregateHigh,
+                                        low: aggregateLow,
+                                        close: aggregateClose,
+                                        })
+                                        console.log("push time", Date.now())
+                                        if(queuedLoad) {
+                                            queuedLoad()
+                                        }
+                                    }
+                                    else {
+                                        newCandleData[newCandleData.length-1] = {
+                                        time: UTCSecondstoESTSeconds(candleStartTimeUTC /1000) as UTCTimestamp, 
+                                        open: aggregateOpen, 
+                                        high: aggregateHigh,
+                                        low: aggregateLow,
+                                        close: aggregateClose,
+                                        }
+                                        if(queuedLoad) {
+                                            queuedLoad()
+                                        }
+                                    }
+                                } 
+                                else {
+                                    console.log("No data returned for aggregation.")
+                                    if(queuedLoad) {
+                                        queuedLoad()
+                                    }
+                                }
+                            }).catch(error => {
+                                console.error("Error fetching data for aggregation:", error)
+                            })
+                        }
+                    }
+
+                }
+                    // if (inst.direction == "backward" || inst.requestType == "loadNewTicker"
+                    // || inst.requestType == "forward" && !isPanning){
+                    //     queuedLoad()
+                    // }
+                else if ((get(replayInfo).status == "active" || get(replayInfo).status == "paused")) {
+                    if(inst.timeframe?.includes('s')) {
+                        referenceStartTime =  getReferenceStartTimeForDateMilliseconds(newCandleData[newCandleData.length-1].time*1000, inst.extendedHours)
+                        const now = getRealTimeTime();
+                        const elapsedTime = now - referenceStartTime; 
+                        if(elapsedTime <0) {
+                            queuedLoad() //if the market hasn't opened yet 12am-3:59:59am
+                        }
+                        else {
+                            const timeframeMs = chartTimeframeInSeconds * 1000;
+                            const numFullBars = Math.floor(elapsedTime / timeframeMs); 
+                            // const candleStartTimeUTC
+                        }
+                    }
+                    else { // minute data OR HOURLY 
+                        referenceStartTime =  getReferenceStartTimeForDateMilliseconds(newCandleData[newCandleData.length-1].time*1000, inst.extendedHours)
+                        
+                        const now = get(currentTimestamp); 
+                        console.log("Current timestamp:", now)
+                        const elapsedTime = now - referenceStartTime; 
+                        console.log("elapsed time is:", elapsedTime)
+                        if(elapsedTime < 0) {
+                            console.log("Trading session has not started yet.")
+                            queuedLoad()
+                        } 
+                        else {
+                            const timeframeMs = chartTimeframeInSeconds * 1000; 
+                            const numFullBars = Math.floor(elapsedTime / timeframeMs);
+                            const candleStartTimeUTC = referenceStartTime + numFullBars*timeframeMs;
+                            console.log("Candle Start Time UTC:", candleStartTimeUTC)
+                            const lastBar = newCandleData[newCandleData.length - 1];
+                            const lastBarTimeMs = ESTSecondstoUTCMillis(lastBar.time); 
+
+                            const lastCompleteMinuteUTC = DateTime.fromMillis(now, {zone: 'utc'}).startOf('minute')
+                            let minuteBarsEndTimeUTC = lastCompleteMinuteUTC.toMillis();
+                            if(lastCompleteMinuteUTC.toMillis() <= candleStartTimeUTC) {
+                                minuteBarsEndTimeUTC = candleStartTimeUTC;
+                            }
+                            const minuteBarsDurationMs = minuteBarsEndTimeUTC - candleStartTimeUTC;
+                            console.log("minuteBarsDurationMs", minuteBarsDurationMs)
+                            const numMinuteBars = Math.floor(minuteBarsDurationMs / (60*1000))
+                            let minuteBarsPromise: Promise<BarData[]> = Promise.resolve([]);
+                            console.log("numMinuteBars:", numMinuteBars)
+                            if(numMinuteBars > 0) {
+                                minuteBarsPromise = privateRequest<BarData[]>("getChartData", {
+                                    securityId: inst.securityId,
+                                    timeframe: "1",
+                                    timestamp: candleStartTimeUTC,
+                                    direction: "forward",
+                                    bars: numMinuteBars, 
+                                    extendedhours: inst.extendedHours, 
+                                    isreplay: (get(replayInfo).status === "active" || get(replayInfo).status === "paused"),
+                                });
+                            }
+                            const tickDataStartTimeUTC = minuteBarsEndTimeUTC; 
+                            const tickDataDurationMs = now - tickDataStartTimeUTC; 
+                            let tickDataPromise: Promise<TradeData[]> = Promise.resolve([]);
+                            if(tickDataDurationMs >0) {
+                                tickDataPromise = privateRequest<TradeData[]>("getTradeData", {
+                                    securityId: inst.securityId,
+                                    time: tickDataStartTimeUTC, 
+                                    lengthOfTime: tickDataDurationMs, 
+                                    extendedHours: inst.extendedHours,
+                                });
+                            }
+                            Promise.all([minuteBarsPromise, tickDataPromise]).then(([minuteBars, tickData]) => {
+                                const allPrices: number[] = [];
+                                if(minuteBars && minuteBars.length >0) {
+                                    console.log(minuteBars)
+                                    aggregateOpen = minuteBars[0].open;
+                                    aggregateClose = minuteBars[minuteBars.length-1].close;
+                                    minuteBars.forEach(bar => {
+                                        allPrices.push(bar.high, bar.low)
+                                    })
+                                }
+                                if(tickData && tickData.length > 0) {
+                                    const filteredTickData = tickData.filter(tick => tick.size >= 100);
+
+                                    if (filteredTickData.length > 0) {
+                                        const tickPrices = filteredTickData.map(tick => tick.price);
+                                        allPrices.push(...tickPrices);
+
+                                        if (aggregateOpen === undefined) {
+                                            aggregateOpen = tickPrices[0];
+                                        }
+                                        aggregateClose = tickPrices[tickPrices.length - 1];
+                                    }
+                                } 
+                                if(allPrices.length > 0 && aggregateOpen !== undefined && aggregateClose !== undefined) {
+                                    aggregateHigh = Math.max(...allPrices);
+                                    aggregateLow = Math.min(...allPrices);
+                                    console.log(allPrices)
+                                    console.log({
+                                        time: UTCSecondstoESTSeconds(candleStartTimeUTC /1000) as UTCTimestamp, 
+                                        open: aggregateOpen, 
+                                        high: aggregateHigh,
+                                        low: aggregateLow,
+                                        close: aggregateClose,
+                                    })
+                                    if(candleStartTimeUTC > lastBarTimeMs) {
+                                        newCandleData.push({
+                                        time: UTCSecondstoESTSeconds(candleStartTimeUTC /1000) as UTCTimestamp, 
+                                        open: aggregateOpen, 
+                                        high: aggregateHigh,
+                                        low: aggregateLow,
+                                        close: aggregateClose,
+                                        })
+                                        console.log("push time", Date.now())
+                                        if(queuedLoad) {
+                                            queuedLoad()
+                                        }
+                                    }
+                                    else {
+                                        newCandleData[newCandleData.length-1] = {
+                                        time: UTCSecondstoESTSeconds(candleStartTimeUTC /1000) as UTCTimestamp, 
+                                        open: aggregateOpen, 
+                                        high: aggregateHigh,
+                                        low: aggregateLow,
+                                        close: aggregateClose,
+                                        }
+                                        if(queuedLoad) {
+                                            queuedLoad()
+                                        }
+                                    }
+                                } 
+                                else {
+                                    console.log("No data returned for aggregation.")
+                                    if(queuedLoad) {
+                                        queuedLoad()
+                                    }
+                                }
+                            }).catch(error => {
+                                console.error("Error fetching data for aggregation:", error)
+                            })
+                        }
+                    }
+                }
+                else { // REQUEST IS NOT FOR REAL TIME DATA // IT IS FOR BACK/FRONT LOAD HISTORICAL
+                    //console.log("testing", chartCandleSeries.data()[chartCandleSeries.data().length-1].time)
                     queuedLoad = () => {
                         if (inst.direction == "forward") {
                             const visibleRange = chart.timeScale().getVisibleRange()
@@ -318,29 +546,29 @@
                                 });
                             }
                         }
-                     isLoadingChartData = false; // Ensure this runs after data is loaded
+                        isLoadingChartData = false; // Ensure this runs after data is loaded
                     }
                     if (inst.direction == "backward" || inst.requestType == "loadNewTicker"
                         || inst.direction == "forward" && !isPanning){
-                        queuedLoad()
-                       if(inst.requestType === "loadNewTicker" && !chartLatestDataReached 
-                           && get(replayInfo).status === "inactive"){
-                            backendLoadChartData({
-                                ...currentChartInstance,
-                                timestamp: ESTSecondstoUTCMillis(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp,
-                                bars:  150, //+ 2*Math.floor(chart.getLogicalRange.to) - chartCandleSeries.data().length,
-                                direction: "forward",
-                                requestType: "loadAdditionalData",
-                                includeLastBar: true, 
-                            })
+                            queuedLoad()
+                            if(inst.requestType === "loadNewTicker" && !chartLatestDataReached 
+                                && get(replayInfo).status === "inactive"){
+                                backendLoadChartData({
+                                    ...currentChartInstance,
+                                    timestamp: ESTSecondstoUTCMillis(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp,
+                                    bars:  150, //+ 2*Math.floor(chart.getLogicalRange.to) - chartCandleSeries.data().length,
+                                    direction: "forward",
+                                    requestType: "loadAdditionalData",
+                                    includeLastBar: true, 
+                                })
+                            }
                         }
                     }
-                }
-            }) .catch((error: string) => {
-                console.error(error)
+                }) .catch((error: string) => {
+                    console.error(error)
 
-                isLoadingChartData = false; // Ensure this runs after data is loaded
-            });
+                    isLoadingChartData = false; // Ensure this runs after data is loaded
+                });
     }
     
     function updateLatestQuote(quotes:QuoteData[]) {

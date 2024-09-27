@@ -66,6 +66,5 @@ func getStartOfTimeWindow(timestamp time.Time, multiplier int, timespan string, 
 		duration := time.Duration(multiplier*24) * time.Hour
 		return timestamp.Truncate(duration), nil
 	}
-    fmt.Println("ERROR: 09hn20inh")
-    return timestamp, nil
+	return time.Time{}, fmt.Errorf("done")
 }

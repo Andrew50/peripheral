@@ -131,15 +131,15 @@ type GetChartDataResults struct {
 	// This probably could be optimized to just having a variable for the comparison sign
 	// but its fine for now
 	if args.Timestamp == 0 { // default value
-		query = `SELECT ticker, minDate, maxDate 
-                 FROM securities 
-                 WHERE securityid = $1 AND 
+		query = `SELECT ticker, minDate, maxDate
+                 FROM securities
+                 WHERE securityid = $1 AND
 				 ticker != $2
 				 ORDER BY minDate DESC`
 		polyResultOrder = "desc"
 	} else if args.Direction == "backward" {
 		query = `SELECT ticker, minDate, maxDate
-				 FROM securities 
+				 FROM securities
 				 WHERE securityid = $1 AND (maxDate > $2 OR maxDate IS NULL)
 				 ORDER BY minDate DESC limit 1`
 		polyResultOrder = "desc"
@@ -147,7 +147,7 @@ type GetChartDataResults struct {
 		fmt.Println(maxDate)
 	} else if args.Direction == "forward" {
 		query = `SELECT ticker, minDate, maxDate
-				 FROM securities 
+				 FROM securities
 				 WHERE securityid = $1 AND  (minDate < $2)
 				 ORDER BY minDate ASC`
 		polyResultOrder = "asc"
@@ -321,7 +321,6 @@ type GetChartDataResults struct {
 	return nil, fmt.Errorf("c34lg")
 }*/
 
-
 type GetTradeDataArgs struct {
 	SecurityID    int64 `json:"securityId"`
 	Timestamp     int64 `json:"time"`
@@ -349,6 +348,7 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 
 	}
 	inputTime := time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).UTC()
+	//fmt.Printf("\nTESTING %v, %v", args.Timestamp, inputTime.In(easternLocation).Format(time.DateTime))
 
 	query := `SELECT ticker, minDate, maxDate FROM securities WHERE securityid=$1 AND (minDate <= $2 AND (maxDate IS NULL or maxDate >= $2)) ORDER BY minDate ASC`
 
@@ -367,6 +367,7 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	var tradeDataList []GetTradeDataResults
 	windowStartTime := args.Timestamp                   // milliseconds
 	windowEndTime := args.Timestamp + args.LengthOfTime // milliseconds
+	fmt.Println("Testing????")
 	for rows.Next() {
 		var ticker string
 		var minDateFromSQL *time.Time
@@ -390,28 +391,42 @@ func GetTradeData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			if int64(time.Time(iter.Item().ParticipantTimestamp).Unix())*1000 > windowEndTime {
 				return tradeDataList, nil
 			}
-            if !args.ExtendedHours {
-                timestamp := time.Time(iter.Item().ParticipantTimestamp).In(easternLocation)
-                hour := timestamp.Hour()
-                minute := timestamp.Minute()
-                if hour < 9 || (hour == 9 && minute < 30) || hour >= 16 {
-                    continue
-                }
-            }
+			if !args.ExtendedHours {
+				timestamp := time.Time(iter.Item().ParticipantTimestamp).In(easternLocation)
+				hour := timestamp.Hour()
+				minute := timestamp.Minute()
+				if hour < 9 || (hour == 9 && minute < 30) || hour >= 16 {
+					continue
+				}
+			}
 			var tradeData GetTradeDataResults
 			tradeData.Timestamp = time.Time(iter.Item().ParticipantTimestamp).UnixNano() / int64(time.Millisecond)
 			tradeData.Price = iter.Item().Price
 			tradeData.Size = iter.Item().Size
 			tradeData.Exchange = iter.Item().Exchange
 			tradeData.Conditions = iter.Item().Conditions
+			//if(len(tradeData.Conditions) == 0 || )
 			tradeDataList = append(tradeDataList, tradeData)
 		}
-		windowStartTime = tradeDataList[len(tradeDataList)-1].Timestamp
+		if len(tradeDataList) > 0 {
+			windowStartTime = tradeDataList[len(tradeDataList)-1].Timestamp
+		} else {
+			return tradeDataList, nil
+		}
 	}
 	if len(tradeDataList) != 0 {
 		return tradeDataList, nil
 	}
-    return nil, fmt.Errorf("on0fi01in0f")
+	return nil, fmt.Errorf("on0fi01in0f")
+}
+
+func contains15or16(nums []int32) bool {
+	for _, num := range nums {
+		if num == 15 || num == 16 {
+			return true
+		}
+	}
+	return false
 }
 
 type GetQuoteDataArgs struct {
@@ -471,14 +486,14 @@ func GetQuoteData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			if int64(time.Time(iter.Item().ParticipantTimestamp).Unix())*1000 > windowEndTime {
 				return quoteDataList, nil
 			}
-            if !args.ExtendedHours {
-                timestamp := time.Time(iter.Item().ParticipantTimestamp).In(easternLocation)
-                hour := timestamp.Hour()
-                minute := timestamp.Minute()
-                if hour < 9 || (hour == 9 && minute < 30) || hour >= 16 {
-                    continue
-                }
-            }
+			if !args.ExtendedHours {
+				timestamp := time.Time(iter.Item().ParticipantTimestamp).In(easternLocation)
+				hour := timestamp.Hour()
+				minute := timestamp.Minute()
+				if hour < 9 || (hour == 9 && minute < 30) || hour >= 16 {
+					continue
+				}
+			}
 			var quoteData GetQuoteDataResults
 			quoteData.Timestamp = time.Time(iter.Item().ParticipantTimestamp).UnixNano() / int64(time.Millisecond)
 			quoteData.BidPrice = iter.Item().BidPrice
