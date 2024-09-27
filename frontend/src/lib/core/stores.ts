@@ -73,7 +73,7 @@ export function initStores(){
     });
     async function getSystemClockOffset() {
         try {
-            const response = await fetch('http://worldtimeapi.org/api/ip');
+            const response = await fetch('https://worldtimeapi.org/api/ip');
             if (!response.ok) {
                 throw new Error('Failed to fetch time data');
             }

@@ -68,8 +68,12 @@
             allTrades = [...modifiedTrades, ...allTrades].slice(0, maxLength);
         });
         unsubscribeQuote = quoteStore.subscribe((quotes:QuoteData[]) => {
-            currentBid = quotes[quotes.length-1].bidPrice;
-            currentAsk = quotes[quotes.length-1].askPrice;
+            const last = quotes[quotes.length-1]
+            if (last){
+                currentBid = last.bidPrice;
+                currentAsk = last.askPrice;
+                console.log(currentAsk)
+            }
         });
         prevSecId = instance.securityId ?? -1
     });
