@@ -23,7 +23,6 @@
 
     import {DateTime} from 'luxon';
 
-
     let bidLine: any
     let askLine: any
     let currentBarTimestamp: number;
@@ -177,7 +176,7 @@
                 }
                 // Handling the aggregation of the most recent candle 
                 if(inst.timestamp == 0) { // IF REAL TIME DATA 
-                    var referenceStartTime: number; 
+                    var referenceStartTime; 
                     var aggregateOpen: number;
                     var aggregateHigh: number;
                     var aggregateLow: number;
@@ -223,18 +222,12 @@
                         }
                     }
                     else if(inst.timeframe?.includes('w')) {
-                        if(Date.now() - ESTSecondstoUTCMillis(newCandleData[newCandleData.length-1].time) > parseInt(inst.timeframe)*604800) {
-                            //const d = new Date(ESTSecondstoUTCMillis())
-                        } else {
-                            referenceStartTime = newCandleData[newCandleData.length-1].time 
-                            aggregateOpen = newCandleData[newCandleData.length-1].open 
-                            aggregateHigh =  newCandleData[newCandleData.length-1].high
-                            aggregateLow =  newCandleData[newCandleData.length-1].low
+                        referenceStartTime = 1694145600000 // Sept. 8th 2003
 
-                        }
                     }
                     else if(inst.timeframe?.includes('d')) {
-                        console.log("---------------")
+                        //referenceStartTime = 1694145600000 // Sept. 8th 2003
+
                         
                     }
                     else if(inst.timeframe?.includes('s')) {
@@ -389,6 +382,161 @@
                             const numFullBars = Math.floor(elapsedTime / timeframeMs); 
                             // const candleStartTimeUTC
                         }
+                    }
+                    else if (inst.timeframe?.includes('w')) {
+                        const referenceDateTime = DateTime.fromObject({year:2003, month:9, day:8, minute:0, second:0, millisecond:0,}, {zone: 'America/New_York'});
+                        const now = get(currentTimestamp)
+                        const nowDateTime = DateTime.fromMillis(now)
+                        const elapsedTimeInWeeks = nowDateTime.diff(referenceDateTime, 'weeks').weeks;
+                        const numFullBars = Math.floor(elapsedTimeInWeeks / parseInt(inst.timeframe));
+                        const candleStartDateTime = referenceDateTime.plus({ weeks: numFullBars * parseInt(inst.timeframe) });
+
+                        // Candle start time in UTC milliseconds
+                        const candleStartTimeUTC = candleStartDateTime.toUTC().toMillis();
+                        referenceStartTime = getReferenceStartTimeForDateMilliseconds(now, false) // market open time of the day
+                        console.log("candleStartTime:", candleStartTimeUTC)
+                        const lastBar = newCandleData[newCandleData.length - 1];
+                        const lastBarTimeMs = ESTSecondstoUTCMillis(lastBar.time); 
+
+                        const lastCompleteDayUTC = DateTime.fromMillis(UTCSecondstoESTSeconds(now/1000)*1000).startOf('day')
+                        let dayBarsEndTimeUTC = lastCompleteDayUTC.toMillis();
+                        if(dayBarsEndTimeUTC <= candleStartTimeUTC) {
+                            dayBarsEndTimeUTC = candleStartTimeUTC;
+                        }
+                        const dailyBarsDurationMs = dayBarsEndTimeUTC - candleStartTimeUTC; 
+                        console.log("dailyBarsDurationMs", dailyBarsDurationMs)
+                        const numDailyBars = Math.floor(dailyBarsDurationMs / (86400000))
+                        console.log('numDailyBars', numDailyBars)
+                        let dailyBarsPromise: Promise<BarData[]> = Promise.resolve([]);
+                        if(numDailyBars > 0) {
+                            dailyBarsPromise = privateRequest<BarData[]>("getChartData", {
+                                securityId: inst.securityId,
+                                timeframe: "1d",
+                                timestamp: candleStartTimeUTC, 
+                                direction: "forward",
+                                bars: numDailyBars, 
+                                extendedhours: false, 
+                                isreplay: true,
+                            })
+                        }
+                        const lastCompleteMinuteUTC = DateTime.fromMillis(UTCSecondstoESTSeconds(now/1000)*1000).startOf('minute')
+                        let minuteBarsEndTimeUTC = lastCompleteMinuteUTC.toMillis(); 
+                        if(lastCompleteMinuteUTC.toMillis() <= candleStartTimeUTC) {
+                                minuteBarsEndTimeUTC = candleStartTimeUTC;
+                        }
+                        const minuteBarsDurationMs = minuteBarsEndTimeUTC - referenceStartTime; 
+                        console.log("minuteBarsEndTime", minuteBarsEndTimeUTC)
+                        console.log("referenceStartTime", referenceStartTime)
+                        const numMinuteBars = Math.floor(minuteBarsDurationMs / (60*1000))
+                        console.log('numMinuteBars', numMinuteBars)
+                        let minuteBarsPromise: Promise<BarData[]> = Promise.resolve([]);
+
+                        if(numMinuteBars > 0) {
+                                minuteBarsPromise = privateRequest<BarData[]>("getChartData", {
+                                    securityId: inst.securityId,
+                                    timeframe: "1",
+                                    timestamp: referenceStartTime,
+                                    direction: "forward",
+                                    bars: numMinuteBars, 
+                                    extendedhours: inst.extendedHours, 
+                                    isreplay: true,
+                                });
+                        }
+                        const tickDataStartTimeUTC = minuteBarsEndTimeUTC; 
+                        const tickDataDurationMs = now - tickDataStartTimeUTC; 
+                        let tickDataPromise: Promise<TradeData[]> = Promise.resolve([]);
+                        if(tickDataDurationMs >0) {
+                            tickDataPromise = privateRequest<TradeData[]>("getTradeData", {
+                                securityId: inst.securityId,
+                                time: tickDataStartTimeUTC, 
+                                lengthOfTime: tickDataDurationMs, 
+                                extendedHours: inst.extendedHours,
+                            });
+                        }
+                        Promise.all([dailyBarsPromise, minuteBarsPromise, tickDataPromise]).then(([dailyBars, minuteBars, tickData]) => {
+                            const allPrices: number[] = [];
+                            if(dailyBars && dailyBars.length > 0) {
+                                const filteredDailyBars = dailyBars.filter(bar => bar.time*1000 < dayBarsEndTimeUTC);
+                                if(filteredDailyBars && filteredDailyBars.length > 0) {
+                                    console.log("daily bar:", filteredDailyBars[0].time, dayBarsEndTimeUTC)
+                                    aggregateOpen = filteredDailyBars[0].open;
+                                    aggregateClose = filteredDailyBars[filteredDailyBars.length-1].close;
+                                    filteredDailyBars.forEach(bar => {
+                                        allPrices.push(bar.high, bar.low)
+                                })
+                                }
+                            }
+                            if(minuteBars && minuteBars.length >0) {
+                                console.log(minuteBars)
+                                if(aggregateOpen === undefined) {
+                                    aggregateOpen = minuteBars[0].open;
+                                }
+                                aggregateClose = minuteBars[minuteBars.length-1].close;
+                                minuteBars.forEach(bar => {
+                                    allPrices.push(bar.high, bar.low)
+                                })
+                            }
+                            if(tickData && tickData.length > 0) {
+                                const filteredTickData = tickData.filter(tick => tick.size >= 100);
+
+                                if (filteredTickData.length > 0) {
+                                    const tickPrices = filteredTickData.map(tick => tick.price);
+                                    allPrices.push(...tickPrices);
+
+                                    if (aggregateOpen === undefined) {
+                                        aggregateOpen = tickPrices[0];
+                                    }
+                                    aggregateClose = tickPrices[tickPrices.length - 1];
+                                }
+                            } 
+                            if(allPrices.length > 0 && aggregateOpen !== undefined && aggregateClose !== undefined) {
+                                aggregateHigh = Math.max(...allPrices);
+                                aggregateLow = Math.min(...allPrices);
+                                console.log({
+                                    time: UTCSecondstoESTSeconds(candleStartTimeUTC /1000) as UTCTimestamp, 
+                                    open: aggregateOpen, 
+                                    high: aggregateHigh,
+                                    low: aggregateLow,
+                                    close: aggregateClose,
+                                })
+                                if(candleStartTimeUTC > lastBarTimeMs) {
+                                    newCandleData.push({
+                                    time: UTCSecondstoESTSeconds(candleStartTimeUTC /1000) as UTCTimestamp, 
+                                    open: aggregateOpen, 
+                                    high: aggregateHigh,
+                                    low: aggregateLow,
+                                    close: aggregateClose,
+                                    })
+                                    console.log("push time", Date.now())
+                                    if(queuedLoad) {
+                                        queuedLoad()
+                                    }
+                                }
+                                else {
+                                    newCandleData[newCandleData.length-1] = {
+                                    time: UTCSecondstoESTSeconds(candleStartTimeUTC /1000) as UTCTimestamp, 
+                                    open: aggregateOpen, 
+                                    high: aggregateHigh,
+                                    low: aggregateLow,
+                                    close: aggregateClose,
+                                    }
+                                    console.log(newCandleData[newCandleData.length-1])
+                                    if(queuedLoad) {
+                                        queuedLoad()
+                                    }
+                                }
+                            } 
+                            else {
+                                console.log("No data returned for aggregation.")
+                                if(queuedLoad) {
+                                    queuedLoad()
+                                }
+                            }
+                        }).catch(error => {
+                            console.error("Error fetching data for aggregation:", error)
+                        })
+                        
+                        
                     }
                     else { // minute data OR HOURLY 
                         referenceStartTime =  getReferenceStartTimeForDateMilliseconds(newCandleData[newCandleData.length-1].time*1000, inst.extendedHours)
@@ -591,7 +739,7 @@
         function updateConsolidation(consolidatedTrade:TradeData,data:TradeData){
             if(data.conditions == null || (data.size >= 100 && !data.conditions.some(condition => tradeConditionsToCheck.has(condition)))) {
                 //if(!(mostRecentBar.close == data.price)) {
-                console.log(consolidatedTrade)
+                //console.log(consolidatedTrade)
                 consolidatedTrade.timestamp = data.timestamp
                 consolidatedTrade.price = data.price
             }
@@ -605,7 +753,7 @@
         const consolidatedTrade2 = {timestamp:null,price:0,size:0}
         var mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
         currentBarTimestamp = mostRecentBar.time as number
-        console.log(trades)
+        //console.log(trades)
         trades.forEach((data:TradeData)=>{
             if (UTCSecondstoESTSeconds(data.timestamp/1000) < (currentBarTimestamp) + chartTimeframeInSeconds) {
                 updateConsolidation(consolidatedTrade,data)
@@ -630,6 +778,7 @@
         }
         //new bar
         var timeToRequestForUpdatingAggregate = ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
+        //console.log(consolidatedTrade2)
         if (consolidatedTrade2.timestamp !== null){
             const data = consolidatedTrade2
             var referenceStartTime = getReferenceStartTimeForDateMilliseconds(data.timestamp, currentChartInstance.extendedHours) // this is in milliseconds 
