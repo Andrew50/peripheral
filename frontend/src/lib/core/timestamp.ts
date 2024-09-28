@@ -184,5 +184,5 @@ function isDaylightSavingTime(date: Date): boolean {
     return date >= dstStart && date < dstEnd;
 }
 export function getRealTimeTime(): number {
-    return Date.now()
+    return Date.now() + systemClockOffset;
 }
