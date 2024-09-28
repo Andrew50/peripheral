@@ -60,6 +60,7 @@ function getStartOfDayTimestamp(timestamp: number): number {
 
 export async function calculateRVOL(volumeData: { time: UTCTimestamp; value: number }[],securityId:number): number {
     let volumeSum = 0;
+    if(!Array.isArray(volumeData)) {return 0;}
     const dayDate = getStartOfDayTimestamp(volumeData[volumeData.length-1].time)//new Date(volumeData[volumeData.length].time * 1000).toISOString().split('T')[0]; // Get the date part
     if (dayDate != dailyVolumeDate || securityId !== dailyVolumeSecurityId){
 
