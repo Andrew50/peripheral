@@ -249,7 +249,7 @@
                         const now = getRealTimeTime(); 
                         const elapsedTime = now - referenceStartTime; 
                         console.log("elapsed time is:", elapsedTime)
-                        if(elapsedTime < 0) {
+                        if(elapsedTime < 0 || (elapsedTime >= 57600000 && inst.extendedHours) || (elapsedTime >= 23400000 && !inst.extendedHours)) {
                             console.log("Trading session has not started yet.")
                             queuedLoad()
                         } 
@@ -382,6 +382,9 @@
                             const numFullBars = Math.floor(elapsedTime / timeframeMs); 
                             // const candleStartTimeUTC
                         }
+                    }
+                    else if (inst.timeframe?.includes('d')) {
+                        
                     }
                     else if (inst.timeframe?.includes('w')) {
                         const referenceDateTime = DateTime.fromObject({year:2003, month:9, day:8, minute:0, second:0, millisecond:0,}, {zone: 'America/New_York'});
