@@ -66,15 +66,15 @@
 
 <style>
     .countdown-overlay {
-        position: fixed; /* Overlay effect */
-        bottom: 20px; /* Position from the bottom of the viewport */
-        right: 20px; /* Position from the right of the viewport */
+        position: absolute; /* Position relative to the parent div */
+        bottom: 20px; /* Position from the bottom of the parent div */
+        right: 20px; /* Position from the right of the parent div */
         background: rgba(0, 0, 0, 0.7); /* Semi-transparent background */
         padding: 10px 20px; /* Padding for better spacing */
         border-radius: 10px; /* Rounded corners */
         color: white; /* Text color */
-        font-size: 24px; /* Adjust font size */
-        z-index: 1000; /* Ensure it's on top of other elements */
+        font-size: 12px; /* Adjust font size */
+        z-index: 990; /* Ensure it's on top of other elements */
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3); /* Add a subtle shadow */
     }
 </style>
