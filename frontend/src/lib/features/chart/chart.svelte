@@ -159,6 +159,11 @@
                         queuedLoad = null
                         sma10Series.setData(calculateSMA(newCandleData, 10));
                         sma20Series.setData(calculateSMA(newCandleData, 20));
+                        if (/^\d+$/.test(inst.timeframe)) {
+                            vwapSeries.setData(calculateVWAP(newCandleData,newVolumeData));
+                        }else{
+                            vwapSeries.setData([])
+                        }
                         if (inst.requestType == 'loadNewTicker') {
                             chart.timeScale().resetTimeScale()
                             //chart.timeScale().fitContent();
