@@ -115,7 +115,7 @@
                 } else if(inst.requestType === 'loadNewTicker') {
                     const lastBar = newCandleData[newCandleData.length - 1]
                     //bidLine.setData([{time:lastBar.time,value:lastBar.close}])
-                    if(inst.includeLastBar == false) {
+                    if(inst.includeLastBar == false && $replayInfo.status !== 'inactive') {
                         // cuts off the last bar 
                         newCandleData = newCandleData.slice(0, newCandleData.length-1)
                         newVolumeData = newVolumeData.slice(0, newVolumeData.length-1)
