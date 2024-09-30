@@ -74,7 +74,7 @@ def filter(conn, df,tickers, setupId,setupName, threshold):
     return results
 
 
-def screen(conn, setupIds):
+def screen(conn, setupIds,timestamp):
     adr = 2
     dolvol = 10 * 1000000
     tf = "1d"
@@ -82,8 +82,11 @@ def screen(conn, setupIds):
     with conn.db.cursor() as cursor:
         cursor.execute('SELECT MAX(bars) FROM setups WHERE setupId = ANY(%s)', (setupIds,))
         maxBars = cursor.fetchone()[0]
-    filteredTickerPriceList = currentTickersAndPrice(conn, dolvol, adr, 0)
-    data, tickers = getTensor(conn, filteredTickerPriceList, tf, maxBars)
+    if timestamp == 0:
+        instanceList = currentTickersAndPrice(conn))
+    else: 
+        instanceList = select * from 
+    data, tickers = getTensor(conn, , tf, maxBars,
     results = []
     for setupId in setupIds:
         with conn.db.cursor() as cursor:
