@@ -6,24 +6,13 @@ import asyncio
 import aiohttp
 import datetime
 
-def normalize(df: np.ndarray,normType) -> np.ndarray:
-    if normType == "rolling-log":
-        df = np.log(df)
-        close_col = np.roll(df[:, 3], shift=1)
-        df = df - close_col[:,np.newaxis]
-        df = df[1:]
-        df = df[::-1]
-        return df
-    elif normType == "min-max":
-        # Min-Max normalization to the range [-1, 1]
-        min_vals = df.min(axis=0)
-        max_vals = df.max(axis=0)
-        df = 2 * (df - min_vals) / (max_vals - min_vals) - 1
-        df = df[1:]     # Remove the first row to match the length
-        df = df[::-1]   # Reverse the order of rows to match 'rolling-log'
-        return df
-    else:
-        raise ValueError(f"Unknown normalization type: {normType}")
+def normalize(df: np.ndarray) -> np.ndarray:
+    df = np.log(df)
+    close_col = np.roll(df[:, 3], shift=1)
+    df = df - close_col[:,np.newaxis]
+    df = df[1:]
+    df = df[::-1]
+    return df
 
 def get_timeframe(timeframe):
     last_char = timeframe[-1]
@@ -46,7 +35,6 @@ async def get_instance_data(session, args):
     #this shit is uses bandaids and only works for daily
     apiKey, ticker, dt, tf, label,bars, currentPrice, pm = [args["polygonKey"],
     args["ticker"],args["dt"],args["tf"],args["label"],args["bars"], args["currentPrice"],args["pm"]]
-    normType = args["normalize"]
     if dt == 0:
         end_time = datetime.datetime.now() #- datetime.timedelta(days=1)
     else:
@@ -109,11 +97,11 @@ async def get_instance_data(session, args):
             data_array[-1,:] = data_array[-1, 0]
         if ticker == "SGH":
             print(data_array)
-        data_array = normalize(data_array,normType)
+        data_array = normalize(data_array)
         return data_array, label
 
-async def async_get_tensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm,normalize):
-    args = [{"tf":tf,"bars":bars,"pm":pm,"polygonKey":conn.polygon,"ticker":instance["ticker"],"normalize":normalize,"dt":instance["dt"],"label":instance["label"],"currentPrice":instance.get("currentPrice",None)}
+async def async_get_tensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm=False):
+    args = [{"tf":tf,"bars":bars,"pm":pm,"polygonKey":conn.polygon,"ticker":instance["ticker"],"dt":instance["dt"],"label":instance["label"],"currentPrice":instance.get("currentPrice",None)}
         for instance in ticker_dt_label_currentPrice_dict
     ]
     
@@ -140,5 +128,5 @@ async def async_get_tensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm
         return ds.astype(np.float32), labels
 
 # This function can now be called synchronously
-def getTensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm=False,normalize="rolling-log"):
-    return asyncio.run(async_get_tensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm,normalize))
+def getTensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm=False):
+    return asyncio.run(async_get_tensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm))
