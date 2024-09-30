@@ -6,7 +6,7 @@ from tensorflow.keras.layers import Bidirectional
 from tensorflow.keras.callbacks import EarlyStopping
 #from imblearn.over_sampling import SMOTE
 from google.protobuf import text_format
-#from tensorflow_serving.config import model_server_config_pb2
+from tensorflow_serving.config import model_server_config_pb2
 from data import getTensor
 tf.get_logger().setLevel('DEBUG')
 tf.config.threading.set_intra_op_parallelism_threads(6)
