@@ -72,7 +72,7 @@
             if (last){
                 currentBid = last.bidPrice;
                 currentAsk = last.askPrice;
-                console.log(currentAsk)
+                //console.log(currentAsk)
             }
         });
         prevSecId = instance.securityId ?? -1

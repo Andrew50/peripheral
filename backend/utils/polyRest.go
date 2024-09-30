@@ -400,3 +400,10 @@ func GetFIGI(conn *Conn, ticker string, dateOnly string) (string, error) {
 	}
 	return "", fmt.Errorf("function GetFIGI could not find FIGI for ticker: {%s} and date {%s}", ticker, dateOnly)
 }
+func GetMarketStatus(conn *Conn) (string, error) {
+	getMarketStatusResponse, err := conn.Polygon.GetMarketStatus(context.Background())
+	if err != nil {
+		return "", err
+	}
+	return getMarketStatusResponse.Market, nil
+}
