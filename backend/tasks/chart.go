@@ -174,7 +174,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			queryStartTime = minDateSQL
 			if queryStartTime.After(queryEndTime) {
 				fmt.Printf("\n%v, %v", queryStartTime, queryEndTime, args.Direction, args.Timestamp, args.Timeframe)
-
 				return nil, fmt.Errorf("i10i0v")
 			}
 		} else if args.Direction == "forward" {

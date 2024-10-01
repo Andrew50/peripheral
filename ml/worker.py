@@ -2,10 +2,12 @@ import json, traceback, datetime, psycopg2
 from conn import Conn
 from train import train
 from screen import screen
+from trainerQueue import refillTrainerQueue
 
 funcMap = {
     "train": train,
-    "screen": screen
+    "screen": screen,
+    "refillTrainerQueue": refillTrainerQueue,
 }
 
 
@@ -17,6 +19,7 @@ def packageResponse(result,status):
 
 def process_tasks():
     data = Conn(True)
+    print("starting queue listening",flush=True)
     while True:
         task = data.cache.brpop('queue', timeout=60)
         if not task:
@@ -25,6 +28,7 @@ def process_tasks():
             _, task_message = task
             task_data = json.loads(task_message)
             task_id, func_ident, args = task_data['id'], task_data['func'], task_data['args']
+
             print(f"starting {func_ident} {args} {task_id}", flush=True)
             try:
                 data.cache.set(task_id, json.dumps('running'))

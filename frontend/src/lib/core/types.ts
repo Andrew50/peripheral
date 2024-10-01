@@ -14,6 +14,7 @@ export interface Setup {
     dolvol: number;
     adr: number;
     mcap: number;
+    score: number;
     activeScreen: boolean
 }
 export interface Watchlist {

@@ -1,42 +1,59 @@
-<!-- screen.svelte -->
 <script lang="ts">
   import { writable, get } from 'svelte/store';
-  import List from '$lib/utils/list.svelte'
-  import '$lib/core/global.css'
-  import {queueRequest } from '$lib/core/backend';
+  import List from '$lib/utils/list.svelte';
+  import '$lib/core/global.css';
+  import {UTCTimestampToESTString} from '$lib/core/timestamp'
+  import { queueRequest } from '$lib/core/backend';
   import type { Writable } from 'svelte/store';
-  import type {Instance} from '$lib/core/types'
-  import {setups} from '$lib/core/stores'
-  let screens:Writable<Screen[]> = writable([])
+  import type { Instance } from '$lib/core/types';
+  import { setups } from '$lib/core/stores';
+  import {queryInstanceInput} from '$lib/utils/input.svelte'
+  
+  // Assume this function is already coded and imported
+
+  let screens: Writable<Screen[]> = writable([]);
+  let selectedDate: Writable<number> = writable(0); // Store for the date, default to current date
+
   interface Screen extends Instance {
-      setupType: string
-      score: number
-      flagged: boolean
+    setupType: string;
+    score: number;
+    flagged: boolean;
   }
 
   function runScreen() {
-      const setupIds = get(setups).filter(v => v.activeScreen).map(v => v.setupId)
-      queueRequest<Screen[]>('screen', { setupIds: setupIds}).then((response) => {
-          console.log(response)
-          screens.set(response)
-      });
+    const setupIds = get(setups).filter(v => v.activeScreen).map(v => v.setupId);
+    const dateToScreen = get(selectedDate); // Get the currently selected date
+    queueRequest<Screen[]>('screen', { setupIds: setupIds, timestamp: dateToScreen/1000 }).then((response) => {
+      console.log(response);
+      screens.set(response);
+    });
+  }
+
+  // This function is called when the date button is clicked
+  function changeDate() {
+    queryInstanceInput(["timestamp"],{timestamp:$selectedDate}).then((v:Instance) => {
+        if (v.timestamp !== undefined){
+            selectedDate.set(v.timestamp); // Update the date store with the new selected date
+        }
+    });
   }
 </script>
 
 <div class="controls-container">
   {#if Array.isArray($setups) && $setups.length > 0}
-   {#each $setups as setup (setup.setupId)}
-    <button 
-      class="{setup.activeScreen ? '' : 'inactive'}" 
-      on:click={() => {setup.activeScreen = !setup.activeScreen}}
-    >
-      {setup.name}
-    </button>
-  {/each}
+    {#each $setups as setup (setup.setupId)}
+      <button 
+        class="{setup.activeScreen ? '' : 'inactive'}" 
+        on:click={() => { setup.activeScreen = !setup.activeScreen }}
+      >
+        {setup.name}
+      </button>
+    {/each}
   {/if}
 </div>
 
-<button on:click={runScreen}> Screen </button>
+<button on:click={changeDate}> Change Date </button>
+<button on:click={runScreen}> Screen {UTCTimestampToESTString($selectedDate)} </button>
 
-<List on:contextmenu={(event)=>{event.preventDefault()}} list={screens} columns={["ticker","change","setup","score"]}/>
+<List on:contextmenu={(event) => { event.preventDefault(); }} list={screens} columns={["ticker", "change", "setup", "score"]} />
 

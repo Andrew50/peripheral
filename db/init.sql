@@ -29,7 +29,8 @@ create table setups (
     sampleSize int default 0,
     dolvol float not null,
     adr float not null,
-    mcap float not null
+    mcap float not null,
+    unique (userId, name)
 );
 create index idxUserIdName on setups(userId, name);
 create table samples (

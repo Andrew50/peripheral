@@ -6,7 +6,7 @@ from tensorflow.keras.layers import Bidirectional
 from tensorflow.keras.callbacks import EarlyStopping
 #from imblearn.over_sampling import SMOTE
 from google.protobuf import text_format
-#from tensorflow_serving.config import model_server_config_pb2
+from tensorflow_serving.config import model_server_config_pb2
 from data import getTensor
 tf.get_logger().setLevel('DEBUG')
 tf.config.threading.set_intra_op_parallelism_threads(6)
@@ -54,7 +54,9 @@ def train_model(conn,setupID):
     trainingSample, validationSample = getSample(conn,setupID,interval,TRAINING_CLASS_RATIO, VALIDATION_CLASS_RATIO, SPLIT_RATIO)
     #print(trainingSample)
     xTrainingData, yTrainingData = getTensor(conn,trainingSample,interval,bars)
+    yTrainingData = np.array([m["label"] for m in yTrainingData])
     xValidationData, yValidationData = getTensor(conn,validationSample,interval,bars)
+    yValidationData = np.array([m["label"] for m in yValidationData])
     yTrainingData, yValidationData = np.array(yTrainingData,dtype=np.int32),np.array(yValidationData,dtype=np.int32)
 
     validationRatio = np.mean(yValidationData)
