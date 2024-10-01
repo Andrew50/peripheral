@@ -44,8 +44,9 @@ def get_timeframe(timeframe):
 
 async def get_instance_data(session, args):
     #this shit is uses bandaids and only works for daily
-    apiKey, ticker, dt, tf,bars, currentPrice, pm, dolvolReq, adrReq, mcapReq, normType = [args["polygonKey"],
-    args["ticker"],args["dt"],args["tf"],args["label"],args["bars"], args["currentPrice"],args["pm"],args["dolvol"],args["adrReq"],args["mcapReq"],args["normalize"]]
+    apiKey, ticker, dt, tf,bars, currentPrice, pm, dolvolReq, adrReq, mcapReq, normType,label = [args["polygonKey"],
+    args["ticker"],args["dt"],args["tf"],args["bars"], args["currentPrice"],args["pm"],args["dolvolReq"],args["adrReq"],
+        args["mcapReq"],args["normalize"],args.get("label",None)]
     if dt == 0:
         end_time = datetime.datetime.now() #- datetime.timedelta(days=1)
     else:
@@ -74,7 +75,10 @@ async def get_instance_data(session, args):
     async with session.get(url, params=params) as response:
         if response.status != 200:
             return None
-        stock_data = await response.json()
+        try:
+            stock_data = await response.json()
+        except:
+            return None
         if 'results' not in stock_data:
             return None
         results = stock_data['results']
@@ -126,7 +130,7 @@ async def get_instance_data(session, args):
         else: #historical
             data_array[-1,:] = data_array[-1, 0]
         data_array = normalize(data_array,normType)
-        return data_array, {"ticker":ticker,"timestamp":dt,"dolvol":dolvol,"adr":adr,"mcap":mcap}
+        return data_array, {"ticker":ticker,"timestamp":dt,"dolvol":dolvol,"adr":adr,"mcap":mcap,"label":label}
 
 async def async_get_tensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm,normalize,dolvolReq,adrReq,mcapReq):
     args = [{"tf":tf,"bars":bars,"pm":pm,"polygonKey":conn.polygon,"ticker":instance["ticker"],"normalize":normalize,

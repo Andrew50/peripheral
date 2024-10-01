@@ -7,7 +7,7 @@
     import Journal from "$lib/features/journal.svelte"
     import Similar from '$lib/utils/similar.svelte';
     import Study from '$lib/features/study.svelte';
-    import Setups from '$lib/features/setups.svelte';
+    import Setups from '$lib/features/setups/setups.svelte';
     import Screen from '$lib/features/screen.svelte';
     import Test from '$lib/features/test.svelte';
     import Watchlist from '$lib/features/watchlist.svelte'
