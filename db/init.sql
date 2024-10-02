@@ -27,6 +27,7 @@ create table setups (
     modelVersion int not null default 0,
     score int default 0;
     sampleSize int default 0,
+    untrainedSamples int default 0,
     dolvol float not null,
     adr float not null,
     mcap float not null,

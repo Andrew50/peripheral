@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 )
 
+
 type SetupResult struct {
     SetupId   int    `json:"setupId"`
     Name     string   `json:"name"`
@@ -48,32 +49,33 @@ type NewSetupArgs struct {
 }
 
 func NewSetup(conn *utils.Conn,userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var input NewSetupArgs
-	if err := json.Unmarshal(rawArgs, &input); err != nil {
+	var args NewSetupArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, err
 	}
-	if input.Name == "" || input.Timeframe == ""{
+	if args.Name == "" || args.Timeframe == ""{
 		return nil, fmt.Errorf("dlkns")
     }
 	var setupId int
 	err := conn.DB.QueryRow(context.Background(), `
 		INSERT INTO setups (name, timeframe, bars, threshold, dolvol, adr, mcap, userId) 
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING setupId`,
-		input.Name, input.Timeframe, input.Bars, input.Threshold, input.Dolvol, input.Adr, input.Mcap, userId,
+		args.Name, args.Timeframe, args.Bars, args.Threshold, args.Dolvol, args.Adr, args.Mcap, userId,
 	).Scan(&setupId)
 
 	if err != nil {
 		return nil, fmt.Errorf("dkngvw0 %v", err)
 	}
+    utils.CheckSampleQueue(conn,setupId,false)
 	return SetupResult{
 		SetupId:   setupId,
-		Name:      input.Name,
-		Timeframe: input.Timeframe,
-		Bars:      input.Bars,
-		Threshold: input.Threshold,
-		Dolvol:    input.Dolvol,
-		Adr:       input.Adr,
-		Mcap:      input.Mcap,
+		Name:      args.Name,
+		Timeframe: args.Timeframe,
+		Bars:      args.Bars,
+		Threshold: args.Threshold,
+		Dolvol:    args.Dolvol,
+		Adr:       args.Adr,
+		Mcap:      args.Mcap,
 	}, nil
 }
 
@@ -109,6 +111,7 @@ type SetSetupArgs struct {
 	Mcap      float64 `json:"mcap"`
 }
 
+
 func SetSetup(conn *utils.Conn, userId int,rawArgs json.RawMessage) (interface{}, error) {
 	var args SetSetupArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -139,6 +142,5 @@ func SetSetup(conn *utils.Conn, userId int,rawArgs json.RawMessage) (interface{}
 		Mcap:      args.Mcap,
 	}, nil
 }
-
 
 

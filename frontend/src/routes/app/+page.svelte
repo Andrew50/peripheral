@@ -35,6 +35,7 @@
     let latestReplaySpeed: number;
     onMount(() => { 
         dispatchMenuChange.subscribe((v:Menu)=>{
+
             toggleMenu(v)
         })
         privateRequest<string>("verifyAuth", {}).catch(() => {

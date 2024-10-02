@@ -9,8 +9,8 @@ from google.protobuf import text_format
 from tensorflow_serving.config import model_server_config_pb2
 from data import getTensor
 tf.get_logger().setLevel('DEBUG')
-tf.config.threading.set_intra_op_parallelism_threads(6)
-tf.config.threading.set_inter_op_parallelism_threads(6)
+tf.config.threading.set_intra_op_parallelism_threads(4)
+tf.config.threading.set_inter_op_parallelism_threads(4)
 
 SPLIT_RATIO = .8
 TRAINING_CLASS_RATIO = .18
@@ -43,16 +43,16 @@ def createModel():
 
 def train_model(conn,setupID):
     with conn.db.cursor() as cursor:
-        cursor.execute('SELECT timeframe, bars, modelVersion FROM setups WHERE setupId = %s', (setupID,))
+        cursor.execute('SELECT timeframe, bars, modelVersion, untrainedSampleChanges FROM setups WHERE setupId = %s', (setupID,))
         traits = cursor.fetchone()
     interval = traits[0]
     if interval != "1d":
         return 'invalid tf'
     bars = traits[1]
     modelVersion = traits[2] + 1
+    addedSamples = traits[3]
     model = createModel()
     trainingSample, validationSample = getSample(conn,setupID,interval,TRAINING_CLASS_RATIO, VALIDATION_CLASS_RATIO, SPLIT_RATIO)
-    #print(trainingSample)
     xTrainingData, yTrainingData = getTensor(conn,trainingSample,interval,bars)
     yTrainingData = np.array([m["label"] for m in yTrainingData])
     xValidationData, yValidationData = getTensor(conn,validationSample,interval,bars)
@@ -61,7 +61,7 @@ def train_model(conn,setupID):
 
     validationRatio = np.mean(yValidationData)
     trainingRatio = np.mean(yTrainingData)
-   # TODO all this needs to be sent to frontend instead of just logged
+   # TODO all this needs to be sent to frontend instead of just logged mabye
     print(f"{len(xValidationData) * validationRatio + len(xTrainingData) * trainingRatio} yes samples")
     print("training class ratio",trainingRatio)
     print("validation class ratio", validationRatio)
@@ -74,8 +74,6 @@ def train_model(conn,setupID):
         mode='max',
         verbose =1
     )
-    #print(xTrainingData.shape)
-    #print(xValidationData.shape)
     history = model.fit(xTrainingData, yTrainingData,epochs=MAX_EPOCHS,batch_size=BATCH_SIZE,validation_data=(xValidationData, yValidationData),callbacks=[early_stopping])
     tf.keras.backend.clear_session()
     score = round(max(history.history['val_auc_pr']) * 100)
@@ -90,6 +88,13 @@ def train_model(conn,setupID):
             with conn.db.cursor() as cursor:
                 query = f"UPDATE setups SET {ident} = %s WHERE setupId = %s;"
                 cursor.execute(query, (val, setupID))
+    conn.db.commit()
+    with conn.db.cursor() as cursor:
+        cursor.execute("""
+            UPDATE setups 
+            SET untrainedSampleChanges = untrainedSampleChanges - %s 
+            WHERE setupId = %s;
+        """, (addedSamples, setupID))
     conn.db.commit()
     return score 
 
@@ -267,7 +272,16 @@ def getSample(data, setupID, interval, TRAINING_CLASS_RATIO, VALIDATION_CLASS_RA
         return trainingDicts,validationDicts
 
 
-def train(data,setupId):
-    results = train_model(data,setupId)
+def train(conn,setupId):
+    err = None
+    results = None
+    try:
+        results = train_model(conn,setupId)
+    except Exception as e:
+        err = e
+    finally:
+        conn.cache.set(f"{setupId}_queue_running", "false")
+        if err is not None:
+            raise err
     return results
 
