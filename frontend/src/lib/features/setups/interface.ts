@@ -17,5 +17,7 @@ export function setSample (setupId:number|"new",instance:Instance):void{
                 unsub()
             }
         })
+    }else{
+        privateRequest<void>("setSample",{setupId:setupId,...instance})
     }
 }
