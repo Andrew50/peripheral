@@ -12,6 +12,7 @@ export let entryOpen = writable(false)
 export let flagWatchlist: Writable<Instance[]>
 export let replayInfo = writable<ReplayInfo>({status:"inactive",startTimestamp:0, replaySpeed:1,})
 export let systemClockOffset = 0;
+export let dispatchMenuChange = writable("")
 export interface ReplayInfo {
     status: "inactive" | "active" | "paused",
     startTimestamp: number,

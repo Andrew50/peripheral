@@ -1,6 +1,6 @@
+<!-- similar.svelte -->
 <script lang="ts" context="module">
 export interface ActiveStream {
-        import '$lib/core/global.css'
 
     securityId: number;
     streamType: "fast" | "slow" | "quote";
@@ -40,6 +40,7 @@ export interface ActiveStream {
 </script>
 
 <script lang="ts">
+    import '$lib/core/global.css'
     let menu: HTMLElement;
     import {browser} from '$app/environment'
     import {onMount} from 'svelte'
@@ -67,6 +68,8 @@ export interface ActiveStream {
     })
 
     function handleClick(event:MouseEvent):void {
+        console.log(event.target)
+        console.log(menu)
         if (menu && !menu.contains(event.target as Node)) {
             closeMenu();
         }

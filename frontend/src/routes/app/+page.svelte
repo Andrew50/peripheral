@@ -2,6 +2,7 @@
     import '$lib/core/global.css'
     import ChartContainer from "$lib/features/chart/chartContainer.svelte"
     import RightClick from '$lib/utils/rightClick.svelte';
+    import Sample from '$lib/utils/sample.svelte';
     import Input from '$lib/utils/input.svelte';
     import Settings from "$lib/features/settings.svelte"
     import Journal from "$lib/features/journal.svelte"
@@ -20,7 +21,7 @@
     import { get, writable } from 'svelte/store';
     import { browser } from '$app/environment';
     import {initStores, replayInfo, type ReplayInfo} from '$lib/core/stores'
-    import { currentTimestamp, formatTimestamp, updateTime } from '$lib/core/stores';
+    import { dispatchMenuChange,currentTimestamp, formatTimestamp, updateTime } from '$lib/core/stores';
     type Menu = 'study' | 'screen' |'quotes'| 'setups' | 'test' | 'none' | 'watchlist' | "journal"|'screensaver' | "replay" | "settings";
     const menus: Menu[] = ['quotes','watchlist' ,'screen' ,'study' ,"journal", 'setups' ,'screensaver' , "replay", "settings"] //,'test'
     let active_menu: Menu = 'none';
@@ -33,6 +34,9 @@
     let interval;
     let latestReplaySpeed: number;
     onMount(() => { 
+        dispatchMenuChange.subscribe((v:Menu)=>{
+            toggleMenu(v)
+        })
         privateRequest<string>("verifyAuth", {}).catch(() => {
             goto('/login');
         });
@@ -68,7 +72,7 @@
         close = 0;
     }
 
-    function toggle_menu(menuName: Menu) {
+    function toggleMenu(menuName: Menu) {
         if (active_menu == menuName) {
             active_menu = 'none'; 
             menuWidth.set(close);
@@ -124,6 +128,7 @@
     <Input/>
     <RightClick/>
     <Similar/>
+    <Sample/>
     <div class="dcontainer">
         <!--<Chart width={pix - $menuWidth - buttonWidth}/>-->
        <ChartContainer width={pix - $menuWidth - buttonWidth}/>
@@ -170,7 +175,7 @@
 
         <button
             class="button {active_menu == menu ? 'active' : ''}"
-            on:click={() => toggle_menu(menu)}
+            on:click={() => toggleMenu(menu)}
         >
             <img class="icon" src={`${menu}.png`} alt="" />
         </button>
