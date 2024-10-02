@@ -1,14 +1,13 @@
+
 package tasks
 
 import (
 	"backend/utils"
+    "time"
+    "fmt"
 	"context"
 	"encoding/json"
-	"fmt"
-	"time"
 )
-
-// Argument structs
 type LabelTrainingQueueInstanceArgs struct {
 	SetupId  int `json:"setupId"`
 	SampleId int `json:"sampleId"`
@@ -22,7 +21,7 @@ func LabelTrainingQueueInstance(conn *utils.Conn, userId int, rawArgs json.RawMe
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error parsing args: %v", err)
 	}
-    checkQueueLength(conn,args.SetupId)
+    utils.CheckSampleQueue(conn,args.SetupId,args.Label)
 	_, err := conn.DB.Exec(context.Background(), `
 		UPDATE samples
 		SET label = $1
@@ -50,7 +49,7 @@ func GetTrainingQueue(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 		return nil, fmt.Errorf("error parsing args: %v", err)
 	}
 
-	checkQueueLength(conn, args.SetupId)
+	utils.CheckSampleQueue(conn, args.SetupId,false)
 	rows, err := conn.DB.Query(context.Background(), `
 		SELECT s.sampleId, s.securityId, s.timestamp, sec.ticker
 		FROM samples s
@@ -81,32 +80,26 @@ func GetTrainingQueue(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 
 	return trainingQueue, nil
 }
-func checkQueueLength(conn *utils.Conn, setupId int) {
-    var queueLength int
-    err := conn.DB.QueryRow(context.Background(), `
-        SELECT COUNT(*) 
-        FROM samples 
-        WHERE setupId = $1 AND label IS NULL`, setupId).Scan(&queueLength)
-    if err != nil {
-        fmt.Printf("Error checking queue length: %v\n", err)
-        return
-    }
-    if queueLength < 20 {
-        queueRunningKey := fmt.Sprintf("%d_queue_running", setupId)
-        queueRunning := conn.Cache.Get(context.Background(), queueRunningKey).Val()
-        if queueRunning != "true" {
-            conn.Cache.Set(context.Background(), queueRunningKey, "true", 0)
-            _, err := utils.Queue(conn, "refillTrainerQueue", map[string]interface{}{
-                "setupId": setupId,
-            })
-
-            if err != nil {
-                fmt.Printf("Error enqueuing refillQueue: %v\n", err)
-                conn.Cache.Del(context.Background(), queueRunningKey)
-                return
-            }
-            fmt.Printf("Enqueued refillQueue for setupId: %d\n", setupId)
-        }
-    }
+type SetSampleArgs struct {
+	SecurityId int    `json:"securityId"`
+	Timestamp  int64  `json:"timestamp"` // Unix timestamp in milliseconds
+	SetupId    int    `json:"setupId"`
 }
 
+func SetSample(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args SetSampleArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("error parsing args: %v", err)
+	}
+
+	_, err := conn.DB.Exec(context.Background(), `
+		INSERT INTO samples (securityId, timestamp, setupId,label)
+		VALUES ($1, to_timestamp($2), $3,true)`,
+		args.SecurityId, args.Timestamp/1000, args.SetupId) // Convert timestamp from milliseconds to seconds
+	if err != nil {
+		return nil, fmt.Errorf("error inserting sample: %v", err)
+	}
+    utils.CheckSampleQueue(conn,args.SetupId,true)
+
+	return map[string]string{"status": "success"}, nil
+}

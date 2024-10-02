@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { privateRequest, queueRequest } from '$lib/core/backend';
+  import { privateRequest } from '$lib/core/backend';
   import type { Setup } from '$lib/core/types';
   import { setups } from '$lib/core/stores';
   import '$lib/core/global.css';

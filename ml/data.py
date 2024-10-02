@@ -156,7 +156,6 @@ async def async_get_tensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm
         ds = np.array(ds)
         if not np.isfinite(ds).all():
             ds = np.nan_to_num(ds, nan=0.0, posinf=0.0, neginf=0.0)
-            print("Bad values corrected")
 
         return ds.astype(np.float32), labels
 
