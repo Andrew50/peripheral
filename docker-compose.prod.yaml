@@ -5,16 +5,16 @@ services:
             dockerfile: Dockerfile.prod
         restart: unless-stopped
         networks:
-            - compose_network_prod
+            - compose_network
 
     db:
         build:
            context: ./db
            dockerfile: Dockerfile.prod
         networks:
-            - compose_network_prod
+            - compose_network
         volumes:
-            - db_prod:/var/lib/postgresql/data
+            - db:/var/lib/postgresql/data
             - ./backups:/backups
         restart: unless-stopped
 
@@ -27,7 +27,7 @@ services:
           - WATCHPACK_POLLING=true #enable polling
         restart: unless-stopped
         networks:
-            - compose_network_prod
+            - compose_network
 
     tf:
         build:
@@ -35,9 +35,9 @@ services:
             dockerfile: Dockerfile
         restart: unless-stopped
         volumes:
-            - tf_prod:/models
+            - tf:/models
         networks:
-          - compose_network_prod
+          - compose_network
 
 
     ml: 
@@ -45,10 +45,10 @@ services:
             context: ./ml
             dockerfile: Dockerfile
         networks:
-            - compose_network_prod
+            - compose_network
         volumes:
           #- ./ml:/app #for hot reload
-            - tf_prod:/models
+            - tf:/models
         restart: unless-stopped
 
     cache:
@@ -56,10 +56,10 @@ services:
             context: ./cache
             dockerfile: Dockerfile
         networks:
-          - compose_network_prod
+          - compose_network
         hostname: redis
         volumes:
-          - cache_prod:/data
+          - cache:/data
         command: redis-server
         restart: unless-stopped
 
@@ -74,7 +74,7 @@ services:
           - backend
           - frontend
         networks:
-          - compose_network_prod
+          - compose_network
 
 
     cloudflared:
@@ -82,14 +82,14 @@ services:
       command: tunnel run --token eyJhIjoiYTAxOGU0Yzg4YmUwZWQ0NGRhN2VhNTY4YjMxMTZiM2MiLCJ0IjoiMjdjMzY2MGUtMmI4YS00YTE1LWIwMDAtOGVjZWYxMjFmYjdjIiwicyI6IllXUmhPVE5pT0dFdE5qUTBOUzAwWTJZM0xXSTVZV0l0TlRaaU9XVTRObVJoWkdFMiJ9
       restart: unless-stopped
       networks:
-        - compose_network_prod
+        - compose_network
         
 
 volumes:
-  db_prod:
-  cache_prod:
-  tf_prod:
+  db:
+  cache:
+  tf:
 
 networks:
-  compose_network_prod:
+  compose_network:
     driver: bridge

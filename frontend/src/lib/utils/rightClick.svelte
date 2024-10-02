@@ -9,6 +9,7 @@
     import {newStudy} from '$lib/features/study.svelte';
     import { get, writable } from 'svelte/store';
     import {querySimilarInstances} from '$lib/utils/similar.svelte'
+    import {querySetSample} from '$lib/utils/sample.svelte'
     import {startReplay} from '$lib/utils/stream'
     interface RightClickQuery {
         x?: number;
@@ -165,8 +166,8 @@
     <div bind:this={rightClickMenu} class="popup-container" style="top: {$rightClickQuery.y}px; left: {$rightClickQuery.x}px;">
         <div >{$rightClickQuery.instance.ticker} {UTCTimestampToESTString($rightClickQuery.instance.timestamp)} </div>
         <div ><button on:click={()=>newStudy(get(rightClickQuery).instance)}> Add to Study </button></div>
-        <!--<div><button on:click={()=>newSample(get(rightClickQuery).instance)}> Add to Sample </button></div>
-        <div><button on:click={()=>newJournal(get(rightClickQuery).instance)}> Add to Journal </button></div>-->
+        <div><button on:click={(event)=>querySetSample(event,get(rightClickQuery).instance)}> Add to Sample </button></div>
+        <!--<div><button on:click={()=>newJournal(get(rightClickQuery).instance)}> Add to Journal </button></div>-->
         <div ><button on:click={(event)=>querySimilarInstances(event,get(rightClickQuery).instance)}> Similar Instances </button></div>
         <!--<div><button on:click={getStats}> Instance Stats </button></div>-->
         <div ><button on:click={()=>startReplay($rightClickQuery.instance.timestamp)}>Begin Replay</button></div>

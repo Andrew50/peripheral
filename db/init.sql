@@ -25,7 +25,7 @@ create table setups (
     bars int not null,
     threshold int not null,
     modelVersion int not null default 0,
-    score int,
+    score int default 0;
     sampleSize int default 0,
     dolvol float not null,
     adr float not null,

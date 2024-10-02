@@ -4,10 +4,19 @@
   import { setups } from '$lib/core/stores';
   import '$lib/core/global.css';
   import Trainer from "./trainer.svelte"
-
+  import {onMount} from 'svelte'
   let selectedSetupId: number | null | "new" = null;
   let trainingSetup: Setup | null = null;
   let editedSetup: Setup | null = null;
+  import {eventDispatcher} from './interface'
+  onMount(()=>{
+      eventDispatcher.subscribe((v:SetupEvent)=>{
+          if (v === "new"){
+              createNewSetup()
+          }
+      })
+  })
+
   function editSetup(setup: Setup) {
     selectedSetupId = setup.setupId;
     editedSetup = { ...setup }; // Create a copy for editing
@@ -15,6 +24,7 @@
   function cancelEdit() {
     selectedSetupId = null;
     editedSetup = null;
+    eventDispatcher.set("cancel")
   }
 
   function train(setup: Setup) {
@@ -54,6 +64,7 @@
               setups.update((o:Setup[])=>{
                   return [...o,s]
               })
+              eventDispatcher.set(s.setupId)
           })
       }else{
         privateRequest('setSetup', editedSetup)
@@ -126,7 +137,9 @@
     </div>
     <button on:click={saveSetup}>Save</button>
     <button on:click={cancelEdit}>Cancel</button>
-    <button on:click={deleteSetup}>Delete</button>
+    {#if selectedSetupId !== 'new'}
+        <button on:click={deleteSetup}>Delete</button>
+    {/if}
 {:else if trainingSetup !== null}
     <Trainer handleExit={()=>{trainingSetup=null}} setup={trainingSetup}/>
 {/if}
