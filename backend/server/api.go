@@ -53,6 +53,7 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
     "deleteSetup": tasks.DeleteSetup,
     "labelTrainingQueueInstance": tasks.LabelTrainingQueueInstance,
     "getTrainingQueue": tasks.GetTrainingQueue,
+    "setSample":tasks.SetSample,
 }
 
 func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
