@@ -11,6 +11,9 @@ from data import getTensor
 tf.get_logger().setLevel('DEBUG')
 tf.config.threading.set_intra_op_parallelism_threads(4)
 tf.config.threading.set_inter_op_parallelism_threads(4)
+print("CPUs available:", len(tf.config.experimental.list_physical_devices('CPU')))
+print("TF_INTER_OP_PARALLELISM_THREADS:", os.environ.get('TF_NUM_INTEROP_THREADS'))
+print("TF_INTRA_OP_PARALLELISM_THREADS:", os.environ.get('TF_NUM_INTRAOP_THREADS'))
 
 SPLIT_RATIO = .8
 TRAINING_CLASS_RATIO = .18
@@ -19,11 +22,12 @@ MIN_RANDOM_NOS = .7
 MAX_EPOCHS = 2000
 PATIENCE_EPOCHS = 150
 MIN_EPOCHS = 50
-BATCH_SIZE = 64
-CONV_FILTER_UNITS= [64]
+BATCH_SIZE = 32
+CONV_FILTER_UNITS= [9]
 CONV_FILTER_KERNAL_SIZES = [5]
-BI_LSTM_UNITS = [64,16]
-DROPOUT_PERCENTS = [.5]
+BI_LSTM_UNITS = [16]
+DROPOUT_PERCENTS = []
+NORMALIZATION_TYPE = "min-max"
 
 def createModel():
     model = Sequential()
@@ -53,9 +57,9 @@ def train_model(conn,setupID):
     addedSamples = traits[3]
     model = createModel()
     trainingSample, validationSample = getSample(conn,setupID,interval,TRAINING_CLASS_RATIO, VALIDATION_CLASS_RATIO, SPLIT_RATIO)
-    xTrainingData, yTrainingData = getTensor(conn,trainingSample,interval,bars)
+    xTrainingData, yTrainingData = getTensor(conn,trainingSample,interval,bars,normalize=NORMALIZATION_TYPE)
     yTrainingData = np.array([m["label"] for m in yTrainingData])
-    xValidationData, yValidationData = getTensor(conn,validationSample,interval,bars)
+    xValidationData, yValidationData = getTensor(conn,validationSample,interval,bars,normalize=NORMALIZATION_TYPE)
     yValidationData = np.array([m["label"] for m in yValidationData])
     yTrainingData, yValidationData = np.array(yTrainingData,dtype=np.int32),np.array(yValidationData,dtype=np.int32)
 
@@ -280,7 +284,7 @@ def train(conn,setupId):
     except Exception as e:
         err = e
     finally:
-        conn.cache.set(f"{setupId}_queue_running", "false")
+        conn.cache.set(f"{setupId}_train_running", "false")
         if err is not None:
             raise err
     return results

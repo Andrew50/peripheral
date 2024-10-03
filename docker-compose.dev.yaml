@@ -60,6 +60,13 @@ services:
             - ./ml:/app #for hot reload
             - tf:/models
         restart: unless-stopped
+        deploy:
+          resources:
+            limits:
+              memory: 32g
+              cpus: '4.0'
+                #ulimits:
+                #stack: 65536
 
     cache:
         build:
