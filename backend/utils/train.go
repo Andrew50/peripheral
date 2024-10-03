@@ -63,7 +63,7 @@ func checkModel(conn *Conn, setupId int) {
     }
 
     // Check if untrained samples exceed 20 or a certain percentage of sampleSize
-    if untrainedSampleChanges > 1 || float64(untrainedSampleChanges)/float64(sampleSize) > 0.05 {
+    if untrainedSampleChanges > 0 || float64(untrainedSampleChanges)/float64(sampleSize) > 0.05 {
         trainRunningKey := fmt.Sprintf("%d_train_running", setupId)
         trainRunning := conn.Cache.Get(context.Background(), trainRunningKey).Val()
 
