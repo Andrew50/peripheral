@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { privateRequest } from '$lib/core/backend';
+  import {queueRequest, privateRequest } from '$lib/core/backend';
   import type { Setup } from '$lib/core/types';
   import { setups } from '$lib/core/stores';
   import '$lib/core/global.css';
@@ -44,6 +44,9 @@
       score: 0,
     };
     selectedSetupId = "new";
+  }
+  function manualTrain(){
+      queueRequest("train",{setupId:selectedSetupId})
   }
   function deleteSetup() {
     if (!selectedSetupId) return;
@@ -137,6 +140,7 @@
     </div>
     <button on:click={saveSetup}>Save</button>
     <button on:click={cancelEdit}>Cancel</button>
+    <button on:click={manualTrain}>(dev) Manual Train</button>
     {#if selectedSetupId !== 'new'}
         <button on:click={deleteSetup}>Delete</button>
     {/if}
