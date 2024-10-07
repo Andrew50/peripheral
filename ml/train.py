@@ -1,14 +1,19 @@
-import tensorflow as tf,  datetime,random , numpy as np, os
-from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.layers import Dense, LSTM, Bidirectional, Dropout, Conv1D, Flatten, Lambda, Input
+import os
+import random
+import datetime
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras import Model, layers, Input, Sequential
+from tensorflow.keras.layers import (Dense, LSTM, Add, LayerNormalization, GlobalAveragePooling1D, 
+                                     MultiHeadAttention, Bidirectional, Dropout, Conv1D, Flatten, Lambda)
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.layers import Bidirectional
-from tensorflow.keras.callbacks import EarlyStopping
-#from imblearn.over_sampling import SMOTE
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, LearningRateScheduler
 from google.protobuf import text_format
 from tensorflow_serving.config import model_server_config_pb2
 from data import getTensor
-tf.get_logger().setLevel('DEBUG')
+
+#tf.get_logger().setLevel('DEBUG')
+
 tf.config.threading.set_intra_op_parallelism_threads(4)
 tf.config.threading.set_inter_op_parallelism_threads(4)
 print("CPUs available:", len(tf.config.experimental.list_physical_devices('CPU')))
@@ -17,19 +22,71 @@ print("TF_INTRA_OP_PARALLELISM_THREADS:", os.environ.get('TF_NUM_INTRAOP_THREADS
 
 SPLIT_RATIO = .8
 TRAINING_CLASS_RATIO = .18
-VALIDATION_CLASS_RATIO = .065
+VALIDATION_CLASS_RATIO = .09
 MIN_RANDOM_NOS = .7
-MAX_EPOCHS = 2000
-PATIENCE_EPOCHS = 150
-MIN_EPOCHS = 50
+MAX_EPOCHS = 1000
+PATIENCE_EPOCHS = 100
+MIN_EPOCHS = 30
 BATCH_SIZE = 32
-CONV_FILTER_UNITS= [9]
+LEARNING_RATE = 1e-3 #inital
+CONV_FILTER_UNITS= [9] 
 CONV_FILTER_KERNAL_SIZES = [5]
-BI_LSTM_UNITS = [16]
+BI_LSTM_UNITS = [32]
 DROPOUT_PERCENTS = []
-NORMALIZATION_TYPE = "min-max"
+BI_LISM_DROPOUTS = [.75]
+DROPOUT_LAYERS = []
+NORMALIZATION_TYPE = "z-score" #good = min-max, z-score, 
+NUM_HEADS = 4  # Number of attention heads
+D_MODEL = 64  # Dimensionality of the output space of the attention
+FF_DIM = 128  # Dimensionality of the feedforward network
 
-def createModel():
+
+def positional_encoding(seq_len, d_model):
+    positions = tf.cast(tf.range(start=0, limit=seq_len, delta=1), dtype=tf.float32)
+    angles = positions[:, tf.newaxis] / tf.pow(10000, (2 * (tf.cast(tf.range(d_model), tf.float32)[tf.newaxis, :] // 2)) / tf.cast(d_model, tf.float32))
+    pos_encoding = tf.where(tf.range(d_model)[tf.newaxis, :] % 2 == 0, tf.sin(angles), tf.cos(angles))
+    return pos_encoding
+
+def create_transformer_model(input_shape, num_transformer_blocks=4):
+    input_layer = Input(shape=(None, input_shape[1]))  # Input shape (sequence_length, num_features)
+    
+    # Project input to the transformer's model dimension (D_MODEL)
+    x = layers.Bidirectional(layers.LSTM(64, return_sequences=True))(input_layer)
+    
+    # Project input to the transformer's model dimension (D_MODEL)
+    #projected_input = layers.Dense(D_MODEL)(input_layer)
+    projected_input = layers.Dense(D_MODEL)(x)
+    
+    # Add positional encoding
+    seq_len = input_shape[0]
+    pos_encoding = positional_encoding(seq_len, D_MODEL)
+    pos_encoding = tf.expand_dims(pos_encoding, axis=0)  # Add batch dimension
+    projected_input += pos_encoding  # Add positional encoding to the projected input
+    
+    # Stack transformer blocks
+    x = projected_input
+    for _ in range(num_transformer_blocks):
+        attn_output = layers.MultiHeadAttention(num_heads=NUM_HEADS, key_dim=D_MODEL)(x, x)
+        attn_output = layers.Dropout(0.4)(attn_output)
+        attn_output = layers.Add()([x, attn_output])  # Residual connection
+        attn_output = layers.LayerNormalization(epsilon=1e-6)(attn_output)
+
+        # Feedforward network
+        ffn_output = layers.Dense(FF_DIM, activation='relu')(attn_output)
+        ffn_output = layers.Dropout(0.4)(ffn_output)
+        ffn_output = layers.Dense(D_MODEL)(ffn_output)
+        x = layers.Add()([attn_output, ffn_output])  # Residual connection
+        x = layers.LayerNormalization(epsilon=1e-6)(x)
+    
+    # Global average pooling and output
+    pooled_output = layers.GlobalAveragePooling1D()(x)
+    output_layer = layers.Dense(1, activation='sigmoid')(pooled_output)
+
+    model = Model(inputs=input_layer, outputs=output_layer)
+    model.compile(optimizer=Adam(learning_rate=1e-3), loss='binary_crossentropy', 
+                  metrics=[tf.keras.metrics.AUC(curve='PR', name='auc_pr')])
+    return model
+def _createModel():
     model = Sequential()
     model.add(Input(shape=(None, 4))) # assuming o h l c
     for units,kernal_size in zip(CONV_FILTER_UNITS,CONV_FILTER_KERNAL_SIZES):
@@ -39,10 +96,22 @@ def createModel():
         model.add(Dropout(dropout))
     model.add(Bidirectional(LSTM(units=BI_LSTM_UNITS[-1], return_sequences=False)))
     model.add(Dense(1, activation='sigmoid'))
-    model.compile(optimizer=Adam(learning_rate=1e-3), loss='binary_crossentropy', 
+    model.compile(optimizer=Adam(learning_rate=LEARNING_RATE), loss='binary_crossentropy', 
                   metrics=[tf.keras.metrics.AUC(curve='PR', name='auc_pr')])
     return model
     
+def createModel():
+    model = Sequential()
+    model.add(Input(shape=(None, 4))) # assuming o h l c
+    model.add(Conv1D(filters=32, kernel_size=7, activation='relu'))
+    model.add(Conv1D(filters=32, kernel_size=7, activation='relu'))
+    model.add(Conv1D(filters=32, kernel_size=7, activation='relu'))
+    model.add(Bidirectional(LSTM(units=128, return_sequences=False,dropout=0.55)))
+    #model.add(Bidirectional(LSTM(units=128, return_sequences=False,dropout=0.4)))
+    model.add(Dense(1, activation='sigmoid'))
+    model.compile(optimizer=Adam(learning_rate=LEARNING_RATE), loss='binary_crossentropy', 
+                  metrics=[tf.keras.metrics.AUC(curve='PR', name='auc_pr')])
+    return model
 
 
 def train_model(conn,setupID):
@@ -56,6 +125,9 @@ def train_model(conn,setupID):
     modelVersion = traits[2] + 1
     addedSamples = traits[3]
     model = createModel()
+    features = 4
+    #model = create_transformer_model(np.array([bars,features]))
+
     trainingSample, validationSample = getSample(conn,setupID,interval,TRAINING_CLASS_RATIO, VALIDATION_CLASS_RATIO, SPLIT_RATIO)
     xTrainingData, yTrainingData = getTensor(conn,trainingSample,interval,bars,normalize=NORMALIZATION_TYPE)
     yTrainingData = np.array([m["label"] for m in yTrainingData])
@@ -78,7 +150,15 @@ def train_model(conn,setupID):
         mode='max',
         verbose =1
     )
-    history = model.fit(xTrainingData, yTrainingData,epochs=MAX_EPOCHS,batch_size=BATCH_SIZE,validation_data=(xValidationData, yValidationData),callbacks=[early_stopping])
+    lr_scheduler = ReduceLROnPlateau(
+        monitor='val_auc_pr', 
+        factor=0.3,  # Reduce the learning rate by half
+        patience=int(PATIENCE_EPOCHS/8),  # Number of epochs with no improvement before reducing
+        min_lr=1e-6,  # Minimum learning rate
+        mode='max',
+        verbose=1
+    )
+    history = model.fit(xTrainingData, yTrainingData,epochs=MAX_EPOCHS,batch_size=BATCH_SIZE,validation_data=(xValidationData, yValidationData),callbacks=[early_stopping,lr_scheduler])
     tf.keras.backend.clear_session()
     score = round(max(history.history['val_auc_pr']) * 100)
     with conn.db.cursor() as cursor:

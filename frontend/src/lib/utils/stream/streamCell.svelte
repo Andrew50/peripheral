@@ -2,13 +2,11 @@
     import { onMount, onDestroy } from 'svelte';
     import type { Writable } from 'svelte/store';
     import {writable} from 'svelte/store'
-    import { getStream } from '$lib/utils/stream';
+    import { addStream } from '$lib/utils/stream/interface';
     import type { TradeData,Instance } from '$lib/core/types';
     export let instance: Instance;
-    let releaseStream: Function = () => {}
-    let unsubscribe: Function = () => {}
-    let priceStream: Writable<TradeData>;
-    let prevCloseStream: Writable<number>;
+    let releaseSlow: Function = () => {}
+    let releaseClose: Function = () => {}
     interface ChangeStore {
         price?: number
         prevClose?: number
@@ -17,14 +15,7 @@
     let changeStore = writable<ChangeStore>({change:"--"})
     
     onMount(() => {
-        const [ps,rs] = getStream<TradeData>(instance, "slow")
-        priceStream = ps 
-        releaseStream = rs
-        const [p, u] = getStream<number>(instance,"close")
-        prevCloseStream = p
-        unsubscribe = u
-        priceStream.subscribe((v) => {
-            v = v[v.length-1]
+        releaseSlow = addStream<TradeData>(instance, "slow",(v:TradeData) => {
             if (v && v.price){
                 changeStore.update((s:ChangeStore)=>{
                     s.price = v.price
@@ -33,18 +24,17 @@
                 })
             }
         });
-        prevCloseStream.subscribe((v:number)=>{
+        releaseClose = addStream<number>(instance,"close",(v:number)=>{
             changeStore.update((s:ChangeStore)=>{
                 s.prevClose = v
                 if (s.price && s.prevClose) s.change = getChange(s.price,s.prevClose)
                 return s
             })
         })
-    });
-
+    })
     onDestroy(() => {
-        releaseStream();
-        unsubscribe();
+        releaseClose();
+        releaseSlow();
     });
     function getChange(price: number, prevClose: number): string {
         if (!price || !prevClose) return "--"

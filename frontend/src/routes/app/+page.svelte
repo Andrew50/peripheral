@@ -1,16 +1,15 @@
 <script lang='ts'>
     import '$lib/core/global.css'
     import ChartContainer from "$lib/features/chart/chartContainer.svelte"
-    import RightClick from '$lib/utils/rightClick.svelte';
-    import Sample from '$lib/utils/sample.svelte';
-    import Input from '$lib/utils/input.svelte';
+    import RightClick from '$lib/utils/popups/rightClick.svelte';
+    import Sample from '$lib/utils/popups/sample.svelte';
+    import Input from '$lib/utils/popups/input.svelte';
     import Settings from "$lib/features/settings.svelte"
     import Journal from "$lib/features/journal.svelte"
-    import Similar from '$lib/utils/similar.svelte';
+    import Similar from '$lib/utils/popups/similar.svelte';
     import Study from '$lib/features/study.svelte';
     import Setups from '$lib/features/setups/setups.svelte';
     import Screen from '$lib/features/screen.svelte';
-    import Test from '$lib/features/test.svelte';
     import Watchlist from '$lib/features/watchlist.svelte'
     import Screensaver from '$lib/features/screensaver.svelte'
     import Quotes from '$lib/features/quotes/quotes.svelte'
@@ -18,10 +17,10 @@
     import { onMount } from 'svelte';
     import { privateRequest } from '$lib/core/backend';
     import { goto } from '$app/navigation';
-    import { get, writable } from 'svelte/store';
+    import { get } from 'svelte/store';
     import { browser } from '$app/environment';
-    import {initStores, replayInfo, type ReplayInfo} from '$lib/core/stores'
-    import { dispatchMenuChange,currentTimestamp, formatTimestamp, updateTime } from '$lib/core/stores';
+    import {initStores} from '$lib/core/stores'
+    import { dispatchMenuChange,streamInfo, formatTimestamp } from '$lib/core/stores';
     type Menu = 'study' | 'screen' |'quotes'| 'setups' | 'test' | 'none' | 'watchlist' | "journal"|'screensaver' | "replay" | "settings";
     const menus: Menu[] = ['quotes','watchlist' ,'screen' ,'study' ,"journal", 'setups' ,'screensaver' , "replay", "settings"] //,'test'
     let active_menu: Menu = 'none';
@@ -31,34 +30,20 @@
     let pix: number;
     import {menuWidth} from "$lib/core/stores"
     let buttonWidth: number;
-    let interval;
-    let latestReplaySpeed: number;
     onMount(() => { 
         dispatchMenuChange.subscribe((v:Menu)=>{
-
             toggleMenu(v)
         })
         privateRequest<string>("verifyAuth", {}).catch(() => {
             goto('/login');
         });
         initStores()
-        replayInfo.subscribe((v:ReplayInfo) => {
-            if (v.replaySpeed == latestReplaySpeed) {return}
-            interval = setInterval(updateTime, 1000/v.replaySpeed)
-            latestReplaySpeed = v.replaySpeed
-            return 
-        })
         if (browser) {
             function handleResize() {
                 pix = window.innerWidth;
             }
-
             window.addEventListener('resize', handleResize);
-
-            // Set initial value
             handleResize();
-            interval = setInterval(updateTime, 1000/get(replayInfo).replaySpeed);
-            latestReplaySpeed = get(replayInfo).replaySpeed;
             return () => {
                 window.removeEventListener('resize', handleResize);
             };
@@ -168,7 +153,7 @@
 
         </div>
         <div class="system-clock">
-            <h3>{$currentTimestamp ? formatTimestamp($currentTimestamp) : 'Loading Time...'}</h3>
+            <h3>{$streamInfo.timestamp ? formatTimestamp($streamInfo.timestamp) : 'Loading Time...'}</h3>
         </div>
     </div>
     <div class="button-container">

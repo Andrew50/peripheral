@@ -1,5 +1,5 @@
 <script>
-    import  Header  from '$lib/utils/header.svelte';
+    import  Header  from '$lib/utils/modules/header.svelte';
     import '$lib/core/global.css'
     import {browser} from '$app/environment'
     if (browser){

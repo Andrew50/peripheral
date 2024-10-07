@@ -1,7 +1,7 @@
 <script lang='ts'>
     import {privateRequest} from '$lib/core/backend'
     import type {Instance} from '$lib/core/types'
-    import {changeChart} from '$lib/features/chart/interface'
+    import {queryChart} from '$lib/features/chart/interface'
     import {onMount, onDestroy} from 'svelte'
     import '$lib/core/global.css'
 
@@ -16,7 +16,7 @@
     function loop(){
         const instance = instances[securityIndex]
         instance.timeframe = tfs[tfIndex];
-        changeChart(instance)
+        queryChart(instance)
         tfIndex ++
         if (tfIndex >= tfs.length){
             tfIndex = 0

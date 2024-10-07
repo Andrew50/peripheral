@@ -7,7 +7,7 @@ export interface ActiveStream {
     openCount: number;
 }
 
-    import {changeChart} from '$lib/features/chart/interface'
+    import {queryChart} from '$lib/features/chart/interface'
     import { writable } from 'svelte/store';
     import type { Writable } from 'svelte/store';
     import type {Instance } from '$lib/core/types';
@@ -129,7 +129,7 @@ export interface ActiveStream {
                     <tbody>
                         {#each $similarQuery.similarInstances as instance} 
                             <tr>
-                                <td on:click={()=>changeChart(instance, true)} 
+                                <td on:click={()=>queryChart(instance, true)} 
                                 on:contextmenu={(e)=>{e.preventDefault();
                                 closeMenu();
                                 queryInstanceRightClick(e,instance,"similar")}}>{instance.ticker}</td>

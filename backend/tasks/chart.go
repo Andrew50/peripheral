@@ -91,7 +91,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	} else {
 		inputTimestamp = time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).UTC()
 	}
-	fmt.Println(inputTimestamp)
 
 	var query string
 	var queryParams []interface{}
@@ -173,7 +172,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			}
 			queryStartTime = minDateSQL
 			if queryStartTime.After(queryEndTime) {
-				fmt.Printf("\n%v, %v", queryStartTime, queryEndTime, args.Direction, args.Timestamp, args.Timeframe)
+				//fmt.Printf("\n%v, %v", queryStartTime, queryEndTime, args.Direction, args.Timestamp, args.Timeframe)
 				return nil, fmt.Errorf("i10i0v")
 			}
 		} else if args.Direction == "forward" {
@@ -257,6 +256,9 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 					if err != nil {
 						return nil, fmt.Errorf("issue with incomplete aggregate 65k5lhgfk, %v", err)
 					}
+                    if len(barDataList) > 0 && incompleteAggregate.Timestamp == barDataList[len(barDataList)-1].Timestamp {
+                        barDataList = barDataList[:len(barDataList)-1]
+                    }
 					barDataList = append(barDataList, incompleteAggregate)
 				}
 			}
@@ -264,7 +266,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		} else {
 			reverse(barDataList)
 			marketStatus, err := utils.GetMarketStatus(conn)
-			fmt.Println(marketStatus)
 			if err != nil {
 				return nil, fmt.Errorf("issue with market status")
 			}
@@ -274,13 +275,15 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				if err != nil {
 					return nil, fmt.Errorf("issue with incomplete aggregate 65k5lhgfk, %v", err)
 				}
+                if len(barDataList) > 0 && incompleteAggregate.Timestamp == barDataList[len(barDataList)-1].Timestamp {
+                    barDataList = barDataList[:len(barDataList)-1]
+                }
 				barDataList = append(barDataList, incompleteAggregate)
 			}
-			starTim := int64(barDataList[0].Timestamp)
+			/*starTim := int64(barDataList[0].Timestamp)
 			endTim := int64(barDataList[len(barDataList)-1].Timestamp)
 			strt := time.Unix(starTim, (starTim)*1e6).UTC()
-			end := time.Unix(endTim, (endTim)*1e6).UTC()
-			fmt.Println("got", strt, end)
+			end := time.Unix(endTim, (endTim)*1e6).UTC()*/
 			return barDataList, nil
 		}
 	}
@@ -321,7 +324,6 @@ func getRequestDates(
 		}
 		queryStartTime = lowerDate
 	}
-	fmt.Println(queryStartTime, queryEndTime)
 
 	startMillis, err := utils.MillisFromUTCTime(queryStartTime)
 	if err != nil {
@@ -396,7 +398,6 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 		lastCompleteDayUTC := time.Date(timestampTime.Year(), timestampTime.Month(), timestampTime.Day(), 0, 0, 0, 0, time.UTC).UnixMilli()
 		dailyBarsDurationMs := lastCompleteDayUTC - timestampStart
 		numDailyBars := int(dailyBarsDurationMs / (86400000))
-		fmt.Printf("numDailyBars: %d\n", numDailyBars)
 		if numDailyBars > 0 {
 			iter, err := utils.GetAggsData(conn.Polygon, ticker, 1, "day",
 				models.Millis(time.Unix(0, timestampStart*int64(time.Millisecond)).UTC()),
@@ -407,7 +408,6 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 			}
 			var count int
 			for iter.Next() {
-				fmt.Println("Daily")
 				if count >= numDailyBars {
 					break
 				}

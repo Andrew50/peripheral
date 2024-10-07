@@ -2,16 +2,16 @@
 <script lang='ts'>
     export let hoveredCandleData;
     import type {Instance} from '$lib/core/types'
-    import {changeChart} from './interface'
+    import {queryChart} from './interface'
     import {writable} from 'svelte/store'
     export let instance: Instance
-    import {queryInstanceInput} from '$lib/utils/input.svelte'
+    import {queryInstanceInput} from '$lib/utils/popups/input.svelte'
     import {settings} from '$lib/core/stores'
     function handleClick(event:MouseEvent |TouchEvent){
         event.preventDefault()
         queryInstanceInput("any",instance)
         .then((v:Instance)=>{
-            changeChart(instance)
+            queryChart(instance)
         })
     }
     function formatVolume(volume: number,dolvol:boolean): string {
