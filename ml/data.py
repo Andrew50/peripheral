@@ -1,29 +1,93 @@
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
-import requests, numpy as np, datetime, multiprocessing, sys, time
+import requests, numpy as np, datetime, multiprocessing, sys, time,pandas as pd
 import asyncio
 import aiohttp
 import datetime
 
-def normalize(df: np.ndarray,normType) -> np.ndarray:
+def normalize(df: np.ndarray, normType: str) -> np.ndarray:
     if normType == "rolling-log":
         df = np.log(df)
         close_col = np.roll(df[:, 3], shift=1)
-        df = df - close_col[:,np.newaxis]
-        df = df[1:]
-        df = df[::-1]
+        df = df - close_col[:, np.newaxis]
+        df = df[::-1]  # Reverse the order of rows to match other normalizations
         return df
+
     elif normType == "min-max":
         # Min-Max normalization to the range [-1, 1]
         min_vals = df.min(axis=0)
         max_vals = df.max(axis=0)
         df = 2 * (df - min_vals) / (max_vals - min_vals) - 1
-        df = df[1:]     # Remove the first row to match the length
         df = df[::-1]   # Reverse the order of rows to match 'rolling-log'
         return df
+
+    elif normType == "z-score":
+        # Z-score normalization
+        mean_vals = df.mean(axis=0)
+        std_vals = df.std(axis=0)
+        df = (df - mean_vals) / std_vals
+        df = df[::-1]   # Reverse the order of rows to match 'rolling-log'
+        return df
+
+    elif normType == "decimal-scaling":
+        # Decimal scaling normalization
+        max_abs_vals = np.abs(df).max(axis=0)
+        scale_factors = np.power(10, np.ceil(np.log10(max_abs_vals)))
+        df = df / scale_factors
+        df = df[::-1]   # Reverse the order of rows to match 'rolling-log'
+        return df
+
+    elif normType == "max-abs":
+        # Max absolute normalization
+        max_abs_vals = np.abs(df).max(axis=0)
+        df = df / max_abs_vals
+        df = df[::-1]   # Reverse the order of rows to match 'rolling-log'
+        return df
+
+    elif normType == "none":
+        # No normalization, just reverse to match 'rolling-log'
+        df = df[::-1]
+        return df
+
     else:
         raise ValueError(f"Unknown normalization type: {normType}")
+
+
+def _normalize(df: np.ndarray, normType) -> np.ndarray:
+    # Calculate the 10-period moving average of the 'close' prices
+    close_prices = df[:, 3]
+    moving_avg_10 = pd.Series(close_prices).rolling(window=10, min_periods=1).mean().values
+
+    # Calculate the 10-period average range (high - low)
+    high_prices = df[:, 1]  # Assuming column index 1 is 'high'
+    low_prices = df[:, 2]   # Assuming column index 2 is 'low'
+    avg_range_10 = pd.Series(high_prices - low_prices).rolling(window=10, min_periods=1).mean().values
+
+    # Append the new features to the original data
+    df = np.column_stack((df, moving_avg_10, avg_range_10))
+
+    # Normalization
+    if normType == "rolling-log":
+        df = np.log(df)
+        close_col = np.roll(df[:, 3], shift=1)
+        df = df - close_col[:, np.newaxis]
+        df = df[1:]  # Remove the first row to match the length
+        df = df[::-1]  # Reverse the order of rows
+
+    elif normType == "min-max":
+        # Min-Max normalization to the range [-1, 1]
+        min_vals = df.min(axis=0)
+        max_vals = df.max(axis=0)
+        df = 2 * (df - min_vals) / (max_vals - min_vals) - 1
+        df = df[1:]  # Remove the first row to match the length
+        df = df[::-1]  # Reverse the order of rows
+
+    else:
+        raise ValueError(f"Unknown normalization type: {normType}")
+
+    return df
+
 
 def get_timeframe(timeframe):
     last_char = timeframe[-1]

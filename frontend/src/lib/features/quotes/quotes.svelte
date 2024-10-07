@@ -2,7 +2,7 @@
     import L1 from './l1.svelte';
     import TimeAndSales from './timeAndSales.svelte';
     import { get, writable } from 'svelte/store';
-    import { queryInstanceInput } from '$lib/utils/input.svelte';
+    import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
     import type { Instance } from '$lib/core/types';
     import type {Writable} from 'svelte/store'
 

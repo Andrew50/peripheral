@@ -1,41 +1,37 @@
 <script lang='ts'>
     import { onMount, onDestroy } from 'svelte';
-    import type { Writable } from 'svelte/store';
+    import {type  Writable,writable } from 'svelte/store';
     import type { QuoteData, Instance } from '$lib/core/types';
-    import { getStream } from '$lib/utils/stream';
+    import { addStream } from '$lib/utils/stream/interface';
     import {derived} from 'svelte/store'
 
     export let instance: Writable<Instance>;
-    let store: Writable<QuoteData>;
+    let store: Writable<QuoteData> = writable({})
     let release: Function = () => {};
 
     let previousBidPrice = 0;
     let previousAskPrice = 0;
     let bidPriceChange = 'no-change';  // Can be 'increase', 'decrease', or 'no-change'
     let askPriceChange = 'no-change';  // Can be 'increase', 'decrease', or 'no-change'
+    function updateStore(v:QuoteData){
+        if (v){
+            // Check bid price change
+            if (v.bidPrice !== undefined && v.bidPrice !== previousBidPrice) {
+                bidPriceChange = v.bidPrice > previousBidPrice ? 'increase' : 'decrease';
+                previousBidPrice = v.bidPrice;
+            }
+            if (v.askPrice !== undefined && v.askPrice !== previousAskPrice) {
+                askPriceChange = v.askPrice > previousAskPrice ? 'increase' : 'decrease';
+                previousAskPrice = v.askPrice;
+            }
+            store.set(v)
+        }
+    }
 
     instance.subscribe((inst: Instance) => {
         if (!inst.securityId) return;
         release();
-        const [s, r] = getStream(inst, "quote");
-        const stream = s;
-        release = r;
-
-        store = derived(stream,(v:QuoteData[])=>{
-            const last = v[v.length-1]
-            if (last){
-                // Check bid price change
-                if (last.bidPrice !== undefined && last.bidPrice !== previousBidPrice) {
-                    bidPriceChange = last.bidPrice > previousBidPrice ? 'increase' : 'decrease';
-                    previousBidPrice = last.bidPrice;
-                }
-                if (last.askPrice !== undefined && last.askPrice !== previousAskPrice) {
-                    askPriceChange = last.askPrice > previousAskPrice ? 'increase' : 'decrease';
-                    previousAskPrice = last.askPrice;
-                }
-                return {...last}
-            }
-        })
+        release = addStream(inst, "quote",updateStore);
     });
 
     onDestroy(() => {
