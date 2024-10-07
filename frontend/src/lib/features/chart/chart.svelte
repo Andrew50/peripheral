@@ -5,11 +5,11 @@
     import Countdown from './countdown.svelte'
     import {privateRequest} from '$lib/core/backend';
     import type {Instance, TradeData,QuoteData} from '$lib/core/types'
-    import {setActiveChart,chartQuery, changeChart,selectedChartId} from './interface'
-    import {currentTimestamp,settings} from '$lib/core/stores'
-    import type {ShiftOverlay, BarData, ChartRequest} from './interface'
-    import { queryInstanceInput } from '$lib/utils/input.svelte'
-    import { queryInstanceRightClick } from '$lib/utils/rightClick.svelte'
+    import {setActiveChart,chartQueryDispatcher, chartEventDispatcher,queryChart} from './interface'
+    import {streamInfo,settings} from '$lib/core/stores'
+    import type {ShiftOverlay,ChartEventDispatch, BarData, ChartQueryDispatch} from './interface'
+    import { queryInstanceInput } from '$lib/utils/popups/input.svelte'
+    import { queryInstanceRightClick } from '$lib/utils/popups/rightClick.svelte'
     import { createChart, ColorType,CrosshairMode} from 'lightweight-charts';
     import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, CandlestickSeriesOptions, DeepPartial, CandlestickStyleOptions, SeriesOptionsCommon, UTCTimestamp,HistogramStyleOptions, HistogramData, HistogramSeriesOptions} from 'lightweight-charts';
     import {calculateRVOL,calculateSMA,calculateSingleADR,calculateVWAP} from './indicators'
@@ -17,12 +17,7 @@
     import {writable, get} from 'svelte/store';
     import { onMount  } from 'svelte';
     import { UTCSecondstoESTSeconds, ESTSecondstoUTCSeconds, ESTSecondstoUTCMillis, getReferenceStartTimeForDateMilliseconds, timeframeToSeconds, getRealTimeTime} from '$lib/core/timestamp';
-	import { getStream, replayStream } from '$lib/utils/stream';
-    import {timeEvent,replayInfo} from '$lib/core/stores'
-    import type {TimeEvent} from '$lib/core/stores'
-
-    import {DateTime} from 'luxon';
-
+	import { addStream } from '$lib/utils/stream/interface';
     let bidLine: any
     let askLine: any
     let currentBarTimestamp: number;
@@ -36,7 +31,7 @@
     let chartEarliestDataReached = false;
     let chartLatestDataReached = false;  
     let isLoadingChartData = false    
-    let lastChartRequestTime = 0; 
+    let lastChartQueryDispatchTime = 0; 
     let queuedLoad: Function | null = null
     let shiftDown = false
     const chartRequestThrottleDuration = 150; 
@@ -49,30 +44,24 @@
     let chartTimeframe: string; 
     let chartTimeframeInSeconds: number; 
     let chartExtendedHours: boolean;
-    let unsubscribe = () => {} 
-    let release = () => {}
-    let releaseQuote = () => {}
-    let unsubscribeQuote = () => {}
+    let releaseFast: () => void = () => {}
+    let releaseQuote: () => void = () => {}
     let currentChartInstance: Instance = {ticker:"",timestamp:0,timeframe:""}
-    let blockingChartRequest = {}
+    let blockingChartQueryDispatch = {}
     let isPanning = false
-    //const tradeConditionsToCheck = new Set([2, 5, 7, 10, 12, 13, 15, 16, 20, 21, 22, 29, 33, 37, 52, 53])
-    const tradeConditionsToCheck = new Set([2, 5, 7, 10, 13, 15, 16, 20, 21, 22, 29, 33, 37, 52, 53])
-    const tradeConditionsToCheckVolume = new Set([15, 16, 38])
 
-    function backendLoadChartData(inst:ChartRequest): void{
+    function backendLoadChartData(inst:ChartQueryDispatch): void{
         if (inst.requestType === "loadNewTicker"){
             bidLine.setData([])
             askLine.setData([])
         }
-
         if (isLoadingChartData ||!inst.ticker || !inst.timeframe || !inst.securityId) { return; }
         isLoadingChartData = true;
-        lastChartRequestTime = Date.now()
-        if((get(replayInfo).status == "active" || get(replayInfo).status == "paused") && inst.timestamp == 0) {
-            inst.timestamp = Math.floor(get(currentTimestamp))
+        lastChartQueryDispatchTime = Date.now()
+        if($streamInfo.replayActive &&( inst.timestamp == 0 || (inst.timestamp ?? 0) > $streamInfo.timestamp)) {
+            console.log("adjusting to stream timestamp")
+            inst.timestamp = Math.floor($streamInfo.timestamp)
         }
-        
         privateRequest<BarData[]>("getChartData", {
             securityId:inst.securityId, 
             timeframe:inst.timeframe, 
@@ -80,10 +69,10 @@
             direction:inst.direction, 
             bars:inst.bars,
             extendedhours:inst.extendedHours, 
-            isreplay: (get(replayInfo).status == "active" || get(replayInfo).status == "paused") ? true : false,}
-            ,true)
+            isreplay: $streamInfo.replayActive},true)
             .then((barDataList: BarData[]) => {
-                blockingChartRequest = inst
+                console.log(barDataList)
+                blockingChartQueryDispatch = inst
                 if (! (Array.isArray(barDataList) && barDataList.length > 0)){ return}
                 let newCandleData = barDataList.map((bar) => ({
                   time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
@@ -113,23 +102,12 @@
                     newVolumeData = [...chartVolumeSeries.data(), ...newVolumeData.slice(1)] as any;
                   }
                 } else if(inst.requestType === 'loadNewTicker') {
-                    const lastBar = newCandleData[newCandleData.length - 1]
-                    //bidLine.setData([{time:lastBar.time,value:lastBar.close}])
-                    if(inst.includeLastBar == false && $replayInfo.status !== 'inactive') {
-                        // cuts off the last bar 
+                    if(inst.includeLastBar == false && !$streamInfo.replayActive) {
                         newCandleData = newCandleData.slice(0, newCandleData.length-1)
                         newVolumeData = newVolumeData.slice(0, newVolumeData.length-1)
                     }
-                    const [priceStore, r] = getStream<TradeData[]>(inst, 'fast')
-                    release = r
-                    unsubscribe = priceStore.subscribe((v:TradeData[]) => {
-                        updateLatestChartBar(v)
-                    })
-                    const [quoteStore, rq] = getStream<QuoteData[]>(inst, 'quote')
-                    releaseQuote = rq
-                    unsubscribeQuote = quoteStore.subscribe((v:QuoteData[]) => {
-                        updateLatestQuote(v)
-                    })
+                    releaseFast()
+                    releaseQuote()
                 }
                 // Check if we reach end of avaliable data 
                 if (inst.timestamp == 0) {
@@ -158,7 +136,7 @@
                 queuedLoad = null
                 sma10Series.setData(calculateSMA(newCandleData, 10));
                 sma20Series.setData(calculateSMA(newCandleData, 20));
-                if (/^\d+$/.test(inst.timeframe)) {
+                if (/^\d+$/.test(inst.timeframe ?? "")) {
                     vwapSeries.setData(calculateVWAP(newCandleData,newVolumeData));
                 }else{
                     vwapSeries.setData([])
@@ -175,6 +153,8 @@
                         rightOffset: 0
                         });
                     }
+                    releaseFast = addStream(inst, 'fast',updateLatestChartBar)
+                    releaseQuote = addStream(inst, 'quote',updateLatestQuote)
                 }
                 isLoadingChartData = false; // Ensure this runs after data is loaded
             }
@@ -182,7 +162,8 @@
                 || inst.direction == "forward" && !isPanning){
                     queuedLoad()
                     if(inst.requestType === "loadNewTicker" && !chartLatestDataReached 
-                        && get(replayInfo).status === "inactive"){
+                        && !$streamInfo.replayActive){
+                        console.log("1")
                         backendLoadChartData({
                             ...currentChartInstance,
                             timestamp: ESTSecondstoUTCMillis(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp,
@@ -200,9 +181,7 @@
         });
     }
     
-    function updateLatestQuote(quotes:QuoteData[]) {
-        const data = quotes[quotes.length-1]
-        //if(isLoadingChartData) {return}
+    function updateLatestQuote(data:QuoteData) {
         if (!data?.bidPrice || !data?.askPrice){return}
         const candle = chartCandleSeries.data()[chartCandleSeries.data().length - 1]
         if (!candle)return;
@@ -214,9 +193,9 @@
             { time: time, value: data.askPrice },
         ]);
     }
-    async function updateLatestChartBar(trades:TradeData[]) {
+    async function updateLatestChartBar(trade:TradeData) {
         const dolvol = get(settings).dolvol
-        function updateConsolidation(consolidatedTrade:TradeData,data:TradeData){
+        /*function updateConsolidation(consolidatedTrade:TradeData,data:TradeData){
             if(data.conditions == null || (data.size >= 100 && !data.conditions.some(condition => tradeConditionsToCheck.has(condition)))) {
                 //if(!(mostRecentBar.close == data.price)) {
                 //console.log(consolidatedTrade)
@@ -226,14 +205,15 @@
             if(data.conditions == null || !data.conditions.some(condition => tradeConditionsToCheckVolume.has(condition))) {
                 consolidatedTrade.size += data.size * (dolvol ? data.price : 1)
             }
-        }
-        if(isLoadingChartData || !trades[0].price || !trades[0].size || !trades[0].timestamp || !chartCandleSeries 
+        }*/
+        if(isLoadingChartData || !trade.price || !trade.size || !trade.timestamp || !chartCandleSeries 
         || chartCandleSeries.data().length == 0) {return}
-        const consolidatedTrade = {timestamp:null,price:0,size:0}
-        const consolidatedTrade2 = {timestamp:null,price:0,size:0}
+        //const consolidatedTrade = {timestamp:null,price:0,size:0}
+        //const consolidatedTrade2 = {timestamp:null,price:0,size:0}
         var mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length-1]
         currentBarTimestamp = mostRecentBar.time as number
         //console.log(trades)
+        /*
         trades.forEach((data:TradeData)=>{
             if (UTCSecondstoESTSeconds(data.timestamp/1000) < (currentBarTimestamp) + chartTimeframeInSeconds) {
                 updateConsolidation(consolidatedTrade,data)
@@ -241,26 +221,28 @@
                 console.log("should be new")
                 updateConsolidation(consolidatedTrade2,data)
             }
-        })
-        if (consolidatedTrade.timestamp !== null){
+        })*/
+        if (UTCSecondstoESTSeconds(trade.timestamp/1000) < (currentBarTimestamp) + chartTimeframeInSeconds) {
+        //if (trade.timestamp !== null){
             chartCandleSeries.update({
                 time: mostRecentBar.time, 
                 open: mostRecentBar.open, 
-                high: Math.max(mostRecentBar.high, consolidatedTrade.price), 
-                low: Math.min(mostRecentBar.low, consolidatedTrade.price),
-                close: consolidatedTrade.price 
+                high: Math.max(mostRecentBar.high, trade.price), 
+                low: Math.min(mostRecentBar.low, trade.price),
+                close: trade.price 
             })  
             chartVolumeSeries.update({
                 time: mostRecentBar.time, 
-                value: chartVolumeSeries.data()[chartVolumeSeries.data().length-1].value + consolidatedTrade.size,
+                value: chartVolumeSeries.data()[chartVolumeSeries.data().length-1].value + trade.size,
                 color: mostRecentBar.close > mostRecentBar.open ? '#089981' : '#ef5350'
             }) 
-        }
+            return
+        }else{
         //new bar
-        var timeToRequestForUpdatingAggregate = ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
+            var timeToRequestForUpdatingAggregate = ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
         //console.log(consolidatedTrade2)
-        if (consolidatedTrade2.timestamp !== null){
-            const data = consolidatedTrade2
+        //if (trade.timestamp !== null){
+            const data = trade
             var referenceStartTime = getReferenceStartTimeForDateMilliseconds(data.timestamp, currentChartInstance.extendedHours) // this is in milliseconds 
             var timeDiff = (data.timestamp - referenceStartTime)/1000 // this is in seconds
             var flooredDifference = Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds // this is in seconds 
@@ -276,11 +258,7 @@
                 time: newTime, 
                 value: data.size
             })
-            console.log(chartCandleSeries.data())
-        } else{
-            return 
-        }
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        }        await new Promise(resolve => setTimeout(resolve, 3000));
         try {
             const barDataList: BarData[] = await privateRequest<BarData[]>("getChartData", {
                 securityId:chartSecurityId, 
@@ -289,7 +267,7 @@
                 direction:"backward",
                 bars:1,
                 extendedHours: chartExtendedHours,
-                isreplay: (get(replayInfo).status == "active" || get(replayInfo).status == "paused") ? true : false,
+                isreplay: $streamInfo.replayActive
             });
 
             if (! (Array.isArray(barDataList) && barDataList.length > 0)){ return}
@@ -403,19 +381,19 @@
         chartContainer.addEventListener('keydown', (event) => {
             setActiveChart(chartId)
             if (event.key == "r" && event.altKey){
-                if (currentChartInstance.timestamp && get(replayInfo).status == "inactive"){
-                    changeChart({timestamp:0})
+                if (currentChartInstance.timestamp && !$streamInfo.replayActive){
+                    queryChart({timestamp:0})
                 }else{
                     chart.timeScale().resetTimeScale()
                 }
             }else if (event.key == "Tab" || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
-                if(get(replayInfo).status == "active" || get(replayInfo).status == "paused") {
+                if($streamInfo.replayActive) {
                     currentChartInstance.timestamp = 0
                 }
                 queryInstanceInput("any",currentChartInstance)
                 .then((v:Instance)=>{
                     currentChartInstance = v
-                    changeChart(v, true)
+                    queryChart(v, true)
                 }).catch()
             }else if (event.key == "Shift"){
                 shiftDown = true
@@ -511,11 +489,12 @@
             latestCrosshairPositionTime = bar.time as number 
         }); 
         chart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
-            if (!logicalRange || Date.now() - lastChartRequestTime < chartRequestThrottleDuration) {return;}
+            if (!logicalRange || Date.now() - lastChartQueryDispatchTime < chartRequestThrottleDuration) {return;}
             const barsOnScreen = Math.floor(logicalRange.to) - Math.ceil(logicalRange.from)
             const bufferInScreenSizes = .7;
             if(logicalRange.from / barsOnScreen < bufferInScreenSizes) {
                 if(chartEarliestDataReached) {return;}
+                        console.log("2")
                 backendLoadChartData({
                     ...currentChartInstance,
                     timestamp: ESTSecondstoUTCMillis(chartCandleSeries.data()[0].time as UTCTimestamp) as number,
@@ -526,7 +505,8 @@
                 })
             } else if (((chartCandleSeries.data().length - logicalRange.to) / barsOnScreen) < bufferInScreenSizes) { // forward loa
                 if(chartLatestDataReached) {return;}
-                if(replayStream.replayStatus == true) { return;}
+                if($streamInfo.replayActive) { return;}
+                        console.log("3")
                 backendLoadChartData({
                     ...currentChartInstance,
                     timestamp: ESTSecondstoUTCMillis(chartCandleSeries.data()[chartCandleSeries.data().length-1].time as UTCTimestamp) as UTCTimestamp,
@@ -537,51 +517,44 @@
                 })
             }
         })
-        function change(newReq:ChartRequest,ignoreId=false){
-           if (!ignoreId && chartId !== selectedChartId){return}
+        function change(newReq:ChartQueryDispatch){
            const req = {...currentChartInstance,...newReq}
-           if (!req.timeframe){
-               req.timeframe = "1d"
-           }
-          /* if (["active","paused"].includes(get(replayInfo).status)){
-               req.timestamp = get(currentTimestamp)
-           }*/
-            unsubscribe() 
-            release()
-            unsubscribeQuote()
-            releaseQuote()
+           if (chartId !== req.chartId){return}
+           if (!req.timeframe){ req.timeframe = "1d" }
+            if(!req.securityId || !req.ticker || !req.timeframe) {return}
             hoveredCandleData.set(defaultHoveredCandleData)
             chartEarliestDataReached = false;
             chartLatestDataReached = false; 
-            if(!req.securityId || !req.ticker || !req.timeframe) {return}
-
             chartSecurityId = req.securityId;
             chartTimeframe = req.timeframe;
             currentChartInstance = {...req}
             chartTimeframeInSeconds = timeframeToSeconds(req.timeframe, (req.timestamp == 0 ? Date.now() : req.timestamp) as number);
-            chartExtendedHours = req.extendedHours;
+            chartExtendedHours = req.extendedHours?? false;
             if (req.timeframe?.includes('m') || req.timeframe?.includes('w') || 
                     req.timeframe?.includes('d') || req.timeframe?.includes('q')){
                     chart.applyOptions({timeScale: {timeVisible: false}});
             }else { chart.applyOptions({timeScale: {timeVisible: true}}); }
             backendLoadChartData(req)
         }
-       chartQuery.subscribe((req:ChartRequest)=>{
+       chartQueryDispatcher.subscribe((req:ChartQueryDispatch)=>{
            change(req)
         }) 
-       timeEvent.subscribe((e:TimeEvent)=>{
+       chartEventDispatcher.subscribe((e:ChartEventDispatch)=>{
            console.log(e)
            if (!currentChartInstance || !currentChartInstance.securityId) return;
            if (e.event == "replay"){
-               currentChartInstance.timestamp = get(currentTimestamp)
-                const req: ChartRequest = {
+               //currentChartInstance.timestamp = $streamInfo.timestamp
+               currentChartInstance.timestamp = 0
+                const req: ChartQueryDispatch = {
                     ...currentChartInstance,
                     bars: 400,
                     direction: "backward",
                     requestType: "loadNewTicker",
                     includeLastBar: false,
+                    chartId: chartId,
                 }
-                change(req,true)
+                console.log(req)
+                change(req)
            }
        })
     });

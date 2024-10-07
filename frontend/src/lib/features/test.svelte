@@ -1,7 +1,7 @@
 <script lang='ts'>
 
 import {writable} from 'svelte/store'
-import {startReplay,getStream} from "$lib/utils/stream"
+import {startReplay,addStream} from "$lib/utils/stream/interface"
     import '$lib/core/global.css'
 
 let store = writable("blank")

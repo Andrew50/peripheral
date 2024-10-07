@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
-    import { currentTimestamp } from '$lib/core/stores';
+    import { streamInfo } from '$lib/core/stores';
     import { writable, derived } from 'svelte/store';
     import type {Instance} from '$lib/core/types'
     import { UTCSecondstoESTSeconds, ESTSecondstoUTCSeconds, ESTSecondstoUTCMillis, getReferenceStartTimeForDateMilliseconds, timeframeToSeconds} from '$lib/core/timestamp';
@@ -41,7 +41,7 @@
     function calculateCountdown() {
         const chartTimeframeInSeconds = timeframeToSeconds(instance.timeframe);
         const nextBarClose = currentBarTimestamp + chartTimeframeInSeconds;
-        const remainingTime = nextBarClose - UTCSecondstoESTSeconds($currentTimestamp/1000);
+        const remainingTime = nextBarClose - UTCSecondstoESTSeconds($streamInfo.timestamp/1000);
         countdown.set(remainingTime > 0 ? remainingTime : 0);
     }
 

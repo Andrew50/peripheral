@@ -1,11 +1,11 @@
 <script lang="ts" context="module">
     import '$lib/core/global.css'
     import type {Instance} from '$lib/core/types' 
-    import {queryInstanceInput } from '$lib/utils/input.svelte'
-    import {queryInstanceRightClick} from '$lib/utils/rightClick.svelte'
-    import {changeChart} from '$lib/features/chart/interface'
+    import {queryInstanceInput } from '$lib/utils/popups/input.svelte'
+    import {queryInstanceRightClick} from '$lib/utils/popups/rightClick.svelte'
+    import {queryChart} from '$lib/features/chart/interface'
     import {menuWidth,entryOpen} from '$lib/core/stores'
-    import type {RightClickResult} from '$lib/utils/rightClick.svelte'
+    import type {RightClickResult} from '$lib/utils/popups/rightClick.svelte'
     import {writable} from 'svelte/store'
     import type {Writable} from 'svelte/store'
     let externalEmbed: Writable<Instance> = writable({})
@@ -84,7 +84,7 @@
     function embeddedInstanceLeftClick(instance: Instance): void {
         instance.securityId = parseInt(instance.securityId)
         instance.timestamp = parseInt(instance.timestamp)
-        changeChart(instance, true)
+        queryChart(instance, true)
 
     }
 
