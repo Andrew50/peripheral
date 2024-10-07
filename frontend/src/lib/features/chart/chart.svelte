@@ -174,11 +174,11 @@
                         })
                     }
                 }
-        }) .catch((error: string) => {
-            console.error(error)
+            }) .catch((error: string) => {
+                console.error(error)
 
-            isLoadingChartData = false; // Ensure this runs after data is loaded
-        });
+                isLoadingChartData = false; // Ensure this runs after data is loaded
+            });
     }
     
     function updateLatestQuote(data:QuoteData) {
