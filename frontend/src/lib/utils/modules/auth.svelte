@@ -3,7 +3,7 @@
     import {publicRequest} from '$lib/core/backend'
         import '$lib/core/global.css'
 
-    import Header from '$lib/utils/header.svelte';
+    import Header from '$lib/utils/modules/header.svelte';
     import { goto } from '$app/navigation';
     import { writable } from 'svelte/store';
   

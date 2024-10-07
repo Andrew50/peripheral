@@ -1,6 +1,6 @@
 <script lang="ts">
     import {privateRequest} from '$lib/core/backend'
-    import Entry from "$lib/utils/entry.svelte"
+    import Entry from "$lib/utils/modules/entry.svelte"
     import {onMount} from 'svelte'
     import {ESTTimestampToESTString} from '$lib/core/timestamp'
     import type {Writable} from 'svelte/store'

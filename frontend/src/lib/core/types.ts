@@ -44,3 +44,8 @@ export interface Settings {
     divideTaS: boolean
     filterTaS: boolean
 }
+export interface StreamInfo {
+    status: "replay" | "realtime" | "paused",
+    startTimestamp: number | null,
+    replaySpeed: number,
+}

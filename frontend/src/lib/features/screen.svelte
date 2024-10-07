@@ -1,13 +1,13 @@
 <script lang="ts">
   import { writable, get } from 'svelte/store';
-  import List from '$lib/utils/list.svelte';
+  import List from '$lib/utils/modules/list.svelte';
   import '$lib/core/global.css';
   import {UTCTimestampToESTString} from '$lib/core/timestamp'
   import { queueRequest } from '$lib/core/backend';
   import type { Writable } from 'svelte/store';
   import type { Instance } from '$lib/core/types';
   import { setups } from '$lib/core/stores';
-  import {queryInstanceInput} from '$lib/utils/input.svelte'
+  import {queryInstanceInput} from '$lib/utils/popups/input.svelte'
   
   // Assume this function is already coded and imported
 

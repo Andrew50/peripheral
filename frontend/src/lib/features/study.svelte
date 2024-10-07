@@ -4,14 +4,14 @@
     import '$lib/core/global.css'
 
     import { get,writable } from 'svelte/store'
-    import {changeChart} from "$lib/features/chart/interface"
-    import Entry from '$lib/utils/entry.svelte'
+    import {queryChart} from "$lib/features/chart/interface"
+    import Entry from '$lib/utils/modules/entry.svelte'
     import {onMount} from 'svelte'
     import {privateRequest} from '$lib/core/backend'
-    import {queryInstanceRightClick} from '$lib/utils/rightClick.svelte'
+    import {queryInstanceRightClick} from '$lib/utils/popups/rightClick.svelte'
     import type {Instance} from '$lib/core/types'
     import  {UTCTimestampToESTString} from '$lib/core/timestamp'
-    import {queryInstanceInput} from '$lib/utils/input.svelte'
+    import {queryInstanceInput} from '$lib/utils/popups/input.svelte'
     interface Study extends Instance{
         studyId: number;
         completed: boolean;
@@ -49,7 +49,7 @@
         if (study.studyId === selectedStudyId){
             selectedStudyId = 0
         }else{
-            changeChart(study)
+            queryChart(study)
             selectedStudyId = study.studyId
 /*            privateRequest<JSON>("getStudyEntry",{studyId:study.studyId})
             .then((entry: JSON) => {

@@ -2,7 +2,7 @@
     import type { Setup, Instance } from '$lib/core/types';
     import {privateRequest} from "$lib/core/backend"
     import {onMount} from 'svelte'
-    import {changeChart} from '$lib/features/chart/interface'
+    import {queryChart} from '$lib/features/chart/interface'
     import {ESTSecondstoUTCSeconds} from '$lib/core/timestamp'
     interface TrainingInstance extends Instance {
         sampleId: number
@@ -14,7 +14,7 @@
     function showInstance(instance){
         console.log(instance)
         instance.timestamp = ESTSecondstoUTCSeconds(instance.timestamp)*1000
-        changeChart(instance)
+        queryChart(instance)
     }
     function refillQueue(){
         privateRequest<TrainingInstance[]>("getTrainingQueue",{setupId:setup.setupId},true)

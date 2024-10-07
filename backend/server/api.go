@@ -5,6 +5,7 @@ import (
 	"backend/tasks"
 	"backend/utils"
 	"encoding/json"
+    "backend/socket"
 	"fmt"
 	"log"
 	"net/http"
@@ -17,43 +18,56 @@ var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, err
 
 var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{}, error){
 	"verifyAuth":              verifyAuth,
+//securities
 	"getSimilarInstances":     tasks.GetSimilarInstances,
 	"getSecuritiesFromTicker": tasks.GetSecuritiesFromTicker,
+    "getCurrentTicker":        tasks.GetCurrentTicker,
+//chart
 	"getChartData":            tasks.GetChartData,
-	"getSecurityDateBounds":   tasks.GetSecurityDateBounds,
+//study
 	"getStudies":              tasks.GetStudies,
 	"newStudy":                tasks.NewStudy,
 	"saveStudy":               tasks.SaveStudy,
 	"deleteStudy":             tasks.DeleteStudy,
 	"getStudyEntry":           tasks.GetStudyEntry,
 	"completeStudy":           tasks.CompleteStudy,
-	"getTradeData":            tasks.GetTradeData,
+//journal
 	"getJournals":             tasks.GetJournals,
 	"saveJournal":             tasks.SaveJournal,
 	"deleteJournal":           tasks.DeleteJournal,
 	"getJournalEntry":         tasks.GetJournalEntry,
 	"completeJournal":         tasks.CompleteJournal,
+//screensaver
 	"getScreensavers":         tasks.GetScreensavers,
+//watchlist
 	"getWatchlists":           tasks.GetWatchlists,
 	"deleteWatchlist":         tasks.DeleteWatchlist,
 	"newWatchlist":            tasks.NewWatchlist,
 	"getWatchlistItems":       tasks.GetWatchlistItems,
 	"deleteWatchlistItem":     tasks.DeleteWatchlistItem,
 	"newWatchlistItem":        tasks.NewWatchlistItem,
+//singles
 	"getPrevClose":            tasks.GetPrevClose,
-//	"getLastTrade":            tasks.GetLastTrade,
-	"getQuoteData":            tasks.GetQuoteData,
-    "getSettings": tasks.GetSettings,
-    "setSettings": tasks.SetSettings,
-    "getCurrentTicker": tasks.GetCurrentTicker,
-    "getExchanges": tasks.GetExchanges,
+//settings
+    "getSettings":             tasks.GetSettings,
+    "setSettings":             tasks.SetSettings,
+    //exchanges
+    "getExchanges":            tasks.GetExchanges,
+//setups
 	"getSetups":               tasks.GetSetups,
-    "newSetup": tasks.NewSetup,
-    "setSetup": tasks.SetSetup,
-    "deleteSetup": tasks.DeleteSetup,
-    "labelTrainingQueueInstance": tasks.LabelTrainingQueueInstance,
-    "getTrainingQueue": tasks.GetTrainingQueue,
-    "setSample":tasks.SetSample,
+    "newSetup":                tasks.NewSetup,
+    "setSetup":                tasks.SetSetup,
+    "deleteSetup":             tasks.DeleteSetup,
+//samples
+    "labelTrainingQueueInstance":tasks.LabelTrainingQueueInstance,
+    "getTrainingQueue":        tasks.GetTrainingQueue,
+    "setSample":               tasks.SetSample,
+
+//deprecated
+	//"getTradeData":            tasks.GetTradeData,
+    //	"getLastTrade":            tasks.GetLastTrade,
+	//"getQuoteData":            tasks.GetQuoteData,
+	//"getSecurityDateBounds":   tasks.GetSecurityDateBounds,
 }
 
 func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
@@ -224,7 +238,7 @@ func StartServer() {
 	http.HandleFunc("/private", private_handler(conn))
 	http.HandleFunc("/queue", queueHandler(conn))
 	http.HandleFunc("/poll", pollHandler(conn))
-	http.HandleFunc("/ws", utils.WsFrontendHandler(conn))
+	http.HandleFunc("/ws", socket.WsHandler(conn))
 
 	fmt.Println("Server running on port 5057")
 	if err := http.ListenAndServe(":5057", nil); err != nil {

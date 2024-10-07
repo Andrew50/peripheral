@@ -11,15 +11,6 @@ import (
 	"github.com/jackc/pgx/v4"
 )
 
-/*type ValidateDatetimeArgs struct {
-    Securityid
-
-func ValidateDatetime(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-    var args ValidateDatetimeArgs
-    if err := json.Unmarshal(rawArgs, &args); err != nil {
-        return nil, fmt.Errorf("getAnnotations invalid args: %v", err)
-    }*/
-
 type GetCurrentTickerArgs struct {
     SecurityId int `json:"securityId"`
 }
@@ -112,43 +103,6 @@ func GetPrevClose(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
     return nil, fmt.Errorf("dn10vn20")
 
 }
-/*type GetPrevCloseArgs struct {
-    Ticker string `json:"ticker"`
-}
-
-type PolygonBar struct {
-    Results []struct {
-        Close float64 `json:"c"`  // Close price
-    } `json:"results"`
-}
-
-func GetPrevClose(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var args GetPrevCloseArgs
-	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		return nil, fmt.Errorf("getAnnotations invalid args: %v", err)
-	}
-	endpoint := fmt.Sprintf("https://api.polygon.io/v2/aggs/ticker/%s/prev?adjusted=true&apiKey=%s",args.Ticker,conn.PolygonKey)
-	resp, err := http.Get(endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch Polygon snapshot: %v", err)
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %v", err)
-	}
-	var bar PolygonBar
-	if err := json.Unmarshal(body, &bar); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal JSON: %v", err)
-	}
-    if len(bar.Results) > 0 {
-        return bar.Results[0].Close, nil
-    }
-    return nil, fmt.Errorf("lkmk2")
-
-}*/
-
-
 
 type GetSecurityFromTickerArgs struct {
 	Ticker string `json:"ticker"`

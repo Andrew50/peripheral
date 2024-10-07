@@ -1,11 +1,11 @@
 <script lang='ts'>
-    import List from '$lib/utils/list.svelte';
+    import List from '$lib/utils/modules/list.svelte';
     import type {Writable} from 'svelte/store';
     import {writable, get} from 'svelte/store';
     import type {Instance, Watchlist} from '$lib/core/types';
     import {onMount,tick} from "svelte";
     import {privateRequest} from "$lib/core/backend";
-    import {queryInstanceInput} from '$lib/utils/input.svelte';
+    import {queryInstanceInput} from '$lib/utils/popups/input.svelte';
     import {flagWatchlistId, watchlists, flagWatchlist} from '$lib/core/stores';
     import '$lib/core/global.css';
 

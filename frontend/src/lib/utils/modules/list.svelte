@@ -2,11 +2,11 @@
 <script lang="ts">
   import { onMount,onDestroy } from 'svelte';
   import { writable,get} from 'svelte/store';
-  import {queryInstanceRightClick} from '$lib/utils/rightClick.svelte'
+  import {queryInstanceRightClick} from '$lib/utils/popups/rightClick.svelte'
   import type { Writable } from 'svelte/store';
   import type {Instance} from '$lib/core/types'
-  import StreamCell from '$lib/utils/streamCell.svelte'
-  import {changeChart} from '$lib/features/chart/interface'
+  import StreamCell from '$lib/utils/stream/streamCell.svelte'
+  import {queryChart} from '$lib/features/chart/interface'
   import {flagWatchlist} from '$lib/core/stores'
     import {flagSecurity} from '$lib/utils/flag'
     let longPressTimer: any
@@ -65,7 +65,7 @@
     const row = document.getElementById(`row-${index}`);
     if (row) {
       row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        changeChart(get(list)[selectedRowIndex])
+        queryChart(get(list)[selectedRowIndex])
     }
   }
   onMount(() => {
@@ -95,7 +95,7 @@
         event.stopPropagation()
       if (even === 0) {
         selectedRowIndex = index;
-        changeChart(instance)
+        queryChart(instance)
       }else if (even === 1){
           flagSecurity(instance)
       }else if (even === 2){

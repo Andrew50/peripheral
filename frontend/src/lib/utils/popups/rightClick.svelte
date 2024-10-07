@@ -5,12 +5,12 @@
     import type {Instance} from '$lib/core/types';
     import {UTCTimestampToESTString} from '$lib/core/timestamp'
     import {flagSecurity} from '$lib/utils/flag'
-    import {embedInstance} from "$lib/utils/entry.svelte";
+    import {embedInstance} from "$lib/utils/modules/entry.svelte";
     import {newStudy} from '$lib/features/study.svelte';
     import { get, writable } from 'svelte/store';
-    import {querySimilarInstances} from '$lib/utils/similar.svelte'
-    import {querySetSample} from '$lib/utils/sample.svelte'
-    import {startReplay} from '$lib/utils/stream'
+    import {querySimilarInstances} from '$lib/utils/popups/similar.svelte'
+    import {querySetSample} from '$lib/utils/popups/sample.svelte'
+    import {startReplay} from '$lib/utils/stream/interface'
     interface RightClickQuery {
         x?: number;
         y?: number;
@@ -72,8 +72,7 @@
                     document.addEventListener('click',handleClick)
                     document.addEventListener('keydown', handleKeyDown)
                     await tick()
-                    const menu = rightClickMenu;
-                    const menuRect = menu.getBoundingClientRect();
+                    const menuRect = rightClickMenu.getBoundingClientRect();
                     const windowWidth = window.innerWidth;
                     const windowHeight = window.innerHeight;
                     console.log(v.y)
@@ -170,7 +169,7 @@
         <!--<div><button on:click={()=>newJournal(get(rightClickQuery).instance)}> Add to Journal </button></div>-->
         <div ><button on:click={(event)=>querySimilarInstances(event,get(rightClickQuery).instance)}> Similar Instances </button></div>
         <!--<div><button on:click={getStats}> Instance Stats </button></div>-->
-        <div ><button on:click={()=>startReplay($rightClickQuery.instance.timestamp)}>Begin Replay</button></div>
+        <div ><button on:click={()=>startReplay($rightClickQuery.instance)}>Begin Replay</button></div>
         {#if $entryOpen}
             <div ><button on:click={()=>embedInstance(get(rightClickQuery).instance)}> Embed </button></div>
         {/if}

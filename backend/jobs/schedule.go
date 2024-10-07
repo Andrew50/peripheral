@@ -4,6 +4,7 @@ import (
 	"backend/utils"
 	"fmt"
 	"time"
+    "backend/socket"
 )
 
 var eOpenRun = false
@@ -33,7 +34,7 @@ func StartScheduler(conn *utils.Conn) chan struct{} {
 }
 
 func initialize(conn *utils.Conn){
-    startPolygonWS(conn)
+    socket.StartPolygonWS(conn)
 }
 
 
@@ -45,7 +46,7 @@ func eventLoop(now time.Time,conn *utils.Conn) {
     //close_ := time.Date(year, month, day, 16, 0, 0, 0, now.Location())
     if !eOpenRun && now.After(eOpen) && now.Before(eClose) {
         fmt.Println("running open update")
-        startPolygonWS(conn)
+        socket.StartPolygonWS(conn)
         pushJournals(conn,year,month,day)
         eOpenRun = true
         eCloseRun = false

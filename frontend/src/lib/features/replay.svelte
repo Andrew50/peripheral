@@ -1,40 +1,39 @@
 <script lang='ts'>
-import {startReplay, stopReplay, pauseReplay, resumeReplay, replayJumpToNextMarketOpen, replayJumpToNextDay} from '$lib/utils/stream';
-import {replayStream} from '$lib/utils/stream';
-import {queryInstanceInput} from '$lib/utils/input.svelte'
+import {startReplay, stopReplay, pauseReplay,changeSpeed, resumeReplay, nextDay} from '$lib/utils/stream/interface';
+import {queryInstanceInput} from '$lib/utils/popups/input.svelte'
 import {UTCTimestampToESTString} from '$lib/core/timestamp'
-import {replayInfo} from '$lib/core/stores'
-import type{ReplayInfo} from '$lib/core/stores'
+import {streamInfo} from '$lib/core/stores'
+import type{StreamInfo} from '$lib/core/stores'
 import '$lib/core/global.css'
 
 import type {Instance} from '$lib/core/types'
     function strtReplay(){
-        queryInstanceInput(["timestamp"],{timestamp:0})
+        queryInstanceInput(["timestamp"],{timestamp:0,extendedHours:false})
         .then((v:Instance)=>{
-            replayInfo.update((r:ReplayInfo) => {
+/*            streamInfo.update((r:StreamInfo) => {
                 r.startTimestamp = v.timestamp
                 return r
-            })
-            startReplay(v.timestamp)
+            })*/
+            startReplay(v)
         })
     }
     function changeReplaySpeed(event: Event) {
         const input = event.target as HTMLInputElement;
         const newSpeed = parseFloat(input.value); // Parse the speed as a decimal number
         if (!isNaN(newSpeed) && newSpeed > 0) {
-            replayStream.changeSpeed(newSpeed);
+            changeSpeed(newSpeed);
         }
     }
 
 </script>
 
 <div class='replay-controls' tabindex="-1"> 
-    {#if ["active","paused"].includes($replayInfo.status)}
+    {#if $streamInfo.replayActive}
         <button on:click={stopReplay}>Stop</button>
-        <button on:click={()=>{stopReplay;startReplay($replayInfo.startTimestamp);}}>Reset
+        <button on:click={()=>{stopReplay;startReplay({timestamp:$streamInfo.startTimestamp,extendedHours:$streamInfo.extendedHours});}}>Reset
        <!-- to {UTCTimestampToESTString($replayInfo.startTimestamp)}-->
         </button>
-        {#if $replayInfo.status === "paused"}
+        {#if $streamInfo.replayPaused}
             <button on:click={resumeReplay}>Play </button>
         {:else}
             <button on:click={pauseReplay}>Pause</button>
@@ -43,8 +42,8 @@ import type {Instance} from '$lib/core/types'
         <input id="speed-input" type="number" step="0.1" min="0.1" value="1.0" on:input={changeReplaySpeed} />
         </div>
         <div>
-        <button on:click={replayJumpToNextMarketOpen} >Jump to next market open (9:30 AM EST)</button>
-        <button on:click={replayJumpToNextDay} >Jump to next day (4 AM EST)</button>    
+        <button on:click={nextDay} >Jump to next market open (9:30 AM EST)</button>
+        <!--<button on:click={jumpToNextDay} >Jump to next day (4 AM EST)</button>    -->
         </div>
         {/if}
     {:else}

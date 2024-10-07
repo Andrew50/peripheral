@@ -1,83 +1,86 @@
 <script lang="ts">
     import { onDestroy, onMount } from 'svelte';
     import type { Writable } from 'svelte/store';
-    import type { TradeData, QuoteData ,Instance} from '$lib/core/types';
-    import { getStream } from '$lib/utils/stream';
-    import '$lib/core/global.css'
-    import {settings} from '$lib/core/stores'
-    import {get} from 'svelte/store'
-    import {privateRequest} from "$lib/core/backend"
+    import type { TradeData, QuoteData, Instance } from '$lib/core/types';
+    import { addStream } from '$lib/utils/stream/interface';
+    import '$lib/core/global.css';
+    import { settings } from '$lib/core/stores';
+    import { get } from 'svelte/store';
+    import { privateRequest } from '$lib/core/backend';
+    
     export let instance: Writable<Instance>;
     let store: Writable<TradeData>;
     let quoteStore: Writable<QuoteData>;
-    let releaseTrade: Function = () => {};
-    let releaseQuote: Function = () => {};
-    let unsubscribeTrade: Function = () => {};
-    let unsubscribeQuote: Function = () => {};
+    let releaseTrade = () => {};
+    let releaseQuote = () => {};
+    let unsubscribeTrade = () => {};
+    let unsubscribeQuote = () => {};
+
     interface TaS extends TradeData {
-        color: string
-        exchangeName: string
+        color: string;
+        exchangeName: string;
     }
-    type Exchanges = {[exchangeId:number]:string}
-    let exchanges: Exchanges = {}
+
+    type Exchanges = { [exchangeId: number]: string };
+    let exchanges: Exchanges = {};
     let allTrades: TaS[] = [];
     let currentBid = 0;
     let currentAsk = 0;
     const maxLength = 20;
     let prevSecId = -1;
-    let divideTaS = get(settings).divideTaS
-    let filterTaS = get(settings).filterTaS
-    onMount(()=>{
-        privateRequest<Exchanges>("getExchanges",{})
-        .then((v:Exchanges)=>{
-            exchanges = v
-        })
-    })
+    let divideTaS = get(settings).divideTaS;
+    let filterTaS = get(settings).filterTaS;
 
-    instance.subscribe((instance: Instance) => {
-        if (!instance.securityId || instance.securityId === prevSecId) return;
-        unsubscribeTrade();
-        releaseTrade();
-        unsubscribeQuote();
-        releaseQuote();
-        const [s, r] = getStream<TradeData[]>(instance, "fast");
-        store = s;
-        releaseTrade = r;
-        const [qs, qr] = getStream<QuoteData[]>(instance,"quote");
-        quoteStore = qs;
-        releaseQuote = qr;
-        allTrades = []
-        unsubscribeTrade = store.subscribe((newTrades: TradeData[]) => {
-            allTrades = allTrades.slice(0, maxLength);
-            const modifiedTrades: TaS[] = [];
-            if (!Array.isArray(newTrades)){return}
-            newTrades.forEach((newTrade) => {
-                if (newTrade.timestamp === undefined || newTrade.timestamp === 0) {
-                    return; // Skip invalid trades
-                }
-                if (!filterTaS && newTrade.size < 100) {
-                    return;
-                }
-                if (divideTaS) {
-                    newTrade.size = Math.floor(newTrade.size / 100);
-                }
-                const exchangeName = exchanges[newTrade.exchange];
-                const newRow: TaS = { color: getPriceColor(newTrade.price), ...newTrade, exchangeName };
-                modifiedTrades.push(newRow);
+    // Fetch exchanges on mount
+    onMount(() => {
+        privateRequest<Exchanges>("getExchanges", {})
+            .then((v: Exchanges) => {
+                exchanges = v;
             });
-            allTrades = [...modifiedTrades, ...allTrades].slice(0, maxLength);
-        });
-        unsubscribeQuote = quoteStore.subscribe((quotes:QuoteData[]) => {
-            const last = quotes[quotes.length-1]
-            if (last){
-                currentBid = last.bidPrice;
-                currentAsk = last.askPrice;
-                //console.log(currentAsk)
-            }
-        });
-        prevSecId = instance.securityId ?? -1
     });
 
+   function updateTradeStore(newTrade: TradeData) {
+        if (newTrade.timestamp === undefined || newTrade.timestamp === 0) {
+            return;
+        }
+        if (!filterTaS && newTrade.size < 100) {
+            return; 
+        }
+        if (divideTaS) {
+            newTrade.size = Math.floor(newTrade.size / 100);
+        }
+        const exchangeName = exchanges[newTrade.exchange];
+        const newRow: TaS = {
+            color: getPriceColor(newTrade.price),
+            ...newTrade,
+            exchangeName,
+        };
+        allTrades = [newRow, ...allTrades].slice(0, maxLength);
+    }
+    function updateQuoteStore(last: QuoteData) {
+        currentBid = last.bidPrice;
+        currentAsk = last.askPrice;
+    }
+
+    // Subscribe to the instance changes
+    instance.subscribe((instance: Instance) => {
+        if (!instance.securityId || instance.securityId === prevSecId) return;
+
+        // Release previous streams
+        releaseTrade();
+        releaseQuote();
+
+        // Add new streams using the passed update functions
+        releaseTrade = addStream<TradeData>(instance, "all", updateTradeStore);
+        releaseQuote = addStream<QuoteData>(instance, "quote", updateQuoteStore);
+        
+        // Reset trades
+        allTrades = [];
+
+        prevSecId = instance.securityId ?? -1;
+    });
+
+    // Cleanup on destroy
     onDestroy(() => {
         unsubscribeTrade();
         releaseTrade();
@@ -88,14 +91,14 @@
     function getPriceColor(price: number): string {
         if (price > currentAsk) {
             return 'dark-green';
-        }else if (price === currentAsk){
-            return 'green'
+        } else if (price === currentAsk) {
+            return 'green';
         } else if (price === currentBid) {
             return 'red';
-        }else if (price <= currentBid){
-            return 'dark-red'
+        } else if (price < currentBid) {
+            return 'dark-red';
         } else {
-            return 'white'; 
+            return 'white';
         }
     }
 </script>
@@ -108,28 +111,27 @@
                 <tr>
                     <th>Time</th>
                     <th>Price</th>
-                    <th>{$settings.divideTaS ? "Size*100":"Size"}</th>
+                    <th>{$settings.divideTaS ? "Size*100" : "Size"}</th>
                     <th>Exchange</th>
                 </tr>
             </thead>
             <tbody>
-            {#each allTrades as trade}
-                <tr class="{trade.color}">
-                    <td>{new Date(trade.timestamp).toLocaleTimeString()}</td>
-                    <td>{trade.price?.toFixed(3)}</td>
-                    <td>{trade.size}</td>
-                    <td>{trade.exchangeName}</td>
-                </tr>
-            {/each}
-            {#each Array(maxLength - allTrades.length).fill(0) as _}
-                <tr>
-                    <td>&nbsp;</td>  <!-- Empty cell -->
-                    <td>&nbsp;</td>  <!-- Empty cell -->
-                    <td>&nbsp;</td>  <!-- Empty cell -->
-                    <td>&nbsp;</td>  <!-- Empty cell -->
-                </tr>
-            {/each}
-            
+                {#each allTrades as trade}
+                    <tr class="{trade.color}">
+                        <td>{new Date(trade.timestamp).toLocaleTimeString()}</td>
+                        <td>{trade.price?.toFixed(3)}</td>
+                        <td>{trade.size}</td>
+                        <td>{trade.exchangeName}</td>
+                    </tr>
+                {/each}
+                {#each Array(maxLength - allTrades.length).fill(0) as _}
+                    <tr>
+                        <td>&nbsp;</td> <!-- Empty cell -->
+                        <td>&nbsp;</td> <!-- Empty cell -->
+                        <td>&nbsp;</td> <!-- Empty cell -->
+                        <td>&nbsp;</td> <!-- Empty cell -->
+                    </tr>
+                {/each}
             </tbody>
         {/if}
     </table>
@@ -141,34 +143,31 @@
         font-size: 12px;
         width: 100%;
         overflow-y: auto;
-        background-color: black;  /* Background color as in the image */
+        background-color: black;
     }
 
     .trade-table {
         width: 100%;
-        border-collapse: collapse; /* Remove lines between cells */
+        border-collapse: collapse;
     }
 
     .trade-table th, .trade-table td {
-        padding: 0;  /* Remove padding to match compact look */
+        padding: 0;
         text-align: left;
-        font-size: 12px;  /* Smaller font size */
-        border: none;  /* Remove borders */
-        background-color: black;  /* Background of the table */
+        font-size: 12px;
+        border: none;
+        background-color: black;
     }
 
     .trade-table th {
         color: white;
         font-weight: bold;
-        background-color: #333;  /* Darker header */
+        background-color: #333;
         padding: 5px;
-        font-size: 12px;  /* Adjust font size to match screenshot */
     }
 
     .trade-table td {
         padding: 5px;
-/*        font-family: monospace; /* Monospace font for numbers */
     }
-
 </style>
 
