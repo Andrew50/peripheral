@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-    "time"
-    "sync"
+	"sync"
+	"time"
 
 	polygonws "github.com/polygon-io/client-go/websocket"
 	"github.com/polygon-io/client-go/websocket/models"
@@ -37,56 +37,52 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 	} else {
 		fmt.Printf("\n successfully connected to Polygon Trades \n ")
 	}
-	err = polygonWS.Subscribe(polygonws.StocksMinAggs)
-	if err != nil {
-		log.Println("Error subscribing to Polygon WebSocket: ", err)
-		return
-	} else {
-		fmt.Printf("\n successfully connected to Polygon \n")
-	}
+	// err = polygonWS.Subscribe(polygonws.StocksMinAggs)
+	// if err != nil {
+	// 	log.Println("Error subscribing to Polygon WebSocket: ", err)
+	// 	return
+	// } else {
+	// 	fmt.Printf("\n successfully connected to Polygon \n")
+	// }
 	for {
 		select {
 		case err := <-polygonWS.Error():
 			fmt.Printf("PolygonWS Error: %v", err)
 		case out := <-polygonWS.Output():
-            var symbol string
-            switch msg := out.(type) {
-            case models.EquityAgg:
-                symbol = msg.Symbol
-            case models.EquityTrade:
-                symbol = msg.Symbol
-            case models.EquityQuote:
-                symbol = msg.Symbol
-            default:
-                //jlog.Println("Unknown message type received")
-                continue
-            }
-            securityId, exists := tickerToSecurityId[symbol]
-            if !exists {
-                //log.Printf("Symbol %s not found in tickerToSecurityId map\n", symbol)
-                continue
-            }
+			var symbol string
 			switch msg := out.(type) {
 			case models.EquityAgg:
-				if msg.Symbol == "TSLA" {
-					fmt.Printf("%v %v %v", msg.StartTimestamp, msg.EndTimestamp, msg.Close)
-				}
+				symbol = msg.Symbol
+			case models.EquityTrade:
+				symbol = msg.Symbol
+			case models.EquityQuote:
+				symbol = msg.Symbol
+			default:
+				//jlog.Println("Unknown message type received")
+				continue
+			}
+			securityId, exists := tickerToSecurityId[symbol]
+			if !exists {
+				//log.Printf("Symbol %s not found in tickerToSecurityId map\n", symbol)
+				continue
+			}
+			switch msg := out.(type) {
 			case models.EquityTrade:
 				channelName := fmt.Sprintf("%d-fast", securityId)
 				data := TradeData{
-//					Ticker:     msg.Symbol,
+					//					Ticker:     msg.Symbol,
 					Price:      msg.Price,
 					Size:       msg.Size,
 					Timestamp:  msg.Timestamp,
 					Conditions: msg.Conditions,
-                    ExchangeId: msg.Exchange,
+					ExchangeId: msg.Exchange,
 					Channel:    channelName,
 				}
 				jsonData, err := json.Marshal(data)
 				if err != nil {
 					fmt.Println("Error marshling JSON:", err)
 				}
-			//	conn.Cache.Publish(context.Background(), "trades-agg", string(jsonData))
+				//	conn.Cache.Publish(context.Background(), "trades-agg", string(jsonData))
 
 				conn.Cache.Publish(context.Background(), channelName, string(jsonData))
 				channelName = fmt.Sprintf("%d-all", securityId)
@@ -101,9 +97,9 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 				nextDispatch, exists := nextDispatchTimes.times[msg.Symbol]
 				nextDispatchTimes.RUnlock()
 				if !exists || now.After(nextDispatch) {
-                    slowChannelName := fmt.Sprintf("%d-slow", securityId)
-                    data.Channel = slowChannelName
-                    jsonData, err = json.Marshal(data)
+					slowChannelName := fmt.Sprintf("%d-slow", securityId)
+					data.Channel = slowChannelName
+					jsonData, err = json.Marshal(data)
 					conn.Cache.Publish(context.Background(), slowChannelName, string(jsonData))
 					nextDispatchTimes.Lock()
 					nextDispatchTimes.times[msg.Symbol] = now.Add(slowRedisTimeout)
@@ -113,7 +109,7 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 				channelName := fmt.Sprintf("%d-quote", securityId)
 				data := QuoteData{
 
-//					Ticker:    msg.Symbol,
+					//					Ticker:    msg.Symbol,
 					Timestamp: msg.Timestamp,
 					BidPrice:  msg.BidPrice,
 					AskPrice:  msg.AskPrice,
@@ -140,10 +136,10 @@ func PolygonDataToRedis(conn *utils.Conn) {
 	}
 }
 func StartPolygonWS(conn *utils.Conn) error {
-    if err := initTickerToSecurityIdMap(conn); err != nil {
+	if err := initTickerToSecurityIdMap(conn); err != nil {
 		return fmt.Errorf("failed to initialize ticker to security ID map: %v", err)
-	}	
-    polygonWSConn, err := polygonws.New(polygonws.Config{
+	}
+	polygonWSConn, err := polygonws.New(polygonws.Config{
 		APIKey: "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm",
 		Feed:   polygonws.RealTime,
 		Market: polygonws.Stocks,
@@ -160,7 +156,7 @@ func StartPolygonWS(conn *utils.Conn) error {
 
 func initTickerToSecurityIdMap(conn *utils.Conn) error {
 	tickerToSecurityId = make(map[string]int)
-	rows, err := conn.DB.Query(context.Background(),"SELECT ticker, securityId FROM securities where maxDate is NULL")
+	rows, err := conn.DB.Query(context.Background(), "SELECT ticker, securityId FROM securities where maxDate is NULL")
 	if err != nil {
 		return err
 	}
