@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/polygon-io/client-go/rest/iter"
@@ -246,6 +247,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	if len(barDataList) != 0 {
 		if haveToAggregate || args.Direction == "forward" {
 			if args.Direction == "backward" {
+				fmt.Println("hit first one")
 				marketStatus, err := utils.GetMarketStatus(conn)
 				if err != nil {
 					return nil, fmt.Errorf("issue with market status")
@@ -264,6 +266,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			}
 			return barDataList, nil
 		} else {
+			fmt.Println("reverse!!!!!!")
 			reverse(barDataList)
 			marketStatus, err := utils.GetMarketStatus(conn)
 			if err != nil {
@@ -375,14 +378,16 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 	timestampTime := time.Unix(0, timestampEnd*int64(time.Millisecond)).UTC()
 	var timestampStart int64
 	var currentDayStart int64
+	fmt.Printf("Current timespan:%v\n", timespan)
 	if timespan == "second" || timespan == "minute" || timespan == "hour" {
 		currentDayStart = getReferenceStartTime(timestampEnd, extendedHours, easternLocation)
 		timeframeInSeconds := getTimeframeInSeconds(multiplier, timespan)
 		elapsedTime := timestampEnd - currentDayStart
+		fmt.Printf("\nElapsed Time:%v", elapsedTime)
 		if elapsedTime < 0 {
 			return incompleteBar, nil
 		}
-		timestampStart = currentDayStart + (elapsedTime / (timeframeInSeconds * 1000))
+		timestampStart = currentDayStart + (elapsedTime/(timeframeInSeconds*1000))*timeframeInSeconds*1000
 	} else {
 		currentDayStart = getReferenceStartTime(timestampEnd, false, easternLocation)
 		if timespan == "day" {
@@ -393,7 +398,8 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 			timestampStart = getReferenceStartTimeForMonths(timestampEnd, multiplier, easternLocation)
 		}
 	}
-	incompleteBar.Timestamp = float64(timestampStart) / 1000
+	fmt.Printf("\nTimestampStart:%v", timestampStart)
+	incompleteBar.Timestamp = math.Floor(float64(timestampStart) / 1000)
 	if timespan == "day" || timespan == "week" || timespan == "month" {
 		lastCompleteDayUTC := time.Date(timestampTime.Year(), timestampTime.Month(), timestampTime.Day(), 0, 0, 0, 0, time.UTC).UnixMilli()
 		dailyBarsDurationMs := lastCompleteDayUTC - timestampStart
@@ -436,12 +442,12 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 			minuteBarsEndTimeUTC = timestampStart
 		}
 		numMinuteBars := (minuteBarsEndTimeUTC - timestampStart) / (60 * 1000)
+		fmt.Printf("numMinuteBars: %d\n", numMinuteBars)
 		if numMinuteBars > 0 {
 			iter, err := utils.GetAggsData(conn.Polygon, ticker, 1, "minute",
 				models.Millis(time.Unix(0, timestampStart*int64(time.Millisecond)).UTC()),
 				models.Millis(time.Unix(0, (lastCompleteMinuteUTC-60000)*int64(time.Millisecond)).UTC()),
 				10000, "asc", !isReplay)
-			fmt.Printf("numMinuteBars: %d\n", numMinuteBars)
 			if err != nil {
 				return incompleteBar, fmt.Errorf("error while pulling minute data for incomplete bar 56kly7lg %v", err)
 			}
@@ -472,16 +478,21 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 		secondBarsEndTimeUTC = timestampStart
 	}
 	numSecondBars := (secondBarsEndTimeUTC - timestampStart) / 1000
+	fmt.Printf("\nnumSecondBars: %d\n", numSecondBars)
+	fmt.Printf("\nstarttime:%v", time.Unix(0, timestampStart*int64(time.Millisecond)).UTC().UnixMilli())
+	fmt.Printf("\nendtime:%v", time.Unix(0, (lastCompleteSecondUTC)*int64(time.Millisecond)).UTC().UnixMilli())
 	if numSecondBars > 0 {
-		iter, err := utils.GetAggsData(conn.Polygon, ticker, 1, "minute",
+		iter, err := utils.GetAggsData(conn.Polygon, ticker, 1, "second",
 			models.Millis(time.Unix(0, timestampStart*int64(time.Millisecond)).UTC()),
-			models.Millis(time.Unix(0, (lastCompleteSecondUTC-1000)*int64(time.Millisecond)).UTC()),
+			models.Millis(time.Unix(0, (lastCompleteSecondUTC)*int64(time.Millisecond)).UTC()),
 			10000, "asc", !isReplay)
 		if err != nil {
 			return incompleteBar, fmt.Errorf("error while pulling minute data for incomplete bar 56kly7lg %v", err)
 		}
 		var count int64
 		for iter.Next() {
+			fmt.Printf("testing")
+			fmt.Printf("%v\n", incompleteBar)
 			if count >= numSecondBars {
 				break
 			}
@@ -498,6 +509,7 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 			incompleteBar.Volume += iter.Item().Volume
 			count++
 		}
+		fmt.Printf("COUNT:%v", count)
 	}
 	var tradeConditionsToCheck = map[int32]struct{}{
 		2: {}, 5: {}, 7: {}, 10: {}, 13: {},
