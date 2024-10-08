@@ -411,7 +411,9 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 				if count >= numDailyBars {
 					break
 				}
-				if incompleteBar.Open == 0 {
+                fmt.Println(iter.Item().Open)
+				if incompleteBar.Open == 0 && iter.Item().Open != 0{
+                    fmt.Println(iter.Item().Open)
 					incompleteBar.Open = iter.Item().Open
 				}
 				if iter.Item().High > incompleteBar.High {

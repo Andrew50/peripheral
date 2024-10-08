@@ -5,8 +5,10 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import Model, layers, Input, Sequential
 from tensorflow.keras.layers import (Dense, LSTM, Add, LayerNormalization, GlobalAveragePooling1D, 
-                                     MultiHeadAttention, Bidirectional, Dropout, Conv1D, Flatten, Lambda)
-from tensorflow.keras.optimizers import Adam
+                                     MultiHeadAttention, Bidirectional, Dropout, Conv1D, Flatten, Lambda,
+                                     BatchNormalization)
+
+from tensorflow.keras.optimizers import Adam, RMSprop
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, LearningRateScheduler
 from google.protobuf import text_format
 from tensorflow_serving.config import model_server_config_pb2
@@ -24,18 +26,20 @@ SPLIT_RATIO = .8
 TRAINING_CLASS_RATIO = .18
 VALIDATION_CLASS_RATIO = .09
 MIN_RANDOM_NOS = .7
-MAX_EPOCHS = 1000
-PATIENCE_EPOCHS = 100
-MIN_EPOCHS = 30
+MAX_EPOCHS = 500
+PATIENCE_EPOCHS = 50
+LEARNING_RATE_PATIENCE_EPOCHS = 20
+LEARNING_RATE_CUT = .99
+MIN_EPOCHS = 15
 BATCH_SIZE = 32
-LEARNING_RATE = 1e-3 #inital
+LEARNING_RATE = 5e-5 #inital 
 CONV_FILTER_UNITS= [9] 
 CONV_FILTER_KERNAL_SIZES = [5]
 BI_LSTM_UNITS = [32]
 DROPOUT_PERCENTS = []
 BI_LISM_DROPOUTS = [.75]
 DROPOUT_LAYERS = []
-NORMALIZATION_TYPE = "z-score" #good = min-max, z-score, 
+NORMALIZATION_TYPE = "rolling-log" #insance: rolling-log (with tanh conv activation)  #good = min-max, z-score, 
 NUM_HEADS = 4  # Number of attention heads
 D_MODEL = 64  # Dimensionality of the output space of the attention
 FF_DIM = 128  # Dimensionality of the feedforward network
@@ -100,19 +104,30 @@ def _createModel():
                   metrics=[tf.keras.metrics.AUC(curve='PR', name='auc_pr')])
     return model
     
-def createModel():
+def createModel(): #rolling log norm type 
     model = Sequential()
-    model.add(Input(shape=(None, 4))) # assuming o h l c
-    model.add(Conv1D(filters=32, kernel_size=7, activation='relu'))
-    model.add(Conv1D(filters=32, kernel_size=7, activation='relu'))
-    model.add(Conv1D(filters=32, kernel_size=7, activation='relu'))
-    model.add(Bidirectional(LSTM(units=128, return_sequences=False,dropout=0.55)))
-    #model.add(Bidirectional(LSTM(units=128, return_sequences=False,dropout=0.4)))
+    model.add(Input(shape=(None, 4))) # assuming o h l cmodel.add(Conv1D(filters=32, kernel_size=5, activation='tanh'))
+    model.add(Conv1D(filters=64, kernel_size=5, activation='tanh'))
+    model.add(LayerNormalization())
+    model.add(Bidirectional(LSTM(units=64, return_sequences=False,dropout=0.65)))
     model.add(Dense(1, activation='sigmoid'))
     model.compile(optimizer=Adam(learning_rate=LEARNING_RATE), loss='binary_crossentropy', 
                   metrics=[tf.keras.metrics.AUC(curve='PR', name='auc_pr')])
     return model
 
+def ___createModel():
+    inputs = Input(shape=(None, 4))  # assuming OHLC
+    x = Conv1D(filters=64, kernel_size=5, activation='tanh')(inputs)
+    x = LayerNormalization()(x)
+    attention_output = MultiHeadAttention(num_heads=8, key_dim=128)(x, x)  # Using `x` as both query and value
+    x = LayerNormalization()(attention_output)
+    x = Bidirectional(LSTM(units=128, return_sequences=False, dropout=0.65))(x)
+    outputs = Dense(1, activation='sigmoid')(x)
+    model = Model(inputs=inputs, outputs=outputs)
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE), 
+                  loss='binary_crossentropy', 
+                  metrics=[tf.keras.metrics.AUC(curve='PR', name='auc_pr')])
+    return model
 
 def train_model(conn,setupID):
     with conn.db.cursor() as cursor:
@@ -152,13 +167,14 @@ def train_model(conn,setupID):
     )
     lr_scheduler = ReduceLROnPlateau(
         monitor='val_auc_pr', 
-        factor=0.3,  # Reduce the learning rate by half
-        patience=int(PATIENCE_EPOCHS/8),  # Number of epochs with no improvement before reducing
-        min_lr=1e-6,  # Minimum learning rate
+        factor=LEARNING_RATE_CUT,
+        patience=int(LEARNING_RATE_PATIENCE_EPOCHS),  
+        min_lr=1e-6,  
         mode='max',
         verbose=1
     )
     history = model.fit(xTrainingData, yTrainingData,epochs=MAX_EPOCHS,batch_size=BATCH_SIZE,validation_data=(xValidationData, yValidationData),callbacks=[early_stopping,lr_scheduler])
+    #history = model.fit(xTrainingData, yTrainingData,epochs=MAX_EPOCHS,batch_size=BATCH_SIZE,validation_data=(xValidationData, yValidationData),callbacks=[early_stopping])
     tf.keras.backend.clear_session()
     score = round(max(history.history['val_auc_pr']) * 100)
     with conn.db.cursor() as cursor:
