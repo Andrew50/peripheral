@@ -151,7 +151,7 @@ func (c *Client) readPump(conn *utils.Conn) {
 			continue
 		}
         os.Stdout.Sync()
-        fmt.Println(clientMsg)
+        //fmt.Println(clientMsg)
 		switch clientMsg.Action {
         case "subscribe":
             if c.replayActive {

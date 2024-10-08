@@ -219,8 +219,9 @@ func getQuoteData(conn *utils.Conn, securityId int, timestamp int64, lengthOfTim
         if err != nil {
             return nil, fmt.Errorf("error scanning row: %w", err)
         }
-
-        windowStartTimeNanos, err := utils.NanosFromUTCTime(time.Unix(windowStartTime/1000, (windowStartTime%1000)*1e6).UTC())
+        tim := time.Unix(windowStartTime/1000, (windowStartTime%1000)*1e6).UTC()
+        fmt.Println(tim)
+        windowStartTimeNanos, err := utils.NanosFromUTCTime(tim)
         if err != nil {
             return nil, fmt.Errorf("error converting time: %v", err)
         }
@@ -230,14 +231,15 @@ func getQuoteData(conn *utils.Conn, securityId int, timestamp int64, lengthOfTim
                 return quoteDataList, nil
             }
 
-            if !extendedHours {
+            //quotes should still be added even if not extedned
+            /*if !extendedHours {
                 timestamp := time.Time(iter.Item().ParticipantTimestamp).In(easternLocation)
                 hour := timestamp.Hour()
                 minute := timestamp.Minute()
                 if hour < 9 || (hour == 9 && minute < 30) || hour >= 16 {
                     continue
                 }
-            }
+            }*/
 
             quoteDataList = append(quoteDataList, &QuoteData{
                 BidPrice:  iter.Item().BidPrice,
@@ -296,7 +298,7 @@ func getPrevCloseData(conn *utils.Conn, securityId int, timestamp int64) ([]Tick
             Timestamp:  time.Time(agg.Timestamp).UnixNano() / int64(time.Millisecond), // Use the actual timestamp of each bar
             ExchangeId: 0, // ExchangeId is not applicable for close data
             Conditions: []int32{},
-            Channel:    "close",
+            Channel:    "",
         }
         closeDataList = append(closeDataList, &closeData)
 

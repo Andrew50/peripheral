@@ -89,6 +89,13 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 			//	conn.Cache.Publish(context.Background(), "trades-agg", string(jsonData))
 
 				conn.Cache.Publish(context.Background(), channelName, string(jsonData))
+				channelName = fmt.Sprintf("%d-all", securityId)
+                data.Channel = channelName
+				jsonData, err = json.Marshal(data)
+				if err != nil {
+					fmt.Println("Error marshling JSON:", err)
+				}
+				conn.Cache.Publish(context.Background(), channelName, string(jsonData))
 				now := time.Now()
 				nextDispatchTimes.RLock()
 				nextDispatch, exists := nextDispatchTimes.times[msg.Symbol]

@@ -113,7 +113,7 @@ def screen(conn, setupIds,timestamp,threshold=25):
         instanceList = getCurrentTickersAndPrice(conn)
     else: 
         instanceList = getHistoricalTickers(conn,timestamp)
-    data, meta = getTensor(conn, instanceList, tf, maxBars,dolvolReq=minDolvolReq,adrReq= minAdrReq,mcapReq=minMcapReq)
+    data, meta = getTensor(conn, instanceList, tf, maxBars,dolvolReq=minDolvolReq,adrReq= minAdrReq,mcapReq=minMcapReq,normalize="rolling-log")
     results = []
     for setupId in setupIds:
         with conn.db.cursor() as cursor:

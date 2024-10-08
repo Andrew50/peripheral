@@ -13,7 +13,16 @@ def normalize(df: np.ndarray, normType: str) -> np.ndarray:
         df = df - close_col[:, np.newaxis]
         df = df[::-1]  # Reverse the order of rows to match other normalizations
         return df
-
+    elif normType == "change":
+        # Roll the close column to get the previous close values
+        previous_close = np.roll(df[:, 3], shift=1)
+        
+        # Calculate the change from the previous close, and normalize by dividing by the previous close
+        df = (df - previous_close[:, np.newaxis]) / previous_close[:, np.newaxis]
+        
+        # Reverse the order of rows to match other normalizations
+        df = df[::-1]
+        return df
     elif normType == "min-max":
         # Min-Max normalization to the range [-1, 1]
         min_vals = df.min(axis=0)
@@ -193,6 +202,8 @@ async def get_instance_data(session, args):
                 data_array[-1,:] = data_array[-2, 0]
         else: #historical
             data_array[-1,:] = data_array[-1, 0]
+        if ticker == "ACMR" or ticker == "SMCI" or ticker == "NVDA":
+            print(data_array)
         data_array = normalize(data_array,normType)
         return data_array, {"ticker":ticker,"timestamp":dt,"dolvol":dolvol,"adr":adr,"mcap":mcap,"label":label}
 
