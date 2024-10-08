@@ -135,6 +135,8 @@ func getInitialStreamValue(conn *utils.Conn, channelName string, timestamp int64
 		return jsonData, nil
 
     } else if streamType == "close" {
+        //clos, err := utils.GetPrevClose(
+
 
 	} else if streamType == "all" {
 		// Return an empty response for "all" stream type
