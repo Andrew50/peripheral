@@ -250,6 +250,9 @@ func getQuoteData(conn *utils.Conn, securityId int, timestamp int64, lengthOfTim
                 Channel:   "", // Set the Channel to an empty string
             })
         }
+        if len(quoteDataList) == 0 {
+            return nil, fmt.Errorf("difw0")
+        }
 
         windowStartTime = quoteDataList[len(quoteDataList)-1].GetTimestamp()
     }

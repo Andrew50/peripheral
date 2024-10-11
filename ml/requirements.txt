@@ -6,3 +6,4 @@ tqdm==4.65.0
 psycopg2-binary
 numpy
 pandas
+keras-cv

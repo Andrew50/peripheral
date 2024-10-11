@@ -1,10 +1,11 @@
 <script lang="ts" context="module">
     import '$lib/core/global.css'
-    import type {Instance} from '$lib/core/types' 
+    import type {Instance,Setup} from '$lib/core/types' 
     import {queryInstanceInput } from '$lib/utils/popups/input.svelte'
     import {queryInstanceRightClick} from '$lib/utils/popups/rightClick.svelte'
     import {queryChart} from '$lib/features/chart/interface'
-    import {menuWidth,entryOpen} from '$lib/core/stores'
+    import {querySetup} from '$lib/utils/popups/setup.svelte'
+    import {menuWidth,entryOpen,dispatchMenuChange} from '$lib/core/stores'
     import type {RightClickResult} from '$lib/utils/popups/rightClick.svelte'
     import {writable} from 'svelte/store'
     import type {Writable} from 'svelte/store'
@@ -25,6 +26,7 @@
     export let func: string;
     export let id: number;
     export let completed: boolean;
+    export let setupId: number|null|undefined = undefined;
     let Quill;
     let editorContainer: HTMLElement | string;
     let controlsContainer: HTMLElement | string;
@@ -46,6 +48,14 @@
 
     function del():void{
         privateRequest<void>(`delete${func}`,{id:id})
+    }
+    function changeSetup(event:MouseEvent){
+        querySetup(event).then((i:number|null)=>{
+            if (i !== null){
+                privateRequest<null>("setStudySetup",{id:id,setupId:i})
+            }
+        })
+
     }
     function complete():void{
         completed = !completed
@@ -87,6 +97,7 @@
         queryChart(instance, true)
 
     }
+
 
     function embeddedInstanceRightClick(instance: Instance, event:MouseEvent): void {
         event.preventDefault()
@@ -195,6 +206,9 @@
     <button on:click={inputAndEmbedInstance}> Insert </button>
     <button on:click={complete}> {completed ? "Complete" : "Uncomplete"} </button>
     <!--<button on:click={save} class="action-btn"> Save </button>-->
+    {#if setupId !== undefined}
+        <button on:click={(event)=>{changeSetup(event)}}> Change Setup </button>
+    {/if}
     <button on:click={del}> Delete </button>
 </div>
 <style>

@@ -104,15 +104,18 @@ def filter(conn, df, metadata, setupId, setupName, threshold, dolvolReq, adrReq,
     return results
 
 
-def screen(conn, setupIds,timestamp,threshold=25):
+def screen(conn, setupIds,timestamp=0,threshold=25,instances=None):
     tf = "1d"
     with conn.db.cursor() as cursor:
         cursor.execute('SELECT MAX(bars),MIN(dolvol),Min(adr),MIN(mcap) FROM setups WHERE setupId = ANY(%s)', (setupIds,))
         maxBars, minDolvolReq,minAdrReq,minMcapReq = cursor.fetchone()
-    if timestamp == 0:
-        instanceList = getCurrentTickersAndPrice(conn)
-    else: 
-        instanceList = getHistoricalTickers(conn,timestamp)
+    if instances is not None:
+        instanceList = instances
+    else:
+        if timestamp == 0:
+            instanceList = getCurrentTickersAndPrice(conn)
+        else: 
+            instanceList = getHistoricalTickers(conn,timestamp)
     data, meta = getTensor(conn, instanceList, tf, maxBars,dolvolReq=minDolvolReq,adrReq= minAdrReq,mcapReq=minMcapReq,normalize="rolling-log")
     results = []
     for setupId in setupIds:

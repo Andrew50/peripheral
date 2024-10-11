@@ -1,7 +1,6 @@
 import time, psycopg2, redis
 
 class Conn:
-
     def __init__(self, inside_container = True):
         if inside_container:
             cache_host = 'cache'
