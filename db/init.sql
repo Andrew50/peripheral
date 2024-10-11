@@ -1,3 +1,4 @@
+--init.sql
 CREATE TABLE users (
     userId SERIAL PRIMARY KEY,
     username VARCHAR(100) UNIQUE NOT NULL,
@@ -25,7 +26,7 @@ create table setups (
     bars int not null,
     threshold int not null,
     modelVersion int not null default 0,
-    score int default 0;
+    score int default 0,
     sampleSize int default 0,
     untrainedSamples int default 0,
     dolvol float not null,
@@ -47,10 +48,11 @@ CREATE TABLE studies (
     studyId serial primary key,
     userId serial references users(userId) on delete cascade,
     securityId int, --references securities(securityId), --cant because not unique
+    setupId serial references setups(setupId), --no action
     timestamp timestamp not null,
     completed boolean not null default false,
     entry json,
-    unique(userId, securityId, timestamp)
+    unique(userId, securityId, timestamp,setupId)
 );
 create index idxUserIdCompleted on studies(userId, completed);
 CREATE TABLE journals (
@@ -81,14 +83,15 @@ COPY securities(securityid, ticker, figi, minDate, maxDate)
 FROM '/docker-entrypoint-initdb.d/securities.csv' DELIMITER ',' CSV HEADER;
 INSERT INTO users (userId, username, password) VALUES (0, 'user', 'pass');
 
-INSERT INTO setups (setupId,userId,name,timeframe,bars,threshold,dolvol,adr,mcap) VALUES 
-(1,0, 'EP', '1d', 30, 30, 5000000, 2.5, 0),
-(2,0, 'F', '1d', 60, 30, 5000000, 2.5, 0),
-(3,0, 'MR', '1d', 30, 30, 5000000, 2.5, 0),
-(4,0, 'NEP', '1d', 30, 30, 5000000, 2.5, 0),
-(5,0, 'NF', '1d', 60, 30, 5000000, 2.5, 0),
-(6,0, 'NP', '1d', 30, 30, 5000000, 2.5, 0),
-(7,0, 'P', '1d', 30, 30, 5000000, 2.5, 0);
+Insert into setups (setupid,userid,name,timeframe,bars,threshold,dolvol,adr,mcap) values 
+(1,0, 'ep', '1d', 30, 30, 5000000, 2.5, 0),
+(2,0, 'f', '1d', 60, 30, 5000000, 2.5, 0),
+(3,0, 'mr', '1d', 30, 30, 5000000, 2.5, 0),
+(4,0, 'nep', '1d', 30, 30, 5000000, 2.5, 0),
+(5,0, 'nf', '1d', 60, 30, 5000000, 2.5, 0),
+(6,0, 'np', '1d', 30, 30, 5000000, 2.5, 0),
+(7,0, 'p', '1d', 30, 30, 5000000, 2.5, 0);
+alter sequence setups_setupid_seq restart with 8;
 CREATE TEMP TABLE temp (
     setupId INTEGER NOT NULL,
     ticker VARCHAR(10) NOT NULL,

@@ -2,14 +2,15 @@
 <script lang="ts" context="module">
     import '$lib/core/global.css'
     import type { Writable } from 'svelte/store';
-    import type {Instance} from '$lib/core/types';
+    import type {Instance,Setup} from '$lib/core/types';
     import {UTCTimestampToESTString} from '$lib/core/timestamp'
     import {flagSecurity} from '$lib/utils/flag'
     import {embedInstance} from "$lib/utils/modules/entry.svelte";
     import {newStudy} from '$lib/features/study.svelte';
-    import { get, writable } from 'svelte/store';
+    import {get, writable } from 'svelte/store';
+    import {setSample} from '$lib/features/setups/interface'
     import {querySimilarInstances} from '$lib/utils/popups/similar.svelte'
-    import {querySetSample} from '$lib/utils/popups/sample.svelte'
+    import {querySetup} from '$lib/utils/popups/setup.svelte'
     import {startReplay} from '$lib/utils/stream/interface'
     interface RightClickQuery {
         x?: number;
@@ -160,12 +161,20 @@
         })
     }
 
+    function sSample(event:MouseEvent){
+        querySetup(event).then((v:number)=>{
+            if (v== null)return
+            setSample(v,$rightClickQuery.instance)
+        })
+
+    }
+
 </script>
 {#if ["initializing","active"].includes($rightClickQuery.status)}
     <div bind:this={rightClickMenu} class="popup-container" style="top: {$rightClickQuery.y}px; left: {$rightClickQuery.x}px;">
         <div >{$rightClickQuery.instance.ticker} {UTCTimestampToESTString($rightClickQuery.instance.timestamp)} </div>
         <div ><button on:click={()=>newStudy(get(rightClickQuery).instance)}> Add to Study </button></div>
-        <div><button on:click={(event)=>querySetSample(event,get(rightClickQuery).instance)}> Add to Sample </button></div>
+        <div><button on:click={(event)=>sSample(event)}> Add to Sample </button></div>
         <!--<div><button on:click={()=>newJournal(get(rightClickQuery).instance)}> Add to Journal </button></div>-->
         <div ><button on:click={(event)=>querySimilarInstances(event,get(rightClickQuery).instance)}> Similar Instances </button></div>
         <!--<div><button on:click={getStats}> Instance Stats </button></div>-->
