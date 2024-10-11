@@ -1,51 +1,47 @@
 <!-- sample.svelte -->
 <script lang="ts" context="module">
-    import { writable,get } from 'svelte/store';
+    import { writable } from 'svelte/store';
     import type { Writable } from 'svelte/store';
-    import type { Setup,Instance } from '$lib/core/types';
-    import { privateRequest } from '$lib/core/backend';
+    import type { Setup } from '$lib/core/types';
+    import {newSetup} from '$lib/features/setups/interface'
     import {setups} from '$lib/core/stores'
-    import {setSample} from '$lib/features/setups/interface'
     interface UserSetupMenu {
         x: number;
         y: number;
-        instance: Instance
-        status: "active" | "inactive";
-        setup: Setup | null
+        status: "active" | "inactive"
+        setup: Setup | null | "new"
     }
 
-    const inactiveUserSetupMenu = { x: 0, y: 0, instance: {}, status: "inactive" } as UserSetupMenu;
+    const inactiveUserSetupMenu = { x: 0, y: 0, status: "inactive"} as UserSetupMenu;
     let userSetupMenu: Writable<UserSetupMenu> = writable(inactiveUserSetupMenu);
-    export async function querySetup(event: MouseEvent, instance: Instance): Promise<Setup|"new"> {
+    export async function querySetup(event: MouseEvent): Promise<number> {
         const menuState: UserSetupMenu = {
             x: event.clientX,
             y: event.clientY,
-            instance: instance,
             status: "active",
             setup: null,
         };
         userSetupMenu.set(menuState);
-        return new Promise<Setup|"new">((resolve, reject) => {
-            const unsubscribe = userSetupMenu.subscribe((iQ: User) => {
-                console.log(iQ)
-                if (iQ.status === "cancelled"){
-                    deactivate()
-                    tick()
-                    reject()
-                }else if(iQ.status === "complete"){
-                    const re = iQ.instance
-                    deactivate()
-                    resolve(re)
+        console.log("open")
+        return new Promise<number>((resolve, reject) => {
+            const unsubscribe = userSetupMenu.subscribe(async(menuState:UserSetupMenu) => {
+                if (menuState.status === "inactive") {
+                    console.log(menuState)
+                    if (menuState.setup === "new"){
+                        const i = await newSetup()
+                        console.log("resolved")
+                        unsubscribe();
+                        resolve(i)
+                    }else if (menuState.setup === null){
+                        unsubscribe();
+                        reject()
+                    }else{
+                        unsubscribe();
+                        resolve(menuState.setup.setupId)
+                    };  // Return the selected setup
                 }
-            })
-            function deactivate(){
-                unsubscribe()
-                inputQuery.update((v:InputQuery)=>{
-                    v.status = "shutdown"
-                    return v
-                    })
-            }
-        })
+            });
+        });
     }
 </script>
 
@@ -89,8 +85,9 @@
         }
     }
 
-    function closeMenu(setup:Setup|null = null): void {
-        userSetupMenu.set(inactiveUserSetupMenu);
+    function closeMenu(setup:Setup|null|"new" = null): void {
+        console.trace()
+        userSetupMenu.set({...inactiveUserSetupMenu,setup:setup});
     }
 
     function handleMouseDown(event: MouseEvent): void {

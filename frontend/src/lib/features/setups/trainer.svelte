@@ -29,7 +29,7 @@
     function label(c:string){
         if (c === "yes" || c === "no"){
             const boolLabel = (c === "yes" ? true : false)
-            privateRequest<TrainingInstance[]>("labelTrainingInstance",{trainingInstanceId:trainingQueue[0].sampleId,label:boolLabel})
+            privateRequest<TrainingInstance[]>("labelTrainingQueueInstance",{sampleId:trainingQueue[0].sampleId,label:boolLabel})
         }
         trainingQueue.shift()
         if (!Array.isArray(trainingQueue) || trainingQueue.length == 0){
