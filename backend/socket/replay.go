@@ -146,6 +146,7 @@ func (c *Client) StartLoop() {
 						timestampUpdate := map[string]interface{}{
 							"channel": "timestamp",
 							"timestamp":  c.simulatedTime,
+
 						}
 						jsonData, err := json.Marshal(timestampUpdate)
 						if err == nil {

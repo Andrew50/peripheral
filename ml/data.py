@@ -119,7 +119,7 @@ async def get_instance_data(session, args):
     #this shit is uses bandaids and only works for daily
     apiKey, ticker, dt, tf,bars, currentPrice, pm, dolvolReq, adrReq, mcapReq, normType,label = [args["polygonKey"],
     args["ticker"],args["dt"],args["tf"],args["bars"], args["currentPrice"],args["pm"],args["dolvolReq"],args["adrReq"],
-        args["mcapReq"],args["normalize"],args.get("label",None)]
+        args["mcapReq"],args["normalize"],args["label"]]
     if dt == 0:
         end_time = datetime.datetime.now() #- datetime.timedelta(days=1)
     else:
@@ -170,6 +170,8 @@ async def get_instance_data(session, args):
             for bar in recent_bars:
                 high = bar['h']
                 low = bar['l']
+                if low == 0:
+                    return None
                 close = bar['c']
                 volume = bar['v']
                 total_volume += close * volume
@@ -202,14 +204,12 @@ async def get_instance_data(session, args):
                 data_array[-1,:] = data_array[-2, 0]
         else: #historical
             data_array[-1,:] = data_array[-1, 0]
-        if ticker == "ACMR" or ticker == "SMCI" or ticker == "NVDA":
-            print(data_array)
         data_array = normalize(data_array,normType)
         return data_array, {"ticker":ticker,"timestamp":dt,"dolvol":dolvol,"adr":adr,"mcap":mcap,"label":label}
 
 async def async_get_tensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm,normalize,dolvolReq,adrReq,mcapReq):
     args = [{"tf":tf,"bars":bars,"pm":pm,"polygonKey":conn.polygon,"ticker":instance["ticker"],"normalize":normalize,
-             "dt":instance["dt"],"label":instance["label"],"currentPrice":instance.get("currentPrice",None),
+             "dt":instance["dt"],"label":instance.get("label",None),"currentPrice":instance.get("currentPrice",None),
              "dolvolReq":dolvolReq,"adrReq":adrReq,"mcapReq":mcapReq
              } for instance in ticker_dt_label_currentPrice_dict ]
     
@@ -236,4 +236,5 @@ async def async_get_tensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm
 
 # This function can now be called synchronously
 def getTensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm=False,normalize="rolling-log",dolvolReq=None,adrReq=None,mcapReq=None):
+    #requires dt and ticker in instances
     return asyncio.run(async_get_tensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm,normalize,dolvolReq,adrReq,mcapReq))

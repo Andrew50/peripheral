@@ -222,7 +222,10 @@
                 updateConsolidation(consolidatedTrade2,data)
             }
         })*/
-        if (UTCSecondstoESTSeconds(trade.timestamp/1000) < (currentBarTimestamp) + chartTimeframeInSeconds) {
+        const sameBar = UTCSecondstoESTSeconds(trade.timestamp/1000) < (currentBarTimestamp) + chartTimeframeInSeconds
+        console.log(sameBar)
+
+        if (sameBar) {
         //if (trade.timestamp !== null){
             chartCandleSeries.update({
                 time: mostRecentBar.time, 
@@ -238,6 +241,7 @@
             }) 
             return
         }else{
+            console.log(trade)
         //new bar
             var timeToRequestForUpdatingAggregate = ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
         //console.log(consolidatedTrade2)

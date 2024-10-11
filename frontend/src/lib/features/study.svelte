@@ -11,10 +11,12 @@
     import {queryInstanceRightClick} from '$lib/utils/popups/rightClick.svelte'
     import type {Instance} from '$lib/core/types'
     import  {UTCTimestampToESTString} from '$lib/core/timestamp'
+    import {setups} from "$lib/core/stores"
     import {queryInstanceInput} from '$lib/utils/popups/input.svelte'
     interface Study extends Instance{
         studyId: number;
         completed: boolean;
+        setupId?: number
     }
     let studies : Writable<Study[]> = writable([])
     export function newStudy(v:Instance):void{
@@ -51,17 +53,8 @@
         }else{
             queryChart(study)
             selectedStudyId = study.studyId
-/*            privateRequest<JSON>("getStudyEntry",{studyId:study.studyId})
-            .then((entry: JSON) => {
-                selectedStudyId = study.studyId
-            })*/
         }
     }
-    function deleteStudy(study: Study):void{
-        privateRequest<void>('deleteStudy',{studyId:study.studyId})
-        .then(() => {studies.update((v:Study[]) => {
-            return v.filter(item => item.studyId !== study.studyId)});
-        })}
 
     function toggleCompletionFilter():void{
         completedFilter.update(v=>!v)// = !completedFilter
@@ -76,6 +69,11 @@
     onMount(() => {
         loadStudies()
     })
+    function getSetupNameById(setupId:number) {
+        console.log(setupId)
+        const setup = $setups.find(s => s.setupId === setupId);
+        return setup ? setup.name : null;  // Return setupName if found, otherwise return null
+    }
 
 </script>
 
@@ -91,6 +89,7 @@
         <thead>
             <tr>
                 <th>Ticker</th>
+                <th>Setup</th>
                 <th>Date</th>
             </tr>
         </thead>
@@ -99,13 +98,15 @@
                 {#each $studies as study}
                     <tr on:contextmenu={(event)=>queryInstanceRightClick(event,study,"header")} on:click={() => selectStudy(study)}>
                         <td>{study.ticker}</td>
+                        <td>{getSetupNameById(study.setupId)}</td>
                         <td>{UTCTimestampToESTString(study.timestamp)}</td>
+                        
                     </tr>
 
                     {#if selectedStudyId == study.studyId}
                         <tr>
-                            <td colspan="2">
-                                <Entry completed={study.completed} func="Study" id={study.studyId} />
+                            <td colspan="3">
+                                <Entry completed={study.completed} setupId={study.setupId} func="Study" id={study.studyId} />
                             </td>
                         </tr>
                     {/if}

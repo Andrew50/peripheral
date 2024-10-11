@@ -205,6 +205,7 @@ func (c *Client) realtimeToReplay() {
     c.replayActive = true
     c.mu.Unlock()
     for channelName := range channelSubscribers {
+        fmt.Println(channelName)
         if _, isSubscribed := channelSubscribers[channelName][c]; isSubscribed {
             c.unsubscribeRealtime(channelName)
             c.subscribeReplay(channelName)

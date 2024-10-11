@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 )
 type LabelTrainingQueueInstanceArgs struct {
-	SetupId  int `json:"setupId"`
 	SampleId int `json:"sampleId"`
 	Label    bool `json:"label"` // Include the label to be assigned (true/false)
 }
@@ -21,16 +20,18 @@ func LabelTrainingQueueInstance(conn *utils.Conn, userId int, rawArgs json.RawMe
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error parsing args: %v", err)
 	}
-    utils.CheckSampleQueue(conn,args.SetupId,args.Label)
-	_, err := conn.DB.Exec(context.Background(), `
+	var setupId int
+	err := conn.DB.QueryRow(context.Background(), `
 		UPDATE samples
 		SET label = $1
-		WHERE sampleId = $2 AND setupId = $3`,
-		args.Label, args.SampleId, args.SetupId)
+		WHERE sampleId = $2
+		RETURNING setupId`,
+		args.Label, args.SampleId).Scan(&setupId)
 	if err != nil {
-		return nil, fmt.Errorf("error labeling sample: %v", err)
+		return nil, fmt.Errorf("error updating and retrieving setupId: %v", err)
 	}
-	return map[string]string{"status": "success"}, nil
+    utils.CheckSampleQueue(conn,setupId,args.Label)
+	return nil, nil
 }
 type GetTrainingQueueArgs struct {
 	SetupId int `json:"setupId"`

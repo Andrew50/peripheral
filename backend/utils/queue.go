@@ -56,10 +56,10 @@ func Queue(conn *Conn, funcName string, arguments interface{}) (string, error){
 
 func CheckSampleQueue(conn *Conn, setupId int, addedSample bool) {
     if addedSample {
-        // Update untrainedSampleChanges and sampleSize if a new sample is added
+        // Update untrainedSamples and sampleSize if a new sample is added
         _, err := conn.DB.Exec(context.Background(), `
             UPDATE setups 
-            SET untrainedSampleChanges = untrainedSampleChanges + 1, 
+            SET untrainedSamples = untrainedSamples + 1, 
                 sampleSize = sampleSize + 1
             WHERE setupId = $1`, setupId)
         if err != nil {
@@ -78,7 +78,7 @@ func CheckSampleQueue(conn *Conn, setupId int, addedSample bool) {
         fmt.Printf("Error checking queue length: %v\n", err)
         return
     }
-    if queueLength < 20 {
+    if queueLength < 30 {
         queueRunningKey := fmt.Sprintf("%d_queue_running", setupId)
         queueRunning := conn.Cache.Get(context.Background(), queueRunningKey).Val()
         if queueRunning != "true" {
@@ -98,21 +98,21 @@ func CheckSampleQueue(conn *Conn, setupId int, addedSample bool) {
 }
 
 func checkModel(conn *Conn, setupId int) {
-    var untrainedSampleChanges int
+    var untrainedSamples int
     var sampleSize int
 
-    // Retrieve untrainedSampleChanges and sampleSize from the database
+    // Retrieve untrainedSamples and sampleSize from the database
     err := conn.DB.QueryRow(context.Background(), `
-        SELECT untrainedSampleChanges, sampleSize
+        SELECT untrainedSamples, sampleSize
         FROM setups
-        WHERE setupId = $1`, setupId).Scan(&untrainedSampleChanges, &sampleSize)
+        WHERE setupId = $1`, setupId).Scan(&untrainedSamples, &sampleSize)
     if err != nil {
         fmt.Printf("Error retrieving model info: %v\n", err)
         return
     }
 
     // Check if untrained samples exceed 20 or a certain percentage of sampleSize
-    if untrainedSampleChanges > 0 || float64(untrainedSampleChanges)/float64(sampleSize) > 0.05 {
+    if untrainedSamples > 0 || float64(untrainedSamples)/float64(sampleSize) > 0.05 {
         trainRunningKey := fmt.Sprintf("%d_train_running", setupId)
         trainRunning := conn.Cache.Get(context.Background(), trainRunningKey).Val()
 

@@ -3,6 +3,8 @@ package server
 import (
 	"backend/jobs"
 	"backend/tasks"
+
+
 	"backend/utils"
 	"encoding/json"
     "backend/socket"
@@ -31,6 +33,7 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"deleteStudy":             tasks.DeleteStudy,
 	"getStudyEntry":           tasks.GetStudyEntry,
 	"completeStudy":           tasks.CompleteStudy,
+    "setStudySetup":           tasks.SetStudySetup,
 //journal
 	"getJournals":             tasks.GetJournals,
 	"saveJournal":             tasks.SaveJournal,

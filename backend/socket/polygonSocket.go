@@ -1,3 +1,4 @@
+//polygonSocket.go
 package socket
 
 import (

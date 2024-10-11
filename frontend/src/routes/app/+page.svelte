@@ -2,7 +2,7 @@
     import '$lib/core/global.css'
     import ChartContainer from "$lib/features/chart/chartContainer.svelte"
     import RightClick from '$lib/utils/popups/rightClick.svelte';
-    import Sample from '$lib/utils/popups/sample.svelte';
+    import Setup from '$lib/utils/popups/setup.svelte';
     import Input from '$lib/utils/popups/input.svelte';
     import Settings from "$lib/features/settings.svelte"
     import Journal from "$lib/features/journal.svelte"
@@ -114,7 +114,7 @@
     <Input/>
     <RightClick/>
     <Similar/>
-    <Sample/>
+    <Setup/>
     <div class="dcontainer">
         <!--<Chart width={pix - $menuWidth - buttonWidth}/>-->
        <ChartContainer width={pix - $menuWidth - buttonWidth}/>
