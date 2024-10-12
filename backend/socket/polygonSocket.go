@@ -38,13 +38,13 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 	} else {
 		fmt.Printf("\n successfully connected to Polygon Trades \n ")
 	}
-	// err = polygonWS.Subscribe(polygonws.StocksMinAggs)
-	// if err != nil {
-	// 	log.Println("Error subscribing to Polygon WebSocket: ", err)
-	// 	return
-	// } else {
-	// 	fmt.Printf("\n successfully connected to Polygon \n")
-	// }
+	err = polygonWS.Subscribe(polygonws.StocksMinAggs)
+	if err != nil {
+		log.Println("Error subscribing to Polygon WebSocket: ", err)
+	 	return
+	} else {
+		fmt.Printf("\n successfully connected to Polygon \n")
+	}
 	for {
 		select {
 		case err := <-polygonWS.Error():
@@ -54,6 +54,10 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 			switch msg := out.(type) {
 			case models.EquityAgg:
 				symbol = msg.Symbol
+                if symbol == "NVDA"{
+                    fmt.Println(msg.EndTimestamp)
+                    fmt.Println(msg.StartTimestamp)
+                }
 			case models.EquityTrade:
 				symbol = msg.Symbol
 			case models.EquityQuote:
