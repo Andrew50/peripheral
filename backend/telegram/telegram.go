@@ -1,6 +1,9 @@
 package telegram
 
 import (
+	"backend/utils"
+	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 
@@ -23,12 +26,27 @@ func InitBot() error {
 	log.Println("Telegram bot initialized successfully")
 	return err
 }
-func SendMessage(msg string, chatID int64) {
+func SendMessageInternal(msg string, chatID int64) {
 	recipient := telebot.ChatID(chatID)
 	_, err := bot.Send(recipient, msg)
 	if err != nil {
 		log.Printf("Failed to send message to chat ID %d: %v", chatID, err)
 	}
+}
+
+type SendMessageArgs struct {
+	Message string `json:"message"`
+	ChatID  int64  `json:"chatID"`
+}
+
+func SendMessage(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args SendMessageArgs
+	err := json.Unmarshal(rawArgs, &args)
+	if err != nil {
+		return nil, fmt.Errorf("incorrect args 3l5lfgkkcj %v", err)
+	}
+	SendMessageInternal(args.Message, args.ChatID)
+	return nil, nil
 }
 
 // func main() {

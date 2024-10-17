@@ -3,11 +3,11 @@ package server
 import (
 	"backend/jobs"
 	"backend/tasks"
+	"backend/telegram"
 
-
+	"backend/socket"
 	"backend/utils"
 	"encoding/json"
-    "backend/socket"
 	"fmt"
 	"log"
 	"net/http"
@@ -19,58 +19,62 @@ var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, err
 }
 
 var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{}, error){
-	"verifyAuth":              verifyAuth,
-//securities
+	"verifyAuth": verifyAuth,
+	//securities
 	"getSimilarInstances":     tasks.GetSimilarInstances,
 	"getSecuritiesFromTicker": tasks.GetSecuritiesFromTicker,
-    "getCurrentTicker":        tasks.GetCurrentTicker,
-//chart
-	"getChartData":            tasks.GetChartData,
-//study
-	"getStudies":              tasks.GetStudies,
-	"newStudy":                tasks.NewStudy,
-	"saveStudy":               tasks.SaveStudy,
-	"deleteStudy":             tasks.DeleteStudy,
-	"getStudyEntry":           tasks.GetStudyEntry,
-	"completeStudy":           tasks.CompleteStudy,
-    "setStudySetup":           tasks.SetStudySetup,
-//journal
-	"getJournals":             tasks.GetJournals,
-	"saveJournal":             tasks.SaveJournal,
-	"deleteJournal":           tasks.DeleteJournal,
-	"getJournalEntry":         tasks.GetJournalEntry,
-	"completeJournal":         tasks.CompleteJournal,
-//screensaver
-	"getScreensavers":         tasks.GetScreensavers,
-//watchlist
-	"getWatchlists":           tasks.GetWatchlists,
-	"deleteWatchlist":         tasks.DeleteWatchlist,
-	"newWatchlist":            tasks.NewWatchlist,
-	"getWatchlistItems":       tasks.GetWatchlistItems,
-	"deleteWatchlistItem":     tasks.DeleteWatchlistItem,
-	"newWatchlistItem":        tasks.NewWatchlistItem,
-//singles
-	"getPrevClose":            tasks.GetPrevClose,
-//settings
-    "getSettings":             tasks.GetSettings,
-    "setSettings":             tasks.SetSettings,
-    //exchanges
-    "getExchanges":            tasks.GetExchanges,
-//setups
-	"getSetups":               tasks.GetSetups,
-    "newSetup":                tasks.NewSetup,
-    "setSetup":                tasks.SetSetup,
-    "deleteSetup":             tasks.DeleteSetup,
-//samples
-    "labelTrainingQueueInstance":tasks.LabelTrainingQueueInstance,
-    "getTrainingQueue":        tasks.GetTrainingQueue,
-    "setSample":               tasks.SetSample,
+	"getCurrentTicker":        tasks.GetCurrentTicker,
+	//chart
+	"getChartData": tasks.GetChartData,
+	//study
+	"getStudies":    tasks.GetStudies,
+	"newStudy":      tasks.NewStudy,
+	"saveStudy":     tasks.SaveStudy,
+	"deleteStudy":   tasks.DeleteStudy,
+	"getStudyEntry": tasks.GetStudyEntry,
+	"completeStudy": tasks.CompleteStudy,
+	"setStudySetup": tasks.SetStudySetup,
+	//journal
+	"getJournals":     tasks.GetJournals,
+	"saveJournal":     tasks.SaveJournal,
+	"deleteJournal":   tasks.DeleteJournal,
+	"getJournalEntry": tasks.GetJournalEntry,
+	"completeJournal": tasks.CompleteJournal,
+	//screensaver
+	"getScreensavers": tasks.GetScreensavers,
+	//watchlist
+	"getWatchlists":       tasks.GetWatchlists,
+	"deleteWatchlist":     tasks.DeleteWatchlist,
+	"newWatchlist":        tasks.NewWatchlist,
+	"getWatchlistItems":   tasks.GetWatchlistItems,
+	"deleteWatchlistItem": tasks.DeleteWatchlistItem,
+	"newWatchlistItem":    tasks.NewWatchlistItem,
+	//singles
+	"getPrevClose": tasks.GetPrevClose,
+	//settings
+	"getSettings": tasks.GetSettings,
+	"setSettings": tasks.SetSettings,
+	//exchanges
+	"getExchanges": tasks.GetExchanges,
+	//setups
+	"getSetups":   tasks.GetSetups,
+	"newSetup":    tasks.NewSetup,
+	"setSetup":    tasks.SetSetup,
+	"deleteSetup": tasks.DeleteSetup,
+	//samples
+	"labelTrainingQueueInstance": tasks.LabelTrainingQueueInstance,
+	"getTrainingQueue":           tasks.GetTrainingQueue,
+	"setSample":                  tasks.SetSample,
+	//telegram
+	"sendMessage": telegram.SendMessage,
 
-//deprecated
-	//"getTradeData":            tasks.GetTradeData,
-    //	"getLastTrade":            tasks.GetLastTrade,
-	//"getQuoteData":            tasks.GetQuoteData,
-	//"getSecurityDateBounds":   tasks.GetSecurityDateBounds,
+	// deprecated
+	// "getTradeData":            tasks.GetTradeData,
+	//
+	//	"getLastTrade":            tasks.GetLastTrade,
+	//
+	// "getQuoteData":            tasks.GetQuoteData,
+	// "getSecurityDateBounds":   tasks.GetSecurityDateBounds,
 }
 
 func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
@@ -90,11 +94,11 @@ func handleError(w http.ResponseWriter, err error, context string) bool {
 	if err != nil {
 		logMessage := fmt.Sprintf("%s: %v", context, err)
 		fmt.Println(logMessage)
-        if (context == "auth"){
-            http.Error(w, logMessage, http.StatusUnauthorized)
-        }else{
-            http.Error(w, logMessage, http.StatusBadRequest)
-        }
+		if context == "auth" {
+			http.Error(w, logMessage, http.StatusUnauthorized)
+		} else {
+			http.Error(w, logMessage, http.StatusBadRequest)
+		}
 		return true
 	}
 	return false
