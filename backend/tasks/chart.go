@@ -258,10 +258,12 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 					if err != nil {
 						return nil, fmt.Errorf("issue with incomplete aggregate 65k5lhgfk, %v", err)
 					}
-                    if len(barDataList) > 0 && incompleteAggregate.Timestamp == barDataList[len(barDataList)-1].Timestamp {
-                        barDataList = barDataList[:len(barDataList)-1]
-                    }
-					barDataList = append(barDataList, incompleteAggregate)
+					if len(barDataList) > 0 && incompleteAggregate.Timestamp == barDataList[len(barDataList)-1].Timestamp {
+						barDataList = barDataList[:len(barDataList)-1]
+					}
+					if incompleteAggregate.Open != 0 {
+						barDataList = append(barDataList, incompleteAggregate)
+					}
 				}
 			}
 			return barDataList, nil
@@ -278,10 +280,12 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				if err != nil {
 					return nil, fmt.Errorf("issue with incomplete aggregate 65k5lhgfk, %v", err)
 				}
-                if len(barDataList) > 0 && incompleteAggregate.Timestamp == barDataList[len(barDataList)-1].Timestamp {
-                    barDataList = barDataList[:len(barDataList)-1]
-                }
-				barDataList = append(barDataList, incompleteAggregate)
+				if len(barDataList) > 0 && incompleteAggregate.Timestamp == barDataList[len(barDataList)-1].Timestamp {
+					barDataList = barDataList[:len(barDataList)-1]
+				}
+				if incompleteAggregate.Open != 0 {
+					barDataList = append(barDataList, incompleteAggregate)
+				}
 			}
 			/*starTim := int64(barDataList[0].Timestamp)
 			endTim := int64(barDataList[len(barDataList)-1].Timestamp)
@@ -417,9 +421,8 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 				if count >= numDailyBars {
 					break
 				}
-                fmt.Println(iter.Item().Open)
-				if incompleteBar.Open == 0 && iter.Item().Open != 0{
-                    fmt.Println(iter.Item().Open)
+				if incompleteBar.Open == 0 && iter.Item().Open != 0 {
+					fmt.Println(iter.Item().Open)
 					incompleteBar.Open = iter.Item().Open
 				}
 				if iter.Item().High > incompleteBar.High {
