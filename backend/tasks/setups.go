@@ -2,22 +2,21 @@ package tasks
 
 import (
 	"backend/utils"
-    "fmt"
 	"context"
 	"encoding/json"
+	"fmt"
 )
 
-
 type SetupResult struct {
-    SetupId   int    `json:"setupId"`
-    Name     string   `json:"name"`
-    Timeframe  string  `json:"timeframe"`
-    Bars   int   `json:"bars"`
-    Threshold int `json:"threshold"`
-    Dolvol   float64 `json:"dolvol"`
-    Adr     float64  `json:"adr"`
-    Mcap    float64   `json:"mcap"`
-    Score int `json:"score"`
+	SetupId   int     `json:"setupId"`
+	Name      string  `json:"name"`
+	Timeframe string  `json:"timeframe"`
+	Bars      int     `json:"bars"`
+	Threshold int     `json:"threshold"`
+	Dolvol    float64 `json:"dolvol"`
+	Adr       float64 `json:"adr"`
+	Mcap      float64 `json:"mcap"`
+	Score     int     `json:"score"`
 }
 
 func GetSetups(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -31,31 +30,32 @@ func GetSetups(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface
 	var setupResults []SetupResult
 	for rows.Next() {
 		var setupResult SetupResult
-		if err := rows.Scan(&setupResult.SetupId, &setupResult.Name, &setupResult.Timeframe,&setupResult.Bars,&setupResult.Threshold,&setupResult.Dolvol, &setupResult.Adr,&setupResult.Mcap,&setupResult.Score); err != nil {
-			return nil, fmt.Errorf("sdifn0 %v",err)
+		if err := rows.Scan(&setupResult.SetupId, &setupResult.Name, &setupResult.Timeframe, &setupResult.Bars, &setupResult.Threshold, &setupResult.Dolvol, &setupResult.Adr, &setupResult.Mcap, &setupResult.Score); err != nil {
+			return nil, fmt.Errorf("sdifn0 %v", err)
 		}
 		setupResults = append(setupResults, setupResult)
 	}
 	return setupResults, nil
 }
+
 type NewSetupArgs struct {
-    Name      string  `json:"name"`
-    Timeframe string  `json:"timeframe"`
-    Bars      int     `json:"bars"`
-    Threshold int     `json:"threshold"`
-    Dolvol    float64 `json:"dolvol"`
-    Adr       float64 `json:"adr"`
-    Mcap      float64 `json:"mcap"`
+	Name      string  `json:"name"`
+	Timeframe string  `json:"timeframe"`
+	Bars      int     `json:"bars"`
+	Threshold int     `json:"threshold"`
+	Dolvol    float64 `json:"dolvol"`
+	Adr       float64 `json:"adr"`
+	Mcap      float64 `json:"mcap"`
 }
 
-func NewSetup(conn *utils.Conn,userId int, rawArgs json.RawMessage) (interface{}, error) {
+func NewSetup(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args NewSetupArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, err
 	}
-	if args.Name == "" || args.Timeframe == ""{
+	if args.Name == "" || args.Timeframe == "" {
 		return nil, fmt.Errorf("dlkns")
-    }
+	}
 	var setupId int
 	err := conn.DB.QueryRow(context.Background(), `
 		INSERT INTO setups (name, timeframe, bars, threshold, dolvol, adr, mcap, userId) 
@@ -66,7 +66,7 @@ func NewSetup(conn *utils.Conn,userId int, rawArgs json.RawMessage) (interface{}
 	if err != nil {
 		return nil, fmt.Errorf("dkngvw0 %v", err)
 	}
-    utils.CheckSampleQueue(conn,setupId,false)
+	utils.CheckSampleQueue(conn, setupId, false)
 	return SetupResult{
 		SetupId:   setupId,
 		Name:      args.Name,
@@ -79,12 +79,11 @@ func NewSetup(conn *utils.Conn,userId int, rawArgs json.RawMessage) (interface{}
 	}, nil
 }
 
-
 type DeleteSetupArgs struct {
-    SetupId int `json:"setupId"`
+	SetupId int `json:"setupId"`
 }
 
-func DeleteSetup(conn *utils.Conn,userId int, rawArgs json.RawMessage) (interface{}, error) {
+func DeleteSetup(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteSetupArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, err
@@ -99,7 +98,6 @@ func DeleteSetup(conn *utils.Conn,userId int, rawArgs json.RawMessage) (interfac
 	return nil, nil
 }
 
-
 type SetSetupArgs struct {
 	SetupId   int     `json:"setupId"`
 	Name      string  `json:"name"`
@@ -111,8 +109,7 @@ type SetSetupArgs struct {
 	Mcap      float64 `json:"mcap"`
 }
 
-
-func SetSetup(conn *utils.Conn, userId int,rawArgs json.RawMessage) (interface{}, error) {
+func SetSetup(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args SetSetupArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error parsing args: %v", err)
@@ -128,9 +125,9 @@ func SetSetup(conn *utils.Conn, userId int,rawArgs json.RawMessage) (interface{}
 	if err != nil {
 		return nil, fmt.Errorf("error updating setup: %v", err)
 	} else if cmdTag.RowsAffected() != 1 {
-        return nil, fmt.Errorf("dkn0w")
+		return nil, fmt.Errorf("dkn0w")
 
-    }
+	}
 	return SetupResult{
 		SetupId:   args.SetupId,
 		Name:      args.Name,
@@ -142,5 +139,3 @@ func SetSetup(conn *utils.Conn, userId int,rawArgs json.RawMessage) (interface{}
 		Mcap:      args.Mcap,
 	}, nil
 }
-
-
