@@ -181,7 +181,6 @@ function isDaylightSavingTime(date: Date): boolean {
     // Start and end dates of DST in the US for the given year
     const dstStart = new Date(Date.UTC(year, 2, 8, 7)); // 2nd Sunday of March at 2:00 AM (UTC-4)
     const dstEnd = new Date(Date.UTC(year, 10, 1, 6)); // 1st Sunday of November at 2:00 AM (UTC-5)
-
     // Return whether the date falls within DST
     return date >= dstStart && date < dstEnd;
 }
