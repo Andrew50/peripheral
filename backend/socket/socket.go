@@ -31,18 +31,22 @@ type ReplayData struct {
 	securityId   int
 }
 type Client struct {
-	ws                  *websocket.Conn
-	mu                  sync.Mutex
-	send                chan []byte
-	replayActive        bool
-	replayPaused        bool
-	replaySpeed         float64
-	replayExtendedHours bool
-	loopRunning         bool
-	buffer              int64
-	simulatedTime       int64
-	replayData          map[string]*ReplayData
-	conn                *utils.Conn
+	ws                    *websocket.Conn
+	mu                    sync.Mutex
+	send                  chan []byte
+	replayActive          bool
+	replayPaused          bool
+	replaySpeed           float64
+	replayExtendedHours   bool
+	loopRunning           bool
+	buffer                int64
+	simulatedTime         int64
+	replayData            map[string]*ReplayData
+	conn                  *utils.Conn
+	simulatedTimeStart    int64
+	accumulatedActiveTime time.Duration
+	lastTickTime          time.Time
+	justResumed           bool
 }
 
 /*
@@ -202,6 +206,11 @@ func (c *Client) readPump(conn *utils.Conn) {
 func (c *Client) realtimeToReplay() {
 	c.mu.Lock()
 	c.replayActive = true
+	c.replayPaused = false
+	c.simulatedTimeStart = c.simulatedTime
+	c.accumulatedActiveTime = 0
+	c.lastTickTime = time.Now()
+	c.justResumed = false
 	c.mu.Unlock()
 	for channelName := range channelSubscribers {
 		fmt.Println(channelName)
