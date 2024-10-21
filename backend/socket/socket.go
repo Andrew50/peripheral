@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	//"github.com/go-redis/redis/v8"
 	"github.com/gorilla/websocket"
 )
 
@@ -20,7 +20,7 @@ var (
 	channelsMutex           sync.RWMutex
 	channelSubscriberCounts = make(map[string]int)
 	channelSubscribers      = make(map[string]map[*Client]bool)
-	redisSubscriptions      = make(map[string]*redis.PubSub)
+	//redisSubscriptions      = make(map[string]*redis.PubSub)
 )
 
 type ReplayData struct {
@@ -254,12 +254,13 @@ func (c *Client) close() {
 			delete(subscribers, c)
 
 			// If there are no more subscribers, close the Redis Pub/Sub and clean up
+            /*
 			if len(subscribers) == 0 {
 				if pubsub, exists := redisSubscriptions[channelName]; exists {
 					pubsub.Close()
 					delete(redisSubscriptions, channelName)
 				}
-			}
+			}*/
 
 			// Clean up the channelSubscribers map
 			delete(channelSubscribers, channelName)

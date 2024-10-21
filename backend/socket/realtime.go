@@ -1,12 +1,10 @@
 //realtime.go
 package socket
 import (
-	"context"
 	"os"
 	"github.com/gorilla/websocket"
     "backend/utils"
     "fmt"
-	"github.com/go-redis/redis/v8"
 )
 /*
 	subscribes the client webscoket (client struct really) to the redis pub/sub
