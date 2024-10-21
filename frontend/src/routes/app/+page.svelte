@@ -1,6 +1,7 @@
 <script lang='ts'>
     import '$lib/core/global.css'
     import ChartContainer from "$lib/features/chart/chartContainer.svelte"
+    import Alerts from "$lib/features/alerts/alert.svelte"
     import RightClick from '$lib/utils/popups/rightClick.svelte';
     import Setup from '$lib/utils/popups/setup.svelte';
     import Input from '$lib/utils/popups/input.svelte';
@@ -21,8 +22,8 @@
     import { browser } from '$app/environment';
     import {initStores} from '$lib/core/stores'
     import { dispatchMenuChange,streamInfo, formatTimestamp } from '$lib/core/stores';
-    type Menu = 'study' | 'screen' |'quotes'| 'setups' | 'test' | 'none' | 'watchlist' | "journal"|'screensaver' | "replay" | "settings";
-    const menus: Menu[] = ['quotes','watchlist' ,'screen' ,'study' ,"journal", 'setups' ,'screensaver' , "replay", "settings"] //,'test'
+    type Menu = 'study' | 'screen' |'alerts' | 'quotes'| 'setups' | 'test' | 'none' | 'watchlist' | "journal"|'screensaver' | "replay" | "settings";
+    const menus: Menu[] = ['quotes','watchlist','alerts' ,'screen' ,'study' ,"journal", 'setups' ,'screensaver' , "replay", "settings"] //,'test'
     let active_menu: Menu = 'none';
     let minWidth: number;
     let maxWidth: number;
@@ -149,6 +150,8 @@
                 <Settings/>
             {:else if active_menu === "quotes"}
                 <Quotes/>
+            {:else if active_menu === "alerts"}
+                <Alerts/>
             {/if}
 
         </div>

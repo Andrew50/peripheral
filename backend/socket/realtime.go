@@ -26,12 +26,12 @@ func (c *Client) subscribeRealtime(conn *utils.Conn, channelName string) {
 		channelSubscribers[channelName] = subscribers
 	}
 	subscribers[c] = true
-	if !exists {
+	/*if !exists {
 		pubsub := conn.Cache.Subscribe(context.Background(), channelName)
 		redisSubscriptions[channelName] = pubsub
 
 		go handleRedisChannel(pubsub, channelName)
-	}
+	}*/
 	channelsMutex.Unlock()
 	go func() {
 		initialValue, err := getInitialStreamValue(conn,channelName,0)
@@ -56,10 +56,10 @@ func (c *Client) unsubscribeRealtime(channelName string) {
 		delete(subscribers, c)
 		if len(subscribers) == 0 {
 			delete(channelSubscribers, channelName)
-			if pubsub, ok := redisSubscriptions[channelName]; ok {
+			/*if pubsub, ok := redisSubscriptions[channelName]; ok {
 				pubsub.Close()
 				delete(redisSubscriptions, channelName)
-			}
+			}*/
 		}
 	}
 }
@@ -70,7 +70,23 @@ when a message comes it iteraties through the list of clients structs subscribed
 and sends a message to the chan of each which will then be handled by the gourtoune running the writePump
 function for that client
 */
-func handleRedisChannel(pubsub *redis.PubSub, channelName string) {
+func broadcastToChannel(channelName string, message string) {
+	channelsMutex.RLock()
+	defer channelsMutex.RUnlock()
+
+	// Get the list of subscribers for the channel
+	subscribers := channelSubscribers[channelName]
+
+	// Broadcast the message to each subscriber
+	for client := range subscribers {
+		select {
+		case client.send <- []byte(message):
+		default:
+			go client.close()
+		}
+	}
+}
+/*func handleRedisChannel(pubsub *redis.PubSub, channelName string) {
     var lastMessage string
 	for msg := range pubsub.Channel() {
         if msg.Payload == lastMessage {
@@ -89,5 +105,5 @@ func handleRedisChannel(pubsub *redis.PubSub, channelName string) {
 			}
 		}
 	}
-}
+}*/
 

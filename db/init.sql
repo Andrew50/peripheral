@@ -79,6 +79,28 @@ CREATE TABLE watchlistItems (
     unique (watchlistId, securityId)
 );
 CREATE INDEX idxWatchlistId on watchlistItems(watchlistId);
+CREATE TABLE alerts (
+    alertId SERIAL PRIMARY KEY,
+    userId SERIAL REFERENCES users(userId) ON DELETE CASCADE,
+    active BOOLEAN NOT NULL DEFAULT false,
+    alertType VARCHAR(10) NOT NULL CHECK (alertType IN ('price', 'setup')), -- Restrict the allowed alert types
+    setupId INT REFERENCES setups(setupId) ON DELETE CASCADE,
+    price DECIMAL(10, 4),
+    securityID INT,
+    CONSTRAINT chk_alert_price_or_setup CHECK (
+        (alertType = 'price' AND price IS NOT NULL AND securityID IS NOT NULL AND setupId IS NULL) OR
+        (alertType = 'setup' AND setupId IS NOT NULL AND price IS NULL AND securityID IS NULL)
+    )
+);
+CREATE INDEX idxAlertByUserId on alerts(userId);
+CREATE TABLE alertLogs (
+    alertLogId serial primary key,
+    alertId serial references alerts(alertId) on delete cascade,
+    timestamp timestamp not null,
+    securityId INT, --references sercurities
+    unique(alertId,timestamp,securityId)
+);
+CREATE INDEX idxAlertLogId on alertLogs(alertLogId);
 COPY securities(securityid, ticker, figi, minDate, maxDate) 
 FROM '/docker-entrypoint-initdb.d/securities.csv' DELIMITER ',' CSV HEADER;
 INSERT INTO users (userId, username, password) VALUES (0, 'user', 'pass');

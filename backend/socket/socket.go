@@ -77,6 +77,7 @@ func WsHandler(conn *utils.Conn) http.HandlerFunc {
             replayData: make(map[string]*ReplayData),
             conn: conn,
             loopRunning: false,
+            buffer: 10000,
 		}
 		go client.writePump()
 		client.readPump(conn)
