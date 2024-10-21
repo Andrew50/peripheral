@@ -128,22 +128,27 @@ func (c *Client) StartLoop() {
 	go func() {
 		ticker := time.NewTicker(FastUpdateInterval)
 		defer ticker.Stop()
-		lastTick := time.Now()
 		lastSlow := time.Now()
 		lastTimestampUpdate := time.Now()
-
 		for {
 			select {
 			case <-ticker.C:
 				c.mu.Lock()
+				now := time.Now()
+				delta := now.Sub(c.lastTickTime)
 				if c.replayActive && !c.replayPaused {
-
-					now := time.Now()
-					elapsed := now.Sub(lastTick).Milliseconds()
-					lastTick = now
-					c.simulatedTime += int64(float64(elapsed) * c.replaySpeed)
+					if c.justResumed {
+						delta = time.Duration(0)
+						c.justResumed = false
+					}
+					c.lastTickTime = now
+					c.accumulatedActiveTime += delta
+					c.lastTickTime = now
+					simulatedElapsed := time.Duration(float64(c.accumulatedActiveTime) * c.replaySpeed)
+					c.simulatedTime = c.simulatedTimeStart + int64(simulatedElapsed/time.Millisecond)
 					if !c.isMarketOpen(c.simulatedTime) {
 						c.jumpToNextMarketOpen()
+						c.simulatedTimeStart = c.simulatedTime
 					}
 					if now.Sub(lastTimestampUpdate) >= TimestampUpdateInterval {
 						timestampUpdate := map[string]interface{}{
@@ -218,15 +223,19 @@ func (c *Client) isMarketOpen(simulatedTime int64) bool {
 	}
 	marketOpen := time.Date(currentTime.Year(), currentTime.Month(), currentTime.Day(), openHour, openMinute, 0, 0, location)
 	marketClose := time.Date(currentTime.Year(), currentTime.Month(), currentTime.Day(), closeHour, closeMinute, 0, 0, location)
-	return currentTime.After(marketOpen) && currentTime.Before(marketClose)
+	return !currentTime.Before(marketOpen) && currentTime.Before(marketClose)
 }
 
 func (c *Client) jumpToNextMarketOpen() {
+
 	location, _ := time.LoadLocation("America/New_York")
 	simulatedTime := time.Unix(c.simulatedTime/1000, 0).In(location) // Convert milliseconds to time.Time in New York timezone
 	simulatedTime = simulatedTime.Add(24 * time.Hour)
-	for simulatedTime.Weekday() == time.Saturday || simulatedTime.Weekday() == time.Sunday {
-		simulatedTime = simulatedTime.Add(24 * time.Hour)
+	fmt.Printf("\n %v %v", simulatedTime, simulatedTime.Weekday())
+	if simulatedTime.Weekday() == time.Saturday {
+		simulatedTime = simulatedTime.Add(48 * time.Hour) // Skip to Monday
+	} else if simulatedTime.Weekday() == time.Sunday {
+		simulatedTime = simulatedTime.Add(24 * time.Hour) // Skip to Monday
 	}
 	openHour, openMinute := MarketOpenHour, MarketOpenMinute
 	if c.replayExtendedHours {
@@ -234,6 +243,9 @@ func (c *Client) jumpToNextMarketOpen() {
 	}
 	nextMarketOpen := time.Date(simulatedTime.Year(), simulatedTime.Month(), simulatedTime.Day(), openHour, openMinute, 0, 0, location)
 	c.simulatedTime = nextMarketOpen.Unix() * 1000 // Convert back to milliseconds
+	c.simulatedTimeStart = c.simulatedTime
+	c.accumulatedActiveTime = 0
+	c.lastTickTime = time.Now()
 }
 
 func jsonMarshalTick(tick TickData, securityId int, channelType string) []byte {
@@ -297,14 +309,20 @@ func (c *Client) LoadTicks(ticker string, channelTypes []string, ticks []TickDat
 func (c *Client) playReplay() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.replayActive = true
-	c.replayPaused = false
+	if c.replayPaused {
+		c.replayActive = true
+		c.replayPaused = false
+		c.justResumed = true
+
+	}
 }
 
 func (c *Client) pauseReplay() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.replayPaused = true
+	if !c.replayPaused {
+		c.replayPaused = true
+	}
 }
 
 func (c *Client) stopReplay() {

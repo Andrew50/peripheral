@@ -8,6 +8,7 @@ import {chartEventDispatcher} from '$lib/features/chart/interface'
 import { getReferenceStartTimeForDateMilliseconds, isOutsideMarketHours, ESTSecondstoUTCMillis, getRealTimeTime } from '$lib/core/timestamp';
 import type { ReplayInfo } from '$lib/core/stores';
 import { type Instance} from '$lib/core/types'
+import {get} from 'svelte/store'
 export function releaseStream(channelName: string, callback: StreamCallback) {
     let callbacks = activeChannels.get(channelName);
     if (callbacks) {
@@ -36,6 +37,9 @@ export function addStream<T extends StreamData>(instance: Instance, channelType:
 }
 export function startReplay(instance: Instance) {
     if (!instance.timestamp) return
+    if(get(streamInfo).replayActive) {
+        stopReplay()
+    } 
     if (socket?.readyState === WebSocket.OPEN) {
         const timestampToUse = isOutsideMarketHours(instance.timestamp) 
             ? ESTSecondstoUTCMillis(getReferenceStartTimeForDateMilliseconds(instance.timestamp, ) / 1000)
