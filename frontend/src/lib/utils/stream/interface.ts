@@ -5,7 +5,7 @@ import {DateTime} from 'luxon';
 import {eventChart} from "$lib/features/chart/interface"
 import {streamInfo} from '$lib/core/stores'
 import {chartEventDispatcher} from '$lib/features/chart/interface'
-import { getReferenceStartTimeForDateMilliseconds, isOutsideMarketHours, ESTSecondstoUTCMillis } from '$lib/core/timestamp';
+import { getReferenceStartTimeForDateMilliseconds, isOutsideMarketHours, ESTSecondstoUTCMillis, getRealTimeTime } from '$lib/core/timestamp';
 import type { ReplayInfo } from '$lib/core/stores';
 import { type Instance} from '$lib/core/types'
 export function releaseStream(channelName: string, callback: StreamCallback) {
@@ -79,7 +79,7 @@ export function stopReplay() {
         };
         socket.send(JSON.stringify(stopRequest));
     }
-    streamInfo.update((r: ReplayInfo) => ({ ...r, replayActive:false }));
+    streamInfo.update((r: ReplayInfo) => ({ ...r, replayActive:false, timestamp:getRealTimeTime()}));
 }
 export function changeSpeed(speed:number) {
     if (socket?.readyState === WebSocket.OPEN) {
