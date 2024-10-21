@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	FastUpdateInterval      = 10 * time.Millisecond
-	SlowUpdateInterval      = 200 * time.Millisecond
+	FastUpdateInterval      = 30 * time.Millisecond
+	SlowUpdateInterval      = 1000 * time.Millisecond
 	BaseBuffer              = 10000 // * time.Millisecond
 	MarketOpenHour          = 9
 	MarketOpenMinute        = 30

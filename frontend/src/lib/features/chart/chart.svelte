@@ -223,7 +223,7 @@
             }
         })*/
         const sameBar = UTCSecondstoESTSeconds(trade.timestamp/1000) < (currentBarTimestamp) + chartTimeframeInSeconds
-        console.log(sameBar)
+        //console.log(sameBar)
 
         if (sameBar) {
         //if (trade.timestamp !== null){

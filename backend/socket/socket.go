@@ -1,20 +1,18 @@
 package socket
 
-
-
 import (
+	"backend/utils"
+	"container/list"
 	"encoding/json"
-    "time"
-    "os"
-    "backend/utils"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/websocket"
-    "container/list"
 )
-
 
 //
 
@@ -26,25 +24,25 @@ var (
 )
 
 type ReplayData struct {
-    channelTypes []string
-    data *list.List
-    refilling bool
-    baseDataType string
-    securityId int
+	channelTypes []string
+	data         *list.List
+	refilling    bool
+	baseDataType string
+	securityId   int
 }
 type Client struct {
-	ws   *websocket.Conn
-	mu   sync.Mutex
-	send chan []byte
-    replayActive bool
-    replayPaused bool
-    replaySpeed float64
-    replayExtendedHours bool
-    loopRunning bool
-    buffer int64
-    simulatedTime int64
-    replayData map[string]*ReplayData
-    conn *utils.Conn
+	ws                  *websocket.Conn
+	mu                  sync.Mutex
+	send                chan []byte
+	replayActive        bool
+	replayPaused        bool
+	replaySpeed         float64
+	replayExtendedHours bool
+	loopRunning         bool
+	buffer              int64
+	simulatedTime       int64
+	replayData          map[string]*ReplayData
+	conn                *utils.Conn
 }
 
 /*
@@ -67,17 +65,17 @@ func WsHandler(conn *utils.Conn) http.HandlerFunc {
 			return
 		}
 		client := &Client{
-			ws:   ws,
-			send: make(chan []byte, 1000),
-            replayActive: false,
-            replayPaused: false,
-            replaySpeed: 1.0,
-            replayExtendedHours: false,
-            simulatedTime: 0,
-            replayData: make(map[string]*ReplayData),
-            conn: conn,
-            loopRunning: false,
-            buffer: 10000,
+			ws:                  ws,
+			send:                make(chan []byte, 1000),
+			replayActive:        false,
+			replayPaused:        false,
+			replaySpeed:         1.0,
+			replayExtendedHours: false,
+			simulatedTime:       0,
+			replayData:          make(map[string]*ReplayData),
+			conn:                conn,
+			buffer:              10000,
+			loopRunning:         false,
 		}
 		go client.writePump()
 		client.readPump(conn)
@@ -90,38 +88,39 @@ pub sub from redis and then iterates through all the subscribeers (possibly one 
 this function simply sends the message to the frontend. it has to lock to prevent concurrent writes to the socket
 */
 func (c *Client) writePump() {
-    defer c.ws.Close()
-    lastTime := time.Now() // Store the time of the last message
+	defer c.ws.Close()
+	lastTime := time.Now() // Store the time of the last message
 
-    for {
-        select {
-        case message, ok := <-c.send:
-            if !ok {
-                fmt.Println("Channel closed, exiting writePump")
-                return
-            }
+	for {
+		select {
+		case message, ok := <-c.send:
+			if !ok {
+				fmt.Println("Channel closed, exiting writePump")
+				return
+			}
 
-            // Calculate the time since the last message
-            if false{
-                now := time.Now()
-                interval := now.Sub(lastTime).Milliseconds()
-                lastTime = now
+			// Calculate the time since the last message
+			if false {
+				now := time.Now()
+				interval := now.Sub(lastTime).Milliseconds()
+				lastTime = now
 
-                // Print the interval between messages
-                fmt.Printf("Message interval: %d ms\n", interval)
+				// Print the interval between messages
+				fmt.Printf("Message interval: %d ms\n", interval)
 
-                // Lock and write the message
-            }
-            c.mu.Lock()
-            err := c.ws.WriteMessage(websocket.TextMessage, message)
-            c.mu.Unlock()
-            if err != nil {
-                fmt.Println("WebSocket write error:", err)
-                return
-            }
-        }
-    }
+				// Lock and write the message
+			}
+			c.mu.Lock()
+			err := c.ws.WriteMessage(websocket.TextMessage, message)
+			c.mu.Unlock()
+			if err != nil {
+				fmt.Println("WebSocket write error:", err)
+				return
+			}
+		}
+	}
 }
+
 /*
 	"blocking" function that listens to the client webscoket (not polygon) for subscrib
 
@@ -141,88 +140,87 @@ func (c *Client) readPump(conn *utils.Conn) {
 			break
 		}
 		var clientMsg struct {
-			Action      string `json:"action"`
-			ChannelName string `json:"channelName"`
-            Timestamp   *int64  `json:"timestamp,omitempty"`
-            Speed   *float64  `json:"speed,omitempty"`
-            ExtendedHours *bool `json:"extendedHours,omitempty"`
+			Action        string   `json:"action"`
+			ChannelName   string   `json:"channelName"`
+			Timestamp     *int64   `json:"timestamp,omitempty"`
+			Speed         *float64 `json:"speed,omitempty"`
+			ExtendedHours *bool    `json:"extendedHours,omitempty"`
 		}
 		if err := json.Unmarshal(message, &clientMsg); err != nil {
 			fmt.Println("Invalid message format", err)
 			continue
 		}
-        os.Stdout.Sync()
-        //fmt.Println(clientMsg)
+		os.Stdout.Sync()
+		//fmt.Println(clientMsg)
 		switch clientMsg.Action {
-        case "subscribe":
-            if c.replayActive {
-                c.subscribeReplay(clientMsg.ChannelName)
-            }else{
-                c.subscribeRealtime(conn, clientMsg.ChannelName)
-            }
-        case "unsubscribe":
-            if c.replayActive {
-                c.unsubscribeReplay(clientMsg.ChannelName)
-            }else{
-                c.unsubscribeRealtime(clientMsg.ChannelName)
-            }
-        case "replay":
-            fmt.Println("replay request")
-            if !c.replayActive {
-                if clientMsg.Timestamp == nil {
-                    fmt.Println("ERR-------------------------nil timestamp")
-                }else{
-                    c.simulatedTime = *(clientMsg.Timestamp)
-                    c.realtimeToReplay()
-                }
-            }
-        case "pause":
-            c.pauseReplay()
-        case "play":
-            c.playReplay()
-        case "speed":
-            c.setReplaySpeed(*(clientMsg.Speed))
-        case "realtime":
-            if c.replayActive {
-                c.replayToRealtime()
-            }
-        case "nextOpen":
-            if c.replayActive {
-                c.jumpToNextMarketOpen()
-            }
-        case "setExtended":
-            if c.replayActive {
-                c.replayExtendedHours = *(clientMsg.ExtendedHours)
-            }
-        default:
-            fmt.Println("Unknown Action:", clientMsg.Action)
-        }
+		case "subscribe":
+			if c.replayActive {
+				c.subscribeReplay(clientMsg.ChannelName)
+			} else {
+				c.subscribeRealtime(conn, clientMsg.ChannelName)
+			}
+		case "unsubscribe":
+			if c.replayActive {
+				c.unsubscribeReplay(clientMsg.ChannelName)
+			} else {
+				c.unsubscribeRealtime(clientMsg.ChannelName)
+			}
+		case "replay":
+			fmt.Println("replay request")
+			if !c.replayActive {
+				if clientMsg.Timestamp == nil {
+					fmt.Println("ERR-------------------------nil timestamp")
+				} else {
+					c.simulatedTime = *(clientMsg.Timestamp)
+					c.realtimeToReplay()
+				}
+			}
+		case "pause":
+			c.pauseReplay()
+		case "play":
+			c.playReplay()
+		case "speed":
+			c.setReplaySpeed(*(clientMsg.Speed))
+		case "realtime":
+			if c.replayActive {
+				c.replayToRealtime()
+			}
+		case "nextOpen":
+			if c.replayActive {
+				c.jumpToNextMarketOpen()
+			}
+		case "setExtended":
+			if c.replayActive {
+				c.replayExtendedHours = *(clientMsg.ExtendedHours)
+			}
+		default:
+			fmt.Println("Unknown Action:", clientMsg.Action)
+		}
 	}
 }
 
-
 func (c *Client) realtimeToReplay() {
-    c.mu.Lock()
-    c.replayActive = true
-    c.mu.Unlock()
-    for channelName := range channelSubscribers {
-        fmt.Println(channelName)
-        if _, isSubscribed := channelSubscribers[channelName][c]; isSubscribed {
-            c.unsubscribeRealtime(channelName)
-            c.subscribeReplay(channelName)
-        }
-    }
+	c.mu.Lock()
+	c.replayActive = true
+	c.mu.Unlock()
+	for channelName := range channelSubscribers {
+		fmt.Println(channelName)
+		if _, isSubscribed := channelSubscribers[channelName][c]; isSubscribed {
+			c.unsubscribeRealtime(channelName)
+			c.subscribeReplay(channelName)
+		}
+	}
 }
 func (c *Client) replayToRealtime() {
-    c.mu.Lock()
-    defer c.mu.Unlock()
-    c.stopReplay()
-    for channelName, replayData := range c.replayData {
-        c.unsubscribeReplay(channelName)
-        for _, channelType := range replayData.channelTypes {
-            c.subscribeRealtime(c.conn, channelName + "-" + channelType)
-        }
-    }
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.stopReplay()
+	for channelName, replayData := range c.replayData {
+		c.unsubscribeReplay(channelName)
+		for _, channelType := range replayData.channelTypes {
+			c.subscribeRealtime(c.conn, channelName+"-"+channelType)
+		}
+	}
 }
 
 /*
@@ -269,7 +267,7 @@ func (c *Client) close() {
 	}
 
 	// Close the send channel to stop the writePump
-    fmt.Println("closing channel")
+	fmt.Println("closing channel")
 	close(c.send)
 
 	// Close the WebSocket connection
