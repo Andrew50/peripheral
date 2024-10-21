@@ -67,6 +67,12 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"setSample":                  tasks.SetSample,
 	//telegram
 	"sendMessage": telegram.SendMessage,
+    //alerts
+    "getAlerts": tasks.GetAlerts,
+    "getAlertLogs": tasks.GetAlertLogs,
+    "newAlert": tasks.NewAlert,
+    "deleteAlert": tasks.DeleteAlert,
+    "setAlert":tasks.SetAlert,
 
 	// deprecated
 	// "getTradeData":            tasks.GetTradeData,
