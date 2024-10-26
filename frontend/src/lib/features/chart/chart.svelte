@@ -332,7 +332,8 @@
         chartContainer.addEventListener('contextmenu', (event:MouseEvent) => {
             event.preventDefault();
             const timestamp = ESTSecondstoUTCMillis(latestCrosshairPositionTime);
-            const ins: Instance = { ...currentChartInstance, timestamp: timestamp}
+            const price = chartCandleSeries.coordinateToPrice(event.clientY) || 0
+            const ins: Instance = { ...currentChartInstance, timestamp: timestamp,price:price}
             queryInstanceRightClick(event,ins,"chart")
         })
         chartContainer.addEventListener('keyup', event => {

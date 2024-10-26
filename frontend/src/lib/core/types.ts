@@ -4,6 +4,7 @@ export interface Instance {
     securityId?: number
     timeframe?: string
     extendedHours?: boolean
+    price?: number
 }
 export interface Setup {
     setupId: number;

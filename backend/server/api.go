@@ -72,7 +72,7 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
     "getAlertLogs": tasks.GetAlertLogs,
     "newAlert": tasks.NewAlert,
     "deleteAlert": tasks.DeleteAlert,
-    "setAlert":tasks.SetAlert,
+    //"setAlert":tasks.SetAlert,
 
 	// deprecated
 	// "getTradeData":            tasks.GetTradeData,

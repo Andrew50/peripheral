@@ -1,4 +1,4 @@
-package telegram
+package alerts
 
 import (
 	"backend/utils"
