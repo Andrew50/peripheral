@@ -83,16 +83,22 @@ CREATE TABLE alerts (
     alertId SERIAL PRIMARY KEY,
     userId SERIAL REFERENCES users(userId) ON DELETE CASCADE,
     active BOOLEAN NOT NULL DEFAULT false,
-    alertType VARCHAR(10) NOT NULL CHECK (alertType IN ('price', 'setup')), -- Restrict the allowed alert types
+    alertType VARCHAR(10) NOT NULL CHECK (alertType IN ('price', 'setup','algo')), -- Restrict the allowed alert types
     setupId INT REFERENCES setups(setupId) ON DELETE CASCADE,
+    algoId INT REEFERENCES algos(algoId) ON DELETE CASCADE,
     price DECIMAL(10, 4),
     securityID INT,
     CONSTRAINT chk_alert_price_or_setup CHECK (
         (alertType = 'price' AND price IS NOT NULL AND securityID IS NOT NULL AND setupId IS NULL) OR
-        (alertType = 'setup' AND setupId IS NOT NULL AND price IS NULL AND securityID IS NULL)
+        (alertType = 'setup' AND setupId IS NOT NULL AND price IS NULL AND securityID IS NULL) OR
+        (alertType = 'algo' AND algoId IS NOT NULL AND price IS NULL)
     )
 );
 CREATE INDEX idxAlertByUserId on alerts(userId);
+CREATE TABLE algos (
+    algoId serial primary key,
+    algoName VARCHAR(50) not null
+);
 CREATE TABLE alertLogs (
     alertLogId serial primary key,
     alertId serial references alerts(alertId) on delete cascade,
