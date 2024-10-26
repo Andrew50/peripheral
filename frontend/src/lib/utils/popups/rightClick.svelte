@@ -10,6 +10,7 @@
     import {get, writable } from 'svelte/store';
     import {setSample} from '$lib/features/setups/interface'
     import {querySimilarInstances} from '$lib/utils/popups/similar.svelte'
+    import {newPriceAlert} from "$lib/features/alerts/interface"
     import {querySetup} from '$lib/utils/popups/setup.svelte'
     import {startReplay} from '$lib/utils/stream/interface'
     interface RightClickQuery {
@@ -183,7 +184,7 @@
             <div ><button on:click={()=>embedInstance(get(rightClickQuery).instance)}> Embed </button></div>
         {/if}
         {#if $rightClickQuery.source === "chart"}
-            <div><button on:click={()=>completeRequest("alert")}>Add Alert </button></div>
+            <div><button on:click={()=>newPriceAlert($rightClickQuery.instance)}>Add Alert {$rightClickQuery.instance.price}</button></div>
         {:else if $rightClickQuery.source === "embedded"}
             <div ><button on:click={()=>completeRequest("edit")}> Edit </button></div>
             <!--<div><button on:click={()=>completeRequest("embdedSimilar")}> Embed Similar </button></div>-->

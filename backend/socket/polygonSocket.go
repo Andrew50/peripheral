@@ -3,6 +3,7 @@ package socket
 
 import (
 	"backend/utils"
+    "backend/alerts"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -54,10 +55,6 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 			switch msg := out.(type) {
 			case models.EquityAgg:
 				symbol = msg.Symbol
-				if symbol == "NVDA" {
-					fmt.Println(msg.EndTimestamp)
-					fmt.Println(msg.StartTimestamp)
-				}
 			case models.EquityTrade:
 				symbol = msg.Symbol
 			case models.EquityQuote:
@@ -72,6 +69,8 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 				continue
 			}
 			switch msg := out.(type) {
+            case models.EquityAgg:
+                alerts.appendAggregate(securityId,msg.Open,msg.High,msg.Low,msg.Close,msg.Volume)
 			case models.EquityTrade:
 				channelName := fmt.Sprintf("%d-fast", securityId)
 				data := TradeData{

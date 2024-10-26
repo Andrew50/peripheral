@@ -14,7 +14,7 @@
         maxDate: string | null;
         name: string;
     }
-    const possibleDisplayKeys = ["ticker","timestamp","timeframe","extendedHours"]
+    const possibleDisplayKeys = ["ticker","timestamp","timeframe","extendedHours","price"]
     type InstanceAttributes = typeof possibleDisplayKeys[number];
     interface InputQuery {
         //inactive is default, no ui shown | complete is succesful completeion, return instance
@@ -116,6 +116,13 @@
                     }
                 }catch{} }
             return {inputValid:false,securities:[]}
+        }else if (inputType == "price"){
+            const price = parseFloat(inputString);
+            if (!isNaN(price) && price > 0) {
+                return { inputValid: true, securities: [] };
+            } else {
+                return { inputValid: false, securities: [] };
+            }
         }
         return {inputValid:false,securities:[]}
     }
@@ -131,6 +138,8 @@
             iQ.instance.timeframe = iQ.inputString
         }else if (iQ.inputType === 'timestamp'){
             iQ.instance.timestamp = ESTStringToUTCTimestamp(iQ.inputString)
+        }else if (iQ.inputType === "price"){
+            iQ.instance.price = parseFloat(iQ.inputString)
         }
         iQ.status = "complete" // temp setting, following code will set back to active
         if(iQ.requiredKeys === "any"){ 
@@ -182,6 +191,9 @@
             if (iQ.inputString !== "") { 
                 if (/^[A-Z]$/.test(iQ.inputString)) {
                     iQ.inputType = "ticker";
+                } else if (/^\d+(\.\d+)?$/.test(iQ.inputString)) {  // Check if input is a valid number or decimal value
+                    iQ.inputType = "price";  // Set inputType to 'price' for numbers with optional decimals
+                    iQ.securities = [];
                 }else if (/^\d{1,2}(?:[hdwmqs])?$/.test(iQ.inputString)) {
                     iQ.inputType = "timeframe";
                     iQ.securities = [];
@@ -259,6 +271,8 @@
                 return UTCTimestampToESTString(q.instance.timestamp)
             }else if (key === 'extendedHours'){
                 return q.instance.extendedHours ? "True" : "False"
+            }else if (key === 'price'){
+                return "$" + String(q.instance.price)
             }else{
                 return q.instance[key]
             }

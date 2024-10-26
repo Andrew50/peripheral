@@ -1,3 +1,4 @@
+<!-- screen.svelte-->
 <script lang="ts">
   import { writable, get } from 'svelte/store';
   import List from '$lib/utils/modules/list.svelte';
