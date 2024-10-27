@@ -4,6 +4,8 @@ import (
     "sync"
     "errors"
     "backend/utils"
+    "time"
+    "fmt"
 )
 
 const (
@@ -37,8 +39,7 @@ var (
     data = make(map[int]*SecurityData)
 )
 
-func initTimeframeData() TimeframeData {
-    //load with polygon fetched aggs
+func initTimeframeData(conn *utils.Conn, securityId int, timeframe int, isExtendedHours bool) TimeframeData {
     aggs := make([][]float64, Length)
     for i := range aggs {
         aggs[i] = make([]float64, OHLCV)
@@ -49,18 +50,86 @@ func initTimeframeData() TimeframeData {
         currentPeriod: -1,
         extendedHours: isExtendedHours,
     }
+    toTime := time.Now()
+    var tfStr string
+    var multiplier int
+    switch timeframe {
+    case Second:
+        tfStr = "second"
+        multiplier = 1
+    case Minute:
+        tfStr = "minute"
+        multiplier = 1
+    case Hour:
+        tfStr = "hour"
+        multiplier = 1
+    case Day:
+        tfStr = "day"
+        multiplier = 1
+    default:
+        fmt.Printf("Invalid timeframe: %d\n", timeframe)
+        return td
+    }
+    fromMillis, toMillis, err := utils.GetRequestStartEndTime(time.Unix(0,0),toTime,"backward",tfStr,multiplier,Length)
+    ticker, err := utils.GetTicker(conn,securityId,toTime)
+    if err != nil {
+        fmt.Printf("error getting hist data")
+        return td
+    }
+    iter, err := utils.GetAggsData(conn.Polygon, ticker, multiplier, tfStr, fromMillis, toMillis, Length, "desc", true)
+    if err != nil {
+        fmt.Printf("Error getting historical data: %v\n", err)
+        return td
+    }
+
+    // Process historical data
+    var idx int
+    for iter.Next() {
+        agg := iter.Item()
+        
+        // Skip if we're not including extended hours data
+        timestamp := time.Time(agg.Timestamp)
+        if !isExtendedHours && !utils.IsTimestampRegularHours(timestamp) {
+            continue
+        }
+
+        if idx >= Length {
+            break
+        }
+
+        td.Aggs[idx] = []float64{
+            agg.Open,
+            agg.High,
+            agg.Low,
+            agg.Close,
+            float64(agg.Volume),
+        }
+        
+        // Update period tracking
+        if td.currentPeriod == -1 {
+            td.currentPeriod = getPeriodStart(timestamp.Unix(), timeframe)
+        }
+        
+        idx++
+    }
+
+    if err := iter.Err(); err != nil {
+        fmt.Printf("Error iterating historical data: %v\n", err)
+    }
+
+    td.size = idx
+    return td
 }
 
-func initSecurityData(conn *utils.Conn, securityId string) *SecurityData {
+func initSecurityData(conn *utils.Conn, securityId int) *SecurityData {
     return &SecurityData{
-        SecondDataExtended: initTimeframeData(conn, ticker, Second, true),
-        MinuteDataExtended: initTimeframeData(conn, ticker, Minute, true),
-        HourData:          initTimeframeData(conn, ticker, Hour, false),
-        DayData:           initTimeframeData(
-            conn, ticker, Day, false),
-        Mcap: getMcap(conn,ticker),
-        Dolvol: getDolvol(conn,ticker),
-        Adr: getAdr(conn,ticker),
+        SecondDataExtended: initTimeframeData(conn, securityId, Second, true),
+        MinuteDataExtended: initTimeframeData(conn, securityId, Minute, true),
+        HourData:          initTimeframeData(conn, securityId, Hour, false),
+        DayData:           initTimeframeData( conn, securityId, Day, false),
+/*        Mcap: getMcap(conn,securityId),
+        Dolvol: getDolvol(conn,securityId),
+        Adr: getAdr(conn,securityId),*/
     }
 }
 func updateTimeframe(td *TimeframeData, timestamp int64, price float64, volume float64, timeframe int) {
@@ -109,10 +178,10 @@ func min64(a, b float64) float64 {
     return b
 }
 
-func appendTick(securityId int, timestamp int64, price float64, volume float64, isExtendedHours bool) error {
+func AppendTick(conn *utils.Conn,securityId int, timestamp int64, price float64, volume float64) error {
     sd, exists := data[securityId]
     if !exists {
-        sd = initSecurityData()
+        sd = initSecurityData(conn,securityId)
         data[securityId] = sd
     }
     if !isExtendedHours {

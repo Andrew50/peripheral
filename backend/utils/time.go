@@ -9,6 +9,16 @@ import (
 	"github.com/polygon-io/client-go/rest/models"
 )
 
+var easternLocation *time.Location
+
+func init(){
+    var err error
+    easternLocation, err = time.LoadLocation("America/New_York")
+    if err != nil {
+        panic(err)
+    }
+}
+
 func StringToTime(datetimeStr string) (time.Time, error) {
 	layouts := []string{
 		time.DateTime,
@@ -149,4 +159,30 @@ func getStartOfTimeWindow(timestamp time.Time, multiplier int, timespan string, 
 		return timestamp.Truncate(duration), nil
 	}
 	return time.Time{}, fmt.Errorf("done")
+}
+
+func TimespanStringToDuration(timespan string) time.Duration {
+	switch timespan {
+	case "second":
+		return time.Second
+	case "minute":
+		return time.Minute
+	case "hour":
+		return time.Hour
+	case "day":
+		return time.Hour * 24
+	case "week":
+		return time.Hour * 24 * 7
+	case "month":
+		return time.Hour * 24 * 30
+	case "year":
+		return time.Hour * 24 * 365
+	default:
+		return time.Minute
+	}
+}
+func IsTimestampRegularHours(timestamp time.Time) bool {
+    marketOpenTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 9, 30, 0, 0, easternLocation)
+    marketCloseTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 16, 0, 0, 0, easternLocation)
+    return !timestamp.Before(marketOpenTime) && timestamp.Before(marketCloseTime)
 }

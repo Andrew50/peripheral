@@ -8,9 +8,6 @@ import (
 	"net/http"
 	"os"
 	"sync"
-	"time"
-
-	//"github.com/go-redis/redis/v8"
 	"github.com/gorilla/websocket"
 )
 
@@ -89,26 +86,12 @@ this function simply sends the message to the frontend. it has to lock to preven
 */
 func (c *Client) writePump() {
 	defer c.ws.Close()
-	lastTime := time.Now() // Store the time of the last message
-
 	for {
 		select {
 		case message, ok := <-c.send:
 			if !ok {
 				fmt.Println("Channel closed, exiting writePump")
 				return
-			}
-
-			// Calculate the time since the last message
-			if false {
-				now := time.Now()
-				interval := now.Sub(lastTime).Milliseconds()
-				lastTime = now
-
-				// Print the interval between messages
-				fmt.Printf("Message interval: %d ms\n", interval)
-
-				// Lock and write the message
 			}
 			c.mu.Lock()
 			err := c.ws.WriteMessage(websocket.TextMessage, message)

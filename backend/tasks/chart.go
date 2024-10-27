@@ -187,7 +187,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			}
 		}
 
-		date1, date2, err := getRequestDates(queryStartTime, queryEndTime, args.Direction, timespan, multiplier, queryBars)
+		date1, date2, err := utils.GetRequestStartEndTime(queryStartTime, queryEndTime, args.Direction, timespan, multiplier, queryBars)
 		if err != nil {
 			return nil, fmt.Errorf("dkn0 %v", err)
 		}
@@ -221,9 +221,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 						timestamp = timestamp.AddDate(0, 0, 1)
 					}
 				}
-				marketOpenTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 9, 30, 0, 0, easternLocation)
-				marketCloseTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 16, 0, 0, 0, easternLocation)
-				if args.ExtendedHours || (!timestamp.Before(marketOpenTime) && timestamp.Before(marketCloseTime)) {
+				if args.ExtendedHours || (utils.IsTimestampRegularHours(timestamp)) {
 					barData := GetChartDataResults{
 						Timestamp: float64(timestamp.Unix()),
 						Open:      item.Open,
@@ -297,72 +295,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	return nil, fmt.Errorf("no data found")
 }
 
-func getRequestDates(
-	lowerDate time.Time,
-	upperDate time.Time,
-	direction string,
-	timespan string,
-	multiplier int,
-	bars int,
-) (models.Millis, models.Millis, error) {
-	overestimate := 2.0
-	badReturn, err := utils.MillisFromUTCTime(time.Now())
-	if direction != "backward" && direction != "forward" {
-		return badReturn, badReturn, fmt.Errorf("invalid direction; must be 'back' or 'forward'")
-	}
-	barDuration := timespanToDuration(timespan) * time.Duration(multiplier)
-	totalDuration := barDuration * time.Duration(int(float64(bars)*overestimate))
-	tradingMinutesPerDay := 960.0 // 16 hours * 60 minutes
-	tradingDurationPerDay := time.Duration(int(tradingMinutesPerDay)) * time.Minute
-	totalTradingDays := totalDuration / tradingDurationPerDay
-	totalTradingDays += 3 //overestimate cause weekends
-	var queryStartTime, queryEndTime time.Time
-	if direction == "backward" {
-		queryStartTime = upperDate.AddDate(0, 0, -int(totalTradingDays))
-		if queryStartTime.Before(lowerDate) {
-			queryStartTime = lowerDate
-		}
-		queryEndTime = upperDate
-		queryStartTime = time.Date(queryStartTime.Year(), queryStartTime.Month(), queryStartTime.Day(), 0, 0, 0, 0, queryStartTime.Location())
-	} else {
-		queryEndTime = lowerDate.AddDate(0, 0, int(totalTradingDays))
-		if queryEndTime.After(upperDate) {
-			queryEndTime = upperDate
-		}
-		queryStartTime = lowerDate
-	}
-
-	startMillis, err := utils.MillisFromUTCTime(queryStartTime)
-	if err != nil {
-		return badReturn, badReturn, err
-	}
-	endMillis, err := utils.MillisFromUTCTime(queryEndTime)
-	if err != nil {
-		return badReturn, badReturn, err
-	}
-	return startMillis, endMillis, nil
-}
-
-func timespanToDuration(timespan string) time.Duration {
-	switch timespan {
-	case "second":
-		return time.Second
-	case "minute":
-		return time.Minute
-	case "hour":
-		return time.Hour
-	case "day":
-		return time.Hour * 24
-	case "week":
-		return time.Hour * 24 * 7
-	case "month":
-		return time.Hour * 24 * 30
-	case "year":
-		return time.Hour * 24 * 365
-	default:
-		return time.Minute
-	}
-}
 
 func reverse(data []GetChartDataResults) {
 	left, right := 0, len(data)-1
@@ -384,8 +316,8 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 	var currentDayStart int64
 	fmt.Printf("Current timespan:%v\n", timespan)
 	if timespan == "second" || timespan == "minute" || timespan == "hour" {
-		currentDayStart = getReferenceStartTime(timestampEnd, extendedHours, easternLocation)
-		timeframeInSeconds := getTimeframeInSeconds(multiplier, timespan)
+		currentDayStart = utils.GetReferenceStartTime(timestampEnd, extendedHours, easternLocation)
+		timeframeInSeconds := utils.GetTimeframeInSeconds(multiplier, timespan)
 		elapsedTime := timestampEnd - currentDayStart
 		fmt.Printf("\nElapsed Time:%v", elapsedTime)
 		if elapsedTime < 0 {
@@ -393,13 +325,13 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 		}
 		timestampStart = currentDayStart + (elapsedTime/(timeframeInSeconds*1000))*timeframeInSeconds*1000
 	} else {
-		currentDayStart = getReferenceStartTime(timestampEnd, false, easternLocation)
+		currentDayStart = utils.GetReferenceStartTime(timestampEnd, false, easternLocation)
 		if timespan == "day" {
-			timestampStart = getReferenceStartTimeForDays(timestampEnd, multiplier, easternLocation)
+			timestampStart = utils.GetReferenceStartTimeForDays(timestampEnd, multiplier, easternLocation)
 		} else if timespan == "week" {
-			timestampStart = getReferenceStartTimeForWeeks(timestampEnd, multiplier, easternLocation)
+			timestampStart = utils.GetReferenceStartTimeForWeeks(timestampEnd, multiplier, easternLocation)
 		} else if timespan == "month" {
-			timestampStart = getReferenceStartTimeForMonths(timestampEnd, multiplier, easternLocation)
+			timestampStart = utils.GetReferenceStartTimeForMonths(timestampEnd, multiplier, easternLocation)
 		}
 	}
 	fmt.Printf("\nTimestampStart:%v", timestampStart)
@@ -563,81 +495,7 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 	}
 	return incompleteBar, nil
 }
-func getTimeframeInSeconds(multiplier int, timeframe string) int64 {
-	if timeframe == "hour" {
-		return 60 * 60 * int64(multiplier)
-	} else if timeframe == "minute" {
-		return 60 * int64(multiplier)
-	} else if timeframe == "second" {
-		return int64(multiplier)
-	}
-	return 0
-}
-func getReferenceStartTimeForMonths(timestamp int64, multiplier int, easternLocation *time.Location) int64 {
-	utcTime := time.Unix(0, timestamp*int64(time.Millisecond)).UTC()
-	nyTime := utcTime.In(easternLocation)
 
-	// Reference date: September 1, 2003, in New York time
-	referenceDate := time.Date(2003, time.September, 1, 0, 0, 0, 0, easternLocation)
-	// Calculate the difference in months between the current time and the reference date
-	elapsedTimeInMonths := (nyTime.Year()-referenceDate.Year())*12 + int(nyTime.Month()) - int(referenceDate.Month())
-	// Calculate the start date for the current bar
-	candleStartTime := referenceDate.AddDate(0, elapsedTimeInMonths, 0)
-	// Convert the start time to Unix time in milliseconds and return it
-	return candleStartTime.UnixMilli()
-}
-func getReferenceStartTimeForWeeks(timestamp int64, multiplier int, easternLocation *time.Location) int64 {
-	utcTime := time.Unix(0, timestamp*int64(time.Millisecond)).UTC()
-	nyTime := utcTime.In(easternLocation)
-	// Reference date: September 8, 2003, in New York time (Monday of that week)
-	referenceDate := time.Date(2003, time.September, 8, 0, 0, 0, 0, easternLocation)
-	// Calculate the difference in weeks between the current time and the reference date
-	elapsedTimeInWeeks := int(nyTime.Sub(referenceDate).Hours() / (24 * 7))
-	// Calculate the number of full bars (based on the multiplier, which is the timeframe in weeks)
-	numFullBars := elapsedTimeInWeeks / multiplier
-	// Calculate the start date for the current bar
-	candleStartTime := referenceDate.AddDate(0, 0, numFullBars*multiplier*7)
-	// Convert the start time to Unix time in milliseconds and return it
-	return candleStartTime.UnixMilli()
-}
-func getReferenceStartTimeForDays(timestamp int64, multiplier int, easternLocation *time.Location) int64 {
-	utcTime := time.Unix(0, timestamp*int64(time.Millisecond)).UTC()
-	nyTime := utcTime.In(easternLocation)
-	var referenceDate time.Time
-	if multiplier == 1 {
-		referenceDate = time.Date(2003, time.September, 10, 0, 0, 0, 0, easternLocation)
-	} else {
-		referenceDate = time.Date(2003, time.September, 9, 0, 0, 0, 0, easternLocation)
-	}
-	elapsedTimeInDays := int(nyTime.Sub(referenceDate).Hours() / 24)
-	numFullBars := elapsedTimeInDays / multiplier
-	candleStartTime := referenceDate.AddDate(0, 0, numFullBars*multiplier)
-	return candleStartTime.UnixMilli()
-
-}
-func getReferenceStartTime(timestamp int64, extendedHours bool, easternLocation *time.Location) int64 {
-
-	utcTime := time.Unix(0, timestamp*int64(time.Millisecond)).UTC()
-	nyTime := utcTime.In(easternLocation)
-	year, month, day := nyTime.Date()
-	var referenceTime time.Time
-	if extendedHours {
-		// If extendedHours is true, set reference time to 4:00 AM EST/EDT
-		referenceTime = time.Date(year, month, day, 4, 0, 0, 0, easternLocation)
-	} else {
-		// If extendedHours is false, set reference time to 9:30 AM EST/EDT
-		referenceTime = time.Date(year, month, day, 9, 30, 0, 0, easternLocation)
-	}
-
-	// Step 5: Convert the reference time back to UTC
-	referenceUTC := referenceTime.UTC()
-
-	// Step 6: Convert the reference UTC time back to Unix timestamp in milliseconds
-	referenceTimestamp := referenceUTC.Unix()*1000 + int64(referenceUTC.Nanosecond())/int64(time.Millisecond)
-
-	return referenceTimestamp
-
-}
 func buildHigherTimeframeFromLower(iter *iter.Iter[models.Agg], multiplier int, timespan string, extendedHours bool, easternLocation *time.Location, numBarsRemaining *int, direction string) ([]GetChartDataResults, error) {
 	var barDataList []GetChartDataResults
 	var currentBar GetChartDataResults
@@ -652,11 +510,9 @@ func buildHigherTimeframeFromLower(iter *iter.Iter[models.Agg], multiplier int, 
 			return nil, fmt.Errorf("din0wi %v", err)
 		}
 		timestamp := time.Time(item.Timestamp).In(easternLocation)
-		marketOpenTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 9, 30, 0, 0, easternLocation)
-		marketCloseTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 16, 0, 0, 0, easternLocation)
-		if extendedHours || (!timestamp.Before(marketOpenTime) && timestamp.Before(marketCloseTime)) {
+		if extendedHours || (utils.IsTimestampRegularHours(timestamp)) {
 			diff := timestamp.Sub(barStartTime)
-			if barStartTime.IsZero() || diff >= time.Duration(multiplier)*timespanToDuration(timespan) {
+			if barStartTime.IsZero() || diff >= time.Duration(multiplier)*utils.TimespanStringToDuration(timespan) {
 				if !barStartTime.IsZero() {
 					barDataList = append(barDataList, currentBar)
 					if direction == "forwards" {

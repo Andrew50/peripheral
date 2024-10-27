@@ -69,8 +69,8 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 				continue
 			}
 			switch msg := out.(type) {
-            case models.EquityAgg:
-                alerts.appendAggregate(securityId,msg.Open,msg.High,msg.Low,msg.Close,msg.Volume)
+/*            case models.EquityAgg:
+                alerts.appendAggregate(securityId,msg.Open,msg.High,msg.Low,msg.Close,msg.Volume)*/
 			case models.EquityTrade:
 				channelName := fmt.Sprintf("%d-fast", securityId)
 				data := TradeData{
@@ -102,6 +102,7 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 				nextDispatchTimes.RLock()
 				nextDispatch, exists := nextDispatchTimes.times[msg.Symbol]
 				nextDispatchTimes.RUnlock()
+                alerts.AppendTick(conn,securityId,data.Timestamp,data.Price,data.Size)
 				if !exists || now.After(nextDispatch) {
 					slowChannelName := fmt.Sprintf("%d-slow", securityId)
 					data.Channel = slowChannelName

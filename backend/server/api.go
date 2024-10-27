@@ -3,7 +3,6 @@ package server
 import (
 	"backend/jobs"
 	"backend/tasks"
-	"backend/telegram"
 
 	"backend/socket"
 	"backend/utils"
@@ -66,7 +65,7 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"getTrainingQueue":           tasks.GetTrainingQueue,
 	"setSample":                  tasks.SetSample,
 	//telegram
-	"sendMessage": telegram.SendMessage,
+//	"sendMessage": telegram.SendMessage,
     //alerts
     "getAlerts": tasks.GetAlerts,
     "getAlertLogs": tasks.GetAlertLogs,
