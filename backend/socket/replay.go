@@ -135,20 +135,16 @@ func (c *Client) StartLoop() {
 			case <-ticker.C:
 				c.mu.Lock()
 				now := time.Now()
-				delta := now.Sub(c.lastTickTime)
 				if c.replayActive && !c.replayPaused {
-					if c.justResumed {
-						delta = time.Duration(0)
-						c.justResumed = false
-					}
+					delta := now.Sub(c.lastTickTime)
 					c.lastTickTime = now
 					c.accumulatedActiveTime += delta
-					c.lastTickTime = now
 					simulatedElapsed := time.Duration(float64(c.accumulatedActiveTime) * c.replaySpeed)
 					c.simulatedTime = c.simulatedTimeStart + int64(simulatedElapsed/time.Millisecond)
 					if !c.isMarketOpen(c.simulatedTime) {
 						c.jumpToNextMarketOpen()
 						c.simulatedTimeStart = c.simulatedTime
+						c.accumulatedActiveTime = 0
 					}
 					if now.Sub(lastTimestampUpdate) >= TimestampUpdateInterval {
 						timestampUpdate := map[string]interface{}{
@@ -185,7 +181,7 @@ func (c *Client) StartLoop() {
 										select {
 										case c.send <- jsonMarshalTick(tick, replayData.securityId, channelType):
 										default:
-											fmt.Println("Warning: Failed to send data. Channel might be closed.")
+											/fmt.Println("Warning: Failed to send data. Channel might be closed.")
 										}
 									}
 								case "slow":
@@ -312,8 +308,7 @@ func (c *Client) playReplay() {
 	if c.replayPaused {
 		c.replayActive = true
 		c.replayPaused = false
-		c.justResumed = true
-
+		c.lastTickTime = time.Now()
 	}
 }
 
