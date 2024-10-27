@@ -40,6 +40,7 @@
     });
 
    function updateTradeStore(newTrade: TradeData) {
+        console.log("received trade", newTrade, new Error().stack);
         if (newTrade.timestamp === undefined || newTrade.timestamp === 0) {
             return;
         }
@@ -62,10 +63,11 @@
         currentAsk = last.askPrice;
     }
 
-    // Subscribe to the instance changes
+    // Subscribe to instance changes
+    let currentSecurityId: number | null = null;
     instance.subscribe((instance: Instance) => {
         if (!instance.securityId || instance.securityId === prevSecId) return;
-
+        currentSecurityId = instance.securityId;
         // Release previous streams
         releaseTrade();
         releaseQuote();

@@ -46,7 +46,7 @@ type Client struct {
 	simulatedTimeStart    int64
 	accumulatedActiveTime time.Duration
 	lastTickTime          time.Time
-	justResumed           bool
+	accumulatedPauseTime  time.Duration
 }
 
 /*
@@ -70,7 +70,7 @@ func WsHandler(conn *utils.Conn) http.HandlerFunc {
 		}
 		client := &Client{
 			ws:                  ws,
-			send:                make(chan []byte, 1000),
+			send:                make(chan []byte, 3000),
 			replayActive:        false,
 			replayPaused:        false,
 			replaySpeed:         1.0,
@@ -210,7 +210,6 @@ func (c *Client) realtimeToReplay() {
 	c.simulatedTimeStart = c.simulatedTime
 	c.accumulatedActiveTime = 0
 	c.lastTickTime = time.Now()
-	c.justResumed = false
 	c.mu.Unlock()
 	for channelName := range channelSubscribers {
 		fmt.Println(channelName)
@@ -285,3 +284,4 @@ func (c *Client) close() {
 		fmt.Println("Error closing WebSocket connection:", err)
 	}
 }
+

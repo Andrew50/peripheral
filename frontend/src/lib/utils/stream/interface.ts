@@ -1,4 +1,3 @@
-
 import {socket,subscribe,unsubscribe,activeChannels,getInitialValue} from './socket'
 import type {SubscriptionRequest,StreamCallback} from './socket'
 import {DateTime} from 'luxon';
@@ -27,7 +26,9 @@ export function addStream<T extends StreamData>(instance: Instance, channelType:
     const channelName = `${instance.securityId}-${channelType}`;
     let callbacks = activeChannels.get(channelName);
     if (callbacks) {
-        callbacks.push(callback);
+        if(!callbacks.includes(callback)) { 
+            callbacks.push(callback);
+        }
     } else {
         activeChannels.set(channelName, [callback]);
         subscribe(channelName);
@@ -63,7 +64,7 @@ export function pauseReplay() {
         };
         socket.send(JSON.stringify(pauseRequest));
     }
-    streamInfo.update((v) => {return {...v,replayPaused:true}})
+    streamInfo.update((v) => ({...v, replayPaused: true, pauseTime: Date.now()}));
 }
 
 export function resumeReplay() {
@@ -73,7 +74,15 @@ export function resumeReplay() {
         };
         socket.send(JSON.stringify(playRequest));
     }
-    streamInfo.update((v) => {return {...v,replayPaused:false}})
+    streamInfo.update((v) => {
+        const pauseDuration = Date.now() - (v.pauseTime || Date.now());
+        return {
+            ...v,
+            replayPaused: false,
+            timestamp: v.timestamp + pauseDuration * v.replaySpeed,
+            lastUpdateTime: Date.now()
+        };
+    });
 }
 
 export function stopReplay() {
@@ -114,4 +123,3 @@ export function setExtended(extendedHours: boolean){
     }
     streamInfo.update((r: ReplayInfo) => ({ ...r,extendedHours:extendedHours}));
 }
-
