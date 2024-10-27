@@ -14,7 +14,10 @@ type Alert struct {
     AlertType  string
     SetupId    *int
     Price      *float64
-    SecurityID *int
+    Direction  *bool
+    SecurityId *int
+    Ticker      *string
+    Message *string
 }
 
 var (
@@ -33,10 +36,14 @@ func RemoveAlert(alertId int) {
 }
 
 func StartAlertLoop(conn *utils.Conn)  error {
-    ctx, cancel = context.WithCancel(context.Background())
-    if err := loadAggregates(conn); err != nil {
+	err := InitTelegramBot()
+    if err != nil {
         return err
     }
+    ctx, cancel = context.WithCancel(context.Background())
+    /*if err := loadAggregates(conn); err != nil {
+        return err
+    }*/
     if err := loadActiveAlerts(ctx, conn); err != nil {
         return err
     }
@@ -90,4 +97,38 @@ func processAlerts( conn *utils.Conn) {
         return true
     })
     wg.Wait()
+}
+func loadActiveAlerts(ctx context.Context, conn *utils.Conn) error {
+    query := `
+        SELECT alertId, userId, alertType, setupId, price,direction, securityID
+        FROM alerts
+        WHERE active = true
+    `
+    rows, err := conn.DB.Query(ctx, query)
+    if err != nil {
+        return err
+    }
+    defer rows.Close()
+    alerts = sync.Map{}
+    for rows.Next() {
+        var alert Alert
+        err := rows.Scan(
+            &alert.AlertId,
+            &alert.UserId,
+            &alert.AlertType,
+            &alert.SetupId,
+            &alert.Price,
+            &alert.Direction,
+            &alert.SecurityId,
+            &alert.Ticker,
+        )
+        if err != nil {
+            return err
+        }
+        alerts.Store(alert.AlertId, alert)
+    }
+    if err = rows.Err(); err != nil {
+        return err
+    }
+    return nil
 }

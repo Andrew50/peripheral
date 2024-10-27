@@ -87,11 +87,13 @@ CREATE TABLE alerts (
     setupId INT REFERENCES setups(setupId) ON DELETE CASCADE,
     algoId INT REEFERENCES algos(algoId) ON DELETE CASCADE,
     price DECIMAL(10, 4),
+    direction Boolean,
     securityID INT,
     CONSTRAINT chk_alert_price_or_setup CHECK (
-        (alertType = 'price' AND price IS NOT NULL AND securityID IS NOT NULL AND setupId IS NULL) OR
-        (alertType = 'setup' AND setupId IS NOT NULL AND price IS NULL AND securityID IS NULL) OR
-        (alertType = 'algo' AND algoId IS NOT NULL AND price IS NULL)
+        (alertType = 'price' AND price IS NOT NULL AND securityID IS NOT NULL AND direction IS NOT NULL AND 
+        algoId IS NULL AND setupId IS NULL) OR
+        (alertType = 'setup' AND setupId IS NOT NULL AND algoId IS NULL AND price IS NULL AND securityID IS NULL) OR
+        (alertType = 'algo' AND algoId IS NOT NULL setupId IS NULL AND price IS NULL)
     )
 );
 CREATE INDEX idxAlertByUserId on alerts(userId);
