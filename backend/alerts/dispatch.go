@@ -4,15 +4,20 @@ import (
 	"backend/utils"
 	"encoding/json"
 	"fmt"
+    "context"
 	"log"
 	"time"
-
 	"gopkg.in/telebot.v3"
 )
 
+const (
+    ChatId  = -1002428678944
+)
+
+
 var bot *telebot.Bot
 
-func InitBot() error {
+func InitTelegramBot() error {
 	botToken := "7500247744:AAGNsmjWYfb97XzppT2E0_8qoArgxLOz7e0"
 	var err error
 
@@ -47,6 +52,42 @@ func SendMessage(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	}
 	SendMessageInternal(args.Message, args.ChatID)
 	return nil, nil
+}
+
+
+func writePriceMessage(alert Alert){
+    var directionStr string
+    if *alert.Direction {
+        directionStr = "above"
+    }else{
+        directionStr = "below"
+    }
+    message := fmt.Sprintf("%s %s %f", alert.Ticker,directionStr,alert.Price)
+    alert.Message = &message
+}
+func dispatchAlert(conn *utils.Conn, alert Alert) error {
+    query := `
+        INSERT INTO alertLogs (alertId, timestamp, securityId)
+        VALUES ($1, $2, $3)
+    `
+    err := conn.DB.QueryRow(context.Background(),
+        query,
+        alert.AlertId,
+        time.Now(),
+    )
+    if err != nil {
+        log.Printf("Failed to log alert to database: %v", err)
+        return fmt.Errorf("failed to log alert: %v", err)
+    }
+    SendMessageInternal(*alert.Message, ChatId)  //todo
+
+/*    messageJSON, err := json.Marshal(wsMessage)
+    if err != nil {
+        log.Printf("Failed to marshal websocket message: %v", err)
+        return fmt.Errorf("failed to marshal websocket message: %v", err)
+    }*/
+
+    return nil
 }
 
 // func main() {
