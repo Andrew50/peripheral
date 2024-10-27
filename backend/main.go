@@ -11,6 +11,7 @@ func main() {
 	args := os.Args
 	if len(args) > 2 {
 //		conn, close := utils.InitConn(false)
+
 	//	defer close()
 //		jobs.PolygonDataToRedis(conn)
 	}

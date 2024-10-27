@@ -14,6 +14,7 @@ import (
 	"github.com/polygon-io/client-go/websocket/models"
 )
 
+
 var nextDispatchTimes = struct {
 	sync.RWMutex
 	times map[string]time.Time
@@ -22,6 +23,7 @@ var nextDispatchTimes = struct {
 const slowRedisTimeout = 1 * time.Second // Adjust the timeout as needed
 
 var tickerToSecurityId map[string]int
+var tickerToSecurityIdLock sync.RWMutex
 
 func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 	err := polygonWS.Subscribe(polygonws.StocksQuotes)
@@ -66,7 +68,9 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 				//jlog.Println("Unknown message type received")
 				continue
 			}
+			tickerToSecurityIdLock.RLock()
 			securityId, exists := tickerToSecurityId[symbol]
+			tickerToSecurityIdLock.RUnlock()
 			if !exists {
 				//log.Printf("Symbol %s not found in tickerToSecurityId map\n", symbol)
 				continue
@@ -164,6 +168,8 @@ func StartPolygonWS(conn *utils.Conn) error {
 }
 
 func initTickerToSecurityIdMap(conn *utils.Conn) error {
+	tickerToSecurityIdLock.Lock()
+	defer tickerToSecurityIdLock.Unlock()
 	tickerToSecurityId = make(map[string]int)
 	rows, err := conn.DB.Query(context.Background(), "SELECT ticker, securityId FROM securities where maxDate is NULL")
 	if err != nil {
