@@ -16,11 +16,12 @@ export let dispatchMenuChange = writable("")
 export interface StreamInfo {
     replayActive: boolean,
     replaySpeed: number,
-    replayPaused: boolean
+    replayPaused: boolean,
     startTimestamp: number,
-    timestamp: number
-    extendedHours: boolean
-    lastUpdateTime?: number
+    timestamp: number,
+    extendedHours: boolean,
+    lastUpdateTime?: number,
+    pauseTime?: number
 }
 export interface TimeEvent {
     event:"newDay" | "replay" | null,

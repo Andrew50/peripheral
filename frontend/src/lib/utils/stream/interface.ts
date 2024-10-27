@@ -1,4 +1,3 @@
-
 import {socket,subscribe,unsubscribe,activeChannels,getInitialValue} from './socket'
 import type {SubscriptionRequest,StreamCallback} from './socket'
 import {DateTime} from 'luxon';
@@ -8,6 +7,7 @@ import {chartEventDispatcher} from '$lib/features/chart/interface'
 import { getReferenceStartTimeForDateMilliseconds, isOutsideMarketHours, ESTSecondstoUTCMillis, getRealTimeTime } from '$lib/core/timestamp';
 import type { ReplayInfo } from '$lib/core/stores';
 import { type Instance} from '$lib/core/types'
+import {get} from 'svelte/store'
 export function releaseStream(channelName: string, callback: StreamCallback) {
     let callbacks = activeChannels.get(channelName);
     if (callbacks) {
@@ -26,7 +26,9 @@ export function addStream<T extends StreamData>(instance: Instance, channelType:
     const channelName = `${instance.securityId}-${channelType}`;
     let callbacks = activeChannels.get(channelName);
     if (callbacks) {
-        callbacks.push(callback);
+        if(!callbacks.includes(callback)) { 
+            callbacks.push(callback);
+        }
     } else {
         activeChannels.set(channelName, [callback]);
         subscribe(channelName);
@@ -36,6 +38,9 @@ export function addStream<T extends StreamData>(instance: Instance, channelType:
 }
 export function startReplay(instance: Instance) {
     if (!instance.timestamp) return
+    if(get(streamInfo).replayActive) {
+        stopReplay()
+    } 
     if (socket?.readyState === WebSocket.OPEN) {
         const timestampToUse = isOutsideMarketHours(instance.timestamp) 
             ? ESTSecondstoUTCMillis(getReferenceStartTimeForDateMilliseconds(instance.timestamp, ) / 1000)
@@ -59,7 +64,7 @@ export function pauseReplay() {
         };
         socket.send(JSON.stringify(pauseRequest));
     }
-    streamInfo.update((v) => {return {...v,replayPaused:true}})
+    streamInfo.update((v) => ({...v, replayPaused: true, pauseTime: Date.now()}));
 }
 
 export function resumeReplay() {
@@ -69,7 +74,15 @@ export function resumeReplay() {
         };
         socket.send(JSON.stringify(playRequest));
     }
-    streamInfo.update((v) => {return {...v,replayPaused:false}})
+    streamInfo.update((v) => {
+        const pauseDuration = Date.now() - (v.pauseTime || Date.now());
+        return {
+            ...v,
+            replayPaused: false,
+            timestamp: v.timestamp + pauseDuration * v.replaySpeed,
+            lastUpdateTime: Date.now()
+        };
+    });
 }
 
 export function stopReplay() {
@@ -110,4 +123,3 @@ export function setExtended(extendedHours: boolean){
     }
     streamInfo.update((r: ReplayInfo) => ({ ...r,extendedHours:extendedHours}));
 }
-
