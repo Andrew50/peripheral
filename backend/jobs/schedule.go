@@ -2,7 +2,7 @@ package jobs
 
 import (
 	"backend/socket"
-	"backend/telegram"
+	"backend/alerts"
 	"backend/utils"
 	"fmt"
 	"time"
@@ -36,7 +36,6 @@ func StartScheduler(conn *utils.Conn) chan struct{} {
 
 func initialize(conn *utils.Conn) {
 	socket.StartPolygonWS(conn)
-	err := telegram.InitBot()
 	if err != nil {
 		fmt.Println("issue init telegram")
 	}

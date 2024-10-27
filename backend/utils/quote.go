@@ -9,19 +9,19 @@ import (
 	"github.com/polygon-io/client-go/rest/iter"
 	"github.com/polygon-io/client-go/rest/models"
 )
-func GetAggsData(client *polygon.Client, ticker string, barLength int, timeframe string,
-	fromMillis models.Millis, toMillis models.Millis, limit int, resultsOrder string, isAdjusted bool) (*iter.Iter[models.Agg], error) {
+func GetAggsData(client *polygon.Client, ticker string, multiplier int, timeframe string,
+	fromMillis models.Millis, toMillis models.Millis, bars int, resultsOrder string, isAdjusted bool) (*iter.Iter[models.Agg], error) {
 	timespan := models.Timespan(timeframe)
 	if resultsOrder != "asc" && resultsOrder != "desc" {
 		return nil, fmt.Errorf("incorrect order string passed %s", resultsOrder)
 	}
 	params := models.ListAggsParams{
 		Ticker:     ticker,
-		Multiplier: barLength,
+		Multiplier: multiplier,
 		Timespan:   timespan,
 		From:       fromMillis,
 		To:         toMillis,
-	}.WithOrder(models.Order(resultsOrder)).WithLimit(limit).WithAdjusted(isAdjusted)
+	}.WithOrder(models.Order(resultsOrder)).WithLimit(bars).WithAdjusted(isAdjusted)
 	iter := client.ListAggs(context.Background(), params)
 	return iter, nil
 
