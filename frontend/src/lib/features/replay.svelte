@@ -33,6 +33,7 @@ import type {Instance} from '$lib/core/types'
         <button on:click={()=>{stopReplay;startReplay({timestamp:$streamInfo.startTimestamp,extendedHours:$streamInfo.extendedHours});}}>Reset
        <!-- to {UTCTimestampToESTString($replayInfo.startTimestamp)}-->
         </button>
+    
         {#if $streamInfo.replayPaused}
             <button on:click={resumeReplay}>Play </button>
         {:else}
