@@ -227,13 +227,15 @@
 
         if (sameBar) {
         //if (trade.timestamp !== null){
-            chartCandleSeries.update({
-                time: mostRecentBar.time, 
-                open: mostRecentBar.open, 
-                high: Math.max(mostRecentBar.high, trade.price), 
-                low: Math.min(mostRecentBar.low, trade.price),
-                close: trade.price 
-            })  
+            if(trade.size >= 100){
+                    chartCandleSeries.update({
+                        time: mostRecentBar.time, 
+                    open: mostRecentBar.open, 
+                    high: Math.max(mostRecentBar.high, trade.price), 
+                    low: Math.min(mostRecentBar.low, trade.price),
+                    close: trade.price 
+                })  
+            }
             chartVolumeSeries.update({
                 time: mostRecentBar.time, 
                 value: chartVolumeSeries.data()[chartVolumeSeries.data().length-1].value + trade.size,
