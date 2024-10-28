@@ -34,6 +34,7 @@ export function addStream<T extends StreamData>(instance: Instance, channelType:
         subscribe(channelName);
     }
     getInitialValue(channelName, callback);
+        
     return () => releaseStream(channelName, callback);
 }
 export function startReplay(instance: Instance) {

@@ -17,6 +17,7 @@ func processPriceAlert(conn *utils.Conn, alert Alert) error {
         if ds.DayData.Aggs[Length - 1][2] < *alert.Price {
             dispatchAlert(conn,alert)
         }
+    
     }
     return nil
 }

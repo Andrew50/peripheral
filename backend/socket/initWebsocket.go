@@ -87,7 +87,7 @@ func getInitialStreamValue(conn *utils.Conn, channelName string, timestamp int64
 		}
 		return jsonData, nil
 
-	} else if streamType == "slow" || streamType == "fast" {
+	} else if streamType == "slow" {
 		// Define the variables needed for TradeData
 		var price float64
 		var size int64
@@ -134,6 +134,8 @@ func getInitialStreamValue(conn *utils.Conn, channelName string, timestamp int64
 		}
 		return jsonData, nil
 
+    } else if streamType == "fast" {
+        return nil, nil
     } else if streamType == "close" {
         //clos, err := utils.GetPrevClose(
 

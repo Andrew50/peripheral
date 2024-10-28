@@ -94,6 +94,7 @@ func initTimeframeData(conn *utils.Conn, securityId int, timeframe int, isExtend
         }
 
         if idx >= Length {
+            
             break
         }
 
@@ -132,11 +133,11 @@ func initSecurityData(conn *utils.Conn, securityId int) *SecurityData {
         Adr: getAdr(conn,securityId),*/
     }
 }
-func updateTimeframe(td *TimeframeData, timestamp int64, price float64, volume float64, timeframe int) {
+func updateTimeframe(td *TimeframeData, timestamp int64, price float64, volume int64, timeframe int) {
     periodStart := getPeriodStart(timestamp, timeframe)
     if td.currentPeriod == -1 {
         td.currentPeriod = periodStart
-        td.Aggs[0] = []float64{price, price, price, price, volume}
+        td.Aggs[0] = []float64{price, price, price, price, float64(volume)}
         td.size = 1
         return
     }
@@ -145,7 +146,7 @@ func updateTimeframe(td *TimeframeData, timestamp int64, price float64, volume f
         if td.size > 0 {
             copy(td.Aggs[1:], td.Aggs[0:min(td.size, Length-1)])
         }
-        td.Aggs[0] = []float64{price, price, price, price, volume}
+        td.Aggs[0] = []float64{price, price, price, price, float64(volume)}
         td.currentPeriod = periodStart
         if td.size < Length {
             td.size++
@@ -154,7 +155,7 @@ func updateTimeframe(td *TimeframeData, timestamp int64, price float64, volume f
         td.Aggs[0][1] = max(td.Aggs[0][1], price) // High
         td.Aggs[0][2] = min64(td.Aggs[0][2], price) // Low
         td.Aggs[0][3] = price                      // Close
-        td.Aggs[0][4] += volume                    // Volume
+        td.Aggs[0][4] += float64(volume)                    // Volume
     }
 }
 func min(a, b int) int {
@@ -178,20 +179,20 @@ func min64(a, b float64) float64 {
     return b
 }
 
-func AppendTick(conn *utils.Conn,securityId int, timestamp int64, price float64, volume float64) error {
+func AppendTick(conn *utils.Conn,securityId int, timestamp int64, price float64, volume int64) error {
     sd, exists := data[securityId]
     if !exists {
         sd = initSecurityData(conn,securityId)
         data[securityId] = sd
     }
-    if !isExtendedHours {
-        sd.HourData.mutex.Lock()
-        updateTimeframe(&sd.HourData, timestamp, price, volume, Hour)
-        sd.HourData.mutex.Unlock()
-        sd.DayData.mutex.Lock()
-        updateTimeframe(&sd.DayData, timestamp, price, volume, Day)
-        sd.DayData.mutex.Unlock()
-    }
+    //if !isExtendedHours {
+    //    sd.HourData.mutex.Lock()
+    //    updateTimeframe(&sd.HourData, timestamp, price, volume, Hour)
+    //    sd.HourData.mutex.Unlock()
+    //    sd.DayData.mutex.Lock()
+    //    updateTimeframe(&sd.DayData, timestamp, price, volume, Day)
+    //    sd.DayData.mutex.Unlock()
+    //}
     sd.SecondDataExtended.mutex.Lock()
     updateTimeframe(&sd.SecondDataExtended, timestamp, price, volume, Second)
     sd.SecondDataExtended.mutex.Unlock()

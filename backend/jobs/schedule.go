@@ -2,7 +2,7 @@ package jobs
 
 import (
 	"backend/socket"
-	"backend/alerts"
+	//"backend/alerts"
 	"backend/utils"
 	"fmt"
 	"time"
@@ -36,10 +36,6 @@ func StartScheduler(conn *utils.Conn) chan struct{} {
 
 func initialize(conn *utils.Conn) {
 	socket.StartPolygonWS(conn)
-	if err != nil {
-		fmt.Println("issue init telegram")
-	}
-	//telegram.SendMessageInternal("TESTING!", -1002428678944)
 }
 
 func eventLoop(now time.Time, conn *utils.Conn) {
