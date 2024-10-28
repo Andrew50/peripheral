@@ -40,7 +40,6 @@
     });
 
    function updateTradeStore(newTrade: TradeData) {
-        console.log("received trade", newTrade, new Error().stack);
         if (newTrade.timestamp === undefined || newTrade.timestamp === 0) {
             return;
         }
