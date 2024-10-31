@@ -266,7 +266,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			}
 			return barDataList, nil
 		} else {
-			fmt.Println("reverse!!!!!!")
+			//fmt.Println("reverse!!!!!!")
 			reverse(barDataList)
 			marketStatus, err := utils.GetMarketStatus(conn)
 			if err != nil {
