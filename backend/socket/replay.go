@@ -181,7 +181,7 @@ func (c *Client) StartLoop() {
 										select {
 										case c.send <- jsonMarshalTick(tick, replayData.securityId, channelType):
 										default:
-											/fmt.Println("Warning: Failed to send data. Channel might be closed.")
+											fmt.Println("Warning: Failed to send data. Channel might be closed.")
 										}
 									}
 								case "slow":

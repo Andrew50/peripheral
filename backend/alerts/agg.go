@@ -20,7 +20,7 @@ const (
 type TimeframeData struct {
     Aggs [][]float64
     size int
-    currentPeriod int64
+    rolloverTimestamp int64
     extendedHours bool
     mutex sync.RWMutex
 }
@@ -47,7 +47,7 @@ func initTimeframeData(conn *utils.Conn, securityId int, timeframe int, isExtend
     td := TimeframeData{
         Aggs:          aggs,
         size:          0,
-        currentPeriod: -1,
+        rolloverTimestamp: -1,
         extendedHours: isExtendedHours,
     }
     toTime := time.Now()
@@ -84,6 +84,7 @@ func initTimeframeData(conn *utils.Conn, securityId int, timeframe int, isExtend
 
     // Process historical data
     var idx int
+    var lastTimestamp int64
     for iter.Next() {
         agg := iter.Item()
         
@@ -105,18 +106,15 @@ func initTimeframeData(conn *utils.Conn, securityId int, timeframe int, isExtend
             float64(agg.Volume),
         }
         
-        // Update period tracking
-        if td.currentPeriod == -1 {
-            td.currentPeriod = getPeriodStart(timestamp.Unix(), timeframe)
-        }
-        
         idx++
+        lastTimestamp = time.Time(agg.Timestamp).Unix()
     }
-
     if err := iter.Err(); err != nil {
         fmt.Printf("Error iterating historical data: %v\n", err)
     }
-
+    //if td.rolloverTimestamp == -1 {
+    td.rolloverTimestamp = lastTimestamp + int64(timeframe) //if theres no data then this wont work but is extreme edge case
+    //}
     td.size = idx
     return td
 }
@@ -133,20 +131,22 @@ func initSecurityData(conn *utils.Conn, securityId int) *SecurityData {
     }
 }
 func updateTimeframe(td *TimeframeData, timestamp int64, price float64, volume float64, timeframe int) {
-    periodStart := getPeriodStart(timestamp, timeframe)
-    if td.currentPeriod == -1 {
+    //periodStart := getPeriodStart(timestamp, timeframe)
+    /*if td.currentPeriod == -1 {
         td.currentPeriod = periodStart
         td.Aggs[0] = []float64{price, price, price, price, volume}
         td.size = 1
         return
-    }
+    }*/
 
-    if periodStart > td.currentPeriod {
+    //if periodStart > td.currentPeriod {
+    if timestamp >= td.rolloverTimestamp { // if out of order ticks
         if td.size > 0 {
             copy(td.Aggs[1:], td.Aggs[0:min(td.size, Length-1)])
         }
         td.Aggs[0] = []float64{price, price, price, price, volume}
-        td.currentPeriod = periodStart
+        //td.currentPeriod = periodStart
+        td.rolloverTimestamp = nextPeriodStart(timestamp,timeframe)
         if td.size < Length {
             td.size++
         }
@@ -178,19 +178,26 @@ func min64(a, b float64) float64 {
     return b
 }
 
-func AppendTick(conn *utils.Conn,securityId int, timestamp int64, price float64, volume float64) error {
+func LoadAggregates(conn *utils.Conn){
+}
+
+func AppendTick(conn *utils.Conn,securityId int, timestamp int64, price float64, intVolume int64) error {
+//    fmt.Println("added tick",securityId,intVolume)
+    volume := float64(intVolume)
     sd, exists := data[securityId]
     if !exists {
-        sd = initSecurityData(conn,securityId)
-        data[securityId] = sd
+        return fmt.Errorf("fid0w0f")
+        //sd = initSecurityData(conn,securityId)
+        //data[securityId] = sd
     }
-    if !isExtendedHours {
+    if utils.IsTimestampRegularHours(time.Unix(timestamp,timestamp*int64(time.Millisecond))) {
         sd.HourData.mutex.Lock()
         updateTimeframe(&sd.HourData, timestamp, price, volume, Hour)
         sd.HourData.mutex.Unlock()
         sd.DayData.mutex.Lock()
         updateTimeframe(&sd.DayData, timestamp, price, volume, Day)
         sd.DayData.mutex.Unlock()
+
     }
     sd.SecondDataExtended.mutex.Lock()
     updateTimeframe(&sd.SecondDataExtended, timestamp, price, volume, Second)
@@ -201,8 +208,11 @@ func AppendTick(conn *utils.Conn,securityId int, timestamp int64, price float64,
     return nil
 }
 
-func getPeriodStart(timestamp int64, tf int) int64 {
+/*func getPeriodStart(timestamp int64, tf int) int64 {
     return timestamp - (timestamp % int64(tf))
+}*/
+func nextPeriodStart(timestamp int64, tf int) int64 {
+    return timestamp - (timestamp % int64(tf)) + int64(tf)
 }
 
 func GetTimeframeData(securityId int, timeframe int, extendedHours bool) ([][]float64, error) {
@@ -232,7 +242,12 @@ func GetTimeframeData(securityId int, timeframe int, extendedHours bool) ([][]fl
     }
     td.mutex.RLock()
     defer td.mutex.RUnlock()
-    return td.Aggs, nil //careful, this doesnt return a copy
+    result := make([][]float64, len(td.Aggs))
+    for i := range td.Aggs {
+        result[i] = make([]float64, OHLCV)
+        copy(result[i], td.Aggs[i])
+    }
+    return result, nil
 }
 /*
 func appendAggregate(securityId int,timeframe string, o float64, h float64, l float64, c float64) error {
