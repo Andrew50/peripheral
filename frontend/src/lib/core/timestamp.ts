@@ -155,6 +155,12 @@ export function getReferenceStartTimeForDateMilliseconds(timestamp: number, exte
 export function isOutsideMarketHours(timestamp: number): boolean {
     // Create a date object from the timestamp
     const date = new Date(timestamp);
+    
+    // Check for weekend first (0 = Sunday, 6 = Saturday)
+    const day = date.getDay();
+    if (day === 0 || day === 6) {
+        return true;
+    }
 
     // Determine if daylight saving is in effect for EST/EDT
     const isDST = isDaylightSavingTime(date);
