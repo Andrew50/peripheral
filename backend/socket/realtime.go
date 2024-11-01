@@ -1,11 +1,14 @@
-//realtime.go
+// realtime.go
 package socket
+
 import (
+	"backend/utils"
+	"fmt"
 	"os"
+
 	"github.com/gorilla/websocket"
-    "backend/utils"
-    "fmt"
 )
+
 /*
 	subscribes the client webscoket (client struct really) to the redis pub/sub
 
@@ -32,7 +35,7 @@ func (c *Client) subscribeRealtime(conn *utils.Conn, channelName string) {
 	}*/
 	channelsMutex.Unlock()
 	go func() {
-		initialValue, err := getInitialStreamValue(conn,channelName,0)
+		initialValue, err := getInitialStreamValue(conn, channelName, 0)
 		if err != nil {
 			fmt.Println("Error fetching initial value from API:", err)
 			return
@@ -84,6 +87,7 @@ func broadcastToChannel(channelName string, message string) {
 		}
 	}
 }
+
 /*func handleRedisChannel(pubsub *redis.PubSub, channelName string) {
     var lastMessage string
 	for msg := range pubsub.Channel() {
@@ -104,4 +108,3 @@ func broadcastToChannel(channelName string, message string) {
 		}
 	}
 }*/
-

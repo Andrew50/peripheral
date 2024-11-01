@@ -93,7 +93,7 @@ CREATE TABLE alerts (
         (alertType = 'price' AND price IS NOT NULL AND securityID IS NOT NULL AND direction IS NOT NULL AND 
         algoId IS NULL AND setupId IS NULL) OR
         (alertType = 'setup' AND setupId IS NOT NULL AND algoId IS NULL AND price IS NULL AND securityID IS NULL) OR
-        (alertType = 'algo' AND algoId IS NOT NULL setupId IS NULL AND price IS NULL)
+        (alertType = 'algo' AND algoId IS NOT NULL AND setupId IS NULL AND price IS NULL)
     )
 );
 CREATE INDEX idxAlertByUserId on alerts(userId);
