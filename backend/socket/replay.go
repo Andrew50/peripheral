@@ -328,7 +328,10 @@ func (c *Client) stopReplay() {
 	c.simulatedTime = 0
 	c.replayData = make(map[string]*ReplayData)
 	fmt.Println("------closing----")
-	close(c.send)
+	select { 
+	case <- c.send: 
+	default:
+	}
 }
 
 func (c *Client) setReplaySpeed(speed float64) {

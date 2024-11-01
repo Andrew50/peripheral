@@ -34,6 +34,7 @@ export function addStream<T extends StreamData>(instance: Instance, channelType:
         subscribe(channelName);
     }
     getInitialValue(channelName, callback);
+        
     return () => releaseStream(channelName, callback);
 }
 export function startReplay(instance: Instance) {
@@ -51,6 +52,7 @@ export function startReplay(instance: Instance) {
             timestamp: timestampToUse,
         };
         socket.send(JSON.stringify(replayRequest));
+        console.log("replay request sent")
         streamInfo.update((v) => {return {...v,replayActive:true,replayPaused:false,startTimestamp:timestampToUse,timestamp:timestampToUse}})
         chartEventDispatcher.set({event:"replay",chartId:"all"})
         //timeEvent.update((v: TimeEvent) => ({ ...v, event: 'replay' }));
