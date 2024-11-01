@@ -9,7 +9,7 @@ import (
 	"os"
 	"sync"
 	"github.com/gorilla/websocket"
-    "time"
+	"time"
 )
 
 //
@@ -32,6 +32,7 @@ type Client struct {
 	ws                    *websocket.Conn
 	mu                    sync.Mutex
 	send                  chan []byte
+	done                  chan struct{}
 	replayActive          bool
 	replayPaused          bool
 	replaySpeed           float64
@@ -69,6 +70,7 @@ func WsHandler(conn *utils.Conn) http.HandlerFunc {
 		client := &Client{
 			ws:                  ws,
 			send:                make(chan []byte, 3000),
+			done:                make(chan struct{}),
 			replayActive:        false,
 			replayPaused:        false,
 			replaySpeed:         1.0,
@@ -139,7 +141,7 @@ func (c *Client) readPump(conn *utils.Conn) {
 			continue
 		}
 		os.Stdout.Sync()
-		//fmt.Println(clientMsg)
+		fmt.Printf("clientMsg.Action: %v\n", clientMsg.Action)
 		switch clientMsg.Action {
 		case "subscribe":
 			if c.replayActive {
@@ -170,6 +172,7 @@ func (c *Client) readPump(conn *utils.Conn) {
 		case "speed":
 			c.setReplaySpeed(*(clientMsg.Speed))
 		case "realtime":
+			fmt.Println("realtime request")
 			if c.replayActive {
 				c.replayToRealtime()
 			}
@@ -188,6 +191,7 @@ func (c *Client) readPump(conn *utils.Conn) {
 }
 
 func (c *Client) realtimeToReplay() {
+	fmt.Printf("replay started at %v\n", c.simulatedTime)
 	c.mu.Lock()
 	c.replayActive = true
 	c.replayPaused = false
@@ -225,7 +229,7 @@ func (c *Client) close() {
 	// Lock to ensure thread safety
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
+	close(c.done)
 	// Stop replay if it's active
 	if c.replayActive {
 		c.stopReplay()
