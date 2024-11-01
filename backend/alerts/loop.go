@@ -2,6 +2,7 @@ package alerts
 
 import (
     "context"
+    "fmt"
     "log"
     "time"
     "sync"
@@ -41,12 +42,13 @@ func StartAlertLoop(conn *utils.Conn)  error {
         return err
     }
     ctx, cancel = context.WithCancel(context.Background())
-    /*if err := loadAggregates(conn); err != nil {
-        return err
-    }*/
-    if err := loadActiveAlerts(ctx, conn); err != nil {
+    if err := InitAlertsAndAggs(conn); err != nil {
         return err
     }
+    fmt.Println("god")
+    /*if err := loadActiveAlerts(ctx, conn); err != nil {
+        return err
+    }*/
     go alertLoop(ctx, conn)
     return nil
 }
@@ -97,38 +99,4 @@ func processAlerts( conn *utils.Conn) {
         return true
     })
     wg.Wait()
-}
-func loadActiveAlerts(ctx context.Context, conn *utils.Conn) error {
-    query := `
-        SELECT alertId, userId, alertType, setupId, price,direction, securityID
-        FROM alerts
-        WHERE active = true
-    `
-    rows, err := conn.DB.Query(ctx, query)
-    if err != nil {
-        return err
-    }
-    defer rows.Close()
-    alerts = sync.Map{}
-    for rows.Next() {
-        var alert Alert
-        err := rows.Scan(
-            &alert.AlertId,
-            &alert.UserId,
-            &alert.AlertType,
-            &alert.SetupId,
-            &alert.Price,
-            &alert.Direction,
-            &alert.SecurityId,
-            &alert.Ticker,
-        )
-        if err != nil {
-            return err
-        }
-        alerts.Store(alert.AlertId, alert)
-    }
-    if err = rows.Err(); err != nil {
-        return err
-    }
-    return nil
 }

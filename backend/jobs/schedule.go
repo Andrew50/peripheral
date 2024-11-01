@@ -2,8 +2,8 @@ package jobs
 
 import (
 	"backend/socket"
-	"backend/alerts"
 	"backend/utils"
+    "backend/alerts"
 	"fmt"
 	"time"
 )
@@ -36,9 +36,14 @@ func StartScheduler(conn *utils.Conn) chan struct{} {
 
 func initialize(conn *utils.Conn) {
 	socket.StartPolygonWS(conn)
-	if err != nil {
+    err := alerts.StartAlertLoop(conn)
+    if err != nil {
+        fmt.Println("schedule issue",err)
+    }
+/*	if err != nil {
 		fmt.Println("issue init telegram")
-	}
+	}*/
+
 	//telegram.SendMessageInternal("TESTING!", -1002428678944)
 }
 
@@ -50,7 +55,8 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 	//close_ := time.Date(year, month, day, 16, 0, 0, 0, now.Location())
 	if !eOpenRun && now.After(eOpen) && now.Before(eClose) {
 		fmt.Println("running open update")
-		socket.StartPolygonWS(conn)
+		//socket.StartPolygonWS(conn)
+        initialize(conn)
 		pushJournals(conn, year, month, day)
 		eOpenRun = true
 		eCloseRun = false

@@ -62,10 +62,12 @@ func writePriceMessage(alert Alert){
     }else{
         directionStr = "below"
     }
-    message := fmt.Sprintf("%s %s %f", alert.Ticker,directionStr,alert.Price)
+    message := fmt.Sprintf("%s %s %f", *alert.Ticker,directionStr,*alert.Price)
     alert.Message = &message
 }
 func dispatchAlert(conn *utils.Conn, alert Alert) error {
+    fmt.Println("dispatching alert", alert)
+    SendMessageInternal(*alert.Message, ChatId)  //todo
     query := `
         INSERT INTO alertLogs (alertId, timestamp, securityId)
         VALUES ($1, $2, $3)
@@ -79,7 +81,6 @@ func dispatchAlert(conn *utils.Conn, alert Alert) error {
         log.Printf("Failed to log alert to database: %v", err)
         return fmt.Errorf("failed to log alert: %v", err)
     }
-    SendMessageInternal(*alert.Message, ChatId)  //todo
 
 /*    messageJSON, err := json.Marshal(wsMessage)
     if err != nil {
