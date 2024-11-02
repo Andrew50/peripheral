@@ -266,7 +266,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			}
 			return barDataList, nil
 		} else {
-			//fmt.Println("reverse!!!!!!")
 			reverse(barDataList)
 			marketStatus, err := utils.GetMarketStatus(conn)
 			if err != nil {
@@ -314,7 +313,6 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 	timestampTime := time.Unix(0, timestampEnd*int64(time.Millisecond)).UTC()
 	var timestampStart int64
 	var currentDayStart int64
-	fmt.Printf("Current timespan:%v\n", timespan)
 	if timespan == "second" || timespan == "minute" || timespan == "hour" {
 		currentDayStart = utils.GetReferenceStartTime(timestampEnd, extendedHours, easternLocation)
 		timeframeInSeconds := utils.GetTimeframeInSeconds(multiplier, timespan)
@@ -372,6 +370,12 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 	}
 	if timespan != "second" {
 		lastCompleteMinuteUTC := timestampTime.Truncate(time.Minute).UnixMilli()
+		if !extendedHours || timespan == "day" || timespan == "week" || timespan == "month" {
+			marketClose := time.Date(timestampTime.Year(), timestampTime.Month(), timestampTime.Day(), 16, 0, 0, 0, easternLocation)
+			if timestampTime.After(marketClose) {
+				lastCompleteMinuteUTC = time.Date(timestampTime.Year(), timestampTime.Month(), timestampTime.Day(), 15, 59, 0, 0, easternLocation).UnixMilli()
+			}
+		}
 		minuteBarsEndTimeUTC := lastCompleteMinuteUTC
 		if lastCompleteMinuteUTC <= timestampStart {
 			minuteBarsEndTimeUTC = timestampStart
@@ -426,8 +430,6 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 		}
 		var count int64
 		for iter.Next() {
-			fmt.Printf("testing")
-			fmt.Printf("%v\n", incompleteBar)
 			if count >= numSecondBars {
 				break
 			}
