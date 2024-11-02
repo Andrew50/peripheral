@@ -131,15 +131,9 @@ func initSecurityData(conn *utils.Conn, securityId int) *SecurityData {
         Adr: getAdr(conn,securityId),*/
     }
 }
-<<<<<<< HEAD
 func updateTimeframe(td *TimeframeData, timestamp int64, price float64, volume float64, timeframe int) {
     //periodStart := getPeriodStart(timestamp, timeframe)
     /*if td.currentPeriod == -1 {
-=======
-func updateTimeframe(td *TimeframeData, timestamp int64, price float64, volume int64, timeframe int) {
-    periodStart := getPeriodStart(timestamp, timeframe)
-    if td.currentPeriod == -1 {
->>>>>>> 7b6cbc9a8923f2f6c4668c96aba03fe932df70be
         td.currentPeriod = periodStart
         td.Aggs[0] = []float64{price, price, price, price, float64(volume)}
         td.size = 1
@@ -151,14 +145,9 @@ func updateTimeframe(td *TimeframeData, timestamp int64, price float64, volume i
         if td.size > 0 {
             copy(td.Aggs[1:], td.Aggs[0:min(td.size, Length-1)])
         }
-<<<<<<< HEAD
         td.Aggs[0] = []float64{price, price, price, price, volume}
         //td.currentPeriod = periodStart
         td.rolloverTimestamp = nextPeriodStart(timestamp,timeframe)
-=======
-        td.Aggs[0] = []float64{price, price, price, price, float64(volume)}
-        td.currentPeriod = periodStart
->>>>>>> 7b6cbc9a8923f2f6c4668c96aba03fe932df70be
         if td.size < Length {
             td.size++
         }
@@ -216,7 +205,6 @@ func AppendTick(conn *utils.Conn,securityId int, timestamp int64, price float64,
     //    updateTimeframe(&sd.DayData, timestamp, price, volume, Day)
     //    sd.DayData.mutex.Unlock()
     //}
->>>>>>> 7b6cbc9a8923f2f6c4668c96aba03fe932df70be
     sd.SecondDataExtended.mutex.Lock()
     updateTimeframe(&sd.SecondDataExtended, timestamp, price, volume, Second)
     sd.SecondDataExtended.mutex.Unlock()

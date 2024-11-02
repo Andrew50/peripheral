@@ -2,10 +2,7 @@ package jobs
 
 import (
 	"backend/socket"
-<<<<<<< HEAD
-=======
 	//"backend/alerts"
->>>>>>> 7b6cbc9a8923f2f6c4668c96aba03fe932df70be
 	"backend/utils"
     "backend/alerts"
 	"fmt"
