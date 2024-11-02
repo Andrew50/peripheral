@@ -114,6 +114,7 @@ export function nextDay(){
         };
         socket.send(JSON.stringify(stopRequest));
     }
+    chartEventDispatcher.set({event:"replay",chartId:"all"})
 }
 export function setExtended(extendedHours: boolean){
     if (socket?.readyState === WebSocket.OPEN) {
