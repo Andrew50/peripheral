@@ -3,13 +3,13 @@ package alerts
 import (
     "backend/utils"
     "fmt"
+    "time"
     "context"
     "sync"
 )
 func InitAlertsAndAggs(conn *utils.Conn) error {
     ctx := context.Background()
     
-    // Initialize alerts first
     if err := loadActiveAlerts(ctx, conn); err != nil {
         return fmt.Errorf("loading active alerts: %w", err)
     }
@@ -22,39 +22,106 @@ func InitAlertsAndAggs(conn *utils.Conn) error {
     if err != nil {
         return fmt.Errorf("querying securities: %w", err)
     }
-    defer rows.Close()
 
-    // Initialize data map
-    data = make(map[int]*SecurityData)
-    
-    // Process each security
-    var loadErrors []error
+    defer rows.Close()
+    var securityIds []int
     for rows.Next() {
         var securityId int
         if err := rows.Scan(&securityId); err != nil {
-            loadErrors = append(loadErrors, fmt.Errorf("scanning security ID: %w", err))
-            continue
+            return fmt.Errorf("scanning security ID: %w", err)
         }
-
-        // Initialize security data with all timeframes
-        sd := initSecurityData(conn, securityId)
-        if sd == nil {
-            loadErrors = append(loadErrors, fmt.Errorf("failed to initialize security data for ID %d", securityId))
-            continue
-        }
-
-        // Validate the initialized data
-        if err := validateSecurityData(sd, securityId); err != nil {
-            loadErrors = append(loadErrors, fmt.Errorf("validation failed for security %d: %w", securityId, err))
-            continue
-        }
-
-        // Store in global map
-        data[securityId] = sd
+        securityIds = append(securityIds, securityId)
     }
 
     if err = rows.Err(); err != nil {
         return fmt.Errorf("iterating security rows: %w", err)
+    }
+
+    type result struct {
+        securityId int
+        data       *SecurityData
+        err        error
+    }
+    resultsChan := make(chan result, len(securityIds))
+    
+    // Create a WaitGroup to track goroutines
+    var wg sync.WaitGroup
+    
+    // Create a semaphore to limit concurrent API calls
+    maxConcurrent := 100 // Adjust this value based on API limits
+    sem := make(chan struct{}, maxConcurrent)
+    
+    // Launch goroutines for each security
+    for _, securityId := range securityIds {
+        wg.Add(1)
+        go func(sid int) {
+            defer wg.Done()
+            
+            // Acquire semaphore
+            sem <- struct{}{}
+            defer func() { <-sem }()
+            
+            //start := time.Now()
+            
+            // Initialize security data
+            sd := initSecurityData(conn, sid)
+            if sd == nil {
+                resultsChan <- result{
+                    securityId: sid,
+                    data:       nil,
+                    err:        fmt.Errorf("failed to initialize security data for ID %d", sid),
+                }
+                return
+            }
+            
+            // Validate the data if needed
+            if err := validateSecurityData(sd); err != nil {
+                resultsChan <- result{
+                    securityId: sid,
+                    data:       nil,
+                    err:        fmt.Errorf("validation failed for security %d: %w", sid, err),
+                }
+                return
+            }
+            
+            ////fmt.Printf("Security %d processed in %v\n", sid, time.Since(start))
+            
+            resultsChan <- result{
+                securityId: sid,
+                data:      sd,
+                err:       nil,
+            }
+        }(securityId)
+    }
+    
+    // Start a goroutine to close results channel when all workers are done
+    go func() {
+        wg.Wait()
+        close(resultsChan)
+    }()
+    
+    // Process results and collect errors
+    data = make(map[int]*SecurityData)
+    var loadErrors []error
+    
+    for res := range resultsChan {
+        if res.err != nil {
+            loadErrors = append(loadErrors, res.err)
+        } else {
+            data[res.securityId] = res.data
+        }
+    }
+    
+    // Handle any load errors
+    if len(loadErrors) > 0 {
+        var errMsg string
+        for i, err := range loadErrors {
+            if i > 0 {
+                errMsg += "; "
+            }
+            errMsg += err.Error()
+        }
+        return fmt.Errorf("errors loading aggregates: %s", errMsg)
     }
 
     // If there were any errors during loading, combine them into a single error
@@ -137,7 +204,7 @@ func loadActiveAlerts(ctx context.Context, conn *utils.Conn) error {
 }
 
 // Helper function to validate initialized security data
-func validateSecurityData(sd *SecurityData, securityId int) error {
+func validateSecurityData(sd *SecurityData) error {
     if sd == nil {
         return fmt.Errorf("security data is nil")
     }
@@ -185,4 +252,101 @@ func validateTimeframeData(td *TimeframeData, timeframeName string, extendedHour
     }
 
     return nil
+}
+func initTimeframeData(conn *utils.Conn, securityId int, timeframe int, isExtendedHours bool) TimeframeData {
+    aggs := make([][]float64, Length)
+    for i := range aggs {
+        aggs[i] = make([]float64, OHLCV)
+    }
+    td := TimeframeData{
+        Aggs:          aggs,
+        size:          0,
+        rolloverTimestamp: -1,
+        extendedHours: isExtendedHours,
+    }
+    toTime := time.Now()
+    var tfStr string
+    var multiplier int
+    switch timeframe {
+    case Second:
+        tfStr = "second"
+        multiplier = 1
+    case Minute:
+        tfStr = "minute"
+        multiplier = 1
+    case Hour:
+        tfStr = "hour"
+        multiplier = 1
+    case Day:
+        tfStr = "day"
+        multiplier = 1
+    default:
+        fmt.Printf("Invalid timeframe: %d\n", timeframe)
+        return td
+    }
+    fromMillis, toMillis, err := utils.GetRequestStartEndTime(time.Unix(0,0),toTime,"backward",tfStr,multiplier,Length)
+    ticker, err := utils.GetTicker(conn,securityId,toTime)
+    //ticker := obj.ticekr
+    if err != nil {
+        fmt.Printf("error getting hist data")
+        return td
+    }
+    iter, err := utils.GetAggsData(conn.Polygon, ticker, multiplier, tfStr, fromMillis, toMillis, Length, "desc", true)
+    if err != nil {
+        fmt.Printf("Error getting historical data: %v\n", err)
+        return td
+    }
+
+    // Process historical data
+    var idx int
+    var lastTimestamp int64
+    for iter.Next() {
+        agg := iter.Item()
+        
+        // Skip if we're not including extended hours data
+        timestamp := time.Time(agg.Timestamp)
+        if !isExtendedHours && !utils.IsTimestampRegularHours(timestamp) {
+            continue
+        }
+
+        if idx >= Length {
+            
+            break
+        }
+
+        td.Aggs[idx] = []float64{
+            agg.Open,
+            agg.High,
+            agg.Low,
+            agg.Close,
+            float64(agg.Volume),
+        }
+        
+        idx++
+        lastTimestamp = time.Time(agg.Timestamp).Unix()
+    }
+    if err := iter.Err(); err != nil {
+        fmt.Printf("Error iterating historical data: %v\n", err)
+    }
+    //if td.rolloverTimestamp == -1 {
+    td.rolloverTimestamp = lastTimestamp + int64(timeframe) //if theres no data then this wont work but is extreme edge case
+    //}
+    td.size = idx
+    return td
+}
+
+func initSecurityData(conn *utils.Conn, securityId int) *SecurityData {
+    return &SecurityData{
+        SecondDataExtended: initTimeframeData(conn, securityId, Second, true),
+        //MinuteDataExtended: initTimeframeData(conn, securityId, Minute, true),
+        //HourData:          initTimeframeData(conn, securityId, Hour, false),
+        //DayData:           initTimeframeData( conn, securityId, Day, false),
+
+/*        Mcap: getMcap(conn,securityId),
+        Dolvol: getDolvol(conn,securityId),
+        Adr: getAdr(conn,securityId),*/
+
+        //
+
+    }
 }

@@ -41,14 +41,16 @@ func StartAlertLoop(conn *utils.Conn)  error {
     if err != nil {
         return err
     }
-    ctx, cancel = context.WithCancel(context.Background())
+    fmt.Println("initing aggs")
     if err := InitAlertsAndAggs(conn); err != nil {
         return err
     }
-    fmt.Println("god")
+    fmt.Println("finished initing aggs")
+
     /*if err := loadActiveAlerts(ctx, conn); err != nil {
         return err
     }*/
+    ctx, cancel = context.WithCancel(context.Background())
     go alertLoop(ctx, conn)
     return nil
 }
