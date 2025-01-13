@@ -79,13 +79,17 @@ CREATE TABLE watchlistItems (
     unique (watchlistId, securityId)
 );
 CREATE INDEX idxWatchlistId on watchlistItems(watchlistId);
+CREATE TABLE algos (
+    algoId serial primary key,
+    algoName VARCHAR(50) not null
+);
 CREATE TABLE alerts (
     alertId SERIAL PRIMARY KEY,
     userId SERIAL REFERENCES users(userId) ON DELETE CASCADE,
     active BOOLEAN NOT NULL DEFAULT false,
     alertType VARCHAR(10) NOT NULL CHECK (alertType IN ('price', 'setup','algo')), -- Restrict the allowed alert types
     setupId INT REFERENCES setups(setupId) ON DELETE CASCADE,
-    algoId INT REEFERENCES algos(algoId) ON DELETE CASCADE,
+    algoId INT REFERENCES algos(algoId) ON DELETE CASCADE,
     price DECIMAL(10, 4),
     direction Boolean,
     securityID INT,
@@ -97,10 +101,6 @@ CREATE TABLE alerts (
     )
 );
 CREATE INDEX idxAlertByUserId on alerts(userId);
-CREATE TABLE algos (
-    algoId serial primary key,
-    algoName VARCHAR(50) not null
-);
 CREATE TABLE alertLogs (
     alertLogId serial primary key,
     alertId serial references alerts(alertId) on delete cascade,
