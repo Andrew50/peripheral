@@ -191,10 +191,17 @@
             if (iQ.inputString !== "") { 
                 if (/^[A-Z]$/.test(iQ.inputString)) {
                     iQ.inputType = "ticker";
-                } else if (/^\d+(\.\d+)?$/.test(iQ.inputString)) {  // Check if input is a valid number or decimal value
-                    iQ.inputType = "price";  // Set inputType to 'price' for numbers with optional decimals
-                    iQ.securities = [];
-                }else if (/^\d{1,2}(?:[hdwmqs])?$/.test(iQ.inputString)) {
+                } else if (/^\d+(\.\d+)?$/.test(iQ.inputString)) {
+                    // Check if it could be a timeframe first (1-3 digits)
+                    if (/^\d{1,3}$/.test(iQ.inputString)) {
+                        iQ.inputType = "timeframe";
+                        iQ.securities = [];
+                    } else {
+                        // If it doesn't match timeframe pattern, then treat as price
+                        iQ.inputType = "price";
+                        iQ.securities = [];
+                    }
+                } else if (/^\d{1,2}(?:[hdwmqs])?$/.test(iQ.inputString)) {
                     iQ.inputType = "timeframe";
                     iQ.securities = [];
                 } else if (/^\d{3}?.*$/.test(iQ.inputString)) {
