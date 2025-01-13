@@ -77,7 +77,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 
 	// For daily and higher timeframes, always include extended hours
 	if timespan != "minute" && timespan != "second" && timespan != "hour" {
-		args.ExtendedHours = true
+		args.ExtendedHours = false
 	}
 
 	easternLocation, err := time.LoadLocation("America/New_York")
