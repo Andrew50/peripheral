@@ -184,7 +184,7 @@
             <div ><button on:click={()=>embedInstance(get(rightClickQuery).instance)}> Embed </button></div>
         {/if}
         {#if $rightClickQuery.source === "chart"}
-            <div><button on:click={()=>newPriceAlert($rightClickQuery.instance)}>Add Alert {$rightClickQuery.instance.price}</button></div>
+            <div><button on:click={()=>newPriceAlert($rightClickQuery.instance)}>Add Alert {$rightClickQuery.instance.price?.toFixed(2)}</button></div>
         {:else if $rightClickQuery.source === "embedded"}
             <div ><button on:click={()=>completeRequest("edit")}> Edit </button></div>
             <!--<div><button on:click={()=>completeRequest("embdedSimilar")}> Embed Similar </button></div>-->
@@ -197,6 +197,10 @@
 <style>
     .popup-container {
         width: 180px;
+        background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent black background */
+        border: 1px solid rgba(255, 255, 255, 0.1); /* Subtle border */
+        border-radius: 4px; /* Rounded corners */
+        padding: 4px;
     }
     button {
         width: 100%;
