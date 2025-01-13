@@ -49,7 +49,18 @@
     let currentChartInstance: Instance = {ticker:"",timestamp:0,timeframe:""}
     let blockingChartQueryDispatch = {}
     let isPanning = false
-
+    function extendedHours(timestamp: number): boolean {
+        const date = new Date(timestamp);
+        const hours = date.getHours();
+        const minutes = date.getMinutes();
+        const timeInMinutes = hours * 60 + minutes;
+        
+        // Regular market hours are 9:30 AM - 4:00 PM EST
+        const marketOpenMinutes = 9 * 60 + 30;  // 9:30 AM
+        const marketCloseMinutes = 16 * 60;     // 4:00 PM
+    
+        return timeInMinutes < marketOpenMinutes || timeInMinutes >= marketCloseMinutes;
+    }
     function backendLoadChartData(inst:ChartQueryDispatch): void{
         if (inst.requestType === "loadNewTicker"){
             bidLine.setData([])
@@ -180,7 +191,6 @@
                 isLoadingChartData = false; // Ensure this runs after data is loaded
             });
     }
-    
     function updateLatestQuote(data:QuoteData) {
         if (!data?.bidPrice || !data?.askPrice){return}
         const candle = chartCandleSeries.data()[chartCandleSeries.data().length - 1]
@@ -194,6 +204,12 @@
         ]);
     }
     async function updateLatestChartBar(trade:TradeData) {
+        const isExtendedHours = extendedHours(trade.timestamp)
+        if(isExtendedHours){ 
+            if(!currentChartInstance.extendedHours || /^[dwm]/.test(currentChartInstance.timeframe)){
+                return
+            }
+        }
         const dolvol = get(settings).dolvol
         /*function updateConsolidation(consolidatedTrade:TradeData,data:TradeData){
             if(data.conditions == null || (data.size >= 100 && !data.conditions.some(condition => tradeConditionsToCheck.has(condition)))) {
