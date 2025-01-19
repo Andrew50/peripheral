@@ -50,6 +50,7 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"newWatchlistItem":    tasks.NewWatchlistItem,
 	//singles
 	"getPrevClose": tasks.GetPrevClose,
+    "getMarketCap": tasks.GetMarketCap,
 	//settings
 	"getSettings": tasks.GetSettings,
 	"setSettings": tasks.SetSettings,

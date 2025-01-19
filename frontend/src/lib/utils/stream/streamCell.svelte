@@ -1,6 +1,5 @@
 <script lang='ts'>
     import { onMount, onDestroy } from 'svelte';
-    import type { Writable } from 'svelte/store';
     import {writable} from 'svelte/store'
     import { addStream } from '$lib/utils/stream/interface';
     import type { TradeData,Instance } from '$lib/core/types';

@@ -43,6 +43,7 @@ func StartAlertLoop(conn *utils.Conn)  error {
     }
     fmt.Println("initing aggs")
     if err := InitAlertsAndAggs(conn); err != nil {
+        fmt.Println("god0ws")
         return err
     }
     fmt.Println("finished initing aggs")
