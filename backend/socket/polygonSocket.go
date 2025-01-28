@@ -94,6 +94,9 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 
 				//conn.Cache.Publish(context.Background(), channelName, string(jsonData))
                 broadcastToChannel(channelName, string(jsonData))
+				if symbol == "SMCI" {
+					fmt.Println("SMCI trade", string(jsonData))
+				}
 				channelName = fmt.Sprintf("%d-all", securityId)
 				data.Channel = channelName
 				jsonData, err = json.Marshal(data)
