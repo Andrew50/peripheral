@@ -62,7 +62,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		queryMultiplier = 1
 		queryBars = args.Bars * multiplier / queryMultiplier
 		haveToAggregate = true
-	} else if timespan == "hour" && !args.ExtendedHours {
+	} else if timespan == "hour" { //&& !args.ExtendedHours { this was commented out idk if it does anything but it "works" now
 		queryTimespan = "minute"
 		queryMultiplier = 30
 		queryBars = multiplier * 2 * args.Bars
