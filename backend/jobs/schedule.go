@@ -4,7 +4,7 @@ import (
 	"backend/socket"
 	//"backend/alerts"
 	"backend/utils"
-    //"backend/alerts"
+    "backend/alerts"
 	"fmt"
 	"time"
 )
@@ -37,10 +37,10 @@ func StartScheduler(conn *utils.Conn) chan struct{} {
 
 func initialize(conn *utils.Conn) {
 	socket.StartPolygonWS(conn)
-/*    err := alerts.StartAlertLoop(conn)
+    err := alerts.StartAlertLoop(conn)
     if err != nil {
         fmt.Println("schedule issue",err)
-    }*/
+    }
 }
 
 func eventLoop(now time.Time, conn *utils.Conn) {
