@@ -11,6 +11,7 @@ import (
 
 type TickData interface {
 	GetTimestamp() int64
+	GetPrice() float64
 	GetChannel() string
 	SetChannel(channel string)
 }
@@ -23,7 +24,9 @@ type TradeData struct {
 	Conditions []int32 `json:"conditions"`
 	Channel    string  `json:"channel"`
 }
-
+func (t TradeData) GetPrice() float64 {
+	return t.Price
+}
 func (t TradeData) GetTimestamp() int64 {
 	return t.Timestamp
 }
@@ -44,7 +47,9 @@ type QuoteData struct {
 	Timestamp int64   `json:"timestamp"`
 	Channel   string  `json:"channel"`
 }
-
+func (q QuoteData) GetPrice() float64 {
+	return q.BidPrice
+}
 func (q QuoteData) GetTimestamp() int64 {
 	return q.Timestamp
 }
@@ -278,10 +283,10 @@ func getPrevCloseData(conn *utils.Conn, securityId int, timestamp int64) ([]Tick
 		return nil, fmt.Errorf("error getting ticker: %v", err)
 	}
 
-	// Get the next day's timestamp to fetch the close data
-	nextDayTime := inputTime.AddDate(0, 0, 1)
-	startOfDay := time.Date(nextDayTime.Year(), nextDayTime.Month(), nextDayTime.Day(), 0, 0, 0, 0, easternLocation)
-	endOfDay := time.Date(nextDayTime.Year(), nextDayTime.Month(), nextDayTime.Day(), 23, 59, 59, 999999999, easternLocation)
+	// Get the previous day's timestamp to fetch the close data
+	prevDayTime := inputTime.AddDate(0, 0, -1)
+	startOfDay := time.Date(prevDayTime.Year(), prevDayTime.Month(), prevDayTime.Day(), 0, 0, 0, 0, easternLocation)
+	endOfDay := time.Date(prevDayTime.Year(), prevDayTime.Month(), prevDayTime.Day(), 23, 59, 59, 999999999, easternLocation)
 
 	// Convert the start and end times to models.Millis
 	startOfDayMillis := models.Millis(startOfDay)
@@ -309,7 +314,7 @@ func getPrevCloseData(conn *utils.Conn, securityId int, timestamp int64) ([]Tick
 	}
 
 	if len(closeDataList) > 0 {
-		fmt.Println("close data", closeDataList[0].GetTimestamp())
+		fmt.Println("close data", closeDataList[0].GetPrice())
 		return closeDataList, nil
 	}
 

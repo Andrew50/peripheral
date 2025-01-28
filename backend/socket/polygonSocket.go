@@ -112,7 +112,7 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 					data.Channel = slowChannelName
 					jsonData, err = json.Marshal(data)
 					//conn.Cache.Publish(context.Background(), slowChannelName, string(jsonData))
-                    broadcastToChannel(channelName, string(jsonData))
+                    broadcastToChannel(slowChannelName, string(jsonData))
 					nextDispatchTimes.Lock()
 					nextDispatchTimes.times[msg.Symbol] = now.Add(slowRedisTimeout)
 					nextDispatchTimes.Unlock()
