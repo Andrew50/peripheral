@@ -154,6 +154,12 @@ function handleTouchEnd() {
                     instance={watch}
                     type="change"
                 />
+            {:else if col === "change %"}
+                <StreamCell
+                    on:contextmenu={(event)=>{event.preventDefault();event.stopPropagation()}}
+                    instance={watch}
+                    type="change %"
+                />
             {:else}
                 <td
                     on:contextmenu={(event)=>{event.preventDefault();event.stopPropagation()}}
