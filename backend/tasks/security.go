@@ -5,14 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"time"
-    "io"
-    "net/http"
+
 	"github.com/jackc/pgx/v4"
 )
 
 type GetCurrentTickerArgs struct {
-    SecurityId int `json:"securityId"`
+	SecurityId int `json:"securityId"`
 }
 
 func GetCurrentTicker(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -21,13 +22,39 @@ func GetCurrentTicker(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 		return nil, fmt.Errorf("di1n0fni0: %v", err)
 	}
 	var ticker string
-	err := conn.DB.QueryRow(context.Background(),  "SELECT ticker FROM securities WHERE securityid=$1 AND maxDate is NULL",args.SecurityId).Scan(&ticker)
-    if err == pgx.ErrNoRows {
-        return "delisted" , nil
-    } else if err != nil {
+	err := conn.DB.QueryRow(context.Background(), "SELECT ticker FROM securities WHERE securityid=$1 AND maxDate is NULL", args.SecurityId).Scan(&ticker)
+	if err == pgx.ErrNoRows {
+		return "delisted", nil
+	} else if err != nil {
 		return nil, fmt.Errorf("k01n0v0e: %v", err)
 	}
-    return ticker, nil
+	return ticker, nil
+}
+
+type GetMarketCapArgs struct {
+	Ticker string `json:"ticker"`
+}
+
+type GetMarketCapResults struct {
+	MarketCap int `json:"marketCap"`
+}
+
+func GetMarketCap(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetMarketCapArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("di1n0fni0: %v", err)
+	}
+
+	details, err := utils.GetTickerDetails(conn.Polygon, args.Ticker, "now")
+	if err != nil {
+		return nil, fmt.Errorf("k01n0v0e: %v", err)
+	}
+
+	if details.MarketCap == 0 {
+		return GetMarketCapResults{MarketCap: 0}, nil
+	}
+
+	return GetMarketCapResults{MarketCap: int(details.MarketCap)}, nil
 }
 
 type GetPrevCloseArgs struct {
@@ -47,13 +74,13 @@ func GetPrevClose(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 
 	// Start at the given timestamp and subtract a day until a valid close is found
 	currentDay := time.Unix(int64(args.Timestamp/1000), 0).UTC()
-    currentDay = currentDay.AddDate(0, 0, -1)
+	currentDay = currentDay.AddDate(0, 0, -1)
 
 	var bar PolygonBar
 	var ticker string
-    maxDaysToCheck := 10
-    daysChecked := 0
-	for daysChecked < maxDaysToCheck{
+	maxDaysToCheck := 10
+	daysChecked := 0
+	for daysChecked < maxDaysToCheck {
 		// Check if it's a weekend (Saturday or Sunday)
 		if currentDay.Weekday() == time.Saturday || currentDay.Weekday() == time.Sunday {
 			// If it's a weekend, subtract another day
@@ -92,15 +119,15 @@ func GetPrevClose(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 
 		// If the close price is found, return it
 		if bar.Close != 0 {
-            fmt.Println(currentDay)
+			fmt.Println(currentDay)
 			return bar.Close, nil
 		}
 
 		// If not a valid market day (e.g., holiday or no trading), go back one day
 		currentDay = currentDay.AddDate(0, 0, -1)
-        daysChecked ++
+		daysChecked++
 	}
-    return nil, fmt.Errorf("dn10vn20")
+	return nil, fmt.Errorf("dn10vn20")
 
 }
 
@@ -140,17 +167,16 @@ func GetSecuritiesFromTicker(conn *utils.Conn, userId int, rawArgs json.RawMessa
 	return securities, nil
 }
 
-
 type GetSimilarInstancesArgs struct {
 	Ticker     string `json:"ticker"`
 	SecurityId int    `json:"securityId"`
-	Timestamp   int64 `json:"timestamp"`
+	Timestamp  int64  `json:"timestamp"`
 	Timeframe  string `json:"timeframe"`
 }
 type GetSimilarInstancesResults struct {
 	Ticker     string `json:"ticker"`
 	SecurityId int    `json:"securityId"`
-	Timestamp   int64 `json:"timestamp"`
+	Timestamp  int64  `json:"timestamp"`
 	Timeframe  string `json:"timeframe"`
 }
 
@@ -175,8 +201,8 @@ func GetSimilarInstances(conn *utils.Conn, userId int, rawArgs json.RawMessage) 
 		FROM securities
 		WHERE ticker = ANY($1) AND (maxDate IS NULL OR maxDate >= $2) AND minDate <= $2
 	`
-    timestamp := time.Unix(args.Timestamp,0)
-	rows, err := conn.DB.Query(context.Background(), query, tickers,timestamp)
+	timestamp := time.Unix(args.Timestamp, 0)
+	rows, err := conn.DB.Query(context.Background(), query, tickers, timestamp)
 	if err != nil {
 		return nil, fmt.Errorf("1imvd: %v", err)
 	}
@@ -198,4 +224,3 @@ func GetSimilarInstances(conn *utils.Conn, userId int, rawArgs json.RawMessage) 
 	}
 	return results, nil
 }
-
