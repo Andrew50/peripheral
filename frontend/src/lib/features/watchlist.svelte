@@ -127,6 +127,6 @@
                 {/if}
         {/if}
     </div>
-    <List parentDelete={deleteItem} columns={["ticker", "price","change"]} list={activeList}/>
+    <List parentDelete={deleteItem} columns={["ticker", "price","change", "change %"]} list={activeList}/>
 </div>
 

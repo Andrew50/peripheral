@@ -137,8 +137,22 @@ func getInitialStreamValue(conn *utils.Conn, channelName string, timestamp int64
     } else if streamType == "fast" {
         return nil, nil
     } else if streamType == "close" {
-        //clos, err := utils.GetPrevClose(
-
+		close, err := getPrevCloseData(conn, securityId, queryTime.UnixNano() / int64(time.Millisecond))
+		if err != nil {
+			return nil, fmt.Errorf("error getting prev close: %v", err)
+		}
+		data := struct {
+			Price   float64 `json:"price"`
+			Channel string  `json:"channel"`
+		}{
+			Price:   close[0].GetPrice(),
+			Channel: channelName,
+		}
+		jsonData, err := json.Marshal(data)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling prev close data: %v", err)
+		}
+		return jsonData, nil
 
 	} else if streamType == "all" {
 		// Return an empty response for "all" stream type
