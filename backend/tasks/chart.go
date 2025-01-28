@@ -492,9 +492,9 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 		fmt.Printf("COUNT:%v", count)
 	}
 	var tradeConditionsToCheck = map[int32]struct{}{
-		2: {}, 5: {}, 7: {}, 10: {}, 13: {},
-		15: {}, 16: {}, 20: {}, 21: {}, 22: {},
-		29: {}, 33: {}, 37: {}, 52: {}, 53: {},
+		2: {}, 5: {}, 10: {}, 15: {}, 16: {},
+		20: {}, 21: {}, 22: {}, 29: {}, 33: {},
+		38: {}, 52: {}, 53: {},
 	}
 	var volumeConditionsToCheck = map[int32]struct{}{
 		15: {}, 16: {}, 38: {},
