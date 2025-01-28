@@ -142,16 +142,23 @@ function handleTouchEnd() {
             {/if}
           </td>
           {#each columns as col}
-            {#if col === "change"}
+            {#if col === "price"}
                 <StreamCell
-          on:contextmenu={(event)=>{event.preventDefault();event.stopPropagation()}}
-                instance={watch}/>
+                    on:contextmenu={(event)=>{event.preventDefault();event.stopPropagation()}}
+                    instance={watch}
+                    type="price"
+                />
+            {:else if col === "change"}
+                <StreamCell
+                    on:contextmenu={(event)=>{event.preventDefault();event.stopPropagation()}}
+                    instance={watch}
+                    type="change"
+                />
             {:else}
                 <td
-          on:contextmenu={(event)=>{event.preventDefault();event.stopPropagation()}}
+                    on:contextmenu={(event)=>{event.preventDefault();event.stopPropagation()}}
                 >{watch[col]}</td>
             {/if}
-
           {/each}
           <td> <button class="delete-button" on:click={(event) => {deleteRow(event,watch)}}> ✕ </button> </td>
           </tr>
