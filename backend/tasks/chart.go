@@ -80,7 +80,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		queryBars = args.Bars
 	}
 
-	// For daily and higher timeframes, always include extended hours
 	if timespan != "minute" && timespan != "second" && timespan != "hour" {
 		args.ExtendedHours = false
 	}
@@ -240,7 +239,19 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 						timestamp = timestamp.AddDate(0, 0, 1)
 					}
 				}
-				if queryTimespan == "day" || args.ExtendedHours || utils.IsTimestampRegularHours(timestamp) {
+				if timespan == "minute" || timespan == "second" || timespan == "hour" {
+					if args.ExtendedHours || (utils.IsTimestampRegularHours(timestamp)) {
+						barData := GetChartDataResults{
+							Timestamp: float64(timestamp.Unix()),
+							Open:      item.Open,
+							High:      item.High,
+							Low:       item.Low,
+							Close:     item.Close,
+							Volume:    item.Volume,
+						}
+						barDataList = append(barDataList, barData)
+					}
+				} else {
 					barData := GetChartDataResults{
 						Timestamp: float64(timestamp.Unix()),
 						Open:      item.Open,
@@ -250,10 +261,10 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 						Volume:    item.Volume,
 					}
 					barDataList = append(barDataList, barData)
-					numBarsRemaining--
-					if numBarsRemaining <= 0 {
-						break
-					}
+				}
+				numBarsRemaining--
+				if numBarsRemaining <= 0 {
+					break
 				}
 			}
 			if numBarsRemaining <= 0 {
@@ -294,6 +305,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			if (args.Timestamp == 0 && marketStatus != "closed") || args.IsReplay {
 				incompleteAggregate, err := requestIncompleteBar(conn, tickerForIncompleteAggregate, args.Timestamp, multiplier, timespan,
 					args.ExtendedHours, args.IsReplay, easternLocation)
+				fmt.Printf("\nagg:%v", incompleteAggregate)
 				if err != nil {
 					return nil, fmt.Errorf("issue with incomplete aggregate 65k5lhgfk, %v", err)
 				}
@@ -301,7 +313,9 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 					barDataList = barDataList[:len(barDataList)-1]
 				}
 				if incompleteAggregate.Open != 0 {
-					barDataList = append(barDataList, incompleteAggregate)
+					if utils.IsTimestampRegularHours(time.Unix(int64(incompleteAggregate.Timestamp), 0)) && !args.ExtendedHours || timespan == "day" || timespan == "week" || timespan == "month" {
+						barDataList = append(barDataList, incompleteAggregate)
+					}
 				}
 			}
 			/*starTim := int64(barDataList[0].Timestamp)
@@ -416,6 +430,10 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 				if count >= numMinuteBars {
 					break
 				}
+				timestamp := time.Time(iter.Item().Timestamp).In(easternLocation)
+				if !utils.IsTimestampRegularHours(timestamp) && !extendedHours {
+					continue
+				}
 				if incompleteBar.Open == 0 {
 					incompleteBar.Open = iter.Item().Open
 				}
@@ -453,6 +471,10 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 		for iter.Next() {
 			if count >= numSecondBars {
 				break
+			}
+			timestamp := time.Time(iter.Item().Timestamp).In(easternLocation)
+			if !utils.IsTimestampRegularHours(timestamp) && !extendedHours {
+				continue
 			}
 			if incompleteBar.Open == 0 {
 				incompleteBar.Open = iter.Item().Open
