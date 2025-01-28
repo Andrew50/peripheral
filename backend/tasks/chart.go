@@ -46,10 +46,15 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
+	fmt.Printf("\nDebug: Received request for SecurityId: %d, Timeframe: %s, Direction: %s\n",
+		args.SecurityId, args.Timeframe, args.Direction)
+
 	multiplier, timespan, _, _, err := utils.GetTimeFrame(args.Timeframe)
 	if err != nil {
 		return nil, fmt.Errorf("invalid timeframe: %v", err)
 	}
+
+	fmt.Printf("Debug: Parsed timeframe - Multiplier: %d, Timespan: %s\n", multiplier, timespan)
 
 	var queryTimespan string
 	var queryMultiplier int
@@ -86,7 +91,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 
 	var inputTimestamp time.Time
 	if args.Timestamp == 0 {
-
 		inputTimestamp = time.Now().In(easternLocation)
 	} else {
 		inputTimestamp = time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).UTC()
@@ -125,6 +129,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	defer cancel()
 	rows, err := conn.DB.Query(ctx, query, queryParams...)
 	if err != nil {
+		fmt.Printf("Debug: Database query failed: %v\n", err)
 		if ctx.Err() == context.DeadlineExceeded {
 			return nil, fmt.Errorf("query timed out: %w", err)
 		}
@@ -135,12 +140,15 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	var barDataList []GetChartDataResults
 	numBarsRemaining := args.Bars
 
+	fmt.Printf("Debug: Starting to process database rows\n")
+
 	for rows.Next() {
 		var ticker string
 		var minDateFromSQL *time.Time
 		var maxDateFromSQL *time.Time
 		err := rows.Scan(&ticker, &minDateFromSQL, &maxDateFromSQL)
 		if err != nil {
+			fmt.Printf("Debug: Error scanning row: %v\n", err)
 			return nil, fmt.Errorf("error scanning data: %w", err)
 		}
 		tickerForIncompleteAggregate = ticker
@@ -188,10 +196,14 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 
 		date1, date2, err := utils.GetRequestStartEndTime(queryStartTime, queryEndTime, args.Direction, timespan, multiplier, queryBars)
 		if err != nil {
+			fmt.Printf("Debug: GetRequestStartEndTime failed: %v\n", err)
 			return nil, fmt.Errorf("dkn0 %v", err)
 		}
 
+		fmt.Printf("Debug: Requesting data from Polygon - Start: %v, End: %v\n", date1, date2)
+
 		if haveToAggregate {
+			fmt.Printf("Debug: Using aggregation path\n")
 			iter, err := utils.GetAggsData(conn.Polygon, ticker, queryMultiplier, queryTimespan, date1, date2, 50000, "asc", !args.IsReplay)
 			if err != nil {
 				return nil, fmt.Errorf("error fetching data from Polygon: %v", err)
@@ -205,16 +217,23 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				break
 			}
 		} else {
+			fmt.Printf("Debug: Using direct data path\n")
 			iter, err := utils.GetAggsData(conn.Polygon, ticker, queryMultiplier, queryTimespan, date1, date2, 50000, polyResultOrder, !args.IsReplay)
 			if err != nil {
+				fmt.Printf("Debug: Polygon API error: %v\n", err)
 				return nil, fmt.Errorf("error fetching data from Polygon: %v", err)
 			}
+			var processedBars int
 			for iter.Next() {
+				processedBars++
 				item := iter.Item()
 				if iter.Err() != nil {
+					fmt.Printf("Debug: Iterator error: %v\n", iter.Err())
 					return nil, fmt.Errorf("dkn0w")
 				}
 				timestamp := time.Time(item.Timestamp).In(easternLocation)
+				fmt.Printf("Debug: Processing bar - Time: %v, Open: %.2f, Close: %.2f\n",
+					timestamp, item.Open, item.Close)
 				if queryTimespan == "week" || queryTimespan == "month" || queryTimespan == "year" {
 					for timestamp.Weekday() == time.Saturday || timestamp.Weekday() == time.Sunday {
 						timestamp = timestamp.AddDate(0, 0, 1)
@@ -254,6 +273,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		}
 	}
 	if len(barDataList) != 0 {
+		fmt.Printf("Debug: Final bar count: %d\n", len(barDataList))
 		if haveToAggregate || args.Direction == "forward" {
 			if args.Direction == "backward" {
 				fmt.Println("hit first one")
@@ -304,10 +324,11 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			end := time.Unix(endTim, (endTim)*1e6).UTC()*/
 			return barDataList, nil
 		}
+	} else {
+		fmt.Printf("Debug: No bars collected. NumBarsRemaining: %d\n", numBarsRemaining)
 	}
 	return nil, fmt.Errorf("no data found")
 }
-
 
 func reverse(data []GetChartDataResults) {
 	left, right := 0, len(data)-1
@@ -410,7 +431,7 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 					break
 				}
 				timestamp := time.Time(iter.Item().Timestamp).In(easternLocation)
-				if(!utils.IsTimestampRegularHours(timestamp) && !extendedHours){
+				if !utils.IsTimestampRegularHours(timestamp) && !extendedHours {
 					continue
 				}
 				if incompleteBar.Open == 0 {
@@ -450,9 +471,9 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 		for iter.Next() {
 			if count >= numSecondBars {
 				break
-			}				
+			}
 			timestamp := time.Time(iter.Item().Timestamp).In(easternLocation)
-			if(!utils.IsTimestampRegularHours(timestamp) && !extendedHours){
+			if !utils.IsTimestampRegularHours(timestamp) && !extendedHours {
 				continue
 			}
 			if incompleteBar.Open == 0 {
