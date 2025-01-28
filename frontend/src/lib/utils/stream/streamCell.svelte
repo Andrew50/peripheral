@@ -3,9 +3,13 @@
     import {writable} from 'svelte/store'
     import { addStream } from '$lib/utils/stream/interface';
     import type { TradeData,Instance } from '$lib/core/types';
+    
     export let instance: Instance;
+    export let type: 'price' | 'change' = 'change';
+    
     let releaseSlow: Function = () => {}
     let releaseClose: Function = () => {}
+    
     interface ChangeStore {
         price?: number
         prevClose?: number
@@ -14,7 +18,7 @@
     let changeStore = writable<ChangeStore>({change:"--"})
     
     onMount(() => {
-        releaseSlow = addStream<TradeData>(instance, "slow",(v:TradeData) => {
+        releaseSlow = addStream<TradeData>(instance, "slow", (v:TradeData) => {
             if (v && v.price){
                 changeStore.update((s:ChangeStore)=>{
                     s.price = v.price
@@ -31,16 +35,26 @@
             })
         })
     })
+    
     onDestroy(() => {
         releaseClose();
         releaseSlow();
     });
+    
     function getChange(price: number, prevClose: number): string {
         if (!price || !prevClose) return "--"
         return ((price / prevClose - 1) * 100).toFixed(2) + "%"
     }
 </script>
 
-<td class={$changeStore.price - $changeStore.prevClose < 0 ? "red" : $changeStore.change === "--"? "white":"green"}> {$changeStore.change} </td>
+<td class={type === 'change' ? 
+    ($changeStore.price - $changeStore.prevClose < 0 ? "red" : $changeStore.change === "--"? "white":"green") 
+    : ""}>
+    {#if type === 'price'}
+        {$changeStore.price?.toFixed(2) ?? '--'}
+    {:else}
+        {'--'}
+    {/if}
+</td>
 
 
