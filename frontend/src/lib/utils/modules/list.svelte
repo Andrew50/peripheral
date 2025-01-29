@@ -184,7 +184,13 @@ function handleTouchEnd() {
   .delete-button {
       padding:1px;
   }
+  .selected {
+    outline: 2px solid #4a9eff;
+    outline-offset: -2px;
+  }
 
-
+  tr {
+    transition: outline 0.2s ease;
+  }
 </style>
 
