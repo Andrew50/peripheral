@@ -9,6 +9,7 @@
     
     let releaseSlow: Function = () => {}
     let releaseClose: Function = () => {}
+    let currentSecurityId: number | null = null;
     
     interface ChangeStore {
         price?: number
@@ -17,17 +18,32 @@
     }
     let changeStore = writable<ChangeStore>({change:"--"})
     
-    onMount(() => {
+    function setupStreams() {
+        // Only setup streams if security ID changed
+        if (currentSecurityId === instance.securityId) {
+            return;
+        }
+        
+        currentSecurityId = instance.securityId ?? null;
+        
+        // Clean up existing streams
+        releaseClose();
+        releaseSlow();
+        
+        // Reset the store
+        changeStore.set({change:"--"});
+        
+        // Set up new streams
         releaseSlow = addStream<TradeData>(instance, "slow", (v:TradeData) => {
             if (v && v.price){
                 changeStore.update((s:ChangeStore)=>{
                     s.price = v.price
                     if (s.price && s.prevClose) s.change = getChange(s.price,s.prevClose)
-                    console.log(s.change)
                     return s
                 })
             }
         });
+        
         releaseClose = addStream<CloseData>(instance,"close",(v:CloseData)=>{
             changeStore.update((s:ChangeStore)=>{
                 s.prevClose = v.price
@@ -35,7 +51,12 @@
                 return s
             })
         })
-    })
+    }
+    
+    // Watch for instance changes
+    $: if (instance?.securityId) {
+        setupStreams();
+    }
     
     onDestroy(() => {
         releaseClose();
@@ -47,6 +68,7 @@
         return ((price / prevClose - 1) * 100).toFixed(2) + "%"
     }
 </script>
+
 <td class={type === 'change' ? 
     ($changeStore.price - $changeStore.prevClose < 0 ? "red" : $changeStore.change === "--"? "white":"green") 
     : type === 'change %' ? ($changeStore.change.includes("-") ? "red" : "green") : ""}>

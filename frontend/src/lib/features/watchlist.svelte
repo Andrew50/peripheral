@@ -68,7 +68,12 @@
         if (!item.watchlistItemId) {
             throw new Error("missing id on delete");
         }
-        privateRequest<void>("deleteWatchlistItem", { watchlistItemId: item.watchlistItemId });
+        privateRequest<void>("deleteWatchlistItem", { watchlistItemId: item.watchlistItemId })
+        .then(() => {
+            activeList.update(items => {
+                return items.filter(i => i.watchlistItemId !== item.watchlistItemId);
+            });
+        });
     }
 
     function selectWatchlist(watchlistIdString: string) {
@@ -104,9 +109,15 @@
             }
         });
     }
+
+    // Helper function to get first letter of watchlist name
+    function getWatchlistInitial(name: string): string {
+        return name.charAt(0).toUpperCase();
+    }
 </script>
 
 <div tabindex="-1" class="feature-container" bind:this={container}>
+    <!-- Controls container first -->
     <div class="controls-container">
         {#if Array.isArray($watchlists)}
             <div class="watchlist-container">
@@ -120,13 +131,69 @@
                     <option value="new">Create New</option>
                 </select>
             </div>
-            <button class="square-btn" on:click={(e) => { e.stopPropagation(); deleteWatchlist(watchlist.watchlistId); }}>x</button>
+            <button class="square-btn" on:click={(e) => { e.stopPropagation(); deleteWatchlist(currentWatchlistId); }}>x</button>
             <button class="square-btn" on:click={addInstance}>+</button>
-                {#if showWatchlistInput}
-                    <input class="input" bind:this={newNameInput} on:keydown={(event) => { if (event.key == "Enter") { newWatchlist(); } }} bind:value={newWatchlistName} placeholder="New Watchlist Name" />
-                {/if}
+            {#if showWatchlistInput}
+                <input class="input" bind:this={newNameInput} on:keydown={(event) => { if (event.key == "Enter") { newWatchlist(); } }} bind:value={newWatchlistName} placeholder="New Watchlist Name" />
+            {/if}
         {/if}
     </div>
+
+    <!-- Shortcut buttons between controls and list -->
+    <div class="shortcut-container">
+        {#if Array.isArray($watchlists)}
+            {#each $watchlists as watchlist}
+                <button 
+                    class="shortcut-btn {currentWatchlistId === watchlist.watchlistId ? 'active' : ''}"
+                    on:click={() => selectWatchlist(String(watchlist.watchlistId))}
+                >
+                    {getWatchlistInitial(watchlist.watchlistName)}
+                </button>
+            {/each}
+        {/if}
+    </div>
+    
     <List parentDelete={deleteItem} columns={["ticker", "price","change", "change %"]} list={activeList}/>
 </div>
+
+<style>
+    .shortcut-container {
+        display: flex;
+        gap: 8px;
+        padding: 8px;
+        flex-wrap: wrap;
+    }
+
+    .shortcut-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #1e222d;
+        border: 1px solid #363a45;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease;
+    }
+
+    .shortcut-btn:hover {
+        background: #2a2e39;
+        border-color: #4a4e58;
+    }
+
+    .shortcut-btn.active {
+        background: #2962ff;
+        border-color: #2962ff;
+    }
+
+    /* Ensure existing styles remain */
+    .feature-container {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+</style>
 
