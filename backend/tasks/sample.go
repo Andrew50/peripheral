@@ -1,19 +1,17 @@
-
 package tasks
 
 import (
 	"backend/utils"
-    "time"
-    "fmt"
 	"context"
 	"encoding/json"
+	"fmt"
+	"time"
 )
+
 type LabelTrainingQueueInstanceArgs struct {
-	SampleId int `json:"sampleId"`
+	SampleId int  `json:"sampleId"`
 	Label    bool `json:"label"` // Include the label to be assigned (true/false)
 }
-
-
 
 func LabelTrainingQueueInstance(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args LabelTrainingQueueInstanceArgs
@@ -30,19 +28,19 @@ func LabelTrainingQueueInstance(conn *utils.Conn, userId int, rawArgs json.RawMe
 	if err != nil {
 		return nil, fmt.Errorf("error updating and retrieving setupId: %v", err)
 	}
-    utils.CheckSampleQueue(conn,setupId,args.Label)
+	utils.CheckSampleQueue(conn, setupId, args.Label)
 	return nil, nil
 }
+
 type GetTrainingQueueArgs struct {
 	SetupId int `json:"setupId"`
 }
 type GetTrainingQueueResult struct {
-    SampleId   int    `json:"sampleId"`
-    SecurityId int    `json:"securityId"`
-    Timestamp  int64  `json:"timestamp"`
-    Ticker     string `json:"ticker"`
+	SampleId   int    `json:"sampleId"`
+	SecurityId int    `json:"securityId"`
+	Timestamp  int64  `json:"timestamp"`
+	Ticker     string `json:"ticker"`
 }
-
 
 func GetTrainingQueue(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetTrainingQueueArgs
@@ -50,7 +48,7 @@ func GetTrainingQueue(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 		return nil, fmt.Errorf("error parsing args: %v", err)
 	}
 
-	utils.CheckSampleQueue(conn, args.SetupId,false)
+	utils.CheckSampleQueue(conn, args.SetupId, false)
 	rows, err := conn.DB.Query(context.Background(), `
 		SELECT s.sampleId, s.securityId, s.timestamp, sec.ticker
 		FROM samples s
@@ -75,16 +73,17 @@ func GetTrainingQueue(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 			SampleId:   sampleId,
 			SecurityId: securityId,
 			Timestamp:  timestamp.Unix(), // Convert to Unix timestamp in milliseconds
-			Ticker:     ticker,                // Add ticker to the struct
+			Ticker:     ticker,           // Add ticker to the struct
 		})
 	}
 
 	return trainingQueue, nil
 }
+
 type SetSampleArgs struct {
-	SecurityId int    `json:"securityId"`
-	Timestamp  int64  `json:"timestamp"` // Unix timestamp in milliseconds
-	SetupId    int    `json:"setupId"`
+	SecurityId int   `json:"securityId"`
+	Timestamp  int64 `json:"timestamp"` // Unix timestamp in milliseconds
+	SetupId    int   `json:"setupId"`
 }
 
 func SetSample(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -100,7 +99,7 @@ func SetSample(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface
 	if err != nil {
 		return nil, fmt.Errorf("error inserting sample: %v", err)
 	}
-    utils.CheckSampleQueue(conn,args.SetupId,true)
+	utils.CheckSampleQueue(conn, args.SetupId, true)
 
 	return map[string]string{"status": "success"}, nil
 }

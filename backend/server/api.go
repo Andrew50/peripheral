@@ -50,7 +50,7 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"newWatchlistItem":    tasks.NewWatchlistItem,
 	//singles
 	"getPrevClose": tasks.GetPrevClose,
-    "getMarketCap": tasks.GetMarketCap,
+	"getMarketCap": tasks.GetMarketCap,
 	//settings
 	"getSettings": tasks.GetSettings,
 	"setSettings": tasks.SetSettings,
@@ -66,13 +66,13 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"getTrainingQueue":           tasks.GetTrainingQueue,
 	"setSample":                  tasks.SetSample,
 	//telegram
-//	"sendMessage": telegram.SendMessage,
-    //alerts
-    "getAlerts": tasks.GetAlerts,
-    "getAlertLogs": tasks.GetAlertLogs,
-    "newAlert": tasks.NewAlert,
-    "deleteAlert": tasks.DeleteAlert,
-    //"setAlert":tasks.SetAlert,
+	//	"sendMessage": telegram.SendMessage,
+	//alerts
+	"getAlerts":    tasks.GetAlerts,
+	"getAlertLogs": tasks.GetAlertLogs,
+	"newAlert":     tasks.NewAlert,
+	"deleteAlert":  tasks.DeleteAlert,
+	//"setAlert":tasks.SetAlert,
 
 	// deprecated
 	// "getTradeData":            tasks.GetTradeData,
@@ -81,6 +81,9 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	//
 	// "getQuoteData":            tasks.GetQuoteData,
 	// "getSecurityDateBounds":   tasks.GetSecurityDateBounds,
+	"setHorizontalLine":    tasks.SetHorizontalLine,
+	"getHorizontalLines":   tasks.GetHorizontalLines,
+	"deleteHorizontalLine": tasks.DeleteHorizontalLine,
 }
 
 func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }

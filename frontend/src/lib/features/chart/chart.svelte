@@ -3,6 +3,7 @@
 	import Legend from './legend.svelte';
 	import Shift from './shift.svelte';
 	import Countdown from './countdown.svelte';
+	import DrawingMenu from './drawingMenu.svelte';
 	import { privateRequest } from '$lib/core/backend';
 	import type { Instance, TradeData, QuoteData } from '$lib/core/types';
 	import {
@@ -47,6 +48,24 @@
 	let bidLine: any;
 	let askLine: any;
 	let currentBarTimestamp: number;
+	interface DrawingMenuProps {
+		chartCandleSeries: ISeriesApi | null;
+		selectedLine: IPriceLine | null;
+		clientX: number;
+		clientY: number;
+		active: boolean;
+		horizontalLines: { price: number; line: IPriceLine; id: number }[];
+	}
+	let drawingMenuProps: Writable<DrawingMenuProps> = writable({
+		chartCandleSeries: null,
+		selectedLine: null,
+		clientX: 0,
+		clientY: 0,
+		active: false,
+		selectedLineId: -1,
+		horizontalLines: []
+	});
+
 	let chartCandleSeries: ISeriesApi<
 		'Candlestick',
 		Time,
@@ -84,6 +103,7 @@
 	>;
 	let chart: IChartApi;
 	let latestCrosshairPositionTime: number;
+	let latestCrosshairPositionY = 0;
 	let chartEarliestDataReached = false;
 	let chartLatestDataReached = false;
 	let isLoadingChartData = false;
@@ -101,7 +121,7 @@
 		adr: 0,
 		chg: 0,
 		chgprct: 0,
-        mcap: 0
+		mcap: 0
 	};
 	const hoveredCandleData = writable(defaultHoveredCandleData);
 	const shiftOverlay: Writable<ShiftOverlay> = writable({
@@ -126,6 +146,7 @@
 	let currentChartInstance: Instance = { ticker: '', timestamp: 0, timeframe: '' };
 	let blockingChartQueryDispatch = {};
 	let isPanning = false;
+	//let horizontalLines: { price: number; line: IPriceLine }[] = []; // Array to store horizontal lines with their references
 	function extendedHours(timestamp: number): boolean {
 		const date = new Date(timestamp);
 		const hours = date.getHours();
@@ -138,7 +159,6 @@
 
 		return timeInMinutes < marketOpenMinutes || timeInMinutes >= marketCloseMinutes;
 	}
-
 
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
 		if (inst.requestType === 'loadNewTicker') {
@@ -220,12 +240,24 @@
 					}
 					releaseFast();
 					releaseQuote();
-                    privateRequest<number>('getMarketCap', {ticker:inst.ticker}, true).then((res:{marketCap:number})=>{
-                        hoveredCandleData.update((v: typeof defaultHoveredCandleData)=>{
-                            v.mcap = res.marketCap
-                            return v
-                        })
-                    })
+					privateRequest<number>('getMarketCap', { ticker: inst.ticker }, true).then(
+						(res: { marketCap: number }) => {
+							hoveredCandleData.update((v: typeof defaultHoveredCandleData) => {
+								v.mcap = res.marketCap;
+								return v;
+							});
+						}
+					);
+					privateRequest<HorizontalLine[]>(
+						'getHorizontalLines',
+						{ securityId: inst.securityId },
+						true
+					).then((res: HorizontalLine[]) => {
+						for (const line of res) {
+							//night need to be later
+							addHorizontalLine(line.price, line.id);
+						}
+					});
 				}
 				// Check if we reach end of avaliable data
 				if (inst.timestamp == 0) {
@@ -316,6 +348,61 @@
 		bidLine.setData([{ time: time, value: data.bidPrice }]);
 		askLine.setData([{ time: time, value: data.askPrice }]);
 	}
+	// Create a horizontal line at the current crosshair position (Y-coordinate)
+	function addHorizontalLine(price: number, id: number = -1) {
+		const priceLine = chartCandleSeries.createPriceLine({
+			price: price,
+			color: 'white',
+			lineWidth: 1,
+			axisLabelVisible: true,
+			title: `Price: ${price}`
+		});
+		$drawingMenuProps.horizontalLines.push({
+			id,
+			price,
+			line: priceLine
+		});
+		if (id == -1) {
+			// only add to baceknd if its being added not from a ticker load but from a new added line
+			privateRequest<number>(
+				'setHorizontalLine',
+				{ price: price, securityId: chartSecurityId },
+				true
+			).then((res: number) => {
+				$drawingMenuProps.horizontalLines[$drawingMenuProps.horizontalLines.length - 1].id = res;
+			});
+		}
+	}
+	function determineClickedLine(event: MouseEvent) {
+		const mouseY = event.clientY;
+		//const portionOfWindow = chart.getVisibleRange().height / 10;
+		const pixelBuffer = 5;
+
+		const upperPrice = chartCandleSeries.coordinateToPrice(mouseY - pixelBuffer) || 0;
+		const lowerPrice = chartCandleSeries.coordinateToPrice(mouseY + pixelBuffer) || 0;
+		console.log(upperPrice, lowerPrice);
+		if (upperPrice == 0 || lowerPrice == 0) return;
+		for (const line of $drawingMenuProps.horizontalLines) {
+			if (line.price <= upperPrice && line.price >= lowerPrice) {
+				drawingMenuProps.update((v: DrawingMenuProps) => {
+					v.chartCandleSeries = chartCandleSeries;
+					v.selectedLine = line.line;
+					v.clientX = event.clientX;
+					v.clientY = event.clientY;
+					v.active = true;
+					v.selectedLineId = line.id;
+					return v;
+				});
+				return;
+			}
+		}
+		drawingMenuProps.update((v: DrawingMenuProps) => {
+			v.selectedLine = null;
+			v.selectedLineId = -1;
+			return v;
+		});
+	}
+
 	async function updateLatestChartBar(trade: TradeData) {
 		const isExtendedHours = extendedHours(trade.timestamp);
 		if (isExtendedHours) {
@@ -540,12 +627,16 @@
 		chartContainer.addEventListener('keydown', (event) => {
 			setActiveChart(chartId);
 			if (event.key == 'r' && event.altKey) {
+				//alt + r reset view
 				if (currentChartInstance.timestamp && !$streamInfo.replayActive) {
 					queryChart({ timestamp: 0 });
 				} else {
 					chart.timeScale().resetTimeScale();
 				}
+			} else if (event.key == 'h' && event.altKey) {
+				addHorizontalLine(chartCandleSeries.coordinateToPrice(latestCrosshairPositionY) || 0);
 			} else if (event.key == 'Tab' || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
+				// goes to input popup
 				if ($streamInfo.replayActive) {
 					currentChartInstance.timestamp = 0;
 				}
@@ -571,6 +662,7 @@
 				}
 			}
 		});
+		chartContainer.addEventListener('click', determineClickedLine);
 		chart = createChart(chartContainer, chartOptions);
 		chartCandleSeries = chart.addCandlestickSeries({
 			priceLineVisible: false,
@@ -653,7 +745,7 @@
 				chg = bar.close - allCandleData[cursorBarIndex - 1].close;
 				chgprct = (bar.close / allCandleData[cursorBarIndex - 1].close - 1) * 100;
 			}
-            const mcap = $hoveredCandleData.mcap
+			const mcap = $hoveredCandleData.mcap;
 			hoveredCandleData.set({
 				open: bar.open,
 				high: bar.high,
@@ -664,7 +756,7 @@
 				chg: chg,
 				chgprct: chgprct,
 				rvol: 0,
-                mcap: mcap
+				mcap: mcap
 			});
 			if (/^\d+$/.test(currentChartInstance.timeframe)) {
 				let barsForRVOL;
@@ -681,6 +773,7 @@
 				});
 			}
 			latestCrosshairPositionTime = bar.time as number;
+			latestCrosshairPositionY = param.point.y as number; //inccorect
 		});
 		chart.timeScale().subscribeVisibleLogicalRangeChange((logicalRange) => {
 			if (!logicalRange || Date.now() - lastChartQueryDispatchTime < chartRequestThrottleDuration) {
@@ -780,6 +873,8 @@
 				};
 				console.log(req);
 				change(req);
+			} else if (e.event == 'addHorizontalLine') {
+				addHorizontalLine(e.data);
 			}
 		});
 	});
@@ -789,8 +884,8 @@
 	<Legend instance={currentChartInstance} {hoveredCandleData} />
 	<Shift {shiftOverlay} />
 	<Countdown instance={currentChartInstance} {currentBarTimestamp} />
+	<DrawingMenu {drawingMenuProps} />
 </div>
-sent
 
 <style>
 	.chart {
