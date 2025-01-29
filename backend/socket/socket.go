@@ -141,7 +141,7 @@ func (c *Client) readPump(conn *utils.Conn) {
 			continue
 		}
 		os.Stdout.Sync()
-		fmt.Printf("clientMsg.Action: %v\n", clientMsg.Action)
+		fmt.Printf("clientMsg.Action: %v %v\n", clientMsg.Action, clientMsg.ChannelName)
 		switch clientMsg.Action {
 		case "subscribe":
 			if c.replayActive {
