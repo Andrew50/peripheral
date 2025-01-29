@@ -232,8 +232,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 					return nil, fmt.Errorf("dkn0w")
 				}
 				timestamp := time.Time(item.Timestamp).In(easternLocation)
-				fmt.Printf("Debug: Processing bar - Time: %v, Open: %.2f, Close: %.2f\n",
-					timestamp, item.Open, item.Close)
 				if queryTimespan == "week" || queryTimespan == "month" || queryTimespan == "year" {
 					for timestamp.Weekday() == time.Saturday || timestamp.Weekday() == time.Sunday {
 						timestamp = timestamp.AddDate(0, 0, 1)
@@ -273,7 +271,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		}
 	}
 	if len(barDataList) != 0 {
-		fmt.Printf("Debug: Final bar count: %d\n", len(barDataList))
 		if haveToAggregate || args.Direction == "forward" {
 			if args.Direction == "backward" {
 				fmt.Println("hit first one")
