@@ -248,6 +248,9 @@
 							});
 						}
 					);
+					for (const line of $drawingMenuProps.horizontalLines) {
+						chartCandleSeries.removePriceLine(line.line);
+					}
 					privateRequest<HorizontalLine[]>(
 						'getHorizontalLines',
 						{ securityId: inst.securityId },
@@ -255,7 +258,7 @@
 					).then((res: HorizontalLine[]) => {
 						for (const line of res) {
 							//night need to be later
-							//addHorizontalLine(line.price, line.id); //TO IMPLEMENT
+							addHorizontalLine(line.price, line.id); //TO IMPLEMENT
 						}
 					});
 				}
@@ -354,7 +357,8 @@
 			price: price,
 			color: 'white',
 			lineWidth: 1,
-			axisLabelVisible: true,
+			lineStyle: 0, // Solid line
+			axisLabelVisible: false,
 			title: `Price: ${price}`
 		});
 		$drawingMenuProps.horizontalLines.push({
@@ -393,6 +397,8 @@
 					v.selectedLineId = line.id;
 					return v;
 				});
+				event.preventDefault();
+				event.stopPropagation();
 				return;
 			}
 		}

@@ -266,7 +266,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		}
 	}
 	if len(barDataList) != 0 {
-		fmt.Printf("Debug: Final bar count: %d\n", len(barDataList))
 		if haveToAggregate || args.Direction == "forward" {
 			if args.Direction == "backward" {
 				fmt.Println("hit first one")
