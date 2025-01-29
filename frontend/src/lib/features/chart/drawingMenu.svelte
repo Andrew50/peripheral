@@ -5,7 +5,9 @@
 	import { privateRequest } from '$lib/core/backend';
 	import type { Writable } from 'svelte/store';
 	export let drawingMenuProps: Writable<DrawingMenuProps>;
-	function removePriceLine() {
+	function removePriceLine(event: MouseEvent) {
+		event.preventDefault();
+		event.stopPropagation();
 		if ($drawingMenuProps.selectedLine !== null) {
 			$drawingMenuProps.chartCandleSeries.removePriceLine($drawingMenuProps.selectedLine);
 			$drawingMenuProps.horizontalLines = $drawingMenuProps.horizontalLines.filter(
@@ -26,8 +28,9 @@
 	});
 
 	function handleClickOutside(event: MouseEvent) {
-		const popup = document.querySelector('.popup-container');
+		const popup = document.querySelector('.test');
 		if (popup && !popup.contains(event.target as Node)) {
+			console.log('clicked outside drawing menu');
 			drawingMenuProps.update((v: DrawingMenuProps) => {
 				v.active = false;
 				return v;
