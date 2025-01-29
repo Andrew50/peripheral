@@ -22,6 +22,10 @@ export interface Watchlist {
     watchlistName: string
     watchlistId: number
 }
+export interface CloseData {
+    price: number;
+    channel: string;
+}
 export interface TradeData {
     timestamp: number;
     price: number;
