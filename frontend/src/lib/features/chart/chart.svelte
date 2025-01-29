@@ -146,7 +146,7 @@
 	let currentChartInstance: Instance = { ticker: '', timestamp: 0, timeframe: '' };
 	let blockingChartQueryDispatch = {};
 	let isPanning = false;
-	//let horizontalLines: { price: number; line: IPriceLine }[] = []; // Array to store horizontal lines with their references
+	const excludedConditions = new Set([7, 12, 13, 37]);
 	function extendedHours(timestamp: number): boolean {
 		const date = new Date(timestamp);
 		const hours = date.getHours();
@@ -404,6 +404,11 @@
 	}
 
 	async function updateLatestChartBar(trade: TradeData) {
+		// Skip trades with excluded conditions
+		if (trade.conditions?.some((condition) => excludedConditions.has(condition))) {
+			return;
+		}
+
 		const isExtendedHours = extendedHours(trade.timestamp);
 		if (isExtendedHours) {
 			if (!currentChartInstance.extendedHours || /^[dwm]/.test(currentChartInstance.timeframe)) {
@@ -432,11 +437,8 @@
 		) {
 			return;
 		}
-		//const consolidatedTrade = {timestamp:null,price:0,size:0}
-		//const consolidatedTrade2 = {timestamp:null,price:0,size:0}
 		var mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length - 1];
 		currentBarTimestamp = mostRecentBar.time as number;
-		//console.log(trades)
 		/*
         trades.forEach((data:TradeData)=>{
             if (UTCSecondstoESTSeconds(data.timestamp/1000) < (currentBarTimestamp) + chartTimeframeInSeconds) {

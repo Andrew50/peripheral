@@ -6,11 +6,17 @@ import (
 	"backend/utils"
     "backend/alerts"
 	"fmt"
+	"sync"
 	"time"
 )
 
 var eOpenRun = false
 var eCloseRun = false
+
+var (
+	polygonInitialized bool
+	polygonInitMutex sync.Mutex
+)
 
 func StartScheduler(conn *utils.Conn) chan struct{} {
 	go initialize(conn)
@@ -36,11 +42,17 @@ func StartScheduler(conn *utils.Conn) chan struct{} {
 }
 
 func initialize(conn *utils.Conn) {
-	socket.StartPolygonWS(conn)
-    err := alerts.StartAlertLoop(conn)
-    if err != nil {
-        fmt.Println("schedule issue",err)
-    }
+	polygonInitMutex.Lock()
+	if !polygonInitialized {
+		socket.StartPolygonWS(conn)
+		polygonInitialized = true
+	}
+	polygonInitMutex.Unlock()
+	
+	err := alerts.StartAlertLoop(conn)
+	if err != nil {
+		fmt.Println("schedule issue",err)
+	}
 }
 
 func eventLoop(now time.Time, conn *utils.Conn) {
