@@ -255,7 +255,7 @@
 					).then((res: HorizontalLine[]) => {
 						for (const line of res) {
 							//night need to be later
-							addHorizontalLine(line.price, line.id);
+							//addHorizontalLine(line.price, line.id); //TO IMPLEMENT
 						}
 					});
 				}
