@@ -232,36 +232,29 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 					return nil, fmt.Errorf("dkn0w")
 				}
 				timestamp := time.Time(item.Timestamp).In(easternLocation)
-				fmt.Printf("Debug: Processing bar - Time: %v, Open: %.2f, Close: %.2f\n",
-					timestamp, item.Open, item.Close)
+				
 				if queryTimespan == "week" || queryTimespan == "month" || queryTimespan == "year" {
 					for timestamp.Weekday() == time.Saturday || timestamp.Weekday() == time.Sunday {
 						timestamp = timestamp.AddDate(0, 0, 1)
 					}
 				}
-				if timespan == "minute" || timespan == "second" || timespan == "hour" {
-					if args.ExtendedHours || (utils.IsTimestampRegularHours(timestamp)) {
-						barData := GetChartDataResults{
-							Timestamp: float64(timestamp.Unix()),
-							Open:      item.Open,
-							High:      item.High,
-							Low:       item.Low,
-							Close:     item.Close,
-							Volume:    item.Volume,
-						}
-						barDataList = append(barDataList, barData)
-					}
-				} else {
-					barData := GetChartDataResults{
-						Timestamp: float64(timestamp.Unix()),
-						Open:      item.Open,
-						High:      item.High,
-						Low:       item.Low,
-						Close:     item.Close,
-						Volume:    item.Volume,
-					}
-					barDataList = append(barDataList, barData)
+
+				// Skip if we need regular hours and timestamp is outside trading hours
+				if (timespan == "minute" || timespan == "second" || timespan == "hour") && 
+				   !args.ExtendedHours && !utils.IsTimestampRegularHours(timestamp) {
+					continue
 				}
+
+				barData := GetChartDataResults{
+					Timestamp: float64(timestamp.Unix()),
+					Open:      item.Open,
+					High:      item.High,
+					Low:       item.Low,
+					Close:     item.Close,
+					Volume:    item.Volume,
+				}
+				barDataList = append(barDataList, barData)
+				
 				numBarsRemaining--
 				if numBarsRemaining <= 0 {
 					break
