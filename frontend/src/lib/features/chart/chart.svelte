@@ -146,7 +146,7 @@
 	let currentChartInstance: Instance = { ticker: '', timestamp: 0, timeframe: '' };
 	let blockingChartQueryDispatch = {};
 	let isPanning = false;
-	const excludedConditions = new Set([7, 12, 13, 37]);
+	const excludedConditions = new Set([2, 7, 10, 12, 13,15,16, 20, 21, 22, 29, 33, 37]);
 	function extendedHours(timestamp: number): boolean {
 		const date = new Date(timestamp);
 		const hours = date.getHours();
@@ -410,57 +410,34 @@
 	}
 
 	async function updateLatestChartBar(trade: TradeData) {
-		// Skip trades with excluded conditions
-		if (trade.conditions?.some((condition) => excludedConditions.has(condition))) {
+		// Early returns for invalid data
+		if (!trade?.price || !trade?.size || !trade?.timestamp || 
+			!chartCandleSeries?.data()?.length || isLoadingChartData) {
 			return;
 		}
 
-		const isExtendedHours = extendedHours(trade.timestamp);
-		if (isExtendedHours) {
-			if (!currentChartInstance.extendedHours || /^[dwm]/.test(currentChartInstance.timeframe)) {
-				return;
-			}
-		}
-		const dolvol = get(settings).dolvol;
-		/*function updateConsolidation(consolidatedTrade:TradeData,data:TradeData){
-            if(data.conditions == null || (data.size >= 100 && !data.conditions.some(condition => tradeConditionsToCheck.has(condition)))) {
-                //if(!(mostRecentBar.close == data.price)) {
-                //console.log(consolidatedTrade)
-                consolidatedTrade.timestamp = data.timestamp
-                consolidatedTrade.price = data.price
-            }
-            if(data.conditions == null || !data.conditions.some(condition => tradeConditionsToCheckVolume.has(condition))) {
-                consolidatedTrade.size += data.size * (dolvol ? data.price : 1)
-            }
-        }*/
-		if (
-			isLoadingChartData ||
-			!trade.price ||
-			!trade.size ||
-			!trade.timestamp ||
-			!chartCandleSeries ||
-			chartCandleSeries.data().length == 0
-		) {
+		// Check excluded conditions early
+		if (trade.conditions?.some(condition => excludedConditions.has(condition))) {
 			return;
 		}
-		var mostRecentBar = chartCandleSeries.data()[chartCandleSeries.data().length - 1];
+
+		// Check extended hours early
+		const isExtendedHours = extendedHours(trade.timestamp);
+		if (isExtendedHours && 
+			(!currentChartInstance.extendedHours || /^[dwm]/.test(currentChartInstance.timeframe))) {
+			return;
+		}
+
+		const dolvol = get(settings).dolvol;
+		const mostRecentBar = chartCandleSeries.data().at(-1);
+		if (!mostRecentBar) return;
+		
 		currentBarTimestamp = mostRecentBar.time as number;
-		/*
-        trades.forEach((data:TradeData)=>{
-            if (UTCSecondstoESTSeconds(data.timestamp/1000) < (currentBarTimestamp) + chartTimeframeInSeconds) {
-                updateConsolidation(consolidatedTrade,data)
-            }else{
-                console.log("should be new")
-                updateConsolidation(consolidatedTrade2,data)
-            }
-        })*/
-		const sameBar =
-			UTCSecondstoESTSeconds(trade.timestamp / 1000) <
-			currentBarTimestamp + chartTimeframeInSeconds;
-		//console.log(sameBar)
+		const tradeTime = UTCSecondstoESTSeconds(trade.timestamp / 1000);
+		const sameBar = tradeTime < currentBarTimestamp + chartTimeframeInSeconds;
 
 		if (sameBar) {
-			//if (trade.timestamp !== null){
+			// Update existing bar
 			if (trade.size >= 100) {
 				chartCandleSeries.update({
 					time: mostRecentBar.time,
@@ -470,45 +447,46 @@
 					close: trade.price
 				});
 			}
-			chartVolumeSeries.update({
-				time: mostRecentBar.time,
-				value: chartVolumeSeries.data()[chartVolumeSeries.data().length - 1].value + trade.size,
-				color: mostRecentBar.close > mostRecentBar.open ? '#089981' : '#ef5350'
-			});
+
+			const lastVolume = chartVolumeSeries.data().at(-1);
+			if (lastVolume) {
+				chartVolumeSeries.update({
+					time: mostRecentBar.time,
+					value: lastVolume.value + trade.size,
+					color: mostRecentBar.close > mostRecentBar.open ? '#089981' : '#ef5350'
+				});
+			}
 			return;
-		} else {
-			console.log(trade);
-			//new bar
-			var timeToRequestForUpdatingAggregate =
-				ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
-			//console.log(consolidatedTrade2)
-			//if (trade.timestamp !== null){
-			const data = trade;
-			var referenceStartTime = getReferenceStartTimeForDateMilliseconds(
-				data.timestamp,
-				currentChartInstance.extendedHours
-			); // this is in milliseconds
-			var timeDiff = (data.timestamp - referenceStartTime) / 1000; // this is in seconds
-			var flooredDifference =
-				Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds; // this is in seconds
-			var newTime = UTCSecondstoESTSeconds(
-				referenceStartTime / 1000 + flooredDifference
-			) as UTCTimestamp;
-			chartCandleSeries.update({
-				time: newTime,
-				open: data.price,
-				high: data.price,
-				low: data.price,
-				close: data.price
-			});
-			chartVolumeSeries.update({
-				time: newTime,
-				value: data.size
-			});
 		}
-		await new Promise((resolve) => setTimeout(resolve, 3000));
+
+		// Create new bar
+		const referenceStartTime = getReferenceStartTimeForDateMilliseconds(
+			trade.timestamp,
+			currentChartInstance.extendedHours
+		);
+		const timeDiff = (trade.timestamp - referenceStartTime) / 1000;
+		const flooredDifference = Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+		const newTime = UTCSecondstoESTSeconds(referenceStartTime / 1000 + flooredDifference) as UTCTimestamp;
+
+		// Update with new bar
+		chartCandleSeries.update({
+			time: newTime,
+			open: trade.price,
+			high: trade.price,
+			low: trade.price,
+			close: trade.price
+		});
+
+		chartVolumeSeries.update({
+			time: newTime,
+			value: trade.size,
+			color: '#089981' // Default to green for new bars
+		});
+
+		// Fetch and update historical data
 		try {
-			const barDataList: BarData[] = await privateRequest<BarData[]>('getChartData', {
+			const timeToRequestForUpdatingAggregate = ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
+			const [barData] = await privateRequest<BarData[]>('getChartData', {
 				securityId: chartSecurityId,
 				timeframe: chartTimeframe,
 				timestamp: timeToRequestForUpdatingAggregate,
@@ -518,33 +496,34 @@
 				isreplay: $streamInfo.replayActive
 			});
 
-			if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
-				return;
-			}
-			const bar = barDataList[0];
-			var currentCandleData = chartCandleSeries.data();
-			for (var c = currentCandleData.length - 1; c > 0; c--) {
-				if (currentCandleData[c].time == UTCSecondstoESTSeconds(bar.time)) {
-					currentCandleData[c] = {
-						time: UTCSecondstoESTSeconds(bar.time) as UTCTimestamp,
-						open: bar.open,
-						high: bar.high,
-						low: bar.low,
-						close: bar.close
-					};
-					chartCandleSeries.setData(currentCandleData);
-					var currentVolumeData = chartVolumeSeries.data();
-					currentVolumeData[c] = {
-						time: UTCSecondstoESTSeconds(bar.time) as UTCTimestamp,
-						value: bar.volume * (dolvol ? bar.close : 1),
-						color: bar.close > bar.open ? '#089981' : '#ef5350'
-					};
-					chartVolumeSeries.setData(currentVolumeData);
-					break;
-				}
+			if (!barData) return;
+
+			// Find and update the matching bar
+			const currentData = chartCandleSeries.data();
+			const barIndex = currentData.findIndex(candle => 
+				candle.time === UTCSecondstoESTSeconds(barData.time));
+				
+			if (barIndex !== -1) {
+				const updatedCandle = {
+					time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
+					open: barData.open,
+					high: barData.high,
+					low: barData.low,
+					close: barData.close
+				};
+				currentData[barIndex] = updatedCandle;
+				chartCandleSeries.setData(currentData);
+
+				const volumeData = chartVolumeSeries.data();
+				volumeData[barIndex] = {
+					time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
+					value: barData.volume * (dolvol ? barData.close : 1),
+					color: barData.close > barData.open ? '#089981' : '#ef5350'
+				};
+				chartVolumeSeries.setData(volumeData);
 			}
 		} catch (error) {
-			console.error('Error fetching polygon aggregate 4k6lg', error);
+			console.error('Error fetching historical data:', error);
 		}
 	}
 
