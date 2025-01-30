@@ -146,7 +146,7 @@
 	let currentChartInstance: Instance = { ticker: '', timestamp: 0, timeframe: '' };
 	let blockingChartQueryDispatch = {};
 	let isPanning = false;
-	const excludedConditions = new Set([2, 7, 10, 12, 13,15,16, 20, 21, 22, 29, 33, 37]);
+	const excludedConditions = new Set([2, 7, 10, 13,15,16, 20, 21, 22, 29, 33, 37]);
 	function extendedHours(timestamp: number): boolean {
 		const date = new Date(timestamp);
 		const hours = date.getHours();
@@ -415,7 +415,7 @@
 			!chartCandleSeries?.data()?.length || isLoadingChartData) {
 			return;
 		}
-
+		console.log(trade.conditions)
 		// Check excluded conditions early
 		if (trade.conditions?.some(condition => excludedConditions.has(condition))) {
 			return;
