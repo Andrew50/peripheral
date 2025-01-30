@@ -102,6 +102,17 @@
             return 'white';
         }
     }
+
+    // Modify the time format to be more compact
+    function formatTime(timestamp: number): string {
+        const date = new Date(timestamp);
+        return date.toLocaleTimeString([], { 
+            hour12: false,
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+    }
 </script>
 
 <!-- Table for displaying time and sales data -->
@@ -110,27 +121,27 @@
         {#if Array.isArray(allTrades)}
             <thead>
                 <tr>
-                    <th>Time</th>
                     <th>Price</th>
-                    <th>{$settings.divideTaS ? "Size*100" : "Size"}</th>
-                    <th>Exchange</th>
+                    <th>{$settings.divideTaS ? "Sz*100" : "Size"}</th>
+                    <th>Exch</th>
+                    <th>Time</th>
                 </tr>
             </thead>
             <tbody>
                 {#each allTrades as trade}
                     <tr class="{trade.color}">
-                        <td>{new Date(trade.timestamp).toLocaleTimeString()}</td>
-                        <td>{trade.price?.toFixed(3)}</td>
+                        <td>{trade.price?.toFixed(2)}</td>
                         <td>{trade.size}</td>
-                        <td>{trade.exchangeName}</td>
+                        <td>{trade.exchangeName.substring(0,4)}</td>
+                        <td>{formatTime(trade.timestamp)}</td>
                     </tr>
                 {/each}
                 {#each Array(maxLength - allTrades.length).fill(0) as _}
                     <tr>
-                        <td>&nbsp;</td> <!-- Empty cell -->
-                        <td>&nbsp;</td> <!-- Empty cell -->
-                        <td>&nbsp;</td> <!-- Empty cell -->
-                        <td>&nbsp;</td> <!-- Empty cell -->
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
                     </tr>
                 {/each}
             </tbody>
@@ -141,7 +152,7 @@
 <style>
     .time-and-sales {
         font-family: Arial, sans-serif;
-        font-size: 12px;
+        font-size: 10px;
         width: 100%;
         overflow-y: auto;
         background-color: black;
@@ -150,25 +161,30 @@
     .trade-table {
         width: 100%;
         border-collapse: collapse;
+        table-layout: fixed;
     }
 
     .trade-table th, .trade-table td {
-        padding: 0;
+        padding: 1px 2px;
         text-align: left;
-        font-size: 12px;
+        font-size: 10px;
         border: none;
         background-color: black;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
+
+    .trade-table th:nth-child(1), .trade-table td:nth-child(1) { width: 25%; }
+    .trade-table th:nth-child(2), .trade-table td:nth-child(2) { width: 25%; }
+    .trade-table th:nth-child(3), .trade-table td:nth-child(3) { width: 25%; }
+    .trade-table th:nth-child(4), .trade-table td:nth-child(4) { width: 25%; }
 
     .trade-table th {
         color: white;
         font-weight: bold;
         background-color: #333;
-        padding: 5px;
-    }
-
-    .trade-table td {
-        padding: 5px;
+        padding: 2px;
     }
 </style>
 

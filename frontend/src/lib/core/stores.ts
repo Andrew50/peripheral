@@ -87,3 +87,8 @@ export function formatTimestamp(timestamp : number) {
     const date = new Date(timestamp);
     return date.toLocaleDateString('en-US') + ' ' + date.toLocaleTimeString('en-US');
 }
+
+export const tickerInfoState = writable({
+    isExpanded: false,
+    currentHeight: 200
+});
