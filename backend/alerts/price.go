@@ -1,29 +1,33 @@
 package alerts
 
 import (
-    "backend/utils"
-    "fmt"
+	"backend/utils"
+	"fmt"
 )
 
 func processPriceAlert(conn *utils.Conn, alert Alert) error {
-    ds := data[*alert.SecurityId]
-    if ds == nil {
-        return fmt.Errorf("1-90vj- price alert")
-    }
-    fmt.Println("god")
-    ds.DayData.mutex.RLock()
-    defer ds.DayData.mutex.RUnlock()
-    if *alert.Direction {
-        if ds.DayData.Aggs[Length - 1][1] > *alert.Price {
-            dispatchAlert(conn,alert)
-
-        }
-    }else{
-        if ds.DayData.Aggs[Length - 1][2] < *alert.Price {
-            dispatchAlert(conn,alert)
-        }
-    
-    }
-    return nil
+	alertAggDataMutex.RLock()         // Acquire read lock
+	defer alertAggDataMutex.RUnlock() // Release read lock
+	ds := alertAggData[*alert.SecurityId]
+	if ds == nil {
+		return fmt.Errorf("1-90vj- price alert")
+	}
+	ds.SecondDataExtended.mutex.RLock()
+	defer ds.SecondDataExtended.mutex.RUnlock()
+	directionPtr := alert.Direction
+	if directionPtr != nil {
+		price := ds.SecondDataExtended.Aggs[Length-1][1]
+		if *directionPtr {
+			if price > *alert.Price {
+				dispatchAlert(conn, alert)
+			}
+		} else {
+			if price < *alert.Price {
+				dispatchAlert(conn, alert)
+			}
+		}
+	} else {
+		fmt.Println("no direction pointer")
+	}
+	return nil
 }
-
