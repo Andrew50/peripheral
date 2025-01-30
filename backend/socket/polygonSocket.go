@@ -2,8 +2,8 @@
 package socket
 
 import (
+	"backend/alerts"
 	"backend/utils"
-    "backend/alerts"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,7 +14,6 @@ import (
 	polygonws "github.com/polygon-io/client-go/websocket"
 	"github.com/polygon-io/client-go/websocket/models"
 )
-
 
 var nextDispatchTimes = struct {
 	sync.RWMutex
@@ -32,21 +31,21 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 		log.Println("niv0: ", err)
 		return
 	} else {
-		fmt.Printf("\n successfully connected to Polygon Quotes\n ")
+		//fmt.Printf("debug: successfully connected to Polygon Quotes\n ")
 	}
 	err = polygonWS.Subscribe(polygonws.StocksTrades)
 	if err != nil {
 		log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	} else {
-		fmt.Printf("\n successfully connected to Polygon Trades \n ")
+		//fmt.Printf("debug: successfully connected to Polygon Trades \n ")
 	}
 	err = polygonWS.Subscribe(polygonws.StocksMinAggs)
 	if err != nil {
 		log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	} else {
-		fmt.Printf("\n successfully connected to Polygon \n")
+		//fmt.Printf("debug: successfully connected to Polygon \n")
 	}
 	for {
 		select {
@@ -73,8 +72,8 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 				continue
 			}
 			switch msg := out.(type) {
-/*            case models.EquityAgg:
-                alerts.appendAggregate(securityId,msg.Open,msg.High,msg.Low,msg.Close,msg.Volume)*/
+			/*            case models.EquityAgg:
+			              alerts.appendAggregate(securityId,msg.Open,msg.High,msg.Low,msg.Close,msg.Volume)*/
 			case models.EquityTrade:
 				channelName := fmt.Sprintf("%d-fast", securityId)
 				data := TradeData{
@@ -93,7 +92,7 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 				//	conn.Cache.Publish(context.Background(), "trades-agg", string(jsonData))
 
 				//conn.Cache.Publish(context.Background(), channelName, string(jsonData))
-                broadcastToChannel(channelName, string(jsonData))
+				broadcastToChannel(channelName, string(jsonData))
 				channelName = fmt.Sprintf("%d-all", securityId)
 				data.Channel = channelName
 				jsonData, err = json.Marshal(data)
@@ -101,18 +100,26 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 					fmt.Println("Error marshling JSON:", err)
 				}
 				//conn.Cache.Publish(context.Background(), channelName, string(jsonData))
-                broadcastToChannel(channelName, string(jsonData))
+				broadcastToChannel(channelName, string(jsonData))
 				now := time.Now()
 				nextDispatchTimes.RLock()
 				nextDispatch, exists := nextDispatchTimes.times[msg.Symbol]
 				nextDispatchTimes.RUnlock()
-                alerts.AppendTick(conn,securityId,data.Timestamp,data.Price,data.Size)
+				// Only append tick if aggregates are initialized
+				//fmt.Println("debug: alerts.IsAggsInitialized()", alerts.IsAggsInitialized())
+
+				//if alerts.IsAggsInitialized() {
+				alerts.AppendTick(conn, securityId, data.Timestamp, data.Price, data.Size)
+				//}
 				if !exists || now.After(nextDispatch) {
 					slowChannelName := fmt.Sprintf("%d-slow", securityId)
 					data.Channel = slowChannelName
 					jsonData, err = json.Marshal(data)
+					if err != nil {
+						fmt.Println("E2fi200e2e0rror marshling JSON:", err)
+					}
 					//conn.Cache.Publish(context.Background(), slowChannelName, string(jsonData))
-                    broadcastToChannel(slowChannelName, string(jsonData))
+					broadcastToChannel(slowChannelName, string(jsonData))
 					nextDispatchTimes.Lock()
 					nextDispatchTimes.times[msg.Symbol] = now.Add(slowRedisTimeout)
 					nextDispatchTimes.Unlock()
@@ -135,19 +142,22 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 					continue
 				}
 				//conn.Cache.Publish(context.Background(), channelName, jsonData)
-                broadcastToChannel(channelName, string(jsonData))
+				broadcastToChannel(channelName, string(jsonData))
 			}
 
 		}
 	}
 }
-/*func PolygonDataToRedis(conn *utils.Conn) {
-	jsonData := `{"message": "Hello, WebSocket!", "value": 123}`
-	err := conn.Cache.Publish(context.Background(), "websocket-test", jsonData).Err()
-	if err != nil {
-		log.Println("Error publishing to Redis:", err)
+
+/*
+	func PolygonDataToRedis(conn *utils.Conn) {
+		jsonData := `{"message": "Hello, WebSocket!", "value": 123}`
+		err := conn.Cache.Publish(context.Background(), "websocket-test", jsonData).Err()
+		if err != nil {
+			log.Println("Error publishing to Redis:", err)
+		}
 	}
-}*/
+*/
 func StartPolygonWS(conn *utils.Conn) error {
 	if err := initTickerToSecurityIdMap(conn); err != nil {
 		return fmt.Errorf("failed to initialize ticker to security ID map: %v", err)

@@ -8,12 +8,29 @@ import (
 	"time"
 )
 
+const concurrency = 30 // Set the desired level of concurrency
+//const polygonRateLimit = 1000 //per second
+// Define constants to control which aggregates are active
+
+type result struct {
+	securityId int
+	data       *SecurityData
+	err        error
+}
+
+var (
+	aggsInitialized     bool
+	aggsInitializedLock sync.RWMutex // Mutex to protect aggsInitialized
+)
+
 func InitAlertsAndAggs(conn *utils.Conn) error {
+	setAggsInitialized(false) // Set to false at the start
 	ctx := context.Background()
 
 	if err := loadActiveAlerts(ctx, conn); err != nil {
 		return fmt.Errorf("loading active alerts: %w", err)
 	}
+
 	query := `
         SELECT securityId 
         FROM securities 
@@ -38,74 +55,14 @@ func InitAlertsAndAggs(conn *utils.Conn) error {
 		return fmt.Errorf("iterating security rows: %w", err)
 	}
 
-	type result struct {
-		securityId int
-		data       *SecurityData
-		err        error
-	}
-	resultsChan := make(chan result, len(securityIds))
-
-	// Create a WaitGroup to track goroutines
-	var wg sync.WaitGroup
-
-	// Create a semaphore to limit concurrent API calls
-	maxConcurrent := 5 // Adjust this value based on API limits
-	sem := make(chan struct{}, maxConcurrent)
-
-	// Launch goroutines for each security
-	for _, securityId := range securityIds {
-		wg.Add(1)
-		go func(sid int) {
-			defer wg.Done()
-
-			// Acquire semaphore
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			//start := time.Now()
-
-			// Initialize security data
-			sd := initSecurityData(conn, sid)
-			if sd == nil {
-				resultsChan <- result{
-					securityId: sid,
-					data:       nil,
-					err:        fmt.Errorf("failed to initialize security data for ID %d", sid),
-				}
-				return
-			}
-
-			// Validate the data if needed
-			if err := validateSecurityData(sd); err != nil {
-				resultsChan <- result{
-					securityId: sid,
-					data:       nil,
-					err:        fmt.Errorf("validation failed for security %d: %w", sid, err),
-				}
-				return
-			}
-
-			////fmt.Printf("Security %d processed in %v\n", sid, time.Since(start))
-
-			resultsChan <- result{
-				securityId: sid,
-				data:       sd,
-				err:        nil,
-			}
-		}(securityId)
-	}
-
-	// Start a goroutine to close results channel when all workers are done
-	go func() {
-		wg.Wait()
-		close(resultsChan)
-	}()
+	// Process securities with a capped number of goroutines
+	results := processSecuritiesConcurrently(securityIds, concurrency, conn)
 
 	// Process results and collect errors
-	data = make(map[int]*SecurityData)
+	data := make(map[int]*SecurityData)
 	var loadErrors []error
 
-	for res := range resultsChan {
+	for _, res := range results {
 		if res.err != nil {
 			loadErrors = append(loadErrors, res.err)
 		} else {
@@ -114,18 +71,6 @@ func InitAlertsAndAggs(conn *utils.Conn) error {
 	}
 
 	// Handle any load errors
-	if len(loadErrors) > 0 {
-		var errMsg string
-		for i, err := range loadErrors {
-			if i > 0 {
-				errMsg += "; "
-			}
-			errMsg += err.Error()
-		}
-		return fmt.Errorf("errors loading aggregates: %s", errMsg)
-	}
-
-	// If there were any errors during loading, combine them into a single error
 	if len(loadErrors) > 0 {
 		var errMsg string
 		for i, err := range loadErrors {
@@ -163,7 +108,74 @@ func InitAlertsAndAggs(conn *utils.Conn) error {
 		return fmt.Errorf("errors validating alerts: %s", errMsg)
 	}
 
+	alertAggDataMutex.Lock() // Acquire write lock
+	alertAggData = data
+	alertAggDataMutex.Unlock() // Release write lock
+
+	setAggsInitialized(true) // Set to true after successful initialization
+	fmt.Println("Finished initializing alerts and aggregates")
 	return nil
+}
+
+// Function to safely set the aggsInitialized flag
+func setAggsInitialized(value bool) {
+	aggsInitializedLock.Lock()
+	defer aggsInitializedLock.Unlock()
+	aggsInitialized = value
+	fmt.Println("debug: aggsInitialized:----------------------", aggsInitialized)
+}
+
+// Function to safely get the aggsInitialized flag
+func IsAggsInitialized() bool {
+	aggsInitializedLock.RLock()
+	defer aggsInitializedLock.RUnlock()
+	return aggsInitialized
+}
+
+// Function to process securities concurrently with a fixed number of workers
+func processSecuritiesConcurrently(securityIds []int, concurrency int, conn *utils.Conn) []result {
+	resultsChan := make(chan result, len(securityIds))
+	jobChan := make(chan int, len(securityIds))
+
+	// Spawn a fixed number of workers
+	for w := 0; w < concurrency; w++ {
+		go func() {
+			for sid := range jobChan {
+				sd, err := processOneSecurity(sid, conn)
+				resultsChan <- result{securityId: sid, data: sd, err: err}
+			}
+		}()
+	}
+
+	// Feed all security IDs into the job channel
+	for _, sid := range securityIds {
+		jobChan <- sid
+	}
+	close(jobChan)
+
+	// Collect all results
+	var results []result
+	for i := 0; i < len(securityIds); i++ {
+		r := <-resultsChan
+		results = append(results, r)
+	}
+	close(resultsChan)
+
+	return results
+}
+
+// Function to process a single security
+func processOneSecurity(sid int, conn *utils.Conn) (*SecurityData, error) {
+	sd := initSecurityData(conn, sid)
+	if sd == nil {
+		return nil, fmt.Errorf("failed to initialize security data for ID %d", sid)
+	}
+
+	if err := validateSecurityData(sd); err != nil {
+		return nil, fmt.Errorf("validation failed for security %d: %w", sid, err)
+	}
+
+	return sd, nil
 }
 
 // Helper function to load active alerts
@@ -207,27 +219,36 @@ func loadActiveAlerts(ctx context.Context, conn *utils.Conn) error {
 // Helper function to validate initialized security data
 func validateSecurityData(sd *SecurityData) error {
 	if sd == nil {
+		fmt.Println("Security data is nil")
 		return fmt.Errorf("security data is nil")
 	}
 
-	// Validate SecondDataExtended
-	if err := validateTimeframeData(&sd.SecondDataExtended, "second", true); err != nil {
-		return fmt.Errorf("second data validation failed: %w", err)
+	if secondAggs {
+		if err := validateTimeframeData(&sd.SecondDataExtended, "second", true); err != nil {
+			fmt.Printf("Second data validation failed: %v\n", err)
+			return fmt.Errorf("second data validation failed: %w", err)
+		}
 	}
 
-	// Validate MinuteDataExtended
-	if err := validateTimeframeData(&sd.MinuteDataExtended, "minute", true); err != nil {
-		return fmt.Errorf("minute data validation failed: %w", err)
+	if minuteAggs {
+		if err := validateTimeframeData(&sd.MinuteDataExtended, "minute", true); err != nil {
+			fmt.Printf("Minute data validation failed: %v\n", err)
+			return fmt.Errorf("minute data validation failed: %w", err)
+		}
 	}
 
-	// Validate HourData
-	if err := validateTimeframeData(&sd.HourData, "hour", false); err != nil {
-		return fmt.Errorf("hour data validation failed: %w", err)
+	if hourAggs {
+		if err := validateTimeframeData(&sd.HourData, "hour", false); err != nil {
+			fmt.Printf("Hour data validation failed: %v\n", err)
+			return fmt.Errorf("hour data validation failed: %w", err)
+		}
 	}
 
-	// Validate DayData
-	if err := validateTimeframeData(&sd.DayData, "day", false); err != nil {
-		return fmt.Errorf("day data validation failed: %w", err)
+	if dayAggs {
+		if err := validateTimeframeData(&sd.DayData, "day", false); err != nil {
+			fmt.Printf("Day data validation failed: %v\n", err)
+			return fmt.Errorf("day data validation failed: %w", err)
+		}
 	}
 
 	return nil
@@ -254,6 +275,7 @@ func validateTimeframeData(td *TimeframeData, timeframeName string, extendedHour
 
 	return nil
 }
+
 func initTimeframeData(conn *utils.Conn, securityId int, timeframe int, isExtendedHours bool) TimeframeData {
 	aggs := make([][]float64, Length)
 	for i := range aggs {
@@ -341,17 +363,23 @@ func initTimeframeData(conn *utils.Conn, securityId int, timeframe int, isExtend
 }
 
 func initSecurityData(conn *utils.Conn, securityId int) *SecurityData {
-	return &SecurityData{
-		SecondDataExtended: initTimeframeData(conn, securityId, Second, true),
-		//MinuteDataExtended: initTimeframeData(conn, securityId, Minute, true),
-		//HourData:          initTimeframeData(conn, securityId, Hour, false),
-		//DayData:           initTimeframeData( conn, securityId, Day, false),
+	sd := &SecurityData{}
 
-		/*        Mcap: getMcap(conn,securityId),
-		          Dolvol: getDolvol(conn,securityId),
-		          Adr: getAdr(conn,securityId),*/
-
-		//
-
+	if secondAggs {
+		sd.SecondDataExtended = initTimeframeData(conn, securityId, Second, true)
 	}
+
+	if minuteAggs {
+		sd.MinuteDataExtended = initTimeframeData(conn, securityId, Minute, true)
+	}
+
+	if hourAggs {
+		sd.HourData = initTimeframeData(conn, securityId, Hour, false)
+	}
+
+	if dayAggs {
+		sd.DayData = initTimeframeData(conn, securityId, Day, false)
+	}
+
+	return sd
 }
