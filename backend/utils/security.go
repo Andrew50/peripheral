@@ -66,6 +66,7 @@ func GetTickerEvents(client *polygon.Client, id string) ([]models.TickerEventRes
 	return res.Results, nil
 
 }
+func getTickerDetails(client *polygon.Client, ticker string) ()
 
 /*type TickerResponse struct {
 	Results []struct {

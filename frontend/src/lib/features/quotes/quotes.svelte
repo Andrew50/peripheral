@@ -5,6 +5,7 @@
     import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
     import type { Instance } from '$lib/core/types';
     import type {Writable} from 'svelte/store'
+    import TickerInfo from '$lib/features/tickerInfo.svelte';
 
     let instance :Writable<Instance> = writable({})
     let container: HTMLDivElement;
@@ -33,6 +34,7 @@
     <L1 instance={instance} />
     <TimeAndSales instance={instance} />
     </div>
+    <TickerInfo />
 </div>
 
 <style>
