@@ -119,7 +119,7 @@ func public_handler(conn *utils.Conn) http.HandlerFunc {
 		if r.Method == "OPTIONS" {
 			return
 		}
-		fmt.Println("got public request")
+		//fmt.Println("debug: got public request")
 		var req Request
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if handleError(w, err, "decoding request") {
@@ -150,7 +150,7 @@ func private_handler(conn *utils.Conn) http.HandlerFunc {
 		if r.Method != "POST" {
 			return
 		}
-		fmt.Println("got private request")
+		//fmt.Println("debug: got private request")
 		token_string := r.Header.Get("Authorization")
 		user_id, err := validate_token(token_string)
 		if handleError(w, err, "auth") {
@@ -160,7 +160,7 @@ func private_handler(conn *utils.Conn) http.HandlerFunc {
 		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "decoding request") {
 			return
 		}
-		fmt.Println(req.Function)
+		//fmt.Printf("debug: %s\n", req.Function)
 
 		if function, ok := privateFunc[req.Function]; ok {
 			result, err := function(conn, user_id, req.Arguments)
@@ -190,7 +190,7 @@ func queueHandler(conn *utils.Conn) http.HandlerFunc {
 		if r.Method != "POST" {
 			return
 		}
-		fmt.Println("got queue request")
+		//fmt.Println("debug: got queue request")
 		token_string := r.Header.Get("Authorization")
 		_, err := validate_token(token_string)
 		if handleError(w, err, "auth") {
@@ -256,7 +256,7 @@ func StartServer() {
 	http.HandleFunc("/poll", pollHandler(conn))
 	http.HandleFunc("/ws", socket.WsHandler(conn))
 
-	fmt.Println("Server running on port 5057")
+	fmt.Println("debug: Server running on port 5057 ----------------------------------------------------------")
 	if err := http.ListenAndServe(":5057", nil); err != nil {
 		log.Fatal(err)
 	}

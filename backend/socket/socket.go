@@ -8,8 +8,9 @@ import (
 	"net/http"
 	"os"
 	"sync"
-	"github.com/gorilla/websocket"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 //
@@ -141,7 +142,7 @@ func (c *Client) readPump(conn *utils.Conn) {
 			continue
 		}
 		os.Stdout.Sync()
-		fmt.Printf("clientMsg.Action: %v %v\n", clientMsg.Action, clientMsg.ChannelName)
+		//fmt.Printf("clientMsg.Action: %v %v\n", clientMsg.Action, clientMsg.ChannelName)
 		switch clientMsg.Action {
 		case "subscribe":
 			if c.replayActive {
@@ -250,13 +251,13 @@ func (c *Client) close() {
 			delete(subscribers, c)
 
 			// If there are no more subscribers, close the Redis Pub/Sub and clean up
-            /*
-			if len(subscribers) == 0 {
-				if pubsub, exists := redisSubscriptions[channelName]; exists {
-					pubsub.Close()
-					delete(redisSubscriptions, channelName)
-				}
-			}*/
+			/*
+				if len(subscribers) == 0 {
+					if pubsub, exists := redisSubscriptions[channelName]; exists {
+						pubsub.Close()
+						delete(redisSubscriptions, channelName)
+					}
+				}*/
 
 			// Clean up the channelSubscribers map
 			delete(channelSubscribers, channelName)
@@ -272,4 +273,3 @@ func (c *Client) close() {
 		fmt.Println("Error closing WebSocket connection:", err)
 	}
 }
-

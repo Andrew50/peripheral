@@ -3,8 +3,8 @@ package jobs
 import (
 	"backend/socket"
 	//"backend/alerts"
+	"backend/alerts"
 	"backend/utils"
-    "backend/alerts"
 	"fmt"
 	"sync"
 	"time"
@@ -15,12 +15,16 @@ var eCloseRun = false
 
 var (
 	polygonInitialized bool
-	polygonInitMutex sync.Mutex
+	polygonInitMutex   sync.Mutex
+	alertsInitialized  bool
+	alertsInitMutex    sync.Mutex
 )
 
 func StartScheduler(conn *utils.Conn) chan struct{} {
-	go initialize(conn)
+	//go initialize(conn)
+	//eventLoop(time.Now(), conn)
 	location, err := time.LoadLocation("EST")
+	go eventLoop(time.Now().In(location), conn)
 	ticker := time.NewTicker(1 * time.Minute)
 	quit := make(chan struct{})
 	if err != nil {
@@ -42,17 +46,22 @@ func StartScheduler(conn *utils.Conn) chan struct{} {
 }
 
 func initialize(conn *utils.Conn) {
+
+	alertsInitMutex.Lock()
+	if !alertsInitialized {
+		err := alerts.StartAlertLoop(conn)
+		if err != nil {
+			fmt.Println("schedule issue", err)
+		}
+		alertsInitialized = true
+	}
+	alertsInitMutex.Unlock()
 	polygonInitMutex.Lock()
 	if !polygonInitialized {
 		socket.StartPolygonWS(conn)
 		polygonInitialized = true
 	}
 	polygonInitMutex.Unlock()
-	
-	err := alerts.StartAlertLoop(conn)
-	if err != nil {
-		fmt.Println("schedule issue",err)
-	}
 }
 
 func eventLoop(now time.Time, conn *utils.Conn) {
@@ -62,17 +71,17 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 	//open := time.Date(year, month, day, 9, 30, 0, 0, now.Location())
 	//close_ := time.Date(year, month, day, 16, 0, 0, 0, now.Location())
 	if !eOpenRun && now.After(eOpen) && now.Before(eClose) {
-		fmt.Println("running open update")
-		//socket.StartPolygonWS(conn)
-        initialize(conn)
-		pushJournals(conn, year, month, day)
 		eOpenRun = true
 		eCloseRun = false
+		fmt.Println("running open schedule ----------------------")
+		//socket.StartPolygonWS(conn)
+		initialize(conn)
+		pushJournals(conn, year, month, day)
 	}
 	if !eCloseRun && now.After(eClose) {
-		fmt.Println("running close update")
-		updateSecurities(conn, false)
 		eOpenRun = false
 		eCloseRun = true
+		fmt.Println("running close schedule ----------------------")
+		updateSecurities(conn, false)
 	}
 }
