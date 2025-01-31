@@ -72,7 +72,6 @@
         <div class="content">
             <div class="info-row">
                 <span class="label">Ticker:</span>
-                <span class="value">{$currentChartInstance.ticker}</span>
             </div>
             <div class="info-row">
                 <span class="label">Market Cap:</span>
