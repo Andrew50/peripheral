@@ -1,7 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { tickerInfoState } from '$lib/core/stores';
-    
     let startY = 0;
     let isDragging = false;
     let container: HTMLDivElement;
@@ -71,6 +70,10 @@
     
     {#if $tickerInfoState.isExpanded}
         <div class="content">
+            <div class="info-row">
+                <span class="label">Ticker:</span>
+                <span class="value">{$currentChartInstance.ticker}</span>
+            </div>
             <div class="info-row">
                 <span class="label">Market Cap:</span>
                 <span class="value">$50.2B</span>
