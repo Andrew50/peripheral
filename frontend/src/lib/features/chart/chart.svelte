@@ -415,7 +415,6 @@
 			!chartCandleSeries?.data()?.length || isLoadingChartData) {
 			return;
 		}
-		console.log(trade.conditions)
 		// Check excluded conditions early
 		if (trade.conditions?.some(condition => excludedConditions.has(condition))) {
 			return;
