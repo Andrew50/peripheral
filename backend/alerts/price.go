@@ -18,11 +18,11 @@ func processPriceAlert(conn *utils.Conn, alert Alert) error {
 	if directionPtr != nil {
 		price := ds.SecondDataExtended.Aggs[Length-1][1]
 		if *directionPtr {
-			if price > *alert.Price {
+			if price >= *alert.Price {
 				dispatchAlert(conn, alert)
 			}
 		} else {
-			if price < *alert.Price {
+			if price <= *alert.Price {
 				dispatchAlert(conn, alert)
 			}
 		}
