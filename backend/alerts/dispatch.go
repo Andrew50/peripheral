@@ -39,30 +39,26 @@ func SendTelegramMessage(msg string, chatID int64) {
 	}
 }
 
-func writeMessage(conn *utils.Conn, alert Alert) string {
+func writeAlertMessage(alert Alert) string {
 	if alert.SecurityId == nil {
 		log.Println("SecurityId is nil")
 		return "SecurityId is missing"
-	}
-	ticker, err := utils.GetTicker(conn, *alert.SecurityId, time.Now())
-	if err != nil {
-		return fmt.Sprintf("error getting ticker: %v", err)
 	}
 	if alert.AlertType == "setup" {
 		if alert.Price == nil {
 			log.Println("Price is nil for setup alert")
 			return "Price is missing for setup alert"
 		}
-		return fmt.Sprintf("%s %f", ticker, *alert.Price)
+		return fmt.Sprintf("%s %f", *alert.Ticker, *alert.Price)
 	} else if alert.AlertType == "price" {
 		if alert.Price == nil || alert.Direction == nil {
 			log.Println("Price or Direction is nil for price alert")
 			return "Price or Direction is missing for price alert"
 		}
 		if *alert.Direction {
-			return fmt.Sprintf("%s price above %f", ticker, *alert.Price)
+			return fmt.Sprintf("%s price above %f", *alert.Ticker, *alert.Price)
 		} else {
-			return fmt.Sprintf("%s price below %f", ticker, *alert.Price)
+			return fmt.Sprintf("%s price below %f", *alert.Ticker, *alert.Price)
 		}
 	} else if alert.AlertType == "algo" {
 		//return fmt.Sprintf("%s %s", *alert.Ticker, *alert.AlgoName)
@@ -72,9 +68,17 @@ func writeMessage(conn *utils.Conn, alert Alert) string {
 
 func dispatchAlert(conn *utils.Conn, alert Alert) error {
 	fmt.Println("dispatching alert", alert)
-	message := writeMessage(conn, alert)
-	SendTelegramMessage(message, ChatId)
-	socket.SendMessageToUser(alert.UserId, message)
+	alertMessage := writeAlertMessage(alert)
+	timestamp := time.Now()
+	SendTelegramMessage(alertMessage, ChatId)
+	socket.SendAlertToUser(alert.UserId, socket.AlertMessage{
+		AlertId:    alert.AlertId,
+		Timestamp:  timestamp.Unix() * 1000,
+		SecurityId: *alert.SecurityId,
+		Message:    alertMessage,
+		Channel:    "alert",
+		Ticker:     *alert.Ticker,
+	})
 	query := `
         INSERT INTO alertLogs (alertId, timestamp, securityId)
         VALUES ($1, $2, $3)
@@ -83,8 +87,8 @@ func dispatchAlert(conn *utils.Conn, alert Alert) error {
 	_, err := conn.DB.Exec(context.Background(),
 		query,
 		alert.AlertId,
-		time.Now(),
-		alert.SecurityId,
+		timestamp,
+		*alert.SecurityId,
 	)
 	if err != nil {
 		log.Printf("Failed to log alert to database: %v", err)
