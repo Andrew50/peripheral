@@ -46,8 +46,8 @@ func isTapeBurst(sd *socket.SecurityData) bool {
 	}
 
 	// 5. Compare to thresholds from VolBurstData
-	volThreshold := sd.VolBurstData.VolumeThreshold[periodIndex] * 2.0
-	pctThreshold := sd.VolBurstData.PriceThreshold[periodIndex] * 2.0
+	volThreshold := sd.VolBurstData.VolumeThreshold[periodIndex] * 10.0
+	pctThreshold := sd.VolBurstData.PriceThreshold[periodIndex] * 10.0
 
 	if totalVol >= volThreshold && pctRange >= pctThreshold {
 		return true

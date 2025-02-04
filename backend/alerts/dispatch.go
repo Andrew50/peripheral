@@ -40,6 +40,9 @@ func SendTelegramMessage(msg string, chatID int64) {
 }
 
 func writeAlertMessage(alert Alert) string {
+	if alert.AlertType == "algo" {
+		return "Algo alert"
+	}
 	if alert.SecurityId == nil {
 		log.Println("SecurityId is nil")
 		return "SecurityId is missing"
