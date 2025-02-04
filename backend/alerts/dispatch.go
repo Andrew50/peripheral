@@ -1,9 +1,9 @@
 package alerts
 
 import (
+	"backend/socket"
 	"backend/utils"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -31,27 +31,22 @@ func InitTelegramBot() error {
 	//log.Println("debug: Telegram bot initialized successfully")
 	return err
 }
-func SendMessageInternal(msg string, chatID int64) {
+func SendTelegramMessage(msg string, chatID int64) {
 	recipient := telebot.ChatID(chatID)
 	_, err := bot.Send(recipient, msg)
 	if err != nil {
 		log.Printf("Failed to send message to chat ID %d: %v", chatID, err)
 	}
 }
-
-type SendMessageArgs struct {
-	Message string `json:"message"`
-	ChatID  int64  `json:"chatID"`
-}
-
-func SendMessage(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var args SendMessageArgs
-	err := json.Unmarshal(rawArgs, &args)
-	if err != nil {
-		return nil, fmt.Errorf("incorrect args 3l5lfgkkcj %v", err)
+func sendMessageToUser(userID int, message string) {
+	socket.userToClientMutex.RLock()
+	client, ok := userToClient[userID]
+	userToClientMutex.RUnlock()
+	if !ok {
+		fmt.Println("client not found")
+		return
 	}
-	SendMessageInternal(args.Message, args.ChatID)
-	return nil, nil
+	client.send <- []byte(message)
 }
 
 func writeMessage(conn *utils.Conn, alert Alert) string {
@@ -84,10 +79,12 @@ func writeMessage(conn *utils.Conn, alert Alert) string {
 	}
 	return ""
 }
+
 func dispatchAlert(conn *utils.Conn, alert Alert) error {
 	fmt.Println("dispatching alert", alert)
 	message := writeMessage(conn, alert)
-	SendMessageInternal(message, ChatId) //todo
+	SendTelegramMessage(message, ChatId)
+	socket.SendMessageToUser(alert.UserId, message)
 	query := `
         INSERT INTO alertLogs (alertId, timestamp, securityId)
         VALUES ($1, $2, $3)
@@ -119,6 +116,21 @@ func dispatchAlert(conn *utils.Conn, alert Alert) error {
 
 	return nil
 }
+
+/*type SendMessageArgs struct {
+	Message string `json:"message"`
+	ChatID  int64  `json:"chatID"`
+}
+
+func SendMessage(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args SendMessageArgs
+	err := json.Unmarshal(rawArgs, &args)
+	if err != nil {
+		return nil, fmt.Errorf("incorrect args 3l5lfgkkcj %v", err)
+	}
+	SendTelegramMessage(args.Message, args.ChatID)
+	return nil, nil
+}*/
 
 // func main() {
 // 	botToken := "7500247744:AAGNsmjWYfb97XzppT2E0_8qoArgxLOz7e0"
