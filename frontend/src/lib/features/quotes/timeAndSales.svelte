@@ -130,7 +130,7 @@
             <tbody>
                 {#each allTrades as trade}
                     <tr class="{trade.color}">
-                        <td>{trade.price?.toFixed(2)}</td>
+                        <td>{trade.price}</td>
                         <td>{trade.size}</td>
                         <td>{trade.exchangeName.substring(0,4)}</td>
                         <td>{formatTime(trade.timestamp)}</td>
@@ -152,7 +152,7 @@
 <style>
     .time-and-sales {
         font-family: Arial, sans-serif;
-        font-size: 10px;
+        font-size: 12px;
         width: 100%;
         overflow-y: auto;
         background-color: black;
@@ -165,9 +165,9 @@
     }
 
     .trade-table th, .trade-table td {
-        padding: 1px 2px;
+        padding: 2px 4px;
         text-align: left;
-        font-size: 10px;
+        font-size: 12px;
         border: none;
         background-color: black;
         white-space: nowrap;
@@ -175,16 +175,16 @@
         text-overflow: ellipsis;
     }
 
-    .trade-table th:nth-child(1), .trade-table td:nth-child(1) { width: 25%; }
+    .trade-table th:nth-child(1), .trade-table td:nth-child(1) { width: 30%; }
     .trade-table th:nth-child(2), .trade-table td:nth-child(2) { width: 25%; }
-    .trade-table th:nth-child(3), .trade-table td:nth-child(3) { width: 25%; }
+    .trade-table th:nth-child(3), .trade-table td:nth-child(3) { width: 20%; }
     .trade-table th:nth-child(4), .trade-table td:nth-child(4) { width: 25%; }
 
     .trade-table th {
         color: white;
         font-weight: bold;
         background-color: #333;
-        padding: 2px;
+        padding: 2px 4px;
     }
 </style>
 
