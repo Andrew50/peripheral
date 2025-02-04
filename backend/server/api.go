@@ -10,6 +10,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+
+	"github.com/gorilla/websocket"
 )
 
 var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, error){
@@ -245,6 +248,39 @@ func pollHandler(conn *utils.Conn) http.HandlerFunc {
 	}
 }
 
+func WSHandler(conn *utils.Conn) http.HandlerFunc {
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Extract user ID from request (e.g., from headers or query parameters)
+		userIDStr := r.Header.Get("X-User-ID") // Example: extracting from header
+		if userIDStr == "" {
+			http.Error(w, "User ID is required", http.StatusBadRequest)
+			return
+		}
+
+		userID, err := strconv.Atoi(userIDStr)
+		if err != nil {
+			http.Error(w, "Invalid User ID", http.StatusBadRequest)
+			return
+		}
+
+		// Upgrade the connection to a WebSocket
+		ws, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			fmt.Println("Failed to upgrade to WebSocket:", err)
+			return
+		}
+
+		// Call the slimmed-down version of WsHandler in socket.go
+		socket.HandleWebSocket(conn, ws, userID)
+	}
+}
+
 func StartServer() {
 	conn, cleanup := utils.InitConn(true)
 	defer cleanup()
@@ -254,7 +290,7 @@ func StartServer() {
 	http.HandleFunc("/private", private_handler(conn))
 	http.HandleFunc("/queue", queueHandler(conn))
 	http.HandleFunc("/poll", pollHandler(conn))
-	http.HandleFunc("/ws", socket.WsHandler(conn))
+	http.HandleFunc("/ws", WSHandler(conn))
 
 	fmt.Println("debug: Server running on port 5057 ----------------------------------------------------------")
 	if err := http.ListenAndServe(":5057", nil); err != nil {
