@@ -63,6 +63,8 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"newSetup":    tasks.NewSetup,
 	"setSetup":    tasks.SetSetup,
 	"deleteSetup": tasks.DeleteSetup,
+	//algos
+	//"getAlgos": tasks.GetAlgos,
 	//samples
 	"labelTrainingQueueInstance": tasks.LabelTrainingQueueInstance,
 	"getTrainingQueue":           tasks.GetTrainingQueue,
