@@ -26,7 +26,8 @@ func processTapeBursts(conn *utils.Conn, alert Alert) {
 				log.Printf("Error getting ticker for security %d: %v", securityID, err)
 				continue
 			}
-			dispatchAlert(conn, alert)
+			fmt.Printf("Tape burst detected on %s %v\n", ticker, alert)
+			//dispatchAlert(conn, alert)
 		}
 	}
 
