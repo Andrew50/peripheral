@@ -146,7 +146,7 @@
 	let currentChartInstance: Instance = { ticker: '', timestamp: 0, timeframe: '' };
 	let blockingChartQueryDispatch = {};
 	let isPanning = false;
-	const excludedConditions = new Set([2, 7, 10, 13,15,16, 20, 21, 22, 29, 33, 37]);
+	const excludedConditions = new Set([2, 7, 10, 13, 15, 16, 20, 21, 22, 29, 33, 37]);
 	function extendedHours(timestamp: number): boolean {
 		const date = new Date(timestamp);
 		const hours = date.getHours();
@@ -177,21 +177,16 @@
 			console.log('adjusting to stream timestamp');
 			inst.timestamp = Math.floor($streamInfo.timestamp);
 		}
-		privateRequest<BarData[]>(
-			'getChartData',
-			{
-				securityId: inst.securityId,
-				timeframe: inst.timeframe,
-				timestamp: inst.timestamp,
-				direction: inst.direction,
-				bars: inst.bars,
-				extendedhours: inst.extendedHours,
-				isreplay: $streamInfo.replayActive
-			},
-			true
-		)
+		privateRequest<BarData[]>('getChartData', {
+			securityId: inst.securityId,
+			timeframe: inst.timeframe,
+			timestamp: inst.timestamp,
+			direction: inst.direction,
+			bars: inst.bars,
+			extendedhours: inst.extendedHours,
+			isreplay: $streamInfo.replayActive
+		})
 			.then((barDataList: BarData[]) => {
-				console.log(barDataList);
 				blockingChartQueryDispatch = inst;
 				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
 					return;
@@ -240,7 +235,7 @@
 					}
 					releaseFast();
 					releaseQuote();
-					privateRequest<number>('getMarketCap', { ticker: inst.ticker }, true).then(
+					privateRequest<number>('getMarketCap', { ticker: inst.ticker }).then(
 						(res: { marketCap: number }) => {
 							hoveredCandleData.update((v: typeof defaultHoveredCandleData) => {
 								v.mcap = res.marketCap;
@@ -251,14 +246,14 @@
 					for (const line of $drawingMenuProps.horizontalLines) {
 						chartCandleSeries.removePriceLine(line.line);
 					}
-					privateRequest<HorizontalLine[]>(
-						'getHorizontalLines',
-						{ securityId: inst.securityId },
-						true
-					).then((res: HorizontalLine[]) => {
-						for (const line of res) {
-							//night need to be later
-							addHorizontalLine(line.price, line.id); //TO IMPLEMENT
+					privateRequest<HorizontalLine[]>('getHorizontalLines', {
+						securityId: inst.securityId
+					}).then((res: HorizontalLine[]) => {
+						if (res !== null && res.length > 0) {
+							for (const line of res) {
+								//night need to be later
+								addHorizontalLine(line.price, line.id); //TO IMPLEMENT
+							}
 						}
 					});
 				}
@@ -368,11 +363,10 @@
 		});
 		if (id == -1) {
 			// only add to baceknd if its being added not from a ticker load but from a new added line
-			privateRequest<number>(
-				'setHorizontalLine',
-				{ price: price, securityId: chartSecurityId },
-				true
-			).then((res: number) => {
+			privateRequest<number>('setHorizontalLine', {
+				price: price,
+				securityId: chartSecurityId
+			}).then((res: number) => {
 				$drawingMenuProps.horizontalLines[$drawingMenuProps.horizontalLines.length - 1].id = res;
 			});
 		}
@@ -411,26 +405,33 @@
 
 	async function updateLatestChartBar(trade: TradeData) {
 		// Early returns for invalid data
-		if (!trade?.price || !trade?.size || !trade?.timestamp || 
-			!chartCandleSeries?.data()?.length || isLoadingChartData) {
+		if (
+			!trade?.price ||
+			!trade?.size ||
+			!trade?.timestamp ||
+			!chartCandleSeries?.data()?.length ||
+			isLoadingChartData
+		) {
 			return;
 		}
 		// Check excluded conditions early
-		if (trade.conditions?.some(condition => excludedConditions.has(condition))) {
+		if (trade.conditions?.some((condition) => excludedConditions.has(condition))) {
 			return;
 		}
 
 		// Check extended hours early
 		const isExtendedHours = extendedHours(trade.timestamp);
-		if (isExtendedHours && 
-			(!currentChartInstance.extendedHours || /^[dwm]/.test(currentChartInstance.timeframe))) {
+		if (
+			isExtendedHours &&
+			(!currentChartInstance.extendedHours || /^[dwm]/.test(currentChartInstance.timeframe))
+		) {
 			return;
 		}
 
 		const dolvol = get(settings).dolvol;
 		const mostRecentBar = chartCandleSeries.data().at(-1);
 		if (!mostRecentBar) return;
-		
+
 		currentBarTimestamp = mostRecentBar.time as number;
 		const tradeTime = UTCSecondstoESTSeconds(trade.timestamp / 1000);
 		const sameBar = tradeTime < currentBarTimestamp + chartTimeframeInSeconds;
@@ -464,8 +465,11 @@
 			currentChartInstance.extendedHours
 		);
 		const timeDiff = (trade.timestamp - referenceStartTime) / 1000;
-		const flooredDifference = Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds;
-		const newTime = UTCSecondstoESTSeconds(referenceStartTime / 1000 + flooredDifference) as UTCTimestamp;
+		const flooredDifference =
+			Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+		const newTime = UTCSecondstoESTSeconds(
+			referenceStartTime / 1000 + flooredDifference
+		) as UTCTimestamp;
 
 		// Update with new bar
 		chartCandleSeries.update({
@@ -484,7 +488,8 @@
 
 		// Fetch and update historical data
 		try {
-			const timeToRequestForUpdatingAggregate = ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
+			const timeToRequestForUpdatingAggregate =
+				ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
 			const [barData] = await privateRequest<BarData[]>('getChartData', {
 				securityId: chartSecurityId,
 				timeframe: chartTimeframe,
@@ -499,9 +504,10 @@
 
 			// Find and update the matching bar
 			const currentData = chartCandleSeries.data();
-			const barIndex = currentData.findIndex(candle => 
-				candle.time === UTCSecondstoESTSeconds(barData.time));
-				
+			const barIndex = currentData.findIndex(
+				(candle) => candle.time === UTCSecondstoESTSeconds(barData.time)
+			);
+
 			if (barIndex !== -1) {
 				const updatedCandle = {
 					time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
@@ -844,7 +850,6 @@
 			change(req);
 		});
 		chartEventDispatcher.subscribe((e: ChartEventDispatch) => {
-			console.log(e);
 			if (!currentChartInstance || !currentChartInstance.securityId) return;
 			if (e.event == 'replay') {
 				//currentChartInstance.timestamp = $streamInfo.timestamp
