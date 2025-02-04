@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 
 	"github.com/gorilla/websocket"
 )
@@ -251,21 +250,24 @@ func pollHandler(conn *utils.Conn) http.HandlerFunc {
 func WSHandler(conn *utils.Conn) http.HandlerFunc {
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
-			return true
+			return true // Allow all origins
 		},
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Extract user ID from request (e.g., from headers or query parameters)
-		userIDStr := r.Header.Get("X-User-ID") // Example: extracting from header
-		if userIDStr == "" {
-			http.Error(w, "User ID is required", http.StatusBadRequest)
+		addCORSHeaders(w)
+
+		// Extract the token from the query parameters
+		token := r.URL.Query().Get("token")
+		if token == "" {
+			http.Error(w, "Token is required", http.StatusBadRequest)
 			return
 		}
 
-		userID, err := strconv.Atoi(userIDStr)
+		// Validate the token and extract the user ID
+		userID, err := validate_token(token)
 		if err != nil {
-			http.Error(w, "Invalid User ID", http.StatusBadRequest)
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
 		}
 

@@ -18,7 +18,7 @@ type Alert struct {
 	Price      *float64
 	Direction  *bool
 	SecurityId *int
-	//Ticker     *string
+	Ticker     *string
 	//Message    *string
 }
 
@@ -29,7 +29,15 @@ var (
 	cancel    context.CancelFunc
 )
 
-func AddAlert(alert Alert) {
+func AddAlert(conn *utils.Conn, alert Alert) {
+	if alert.AlertType == "price" {
+		ticker, err := utils.GetTicker(conn, *alert.SecurityId, time.Now())
+		if err != nil {
+			fmt.Println("error getting ticker: %w", err)
+			return
+		}
+		alert.Ticker = &ticker
+	}
 	alerts.Store(alert.AlertId, alert)
 }
 
@@ -72,7 +80,7 @@ func alertLoop(ctx context.Context, conn *utils.Conn) {
 }
 
 func printAlert(alert Alert) {
-	fmt.Printf("AlertId: %d, UserId: %d, AlertType: %s, SetupId: %v, Price: %v, Direction: %v, SecurityId: %v\n", alert.AlertId, alert.UserId, alert.AlertType, nilOrValue(alert.SetupId), nilOrValue(alert.Price), nilOrValue(alert.Direction), nilOrValue(alert.SecurityId))
+	fmt.Printf("AlertId: %d, UserId: %d, AlertType: %s, SetupId: %v, Price: %v, Direction: %v, SecurityId: %v, Ticker: %v\n", alert.AlertId, alert.UserId, alert.AlertType, nilOrValue(alert.SetupId), nilOrValue(alert.Price), nilOrValue(alert.Direction), nilOrValue(alert.SecurityId), nilOrValue(alert.Ticker))
 }
 
 func nilOrValue[T any](ptr *T) any {
@@ -142,6 +150,15 @@ func initAlerts(conn *utils.Conn) error {
 		if err != nil {
 			return fmt.Errorf("scanning alert row: %w", err)
 		}
+		if alert.AlertType == "price" {
+			ticker, err := utils.GetTicker(conn, *alert.SecurityId, time.Now())
+			if err != nil {
+				fmt.Println("error getting ticker: %w", err)
+				return fmt.Errorf("getting ticker: %w", err)
+			}
+			alert.Ticker = &ticker
+		}
+
 		alerts.Store(alert.AlertId, alert)
 	}
 
