@@ -1,24 +1,13 @@
 package alerts
 
 import (
+	"backend/socket"
 	"backend/utils"
 	"context"
 	"fmt"
 	"log"
 	"sync"
 	"time"
-)
-
-const (
-	secondAggs = true
-	minuteAggs = false
-	hourAggs   = false
-	dayAggs    = false
-)
-
-var (
-	alertAggData      = make(map[int]*SecurityData)
-	alertAggDataMutex sync.RWMutex
 )
 
 type Alert struct {
@@ -53,14 +42,11 @@ func StartAlertLoop(conn *utils.Conn) error { //entrypoint
 	if err != nil {
 		return err
 	}
-	if err := InitAlertsAndAggs(conn); err != nil {
-		fmt.Println("god0ws")
+	if err := initAlerts(conn); err != nil {
+		fmt.Println("error : god0ws")
 		return err
 	}
 
-	/*if err := loadActiveAlerts(ctx, conn); err != nil {
-	    return err
-	}*/
 	ctx, cancel = context.WithCancel(context.Background())
 	go alertLoop(ctx, conn)
 	return nil
@@ -124,4 +110,71 @@ func processAlerts(conn *utils.Conn) {
 		return true
 	})
 	wg.Wait()
+}
+
+func initAlerts(conn *utils.Conn) error {
+	ctx := context.Background()
+
+	// Load active alerts
+	query := `
+        SELECT alertId, userId, alertType, setupId, price, direction, securityId
+        FROM alerts
+        WHERE active = true
+    `
+	rows, err := conn.DB.Query(ctx, query)
+	if err != nil {
+		return fmt.Errorf("querying active alerts: %w", err)
+	}
+	defer rows.Close()
+
+	alerts = sync.Map{}
+	for rows.Next() {
+		var alert Alert
+		err := rows.Scan(
+			&alert.AlertId,
+			&alert.UserId,
+			&alert.AlertType,
+			&alert.SetupId,
+			&alert.Price,
+			&alert.Direction,
+			&alert.SecurityId,
+		)
+		if err != nil {
+			return fmt.Errorf("scanning alert row: %w", err)
+		}
+		alerts.Store(alert.AlertId, alert)
+	}
+
+	if err = rows.Err(); err != nil {
+		return fmt.Errorf("iterating alert rows: %w", err)
+	}
+
+	// Validate alert securities exist in data map
+	var alertErrors []error
+	alerts.Range(func(key, value interface{}) bool {
+		alert := value.(Alert)
+		if alert.SecurityId != nil {
+			if _, exists := socket.AggData[*alert.SecurityId]; !exists {
+				alertErrors = append(alertErrors,
+					fmt.Errorf("alert ID %d references non-existent security ID %d",
+						alert.AlertId, *alert.SecurityId))
+			}
+		}
+		return true
+	})
+
+	// Report any alert validation errors
+	if len(alertErrors) > 0 {
+		var errMsg string
+		for i, err := range alertErrors {
+			if i > 0 {
+				errMsg += "; "
+			}
+			errMsg += err.Error()
+		}
+		return fmt.Errorf("errors validating alerts: %s", errMsg)
+	}
+
+	fmt.Println("Finished initializing alerts")
+	return nil
 }

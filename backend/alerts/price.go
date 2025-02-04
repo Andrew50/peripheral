@@ -1,22 +1,23 @@
 package alerts
 
 import (
+	"backend/socket"
 	"backend/utils"
 	"fmt"
 )
 
 func processPriceAlert(conn *utils.Conn, alert Alert) error {
-	alertAggDataMutex.RLock()         // Acquire read lock
-	defer alertAggDataMutex.RUnlock() // Release read lock
-	ds := alertAggData[*alert.SecurityId]
+	socket.AggDataMutex.RLock()         // Acquire read lock
+	defer socket.AggDataMutex.RUnlock() // Release read lock
+	ds := socket.AggData[*alert.SecurityId]
 	if ds == nil {
 		return fmt.Errorf("1-90vj- price alert")
 	}
-	ds.SecondDataExtended.mutex.RLock()
-	defer ds.SecondDataExtended.mutex.RUnlock()
+	ds.SecondDataExtended.Mutex.RLock()
+	defer ds.SecondDataExtended.Mutex.RUnlock()
 	directionPtr := alert.Direction
 	if directionPtr != nil {
-		price := ds.SecondDataExtended.Aggs[Length-1][1]
+		price := ds.SecondDataExtended.Aggs[socket.AggsLength-1][1]
 		if *directionPtr {
 			if price >= *alert.Price {
 				dispatchAlert(conn, alert)

@@ -18,8 +18,8 @@ var (
 	channelsMutex           sync.RWMutex
 	channelSubscriberCounts = make(map[string]int)
 	channelSubscribers      = make(map[string]map[*Client]bool)
-	userToClient            = make(map[int]*Client)
-	userToClientMutex       sync.RWMutex
+	UserToClient            = make(map[int]*Client)
+	UserToClientMutex       sync.RWMutex
 	//redisSubscriptions      = make(map[string]*redis.PubSub)
 )
 
@@ -62,6 +62,17 @@ handles updates to the channel of the client. these updates are sent by a goruot
 pub sub from redis and then iterates through all the subscribeers (possibly one of them being this client).
 this function simply sends the message to the frontend. it has to lock to prevent concurrent writes to the socket
 */
+
+func SendMessageToUser(userID int, message string) {
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+	if !ok {
+		fmt.Println("client not found")
+		return
+	}
+	client.send <- []byte(message)
+}
 func (c *Client) writePump() {
 	defer c.ws.Close()
 	for {
@@ -261,9 +272,9 @@ func HandleWebSocket(conn *utils.Conn, ws *websocket.Conn, userID int) {
 	}
 
 	// Store the client in the userToClient map
-	userToClientMutex.Lock()
-	userToClient[userID] = client
-	userToClientMutex.Unlock()
+	UserToClientMutex.Lock()
+	UserToClient[userID] = client
+	UserToClientMutex.Unlock()
 
 	// Start the writePump and readPump goroutines
 	go client.writePump()

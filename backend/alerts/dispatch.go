@@ -38,16 +38,6 @@ func SendTelegramMessage(msg string, chatID int64) {
 		log.Printf("Failed to send message to chat ID %d: %v", chatID, err)
 	}
 }
-func sendMessageToUser(userID int, message string) {
-	socket.userToClientMutex.RLock()
-	client, ok := userToClient[userID]
-	userToClientMutex.RUnlock()
-	if !ok {
-		fmt.Println("client not found")
-		return
-	}
-	client.send <- []byte(message)
-}
 
 func writeMessage(conn *utils.Conn, alert Alert) string {
 	if alert.SecurityId == nil {
