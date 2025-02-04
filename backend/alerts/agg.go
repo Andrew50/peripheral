@@ -25,6 +25,11 @@ type TimeframeData struct {
 	mutex             sync.RWMutex
 }
 
+type VolBurstData struct { 
+	VolumeThreshold []float64 
+	PriceThreshold  []float64  
+}
+
 type SecurityData struct {
 	SecondDataExtended TimeframeData
 	MinuteDataExtended TimeframeData
@@ -33,6 +38,7 @@ type SecurityData struct {
 	Dolvol             float64
 	Mcap               float64
 	Adr                float64
+	VolBurstData       VolBurstData 
 }
 
 func updateTimeframe(td *TimeframeData, timestamp int64, price float64, volume float64, timeframe int) {

@@ -14,6 +14,7 @@ const (
 	minuteAggs = false
 	hourAggs   = false
 	dayAggs    = false
+	volBurst    = true
 )
 
 var (
@@ -81,6 +82,7 @@ func alertLoop(ctx context.Context, conn *utils.Conn) {
 			return
 		case <-ticker.C:
 			processAlerts(conn)
+			processTapeBursts(conn)
 		}
 	}
 }
@@ -124,4 +126,23 @@ func processAlerts(conn *utils.Conn) {
 		return true
 	})
 	wg.Wait()
+}
+func processTapeBursts(conn *utils.Conn) {
+	alertAggDataMutex.RLock()
+	defer alertAggDataMutex.RUnlock()
+	for securityID, sd := range alertAggData { 
+		if len(sd.VolBurstData.VolumeThreshold) == 0 {
+			continue 
+		}
+		ticker, err := utils.GetTicker(conn, securityID, time.Now()) 
+		fmt.Printf("Running volburst on %s\n", ticker)
+		if isTapeBurst(sd) {
+			if err != nil {
+				log.Printf("Error getting ticker for security %d: %v", securityID, err)
+				continue 
+			}
+			SendMessageInternal("Tape Burst on " + ticker, ChatId)
+		}
+	}
+
 }
