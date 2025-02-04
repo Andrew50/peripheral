@@ -1,8 +1,10 @@
-import { writable} from 'svelte/store';
+import { writable } from 'svelte/store';
 import { streamInfo } from '$lib/core/stores';
-import type {StreamInfo,TradeData, QuoteData } from "$lib/core/types";
+import type { StreamInfo, TradeData, QuoteData } from "$lib/core/types";
 import { base_url } from '$lib/core/backend';
-import {browser} from '$app/environment'
+import { browser } from '$app/environment'
+import { handleAlert } from './alert';
+import type { AlertData } from './alert';
 
 export type ChannelType = "fast" | "slow" | "quote" | "close" | "all";
 export type StreamData = TradeData | QuoteData | number;
@@ -16,19 +18,26 @@ type SubscriptionRequest = {
     timestamp?: number;
 };
 
-const socketUrl: string = base_url + "/ws";
 export let socket: WebSocket | null = null;
 let reconnectInterval: number = 5000; //ms
 const maxReconnectInterval: number = 30000;
 let reconnectAttempts: number = 0;
-const maxReconnectAttempts: number = 5; 
+const maxReconnectAttempts: number = 5;
 let shouldReconnect: boolean = true;
 const connectionStatus = writable<'connected' | 'disconnected' | 'connecting'>('connecting');
 connect()
 
 function connect() {
-    if (!browser)return
-    socket = new WebSocket(socketUrl);
+    if (!browser) return
+    try {
+        const token = sessionStorage.getItem("authToken")
+        const socketUrl = base_url + "/ws" + "?token=" + token;
+        socket = new WebSocket(socketUrl);
+    } catch (e) {
+        console.error(e);
+        setTimeout(connect, 1000);
+        return;
+    }
     socket.addEventListener('close', () => {
         connectionStatus.set('disconnected');
         if (shouldReconnect) {
@@ -37,24 +46,27 @@ function connect() {
     });
     socket.addEventListener('open', () => {
         connectionStatus.set('connected');
-        reconnectAttempts = 0; 
-        reconnectInterval = 5000; 
+        reconnectAttempts = 0;
+        reconnectInterval = 5000;
         for (const [channelName] of activeChannels.keys()) {
             subscribe(channelName);
         }
     });
     socket.addEventListener('message', (event) => {
         let data
-        try{
+        try {
             data = JSON.parse(event.data);
-        }catch{
+        } catch {
             return
         }
         const channelName = data.channel;
         if (channelName) {
-            if (channelName === "timestamp"){
-                streamInfo.update((v:StreamInfo)=>{return {...v,timestamp:data.timestamp}})
-            }else{
+            if (channelName === "alert") {
+                handleAlert(data as AlertData);
+            }
+            else if (channelName === "timestamp") {
+                streamInfo.update((v: StreamInfo) => { return { ...v, timestamp: data.timestamp } })
+            } else {
                 const callbacks = activeChannels.get(channelName);
                 if (callbacks) {
                     callbacks.forEach(callback => callback(data));
@@ -68,7 +80,7 @@ function connect() {
 }
 
 function disconnect() {
-    shouldReconnect = false; 
+    shouldReconnect = false;
     connectionStatus.set('disconnected');
 
     if (socket) {
@@ -110,11 +122,11 @@ export function unsubscribe(channelName: string) {
 
 
 export function getInitialValue(channelName: string, callback: StreamCallback) {
-    const [securityId,streamType] = channelName.split("-")
+    const [securityId, streamType] = channelName.split("-")
     let func
-    switch(streamType){
+    switch (streamType) {
         case "close": func = "getClose"; break;
-        case "quote": func = "getQuote";break;
+        case "quote": func = "getQuote"; break;
         case "all": func = "getTrade"; break;
         case "fast": func = "getTrade"; break;
         case "slow": func = "getTrade"; break;

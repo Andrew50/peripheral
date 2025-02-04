@@ -147,7 +147,7 @@ func NewAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 		SetupId:    newAlert.SetupId,
 		Direction:  direction,
 	}
-	alerts.AddAlert(alertToAdd)
+	alerts.AddAlert(conn, alertToAdd)
 
 	return newAlert, nil
 }
