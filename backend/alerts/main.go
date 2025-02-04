@@ -167,6 +167,20 @@ func initAlerts(conn *utils.Conn) error {
 		return fmt.Errorf("iterating alert rows: %w", err)
 	}
 
+	// Manually create an algo alert for testing
+	algoAlert := Alert{
+		AlertId:    999999, // Use a high number to avoid conflicts
+		UserId:     1,      // Set to an existing user ID
+		AlertType:  "algo",
+		SecurityId: nil, // Not needed for algo alerts
+		Price:      nil, // Not needed for algo alerts
+		Direction:  nil, // Not needed for algo alerts
+		SetupId:    nil, // Not needed for algo alerts
+		Ticker:     nil, // Not needed for algo alerts
+	}
+	alerts.Store(algoAlert.AlertId, algoAlert)
+	fmt.Println("Added manual algo alert for testing")
+
 	// Validate alert securities exist in data map
 	var alertErrors []error
 	alerts.Range(func(key, value interface{}) bool {
