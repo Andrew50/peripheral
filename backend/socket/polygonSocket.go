@@ -2,7 +2,6 @@
 package socket
 
 import (
-	"backend/alerts"
 	"backend/utils"
 	"context"
 	"encoding/json"
@@ -109,7 +108,7 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 				//fmt.Println("debug: alerts.IsAggsInitialized()", alerts.IsAggsInitialized())
 
 				//if alerts.IsAggsInitialized() {
-				alerts.AppendTick(conn, securityId, data.Timestamp, data.Price, data.Size)
+				appendTick(conn, securityId, data.Timestamp, data.Price, data.Size)
 				//}
 				if !exists || now.After(nextDispatch) {
 					slowChannelName := fmt.Sprintf("%d-slow", securityId)
