@@ -5,10 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"	
-	"time"
-	"github.com/polygon-io/client-go/rest/models"
 	"sort"
+	"sync"
+	"time"
+
+	"github.com/polygon-io/client-go/rest/models"
 )
 
 const (
@@ -27,6 +28,7 @@ const (
 	minuteAggs = false
 	hourAggs   = false
 	dayAggs    = false
+	volBurst   = true
 )
 
 var (
@@ -36,14 +38,14 @@ var (
 
 type TimeframeData struct {
 	Aggs              [][]float64
-	size              int
+	Size              int
 	rolloverTimestamp int64
 	extendedHours     bool
 	Mutex             sync.RWMutex
 }
-type VolBurstData struct { 
-	VolumeThreshold []float64 
-	PriceThreshold  []float64  
+type VolBurstData struct {
+	VolumeThreshold []float64
+	PriceThreshold  []float64
 }
 
 type SecurityData struct {
@@ -62,13 +64,13 @@ func updateTimeframe(td *TimeframeData, timestamp int64, price float64, volume f
 	defer td.Mutex.Unlock() // Ensure the lock is released
 
 	if timestamp >= td.rolloverTimestamp { // if out of order ticks
-		if td.size > 0 {
-			copy(td.Aggs[1:], td.Aggs[0:min(td.size, AggsLength-1)])
+		if td.Size > 0 {
+			copy(td.Aggs[1:], td.Aggs[0:min(td.Size, AggsLength-1)])
 		}
 		td.Aggs[0] = []float64{price, price, price, price, volume}
 		td.rolloverTimestamp = nextPeriodStart(timestamp, timeframe)
-		if td.size < AggsLength {
-			td.size++
+		if td.Size < AggsLength {
+			td.Size++
 		}
 	} else {
 		td.Aggs[0][1] = max(td.Aggs[0][1], price)   // High
@@ -378,7 +380,7 @@ func initTimeframeData(conn *utils.Conn, securityId int, timeframe int, isExtend
 	}
 	td := TimeframeData{
 		Aggs:              aggs,
-		size:              0,
+		Size:              0,
 		rolloverTimestamp: -1,
 		extendedHours:     isExtendedHours,
 	}
@@ -453,18 +455,21 @@ func initTimeframeData(conn *utils.Conn, securityId int, timeframe int, isExtend
 	//if td.rolloverTimestamp == -1 {
 	td.rolloverTimestamp = lastTimestamp + int64(timeframe) //if theres no data then this wont work but is extreme edge case
 	//}
-	td.size = idx
+	td.Size = idx
 	return td
 }
+
 // initVolBurstData initializes threshold data for volume burst (tape burst)
 // detection based on historical trading data. We define seven periods:
-//  0: premarket (4:00 - 9:30)
-//  1: open 9:30 - 9:45
-//  2: 9:45 - 10:00
-//  3: 10:00 - 12:00
-//  4: 12:00 - 14:00
-//  5: 14:00 - 16:00
-//  6: after hours (16:00 - 20:00)
+//
+//	0: premarket (4:00 - 9:30)
+//	1: open 9:30 - 9:45
+//	2: 9:45 - 10:00
+//	3: 10:00 - 12:00
+//	4: 12:00 - 14:00
+//	5: 14:00 - 16:00
+//	6: after hours (16:00 - 20:00)
+//
 // For each period, we break the interval into 20 second segments and compute
 // the average total volume and average % price range (from high to low) over those windows.
 // The resulting thresholds are saved in the order specified.
@@ -545,7 +550,7 @@ func initVolBurstData(conn *utils.Conn, securityId int) VolBurstData {
 				if t.After(windowEnd) {
 					break
 				}
-				windowVol += aggs[j].Volume 
+				windowVol += aggs[j].Volume
 				if !windowInitialized {
 					windowMinPrice = aggs[j].Low
 					windowMaxPrice = aggs[j].High
@@ -564,24 +569,23 @@ func initVolBurstData(conn *utils.Conn, securityId int) VolBurstData {
 				// Determine window's period based on windowMid.
 				for periodIdx, period := range periods {
 					if (windowMid.Equal(period.Start) || windowMid.After(period.Start)) && windowMid.Before(period.End) {
-						totalVol[periodIdx] += windowVol 
-						totalPct[periodIdx] += pctChange 
-						countWindows[periodIdx]++ 
-						break 
+						totalVol[periodIdx] += windowVol
+						totalPct[periodIdx] += pctChange
+						countWindows[periodIdx]++
+						break
 					}
 				}
 			}
 		}
 	}
-	
 
 	for idx := 0; idx < 7; idx++ {
 		if countWindows[idx] > 0 {
 			volThreshold[idx] = totalVol[idx] / float64(countWindows[idx])
 			priceThreshold[idx] = totalPct[idx] / float64(countWindows[idx])
-		} 
-	}	
-	ticker, err := utils.GetTicker(conn, securityId, time.Now()) 
+		}
+	}
+	ticker, err := utils.GetTicker(conn, securityId, time.Now())
 	if err != nil {
 		fmt.Printf("error getting ticker: %v\n", err)
 		return VolBurstData{}
