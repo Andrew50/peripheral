@@ -187,9 +187,16 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 		//startDate = time.Date(2005, 1, 3, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
 		//startDate = time.Date(2004, 11, 1, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
 	} else {
-		err := conn.DB.QueryRow(context.Background(), "SELECT MAX(minDate) from securities").Scan(&startDate)
+		var startDateNull sql.NullTime
+		err := conn.DB.QueryRow(context.Background(), "SELECT MAX(minDate) from securities").Scan(&startDateNull)
 		if err != nil {
 			return err
+		}
+		if startDateNull.Valid {
+			startDate = startDateNull.Time
+		} else {
+			// Default to a specific date if no valid date is found
+			startDate = time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC)
 		}
 		//startDate = time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
 	}

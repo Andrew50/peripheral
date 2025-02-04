@@ -47,6 +47,10 @@ func StartScheduler(conn *utils.Conn) chan struct{} {
 
 func initialize(conn *utils.Conn) {
 
+	err := updateSecurities(conn, false)
+	if err != nil {
+		fmt.Println("schedule issue", err)
+	}
 	alertsInitMutex.Lock()
 	if !alertsInitialized {
 		err := alerts.StartAlertLoop(conn)
@@ -82,6 +86,9 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 		eOpenRun = false
 		eCloseRun = true
 		fmt.Println("running close schedule ----------------------")
-		updateSecurities(conn, false)
+		err := updateSecurities(conn, false)
+		if err != nil {
+			fmt.Println("schedule issue", err)
+		}
 	}
 }
