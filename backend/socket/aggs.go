@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"sync"
 	"time"
 
@@ -474,123 +473,119 @@ func initTimeframeData(conn *utils.Conn, securityId int, timeframe int, isExtend
 // the average total volume and average % price range (from high to low) over those windows.
 // The resulting thresholds are saved in the order specified.
 func initVolBurstData(conn *utils.Conn, securityId int) VolBurstData {
-	volThreshold := make([]float64, 7)
-	priceThreshold := make([]float64, 7)
-	toTime := time.Now()
 	location, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		fmt.Printf("error getting location: %v\n", err)
 		return VolBurstData{}
 	}
+	now := time.Now().In(location)
+	// Single fetch for the last 15 days
+	globalStart := time.Date(now.Year(), now.Month(), now.Day(), 4, 0, 0, 0, location).AddDate(0, 0, -15)
+	globalEnd := time.Date(now.Year(), now.Month(), now.Day(), 20, 0, 0, 0, location)
 
-	totalVol := make([]float64, 7)
-	totalPct := make([]float64, 7)
-	countWindows := make([]int, 7)
-
-	numDays := 15
-	for i := 0; i < numDays; i++ {
-		startDate := toTime.AddDate(0, 0, -i)
-		dayStart := time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 4, 0, 0, 0, location)
-		dayEnd := time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 20, 0, 0, 0, location)
-		periods := []struct {
-			Name  string
-			Start time.Time
-			End   time.Time
-		}{
-			{"Premarket", dayStart, time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 9, 30, 0, 0, location)},
-			{"OpenEarly", time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 9, 30, 0, 0, location),
-				time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 9, 45, 0, 0, location)},
-			{"OpenLate", time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 9, 45, 0, 0, location),
-				time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 10, 0, 0, 0, location)},
-			{"10to12", time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 10, 0, 0, 0, location),
-				time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 12, 0, 0, 0, location)},
-			{"12to2", time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 12, 0, 0, 0, location),
-				time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 14, 0, 0, 0, location)},
-			{"2to4", time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 14, 0, 0, 0, location),
-				time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 16, 0, 0, 0, location)},
-			{"AfterHours", time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 16, 0, 0, 0, location), dayEnd},
-		}
-		ticker, err := utils.GetTicker(conn, securityId, startDate)
-		if err != nil {
-			fmt.Printf("error getting ticker: %v\n", err)
-			return VolBurstData{}
-		}
-		fromMillis := models.Millis(dayStart)
-		endMillis := models.Millis(dayEnd)
-		iter, err := utils.GetAggsData(conn.Polygon, ticker, 1, "second", fromMillis, endMillis, 1000, "asc", true)
-		if err != nil {
-			fmt.Printf("error getting aggs data: %v\n", err)
-			return VolBurstData{}
-		}
-		var aggs []models.Agg
-		for iter.Next() {
-			aggs = append(aggs, iter.Item())
-		}
-		if len(aggs) == 0 {
-			continue
-		}
-		windowDuration := 20 * time.Second
-		slideIncrement := 5 * time.Second
-
-		for windowStart := dayStart; windowStart.Add(windowDuration).Before(dayEnd) || windowStart.Add(windowDuration).Equal(dayEnd); windowStart = windowStart.Add(slideIncrement) {
-			windowEnd := windowStart.Add(windowDuration)
-			windowMid := windowStart.Add(windowDuration / 2)
-
-			// Use binary search to find the first index in aggs that falls at or after windowStart.
-			startIdx := sort.Search(len(aggs), func(i int) bool {
-				return !time.Time(aggs[i].Timestamp).Before(windowStart)
-			})
-			windowVol := 0.0
-			var windowMinPrice, windowMaxPrice float64
-			windowInitialized := false
-
-			// Iterate from startIdx until the aggregation's timestamp exceeds windowEnd.
-			for j := startIdx; j < len(aggs); j++ {
-				t := time.Time(aggs[j].Timestamp)
-				if t.After(windowEnd) {
-					break
-				}
-				windowVol += aggs[j].Volume
-				if !windowInitialized {
-					windowMinPrice = aggs[j].Low
-					windowMaxPrice = aggs[j].High
-					windowInitialized = true
-				} else {
-					if aggs[j].Low < windowMinPrice {
-						windowMinPrice = aggs[j].Low
-					}
-					if aggs[j].High > windowMaxPrice {
-						windowMaxPrice = aggs[j].High
-					}
-				}
-			}
-			if windowInitialized && windowMinPrice > 0 {
-				pctChange := (windowMaxPrice - windowMinPrice) / windowMinPrice
-				// Determine window's period based on windowMid.
-				for periodIdx, period := range periods {
-					if (windowMid.Equal(period.Start) || windowMid.After(period.Start)) && windowMid.Before(period.End) {
-						totalVol[periodIdx] += windowVol
-						totalPct[periodIdx] += pctChange
-						countWindows[periodIdx]++
-						break
-					}
-				}
-			}
-		}
-	}
-
-	for idx := 0; idx < 7; idx++ {
-		if countWindows[idx] > 0 {
-			volThreshold[idx] = totalVol[idx] / float64(countWindows[idx])
-			priceThreshold[idx] = totalPct[idx] / float64(countWindows[idx])
-		}
-	}
-	ticker, err := utils.GetTicker(conn, securityId, time.Now())
+	ticker, err := utils.GetTicker(conn, securityId, now)
 	if err != nil {
 		fmt.Printf("error getting ticker: %v\n", err)
 		return VolBurstData{}
 	}
-	if ticker == "NVDA" || ticker == "TSLA" || ticker == "AAPL" || ticker == "COIN" || ticker == "MSFT" || ticker == "GOOG" || ticker == "AMZN" {
+
+	fromMillis := models.Millis(globalStart)
+	endMillis := models.Millis(globalEnd)
+
+	iter, err := utils.GetAggsData(conn.Polygon, ticker, 1, "second", fromMillis, endMillis, 100000, "asc", true)
+	if err != nil {
+		fmt.Printf("error getting aggs data: %v\n", err)
+		return VolBurstData{}
+	}
+
+	// Read all second bars
+	var allAggs []models.Agg
+	for iter.Next() {
+		allAggs = append(allAggs, iter.Item())
+	}
+	// Separate them by day
+	dailyBars := make(map[time.Time][]models.Agg)
+	for _, agg := range allAggs {
+		t := time.Time(agg.Timestamp).In(location)
+		dateKey := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, location)
+		dailyBars[dateKey] = append(dailyBars[dateKey], agg)
+	}
+
+	// Predefine the 7 time-of-day "periods"
+	// We'll reuse this for each day
+	type Period struct {
+		Start, End time.Time
+	}
+
+	// We'll accumulate totalVol & totalPct in 7 buckets across all days
+	totalVol := make([]float64, 7)
+	totalPct := make([]float64, 7)
+	countWin := make([]int, 7)
+
+	// For each of the last 15 days
+	for d := 0; d < 15; d++ {
+		dayKey := now.AddDate(0, 0, -d)
+		midnight := time.Date(dayKey.Year(), dayKey.Month(), dayKey.Day(), 0, 0, 0, 0, location)
+
+		// Actual day boundaries
+		dayStart := midnight.Add(4 * time.Hour) // 4:00
+		dayEnd := midnight.Add(20 * time.Hour)  // 20:00
+		bars := dailyBars[midnight]             // might be nil if no data that day
+		if len(bars) == 0 {
+			continue
+		}
+
+		// We'll do a 2-step approach:
+		//   1) We'll define the 7 time-based sub-periods for *that day*.
+		//   2) We'll compute the total volume / pct range stats for each sub-period via our sliding window.
+
+		subPeriods := []struct {
+			idx       int
+			startTime time.Time
+			endTime   time.Time
+		}{
+			{0, dayStart, time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 9, 30, 0, 0, location)}, // pre
+			{1, time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 9, 30, 0, 0, location),
+				time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 9, 45, 0, 0, location)},
+			{2, time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 9, 45, 0, 0, location),
+				time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 10, 0, 0, 0, location)},
+			{3, time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 10, 0, 0, 0, location),
+				time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 12, 0, 0, 0, location)},
+			{4, time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 12, 0, 0, 0, location),
+				time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 14, 0, 0, 0, location)},
+			{5, time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 14, 0, 0, 0, location),
+				time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 16, 0, 0, 0, location)},
+			{6, time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 16, 0, 0, 0, location), dayEnd},
+		}
+
+		// For each sub-period, run the sliding window logic
+		for _, sp := range subPeriods {
+			if sp.endTime.Before(sp.startTime) {
+				continue
+			}
+			if sp.endTime.After(dayEnd) {
+				sp.endTime = dayEnd
+			}
+
+			vol, pct, cnt := slidingWindowStats(bars, sp.startTime, sp.endTime)
+			totalVol[sp.idx] += vol
+			totalPct[sp.idx] += pct
+			countWin[sp.idx] += cnt
+		}
+	}
+
+	// Compute the final averages
+	volThreshold := make([]float64, 7)
+	priceThreshold := make([]float64, 7)
+	for i := 0; i < 7; i++ {
+		if countWin[i] > 0 {
+			volThreshold[i] = totalVol[i] / float64(countWin[i])
+			priceThreshold[i] = totalPct[i] / float64(countWin[i])
+		}
+	}
+
+	// Possibly debug print if it's a well-known ticker
+	if ticker == "NVDA" || ticker == "TSLA" {
 		fmt.Printf("volThreshold: %v, priceThreshold: %v, ticker %v\n", volThreshold, priceThreshold, ticker)
 	}
 	return VolBurstData{
@@ -598,7 +593,67 @@ func initVolBurstData(conn *utils.Conn, securityId int) VolBurstData {
 		PriceThreshold:  priceThreshold,
 	}
 }
+func slidingWindowStats(bars []models.Agg, startTime, endTime time.Time) (float64, float64, int) {
+	const windowDur = 20 * time.Second
+	const slideStep = 5 * time.Second
+	// Ensure bars are sorted ascending by timestamp
+	// Typically they'd already be sorted from your polygon call.
 
+	totalVol := 0.0
+	totalPct := 0.0
+	count := 0
+
+	leftIdx := 0
+	for t := startTime; t.Before(endTime); t = t.Add(slideStep) {
+		windowStart := t
+		windowEnd := t.Add(windowDur)
+		if windowEnd.After(endTime) {
+			windowEnd = endTime
+		}
+
+		// Move leftIdx to skip bars older than windowStart
+		for leftIdx < len(bars) && time.Time(bars[leftIdx].Timestamp).Before(windowStart) {
+			leftIdx++
+		}
+		if leftIdx >= len(bars) {
+			break
+		}
+		// Accumulate stats for bars in [windowStart, windowEnd]
+		var (
+			wVol float64
+			wMin float64
+			wMax float64
+			init bool
+		)
+		for rightIdx := leftIdx; rightIdx < len(bars); rightIdx++ {
+			ts := time.Time(bars[rightIdx].Timestamp)
+			if ts.After(windowEnd) {
+				break
+			}
+			wVol += bars[rightIdx].Volume
+			if !init {
+				wMin = bars[rightIdx].Low
+				wMax = bars[rightIdx].High
+				init = true
+			} else {
+				if bars[rightIdx].Low < wMin {
+					wMin = bars[rightIdx].Low
+				}
+				if bars[rightIdx].High > wMax {
+					wMax = bars[rightIdx].High
+				}
+			}
+		}
+		if init && wMin > 0 {
+			pct := (wMax - wMin) / wMin
+			totalVol += wVol
+			totalPct += pct
+			count++
+		}
+	}
+
+	return totalVol, totalPct, count
+}
 func initSecurityData(conn *utils.Conn, securityId int) *SecurityData {
 	sd := &SecurityData{}
 
