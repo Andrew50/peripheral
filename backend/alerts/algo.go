@@ -1,6 +1,7 @@
 package alerts
 
 import (
+	"backend/socket"
 	"backend/utils"
 	"fmt"
 	"log"
@@ -8,13 +9,13 @@ import (
 )
 
 func processAlgoAlert(conn *utils.Conn, alert Alert) error {
+	processTapeBursts(conn, alert)
 	return nil
 }
 func processTapeBursts(conn *utils.Conn, alert Alert) {
-	socket.
-		alertAggDataMutex.RLock()
-	defer alertAggDataMutex.RUnlock()
-	for securityID, sd := range alertAggData {
+	socket.AggDataMutex.RLock()
+	defer socket.AggDataMutex.RUnlock()
+	for securityID, sd := range socket.AggData {
 		if len(sd.VolBurstData.VolumeThreshold) == 0 {
 			continue
 		}
