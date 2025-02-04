@@ -5,7 +5,6 @@ import (
 	"container/list"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -19,6 +18,8 @@ var (
 	channelsMutex           sync.RWMutex
 	channelSubscriberCounts = make(map[string]int)
 	channelSubscribers      = make(map[string]map[*Client]bool)
+	UserToClient            = make(map[int]*Client)
+	UserToClientMutex       sync.RWMutex
 	//redisSubscriptions      = make(map[string]*redis.PubSub)
 )
 
@@ -56,42 +57,22 @@ makes a new client. it then starts the goroutine that will handle chan updates c
 asynynchrnously and then syncronolously (not really because the server is already running this whole thing as a goroutine)
 checks for websocket messages from the frontend.
 */
-func WsHandler(conn *utils.Conn) http.HandlerFunc {
-	upgrader := websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool {
-			return true
-		},
-	}
-	return func(w http.ResponseWriter, r *http.Request) {
-		ws, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			fmt.Println("failed to upgrade to websocket: ", err)
-			return
-		}
-		client := &Client{
-			ws:                  ws,
-			send:                make(chan []byte, 3000),
-			done:                make(chan struct{}),
-			replayActive:        false,
-			replayPaused:        false,
-			replaySpeed:         1.0,
-			replayExtendedHours: false,
-			simulatedTime:       0,
-			replayData:          make(map[string]*ReplayData),
-			conn:                conn,
-			buffer:              10000,
-			loopRunning:         false,
-		}
-		go client.writePump()
-		client.readPump(conn)
-	}
-}
-
 /*
 handles updates to the channel of the client. these updates are sent by a goruotine that listens to
 pub sub from redis and then iterates through all the subscribeers (possibly one of them being this client).
 this function simply sends the message to the frontend. it has to lock to prevent concurrent writes to the socket
 */
+
+func SendMessageToUser(userID int, message string) {
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+	if !ok {
+		fmt.Println("client not found")
+		return
+	}
+	client.send <- []byte(message)
+}
 func (c *Client) writePump() {
 	defer c.ws.Close()
 	for {
@@ -272,4 +253,30 @@ func (c *Client) close() {
 	if err := c.ws.Close(); err != nil {
 		fmt.Println("Error closing WebSocket connection:", err)
 	}
+}
+
+func HandleWebSocket(conn *utils.Conn, ws *websocket.Conn, userID int) {
+	client := &Client{
+		ws:                  ws,
+		send:                make(chan []byte, 3000),
+		done:                make(chan struct{}),
+		replayActive:        false,
+		replayPaused:        false,
+		replaySpeed:         1.0,
+		replayExtendedHours: false,
+		simulatedTime:       0,
+		replayData:          make(map[string]*ReplayData),
+		conn:                conn,
+		buffer:              10000,
+		loopRunning:         false,
+	}
+
+	// Store the client in the userToClient map
+	UserToClientMutex.Lock()
+	UserToClient[userID] = client
+	UserToClientMutex.Unlock()
+
+	// Start the writePump and readPump goroutines
+	go client.writePump()
+	client.readPump(conn)
 }
