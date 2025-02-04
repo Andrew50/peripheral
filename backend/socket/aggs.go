@@ -1,8 +1,9 @@
-package alerts
+package socket
 
 import (
 	"backend/utils"
 	"context"
+	"errors"
 	"fmt"
 	"sync"	
 	"time"
@@ -10,28 +11,176 @@ import (
 	"sort"
 )
 
-const concurrency = 30 // Set the desired level of concurrency
-//const polygonRateLimit = 1000 //per second
-// Define constants to control which aggregates are active
+const (
+	AggsLength = 100
+	OHLCV      = 5
+	Second     = 1
+	Minute     = 60
+	Hour       = 3600
+	Day        = 86400
 
-type result struct {
-	securityId int
-	data       *SecurityData
-	err        error
-}
-
-var (
-	aggsInitialized     bool
-	aggsInitializedLock sync.RWMutex // Mutex to protect aggsInitialized
+	concurrency = 30
 )
 
-func InitAlertsAndAggs(conn *utils.Conn) error {
-	setAggsInitialized(false) // Set to false at the start
-	ctx := context.Background()
+const (
+	secondAggs = true
+	minuteAggs = false
+	hourAggs   = false
+	dayAggs    = false
+)
 
-	if err := loadActiveAlerts(ctx, conn); err != nil {
-		return fmt.Errorf("loading active alerts: %w", err)
+var (
+	AggData      = make(map[int]*SecurityData)
+	AggDataMutex sync.RWMutex
+)
+
+type TimeframeData struct {
+	Aggs              [][]float64
+	size              int
+	rolloverTimestamp int64
+	extendedHours     bool
+	Mutex             sync.RWMutex
+}
+type VolBurstData struct { 
+	VolumeThreshold []float64 
+	PriceThreshold  []float64  
+}
+
+type SecurityData struct {
+	SecondDataExtended TimeframeData
+	MinuteDataExtended TimeframeData
+	HourData           TimeframeData
+	DayData            TimeframeData
+	Dolvol             float64
+	Mcap               float64
+	Adr                float64
+	VolBurstData       VolBurstData
+}
+
+func updateTimeframe(td *TimeframeData, timestamp int64, price float64, volume float64, timeframe int) {
+	td.Mutex.Lock()         // Acquire write lock
+	defer td.Mutex.Unlock() // Ensure the lock is released
+
+	if timestamp >= td.rolloverTimestamp { // if out of order ticks
+		if td.size > 0 {
+			copy(td.Aggs[1:], td.Aggs[0:min(td.size, AggsLength-1)])
+		}
+		td.Aggs[0] = []float64{price, price, price, price, volume}
+		td.rolloverTimestamp = nextPeriodStart(timestamp, timeframe)
+		if td.size < AggsLength {
+			td.size++
+		}
+	} else {
+		td.Aggs[0][1] = max(td.Aggs[0][1], price)   // High
+		td.Aggs[0][2] = min64(td.Aggs[0][2], price) // Low
+		td.Aggs[0][3] = price                       // Close
+		td.Aggs[0][4] += float64(volume)            // Volume
 	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func min64(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func appendTick(conn *utils.Conn, securityId int, timestamp int64, price float64, intVolume int64) error {
+	volume := float64(intVolume)
+
+	AggDataMutex.RLock() // Acquire read lock
+	sd, exists := AggData[securityId]
+	AggDataMutex.RUnlock() // Release read lock
+
+	if !exists {
+		return fmt.Errorf("fid0w0f")
+	}
+
+	if utils.IsTimestampRegularHours(time.Unix(timestamp, timestamp*int64(time.Millisecond))) {
+		if hourAggs {
+			updateTimeframe(&sd.HourData, timestamp, price, volume, Hour)
+		}
+		if dayAggs {
+			updateTimeframe(&sd.DayData, timestamp, price, volume, Day)
+		}
+	}
+
+	if secondAggs {
+		updateTimeframe(&sd.SecondDataExtended, timestamp, price, volume, Second)
+	}
+
+	if minuteAggs {
+		updateTimeframe(&sd.MinuteDataExtended, timestamp, price, volume, Minute)
+	}
+
+	return nil
+}
+
+/*
+	func getPeriodStart(timestamp int64, tf int) int64 {
+	    return timestamp - (timestamp % int64(tf))
+	}
+*/
+func nextPeriodStart(timestamp int64, tf int) int64 {
+	return timestamp - (timestamp % int64(tf)) + int64(tf)
+}
+
+func GetTimeframeData(securityId int, timeframe int, extendedHours bool) ([][]float64, error) {
+	AggDataMutex.RLock() // Acquire read lock
+	sd, exists := AggData[securityId]
+	AggDataMutex.RUnlock() // Release read lock
+
+	if !exists {
+		return nil, errors.New("security not found")
+	}
+	var td *TimeframeData
+	switch timeframe {
+	case Second:
+		if extendedHours {
+			td = &sd.SecondDataExtended
+		}
+	case Minute:
+		if extendedHours {
+			td = &sd.MinuteDataExtended
+		}
+	case Hour:
+		td = &sd.HourData
+	case Day:
+		td = &sd.DayData
+	default:
+		return nil, errors.New("invalid timeframe")
+	}
+	if td == nil {
+		return nil, errors.New("timeframe data not available")
+	}
+	td.Mutex.RLock()
+	defer td.Mutex.RUnlock()
+	result := make([][]float64, len(td.Aggs))
+	for i := range td.Aggs {
+		result[i] = make([]float64, OHLCV)
+		copy(result[i], td.Aggs[i])
+	}
+	return result, nil
+}
+
+// Function to initialize aggregates
+func InitAggregates(conn *utils.Conn) error {
+	//setAggsInitialized(false) // Set to false at the start
+	ctx := context.Background()
 
 	query := `
         SELECT securityId 
@@ -84,57 +233,39 @@ func InitAlertsAndAggs(conn *utils.Conn) error {
 		return fmt.Errorf("errors loading aggregates: %s", errMsg)
 	}
 
-	// Validate alert securities exist in data map
-	var alertErrors []error
-	alerts.Range(func(key, value interface{}) bool {
-		alert := value.(Alert)
-		if alert.SecurityId != nil {
-			if _, exists := data[*alert.SecurityId]; !exists {
-				alertErrors = append(alertErrors,
-					fmt.Errorf("alert ID %d references non-existent security ID %d",
-						alert.AlertId, *alert.SecurityId))
-			}
-		}
-		return true
-	})
+	AggDataMutex.Lock() // Acquire write lock
+	AggData = data
+	AggDataMutex.Unlock() // Release write lock
 
-	// Report any alert validation errors
-	if len(alertErrors) > 0 {
-		var errMsg string
-		for i, err := range alertErrors {
-			if i > 0 {
-				errMsg += "; "
-			}
-			errMsg += err.Error()
-		}
-		return fmt.Errorf("errors validating alerts: %s", errMsg)
-	}
-
-	alertAggDataMutex.Lock() // Acquire write lock
-	alertAggData = data
-	alertAggDataMutex.Unlock() // Release write lock
-
-	setAggsInitialized(true) // Set to true after successful initialization
-	fmt.Println("Finished initializing alerts and aggregates")
+	//	setAggsInitialized(true) // Set to true after successful initialization
+	fmt.Println("Finished initializing aggregates")
 	return nil
 }
 
+// Function to initialize alerts
+
 // Function to safely set the aggsInitialized flag
-func setAggsInitialized(value bool) {
-	aggsInitializedLock.Lock()
-	defer aggsInitializedLock.Unlock()
-	aggsInitialized = value
-	fmt.Println("debug: aggsInitialized:----------------------", aggsInitialized)
+/*func setAggsInitialized(value bool) {
+	AggsInitializedLock.Lock()
+	defer AggsInitializedLock.Unlock()
+	AggsInitialized = value
+	fmt.Println("debug: aggsInitialized:----------------------", AggsInitialized)
 }
 
 // Function to safely get the aggsInitialized flag
 func IsAggsInitialized() bool {
-	aggsInitializedLock.RLock()
-	defer aggsInitializedLock.RUnlock()
-	return aggsInitialized
+	AggsInitializedLock.RLock()
+	defer AggsInitializedLock.RUnlock()
+	return AggsInitialized
+}
+*/
+// Function to process securities concurrently with a fixed number of workers
+type result struct {
+	securityId int
+	data       *SecurityData
+	err        error
 }
 
-// Function to process securities concurrently with a fixed number of workers
 func processSecuritiesConcurrently(securityIds []int, concurrency int, conn *utils.Conn) []result {
 	resultsChan := make(chan result, len(securityIds))
 	jobChan := make(chan int, len(securityIds))
@@ -178,44 +309,6 @@ func processOneSecurity(sid int, conn *utils.Conn) (*SecurityData, error) {
 	}
 
 	return sd, nil
-}
-
-// Helper function to load active alerts
-func loadActiveAlerts(ctx context.Context, conn *utils.Conn) error {
-	query := `
-        SELECT alertId, userId, alertType, setupId, price, direction, securityId
-        FROM alerts
-        WHERE active = true
-    `
-	rows, err := conn.DB.Query(ctx, query)
-	if err != nil {
-		return fmt.Errorf("querying active alerts: %w", err)
-	}
-	defer rows.Close()
-
-	alerts = sync.Map{}
-	for rows.Next() {
-		var alert Alert
-		err := rows.Scan(
-			&alert.AlertId,
-			&alert.UserId,
-			&alert.AlertType,
-			&alert.SetupId,
-			&alert.Price,
-			&alert.Direction,
-			&alert.SecurityId,
-		)
-		if err != nil {
-			return fmt.Errorf("scanning alert row: %w", err)
-		}
-		alerts.Store(alert.AlertId, alert)
-	}
-
-	if err = rows.Err(); err != nil {
-		return fmt.Errorf("iterating alert rows: %w", err)
-	}
-
-	return nil
 }
 
 // Helper function to validate initialized security data
@@ -266,9 +359,9 @@ func validateTimeframeData(td *TimeframeData, timeframeName string, extendedHour
 		return fmt.Errorf("%s aggregates array is nil", timeframeName)
 	}
 
-	if len(td.Aggs) != Length {
+	if len(td.Aggs) != AggsLength {
 		return fmt.Errorf("%s aggregates length mismatch: got %d, want %d",
-			timeframeName, len(td.Aggs), Length)
+			timeframeName, len(td.Aggs), AggsLength)
 	}
 
 	if td.rolloverTimestamp == -1 {
@@ -279,7 +372,7 @@ func validateTimeframeData(td *TimeframeData, timeframeName string, extendedHour
 }
 
 func initTimeframeData(conn *utils.Conn, securityId int, timeframe int, isExtendedHours bool) TimeframeData {
-	aggs := make([][]float64, Length)
+	aggs := make([][]float64, AggsLength)
 	for i := range aggs {
 		aggs[i] = make([]float64, OHLCV)
 	}
@@ -309,7 +402,7 @@ func initTimeframeData(conn *utils.Conn, securityId int, timeframe int, isExtend
 		fmt.Printf("Invalid timeframe: %d\n", timeframe)
 		return td
 	}
-	fromMillis, toMillis, err := utils.GetRequestStartEndTime(time.Unix(0, 0), toTime, "backward", tfStr, multiplier, Length)
+	fromMillis, toMillis, err := utils.GetRequestStartEndTime(time.Unix(0, 0), toTime, "backward", tfStr, multiplier, AggsLength)
 	if err != nil {
 		fmt.Printf("error g2io002")
 		return td
@@ -320,7 +413,7 @@ func initTimeframeData(conn *utils.Conn, securityId int, timeframe int, isExtend
 		fmt.Printf("error getting hist data")
 		return td
 	}
-	iter, err := utils.GetAggsData(conn.Polygon, ticker, multiplier, tfStr, fromMillis, toMillis, Length, "desc", true)
+	iter, err := utils.GetAggsData(conn.Polygon, ticker, multiplier, tfStr, fromMillis, toMillis, AggsLength, "desc", true)
 	if err != nil {
 		fmt.Printf("Error getting historical data: %v\n", err)
 		return td
@@ -338,7 +431,7 @@ func initTimeframeData(conn *utils.Conn, securityId int, timeframe int, isExtend
 			continue
 		}
 
-		if idx >= Length {
+		if idx >= AggsLength {
 
 			break
 		}
@@ -525,3 +618,23 @@ func initSecurityData(conn *utils.Conn, securityId int) *SecurityData {
 	}
 	return sd
 }
+
+/*
+func appendAggregate(securityId int,timeframe string, o float64, h float64, l float64, c float64) error {
+    sd, exists := data[securityId]
+    if !exists {
+        sd = initSecurityData()
+        data[securityId] = sd
+    }
+    sd.mutex.Lock()
+    defer sd.mutex.Unlock()
+
+    if sd.size > 0 {
+        copy(sd.Aggs[1:],sd.Aggs[0:min(sd.size,Length-1)])
+    }
+    sd.Aggs[0] = []float64{o,h,l,c}
+    if sd.size < Length {
+        sd.size ++
+    }
+    return nil
+}*/
