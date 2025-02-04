@@ -54,3 +54,18 @@ export interface StreamInfo {
     startTimestamp: number | null,
     replaySpeed: number,
 }
+export interface AlertData {
+    message: string;
+    alertId: number;
+    timestamp: number;
+    securityId: number;
+}
+export interface AlertLog extends Instance, Alert { }
+export interface Alert {
+    alertId?: number
+    alertType: string
+    setupId?: number
+    securityId?: number
+    ticker?: string
+    price?: number
+}

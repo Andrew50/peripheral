@@ -63,15 +63,29 @@ pub sub from redis and then iterates through all the subscribeers (possibly one 
 this function simply sends the message to the frontend. it has to lock to prevent concurrent writes to the socket
 */
 
-func SendMessageToUser(userID int, message string) {
-	UserToClientMutex.RLock()
-	client, ok := UserToClient[userID]
-	UserToClientMutex.RUnlock()
-	if !ok {
-		fmt.Println("client not found")
-		return
+type AlertMessage struct {
+	AlertId    int    `json:"alertId"`
+	Timestamp  int64  `json:"timestamp"`
+	SecurityId int    `json:"securityId"`
+	Message    string `json:"message"`
+	Channel    string `json:"channel"`
+	Ticker     string `json:"ticker"`
+}
+
+func SendAlertToUser(userID int, alert AlertMessage) {
+	jsonData, err := json.Marshal(alert)
+	if err == nil {
+		UserToClientMutex.RLock()
+		client, ok := UserToClient[userID]
+		UserToClientMutex.RUnlock()
+		if !ok {
+			fmt.Println("client not found")
+			return
+		}
+		client.send <- jsonData
+	} else {
+		fmt.Println("Error marshaling alert:", err)
 	}
-	client.send <- []byte(message)
 }
 func (c *Client) writePump() {
 	defer c.ws.Close()
@@ -244,6 +258,16 @@ func (c *Client) close() {
 			delete(channelSubscribers, channelName)
 		}
 	}
+
+	// Remove the client from the UserToClient map
+	UserToClientMutex.Lock()
+	for userID, client := range UserToClient {
+		if client == c {
+			delete(UserToClient, userID)
+			break
+		}
+	}
+	UserToClientMutex.Unlock()
 
 	// Close the send channel to stop the writePump
 	fmt.Println("closing channel")
