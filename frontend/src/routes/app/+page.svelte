@@ -10,6 +10,7 @@
 	import Similar from '$lib/utils/popups/similar.svelte';
 	import Study from '$lib/features/study.svelte';
 	import Setups from '$lib/features/setups/setups.svelte';
+	import Algo from '$lib/utils/popups/algo.svelte';
 	import Screen from '$lib/features/screen.svelte';
 	import Watchlist from '$lib/features/watchlist.svelte';
 	import Screensaver from '$lib/features/screensaver.svelte';
@@ -141,6 +142,7 @@
 	<Similar />
 	<Setup />
 	<AlertPopup />
+	<Algo />
 	<div class="dcontainer">
 		<!--<Chart width={pix - $menuWidth - buttonWidth}/>-->
 		<ChartContainer width={pix - $menuWidth - buttonWidth} />

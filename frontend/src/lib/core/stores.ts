@@ -1,7 +1,7 @@
 //stores.ts
 import { writable } from 'svelte/store'
 //export let currentTimestamp = writable(0);
-import type { Settings, Setup, Instance, Watchlist, Alert, AlertLog, AlertData } from '$lib/core/types'
+import type { Settings, Algo, Setup, Instance, Watchlist, Alert, AlertLog, AlertData } from '$lib/core/types'
 import type { Writable } from 'svelte/store'
 import { privateRequest } from '$lib/core/backend'
 export const setups: Writable<Setup[]> = writable([]);
@@ -17,6 +17,7 @@ export let flagWatchlist: Writable<Instance[]>
 export const streamInfo = writable<StreamInfo>({ replayActive: false, replaySpeed: 1, replayPaused: false, startTimestamp: 0, timestamp: 0, extendedHours: false })
 export const systemClockOffset = 0;
 export const dispatchMenuChange = writable("")
+export const algos: Writable<Algo[]> = writable([])
 
 export interface StreamInfo {
     replayActive: boolean,

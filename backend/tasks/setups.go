@@ -7,6 +7,29 @@ import (
 	"fmt"
 )
 
+/*type Algo struct {
+	AlgoId   int    `json:"algoId"`
+	AlgoName string `json:"algoName"`
+}
+
+func GetAlgos(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	rows, err := conn.DB.Query(context.Background(), `
+		SELECT algoId, algoName
+		FROM algos`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var algos []Algo
+	for rows.Next() {
+		var algo Algo
+		if err := rows.Scan(&algo.AlgoId, &algo.AlgoName); err != nil {
+			return nil, err
+		}
+	}
+	return algos, nil
+}*/
+
 type SetupResult struct {
 	SetupId   int     `json:"setupId"`
 	Name      string  `json:"name"`

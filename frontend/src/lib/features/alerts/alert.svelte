@@ -3,7 +3,8 @@
 	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
 	import { writable } from 'svelte/store';
 	import { onMount } from 'svelte';
-	import { querySetup } from '$lib/utils/popups/setup.svelte'; // Assuming you have a specific function for querying setup inputs
+	import { querySetup } from '$lib/utils/popups/setup.svelte';
+	import { queryAlgo } from '$lib/utils/popups/algo.svelte';
 	import { privateRequest } from '$lib/core/backend';
 	import { activeAlerts, inactiveAlerts, alertLogs } from '$lib/core/stores';
 	import { type Alert, type AlertLog, newAlert, newPriceAlert } from './interface';
@@ -11,6 +12,11 @@
 	onMount(() => {
 		if ($inactiveAlerts === undefined || $activeAlerts === undefined) {
 			privateRequest<Alert[]>('getAlerts', {}).then((v: Alert[]) => {
+				if (v === undefined || v === null) {
+					inactiveAlerts.set([]);
+					activeAlerts.set([]);
+					return;
+				}
 				let inactive = v.filter((alert: Alert) => alert.active === false);
 				inactiveAlerts.set(inactive);
 				let active = v.filter((alert: Alert) => alert.active === true);
@@ -64,7 +70,7 @@
 	<select id="alertType" bind:value={$selectedAlertType}>
 		<option value="price">Price</option>
 		<option value="setup">Setup</option>
-		<option value="algo">Setup</option>
+		<option value="algo">Algo</option>
 	</select>
 	<button
 		on:click={(event) => {

@@ -65,6 +65,7 @@ export interface Alert {
     alertId?: number
     alertType: string
     setupId?: number
+    algoId?: number
     securityId?: number
     ticker?: string
     price?: number

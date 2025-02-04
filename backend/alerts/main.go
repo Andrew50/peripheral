@@ -14,6 +14,7 @@ type Alert struct {
 	AlertId    int
 	UserId     int
 	AlertType  string
+	AlgoId     *int
 	SetupId    *int
 	Price      *float64
 	Direction  *bool

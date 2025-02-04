@@ -17,6 +17,7 @@ type Alert struct {
 	SetupId    *int     `json:"setupId,omitempty"`    // Field for setupId if alert type is 'setup'
 	Ticker     *string  `json:"ticker,omitempty"`
 	Active     bool     `json:"active"`
+	AlgoId     *int     `json:"algoId,omitempty"`
 }
 
 func GetAlerts(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -84,11 +85,13 @@ type NewAlertArgs struct {
 	SecurityId *int     `json:"securityId,omitempty"`
 	SetupId    *int     `json:"setupId,omitempty"`
 	Ticker     *string  `json:"ticker,omitempty"`
+	AlgoId     *int     `json:"algoId,omitempty"`
 }
 
 func NewAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args NewAlertArgs
-	err := json.Unmarshal(rawArgs, &args)
+	var err error
+	err = json.Unmarshal(rawArgs, &args)
 	if err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
@@ -124,6 +127,14 @@ func NewAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 			VALUES ($1, $2, $3, true) RETURNING alertId`
 		err = conn.DB.QueryRow(context.Background(), insertQuery, userId, args.AlertType, *args.SetupId).Scan(&alertId)
 
+	} else if args.AlertType == "algo" {
+		if args.AlgoId == nil {
+			return nil, fmt.Errorf("algoId is required for 'algo' type alerts")
+		}
+		insertQuery = `
+			INSERT INTO alerts (userId, alertType, algoId, active) 
+			VALUES ($1, $2, $3, true) RETURNING alertId`
+		err = conn.DB.QueryRow(context.Background(), insertQuery, userId, args.AlertType, *args.AlgoId).Scan(&alertId)
 	} else {
 		return nil, fmt.Errorf("invalid alertType: %s", args.AlertType)
 	}
@@ -136,6 +147,7 @@ func NewAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 		Price:      args.Price,      // If setup type, price will be null
 		SecurityId: args.SecurityId, // If setup type, securityId will be null
 		SetupId:    args.SetupId,    // If price type, setupId will be null
+		AlgoId:     args.AlgoId,     // If algo type, algoId will be null
 		Active:     true,            // Set to true by default
 	}
 	// Convert tasks.Alert to alerts.Alert
@@ -145,6 +157,7 @@ func NewAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 		Price:      newAlert.Price,
 		SecurityId: newAlert.SecurityId,
 		SetupId:    newAlert.SetupId,
+		AlgoId:     newAlert.AlgoId,
 		Direction:  direction,
 	}
 	alerts.AddAlert(conn, alertToAdd)
