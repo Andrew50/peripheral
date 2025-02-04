@@ -5,23 +5,20 @@
 	import { onMount } from 'svelte';
 	import { querySetup } from '$lib/utils/popups/setup.svelte'; // Assuming you have a specific function for querying setup inputs
 	import { privateRequest } from '$lib/core/backend';
-	import {
-		type Alert,
-		type AlertLog,
-		alerts,
-		newAlert,
-		newPriceAlert,
-		alertLogs
-	} from './interface';
+	import { activeAlerts, inactiveAlerts, alertLogs } from '$lib/core/stores';
+	import { type Alert, type AlertLog, newAlert, newPriceAlert } from './interface';
 	let selectedAlertType = writable<string>('price');
 	onMount(() => {
-		if ($alerts === undefined) {
-			privateRequest<Alert[]>('getAlerts', {}, true).then((v: Alert[]) => {
-				alerts.set(v);
+		if ($inactiveAlerts === undefined || $activeAlerts === undefined) {
+			privateRequest<Alert[]>('getAlerts', {}).then((v: Alert[]) => {
+				let inactive = v.filter((alert: Alert) => alert.active === false);
+				inactiveAlerts.set(inactive);
+				let active = v.filter((alert: Alert) => alert.active === true);
+				activeAlerts.set(active);
 			});
 		}
 		if ($alertLogs === undefined) {
-			privateRequest<AlertLog[]>('getAlertLogs', {}, true).then((v: AlertLog[]) => {
+			privateRequest<AlertLog[]>('getAlertLogs', {}).then((v: AlertLog[]) => {
 				alertLogs.set(v);
 			});
 		}
@@ -58,6 +55,8 @@
 	function deleteAlertLog(alertLog: AlertLog) {
 		alertLogs.update((currentLogs) => currentLogs.filter((log) => log !== alertLog));
 	}
+
+	// Add derived stores for active and inactive alerts
 </script>
 
 <div class="controls-container">
@@ -75,14 +74,31 @@
 		New
 	</button>
 </div>
+
+<!-- Active Alerts -->
+<h3>Active Alerts</h3>
 <List
 	on:contextmenu={(event) => {
 		event.preventDefault();
 	}}
-	list={alerts}
+	list={activeAlerts}
 	columns={['alertType', 'ticker', 'alertPrice']}
 	parentDelete={deleteAlert}
 />
+
+<!-- Inactive Alerts -->
+<h3>Inactive Alerts</h3>
+<List
+	on:contextmenu={(event) => {
+		event.preventDefault();
+	}}
+	list={inactiveAlerts}
+	columns={['alertType', 'ticker', 'alertPrice']}
+	parentDelete={deleteAlert}
+/>
+
+<!-- Alert Logs -->
+<h3>Alert History</h3>
 <List
 	on:contextmenu={(event) => {
 		event.preventDefault();
