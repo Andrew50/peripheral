@@ -232,7 +232,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 					return nil, fmt.Errorf("dkn0w")
 				}
 				timestamp := time.Time(item.Timestamp).In(easternLocation)
-				
+
 				if queryTimespan == "week" || queryTimespan == "month" || queryTimespan == "year" {
 					for timestamp.Weekday() == time.Saturday || timestamp.Weekday() == time.Sunday {
 						timestamp = timestamp.AddDate(0, 0, 1)
@@ -240,8 +240,8 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				}
 
 				// Skip if we need regular hours and timestamp is outside trading hours
-				if (timespan == "minute" || timespan == "second" || timespan == "hour") && 
-				   !args.ExtendedHours && !utils.IsTimestampRegularHours(timestamp) {
+				if (timespan == "minute" || timespan == "second" || timespan == "hour") &&
+					!args.ExtendedHours && !utils.IsTimestampRegularHours(timestamp) {
 					continue
 				}
 
@@ -254,7 +254,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 					Volume:    item.Volume,
 				}
 				barDataList = append(barDataList, barData)
-				
+
 				numBarsRemaining--
 				if numBarsRemaining <= 0 {
 					break
@@ -337,6 +337,7 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 	if timestamp == 0 {
 		timestampEnd = time.Now().UnixMilli()
 	}
+	fmt.Printf("hit 1")
 	timestampTime := time.Unix(0, timestampEnd*int64(time.Millisecond)).UTC()
 	var timestampStart int64
 	var currentDayStart int64
@@ -497,8 +498,10 @@ func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, mult
 	if err != nil {
 		return incompleteBar, fmt.Errorf("error pulling tick data 56l5kykgk, %v", err)
 	}
+	fmt.Printf("\n timestampend:%v\n", timestampEnd)
 	for iter.Next() {
-		if time.Time(iter.Item().ParticipantTimestamp).UnixMilli() > timestampEnd {
+		timestamp := time.Time(iter.Item().ParticipantTimestamp).In(easternLocation)
+		if !utils.IsTimestampRegularHours(timestamp) && !extendedHours {
 			break
 		}
 		foundCondition := false
