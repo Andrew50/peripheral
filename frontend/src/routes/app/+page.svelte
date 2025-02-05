@@ -16,6 +16,7 @@
 	import Screensaver from '$lib/features/screensaver.svelte';
 	import Quotes from '$lib/features/quotes/quotes.svelte';
 	import Replay from '$lib/features/replay.svelte';
+	import Account from '$lib/features/account.svelte';
 	import { onMount } from 'svelte';
 	import { privateRequest } from '$lib/core/backend';
 	import { goto } from '$app/navigation';
@@ -36,7 +37,8 @@
 		| 'journal'
 		| 'screensaver'
 		| 'replay'
-		| 'settings';
+		| 'settings'
+		| 'account';
 	const menus: Menu[] = [
 		'quotes',
 		'watchlist',
@@ -47,7 +49,8 @@
 		'setups',
 		'screensaver',
 		'replay',
-		'settings'
+		'settings',
+		'account'
 	]; //,'test'
 	let active_menu: Menu = 'none';
 	let minWidth: number;
@@ -57,6 +60,9 @@
 	import { menuWidth } from '$lib/core/stores';
 	let buttonWidth: number;
 	onMount(() => {
+		if (browser) {
+			document.title = 'Atlantis'; // Set initial title without dash
+		}
 		dispatchMenuChange.subscribe((v: Menu) => {
 			toggleMenu(v);
 		});
@@ -88,10 +94,18 @@
 		if (active_menu == menuName) {
 			active_menu = 'none';
 			menuWidth.set(close);
+			if (browser) {
+				document.title = 'Atlantis';
+			}
 		} else {
 			active_menu = menuName;
 			if (get(menuWidth) < minWidth) {
 				menuWidth.set(minWidth);
+			}
+			if (browser) {
+				if (menuName !== '') {
+					document.title = `${menuName.charAt(0).toUpperCase() + menuName.slice(1)} - Atlantis`;
+				}
 			}
 		}
 	}
@@ -175,6 +189,8 @@
 				<Quotes />
 			{:else if active_menu === 'alerts'}
 				<Alerts />
+			{:else if active_menu === 'account'}
+				<Account />
 			{/if}
 		</div>
 		<div class="system-clock">
@@ -186,8 +202,9 @@
 			<button
 				class="button {active_menu == menu ? 'active' : ''}"
 				on:click={() => toggleMenu(menu)}
+				title={menu.charAt(0).toUpperCase() + menu.slice(1)}
 			>
-				<img class="icon" src={`${menu}.png`} alt="" />
+				<img class="icon" src={`${menu}.png`} alt={menu} />
 			</button>
 		{/each}
 	</div>
