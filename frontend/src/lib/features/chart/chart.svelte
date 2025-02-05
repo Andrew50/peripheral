@@ -177,6 +177,8 @@
 			console.log('adjusting to stream timestamp');
 			inst.timestamp = Math.floor($streamInfo.timestamp);
 		}
+		console.log(inst);
+		console.log(inst.extendedHours)
 		privateRequest<BarData[]>('getChartData', {
 			securityId: inst.securityId,
 			timeframe: inst.timeframe,
@@ -191,6 +193,7 @@
 				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
 					return;
 				}
+				console.log(barDataList);
 				let newCandleData = barDataList.map((bar) => ({
 					time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
 					open: bar.open,
