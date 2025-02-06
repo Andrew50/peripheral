@@ -24,6 +24,9 @@ const slowRedisTimeout = 1 * time.Second // Adjust the timeout as needed
 var tickerToSecurityId map[string]int
 var tickerToSecurityIdLock sync.RWMutex
 
+// Add this package-level variable
+var polygonWSConn *polygonws.Client
+
 func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 	err := polygonWS.Subscribe(polygonws.StocksQuotes)
 	if err != nil {
@@ -161,18 +164,31 @@ func StartPolygonWS(conn *utils.Conn) error {
 	if err := initTickerToSecurityIdMap(conn); err != nil {
 		return fmt.Errorf("failed to initialize ticker to security ID map: %v", err)
 	}
-	polygonWSConn, err := polygonws.New(polygonws.Config{
+
+	var err error
+	polygonWSConn, err = polygonws.New(polygonws.Config{
 		APIKey: "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm",
 		Feed:   polygonws.RealTime,
 		Market: polygonws.Stocks,
 	})
 	if err != nil {
-		fmt.Printf("Error init polygonWs connection")
+		return fmt.Errorf("error initializing polygonWS connection: %v", err)
 	}
+
 	if err := polygonWSConn.Connect(); err != nil {
-		fmt.Printf("Error connecting to polygonWS")
+		return fmt.Errorf("error connecting to polygonWS: %v", err)
 	}
+
 	go StreamPolygonDataToRedis(conn, polygonWSConn)
+	return nil
+}
+
+func StopPolygonWS() error {
+	if polygonWSConn == nil {
+		return fmt.Errorf("polygon websocket connection is not initialized")
+	}
+
+	polygonWSConn.Close()
 	return nil
 }
 
