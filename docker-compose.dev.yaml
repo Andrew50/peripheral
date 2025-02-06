@@ -50,14 +50,14 @@ services:
           - compose_network
 
 
-    ml: 
+    worker: 
         build: #satish was here
-            context: ./ml
+            context: ./worker
             dockerfile: Dockerfile
         networks:
             - compose_network
         volumes:
-            - ./ml:/app #for hot reload
+            - ./worker:/app #for hot reload
             - tf:/models
         restart: unless-stopped
         deploy:
