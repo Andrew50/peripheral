@@ -10,5 +10,6 @@ RUN pip install --no-deps tensorflow-serving-api==2.17.0
 COPY requirements.txt .
 RUN pip install -r requirements.txt --no-cache-dir
 COPY . .
-ENV PYTHONBUFFERED=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONFAULTHANDLER=1
 CMD ["watchmedo", "auto-restart", "--recursive", "--patterns=*py", "--", "python", "-u", "worker.py"]

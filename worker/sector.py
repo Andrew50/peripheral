@@ -2,8 +2,11 @@ import yfinance as yf
 import psycopg2
 from psycopg2.extras import execute_batch
 import time
+from conn import Conn
 from multiprocessing import Pool, cpu_count
 from datetime import datetime
+
+USE_DATABASE = True  # Set to False to print output instead of saving to database
 
 def get_timestamp():
     return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -30,13 +33,13 @@ def process_ticker_batch(tickers):
     for ticker in tickers:
         info = get_sector_info(ticker)
         results.append(info)
-        time.sleep(0.5)  # Respect rate limits while still being parallel
+        time.sleep(0.1)  # Respect rate limits while still being parallel
     return results
 
 def update_sectors(conn):
     print(f"{get_timestamp()} - Starting sector updates", flush=True)
     try:
-        with conn.cursor() as cursor:
+        with conn.db.cursor() as cursor:
             cursor.execute("""
                 SELECT DISTINCT ticker 
                 FROM securities 
@@ -45,30 +48,37 @@ def update_sectors(conn):
             tickers = [row[0] for row in cursor.fetchall()]
             if not tickers:
                 return
-            num_processes = min(cpu_count(), 3)
-            batch_size = 20
-            batches = [tickers[i:i + batch_size] for i in range(0, len(tickers), batch_size)]
             
             total_updates = 0
-            with Pool(num_processes) as pool:
-                for batch_results in pool.imap_unordered(process_ticker_batch, batches):
-                    updates = [(info['sector'], info['industry'], info['ticker']) 
-                              for info in batch_results]
-                    
+            total_tickers = len(tickers)
+            print(f"{get_timestamp()} - Processing {total_tickers} tickers", flush=True)
+            
+            for ticker in tickers:
+                info = get_sector_info(ticker)
+                
+                if USE_DATABASE:
                     try:
-                        execute_batch(cursor, """
+                        cursor.execute("""
                             UPDATE securities 
                             SET sector = %s, industry = %s 
                             WHERE ticker = %s AND maxDate IS NULL
-                        """, updates)
-                        conn.commit()
-                        total_updates += len(updates)
+                        """, (info['sector'], info['industry'], info['ticker']))
+                        conn.db.commit()
+                        total_updates += 1
+                        
+                        # Add progress tracking
+                        if total_updates % 10 == 0:
+                            print(f"{get_timestamp()} - Processed {total_updates}/{total_tickers} tickers ({(total_updates/total_tickers)*100:.1f}%)", flush=True)
                         
                     except Exception as e:
-                        conn.rollback()
+                        conn.db.rollback()
+                        print(f"{get_timestamp()} - Error updating {ticker}: {str(e)}", flush=True)
                         continue
+                
+                time.sleep(0.3)  # Respect rate limits, .3 seems to be the min wait
             
-            print(f"{get_timestamp()} - Completed! Successfully updated {total_updates} securities", flush=True)
+            if USE_DATABASE:
+                print(f"{get_timestamp()} - Completed! Successfully updated {total_updates} securities", flush=True)
                 
     except Exception as e:
         print(f"{get_timestamp()} - Error in update_sectors: {str(e)}", flush=True)
@@ -76,7 +86,4 @@ def update_sectors(conn):
 
 if __name__ == "__main__":
     # Test code
-    ticker = "AAPL"
-    info = get_sector_info(ticker)
-    print(f"Sector: {info['sector']}", flush=True)
-    print(f"Industry: {info['industry']}", flush=True)
+    update_sectors(Conn(False))
