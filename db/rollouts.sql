@@ -30,6 +30,7 @@ CREATE TABLE trade_executions (
     executionId SERIAL PRIMARY KEY,
     userId INT REFERENCES users(userId) ON DELETE CASCADE,
     securityId INT,
+    ticker VARCHAR(20) NOT NULL,
     date DATE NOT NULL,
     price DECIMAL(10, 4) NOT NULL,
     size INT NOT NULL,
