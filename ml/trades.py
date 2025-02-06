@@ -6,9 +6,10 @@ import traceback
 from datetime import datetime
 
 
-def grab_user_trades(conn, user_id: int):
+def grab_user_trades(conn, args: dict):
     """Fetch all trades for a user"""
     try:
+        user_id = args['user_id']  # Get user_id from args dictionary
         with conn.db.cursor() as cursor:
             cursor.execute("""
                 SELECT 
@@ -116,7 +117,7 @@ def handle_trade_upload(conn, file_content: str, user_id: int, additional_args: 
 
             # Commit the transaction after all trades are processed
             conn.db.commit()
-
+        process_trades(conn, user_id)
         return {
             "status": "success",
             "message": "Trades uploaded successfully"
@@ -148,7 +149,6 @@ def process_trades(conn, user_id: int):
     """
     try:
         with conn.db.cursor() as cursor:
-            # Get all unprocessed executions ordered by timestamp
             cursor.execute("""
                 SELECT te.*, s.ticker 
                 FROM trade_executions te
@@ -161,20 +161,22 @@ def process_trades(conn, user_id: int):
             
             # Process each execution
             for execution in executions:
-                ticker = execution['ticker']
-                direction = execution['direction']
-                date = execution['date']
-                price = execution['price']
-                size = execution['size']
-                timestamp = execution['timestamp']
-                execution_id = execution['executionId']
+                # Updated indices to match the actual column order:
+                # executionid[0] | userid[1] | securityid[2] | date[3] | price[4] | size[5] | timestamp[6] | direction[7] | tradeid[8]
+                securityid = execution[2]
+                direction = execution[7]
+                date = execution[3]
+                price = execution[4]
+                size = execution[5]
+                timestamp = execution[6]
+                execution_id = execution[0]
                 
                 # Check if there's an open trade for this ticker
                 cursor.execute("""
                     SELECT * FROM trades 
-                    WHERE userId = %s AND ticker = %s AND status = 'Open'
+                    WHERE userid = %s AND securityid = %s AND status = 'Open'
                     ORDER BY date DESC LIMIT 1
-                """, (user_id, ticker))
+                """, (user_id, securityid))
                 
                 open_trade = cursor.fetchone()
                 
@@ -225,13 +227,13 @@ def process_trades(conn, user_id: int):
                     # Create new trade
                     cursor.execute("""
                         INSERT INTO trades (
-                            userId, ticker, tradeDirection, date, status, 
-                            openQuantity, entry_times, entry_prices, entry_shares
+                            userid, securityid, ticker, tradedirection, date, status, 
+                            openquantity, entry_times, entry_prices, entry_shares
                         ) VALUES (
                             %s, %s, %s, %s, 'Open', %s, 
                             ARRAY[%s], ARRAY[%s], ARRAY[%s]
-                        ) RETURNING tradeId
-                    """, (user_id, ticker, direction, date, size, 
+                        ) RETURNING tradeid
+                    """, (user_id, securityid, direction, date, size, 
                           timestamp, price, size))
                     trade_id = cursor.fetchone()[0]
 
@@ -247,7 +249,7 @@ def process_trades(conn, user_id: int):
 
     except Exception as e:
         conn.db.rollback()
-        error_info = traceback.format_ex()
+        error_info = traceback.format_exc()
         print(f"Error processing trades:\n{error_info}")
         return {
             "status": "error",
