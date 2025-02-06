@@ -4,12 +4,12 @@ import io
 from screen import getCurrentSecId
 import traceback
 from datetime import datetime
+from decimal import Decimal
 
 
-def grab_user_trades(conn, args: dict):
+def grab_user_trades(conn, user_id: int):
     """Fetch all trades for a user"""
     try:
-        user_id = args['user_id']  # Get user_id from args dictionary
         with conn.db.cursor() as cursor:
             cursor.execute("""
                 SELECT 
@@ -24,28 +24,28 @@ def grab_user_trades(conn, args: dict):
             trades = []
             for row in cursor.fetchall():
                 trade = {
-                    'tradeId': row['tradeId'],
-                    'ticker': row['ticker'],
-                    'direction': row['tradeDirection'],
-                    'date': row['date'].strftime('%Y-%m-%d'),
-                    'status': row['status'],
-                    'openQuantity': row['openQuantity'],
-                    'closedPnL': float(row['closedPnL']) if row['closedPnL'] else None,
+                    'ticker': row[2],
+                    'securityId': row[3],
+                    'direction': row[4],
+                    'date': row[5].strftime('%Y-%m-%d'),
+                    'status': row[6],
+                    'openQuantity': row[7],
+                    'closedPnL': float(row[8]) if row[8] else None,
                     'entries': [
                         {
-                            'time': row['entry_times'][i].strftime('%Y-%m-%d %H:%M:%S'),
-                            'price': float(row['entry_prices'][i]),
-                            'shares': row['entry_shares'][i]
+                            'time': row[9][i].strftime('%Y-%m-%d %H:%M:%S'),
+                            'price': float(row[10][i]),
+                            'shares': row[11][i]
                         }
-                        for i in range(row['num_entries']) if row['num_entries']
+                        for i in range(len(row[9])) if row[9]
                     ],
                     'exits': [
                         {
-                            'time': row['exit_times'][i].strftime('%Y-%m-%d %H:%M:%S'),
-                            'price': float(row['exit_prices'][i]),
-                            'shares': row['exit_shares'][i]
+                            'time': row[12][i].strftime('%Y-%m-%d %H:%M:%S'),
+                            'price': float(row[13][i]),
+                            'shares': row[14][i]
                         }
-                        for i in range(row['num_exits']) if row['num_exits']
+                        for i in range(len(row[12])) if row[12]
                     ]
                 }
                 trades.append(trade)
@@ -78,10 +78,9 @@ def handle_trade_upload(conn, file_content: str, user_id: int, additional_args: 
             for i in range(len(df)-1, -1, -1):
                 trade = df.iloc[i]
                 trade_description = trade['Trade Description']
-                print(f"trade_description: {trade_description}")
                 fidelity_trade_status = trade['Status']
                 
-                if 'Short' in trade_description or 'Sell to Open' in trade_description:
+                if 'Short' in trade_description or 'Sell to Open' in trade_description or 'Buy to Cover' in trade_description or 'Buy to Close' in trade_description:
                     trade_direction = "Short" 
                 else: 
                     trade_direction = "Long"
@@ -90,7 +89,7 @@ def handle_trade_upload(conn, file_content: str, user_id: int, additional_args: 
                 ticker = trade['Symbol']
                 securityId = getCurrentSecId(conn, ticker)
                 
-                if 'Limit' in trade_description:
+                if 'Limit' in trade_description or 'Stop Loss' in trade_description:
                     if 'FILLED AT' in fidelity_trade_status:
                         trade_price = float(fidelity_trade_status.split('$')[1])
                         trade_shares = float(trade['Quantity'].replace(',', ''))
@@ -105,15 +104,14 @@ def handle_trade_upload(conn, file_content: str, user_id: int, additional_args: 
                     trade_price = float(fidelity_trade_status.split('$')[1])
                     trade_shares = float(trade['Quantity'].replace(',', ''))
                 
-                if trade_direction == "Short": 
+                if 'Sell' in trade_description or 'Short' in trade_description: 
                     trade_shares = -trade_shares
 
                 cursor.execute("""
                     INSERT INTO trade_executions 
-                    (userId, securityId, date, price, size, timestamp, direction)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (userId, securityId, timestamp) DO NOTHING
-                """, (user_id, securityId, trade_date, trade_price, abs(trade_shares), trade_dt, trade_direction))
+                    (userId, securityId, ticker, date, price, size, timestamp, direction)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (user_id, securityId, ticker, trade_date, trade_price, trade_shares, trade_dt, trade_direction))
 
             # Commit the transaction after all trades are processed
             conn.db.commit()
@@ -146,105 +144,212 @@ def parse_datetime(datetime_str):
 def process_trades(conn, user_id: int):
     """
     Process trade_executions into consolidated trades
+    following the same logic as the original DataFrame approach:
+    - "Short" trades use negative openQuantity
+    - Adding to short => openQuantity -= size
+    - Exiting short => openQuantity += size
+    - Adding to long => openQuantity += size
+    - Exiting long => openQuantity -= size
     """
+
     try:
         with conn.db.cursor() as cursor:
+            # Fetch all executions that have not yet been assigned a tradeId
             cursor.execute("""
-                SELECT te.*, s.ticker 
+                SELECT te.* 
                 FROM trade_executions te
-                JOIN securities s ON te.securityId = s.securityId
                 WHERE te.userId = %s AND te.tradeId IS NULL
-                ORDER BY te.timestamp
+                ORDER BY te.timestamp ASC
             """, (user_id,))
-            
+
             executions = cursor.fetchall()
-            
-            # Process each execution
+
             for execution in executions:
-                # Updated indices to match the actual column order:
-                # executionid[0] | userid[1] | securityid[2] | date[3] | price[4] | size[5] | timestamp[6] | direction[7] | tradeid[8]
-                securityid = execution[2]
-                direction = execution[7]
-                date = execution[3]
-                price = execution[4]
-                size = execution[5]
-                timestamp = execution[6]
+                # execution structure:
+                #   0: executionId
+                #   1: userId
+                #   2: securityId
+                #   3: ticker
+                #   4: date
+                #   5: price
+                #   6: size
+                #   7: timestamp
+                #   8: direction ("Long" or "Short")
+                #   9: tradeId  (currently NULL)
                 execution_id = execution[0]
-                
-                # Check if there's an open trade for this ticker
+                ticker       = execution[3]
+                securityId   = execution[2]
+                trade_date   = execution[4]
+                trade_price  = float(execution[5])
+                trade_size   = int(execution[6])   
+                trade_ts     = execution[7]           # timestamp
+                direction    = execution[8]           # "Long" or "Short"
+
+                # 1) Check if there's an open trade for this (user, ticker)
                 cursor.execute("""
-                    SELECT * FROM trades 
-                    WHERE userid = %s AND securityid = %s AND status = 'Open'
-                    ORDER BY date DESC LIMIT 1
-                """, (user_id, securityid))
-                
+                    SELECT * 
+                    FROM trades
+                    WHERE userId = %s
+                      AND ticker = %s
+                      AND status = 'Open'
+                    ORDER BY date DESC
+                    LIMIT 1
+                """, (user_id, ticker))
+
                 open_trade = cursor.fetchone()
-                
-                if open_trade:
-                    trade_id = open_trade['tradeId']
-                    # Update existing trade
-                    if (direction == 'Long' and open_trade['tradeDirection'] == 'Long') or \
-                       (direction == 'Short' and open_trade['tradeDirection'] == 'Short'):
-                        # Adding to position
-                        cursor.execute("""
-                            UPDATE trades 
-                            SET entry_times = array_append(entry_times, %s),
-                                entry_prices = array_append(entry_prices, %s),
-                                entry_shares = array_append(entry_shares, %s),
-                                openQuantity = openQuantity + %s
-                            WHERE tradeId = %s
-                        """, (timestamp, price, size, size, trade_id))
-                    else:
-                        # Closing position
-                        cursor.execute("""
-                            UPDATE trades 
-                            SET exit_times = array_append(exit_times, %s),
-                                exit_prices = array_append(exit_prices, %s),
-                                exit_shares = array_append(exit_shares, %s),
-                                openQuantity = openQuantity - %s,
-                                status = CASE 
-                                    WHEN openQuantity - %s = 0 THEN 'Closed'
-                                    ELSE status
-                                END
-                            WHERE tradeId = %s
-                        """, (timestamp, price, size, size, size, trade_id))
-                        
-                        # Calculate P&L if trade is closed
-                        if open_trade['openQuantity'] - size == 0:
-                            pnl = calculate_pnl(
-                                open_trade['entry_prices'], 
-                                open_trade['entry_shares'],
-                                open_trade['exit_prices'] + [price],
-                                open_trade['exit_shares'] + [size],
-                                open_trade['tradeDirection']
-                            )
-                            cursor.execute("""
-                                UPDATE trades 
-                                SET closedPnL = %s
-                                WHERE tradeId = %s
-                            """, (pnl, trade_id))
-                else:
-                    # Create new trade
+
+                if not open_trade:
+                    # 2) No open trade => create one
+                    #    If Short => openQuantity = -trade_size, else => openQuantity = trade_size
+                    open_quantity = trade_size  
+
                     cursor.execute("""
                         INSERT INTO trades (
-                            userid, securityid, ticker, tradedirection, date, status, 
-                            openquantity, entry_times, entry_prices, entry_shares
-                        ) VALUES (
-                            %s, %s, %s, %s, 'Open', %s, 
-                            ARRAY[%s], ARRAY[%s], ARRAY[%s]
-                        ) RETURNING tradeid
-                    """, (user_id, securityid, direction, date, size, 
-                          timestamp, price, size))
-                    trade_id = cursor.fetchone()[0]
+                            userId, securityId, ticker, tradeDirection, date, status, openQuantity,
+                            entry_times, entry_prices, entry_shares,
+                            exit_times, exit_prices, exit_shares
+                        )
+                        VALUES (
+                            %s, %s, %s, %s, %s, 'Open', %s,
+                            ARRAY[%s], ARRAY[%s], ARRAY[%s],
+                            ARRAY[]::timestamp[], ARRAY[]::decimal(10,4)[], ARRAY[]::int[]
+                        )
+                        RETURNING tradeId
+                    """, (
+                        user_id,
+                        securityId,
+                        ticker,
+                        direction,
+                        trade_date,
+                        open_quantity,
+                        trade_ts,        # first entry time
+                        trade_price,     # first entry price
+                        trade_size       
+                    ))
 
-                # Link execution to trade
-                cursor.execute("""
-                    UPDATE trade_executions 
-                    SET tradeId = %s 
-                    WHERE executionId = %s
-                """, (trade_id, execution_id))
-            
+                    new_trade_id = cursor.fetchone()[0]
+
+                    # Link this execution to the newly created trade
+                    cursor.execute("""
+                        UPDATE trade_executions
+                        SET tradeId = %s
+                        WHERE executionId = %s
+                    """, (new_trade_id, execution_id))
+
+                else:
+                    # 3) We have an open trade => decide if it's an Entry or Exit
+                    trade_id      = open_trade[0]
+                    trade_dir     = open_trade[4]   # "Long" or "Short"
+                    old_open_qty  = float(open_trade[7])  # could be negative for short
+                    entry_times   = open_trade[8]
+                    entry_prices  = open_trade[9]
+                    entry_shares  = open_trade[10]
+                    exit_times    = open_trade[11]
+                    exit_prices   = open_trade[12]
+                    exit_shares   = open_trade[13]
+                    new_open_qty = old_open_qty + trade_size  
+                    if trade_dir == direction:
+                        # Check if trade size is in same direction as open quantity
+                        is_same_direction = (old_open_qty > 0 and trade_size > 0) or (old_open_qty < 0 and trade_size < 0)
+                        
+                        if is_same_direction:
+                            # This is an additional "Entry" since sizes are in same direction
+                            cursor.execute("""
+                                UPDATE trades
+                                SET entry_times  = array_append(entry_times, %s),
+                                    entry_prices = array_append(entry_prices, %s),
+                                    entry_shares = array_append(entry_shares, %s),
+                                    openQuantity = %s
+                                WHERE tradeId = %s
+                            """, (
+                                trade_ts,
+                                trade_price,
+                                trade_size,
+                                new_open_qty,
+                                trade_id
+                            ))
+                        else:
+                            # This is an "Exit" since sizes are in opposite directions
+                            cursor.execute("""
+                                UPDATE trades
+                                SET exit_times  = array_append(exit_times, %s),
+                                    exit_prices = array_append(exit_prices, %s),
+                                    exit_shares = array_append(exit_shares, %s),
+                                    openQuantity = %s,
+                                    status = CASE
+                                        WHEN %s = 0 THEN 'Closed'
+                                        ELSE 'Open'
+                                    END
+                                WHERE tradeId = %s
+                            """, (
+                                trade_ts,
+                                trade_price,
+                                trade_size,
+                                new_open_qty,
+                                new_open_qty,   # check if it's zero
+                                trade_id
+                            ))
+
+                    else:
+                        # Append to the "exit_" arrays
+                        # Possibly close if new_open_qty hits 0
+                        cursor.execute("""
+                            UPDATE trades
+                            SET exit_times  = array_append(exit_times, %s),
+                                exit_prices = array_append(exit_prices, %s),
+                                exit_shares = array_append(exit_shares, %s),
+                                openQuantity = %s,
+                                status = CASE
+                                    WHEN %s = 0 THEN 'Closed'
+                                    ELSE 'Open'
+                                END
+                            WHERE tradeId = %s
+                        """, (
+                            trade_ts, 
+                            trade_price,
+                            trade_size,
+                            new_open_qty,
+                            new_open_qty,   # check if it's zero
+                            trade_id
+                        ))
+                        print("\n HIT HERE ")
+                        # If we just closed the trade, compute P/L
+                        if new_open_qty == 0:  # effectively zero
+                            # We need fresh arrays to compute P/L
+                            print("\nhittttttttt")
+                            # Easiest might be to SELECT them again:
+                            cursor.execute("""
+                                SELECT entry_prices, entry_shares,
+                                       exit_prices, exit_shares,
+                                       tradeDirection
+                                FROM trades
+                                WHERE tradeId = %s
+                            """, (trade_id,))
+                            updated_trade = cursor.fetchone()
+                            updated_pnl = calculate_pnl(
+                                updated_trade[0],
+                                updated_trade[1],
+                                updated_trade[2],
+                                updated_trade[3],
+                                updated_trade[4]
+                            )
+                            # Update the closedPnL field
+                            cursor.execute("""
+                                UPDATE trades
+                                SET closedPnL = %s
+                                WHERE tradeId = %s
+                            """, (updated_pnl, trade_id))
+
+                    # 4) Link this execution to the trade
+                    cursor.execute("""
+                        UPDATE trade_executions
+                        SET tradeId = %s
+                        WHERE executionId = %s
+                    """, (trade_id, execution_id))
+
+            # Finally commit once all executions have been processed
             conn.db.commit()
+
             return {"status": "success", "message": "Trades processed successfully"}
 
     except Exception as e:
@@ -254,19 +359,40 @@ def process_trades(conn, user_id: int):
         return {
             "status": "error",
             "message": f"Error: {str(e)}\nTraceback:\n{error_info}"
-        }   
+        }
+
 
 def calculate_pnl(entry_prices, entry_shares, exit_prices, exit_shares, direction):
     """Calculate P&L for a completed trade"""
-    total_entry_value = sum(p * s for p, s in zip(entry_prices, entry_shares))
-    total_exit_value = sum(p * s for p, s in zip(exit_prices, exit_shares))
-    total_entry_shares = sum(entry_shares)
-    total_exit_shares = sum(exit_shares)
-    
+    # Convert all numbers to Decimal for consistent decimal arithmetic
+    total_entry_value = Decimal('0')
+    total_entry_shares = Decimal('0')
+    total_exit_value = Decimal('0')
+    total_exit_shares = Decimal('0')
+
+    # Calculate totals for entries
+    for price, shares in zip(entry_prices, entry_shares):
+        price = Decimal(str(price))
+        shares = Decimal(str(abs(shares)))  # Use absolute value for shares
+        total_entry_value += price * shares
+        total_entry_shares += shares
+
+    # Calculate totals for exits
+    for price, shares in zip(exit_prices, exit_shares):
+        price = Decimal(str(price))
+        shares = Decimal(str(abs(shares)))  # Use absolute value for shares
+        total_exit_value += price * shares
+        total_exit_shares += shares
+
+    # Calculate weighted average prices
+    avg_entry_price = total_entry_value / total_entry_shares if total_entry_shares > 0 else Decimal('0')
+    avg_exit_price = total_exit_value / total_exit_shares if total_exit_shares > 0 else Decimal('0')
+
+    # Calculate P&L based on direction
     if direction == "Long":
-        pnl = total_exit_value - (total_entry_value * (total_exit_shares / total_entry_shares))
+        pnl = (avg_exit_price - avg_entry_price) * total_exit_shares
     else:  # Short
-        pnl = (total_entry_value * (total_exit_shares / total_entry_shares)) - total_exit_value
-    
-    return round(pnl, 2)
+        pnl = (avg_entry_price - avg_exit_price) * total_exit_shares
+    print("\ncalculated pnl: ", pnl)
+    return float(round(pnl, 2))
     
