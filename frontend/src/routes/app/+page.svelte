@@ -16,7 +16,6 @@
 	import Screensaver from '$lib/features/screensaver.svelte';
 	import Quotes from '$lib/features/quotes/quotes.svelte';
 	import Replay from '$lib/features/replay.svelte';
-	import Account from '$lib/features/account.svelte';
 	import { onMount } from 'svelte';
 	import { privateRequest } from '$lib/core/backend';
 	import { goto } from '$app/navigation';
