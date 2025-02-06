@@ -46,7 +46,12 @@ export type ChartEvent = "" | "replay" | "realtime" | "addHorizontalLine"
 
 export let selectedChartId: ChartId = 0
 
-export function setActiveChart(chartId: number) { selectedChartId = chartId }
+export const activeChartInstance: Writable<Instance | null> = writable(null)
+
+export function setActiveChart(chartId: ChartId, currentChartInstance: Instance) {
+    selectedChartId = chartId
+    activeChartInstance.set(currentChartInstance)
+}
 
 export const chartQueryDispatcher: Writable<ChartQueryDispatch> = writable({ timestamp: 0, extendedHours: false, timeframe: "1d", ticker: "" })
 export const chartEventDispatcher: Writable<ChartEventDispatch> = writable({ event: "", chartId: 0, data: null })
@@ -66,4 +71,5 @@ export function queryChart(newInstance: Instance, includeLast: boolean = true): 
         chartId: selectedChartId,
     }
     chartQueryDispatcher.set(req)
+    setActiveChart(selectedChartId, newInstance)
 }
