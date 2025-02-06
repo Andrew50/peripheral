@@ -78,3 +78,32 @@ func SetHorizontalLine(conn *utils.Conn, userId int, rawArgs json.RawMessage) (i
 	}
 	return id, nil
 }
+
+type UpdateHorizontalLineArgs struct {
+	Id         int     `json:"id"`
+	SecurityId int     `json:"securityId"`
+	Price      float64 `json:"price"`
+}
+
+func UpdateHorizontalLine(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args UpdateHorizontalLineArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("error parsing args: %v", err)
+	}
+
+	cmdTag, err := conn.DB.Exec(context.Background(), `
+		UPDATE horizontal_lines 
+		SET price = $1 
+		WHERE id = $2 AND userId = $3 AND securityId = $4`,
+		args.Price, args.Id, userId, args.SecurityId)
+
+	if err != nil {
+		return nil, fmt.Errorf("error updating horizontal line: %v", err)
+	}
+
+	if cmdTag.RowsAffected() == 0 {
+		return nil, fmt.Errorf("no horizontal line found with id %d", args.Id)
+	}
+
+	return nil, nil
+}

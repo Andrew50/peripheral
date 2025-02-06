@@ -53,9 +53,9 @@
 		AR: {$hoveredCandleData.adr?.toFixed(2)}
 		RVOL: {$hoveredCandleData.rvol?.toFixed(2)}
 	</div>
-	<div class="mcap">
+	<!--<div class="mcap">
 		MCAP: {formatLargeNumber($hoveredCandleData.mcap, false)}
-	</div>
+	</div>-->
 </div>
 
 <style>

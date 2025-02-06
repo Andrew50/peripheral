@@ -1,5 +1,3 @@
-
-
 export interface ShiftOverlay {
     startX: number
     startY: number
