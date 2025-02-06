@@ -178,7 +178,7 @@
 			inst.timestamp = Math.floor($streamInfo.timestamp);
 		}
 		console.log(inst);
-		console.log(inst.extendedHours)
+		console.log(inst.extendedHours);
 		privateRequest<BarData[]>('getChartData', {
 			securityId: inst.securityId,
 			timeframe: inst.timeframe,
@@ -442,7 +442,7 @@
 		if (sameBar) {
 			// Update existing bar
 			if (trade.size >= 100) {
-				if (!(trade.conditions?.some((condition) => excludedConditions.has(condition)))) {
+				if (!trade.conditions?.some((condition) => excludedConditions.has(condition))) {
 					chartCandleSeries.update({
 						time: mostRecentBar.time,
 						open: mostRecentBar.open,
@@ -599,7 +599,7 @@
 			}
 		});
 		chartContainer.addEventListener('mousedown', (event) => {
-			setActiveChart(chartId);
+			setActiveChart(chartId, currentChartInstance);
 			isPanning = true;
 			if (shiftDown || get(shiftOverlay).isActive) {
 				shiftOverlay.update((v: ShiftOverlay) => {
@@ -622,7 +622,7 @@
 		});
 
 		chartContainer.addEventListener('keydown', (event) => {
-			setActiveChart(chartId);
+			setActiveChart(chartId, currentChartInstance);
 			if (event.key == 'r' && event.altKey) {
 				//alt + r reset view
 				if (currentChartInstance.timestamp && !$streamInfo.replayActive) {

@@ -241,6 +241,7 @@
 
 	// Instead of repeatedly adding/removing listeners in the store subscription,
 	// we add the keydown listener once on mount and remove it on destroy.
+	let unsubscribe: () => void;
 	onMount(() => {
 		// Save the original focused element so we can restore focus later.
 		prevFocusedElement = document.activeElement as HTMLElement;
@@ -252,7 +253,7 @@
 		document.addEventListener('keydown', keydownHandler);
 
 		// One subscription to the store handles transitions that affect focus.
-		const unsubscribe = inputQuery.subscribe((v: InputQuery) => {
+		unsubscribe = inputQuery.subscribe((v: InputQuery) => {
 			if (browser) {
 				if (v.status === 'initializing') {
 					// Focus the hidden input (after a tick to allow rendering)
@@ -273,13 +274,16 @@
 		// document.addEventListener('touchstart', onTouch);
 
 		// Cleanup on destroy
-		onDestroy(() => {
+	});
+	onDestroy(() => {
+		try {
 			document.removeEventListener('keydown', keydownHandler);
 			// document.removeEventListener('touchstart', onTouch);
 			unsubscribe();
-		});
+		} catch (error) {
+			console.error('Error removing event listeners:', error);
+		}
 	});
-
 	function displayValue(q: InputQuery, key: string): string {
 		if (key === q.inputType) {
 			return q.inputString;
