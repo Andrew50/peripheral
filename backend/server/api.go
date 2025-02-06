@@ -269,7 +269,7 @@ func queueHandler(conn *utils.Conn) http.HandlerFunc {
 		}
 		//fmt.Println("debug: got queue request")
 		token_string := r.Header.Get("Authorization")
-		_, err := validate_token(token_string)
+		userId, err := validate_token(token_string)
 		if handleError(w, err, "auth") {
 			return
 		}
@@ -277,7 +277,25 @@ func queueHandler(conn *utils.Conn) http.HandlerFunc {
 		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "decoding request") {
 			return
 		}
-		taskId, err := utils.Queue(conn, req.Function, req.Arguments)
+
+		// Create a map for the combined arguments
+		var args map[string]interface{}
+
+		// If req.Arguments is not empty, unmarshal it into the args map
+		if len(req.Arguments) > 0 {
+			if err := json.Unmarshal(req.Arguments, &args); err != nil {
+				handleError(w, err, "parsing arguments")
+				return
+			}
+		} else {
+			// Initialize empty map if no arguments were provided
+			args = make(map[string]interface{})
+		}
+
+		// Add userId to the arguments
+		args["user_id"] = userId
+
+		taskId, err := utils.Queue(conn, req.Function, args)
 		if handleError(w, err, "queue") {
 			return
 		}
@@ -288,7 +306,6 @@ func queueHandler(conn *utils.Conn) http.HandlerFunc {
 		if handleError(w, err, "190v0id") {
 			return
 		}
-
 	}
 }
 
