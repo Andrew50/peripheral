@@ -23,13 +23,17 @@ var (
 func StartScheduler(conn *utils.Conn) chan struct{} {
 	//go initialize(conn)
 	//eventLoop(time.Now(), conn)
+	updateSectors(conn)
 	location, err := time.LoadLocation("EST")
 	go eventLoop(time.Now().In(location), conn)
+
 	ticker := time.NewTicker(1 * time.Minute)
 	quit := make(chan struct{})
 	if err != nil {
 		panic(fmt.Errorf("219jv %v", err))
+
 	}
+
 	go func() {
 		for {
 			select {
@@ -46,12 +50,9 @@ func StartScheduler(conn *utils.Conn) chan struct{} {
 }
 
 func initialize(conn *utils.Conn) {
+	// Queue sector update on first init
 
-	err := updateSecurities(conn, false)
-	if err != nil {
-		fmt.Println("schedule issue: 0w0c", err)
-	}
-	err = socket.InitAggregates(conn)
+	err := socket.InitAggregates(conn)
 	if err != nil {
 		fmt.Println("schedule issue: dfi0w20", err)
 	}
@@ -72,10 +73,18 @@ func initialize(conn *utils.Conn) {
 	polygonInitMutex.Unlock()
 }
 
+func updateSectors(conn *utils.Conn) error {
+	_, err := utils.Queue(conn, "update_sectors", map[string]interface{}{})
+	if err != nil {
+		return fmt.Errorf("error queueing sector update: %w", err)
+	}
+	return nil
+}
+
 func eventLoop(now time.Time, conn *utils.Conn) {
 	year, month, day := now.Date()
 	eOpen := time.Date(year, month, day, 4, 0, 0, 0, now.Location())
-	eClose := time.Date(year, month, day, 16, 0, 0, 0, now.Location())
+	eClose := time.Date(year, month, day, 20, 0, 0, 0, now.Location())
 	//open := time.Date(year, month, day, 9, 30, 0, 0, now.Location())
 	//close_ := time.Date(year, month, day, 16, 0, 0, 0, now.Location())
 	if !eOpenRun && now.After(eOpen) && now.Before(eClose) {
@@ -89,10 +98,17 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 	if !eCloseRun && now.After(eClose) {
 		eOpenRun = false
 		eCloseRun = true
+		alerts.StopAlertLoop()
+		socket.StopPolygonWS()
 		fmt.Println("running close schedule ----------------------")
+
 		err := updateSecurities(conn, false)
 		if err != nil {
 			fmt.Println("schedule issue: dw000", err)
+		}
+		err = updateSectors(conn)
+		if err != nil {
+			fmt.Println("schedule issue: sector update close:", err)
 		}
 	}
 }
