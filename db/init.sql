@@ -12,6 +12,8 @@ CREATE TABLE securities (
     figi varchar(12) not null,
     minDate timestamp,
     maxDate timestamp,
+    sector varchar(100),
+    industry varchar(100),
     unique (ticker, minDate),
     unique (ticker, maxDate),
     unique (securityid, minDate),
@@ -151,13 +153,13 @@ CREATE TABLE trades (
     openQuantity INT,
     closedPnL DECIMAL(10, 2),
     -- Store up to 20 entries
-    entry_times TIMESTAMP[] DEFAULT ARRAY[]::TIMESTAMP[],
-    entry_prices DECIMAL(10,4)[] DEFAULT ARRAY[]::DECIMAL(10,4)[],
-    entry_shares INT[] DEFAULT ARRAY[]::INT[],
+    entry_times TIMESTAMP [] DEFAULT ARRAY []::TIMESTAMP [],
+    entry_prices DECIMAL(10, 4) [] DEFAULT ARRAY []::DECIMAL(10, 4) [],
+    entry_shares INT [] DEFAULT ARRAY []::INT [],
     -- Store up to 50 exits
-    exit_times TIMESTAMP[] DEFAULT ARRAY[]::TIMESTAMP[],
-    exit_prices DECIMAL(10,4)[] DEFAULT ARRAY[]::DECIMAL(10,4)[],
-    exit_shares INT[] DEFAULT ARRAY[]::INT[],
+    exit_times TIMESTAMP [] DEFAULT ARRAY []::TIMESTAMP [],
+    exit_prices DECIMAL(10, 4) [] DEFAULT ARRAY []::DECIMAL(10, 4) [],
+    exit_shares INT [] DEFAULT ARRAY []::INT [],
     UNIQUE (userId, ticker, date)
 );
 CREATE TABLE trade_executions (
