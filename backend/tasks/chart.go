@@ -151,6 +151,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			fmt.Printf("Debug: Error scanning row: %v\n", err)
 			return nil, fmt.Errorf("error scanning data: %w", err)
 		}
+		fmt.Printf("\n ticker: %v\n", ticker)
 		tickerForIncompleteAggregate = ticker
 		// Handle NULL dates from the database
 		if maxDateFromSQL == nil {
