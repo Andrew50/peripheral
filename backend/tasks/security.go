@@ -3,6 +3,7 @@ package tasks
 import (
 	"backend/utils"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -223,4 +224,82 @@ func GetSimilarInstances(conn *utils.Conn, userId int, rawArgs json.RawMessage) 
 		return nil, fmt.Errorf("error iterating over rows: %v", err)
 	}
 	return results, nil
+}
+
+type GetTickerDetailsArgs struct {
+	SecurityId int `json:"securityId"`
+}
+
+type TickerDetailsResponse struct {
+	Ticker                      string  `json:"ticker"`
+	Name                        string  `json:"name"`
+	Market                      string  `json:"market"`
+	Locale                      string  `json:"locale"`
+	PrimaryExchange             string  `json:"primary_exchange"`
+	Active                      bool    `json:"active"`
+	MarketCap                   float64 `json:"market_cap"`
+	Description                 string  `json:"description"`
+	Logo                        string  `json:"logo"`
+	ShareClassSharesOutstanding int64   `json:"share_class_shares_outstanding"`
+}
+
+func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetTickerDetailsArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+
+	ticker, err := utils.GetTicker(conn, args.SecurityId, time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ticker: %v", err)
+	}
+	details, err := utils.GetTickerDetails(conn.Polygon, ticker, "now")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ticker details: %v", err)
+	}
+
+	// Fetch the logo image if URL exists
+	var logoBase64 string
+	if details.Branding.LogoURL != "" {
+		// Create HTTP client
+		client := &http.Client{}
+
+		// Create request with API key
+		req, err := http.NewRequest("GET", details.Branding.LogoURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request for logo: %v", err)
+		}
+		req.Header.Add("Authorization", "Bearer "+conn.PolygonKey)
+
+		// Make the request
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch logo: %v", err)
+		}
+		defer resp.Body.Close()
+
+		// Read the image data
+		imageData, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read logo data: %v", err)
+		}
+
+		// Convert to base64
+		logoBase64 = base64.StdEncoding.EncodeToString(imageData)
+	}
+
+	response := TickerDetailsResponse{
+		Ticker:                      details.Ticker,
+		Name:                        details.Name,
+		Market:                      string(details.Market),
+		Locale:                      string(details.Locale),
+		PrimaryExchange:             details.PrimaryExchange,
+		Active:                      details.Active,
+		MarketCap:                   details.MarketCap,
+		Description:                 details.Description,
+		ShareClassSharesOutstanding: details.ShareClassSharesOutstanding,
+		Logo:                        logoBase64,
+	}
+
+	return response, nil
 }
