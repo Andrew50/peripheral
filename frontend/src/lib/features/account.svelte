@@ -45,6 +45,7 @@
         try {
             const result = await queueRequest<Trade[]>('grab_user_trades', {});
             trades.set(result);
+            console.log(result);
             message = 'Trades loaded successfully';
         } catch (error) {
             message = `Error: ${error}`;
@@ -78,14 +79,7 @@
 <List 
     on:contextmenu={(event) => {event.preventDefault();}} 
     list={trades} 
-    columns={[
-        { key: 'date', label: 'Date' },
-        { key: 'ticker', label: 'Ticker' },
-        { key: 'direction', label: 'Direction' },
-        { key: 'status', label: 'Status' },
-        { key: 'openQuantity', label: 'Open Qty' },
-        { key: 'closedPnL', label: 'P/L', format: (value) => value ?? '-' }
-    ]} 
+    columns={["date", "ticker", "direction", "status", "openQuantity", "closedPnL"]}
 />
 
 <style>

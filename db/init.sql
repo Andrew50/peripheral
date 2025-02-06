@@ -166,13 +166,13 @@ CREATE TABLE trade_executions (
     executionId SERIAL PRIMARY KEY,
     userId INT REFERENCES users(userId) ON DELETE CASCADE,
     securityId INT,
+    ticker VARCHAR(20) NOT NULL,
     date DATE NOT NULL,
     price DECIMAL(10, 4) NOT NULL,
     size INT NOT NULL,
     timestamp TIMESTAMP NOT NULL,
     direction VARCHAR(10) NOT NULL,
     tradeId INT REFERENCES trades(tradeId),
-    UNIQUE (userId, securityId, timestamp)
 );
 CREATE INDEX idxUserIdSecurityIdPrice on horizontal_lines(userId, securityId, price);
 COPY securities(securityid, ticker, figi, minDate, maxDate)
