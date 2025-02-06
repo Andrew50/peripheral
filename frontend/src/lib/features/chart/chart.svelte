@@ -49,12 +49,13 @@
 	let askLine: any;
 	let currentBarTimestamp: number;
 	interface DrawingMenuProps {
-		chartCandleSeries: ISeriesApi | null;
+		chartCandleSeries: ISeriesApi<'Candlestick'>;
 		selectedLine: IPriceLine | null;
 		clientX: number;
 		clientY: number;
 		active: boolean;
 		horizontalLines: { price: number; line: IPriceLine; id: number }[];
+		isDragging: boolean;
 	}
 	let drawingMenuProps: Writable<DrawingMenuProps> = writable({
 		chartCandleSeries: null,
@@ -63,7 +64,8 @@
 		clientY: 0,
 		active: false,
 		selectedLineId: -1,
-		horizontalLines: []
+		horizontalLines: [],
+		isDragging: false
 	});
 
 	let chartCandleSeries: ISeriesApi<
@@ -147,6 +149,10 @@
 	let blockingChartQueryDispatch = {};
 	let isPanning = false;
 	const excludedConditions = new Set([2, 7, 10, 13, 15, 16, 20, 21, 22, 29, 33, 37]);
+	let mouseDownStartX = 0;
+	let mouseDownStartY = 0;
+	const DRAG_THRESHOLD = 3; // pixels of movement before considered a drag
+
 	function extendedHours(timestamp: number): boolean {
 		const date = new Date(timestamp);
 		const hours = date.getHours();
@@ -238,14 +244,14 @@
 					}
 					releaseFast();
 					releaseQuote();
-					privateRequest<number>('getMarketCap', { ticker: inst.ticker }).then(
+					/*privateRequest<number>('getMarketCap', { ticker: inst.ticker }).then(
 						(res: { marketCap: number }) => {
 							hoveredCandleData.update((v: typeof defaultHoveredCandleData) => {
 								v.mcap = res.marketCap;
 								return v;
 							});
 						}
-					);
+					);*/
 					for (const line of $drawingMenuProps.horizontalLines) {
 						chartCandleSeries.removePriceLine(line.line);
 					}
@@ -374,35 +380,181 @@
 			});
 		}
 	}
+	function handleMouseMove(event: MouseEvent) {
+		if (!$drawingMenuProps.isDragging || !$drawingMenuProps.selectedLine) return;
+
+		const newPrice = chartCandleSeries.coordinateToPrice(event.clientY) || 0;
+		if (newPrice <= 0) return;
+
+		// Update the line position visually
+		$drawingMenuProps.selectedLine.applyOptions({
+			price: newPrice
+		});
+
+		// Update the stored price in horizontalLines array
+		const lineIndex = $drawingMenuProps.horizontalLines.findIndex(
+			(line) => line.line === $drawingMenuProps.selectedLine
+		);
+		if (lineIndex !== -1) {
+			$drawingMenuProps.horizontalLines[lineIndex].price = newPrice;
+		}
+	}
+
+	function handleMouseUp() {
+		if (!$drawingMenuProps.isDragging || !$drawingMenuProps.selectedLine) return;
+
+		const lineData = $drawingMenuProps.horizontalLines.find(
+			(line) => line.line === $drawingMenuProps.selectedLine
+		);
+
+		if (lineData) {
+			// Update line position in backend
+			privateRequest<void>(
+				'updateHorizontalLine',
+				{
+					id: lineData.id,
+					price: lineData.price,
+					securityId: chartSecurityId
+				},
+				true
+			);
+		}
+
+		drawingMenuProps.update((v) => ({ ...v, isDragging: false }));
+		document.removeEventListener('mousemove', handleMouseMove);
+		document.removeEventListener('mouseup', handleMouseUp);
+	}
+
+	function startDragging(event: MouseEvent) {
+		if (!$drawingMenuProps.selectedLine) return;
+
+		event.preventDefault();
+		event.stopPropagation();
+
+		drawingMenuProps.update((v) => ({ ...v, isDragging: true }));
+		document.addEventListener('mousemove', handleMouseMove);
+		document.addEventListener('mouseup', handleMouseUp);
+	}
+
 	function determineClickedLine(event: MouseEvent) {
 		const mouseY = event.clientY;
-		//const portionOfWindow = chart.getVisibleRange().height / 10;
 		const pixelBuffer = 5;
 
 		const upperPrice = chartCandleSeries.coordinateToPrice(mouseY - pixelBuffer) || 0;
 		const lowerPrice = chartCandleSeries.coordinateToPrice(mouseY + pixelBuffer) || 0;
 		console.log(upperPrice, lowerPrice);
-		if (upperPrice == 0 || lowerPrice == 0) return;
+
+		if (upperPrice == 0 || lowerPrice == 0) return false;
+
 		for (const line of $drawingMenuProps.horizontalLines) {
 			if (line.price <= upperPrice && line.price >= lowerPrice) {
-				drawingMenuProps.update((v: DrawingMenuProps) => {
-					v.chartCandleSeries = chartCandleSeries;
-					v.selectedLine = line.line;
-					v.clientX = event.clientX;
-					v.clientY = event.clientY;
-					v.active = true;
-					v.selectedLineId = line.id;
-					return v;
-				});
+				drawingMenuProps.update((v: DrawingMenuProps) => ({
+					...v,
+					chartCandleSeries: chartCandleSeries,
+					selectedLine: line.line,
+					clientX: event.clientX,
+					clientY: event.clientY,
+					active: false,
+					selectedLineId: line.id
+				}));
+
 				event.preventDefault();
 				event.stopPropagation();
-				return;
+				return true;
 			}
 		}
-		drawingMenuProps.update((v: DrawingMenuProps) => {
-			v.selectedLine = null;
-			v.selectedLineId = -1;
-			return v;
+
+		setTimeout(() => {
+			drawingMenuProps.update((v: DrawingMenuProps) => ({
+				...v,
+				selectedLine: null,
+				selectedLineId: -1,
+				active: false
+			}));
+		}, 100);
+		return false;
+	}
+
+	function handleMouseDown(event: MouseEvent) {
+		console.log('handleMouseDown');
+		if (determineClickedLine(event)) {
+			console.log('determineClickedLine');
+			mouseDownStartX = event.clientX;
+			mouseDownStartY = event.clientY;
+
+			// Add mousemove listener to detect drag
+			const handleMouseMoveForDrag = (moveEvent: MouseEvent) => {
+				const deltaX = Math.abs(moveEvent.clientX - mouseDownStartX);
+				const deltaY = Math.abs(moveEvent.clientY - mouseDownStartY);
+
+				if (deltaX > DRAG_THRESHOLD || deltaY > DRAG_THRESHOLD) {
+					// It's a drag - start dragging and remove this temporary listener
+					document.removeEventListener('mousemove', handleMouseMoveForDrag);
+					document.removeEventListener('mouseup', handleMouseUpForClick);
+					startDragging(moveEvent);
+				}
+			};
+
+			// Add mouseup listener to handle click
+			const handleMouseUpForClick = (upEvent: MouseEvent) => {
+				const deltaX = Math.abs(upEvent.clientX - mouseDownStartX);
+				const deltaY = Math.abs(upEvent.clientY - mouseDownStartY);
+				console.log(deltaX, deltaY);
+
+				if (deltaX <= DRAG_THRESHOLD && deltaY <= DRAG_THRESHOLD) {
+					console.log('click');
+					// It's a click - show menu
+					drawingMenuProps.update((v) => ({
+						...v,
+						active: true,
+						clientX: upEvent.clientX,
+						clientY: upEvent.clientY
+					}));
+				}
+
+				// Clean up listeners
+				document.removeEventListener('mousemove', handleMouseMoveForDrag);
+				document.removeEventListener('mouseup', handleMouseUpForClick);
+			};
+
+			document.addEventListener('mousemove', handleMouseMoveForDrag);
+			document.addEventListener('mouseup', handleMouseUpForClick);
+			return;
+		}
+
+		setActiveChart(chartId, currentChartInstance);
+		isPanning = true;
+		if (shiftDown || get(shiftOverlay).isActive) {
+			shiftOverlay.update((v: ShiftOverlay) => {
+				v.isActive = !v.isActive;
+				if (v.isActive) {
+					v.startX = event.clientX;
+					v.startY = event.clientY;
+					v.width = 0;
+					v.height = 0;
+					v.x = v.startX;
+					v.y = v.startY;
+					v.startPrice = chartCandleSeries.coordinateToPrice(v.startY) || 0;
+					document.addEventListener('mousemove', shiftOverlayTrack);
+				} else {
+					document.removeEventListener('mousemove', shiftOverlayTrack);
+				}
+				return v;
+			});
+		}
+	}
+
+	function shiftOverlayTrack(event: MouseEvent): void {
+		shiftOverlay.update((v: ShiftOverlay) => {
+			const god = {
+				...v,
+				width: Math.abs(event.clientX - v.startX),
+				height: Math.abs(event.clientY - v.startY),
+				x: Math.min(event.clientX, v.startX),
+				y: Math.min(event.clientY, v.startY),
+				currentPrice: chartCandleSeries.coordinateToPrice(event.clientY) || 0
+			};
+			return god;
 		});
 	}
 
@@ -579,48 +731,13 @@
 				shiftDown = false;
 			}
 		});
-		function shiftOverlayTrack(event: MouseEvent): void {
-			shiftOverlay.update((v: ShiftOverlay) => {
-				const god = {
-					...v,
-					width: Math.abs(event.clientX - v.startX),
-					height: Math.abs(event.clientY - v.startY),
-					x: Math.min(event.clientX, v.startX),
-					y: Math.min(event.clientY, v.startY),
-					currentPrice: chartCandleSeries.coordinateToPrice(event.clientY) || 0
-				};
-				return god;
-			});
-		}
+		chartContainer.addEventListener('mousedown', handleMouseDown);
 		chartContainer.addEventListener('mouseup', () => {
 			isPanning = false;
 			if (queuedLoad != null) {
 				queuedLoad();
 			}
 		});
-		chartContainer.addEventListener('mousedown', (event) => {
-			setActiveChart(chartId, currentChartInstance);
-			isPanning = true;
-			if (shiftDown || get(shiftOverlay).isActive) {
-				shiftOverlay.update((v: ShiftOverlay) => {
-					v.isActive = !v.isActive;
-					if (v.isActive) {
-						v.startX = event.clientX;
-						v.startY = event.clientY;
-						v.width = 0;
-						v.height = 0;
-						v.x = v.startX;
-						v.y = v.startY;
-						v.startPrice = chartCandleSeries.coordinateToPrice(v.startY) || 0;
-						chartContainer.addEventListener('mousemove', shiftOverlayTrack);
-					} else {
-						chartContainer.removeEventListener('mousemove', shiftOverlayTrack);
-					}
-					return v;
-				});
-			}
-		});
-
 		chartContainer.addEventListener('keydown', (event) => {
 			setActiveChart(chartId, currentChartInstance);
 			if (event.key == 'r' && event.altKey) {
@@ -659,7 +776,6 @@
 				}
 			}
 		});
-		chartContainer.addEventListener('click', determineClickedLine);
 		chart = createChart(chartContainer, chartOptions);
 		chartCandleSeries = chart.addCandlestickSeries({
 			priceLineVisible: false,

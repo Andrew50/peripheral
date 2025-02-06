@@ -27,6 +27,8 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"getSimilarInstances":     tasks.GetSimilarInstances,
 	"getSecuritiesFromTicker": tasks.GetSecuritiesFromTicker,
 	"getCurrentTicker":        tasks.GetCurrentTicker,
+	"getTickerDetails":        tasks.GetTickerDetails,
+
 	//chart
 	"getChartData": tasks.GetChartData,
 	//study
@@ -54,7 +56,7 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"newWatchlistItem":    tasks.NewWatchlistItem,
 	//singles
 	"getPrevClose": tasks.GetPrevClose,
-	"getMarketCap": tasks.GetMarketCap,
+	//"getMarketCap": tasks.GetMarketCap,
 	//settings
 	"getSettings": tasks.GetSettings,
 	"setSettings": tasks.SetSettings,
@@ -90,7 +92,9 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"setHorizontalLine":    tasks.SetHorizontalLine,
 	"getHorizontalLines":   tasks.GetHorizontalLines,
 	"deleteHorizontalLine": tasks.DeleteHorizontalLine,
-	"getTickerDetails":     tasks.GetTickerDetails,
+	"updateHorizontalLine": tasks.UpdateHorizontalLine,
+	//tick
+
 }
 
 func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
