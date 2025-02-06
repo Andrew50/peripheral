@@ -6,8 +6,10 @@ import (
 
 	"backend/socket"
 	"backend/utils"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 
@@ -143,6 +145,76 @@ func public_handler(conn *utils.Conn) http.HandlerFunc {
 		} else {
 			http.Error(w, fmt.Sprintf("invalid function: %s", req.Function), http.StatusBadRequest)
 			fmt.Printf("invalid function: %s", req.Function)
+			return
+		}
+	}
+}
+
+func private_upload_handler(conn *utils.Conn) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		addCORSHeaders(w)
+		if r.Method != "POST" {
+			return
+		}
+		token_string := r.Header.Get("Authorization")
+		userId, err := validate_token(token_string)
+		if handleError(w, err, "auth") {
+			return
+		}
+
+		if err := r.ParseMultipartForm(32 << 20); err != nil {
+			handleError(w, err, "parsing multipart form")
+			return
+		}
+
+		// Get function name
+		funcName := r.FormValue("func")
+		if funcName == "" {
+			handleError(w, fmt.Errorf("missing function name"), "function name")
+			return
+		}
+
+		file, _, err := r.FormFile("file")
+		if err != nil {
+			handleError(w, err, "file")
+			return
+		}
+		defer file.Close()
+
+		fileContent, err := io.ReadAll(file)
+		if err != nil {
+			handleError(w, err, "reading file")
+			return
+		}
+		encodedContent := base64.StdEncoding.EncodeToString(fileContent)
+
+		// Parse additional arguments
+		var additionalArgs map[string]interface{}
+		if argsStr := r.FormValue("args"); argsStr != "" {
+			if err := json.Unmarshal([]byte(argsStr), &additionalArgs); err != nil {
+				handleError(w, err, "parsing additional arguments")
+				return
+			}
+		}
+
+		// Include userId in the arguments
+		args := map[string]interface{}{
+			"file_content":    encodedContent,
+			"additional_args": additionalArgs,
+			"user_id":         userId,
+		}
+
+		taskId, err := utils.Queue(conn, funcName, args)
+		if handleError(w, err, "queuing task") {
+			return
+		}
+
+		response := map[string]string{
+			"taskId": taskId,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			handleError(w, err, "encoding response")
 			return
 		}
 	}
@@ -295,7 +367,7 @@ func StartServer() {
 	http.HandleFunc("/queue", queueHandler(conn))
 	http.HandleFunc("/poll", pollHandler(conn))
 	http.HandleFunc("/ws", WSHandler(conn))
-
+	http.HandleFunc("/private-upload", private_upload_handler(conn))
 	fmt.Println("debug: Server running on port 5057 ----------------------------------------------------------")
 	if err := http.ListenAndServe(":5057", nil); err != nil {
 		log.Fatal(err)

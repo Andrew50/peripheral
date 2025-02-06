@@ -19,7 +19,7 @@
     setupType: string;
     score: number;
     flagged: boolean;
-  }
+  } 
 
   function runScreen() {
     const setupIds = get(setups).filter(v => v.activeScreen).map(v => v.setupId);
