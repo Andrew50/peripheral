@@ -1,8 +1,8 @@
 /backend/tmp/
 backend/tmp/main
 backend/app.log
-ml/__pycache__
-ml/core
+worker/__pycache__
+worker/core
 db/backups
-ml/venv
+worker/venv
 backups/
