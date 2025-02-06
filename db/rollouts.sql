@@ -7,8 +7,7 @@
  );
  CREATE INDEX IF NOT EXISTS idxUserIdSecurityIdPrice ON horizontal_lines(userId, securityId, price);
  */
-
- CREATE TABLE trades (
+CREATE TABLE trades (
     tradeId SERIAL PRIMARY KEY,
     userId INT REFERENCES users(userId) ON DELETE CASCADE,
     ticker VARCHAR(10) NOT NULL,
@@ -18,13 +17,13 @@
     openQuantity INT,
     closedPnL DECIMAL(10, 2),
     -- Store up to 20 entries
-    entry_times TIMESTAMP[] DEFAULT ARRAY[]::TIMESTAMP[],
-    entry_prices DECIMAL(10,4)[] DEFAULT ARRAY[]::DECIMAL(10,4)[],
-    entry_shares INT[] DEFAULT ARRAY[]::INT[],
+    entry_times TIMESTAMP [] DEFAULT ARRAY []::TIMESTAMP [],
+    entry_prices DECIMAL(10, 4) [] DEFAULT ARRAY []::DECIMAL(10, 4) [],
+    entry_shares INT [] DEFAULT ARRAY []::INT [],
     -- Store up to 50 exits
-    exit_times TIMESTAMP[] DEFAULT ARRAY[]::TIMESTAMP[],
-    exit_prices DECIMAL(10,4)[] DEFAULT ARRAY[]::DECIMAL(10,4)[],
-    exit_shares INT[] DEFAULT ARRAY[]::INT[],
+    exit_times TIMESTAMP [] DEFAULT ARRAY []::TIMESTAMP [],
+    exit_prices DECIMAL(10, 4) [] DEFAULT ARRAY []::DECIMAL(10, 4) [],
+    exit_shares INT [] DEFAULT ARRAY []::INT [],
     UNIQUE (userId, ticker, date)
 );
 CREATE TABLE trade_executions (
@@ -39,3 +38,6 @@ CREATE TABLE trade_executions (
     tradeId INT REFERENCES trades(tradeId),
     UNIQUE (userId, securityId, timestamp)
 );
+ALTER TABLE securities
+ADD COLUMN sector VARCHAR(100),
+    ADD COLUMN industry VARCHAR(100);
