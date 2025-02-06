@@ -52,21 +52,24 @@ export async function privateFileRequest<T>(func:string, file: File, additionalA
     };
     const response = await fetch(`${base_url}/private-upload`, {
         method: 'POST',
-        headers: headers,
+        headers: {
+            ...(authToken ? { 'Authorization': authToken } : {})
+        },
         body: formData
     }).catch((e)=>{
         return Promise.reject(e);
     });
-    if (response.status === 401){
-        goto('/login')
-    }else if (response.ok){
-        const result = await response.json() as T
-        return result;
-    } else {
-        const errorMessage = await response.text()
-        console.error("error: ", errorMessage)
+
+    if (response.status === 401) {
+        goto('/login');
+    }
+    if (!response.ok) {
+        const errorMessage = await response.text();
+        console.error("Error:", errorMessage);
         return Promise.reject(errorMessage);
     }
+
+    return response.json();
 }
 
 export async function privateRequest<T>(func: string, args: any,verbose=false): Promise<T> {
