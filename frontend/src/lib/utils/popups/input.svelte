@@ -168,6 +168,7 @@
 		return iQ;
 	}
 	function handleKeyDown(event: KeyboardEvent): void {
+		event.stopPropagation();
 		let iQ = get(inputQuery);
 		if (event.key === 'Escape') {
 			iQ.status = 'cancelled';
@@ -248,9 +249,14 @@
 		inputQuery.subscribe(async (v: InputQuery) => {
 			if (browser) {
 				if (v.status === 'initializing') {
+					//while (true) {
 					try {
 						document.removeEventListener('keydown', handleKeyDown);
-					} catch {}
+						await tick();
+					} catch {
+						//		break;
+					}
+					//}
 
 					await tick();
 					document.addEventListener('keydown', handleKeyDown);
