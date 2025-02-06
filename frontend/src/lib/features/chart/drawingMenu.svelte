@@ -5,10 +5,16 @@
 	import { privateRequest } from '$lib/core/backend';
 	import type { Writable } from 'svelte/store';
 	export let drawingMenuProps: Writable<DrawingMenuProps>;
+
+	let menuElement: HTMLDivElement;
+
 	function removePriceLine(event: MouseEvent) {
+		console.log('removePriceLine');
 		event.preventDefault();
-		event.stopPropagation();
+		event.stopImmediatePropagation();
+		console.log('removePriceLine');
 		if ($drawingMenuProps.selectedLine !== null) {
+			console.log('removing price line');
 			$drawingMenuProps.chartCandleSeries.removePriceLine($drawingMenuProps.selectedLine);
 			$drawingMenuProps.horizontalLines = $drawingMenuProps.horizontalLines.filter(
 				(line) => line.line !== $drawingMenuProps.selectedLine
@@ -23,55 +29,76 @@
 			console.log('Price line removed');
 		}
 	}
-	onMount(() => {
-		document.addEventListener('click', handleClickOutside);
-	});
 
 	function handleClickOutside(event: MouseEvent) {
-		const popup = document.querySelector('.test');
-		if (popup && !popup.contains(event.target as Node)) {
-			console.log('clicked outside drawing menu');
-			drawingMenuProps.update((v: DrawingMenuProps) => {
-				v.active = false;
-				return v;
-			});
+		console.log($drawingMenuProps.active, $drawingMenuProps.isDragging);
+		if (!$drawingMenuProps.active || $drawingMenuProps.isDragging) {
+			console.log('handleClickOutside -----');
+			return;
+		}
+		console.log('handleClickOutside');
+		console.log(menuElement);
+
+		if (!menuElement) return;
+
+		const deleteButton = menuElement.querySelector('button');
+		if (deleteButton && deleteButton.contains(event.target as Node)) {
+			return;
+		}
+
+		const clickY = event.clientY;
+		const isClickInMenu =
+			event.target === menuElement || menuElement.contains(event.target as Node);
+
+		const selectedLine = $drawingMenuProps.selectedLine;
+		const chartCandleSeries = $drawingMenuProps.chartCandleSeries;
+		let isClickNearLine = false;
+
+		if (selectedLine && chartCandleSeries) {
+			const linePrice = selectedLine.options().price;
+			const lineY = chartCandleSeries.priceToCoordinate(linePrice) || 0;
+			const CLICK_THRESHOLD = 5; // pixels
+			isClickNearLine = Math.abs(clickY - lineY) <= CLICK_THRESHOLD;
+		}
+
+		if (!isClickInMenu && !isClickNearLine) {
+			drawingMenuProps.update((v: DrawingMenuProps) => ({
+				...v,
+				active: false
+			}));
 		}
 	}
+
+	onMount(() => {
+		document.addEventListener('mousedown', handleClickOutside);
+		return () => {
+			document.removeEventListener('mousedown', handleClickOutside);
+		};
+	});
+
+	$: menuStyle = `
+		left: ${$drawingMenuProps.clientX}px; 
+		top: ${$drawingMenuProps.clientY}px;
+		pointer-events: ${$drawingMenuProps.isDragging ? 'none' : 'auto'};
+	`;
 </script>
 
-{#if $drawingMenuProps.active}
-	<div
-		class="test"
-		style="left: {$drawingMenuProps.clientX}px; top: {$drawingMenuProps.clientY}px;"
-	>
+{#if $drawingMenuProps.active && !$drawingMenuProps.isDragging}
+	<div bind:this={menuElement} class="drawing-menu" style={menuStyle}>
 		<button on:click={removePriceLine}>Delete</button>
 	</div>
 {/if}
 
 <style>
-	.popup-container {
-		width: 180px;
-		background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent black background */
-		border: 1px solid rgba(255, 255, 255, 0.1); /* Subtle border */
-		border-radius: 4px; /* Rounded corners */
-		padding: 4px;
+	.drawing-menu {
 		position: absolute;
 		z-index: 1000;
+		background-color: rgba(0, 0, 0, 0.5);
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		border-radius: 4px;
+		padding: 4px;
 	}
 	button {
 		width: 100%;
-	}
-	.test {
-		position: absolute;
-		top: 0; /* Adjust as needed */
-		left: 0; /* Adjust as needed */
-		/* Optionally, you can set right and bottom to control the size */
-		/* right: 0; */
-		/* bottom: 0; */
-		z-index: 1000; /* Ensure it's on top of other elements */
-		background-color: rgba(0, 0, 0, 0.5); /* Example background color */
-		border: 1px solid rgba(255, 255, 255, 0.1); /* Example border */
-		border-radius: 4px; /* Example rounded corners */
-		padding: 4px; /* Example padding */
 	}
 </style>
