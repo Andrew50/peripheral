@@ -442,13 +442,15 @@
 		if (sameBar) {
 			// Update existing bar
 			if (trade.size >= 100) {
-				chartCandleSeries.update({
-					time: mostRecentBar.time,
-					open: mostRecentBar.open,
-					high: Math.max(mostRecentBar.high, trade.price),
-					low: Math.min(mostRecentBar.low, trade.price),
-					close: trade.price
-				});
+				if (!(trade.conditions?.some((condition) => excludedConditions.has(condition)))) {
+					chartCandleSeries.update({
+						time: mostRecentBar.time,
+						open: mostRecentBar.open,
+						high: Math.max(mostRecentBar.high, trade.price),
+						low: Math.min(mostRecentBar.low, trade.price),
+						close: trade.price
+					});
+				}
 			}
 
 			const lastVolume = chartVolumeSeries.data().at(-1);

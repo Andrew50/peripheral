@@ -3,11 +3,13 @@ from conn import Conn
 from train import train
 from screen import screen
 from trainerQueue import refillTrainerQueue
-
+from trades import handle_trade_upload, grab_user_trades
 funcMap = {
     "train": train,
     "screen": screen,
     "refillTrainerQueue": refillTrainerQueue,
+    "handle_trade_upload": handle_trade_upload,
+    "grab_user_trades": grab_user_trades,
 }
 
 
@@ -36,7 +38,7 @@ def process_tasks():
                 result = funcMap[func_ident](data,**args)
 
                 data.cache.set(task_id, packageResponse(result,"completed"))
-                print(f"finished {func_ident} {args} time: {datetime.datetime.now() - start} result: {result}", flush=True)
+                #print(f"finished {func_ident} {args} time: {datetime.datetime.now() - start} result: {result}", flush=True)
             except psycopg2.InterfaceError:
                 exception = traceback.format_exc()
                 data.cache.set(task_id, packageResponse(exception,"error"))

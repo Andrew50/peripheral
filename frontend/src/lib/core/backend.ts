@@ -34,6 +34,40 @@ export async function publicRequest<T>(func: string, args: any): Promise<T> {
     }
 }
 
+export async function privateFileRequest<T>(func:string, file: File, additionalArgs: object = {}): Promise<T> {
+    let authToken;
+    try {
+        authToken = sessionStorage.getItem("authToken")
+    }catch{
+        return
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('func', func);
+    formData.append('args', JSON.stringify(additionalArgs));
+
+    const headers = {
+        'Content-Type': 'multipart/form-data',
+        ...(authToken ? { 'Authorization': authToken} : {}),
+    };
+    const response = await fetch(`${base_url}/private-upload`, {
+        method: 'POST',
+        headers: headers,
+        body: formData
+    }).catch((e)=>{
+        return Promise.reject(e);
+    });
+    if (response.status === 401){
+        goto('/login')
+    }else if (response.ok){
+        const result = await response.json() as T
+        return result;
+    } else {
+        const errorMessage = await response.text()
+        console.error("error: ", errorMessage)
+        return Promise.reject(errorMessage);
+    }
+}
 
 export async function privateRequest<T>(func: string, args: any,verbose=false): Promise<T> {
     let authToken;

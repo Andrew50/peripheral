@@ -24,6 +24,7 @@
 	import { initStores } from '$lib/core/stores';
 	import { dispatchMenuChange, streamInfo, formatTimestamp } from '$lib/core/stores';
 	import AlertPopup from '$lib/utils/popups/alertPopup.svelte';
+	import Account from '$lib/features/account.svelte';
 	type Menu =
 		| 'study'
 		| 'screen'
@@ -36,7 +37,8 @@
 		| 'journal'
 		| 'screensaver'
 		| 'replay'
-		| 'settings';
+		| 'settings'
+		| 'account';
 	const menus: Menu[] = [
 		'quotes',
 		'watchlist',
@@ -47,7 +49,8 @@
 		'setups',
 		'screensaver',
 		'replay',
-		'settings'
+		'settings',
+		'account'
 	]; //,'test'
 	let active_menu: Menu = 'none';
 	let minWidth: number;
@@ -175,6 +178,8 @@
 				<Quotes />
 			{:else if active_menu === 'alerts'}
 				<Alerts />
+			{:else if active_menu === 'account'}
+				<Account />
 			{/if}
 		</div>
 		<div class="system-clock">

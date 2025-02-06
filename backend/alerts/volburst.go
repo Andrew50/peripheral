@@ -10,14 +10,18 @@ func isTapeBurst(sd *socket.SecurityData) bool {
 	// 1. Lock second data
 	sd.SecondDataExtended.Mutex.RLock()
 	defer sd.SecondDataExtended.Mutex.RUnlock()
-
 	// 2. If we don’t have enough bars, return false
 	lookbackSeconds := 15
 	if lookbackSeconds > sd.SecondDataExtended.Size {
 		return false
 	}
-
-	// 3. Sum volume and find high/low
+	periodIndex, err := getDayPeriodIndex()
+	if err != nil {
+		return false
+	}
+	if sd.VolBurstData.VolumeThreshold[periodIndex] < 300 {
+		return false // minimum liquidity requirement
+	}
 	totalVol := 0.0
 	windowHigh := sd.SecondDataExtended.Aggs[0][1]
 	windowLow := sd.SecondDataExtended.Aggs[0][2]
@@ -38,12 +42,6 @@ func isTapeBurst(sd *socket.SecurityData) bool {
 		return false
 	}
 	pctRange := (windowHigh - windowLow) / windowLow
-
-	// 4. Figure out day period index
-	periodIndex, err := getDayPeriodIndex()
-	if err != nil {
-		return false
-	}
 
 	// 5. Compare to thresholds from VolBurstData
 	volThreshold := sd.VolBurstData.VolumeThreshold[periodIndex] * 10.0
