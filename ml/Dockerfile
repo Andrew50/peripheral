@@ -1,3 +1,2 @@
-# Add these environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONFAULTHANDLER=1 
