@@ -96,10 +96,12 @@ export function formatTimestamp(timestamp: number) {
     return date.toLocaleDateString('en-US') + ' ' + date.toLocaleTimeString('en-US');
 }
 
-export const tickerInfoState = writable({
-    isExpanded: false,
-    currentHeight: 200
+
+export const activeChartInstance = writable<Instance>({
+    ticker: '',
+    timestamp: 0,
+    timeframe: '',
+    securityId: 0,
+    extendedHours: false
 });
-
-
 
