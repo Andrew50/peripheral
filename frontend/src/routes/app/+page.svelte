@@ -16,7 +16,7 @@
 	import Screensaver from '$lib/features/screensaver.svelte';
 	import Quotes from '$lib/features/quotes/quotes.svelte';
 	import Replay from '$lib/features/replay.svelte';
-	import Account from '$lib/features/account.svelte';
+	import TickerInfo from '$lib/features/tickerInfo.svelte';
 	import { onMount } from 'svelte';
 	import { privateRequest } from '$lib/core/backend';
 	import { goto } from '$app/navigation';
@@ -167,30 +167,33 @@
 			style="right: {$menuWidth + buttonWidth}px"
 		></div>
 		<div class="menu-container" style="width: {$menuWidth}px; right: {buttonWidth}px">
-			{#if active_menu === 'study'}
-				<Study />
-			{:else if active_menu === 'setups'}
-				<Setups />
-			{:else if active_menu === 'screen'}
-				<Screen />
-				<!--{:else if active_menu === 'test'}
-                <Test/>-->
-			{:else if active_menu === 'watchlist'}
-				<Watchlist />
-			{:else if active_menu === 'journal'}
-				<Journal />
-			{:else if active_menu === 'screensaver'}
-				<Screensaver />
-			{:else if active_menu === 'replay'}
-				<Replay />
-			{:else if active_menu === 'settings'}
-				<Settings />
-			{:else if active_menu === 'quotes'}
-				<Quotes />
-			{:else if active_menu === 'alerts'}
-				<Alerts />
-			{:else if active_menu === 'account'}
-				<Account />
+			<div class="menu-content">
+				{#if active_menu === 'study'}
+					<Study />
+				{:else if active_menu === 'setups'}
+					<Setups />
+				{:else if active_menu === 'screen'}
+					<Screen />
+				{:else if active_menu === 'watchlist'}
+					<Watchlist />
+				{:else if active_menu === 'journal'}
+					<Journal />
+				{:else if active_menu === 'screensaver'}
+					<Screensaver />
+				{:else if active_menu === 'replay'}
+					<Replay />
+				{:else if active_menu === 'settings'}
+					<Settings />
+				{:else if active_menu === 'quotes'}
+					<Quotes />
+				{:else if active_menu === 'alerts'}
+					<Alerts />
+				{:else if active_menu === 'account'}
+					<Account />
+				{/if}
+			</div>
+			{#if active_menu !== 'none'}
+				<TickerInfo />
 			{/if}
 		</div>
 		<div class="system-clock">
@@ -251,6 +254,13 @@
         scrollbar-width: thin;*/
 		scrollbar-width: none;
 	}
+
+	.menu-content {
+		flex: 1;
+		overflow-y: auto;
+		margin-bottom: 25%; /* Leave space for ticker info */
+	}
+
 	.resize-handle {
 		position: absolute;
 		top: 0;

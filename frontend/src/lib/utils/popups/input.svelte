@@ -1,13 +1,13 @@
-<!-- instance.svlete -->
+<!-- instance.svelte -->
 <script lang="ts" context="module">
 	import '$lib/core/global.css';
-
 	import { privateRequest } from '$lib/core/backend';
 	import { get, writable } from 'svelte/store';
 	import { parse } from 'date-fns';
 	import { tick } from 'svelte';
 	import type { Writable } from 'svelte/store';
 	import type { Instance } from '$lib/core/types';
+
 	interface Security {
 		securityId: number;
 		ticker: string;
@@ -17,11 +17,12 @@
 	const possibleDisplayKeys = ['ticker', 'timestamp', 'timeframe', 'extendedHours', 'price'];
 	type InstanceAttributes = (typeof possibleDisplayKeys)[number];
 	interface InputQuery {
-		//inactive is default, no ui shown | complete is succesful completeion, return instance
-		// cancelled is user closed with escape, dont return anything
-		// active is window is open, waiting for cancellation or completion
-		//init is setting up event handlers |  c
-
+		// 'inactive': no UI shown
+		// 'initializing': setting up event handlers
+		// 'active': window is open waiting for input
+		// 'complete': one field completed (may still be active if more required)
+		// 'cancelled': user cancelled via Escape
+		// 'shutdown': about to close and reset to inactive
 		status: 'inactive' | 'initializing' | 'active' | 'complete' | 'cancelled' | 'shutdown';
 		inputString: string;
 		inputType: string;
@@ -45,37 +46,34 @@
 		requiredKeys: InstanceAttributes[] | 'any',
 		instance: Instance = {}
 	): Promise<Instance> {
-		//init the query with passsed info
 		await tick();
 		if (get(inputQuery).status === 'inactive') {
-			inputQuery.update((v: InputQuery) => {
-				v.requiredKeys = requiredKeys;
-				v.instance = instance; //instance must be set up to have required fields as blank
-				v.status = 'initializing';
-				return v;
-			});
+			// initialize with the passed instance info
+			inputQuery.update((v: InputQuery) => ({
+				...v,
+				requiredKeys,
+				instance,
+				status: 'initializing'
+			}));
 			return new Promise<Instance>((resolve, reject) => {
 				const unsubscribe = inputQuery.subscribe((iQ: InputQuery) => {
 					if (iQ.status === 'cancelled') {
-						deactivate();
-						tick();
-						reject();
+						cleanup();
+						reject(new Error('User cancelled input'));
 					} else if (iQ.status === 'complete') {
 						const re = iQ.instance;
-						deactivate();
+						cleanup();
 						resolve(re);
 					}
 				});
-				function deactivate() {
+				function cleanup() {
 					unsubscribe();
-					inputQuery.update((v: InputQuery) => {
-						v.status = 'shutdown';
-						return v;
-					});
+					// trigger shutdown so the onMount subscription resets the state
+					inputQuery.update((v: InputQuery) => ({ ...v, status: 'shutdown' }));
 				}
 			});
 		} else {
-			return Promise.reject(new Error('input query already active'));
+			return Promise.reject(new Error('Input query already active'));
 		}
 	}
 </script>
@@ -84,7 +82,8 @@
 	import { browser } from '$app/environment';
 	import { onDestroy, onMount } from 'svelte';
 	import { ESTStringToUTCTimestamp, UTCTimestampToESTString } from '$lib/core/timestamp';
-	let prevFocusedElement: HTMLElement | null;
+	let prevFocusedElement: HTMLElement | null = null;
+	// flag to indicate that an async validation (ticker lookup) is in progress
 	let secQueryActive = false;
 
 	interface ValidateResponse {
@@ -93,7 +92,6 @@
 	}
 
 	async function validateInput(inputString: string, inputType: string): Promise<ValidateResponse> {
-		//auto wraps sync returns in Promise.resolve()
 		if (inputType === 'ticker') {
 			secQueryActive = true;
 			const securities = await privateRequest<Security[]>('getSecuritiesFromTicker', {
@@ -108,40 +106,33 @@
 			} else {
 				return { inputValid: false, securities: [] };
 			}
-		} else if (inputType == 'timeframe') {
+		} else if (inputType === 'timeframe') {
 			const regex = /^\d{1,3}[yqmwhds]?$/i;
 			return { inputValid: regex.test(inputString), securities: [] };
-		} else if (inputType == 'timestamp') {
+		} else if (inputType === 'timestamp') {
 			const formats = ['yyyy-MM-dd H:m:ss', 'yyyy-MM-dd H:m', 'yyyy-MM-dd H', 'yyyy-MM-dd'];
 			for (const format of formats) {
 				try {
 					const parsedDate = parse(inputString, format, new Date());
 					if (parsedDate != 'Invalid Date') {
-						//if (isNaN(parsedDate.getTime())){
-						//return {inputValid: await privateRequest<boolean>("validateDateString",{dateString:inputString}),securities:[]}
 						return { inputValid: true, securities: [] };
 					}
-				} catch {}
+				} catch {
+					/* try next format */
+				}
 			}
 			return { inputValid: false, securities: [] };
-		} else if (inputType == 'price') {
+		} else if (inputType === 'price') {
 			const price = parseFloat(inputString);
-			if (!isNaN(price) && price > 0) {
-				return { inputValid: true, securities: [] };
-			} else {
-				return { inputValid: false, securities: [] };
-			}
+			return { inputValid: !isNaN(price) && price > 0, securities: [] };
 		}
 		return { inputValid: false, securities: [] };
 	}
 
 	function enterInput(iQ: InputQuery, tickerIndex: number = 0): InputQuery {
-		if (iQ.inputType === 'ticker') {
-			const securities = iQ.securities;
-			if (Array.isArray(securities) && securities.length > 0) {
-				iQ.instance.securityId = securities[tickerIndex].securityId;
-				iQ.instance.ticker = securities[tickerIndex].ticker;
-			}
+		if (iQ.inputType === 'ticker' && Array.isArray(iQ.securities) && iQ.securities.length > 0) {
+			iQ.instance.securityId = iQ.securities[tickerIndex].securityId;
+			iQ.instance.ticker = iQ.securities[tickerIndex].ticker;
 		} else if (iQ.inputType === 'timeframe') {
 			iQ.instance.timeframe = iQ.inputString;
 		} else if (iQ.inputType === 'timestamp') {
@@ -149,7 +140,8 @@
 		} else if (iQ.inputType === 'price') {
 			iQ.instance.price = parseFloat(iQ.inputString);
 		}
-		iQ.status = 'complete'; // temp setting, following code will set back to active
+		// Mark as complete but then check if further input is needed.
+		iQ.status = 'complete';
 		if (iQ.requiredKeys === 'any') {
 			if (Object.keys(iQ.instance).length === 0) {
 				iQ.status = 'active';
@@ -167,50 +159,54 @@
 		iQ.inputValid = true;
 		return iQ;
 	}
-	function handleKeyDown(event: KeyboardEvent): void {
+
+	// Mark handleKeyDown as async so we can await the validate call if needed.
+	async function handleKeyDown(event: KeyboardEvent): Promise<void> {
+		// Only process keys when the input UI is active
+		const currentState = get(inputQuery);
+		if (currentState.status !== 'active') return;
+
 		event.stopPropagation();
-		let iQ = get(inputQuery);
+
+		// Do not process if a validation (security query) is underway
+		if (secQueryActive) return;
+
+		let iQ = { ...currentState };
 		if (event.key === 'Escape') {
 			iQ.status = 'cancelled';
 			inputQuery.set(iQ);
 		} else if (event.key === 'Enter') {
 			event.preventDefault();
-			while (secQueryActive) {}
 			if (iQ.inputValid) {
 				iQ = enterInput(iQ, 0);
 			}
 			inputQuery.set(iQ);
-		} else if (event.key == 'Tab') {
+		} else if (event.key === 'Tab') {
 			event.preventDefault();
 			iQ.instance.extendedHours = !iQ.instance.extendedHours;
 			inputQuery.set({ ...iQ });
 		} else {
+			// Process alphanumeric and a few special characters.
 			if (
-				/^[a-zA-Z0-9]$/.test(event.key.toLowerCase()) ||
+				/^[a-zA-Z0-9]$/.test(event.key) ||
 				/[-:.]/.test(event.key) ||
-				(event.key == ' ' && iQ.inputType === 'timestamp')
+				(event.key === ' ' && iQ.inputType === 'timestamp')
 			) {
-				let key: string;
-				if (iQ.inputType === 'timeframe') {
-					key = event.key;
-				} else {
-					key = event.key.toUpperCase();
-				}
+				const key = iQ.inputType === 'timeframe' ? event.key : event.key.toUpperCase();
 				iQ.inputString += key;
-			} else if (event.key == 'Backspace') {
+			} else if (event.key === 'Backspace') {
 				iQ.inputString = iQ.inputString.slice(0, -1);
 			}
-			//classify input
+
+			// classify the input string into a type
 			if (iQ.inputString !== '') {
 				if (/^[A-Z]$/.test(iQ.inputString)) {
 					iQ.inputType = 'ticker';
 				} else if (/^\d+(\.\d+)?$/.test(iQ.inputString)) {
-					// Check if it could be a timeframe first (1-3 digits)
 					if (/^\d{1,3}$/.test(iQ.inputString)) {
 						iQ.inputType = 'timeframe';
 						iQ.securities = [];
 					} else {
-						// If it doesn't match timeframe pattern, then treat as price
 						iQ.inputType = 'price';
 						iQ.securities = [];
 					}
@@ -221,72 +217,73 @@
 					iQ.inputType = 'timestamp';
 					iQ.securities = [];
 				} else {
-					//assume its
 					iQ.inputType = 'ticker';
 				}
 			} else {
 				iQ.inputType = '';
 			}
-			validateInput(iQ.inputString, iQ.inputType).then((validateResponse: ValidateResponse) => {
-				inputQuery.update((v: InputQuery) => {
-					return {
-						...iQ,
-						...validateResponse
-					};
-				});
-			});
+
+			// Validate asynchronously, and then update the store.
+			const validateResponse: ValidateResponse = await validateInput(iQ.inputString, iQ.inputType);
+			inputQuery.update((v: InputQuery) => ({
+				...v,
+				inputString: iQ.inputString,
+				inputType: iQ.inputType,
+				...validateResponse
+			}));
 		}
 	}
+
+	// onTouch handler (if needed) now removes the UI by updating via update() too.
 	function onTouch(event: TouchEvent) {
-		inputQuery.update((v: InputQuery) => {
-			v.status = 'cancelled';
-			return v;
-		});
+		inputQuery.update((v: InputQuery) => ({ ...v, status: 'cancelled' }));
 	}
 
+	// Instead of repeatedly adding/removing listeners in the store subscription,
+	// we add the keydown listener once on mount and remove it on destroy.
+	let unsubscribe: () => void;
 	onMount(() => {
-		//document.addEventListener('touchstart',onTouch)
-		inputQuery.subscribe(async (v: InputQuery) => {
+		// Save the original focused element so we can restore focus later.
+		prevFocusedElement = document.activeElement as HTMLElement;
+
+		// Keydown listener simply calls our async handler.
+		const keydownHandler = (event: KeyboardEvent) => {
+			handleKeyDown(event);
+		};
+		document.addEventListener('keydown', keydownHandler);
+
+		// One subscription to the store handles transitions that affect focus.
+		unsubscribe = inputQuery.subscribe((v: InputQuery) => {
 			if (browser) {
 				if (v.status === 'initializing') {
-					//while (true) {
-					try {
-						document.removeEventListener('keydown', handleKeyDown);
-						await tick();
-					} catch {
-						//		break;
-					}
-					//}
-
-					await tick();
-					document.addEventListener('keydown', handleKeyDown);
-					prevFocusedElement = document.activeElement as HTMLElement;
-					//const inputWindow = document.getElementById("input-window")
-					const inputWindow = document.getElementById('hidden-input');
-					inputWindow.focus();
-					v.status = 'active';
-					//await tick()
+					// Focus the hidden input (after a tick to allow rendering)
+					tick().then(() => {
+						document.getElementById('hidden-input')?.focus();
+					});
+					// Use update() to mark that the UI is now active.
+					inputQuery.update((state) => ({ ...state, status: 'active' }));
 				} else if (v.status === 'shutdown') {
+					// Restore focus and then update to inactive.
 					prevFocusedElement?.focus();
-					document.removeEventListener('keydown', handleKeyDown);
-					try {
-						document.removeEventListener('onTouch', onTouch);
-					} catch {}
-					v.status = 'inactive';
-					v.inputString = '';
+					inputQuery.update((state) => ({ ...state, status: 'inactive', inputString: '' }));
 				}
 			}
 		});
+
+		// (If you need a touch listener, add it once here, too.)
+		// document.addEventListener('touchstart', onTouch);
+
+		// Cleanup on destroy
 	});
 	onDestroy(() => {
 		try {
-			document.removeEventListener('keydown', handleKeyDown);
-		} catch {}
-		try {
-			document.removeEventListener('onTouch', onTouch);
-		} catch {}
+			document.removeEventListener('keydown', keydownHandler);
+			// document.removeEventListener('touchstart', onTouch);
+			unsubscribe();
+		} catch (error) {
+			console.error('Error removing event listeners:', error);
+		}
 	});
-
 	function displayValue(q: InputQuery, key: string): string {
 		if (key === q.inputType) {
 			return q.inputString;
@@ -303,8 +300,6 @@
 		}
 		return '';
 	}
-	/*    key === $inputQuery.inputType ? $inputQuery.inputString : ($inputQuery.instance[key] ? (key === "timestamp" ? UTCTimestampToESTString($inputQuery.instance[key]):$inputQuery.instance[key] ) : ""))}
-    }*/
 </script>
 
 {#if $inputQuery.status === 'active' || $inputQuery.status === 'initializing'}
@@ -316,8 +311,10 @@
 						<span
 							class={$inputQuery.requiredKeys.includes(key) && !$inputQuery.instance[key]
 								? 'red'
-								: ''}>{key}</span
+								: ''}
 						>
+							{key}
+						</span>
 						<span
 							class={key === $inputQuery.inputType ? ($inputQuery.inputValid ? 'blue' : 'red') : ''}
 						>
