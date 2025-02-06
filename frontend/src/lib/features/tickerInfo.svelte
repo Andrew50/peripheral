@@ -135,7 +135,17 @@
 				<div class="info-row">
 					<span class="label">Market Cap:</span>
 					<span class="value">
-						{tickerDetails.market_cap ? `$${(tickerDetails.market_cap / 1e9).toFixed(2)}B` : 'N/A'}
+						{#if tickerDetails.market_cap}
+							{#if tickerDetails.market_cap >= 1e12}
+								${(tickerDetails.market_cap / 1e12).toFixed(2)}T
+							{:else if tickerDetails.market_cap >= 1e9}
+								${(tickerDetails.market_cap / 1e9).toFixed(2)}B
+							{:else}
+								${(tickerDetails.market_cap / 1e6).toFixed(2)}M
+							{/if}
+						{:else}
+							N/A
+						{/if}
 					</span>
 				</div>
 				<div class="info-row">
