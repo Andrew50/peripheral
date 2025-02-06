@@ -40,9 +40,9 @@ services:
           - compose_network
 
 
-    ml: 
+    worker: 
         build: #satish was here
-            context: ./ml
+            context: ./worker
             dockerfile: Dockerfile
         networks:
             - compose_network
