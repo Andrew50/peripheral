@@ -25,7 +25,6 @@
 	import { initStores } from '$lib/core/stores';
 	import { dispatchMenuChange, streamInfo, formatTimestamp } from '$lib/core/stores';
 	import AlertPopup from '$lib/utils/popups/alertPopup.svelte';
-	import Account from '$lib/features/account.svelte';
 	type Menu =
 		| 'study'
 		| 'screen'
