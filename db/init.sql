@@ -12,6 +12,8 @@ CREATE TABLE securities (
     figi varchar(12) not null,
     minDate timestamp,
     maxDate timestamp,
+    sector varchar(100),
+    industry varchar(100),
     unique (ticker, minDate),
     unique (ticker, maxDate),
     unique (securityid, minDate),
@@ -144,21 +146,21 @@ CREATE TABLE horizontal_lines (
 CREATE TABLE trades (
     tradeId SERIAL PRIMARY KEY,
     userId INT REFERENCES users(userId) ON DELETE CASCADE,
-    ticker VARCHAR(20) NOT NULL,
-    securityId INT, 
+    ticker VARCHAR(10) NOT NULL,
     tradeDirection VARCHAR(10) NOT NULL,
     date DATE NOT NULL,
     status VARCHAR(10) NOT NULL CHECK (status IN ('Open', 'Closed')),
     openQuantity INT,
     closedPnL DECIMAL(10, 2),
     -- Store up to 20 entries
-    entry_times TIMESTAMP[] DEFAULT ARRAY[]::TIMESTAMP[],
-    entry_prices DECIMAL(10,4)[] DEFAULT ARRAY[]::DECIMAL(10,4)[],
-    entry_shares INT[] DEFAULT ARRAY[]::INT[],
+    entry_times TIMESTAMP [] DEFAULT ARRAY []::TIMESTAMP [],
+    entry_prices DECIMAL(10, 4) [] DEFAULT ARRAY []::DECIMAL(10, 4) [],
+    entry_shares INT [] DEFAULT ARRAY []::INT [],
     -- Store up to 50 exits
-    exit_times TIMESTAMP[] DEFAULT ARRAY[]::TIMESTAMP[],
-    exit_prices DECIMAL(10,4)[] DEFAULT ARRAY[]::DECIMAL(10,4)[],
-    exit_shares INT[] DEFAULT ARRAY[]::INT[],
+    exit_times TIMESTAMP [] DEFAULT ARRAY []::TIMESTAMP [],
+    exit_prices DECIMAL(10, 4) [] DEFAULT ARRAY []::DECIMAL(10, 4) [],
+    exit_shares INT [] DEFAULT ARRAY []::INT [],
+    UNIQUE (userId, ticker, date)
 );
 CREATE TABLE trade_executions (
     executionId SERIAL PRIMARY KEY,
