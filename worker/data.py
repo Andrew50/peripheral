@@ -1,3 +1,4 @@
+#data.py
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
@@ -157,7 +158,10 @@ async def get_instance_data(session, args):
         results = stock_data['results']
         if len(results) < bars:
             return None
-        data_array = np.zeros((bars, 4))
+        if normType == "none":
+            data_array = np.zeros((bars, 5))
+        else:
+            data_array = np.zeros((bars, 4))
         if dt == 0:
             bars -= 1  # Adjust because a new bar will be added
         
@@ -197,6 +201,8 @@ async def get_instance_data(session, args):
             data_array[j, 1] = bar['h']  # High
             data_array[j, 2] = bar['l']  # Low
             data_array[j, 3] = bar['c']  # Close
+            if normType == "none":
+                data_array[j, 4] = bar['v']  # Volume
         if dt == 0: #current
             if currentPrice is not None and currentPrice != 0:
                 data_array[-1, :] = np.float64(currentPrice)
@@ -204,7 +210,8 @@ async def get_instance_data(session, args):
                 data_array[-1,:] = data_array[-2, 0]
         else: #historical
             data_array[-1,:] = data_array[-1, 0]
-        data_array = normalize(data_array,normType)
+        if normType != "none":
+            data_array = normalize(data_array,normType)
         return data_array, {"ticker":ticker,"timestamp":dt,"dolvol":dolvol,"adr":adr,"mcap":mcap,"label":label}
 
 async def async_get_tensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm,normalize,dolvolReq,adrReq,mcapReq):

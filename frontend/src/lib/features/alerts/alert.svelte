@@ -9,26 +9,7 @@
 	import { activeAlerts, inactiveAlerts, alertLogs } from '$lib/core/stores';
 	import { type Alert, type AlertLog, newAlert, newPriceAlert } from './interface';
 	let selectedAlertType = writable<string>('price');
-	onMount(() => {
-		if ($inactiveAlerts === undefined || $activeAlerts === undefined) {
-			privateRequest<Alert[]>('getAlerts', {}).then((v: Alert[]) => {
-				if (v === undefined || v === null) {
-					inactiveAlerts.set([]);
-					activeAlerts.set([]);
-					return;
-				}
-				let inactive = v.filter((alert: Alert) => alert.active === false);
-				inactiveAlerts.set(inactive);
-				let active = v.filter((alert: Alert) => alert.active === true);
-				activeAlerts.set(active);
-			});
-		}
-		if ($alertLogs === undefined) {
-			privateRequest<AlertLog[]>('getAlertLogs', {}).then((v: AlertLog[]) => {
-				alertLogs.set(v);
-			});
-		}
-	});
+
 	async function createAlert(event: MouseEvent) {
 		const alertType = $selectedAlertType; // Get selected alert type from the dropdown
 
