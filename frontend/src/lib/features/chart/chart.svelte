@@ -12,7 +12,7 @@
 		chartEventDispatcher,
 		queryChart
 	} from './interface';
-	import { streamInfo, settings } from '$lib/core/stores';
+	import { streamInfo, settings, activeAlerts } from '$lib/core/stores';
 	import type { ShiftOverlay, ChartEventDispatch, BarData, ChartQueryDispatch } from './interface';
 	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
 	import { queryInstanceRightClick } from '$lib/utils/popups/rightClick.svelte';
@@ -152,6 +152,16 @@
 	let mouseDownStartX = 0;
 	let mouseDownStartY = 0;
 	const DRAG_THRESHOLD = 3; // pixels of movement before considered a drag
+
+	// Add new interface for alert lines
+	interface AlertLine {
+		price: number;
+		line: IPriceLine;
+		alertId: number;
+	}
+
+	// Add new property to track alert lines
+	let alertLines: AlertLine[] = [];
 
 	function extendedHours(timestamp: number): boolean {
 		const date = new Date(timestamp);
@@ -446,6 +456,7 @@
 
 		if (upperPrice == 0 || lowerPrice == 0) return false;
 
+		// Only check regular horizontal lines, not alert lines
 		for (const line of $drawingMenuProps.horizontalLines) {
 			if (line.price <= upperPrice && line.price >= lowerPrice) {
 				drawingMenuProps.update((v: DrawingMenuProps) => ({
@@ -689,6 +700,100 @@
 		}
 	}
 
+	// Add subscription to activeAlerts store to update alert lines
+	$: if ($activeAlerts && chartCandleSeries) {
+		// Remove existing alert lines
+		alertLines.forEach((line) => {
+			chartCandleSeries.removePriceLine(line.line);
+		});
+		alertLines = [];
+
+		// Add new alert lines for price alerts
+		$activeAlerts.forEach((alert) => {
+			if (alert.alertType === 'price' && alert.alertPrice && alert.securityId === chartSecurityId) {
+				const priceLine = chartCandleSeries.createPriceLine({
+					price: alert.alertPrice,
+					color: '#FFB74D', // Orange color for alert lines
+					lineWidth: 1,
+					lineStyle: 1, // Dashed line
+					axisLabelVisible: true,
+					title: `Alert: ${alert.alertPrice}`
+					// Make lines unclickable by not adding any interactive properties
+				});
+
+				alertLines.push({
+					price: alert.alertPrice,
+					line: priceLine,
+					alertId: alert.alertId
+				});
+			}
+		});
+	}
+
+	function change(newReq: ChartQueryDispatch) {
+		const req = { ...currentChartInstance, ...newReq };
+		if (chartId !== req.chartId) {
+			return;
+		}
+		if (!req.timeframe) {
+			req.timeframe = '1d';
+		}
+		if (!req.securityId || !req.ticker || !req.timeframe) {
+			return;
+		}
+		hoveredCandleData.set(defaultHoveredCandleData);
+		chartEarliestDataReached = false;
+		chartLatestDataReached = false;
+		chartSecurityId = req.securityId;
+		chartTimeframe = req.timeframe;
+		currentChartInstance = { ...req };
+		chartTimeframeInSeconds = timeframeToSeconds(
+			req.timeframe,
+			(req.timestamp == 0 ? Date.now() : req.timestamp) as number
+		);
+		chartExtendedHours = req.extendedHours ?? false;
+		if (
+			req.timeframe?.includes('m') ||
+			req.timeframe?.includes('w') ||
+			req.timeframe?.includes('d') ||
+			req.timeframe?.includes('q')
+		) {
+			chart.applyOptions({ timeScale: { timeVisible: false } });
+		} else {
+			chart.applyOptions({ timeScale: { timeVisible: true } });
+		}
+		backendLoadChartData(req);
+
+		// Clear existing alert lines when changing tickers
+		alertLines.forEach((line) => {
+			chartCandleSeries.removePriceLine(line.line);
+		});
+		alertLines = [];
+	}
+
+	chartQueryDispatcher.subscribe((req: ChartQueryDispatch) => {
+		change(req);
+	});
+	chartEventDispatcher.subscribe((e: ChartEventDispatch) => {
+		if (!currentChartInstance || !currentChartInstance.securityId) return;
+		if (e.event == 'replay') {
+			//currentChartInstance.timestamp = $streamInfo.timestamp
+			currentChartInstance.timestamp = 0;
+			const req: ChartQueryDispatch = {
+				...currentChartInstance,
+				bars: 400,
+				direction: 'backward',
+				requestType: 'loadNewTicker',
+				includeLastBar: false,
+				chartId: chartId
+			};
+			console.log(req);
+			change(req);
+		} else if (e.event == 'addHorizontalLine') {
+			addHorizontalLine(e.data);
+		}
+	});
+
 	onMount(() => {
 		const chartOptions = {
 			autoSize: true,
@@ -931,62 +1036,6 @@
 					requestType: 'loadAdditionalData',
 					includeLastBar: true
 				});
-			}
-		});
-		function change(newReq: ChartQueryDispatch) {
-			const req = { ...currentChartInstance, ...newReq };
-			if (chartId !== req.chartId) {
-				return;
-			}
-			if (!req.timeframe) {
-				req.timeframe = '1d';
-			}
-			if (!req.securityId || !req.ticker || !req.timeframe) {
-				return;
-			}
-			hoveredCandleData.set(defaultHoveredCandleData);
-			chartEarliestDataReached = false;
-			chartLatestDataReached = false;
-			chartSecurityId = req.securityId;
-			chartTimeframe = req.timeframe;
-			currentChartInstance = { ...req };
-			chartTimeframeInSeconds = timeframeToSeconds(
-				req.timeframe,
-				(req.timestamp == 0 ? Date.now() : req.timestamp) as number
-			);
-			chartExtendedHours = req.extendedHours ?? false;
-			if (
-				req.timeframe?.includes('m') ||
-				req.timeframe?.includes('w') ||
-				req.timeframe?.includes('d') ||
-				req.timeframe?.includes('q')
-			) {
-				chart.applyOptions({ timeScale: { timeVisible: false } });
-			} else {
-				chart.applyOptions({ timeScale: { timeVisible: true } });
-			}
-			backendLoadChartData(req);
-		}
-		chartQueryDispatcher.subscribe((req: ChartQueryDispatch) => {
-			change(req);
-		});
-		chartEventDispatcher.subscribe((e: ChartEventDispatch) => {
-			if (!currentChartInstance || !currentChartInstance.securityId) return;
-			if (e.event == 'replay') {
-				//currentChartInstance.timestamp = $streamInfo.timestamp
-				currentChartInstance.timestamp = 0;
-				const req: ChartQueryDispatch = {
-					...currentChartInstance,
-					bars: 400,
-					direction: 'backward',
-					requestType: 'loadNewTicker',
-					includeLastBar: false,
-					chartId: chartId
-				};
-				console.log(req);
-				change(req);
-			} else if (e.event == 'addHorizontalLine') {
-				addHorizontalLine(e.data);
 			}
 		});
 	});

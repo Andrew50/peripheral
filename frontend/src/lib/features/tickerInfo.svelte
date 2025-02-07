@@ -25,6 +25,8 @@
 		description: string;
 		logo: string;
 		share_class_shares_outstanding: number;
+		industry: string;
+		sector: string;
 	}
 
 	let tickerDetails: TickerDetails | null = null;
@@ -133,6 +135,10 @@
 					<span class="value">{tickerDetails.name}</span>
 				</div>
 				<div class="info-row">
+					<span class="label">Status:</span>
+					<span class="value">{tickerDetails.active ? 'Active' : 'Inactive'}</span>
+				</div>
+				<div class="info-row">
 					<span class="label">Market Cap:</span>
 					<span class="value">
 						{#if tickerDetails.market_cap}
@@ -149,6 +155,15 @@
 					</span>
 				</div>
 				<div class="info-row">
+					<span class="label">Sector:</span>
+					<span class="value">{tickerDetails.sector || 'N/A'}</span>
+				</div>
+				<div class="info-row">
+					<span class="label">Industry:</span>
+					<span class="value">{tickerDetails.industry || 'N/A'}</span>
+				</div>
+
+				<div class="info-row">
 					<span class="label">Exchange:</span>
 					<span class="value">{tickerDetails.primary_exchange || 'N/A'}</span>
 				</div>
@@ -163,10 +178,6 @@
 							? `${(tickerDetails.share_class_shares_outstanding / 1e6).toFixed(2)}M`
 							: 'N/A'}
 					</span>
-				</div>
-				<div class="info-row">
-					<span class="label">Status:</span>
-					<span class="value">{tickerDetails.active ? 'Active' : 'Inactive'}</span>
 				</div>
 				{#if tickerDetails.description}
 					<div class="description">
