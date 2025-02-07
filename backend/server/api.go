@@ -93,8 +93,9 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"getHorizontalLines":   tasks.GetHorizontalLines,
 	"deleteHorizontalLine": tasks.DeleteHorizontalLine,
 	"updateHorizontalLine": tasks.UpdateHorizontalLine,
-	//tick
+	//active
 
+	"getActive": tasks.GetActive,
 }
 
 func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }

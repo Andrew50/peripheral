@@ -18,6 +18,7 @@
 	import Replay from '$lib/features/replay.svelte';
 	import TickerInfo from '$lib/features/tickerInfo.svelte';
 	import Account from '$lib/features/account.svelte';
+	import Active from '$lib/features/active.svelte';
 	import { onMount } from 'svelte';
 	import { privateRequest } from '$lib/core/backend';
 	import { goto } from '$app/navigation';
@@ -39,7 +40,8 @@
 		| 'screensaver'
 		| 'replay'
 		| 'settings'
-		| 'account';
+		| 'account'
+		| 'active';
 	const menus: Menu[] = [
 		'quotes',
 		'watchlist',
@@ -51,7 +53,8 @@
 		'screensaver',
 		'replay',
 		'settings',
-		'account'
+		'account',
+		'active'
 	]; //,'test'
 	let active_menu: Menu = 'none';
 	let minWidth: number;
@@ -191,6 +194,8 @@
 					<Alerts />
 				{:else if active_menu === 'account'}
 					<Account />
+				{:else if active_menu === 'active'}
+					<Active />
 				{/if}
 			</div>
 			{#if active_menu !== 'none'}

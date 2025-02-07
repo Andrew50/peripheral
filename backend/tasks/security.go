@@ -241,6 +241,8 @@ type TickerDetailsResponse struct {
 	Description                 string  `json:"description"`
 	Logo                        string  `json:"logo"`
 	ShareClassSharesOutstanding int64   `json:"share_class_shares_outstanding"`
+	Industry                    string  `json:"industry"`
+	Sector                      string  `json:"sector"`
 }
 
 func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -256,6 +258,13 @@ func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 	details, err := utils.GetTickerDetails(conn.Polygon, ticker, "now")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ticker details: %v", err)
+	}
+
+	var sector, industry string
+	err = conn.DB.QueryRow(context.Background(), `SELECT sector, industry from securities 
+    where securityId = $1 and maxDate is NULL`, args.SecurityId).Scan(&sector, &industry)
+	if err != nil {
+		return nil, fmt.Errorf("01if0d %v", err)
 	}
 
 	// Fetch the logo image if URL exists
@@ -299,6 +308,8 @@ func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 		Description:                 details.Description,
 		ShareClassSharesOutstanding: details.ShareClassSharesOutstanding,
 		Logo:                        logoBase64,
+		Sector:                      sector,
+		Industry:                    industry,
 	}
 
 	return response, nil

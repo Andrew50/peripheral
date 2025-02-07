@@ -81,8 +81,18 @@ func updateSectors(conn *utils.Conn) error {
 	return nil
 }
 
+func updateMarketMetrics(conn *utils.Conn) error {
+	_, err := utils.Queue(conn, "update_active", map[string]interface{}{})
+	if err != nil {
+		return fmt.Errorf("error queueing market metrics update: %w", err)
+	}
+	return nil
+
+}
+
 func eventLoop(now time.Time, conn *utils.Conn) {
 	year, month, day := now.Date()
+
 	eOpen := time.Date(year, month, day, 4, 0, 0, 0, now.Location())
 	eClose := time.Date(year, month, day, 20, 0, 0, 0, now.Location())
 	//open := time.Date(year, month, day, 9, 30, 0, 0, now.Location())
@@ -109,6 +119,10 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 		err = updateSectors(conn)
 		if err != nil {
 			fmt.Println("schedule issue: sector update close:", err)
+		}
+		err = updateMarketMetrics(conn)
+		if err != nil {
+			fmt.Println("schedule issue: market metrics update:", err)
 		}
 	}
 }

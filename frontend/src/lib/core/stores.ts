@@ -53,6 +53,24 @@ export function initStores() {
             })
             setups.set(v);
         })
+
+    // Add alert initialization
+    privateRequest<Alert[]>('getAlerts', {}).then((v: Alert[]) => {
+        if (v === undefined || v === null) {
+            inactiveAlerts.set([]);
+            activeAlerts.set([]);
+            return;
+        }
+        let inactive = v.filter((alert: Alert) => alert.active === false);
+        inactiveAlerts.set(inactive);
+        let active = v.filter((alert: Alert) => alert.active === true);
+        activeAlerts.set(active);
+    });
+
+    privateRequest<AlertLog[]>('getAlertLogs', {}).then((v: AlertLog[]) => {
+        alertLogs.set(v || []);
+    });
+
     function loadFlagWatchlist() {
         privateRequest<Instance[]>("getWatchlistItems", { watchlistId: flagWatchlistId })
             .then((v: Instance[]) => {
