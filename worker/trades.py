@@ -142,19 +142,10 @@ def parse_datetime(datetime_str):
         return None, None
 
 def process_trades(conn, user_id: int):
-    """
-    Process trade_executions into consolidated trades
-    following the same logic as the original DataFrame approach:
-    - "Short" trades use negative openQuantity
-    - Adding to short => openQuantity -= size
-    - Exiting short => openQuantity += size
-    - Adding to long => openQuantity += size
-    - Exiting long => openQuantity -= size
-    """
-
+    """Process trade_executions into consolidated trades"""
     try:
         with conn.db.cursor() as cursor:
-            # Fetch all executions that have not yet been assigned a tradeId
+            print("\nStarting process_trades", flush=True)
             cursor.execute("""
                 SELECT te.* 
                 FROM trade_executions te
@@ -163,29 +154,19 @@ def process_trades(conn, user_id: int):
             """, (user_id,))
 
             executions = cursor.fetchall()
+            print(f"\nFound {len(executions)} unprocessed executions", flush=True)
 
             for execution in executions:
-                # execution structure:
-                #   0: executionId
-                #   1: userId
-                #   2: securityId
-                #   3: ticker
-                #   4: date
-                #   5: price
-                #   6: size
-                #   7: timestamp
-                #   8: direction ("Long" or "Short")
-                #   9: tradeId  (currently NULL)
+                print(f"\nProcessing execution: {execution}", flush=True)
                 execution_id = execution[0]
-                ticker       = execution[3]
-                securityId   = execution[2]
-                trade_date   = execution[4]
-                trade_price  = float(execution[5])
-                trade_size   = int(execution[6])   
-                trade_ts     = execution[7]           # timestamp
-                direction    = execution[8]           # "Long" or "Short"
+                ticker = execution[3]
+                securityId = execution[2]
+                trade_date = execution[4]
+                trade_price = float(execution[5])
+                trade_size = int(execution[6])   
+                trade_ts = execution[7]           
+                direction = execution[8]          
 
-                # 1) Check if there's an open trade for this (user, ticker)
                 cursor.execute("""
                     SELECT * 
                     FROM trades
@@ -199,8 +180,7 @@ def process_trades(conn, user_id: int):
                 open_trade = cursor.fetchone()
 
                 if not open_trade:
-                    # 2) No open trade => create one
-                    #    If Short => openQuantity = -trade_size, else => openQuantity = trade_size
+                    print("\nCreating new trade", flush=True)
                     open_quantity = trade_size  
 
                     cursor.execute("""
@@ -216,20 +196,11 @@ def process_trades(conn, user_id: int):
                         )
                         RETURNING tradeId
                     """, (
-                        user_id,
-                        securityId,
-                        ticker,
-                        direction,
-                        trade_date,
-                        open_quantity,
-                        trade_ts,        # first entry time
-                        trade_price,     # first entry price
-                        trade_size       
+                        user_id, securityId, ticker, direction, trade_date, open_quantity,
+                        trade_ts, trade_price, trade_size       
                     ))
 
                     new_trade_id = cursor.fetchone()[0]
-
-                    # Link this execution to the newly created trade
                     cursor.execute("""
                         UPDATE trade_executions
                         SET tradeId = %s
@@ -237,42 +208,32 @@ def process_trades(conn, user_id: int):
                     """, (new_trade_id, execution_id))
 
                 else:
-                    # 3) We have an open trade => decide if it's an Entry or Exit
-                    trade_id      = open_trade[0]
-                    trade_dir     = open_trade[4]   # "Long" or "Short"
-                    old_open_qty  = float(open_trade[7])  # could be negative for short
-                    entry_times   = open_trade[8]
-                    entry_prices  = open_trade[9]
-                    entry_shares  = open_trade[10]
-                    exit_times    = open_trade[11]
-                    exit_prices   = open_trade[12]
-                    exit_shares   = open_trade[13]
+                    print("\nUpdating existing trade", flush=True)
+                    trade_id = open_trade[0]
+                    trade_dir = open_trade[4]   
+                    old_open_qty = float(open_trade[7])  
                     new_open_qty = old_open_qty + trade_size  
+                    print(f"\nTrade details - Direction: {trade_dir}, Old Qty: {old_open_qty}, New Qty: {new_open_qty}", flush=True)
+
                     if trade_dir == direction:
-                        # Check if trade size is in same direction as open quantity
                         is_same_direction = (old_open_qty > 0 and trade_size > 0) or (old_open_qty < 0 and trade_size < 0)
+                        print(f"\nSame direction check: {is_same_direction}", flush=True)
                         
                         if is_same_direction:
-                            # This is an additional "Entry" since sizes are in same direction
+                            print("\nAdding to position", flush=True)
                             cursor.execute("""
                                 UPDATE trades
-                                SET entry_times  = array_append(entry_times, %s),
+                                SET entry_times = array_append(entry_times, %s),
                                     entry_prices = array_append(entry_prices, %s),
                                     entry_shares = array_append(entry_shares, %s),
                                     openQuantity = %s
                                 WHERE tradeId = %s
-                            """, (
-                                trade_ts,
-                                trade_price,
-                                trade_size,
-                                new_open_qty,
-                                trade_id
-                            ))
+                            """, (trade_ts, trade_price, trade_size, new_open_qty, trade_id))
                         else:
-                            # This is an "Exit" since sizes are in opposite directions
+                            print("\nReducing position (same direction)", flush=True)
                             cursor.execute("""
                                 UPDATE trades
-                                SET exit_times  = array_append(exit_times, %s),
+                                SET exit_times = array_append(exit_times, %s),
                                     exit_prices = array_append(exit_prices, %s),
                                     exit_shares = array_append(exit_shares, %s),
                                     openQuantity = %s,
@@ -281,21 +242,13 @@ def process_trades(conn, user_id: int):
                                         ELSE 'Open'
                                     END
                                 WHERE tradeId = %s
-                            """, (
-                                trade_ts,
-                                trade_price,
-                                trade_size,
-                                new_open_qty,
-                                new_open_qty,   # check if it's zero
-                                trade_id
-                            ))
+                            """, (trade_ts, trade_price, trade_size, new_open_qty, new_open_qty, trade_id))
 
                     else:
-                        # Append to the "exit_" arrays
-                        # Possibly close if new_open_qty hits 0
+                        print("\nReducing position (opposite direction)", flush=True)
                         cursor.execute("""
                             UPDATE trades
-                            SET exit_times  = array_append(exit_times, %s),
+                            SET exit_times = array_append(exit_times, %s),
                                 exit_prices = array_append(exit_prices, %s),
                                 exit_shares = array_append(exit_shares, %s),
                                 openQuantity = %s,
@@ -304,58 +257,47 @@ def process_trades(conn, user_id: int):
                                     ELSE 'Open'
                                 END
                             WHERE tradeId = %s
-                        """, (
-                            trade_ts, 
-                            trade_price,
-                            trade_size,
-                            new_open_qty,
-                            new_open_qty,   # check if it's zero
-                            trade_id
-                        ))
-                        print("\n HIT HERE ")
-                        # If we just closed the trade, compute P/L
-                        if new_open_qty == 0:  # effectively zero
-                            # We need fresh arrays to compute P/L
-                            print("\nhittttttttt")
-                            # Easiest might be to SELECT them again:
-                            cursor.execute("""
-                                SELECT entry_prices, entry_shares,
-                                       exit_prices, exit_shares,
-                                       tradeDirection
-                                FROM trades
-                                WHERE tradeId = %s
-                            """, (trade_id,))
-                            updated_trade = cursor.fetchone()
-                            updated_pnl = calculate_pnl(
-                                updated_trade[0],
-                                updated_trade[1],
-                                updated_trade[2],
-                                updated_trade[3],
-                                updated_trade[4]
-                            )
-                            # Update the closedPnL field
-                            cursor.execute("""
-                                UPDATE trades
-                                SET closedPnL = %s
-                                WHERE tradeId = %s
-                            """, (updated_pnl, trade_id))
+                        """, (trade_ts, trade_price, trade_size, new_open_qty, new_open_qty, trade_id))
 
-                    # 4) Link this execution to the trade
+                    print(f"\nChecking if trade closed. New quantity: {new_open_qty}", flush=True)
+                    if abs(new_open_qty) < 1e-9:  # effectively zero
+                        print("\nTrade closed - calculating P&L", flush=True)
+                        cursor.execute("""
+                            SELECT entry_prices, entry_shares,
+                                   exit_prices, exit_shares,
+                                   tradeDirection
+                            FROM trades
+                            WHERE tradeId = %s
+                        """, (trade_id,))
+                        updated_trade = cursor.fetchone()
+                        updated_pnl = calculate_pnl(
+                            updated_trade[0],
+                            updated_trade[1],
+                            updated_trade[2],
+                            updated_trade[3],
+                            updated_trade[4]
+                        )
+                        print(f"\nCalculated P&L: {updated_pnl}", flush=True)
+                        cursor.execute("""
+                            UPDATE trades
+                            SET closedPnL = %s
+                            WHERE tradeId = %s
+                        """, (updated_pnl, trade_id))
+
                     cursor.execute("""
                         UPDATE trade_executions
                         SET tradeId = %s
                         WHERE executionId = %s
                     """, (trade_id, execution_id))
 
-            # Finally commit once all executions have been processed
             conn.db.commit()
-
+            print("\nAll trades processed successfully", flush=True)
             return {"status": "success", "message": "Trades processed successfully"}
 
     except Exception as e:
         conn.db.rollback()
         error_info = traceback.format_exc()
-        print(f"Error processing trades:\n{error_info}")
+        print(f"Error processing trades:\n{error_info}", flush=True)
         return {
             "status": "error",
             "message": f"Error: {str(e)}\nTraceback:\n{error_info}"
