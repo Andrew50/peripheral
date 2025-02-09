@@ -14,10 +14,10 @@
 		maxDate: string | null;
 		name: string;
 	}
-    const allKeys = ['ticker' , 'timestamp' , 'timeframe' , 'extendedHours' , 'price']
+	const allKeys = ['ticker', 'timestamp', 'timeframe', 'extendedHours', 'price'];
 
-	type InstanceAttributes = (typeof possibleFields)[number]
-    interface InputQuery {
+	type InstanceAttributes = (typeof possibleFields)[number];
+	interface InputQuery {
 		// 'inactive': no UI shown
 		// 'initializing' setting up event handlers
 		// 'active': window is open waiting for input
@@ -50,19 +50,18 @@
 		optionalKeys: InstanceAttributes[] | 'any',
 		instance: Instance = {}
 	): Promise<Instance> {
-        let possibleKeys:  InstanceAttributes
-		if (optionalKeys === 'any'){
-            possibleKeys = allKeys
-        } else {
-
-            possibleKeys = Array.from(new Set([...requiredKeys, ...optionalKeys]));
-            for (let i=0;i<possibleKeys.length();i++){
-                const key = possibleKeys[i]
-                if (!allKeys.includes(key)){
-                    return Promise.reject(`invalid key ${key}`)
-                }
-            }
-        }
+		let possibleKeys: InstanceAttributes;
+		if (optionalKeys === 'any') {
+			possibleKeys = allKeys;
+		} else {
+			possibleKeys = Array.from(new Set([...requiredKeys, ...optionalKeys]));
+			for (let i = 0; i < possibleKeys.length(); i++) {
+				const key = possibleKeys[i];
+				if (!allKeys.includes(key)) {
+					return Promise.reject(`invalid key ${key}`);
+				}
+			}
+		}
 		await tick();
 		if (get(inputQuery).status === 'inactive') {
 			// initialize with the passed instance info

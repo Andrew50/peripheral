@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v4"
@@ -147,12 +148,24 @@ func GetSecuritiesFromTicker(conn *utils.Conn, userId int, rawArgs json.RawMessa
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("getAnnotations invalid args: %v", err)
 	}
-	rows, err := conn.DB.Query(context.Background(), `
-    SELECT securityId, ticker, maxDate 
-    from securities where ticker = $1
-    ORDER BY maxDate IS  NULL DESC,
-    maxDate DESC
-    `, args.Ticker)
+
+	// Clean and prepare the search query
+	query := strings.ToUpper(strings.TrimSpace(args.Ticker))
+	
+	// Modified query to include fuzzy matching, removed COALESCE(name, '') since name column doesn't exist
+	sqlQuery := `
+	SELECT DISTINCT ON (s.ticker) securityId, ticker, maxDate
+	FROM securities s
+	WHERE (
+		ticker LIKE $1 || '%' OR 
+		ticker LIKE '%' || $1 || '%' OR
+		similarity(ticker, $1) > 0.3
+	)
+	ORDER BY ticker, maxDate DESC NULLS FIRST
+	LIMIT 20
+	`
+
+	rows, err := conn.DB.Query(context.Background(), sqlQuery, query)
 	if err != nil {
 		return nil, err
 	}
