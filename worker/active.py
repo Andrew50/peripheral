@@ -6,7 +6,7 @@ from data import getTensor
 
 # Constants for list lengths
 TOP_N = 50             # Number of top/bottom items to show per metric
-TOP_CONSTITUENTS = 10  # Number of constituents to show per sector/industry
+TOP_CONSTITUENTS = 25  # Number of constituents to show per sector/industry
 
 def get_timeframe_days(timeframe):
     if timeframe == "1 day":

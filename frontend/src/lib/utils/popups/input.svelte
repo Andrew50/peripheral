@@ -84,7 +84,7 @@
 	import { ESTStringToUTCTimestamp, UTCTimestampToESTString } from '$lib/core/timestamp';
 	let prevFocusedElement: HTMLElement | null = null;
 	// flag to indicate that an async validation (ticker lookup) is in progress
-	let secQueryActive = false;
+	//let secQueryActive = false;
 
 	interface ValidateResponse {
 		inputValid: boolean;
@@ -93,11 +93,11 @@
 
 	async function validateInput(inputString: string, inputType: string): Promise<ValidateResponse> {
 		if (inputType === 'ticker') {
-			secQueryActive = true;
+			//secQueryActive = true;
 			const securities = await privateRequest<Security[]>('getSecuritiesFromTicker', {
 				ticker: inputString
 			});
-			secQueryActive = false;
+			//secQueryActive = false;
 			if (Array.isArray(securities) && securities.length > 0) {
 				return {
 					inputValid: securities.some((v: Security) => v.ticker === inputString),
@@ -169,7 +169,7 @@
 		event.stopPropagation();
 
 		// Do not process if a validation (security query) is underway
-		if (secQueryActive) return;
+		//if (secQueryActive) return;
 
 		let iQ = { ...currentState };
 		if (event.key === 'Escape') {
@@ -223,14 +223,21 @@
 				iQ.inputType = '';
 			}
 
-			// Validate asynchronously, and then update the store.
-			const validateResponse: ValidateResponse = await validateInput(iQ.inputString, iQ.inputType);
 			inputQuery.update((v: InputQuery) => ({
 				...v,
 				inputString: iQ.inputString,
-				inputType: iQ.inputType,
-				...validateResponse
+				inputType: iQ.inputType
 			}));
+
+			// Validate asynchronously, and then update the store.
+			validateInput(iQ.inputString, iQ.inputType).then((validationResp: ValidateResponse) => {
+				inputQuery.update((v: InputQuery) => ({
+					...v,
+					//inputString: iQ.inputString,
+					//inputType: iQ.inputType,
+					...validationResp
+				}));
+			});
 		}
 	}
 
@@ -243,16 +250,11 @@
 	// we add the keydown listener once on mount and remove it on destroy.
 	let unsubscribe: () => void;
 	onMount(() => {
-		// Save the original focused element so we can restore focus later.
 		prevFocusedElement = document.activeElement as HTMLElement;
-
-		// Keydown listener simply calls our async handler.
 		const keydownHandler = (event: KeyboardEvent) => {
 			handleKeyDown(event);
 		};
 		document.addEventListener('keydown', keydownHandler);
-
-		// One subscription to the store handles transitions that affect focus.
 		unsubscribe = inputQuery.subscribe((v: InputQuery) => {
 			if (browser) {
 				if (v.status === 'initializing') {
@@ -269,11 +271,6 @@
 				}
 			}
 		});
-
-		// (If you need a touch listener, add it once here, too.)
-		// document.addEventListener('touchstart', onTouch);
-
-		// Cleanup on destroy
 	});
 	onDestroy(() => {
 		try {
