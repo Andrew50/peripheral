@@ -1,4 +1,6 @@
 --init.sql
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 CREATE TABLE users (
     userId SERIAL PRIMARY KEY,
     username VARCHAR(100) UNIQUE NOT NULL,
@@ -19,6 +21,7 @@ CREATE TABLE securities (
     unique (securityid, minDate),
     unique (securityid, maxDate)
 );
+CREATE INDEX trgm_idx_securities_ticker ON securities USING gin (ticker gin_trgm_ops);
 create index idxTickerDateRange on securities (ticker, minDate, maxDate);
 create table setups (
     setupId serial primary key,
