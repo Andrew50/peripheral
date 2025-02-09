@@ -859,7 +859,7 @@
 				if ($streamInfo.replayActive) {
 					currentChartInstance.timestamp = 0;
 				}
-				queryInstanceInput('any', currentChartInstance)
+				queryInstanceInput('any','any', currentChartInstance)
 					.then((v: Instance) => {
 						currentChartInstance = v;
 						queryChart(v, true);
