@@ -14,8 +14,7 @@
 		maxDate: string | null;
 		name: string;
 	}
-	const possibleDisplayKeys = ['ticker', 'timestamp', 'timeframe', 'extendedHours', 'price'];
-	type InstanceAttributes = (typeof possibleDisplayKeys)[number];
+	type InstanceAttributes = 'ticker' | 'timestamp' | 'timeframe' | 'extendedHours' | 'price';
 	interface InputQuery {
 		// 'inactive': no UI shown
 		// 'initializing': setting up event handlers
@@ -29,6 +28,7 @@
 		inputValid: boolean;
 		instance: Instance;
 		requiredKeys: InstanceAttributes[] | 'any';
+		possibleKeys: InstanceAttributes[] | 'any';
 		securities?: Security[];
 	}
 
@@ -38,20 +38,29 @@
 		inputValid: true,
 		inputType: '',
 		requiredKeys: 'any',
+		possibleKeys: 'any',
 		instance: {}
 	};
 	let inputQuery: Writable<InputQuery> = writable({ ...inactiveInputQuery });
 
 	export async function queryInstanceInput(
 		requiredKeys: InstanceAttributes[] | 'any',
+		optionalKeys: InstanceAttributes[] | 'any',
 		instance: Instance = {}
 	): Promise<Instance> {
+		if (requiredKeys === 'any' && optionalKeys !== 'any') {
+			return Promise.reject(
+				new Error('Required keys must be specified if optional keys are specified')
+			);
+		}
+		const possibleKeys = Array.from(new Set([...requiredKeys, ...optionalKeys]));
 		await tick();
 		if (get(inputQuery).status === 'inactive') {
 			// initialize with the passed instance info
 			inputQuery.update((v: InputQuery) => ({
 				...v,
 				requiredKeys,
+				possibleKeys,
 				instance,
 				status: 'initializing'
 			}));
@@ -303,10 +312,12 @@
 	<div class="popup-container" id="input-window" tabindex="-1">
 		<div class="content-container">
 			{#if $inputQuery.instance && Object.keys($inputQuery.instance).length > 0}
-				{#each possibleDisplayKeys as key}
+				{#each $inputQuery.possibleKeys === 'any' ? [] : $inputQuery.possibleKeys as key}
 					<div class="span-container">
 						<span
-							class={$inputQuery.requiredKeys.includes(key) && !$inputQuery.instance[key]
+							class={$inputQuery.requiredKeys !== 'any' &&
+							$inputQuery.requiredKeys.includes(key) &&
+							!$inputQuery.instance[key]
 								? 'red'
 								: ''}
 						>
