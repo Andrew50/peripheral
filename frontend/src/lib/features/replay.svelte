@@ -8,7 +8,7 @@ import '$lib/core/global.css'
 
 import type {Instance} from '$lib/core/types'
     function strtReplay(){
-        queryInstanceInput(["timestamp"],{timestamp:0,extendedHours:false})
+        queryInstanceInput(["timestamp"],["timestamp"],{timestamp:0,extendedHours:false})
         .then((v:Instance)=>{
 /*            streamInfo.update((r:StreamInfo) => {
                 r.startTimestamp = v.timestamp

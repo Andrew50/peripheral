@@ -24,7 +24,7 @@
 
     function addInstance() {
         const inst = { ticker: "", timestamp: 0 };
-        queryInstanceInput(["ticker"], inst).then((i: Instance) => {
+        queryInstanceInput(["ticker"],["ticker","timestamp"], inst).then((i: Instance) => {
             const aList = get(activeList);
             const empty = !Array.isArray(aList);
             if (empty || !aList.find((l: Instance) => l.ticker === i.ticker)) {
