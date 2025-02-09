@@ -88,3 +88,9 @@ CREATE TABLE alertLogs (
     unique(alertId, timestamp, securityId)
 );
 CREATE INDEX idxAlertLogId on alertLogs(alertLogId);
+
+
+
+
+--new
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
