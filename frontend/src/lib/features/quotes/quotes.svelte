@@ -13,7 +13,7 @@
     function handleKey(event: KeyboardEvent) {
         if (event.key == "Tab" || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
             const v = get(instance)
-            queryInstanceInput(["ticker"], v)
+            queryInstanceInput(["ticker"],["ticker"], v)
                 .then((i: Instance) => {
                     instance.set(i)
                 })

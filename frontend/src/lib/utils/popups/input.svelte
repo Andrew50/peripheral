@@ -14,10 +14,12 @@
 		maxDate: string | null;
 		name: string;
 	}
-	type InstanceAttributes = 'ticker' | 'timestamp' | 'timeframe' | 'extendedHours' | 'price';
-	interface InputQuery {
+    const allKeys = ['ticker' , 'timestamp' , 'timeframe' , 'extendedHours' , 'price']
+
+	type InstanceAttributes = (typeof possibleFields)[number]
+    interface InputQuery {
 		// 'inactive': no UI shown
-		// 'initializing': setting up event handlers
+		// 'initializing' setting up event handlers
 		// 'active': window is open waiting for input
 		// 'complete': one field completed (may still be active if more required)
 		// 'cancelled': user cancelled via Escape
@@ -28,7 +30,7 @@
 		inputValid: boolean;
 		instance: Instance;
 		requiredKeys: InstanceAttributes[] | 'any';
-		possibleKeys: InstanceAttributes[] | 'any';
+		possibleKeys: InstanceAttributes[];
 		securities?: Security[];
 	}
 
@@ -38,7 +40,7 @@
 		inputValid: true,
 		inputType: '',
 		requiredKeys: 'any',
-		possibleKeys: 'any',
+		possibleKeys: [],
 		instance: {}
 	};
 	let inputQuery: Writable<InputQuery> = writable({ ...inactiveInputQuery });
@@ -48,12 +50,19 @@
 		optionalKeys: InstanceAttributes[] | 'any',
 		instance: Instance = {}
 	): Promise<Instance> {
-		if (requiredKeys === 'any' && optionalKeys !== 'any') {
-			return Promise.reject(
-				new Error('Required keys must be specified if optional keys are specified')
-			);
-		}
-		const possibleKeys = Array.from(new Set([...requiredKeys, ...optionalKeys]));
+        let possibleKeys:  InstanceAttributes
+		if (optionalKeys === 'any'){
+            possibleKeys = allKeys
+        } else {
+
+            possibleKeys = Array.from(new Set([...requiredKeys, ...optionalKeys]));
+            for (let i=0;i<possibleKeys.length();i++){
+                const key = possibleKeys[i]
+                if (!allKeys.includes(key)){
+                    return Promise.reject(`invalid key ${key}`)
+                }
+            }
+        }
 		await tick();
 		if (get(inputQuery).status === 'inactive') {
 			// initialize with the passed instance info
@@ -174,12 +183,7 @@
 		// Only process keys when the input UI is active
 		const currentState = get(inputQuery);
 		if (currentState.status !== 'active') return;
-
 		event.stopPropagation();
-
-		// Do not process if a validation (security query) is underway
-		//if (secQueryActive) return;
-
 		let iQ = { ...currentState };
 		if (event.key === 'Escape') {
 			iQ.status = 'cancelled';
@@ -209,25 +213,25 @@
 
 			// classify the input string into a type
 			if (iQ.inputString !== '') {
-				if (/^[A-Z]$/.test(iQ.inputString)) {
+				if (iQ.possibleKeys.includes('ticker') && /^[A-Z]$/.test(iQ.inputString)) {
 					iQ.inputType = 'ticker';
-				} else if (/^\d+(\.\d+)?$/.test(iQ.inputString)) {
-					if (/^\d{1,3}$/.test(iQ.inputString)) {
-						iQ.inputType = 'timeframe';
-						iQ.securities = [];
-					} else {
-						iQ.inputType = 'price';
-						iQ.securities = [];
-					}
-				} else if (/^\d{1,2}(?:[hdwmqs])?$/.test(iQ.inputString)) {
+				} else if (iQ.possibleKeys.includes('timesframe') && /^\d+(\.\d+)?$/.test(iQ.inputString) && (/^\d{1,3}$/.test(iQ.inputString)) {
+                    iQ.inputType = 'timeframe';
+                    iQ.securities = [];
+                } else if (iQ.possibleKeys.includes('price') && /^\d+(\.\d+)?$/.test(iQ.inputString)){
+                    iQ.inputType = 'price';
+                    iQ.securities = [];
+				} else if (iQ.possibleKeys.includes('timeframe') && /^\d{1,2}(?:[hdwmqs])?$/.test(iQ.inputString)) {
 					iQ.inputType = 'timeframe';
 					iQ.securities = [];
-				} else if (/^\d{3}?.*$/.test(iQ.inputString)) {
+				} else if (iQ.possibleKeys.includes('timestamp') && /^\d{3}?.*$/.test(iQ.inputString)) {
 					iQ.inputType = 'timestamp';
 					iQ.securities = [];
-				} else {
+				} else if(iQ.possibleKeys.includes('ticker')){
 					iQ.inputType = 'ticker';
-				}
+				}else{
+                    iQ.inputType = '';
+                }
 			} else {
 				iQ.inputType = '';
 			}
@@ -258,11 +262,11 @@
 	// Instead of repeatedly adding/removing listeners in the store subscription,
 	// we add the keydown listener once on mount and remove it on destroy.
 	let unsubscribe: () => void;
+    const keydownHandler = (event: KeyboardEvent) => {
+        handleKeyDown(event);
+    };
 	onMount(() => {
 		prevFocusedElement = document.activeElement as HTMLElement;
-		const keydownHandler = (event: KeyboardEvent) => {
-			handleKeyDown(event);
-		};
 		document.addEventListener('keydown', keydownHandler);
 		unsubscribe = inputQuery.subscribe((v: InputQuery) => {
 			if (browser) {
@@ -312,7 +316,7 @@
 	<div class="popup-container" id="input-window" tabindex="-1">
 		<div class="content-container">
 			{#if $inputQuery.instance && Object.keys($inputQuery.instance).length > 0}
-				{#each $inputQuery.possibleKeys === 'any' ? [] : $inputQuery.possibleKeys as key}
+				{#each $inputQuery.possibleKeys as key}
 					<div class="span-container">
 						<span
 							class={$inputQuery.requiredKeys !== 'any' &&

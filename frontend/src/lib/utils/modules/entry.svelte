@@ -85,7 +85,7 @@
 
     function inputAndEmbedInstance(): void {
         const blankInstance: Instance = {ticker:"",timestamp:0,timeframe:""}
-        queryInstanceInput(["ticker","timeframe","timestamp"],blankInstance)
+        queryInstanceInput(["ticker","timeframe","timestamp"], ["ticker","timeframe","timestamp"],blankInstance)
         .then((instance: Instance) => {
             insertEmbeddedInstance(instance)
         })
@@ -114,7 +114,7 @@
     }
     function editEmbeddedInstance(instance:Instance): void{
         const ins = {...instance} //make a copy
-        queryInstanceInput(["ticker", "timeframe", "timestamp"],ins)
+        queryInstanceInput(["ticker", "timeframe", "timestamp"],["ticker","timeframe","timestamp","extendedHours"],ins)
         .then((updatedInstance: Instance) => {
             // Find the embedded instance in the editor content
             const delta = editor?.getContents();
