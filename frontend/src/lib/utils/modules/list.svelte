@@ -2,6 +2,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { writable, get } from 'svelte/store';
+	import { UTCTimestampToESTString } from '$lib/core/timestamp';
 	import { queryInstanceRightClick } from '$lib/utils/popups/rightClick.svelte';
 	import type { Writable } from 'svelte/store';
 	import type { Instance } from '$lib/core/types';
@@ -175,6 +176,13 @@
 									instance={watch}
 									type="change %"
 								/>
+							{:else if col === 'timestamp'}
+								<td
+									on:contextmenu={(event) => {
+										event.preventDefault();
+										event.stopPropagation();
+									}}>{UTCTimestampToESTString(watch[col])}</td
+								>
 							{:else}
 								<td
 									on:contextmenu={(event) => {
