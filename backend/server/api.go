@@ -272,7 +272,7 @@ func queueHandler(conn *utils.Conn) http.HandlerFunc {
 		if r.Method != "POST" {
 			return
 		}
-		//fmt.Println("debug: got queue request")
+		fmt.Println("debug: got queue request")
 		token_string := r.Header.Get("Authorization")
 		userId, err := validate_token(token_string)
 		if handleError(w, err, "auth") {

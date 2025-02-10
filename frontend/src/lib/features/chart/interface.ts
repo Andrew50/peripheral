@@ -60,6 +60,7 @@ export function addHorizontalLine(price: number) {
     chartEventDispatcher.set({ event: "addHorizontalLine", chartId: selectedChartId, data: price })
 }
 export function queryChart(newInstance: Instance, includeLast: boolean = true): void {
+    console.log("instance: ", newInstance);
     const req: ChartQueryDispatch = {
         ...newInstance,
         bars: 600,
