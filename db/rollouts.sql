@@ -10,6 +10,7 @@
 CREATE TABLE trades (
     tradeId SERIAL PRIMARY KEY,
     userId INT REFERENCES users(userId) ON DELETE CASCADE,
+    securityId INT, 
     ticker VARCHAR(10) NOT NULL,
     tradeDirection VARCHAR(10) NOT NULL,
     date DATE NOT NULL,
@@ -23,8 +24,7 @@ CREATE TABLE trades (
     -- Store up to 50 exits
     exit_times TIMESTAMP [] DEFAULT ARRAY []::TIMESTAMP [],
     exit_prices DECIMAL(10, 4) [] DEFAULT ARRAY []::DECIMAL(10, 4) [],
-    exit_shares INT [] DEFAULT ARRAY []::INT [],
-    UNIQUE (userId, ticker, date)
+    exit_shares INT [] DEFAULT ARRAY []::INT []
 );
 CREATE TABLE trade_executions (
     executionId SERIAL PRIMARY KEY,
@@ -36,8 +36,7 @@ CREATE TABLE trade_executions (
     size INT NOT NULL,
     timestamp TIMESTAMP NOT NULL,
     direction VARCHAR(10) NOT NULL,
-    tradeId INT REFERENCES trades(tradeId),
-    UNIQUE (userId, securityId, timestamp)
+    tradeId INT REFERENCES trades(tradeId)
 );
 ALTER TABLE securities
 ADD COLUMN sector VARCHAR(100),
