@@ -6,7 +6,7 @@ from data import getTensor
 
 # Constants for list lengths
 TOP_N = 50             # Number of top/bottom items to show per metric
-TOP_CONSTITUENTS = 10  # Number of constituents to show per sector/industry
+TOP_CONSTITUENTS = 25  # Number of constituents to show per sector/industry
 
 def get_timeframe_days(timeframe):
     if timeframe == "1 day":
@@ -23,9 +23,6 @@ def get_timeframe_days(timeframe):
         raise ValueError("Unsupported timeframe")
 
 def calculate_gap(tensor, idx):
-    """Calculate the gap between the previous close and current open for a given stock tensor.
-       Assumes that tensor[idx] has at least two rows.
-    """
     if len(tensor[idx]) < 2:
         return 0
     prev_close = tensor[idx][-2][3]  # Previous day's close
@@ -33,7 +30,6 @@ def calculate_gap(tensor, idx):
     return ((curr_open - prev_close) / prev_close) * 100
 
 def calculate_active(data):
-    # Get all active securities from the database
     with data.db.cursor() as cursor:
         cursor.execute("""
             SELECT ticker, sector, industry, securityId FROM securities 
@@ -42,14 +38,9 @@ def calculate_active(data):
         tickers = cursor.fetchall()
     
     print(f"Processing {len(tickers)} active securities")
-    
-    # Get tensor data for all stocks for ~1 year (270 trading days)
     instances = [{"ticker": t[0], "dt": 0} for t in tickers]
     tensor, labels = getTensor(data, instances, "1d", 270, normalize="none")
-    
-    # Build a lookup to map ticker to its index in the tensor array
     ticker_to_idx = {label["ticker"]: i for i, label in enumerate(labels)}
-    
     timeframes = ["1 day", "1 week", "1 month", "6 month", "1 year"]
     groups = ["stock", "sector", "industry"]
     
@@ -191,13 +182,20 @@ def calculate_active(data):
                 if not values:
                     continue
 
-                # Sort by the metric value (the third element in the tuple)
-                values.sort(key=lambda x: x[2])
-                
-                # Determine leaders (highest values) and laggards (lowest values)
-                leaders = values[-TOP_N:]
-                laggards = values[:TOP_N]
-                
+                # For stocks, crop the sorted list to TOP_N; for sectors/industries, use the full list.
+                leaders = sorted(values, key=lambda x: x[2], reverse=True)
+                laggards = sorted(values, key=lambda x: x[2])
+                if group == "stock":
+                    # Sort ascending so that the lowest values come first,
+                    # then crop for laggards (lowest) and leaders (highest)
+                    #sorted_values = sorted(values, key=lambda x: x[2])
+                    laggards = laggards[:TOP_N]
+                    leaders = leaders[:TOP_N]
+                #else:
+                    # For sectors and industries, do not crop.
+                    # Leaders: full list sorted descending (highest first)
+                    # Laggards: full list sorted ascending (lowest first)
+
                 # Build results for leaders
                 result_list = []
                 for entry in leaders:

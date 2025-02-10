@@ -44,7 +44,7 @@
     })
     function newStudyRequest():void{
         const insTemplate: Instance = {ticker:"",timestamp:0}
-        queryInstanceInput(["ticker", "timestamp"],insTemplate)
+        queryInstanceInput(["ticker", "timestamp"],["ticker","timestamp"],insTemplate)
         .then((v:Instance) => {newStudy(v)})
     }
     function selectStudy(study: Study) : void {
