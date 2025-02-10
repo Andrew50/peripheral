@@ -8,7 +8,7 @@
 	import { settings } from '$lib/core/stores';
 	function handleClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
-		queryInstanceInput('any', instance).then((v: Instance) => {
+		queryInstanceInput('any',['ticker','timeframe','timestamp','extendedHours'], instance).then((v: Instance) => {
 			queryChart(instance);
 		});
 	}

@@ -14,11 +14,12 @@
 		maxDate: string | null;
 		name: string;
 	}
-	const possibleDisplayKeys = ['ticker', 'timestamp', 'timeframe', 'extendedHours', 'price'];
-	type InstanceAttributes = (typeof possibleDisplayKeys)[number];
+	const allKeys = ['ticker', 'timestamp', 'timeframe', 'extendedHours', 'price'];
+
+	type InstanceAttributes = (typeof possibleFields)[number];
 	interface InputQuery {
 		// 'inactive': no UI shown
-		// 'initializing': setting up event handlers
+		// 'initializing' setting up event handlers
 		// 'active': window is open waiting for input
 		// 'complete': one field completed (may still be active if more required)
 		// 'cancelled': user cancelled via Escape
@@ -29,6 +30,7 @@
 		inputValid: boolean;
 		instance: Instance;
 		requiredKeys: InstanceAttributes[] | 'any';
+		possibleKeys: InstanceAttributes[];
 		securities?: Security[];
 	}
 
@@ -38,20 +40,35 @@
 		inputValid: true,
 		inputType: '',
 		requiredKeys: 'any',
+		possibleKeys: [],
 		instance: {}
 	};
 	let inputQuery: Writable<InputQuery> = writable({ ...inactiveInputQuery });
 
 	export async function queryInstanceInput(
 		requiredKeys: InstanceAttributes[] | 'any',
+		optionalKeys: InstanceAttributes[] | 'any',
 		instance: Instance = {}
 	): Promise<Instance> {
+		let possibleKeys: InstanceAttributes;
+		if (optionalKeys === 'any') {
+			possibleKeys = allKeys;
+		} else {
+			possibleKeys = Array.from(new Set([...requiredKeys, ...optionalKeys]));
+			for (let i = 0; i < possibleKeys.length(); i++) {
+				const key = possibleKeys[i];
+				if (!allKeys.includes(key)) {
+					return Promise.reject(`invalid key ${key}`);
+				}
+			}
+		}
 		await tick();
 		if (get(inputQuery).status === 'inactive') {
 			// initialize with the passed instance info
 			inputQuery.update((v: InputQuery) => ({
 				...v,
 				requiredKeys,
+				possibleKeys,
 				instance,
 				status: 'initializing'
 			}));
@@ -84,7 +101,7 @@
 	import { ESTStringToUTCTimestamp, UTCTimestampToESTString } from '$lib/core/timestamp';
 	let prevFocusedElement: HTMLElement | null = null;
 	// flag to indicate that an async validation (ticker lookup) is in progress
-	let secQueryActive = false;
+	//let secQueryActive = false;
 
 	interface ValidateResponse {
 		inputValid: boolean;
@@ -93,11 +110,11 @@
 
 	async function validateInput(inputString: string, inputType: string): Promise<ValidateResponse> {
 		if (inputType === 'ticker') {
-			secQueryActive = true;
+			//secQueryActive = true;
 			const securities = await privateRequest<Security[]>('getSecuritiesFromTicker', {
 				ticker: inputString
 			});
-			secQueryActive = false;
+			//secQueryActive = false;
 			if (Array.isArray(securities) && securities.length > 0) {
 				return {
 					inputValid: securities.some((v: Security) => v.ticker === inputString),
@@ -165,12 +182,7 @@
 		// Only process keys when the input UI is active
 		const currentState = get(inputQuery);
 		if (currentState.status !== 'active') return;
-
 		event.stopPropagation();
-
-		// Do not process if a validation (security query) is underway
-		if (secQueryActive) return;
-
 		let iQ = { ...currentState };
 		if (event.key === 'Escape') {
 			iQ.status = 'cancelled';
@@ -200,37 +212,44 @@
 
 			// classify the input string into a type
 			if (iQ.inputString !== '') {
-				if (/^[A-Z]$/.test(iQ.inputString)) {
+				if (iQ.possibleKeys.includes('ticker') && /^[A-Z]$/.test(iQ.inputString)) {
 					iQ.inputType = 'ticker';
-				} else if (/^\d+(\.\d+)?$/.test(iQ.inputString)) {
-					if (/^\d{1,3}$/.test(iQ.inputString)) {
-						iQ.inputType = 'timeframe';
-						iQ.securities = [];
-					} else {
-						iQ.inputType = 'price';
-						iQ.securities = [];
-					}
-				} else if (/^\d{1,2}(?:[hdwmqs])?$/.test(iQ.inputString)) {
+				} else if (iQ.possibleKeys.includes('timesframe') && /^\d+(\.\d+)?$/.test(iQ.inputString) && (/^\d{1,3}$/.test(iQ.inputString)) {
+                    iQ.inputType = 'timeframe';
+                    iQ.securities = [];
+                } else if (iQ.possibleKeys.includes('price') && /^\d+(\.\d+)?$/.test(iQ.inputString)){
+                    iQ.inputType = 'price';
+                    iQ.securities = [];
+				} else if (iQ.possibleKeys.includes('timeframe') && /^\d{1,2}(?:[hdwmqs])?$/.test(iQ.inputString)) {
 					iQ.inputType = 'timeframe';
 					iQ.securities = [];
-				} else if (/^\d{3}?.*$/.test(iQ.inputString)) {
+				} else if (iQ.possibleKeys.includes('timestamp') && /^\d{3}?.*$/.test(iQ.inputString)) {
 					iQ.inputType = 'timestamp';
 					iQ.securities = [];
-				} else {
+				} else if(iQ.possibleKeys.includes('ticker')){
 					iQ.inputType = 'ticker';
-				}
+				}else{
+                    iQ.inputType = '';
+                }
 			} else {
 				iQ.inputType = '';
 			}
 
-			// Validate asynchronously, and then update the store.
-			const validateResponse: ValidateResponse = await validateInput(iQ.inputString, iQ.inputType);
 			inputQuery.update((v: InputQuery) => ({
 				...v,
 				inputString: iQ.inputString,
-				inputType: iQ.inputType,
-				...validateResponse
+				inputType: iQ.inputType
 			}));
+
+			// Validate asynchronously, and then update the store.
+			validateInput(iQ.inputString, iQ.inputType).then((validationResp: ValidateResponse) => {
+				inputQuery.update((v: InputQuery) => ({
+					...v,
+					//inputString: iQ.inputString,
+					//inputType: iQ.inputType,
+					...validationResp
+				}));
+			});
 		}
 	}
 
@@ -242,17 +261,12 @@
 	// Instead of repeatedly adding/removing listeners in the store subscription,
 	// we add the keydown listener once on mount and remove it on destroy.
 	let unsubscribe: () => void;
+    const keydownHandler = (event: KeyboardEvent) => {
+        handleKeyDown(event);
+    };
 	onMount(() => {
-		// Save the original focused element so we can restore focus later.
 		prevFocusedElement = document.activeElement as HTMLElement;
-
-		// Keydown listener simply calls our async handler.
-		const keydownHandler = (event: KeyboardEvent) => {
-			handleKeyDown(event);
-		};
 		document.addEventListener('keydown', keydownHandler);
-
-		// One subscription to the store handles transitions that affect focus.
 		unsubscribe = inputQuery.subscribe((v: InputQuery) => {
 			if (browser) {
 				if (v.status === 'initializing') {
@@ -269,11 +283,6 @@
 				}
 			}
 		});
-
-		// (If you need a touch listener, add it once here, too.)
-		// document.addEventListener('touchstart', onTouch);
-
-		// Cleanup on destroy
 	});
 	onDestroy(() => {
 		try {
@@ -306,10 +315,12 @@
 	<div class="popup-container" id="input-window" tabindex="-1">
 		<div class="content-container">
 			{#if $inputQuery.instance && Object.keys($inputQuery.instance).length > 0}
-				{#each possibleDisplayKeys as key}
+				{#each $inputQuery.possibleKeys as key}
 					<div class="span-container">
 						<span
-							class={$inputQuery.requiredKeys.includes(key) && !$inputQuery.instance[key]
+							class={$inputQuery.requiredKeys !== 'any' &&
+							$inputQuery.requiredKeys.includes(key) &&
+							!$inputQuery.instance[key]
 								? 'red'
 								: ''}
 						>

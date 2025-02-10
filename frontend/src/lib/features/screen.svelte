@@ -32,7 +32,7 @@
 
   // This function is called when the date button is clicked
   function changeDate() {
-    queryInstanceInput(["timestamp"],{timestamp:$selectedDate}).then((v:Instance) => {
+    queryInstanceInput(["timestamp"],["timestamp"],{timestamp:$selectedDate}).then((v:Instance) => {
         if (v.timestamp !== undefined){
             selectedDate.set(v.timestamp); // Update the date store with the new selected date
         }

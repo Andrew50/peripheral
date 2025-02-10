@@ -870,7 +870,7 @@
 		chartContainer.addEventListener('contextmenu', (event: MouseEvent) => {
 			event.preventDefault();
 			const timestamp = ESTSecondstoUTCMillis(latestCrosshairPositionTime);
-			const price = chartCandleSeries.coordinateToPrice(event.clientY) || 0;
+			const price = Math.round(chartCandleSeries.coordinateToPrice(event.clientY) * 100) / 100 || 0;
 			const ins: Instance = { ...currentChartInstance, timestamp: timestamp, price: price };
 			queryInstanceRightClick(event, ins, 'chart');
 		});
@@ -902,7 +902,7 @@
 				if ($streamInfo.replayActive) {
 					currentChartInstance.timestamp = 0;
 				}
-				queryInstanceInput('any', currentChartInstance)
+				queryInstanceInput('any', 'any', currentChartInstance)
 					.then((v: Instance) => {
 						currentChartInstance = v;
 						queryChart(v, true);
