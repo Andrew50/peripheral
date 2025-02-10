@@ -13,7 +13,7 @@
 	export let list: Writable<Instance[]> = writable([]);
 	export let columns: Array<string>;
 	export let parentDelete = (v: Instance) => {};
-
+	export let formatters: {[key: string]: (value: any) => string} = {};
 	function isFlagged(instance: Instance, flagWatch: Instance[]) {
 		if (!Array.isArray(flagWatch)) return false;
 		return flagWatch.some((item) => item.ticker === instance.ticker);
@@ -100,7 +100,11 @@
 		event.stopPropagation();
 		if (even === 0) {
 			selectedRowIndex = index;
-			queryChart(instance);
+			if('openQuantity' in instance) {
+				queryChart(instance);
+			} else {
+				queryChart(instance);
+			}
 		} else if (even === 1) {
 			flagSecurity(instance);
 		} else if (even === 2) {
@@ -180,7 +184,7 @@
 									on:contextmenu={(event) => {
 										event.preventDefault();
 										event.stopPropagation();
-									}}>{watch[col]}</td
+									}}>{formatters[col] ? formatters[col](watch[col]) : watch[col]}</td
 								>
 							{/if}
 						{/each}

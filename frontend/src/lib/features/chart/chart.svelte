@@ -26,6 +26,7 @@
 		CandlestickSeriesOptions,
 		DeepPartial,
 		CandlestickStyleOptions,
+		CustomSeriesOptions,
 		SeriesOptionsCommon,
 		UTCTimestamp,
 		HistogramStyleOptions,
@@ -45,6 +46,7 @@
 		getRealTimeTime
 	} from '$lib/core/timestamp';
 	import { addStream } from '$lib/utils/stream/interface';
+	import { ArrowMarkersPaneView, type ArrowMarker } from './arrowMarkers';
 	let bidLine: any;
 	let askLine: any;
 	let currentBarTimestamp: number;
@@ -163,6 +165,8 @@
 	// Add new property to track alert lines
 	let alertLines: AlertLine[] = [];
 
+	let arrowSeries: any = null;  // Initialize as null
+
 	function extendedHours(timestamp: number): boolean {
 		const date = new Date(timestamp);
 		const hours = date.getHours();
@@ -276,6 +280,7 @@
 						}
 					});
 				}
+
 				// Check if we reach end of avaliable data
 				if (inst.timestamp == 0) {
 					chartLatestDataReached = true;
@@ -298,6 +303,40 @@
 					} else if (inst.direction == 'backward') {
 						chartCandleSeries.setData(newCandleData);
 						chartVolumeSeries.setData(newVolumeData);
+						
+						// Add null check before using arrowSeries
+						if (arrowSeries && 'entries' in inst || 'exits' in inst) {
+							const markers: ArrowMarker[] = [];
+							
+							// Add entry markers
+							if ('entries' in inst) {
+								inst.entries.forEach(entry => {
+									const entryTime = UTCSecondstoESTSeconds(entry.time / 1000);
+									const roundedTime = Math.floor(entryTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+									markers.push({
+										time: roundedTime as UTCTimestamp,
+										price: entry.price,
+										type: 'entry'
+									});
+								});
+							}
+							
+							// Add exit markers
+							if ('exits' in inst) {
+								inst.exits.forEach(exit => {
+									const exitTime = UTCSecondstoESTSeconds(exit.time / 1000);
+									const roundedTime = Math.floor(exitTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+									markers.push({
+										time: roundedTime as UTCTimestamp,
+										price: exit.price,
+										type: 'exit'
+									});
+								});
+							}
+							console.log(markers);
+						
+							arrowSeries.setData(markers);
+						}
 					}
 					queuedLoad = null;
 					sma10Series.setData(calculateSMA(newCandleData, 10));
@@ -769,6 +808,10 @@
 			chartCandleSeries.removePriceLine(line.line);
 		});
 		alertLines = [];
+
+		if(arrowSeries) {
+			arrowSeries.setData([]);
+		}
 	}
 
 	chartQueryDispatcher.subscribe((req: ChartQueryDispatch) => {
@@ -919,6 +962,7 @@
 			lastValueVisible: true, // Shows the price on the right
 			priceLineVisible: false
 		});
+		arrowSeries = chart.addCustomSeries<ArrowMarker, CustomSeriesOptions>(new ArrowMarkersPaneView(),{});
 
 		chart.subscribeCrosshairMove((param) => {
 			if (!chartCandleSeries.data().length || !param.point || !currentChartInstance.securityId) {
