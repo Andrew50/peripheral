@@ -14,7 +14,7 @@
 		const alertType = $selectedAlertType; // Get selected alert type from the dropdown
 
 		if (alertType === 'price') {
-			const inst = await queryInstanceInput(['ticker', 'price'], { ticker: '' });
+			const inst = await queryInstanceInput(['ticker', 'price'],['ticker','price'], { ticker: '' });
 			//price?
 			console.log('inst', inst);
 			newPriceAlert(inst);
