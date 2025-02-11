@@ -6,6 +6,7 @@
 	import type { Writable } from 'svelte/store';
 	export let drawingMenuProps: Writable<DrawingMenuProps>;
 
+    let price: Number;
 	let menuElement: HTMLDivElement;
 
 	function removePriceLine(event: MouseEvent) {
@@ -29,6 +30,17 @@
 			console.log('Price line removed');
 		}
 	}
+
+    function editHorizontalLinePrice(){
+        console.log("updating price line price")
+
+
+
+		if ($drawingMenuProps.selectedLine !== null) {
+            $drawingMenuProps.chartCandleSeries.updatePriceLine($drawingMenuProps.selectedLine,price)
+            //$drawingMenuProps.selectedLine.price = price already updated by bind:Lthis?
+        }
+    }
 
 	function handleClickOutside(event: MouseEvent) {
 		console.log($drawingMenuProps.active, $drawingMenuProps.isDragging);
@@ -86,6 +98,9 @@
 {#if $drawingMenuProps.active && !$drawingMenuProps.isDragging}
 	<div bind:this={menuElement} class="drawing-menu" style={menuStyle}>
 		<button on:click={removePriceLine}>Delete</button>
+        <input on:change={editHorizontalLinePrice} bind:this={$drawingMenuProps.selectedLine.price}/>
+
+
 	</div>
 {/if}
 

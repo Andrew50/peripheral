@@ -13,6 +13,7 @@ export interface Instance {
     market_cap?: number;
     description?: string;
     logo?: string;
+    icon?: string;
     share_class_shares_outstanding?: number;
     industry?: string;
     sector?: string;
