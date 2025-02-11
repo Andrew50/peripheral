@@ -42,8 +42,7 @@
 		ESTSecondstoUTCSeconds,
 		ESTSecondstoUTCMillis,
 		getReferenceStartTimeForDateMilliseconds,
-		timeframeToSeconds,
-		getRealTimeTime
+		timeframeToSeconds
 	} from '$lib/core/timestamp';
 	import { addStream } from '$lib/utils/stream/interface';
 	import { ArrowMarkersPaneView, type ArrowMarker } from './arrowMarkers';
