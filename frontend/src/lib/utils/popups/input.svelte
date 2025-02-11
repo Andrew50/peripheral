@@ -98,12 +98,12 @@
 
 	interface ValidateResponse {
 		inputValid: boolean;
-		securities: Security[];
+		securities: Instance[];
 	}
 
 	async function validateInput(inputString: string, inputType: string): Promise<ValidateResponse> {
 		if (inputType === 'ticker') {
-			const securities = await privateRequest<Security[]>('getSecuritiesFromTicker', {
+			const securities = await privateRequest<Instance[]>('getSecuritiesFromTicker', {
 				ticker: inputString
 			});
 			console.log(securities);
@@ -113,11 +113,15 @@
 				const securitiesWithDetails = await Promise.all(
 					securities.map(async (security) => {
 						try {
-							const details = await privateRequest<Security>('getTickerDetails', {
-								securityId: security.securityId,
-								ticker: security.ticker,
-								timestamp: security.timestamp
-							}).catch((v) => {});
+							const details = await privateRequest<Instance>(
+								'getTickerDetails',
+								{
+									securityId: security.securityId,
+									ticker: security.ticker,
+									timestamp: security.timestamp
+								},
+								true
+							).catch((v) => {});
 							return {
 								...security,
 								...details
@@ -348,8 +352,8 @@
 
 	let sectors: string[] = [];
 	let industries: string[] = [];
-	function capitalize(str, lower = false) {
-		return (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, (match) =>
+	function capitalize(str: string, lower = false): string {
+		return (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, (match: string) =>
 			match.toUpperCase()
 		);
 	}
@@ -363,7 +367,7 @@
 		</div>
 
 		<div class="search-bar">
-			<input type="text" placeholder="Search symbol" value={$inputQuery.inputString} readonly />
+			<input type="text" placeholder="Enter Value" value={$inputQuery.inputString} readonly />
 		</div>
 		<div class="content-container">
 			{#if $inputQuery.instance && Object.keys($inputQuery.instance).length > 0}
@@ -408,26 +412,60 @@
 												inputQuery.set(enterInput(get(inputQuery), i));
 											}}
 										>
-											<td>{sec.ticker}</td>
-											<td>{sec.maxDate === null ? 'Current' : sec.maxDate}</td>
 											<td>
 												<div
 													style="background-color: transparent; width: 100px; height: 30px; display: flex; align-items: center; justify-content: center;"
 												>
-													{#if sec.logo}
+													{#if sec.icon}
+														<img
+															src={`data:image/jpeg;base64,${sec.icon}`}
+															alt="Security Image"
+															style="max-width: 100%; max-height: 100%; object-fit: contain;"
+														/>
+													{/if}
+													<!--{#if sec.logo}
 														<img
 															src={`data:image/svg+xml;base64,${sec.logo}`}
 															alt="Security Image"
 															style="max-width: 100%; max-height: 100%; object-fit: contain;"
 														/>
-													{/if}
+													{/if}-->
 												</div>
 											</td>
+											<td>{sec.ticker}</td>
+											<td>{sec.maxDate === null ? 'Current' : sec.maxDate}</td>
 										</tr>
 									{/each}
 								</tbody>
 							</table>
 						{/if}
+					</div>
+				{:else if $inputQuery.inputType === 'timestamp'}
+					<div class="span-container">
+						<div class="span-row">
+							<span>{UTCTimestampToESTString($inputQuery.instance.timestamp ?? 0)}</span>
+						</div>
+					</div>
+				{:else if $inputQuery.inputType === 'timeframe'}
+					<div class="span-container">
+						<div class="span-row">
+							<span>Timeframe</span>
+							<span>{$inputQuery.instance.timeframe}</span>
+						</div>
+					</div>
+				{:else if $inputQuery.inputType === 'extendedHours'}
+					<div class="span-container">
+						<div class="span-row">
+							<span>Extended Hours</span>
+							<span>{$inputQuery.instance.extendedHours ? 'True' : 'False'}</span>
+						</div>
+					</div>
+				{:else if $inputQuery.inputType === 'price'}
+					<div class="span-container">
+						<div class="span-row">
+							<span>Price</span>
+							<span>${$inputQuery.instance.price}</span>
+						</div>
 					</div>
 				{/if}
 			{/if}
@@ -468,6 +506,7 @@
 		display: felx;
 		flex-direction: column;
 		gap: 8px;
+		width: 100%;
 	}
 	.span-container span {
 		align-items: top;
