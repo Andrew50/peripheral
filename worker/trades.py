@@ -62,7 +62,7 @@ def grab_user_trades(conn, user_id: int, sort: str = "desc", date: str = None, h
                     'securityId': row[2],
                     'tradeStart': eastern.localize(row[9][0]).astimezone(utc).timestamp() * 1000 if row[9] else None,
                     'timestamp': eastern.localize(row[12][-1]).astimezone(utc).timestamp() * 1000 if row[12] else (eastern.localize(row[9][0]).astimezone(utc).timestamp() * 1000 if row[9] else None),
-                    'direction': row[4],
+                    'trade_direction': row[4],
                     'date': row[5].strftime('%Y-%m-%d'),
                     'status': row[6],
                     'openQuantity': row[7],

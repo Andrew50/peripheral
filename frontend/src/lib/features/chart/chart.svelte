@@ -184,6 +184,7 @@
 		if (inst.requestType === 'loadNewTicker') {
 			bidLine.setData([]);
 			askLine.setData([]);
+			arrowSeries.setData([]);
 		}
 		if (isLoadingChartData || !inst.ticker || !inst.timeframe || !inst.securityId) {
 			return;
@@ -303,42 +304,61 @@
 					} else if (inst.direction == 'backward') {
 						chartCandleSeries.setData(newCandleData);
 						chartVolumeSeries.setData(newVolumeData);
-						
-						// Add null check before using arrowSeries
-						if (arrowSeries && 'entries' in inst || 'exits' in inst) {
-							const markers: ArrowMarker[] = [];
+						if (arrowSeries && ('entries' in inst || 'exits' in inst)) {
+							const markersByTime = new Map<number, {
+								entries: Array<{ price: number; isLong: boolean }>,
+								exits: Array<{ price: number; isLong: boolean }>
+							}>();
 							
-							// Add entry markers
+							// Group entries by rounded time
 							if ('entries' in inst) {
 								inst.entries.forEach(entry => {
 									const entryTime = UTCSecondstoESTSeconds(entry.time / 1000);
 									const roundedTime = Math.floor(entryTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
-									markers.push({
-										time: roundedTime as UTCTimestamp,
+									
+									if (!markersByTime.has(roundedTime)) {
+										markersByTime.set(roundedTime, { entries: [], exits: [] });
+									}
+									
+									markersByTime.get(roundedTime)?.entries.push({
 										price: entry.price,
-										type: 'entry'
+										isLong: inst.trade_direction === 'Long'  // Assuming 'BUY' indicates long
 									});
 								});
 							}
 							
-							// Add exit markers
+							// Group exits by rounded time
 							if ('exits' in inst) {
 								inst.exits.forEach(exit => {
 									const exitTime = UTCSecondstoESTSeconds(exit.time / 1000);
 									const roundedTime = Math.floor(exitTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
-									markers.push({
-										time: roundedTime as UTCTimestamp,
+									
+									if (!markersByTime.has(roundedTime)) {
+										markersByTime.set(roundedTime, { entries: [], exits: [] });
+									}
+									
+									markersByTime.get(roundedTime)?.exits.push({
 										price: exit.price,
-										type: 'exit'
+										isLong: inst.trade_direction === 'Long'  // Assuming 'BUY' indicates long
 									});
 								});
 							}
+							
+							// Convert to format for ArrowMarkersPaneView
+							const markers = Array.from(markersByTime.entries()).map(([time, data]) => ({
+								time: time as UTCTimestamp,
+								entries: data.entries,
+								exits: data.exits
+							}));
+							
 							console.log(markers);
 						
 							arrowSeries.setData(markers);
 						}
+						
 					}
 					queuedLoad = null;
+					
 					sma10Series.setData(calculateSMA(newCandleData, 10));
 					sma20Series.setData(calculateSMA(newCandleData, 20));
 					if (/^\d+$/.test(inst.timeframe ?? '')) {
