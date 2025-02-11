@@ -95,7 +95,6 @@ func processAlerts(conn *utils.Conn) {
 	var wg sync.WaitGroup
 	alerts.Range(func(key, value interface{}) bool {
 		alert := value.(Alert)
-		printAlert(alert)
 		wg.Add(1)
 		go func(a Alert) {
 			defer wg.Done()
