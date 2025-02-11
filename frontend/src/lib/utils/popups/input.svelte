@@ -214,23 +214,23 @@
 			if (iQ.inputString !== '') {
 				if (iQ.possibleKeys.includes('ticker') && /^[A-Z]$/.test(iQ.inputString)) {
 					iQ.inputType = 'ticker';
-				} else if (iQ.possibleKeys.includes('timesframe') && /^\d+(\.\d+)?$/.test(iQ.inputString) && (/^\d{1,3}$/.test(iQ.inputString)) {
-                    iQ.inputType = 'timeframe';
-                    iQ.securities = [];
-                } else if (iQ.possibleKeys.includes('price') && /^\d+(\.\d+)?$/.test(iQ.inputString)){
-                    iQ.inputType = 'price';
-                    iQ.securities = [];
+				} else if (iQ.possibleKeys.includes('timeframe') && /^\d+(\.\d+)?$/.test(iQ.inputString) && /^\d{1,3}$/.test(iQ.inputString)) {
+					iQ.inputType = 'timeframe';
+					iQ.securities = [];
+				} else if (iQ.possibleKeys.includes('price') && /^\d+(\.\d+)?$/.test(iQ.inputString)) {
+					iQ.inputType = 'price';
+					iQ.securities = [];
 				} else if (iQ.possibleKeys.includes('timeframe') && /^\d{1,2}(?:[hdwmqs])?$/.test(iQ.inputString)) {
 					iQ.inputType = 'timeframe';
 					iQ.securities = [];
 				} else if (iQ.possibleKeys.includes('timestamp') && /^\d{3}?.*$/.test(iQ.inputString)) {
 					iQ.inputType = 'timestamp';
 					iQ.securities = [];
-				} else if(iQ.possibleKeys.includes('ticker')){
+				} else if(iQ.possibleKeys.includes('ticker')) {
 					iQ.inputType = 'ticker';
-				}else{
-                    iQ.inputType = '';
-                }
+				} else {
+					iQ.inputType = '';
+				}
 			} else {
 				iQ.inputType = '';
 			}

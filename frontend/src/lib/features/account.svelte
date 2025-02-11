@@ -17,7 +17,7 @@
     let selectedHour: number | "" = "";
 
     interface Trade extends Instance {
-        direction: string;
+        trade_direction: string;
         status: string;
         openQuantity: number;
         closedPnL: number | null;
@@ -124,7 +124,7 @@
 <List 
     on:contextmenu={(event) => {event.preventDefault();}} 
     list={trades} 
-    columns={["timestamp", "ticker", "direction", "status", "openQuantity", "closedPnL"]}
+    columns={["timestamp", "ticker", "trade_direction", "status", "openQuantity", "closedPnL"]}
     formatters={{
         timestamp: (value) => value ? UTCTimestampToESTString(value) : 'N/A',
         closedPnL: (value) => value !== null ? value.toFixed(2) : 'N/A'
