@@ -3,6 +3,7 @@ package tasks
 import (
 	"backend/utils"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -138,9 +139,9 @@ type GetSecurityFromTickerArgs struct {
 }
 
 type GetSecurityFromTickerResults struct {
-	SecurityId int        `json:"securityId"`
-	Ticker     string     `json:"ticker"`
-	Timestamp    *time.Time `json:"timestamp"`
+	SecurityId int    `json:"securityId"`
+	Ticker     string `json:"ticker"`
+	Timestamp  int64  `json:"timestamp"`
 }
 
 func GetSecuritiesFromTicker(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -189,8 +190,14 @@ func GetSecuritiesFromTicker(conn *utils.Conn, userId int, rawArgs json.RawMessa
 	var securities []GetSecurityFromTickerResults
 	for rows.Next() {
 		var security GetSecurityFromTickerResults
-		if err := rows.Scan(&security.SecurityId, &security.Ticker, &security.Timestamp); err != nil {
+		var timestamp sql.NullTime
+		if err := rows.Scan(&security.SecurityId, &security.Ticker, &timestamp); err != nil {
 			return nil, err
+		}
+		if timestamp.Valid {
+			security.Timestamp = timestamp.Time.UnixMilli()
+		} else {
+			security.Timestamp = 0
 		}
 		securities = append(securities, security)
 	}
@@ -256,25 +263,25 @@ func GetSimilarInstances(conn *utils.Conn, userId int, rawArgs json.RawMessage) 
 }
 
 type GetTickerDetailsArgs struct {
-	SecurityId int `json:"securityId"`
-    Ticker string `json:"ticker"`
-    Timestamp int64 `json:"timestamp"`
+	SecurityId int    `json:"securityId"`
+	Ticker     string `json:"ticker,omitempty"`
+	Timestamp  int64  `json:"timestamp,omitempty"`
 }
 
 type TickerDetailsResponse struct {
-	Ticker          string  `json:"ticker"`
-	Name            string  `json:"name"`
-	Market          string  `json:"market"`
-	Locale          string  `json:"locale"`
-	PrimaryExchange string  `json:"primary_exchange"`
-	Active          bool    `json:"active"`
-	MarketCap       float64 `json:"market_cap"`
-	Description     string  `json:"description"`
-	Logo            string  `json:"logo"`
-	//	Icon                        string  `json:"icon"`
-	ShareClassSharesOutstanding int64  `json:"share_class_shares_outstanding"`
-	Industry                    string `json:"industry"`
-	Sector                      string `json:"sector"`
+	Ticker                      string  `json:"ticker"`
+	Name                        string  `json:"name"`
+	Market                      string  `json:"market"`
+	Locale                      string  `json:"locale"`
+	PrimaryExchange             string  `json:"primary_exchange"`
+	Active                      bool    `json:"active"`
+	MarketCap                   float64 `json:"market_cap"`
+	Description                 string  `json:"description"`
+	Logo                        string  `json:"logo"`
+	Icon                        string  `json:"icon"`
+	ShareClassSharesOutstanding int64   `json:"share_class_shares_outstanding"`
+	Industry                    string  `json:"industry"`
+	Sector                      string  `json:"sector"`
 }
 
 func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -282,16 +289,23 @@ func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-    tim := time.UnixMilli(args.Timestamp)
+	tim := time.UnixMilli(args.Timestamp)
 
-	ticker, err := utils.GetTicker(conn, args.SecurityId, tim)
-	if err != nil {
-        return nil, fmt.Errorf("failed to get ticker: %s: %v",args.Ticker, err)
+	var ticker string
+	var err error
+	if args.Ticker == "" {
+		ticker, err = utils.GetTicker(conn, args.SecurityId, tim)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get ticker: %s: %v", args.Ticker, err)
+		}
+	} else {
+		ticker = args.Ticker
 	}
 	details, err := utils.GetTickerDetails(conn.Polygon, ticker, "now")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get ticker details: %v", err)
 		fmt.Println("failed to get ticker details: %v", err)
+		return nil, nil
+		//return nil, fmt.Errorf("failed to get ticker details: %v", err)
 	}
 
 	var sector, industry string
@@ -331,6 +345,7 @@ func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 	// Fetch both logo and icon
 
 	logoBase64, err := fetchImage(details.Branding.LogoURL)
+	iconBase64, err := fetchImage(details.Branding.IconURL)
 	/*
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch logo: %v", err)	const defaultIcons = {
@@ -352,9 +367,9 @@ func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 		Description:                 details.Description,
 		ShareClassSharesOutstanding: details.ShareClassSharesOutstanding,
 		Logo:                        logoBase64,
-		//Icon:                        iconBase64,
-		Sector:   sector,
-		Industry: industry,
+		Icon:                        iconBase64,
+		Sector:                      sector,
+		Industry:                    industry,
 	}
 
 	return response, nil
