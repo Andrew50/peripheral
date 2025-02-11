@@ -150,7 +150,7 @@ CREATE TABLE trades (
     tradeId SERIAL PRIMARY KEY,
     userId INT REFERENCES users(userId) ON DELETE CASCADE,
     securityId INT, 
-    ticker VARCHAR(10) NOT NULL,
+    ticker VARCHAR(20) NOT NULL,
     tradeDirection VARCHAR(10) NOT NULL,
     date DATE NOT NULL,
     status VARCHAR(10) NOT NULL CHECK (status IN ('Open', 'Closed')),
