@@ -1,47 +1,72 @@
 /*colors.css*/
 :root {
-    --c1: #3a3f47; /* secondary - grey*/
-    --c2: #2c2f36; /* base - dark greay*/
-    --c3: #2962ff; /* accents - blue*/
-    --c4: #c9c9c9; /* spereator - light grey */
-    --c5: #ad3d3d; /* error - red*/
-    --c6: #28a745; /* - green */
-    --c3-hover: #0056b3; /* blue hover */
-    --c6-hover: #218838; /* green hover */
+    --c1: #2d3139;
+    /* secondary - darker grey */
+    --c2: #1a1c21;
+    /* base - dark background */
+    --c3: #3b82f6;
+    /* accent - modern blue */
+    --c4: #374151;
+    /* separator - medium grey */
+    --c5: #ef4444;
+    /* error - modern red */
+    --c6: #22c55e;
+    /* success - modern green */
+    --c3-hover: #2563eb;
+    /* blue hover */
+    --c6-hover: #16a34a;
+    /* green hover */
 
-    --f1: #ffffff; /* white font */
-    --f2: #f2f2f2; /* Light grey color, consistent with theme */
+    --f1: #f9fafb;
+    /* primary text - off white */
+    --f2: #9ca3af;
+    /* secondary text - light grey */
+
+    /* Add some new accent colors */
+    --accent-purple: #8b5cf6;
+    --accent-indigo: #6366f1;
+    --accent-yellow: #eab308;
 }
-.dark-green{
-    color: #006400;  /* Dark green */
+
+.dark-green {
+    color: #006400;
+    /* Dark green */
     font-weight: bold;
 }
 
-.green{
-    color: #00ff00;  /* Bright green */
-}
-
-.red{
-    color: #ff0000;  /* Bright red */
-}
-
-.dark-red{
-    color: #8b0000;  /* Dark red */
-    font-weight: bold;
-}
-
-.white{
-    color: white;
-}
 .green {
-    color: green;
+    color: #00ff00;
+    /* Bright green */
 }
+
 .red {
-    color: red;
+    color: #ff0000;
+    /* Bright red */
 }
+
+.dark-red {
+    color: #8b0000;
+    /* Dark red */
+    font-weight: bold;
+}
+
 .white {
     color: white;
 }
+
+.green {
+    color: green;
+}
+
+.red {
+    color: red;
+}
+
+.white {
+
+    color: white;
+}
+
 /*span.green {
     color: var(--c5);
     font-weight: bold;
@@ -50,7 +75,8 @@ span.red {
     color: var(--c5);
     font-weight: bold;
 }
+*/
 span.blue {
     color: var(--c3);
     font-weight: bold;
-}*/
+}
