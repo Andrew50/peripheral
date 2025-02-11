@@ -4,7 +4,18 @@ export interface Instance {
     securityId?: number
     timeframe?: string
     extendedHours?: boolean
-    price?: number
+    price?: number;
+    name?: string;
+    market?: string;
+    locale?: string;
+    primary_exchange?: string;
+    active?: boolean;
+    market_cap?: number;
+    description?: string;
+    logo?: string;
+    share_class_shares_outstanding?: number;
+    industry?: string;
+    sector?: string;
 }
 export interface Setup {
     setupId: number;

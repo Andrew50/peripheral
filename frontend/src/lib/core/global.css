@@ -1,4 +1,30 @@
 /*global.css*/
+/*@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+:root {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    font-weight: 400;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: var(--c2);
+    color: var(--f1);
+    min-height: 100vh;
+    margin: 0;
+}
+
+html {
+    background-color: var(--c2);
+}*/
+
 @import './styles/table.css';
 @import './styles/div.css';
 @import './styles/misc.css';

@@ -7,19 +7,22 @@
     position: absolute;
     left: 0;
     right: 0;
-    background-color: var(--c2); /* Example background color */
+    background-color: var(--c2);
+    /* Example background color */
 }
+
 .feature-container {
     outline: none;
     height: 100%;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    width:100%;
+    width: 100%;
     justify-content: flex-start;
     overflow-y: auto;
     overflow-x: hidden;
 }
+
 .table-container {
     border-radius: 4px;
     overflow: scroll;
@@ -30,6 +33,7 @@
     flex-grow: 1;
     scrollbar-width: none;
 }
+
 .controls-container {
     display: flex;
     justify-content: left;
@@ -38,11 +42,12 @@
     flex-wrap: wrap;
     width: 100%;
 }
+
 .popup-container {
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    align-items: center;
+    justify-content: stretch;
+    align-items: stretch;
     position: fixed;
     top: 50%;
     left: 50%;
@@ -51,18 +56,23 @@
     border: 1px solid var(--c4);
     z-index: 1000;
     padding: 20px;
-    max-width: 80vw;
-    max-height: 50vw;
+    max-width: 90vw;
+    max-height: 80vh;
     color: var(--f1);
-    overflow: hidden; /* Prevent content from overflowing */
+    overflow: auto;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
+
 .center-container {
-    text-align:center;
-     display: flex;
+    text-align: center;
+    display: flex;
     flex-direction: column;
-    align-items: center; /* Center items horizontally */
-    justify-content: center; /* Center items vertically */
+    align-items: center;
+    /* Center items horizontally */
+    justify-content: center;
+    /* Center items vertically */
 }
+
 .content-container {
     width: 100%;
     height: 100%;
@@ -70,11 +80,16 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    flex-grow: 1;
 }
+
 .span-container {
     display: flex;
-    justify-content: space-between;
-    width: 100%;
+    justify-content: stretch;
+    align-items: stretch;
+    width: auto;
+    max-width: 80%;
     padding: 10px 0;
     border-bottom: 1px solid var(--c4);
+    margin: 0 auto;
 }

@@ -7,16 +7,13 @@
 	import { tick } from 'svelte';
 	import type { Writable } from 'svelte/store';
 	import type { Instance } from '$lib/core/types';
+	const allKeys = ['ticker', 'timestamp', 'timeframe', 'extendedHours', 'price'] as const;
 
-	interface Security {
-		securityId: number;
-		ticker: string;
-		maxDate: string | null;
-		name: string;
-	}
-	const allKeys = ['ticker', 'timestamp', 'timeframe', 'extendedHours', 'price'];
-
-	type InstanceAttributes = (typeof possibleFields)[number];
+	type InstanceAttributes = (typeof allKeys)[number];
+	let filterOptions = [];
+	privateRequest<[]>('getSecurityClassifications', {}).then((v: []) => {
+		filterOptions = v;
+	});
 	interface InputQuery {
 		// 'inactive': no UI shown
 		// 'initializing' setting up event handlers
@@ -31,7 +28,7 @@
 		instance: Instance;
 		requiredKeys: InstanceAttributes[] | 'any';
 		possibleKeys: InstanceAttributes[];
-		securities?: Security[];
+		securities?: Instance[];
 	}
 
 	const inactiveInputQuery: InputQuery = {
@@ -50,17 +47,13 @@
 		optionalKeys: InstanceAttributes[] | 'any',
 		instance: Instance = {}
 	): Promise<Instance> {
-		let possibleKeys: InstanceAttributes;
+		let possibleKeys: InstanceAttributes[];
 		if (optionalKeys === 'any') {
-			possibleKeys = allKeys;
+			possibleKeys = [...allKeys];
 		} else {
-			possibleKeys = Array.from(new Set([...requiredKeys, ...optionalKeys]));
-			for (let i = 0; i < possibleKeys.length(); i++) {
-				const key = possibleKeys[i];
-				if (!allKeys.includes(key)) {
-					return Promise.reject(`invalid key ${key}`);
-				}
-			}
+			possibleKeys = Array.from(
+				new Set([...requiredKeys, ...optionalKeys])
+			) as InstanceAttributes[];
 		}
 		await tick();
 		if (get(inputQuery).status === 'inactive') {
@@ -110,15 +103,35 @@
 
 	async function validateInput(inputString: string, inputType: string): Promise<ValidateResponse> {
 		if (inputType === 'ticker') {
-			//secQueryActive = true;
 			const securities = await privateRequest<Security[]>('getSecuritiesFromTicker', {
 				ticker: inputString
 			});
-			//secQueryActive = false;
+            console.log(securities)
+
 			if (Array.isArray(securities) && securities.length > 0) {
+				// Fetch details for each security
+				const securitiesWithDetails = await Promise.all(
+					securities.map(async (security) => {
+						try {
+							const details = await privateRequest<Security>('getTickerDetails', {
+								securityId: security.securityId,
+								ticker: security.ticker,
+                                timestamp: security.timestamp,
+							}).catch((v) => {});
+							return {
+								...security,
+								...details
+							};
+						} catch {
+							//console.error('Error fetching ticker details:', error);
+							return security;
+						}
+					})
+				);
+
 				return {
-					inputValid: securities.some((v: Security) => v.ticker === inputString),
-					securities: securities
+					inputValid: securitiesWithDetails.some((v) => v.ticker === inputString),
+					securities: securitiesWithDetails
 				};
 			} else {
 				return { inputValid: false, securities: [] };
@@ -131,7 +144,7 @@
 			for (const format of formats) {
 				try {
 					const parsedDate = parse(inputString, format, new Date());
-					if (parsedDate != 'Invalid Date') {
+					if (!isNaN(parsedDate.getTime())) {
 						return { inputValid: true, securities: [] };
 					}
 				} catch {
@@ -214,23 +227,30 @@
 			if (iQ.inputString !== '') {
 				if (iQ.possibleKeys.includes('ticker') && /^[A-Z]$/.test(iQ.inputString)) {
 					iQ.inputType = 'ticker';
-				} else if (iQ.possibleKeys.includes('timesframe') && /^\d+(\.\d+)?$/.test(iQ.inputString) && (/^\d{1,3}$/.test(iQ.inputString)) {
-                    iQ.inputType = 'timeframe';
-                    iQ.securities = [];
-                } else if (iQ.possibleKeys.includes('price') && /^\d+(\.\d+)?$/.test(iQ.inputString)){
-                    iQ.inputType = 'price';
-                    iQ.securities = [];
-				} else if (iQ.possibleKeys.includes('timeframe') && /^\d{1,2}(?:[hdwmqs])?$/.test(iQ.inputString)) {
+				} else if (
+					iQ.possibleKeys.includes('timeframe') &&
+					/^\d+(\.\d+)?$/.test(iQ.inputString) &&
+					/^\d{1,3}$/.test(iQ.inputString)
+				) {
+					iQ.inputType = 'timeframe';
+					iQ.securities = [];
+				} else if (iQ.possibleKeys.includes('price') && /^\d+(\.\d+)?$/.test(iQ.inputString)) {
+					iQ.inputType = 'price';
+					iQ.securities = [];
+				} else if (
+					iQ.possibleKeys.includes('timeframe') &&
+					/^\d{1,2}(?:[hdwmqs])?$/.test(iQ.inputString)
+				) {
 					iQ.inputType = 'timeframe';
 					iQ.securities = [];
 				} else if (iQ.possibleKeys.includes('timestamp') && /^\d{3}?.*$/.test(iQ.inputString)) {
 					iQ.inputType = 'timestamp';
 					iQ.securities = [];
-				} else if(iQ.possibleKeys.includes('ticker')){
+				} else if (iQ.possibleKeys.includes('ticker')) {
 					iQ.inputType = 'ticker';
-				}else{
-                    iQ.inputType = '';
-                }
+				} else {
+					iQ.inputType = '';
+				}
 			} else {
 				iQ.inputType = '';
 			}
@@ -243,6 +263,7 @@
 
 			// Validate asynchronously, and then update the store.
 			validateInput(iQ.inputString, iQ.inputType).then((validationResp: ValidateResponse) => {
+                console.log(validationResp)
 				inputQuery.update((v: InputQuery) => ({
 					...v,
 					//inputString: iQ.inputString,
@@ -261,9 +282,9 @@
 	// Instead of repeatedly adding/removing listeners in the store subscription,
 	// we add the keydown listener once on mount and remove it on destroy.
 	let unsubscribe: () => void;
-    const keydownHandler = (event: KeyboardEvent) => {
-        handleKeyDown(event);
-    };
+	const keydownHandler = (event: KeyboardEvent) => {
+		handleKeyDown(event);
+	};
 	onMount(() => {
 		prevFocusedElement = document.activeElement as HTMLElement;
 		document.addEventListener('keydown', keydownHandler);
@@ -283,6 +304,17 @@
 				}
 			}
 		});
+
+		type SecurityClassifications = {
+			sectors: string[];
+			industries: string[];
+		};
+		privateRequest<SecurityClassifications>('getSecurityClassifications', {}, true).then(
+			(classifications: SecurityClassifications) => {
+				sectors = classifications.sectors;
+				industries = classifications.industries;
+			}
+		);
 	});
 	onDestroy(() => {
 		try {
@@ -296,69 +328,119 @@
 	function displayValue(q: InputQuery, key: string): string {
 		if (key === q.inputType) {
 			return q.inputString;
-		} else if (q.instance[key] !== undefined) {
+		} else if (key in q.instance) {
 			if (key === 'timestamp') {
-				return UTCTimestampToESTString(q.instance.timestamp);
+				return UTCTimestampToESTString(q.instance.timestamp ?? 0);
 			} else if (key === 'extendedHours') {
 				return q.instance.extendedHours ? 'True' : 'False';
 			} else if (key === 'price') {
 				return '$' + String(q.instance.price);
 			} else {
-				return q.instance[key];
+				return String(q.instance[key as keyof Instance]);
 			}
 		}
 		return '';
 	}
+
+	function closeWindow() {
+		inputQuery.update((v) => ({ ...v, status: 'cancelled' }));
+	}
+
+	let sectors: string[] = [];
+	let industries: string[] = [];
+    function capitalize(str, lower = false){
+      return (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, match => match.toUpperCase())
+    }
 </script>
 
 {#if $inputQuery.status === 'active' || $inputQuery.status === 'initializing'}
 	<div class="popup-container" id="input-window" tabindex="-1">
+		<div class="header">
+			<div class="title">{capitalize($inputQuery.inputType)} Input</div>
+			<button class="close-button" on:click={closeWindow}>×</button>
+		</div>
+
+		<div class="search-bar">
+			<input type="text" placeholder="Search symbol" value={$inputQuery.inputString} readonly />
+		</div>
 		<div class="content-container">
 			{#if $inputQuery.instance && Object.keys($inputQuery.instance).length > 0}
-				{#each $inputQuery.possibleKeys as key}
-					<div class="span-container">
-						<span
-							class={$inputQuery.requiredKeys !== 'any' &&
-							$inputQuery.requiredKeys.includes(key) &&
-							!$inputQuery.instance[key]
-								? 'red'
-								: ''}
-						>
-							{key}
-						</span>
-						<span
-							class={key === $inputQuery.inputType ? ($inputQuery.inputValid ? 'blue' : 'red') : ''}
-						>
-							{displayValue($inputQuery, key)}
-						</span>
-					</div>
-				{/each}
+                        {#if $inputQuery.inputType === ''}
+       <div class="span-container">
+  {#each $inputQuery.possibleKeys as key}
+    <div class="span-row">
+      <span
+        class={
+          $inputQuery.requiredKeys !== 'any' &&
+          $inputQuery.requiredKeys.includes(key) &&
+          !$inputQuery.instance[key]
+            ? 'red'
+            : ''
+        }
+      >
+        {key}
+      </span>
+      <span>
+        {displayValue($inputQuery, key)}
+      </span>
+    </div>
+  {/each}
+</div>
+                        {:else if $inputQuery.inputType === "ticker"}
+                            <div class="table-container">
+                                {#if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
+                                    <table>
+                                        <!--<thead>
+                        <tr>
+
+                            <th>Ticker</th>const capitalize = (str, lower = false) =>
+  (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, match => match.toUpperCase());
+;
+                            <th>Delist Date</th>
+                        </tr>const capitalize = (str, lower = false) =>
+  (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, match => match.toUpperCase());
+;
+                    </thead>-->
+                                        <tbody>
+                                            {#each $inputQuery.securities as sec, i}
+                                                <tr
+                                                    on:click={() => {
+                                                        inputQuery.set(enterInput(get(inputQuery), i));
+                                                    }}
+                                                >
+                                                    <td>{sec.ticker}</td>
+                                                    <td>{sec.maxDate === null ? 'Current' : sec.maxDate}</td>
+                                                    <td>
+                                                        <div style="background-color: transparent; width: 100px; height: 30px; display: flex; align-items: center; justify-content: center;">
+                                                            {#if sec.logo}
+                                                                <img 
+                                                                    src={`data:image/svg+xml;base64,${sec.logo}`} 
+                                                                    alt="Security Image" 
+                                                                    style="max-width: 100%; max-height: 100%; object-fit: contain;" 
+                                                                />
+                                                            {/if}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            {/each}
+                                        </tbody>
+                                    </table>
+                                {/if}
+                            </div>
+                        {/if}
 			{/if}
-			<div class="table-container">
-				{#if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
-					<table>
-						<thead>
-							<tr>
-								<th>Ticker</th>
-								<th>Delist Date</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each $inputQuery.securities as sec, i}
-								<tr
-									on:click={() => {
-										inputQuery.set(enterInput(get(inputQuery), i));
-									}}
-								>
-									<td>{sec.ticker}</td>
-									<td>{sec.maxDate === null ? 'Current' : sec.maxDate}</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				{/if}
-			</div>
 		</div>
+		<!-- TODO!<div class="filters">
+            {#each [...filterOptions.industries, ...filterOptions.sectors] as item}
+				<button
+					class="filter-bubble"
+					class:active={selectedFilter === item}
+					on:click={() => (selectedFilter = item)}
+				>
+                {item}
+				</button>
+			{/each}
+		</div>-->
 	</div>
 {/if}
 <input
@@ -370,7 +452,216 @@
 
 <style>
 	.popup-container {
-		width: 400px;
-		height: 500px;
+		width: 700px;
+		height: 600px;
+		background: var(--c2);
+		border: 1px solid var(--c4);
+		border-radius: 8px;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+	}
+    .span-container {
+        display: felx;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .span-container span{
+        align-items: top;
+        display: block;
+        flex-direction: row;
+        width: 100%;
+        font-size:30px;
+    }
+    .span-row {
+  /* Each row is a flex container, left label and right value */
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  /* optionally align items on the baseline or center */
+  align-items: baseline;
+}
+
+.span-row span {
+  /* Let it inherit the global font instead of forcing a size */
+  font-size: inherit; 
+}
+
+	.header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 8px 12px;
+
+		border-bottom: 1px solid var(--c4);
+		height: 40px;
+	}
+
+	.title {
+		font-size: 16px;
+		font-weight: 500;
+		color: #fff;
+	}
+
+	.close-button {
+		background: none;
+		border: none;
+		color: #666;
+		font-size: 20px;
+		cursor: pointer;
+		padding: 0 5px;
+	}
+
+	.close-button:hover {
+		color: #fff;
+	}
+
+	.search-bar {
+		padding: 8px 12px;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		border-bottom: 1px solid var(--c4);
+		height: 48px;
+	}
+
+	.search-bar input {
+		flex: 1;
+		background: #2d2d2d;
+		border: 1px solid #444;
+		padding: 6px 10px;
+		color: #fff;
+		border-radius: 4px;
+	}
+
+	.search-icon {
+		color: #666;
+	}
+
+	.filters {
+		padding: 4px 8px;
+		display: flex;
+		gap: 4px;
+		flex-wrap: wrap;
+		border-bottom: 1px solid var(--c4);
+		height: auto;
+		max-height: 80px;
+		overflow-y: auto;
+	}
+
+	.filter-bubble {
+		background: transparent;
+		border: 1px solid #444;
+		color: #888;
+		padding: 2px 8px;
+		border-radius: 8px;
+		font-size: 10px;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.filter-bubble.active {
+		background: #2962ff;
+		border-color: #2962ff;
+		color: white;
+	}
+
+	.results {
+		padding: 0;
+		flex: 1;
+		overflow-y: auto;
+	}
+
+	.securities-list {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.security-item {
+		display: flex;
+		align-items: center;
+		padding: 8px 12px;
+		cursor: pointer;
+		border-bottom: 1px solid var(--c4);
+		height: 40px;
+	}
+
+	.security-item:hover {
+		background: #2d2d2d;
+	}
+
+	.security-icon {
+		margin-right: 12px;
+		width: 24px;
+		height: 24px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.security-icon img {
+		width: 28px;
+		height: 28px;
+		object-fit: contain;
+	}
+
+	.security-info {
+		flex: 1;
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.security-main {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex: 1;
+	}
+
+	.ticker {
+		font-weight: 600;
+		color: var(--f1);
+		min-width: 60px;
+		font-size: 0.9em;
+	}
+
+	.name {
+		color: var(--f2);
+		font-size: 0.85em;
+		flex: 1;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.security-details {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex: 1;
+		color: var(--f2);
+		font-size: 0.8em;
+		margin-left: auto;
+	}
+
+	.sector {
+		color: var(--f2);
+		font-size: 0.8em;
+		margin-right: 8px;
+	}
+
+	.exchange {
+		color: var(--f2);
+		font-size: 0.8em;
+		min-width: 50px;
+	}
+
+	.date {
+		color: var(--f2);
+		font-size: 0.8em;
+		min-width: 70px;
 	}
 </style>
