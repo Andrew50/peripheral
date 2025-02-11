@@ -14,21 +14,6 @@
 	let isDragging = false;
 	let container: HTMLDivElement;
 
-	interface TickerDetails {
-		ticker: string;
-		name: string;
-		market: string;
-		locale: string;
-		primary_exchange: string;
-		active: boolean;
-		market_cap: number;
-		description: string;
-		logo: string;
-		share_class_shares_outstanding: number;
-		industry: string;
-		sector: string;
-	}
-
 	let tickerDetails: TickerDetails | null = null;
 
 	onMount(() => {

@@ -140,7 +140,7 @@ type GetSecurityFromTickerArgs struct {
 type GetSecurityFromTickerResults struct {
 	SecurityId int        `json:"securityId"`
 	Ticker     string     `json:"ticker"`
-	MaxDate    *time.Time `json:"maxDate"`
+	Timestamp    *time.Time `json:"timestamp"`
 }
 
 func GetSecuritiesFromTicker(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -151,18 +151,34 @@ func GetSecuritiesFromTicker(conn *utils.Conn, userId int, rawArgs json.RawMessa
 
 	// Clean and prepare the search query
 	query := strings.ToUpper(strings.TrimSpace(args.Ticker))
-	
-	// Modified query to include fuzzy matching, removed COALESCE(name, '') since name column doesn't exist
+
+	// Modified query to prioritize exact matches and then show fuzzy matches
 	sqlQuery := `
-	SELECT DISTINCT ON (s.ticker) securityId, ticker, maxDate
-	FROM securities s
-	WHERE (
-		ticker LIKE $1 || '%' OR 
-		ticker LIKE '%' || $1 || '%' OR
-		similarity(ticker, $1) > 0.3
+	WITH ranked_results AS (
+		SELECT DISTINCT ON (s.ticker) 
+			securityId, 
+			ticker, 
+			maxDate,
+			CASE 
+				WHEN UPPER(ticker) = UPPER($1) THEN 1
+				WHEN UPPER(ticker) LIKE UPPER($1) || '%' THEN 2
+				WHEN UPPER(ticker) LIKE '%' || UPPER($1) || '%' THEN 3
+				ELSE 4
+			END as match_type,
+			similarity(UPPER(ticker), UPPER($1)) as sim_score
+		FROM securities s
+		WHERE (
+			UPPER(ticker) = UPPER($1) OR
+			UPPER(ticker) LIKE UPPER($1) || '%' OR 
+			UPPER(ticker) LIKE '%' || UPPER($1) || '%' OR
+			similarity(UPPER(ticker), UPPER($1)) > 0.3
+		)
+		ORDER BY ticker, maxDate DESC NULLS FIRST
 	)
-	ORDER BY ticker, maxDate DESC NULLS FIRST
-	LIMIT 20
+	SELECT securityId, ticker, maxDate
+	FROM ranked_results
+	ORDER BY match_type, sim_score DESC
+	LIMIT 10
 	`
 
 	rows, err := conn.DB.Query(context.Background(), sqlQuery, query)
@@ -173,7 +189,7 @@ func GetSecuritiesFromTicker(conn *utils.Conn, userId int, rawArgs json.RawMessa
 	var securities []GetSecurityFromTickerResults
 	for rows.Next() {
 		var security GetSecurityFromTickerResults
-		if err := rows.Scan(&security.SecurityId, &security.Ticker, &security.MaxDate); err != nil {
+		if err := rows.Scan(&security.SecurityId, &security.Ticker, &security.Timestamp); err != nil {
 			return nil, err
 		}
 		securities = append(securities, security)
@@ -241,21 +257,24 @@ func GetSimilarInstances(conn *utils.Conn, userId int, rawArgs json.RawMessage) 
 
 type GetTickerDetailsArgs struct {
 	SecurityId int `json:"securityId"`
+    Ticker string `json:"ticker"`
+    Timestamp int64 `json:"timestamp"`
 }
 
 type TickerDetailsResponse struct {
-	Ticker                      string  `json:"ticker"`
-	Name                        string  `json:"name"`
-	Market                      string  `json:"market"`
-	Locale                      string  `json:"locale"`
-	PrimaryExchange             string  `json:"primary_exchange"`
-	Active                      bool    `json:"active"`
-	MarketCap                   float64 `json:"market_cap"`
-	Description                 string  `json:"description"`
-	Logo                        string  `json:"logo"`
-	ShareClassSharesOutstanding int64   `json:"share_class_shares_outstanding"`
-	Industry                    string  `json:"industry"`
-	Sector                      string  `json:"sector"`
+	Ticker          string  `json:"ticker"`
+	Name            string  `json:"name"`
+	Market          string  `json:"market"`
+	Locale          string  `json:"locale"`
+	PrimaryExchange string  `json:"primary_exchange"`
+	Active          bool    `json:"active"`
+	MarketCap       float64 `json:"market_cap"`
+	Description     string  `json:"description"`
+	Logo            string  `json:"logo"`
+	//	Icon                        string  `json:"icon"`
+	ShareClassSharesOutstanding int64  `json:"share_class_shares_outstanding"`
+	Industry                    string `json:"industry"`
+	Sector                      string `json:"sector"`
 }
 
 func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -263,14 +282,16 @@ func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
+    tim := time.UnixMilli(args.Timestamp)
 
-	ticker, err := utils.GetTicker(conn, args.SecurityId, time.Now())
+	ticker, err := utils.GetTicker(conn, args.SecurityId, tim)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get ticker: %v", err)
+        return nil, fmt.Errorf("failed to get ticker: %s: %v",args.Ticker, err)
 	}
 	details, err := utils.GetTickerDetails(conn.Polygon, ticker, "now")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ticker details: %v", err)
+		fmt.Println("failed to get ticker details: %v", err)
 	}
 
 	var sector, industry string
@@ -280,35 +301,45 @@ func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 		return nil, fmt.Errorf("01if0d %v", err)
 	}
 
-	// Fetch the logo image if URL exists
-	var logoBase64 string
-	if details.Branding.LogoURL != "" {
-		// Create HTTP client
-		client := &http.Client{}
+	// Helper function to fetch and encode image data
+	fetchImage := func(url string) (string, error) {
+		if url == "" {
+			return "", nil
+		}
 
-		// Create request with API key
-		req, err := http.NewRequest("GET", details.Branding.LogoURL, nil)
+		client := &http.Client{}
+		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create request for logo: %v", err)
+			return "", fmt.Errorf("failed to create request: %v", err)
 		}
 		req.Header.Add("Authorization", "Bearer "+conn.PolygonKey)
 
-		// Make the request
 		resp, err := client.Do(req)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetch logo: %v", err)
+			return "", fmt.Errorf("failed to fetch image: %v", err)
 		}
 		defer resp.Body.Close()
 
-		// Read the image data
 		imageData, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read logo data: %v", err)
+			return "", fmt.Errorf("failed to read image data: %v", err)
 		}
 
-		// Convert to base64
-		logoBase64 = base64.StdEncoding.EncodeToString(imageData)
+		return base64.StdEncoding.EncodeToString(imageData), nil
 	}
+
+	// Fetch both logo and icon
+
+	logoBase64, err := fetchImage(details.Branding.LogoURL)
+	/*
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch logo: %v", err)	const defaultIcons = {
+			stock: '<svg>...</svg>', // Add your default SVG content
+			fund: '<svg>...</svg>',
+			futures: '<svg>...</svg>',
+			forex: '<svg>...</svg>',
+			indices: '<svg>...</svg>'
+		} as const;*/
 
 	response := TickerDetailsResponse{
 		Ticker:                      details.Ticker,
@@ -321,9 +352,79 @@ func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 		Description:                 details.Description,
 		ShareClassSharesOutstanding: details.ShareClassSharesOutstanding,
 		Logo:                        logoBase64,
-		Sector:                      sector,
-		Industry:                    industry,
+		//Icon:                        iconBase64,
+		Sector:   sector,
+		Industry: industry,
 	}
 
 	return response, nil
+}
+
+type GetSecurityClassificationsResults struct {
+	Sectors    []string `json:"sectors"`
+	Industries []string `json:"industries"`
+}
+
+func GetSecurityClassifications(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	// Query to get unique sectors, excluding NULL values and empty strings
+	sectorQuery := `
+		SELECT DISTINCT sector 
+		FROM securities 
+		WHERE sector IS NOT NULL 
+		AND sector != '' 
+		AND maxDate IS NULL 
+		ORDER BY sector
+	`
+
+	industryQuery := `
+		SELECT DISTINCT industry 
+		FROM securities 
+		WHERE industry IS NOT NULL 
+		AND industry != '' 
+		AND maxDate IS NULL 
+		ORDER BY industry
+	`
+
+	sectorRows, err := conn.DB.Query(context.Background(), sectorQuery)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query sectors: %v", err)
+	}
+	defer sectorRows.Close()
+
+	var sectors []string
+	for sectorRows.Next() {
+		var sector string
+		if err := sectorRows.Scan(&sector); err != nil {
+			return nil, fmt.Errorf("failed to scan sector: %v", err)
+		}
+		sectors = append(sectors, sector)
+	}
+
+	if err := sectorRows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over sectors: %v", err)
+	}
+
+	industryRows, err := conn.DB.Query(context.Background(), industryQuery)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query industries: %v", err)
+	}
+	defer industryRows.Close()
+
+	var industries []string
+	for industryRows.Next() {
+		var industry string
+		if err := industryRows.Scan(&industry); err != nil {
+			return nil, fmt.Errorf("failed to scan industry: %v", err)
+		}
+		industries = append(industries, industry)
+	}
+
+	if err := industryRows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over industries: %v", err)
+	}
+
+	return GetSecurityClassificationsResults{
+		Sectors:    sectors,
+		Industries: industries,
+	}, nil
 }
