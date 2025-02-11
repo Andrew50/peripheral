@@ -106,7 +106,7 @@
 			const securities = await privateRequest<Security[]>('getSecuritiesFromTicker', {
 				ticker: inputString
 			});
-            console.log(securities)
+			console.log(securities);
 
 			if (Array.isArray(securities) && securities.length > 0) {
 				// Fetch details for each security
@@ -116,7 +116,7 @@
 							const details = await privateRequest<Security>('getTickerDetails', {
 								securityId: security.securityId,
 								ticker: security.ticker,
-                                timestamp: security.timestamp,
+								timestamp: security.timestamp
 							}).catch((v) => {});
 							return {
 								...security,
@@ -263,7 +263,7 @@
 
 			// Validate asynchronously, and then update the store.
 			validateInput(iQ.inputString, iQ.inputType).then((validationResp: ValidateResponse) => {
-                console.log(validationResp)
+				console.log(validationResp);
 				inputQuery.update((v: InputQuery) => ({
 					...v,
 					//inputString: iQ.inputString,
@@ -348,9 +348,11 @@
 
 	let sectors: string[] = [];
 	let industries: string[] = [];
-    function capitalize(str, lower = false){
-      return (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, match => match.toUpperCase())
-    }
+	function capitalize(str, lower = false) {
+		return (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, (match) =>
+			match.toUpperCase()
+		);
+	}
 </script>
 
 {#if $inputQuery.status === 'active' || $inputQuery.status === 'initializing'}
@@ -365,32 +367,30 @@
 		</div>
 		<div class="content-container">
 			{#if $inputQuery.instance && Object.keys($inputQuery.instance).length > 0}
-                        {#if $inputQuery.inputType === ''}
-       <div class="span-container">
-  {#each $inputQuery.possibleKeys as key}
-    <div class="span-row">
-      <span
-        class={
-          $inputQuery.requiredKeys !== 'any' &&
-          $inputQuery.requiredKeys.includes(key) &&
-          !$inputQuery.instance[key]
-            ? 'red'
-            : ''
-        }
-      >
-        {key}
-      </span>
-      <span>
-        {displayValue($inputQuery, key)}
-      </span>
-    </div>
-  {/each}
-</div>
-                        {:else if $inputQuery.inputType === "ticker"}
-                            <div class="table-container">
-                                {#if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
-                                    <table>
-                                        <!--<thead>
+				{#if $inputQuery.inputType === ''}
+					<div class="span-container">
+						{#each $inputQuery.possibleKeys as key}
+							<div class="span-row">
+								<span
+									class={$inputQuery.requiredKeys !== 'any' &&
+									$inputQuery.requiredKeys.includes(key) &&
+									!$inputQuery.instance[key]
+										? 'red'
+										: ''}
+								>
+									{key}
+								</span>
+								<span>
+									{displayValue($inputQuery, key)}
+								</span>
+							</div>
+						{/each}
+					</div>
+				{:else if $inputQuery.inputType === 'ticker'}
+					<div class="table-container">
+						{#if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
+							<table>
+								<!--<thead>
                         <tr>
 
                             <th>Ticker</th>const capitalize = (str, lower = false) =>
@@ -401,33 +401,35 @@
   (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, match => match.toUpperCase());
 ;
                     </thead>-->
-                                        <tbody>
-                                            {#each $inputQuery.securities as sec, i}
-                                                <tr
-                                                    on:click={() => {
-                                                        inputQuery.set(enterInput(get(inputQuery), i));
-                                                    }}
-                                                >
-                                                    <td>{sec.ticker}</td>
-                                                    <td>{sec.maxDate === null ? 'Current' : sec.maxDate}</td>
-                                                    <td>
-                                                        <div style="background-color: transparent; width: 100px; height: 30px; display: flex; align-items: center; justify-content: center;">
-                                                            {#if sec.logo}
-                                                                <img 
-                                                                    src={`data:image/svg+xml;base64,${sec.logo}`} 
-                                                                    alt="Security Image" 
-                                                                    style="max-width: 100%; max-height: 100%; object-fit: contain;" 
-                                                                />
-                                                            {/if}
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            {/each}
-                                        </tbody>
-                                    </table>
-                                {/if}
-                            </div>
-                        {/if}
+								<tbody>
+									{#each $inputQuery.securities as sec, i}
+										<tr
+											on:click={() => {
+												inputQuery.set(enterInput(get(inputQuery), i));
+											}}
+										>
+											<td>{sec.ticker}</td>
+											<td>{sec.maxDate === null ? 'Current' : sec.maxDate}</td>
+											<td>
+												<div
+													style="background-color: transparent; width: 100px; height: 30px; display: flex; align-items: center; justify-content: center;"
+												>
+													{#if sec.logo}
+														<img
+															src={`data:image/svg+xml;base64,${sec.logo}`}
+															alt="Security Image"
+															style="max-width: 100%; max-height: 100%; object-fit: contain;"
+														/>
+													{/if}
+												</div>
+											</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						{/if}
+					</div>
+				{/if}
 			{/if}
 		</div>
 		<!-- TODO!<div class="filters">
@@ -462,31 +464,31 @@
 		overflow: hidden;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 	}
-    .span-container {
-        display: felx;
-        flex-direction: column;
-        gap: 8px;
-    }
-    .span-container span{
-        align-items: top;
-        display: block;
-        flex-direction: row;
-        width: 100%;
-        font-size:30px;
-    }
-    .span-row {
-  /* Each row is a flex container, left label and right value */
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  /* optionally align items on the baseline or center */
-  align-items: baseline;
-}
+	.span-container {
+		display: felx;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.span-container span {
+		align-items: top;
+		display: block;
+		flex-direction: row;
+		width: 100%;
+		font-size: 30px;
+	}
+	.span-row {
+		/* Each row is a flex container, left label and right value */
+		display: flex;
+		flex-direction: row;
+		justify-content: space-between;
+		/* optionally align items on the baseline or center */
+		align-items: baseline;
+	}
 
-.span-row span {
-  /* Let it inherit the global font instead of forcing a size */
-  font-size: inherit; 
-}
+	.span-row span {
+		/* Let it inherit the global font instead of forcing a size */
+		font-size: inherit;
+	}
 
 	.header {
 		display: flex;

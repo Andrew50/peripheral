@@ -26,6 +26,7 @@
 		CandlestickSeriesOptions,
 		DeepPartial,
 		CandlestickStyleOptions,
+		CustomSeriesOptions,
 		SeriesOptionsCommon,
 		UTCTimestamp,
 		HistogramStyleOptions,
@@ -45,6 +46,7 @@
 		getRealTimeTime
 	} from '$lib/core/timestamp';
 	import { addStream } from '$lib/utils/stream/interface';
+	import { ArrowMarkersPaneView, type ArrowMarker } from './arrowMarkers';
 	let bidLine: any;
 	let askLine: any;
 	let currentBarTimestamp: number;
@@ -163,6 +165,8 @@
 	// Add new property to track alert lines
 	let alertLines: AlertLine[] = [];
 
+	let arrowSeries: any = null;  // Initialize as null
+
 	function extendedHours(timestamp: number): boolean {
 		const date = new Date(timestamp);
 		const hours = date.getHours();
@@ -180,6 +184,7 @@
 		if (inst.requestType === 'loadNewTicker') {
 			bidLine.setData([]);
 			askLine.setData([]);
+			arrowSeries.setData([]);
 		}
 		if (isLoadingChartData || !inst.ticker || !inst.timeframe || !inst.securityId) {
 			return;
@@ -276,6 +281,7 @@
 						}
 					});
 				}
+
 				// Check if we reach end of avaliable data
 				if (inst.timestamp == 0) {
 					chartLatestDataReached = true;
@@ -298,8 +304,61 @@
 					} else if (inst.direction == 'backward') {
 						chartCandleSeries.setData(newCandleData);
 						chartVolumeSeries.setData(newVolumeData);
+						if (arrowSeries && ('entries' in inst || 'exits' in inst)) {
+							const markersByTime = new Map<number, {
+								entries: Array<{ price: number; isLong: boolean }>,
+								exits: Array<{ price: number; isLong: boolean }>
+							}>();
+							
+							// Group entries by rounded time
+							if ('entries' in inst) {
+								inst.entries.forEach(entry => {
+									const entryTime = UTCSecondstoESTSeconds(entry.time / 1000);
+									const roundedTime = Math.floor(entryTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+									
+									if (!markersByTime.has(roundedTime)) {
+										markersByTime.set(roundedTime, { entries: [], exits: [] });
+									}
+									
+									markersByTime.get(roundedTime)?.entries.push({
+										price: entry.price,
+										isLong: inst.trade_direction === 'Long'  // Assuming 'BUY' indicates long
+									});
+								});
+							}
+							
+							// Group exits by rounded time
+							if ('exits' in inst) {
+								inst.exits.forEach(exit => {
+									const exitTime = UTCSecondstoESTSeconds(exit.time / 1000);
+									const roundedTime = Math.floor(exitTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+									
+									if (!markersByTime.has(roundedTime)) {
+										markersByTime.set(roundedTime, { entries: [], exits: [] });
+									}
+									
+									markersByTime.get(roundedTime)?.exits.push({
+										price: exit.price,
+										isLong: inst.trade_direction === 'Long'  // Assuming 'BUY' indicates long
+									});
+								});
+							}
+							
+							// Convert to format for ArrowMarkersPaneView
+							const markers = Array.from(markersByTime.entries()).map(([time, data]) => ({
+								time: time as UTCTimestamp,
+								entries: data.entries,
+								exits: data.exits
+							}));
+							
+							console.log(markers);
+						
+							arrowSeries.setData(markers);
+						}
+						
 					}
 					queuedLoad = null;
+					
 					sma10Series.setData(calculateSMA(newCandleData, 10));
 					sma20Series.setData(calculateSMA(newCandleData, 20));
 					if (/^\d+$/.test(inst.timeframe ?? '')) {
@@ -769,6 +828,10 @@
 			chartCandleSeries.removePriceLine(line.line);
 		});
 		alertLines = [];
+
+		if(arrowSeries) {
+			arrowSeries.setData([]);
+		}
 	}
 
 	chartQueryDispatcher.subscribe((req: ChartQueryDispatch) => {
@@ -827,7 +890,7 @@
 		chartContainer.addEventListener('contextmenu', (event: MouseEvent) => {
 			event.preventDefault();
 			const timestamp = ESTSecondstoUTCMillis(latestCrosshairPositionTime);
-			const price = chartCandleSeries.coordinateToPrice(event.clientY) || 0;
+			const price = Math.round(chartCandleSeries.coordinateToPrice(event.clientY) * 100) / 100 || 0;
 			const ins: Instance = { ...currentChartInstance, timestamp: timestamp, price: price };
 			queryInstanceRightClick(event, ins, 'chart');
 		});
@@ -859,7 +922,7 @@
 				if ($streamInfo.replayActive) {
 					currentChartInstance.timestamp = 0;
 				}
-				queryInstanceInput('any','any', currentChartInstance)
+				queryInstanceInput('any', 'any', currentChartInstance)
 					.then((v: Instance) => {
 						currentChartInstance = v;
 						queryChart(v, true);
@@ -919,6 +982,7 @@
 			lastValueVisible: true, // Shows the price on the right
 			priceLineVisible: false
 		});
+		arrowSeries = chart.addCustomSeries<ArrowMarker, CustomSeriesOptions>(new ArrowMarkersPaneView(),{});
 
 		chart.subscribeCrosshairMove((param) => {
 			if (!chartCandleSeries.data().length || !param.point || !currentChartInstance.securityId) {

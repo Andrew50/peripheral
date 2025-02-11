@@ -4,14 +4,20 @@
     import type { Instance } from '$lib/core/types';
     import List from '$lib/utils/modules/list.svelte';
     import { writable } from 'svelte/store';
+    import { UTCTimestampToESTString } from '$lib/core/timestamp';
 
     let files: FileList;
     let uploading = false;
     let message = '';
     let trades = writable<Trade[]>([]);
 
+    // Add filter states
+    let sortDirection = "desc";
+    let selectedDate = "";
+    let selectedHour: number | "" = "";
+
     interface Trade extends Instance {
-        direction: string;
+        trade_direction: string;
         status: string;
         openQuantity: number;
         closedPnL: number | null;
@@ -43,7 +49,18 @@
 
     async function pullTrades() {
         try {
-            const result = await queueRequest<Trade[]>('grab_user_trades', {});
+            console.log("pulling trades");
+            const params: any = { sort: sortDirection };
+            
+            if (selectedDate) {
+                params.date = selectedDate;
+            }
+            
+            if (selectedHour !== "") {
+                params.hour = selectedHour;
+            }
+
+            const result = await queueRequest<Trade[]>('grab_user_trades', params);
             trades.set(result);
             console.log(result);
             message = 'Trades loaded successfully';
@@ -52,6 +69,12 @@
             console.error('Load trades error:', error);
         }
     }
+
+    // Generate hours array for the select dropdown
+    const hours = Array.from({ length: 24 }, (_, i) => ({
+        value: i,
+        label: `${i.toString().padStart(2, '0')}:00`
+    }));
 </script>
 
 <div class="account-container">
@@ -69,8 +92,30 @@
         >
             Upload
         </button>
-        <button on:click={pullTrades}>Pull Trades</button>
     </div>
+
+    <div class="filters-section">
+        <select bind:value={sortDirection} on:change={pullTrades}>
+            <option value="desc">Newest First</option>
+            <option value="asc">Oldest First</option>
+        </select>
+
+        <input 
+            type="date" 
+            bind:value={selectedDate}
+            on:change={pullTrades}
+        />
+
+        <select bind:value={selectedHour} on:change={pullTrades}>
+            <option value="">All Hours</option>
+            {#each hours as hour}
+                <option value={hour.value}>{hour.label}</option>
+            {/each}
+        </select>
+
+        <button on:click={pullTrades}>Refresh Trades</button>
+    </div>
+
     {#if message}
         <p class="message">{message}</p>
     {/if}
@@ -79,7 +124,11 @@
 <List 
     on:contextmenu={(event) => {event.preventDefault();}} 
     list={trades} 
-    columns={["date", "ticker", "direction", "status", "openQuantity", "closedPnL"]}
+    columns={["timestamp", "ticker", "trade_direction", "status", "openQuantity", "closedPnL"]}
+    formatters={{
+        timestamp: (value) => value ? UTCTimestampToESTString(value) : 'N/A',
+        closedPnL: (value) => value !== null ? value.toFixed(2) : 'N/A'
+    }}
 />
 
 <style>
@@ -89,6 +138,13 @@
     }
 
     .upload-section {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .filters-section {
         display: flex;
         gap: 10px;
         align-items: center;
@@ -112,5 +168,18 @@
     .message {
         margin-top: 10px;
         color: #ddd;
+    }
+
+    select, input[type="date"] {
+        padding: 8px;
+        background-color: #333;
+        color: white;
+        border: 1px solid #444;
+        border-radius: 4px;
+    }
+
+    select option {
+        background-color: #333;
+        color: white;
     }
 </style>

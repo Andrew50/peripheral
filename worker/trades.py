@@ -5,35 +5,71 @@ from screen import getCurrentSecId
 import traceback
 from datetime import datetime
 from decimal import Decimal
+import pytz
 
 
-def grab_user_trades(conn, user_id: int):
-    """Fetch all trades for a user"""
+def grab_user_trades(conn, user_id: int, sort: str = "desc", date: str = None, hour: int = None):
+    """
+    Fetch all trades for a user with optional sorting and filtering
+    
+    Args:
+        conn: Database connection
+        user_id (int): User ID
+        sort (str): Sort direction - "asc" or "desc"
+        date (str): Optional date filter in format 'YYYY-MM-DD'
+        hour (int): Optional hour filter (0-23)
+    """
     try:
         with conn.db.cursor() as cursor:
-            cursor.execute("""
+            base_query = """
                 SELECT 
                     t.*,
                     array_length(entry_times, 1) as num_entries,
                     array_length(exit_times, 1) as num_exits
                 FROM trades t
                 WHERE t.userId = %s
-                ORDER BY t.date DESC
-            """, (user_id,))
+            """
+            params = [user_id]
+            
+            # Add date filter if provided
+            if date:
+                base_query += " AND DATE(t.entry_times[1]) = %s"
+                params.append(date)
+            
+            # Add hour filter if provided
+            if hour is not None:
+                base_query += " AND EXTRACT(HOUR FROM t.entry_times[1]) = %s"
+                params.append(hour)
+            
+            # Add sorting
+            sort_direction = "DESC" if sort.lower() == "desc" else "ASC"
+            base_query += f" ORDER BY t.entry_times[1] {sort_direction}"
+            
+            cursor.execute(base_query, tuple(params))
             
             trades = []
+            eastern = pytz.timezone('America/New_York')
+            utc = pytz.UTC
+            
             for row in cursor.fetchall():
+                # Convert EST timestamp to UTC before getting Unix timestamp
+                est_time = eastern.localize(row[9][0]) if row[9] else None
+                utc_time = est_time.astimezone(utc) if est_time else None
+                timestamp = int(utc_time.timestamp() * 1000) if utc_time else None
+                
                 trade = {
-                    'ticker': row[2],
-                    'securityId': row[3],
-                    'direction': row[4],
+                    'ticker': row[3],
+                    'securityId': row[2],
+                    'tradeStart': eastern.localize(row[9][0]).astimezone(utc).timestamp() * 1000 if row[9] else None,
+                    'timestamp': eastern.localize(row[12][-1]).astimezone(utc).timestamp() * 1000 if row[12] else (eastern.localize(row[9][0]).astimezone(utc).timestamp() * 1000 if row[9] else None),
+                    'trade_direction': row[4],
                     'date': row[5].strftime('%Y-%m-%d'),
                     'status': row[6],
                     'openQuantity': row[7],
                     'closedPnL': float(row[8]) if row[8] else None,
                     'entries': [
                         {
-                            'time': row[9][i].strftime('%Y-%m-%d %H:%M:%S'),
+                            'time': eastern.localize(row[9][i]).astimezone(utc).timestamp() * 1000,
                             'price': float(row[10][i]),
                             'shares': row[11][i]
                         }
@@ -41,7 +77,7 @@ def grab_user_trades(conn, user_id: int):
                     ],
                     'exits': [
                         {
-                            'time': row[12][i].strftime('%Y-%m-%d %H:%M:%S'),
+                            'time': eastern.localize(row[12][i]).astimezone(utc).timestamp() * 1000,
                             'price': float(row[13][i]),
                             'shares': row[14][i]
                         }
