@@ -72,10 +72,9 @@ export function initStores() {
     });
 
     function loadFlagWatchlist() {
-        privateRequest<Instance[]>("getWatchlistItems", { watchlistId: flagWatchlistId })
-            .then((v: Instance[]) => {
-                flagWatchlist = writable(v)
-            })
+        privateRequest<Instance[]>("getWatchlistItems", { watchlistId: flagWatchlistId }).then((v: Instance[]) => {
+            flagWatchlist = writable(v)
+        })
     }
     privateRequest<Watchlist[]>("getWatchlists", {})
         .then((list: Watchlist[]) => {
@@ -93,6 +92,7 @@ export function initStores() {
         })
     function updateTime() {
         streamInfo.update((v: StreamInfo) => {
+            console.log(v)
             if (v.replayActive && !v.replayPaused) {
                 const currentTime = Date.now();
                 const elapsedTime = v.lastUpdateTime ? currentTime - v.lastUpdateTime : 0;
@@ -110,6 +110,9 @@ export function initStores() {
 
 
 export function formatTimestamp(timestamp: number) {
+    if (timestamp === 0) {
+        return new Date().toLocaleDateString('en-US') + ' ' + new Date().toLocaleTimeString('en-US');
+    }
     const date = new Date(timestamp);
     return date.toLocaleDateString('en-US') + ' ' + date.toLocaleTimeString('en-US');
 }

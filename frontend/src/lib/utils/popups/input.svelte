@@ -165,8 +165,9 @@
 
 	function enterInput(iQ: InputQuery, tickerIndex: number = 0): InputQuery {
 		if (iQ.inputType === 'ticker' && Array.isArray(iQ.securities) && iQ.securities.length > 0) {
-			iQ.instance.securityId = iQ.securities[tickerIndex].securityId;
-			iQ.instance.ticker = iQ.securities[tickerIndex].ticker;
+			const ts = iQ.instance.timestamp;
+			iQ.instance = { ...iQ.instance, ...iQ.securities[tickerIndex] };
+			iQ.instance.timestamp = ts;
 		} else if (iQ.inputType === 'timeframe') {
 			iQ.instance.timeframe = iQ.inputString;
 		} else if (iQ.inputType === 'timestamp') {
@@ -232,22 +233,18 @@
 				if (iQ.possibleKeys.includes('ticker') && /^[A-Z]$/.test(iQ.inputString)) {
 					iQ.inputType = 'ticker';
 				} else if (
-					iQ.possibleKeys.includes('timeframe') &&
-					/^\d+(\.\d+)?$/.test(iQ.inputString) &&
-					/^\d{1,3}$/.test(iQ.inputString)
+					iQ.possibleKeys.includes('price') &&
+					/^(?:\d*\.\d+|\d{3,})$/.test(iQ.inputString)
 				) {
-					iQ.inputType = 'timeframe';
-					iQ.securities = [];
-				} else if (iQ.possibleKeys.includes('price') && /^\d+(\.\d+)?$/.test(iQ.inputString)) {
 					iQ.inputType = 'price';
 					iQ.securities = [];
 				} else if (
 					iQ.possibleKeys.includes('timeframe') &&
-					/^\d{1,2}(?:[hdwmqs])?$/.test(iQ.inputString)
+					/^\d{1,2}[hdwmqs]?$/i.test(iQ.inputString)
 				) {
 					iQ.inputType = 'timeframe';
 					iQ.securities = [];
-				} else if (iQ.possibleKeys.includes('timestamp') && /^\d{3}?.*$/.test(iQ.inputString)) {
+				} else if (iQ.possibleKeys.includes('timestamp') && /^[\d-]+$/.test(iQ.inputString)) {
 					iQ.inputType = 'timestamp';
 					iQ.securities = [];
 				} else if (iQ.possibleKeys.includes('ticker')) {
@@ -357,6 +354,37 @@
 			match.toUpperCase()
 		);
 	}
+
+	function formatTimeframe(timeframe: string): string {
+		const match = timeframe.match(/^(\d+)([dwmsh]?)$/i) ?? null;
+		let result = timeframe;
+		if (match) {
+			switch (match[2]) {
+				case 'd':
+					result = `${match[1]} days`;
+					break;
+				case 'w':
+					result = `${match[1]} weeks`;
+					break;
+				case 'm':
+					result = `${match[1]} months`;
+					break;
+				case 'h':
+					result = `${match[1]} hours`;
+					break;
+				case 's':
+					result = `${match[1]} seconds`;
+					break;
+				default:
+					result = `${match[1]} minutes`;
+					break;
+			}
+			if (match[1] === '1') {
+				result = result.slice(0, -1);
+			}
+		}
+		return result;
+	}
 </script>
 
 {#if $inputQuery.status === 'active' || $inputQuery.status === 'initializing'}
@@ -433,7 +461,8 @@
 												</div>
 											</td>
 											<td>{sec.ticker}</td>
-											<td>{sec.maxDate === null ? 'Current' : sec.maxDate}</td>
+											<td>{sec.name}</td>
+											<td>{UTCTimestampToESTString(sec.timestamp)}</td>
 										</tr>
 									{/each}
 								</tbody>
@@ -443,14 +472,26 @@
 				{:else if $inputQuery.inputType === 'timestamp'}
 					<div class="span-container">
 						<div class="span-row">
-							<span>{UTCTimestampToESTString($inputQuery.instance.timestamp ?? 0)}</span>
+							<span>Timestamp</span>
+							<input
+								type="datetime-local"
+								on:change={(e) => {
+									const date = new Date(e.target.value);
+									if (!isNaN(date.getTime())) {
+										$inputQuery.instance.timestamp = date.getTime();
+										$inputQuery.inputValid = true;
+									} else {
+										$inputQuery.inputValid = false;
+									}
+								}}
+							/>
 						</div>
 					</div>
 				{:else if $inputQuery.inputType === 'timeframe'}
 					<div class="span-container">
 						<div class="span-row">
 							<span>Timeframe</span>
-							<span>{$inputQuery.instance.timeframe}</span>
+							<span>{formatTimeframe($inputQuery.inputString)}</span>
 						</div>
 					</div>
 				{:else if $inputQuery.inputType === 'extendedHours'}
@@ -460,13 +501,7 @@
 							<span>{$inputQuery.instance.extendedHours ? 'True' : 'False'}</span>
 						</div>
 					</div>
-				{:else if $inputQuery.inputType === 'price'}
-					<div class="span-container">
-						<div class="span-row">
-							<span>Price</span>
-							<span>${$inputQuery.instance.price}</span>
-						</div>
-					</div>
+					0
 				{/if}
 			{/if}
 		</div>

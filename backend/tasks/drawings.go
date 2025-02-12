@@ -79,7 +79,7 @@ func SetHorizontalLine(conn *utils.Conn, userId int, rawArgs json.RawMessage) (i
 	return id, nil
 }
 
-type UpdateHorizontalLineArgs struct {
+/*type UpdateHorizontalLineArgs struct {
 	Id         int     `json:"id"`
 	SecurityId int     `json:"securityId"`
 	Price      float64 `json:"price"`
@@ -92,8 +92,8 @@ func UpdateHorizontalLine(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 	}
 
 	cmdTag, err := conn.DB.Exec(context.Background(), `
-		UPDATE horizontal_lines 
-		SET price = $1 
+		UPDATE horizontal_lines
+		SET price = $1
 		WHERE id = $2 AND userId = $3 AND securityId = $4`,
 		args.Price, args.Id, userId, args.SecurityId)
 
@@ -107,3 +107,4 @@ func UpdateHorizontalLine(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 
 	return nil, nil
 }
+*/
