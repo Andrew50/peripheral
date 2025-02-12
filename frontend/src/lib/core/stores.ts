@@ -92,7 +92,6 @@ export function initStores() {
         })
     function updateTime() {
         streamInfo.update((v: StreamInfo) => {
-            console.log(v)
             if (v.replayActive && !v.replayPaused) {
                 const currentTime = Date.now();
                 const elapsedTime = v.lastUpdateTime ? currentTime - v.lastUpdateTime : 0;
