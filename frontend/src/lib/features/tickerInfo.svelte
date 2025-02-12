@@ -20,12 +20,11 @@
 	//let tickerDetails: TickerDetails | null = null;
 
 	onMount(() => {
-		activeChartInstance.subscribe((instance: Instance | null) => {
-			console.log(instance);
-			/*if (instance !== null && instance !== undefined && instance.securityId !== undefined) {
+		/*activeChartInstance.subscribe((instance: Instance | null) => {
+			if (instance !== null && instance !== undefined && instance.securityId !== undefined) {
 				loadTickerData(instance.securityId);
-			}*/
-		});
+			}
+		});*/
 		document.addEventListener('mousemove', handleMouseMove);
 		document.addEventListener('mouseup', handleMouseUp);
 
