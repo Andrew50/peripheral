@@ -15,6 +15,7 @@
     let sortDirection = "desc";
     let selectedDate = "";
     let selectedHour: number | "" = "";
+    let selectedTicker = "";
 
     interface Trade extends Instance {
         trade_direction: string;
@@ -60,6 +61,10 @@
                 params.hour = selectedHour;
             }
 
+            if (selectedTicker) {
+                params.ticker = selectedTicker.toUpperCase();
+            }
+
             const result = await queueRequest<Trade[]>('grab_user_trades', params);
             trades.set(result);
             console.log(result);
@@ -95,6 +100,12 @@
     </div>
 
     <div class="filters-section">
+        <input 
+            type="text" 
+            placeholder="Ticker"
+            bind:value={selectedTicker}
+            on:change={pullTrades}
+        />
         <select bind:value={sortDirection} on:change={pullTrades}>
             <option value="desc">Newest First</option>
             <option value="asc">Oldest First</option>

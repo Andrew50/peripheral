@@ -8,7 +8,7 @@ from decimal import Decimal
 import pytz
 
 
-def grab_user_trades(conn, user_id: int, sort: str = "desc", date: str = None, hour: int = None):
+def grab_user_trades(conn, user_id: int, sort: str = "desc", date: str = None, hour: int = None, ticker: str = None):
     """
     Fetch all trades for a user with optional sorting and filtering
     
@@ -18,6 +18,7 @@ def grab_user_trades(conn, user_id: int, sort: str = "desc", date: str = None, h
         sort (str): Sort direction - "asc" or "desc"
         date (str): Optional date filter in format 'YYYY-MM-DD'
         hour (int): Optional hour filter (0-23)
+        ticker (str): Optional ticker filter
     """
     try:
         with conn.db.cursor() as cursor:
@@ -40,6 +41,11 @@ def grab_user_trades(conn, user_id: int, sort: str = "desc", date: str = None, h
             if hour is not None:
                 base_query += " AND EXTRACT(HOUR FROM t.entry_times[1]) = %s"
                 params.append(hour)
+
+            # Add ticker filter if provided
+            if ticker:
+                base_query += " AND t.ticker = %s"
+                params.append(ticker)
             
             # Add sorting
             sort_direction = "DESC" if sort.lower() == "desc" else "ASC"
@@ -311,7 +317,8 @@ def process_trades(conn, user_id: int):
                             updated_trade[1],
                             updated_trade[2],
                             updated_trade[3],
-                            updated_trade[4]
+                            updated_trade[4],
+                            ticker
                         )
                         print(f"\nCalculated P&L: {updated_pnl}", flush=True)
                         cursor.execute("""
@@ -340,7 +347,7 @@ def process_trades(conn, user_id: int):
         }
 
 
-def calculate_pnl(entry_prices, entry_shares, exit_prices, exit_shares, direction):
+def calculate_pnl(entry_prices, entry_shares, exit_prices, exit_shares, direction, ticker):
     """Calculate P&L for a completed trade"""
     # Convert all numbers to Decimal for consistent decimal arithmetic
     total_entry_value = Decimal('0')
@@ -371,6 +378,15 @@ def calculate_pnl(entry_prices, entry_shares, exit_prices, exit_shares, directio
         pnl = (avg_exit_price - avg_entry_price) * total_exit_shares
     else:  # Short
         pnl = (avg_entry_price - avg_exit_price) * total_exit_shares
+
+    # Check if it's an options trade (ticker contains 'C' or 'P' and is longer than 4 characters)
+    is_option = len(ticker) > 4 and ('C' in ticker or 'P' in ticker)
+    if is_option:
+        pnl = pnl * Decimal('100')  # Multiply by 100 for options contracts
+        total_contracts = total_entry_shares + total_exit_shares
+        commission = Decimal('0.65') * total_contracts  # $0.65 per contract
+        pnl = pnl - commission
+
     print("\ncalculated pnl: ", pnl)
     return float(round(pnl, 2))
     
