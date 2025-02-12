@@ -8,9 +8,11 @@
 	import type { Writable } from 'svelte/store';
 	import type { Instance } from '$lib/core/types';
 	const allKeys = ['ticker', 'timestamp', 'timeframe', 'extendedHours', 'price'] as const;
+	let currentSecurityResultRequest = 0;
 
 	type InstanceAttributes = (typeof allKeys)[number];
 	let filterOptions = [];
+	let loadedSecurityResultRequest = -1;
 	privateRequest<[]>('getSecurityClassifications', {}).then((v: []) => {
 		filterOptions = v;
 	});
@@ -113,15 +115,11 @@
 				const securitiesWithDetails = await Promise.all(
 					securities.map(async (security) => {
 						try {
-							const details = await privateRequest<Instance>(
-								'getTickerDetails',
-								{
-									securityId: security.securityId,
-									ticker: security.ticker,
-									timestamp: security.timestamp
-								},
-								true
-							).catch((v) => {});
+							const details = await privateRequest<Instance>('getTickerDetails', {
+								securityId: security.securityId,
+								ticker: security.ticker,
+								timestamp: security.timestamp
+							}).catch((v) => {});
 							return {
 								...security,
 								...details
@@ -163,11 +161,32 @@
 		return { inputValid: false, securities: [] };
 	}
 
-	function enterInput(iQ: InputQuery, tickerIndex: number = 0): InputQuery {
-		if (iQ.inputType === 'ticker' && Array.isArray(iQ.securities) && iQ.securities.length > 0) {
+	async function waitForSecurityResult(): Promise<void> {
+		return new Promise((resolve) => {
+			const check = () => {
+				console.log(loadedSecurityResultRequest, currentSecurityResultRequest);
+				if (loadedSecurityResultRequest === currentSecurityResultRequest) {
+					resolve();
+				} else {
+					// Check again after 50ms (or adjust as needed)
+					setTimeout(check, 50);
+				}
+			};
+			check();
+		});
+	}
+
+	async function enterInput(iQ: InputQuery, tickerIndex: number = 0): Promise<InputQuery> {
+		if (iQ.inputType === 'ticker') {
 			const ts = iQ.instance.timestamp;
-			iQ.instance = { ...iQ.instance, ...iQ.securities[tickerIndex] };
-			iQ.instance.timestamp = ts;
+			await waitForSecurityResult();
+			iQ = get(inputQuery);
+			console.log(iQ.securities);
+			if (Array.isArray(iQ.securities) && iQ.securities.length > 0) {
+				iQ.instance = { ...iQ.instance, ...iQ.securities[tickerIndex] };
+				console.log(iQ.instance);
+				iQ.instance.timestamp = ts;
+			}
 		} else if (iQ.inputType === 'timeframe') {
 			iQ.instance.timeframe = iQ.inputString;
 		} else if (iQ.inputType === 'timestamp') {
@@ -208,7 +227,7 @@
 		} else if (event.key === 'Enter') {
 			event.preventDefault();
 			if (iQ.inputValid) {
-				iQ = enterInput(iQ, 0);
+				iQ = await enterInput(iQ, 0);
 			}
 			inputQuery.set(iQ);
 		} else if (event.key === 'Tab') {
@@ -261,16 +280,20 @@
 				inputString: iQ.inputString,
 				inputType: iQ.inputType
 			}));
+			currentSecurityResultRequest++;
+			const thisSecurityResultRequest = currentSecurityResultRequest;
 
 			// Validate asynchronously, and then update the store.
 			validateInput(iQ.inputString, iQ.inputType).then((validationResp: ValidateResponse) => {
-				console.log(validationResp);
-				inputQuery.update((v: InputQuery) => ({
-					...v,
-					//inputString: iQ.inputString,
-					//inputType: iQ.inputType,
-					...validationResp
-				}));
+				if (thisSecurityResultRequest === currentSecurityResultRequest) {
+					inputQuery.update((v: InputQuery) => ({
+						...v,
+						//inputString: iQ.inputString,
+						//inputType: iQ.inputType,
+						...validationResp
+					}));
+					loadedSecurityResultRequest = thisSecurityResultRequest;
+				}
 			});
 		}
 	}
