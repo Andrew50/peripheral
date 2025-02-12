@@ -4,6 +4,9 @@
 	import { activeChartInstance } from '$lib/features/chart/interface';
 	import type { Instance } from '$lib/core/types';
 	import { writable } from 'svelte/store';
+	import StreamCell from '$lib/utils/stream/streamCell.svelte';
+
+	import { streamInfo, formatTimestamp } from '$lib/core/stores';
 
 	const tickerInfoState = writable({
 		isExpanded: true,
@@ -14,24 +17,32 @@
 	let isDragging = false;
 	let container: HTMLDivElement;
 
-	let tickerDetails: TickerDetails | null = null;
+	//let tickerDetails: TickerDetails | null = null;
 
 	onMount(() => {
 		activeChartInstance.subscribe((instance: Instance | null) => {
-			if (instance !== null && instance !== undefined && instance.securityId !== undefined) {
+			console.log(instance);
+			/*if (instance !== null && instance !== undefined && instance.securityId !== undefined) {
 				loadTickerData(instance.securityId);
-			}
+			}*/
 		});
+		document.addEventListener('mousemove', handleMouseMove);
+		document.addEventListener('mouseup', handleMouseUp);
+
+		return () => {
+			document.removeEventListener('mousemove', handleMouseMove);
+			document.removeEventListener('mouseup', handleMouseUp);
+		};
 	});
 
-	async function loadTickerData(securityId: number) {
+	/*async function loadTickerData(securityId: number) {
 		try {
-			const data = await privateRequest('getTickerDetails', { securityId });
-			tickerDetails = data as TickerDetails;
+			const data = await privateRequest('getTickerDetails', { securityId }, true);
+	//		tickerDetails = data as TickerDetails;
 		} catch (error) {
 			console.error('Error loading ticker data:', error);
 		}
-	}
+	}*/
 
 	function handleMouseDown(e: MouseEvent | TouchEvent) {
 		if (e.target instanceof HTMLButtonElement) return;
@@ -75,16 +86,6 @@
 			currentHeight: !state.isExpanded ? state.currentHeight : 200
 		}));
 	}
-
-	onMount(() => {
-		document.addEventListener('mousemove', handleMouseMove);
-		document.addEventListener('mouseup', handleMouseUp);
-
-		return () => {
-			document.removeEventListener('mousemove', handleMouseMove);
-			document.removeEventListener('mouseup', handleMouseUp);
-		};
-	});
 </script>
 
 <div
@@ -103,36 +104,47 @@
 		<span>Ticker Info - {$activeChartInstance?.ticker || 'No ticker selected'}</span>
 	</div>
 
-	{#if $activeChartInstance !== null && tickerDetails !== null}
+	{#if $activeChartInstance !== null && $activeChartInstance !== null}
 		{#if $tickerInfoState.isExpanded}
 			<div class="content">
-				{#if tickerDetails.logo}
+				<div class="system-clock">
+					<h3>
+						{$streamInfo.timestamp !== undefined
+							? formatTimestamp($streamInfo.timestamp)
+							: 'Loading Time...'}
+					</h3>
+				</div>
+				{#if $activeChartInstance.logo}
 					<div class="logo-container">
 						<img
-							src="data:image/svg+xml;base64,{tickerDetails.logo}"
-							alt="{tickerDetails.name} logo"
+							src="data:image/svg+xml;base64,{$activeChartInstance.logo}"
+							alt="{$activeChartInstance.name} logo"
 							class="company-logo"
 						/>
 					</div>
 				{/if}
+				<div class="stream-cells">
+					<StreamCell instance={$activeChartInstance} type="price" class="stream-cell" />
+					<StreamCell instance={$activeChartInstance} type="change %" class="stream-cell" />
+				</div>
 				<div class="info-row">
 					<span class="label">Name:</span>
-					<span class="value">{tickerDetails.name}</span>
+					<span class="value">{$activeChartInstance.name}</span>
 				</div>
 				<div class="info-row">
 					<span class="label">Status:</span>
-					<span class="value">{tickerDetails.active ? 'Active' : 'Inactive'}</span>
+					<span class="value">{$activeChartInstance.active ? 'Active' : 'Inactive'}</span>
 				</div>
 				<div class="info-row">
 					<span class="label">Market Cap:</span>
 					<span class="value">
-						{#if tickerDetails.market_cap}
-							{#if tickerDetails.market_cap >= 1e12}
-								${(tickerDetails.market_cap / 1e12).toFixed(2)}T
-							{:else if tickerDetails.market_cap >= 1e9}
-								${(tickerDetails.market_cap / 1e9).toFixed(2)}B
+						{#if $activeChartInstance.market_cap}
+							{#if $activeChartInstance.market_cap >= 1e12}
+								${($activeChartInstance.market_cap / 1e12).toFixed(2)}T
+							{:else if $activeChartInstance.market_cap >= 1e9}
+								${($activeChartInstance.market_cap / 1e9).toFixed(2)}B
 							{:else}
-								${(tickerDetails.market_cap / 1e6).toFixed(2)}M
+								${($activeChartInstance.market_cap / 1e6).toFixed(2)}M
 							{/if}
 						{:else}
 							N/A
@@ -141,33 +153,33 @@
 				</div>
 				<div class="info-row">
 					<span class="label">Sector:</span>
-					<span class="value">{tickerDetails.sector || 'N/A'}</span>
+					<span class="value">{$activeChartInstance.sector || 'N/A'}</span>
 				</div>
 				<div class="info-row">
 					<span class="label">Industry:</span>
-					<span class="value">{tickerDetails.industry || 'N/A'}</span>
+					<span class="value">{$activeChartInstance.industry || 'N/A'}</span>
 				</div>
 
 				<div class="info-row">
 					<span class="label">Exchange:</span>
-					<span class="value">{tickerDetails.primary_exchange || 'N/A'}</span>
+					<span class="value">{$activeChartInstance.primary_exchange || 'N/A'}</span>
 				</div>
 				<div class="info-row">
 					<span class="label">Market:</span>
-					<span class="value">{tickerDetails.market || 'N/A'}</span>
+					<span class="value">{$activeChartInstance.market || 'N/A'}</span>
 				</div>
 				<div class="info-row">
 					<span class="label">Shares Outstanding:</span>
 					<span class="value">
-						{tickerDetails.share_class_shares_outstanding
-							? `${(tickerDetails.share_class_shares_outstanding / 1e6).toFixed(2)}M`
+						{$activeChartInstance.share_class_shares_outstanding
+							? `${($activeChartInstance.share_class_shares_outstanding / 1e6).toFixed(2)}M`
 							: 'N/A'}
 					</span>
 				</div>
-				{#if tickerDetails.description}
+				{#if $activeChartInstance.description}
 					<div class="description">
 						<span class="label">Description:</span>
-						<p class="value description-text">{tickerDetails.description}</p>
+						<p class="value description-text">{$activeChartInstance.description}</p>
 					</div>
 				{/if}
 			</div>
@@ -176,6 +188,15 @@
 </div>
 
 <style>
+	.system-clock {
+		background-color: var(--c2);
+		padding: 0px 10px;
+		font-size: 1rem;
+		color: var(--f1);
+		width: 100%;
+		text-align: center;
+		box-sizing: border-box;
+	}
 	.ticker-info-container {
 		position: absolute;
 		bottom: 0;
@@ -226,7 +247,7 @@
 		justify-content: center;
 		margin-bottom: 15px;
 		padding: 10px;
-		background: rgba(255, 255, 255, 0.05);
+		/*background: rgba(255, 255, 255, 0.05);*/
 		border-radius: 4px;
 	}
 
@@ -279,5 +300,15 @@
 
 	.value {
 		font-family: monospace;
+	}
+
+	.stream-cells {
+		display: flex;
+		gap: 10px; /* Adjust spacing between cells as needed */
+	}
+
+	.stream-cell {
+		font-size: 4rem; /* Increase font size */
+		color: white;
 	}
 </style>

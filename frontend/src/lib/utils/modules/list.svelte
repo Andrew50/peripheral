@@ -14,7 +14,7 @@
 	export let list: Writable<Instance[]> = writable([]);
 	export let columns: Array<string>;
 	export let parentDelete = (v: Instance) => {};
-	export let formatters: {[key: string]: (value: any) => string} = {};
+	export let formatters: { [key: string]: (value: any) => string } = {};
 	function isFlagged(instance: Instance, flagWatch: Instance[]) {
 		if (!Array.isArray(flagWatch)) return false;
 		return flagWatch.some((item) => item.ticker === instance.ticker);
@@ -101,7 +101,7 @@
 		event.stopPropagation();
 		if (even === 0) {
 			selectedRowIndex = index;
-			if('openQuantity' in instance) {
+			if ('openQuantity' in instance) {
 				queryChart(instance);
 			} else {
 				queryChart(instance);
@@ -154,32 +154,38 @@
 						</td>
 						{#each columns as col}
 							{#if col === 'price'}
-								<StreamCell
-									on:contextmenu={(event) => {
-										event.preventDefault();
-										event.stopPropagation();
-									}}
-									instance={watch}
-									type="price"
-								/>
+								<td>
+									<StreamCell
+										on:contextmenu={(event) => {
+											event.preventDefault();
+											event.stopPropagation();
+										}}
+										instance={watch}
+										type="price"
+									/>
+								</td>
 							{:else if col === 'change'}
-								<StreamCell
-									on:contextmenu={(event) => {
-										event.preventDefault();
-										event.stopPropagation();
-									}}
-									instance={watch}
-									type="change"
-								/>
+								<td>
+									<StreamCell
+										on:contextmenu={(event) => {
+											event.preventDefault();
+											event.stopPropagation();
+										}}
+										instance={watch}
+										type="change"
+									/>
+								</td>
 							{:else if col === 'change %'}
-								<StreamCell
-									on:contextmenu={(event) => {
-										event.preventDefault();
-										event.stopPropagation();
-									}}
-									instance={watch}
-									type="change %"
-								/>
+								<td>
+									<StreamCell
+										on:contextmenu={(event) => {
+											event.preventDefault();
+											event.stopPropagation();
+										}}
+										instance={watch}
+										type="change %"
+									/>
+								</td>
 							{:else if col === 'timestamp'}
 								<td
 									on:contextmenu={(event) => {
