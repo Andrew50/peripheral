@@ -10,6 +10,7 @@
 	import { queryChart } from '$lib/features/chart/interface';
 	import { flagWatchlist } from '$lib/core/stores';
 	import { flagSecurity } from '$lib/utils/flag';
+	import { newAlert } from '$lib/features/alerts/interface';
 	let longPressTimer: any;
 	export let list: Writable<Instance[]> = writable([]);
 	export let columns: Array<string>;
@@ -33,6 +34,18 @@
 			return v.filter((s) => s !== watch);
 		});
 		parentDelete(watch);
+	}
+	function createListAlert() {
+		const alert = {
+			price: get(list)[selectedRowIndex].price,
+
+		};
+		for (let i = 0; i < get(list).length; i++) {
+			alert.securityId = get(list)[i].securityId?;
+			alert.ticker = get(list)[i].ticker?;
+			newAlert(alert);
+		}
+
 	}
 	function handleKeydown(event: KeyboardEvent, watch: Instance) {
 		if (event.key === 'ArrowUp' || (event.key === ' ' && event.shiftKey)) {
