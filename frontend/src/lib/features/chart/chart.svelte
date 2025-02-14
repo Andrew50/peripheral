@@ -105,8 +105,7 @@
 		volume: 0,
 		adr: 0,
 		chg: 0,
-		chgprct: 0,
-		mcap: 0
+		chgprct: 0
 	};
 	const hoveredCandleData = writable(defaultHoveredCandleData);
 	const shiftOverlay: Writable<ShiftOverlay> = writable({
@@ -893,12 +892,12 @@
 				if ($streamInfo.replayActive) {
 					currentChartInstance.timestamp = 0;
 				}
-				queryInstanceInput('any', 'any', currentChartInstance)
-					.then((v: Instance) => {
-						currentChartInstance = v;
-						queryChart(v, true);
-					})
-					.catch();
+				console.log(currentChartInstance);
+				queryInstanceInput('any', 'any', currentChartInstance).then((v: Instance) => {
+					console.log(v);
+					currentChartInstance = v;
+					queryChart(v, true);
+				});
 			} else if (event.key == 'Shift') {
 				shiftDown = true;
 			} else if (event.key == 'Escape') {
@@ -916,6 +915,8 @@
 			}
 		});
 		chart = createChart(chartContainer, chartOptions);
+
+		// Then add your candlestick / volume / etc. after or before.
 		chartCandleSeries = chart.addCandlestickSeries({
 			priceLineVisible: false,
 			upColor: '#089981',
