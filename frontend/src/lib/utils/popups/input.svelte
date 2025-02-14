@@ -120,6 +120,16 @@
 
 	let isLoadingSecurities = false;
 
+	let manualInputType: string = 'auto';
+
+	// Add this reactive statement
+	$: if (manualInputType !== 'auto' && $inputQuery.status === 'active') {
+		inputQuery.update((v) => ({
+			...v,
+			inputType: manualInputType
+		}));
+	}
+
 	interface ValidateResponse {
 		inputValid: boolean;
 		securities: Instance[];
@@ -215,6 +225,8 @@
 		iQ.inputString = '';
 		iQ.inputType = '';
 		iQ.inputValid = true;
+		// Reset manualInputType to auto after input is entered
+		manualInputType = 'auto';
 		return iQ;
 	}
 
@@ -270,32 +282,38 @@
 				iQ.inputString = iQ.inputString.slice(0, -1);
 			}
 
-			// classify the input string into a type
-			if (iQ.inputString !== '') {
-				if (iQ.possibleKeys.includes('ticker') && /^[A-Z]$/.test(iQ.inputString)) {
-					iQ.inputType = 'ticker';
-				} else if (
-					iQ.possibleKeys.includes('price') &&
-					/^(?:\d*\.\d+|\d{3,})$/.test(iQ.inputString)
-				) {
-					iQ.inputType = 'price';
-					iQ.securities = [];
-				} else if (
-					iQ.possibleKeys.includes('timeframe') &&
-					/^\d{1,2}[hdwmqs]?$/i.test(iQ.inputString)
-				) {
-					iQ.inputType = 'timeframe';
-					iQ.securities = [];
-				} else if (iQ.possibleKeys.includes('timestamp') && /^[\d-]+$/.test(iQ.inputString)) {
-					iQ.inputType = 'timestamp';
-					iQ.securities = [];
-				} else if (iQ.possibleKeys.includes('ticker')) {
-					iQ.inputType = 'ticker';
+			// Only auto-classify if manualInputType is set to 'auto'
+			if (manualInputType === 'auto') {
+				// classify the input string into a type
+				if (iQ.inputString !== '') {
+					if (iQ.possibleKeys.includes('ticker') && /^[A-Z]$/.test(iQ.inputString)) {
+						iQ.inputType = 'ticker';
+					} else if (
+						iQ.possibleKeys.includes('price') &&
+						/^(?:\d*\.\d+|\d{3,})$/.test(iQ.inputString)
+					) {
+						iQ.inputType = 'price';
+						iQ.securities = [];
+					} else if (
+						iQ.possibleKeys.includes('timeframe') &&
+						/^\d{1,2}[hdwmqs]?$/i.test(iQ.inputString)
+					) {
+						iQ.inputType = 'timeframe';
+						iQ.securities = [];
+					} else if (iQ.possibleKeys.includes('timestamp') && /^[\d-]+$/.test(iQ.inputString)) {
+						iQ.inputType = 'timestamp';
+						iQ.securities = [];
+					} else if (iQ.possibleKeys.includes('ticker')) {
+						iQ.inputType = 'ticker';
+					} else {
+						iQ.inputType = '';
+					}
 				} else {
 					iQ.inputType = '';
 				}
 			} else {
-				iQ.inputType = '';
+				// Use the manually selected input type
+				iQ.inputType = manualInputType;
 			}
 
 			inputQuery.update((v: InputQuery) => ({
@@ -457,6 +475,15 @@
 	<div class="popup-container" id="input-window" tabindex="-1">
 		<div class="header">
 			<div class="title">{capitalize($inputQuery.inputType)} Input</div>
+			<div class="field-select">
+				<span>Field:</span>
+				<select class="input-type-select" bind:value={manualInputType}>
+					<option value="auto">Auto</option>
+					{#each $inputQuery.possibleKeys as key}
+						<option value={key}>{capitalize(key)}</option>
+					{/each}
+				</select>
+			</div>
 			<button class="close-button" on:click={closeWindow}>×</button>
 		</div>
 
@@ -640,7 +667,6 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: 8px 12px;
-
 		border-bottom: 1px solid var(--c4);
 		height: 40px;
 	}
@@ -808,13 +834,6 @@
 
 	.date {
 		color: var(--f2);
-		font-size: 0.8em;
-		min-width: 70px;
-	}
-
-	.loading-container {
-		display: flex;
-		flex-direction: column;
 		align-items: center;
 		justify-content: center;
 		padding: 20px;
@@ -838,5 +857,32 @@
 		100% {
 			transform: rotate(360deg);
 		}
+	}
+
+	.field-select {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin-left: auto;
+	}
+
+	.field-select span {
+		color: var(--f2);
+		font-size: 14px;
+	}
+
+	.input-type-select {
+		background: var(--c4);
+		color: var(--f1);
+		border: 1px solid var(--c4);
+		border-radius: 4px;
+		padding: 4px 8px;
+		font-size: 14px;
+		width: 120px;
+	}
+
+	.input-type-select option {
+		background: var(--c4);
+		color: var(--f1);
 	}
 </style>
