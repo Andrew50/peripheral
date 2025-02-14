@@ -30,30 +30,20 @@ const tradeConditionsToCheck = new Set([2, 5, 7, 10, 13, 15, 16, 20, 21, 22, 29,
 const tradeConditionsToCheckVolume = new Set([15, 16, 38])
 */
 func (c *Client) subscribeReplay(channelName string) {
-	splits := strings.Split(channelName, "-")
-	securityId := splits[0]
+	securityId, baseDataType, channelType, err := getInfoFromChannelName(channelName)
+	if err != nil {
+		fmt.Println("Error getting info from channel name:", err)
+		return
+	}
 	securityIdInt, err := strconv.Atoi(securityId)
 	if err != nil {
 		fmt.Printf("do021 %v\n", err)
 		return
 	}
-	channelType := splits[1]
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	var baseDataType string
-	switch channelType {
-	case "all", "slow", "fast":
-		baseDataType = "trade"
-	case "quote":
-		baseDataType = "quote"
-	case "close":
-		baseDataType = "close"
-	default:
-		fmt.Println("ERR------------------------Invalid channel type:", channelType)
-		return
-	}
-
 	key := fmt.Sprintf("%s-%s", securityId, baseDataType)
+
 	if _, exists := c.replayData[key]; !exists {
 		c.replayData[key] = &ReplayData{
 			baseDataType: baseDataType,
@@ -65,7 +55,7 @@ func (c *Client) subscribeReplay(channelName string) {
 	}
 	for _, existingChannelType := range c.replayData[key].channelTypes {
 		if existingChannelType == channelType {
-			return
+			return //this triggers if the channel is already subscribed, but we still want initial value for the new subscription???
 		}
 	}
 	c.replayData[key].channelTypes = append(c.replayData[key].channelTypes, channelType)
@@ -90,26 +80,36 @@ func (c *Client) subscribeReplay(channelName string) {
 	}
 }
 
-func (c *Client) unsubscribeReplay(channelName string) {
+func getInfoFromChannelName(channelName string) (string, string, string, error) {
 	splits := strings.Split(channelName, "-")
-	ticker := splits[0]
+	securityId := splits[0]
 	channelType := splits[1]
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Determine the base data type
 	var baseDataType string
 	switch channelType {
 	case "all", "slow", "fast":
 		baseDataType = "trade"
 	case "quote":
 		baseDataType = "quote"
+	case "close":
+		baseDataType = "close"
 	default:
 		fmt.Println("Invalid channel type:", channelType)
+		return "", "", "", fmt.Errorf("invalid channel type: %s", channelType)
+	}
+	return securityId, baseDataType, channelType, nil
+}
+
+func (c *Client) unsubscribeReplay(channelName string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Determine the base data type
+	securityId, baseDataType, channelType, err := getInfoFromChannelName(channelName)
+	if err != nil {
+		fmt.Println("Error getting info from channel name:", err)
 		return
 	}
-	key := fmt.Sprintf("%s-%s", ticker, baseDataType)
+	key := fmt.Sprintf("%s-%s", securityId, baseDataType)
 	if replayData, exists := c.replayData[key]; exists {
 		for i, existingChannelType := range replayData.channelTypes {
 			if existingChannelType == channelType {
@@ -184,13 +184,17 @@ func (c *Client) StartLoop() {
 											fmt.Println("Warning: Failed to send data. Channel might be closed.")
 										}
 									}
-								case "slow":
+								case "slow-regular", "slow-extended":
 									if now.Sub(lastSlow) < SlowUpdateInterval {
 										continue
 									}
 									lastSlow = now
 									fallthrough
-								case "fast", "quote":
+								case "fast-regular", "fast-extended":
+									channelNameType := getChannelNameType(c.simulatedTime)
+									channelType = fmt.Sprintf("%s-%s", channelNameType, channelType)
+									fallthrough
+								case "quote":
 									c.send <- jsonMarshalTick(aggregateTicks(ticksToPush, replayData.baseDataType), replayData.securityId, channelType)
 								}
 							}
@@ -328,8 +332,8 @@ func (c *Client) stopReplay() {
 	c.simulatedTime = 0
 	c.replayData = make(map[string]*ReplayData)
 	fmt.Println("------closing----")
-	select { 
-	case <- c.send: 
+	select {
+	case <-c.send:
 	default:
 	}
 }

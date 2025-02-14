@@ -123,8 +123,22 @@
 					</div>
 				{/if}
 				<div class="stream-cells">
-					<StreamCell instance={$activeChartInstance} type="price" class="stream-cell" />
-					<StreamCell instance={$activeChartInstance} type="change %" class="stream-cell" />
+					<div class="stream-cell-container">
+						<span class="info-row">Price</span>
+						<StreamCell instance={$activeChartInstance} type="price" />
+					</div>
+					<div class="stream-cell-container">
+						<span class="info-row">Change %</span>
+						<StreamCell instance={$activeChartInstance} type="change %" />
+					</div>
+					<div class="stream-cell-container">
+						<span class="info-row">Change $</span>
+						<StreamCell instance={$activeChartInstance} type="change" />
+					</div>
+					<div class="stream-cell-container">
+						<span class="info-row">Change % extended</span>
+						<StreamCell instance={$activeChartInstance} type="change % extended" />
+					</div>
 				</div>
 				<div class="info-row">
 					<span class="label">Name:</span>
