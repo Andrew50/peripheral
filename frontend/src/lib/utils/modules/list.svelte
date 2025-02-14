@@ -37,15 +37,13 @@
 	}
 	function createListAlert() {
 		const alert = {
-			price: get(list)[selectedRowIndex].price,
-
+			price: get(list)[selectedRowIndex].price
 		};
 		for (let i = 0; i < get(list).length; i++) {
-			alert.securityId = get(list)[i].securityId?;
-			alert.ticker = get(list)[i].ticker?;
+			alert.securityId = get(list)[i].securityId;
+			alert.ticker = get(list)[i].ticker;
 			newAlert(alert);
 		}
-
 	}
 	function handleKeydown(event: KeyboardEvent, watch: Instance) {
 		if (event.key === 'ArrowUp' || (event.key === ' ' && event.shiftKey)) {
