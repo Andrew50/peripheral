@@ -55,12 +55,13 @@
 		instance: Instance = {}
 	): Promise<Instance> {
 		// If an input query is already active, force its cancellation.
+		console.log(requiredKeys);
 		if (get(inputQuery).status !== 'inactive') {
 			if (activePromiseReject) {
 				activePromiseReject(new Error('User cancelled input'));
 				activePromiseReject = null;
 			}
-			inputQuery.set({ ...inactiveInputQuery });
+			inputQuery.update((q) => ({ ...inactiveInputQuery }));
 			// Optionally wait a tick for the UI to update.
 			await tick();
 		}
@@ -178,7 +179,6 @@
 	async function waitForSecurityResult(): Promise<void> {
 		return new Promise((resolve) => {
 			const check = () => {
-				console.log(loadedSecurityResultRequest, currentSecurityResultRequest);
 				if (loadedSecurityResultRequest === currentSecurityResultRequest) {
 					resolve();
 				} else {
@@ -191,11 +191,12 @@
 	}
 
 	async function enterInput(iQ: InputQuery, tickerIndex: number = 0): Promise<InputQuery> {
+		console.log(iQ);
 		if (iQ.inputType === 'ticker') {
 			const ts = iQ.instance.timestamp;
 			await waitForSecurityResult();
-			iQ = get(inputQuery);
-			console.log(iQ.securities);
+			iQ = $inputQuery;
+			console.log(iQ);
 			if (Array.isArray(iQ.securities) && iQ.securities.length > 0) {
 				iQ.instance = { ...iQ.instance, ...iQ.securities[tickerIndex] };
 				console.log(iQ.instance);
@@ -215,6 +216,7 @@
 				iQ.status = 'active';
 			}
 		} else {
+			console.log(iQ.requiredKeys);
 			for (const attribute of iQ.requiredKeys) {
 				if (!iQ.instance[attribute]) {
 					iQ.status = 'active';
@@ -257,18 +259,19 @@
 		event.stopPropagation();
 		let iQ = { ...currentState };
 		if (event.key === 'Escape') {
-			iQ.status = 'cancelled';
-			inputQuery.set(iQ);
+			inputQuery.update((q) => ({ ...q, status: 'cancelled' }));
 		} else if (event.key === 'Enter') {
 			event.preventDefault();
 			if (iQ.inputValid) {
-				iQ = await enterInput(iQ, 0);
+				const updatedQuery = await enterInput(iQ, 0);
+				inputQuery.set(updatedQuery);
 			}
-			inputQuery.set(iQ);
 		} else if (event.key === 'Tab') {
 			event.preventDefault();
-			iQ.instance.extendedHours = !iQ.instance.extendedHours;
-			inputQuery.set({ ...iQ });
+			inputQuery.update((q) => ({
+				...q,
+				instance: { ...q.instance, extendedHours: !q.instance.extendedHours }
+			}));
 		} else {
 			// Process alphanumeric and a few special characters.
 			if (
@@ -351,6 +354,7 @@
 										securities: securitiesWithDetails
 									};
 								});
+								console.log($inputQuery);
 							}
 						}
 					);
@@ -534,8 +538,9 @@
 								<tbody>
 									{#each $inputQuery.securities as sec, i}
 										<tr
-											on:click={() => {
-												inputQuery.set(enterInput(get(inputQuery), i));
+											on:click={async () => {
+												const updatedQuery = await enterInput($inputQuery, i);
+												inputQuery.set(updatedQuery);
 											}}
 										>
 											<td>
@@ -574,13 +579,15 @@
 							<input
 								type="datetime-local"
 								on:change={(e) => {
-									const date = new Date(e.target.value);
-									if (!isNaN(date.getTime())) {
-										$inputQuery.instance.timestamp = date.getTime();
-										$inputQuery.inputValid = true;
-									} else {
-										$inputQuery.inputValid = false;
-									}
+									const date = new Date(e.target?.value ?? '');
+									inputQuery.update((q) => ({
+										...q,
+										instance: {
+											...q.instance,
+											timestamp: !isNaN(date.getTime()) ? date.getTime() : q.instance.timestamp
+										},
+										inputValid: !isNaN(date.getTime())
+									}));
 								}}
 							/>
 						</div>
