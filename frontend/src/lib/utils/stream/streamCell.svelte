@@ -5,7 +5,7 @@
 	import type { TradeData, Instance, CloseData } from '$lib/core/types';
 
 	export let instance: Instance;
-	export let type: 'price' | 'change' | 'change %' = 'change';
+	export let type: 'price' | 'change' | 'change %' | 'change % extended' = 'change';
 
 	let releaseSlow: Function = () => {};
 	let releaseClose: Function = () => {};
@@ -33,8 +33,12 @@
 		// Reset the store
 		changeStore.set({ change: '--' });
 
+		// Decide which streams to use based on type
+		let slowStreamName = type === 'change % extended' ? 'slow-extended' : 'slow-regular';
+		let closeStreamName = type === 'change % extended' ? 'close-extended' : 'close-regular';
+
 		// Set up new streams
-		releaseSlow = addStream<TradeData>(instance, 'slow', (v: TradeData) => {
+		releaseSlow = addStream<TradeData>(instance, slowStreamName, (v: TradeData) => {
 			if (v && v.price) {
 				changeStore.update((s: ChangeStore) => {
 					s.price = v.price;
@@ -44,7 +48,7 @@
 			}
 		});
 
-		releaseClose = addStream<CloseData>(instance, 'close', (v: CloseData) => {
+		releaseClose = addStream<CloseData>(instance, closeStreamName, (v: CloseData) => {
 			changeStore.update((s: ChangeStore) => {
 				s.prevClose = v.price;
 				if (s.price && s.prevClose) s.change = getChange(s.price, s.prevClose);
@@ -76,7 +80,7 @@
 			: $changeStore.change === '--'
 				? 'white'
 				: 'green'
-		: type === 'change %'
+		: type === 'change %' || type === 'change % extended'
 			? $changeStore.change.includes('-')
 				? 'red'
 				: 'green'
@@ -86,7 +90,7 @@
 		{($changeStore.price - $changeStore.prevClose).toFixed(2)}
 	{:else if type === 'price'}
 		{$changeStore.price?.toFixed(2) ?? '--'}
-	{:else if type === 'change %'}
+	{:else if type === 'change %' || type === 'change % extended'}
 		{$changeStore.change}
 	{:else}
 		{'--'}
