@@ -118,6 +118,8 @@
 	// flag to indicate that an async validation (ticker lookup) is in progress
 	//let secQueryActive = false;
 
+	let isLoadingSecurities = false;
+
 	interface ValidateResponse {
 		inputValid: boolean;
 		securities: Instance[];
@@ -125,16 +127,20 @@
 
 	async function validateInput(inputString: string, inputType: string): Promise<ValidateResponse> {
 		if (inputType === 'ticker') {
-			const securities = await privateRequest<Instance[]>('getSecuritiesFromTicker', {
-				ticker: inputString
-			});
-			if (Array.isArray(securities) && securities.length > 0) {
-				return {
-					inputValid: securities.some((v) => v.ticker === inputString),
-					securities: securities
-				};
-			} else {
+			isLoadingSecurities = true;
+			try {
+				const securities = await privateRequest<Instance[]>('getSecuritiesFromTicker', {
+					ticker: inputString
+				});
+				if (Array.isArray(securities) && securities.length > 0) {
+					return {
+						inputValid: securities.some((v) => v.ticker === inputString),
+						securities: securities
+					};
+				}
 				return { inputValid: false, securities: [] };
+			} finally {
+				isLoadingSecurities = false;
 			}
 		} else if (inputType === 'timeframe') {
 			const regex = /^\d{1,3}[yqmwhds]?$/i;
@@ -480,7 +486,12 @@
 					</div>
 				{:else if $inputQuery.inputType === 'ticker'}
 					<div class="table-container">
-						{#if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
+						{#if isLoadingSecurities}
+							<div class="loading-container">
+								<div class="loading-spinner"></div>
+								<span>Loading securities...</span>
+							</div>
+						{:else if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
 							<table>
 								<!--<thead>
                         <tr>
@@ -799,5 +810,33 @@
 		color: var(--f2);
 		font-size: 0.8em;
 		min-width: 70px;
+	}
+
+	.loading-container {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 20px;
+		color: var(--f2);
+	}
+
+	.loading-spinner {
+		width: 30px;
+		height: 30px;
+		border: 3px solid var(--c4);
+		border-top: 3px solid var(--f1);
+		border-radius: 50%;
+		animation: spin 1s linear infinite;
+		margin-bottom: 10px;
+	}
+
+	@keyframes spin {
+		0% {
+			transform: rotate(0deg);
+		}
+		100% {
+			transform: rotate(360deg);
+		}
 	}
 </style>

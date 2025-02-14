@@ -164,7 +164,7 @@
 							{/if}
 						</td>
 						{#each columns as col}
-							{#if col === 'price'}
+							{#if ['price', 'change', 'change %', 'change % extended'].includes(col)}
 								<td>
 									<StreamCell
 										on:contextmenu={(event) => {
@@ -172,29 +172,7 @@
 											event.stopPropagation();
 										}}
 										instance={watch}
-										type="price"
-									/>
-								</td>
-							{:else if col === 'change'}
-								<td>
-									<StreamCell
-										on:contextmenu={(event) => {
-											event.preventDefault();
-											event.stopPropagation();
-										}}
-										instance={watch}
-										type="change"
-									/>
-								</td>
-							{:else if col === 'change %'}
-								<td>
-									<StreamCell
-										on:contextmenu={(event) => {
-											event.preventDefault();
-											event.stopPropagation();
-										}}
-										instance={watch}
-										type="change %"
+										type={col}
 									/>
 								</td>
 							{:else if col === 'timestamp'}

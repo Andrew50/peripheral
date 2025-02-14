@@ -63,6 +63,15 @@ pub sub from redis and then iterates through all the subscribeers (possibly one 
 this function simply sends the message to the frontend. it has to lock to prevent concurrent writes to the socket
 */
 
+func getChannelNameType(timestamp int64) string {
+
+	if utils.IsTimestampRegularHours(time.Unix(timestamp/1000, 0)) { //might not need / 1000
+		return "regular"
+	} else {
+		return "extended"
+	}
+}
+
 type AlertMessage struct {
 	AlertId    int    `json:"alertId"`
 	Timestamp  int64  `json:"timestamp"`

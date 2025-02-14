@@ -5,12 +5,21 @@ import { base_url } from '$lib/core/backend';
 import { browser } from '$app/environment'
 import { handleAlert } from './alert';
 import type { AlertData } from './alert';
+export type TimeType = "regular" | "extended"
+export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
+    "fast-regular" |
+    "fast-extended" |
+    "slow-regular" |
+    "slow-extended" |
+    "close-regular" |
+    "close-extended" |
+    "quote" |
+    "all" //all trades
 
-export type ChannelType = "fast" | "slow" | "quote" | "close" | "all";
 export type StreamData = TradeData | QuoteData | number;
 export type StreamCallback = (v: TradeData | QuoteData | number) => void;
 
-export let activeChannels: Map<string, StreamCallback[]> = new Map();
+export const activeChannels: Map<string, StreamCallback[]> = new Map();
 
 type SubscriptionRequest = {
     action: 'subscribe' | 'unsubscribe' | 'replay' | 'pause' | 'play' | 'realtime' | 'speed';
@@ -102,6 +111,7 @@ function reconnect() {
 
 export function subscribe(channelName: string) {
     if (socket?.readyState === WebSocket.OPEN) {
+        console.log("subscribing to", channelName)
         const subscriptionRequest: SubscriptionRequest = {
             action: 'subscribe',
             channelName: channelName,
@@ -112,6 +122,7 @@ export function subscribe(channelName: string) {
 
 export function unsubscribe(channelName: string) {
     if (socket?.readyState === WebSocket.OPEN) {
+        console.log("unsubscribing from", channelName)
         const unsubscriptionRequest: SubscriptionRequest = {
             action: 'unsubscribe',
             channelName: channelName,
@@ -121,17 +132,22 @@ export function unsubscribe(channelName: string) {
 }
 
 
-export function getInitialValue(channelName: string, callback: StreamCallback) {
+/*export function getInitialValue(channelName: string, callback: StreamCallback) {
+    console.warn("getInitialValue", channelName)
+    return
     const [securityId, streamType] = channelName.split("-")
     let func
     switch (streamType) {
         case "close": func = "getClose"; break;
         case "quote": func = "getQuote"; break;
         case "all": func = "getTrade"; break;
-        case "fast": func = "getTrade"; break;
-        case "slow": func = "getTrade"; break;
+        case "fast_trades": func = "getTrade"; break;//these might have to change to not get 
+        case "slow_trades": func = "getTrade"; break;
+        case "fast_quotes": func = "getQuote"; break;
+        case "slow_quotes": func = "getQuote"; break;
         default: throw new Error("frontend: 19f-0")
     }
     //privateRequest(func,{securityId:securityId,timestamp:get(streamInfo).timestamp}).then((data: StreamData) => callback(data)); // might need to fixed
 }
+*/
 

@@ -368,7 +368,7 @@
 								rightOffset: 0
 							});
 						}
-						releaseFast = addStream(inst, 'fast', updateLatestChartBar);
+						releaseFast = addStream(inst, 'all', updateLatestChartBar);
 						releaseQuote = addStream(inst, 'quote', updateLatestQuote);
 					}
 					isLoadingChartData = false; // Ensure this runs after data is loaded
