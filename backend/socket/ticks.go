@@ -319,7 +319,6 @@ func getPrevCloseData(conn *utils.Conn, securityId int, timestamp int64) ([]Tick
 	}
 
 	if len(closeDataList) > 0 {
-		fmt.Println("close data", closeDataList[0].GetPrice())
 		return closeDataList, nil
 	}
 
@@ -328,16 +327,20 @@ func getPrevCloseData(conn *utils.Conn, securityId int, timestamp int64) ([]Tick
 
 func getInitialStreamValue(conn *utils.Conn, channelName string, timestamp int64) ([]byte, error) {
 	parts := strings.Split(channelName, "-")
-	if len(parts) != 2 {
+	if len(parts) != 2 && len(parts) != 3 { //3 length means extended vs regular hours
 		return nil, fmt.Errorf("invalid channel name: %s", channelName)
 	}
 
 	securityId, err := strconv.Atoi(parts[0])
 	if err != nil {
-		return nil, fmt.Errorf("d0if02f %v\n", err)
+		return nil, fmt.Errorf("d0if02f %v", err)
 	}
 
 	streamType := parts[1]
+	var extendedHours bool
+	if len(parts) == 3 {
+		extendedHours = parts[2] == "extended"
+	}
 
 	// Determine the query time
 	var queryTime time.Time
@@ -415,12 +418,42 @@ func getInitialStreamValue(conn *utils.Conn, channelName string, timestamp int64
 			if err != nil {
 				return nil, fmt.Errorf("failed to get last trade: %v", err)
 			}
-			// Assign values from GetLastTrade
-			price = trade.Price
-			size = int64(trade.Size)
-			tradeTimestamp = time.Time(trade.Timestamp).UnixNano() / int64(time.Millisecond)
-			conditions = trade.Conditions
-		} else {
+
+			tradeTime := time.Time(trade.Timestamp)
+			if !extendedHours && !utils.IsTimestampRegularHours(tradeTime) { //if regular channel and last trade was during extended
+				fmt.Println("regular channel and extended hours trade")
+				// If not extended hours and last trade was during extended hours,
+				// get the most recent close instead
+				closePrice, err := utils.GetMostRecentRegularClose(conn.Polygon, ticker)
+				if err != nil {
+					return nil, fmt.Errorf("error getting close price: %v", err)
+				}
+				price = closePrice
+				size = 0
+				tradeTimestamp = tradeTime.UnixNano() / int64(time.Millisecond)
+				conditions = []int32{}
+			} else if extendedHours && utils.IsTimestampRegularHours(tradeTime) { //if extended channel and last trade was during regular hours
+				fmt.Println("extended hours and regular hours trade")
+				// Get the most recent open price for extended hours
+				openPrice, err := utils.GetMostRecentExtendedHoursClose(conn.Polygon, ticker)
+				if err != nil {
+					return nil, fmt.Errorf("error getting open price: %v", err)
+				}
+				price = openPrice
+				size = 0
+				tradeTimestamp = tradeTime.UnixNano() / int64(time.Millisecond)
+				conditions = []int32{}
+			} else {
+				fmt.Println("god")
+
+				// Use the last trade data
+				price = trade.Price
+				size = int64(trade.Size)
+				tradeTimestamp = tradeTime.UnixNano() / int64(time.Millisecond)
+				conditions = trade.Conditions
+			}
+			fmt.Println("slow", extendedHours, ticker, price)
+		} else { //need to use same if logic as if timestamp == 0 TODO !!!!!
 			// Get the trade at the specified timestamp
 			trade, err := utils.GetTradeAtTimestamp(conn.Polygon, securityId, queryTime)
 			if err != nil {
@@ -452,23 +485,46 @@ func getInitialStreamValue(conn *utils.Conn, channelName string, timestamp int64
 	} else if streamType == "fast" {
 		return nil, nil
 	} else if streamType == "close" {
-		close, err := getPrevCloseData(conn, securityId, queryTime.UnixNano()/int64(time.Millisecond))
-		if err != nil {
-			return nil, fmt.Errorf("error getting prev close: %v", err)
+		if !extendedHours {
+			// Get previous day's close as before
+			close, err := getPrevCloseData(conn, securityId, queryTime.UnixNano()/int64(time.Millisecond))
+			if err != nil {
+				return nil, fmt.Errorf("error getting prev close: %v", err)
+			}
+			data := struct {
+				Price   float64 `json:"price"`
+				Channel string  `json:"channel"`
+			}{
+				Price:   close[0].GetPrice(),
+				Channel: channelName,
+			}
+			fmt.Println("close", extendedHours, ticker, close[0].GetPrice())
+			jsonData, err := json.Marshal(data)
+			if err != nil {
+				return nil, fmt.Errorf("error marshaling prev close data: %v", err)
+			}
+			return jsonData, nil
+		} else {
+			// Get current day's most recent regular hours close
+			closePrice, err := utils.GetMostRecentRegularClose(conn.Polygon, ticker)
+			fmt.Println("closePrice", ticker, closePrice)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get current regular hours close: %v", err)
+			}
+			data := struct {
+				Price   float64 `json:"price"`
+				Channel string  `json:"channel"`
+			}{
+				Price:   closePrice,
+				Channel: channelName,
+			}
+			fmt.Println("close2", extendedHours, ticker, closePrice)
+			jsonData, err := json.Marshal(data)
+			if err != nil {
+				return nil, fmt.Errorf("error marshaling current close data: %v", err)
+			}
+			return jsonData, nil
 		}
-		data := struct {
-			Price   float64 `json:"price"`
-			Channel string  `json:"channel"`
-		}{
-			Price:   close[0].GetPrice(),
-			Channel: channelName,
-		}
-		jsonData, err := json.Marshal(data)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling prev close data: %v", err)
-		}
-		return jsonData, nil
-
 	} else if streamType == "all" {
 		// Return an empty response for "all" stream type
 		return nil, nil
