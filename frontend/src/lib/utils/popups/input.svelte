@@ -44,11 +44,28 @@
 	};
 	let inputQuery: Writable<InputQuery> = writable({ ...inactiveInputQuery });
 
+	// Hold the reject function of the currently active promise (if any)
+	let activePromiseReject: ((reason?: any) => void) | null = null;
+
+	// Modified queryInstanceInput: if called while another query is active,
+	// cancel the previous query (rejecting its promise) and reset the state.
 	export async function queryInstanceInput(
 		requiredKeys: InstanceAttributes[] | 'any',
 		optionalKeys: InstanceAttributes[] | 'any',
 		instance: Instance = {}
 	): Promise<Instance> {
+		// If an input query is already active, force its cancellation.
+		if (get(inputQuery).status !== 'inactive') {
+			if (activePromiseReject) {
+				activePromiseReject(new Error('User cancelled input'));
+				activePromiseReject = null;
+			}
+			inputQuery.set({ ...inactiveInputQuery });
+			// Optionally wait a tick for the UI to update.
+			await tick();
+		}
+
+		// Determine possible keys.
 		let possibleKeys: InstanceAttributes[];
 		if (optionalKeys === 'any') {
 			possibleKeys = [...allKeys];
@@ -58,35 +75,38 @@
 			) as InstanceAttributes[];
 		}
 		await tick();
-		if (get(inputQuery).status === 'inactive') {
-			// initialize with the passed instance info
-			inputQuery.update((v: InputQuery) => ({
-				...v,
-				requiredKeys,
-				possibleKeys,
-				instance,
-				status: 'initializing'
-			}));
-			return new Promise<Instance>((resolve, reject) => {
-				const unsubscribe = inputQuery.subscribe((iQ: InputQuery) => {
-					if (iQ.status === 'cancelled') {
-						cleanup();
-						reject(new Error('User cancelled input'));
-					} else if (iQ.status === 'complete') {
-						const re = iQ.instance;
-						cleanup();
-						resolve(re);
-					}
-				});
-				function cleanup() {
-					unsubscribe();
-					// trigger shutdown so the onMount subscription resets the state
-					inputQuery.update((v: InputQuery) => ({ ...v, status: 'shutdown' }));
+		// Initialize the query with passed instance info.
+		inputQuery.update((v: InputQuery) => ({
+			...v,
+			requiredKeys,
+			possibleKeys,
+			instance,
+			status: 'initializing'
+		}));
+
+		// Return a new promise that resolves when input is complete or rejects on cancellation.
+		return new Promise<Instance>((resolve, reject) => {
+			// Save the reject function so a subsequent call can cancel this query.
+			activePromiseReject = reject;
+
+			const unsubscribe = inputQuery.subscribe((iQ: InputQuery) => {
+				if (iQ.status === 'cancelled') {
+					cleanup();
+					reject(new Error('User cancelled input'));
+				} else if (iQ.status === 'complete') {
+					const result = iQ.instance;
+					cleanup();
+					resolve(result);
 				}
 			});
-		} else {
-			return Promise.reject(new Error('Input query already active'));
-		}
+
+			function cleanup() {
+				unsubscribe();
+				activePromiseReject = null;
+				// Trigger a shutdown to reset state.
+				inputQuery.update((v: InputQuery) => ({ ...v, status: 'shutdown' }));
+			}
+		});
 	}
 </script>
 
@@ -108,32 +128,10 @@
 			const securities = await privateRequest<Instance[]>('getSecuritiesFromTicker', {
 				ticker: inputString
 			});
-			console.log(securities);
-
 			if (Array.isArray(securities) && securities.length > 0) {
-				// Fetch details for each security
-				const securitiesWithDetails = await Promise.all(
-					securities.map(async (security) => {
-						try {
-							const details = await privateRequest<Instance>('getTickerDetails', {
-								securityId: security.securityId,
-								ticker: security.ticker,
-								timestamp: security.timestamp
-							}).catch((v) => {});
-							return {
-								...security,
-								...details
-							};
-						} catch {
-							//console.error('Error fetching ticker details:', error);
-							return security;
-						}
-					})
-				);
-
 				return {
-					inputValid: securitiesWithDetails.some((v) => v.ticker === inputString),
-					securities: securitiesWithDetails
+					inputValid: securities.some((v) => v.ticker === inputString),
+					securities: securities
 				};
 			} else {
 				return { inputValid: false, securities: [] };
@@ -214,6 +212,25 @@
 		return iQ;
 	}
 
+	async function fetchSecurityDetails(securities: Instance[]): Promise<Instance[]> {
+		console.log(securities);
+		return Promise.all(
+			securities.map(async (security) => {
+				const details = await privateRequest<Instance>('getTickerDetails', {
+					securityId: security.securityId,
+					ticker: security.ticker,
+					timestamp: security.timestamp
+				}).catch((v) => {
+					console.warn(`get Details failed for ${security} ${v}`);
+				});
+				return {
+					...security,
+					...details
+				};
+			})
+		);
+	}
+
 	// Mark handleKeyDown as async so we can await the validate call if needed.
 	async function handleKeyDown(event: KeyboardEvent): Promise<void> {
 		// Only process keys when the input UI is active
@@ -288,11 +305,31 @@
 				if (thisSecurityResultRequest === currentSecurityResultRequest) {
 					inputQuery.update((v: InputQuery) => ({
 						...v,
-						//inputString: iQ.inputString,
-						//inputType: iQ.inputType,
 						...validationResp
 					}));
 					loadedSecurityResultRequest = thisSecurityResultRequest;
+
+					fetchSecurityDetails([...validationResp.securities]).then(
+						(securitiesWithDetails: Instance[]) => {
+							if (thisSecurityResultRequest === currentSecurityResultRequest) {
+								inputQuery.update((v: InputQuery) => {
+									// Merge the newly fetched details into the instance if it matches
+									if (v.instance && 'ticker' in v.instance && v.instance.ticker) {
+										const matchedSec = securitiesWithDetails.find(
+											(sec) => sec.ticker === v.instance.ticker
+										);
+										if (matchedSec) {
+											v.instance = { ...v.instance, ...matchedSec };
+										}
+									}
+									return {
+										...v,
+										securities: securitiesWithDetails
+									};
+								});
+							}
+						}
+					);
 				}
 			});
 		}
