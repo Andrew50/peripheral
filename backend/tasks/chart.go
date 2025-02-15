@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
+	"sync"
 	"time"
 
 	"github.com/polygon-io/client-go/rest/iter"
@@ -31,7 +33,12 @@ type GetChartDataResults struct {
 	Volume    float64 `json:"volume"`
 }
 
-var debug = false // Flip to `true` to enable verbose debugging output
+type GetChartDataResponse struct {
+	Bars           []GetChartDataResults `json:"bars"`
+	IsEarliestData bool                  `json:"isEarliestData"`
+}
+
+var debug = true // Flip to `true` to enable verbose debugging output
 
 func MaxDivisorOf30(n int) int {
 	for k := n; k >= 1; k-- {
@@ -212,7 +219,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				continue
 			}
 		}
-
+		fmt.Printf("\n\n%v, %v, %v, %v, %v, %v\n\n", ticker, timespan, multiplier, queryBars, queryStartTime, queryEndTime)
 		date1, date2, err := utils.GetRequestStartEndTime(
 			queryStartTime, queryEndTime, args.Direction, timespan, multiplier, queryBars,
 		)
@@ -230,6 +237,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 
 		// If we have to aggregate (e.g., second->minute, or minute->hour), do so
 		if haveToAggregate {
+			fmt.Printf("\n\nhave to aggregate\n\n")
 			it, err := utils.GetAggsData(
 				conn.Polygon,
 				ticker,
@@ -258,6 +266,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			}
 		} else {
 			// Otherwise, we can directly pull from Polygon at the desired timeframe
+			fmt.Printf("\n\nnot aggregating\n\n")
 			it, err := utils.GetAggsData(
 				conn.Polygon,
 				ticker,
@@ -320,6 +329,24 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 
 	// If we have some bars, reverse them if needed, then optionally fetch incomplete bar
 	if len(barDataList) > 0 {
+		// Check if we're actually at the earliest data by looking at the earliest timestamp
+		var isEarliestData bool
+		if args.Direction == "backward" {
+			earliestBar := barDataList[0]
+			rows, err := conn.DB.Query(ctx, `
+				SELECT 1 FROM securities 
+				WHERE securityid = $1 
+				AND minDate < $2
+				LIMIT 1
+			`, args.SecurityId, time.Unix(int64(earliestBar.Timestamp), 0))
+			if err != nil {
+				return nil, fmt.Errorf("error checking earliest data: %w", err)
+			}
+			defer rows.Close()
+
+			isEarliestData = !rows.Next() // true if no earlier data exists
+		}
+
 		// For aggregator logic or forward queries, we skip reversing.
 		if haveToAggregate || args.Direction == "forward" {
 			if args.Direction == "backward" {
@@ -353,7 +380,10 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 					}
 				}
 			}
-			return barDataList, nil
+			return GetChartDataResponse{
+				Bars:           barDataList,
+				IsEarliestData: isEarliestData,
+			}, nil
 		}
 
 		// Otherwise, direction=backward with direct data—reverse the slice
@@ -383,7 +413,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				barDataList = barDataList[:len(barDataList)-1]
 			}
 			if incompleteAgg.Open != 0 {
-				// Only add incomplete bar if it’s within regular hours or daily+ timeframes
+				// Only add incomplete bar if it's within regular hours or daily+ timeframes
 				incompleteTs := time.Unix(int64(incompleteAgg.Timestamp), 0)
 				if (utils.IsTimestampRegularHours(incompleteTs) && !args.ExtendedHours) ||
 					timespan == "day" || timespan == "week" || timespan == "month" {
@@ -391,7 +421,10 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				}
 			}
 		}
-		return barDataList, nil
+		return GetChartDataResponse{
+			Bars:           barDataList,
+			IsEarliestData: isEarliestData,
+		}, nil
 	}
 
 	if debug {
@@ -408,7 +441,8 @@ func reverse(data []GetChartDataResults) {
 	}
 }
 
-// requestIncompleteBar attempts to build a partial bar for the current bar in progress
+// requestIncompleteBars fetches daily, minute, second, and trade data
+// in parallel, then merges all results in a single pass. This avoids stepwise merges.
 func requestIncompleteBar(
 	conn *utils.Conn,
 	ticker string,
@@ -420,6 +454,9 @@ func requestIncompleteBar(
 	easternLocation *time.Location,
 ) (GetChartDataResults, error) {
 
+	// --------------------------
+	// 1) Compute time boundaries
+	// --------------------------
 	var incompleteBar GetChartDataResults
 	timestampEnd := timestamp
 	if timestamp == 0 {
@@ -430,16 +467,17 @@ func requestIncompleteBar(
 	var timestampStart int64
 	var currentDayStart int64
 
-	// Intraday logic
+	// Same logic as before
 	if timespan == "second" || timespan == "minute" || timespan == "hour" {
 		currentDayStart = utils.GetReferenceStartTime(timestampEnd, extendedHours, easternLocation)
+		elapsed := timestampEnd - currentDayStart
 		timeframeInSeconds := utils.GetTimeframeInSeconds(multiplier, timespan)
-		elapsedTime := timestampEnd - currentDayStart
-		if elapsedTime < 0 {
+		if elapsed < 0 {
+			// Means we're before the day start
 			return incompleteBar, nil
 		}
 		// Snap to boundary
-		timestampStart = currentDayStart + (elapsedTime/(timeframeInSeconds*1000))*timeframeInSeconds*1000
+		timestampStart = currentDayStart + (elapsed/(timeframeInSeconds*1000))*timeframeInSeconds*1000
 	} else {
 		// Daily or above
 		currentDayStart = utils.GetReferenceStartTime(timestampEnd, false, easternLocation)
@@ -452,219 +490,365 @@ func requestIncompleteBar(
 			timestampStart = utils.GetReferenceStartTimeForMonths(timestampEnd, multiplier, easternLocation)
 		}
 	}
-
+	// This is the official bar "start" in seconds
 	incompleteBar.Timestamp = math.Floor(float64(timestampStart) / 1000.0)
 
-	// For daily or above, try to combine daily bars from open to "yesterday"
-	if timespan == "day" || timespan == "week" || timespan == "month" {
-		lastCompleteDayUTC := time.Date(
-			timestampTime.Year(), timestampTime.Month(), timestampTime.Day(),
-			0, 0, 0, 0, time.UTC,
-		).UnixMilli()
-		dailyBarsDurationMs := lastCompleteDayUTC - timestampStart
-		numDailyBars := int(dailyBarsDurationMs / 86400000) // ms in a day
-		if numDailyBars > 0 {
-			startT := models.Millis(time.Unix(0, timestampStart*int64(time.Millisecond)).UTC())
-			endT := models.Millis(time.Unix(0, (lastCompleteDayUTC-86400000)*int64(time.Millisecond)).UTC())
+	// -------------------------
+	// 2) Define sub-windows for daily/minute/second/trade, so no overlap
+	// -------------------------
+	// We'll fetch:
+	//   (A) daily bars:   [timestampStart .. dailyEnd)
+	//   (B) minute bars:  [dailyEnd       .. minuteEnd)
+	//   (C) second bars:  [minuteEnd      .. secondEnd)
+	//   (D) trades:       [secondEnd      .. timestampEnd)
+	//
+	// This ensures we don't double-aggregate.
 
-			it, err := utils.GetAggsData(conn.Polygon, ticker, 1, "day", startT, endT, 10000, "asc", !isReplay)
-			if err != nil {
-				return incompleteBar, fmt.Errorf("error creating incomplete bar (daily) %v", err)
-			}
-
-			var count int
-			for it.Next() {
-				if count >= numDailyBars {
-					break
-				}
-				agg := it.Item()
-				if incompleteBar.Open == 0 && agg.Open != 0 {
-					incompleteBar.Open = agg.Open
-				}
-				if agg.High > incompleteBar.High {
-					incompleteBar.High = agg.High
-				}
-				if agg.Low < incompleteBar.Low || incompleteBar.Low == 0 {
-					incompleteBar.Low = agg.Low
-				}
-				incompleteBar.Close = agg.Close
-				incompleteBar.Volume += agg.Volume
-				count++
-			}
-		}
-		timestampStart = currentDayStart
+	//
+	// (A) daily up to last-complete-day
+	//
+	lastCompleteDayUTC := time.Date(timestampTime.Year(), timestampTime.Month(), timestampTime.Day(),
+		0, 0, 0, 0, time.UTC).UnixMilli()
+	dailyEnd := lastCompleteDayUTC - 86400000 // 1 day (ms)
+	if dailyEnd < timestampStart {
+		// means there's no partial day to fetch
+		dailyEnd = timestampStart
 	}
 
-	// For minute data
-	if timespan != "second" {
-		lastCompleteMinuteUTC := timestampTime.Truncate(time.Minute).UnixMilli()
-		if !extendedHours || timespan == "day" || timespan == "week" || timespan == "month" {
-			marketClose := time.Date(
-				timestampTime.Year(), timestampTime.Month(), timestampTime.Day(),
-				16, 0, 0, 0, easternLocation,
-			)
-			// If time is after market close, we roll back to the last minute before 16:00
-			if timestampTime.After(marketClose) {
-				lastCompleteMinuteUTC = time.Date(
-					timestampTime.Year(), timestampTime.Month(), timestampTime.Day(),
-					15, 59, 0, 0, easternLocation,
-				).UnixMilli()
-			}
+	//
+	// (B) minute up to last-complete-minute
+	//
+	lastCompleteMinuteUTC := timestampTime.Truncate(time.Minute).UnixMilli()
+	// If after market close, roll back to 15:59
+	if !extendedHours || timespan == "day" || timespan == "week" || timespan == "month" {
+		marketClose := time.Date(timestampTime.Year(), timestampTime.Month(), timestampTime.Day(),
+			16, 0, 0, 0, easternLocation)
+		if timestampTime.After(marketClose) {
+			lastCompleteMinuteUTC = time.Date(timestampTime.Year(), timestampTime.Month(), timestampTime.Day(),
+				15, 59, 0, 0, easternLocation).UnixMilli()
 		}
-		minuteBarsEndTimeUTC := lastCompleteMinuteUTC
-		if minuteBarsEndTimeUTC <= timestampStart {
-			minuteBarsEndTimeUTC = timestampStart
-		}
-		numMinuteBars := (minuteBarsEndTimeUTC - timestampStart) / (60 * 1000)
-		if debug {
-			fmt.Printf("[DEBUG] # of minute bars to fetch: %d\n", numMinuteBars)
-		}
-
-		if numMinuteBars > 0 {
-			startT := models.Millis(time.Unix(0, timestampStart*int64(time.Millisecond)).UTC())
-			endT := models.Millis(time.Unix(0, (lastCompleteMinuteUTC-60000)*int64(time.Millisecond)).UTC())
-
-			it, err := utils.GetAggsData(conn.Polygon, ticker, 1, "minute", startT, endT, 10000, "asc", !isReplay)
-			if err != nil {
-				return incompleteBar, fmt.Errorf("error while pulling minute data for incomplete bar: %v", err)
-			}
-
-			var count int64
-			for it.Next() {
-				if count >= numMinuteBars {
-					break
-				}
-				agg := it.Item()
-				barTs := time.Time(agg.Timestamp).In(easternLocation)
-				if !utils.IsTimestampRegularHours(barTs) && !extendedHours {
-					continue
-				}
-				if incompleteBar.Open == 0 {
-					incompleteBar.Open = agg.Open
-				}
-				if agg.High > incompleteBar.High {
-					incompleteBar.High = agg.High
-				}
-				if agg.Low < incompleteBar.Low || incompleteBar.Low == 0 {
-					incompleteBar.Low = agg.Low
-				}
-				incompleteBar.Close = agg.Close
-				incompleteBar.Volume += agg.Volume
-				count++
-			}
-		}
-		timestampStart = lastCompleteMinuteUTC
+	}
+	minuteEnd := lastCompleteMinuteUTC - 60000 // subtract 1 minute
+	if minuteEnd < dailyEnd {
+		minuteEnd = dailyEnd
 	}
 
-	// For second data
+	//
+	// (C) second up to last-complete-second
+	//
 	lastCompleteSecondUTC := timestampTime.Truncate(time.Second).UnixMilli()
-	secondBarsEndTimeUTC := lastCompleteSecondUTC
-	if secondBarsEndTimeUTC <= timestampStart {
-		secondBarsEndTimeUTC = timestampStart
-	}
-	numSecondBars := (secondBarsEndTimeUTC - timestampStart) / 1000
-	if debug {
-		fmt.Printf("[DEBUG] # of second bars to fetch: %d\n", numSecondBars)
+	secondEnd := lastCompleteSecondUTC
+	if secondEnd < minuteEnd {
+		secondEnd = minuteEnd
 	}
 
-	if numSecondBars > 0 {
-		startT := models.Millis(time.Unix(0, timestampStart*int64(time.Millisecond)).UTC())
-		endT := models.Millis(time.Unix(0, lastCompleteSecondUTC*int64(time.Millisecond)).UTC())
-
-		it, err := utils.GetAggsData(conn.Polygon, ticker, 1, "second", startT, endT, 10000, "asc", !isReplay)
-		if err != nil {
-			return incompleteBar, fmt.Errorf("error while pulling second data for incomplete bar: %v", err)
-		}
-
-		var count int64
-		for it.Next() {
-			if count >= numSecondBars {
-				break
-			}
-			agg := it.Item()
-			barTs := time.Time(agg.Timestamp).In(easternLocation)
-			if !extendedHours && !utils.IsTimestampRegularHours(barTs) {
-				continue
-			}
-			if incompleteBar.Open == 0 {
-				incompleteBar.Open = agg.Open
-			}
-			if agg.High > incompleteBar.High {
-				incompleteBar.High = agg.High
-			}
-			if agg.Low < incompleteBar.Low || incompleteBar.Low == 0 {
-				incompleteBar.Low = agg.Low
-			}
-			incompleteBar.Close = agg.Close
-			incompleteBar.Volume += agg.Volume
-			count++
-		}
-		timestampStart = lastCompleteSecondUTC
+	//
+	// (D) trades up to timestampEnd
+	//
+	tradeEnd := timestampEnd
+	if tradeEnd < secondEnd {
+		tradeEnd = secondEnd
 	}
 
-	// For trade-level data
-	tradeConditionsToCheck := map[int32]struct{}{
+	// ------------------------
+	// 3) Concurrently fetch data
+	// ------------------------
+	var wg sync.WaitGroup
+	wg.Add(4) // daily, minute, second, trades
+
+	var dailyBars []models.Agg
+	var minuteBars []models.Agg
+	var secondBars []models.Agg
+	var tradeList []models.Trade
+
+	var dailyErr, minuteErr, secondErr, tradeErr error
+
+	go func() {
+		defer wg.Done()
+		dailyBars, dailyErr = fetchAggData(
+			conn, ticker,
+			1, "day",
+			timestampStart, dailyEnd,
+			isReplay,
+			// We do NOT filter extended hours for daily bars. They're daily lumps anyway.
+			false,
+			easternLocation,
+		)
+	}()
+	go func() {
+		defer wg.Done()
+		minuteBars, minuteErr = fetchAggData(
+			conn, ticker,
+			1, "minute",
+			dailyEnd, minuteEnd,
+			isReplay,
+			!extendedHours, // pass a "filterRegularHours" argument (inverse of extended)
+			easternLocation,
+		)
+	}()
+	go func() {
+		defer wg.Done()
+		secondBars, secondErr = fetchAggData(
+			conn, ticker,
+			1, "second",
+			minuteEnd, secondEnd,
+			isReplay,
+			!extendedHours,
+			easternLocation,
+		)
+	}()
+	go func() {
+		defer wg.Done()
+		tradeList, tradeErr = fetchTrades(
+			conn, ticker,
+			secondEnd, tradeEnd,
+			extendedHours,
+			isReplay,
+			easternLocation,
+		)
+	}()
+
+	wg.Wait()
+
+	// Check errors
+	if dailyErr != nil {
+		return incompleteBar, fmt.Errorf("daily fetch error: %v", dailyErr)
+	}
+	if minuteErr != nil {
+		return incompleteBar, fmt.Errorf("minute fetch error: %v", minuteErr)
+	}
+	if secondErr != nil {
+		return incompleteBar, fmt.Errorf("second fetch error: %v", secondErr)
+	}
+	if tradeErr != nil {
+		return incompleteBar, fmt.Errorf("trade fetch error: %v", tradeErr)
+	}
+
+	// ------------------------
+	// 4) Flatten all data into a single slice
+	// ------------------------
+	combined := make([]combinedData, 0, len(dailyBars)+len(minuteBars)+len(secondBars)+len(tradeList))
+
+	// (A) daily
+	for _, agg := range dailyBars {
+		combined = append(combined, combinedData{
+			ts:      time.Time(agg.Timestamp),
+			isTrade: false,
+			open:    agg.Open,
+			high:    agg.High,
+			low:     agg.Low,
+			close:   agg.Close,
+			volume:  agg.Volume,
+			// No conditions for aggregated bars
+		})
+	}
+	// (B) minute
+	for _, agg := range minuteBars {
+		combined = append(combined, combinedData{
+			ts:      time.Time(agg.Timestamp),
+			isTrade: false,
+			open:    agg.Open,
+			high:    agg.High,
+			low:     agg.Low,
+			close:   agg.Close,
+			volume:  agg.Volume,
+		})
+	}
+	// (C) second
+	for _, agg := range secondBars {
+		combined = append(combined, combinedData{
+			ts:      time.Time(agg.Timestamp),
+			isTrade: false,
+			open:    agg.Open,
+			high:    agg.High,
+			low:     agg.Low,
+			close:   agg.Close,
+			volume:  agg.Volume,
+		})
+	}
+	// (D) trades
+	for _, tr := range tradeList {
+		// For trades, treat Price as O/H/L/C and Size as volume
+		combined = append(combined, combinedData{
+			ts:         time.Time(tr.ParticipantTimestamp),
+			isTrade:    true,
+			open:       tr.Price,
+			high:       tr.Price,
+			low:        tr.Price,
+			close:      tr.Price,
+			volume:     tr.Size,
+			conditions: tr.Conditions,
+		})
+	}
+
+	// ------------------------
+	// 5) Sort combined by ascending timestamp
+	// ------------------------
+	sort.Slice(combined, func(i, j int) bool {
+		return combined[i].ts.Before(combined[j].ts)
+	})
+
+	// ------------------------
+	// 6) Single-pass aggregator
+	// ------------------------
+	tradeConditionsToSkipOhlc := map[int32]struct{}{
 		2: {}, 5: {}, 10: {}, 15: {}, 16: {}, 20: {}, 21: {}, 22: {}, 29: {}, 33: {}, 38: {}, 52: {}, 53: {},
 	}
-	volumeConditionsToCheck := map[int32]struct{}{
+	tradeConditionsToSkipVolume := map[int32]struct{}{
 		15: {}, 16: {}, 38: {},
 	}
 
-	startNanos := models.Nanos(time.Unix(timestampStart/1000, (timestampStart%1000)*1e6).UTC())
-	it, err := utils.GetTrade(conn.Polygon, ticker, startNanos, "asc", models.GTE, 30000)
-	if err != nil {
-		return incompleteBar, fmt.Errorf("error pulling tick data: %v", err)
-	}
-
-	endUnix := time.Unix(0, timestampEnd*int64(time.Millisecond)).UTC()
-	for it.Next() {
-		trade := it.Item()
-		if trade == nil {
+	for _, cd := range combined {
+		// Only process data that's within the final time range
+		if cd.ts.UnixMilli() < timestampStart {
 			continue
 		}
-		tradeTs := time.Time(trade.ParticipantTimestamp).In(easternLocation)
-		// Stop if we move past the target end
-		if tradeTs.After(endUnix) {
-			break
-		}
-		if !extendedHours && !utils.IsTimestampRegularHours(tradeTs) {
+		if cd.ts.UnixMilli() > timestampEnd {
 			break
 		}
 
-		// Skip if condition blacklists it from affecting O/H/L/C
-		skipOhlc := false
-		for _, condition := range trade.Conditions {
-			if _, found := tradeConditionsToCheck[condition]; found {
-				skipOhlc = true
-				break
+		if cd.isTrade {
+			// Evaluate whether to skip O/H/L/C or volume based on conditions
+			skipOhlc := false
+			skipVol := false
+			for _, cond := range cd.conditions {
+				if _, found := tradeConditionsToSkipOhlc[cond]; found {
+					skipOhlc = true
+				}
+				if _, found := tradeConditionsToSkipVolume[cond]; found {
+					skipVol = true
+				}
+				if skipOhlc && skipVol {
+					break
+				}
 			}
-		}
-		if !skipOhlc {
-			if incompleteBar.Open == 0 {
-				incompleteBar.Open = trade.Price
+			if !skipOhlc {
+				if incompleteBar.Open == 0 {
+					incompleteBar.Open = cd.open
+				}
+				if cd.high > incompleteBar.High {
+					incompleteBar.High = cd.high
+				}
+				if incompleteBar.Low == 0 || cd.low < incompleteBar.Low {
+					incompleteBar.Low = cd.low
+				}
+				incompleteBar.Close = cd.close
 			}
-			if trade.Price > incompleteBar.High {
-				incompleteBar.High = trade.Price
-			} else if trade.Price < incompleteBar.Low || incompleteBar.Low == 0 {
-				incompleteBar.Low = trade.Price
+			if !skipVol {
+				incompleteBar.Volume += cd.volume
 			}
-			incompleteBar.Close = trade.Price
-		}
-
-		// Only add volume if not in volume condition skip set
-		skipVol := false
-		for _, condition := range trade.Conditions {
-			if _, found := volumeConditionsToCheck[condition]; found {
-				skipVol = true
-				break
+		} else {
+			// It's aggregated data (daily/minute/second)
+			// Incorporate it directly.
+			if incompleteBar.Open == 0 && cd.open != 0 {
+				incompleteBar.Open = cd.open
 			}
-		}
-		if !skipVol {
-			incompleteBar.Volume += trade.Size
+			if cd.high > incompleteBar.High {
+				incompleteBar.High = cd.high
+			}
+			if incompleteBar.Low == 0 || cd.low < incompleteBar.Low {
+				incompleteBar.Low = cd.low
+			}
+			incompleteBar.Close = cd.close
+			incompleteBar.Volume += cd.volume
 		}
 	}
 
 	return incompleteBar, nil
+}
+
+// ----------------------------------------------------
+//  Helper types and fetch functions used by the above
+// ----------------------------------------------------
+
+// combinedData is a unified structure for Agg or Trade data
+type combinedData struct {
+	ts         time.Time
+	isTrade    bool
+	open       float64
+	high       float64
+	low        float64
+	close      float64
+	volume     float64
+	conditions []int32 // only used for trades
+}
+
+// fetchAggData pulls aggregated bars (day/minute/second) from Polygon,
+// optionally filtering out non-regular-hour bars if `filterRegularOnly` is true.
+func fetchAggData(
+	conn *utils.Conn,
+	ticker string,
+	multiplier int,
+	timespan string,
+	startMs, endMs int64,
+	isReplay bool,
+	filterRegularOnly bool,
+	easternLocation *time.Location,
+) ([]models.Agg, error) {
+
+	if endMs <= startMs {
+		return nil, nil
+	}
+	start := models.Millis(time.Unix(0, startMs*int64(time.Millisecond)).UTC())
+	end := models.Millis(time.Unix(0, endMs*int64(time.Millisecond)).UTC())
+
+	it, err := utils.GetAggsData(conn.Polygon, ticker, multiplier, timespan, start, end, 10000, "asc", !isReplay)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []models.Agg
+	for it.Next() {
+		agg := it.Item()
+		ts := time.Time(agg.Timestamp).In(easternLocation)
+
+		if filterRegularOnly {
+			if !utils.IsTimestampRegularHours(ts) {
+				continue
+			}
+		}
+		result = append(result, agg)
+	}
+	return result, it.Err()
+}
+
+// fetchTrades pulls trade data, filtering pre/post market if extendedHours=false.
+func fetchTrades(
+	conn *utils.Conn,
+	ticker string,
+	startMs, endMs int64,
+	extendedHours bool,
+	isReplay bool,
+	easternLocation *time.Location,
+) ([]models.Trade, error) {
+
+	if endMs <= startMs {
+		return nil, nil
+	}
+	startNanos := models.Nanos(time.Unix(startMs/1000, (startMs%1000)*1e6).UTC())
+
+	it, err := utils.GetTrade(conn.Polygon, ticker, startNanos, "asc", models.GTE, 30000)
+	if err != nil {
+		return nil, err
+	}
+
+	var trades []models.Trade
+	endTime := time.Unix(0, endMs*int64(time.Millisecond)).UTC()
+
+	for it.Next() {
+		tr := it.Item()
+		if it.Err() != nil {
+			return nil, it.Err()
+		}
+		tradeTs := time.Time(tr.ParticipantTimestamp).In(easternLocation)
+		if tradeTs.After(endTime) {
+			break
+		}
+		if extendedHours || utils.IsTimestampRegularHours(tradeTs) {
+			trades = append(trades, tr)
+		}
+	}
+	return trades, it.Err()
 }
 
 // buildHigherTimeframeFromLower re-aggregates smaller timeframes into a bigger timeframe.
