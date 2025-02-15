@@ -684,6 +684,8 @@
 		try {
 			const timeToRequestForUpdatingAggregate =
 				ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
+			console.log('chart timeframe: ', chartTimeframe);
+			console.log('timeToRequestForUpdatingAggregate: ', timeToRequestForUpdatingAggregate);
 			const [barData] = await privateRequest<BarData[]>('getChartData', {
 				securityId: chartSecurityId,
 				timeframe: chartTimeframe,
