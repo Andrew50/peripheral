@@ -227,7 +227,7 @@ def process_trades(conn, user_id: int):
 
                     cursor.execute("""
                         INSERT INTO trades (
-                            userId, securityId, ticker, tradeDirection, date, status, openQuantity,
+                            userId, securityId, ticker, tradedirection, date, status, openQuantity,
                             entry_times, entry_prices, entry_shares,
                             exit_times, exit_prices, exit_shares
                         )
@@ -286,6 +286,29 @@ def process_trades(conn, user_id: int):
                                 WHERE tradeId = %s
                             """, (trade_ts, trade_price, trade_size, new_open_qty, new_open_qty, trade_id))
 
+                            # Calculate and update P/L for partial exits
+                            cursor.execute("""
+                                SELECT entry_prices, entry_shares,
+                                       exit_prices, exit_shares,
+                                       tradedirection
+                                FROM trades
+                                WHERE tradeId = %s
+                            """, (trade_id,))
+                            trade_data = cursor.fetchone()
+                            updated_pnl = calculate_pnl(
+                                trade_data[0],
+                                trade_data[1],
+                                trade_data[2],
+                                trade_data[3],
+                                trade_data[4],
+                                ticker
+                            )
+                            cursor.execute("""
+                                UPDATE trades
+                                SET closedPnL = %s
+                                WHERE tradeId = %s
+                            """, (updated_pnl, trade_id))
+
                     else:
                         print("\nReducing position (opposite direction)", flush=True)
                         cursor.execute("""
@@ -301,26 +324,23 @@ def process_trades(conn, user_id: int):
                             WHERE tradeId = %s
                         """, (trade_ts, trade_price, trade_size, new_open_qty, new_open_qty, trade_id))
 
-                    print(f"\nChecking if trade closed. New quantity: {new_open_qty}", flush=True)
-                    if abs(new_open_qty) < 1e-9:  # effectively zero
-                        print("\nTrade closed - calculating P&L", flush=True)
+                        # Calculate and update P/L for partial exits
                         cursor.execute("""
                             SELECT entry_prices, entry_shares,
                                    exit_prices, exit_shares,
-                                   tradeDirection
+                                   tradedirection
                             FROM trades
                             WHERE tradeId = %s
                         """, (trade_id,))
-                        updated_trade = cursor.fetchone()
+                        trade_data = cursor.fetchone()
                         updated_pnl = calculate_pnl(
-                            updated_trade[0],
-                            updated_trade[1],
-                            updated_trade[2],
-                            updated_trade[3],
-                            updated_trade[4],
+                            trade_data[0],
+                            trade_data[1],
+                            trade_data[2],
+                            trade_data[3],
+                            trade_data[4],
                             ticker
                         )
-                        print(f"\nCalculated P&L: {updated_pnl}", flush=True)
                         cursor.execute("""
                             UPDATE trades
                             SET closedPnL = %s
@@ -389,4 +409,221 @@ def calculate_pnl(entry_prices, entry_shares, exit_prices, exit_shares, directio
 
     print("\ncalculated pnl: ", pnl)
     return float(round(pnl, 2))
+
+def get_trade_statistics(conn, user_id: int, start_date: str = None, end_date: str = None, ticker: str = None) -> dict:
+    """
+    Calculate trading statistics for a user within a date range
+    
+    Args:
+        conn: Database connection
+        user_id (int): User ID
+        start_date (str): Optional start date filter in format 'YYYY-MM-DD'
+        end_date (str): Optional end date filter in format 'YYYY-MM-DD'
+        ticker (str): Optional ticker filter
+    """
+    try:
+        with conn.db.cursor() as cursor:
+            query = """
+                SELECT 
+                    COUNT(*) as total_trades,
+                    COUNT(CASE WHEN closedPnL > 0 THEN 1 END) as winning_trades,
+                    COUNT(CASE WHEN closedPnL <= 0 THEN 1 END) as losing_trades,
+                    AVG(CASE WHEN closedPnL > 0 THEN closedPnL END) as avg_win,
+                    AVG(CASE WHEN closedPnL <= 0 THEN closedPnL END) as avg_loss,
+                    SUM(closedPnL) as total_pnl
+                FROM trades 
+                WHERE userId = %s 
+                AND status = 'Closed'
+                AND closedPnL IS NOT NULL
+            """
+            params = [user_id]
+
+            if start_date:
+                query += " AND DATE(entry_times[1]) >= %s"
+                params.append(start_date)
+            
+            if end_date:
+                query += " AND DATE(entry_times[1]) <= %s"
+                params.append(end_date)
+            
+            if ticker:
+                query += " AND ticker = %s"
+                params.append(ticker)
+
+            cursor.execute(query, tuple(params))
+            row = cursor.fetchone()
+            
+            total_trades = row[0]
+            winning_trades = row[1]
+            losing_trades = row[2]
+            avg_win = float(row[3]) if row[3] else 0
+            avg_loss = float(row[4]) if row[4] else 0
+            total_pnl = float(row[5]) if row[5] else 0
+            
+            win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
+            
+            # Update P/L curve query with date range
+            pnl_query = """
+                SELECT 
+                    entry_times[1] as trade_time,
+                    closedPnL
+                FROM trades 
+                WHERE userId = %s 
+                AND status = 'Closed'
+                AND closedPnL IS NOT NULL
+            """
+            params = [user_id]
+
+            if start_date:
+                pnl_query += " AND DATE(entry_times[1]) >= %s"
+                params.append(start_date)
+            
+            if end_date:
+                pnl_query += " AND DATE(entry_times[1]) <= %s"
+                params.append(end_date)
+            
+            if ticker:
+                pnl_query += " AND ticker = %s"
+                params.append(ticker)
+                
+            pnl_query += " ORDER BY entry_times[1] ASC"
+
+            eastern = pytz.timezone('America/New_York')
+            utc = pytz.UTC
+
+            # Add queries for top and bottom trades
+            trades_query = """
+                SELECT 
+                    ticker,
+                    entry_times[1] as trade_time,
+                    tradedirection,
+                    closedPnL
+                FROM trades 
+                WHERE userId = %s 
+                AND status = 'Closed'
+                AND closedPnL IS NOT NULL
+            """
+            params = [user_id]
+
+            if start_date:
+                trades_query += " AND DATE(entry_times[1]) >= %s"
+                params.append(start_date)
+            
+            if end_date:
+                trades_query += " AND DATE(entry_times[1]) <= %s"
+                params.append(end_date)
+            
+            if ticker:
+                trades_query += " AND ticker = %s"
+                params.append(ticker)
+
+            # Get top 5 trades
+            top_query = trades_query + " ORDER BY closedPnL DESC LIMIT 5"
+            cursor.execute(top_query, tuple(params))
+            top_trades = [{
+                'ticker': row[0],
+                'timestamp': int(eastern.localize(row[1]).astimezone(utc).timestamp() * 1000),
+                'direction': row[2],
+                'pnl': float(row[3])
+            } for row in cursor.fetchall()]
+
+            # Get bottom 5 trades
+            bottom_query = trades_query + " ORDER BY closedPnL ASC LIMIT 5"
+            cursor.execute(bottom_query, tuple(params))
+            bottom_trades = [{
+                'ticker': row[0],
+                'timestamp': int(eastern.localize(row[1]).astimezone(utc).timestamp() * 1000),
+                'direction': row[2],
+                'pnl': float(row[3])
+            } for row in cursor.fetchall()]
+
+            # Get P/L curve data
+            cursor.execute(pnl_query, tuple(params))
+            pnl_data = cursor.fetchall()
+            
+            cumulative_pnl = []
+            running_total = 0
+            
+            for row in pnl_data:
+                trade_time = int(eastern.localize(row[0]).astimezone(utc).timestamp() * 1000)
+                pnl = float(row[1])
+                running_total += pnl
+                cumulative_pnl.append({
+                    'timestamp': trade_time,
+                    'value': running_total
+                })
+
+            # Add query for hourly statistics
+            hourly_query = """
+                SELECT 
+                    EXTRACT(HOUR FROM entry_times[1]) as hour,
+                    COUNT(*) as total_trades,
+                    COUNT(CASE WHEN closedPnL > 0 THEN 1 END) as winning_trades,
+                    COUNT(CASE WHEN closedPnL <= 0 THEN 1 END) as losing_trades,
+                    AVG(closedPnL) as avg_pnl,
+                    SUM(closedPnL) as total_pnl
+                FROM trades 
+                WHERE userId = %s 
+                AND status = 'Closed'
+                AND closedPnL IS NOT NULL
+            """
+            params = [user_id]
+
+            if start_date:
+                hourly_query += " AND DATE(entry_times[1]) >= %s"
+                params.append(start_date)
+            
+            if end_date:
+                hourly_query += " AND DATE(entry_times[1]) <= %s"
+                params.append(end_date)
+            
+            if ticker:
+                hourly_query += " AND ticker = %s"
+                params.append(ticker)
+            
+            hourly_query += " GROUP BY EXTRACT(HOUR FROM entry_times[1]) ORDER BY hour"
+
+            cursor.execute(hourly_query, tuple(params))
+            hourly_stats = []
+            
+            for row in cursor.fetchall():
+                hour = int(row[0])
+                total = int(row[1])
+                wins = int(row[2])
+                losses = int(row[3])
+                avg_pnl = float(row[4]) if row[4] else 0
+                total_pnl = float(row[5]) if row[5] else 0
+                
+                hourly_stats.append({
+                    'hour': hour,
+                    'hour_display': f"{hour:02d}:00",
+                    'total_trades': total,
+                    'winning_trades': wins,
+                    'losing_trades': losses,
+                    'win_rate': round((wins / total * 100), 2) if total > 0 else 0,
+                    'avg_pnl': round(avg_pnl, 2),
+                    'total_pnl': round(total_pnl, 2)
+                })
+
+            return {
+                "total_trades": total_trades,
+                "winning_trades": winning_trades,
+                "losing_trades": losing_trades,
+                "win_rate": round(win_rate, 2),
+                "avg_win": round(avg_win, 2),
+                "avg_loss": round(avg_loss, 2),
+                "total_pnl": round(total_pnl, 2),
+                "pnl_curve": cumulative_pnl,
+                "top_trades": top_trades,
+                "bottom_trades": bottom_trades,
+                "hourly_stats": hourly_stats
+            }
+            
+    except Exception as e:
+        error_info = traceback.format_exc()
+        print(f"Error calculating statistics:\n{error_info}")
+        return {
+            "error": str(e),
+            "traceback": error_info
+        }
     
