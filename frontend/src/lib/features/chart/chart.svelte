@@ -135,6 +135,7 @@
 	let mouseDownStartY = 0;
 	const DRAG_THRESHOLD = 3; // pixels of movement before considered a drag
 
+	
 	// Add new interface for alert lines
 	interface AlertLine {
 		price: number;
@@ -180,7 +181,7 @@
 		}
 		console.log(inst);
 		console.log(inst.extendedHours);
-		privateRequest<BarData[]>('getChartData', {
+		privateRequest<{bars: BarData[], isEarliestData: boolean}>('getChartData', {
 			securityId: inst.securityId,
 			timeframe: inst.timeframe,
 			timestamp: inst.timestamp,
@@ -189,7 +190,8 @@
 			extendedhours: inst.extendedHours,
 			isreplay: $streamInfo.replayActive
 		})
-			.then((barDataList: BarData[]) => {
+			.then((response) => {
+				const barDataList = response.bars;
 				blockingChartQueryDispatch = inst;
 				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
 					return;
@@ -273,8 +275,9 @@
 				}
 				if (barDataList.length < inst.bars) {
 					if (inst.direction == 'backward') {
-						chartEarliestDataReached = true;
+						chartEarliestDataReached = response.isEarliestData;
 					} else if (inst.direction == 'forward') {
+						console.log("chartLatestDataReached")
 						chartLatestDataReached = true;
 					}
 				}
