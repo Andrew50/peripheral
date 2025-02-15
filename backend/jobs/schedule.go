@@ -23,9 +23,12 @@ var (
 )
 
 func StartScheduler(conn *utils.Conn) chan struct{} {
+
 	//go initialize(conn)
 	//eventLoop(time.Now(), conn)
+
 	updateSectors(conn)
+
 	location, err := time.LoadLocation("EST")
 	go eventLoop(time.Now().In(location), conn)
 
@@ -52,6 +55,7 @@ func StartScheduler(conn *utils.Conn) chan struct{} {
 }
 
 func initialize(conn *utils.Conn) {
+
 	// Queue sector update on first init
 
 	if useBS {
