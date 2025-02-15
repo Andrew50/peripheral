@@ -128,6 +128,10 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 			if err != nil {
 				fmt.Println("schedule issue: dw000", err)
 			}
+			err = updateSecurityDetails(conn, false)
+			if err != nil {
+				fmt.Println("schedule issue: security details update:", err)
+			}
 			err = updateSectors(conn)
 			if err != nil {
 				fmt.Println("schedule issue: sector update close:", err)
