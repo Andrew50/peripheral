@@ -8,9 +8,11 @@
 	import type { Writable } from 'svelte/store';
 	import type { Instance } from '$lib/core/types';
 	const allKeys = ['ticker', 'timestamp', 'timeframe', 'extendedHours', 'price'] as const;
+	let currentSecurityResultRequest = 0;
 
 	type InstanceAttributes = (typeof allKeys)[number];
 	let filterOptions = [];
+	let loadedSecurityResultRequest = -1;
 	privateRequest<[]>('getSecurityClassifications', {}).then((v: []) => {
 		filterOptions = v;
 	});
@@ -42,11 +44,29 @@
 	};
 	let inputQuery: Writable<InputQuery> = writable({ ...inactiveInputQuery });
 
+	// Hold the reject function of the currently active promise (if any)
+	let activePromiseReject: ((reason?: any) => void) | null = null;
+
+	// Modified queryInstanceInput: if called while another query is active,
+	// cancel the previous query (rejecting its promise) and reset the state.
 	export async function queryInstanceInput(
 		requiredKeys: InstanceAttributes[] | 'any',
 		optionalKeys: InstanceAttributes[] | 'any',
 		instance: Instance = {}
 	): Promise<Instance> {
+		// If an input query is already active, force its cancellation.
+		console.log(requiredKeys);
+		if (get(inputQuery).status !== 'inactive') {
+			if (activePromiseReject) {
+				activePromiseReject(new Error('User cancelled input'));
+				activePromiseReject = null;
+			}
+			inputQuery.update((q) => ({ ...inactiveInputQuery }));
+			// Optionally wait a tick for the UI to update.
+			await tick();
+		}
+
+		// Determine possible keys.
 		let possibleKeys: InstanceAttributes[];
 		if (optionalKeys === 'any') {
 			possibleKeys = [...allKeys];
@@ -56,35 +76,38 @@
 			) as InstanceAttributes[];
 		}
 		await tick();
-		if (get(inputQuery).status === 'inactive') {
-			// initialize with the passed instance info
-			inputQuery.update((v: InputQuery) => ({
-				...v,
-				requiredKeys,
-				possibleKeys,
-				instance,
-				status: 'initializing'
-			}));
-			return new Promise<Instance>((resolve, reject) => {
-				const unsubscribe = inputQuery.subscribe((iQ: InputQuery) => {
-					if (iQ.status === 'cancelled') {
-						cleanup();
-						reject(new Error('User cancelled input'));
-					} else if (iQ.status === 'complete') {
-						const re = iQ.instance;
-						cleanup();
-						resolve(re);
-					}
-				});
-				function cleanup() {
-					unsubscribe();
-					// trigger shutdown so the onMount subscription resets the state
-					inputQuery.update((v: InputQuery) => ({ ...v, status: 'shutdown' }));
+		// Initialize the query with passed instance info.
+		inputQuery.update((v: InputQuery) => ({
+			...v,
+			requiredKeys,
+			possibleKeys,
+			instance,
+			status: 'initializing'
+		}));
+
+		// Return a new promise that resolves when input is complete or rejects on cancellation.
+		return new Promise<Instance>((resolve, reject) => {
+			// Save the reject function so a subsequent call can cancel this query.
+			activePromiseReject = reject;
+
+			const unsubscribe = inputQuery.subscribe((iQ: InputQuery) => {
+				if (iQ.status === 'cancelled') {
+					cleanup();
+					reject(new Error('User cancelled input'));
+				} else if (iQ.status === 'complete') {
+					const result = iQ.instance;
+					cleanup();
+					resolve(result);
 				}
 			});
-		} else {
-			return Promise.reject(new Error('Input query already active'));
-		}
+
+			function cleanup() {
+				unsubscribe();
+				activePromiseReject = null;
+				// Trigger a shutdown to reset state.
+				inputQuery.update((v: InputQuery) => ({ ...v, status: 'shutdown' }));
+			}
+		});
 	}
 </script>
 
@@ -96,6 +119,18 @@
 	// flag to indicate that an async validation (ticker lookup) is in progress
 	//let secQueryActive = false;
 
+	let isLoadingSecurities = false;
+
+	let manualInputType: string = 'auto';
+
+	// Add this reactive statement
+	$: if (manualInputType !== 'auto' && $inputQuery.status === 'active') {
+		inputQuery.update((v) => ({
+			...v,
+			inputType: manualInputType
+		}));
+	}
+
 	interface ValidateResponse {
 		inputValid: boolean;
 		securities: Instance[];
@@ -103,42 +138,20 @@
 
 	async function validateInput(inputString: string, inputType: string): Promise<ValidateResponse> {
 		if (inputType === 'ticker') {
-			const securities = await privateRequest<Instance[]>('getSecuritiesFromTicker', {
-				ticker: inputString
-			});
-			console.log(securities);
-
-			if (Array.isArray(securities) && securities.length > 0) {
-				// Fetch details for each security
-				const securitiesWithDetails = await Promise.all(
-					securities.map(async (security) => {
-						try {
-							const details = await privateRequest<Instance>(
-								'getTickerDetails',
-								{
-									securityId: security.securityId,
-									ticker: security.ticker,
-									timestamp: security.timestamp
-								},
-								true
-							).catch((v) => {});
-							return {
-								...security,
-								...details
-							};
-						} catch {
-							//console.error('Error fetching ticker details:', error);
-							return security;
-						}
-					})
-				);
-
-				return {
-					inputValid: securitiesWithDetails.some((v) => v.ticker === inputString),
-					securities: securitiesWithDetails
-				};
-			} else {
+			isLoadingSecurities = true;
+			try {
+				const securities = await privateRequest<Instance[]>('getSecuritiesFromTicker', {
+					ticker: inputString
+				});
+				if (Array.isArray(securities) && securities.length > 0) {
+					return {
+						inputValid: securities.some((v) => v.ticker === inputString),
+						securities: securities
+					};
+				}
 				return { inputValid: false, securities: [] };
+			} finally {
+				isLoadingSecurities = false;
 			}
 		} else if (inputType === 'timeframe') {
 			const regex = /^\d{1,3}[yqmwhds]?$/i;
@@ -163,10 +176,32 @@
 		return { inputValid: false, securities: [] };
 	}
 
-	function enterInput(iQ: InputQuery, tickerIndex: number = 0): InputQuery {
-		if (iQ.inputType === 'ticker' && Array.isArray(iQ.securities) && iQ.securities.length > 0) {
-			iQ.instance.securityId = iQ.securities[tickerIndex].securityId;
-			iQ.instance.ticker = iQ.securities[tickerIndex].ticker;
+	async function waitForSecurityResult(): Promise<void> {
+		return new Promise((resolve) => {
+			const check = () => {
+				if (loadedSecurityResultRequest === currentSecurityResultRequest) {
+					resolve();
+				} else {
+					// Check again after 50ms (or adjust as needed)
+					setTimeout(check, 50);
+				}
+			};
+			check();
+		});
+	}
+
+	async function enterInput(iQ: InputQuery, tickerIndex: number = 0): Promise<InputQuery> {
+		console.log(iQ);
+		if (iQ.inputType === 'ticker') {
+			const ts = iQ.instance.timestamp;
+			await waitForSecurityResult();
+			iQ = $inputQuery;
+			console.log(iQ);
+			if (Array.isArray(iQ.securities) && iQ.securities.length > 0) {
+				iQ.instance = { ...iQ.instance, ...iQ.securities[tickerIndex] };
+				console.log(iQ.instance);
+				iQ.instance.timestamp = ts;
+			}
 		} else if (iQ.inputType === 'timeframe') {
 			iQ.instance.timeframe = iQ.inputString;
 		} else if (iQ.inputType === 'timestamp') {
@@ -181,6 +216,7 @@
 				iQ.status = 'active';
 			}
 		} else {
+			console.log(iQ.requiredKeys);
 			for (const attribute of iQ.requiredKeys) {
 				if (!iQ.instance[attribute]) {
 					iQ.status = 'active';
@@ -191,7 +227,28 @@
 		iQ.inputString = '';
 		iQ.inputType = '';
 		iQ.inputValid = true;
+		// Reset manualInputType to auto after input is entered
+		manualInputType = 'auto';
 		return iQ;
+	}
+
+	async function fetchSecurityDetails(securities: Instance[]): Promise<Instance[]> {
+		console.log(securities);
+		return Promise.all(
+			securities.map(async (security) => {
+				const details = await privateRequest<Instance>('getTickerDetails', {
+					securityId: security.securityId,
+					ticker: security.ticker,
+					timestamp: security.timestamp
+				}).catch((v) => {
+					console.warn(`get Details failed for ${security} ${v}`);
+				});
+				return {
+					...security,
+					...details
+				};
+			})
+		);
 	}
 
 	// Mark handleKeyDown as async so we can await the validate call if needed.
@@ -202,18 +259,19 @@
 		event.stopPropagation();
 		let iQ = { ...currentState };
 		if (event.key === 'Escape') {
-			iQ.status = 'cancelled';
-			inputQuery.set(iQ);
+			inputQuery.update((q) => ({ ...q, status: 'cancelled' }));
 		} else if (event.key === 'Enter') {
 			event.preventDefault();
 			if (iQ.inputValid) {
-				iQ = enterInput(iQ, 0);
+				const updatedQuery = await enterInput(iQ, 0);
+				inputQuery.set(updatedQuery);
 			}
-			inputQuery.set(iQ);
 		} else if (event.key === 'Tab') {
 			event.preventDefault();
-			iQ.instance.extendedHours = !iQ.instance.extendedHours;
-			inputQuery.set({ ...iQ });
+			inputQuery.update((q) => ({
+				...q,
+				instance: { ...q.instance, extendedHours: !q.instance.extendedHours }
+			}));
 		} else {
 			// Process alphanumeric and a few special characters.
 			if (
@@ -227,36 +285,38 @@
 				iQ.inputString = iQ.inputString.slice(0, -1);
 			}
 
-			// classify the input string into a type
-			if (iQ.inputString !== '') {
-				if (iQ.possibleKeys.includes('ticker') && /^[A-Z]$/.test(iQ.inputString)) {
-					iQ.inputType = 'ticker';
-				} else if (
-					iQ.possibleKeys.includes('timeframe') &&
-					/^\d+(\.\d+)?$/.test(iQ.inputString) &&
-					/^\d{1,3}$/.test(iQ.inputString)
-				) {
-					iQ.inputType = 'timeframe';
-					iQ.securities = [];
-				} else if (iQ.possibleKeys.includes('price') && /^\d+(\.\d+)?$/.test(iQ.inputString)) {
-					iQ.inputType = 'price';
-					iQ.securities = [];
-				} else if (
-					iQ.possibleKeys.includes('timeframe') &&
-					/^\d{1,2}(?:[hdwmqs])?$/.test(iQ.inputString)
-				) {
-					iQ.inputType = 'timeframe';
-					iQ.securities = [];
-				} else if (iQ.possibleKeys.includes('timestamp') && /^\d{3}?.*$/.test(iQ.inputString)) {
-					iQ.inputType = 'timestamp';
-					iQ.securities = [];
-				} else if (iQ.possibleKeys.includes('ticker')) {
-					iQ.inputType = 'ticker';
+			// Only auto-classify if manualInputType is set to 'auto'
+			if (manualInputType === 'auto') {
+				// classify the input string into a type
+				if (iQ.inputString !== '') {
+					if (iQ.possibleKeys.includes('ticker') && /^[A-Z]$/.test(iQ.inputString)) {
+						iQ.inputType = 'ticker';
+					} else if (
+						iQ.possibleKeys.includes('price') &&
+						/^(?:\d*\.\d+|\d{3,})$/.test(iQ.inputString)
+					) {
+						iQ.inputType = 'price';
+						iQ.securities = [];
+					} else if (
+						iQ.possibleKeys.includes('timeframe') &&
+						/^\d{1,2}[hdwmqs]?$/i.test(iQ.inputString)
+					) {
+						iQ.inputType = 'timeframe';
+						iQ.securities = [];
+					} else if (iQ.possibleKeys.includes('timestamp') && /^[\d-]+$/.test(iQ.inputString)) {
+						iQ.inputType = 'timestamp';
+						iQ.securities = [];
+					} else if (iQ.possibleKeys.includes('ticker')) {
+						iQ.inputType = 'ticker';
+					} else {
+						iQ.inputType = '';
+					}
 				} else {
 					iQ.inputType = '';
 				}
 			} else {
-				iQ.inputType = '';
+				// Use the manually selected input type
+				iQ.inputType = manualInputType;
 			}
 
 			inputQuery.update((v: InputQuery) => ({
@@ -264,16 +324,41 @@
 				inputString: iQ.inputString,
 				inputType: iQ.inputType
 			}));
+			currentSecurityResultRequest++;
+			const thisSecurityResultRequest = currentSecurityResultRequest;
 
 			// Validate asynchronously, and then update the store.
 			validateInput(iQ.inputString, iQ.inputType).then((validationResp: ValidateResponse) => {
-				console.log(validationResp);
-				inputQuery.update((v: InputQuery) => ({
-					...v,
-					//inputString: iQ.inputString,
-					//inputType: iQ.inputType,
-					...validationResp
-				}));
+				if (thisSecurityResultRequest === currentSecurityResultRequest) {
+					inputQuery.update((v: InputQuery) => ({
+						...v,
+						...validationResp
+					}));
+					loadedSecurityResultRequest = thisSecurityResultRequest;
+
+					fetchSecurityDetails([...validationResp.securities]).then(
+						(securitiesWithDetails: Instance[]) => {
+							if (thisSecurityResultRequest === currentSecurityResultRequest) {
+								inputQuery.update((v: InputQuery) => {
+									// Merge the newly fetched details into the instance if it matches
+									if (v.instance && 'ticker' in v.instance && v.instance.ticker) {
+										const matchedSec = securitiesWithDetails.find(
+											(sec) => sec.ticker === v.instance.ticker
+										);
+										if (matchedSec) {
+											v.instance = { ...v.instance, ...matchedSec };
+										}
+									}
+									return {
+										...v,
+										securities: securitiesWithDetails
+									};
+								});
+								console.log($inputQuery);
+							}
+						}
+					);
+				}
 			});
 		}
 	}
@@ -357,12 +442,52 @@
 			match.toUpperCase()
 		);
 	}
+
+	function formatTimeframe(timeframe: string): string {
+		const match = timeframe.match(/^(\d+)([dwmsh]?)$/i) ?? null;
+		let result = timeframe;
+		if (match) {
+			switch (match[2]) {
+				case 'd':
+					result = `${match[1]} days`;
+					break;
+				case 'w':
+					result = `${match[1]} weeks`;
+					break;
+				case 'm':
+					result = `${match[1]} months`;
+					break;
+				case 'h':
+					result = `${match[1]} hours`;
+					break;
+				case 's':
+					result = `${match[1]} seconds`;
+					break;
+				default:
+					result = `${match[1]} minutes`;
+					break;
+			}
+			if (match[1] === '1') {
+				result = result.slice(0, -1);
+			}
+		}
+		return result;
+	}
 </script>
 
 {#if $inputQuery.status === 'active' || $inputQuery.status === 'initializing'}
 	<div class="popup-container" id="input-window" tabindex="-1">
 		<div class="header">
 			<div class="title">{capitalize($inputQuery.inputType)} Input</div>
+			<div class="field-select">
+				<span>Field:</span>
+				<select class="input-type-select" bind:value={manualInputType}>
+					<option value="auto">Auto</option>
+					{#each $inputQuery.possibleKeys as key}
+						<option value={key}>{capitalize(key)}</option>
+					{/each}
+				</select>
+			</div>
 			<button class="close-button" on:click={closeWindow}>×</button>
 		</div>
 
@@ -392,7 +517,12 @@
 					</div>
 				{:else if $inputQuery.inputType === 'ticker'}
 					<div class="table-container">
-						{#if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
+						{#if isLoadingSecurities}
+							<div class="loading-container">
+								<div class="loading-spinner"></div>
+								<span>Loading securities...</span>
+							</div>
+						{:else if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
 							<table>
 								<!--<thead>
                         <tr>
@@ -408,8 +538,9 @@
 								<tbody>
 									{#each $inputQuery.securities as sec, i}
 										<tr
-											on:click={() => {
-												inputQuery.set(enterInput(get(inputQuery), i));
+											on:click={async () => {
+												const updatedQuery = await enterInput($inputQuery, i);
+												inputQuery.set(updatedQuery);
 											}}
 										>
 											<td>
@@ -433,7 +564,8 @@
 												</div>
 											</td>
 											<td>{sec.ticker}</td>
-											<td>{sec.maxDate === null ? 'Current' : sec.maxDate}</td>
+											<td>{sec.name}</td>
+											<td>{UTCTimestampToESTString(sec.timestamp)}</td>
 										</tr>
 									{/each}
 								</tbody>
@@ -443,14 +575,28 @@
 				{:else if $inputQuery.inputType === 'timestamp'}
 					<div class="span-container">
 						<div class="span-row">
-							<span>{UTCTimestampToESTString($inputQuery.instance.timestamp ?? 0)}</span>
+							<span>Timestamp</span>
+							<input
+								type="datetime-local"
+								on:change={(e) => {
+									const date = new Date(e.target?.value ?? '');
+									inputQuery.update((q) => ({
+										...q,
+										instance: {
+											...q.instance,
+											timestamp: !isNaN(date.getTime()) ? date.getTime() : q.instance.timestamp
+										},
+										inputValid: !isNaN(date.getTime())
+									}));
+								}}
+							/>
 						</div>
 					</div>
 				{:else if $inputQuery.inputType === 'timeframe'}
 					<div class="span-container">
 						<div class="span-row">
 							<span>Timeframe</span>
-							<span>{$inputQuery.instance.timeframe}</span>
+							<span>{formatTimeframe($inputQuery.inputString)}</span>
 						</div>
 					</div>
 				{:else if $inputQuery.inputType === 'extendedHours'}
@@ -460,13 +606,7 @@
 							<span>{$inputQuery.instance.extendedHours ? 'True' : 'False'}</span>
 						</div>
 					</div>
-				{:else if $inputQuery.inputType === 'price'}
-					<div class="span-container">
-						<div class="span-row">
-							<span>Price</span>
-							<span>${$inputQuery.instance.price}</span>
-						</div>
-					</div>
+					0
 				{/if}
 			{/if}
 		</div>
@@ -534,7 +674,6 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: 8px 12px;
-
 		border-bottom: 1px solid var(--c4);
 		height: 40px;
 	}
@@ -702,7 +841,55 @@
 
 	.date {
 		color: var(--f2);
-		font-size: 0.8em;
-		min-width: 70px;
+		align-items: center;
+		justify-content: center;
+		padding: 20px;
+		color: var(--f2);
+	}
+
+	.loading-spinner {
+		width: 30px;
+		height: 30px;
+		border: 3px solid var(--c4);
+		border-top: 3px solid var(--f1);
+		border-radius: 50%;
+		animation: spin 1s linear infinite;
+		margin-bottom: 10px;
+	}
+
+	@keyframes spin {
+		0% {
+			transform: rotate(0deg);
+		}
+		100% {
+			transform: rotate(360deg);
+		}
+	}
+
+	.field-select {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin-left: auto;
+	}
+
+	.field-select span {
+		color: var(--f2);
+		font-size: 14px;
+	}
+
+	.input-type-select {
+		background: var(--c4);
+		color: var(--f1);
+		border: 1px solid var(--c4);
+		border-radius: 4px;
+		padding: 4px 8px;
+		font-size: 14px;
+		width: 120px;
+	}
+
+	.input-type-select option {
+		background: var(--c4);
+		color: var(--f1);
 	}
 </style>

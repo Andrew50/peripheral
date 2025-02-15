@@ -20,6 +20,8 @@ adds the client to the list of client subsrcibed to that channel (subscribers va
 func (c *Client) subscribeRealtime(conn *utils.Conn, channelName string) {
 	channelsMutex.Lock()
 	os.Stdout.Sync()
+	//splits := strings.Split(channelNameWithTimeType, "-")
+	//channelName := fmt.Sprintf("%s-%s", splits[0], splits[1])
 
 	subscribers, exists := channelSubscribers[channelName]
 	if !exists {
@@ -27,12 +29,7 @@ func (c *Client) subscribeRealtime(conn *utils.Conn, channelName string) {
 		channelSubscribers[channelName] = subscribers
 	}
 	subscribers[c] = true
-	/*if !exists {
-		pubsub := conn.Cache.Subscribe(context.Background(), channelName)
-		redisSubscriptions[channelName] = pubsub
 
-		go handleRedisChannel(pubsub, channelName)
-	}*/
 	channelsMutex.Unlock()
 	go func() {
 		initialValue, err := getInitialStreamValue(conn, channelName, 0)
@@ -57,10 +54,6 @@ func (c *Client) unsubscribeRealtime(channelName string) {
 		delete(subscribers, c)
 		if len(subscribers) == 0 {
 			delete(channelSubscribers, channelName)
-			/*if pubsub, ok := redisSubscriptions[channelName]; ok {
-				pubsub.Close()
-				delete(redisSubscriptions, channelName)
-			}*/
 		}
 	}
 }
@@ -87,24 +80,3 @@ func broadcastToChannel(channelName string, message string) {
 		}
 	}
 }
-
-/*func handleRedisChannel(pubsub *redis.PubSub, channelName string) {
-    var lastMessage string
-	for msg := range pubsub.Channel() {
-        if msg.Payload == lastMessage {
-			continue // filter out duplicate prints
-		}
-        lastMessage = msg.Payload
-		channelsMutex.RLock()
-		subscribers := channelSubscribers[channelName]
-		channelsMutex.RUnlock()
-
-		for client := range subscribers {
-			select {
-			case client.send <- []byte(msg.Payload):
-			default:
-				go client.close()
-			}
-		}
-	}
-}*/
