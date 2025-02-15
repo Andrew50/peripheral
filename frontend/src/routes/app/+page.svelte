@@ -201,9 +201,11 @@
 			{#if active_menu !== 'none'}
 				<TickerInfo />
 			{/if}
-		</div>
-		<div class="system-clock">
-			<h3>{$streamInfo.timestamp ? formatTimestamp($streamInfo.timestamp) : 'Loading Time...'}</h3>
+			<!--<div class="system-clock">
+				<h3>
+					{$streamInfo.timestamp ? formatTimestamp($streamInfo.timestamp) : 'Loading Time...'}
+				</h3>
+			</div>-->
 		</div>
 	</div>
 	<div class="button-container">
@@ -228,15 +230,13 @@
 		flex-direction: row;
 	}
 	.system-clock {
-		position: absolute;
-		bottom: 5px; /* Adjust this to move it up a bit from the bottom */
-		left: 5px; /* Adjust to align with the menu's width */
-		z-index: 4;
 		background-color: var(--c2);
 		padding: 0px 10px;
 		font-size: 1rem;
 		color: var(--f1);
-		/*box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);*/
+		width: 100%;
+		text-align: center;
+		box-sizing: border-box;
 	}
 
 	.menu-container {
@@ -259,12 +259,13 @@
 		/*scrollbar-color: var(--c4) var(--c1);
         scrollbar-width: thin;*/
 		scrollbar-width: none;
+		/*justify-content: space-between;*/
 	}
 
 	.menu-content {
 		flex: 1;
 		overflow-y: auto;
-		margin-bottom: 25%; /* Leave space for ticker info */
+		margin-bottom: 33%; /* Leave space for ticker info */
 	}
 
 	.resize-handle {
