@@ -4,15 +4,20 @@ import (
 	"backend/utils"
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
 	"github.com/jackc/pgx/v4"
 
 	"database/sql"
+
+	"encoding/base64"
 
 	_ "github.com/lib/pq"
 	polygon "github.com/polygon-io/client-go/rest"
@@ -433,5 +438,145 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 		yesterdayDateString = currentDateString
 		activeYesterday = activeToday
 	}
+	return updateSecurityDetails(conn, test)
+
+}
+
+func updateSecurityDetails(conn *utils.Conn, test bool) error {
+	// Query active securities (where maxDate is null)
+	fmt.Println("Updating security details")
+	rows, err := conn.DB.Query(context.Background(),
+		`SELECT securityid, ticker 
+		 FROM securities 
+		 WHERE maxDate IS NULL AND (logo IS NULL OR icon IS NULL)`)
+	if err != nil {
+		return fmt.Errorf("failed to query active securities: %v", err)
+	}
+	defer rows.Close()
+
+	// Create a rate limiter for 10 requests per second
+	rateLimiter := time.NewTicker(100 * time.Millisecond) // 10 requests per second
+	defer rateLimiter.Stop()
+
+	// Create a worker pool with semaphore to limit concurrent requests
+	maxWorkers := 15
+
+	sem := make(chan struct{}, maxWorkers)
+	errChan := make(chan error, maxWorkers)
+	var wg sync.WaitGroup
+
+	// Helper function to fetch and encode image data
+	fetchImage := func(url string, polygonKey string) (string, error) {
+		if url == "" {
+			return "", nil
+		}
+
+		client := &http.Client{}
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return "", fmt.Errorf("failed to create request: %v", err)
+		}
+		req.Header.Add("Authorization", "Bearer "+polygonKey)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return "", fmt.Errorf("failed to fetch image: %v", err)
+		}
+		defer resp.Body.Close()
+
+		imageData, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("failed to read image data: %v", err)
+		}
+
+		return base64.StdEncoding.EncodeToString(imageData), nil
+	}
+
+	// Worker function to process each security
+	processSecurity := func(securityId int, ticker string) {
+		defer wg.Done()
+		defer func() { <-sem }() // Release semaphore slot
+
+		<-rateLimiter.C // Wait for rate limiter
+
+		details, err := utils.GetTickerDetails(conn.Polygon, ticker, "now")
+		if err != nil {
+			if test {
+				log.Printf("Failed to get details for %s: %v", ticker, err)
+			}
+			return
+		}
+
+		// Fetch both logo and icon
+		logoBase64, _ := fetchImage(details.Branding.LogoURL, conn.PolygonKey)
+		iconBase64, _ := fetchImage(details.Branding.IconURL, conn.PolygonKey)
+
+		// Update the security record with all details
+		_, err = conn.DB.Exec(context.Background(),
+			`UPDATE securities 
+			 SET name = $1,
+				 market = $2,
+				 locale = $3,
+				 primary_exchange = $4,
+				 active = $5,
+				 market_cap = $6,
+				 description = $7,
+				 logo = $8,
+				 icon = $9,
+				 share_class_shares_outstanding = $10
+			 WHERE securityid = $11`,
+			details.Name,
+			string(details.Market),
+			string(details.Locale),
+			details.PrimaryExchange,
+			details.Active,
+			details.MarketCap,
+			details.Description,
+			logoBase64,
+			iconBase64,
+			details.ShareClassSharesOutstanding,
+			securityId)
+
+		if err != nil {
+			if test {
+				log.Printf("Failed to update details for %s: %v", ticker, err)
+			}
+			errChan <- fmt.Errorf("failed to update %s: %v", ticker, err)
+			return
+		}
+
+		if test {
+			log.Printf("Successfully updated details for %s", ticker)
+		}
+	}
+
+	// Process all securities
+	for rows.Next() {
+		var securityId int
+		var ticker string
+		if err := rows.Scan(&securityId, &ticker); err != nil {
+			return fmt.Errorf("failed to scan security row: %v", err)
+		}
+
+		sem <- struct{}{} // Acquire semaphore slot
+		wg.Add(1)
+		go processSecurity(securityId, ticker)
+	}
+
+	// Wait for all workers to complete
+	wg.Wait()
+	close(errChan)
+
+	// Check for any errors
+	var errors []error
+	for err := range errChan {
+		errors = append(errors, err)
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("encountered %d errors during update: %v", len(errors), errors)
+	}
+	fmt.Println("Security details updated successfully")
+
 	return nil
 }

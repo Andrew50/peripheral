@@ -162,6 +162,7 @@ func GetMostRecentRegularClose(client *polygon.Client, ticker string, referenceT
 	}
 
 	return 0, fmt.Errorf("no recent regular hours close found for %s", ticker)
+	//
 }
 
 // GetMostRecentExtendedHoursClose gets the most recent extended-hours close relative to referenceTime
