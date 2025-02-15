@@ -104,7 +104,7 @@
 	</div>
 
 	{#if $activeChartInstance !== null && $activeChartInstance !== null}
-		{#if $tickerInfoState.isExpanded}
+		{#if $tickerInfoState.isExpanded && $activeChartInstance.detailsUpdateStore}
 			<div class="content">
 				<div class="system-clock">
 					<h3>

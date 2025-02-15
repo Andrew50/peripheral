@@ -1,3 +1,4 @@
+import type { Writable } from 'svelte/store';
 export interface Instance {
     ticker?: string
     timestamp?: number
@@ -17,6 +18,7 @@ export interface Instance {
     share_class_shares_outstanding?: number;
     industry?: string;
     sector?: string;
+    detailsUpdateStore?: Writable<any>;
 }
 export interface Setup {
     setupId: number;
