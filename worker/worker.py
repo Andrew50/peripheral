@@ -3,7 +3,7 @@ from conn import Conn
 from train import train
 from screen import screen
 from trainerQueue import refillTrainerQueue
-from trades import handle_trade_upload, grab_user_trades
+from trades import handle_trade_upload, grab_user_trades, get_trade_statistics
 from update_sectors import update_sectors
 from active import update_active
 
@@ -15,6 +15,7 @@ funcMap = {
     "grab_user_trades": grab_user_trades,
     "update_sectors": update_sectors,
     "update_active": update_active,
+    "get_trade_statistics": get_trade_statistics
 }
 
 
