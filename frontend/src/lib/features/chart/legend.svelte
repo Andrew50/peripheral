@@ -37,56 +37,64 @@
 		}
 		return vol;
 	}
+
+	function debugInstance() {
+		console.log('Current instance:', JSON.parse(JSON.stringify(instance)));
+	}
 </script>
 
 <div tabindex="-1" on:click={handleClick} on:touchstart={handleClick} class="legend">
-	<div class="header">
-		{#if instance?.icon}
-			<img
-				src="data:image/svg+xml;base64,{instance.icon}"
-				alt="{instance.name} logo"
-				class="company-logo"
-			/>
-		{/if}
-		<span class="symbol">{instance?.ticker ?? 'NA'}</span>
-		<span class="timeframe">{instance?.timeframe ?? 'NA'}</span>
-	</div>
+	{#if instance.detailsUpdateStore?.subscribe}
+		<div class="header">
+			{#if instance?.icon}
+				<img
+					src="data:image/svg+xml;base64,{instance.icon}"
+					alt="{instance.name} logo"
+					class="company-logo"
+				/>
+			{/if}
+			<span class="symbol">{instance?.ticker ?? 'NA'}</span>
+			<span class="timeframe">{instance?.timeframe ?? 'NA'}</span>
+		</div>
 
-	<div class="price-grid" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">
-		<div class="price-row">
-			<span class="label">O</span>
-			<span class="value">{$hoveredCandleData.open.toFixed(2)}</span>
-			<span class="label">H</span>
-			<span class="value">{$hoveredCandleData.high.toFixed(2)}</span>
+		<div class="price-grid" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">
+			<div class="price-row">
+				<span class="label">O</span>
+				<span class="value">{$hoveredCandleData.open.toFixed(2)}</span>
+				<span class="label">H</span>
+				<span class="value">{$hoveredCandleData.high.toFixed(2)}</span>
+			</div>
+			<div class="price-row">
+				<span class="label">L</span>
+				<span class="value">{$hoveredCandleData.low.toFixed(2)}</span>
+				<span class="label">C</span>
+				<span class="value">{$hoveredCandleData.close.toFixed(2)}</span>
+			</div>
 		</div>
-		<div class="price-row">
-			<span class="label">L</span>
-			<span class="value">{$hoveredCandleData.low.toFixed(2)}</span>
-			<span class="label">C</span>
-			<span class="value">{$hoveredCandleData.close.toFixed(2)}</span>
-		</div>
-	</div>
 
-	<div class="metrics-grid">
-		<div class="metric">
-			<span class="label">CHG</span>
-			<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">
-				{$hoveredCandleData.chg.toFixed(2)} ({$hoveredCandleData.chgprct.toFixed(2)}%)
-			</span>
+		<div class="metrics-grid">
+			<div class="metric">
+				<span class="label">CHG</span>
+				<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">
+					{$hoveredCandleData.chg.toFixed(2)} ({$hoveredCandleData.chgprct.toFixed(2)}%)
+				</span>
+			</div>
+			<div class="metric">
+				<span class="label">VOL</span>
+				<span class="value">{formatLargeNumber($hoveredCandleData.volume, $settings.dolvol)}</span>
+			</div>
+			<div class="metric">
+				<span class="label">ADR</span>
+				<span class="value">{$hoveredCandleData.adr?.toFixed(2) ?? 'NA'}</span>
+			</div>
+			<div class="metric">
+				<span class="label">RVOL</span>
+				<span class="value">{$hoveredCandleData.rvol?.toFixed(2) ?? 'NA'}</span>
+			</div>
 		</div>
-		<div class="metric">
-			<span class="label">VOL</span>
-			<span class="value">{formatLargeNumber($hoveredCandleData.volume, $settings.dolvol)}</span>
-		</div>
-		<div class="metric">
-			<span class="label">ADR</span>
-			<span class="value">{$hoveredCandleData.adr?.toFixed(2) ?? 'NA'}</span>
-		</div>
-		<div class="metric">
-			<span class="label">RVOL</span>
-			<span class="value">{$hoveredCandleData.rvol?.toFixed(2) ?? 'NA'}</span>
-		</div>
-	</div>
+
+		<button class="debug-button" on:click|stopPropagation={debugInstance}> Debug Instance </button>
+	{/if}
 </div>
 
 <style>
@@ -194,5 +202,21 @@
 			width: calc(100% - 20px);
 			min-width: 260px;
 		}
+	}
+
+	.debug-button {
+		margin-top: 8px;
+		width: 100%;
+		padding: 4px;
+		background: rgba(255, 255, 255, 0.1);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		color: #999;
+		border-radius: 3px;
+		cursor: pointer;
+		font-size: 12px;
+	}
+
+	.debug-button:hover {
+		background: rgba(255, 255, 255, 0.15);
 	}
 </style>

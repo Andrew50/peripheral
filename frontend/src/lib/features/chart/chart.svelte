@@ -757,7 +757,10 @@
 	}
 
 	function change(newReq: ChartQueryDispatch) {
-		const req = { ...currentChartInstance, ...newReq };
+		// Instead of creating a new object, update the existing one
+		Object.assign(currentChartInstance, newReq);
+		const req = currentChartInstance;
+
 		if (chartId !== req.chartId) {
 			return;
 		}
@@ -772,7 +775,6 @@
 		chartLatestDataReached = false;
 		chartSecurityId = req.securityId;
 		chartTimeframe = req.timeframe;
-		currentChartInstance = { ...req };
 		chartTimeframeInSeconds = timeframeToSeconds(
 			req.timeframe,
 			(req.timestamp == 0 ? Date.now() : req.timestamp) as number
