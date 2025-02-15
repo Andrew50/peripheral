@@ -17,6 +17,9 @@ export function newPriceAlert(instance: Instance) {
 }
 
 export function newAlert(alert: Alert) {
+    if (alert.price) {
+        alert.price = parseFloat(alert.price.toFixed(2));
+    }
     privateRequest<Alert>('newAlert', alert).then((createdAlert: Alert) => {
         createdAlert.ticker = alert.ticker;
         if (activeAlerts !== undefined) {

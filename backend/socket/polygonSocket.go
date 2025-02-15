@@ -19,12 +19,15 @@ var nextDispatchTimes = struct {
 	times map[string]time.Time
 }{times: make(map[string]time.Time)}
 
+var useAlerts bool
+
 const slowRedisTimeout = 1 * time.Second // Adjust the timeout as needed
 
 var tickerToSecurityId map[string]int
 var tickerToSecurityIdLock sync.RWMutex
 
 // Add this package-level variable
+
 var polygonWSConn *polygonws.Client
 
 func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
@@ -77,7 +80,8 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 			/*            case models.EquityAgg:
 			              alerts.appendAggregate(securityId,msg.Open,msg.High,msg.Low,msg.Close,msg.Volume)*/
 			case models.EquityTrade:
-				channelName := fmt.Sprintf("%d-fast", securityId)
+				channelNameType := getChannelNameType(msg.Timestamp)
+				channelName := fmt.Sprintf("%d-fast-%s", securityId, channelNameType)
 				data := TradeData{
 					//					Ticker:     msg.Symbol,
 					Price:      msg.Price,
@@ -111,10 +115,12 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 				//fmt.Println("debug: alerts.IsAggsInitialized()", alerts.IsAggsInitialized())
 
 				//if alerts.IsAggsInitialized() {
-				appendTick(conn, securityId, data.Timestamp, data.Price, data.Size)
+				if useAlerts {
+					appendTick(conn, securityId, data.Timestamp, data.Price, data.Size)
+				}
 				//}
 				if !exists || now.After(nextDispatch) {
-					slowChannelName := fmt.Sprintf("%d-slow", securityId)
+					slowChannelName := fmt.Sprintf("%d-slow-%s", securityId, channelNameType)
 					data.Channel = slowChannelName
 					jsonData, err = json.Marshal(data)
 					if err != nil {
@@ -127,7 +133,9 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 					nextDispatchTimes.Unlock()
 				}
 			case models.EquityQuote:
-				channelName := fmt.Sprintf("%d-quote", securityId)
+				channelNameType := getChannelNameType(msg.Timestamp)
+
+				channelName := fmt.Sprintf("%d-%s-quote", securityId, channelNameType)
 				data := QuoteData{
 
 					//					Ticker:    msg.Symbol,
@@ -160,7 +168,8 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 		}
 	}
 */
-func StartPolygonWS(conn *utils.Conn) error {
+func StartPolygonWS(conn *utils.Conn, _useAlerts bool) error {
+	useAlerts = _useAlerts
 	if err := initTickerToSecurityIdMap(conn); err != nil {
 		return fmt.Errorf("failed to initialize ticker to security ID map: %v", err)
 	}

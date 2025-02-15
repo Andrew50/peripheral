@@ -5,6 +5,7 @@
 	import Countdown from './countdown.svelte';
 	import DrawingMenu from './drawingMenu.svelte';
 	import { privateRequest } from '$lib/core/backend';
+	import { type DrawingMenuProps, addHorizontalLine, drawingMenuProps } from './drawingMenu.svelte';
 	import type { Instance, TradeData, QuoteData } from '$lib/core/types';
 	import {
 		setActiveChart,
@@ -49,25 +50,6 @@
 	let bidLine: any;
 	let askLine: any;
 	let currentBarTimestamp: number;
-	interface DrawingMenuProps {
-		chartCandleSeries: ISeriesApi<'Candlestick'>;
-		selectedLine: IPriceLine | null;
-		clientX: number;
-		clientY: number;
-		active: boolean;
-		horizontalLines: { price: number; line: IPriceLine; id: number }[];
-		isDragging: boolean;
-	}
-	let drawingMenuProps: Writable<DrawingMenuProps> = writable({
-		chartCandleSeries: null,
-		selectedLine: null,
-		clientX: 0,
-		clientY: 0,
-		active: false,
-		selectedLineId: -1,
-		horizontalLines: [],
-		isDragging: false
-	});
 
 	let chartCandleSeries: ISeriesApi<
 		'Candlestick',
@@ -123,8 +105,7 @@
 		volume: 0,
 		adr: 0,
 		chg: 0,
-		chgprct: 0,
-		mcap: 0
+		chgprct: 0
 	};
 	const hoveredCandleData = writable(defaultHoveredCandleData);
 	const shiftOverlay: Writable<ShiftOverlay> = writable({
@@ -164,7 +145,7 @@
 	// Add new property to track alert lines
 	let alertLines: AlertLine[] = [];
 
-	let arrowSeries: any = null;  // Initialize as null
+	let arrowSeries: any = null; // Initialize as null
 
 	function extendedHours(timestamp: number): boolean {
 		const date = new Date(timestamp);
@@ -266,6 +247,11 @@
 							});
 						}
 					);*/
+					drawingMenuProps.update((v) => ({
+						...v,
+						chartCandleSeries: chartCandleSeries,
+						securityId: inst.securityId
+					}));
 					for (const line of $drawingMenuProps.horizontalLines) {
 						chartCandleSeries.removePriceLine(line.line);
 					}
@@ -275,7 +261,7 @@
 						if (res !== null && res.length > 0) {
 							for (const line of res) {
 								//night need to be later
-								addHorizontalLine(line.price, line.id); //TO IMPLEMENT
+								addHorizontalLine(line.price, currentChartInstance.securityId, line.id); //TO IMPLEMENT
 							}
 						}
 					});
@@ -304,60 +290,64 @@
 						chartCandleSeries.setData(newCandleData);
 						chartVolumeSeries.setData(newVolumeData);
 						if (arrowSeries && ('entries' in inst || 'exits' in inst)) {
-							const markersByTime = new Map<number, {
-								entries: Array<{ price: number; isLong: boolean }>,
-								exits: Array<{ price: number; isLong: boolean }>
-							}>();
-							
+							const markersByTime = new Map<
+								number,
+								{
+									entries: Array<{ price: number; isLong: boolean }>;
+									exits: Array<{ price: number; isLong: boolean }>;
+								}
+							>();
+
 							// Group entries by rounded time
 							if ('entries' in inst) {
-								inst.entries.forEach(entry => {
+								inst.entries.forEach((entry) => {
 									const entryTime = UTCSecondstoESTSeconds(entry.time / 1000);
-									const roundedTime = Math.floor(entryTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
-									
+									const roundedTime =
+										Math.floor(entryTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+
 									if (!markersByTime.has(roundedTime)) {
 										markersByTime.set(roundedTime, { entries: [], exits: [] });
 									}
-									
+
 									markersByTime.get(roundedTime)?.entries.push({
 										price: entry.price,
-										isLong: inst.trade_direction === 'Long'  // Assuming 'BUY' indicates long
+										isLong: inst.trade_direction === 'Long' // Assuming 'BUY' indicates long
 									});
 								});
 							}
-							
+
 							// Group exits by rounded time
 							if ('exits' in inst) {
-								inst.exits.forEach(exit => {
+								inst.exits.forEach((exit) => {
 									const exitTime = UTCSecondstoESTSeconds(exit.time / 1000);
-									const roundedTime = Math.floor(exitTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
-									
+									const roundedTime =
+										Math.floor(exitTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+
 									if (!markersByTime.has(roundedTime)) {
 										markersByTime.set(roundedTime, { entries: [], exits: [] });
 									}
-									
+
 									markersByTime.get(roundedTime)?.exits.push({
 										price: exit.price,
-										isLong: inst.trade_direction === 'Long'  // Assuming 'BUY' indicates long
+										isLong: inst.trade_direction === 'Long' // Assuming 'BUY' indicates long
 									});
 								});
 							}
-							
+
 							// Convert to format for ArrowMarkersPaneView
 							const markers = Array.from(markersByTime.entries()).map(([time, data]) => ({
 								time: time as UTCTimestamp,
 								entries: data.entries,
 								exits: data.exits
 							}));
-							
+
 							console.log(markers);
-						
+
 							arrowSeries.setData(markers);
 						}
-						
 					}
 					queuedLoad = null;
-					
+
 					sma10Series.setData(calculateSMA(newCandleData, 10));
 					sma20Series.setData(calculateSMA(newCandleData, 20));
 					if (/^\d+$/.test(inst.timeframe ?? '')) {
@@ -377,7 +367,7 @@
 								rightOffset: 0
 							});
 						}
-						releaseFast = addStream(inst, 'fast', updateLatestChartBar);
+						releaseFast = addStream(inst, 'all', updateLatestChartBar);
 						releaseQuote = addStream(inst, 'quote', updateLatestQuote);
 					}
 					isLoadingChartData = false; // Ensure this runs after data is loaded
@@ -424,30 +414,7 @@
 		askLine.setData([{ time: time, value: data.askPrice }]);
 	}
 	// Create a horizontal line at the current crosshair position (Y-coordinate)
-	function addHorizontalLine(price: number, id: number = -1) {
-		const priceLine = chartCandleSeries.createPriceLine({
-			price: price,
-			color: 'white',
-			lineWidth: 1,
-			lineStyle: 0, // Solid line
-			axisLabelVisible: false,
-			title: `Price: ${price}`
-		});
-		$drawingMenuProps.horizontalLines.push({
-			id,
-			price,
-			line: priceLine
-		});
-		if (id == -1) {
-			// only add to baceknd if its being added not from a ticker load but from a new added line
-			privateRequest<number>('setHorizontalLine', {
-				price: price,
-				securityId: chartSecurityId
-			}).then((res: number) => {
-				$drawingMenuProps.horizontalLines[$drawingMenuProps.horizontalLines.length - 1].id = res;
-			});
-		}
-	}
+
 	function handleMouseMove(event: MouseEvent) {
 		if (!$drawingMenuProps.isDragging || !$drawingMenuProps.selectedLine) return;
 
@@ -521,6 +488,7 @@
 					...v,
 					chartCandleSeries: chartCandleSeries,
 					selectedLine: line.line,
+					selectedLinePrice: line.price,
 					clientX: event.clientX,
 					clientY: event.clientY,
 					active: false,
@@ -828,7 +796,7 @@
 		});
 		alertLines = [];
 
-		if(arrowSeries) {
+		if (arrowSeries) {
 			arrowSeries.setData([]);
 		}
 	}
@@ -852,7 +820,7 @@
 			console.log(req);
 			change(req);
 		} else if (e.event == 'addHorizontalLine') {
-			addHorizontalLine(e.data);
+			addHorizontalLine(e.data.price, e.data.securityId);
 		}
 	});
 
@@ -915,18 +883,21 @@
 					chart.timeScale().resetTimeScale();
 				}
 			} else if (event.key == 'h' && event.altKey) {
-				addHorizontalLine(chartCandleSeries.coordinateToPrice(latestCrosshairPositionY) || 0);
+				addHorizontalLine(
+					chartCandleSeries.coordinateToPrice(latestCrosshairPositionY) || 0,
+					currentChartInstance.securityId
+				);
 			} else if (event.key == 'Tab' || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
 				// goes to input popup
 				if ($streamInfo.replayActive) {
 					currentChartInstance.timestamp = 0;
 				}
-				queryInstanceInput('any', 'any', currentChartInstance)
-					.then((v: Instance) => {
-						currentChartInstance = v;
-						queryChart(v, true);
-					})
-					.catch();
+				console.log(currentChartInstance);
+				queryInstanceInput('any', 'any', currentChartInstance).then((v: Instance) => {
+					console.log(v);
+					currentChartInstance = v;
+					queryChart(v, true);
+				});
 			} else if (event.key == 'Shift') {
 				shiftDown = true;
 			} else if (event.key == 'Escape') {
@@ -944,6 +915,8 @@
 			}
 		});
 		chart = createChart(chartContainer, chartOptions);
+
+		// Then add your candlestick / volume / etc. after or before.
 		chartCandleSeries = chart.addCandlestickSeries({
 			priceLineVisible: false,
 			upColor: '#089981',
@@ -981,7 +954,10 @@
 			lastValueVisible: true, // Shows the price on the right
 			priceLineVisible: false
 		});
-		arrowSeries = chart.addCustomSeries<ArrowMarker, CustomSeriesOptions>(new ArrowMarkersPaneView(),{});
+		arrowSeries = chart.addCustomSeries<ArrowMarker, CustomSeriesOptions>(
+			new ArrowMarkersPaneView(),
+			{}
+		);
 
 		chart.subscribeCrosshairMove((param) => {
 			if (!chartCandleSeries.data().length || !param.point || !currentChartInstance.securityId) {

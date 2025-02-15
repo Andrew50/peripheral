@@ -1,13 +1,14 @@
-import {socket,subscribe,unsubscribe,activeChannels,getInitialValue} from './socket'
-import type {SubscriptionRequest,StreamCallback} from './socket'
-import {DateTime} from 'luxon';
-import {eventChart} from "$lib/features/chart/interface"
-import {streamInfo} from '$lib/core/stores'
-import {chartEventDispatcher} from '$lib/features/chart/interface'
+import { socket, subscribe, unsubscribe, activeChannels } from './socket'
+import type { SubscriptionRequest, StreamCallback } from './socket'
+import { DateTime } from 'luxon';
+import { eventChart } from "$lib/features/chart/interface"
+import { streamInfo } from '$lib/core/stores'
+import { chartEventDispatcher } from '$lib/features/chart/interface'
 import { getReferenceStartTimeForDateMilliseconds, isOutsideMarketHours, ESTSecondstoUTCMillis, getRealTimeTime } from '$lib/core/timestamp';
 import type { ReplayInfo } from '$lib/core/stores';
-import { type Instance} from '$lib/core/types'
-import {get} from 'svelte/store'
+import { type Instance } from '$lib/core/types'
+import { get } from 'svelte/store'
+import type { StreamData, ChannelType, TimeType } from './socket'
 export function releaseStream(channelName: string, callback: StreamCallback) {
     let callbacks = activeChannels.get(channelName);
     if (callbacks) {
@@ -22,29 +23,29 @@ export function releaseStream(channelName: string, callback: StreamCallback) {
 }
 
 export function addStream<T extends StreamData>(instance: Instance, channelType: ChannelType, callback: StreamCallback): Function {
-    if (!instance.securityId) return () => {};
+    if (!instance.securityId) return () => { };
     const channelName = `${instance.securityId}-${channelType}`;
-    let callbacks = activeChannels.get(channelName);
+    const callbacks = activeChannels.get(channelName);
     if (callbacks) {
-        if(!callbacks.includes(callback)) { 
+        if (!callbacks.includes(callback)) {
             callbacks.push(callback);
         }
     } else {
         activeChannels.set(channelName, [callback]);
         subscribe(channelName);
     }
-    getInitialValue(channelName, callback);
-        
+    //getInitialValue(channelName, callback); //handled on backend now, kinda
+
     return () => releaseStream(channelName, callback);
 }
 export function startReplay(instance: Instance) {
     if (!instance.timestamp) return
-    if(get(streamInfo).replayActive) {
+    if (get(streamInfo).replayActive) {
         stopReplay()
-    } 
+    }
     if (socket?.readyState === WebSocket.OPEN) {
-        const timestampToUse = isOutsideMarketHours(instance.timestamp) 
-            ? ESTSecondstoUTCMillis(getReferenceStartTimeForDateMilliseconds(instance.timestamp, ) / 1000)
+        const timestampToUse = isOutsideMarketHours(instance.timestamp)
+            ? ESTSecondstoUTCMillis(getReferenceStartTimeForDateMilliseconds(instance.timestamp,) / 1000)
             : instance.timestamp;
         setExtended(instance.extendedHours ?? false)
         const replayRequest: SubscriptionRequest = {
@@ -53,8 +54,8 @@ export function startReplay(instance: Instance) {
         };
         socket.send(JSON.stringify(replayRequest));
         console.log("replay request sent")
-        streamInfo.update((v) => {return {...v,replayActive:true,replayPaused:false,startTimestamp:timestampToUse,timestamp:timestampToUse}})
-        chartEventDispatcher.set({event:"replay",chartId:"all"})
+        streamInfo.update((v) => { return { ...v, replayActive: true, replayPaused: false, startTimestamp: timestampToUse, timestamp: timestampToUse } })
+        chartEventDispatcher.set({ event: "replay", chartId: "all" })
         //timeEvent.update((v: TimeEvent) => ({ ...v, event: 'replay' }));
     }
 }
@@ -66,7 +67,7 @@ export function pauseReplay() {
         };
         socket.send(JSON.stringify(pauseRequest));
     }
-    streamInfo.update((v) => ({...v, replayPaused: true, pauseTime: Date.now()}));
+    streamInfo.update((v) => ({ ...v, replayPaused: true, pauseTime: Date.now() }));
 }
 
 export function resumeReplay() {
@@ -94,9 +95,9 @@ export function stopReplay() {
         };
         socket.send(JSON.stringify(stopRequest));
     }
-    streamInfo.update((r: ReplayInfo) => ({ ...r, replayActive:false, timestamp:getRealTimeTime()}));
+    streamInfo.update((r: ReplayInfo) => ({ ...r, replayActive: false, timestamp: getRealTimeTime() }));
 }
-export function changeSpeed(speed:number) {
+export function changeSpeed(speed: number) {
     if (socket?.readyState === WebSocket.OPEN) {
         const stopRequest: SubscriptionRequest = {
             action: 'speed',
@@ -104,19 +105,19 @@ export function changeSpeed(speed:number) {
         };
         socket.send(JSON.stringify(stopRequest));
     }
-    streamInfo.update((r: ReplayInfo) => ({ ...r,replaySpeed:speed }));
+    streamInfo.update((r: ReplayInfo) => ({ ...r, replaySpeed: speed }));
 }
 
-export function nextDay(){
+export function nextDay() {
     if (socket?.readyState === WebSocket.OPEN) {
         const stopRequest: SubscriptionRequest = {
             action: 'nextOpen',
         };
         socket.send(JSON.stringify(stopRequest));
     }
-    chartEventDispatcher.set({event:"replay",chartId:"all"})
+    chartEventDispatcher.set({ event: "replay", chartId: "all" })
 }
-export function setExtended(extendedHours: boolean){
+export function setExtended(extendedHours: boolean) {
     if (socket?.readyState === WebSocket.OPEN) {
         const stopRequest: SubscriptionRequest = {
             action: 'setExtended',
@@ -124,5 +125,5 @@ export function setExtended(extendedHours: boolean){
         };
         socket.send(JSON.stringify(stopRequest));
     }
-    streamInfo.update((r: ReplayInfo) => ({ ...r,extendedHours:extendedHours}));
+    streamInfo.update((r: ReplayInfo) => ({ ...r, extendedHours: extendedHours }));
 }
