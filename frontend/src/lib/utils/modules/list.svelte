@@ -15,12 +15,16 @@
 	export let columns: Array<string>;
 	export let parentDelete = (v: Instance) => {};
 	export let formatters: {[key: string]: (value: any) => string} = {};
+	export let expandable = false;
+	export let expandedContent: (item: any) => any = () => null;
+
+	let selectedRowIndex = -1;
+	let expandedRows = new Set();
+
 	function isFlagged(instance: Instance, flagWatch: Instance[]) {
 		if (!Array.isArray(flagWatch)) return false;
 		return flagWatch.some((item) => item.ticker === instance.ticker);
 	}
-
-	let selectedRowIndex = -1;
 
 	function rowRightClick(event: MouseEvent, watch: Instance) {
 		event.preventDefault();
@@ -121,6 +125,36 @@
 	function handleTouchEnd() {
 		clearTimeout(longPressTimer); // Clear if it's a short tap
 	}
+
+	function toggleRow(index: number) {
+		if (expandedRows.has(index)) {
+			expandedRows.delete(index);
+		} else {
+			expandedRows.add(index);
+		}
+		expandedRows = expandedRows; // Trigger reactivity
+	}
+
+	function formatValue(value: any, column: string): string {
+		if (formatters[column]) {
+			return formatters[column](value);
+		}
+		return value?.toString() ?? 'N/A';
+	}
+
+	function getAllOrders(trade) {
+		const entries = trade.entries?.map(entry => ({
+			...entry,
+			type: 'Entry'
+		})) || [];
+		
+		const exits = trade.exits?.map(exit => ({
+			...exit,
+			type: 'Exit'
+		})) || [];
+
+		return [...entries, ...exits].sort((a, b) => a.time - b.time);
+	}
 </script>
 
 {#if Array.isArray($list) && $list.length > 0}
@@ -128,7 +162,9 @@
 		<table>
 			<thead>
 				<tr>
-					<th></th>
+					{#if expandable}
+						<th></th>
+					{/if}
 					{#each columns as col}
 						<th>{col}</th>
 					{/each}
@@ -146,7 +182,15 @@
 						on:contextmenu={(event) => {
 							event.preventDefault();
 						}}
+						class:expandable
+						class:expanded={expandedRows.has(i)}
+						on:click={() => expandable && toggleRow(i)}
 					>
+						{#if expandable}
+							<td class="expand-cell">
+								<span class="expand-icon">{expandedRows.has(i) ? '−' : '+'}</span>
+							</td>
+						{/if}
 						<td>
 							{#if isFlagged(watch, $flagWatchlist)}
 								<span class="flag-icon">⚑</span> <!-- Example flag icon -->
@@ -192,7 +236,7 @@
 									on:contextmenu={(event) => {
 										event.preventDefault();
 										event.stopPropagation();
-									}}>{formatters[col] ? formatters[col](watch[col]) : watch[col]}</td
+									}}>{formatValue(watch[col], col)}</td
 								>
 							{/if}
 						{/each}
@@ -207,6 +251,35 @@
 							</button>
 						</td>
 					</tr>
+					{#if expandable && expandedRows.has(i)}
+						<tr class="expanded-content">
+							<td colspan={columns.length + 1}>
+								<div class="trade-details">
+									<h4>Trade Details</h4>
+									<table>
+										<thead>
+											<tr>
+												<th>Time</th>
+												<th>Type</th>
+												<th>Price</th>
+												<th>Shares</th>
+											</tr>
+										</thead>
+										<tbody>
+											{#each getAllOrders(watch) as order}
+												<tr>
+													<td>{UTCTimestampToESTString(order.time)}</td>
+													<td class={order.type.toLowerCase()}>{order.type}</td>
+													<td>${order.price.toFixed(2)}</td>
+													<td>{order.shares}</td>
+												</tr>
+											{/each}
+										</tbody>
+									</table>
+								</div>
+							</td>
+						</tr>
+					{/if}
 				{/each}
 			</tbody>
 		</table>
@@ -229,5 +302,106 @@
 
 	tr {
 		transition: outline 0.2s ease;
+	}
+
+	.list-container {
+		width: 100%;
+		overflow-x: auto;
+	}
+
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		margin: 0;
+		padding: 0;
+		color: white;
+	}
+
+	th, td {
+		padding: 8px;
+		text-align: left;
+		border-bottom: 1px solid #444;
+	}
+
+	th {
+		background-color: #333;
+		font-weight: bold;
+	}
+
+	tr {
+		background-color: #222;
+		transition: background-color 0.2s;
+	}
+
+	tr:hover {
+		background-color: #2a2a2a;
+	}
+
+	.expandable {
+		cursor: pointer;
+	}
+
+	.expand-cell {
+		width: 30px;
+		text-align: center;
+		padding: 4px;
+	}
+
+	.expand-icon {
+		display: inline-block;
+		width: 16px;
+		height: 16px;
+		line-height: 16px;
+		text-align: center;
+		background-color: #444;
+		border-radius: 3px;
+		font-weight: bold;
+		font-size: 12px;
+	}
+
+	.expanded-content {
+		background-color: #2a2a2a;
+	}
+
+	.expanded-content td {
+		padding: 8px;
+	}
+
+	.trade-details {
+		background-color: #333;
+		padding: 8px;
+		border-radius: 4px;
+	}
+
+	.trade-details h4 {
+		margin: 0 0 6px 0;
+		color: #888;
+		font-size: 0.9em;
+	}
+
+	.trade-details table {
+		width: 100%;
+		font-size: 0.85em;
+	}
+
+	.trade-details th {
+		background-color: #444;
+		padding: 6px 8px;
+	}
+
+	.trade-details tr {
+		background-color: transparent;
+	}
+
+	.trade-details tr:hover {
+		background-color: #3a3a3a;
+	}
+
+	.entry {
+		color: #4caf50;
+	}
+
+	.exit {
+		color: #f44336;
 	}
 </style>
