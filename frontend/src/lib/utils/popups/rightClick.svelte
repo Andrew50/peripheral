@@ -227,10 +227,13 @@
 <style>
 	.popup-container {
 		width: 180px;
-		background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent black background */
-		border: 1px solid rgba(255, 255, 255, 0.1); /* Subtle border */
-		border-radius: 4px; /* Rounded corners */
+		background-color: rgba(0, 0, 0, 0.5);
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		border-radius: 4px;
 		padding: 4px;
+		/* Add these properties to prevent scrolling */
+		overflow: visible;
+		max-height: none;
 	}
 	button {
 		width: 100%;

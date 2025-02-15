@@ -51,7 +51,7 @@ def update_sectors(conn):
             
             total_updates = 0
             total_tickers = len(tickers)
-            print(f"{get_timestamp()} - Processing {total_tickers} tickers", flush=True)
+            #print(f"{get_timestamp()} - Processing {total_tickers} tickers", flush=True)
             
             for ticker in tickers:
                 info = get_sector_info(ticker)
@@ -67,8 +67,8 @@ def update_sectors(conn):
                         total_updates += 1
                         
                         # Add progress tracking
-                        if total_updates % 10 == 0:
-                            print(f"{get_timestamp()} - Processed {total_updates}/{total_tickers} tickers ({(total_updates/total_tickers)*100:.1f}%)", flush=True)
+                        #if total_updates % 10 == 0:
+                            #print(f"{get_timestamp()} - Processed {total_updates}/{total_tickers} tickers ({(total_updates/total_tickers)*100:.1f}%)", flush=True)
                         
                     except Exception as e:
                         conn.db.rollback()

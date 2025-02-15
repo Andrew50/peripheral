@@ -142,6 +142,8 @@ type GetSecurityFromTickerResults struct {
 	SecurityId int    `json:"securityId"`
 	Ticker     string `json:"ticker"`
 	Timestamp  int64  `json:"timestamp"`
+	Icon       string `json:"icon"`
+	Name       string `json:"name"`
 }
 
 func GetSecuritiesFromTicker(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -153,12 +155,14 @@ func GetSecuritiesFromTicker(conn *utils.Conn, userId int, rawArgs json.RawMessa
 	// Clean and prepare the search query
 	query := strings.ToUpper(strings.TrimSpace(args.Ticker))
 
-	// Modified query to prioritize exact matches and then show fuzzy matches
+	// Modified query to properly handle name and icon and prioritize active securities
 	sqlQuery := `
 	WITH ranked_results AS (
 		SELECT DISTINCT ON (s.ticker) 
 			securityId, 
-			ticker, 
+			ticker,
+			NULLIF(name, '') as name,
+			NULLIF(icon, '') as icon, 
 			maxDate,
 			CASE 
 				WHEN UPPER(ticker) = UPPER($1) THEN 1
@@ -166,7 +170,11 @@ func GetSecuritiesFromTicker(conn *utils.Conn, userId int, rawArgs json.RawMessa
 				WHEN UPPER(ticker) LIKE '%' || UPPER($1) || '%' THEN 3
 				ELSE 4
 			END as match_type,
-			similarity(UPPER(ticker), UPPER($1)) as sim_score
+			similarity(UPPER(ticker), UPPER($1)) as sim_score,
+			CASE 
+				WHEN maxDate IS NULL THEN 0
+				ELSE 1
+			END as is_delisted
 		FROM securities s
 		WHERE (
 			UPPER(ticker) = UPPER($1) OR
@@ -176,9 +184,9 @@ func GetSecuritiesFromTicker(conn *utils.Conn, userId int, rawArgs json.RawMessa
 		)
 		ORDER BY ticker, maxDate DESC NULLS FIRST
 	)
-	SELECT securityId, ticker, maxDate
+	SELECT securityId, ticker, name, icon, maxDate
 	FROM ranked_results
-	ORDER BY match_type, sim_score DESC
+	ORDER BY match_type, is_delisted, sim_score DESC
 	LIMIT 10
 	`
 
@@ -187,11 +195,13 @@ func GetSecuritiesFromTicker(conn *utils.Conn, userId int, rawArgs json.RawMessa
 		return nil, err
 	}
 	defer rows.Close()
+
 	var securities []GetSecurityFromTickerResults
 	for rows.Next() {
 		var security GetSecurityFromTickerResults
 		var timestamp sql.NullTime
-		if err := rows.Scan(&security.SecurityId, &security.Ticker, &timestamp); err != nil {
+		var name, icon sql.NullString
+		if err := rows.Scan(&security.SecurityId, &security.Ticker, &name, &icon, &timestamp); err != nil {
 			return nil, err
 		}
 		if timestamp.Valid {
@@ -199,6 +209,9 @@ func GetSecuritiesFromTicker(conn *utils.Conn, userId int, rawArgs json.RawMessa
 		} else {
 			security.Timestamp = 0
 		}
+		// Properly assign name and icon from NullString
+		security.Name = name.String
+		security.Icon = icon.String
 		securities = append(securities, security)
 	}
 	return securities, nil
@@ -266,6 +279,69 @@ type GetTickerDetailsArgs struct {
 	SecurityId int    `json:"securityId"`
 	Ticker     string `json:"ticker,omitempty"`
 	Timestamp  int64  `json:"timestamp,omitempty"`
+}
+
+type GetTickerMenuDetailsResults struct {
+	Ticker                      string  `json:"ticker"`
+	Name                        string  `json:"name"`
+	Market                      string  `json:"market"`
+	Locale                      string  `json:"locale"`
+	PrimaryExchange             string  `json:"primary_exchange"`
+	Active                      bool    `json:"active"`
+	MarketCap                   float64 `json:"market_cap"`
+	Description                 string  `json:"description"`
+	Logo                        string  `json:"logo"`
+	ShareClassSharesOutstanding int64   `json:"share_class_shares_outstanding"`
+	Industry                    string  `json:"industry"`
+	Sector                      string  `json:"sector"`
+	Icon                        string  `json:"icon"`
+}
+
+func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetTickerDetailsArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+
+	// Modified query to be more explicit and add NULLIF to handle empty strings
+	query := `
+		SELECT 
+			ticker,
+			NULLIF(name, '') as name,
+			NULLIF(market, '') as market,
+			NULLIF(locale, '') as locale,
+			NULLIF(primary_exchange, '') as primary_exchange,
+			active,
+			market_cap,
+			NULLIF(description, '') as description,
+			NULLIF(logo, '') as logo,
+			NULLIF(icon, '') as icon,
+			share_class_shares_outstanding,
+			NULLIF(industry, '') as industry,
+			NULLIF(sector, '') as sector
+		FROM securities 
+		WHERE securityId = $1 AND maxDate IS NULL`
+
+	var results GetTickerMenuDetailsResults
+	err := conn.DB.QueryRow(context.Background(), query, args.SecurityId).Scan(
+		&results.Ticker,
+		&results.Name,
+		&results.Market,
+		&results.Locale,
+		&results.PrimaryExchange,
+		&results.Active,
+		&results.MarketCap,
+		&results.Description,
+		&results.Logo,
+		&results.Icon,
+		&results.ShareClassSharesOutstanding,
+		&results.Industry,
+		&results.Sector,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ticker details: %v", err)
+	}
+	return results, nil
 }
 
 type TickerDetailsResponse struct {

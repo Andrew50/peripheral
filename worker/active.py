@@ -65,7 +65,7 @@ def calculate_active(data):
         
         # Loop over each security and compute metrics
         for i, label in enumerate(labels):
-            if i > 0 and i % 100 == 0:
+            if i > 0 and i % 1000 == 0:
                 print(f"Processed {i}/{len(labels)} securities...")
             
             ticker = label["ticker"]
@@ -83,7 +83,7 @@ def calculate_active(data):
             # Calculate price return in percentage over the lookback period
             current_price = tensor[idx][-1][3]        # current close
             past_price = tensor[idx][-lookback_bars][3] # past close
-            print(f"timeframe: {timeframe}, ticker: {ticker}, current_price: {current_price}, past_price: {past_price}")
+            #print(f"timeframe: {timeframe}, ticker: {ticker}, current_price: {current_price}, past_price: {past_price}")
             if past_price == 0:
                 continue  # avoid division by zero
             price_val = ((current_price - past_price) / past_price) * 100
