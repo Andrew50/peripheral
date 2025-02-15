@@ -412,59 +412,62 @@ func getInitialStreamValue(conn *utils.Conn, channelName string, timestamp int64
 		var tradeTimestamp int64
 		var conditions []int32
 
+		// Use the same approach for trade fetch:
+		var trade models.Trade
 		if timestamp == 0 {
 			// Get the latest trade
-			trade, err := utils.GetLastTrade(conn.Polygon, ticker)
+			latestTrade, err := utils.GetLastTrade(conn.Polygon, ticker)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get last trade: %v", err)
 			}
-
-			tradeTime := time.Time(trade.Timestamp)
-			if !extendedHours && !utils.IsTimestampRegularHours(tradeTime) { //if regular channel and last trade was during extended
-				fmt.Println("regular channel and extended hours trade")
-				// If not extended hours and last trade was during extended hours,
-				// get the most recent close instead
-				closePrice, err := utils.GetMostRecentRegularClose(conn.Polygon, ticker)
-				if err != nil {
-					return nil, fmt.Errorf("error getting close price: %v", err)
-				}
-				price = closePrice
-				size = 0
-				tradeTimestamp = tradeTime.UnixNano() / int64(time.Millisecond)
-				conditions = []int32{}
-			} else if extendedHours && utils.IsTimestampRegularHours(tradeTime) { //if extended channel and last trade was during regular hours
-				fmt.Println("extended hours and regular hours trade")
-				// Get the most recent open price for extended hours
-				openPrice, err := utils.GetMostRecentExtendedHoursClose(conn.Polygon, ticker)
-				if err != nil {
-					return nil, fmt.Errorf("error getting open price: %v", err)
-				}
-				price = openPrice
-				size = 0
-				tradeTimestamp = tradeTime.UnixNano() / int64(time.Millisecond)
-				conditions = []int32{}
-			} else {
-				fmt.Println("god")
-
-				// Use the last trade data
-				price = trade.Price
-				size = int64(trade.Size)
-				tradeTimestamp = tradeTime.UnixNano() / int64(time.Millisecond)
-				conditions = trade.Conditions
+			trade = models.Trade{
+				Price:      latestTrade.Price,
+				Size:       latestTrade.Size,
+				Timestamp:  latestTrade.Timestamp,
+				Conditions: latestTrade.Conditions,
+				Exchange:   latestTrade.Exchange,
 			}
-			fmt.Println("slow", extendedHours, ticker, price)
-		} else { //need to use same if logic as if timestamp == 0 TODO !!!!!
+		} else {
 			// Get the trade at the specified timestamp
-			trade, err := utils.GetTradeAtTimestamp(conn.Polygon, securityId, queryTime)
+			fetchedTrade, err := utils.GetTradeAtTimestamp(conn.Polygon, securityId, queryTime)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get trade at timestamp: %v", err)
 			}
-			// Assign values from GetTradeAtTimestamp
+			trade = fetchedTrade
+		}
+
+		tradeTime := time.Time(trade.Timestamp)
+		if !extendedHours && !utils.IsTimestampRegularHours(tradeTime) {
+			// If not extended hours, but the last trade was in extended hours,
+			// get the most recent regular close for the referenceTime = tradeTime
+			closePrice, err := utils.GetMostRecentRegularClose(conn.Polygon, ticker, tradeTime)
+			if err != nil {
+				return nil, fmt.Errorf("error getting close price: %v", err)
+			}
+			price = closePrice
+			size = 0
+			conditions = []int32{}
+			tradeTimestamp = tradeTime.UnixNano() / int64(time.Millisecond)
+		} else if extendedHours && utils.IsTimestampRegularHours(tradeTime) {
+			// If extended hours, but the last trade was in regular hours,
+			// get the most recent extended-hours close for the referenceTime = tradeTime
+			openPrice, err := utils.GetMostRecentExtendedHoursClose(conn.Polygon, ticker, tradeTime)
+			if err != nil {
+				return nil, fmt.Errorf("error getting open price: %v", err)
+			}
+			price = openPrice
+			size = 0
+			conditions = []int32{}
+			tradeTimestamp = tradeTime.UnixNano() / int64(time.Millisecond)
+		} else {
+			// Else use the trade as-is
 			price = trade.Price
 			size = int64(trade.Size)
-			tradeTimestamp = time.Time(trade.SipTimestamp).UnixNano() / int64(time.Millisecond)
 			conditions = trade.Conditions
+			tradeTimestamp = tradeTime.UnixNano() / int64(time.Millisecond)
 		}
+
+		fmt.Println("slow", extendedHours, ticker, price)
 
 		// Create the TradeData struct using the variables
 		data := TradeData{
@@ -475,7 +478,6 @@ func getInitialStreamValue(conn *utils.Conn, channelName string, timestamp int64
 			Channel:    channelName,
 		}
 
-		// Marshal to JSON
 		jsonData, err := json.Marshal(data)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling trade data: %v", err)

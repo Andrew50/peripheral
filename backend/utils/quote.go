@@ -116,16 +116,19 @@ func GetTrade(client *polygon.Client, ticker string, nanoTimestamp models.Nanos,
 }
 
 // GetMostRecentRegularClose gets the most recent close price from regular trading hours
-func GetMostRecentRegularClose(client *polygon.Client, ticker string) (float64, error) {
-	// Get today's date in Eastern time
-	now := time.Now().In(easternLocation)
-	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, easternLocation)
+func GetMostRecentRegularClose(client *polygon.Client, ticker string, referenceTime time.Time) (float64, error) {
+	easternLocation, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return 0, fmt.Errorf("error loading location: %v", err)
+	}
 
-	// Convert to models.Millis
+	refLocal := referenceTime.In(easternLocation)
+	startOfDay := time.Date(refLocal.Year(), refLocal.Month(), refLocal.Day(), 0, 0, 0, 0, easternLocation)
+
+	// We'll use 'referenceTime' as the "end" time for scanning minute bars
 	startMillis := models.Millis(startOfDay)
-	endMillis := models.Millis(now)
+	endMillis := models.Millis(refLocal)
 
-	// Get 1-minute bars for today
 	iter, err := GetAggsData(client, ticker, 1, "minute", startMillis, endMillis, 1000, "desc", true)
 	if err != nil {
 		return 0, fmt.Errorf("error getting aggregates: %v", err)
@@ -144,14 +147,14 @@ func GetMostRecentRegularClose(client *polygon.Client, ticker string) (float64, 
 		return 0, fmt.Errorf("error iterating aggregates: %v", err)
 	}
 
-	// If no regular hours data found today, get yesterday's close
-	yesterday := startOfDay.AddDate(0, 0, -1)
-	yesterdayStart := models.Millis(yesterday)
+	// If no regular hours data found for that day, check the previous day
+	yesterdayLocal := startOfDay.AddDate(0, 0, -1)
+	yesterdayStart := models.Millis(yesterdayLocal)
 	yesterdayEnd := models.Millis(startOfDay.Add(-time.Nanosecond))
 
 	iter, err = GetAggsData(client, ticker, 1, "day", yesterdayStart, yesterdayEnd, 1, "desc", true)
 	if err != nil {
-		return 0, fmt.Errorf("error getting yesterday's data: %v", err)
+		return 0, fmt.Errorf("error getting previous day's data: %v", err)
 	}
 
 	for iter.Next() {
@@ -161,17 +164,18 @@ func GetMostRecentRegularClose(client *polygon.Client, ticker string) (float64, 
 	return 0, fmt.Errorf("no recent regular hours close found for %s", ticker)
 }
 
-// GetMostRecentRegularOpen gets the most recent open price from regular trading hours
-func GetMostRecentExtendedHoursClose(client *polygon.Client, ticker string) (float64, error) {
-	// Get today's date in Eastern time
-	now := time.Now().In(easternLocation)
-	endOfExtendedHours := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, easternLocation)
+// GetMostRecentExtendedHoursClose gets the most recent extended-hours close relative to referenceTime
+func GetMostRecentExtendedHoursClose(client *polygon.Client, ticker string, referenceTime time.Time) (float64, error) {
+	easternLocation, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return 0, fmt.Errorf("error loading location: %v", err)
+	}
 
-	// Convert to models.Millis
-	startMillis := models.Millis(endOfExtendedHours)
-	endMillis := models.Millis(now)
+	refLocal := referenceTime.In(easternLocation)
+	startOfExtended := time.Date(refLocal.Year(), refLocal.Month(), refLocal.Day(), 0, 0, 0, 0, easternLocation)
+	startMillis := models.Millis(startOfExtended)
+	endMillis := models.Millis(refLocal)
 
-	// Get 1-minute bars for today
 	iter, err := GetAggsData(client, ticker, 1, "minute", startMillis, endMillis, 1000, "desc", true)
 	if err != nil {
 		return 0, fmt.Errorf("error getting aggregates: %v", err)
@@ -190,19 +194,21 @@ func GetMostRecentExtendedHoursClose(client *polygon.Client, ticker string) (flo
 		return 0, fmt.Errorf("error iterating aggregates: %v", err)
 	}
 
-	// If no regular hours data found today, get yesterday's open
-	yesterday := endOfExtendedHours.AddDate(0, 0, -1)
-	yesterdayStart := models.Millis(yesterday)
-	yesterdayEnd := models.Millis(endOfExtendedHours.Add(-time.Nanosecond))
+	// If no regular hours data found for that day, check the previous day
+	yesterdayLocal := startOfExtended.AddDate(0, 0, -1)
+	yesterdayStart := models.Millis(yesterdayLocal)
+	yesterdayEnd := models.Millis(startOfExtended.Add(-time.Nanosecond))
 
 	iter, err = GetAggsData(client, ticker, 1, "day", yesterdayStart, yesterdayEnd, 1, "desc", true)
 	if err != nil {
-		return 0, fmt.Errorf("error getting yesterday's data: %v", err)
+		return 0, fmt.Errorf("error getting previous day's data: %v", err)
 	}
 
 	for iter.Next() {
+		// For extended hours close, we might want "Open" or "Close" from the prior day.
+		// This example uses .Open, but you could revise as needed:
 		return iter.Item().Open, nil
 	}
 
-	return 0, fmt.Errorf("no recent regular hours open found for %s", ticker)
+	return 0, fmt.Errorf("no recent extended hours close found for %s", ticker)
 }
