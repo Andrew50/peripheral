@@ -438,8 +438,8 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 		yesterdayDateString = currentDateString
 		activeYesterday = activeToday
 	}
-	return updateSecurityDetails(conn, test)
 
+	return nil
 }
 
 func updateSecurityDetails(conn *utils.Conn, test bool) error {
