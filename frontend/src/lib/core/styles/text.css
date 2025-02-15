@@ -14,5 +14,5 @@ hr {
 }
 
 * {
-    font-family: monospace; /* Monospace font for numbers */
+    font-family: 'Fira Sans', sans-serif; /* Monospace font for numbers */
 }
