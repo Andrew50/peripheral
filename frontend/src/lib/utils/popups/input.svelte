@@ -143,6 +143,7 @@
 				const securities = await privateRequest<Instance[]>('getSecuritiesFromTicker', {
 					ticker: inputString
 				});
+				console.log(securities);
 				if (Array.isArray(securities) && securities.length > 0) {
 					return {
 						inputValid: securities.some((v) => v.ticker === inputString),
@@ -232,7 +233,7 @@
 		return iQ;
 	}
 
-	async function fetchSecurityDetails(securities: Instance[]): Promise<Instance[]> {
+	/*async function fetchSecurityDetails(securities: Instance[]): Promise<Instance[]> {
 		console.log(securities);
 		return Promise.all(
 			securities.map(async (security) => {
@@ -249,7 +250,7 @@
 				};
 			})
 		);
-	}
+	}*/
 
 	// Mark handleKeyDown as async so we can await the validate call if needed.
 	async function handleKeyDown(event: KeyboardEvent): Promise<void> {
@@ -336,19 +337,20 @@
 					}));
 					loadedSecurityResultRequest = thisSecurityResultRequest;
 
-					fetchSecurityDetails([...validationResp.securities]).then(
+					/*fetchSecurityDetails([...validationResp.securities]).then(
 						(securitiesWithDetails: Instance[]) => {
 							if (thisSecurityResultRequest === currentSecurityResultRequest) {
 								inputQuery.update((v: InputQuery) => {
 									// Merge the newly fetched details into the instance if it matches
-									if (v.instance && 'ticker' in v.instance && v.instance.ticker) {
+									/*if (v.instance && 'ticker' in v.instance && v.instance.ticker) {
 										const matchedSec = securitiesWithDetails.find(
 											(sec) => sec.ticker === v.instance.ticker
 										);
 										if (matchedSec) {
 											v.instance = { ...v.instance, ...matchedSec };
 										}
-									}
+									}*/
+					/*
 									return {
 										...v,
 										securities: securitiesWithDetails
@@ -357,7 +359,7 @@
 								console.log($inputQuery);
 							}
 						}
-					);
+					);*/
 				}
 			});
 		}

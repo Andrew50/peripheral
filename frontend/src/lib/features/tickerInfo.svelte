@@ -20,11 +20,19 @@
 	//let tickerDetails: TickerDetails | null = null;
 
 	onMount(() => {
-		/*activeChartInstance.subscribe((instance: Instance | null) => {
-			if (instance !== null && instance !== undefined && instance.securityId !== undefined) {
-				loadTickerData(instance.securityId);
+		activeChartInstance.subscribe((instance: Instance | null) => {
+			if (!instance?.detailsFetched && instance?.securityId) {
+				privateRequest('getTickerMenuDetails', { securityId: instance.securityId }, true).then(
+					(details) => {
+						activeChartInstance.update((instance: Instance) => ({
+							...instance,
+							...details,
+							detailsFetched: true
+						}));
+					}
+				);
 			}
-		});*/
+		});
 		document.addEventListener('mousemove', handleMouseMove);
 		document.addEventListener('mouseup', handleMouseUp);
 
@@ -104,7 +112,7 @@
 	</div>
 
 	{#if $activeChartInstance !== null && $activeChartInstance !== null}
-		{#if $tickerInfoState.isExpanded && $activeChartInstance.detailsUpdateStore}
+		{#if $tickerInfoState.isExpanded}
 			<div class="content">
 				<div class="system-clock">
 					<h3>

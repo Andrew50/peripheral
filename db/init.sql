@@ -1,6 +1,5 @@
 --init.sql
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
-
 CREATE TABLE users (
     userId SERIAL PRIMARY KEY,
     username VARCHAR(100) UNIQUE NOT NULL,
@@ -12,10 +11,22 @@ CREATE TABLE securities (
     securityid SERIAL,
     ticker varchar(10) not null,
     figi varchar(12) not null,
-    minDate timestamp,
-    maxDate timestamp,
+    name varchar(200),
+    market varchar(50),
+    locale varchar(50),
+    primary_exchange varchar(50),
+    active boolean DEFAULT true,
+    market_cap decimal(20, 2),
+    description text,
+    logo text,
+    -- base64 encoded image
+    icon text,
+    -- base64 encoded image
+    share_class_shares_outstanding bigint,
     sector varchar(100),
     industry varchar(100),
+    minDate timestamp,
+    maxDate timestamp,
     unique (ticker, minDate),
     unique (ticker, maxDate),
     unique (securityid, minDate),
@@ -149,7 +160,7 @@ CREATE TABLE horizontal_lines (
 CREATE TABLE trades (
     tradeId SERIAL PRIMARY KEY,
     userId INT REFERENCES users(userId) ON DELETE CASCADE,
-    securityId INT, 
+    securityId INT,
     ticker VARCHAR(20) NOT NULL,
     tradeDirection VARCHAR(10) NOT NULL,
     date DATE NOT NULL,

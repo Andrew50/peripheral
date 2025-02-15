@@ -421,11 +421,11 @@ func getInitialStreamValue(conn *utils.Conn, channelName string, timestamp int64
 				return nil, fmt.Errorf("failed to get last trade: %v", err)
 			}
 			trade = models.Trade{
-				Price:      latestTrade.Price,
-				Size:       latestTrade.Size,
-				Timestamp:  latestTrade.Timestamp,
-				Conditions: latestTrade.Conditions,
-				Exchange:   latestTrade.Exchange,
+				Price:        latestTrade.Price,
+				Size:         latestTrade.Size,
+				SipTimestamp: latestTrade.Timestamp, // Changed to use Timestamp instead of SipTimestamp for LastTrade
+				Conditions:   latestTrade.Conditions,
+				Exchange:     int(latestTrade.Exchange),
 			}
 		} else {
 			// Get the trade at the specified timestamp
@@ -436,7 +436,7 @@ func getInitialStreamValue(conn *utils.Conn, channelName string, timestamp int64
 			trade = fetchedTrade
 		}
 
-		tradeTime := time.Time(trade.Timestamp)
+		tradeTime := time.Time(trade.SipTimestamp) // Changed from Timestamp to SipTimestamp
 		if !extendedHours && !utils.IsTimestampRegularHours(tradeTime) {
 			// If not extended hours, but the last trade was in extended hours,
 			// get the most recent regular close for the referenceTime = tradeTime
@@ -508,7 +508,7 @@ func getInitialStreamValue(conn *utils.Conn, channelName string, timestamp int64
 			return jsonData, nil
 		} else {
 			// Get current day's most recent regular hours close
-			closePrice, err := utils.GetMostRecentRegularClose(conn.Polygon, ticker)
+			closePrice, err := utils.GetMostRecentRegularClose(conn.Polygon, ticker, time.Now()) // Added current time as third argument
 			fmt.Println("closePrice", ticker, closePrice)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get current regular hours close: %v", err)
