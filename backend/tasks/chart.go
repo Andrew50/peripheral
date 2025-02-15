@@ -383,7 +383,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				barDataList = barDataList[:len(barDataList)-1]
 			}
 			if incompleteAgg.Open != 0 {
-				// Only add incomplete bar if it’s within regular hours or daily+ timeframes
+				// Only add incomplete bar if it's within regular hours or daily+ timeframes
 				incompleteTs := time.Unix(int64(incompleteAgg.Timestamp), 0)
 				if (utils.IsTimestampRegularHours(incompleteTs) && !args.ExtendedHours) ||
 					timespan == "day" || timespan == "week" || timespan == "month" {
@@ -619,9 +619,11 @@ func requestIncompleteBar(
 	endUnix := time.Unix(0, timestampEnd*int64(time.Millisecond)).UTC()
 	for it.Next() {
 		trade := it.Item()
-		if trade == nil {
+		// Check if the trade is empty by looking at the Price field
+		if trade.Price == 0 {
 			continue
 		}
+
 		tradeTs := time.Time(trade.ParticipantTimestamp).In(easternLocation)
 		// Stop if we move past the target end
 		if tradeTs.After(endUnix) {
