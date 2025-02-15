@@ -13,6 +13,8 @@ import (
 var eOpenRun = false
 var eCloseRun = false
 
+var useBS = false //alerts, securityUpdate, marketMetrics, sectorUpdate
+
 var (
 	polygonInitialized bool
 	polygonInitMutex   sync.Mutex
@@ -52,22 +54,27 @@ func StartScheduler(conn *utils.Conn) chan struct{} {
 func initialize(conn *utils.Conn) {
 	// Queue sector update on first init
 
-	err := socket.InitAggregates(conn)
-	if err != nil {
-		fmt.Println("schedule issue: dfi0w20", err)
-	}
-	alertsInitMutex.Lock()
-	if !alertsInitialized {
-		err := alerts.StartAlertLoop(conn)
+	if useBS {
+		err := socket.InitAggregates(conn)
 		if err != nil {
-			fmt.Println("schedule issue: k0w0c", err)
+			fmt.Println("schedule issue: dfi0w20", err)
 		}
-		alertsInitialized = true
+
+		alertsInitMutex.Lock()
+		if !alertsInitialized {
+			err := alerts.StartAlertLoop(conn)
+			if err != nil {
+				fmt.Println("schedule issue: k0w0c", err)
+			}
+			alertsInitialized = true
+		}
+		alertsInitMutex.Unlock()
+	} else {
+		fmt.Println("not using alerts !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 	}
-	alertsInitMutex.Unlock()
 	polygonInitMutex.Lock()
 	if !polygonInitialized {
-		socket.StartPolygonWS(conn)
+		socket.StartPolygonWS(conn, useBS)
 		polygonInitialized = true
 	}
 	polygonInitMutex.Unlock()
@@ -111,18 +118,21 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 		alerts.StopAlertLoop()
 		socket.StopPolygonWS()
 		fmt.Println("running close schedule ----------------------")
+		if useBS {
 
-		err := updateSecurities(conn, false)
-		if err != nil {
-			fmt.Println("schedule issue: dw000", err)
+			err := updateSecurities(conn, false)
+			if err != nil {
+				fmt.Println("schedule issue: dw000", err)
+			}
+			err = updateSectors(conn)
+			if err != nil {
+				fmt.Println("schedule issue: sector update close:", err)
+			}
+			err = updateMarketMetrics(conn)
+			if err != nil {
+				fmt.Println("schedule issue: market metrics update:", err)
+			}
 		}
-		err = updateSectors(conn)
-		if err != nil {
-			fmt.Println("schedule issue: sector update close:", err)
-		}
-		err = updateMarketMetrics(conn)
-		if err != nil {
-			fmt.Println("schedule issue: market metrics update:", err)
-		}
+
 	}
 }
