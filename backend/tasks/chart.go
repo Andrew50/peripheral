@@ -31,13 +31,15 @@ type GetChartDataResults struct {
 	Volume    float64 `json:"volume"`
 }
 
+var debug = false // Flip to `true` to enable verbose debugging output
+
 func MaxDivisorOf30(n int) int {
 	for k := n; k >= 1; k-- {
 		if 30%k == 0 && n%k == 0 {
 			return k
 		}
 	}
-	return 1 // 1 divides all integers, so we return 1 if no other common divisor is found.
+	return 1
 }
 
 func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -46,28 +48,37 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
-	fmt.Printf("\nDebug: Received request for SecurityId: %d, Timeframe: %s, Direction: %s\n",
-		args.SecurityId, args.Timeframe, args.Direction)
+	if debug {
+		fmt.Printf("[DEBUG] GetChartData: SecurityId=%d, Timeframe=%s, Direction=%s\n",
+			args.SecurityId, args.Timeframe, args.Direction)
+	}
 
 	multiplier, timespan, _, _, err := utils.GetTimeFrame(args.Timeframe)
 	if err != nil {
 		return nil, fmt.Errorf("invalid timeframe: %v", err)
 	}
+	if debug {
+		fmt.Printf("[DEBUG] Parsed timeframe => multiplier=%d, timespan=%s\n", multiplier, timespan)
+	}
 
-	fmt.Printf("Debug: Parsed timeframe - Multiplier: %d, Timespan: %s\n", multiplier, timespan)
-
+	// Determine if we must build a higher TF from a lower TF
 	var queryTimespan string
 	var queryMultiplier int
 	var queryBars int
 	var tickerForIncompleteAggregate string
 	haveToAggregate := false
+
+	// Special logic for second/minute frames with 30-based constraints
 	if (timespan == "second" || timespan == "minute") && (30%multiplier != 0) {
 		queryTimespan = timespan
-		queryMultiplier = MaxDivisorOf30(multiplier)
+		// Overriding the typical logic with direct 1-min aggregator
+		// (The original code forcibly sets queryMultiplier=1 anyway)
+		_ = MaxDivisorOf30(multiplier)
 		queryMultiplier = 1
 		queryBars = args.Bars * multiplier / queryMultiplier
 		haveToAggregate = true
-	} else if timespan == "hour" { //&& !args.ExtendedHours { this was commented out idk if it does anything but it "works" now
+	} else if timespan == "hour" {
+		// Hour -> 30-min aggregator
 		queryTimespan = "minute"
 		queryMultiplier = 30
 		queryBars = multiplier * 2 * args.Bars
@@ -80,6 +91,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		queryBars = args.Bars
 	}
 
+	// For timeframes above day, there's no extended hours
 	if timespan != "minute" && timespan != "second" && timespan != "hour" {
 		args.ExtendedHours = false
 	}
@@ -89,47 +101,54 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		return nil, fmt.Errorf("issue loading eastern location: %v", err)
 	}
 
+	// Convert the incoming timestamp (in ms) to time.Time
 	var inputTimestamp time.Time
 	if args.Timestamp == 0 {
+		// If no timestamp provided, we assume "now" in Eastern Time
 		inputTimestamp = time.Now().In(easternLocation)
 	} else {
 		inputTimestamp = time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).UTC()
 	}
 
+	// Build the DB query depending on direction/timestamp
 	var query string
 	var queryParams []interface{}
 	var polyResultOrder string
 
-	if args.Timestamp == 0 {
+	switch {
+	case args.Timestamp == 0:
 		query = `SELECT ticker, minDate, maxDate 
                  FROM securities 
                  WHERE securityid = $1
                  ORDER BY minDate DESC NULLS FIRST`
 		queryParams = []interface{}{args.SecurityId}
 		polyResultOrder = "desc"
-	} else if args.Direction == "backward" {
+	case args.Direction == "backward":
 		query = `SELECT ticker, minDate, maxDate
                  FROM securities 
                  WHERE securityid = $1 AND (maxDate > $2 OR maxDate IS NULL)
                  ORDER BY minDate DESC NULLS FIRST LIMIT 1`
 		queryParams = []interface{}{args.SecurityId, inputTimestamp}
 		polyResultOrder = "desc"
-	} else if args.Direction == "forward" {
+	case args.Direction == "forward":
 		query = `SELECT ticker, minDate, maxDate
                  FROM securities 
                  WHERE securityid = $1 AND (minDate < $2 OR minDate IS NULL)
                  ORDER BY minDate ASC NULLS LAST`
 		queryParams = []interface{}{args.SecurityId, inputTimestamp}
 		polyResultOrder = "asc"
-	} else {
+	default:
 		return nil, fmt.Errorf("Incorrect direction passed")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
+
 	rows, err := conn.DB.Query(ctx, query, queryParams...)
 	if err != nil {
-		fmt.Printf("Debug: Database query failed: %v\n", err)
+		if debug {
+			fmt.Printf("[DEBUG] Database query failed: %v\n", err)
+		}
 		if ctx.Err() == context.DeadlineExceeded {
 			return nil, fmt.Errorf("query timed out: %w", err)
 		}
@@ -137,54 +156,53 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	}
 	defer rows.Close()
 
-	var barDataList []GetChartDataResults
+	// Preallocate capacity for bar data. We'll at most fetch up to args.Bars + small overhead
+	barDataList := make([]GetChartDataResults, 0, args.Bars+10)
 	numBarsRemaining := args.Bars
 
-	fmt.Printf("Debug: Starting to process database rows\n")
+	if debug {
+		fmt.Printf("[DEBUG] Processing rows from DB...\n")
+	}
 
 	for rows.Next() {
 		var ticker string
-		var minDateFromSQL *time.Time
-		var maxDateFromSQL *time.Time
-		err := rows.Scan(&ticker, &minDateFromSQL, &maxDateFromSQL)
-		if err != nil {
-			fmt.Printf("Debug: Error scanning row: %v\n", err)
+		var minDateFromSQL, maxDateFromSQL *time.Time
+
+		if err := rows.Scan(&ticker, &minDateFromSQL, &maxDateFromSQL); err != nil {
+			if debug {
+				fmt.Printf("[DEBUG] Error scanning row: %v\n", err)
+			}
 			return nil, fmt.Errorf("error scanning data: %w", err)
 		}
-		fmt.Printf("\n ticker: %v\n", ticker)
 		tickerForIncompleteAggregate = ticker
-		// Handle NULL dates from the database
+
+		// Handle NULL maxDate
 		if maxDateFromSQL == nil {
 			now := time.Now()
 			maxDateFromSQL = &now
 		}
-		var minDateSQL, maxDateSQL time.Time
+
+		// If minDate is nil, pick a minimal date
+		var minDateSQL time.Time
 		if minDateFromSQL != nil {
 			minDateSQL = minDateFromSQL.In(easternLocation)
 		} else {
-			// Default to a very early date if minDate is NULL
 			minDateSQL = time.Date(1970, 1, 1, 0, 0, 0, 0, easternLocation)
 		}
-
-		if maxDateFromSQL != nil {
-			maxDateSQL = (maxDateFromSQL).In(easternLocation)
-		} else {
-			// Default to current time if maxDate is NULL
-			maxDateSQL = time.Now().In(easternLocation)
-		}
+		maxDateSQL := maxDateFromSQL.In(easternLocation)
 
 		var queryStartTime, queryEndTime time.Time
-		if args.Direction == "backward" {
+		switch args.Direction {
+		case "backward":
 			queryEndTime = inputTimestamp
 			if maxDateSQL.Before(queryEndTime) {
 				queryEndTime = maxDateSQL
 			}
 			queryStartTime = minDateSQL
 			if queryStartTime.After(queryEndTime) {
-				//fmt.Printf("\n%v, %v", queryStartTime, queryEndTime, args.Direction, args.Timestamp, args.Timeframe)
 				return nil, fmt.Errorf("i10i0v")
 			}
-		} else if args.Direction == "forward" {
+		case "forward":
 			queryStartTime = inputTimestamp
 			if minDateSQL.After(queryStartTime) {
 				queryStartTime = minDateSQL
@@ -195,21 +213,42 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			}
 		}
 
-		date1, date2, err := utils.GetRequestStartEndTime(queryStartTime, queryEndTime, args.Direction, timespan, multiplier, queryBars)
+		date1, date2, err := utils.GetRequestStartEndTime(
+			queryStartTime, queryEndTime, args.Direction, timespan, multiplier, queryBars,
+		)
 		if err != nil {
-			fmt.Printf("Debug: GetRequestStartEndTime failed: %v\n", err)
+			if debug {
+				fmt.Printf("[DEBUG] GetRequestStartEndTime failed: %v\n", err)
+			}
 			return nil, fmt.Errorf("dkn0 %v", err)
 		}
 
-		fmt.Printf("Debug: Requesting data from Polygon - Start: %v, End: %v\n", date1, date2)
+		if debug {
+			fmt.Printf("[DEBUG] Polygon request for %s: start=%v end=%v aggregator=%v\n",
+				ticker, date1, date2, haveToAggregate)
+		}
 
+		// If we have to aggregate (e.g., second->minute, or minute->hour), do so
 		if haveToAggregate {
-			fmt.Printf("Debug: Using aggregation path\n")
-			iter, err := utils.GetAggsData(conn.Polygon, ticker, queryMultiplier, queryTimespan, date1, date2, 50000, "asc", !args.IsReplay)
+			it, err := utils.GetAggsData(
+				conn.Polygon,
+				ticker,
+				queryMultiplier,
+				queryTimespan,
+				date1, date2,
+				50000,
+				// For intraday backward queries we typically want ascending data
+				// to handle reaggregation easily (original code used "asc" for aggregator).
+				"asc",
+				!args.IsReplay,
+			)
 			if err != nil {
 				return nil, fmt.Errorf("error fetching data from Polygon: %v", err)
 			}
-			aggregatedData, err := buildHigherTimeframeFromLower(iter, multiplier, timespan, args.ExtendedHours, easternLocation, &numBarsRemaining, args.Direction)
+
+			aggregatedData, err := buildHigherTimeframeFromLower(
+				it, multiplier, timespan, args.ExtendedHours, easternLocation, &numBarsRemaining, args.Direction,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -218,43 +257,55 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				break
 			}
 		} else {
-			fmt.Printf("Debug: Using direct data path\n")
-			iter, err := utils.GetAggsData(conn.Polygon, ticker, queryMultiplier, queryTimespan, date1, date2, 50000, polyResultOrder, !args.IsReplay)
+			// Otherwise, we can directly pull from Polygon at the desired timeframe
+			it, err := utils.GetAggsData(
+				conn.Polygon,
+				ticker,
+				queryMultiplier,
+				queryTimespan,
+				date1,
+				date2,
+				50000,
+				polyResultOrder,
+				!args.IsReplay,
+			)
 			if err != nil {
-				fmt.Printf("Debug: Polygon API error: %v\n", err)
+				if debug {
+					fmt.Printf("[DEBUG] Polygon API error: %v\n", err)
+				}
 				return nil, fmt.Errorf("error fetching data from Polygon: %v", err)
 			}
-			var processedBars int
-			for iter.Next() {
-				processedBars++
-				item := iter.Item()
-				if iter.Err() != nil {
-					fmt.Printf("Debug: Iterator error: %v\n", iter.Err())
+
+			for it.Next() {
+				item := it.Item()
+				if it.Err() != nil {
+					if debug {
+						fmt.Printf("[DEBUG] Iterator error: %v\n", it.Err())
+					}
 					return nil, fmt.Errorf("dkn0w")
 				}
-				timestamp := time.Time(item.Timestamp).In(easternLocation)
 
+				ts := time.Time(item.Timestamp).In(easternLocation)
+				// Skip weekends for big timespans
 				if queryTimespan == "week" || queryTimespan == "month" || queryTimespan == "year" {
-					for timestamp.Weekday() == time.Saturday || timestamp.Weekday() == time.Sunday {
-						timestamp = timestamp.AddDate(0, 0, 1)
+					if ts.Weekday() == time.Saturday || ts.Weekday() == time.Sunday {
+						continue
 					}
 				}
-
-				// Skip if we need regular hours and timestamp is outside trading hours
+				// Skip out of hours if not extended hours
 				if (timespan == "minute" || timespan == "second" || timespan == "hour") &&
-					!args.ExtendedHours && !utils.IsTimestampRegularHours(timestamp) {
+					!args.ExtendedHours && !utils.IsTimestampRegularHours(ts) {
 					continue
 				}
 
-				barData := GetChartDataResults{
-					Timestamp: float64(timestamp.Unix()),
+				barDataList = append(barDataList, GetChartDataResults{
+					Timestamp: float64(ts.Unix()),
 					Open:      item.Open,
 					High:      item.High,
 					Low:       item.Low,
 					Close:     item.Close,
 					Volume:    item.Volume,
-				}
-				barDataList = append(barDataList, barData)
+				})
 
 				numBarsRemaining--
 				if numBarsRemaining <= 0 {
@@ -266,327 +317,432 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			}
 		}
 	}
-	if len(barDataList) != 0 {
+
+	// If we have some bars, reverse them if needed, then optionally fetch incomplete bar
+	if len(barDataList) > 0 {
+		// For aggregator logic or forward queries, we skip reversing.
 		if haveToAggregate || args.Direction == "forward" {
 			if args.Direction == "backward" {
-				fmt.Println("hit first one")
+				// Potentially fetch incomplete bar if market is open or in replay
 				marketStatus, err := utils.GetMarketStatus(conn)
 				if err != nil {
 					return nil, fmt.Errorf("issue with market status")
 				}
+
 				if (args.Timestamp == 0 && marketStatus != "closed") || args.IsReplay {
-					incompleteAggregate, err := requestIncompleteBar(conn, tickerForIncompleteAggregate, args.Timestamp, multiplier, timespan,
-						args.ExtendedHours, args.IsReplay, easternLocation)
+					incompleteAgg, err := requestIncompleteBar(
+						conn,
+						tickerForIncompleteAggregate,
+						args.Timestamp,
+						multiplier,
+						timespan,
+						args.ExtendedHours,
+						args.IsReplay,
+						easternLocation,
+					)
 					if err != nil {
-						return nil, fmt.Errorf("issue with incomplete aggregate 65k5lhgfk, %v", err)
+						return nil, fmt.Errorf("issue with incomplete aggregate: %v", err)
 					}
-					if len(barDataList) > 0 && incompleteAggregate.Timestamp == barDataList[len(barDataList)-1].Timestamp {
+
+					if len(barDataList) > 0 &&
+						incompleteAgg.Timestamp == barDataList[len(barDataList)-1].Timestamp {
 						barDataList = barDataList[:len(barDataList)-1]
 					}
-					if incompleteAggregate.Open != 0 {
-						barDataList = append(barDataList, incompleteAggregate)
+					if incompleteAgg.Open != 0 {
+						barDataList = append(barDataList, incompleteAgg)
 					}
 				}
 			}
-			return barDataList, nil
-		} else {
-			reverse(barDataList)
-			marketStatus, err := utils.GetMarketStatus(conn)
-			if err != nil {
-				return nil, fmt.Errorf("issue with market status")
-			}
-			if (args.Timestamp == 0 && marketStatus != "closed") || args.IsReplay {
-				incompleteAggregate, err := requestIncompleteBar(conn, tickerForIncompleteAggregate, args.Timestamp, multiplier, timespan,
-					args.ExtendedHours, args.IsReplay, easternLocation)
-				fmt.Printf("\nagg:%v", incompleteAggregate)
-				if err != nil {
-					return nil, fmt.Errorf("issue with incomplete aggregate 65k5lhgfk, %v", err)
-				}
-				if len(barDataList) > 0 && incompleteAggregate.Timestamp == barDataList[len(barDataList)-1].Timestamp {
-					barDataList = barDataList[:len(barDataList)-1]
-				}
-				if incompleteAggregate.Open != 0 {
-					if utils.IsTimestampRegularHours(time.Unix(int64(incompleteAggregate.Timestamp), 0)) && !args.ExtendedHours || timespan == "day" || timespan == "week" || timespan == "month" {
-						barDataList = append(barDataList, incompleteAggregate)
-					}
-				}
-			}
-			/*starTim := int64(barDataList[0].Timestamp)
-			endTim := int64(barDataList[len(barDataList)-1].Timestamp)
-			strt := time.Unix(starTim, (starTim)*1e6).UTC()
-			end := time.Unix(endTim, (endTim)*1e6).UTC()*/
 			return barDataList, nil
 		}
-	} else {
-		fmt.Printf("Debug: No bars collected. NumBarsRemaining: %d\n", numBarsRemaining)
+
+		// Otherwise, direction=backward with direct data—reverse the slice
+		reverse(barDataList)
+
+		// Possibly append incomplete bar
+		marketStatus, err := utils.GetMarketStatus(conn)
+		if err != nil {
+			return nil, fmt.Errorf("issue with market status")
+		}
+		if (args.Timestamp == 0 && marketStatus != "closed") || args.IsReplay {
+			incompleteAgg, err := requestIncompleteBar(
+				conn,
+				tickerForIncompleteAggregate,
+				args.Timestamp,
+				multiplier,
+				timespan,
+				args.ExtendedHours,
+				args.IsReplay,
+				easternLocation,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("issue with incomplete aggregate: %v", err)
+			}
+			if len(barDataList) > 0 &&
+				incompleteAgg.Timestamp == barDataList[len(barDataList)-1].Timestamp {
+				barDataList = barDataList[:len(barDataList)-1]
+			}
+			if incompleteAgg.Open != 0 {
+				// Only add incomplete bar if it’s within regular hours or daily+ timeframes
+				incompleteTs := time.Unix(int64(incompleteAgg.Timestamp), 0)
+				if (utils.IsTimestampRegularHours(incompleteTs) && !args.ExtendedHours) ||
+					timespan == "day" || timespan == "week" || timespan == "month" {
+					barDataList = append(barDataList, incompleteAgg)
+				}
+			}
+		}
+		return barDataList, nil
+	}
+
+	if debug {
+		fmt.Printf("[DEBUG] No data found. numBarsRemaining=%d\n", numBarsRemaining)
 	}
 	return nil, fmt.Errorf("no data found")
 }
 
 func reverse(data []GetChartDataResults) {
-	left, right := 0, len(data)-1
-	for left < right {
+	for left, right := 0, len(data)-1; left < right; {
 		data[left], data[right] = data[right], data[left]
 		left++
 		right--
 	}
 }
 
-func requestIncompleteBar(conn *utils.Conn, ticker string, timestamp int64, multiplier int, timespan string, extendedHours bool, isReplay bool, easternLocation *time.Location) (GetChartDataResults, error) {
+// requestIncompleteBar attempts to build a partial bar for the current bar in progress
+func requestIncompleteBar(
+	conn *utils.Conn,
+	ticker string,
+	timestamp int64,
+	multiplier int,
+	timespan string,
+	extendedHours bool,
+	isReplay bool,
+	easternLocation *time.Location,
+) (GetChartDataResults, error) {
+
 	var incompleteBar GetChartDataResults
 	timestampEnd := timestamp
 	if timestamp == 0 {
 		timestampEnd = time.Now().UnixMilli()
 	}
-	fmt.Printf("hit 1")
-	timestampTime := time.Unix(0, timestampEnd*int64(time.Millisecond)).UTC()
+
+	timestampTime := time.Unix(timestampEnd/1000, (timestampEnd%1000)*1e6).UTC()
 	var timestampStart int64
 	var currentDayStart int64
+
+	// Intraday logic
 	if timespan == "second" || timespan == "minute" || timespan == "hour" {
 		currentDayStart = utils.GetReferenceStartTime(timestampEnd, extendedHours, easternLocation)
 		timeframeInSeconds := utils.GetTimeframeInSeconds(multiplier, timespan)
 		elapsedTime := timestampEnd - currentDayStart
-		fmt.Printf("\nElapsed Time:%v", elapsedTime)
 		if elapsedTime < 0 {
 			return incompleteBar, nil
 		}
+		// Snap to boundary
 		timestampStart = currentDayStart + (elapsedTime/(timeframeInSeconds*1000))*timeframeInSeconds*1000
 	} else {
+		// Daily or above
 		currentDayStart = utils.GetReferenceStartTime(timestampEnd, false, easternLocation)
-		if timespan == "day" {
+		switch timespan {
+		case "day":
 			timestampStart = utils.GetReferenceStartTimeForDays(timestampEnd, multiplier, easternLocation)
-		} else if timespan == "week" {
+		case "week":
 			timestampStart = utils.GetReferenceStartTimeForWeeks(timestampEnd, multiplier, easternLocation)
-		} else if timespan == "month" {
+		case "month":
 			timestampStart = utils.GetReferenceStartTimeForMonths(timestampEnd, multiplier, easternLocation)
 		}
 	}
-	fmt.Printf("\nTimestampStart:%v", timestampStart)
-	incompleteBar.Timestamp = math.Floor(float64(timestampStart) / 1000)
+
+	incompleteBar.Timestamp = math.Floor(float64(timestampStart) / 1000.0)
+
+	// For daily or above, try to combine daily bars from open to "yesterday"
 	if timespan == "day" || timespan == "week" || timespan == "month" {
-		lastCompleteDayUTC := time.Date(timestampTime.Year(), timestampTime.Month(), timestampTime.Day(), 0, 0, 0, 0, time.UTC).UnixMilli()
+		lastCompleteDayUTC := time.Date(
+			timestampTime.Year(), timestampTime.Month(), timestampTime.Day(),
+			0, 0, 0, 0, time.UTC,
+		).UnixMilli()
 		dailyBarsDurationMs := lastCompleteDayUTC - timestampStart
-		numDailyBars := int(dailyBarsDurationMs / (86400000))
+		numDailyBars := int(dailyBarsDurationMs / 86400000) // ms in a day
 		if numDailyBars > 0 {
-			iter, err := utils.GetAggsData(conn.Polygon, ticker, 1, "day",
-				models.Millis(time.Unix(0, timestampStart*int64(time.Millisecond)).UTC()),
-				models.Millis(time.Unix(0, (lastCompleteDayUTC-86400000)*int64(time.Millisecond)).UTC()),
-				10000, "asc", !isReplay)
+			startT := models.Millis(time.Unix(0, timestampStart*int64(time.Millisecond)).UTC())
+			endT := models.Millis(time.Unix(0, (lastCompleteDayUTC-86400000)*int64(time.Millisecond)).UTC())
+
+			it, err := utils.GetAggsData(conn.Polygon, ticker, 1, "day", startT, endT, 10000, "asc", !isReplay)
 			if err != nil {
-				return incompleteBar, fmt.Errorf("error creating incomplete bar 64krjglvk %v", err)
+				return incompleteBar, fmt.Errorf("error creating incomplete bar (daily) %v", err)
 			}
+
 			var count int
-			for iter.Next() {
+			for it.Next() {
 				if count >= numDailyBars {
 					break
 				}
-				if incompleteBar.Open == 0 && iter.Item().Open != 0 {
-					fmt.Println(iter.Item().Open)
-					incompleteBar.Open = iter.Item().Open
+				agg := it.Item()
+				if incompleteBar.Open == 0 && agg.Open != 0 {
+					incompleteBar.Open = agg.Open
 				}
-				if iter.Item().High > incompleteBar.High {
-					incompleteBar.High = iter.Item().High
+				if agg.High > incompleteBar.High {
+					incompleteBar.High = agg.High
 				}
-				if iter.Item().Low < incompleteBar.Low || incompleteBar.Low == 0 {
-					incompleteBar.Low = iter.Item().Low
+				if agg.Low < incompleteBar.Low || incompleteBar.Low == 0 {
+					incompleteBar.Low = agg.Low
 				}
-				incompleteBar.Close = iter.Item().Close
-				incompleteBar.Volume += iter.Item().Volume
+				incompleteBar.Close = agg.Close
+				incompleteBar.Volume += agg.Volume
 				count++
 			}
 		}
 		timestampStart = currentDayStart
 	}
+
+	// For minute data
 	if timespan != "second" {
 		lastCompleteMinuteUTC := timestampTime.Truncate(time.Minute).UnixMilli()
 		if !extendedHours || timespan == "day" || timespan == "week" || timespan == "month" {
-			marketClose := time.Date(timestampTime.Year(), timestampTime.Month(), timestampTime.Day(), 16, 0, 0, 0, easternLocation)
+			marketClose := time.Date(
+				timestampTime.Year(), timestampTime.Month(), timestampTime.Day(),
+				16, 0, 0, 0, easternLocation,
+			)
+			// If time is after market close, we roll back to the last minute before 16:00
 			if timestampTime.After(marketClose) {
-				lastCompleteMinuteUTC = time.Date(timestampTime.Year(), timestampTime.Month(), timestampTime.Day(), 15, 59, 0, 0, easternLocation).UnixMilli()
+				lastCompleteMinuteUTC = time.Date(
+					timestampTime.Year(), timestampTime.Month(), timestampTime.Day(),
+					15, 59, 0, 0, easternLocation,
+				).UnixMilli()
 			}
 		}
 		minuteBarsEndTimeUTC := lastCompleteMinuteUTC
-		if lastCompleteMinuteUTC <= timestampStart {
+		if minuteBarsEndTimeUTC <= timestampStart {
 			minuteBarsEndTimeUTC = timestampStart
 		}
 		numMinuteBars := (minuteBarsEndTimeUTC - timestampStart) / (60 * 1000)
-		fmt.Printf("numMinuteBars: %d\n", numMinuteBars)
+		if debug {
+			fmt.Printf("[DEBUG] # of minute bars to fetch: %d\n", numMinuteBars)
+		}
+
 		if numMinuteBars > 0 {
-			iter, err := utils.GetAggsData(conn.Polygon, ticker, 1, "minute",
-				models.Millis(time.Unix(0, timestampStart*int64(time.Millisecond)).UTC()),
-				models.Millis(time.Unix(0, (lastCompleteMinuteUTC-60000)*int64(time.Millisecond)).UTC()),
-				10000, "asc", !isReplay)
+			startT := models.Millis(time.Unix(0, timestampStart*int64(time.Millisecond)).UTC())
+			endT := models.Millis(time.Unix(0, (lastCompleteMinuteUTC-60000)*int64(time.Millisecond)).UTC())
+
+			it, err := utils.GetAggsData(conn.Polygon, ticker, 1, "minute", startT, endT, 10000, "asc", !isReplay)
 			if err != nil {
-				return incompleteBar, fmt.Errorf("error while pulling minute data for incomplete bar 56kly7lg %v", err)
+				return incompleteBar, fmt.Errorf("error while pulling minute data for incomplete bar: %v", err)
 			}
+
 			var count int64
-			for iter.Next() {
+			for it.Next() {
 				if count >= numMinuteBars {
 					break
 				}
-				timestamp := time.Time(iter.Item().Timestamp).In(easternLocation)
-				if !utils.IsTimestampRegularHours(timestamp) && !extendedHours {
+				agg := it.Item()
+				barTs := time.Time(agg.Timestamp).In(easternLocation)
+				if !utils.IsTimestampRegularHours(barTs) && !extendedHours {
 					continue
 				}
 				if incompleteBar.Open == 0 {
-					incompleteBar.Open = iter.Item().Open
+					incompleteBar.Open = agg.Open
 				}
-				if iter.Item().High > incompleteBar.High {
-					incompleteBar.High = iter.Item().High
+				if agg.High > incompleteBar.High {
+					incompleteBar.High = agg.High
 				}
-				if iter.Item().Low < incompleteBar.Low || incompleteBar.Low == 0 {
-					incompleteBar.Low = iter.Item().Low
+				if agg.Low < incompleteBar.Low || incompleteBar.Low == 0 {
+					incompleteBar.Low = agg.Low
 				}
-				incompleteBar.Close = iter.Item().Close
-				incompleteBar.Volume += iter.Item().Volume
+				incompleteBar.Close = agg.Close
+				incompleteBar.Volume += agg.Volume
 				count++
 			}
 		}
 		timestampStart = lastCompleteMinuteUTC
 	}
+
+	// For second data
 	lastCompleteSecondUTC := timestampTime.Truncate(time.Second).UnixMilli()
 	secondBarsEndTimeUTC := lastCompleteSecondUTC
-	if lastCompleteSecondUTC <= timestampStart {
+	if secondBarsEndTimeUTC <= timestampStart {
 		secondBarsEndTimeUTC = timestampStart
 	}
 	numSecondBars := (secondBarsEndTimeUTC - timestampStart) / 1000
-	fmt.Printf("\nnumSecondBars: %d\n", numSecondBars)
-	fmt.Printf("\nstarttime:%v", time.Unix(0, timestampStart*int64(time.Millisecond)).UTC().UnixMilli())
-	fmt.Printf("\nendtime:%v", time.Unix(0, (lastCompleteSecondUTC)*int64(time.Millisecond)).UTC().UnixMilli())
+	if debug {
+		fmt.Printf("[DEBUG] # of second bars to fetch: %d\n", numSecondBars)
+	}
+
 	if numSecondBars > 0 {
-		iter, err := utils.GetAggsData(conn.Polygon, ticker, 1, "second",
-			models.Millis(time.Unix(0, timestampStart*int64(time.Millisecond)).UTC()),
-			models.Millis(time.Unix(0, (lastCompleteSecondUTC)*int64(time.Millisecond)).UTC()),
-			10000, "asc", !isReplay)
+		startT := models.Millis(time.Unix(0, timestampStart*int64(time.Millisecond)).UTC())
+		endT := models.Millis(time.Unix(0, lastCompleteSecondUTC*int64(time.Millisecond)).UTC())
+
+		it, err := utils.GetAggsData(conn.Polygon, ticker, 1, "second", startT, endT, 10000, "asc", !isReplay)
 		if err != nil {
-			return incompleteBar, fmt.Errorf("error while pulling minute data for incomplete bar 56kly7lg %v", err)
+			return incompleteBar, fmt.Errorf("error while pulling second data for incomplete bar: %v", err)
 		}
+
 		var count int64
-		for iter.Next() {
+		for it.Next() {
 			if count >= numSecondBars {
 				break
 			}
-			timestamp := time.Time(iter.Item().Timestamp).In(easternLocation)
-			if !utils.IsTimestampRegularHours(timestamp) && !extendedHours {
+			agg := it.Item()
+			barTs := time.Time(agg.Timestamp).In(easternLocation)
+			if !extendedHours && !utils.IsTimestampRegularHours(barTs) {
 				continue
 			}
 			if incompleteBar.Open == 0 {
-				incompleteBar.Open = iter.Item().Open
+				incompleteBar.Open = agg.Open
 			}
-			if iter.Item().High > incompleteBar.High {
-				incompleteBar.High = iter.Item().High
+			if agg.High > incompleteBar.High {
+				incompleteBar.High = agg.High
 			}
-			if iter.Item().Low < incompleteBar.Low || incompleteBar.Low == 0 {
-				incompleteBar.Low = iter.Item().Low
+			if agg.Low < incompleteBar.Low || incompleteBar.Low == 0 {
+				incompleteBar.Low = agg.Low
 			}
-			incompleteBar.Close = iter.Item().Close
-			incompleteBar.Volume += iter.Item().Volume
+			incompleteBar.Close = agg.Close
+			incompleteBar.Volume += agg.Volume
 			count++
 		}
-		fmt.Printf("COUNT:%v", count)
+		timestampStart = lastCompleteSecondUTC
 	}
-	var tradeConditionsToCheck = map[int32]struct{}{
-		2: {}, 5: {}, 10: {}, 15: {}, 16: {},
-		20: {}, 21: {}, 22: {}, 29: {}, 33: {},
-		38: {}, 52: {}, 53: {},
+
+	// For trade-level data
+	tradeConditionsToCheck := map[int32]struct{}{
+		2: {}, 5: {}, 10: {}, 15: {}, 16: {}, 20: {}, 21: {}, 22: {}, 29: {}, 33: {}, 38: {}, 52: {}, 53: {},
 	}
-	var volumeConditionsToCheck = map[int32]struct{}{
+	volumeConditionsToCheck := map[int32]struct{}{
 		15: {}, 16: {}, 38: {},
 	}
-	timestampStart = lastCompleteSecondUTC
-	iter, err := utils.GetTrade(conn.Polygon, ticker, models.Nanos(time.Unix(timestampStart/1000, (timestampStart%1000*1e6)).UTC()),
-		"asc", models.GTE, 30000)
+
+	startNanos := models.Nanos(time.Unix(timestampStart/1000, (timestampStart%1000)*1e6).UTC())
+	it, err := utils.GetTrade(conn.Polygon, ticker, startNanos, "asc", models.GTE, 30000)
 	if err != nil {
-		return incompleteBar, fmt.Errorf("error pulling tick data 56l5kykgk, %v", err)
+		return incompleteBar, fmt.Errorf("error pulling tick data: %v", err)
 	}
-	fmt.Printf("\n timestampend:%v\n", timestampEnd)
-	for iter.Next() {
-		timestamp := time.Time(iter.Item().ParticipantTimestamp).In(easternLocation)
-		if !utils.IsTimestampRegularHours(timestamp) && !extendedHours {
+
+	endUnix := time.Unix(0, timestampEnd*int64(time.Millisecond)).UTC()
+	for it.Next() {
+		trade := it.Item()
+		if trade == nil {
+			continue
+		}
+		tradeTs := time.Time(trade.ParticipantTimestamp).In(easternLocation)
+		// Stop if we move past the target end
+		if tradeTs.After(endUnix) {
 			break
 		}
-		foundCondition := false
-		for _, condition := range iter.Item().Conditions {
+		if !extendedHours && !utils.IsTimestampRegularHours(tradeTs) {
+			break
+		}
+
+		// Skip if condition blacklists it from affecting O/H/L/C
+		skipOhlc := false
+		for _, condition := range trade.Conditions {
 			if _, found := tradeConditionsToCheck[condition]; found {
-				foundCondition = true
+				skipOhlc = true
 				break
 			}
 		}
-		if !foundCondition {
+		if !skipOhlc {
 			if incompleteBar.Open == 0 {
-				incompleteBar.Open = iter.Item().Price
+				incompleteBar.Open = trade.Price
 			}
-			if iter.Item().Price > incompleteBar.High {
-				incompleteBar.High = iter.Item().Price
-			} else if iter.Item().Price < incompleteBar.Low || incompleteBar.Low == 0 {
-				incompleteBar.Low = iter.Item().Price
+			if trade.Price > incompleteBar.High {
+				incompleteBar.High = trade.Price
+			} else if trade.Price < incompleteBar.Low || incompleteBar.Low == 0 {
+				incompleteBar.Low = trade.Price
 			}
-			incompleteBar.Close = iter.Item().Price
+			incompleteBar.Close = trade.Price
 		}
-		foundTradeCondition := false
-		for _, condition := range iter.Item().Conditions {
+
+		// Only add volume if not in volume condition skip set
+		skipVol := false
+		for _, condition := range trade.Conditions {
 			if _, found := volumeConditionsToCheck[condition]; found {
-				foundTradeCondition = true
+				skipVol = true
 				break
 			}
 		}
-		if !foundTradeCondition {
-			incompleteBar.Volume += iter.Item().Size
+		if !skipVol {
+			incompleteBar.Volume += trade.Size
 		}
 	}
+
 	return incompleteBar, nil
 }
 
-func buildHigherTimeframeFromLower(iter *iter.Iter[models.Agg], multiplier int, timespan string, extendedHours bool, easternLocation *time.Location, numBarsRemaining *int, direction string) ([]GetChartDataResults, error) {
+// buildHigherTimeframeFromLower re-aggregates smaller timeframes into a bigger timeframe.
+func buildHigherTimeframeFromLower(
+	it *iter.Iter[models.Agg],
+	multiplier int,
+	timespan string,
+	extendedHours bool,
+	easternLocation *time.Location,
+	numBarsRemaining *int,
+	direction string,
+) ([]GetChartDataResults, error) {
+
 	var barDataList []GetChartDataResults
+	barDataList = make([]GetChartDataResults, 0, *numBarsRemaining+10) // Prealloc
+
 	var currentBar GetChartDataResults
 	var barStartTime time.Time
 
-	b := 0
+	// Convert the "one unit" (minute/second) into time.Duration for aggregator logic
+	unitDuration := utils.TimespanStringToDuration(timespan)
+	// The length of each bar in lower timeframe
+	requiredDuration := time.Duration(multiplier) * unitDuration
 
-	for iter.Next() {
-		item := iter.Item()
-		err := iter.Err()
-		if err != nil {
-			return nil, fmt.Errorf("din0wi %v", err)
+	for it.Next() {
+		agg := it.Item()
+		if it.Err() != nil {
+			return nil, fmt.Errorf("iterator error: %v", it.Err())
 		}
-		timestamp := time.Time(item.Timestamp).In(easternLocation)
-		if extendedHours || (utils.IsTimestampRegularHours(timestamp)) {
+		timestamp := time.Time(agg.Timestamp).In(easternLocation)
+
+		// Filter out pre/post market if not extended
+		if extendedHours || utils.IsTimestampRegularHours(timestamp) {
 			diff := timestamp.Sub(barStartTime)
-			if barStartTime.IsZero() || diff >= time.Duration(multiplier)*utils.TimespanStringToDuration(timespan) {
+
+			// If we're starting or we've exceeded the timeslice for the bar
+			if barStartTime.IsZero() || diff >= requiredDuration {
+				// If we have a bar in progress, store it
 				if !barStartTime.IsZero() {
 					barDataList = append(barDataList, currentBar)
-					if direction == "forwards" {
-						*numBarsRemaining--
-						if *numBarsRemaining <= 0 {
-							break
-						}
+					*numBarsRemaining--
+					if *numBarsRemaining <= 0 {
+						break
 					}
 				}
+				// Start a new bar
 				currentBar = GetChartDataResults{
 					Timestamp: float64(timestamp.Unix()),
-					Open:      item.Open,
-					High:      item.High,
-					Low:       item.Low,
-					Close:     item.Close,
-					Volume:    item.Volume,
+					Open:      agg.Open,
+					High:      agg.High,
+					Low:       agg.Low,
+					Close:     agg.Close,
+					Volume:    agg.Volume,
 				}
 				barStartTime = timestamp
 			} else {
-				currentBar.High = max(currentBar.High, item.High)
-				currentBar.Low = min(currentBar.Low, item.Low)
-				currentBar.Close = item.Close
-				currentBar.Volume += item.Volume
+				// Continue aggregating into the current bar
+				if agg.High > currentBar.High {
+					currentBar.High = agg.High
+				}
+				if agg.Low < currentBar.Low {
+					currentBar.Low = agg.Low
+				}
+				currentBar.Close = agg.Close
+				currentBar.Volume += agg.Volume
 			}
 		}
-		b++
 	}
-	if direction == "forwards" {
+
+	// Flush last bar if needed
+	// For forward direction, we add the last bar
+	if direction == "forward" {
 		if !barStartTime.IsZero() && *numBarsRemaining > 0 {
 			barDataList = append(barDataList, currentBar)
 			*numBarsRemaining--
 		}
 	} else {
+		// For backward direction, we may need to slice off extra bars
 		barsToKeep := len(barDataList) - *numBarsRemaining
 		if barsToKeep < 0 {
 			barsToKeep = 0
