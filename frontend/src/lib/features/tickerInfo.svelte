@@ -1,4 +1,3 @@
-<!-- tickerInfo.svelte-->
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { privateRequest } from '$lib/core/backend';
@@ -6,27 +5,28 @@
 	import type { Instance } from '$lib/core/types';
 	import { writable } from 'svelte/store';
 	import StreamCell from '$lib/utils/stream/streamCell.svelte';
-
 	import { streamInfo, formatTimestamp } from '$lib/core/stores';
+
+	// Import the Quotes module here, so it can be toggled
+	import Quotes from '$lib/features/quotes/quotes.svelte';
 
 	const tickerInfoState = writable({
 		isExpanded: true,
-		currentHeight: 300
+		currentHeight: 600
 	});
 
-	let startY = 0;
-	let isDragging = false;
+	let showQuotes = false; // new dropdown toggle for Quotes
 	let container: HTMLDivElement;
-
-	//let tickerDetails: TickerDetails | null = null;
+	let isDragging = false;
+	let startY = 0;
 
 	onMount(() => {
 		activeChartInstance.subscribe((instance: Instance | null) => {
-			if (!instance?.detailsFetched && instance?.securityId) {
+			if (instance && !instance.detailsFetched && instance.securityId) {
 				privateRequest('getTickerMenuDetails', { securityId: instance.securityId }, true).then(
 					(details) => {
-						activeChartInstance.update((instance: Instance) => ({
-							...instance,
+						activeChartInstance.update((inst: Instance) => ({
+							...inst,
 							...details,
 							detailsFetched: true
 						}));
@@ -34,6 +34,7 @@
 				);
 			}
 		});
+
 		document.addEventListener('mousemove', handleMouseMove);
 		document.addEventListener('mouseup', handleMouseUp);
 
@@ -42,15 +43,6 @@
 			document.removeEventListener('mouseup', handleMouseUp);
 		};
 	});
-
-	/*async function loadTickerData(securityId: number) {
-		try {
-			const data = await privateRequest('getTickerDetails', { securityId }, true);
-	//		tickerDetails = data as TickerDetails;
-		} catch (error) {
-			console.error('Error loading ticker data:', error);
-		}
-	}*/
 
 	function handleMouseDown(e: MouseEvent | TouchEvent) {
 		if (e.target instanceof HTMLButtonElement) return;
@@ -77,7 +69,7 @@
 
 		tickerInfoState.update((state) => ({
 			...state,
-			currentHeight: Math.min(Math.max(state.currentHeight + deltaY, 50), 400)
+			currentHeight: Math.min(Math.max(state.currentHeight + deltaY, 200), 800)
 		}));
 	}
 
@@ -87,31 +79,28 @@
 		document.body.style.userSelect = '';
 	}
 
-	function toggleExpand() {
-		tickerInfoState.update((state) => ({
-			...state,
-			isExpanded: !state.isExpanded,
-			currentHeight: !state.isExpanded ? state.currentHeight : 200
-		}));
-	}
-
 	function handleClick(event: MouseEvent | TouchEvent) {
-		// Don't trigger if clicking the expand button or drag handle
+		// Only query chart if not clicking expand or drag handle
 		if (
 			event.target instanceof HTMLButtonElement ||
 			(event.target instanceof HTMLElement && event.target.classList.contains('drag-handle'))
-		)
+		) {
 			return;
+		}
 
 		if ($activeChartInstance) {
 			queryChart($activeChartInstance);
 		}
 	}
+
+	function toggleQuotes() {
+		showQuotes = !showQuotes;
+	}
 </script>
 
 <div
-	class="ticker-info-container {$tickerInfoState.isExpanded ? 'expanded' : ''}"
-	style="height: {$tickerInfoState.isExpanded ? $tickerInfoState.currentHeight : '30'}px"
+	class="ticker-info-container expanded"
+	style="height: {$tickerInfoState.currentHeight}px"
 	bind:this={container}
 	on:click={handleClick}
 	on:touchstart={handleClick}
@@ -121,104 +110,107 @@
 		on:mousedown={handleMouseDown}
 		on:touchstart|preventDefault={handleMouseDown}
 	>
-		<button class="expand-button" on:click|stopPropagation={toggleExpand}>
-			{$tickerInfoState.isExpanded ? '▼' : '▲'}
-		</button>
 		<span class="ticker-name">{$activeChartInstance?.ticker || 'NaN'}</span>
-		<span class="timestamp">
-			{$streamInfo.timestamp !== undefined
-				? formatTimestamp($streamInfo.timestamp)
-				: 'Loading Time...'}
-		</span>
 	</div>
 
-	{#if $activeChartInstance !== null && $activeChartInstance !== null}
-		{#if $tickerInfoState.isExpanded}
-			<div class="content">
-				{#if $activeChartInstance.logo}
-					<div class="logo-container">
-						<img
-							src="data:image/svg+xml;base64,{$activeChartInstance.logo}"
-							alt="{$activeChartInstance.name} logo"
-							class="company-logo"
-						/>
-					</div>
-				{/if}
-				<div class="stream-cells">
-					<div class="stream-cell-container">
-						<span class="info-row">Price</span>
-						<StreamCell instance={$activeChartInstance} type="price" />
-					</div>
-					<div class="stream-cell-container">
-						<span class="info-row">Change %</span>
-						<StreamCell instance={$activeChartInstance} type="change %" />
-					</div>
-					<div class="stream-cell-container">
-						<span class="info-row">Change $</span>
-						<StreamCell instance={$activeChartInstance} type="change" />
-					</div>
-					<div class="stream-cell-container">
-						<span class="info-row">Change % extended</span>
-						<StreamCell instance={$activeChartInstance} type="change % extended" />
-					</div>
+	{#if $activeChartInstance !== null}
+		<div class="content">
+			{#if $activeChartInstance.logo}
+				<div class="logo-container">
+					<img
+						src="data:image/svg+xml;base64,{$activeChartInstance.logo}"
+						alt="{$activeChartInstance.name} logo"
+						class="company-logo"
+					/>
 				</div>
-				<div class="info-row">
-					<span class="label">Name:</span>
-					<span class="value">{$activeChartInstance.name}</span>
+			{/if}
+			<div class="stream-cells">
+				<div class="stream-cell-container">
+					<span class="info-row">Price</span>
+					<StreamCell instance={$activeChartInstance} type="price" />
 				</div>
-				<div class="info-row">
-					<span class="label">Status:</span>
-					<span class="value">{$activeChartInstance.active ? 'Active' : 'Inactive'}</span>
+				<div class="stream-cell-container">
+					<span class="info-row">Change %</span>
+					<StreamCell instance={$activeChartInstance} type="change %" />
 				</div>
-				<div class="info-row">
-					<span class="label">Market Cap:</span>
-					<span class="value">
-						{#if $activeChartInstance.market_cap}
-							{#if $activeChartInstance.market_cap >= 1e12}
-								${($activeChartInstance.market_cap / 1e12).toFixed(2)}T
-							{:else if $activeChartInstance.market_cap >= 1e9}
-								${($activeChartInstance.market_cap / 1e9).toFixed(2)}B
-							{:else}
-								${($activeChartInstance.market_cap / 1e6).toFixed(2)}M
-							{/if}
-						{:else}
-							N/A
-						{/if}
-					</span>
+				<div class="stream-cell-container">
+					<span class="info-row">Change $</span>
+					<StreamCell instance={$activeChartInstance} type="change" />
 				</div>
-				<div class="info-row">
-					<span class="label">Sector:</span>
-					<span class="value">{$activeChartInstance.sector || 'N/A'}</span>
+				<div class="stream-cell-container">
+					<span class="info-row">Change % extended</span>
+					<StreamCell instance={$activeChartInstance} type="change % extended" />
 				</div>
-				<div class="info-row">
-					<span class="label">Industry:</span>
-					<span class="value">{$activeChartInstance.industry || 'N/A'}</span>
-				</div>
-
-				<div class="info-row">
-					<span class="label">Exchange:</span>
-					<span class="value">{$activeChartInstance.primary_exchange || 'N/A'}</span>
-				</div>
-				<div class="info-row">
-					<span class="label">Market:</span>
-					<span class="value">{$activeChartInstance.market || 'N/A'}</span>
-				</div>
-				<div class="info-row">
-					<span class="label">Shares Outstanding:</span>
-					<span class="value">
-						{$activeChartInstance.share_class_shares_outstanding
-							? `${($activeChartInstance.share_class_shares_outstanding / 1e6).toFixed(2)}M`
-							: 'N/A'}
-					</span>
-				</div>
-				{#if $activeChartInstance.description}
-					<div class="description">
-						<span class="label">Description:</span>
-						<p class="value description-text">{$activeChartInstance.description}</p>
-					</div>
-				{/if}
 			</div>
-		{/if}
+			<div class="info-row">
+				<span class="label">Name:</span>
+				<span class="value">{$activeChartInstance.name}</span>
+			</div>
+			<div class="info-row">
+				<span class="label">Status:</span>
+				<span class="value">{$activeChartInstance.active ? 'Active' : 'Inactive'}</span>
+			</div>
+			<div class="info-row">
+				<span class="label">Market Cap:</span>
+				<span class="value">
+					{#if $activeChartInstance.market_cap}
+						{#if $activeChartInstance.market_cap >= 1e12}
+							${($activeChartInstance.market_cap / 1e12).toFixed(2)}T
+						{:else if $activeChartInstance.market_cap >= 1e9}
+							${($activeChartInstance.market_cap / 1e9).toFixed(2)}B
+						{:else}
+							${($activeChartInstance.market_cap / 1e6).toFixed(2)}M
+						{/if}
+					{:else}
+						N/A
+					{/if}
+				</span>
+			</div>
+			<div class="info-row">
+				<span class="label">Sector:</span>
+				<span class="value">{$activeChartInstance.sector || 'N/A'}</span>
+			</div>
+			<div class="info-row">
+				<span class="label">Industry:</span>
+				<span class="value">{$activeChartInstance.industry || 'N/A'}</span>
+			</div>
+
+			<div class="info-row">
+				<span class="label">Exchange:</span>
+				<span class="value">{$activeChartInstance.primary_exchange || 'N/A'}</span>
+			</div>
+			<div class="info-row">
+				<span class="label">Market:</span>
+				<span class="value">{$activeChartInstance.market || 'N/A'}</span>
+			</div>
+			<div class="info-row">
+				<span class="label">Shares Out:</span>
+				<span class="value">
+					{$activeChartInstance.share_class_shares_outstanding
+						? `${($activeChartInstance.share_class_shares_outstanding / 1e6).toFixed(2)}M`
+						: 'N/A'}
+				</span>
+			</div>
+			{#if $activeChartInstance.description}
+				<div class="description">
+					<span class="label">Description:</span>
+					<p class="value description-text">{$activeChartInstance.description}</p>
+				</div>
+			{/if}
+
+			<!-- Toggle for showing quotes -->
+			<div class="info-row quotes-toggle">
+				<span class="label">Quotes:</span>
+				<button on:click|stopPropagation={toggleQuotes}>
+					{showQuotes ? 'Hide' : 'Show'}
+				</button>
+			</div>
+			{#if showQuotes}
+				<div class="quotes-section">
+					<Quotes />
+				</div>
+			{/if}
+		</div>
 	{/if}
 </div>
 
@@ -235,14 +227,15 @@
 		will-change: height;
 		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 		cursor: pointer;
+		height: 300px; /* Default height */
 	}
 
 	.ticker-info-container.expanded {
-		transition: none; /* Remove transition when expanded for better drag response */
+		transition: none;
 	}
 
 	.ticker-info-container:not(.expanded) {
-		transition: height 0.2s ease; /* Only animate when collapsing/expanding */
+		transition: height 0.2s ease;
 	}
 
 	.drag-handle {
@@ -259,23 +252,6 @@
 		color: var(--text-primary);
 		font-size: 14px;
 		font-weight: 500;
-		justify-content: flex-start;
-		gap: 10px;
-	}
-
-	.expand-button {
-		background: none;
-		border: none;
-		color: var(--text-secondary);
-		cursor: pointer;
-		padding: 5px;
-		margin-right: 10px;
-		z-index: 2;
-		transition: color 0.2s ease;
-	}
-
-	.expand-button:hover {
-		color: var(--text-primary);
 	}
 
 	.logo-container {
@@ -286,26 +262,10 @@
 		background: var(--ui-bg-element);
 		border-radius: 4px;
 	}
-
 	.company-logo {
 		max-height: 40px;
 		max-width: 200px;
 		object-fit: contain;
-	}
-
-	.description {
-		margin-top: 15px;
-		padding-top: 10px;
-		border-top: 1px solid var(--ui-border);
-	}
-
-	.description-text {
-		margin-top: 5px;
-		font-size: 12px;
-		line-height: 1.5;
-		color: var(--text-primary);
-		white-space: pre-wrap;
-		word-break: break-word;
 	}
 
 	.content {
@@ -316,9 +276,8 @@
 		height: calc(100% - 30px);
 		color: var(--text-primary);
 	}
-
 	.content::-webkit-scrollbar {
-		display: none; /* WebKit */
+		display: none;
 	}
 
 	.info-row {
@@ -334,7 +293,6 @@
 	.info-row:hover {
 		background: var(--ui-bg-hover);
 	}
-
 	.label {
 		color: var(--text-secondary);
 		font-weight: 500;
@@ -343,7 +301,6 @@
 	.value {
 		font-family: monospace;
 		font-weight: 500;
-		font-feature-settings: 'tnum';
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -375,17 +332,28 @@
 		color: var(--text-secondary);
 	}
 
+	.description {
+		margin-top: 15px;
+		padding-top: 10px;
+		border-top: 1px solid var(--ui-border);
+	}
+	.description-text {
+		margin-top: 5px;
+		font-size: 12px;
+		line-height: 1.5;
+		color: var(--text-primary);
+		white-space: pre-wrap;
+		word-break: break-word;
+	}
+
 	.ticker-name {
 		font-weight: 600;
 	}
 
-	.timestamp {
-		color: var(--text-secondary);
-		font-size: 12px;
-		font-weight: 400;
-		margin-left: auto;
-		white-space: nowrap;
-		font-feature-settings: 'tnum';
-		font-variant-numeric: tabular-nums;
+	.quotes-toggle {
+		background: var(--ui-bg-element);
+	}
+	.quotes-section {
+		margin-top: 10px;
 	}
 </style>
