@@ -150,15 +150,8 @@
 
 	function extendedHours(timestamp: number): boolean {
 		const date = new Date(timestamp);
-		const hours = date.getHours();
-		const minutes = date.getMinutes();
-		const timeInMinutes = hours * 60 + minutes;
-
-		// Regular market hours are 9:30 AM - 4:00 PM EST
-		const marketOpenMinutes = 9 * 60 + 30; // 9:30 AM
-		const marketCloseMinutes = 16 * 60; // 4:00 PM
-
-		return timeInMinutes < marketOpenMinutes || timeInMinutes >= marketCloseMinutes;
+		const minutes = date.getHours() * 60 + date.getMinutes();
+		return minutes < 570 || minutes >= 960; // 9:30 AM - 4:00 PM EST
 	}
 
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
@@ -410,7 +403,7 @@
 		if (!data?.bidPrice || !data?.askPrice) {
 			return;
 		}
-		const candle = chartCandleSeries.data()[chartCandleSeries.data().length - 1];
+		const candle = chartCandleSeries.data().at(-1);
 		if (!candle) return;
 		const time = candle.time;
 		bidLine.setData([{ time: time, value: data.bidPrice }]);
