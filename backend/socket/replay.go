@@ -82,21 +82,43 @@ func (c *Client) subscribeReplay(channelName string) {
 
 func getInfoFromChannelName(channelName string) (string, string, string, error) {
 	splits := strings.Split(channelName, "-")
+
+	// e.g.: "123-slow-regular" => splits = [ "123", "slow", "regular" ]
 	securityId := splits[0]
-	channelType := splits[1]
-	var baseDataType string
-	switch channelType {
-	case "all", "slow", "fast":
-		baseDataType = "trade"
-	case "quote":
-		baseDataType = "quote"
-	case "close":
-		baseDataType = "close"
-	default:
-		fmt.Println("Invalid channel type:", channelType)
+
+	if len(splits) == 2 {
+		// might be just "123-slow" or "123-fast" or "123-all"
+		switch splits[1] {
+		case "all", "slow", "fast":
+			return securityId, "trade", splits[1], nil
+		case "quote":
+			return securityId, "quote", "quote", nil
+		case "close":
+			return securityId, "close", "close", nil
+		default:
+			return "", "", "", fmt.Errorf("invalid channel type: %s", splits[1])
+		}
+	} else if len(splits) == 3 {
+		// might be "slow-regular" or "slow-extended" or "fast-regular", etc.
+		base := splits[1]  // "slow" or "fast"
+		extra := splits[2] // "regular" or "extended"
+
+		// combine them
+		channelType := base + "-" + extra
+
+		// Then decide baseDataType
+		switch base {
+		case "all", "slow", "fast":
+			return securityId, "trade", channelType, nil
+		case "quote":
+			return securityId, "quote", channelType, nil
+		case "close":
+			return securityId, "close", channelType, nil
+		}
 		return "", "", "", fmt.Errorf("invalid channel type: %s", channelType)
 	}
-	return securityId, baseDataType, channelType, nil
+
+	return "", "", "", fmt.Errorf("invalid channelName format: %s", channelName)
 }
 
 func (c *Client) unsubscribeReplay(channelName string) {
@@ -191,10 +213,9 @@ func (c *Client) StartLoop() {
 									lastSlow = now
 									fallthrough
 								case "fast-regular", "fast-extended":
-									channelNameType := getChannelNameType(c.simulatedTime)
-									channelType = fmt.Sprintf("%s-%s", channelNameType, channelType)
 									fallthrough
 								case "quote":
+									fmt.Printf("\n\nchannelType: %v\n\n", channelType)
 									c.send <- jsonMarshalTick(aggregateTicks(ticksToPush, replayData.baseDataType), replayData.securityId, channelType)
 								}
 							}
