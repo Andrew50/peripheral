@@ -8,6 +8,12 @@
 	import { settings } from '$lib/core/stores';
 	import { UTCTimestampToESTString } from '$lib/core/timestamp';
 
+	let isCollapsed = false;
+
+	function toggleCollapse() {
+		isCollapsed = !isCollapsed;
+	}
+
 	function handleClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
 		queryInstanceInput('any', ['ticker', 'timeframe', 'timestamp', 'extendedHours'], instance).then(
@@ -40,7 +46,12 @@
 	}
 </script>
 
-<div tabindex="-1" on:click={handleClick} on:touchstart={handleClick} class="legend">
+<div
+	tabindex="-1"
+	on:click={handleClick}
+	on:touchstart={handleClick}
+	class="legend {isCollapsed ? 'collapsed' : ''}"
+>
 	<div class="header">
 		{#if instance?.icon}
 			<img
@@ -57,40 +68,59 @@
 		</span>
 	</div>
 
-	<div class="price-grid" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">
-		<div class="price-row">
-			<span class="label">O</span>
-			<span class="value">{$hoveredCandleData.open.toFixed(2)}</span>
-			<span class="label">H</span>
-			<span class="value">{$hoveredCandleData.high.toFixed(2)}</span>
+	{#if !isCollapsed}
+		<div class="price-grid" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">
+			<div class="price-row">
+				<span class="label">O</span>
+				<span class="value">{$hoveredCandleData.open.toFixed(2)}</span>
+				<span class="label">H</span>
+				<span class="value">{$hoveredCandleData.high.toFixed(2)}</span>
+			</div>
+			<div class="price-row">
+				<span class="label">L</span>
+				<span class="value">{$hoveredCandleData.low.toFixed(2)}</span>
+				<span class="label">C</span>
+				<span class="value">{$hoveredCandleData.close.toFixed(2)}</span>
+			</div>
 		</div>
-		<div class="price-row">
-			<span class="label">L</span>
-			<span class="value">{$hoveredCandleData.low.toFixed(2)}</span>
-			<span class="label">C</span>
-			<span class="value">{$hoveredCandleData.close.toFixed(2)}</span>
-		</div>
-	</div>
 
-	<div class="metrics-grid">
-		<div class="metric">
-			<span class="label">CHG</span>
-			<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">
-				{$hoveredCandleData.chg.toFixed(2)} ({$hoveredCandleData.chgprct.toFixed(2)}%)
-			</span>
+		<div class="metrics-grid">
+			<div class="metric">
+				<span class="label">CHG</span>
+				<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">
+					{$hoveredCandleData.chg.toFixed(2)} ({$hoveredCandleData.chgprct.toFixed(2)}%)
+				</span>
+			</div>
+			<div class="metric">
+				<span class="label">VOL</span>
+				<span class="value">{formatLargeNumber($hoveredCandleData.volume, $settings.dolvol)}</span>
+			</div>
+			<div class="metric">
+				<span class="label">ADR</span>
+				<span class="value">{$hoveredCandleData.adr?.toFixed(2) ?? 'NA'}</span>
+			</div>
+			<div class="metric">
+				<span class="label">RVOL</span>
+				<span class="value">{$hoveredCandleData.rvol?.toFixed(2) ?? 'NA'}</span>
+			</div>
 		</div>
-		<div class="metric">
-			<span class="label">VOL</span>
-			<span class="value">{formatLargeNumber($hoveredCandleData.volume, $settings.dolvol)}</span>
-		</div>
-		<div class="metric">
-			<span class="label">ADR</span>
-			<span class="value">{$hoveredCandleData.adr?.toFixed(2) ?? 'NA'}</span>
-		</div>
-		<div class="metric">
-			<span class="label">RVOL</span>
-			<span class="value">{$hoveredCandleData.rvol?.toFixed(2) ?? 'NA'}</span>
-		</div>
+	{/if}
+
+	<div class="collapse-row" on:click|stopPropagation={toggleCollapse}>
+		<div class="divider"></div>
+		<button class="collapse-button" aria-label="Toggle legend">
+			<svg
+				class="arrow-icon"
+				viewBox="0 0 24 24"
+				width="16"
+				height="16"
+				stroke="currentColor"
+				stroke-width="2"
+				fill="none"
+			>
+				<path d="M18 15l-6-6-6 6" />
+			</svg>
+		</button>
 	</div>
 </div>
 
@@ -121,18 +151,26 @@
 		margin-bottom: 6px;
 		padding-bottom: 4px;
 		border-bottom: 1px solid var(--ui-border);
+		min-width: 0;
+		flex-wrap: wrap;
 	}
 
 	.symbol {
 		font-size: 16px;
 		font-weight: 600;
 		color: var(--text-primary);
+		white-space: nowrap;
 	}
 
 	.metadata {
 		display: flex;
 		align-items: center;
 		gap: 6px;
+		flex-wrap: wrap;
+		overflow: hidden;
+		flex: 1;
+		min-width: 0;
+		max-width: calc(100% - 16px);
 	}
 
 	.timeframe,
@@ -143,6 +181,10 @@
 		padding: 2px 6px;
 		background: var(--ui-bg-element);
 		border-radius: 3px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: calc(100% - 12px);
 	}
 
 	.timestamp {
@@ -218,5 +260,70 @@
 		height: 24px;
 		object-fit: contain;
 		border-radius: 4px;
+	}
+
+	.legend.collapsed {
+		width: auto;
+		min-width: auto;
+		max-width: 100%;
+	}
+
+	.legend.collapsed .header {
+		margin-bottom: 0;
+		border-bottom: none;
+		padding-bottom: 0;
+	}
+
+	.collapse-row {
+		display: none;
+		flex-direction: column;
+		align-items: center;
+		margin-top: 2px;
+		cursor: pointer;
+		height: 16px;
+	}
+
+	/* Show collapse row on hover for expanded state */
+	.legend:hover .collapse-row {
+		display: flex;
+	}
+
+	/* For collapsed state, only show on hover */
+	.legend.collapsed .collapse-row {
+		display: none;
+	}
+
+	.legend.collapsed:hover .collapse-row {
+		display: flex;
+		margin-top: 0;
+	}
+
+	.divider {
+		height: 1px;
+		background-color: var(--ui-border);
+		width: 100%;
+		margin: 2px 0;
+	}
+
+	.collapse-button {
+		background: transparent;
+		border: none;
+		padding: 0;
+		height: 14px;
+		cursor: pointer;
+		border-radius: 4px;
+		color: var(--text-secondary);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.arrow-icon {
+		transform: rotate(0deg);
+		transition: transform 0.2s ease;
+	}
+
+	.collapsed .arrow-icon {
+		transform: rotate(180deg);
 	}
 </style>
