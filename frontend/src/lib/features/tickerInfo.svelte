@@ -1,3 +1,4 @@
+<!-- tickerInfo.svelte-->
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { privateRequest } from '$lib/core/backend';
@@ -123,19 +124,17 @@
 		<button class="expand-button" on:click|stopPropagation={toggleExpand}>
 			{$tickerInfoState.isExpanded ? '▼' : '▲'}
 		</button>
-		<span>{$activeChartInstance?.ticker || 'NaN'}</span>
+		<span class="ticker-name">{$activeChartInstance?.ticker || 'NaN'}</span>
+		<span class="timestamp">
+			{$streamInfo.timestamp !== undefined
+				? formatTimestamp($streamInfo.timestamp)
+				: 'Loading Time...'}
+		</span>
 	</div>
 
 	{#if $activeChartInstance !== null && $activeChartInstance !== null}
 		{#if $tickerInfoState.isExpanded}
 			<div class="content">
-				<div class="system-clock">
-					<h3>
-						{$streamInfo.timestamp !== undefined
-							? formatTimestamp($streamInfo.timestamp)
-							: 'Loading Time...'}
-					</h3>
-				</div>
 				{#if $activeChartInstance.logo}
 					<div class="logo-container">
 						<img
@@ -224,17 +223,6 @@
 </div>
 
 <style>
-	.system-clock {
-		background-color: var(--ui-bg-secondary);
-		padding: 8px;
-		font-size: 0.9rem;
-		color: var(--text-primary);
-		width: 100%;
-		text-align: center;
-		box-sizing: border-box;
-		border-bottom: 1px solid var(--ui-border);
-	}
-
 	.ticker-info-container {
 		position: absolute;
 		bottom: 0;
@@ -271,6 +259,8 @@
 		color: var(--text-primary);
 		font-size: 14px;
 		font-weight: 500;
+		justify-content: flex-start;
+		gap: 10px;
 	}
 
 	.expand-button {
@@ -383,5 +373,19 @@
 		background: none;
 		font-weight: 500;
 		color: var(--text-secondary);
+	}
+
+	.ticker-name {
+		font-weight: 600;
+	}
+
+	.timestamp {
+		color: var(--text-secondary);
+		font-size: 12px;
+		font-weight: 400;
+		margin-left: auto;
+		white-space: nowrap;
+		font-feature-settings: 'tnum';
+		font-variant-numeric: tabular-nums;
 	}
 </style>
