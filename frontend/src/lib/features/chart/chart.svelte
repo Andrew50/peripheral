@@ -285,7 +285,7 @@
 					} else if (inst.direction == 'backward') {
 						chartCandleSeries.setData(newCandleData);
 						chartVolumeSeries.setData(newVolumeData);
-						if (arrowSeries && ('entries' in inst || 'exits' in inst)) {
+						if (arrowSeries && ('trades' in inst)) {
 							const markersByTime = new Map<
 								number,
 								{
@@ -294,39 +294,31 @@
 								}
 							>();
 
-							// Group entries by rounded time
-							if ('entries' in inst) {
-								inst.entries.forEach((entry) => {
-									const entryTime = UTCSecondstoESTSeconds(entry.time / 1000);
-									const roundedTime =
-										Math.floor(entryTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+							// Process all trades
+							if (inst.trades) {
+								inst.trades.forEach((trade) => {
+									const tradeTime = UTCSecondstoESTSeconds(trade.time / 1000);
+									const roundedTime = Math.floor(tradeTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
 
 									if (!markersByTime.has(roundedTime)) {
 										markersByTime.set(roundedTime, { entries: [], exits: [] });
 									}
 
-									markersByTime.get(roundedTime)?.entries.push({
-										price: entry.price,
-										isLong: inst.trade_direction === 'Long' // Assuming 'BUY' indicates long
-									});
-								});
-							}
+									// Determine if this is an entry or exit based on trade type
+									const isEntry = trade.type === 'Buy' || trade.type === 'Short';
+									const isLong = trade.type === 'Buy' || trade.type === 'Sell';
 
-							// Group exits by rounded time
-							if ('exits' in inst) {
-								inst.exits.forEach((exit) => {
-									const exitTime = UTCSecondstoESTSeconds(exit.time / 1000);
-									const roundedTime =
-										Math.floor(exitTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
-
-									if (!markersByTime.has(roundedTime)) {
-										markersByTime.set(roundedTime, { entries: [], exits: [] });
+									if (isEntry) {
+										markersByTime.get(roundedTime)?.entries.push({
+											price: trade.price,
+											isLong: isLong
+										});
+									} else {
+										markersByTime.get(roundedTime)?.exits.push({
+											price: trade.price,
+											isLong: isLong
+										});
 									}
-
-									markersByTime.get(roundedTime)?.exits.push({
-										price: exit.price,
-										isLong: inst.trade_direction === 'Long' // Assuming 'BUY' indicates long
-									});
 								});
 							}
 
@@ -337,8 +329,7 @@
 								exits: data.exits
 							}));
 
-							console.log(markers);
-
+							console.log('Setting arrow markers:', markers);
 							arrowSeries.setData(markers);
 						}
 					}

@@ -63,6 +63,30 @@ def grab_user_trades(conn, user_id: int, sort: str = "desc", date: str = None, h
                 utc_time = est_time.astimezone(utc) if est_time else None
                 timestamp = int(utc_time.timestamp() * 1000) if utc_time else None
                 
+                # Create combined trades array sorted by timestamp
+                combined_trades = []
+                
+                # Add entries
+                for i in range(len(row[9])) if row[9] else []:
+                    combined_trades.append({
+                        'time': eastern.localize(row[9][i]).astimezone(utc).timestamp() * 1000,
+                        'price': float(row[10][i]),
+                        'shares': row[11][i],
+                        'type': 'Short' if row[4] == 'Short' else 'Buy'
+                    })
+                
+                # Add exits
+                for i in range(len(row[12])) if row[12] else []:
+                    combined_trades.append({
+                        'time': eastern.localize(row[12][i]).astimezone(utc).timestamp() * 1000,
+                        'price': float(row[13][i]),
+                        'shares': row[14][i],
+                        'type': 'Buy to Cover' if row[4] == 'Short' and row[7] <= 0 else 'Sell'
+                    })
+                
+                # Sort combined trades by timestamp
+                combined_trades.sort(key=lambda x: x['time'])
+                
                 trade = {
                     'ticker': row[3],
                     'securityId': row[2],
@@ -73,22 +97,7 @@ def grab_user_trades(conn, user_id: int, sort: str = "desc", date: str = None, h
                     'status': row[6],
                     'openQuantity': row[7],
                     'closedPnL': float(row[8]) if row[8] else None,
-                    'entries': [
-                        {
-                            'time': eastern.localize(row[9][i]).astimezone(utc).timestamp() * 1000,
-                            'price': float(row[10][i]),
-                            'shares': row[11][i]
-                        }
-                        for i in range(len(row[9])) if row[9]
-                    ],
-                    'exits': [
-                        {
-                            'time': eastern.localize(row[12][i]).astimezone(utc).timestamp() * 1000,
-                            'price': float(row[13][i]),
-                            'shares': row[14][i]
-                        }
-                        for i in range(len(row[12])) if row[12]
-                    ]
+                    'trades': combined_trades
                 }
                 trades.append(trade)
             
@@ -430,7 +439,7 @@ def get_trade_statistics(conn, user_id: int, start_date: str = None, end_date: s
                     COUNT(CASE WHEN closedPnL <= 0 THEN 1 END) as losing_trades,
                     AVG(CASE WHEN closedPnL > 0 THEN closedPnL END) as avg_win,
                     AVG(CASE WHEN closedPnL <= 0 THEN closedPnL END) as avg_loss,
-                    SUM(closedPnL) as total_pnl
+                    COALESCE(SUM(closedPnL), 0) as total_pnl
                 FROM trades 
                 WHERE userId = %s 
                 AND status = 'Closed'
@@ -605,18 +614,89 @@ def get_trade_statistics(conn, user_id: int, start_date: str = None, end_date: s
                     'total_pnl': round(total_pnl, 2)
                 })
 
+            # Add query for ticker statistics
+            ticker_query = """
+                SELECT 
+                    ticker,
+                    COUNT(*) as total_trades,
+                    COUNT(CASE WHEN closedPnL > 0 THEN 1 END) as winning_trades,
+                    COUNT(CASE WHEN closedPnL <= 0 THEN 1 END) as losing_trades,
+                    AVG(closedPnL) as avg_pnl,
+                    SUM(closedPnL) as total_pnl
+                FROM trades 
+                WHERE userId = %s 
+                AND status = 'Closed'
+                AND closedPnL IS NOT NULL
+            """
+            params = [user_id]
+
+            if start_date:
+                ticker_query += " AND DATE(entry_times[1]) >= %s"
+                params.append(start_date)
+            
+            if end_date:
+                ticker_query += " AND DATE(entry_times[1]) <= %s"
+                params.append(end_date)
+            
+            if ticker:
+                ticker_query += " AND ticker = %s"
+                params.append(ticker)
+            
+            ticker_query += """ 
+                GROUP BY ticker 
+                ORDER BY SUM(closedPnL) DESC
+            """
+
+            cursor.execute(ticker_query, tuple(params))
+            ticker_stats = []
+            
+            for row in cursor.fetchall():
+                ticker_name = row[0]
+                total = int(row[1])
+                wins = int(row[2])
+                losses = int(row[3])
+                avg_pnl = float(row[4]) if row[4] else 0
+                total_pnl = float(row[5]) if row[5] else 0
+                
+                ticker_stats.append({
+                    'ticker': ticker_name,
+                    'total_trades': total,
+                    'winning_trades': wins,
+                    'losing_trades': losses,
+                    'win_rate': round((wins / total * 100), 2) if total > 0 else 0,
+                    'avg_pnl': round(avg_pnl, 2),
+                    'total_pnl': round(total_pnl, 2)
+                })
+
+            # Verify total P&L matches sum of ticker P&Ls
+            cursor.execute("""
+                SELECT COALESCE(SUM(closedPnL), 0) as verification_total
+                FROM trades 
+                WHERE userId = %s 
+                AND status = 'Closed'
+                AND closedPnL IS NOT NULL
+                """ + 
+                (" AND DATE(entry_times[1]) >= %s" if start_date else "") +
+                (" AND DATE(entry_times[1]) <= %s" if end_date else "") +
+                (" AND ticker = %s" if ticker else ""),
+                tuple(param for param in params if param is not None)
+            )
+            verification_total = float(cursor.fetchone()[0])
+
+            # Add verification to returned data
             return {
                 "total_trades": total_trades,
                 "winning_trades": winning_trades,
                 "losing_trades": losing_trades,
-                "win_rate": round(win_rate, 2),
+                "win_rate": round((winning_trades / total_trades * 100), 2) if total_trades > 0 else 0,
                 "avg_win": round(avg_win, 2),
                 "avg_loss": round(avg_loss, 2),
-                "total_pnl": round(total_pnl, 2),
+                "total_pnl": round(verification_total, 2),  # Use verified total
                 "pnl_curve": cumulative_pnl,
                 "top_trades": top_trades,
                 "bottom_trades": bottom_trades,
-                "hourly_stats": hourly_stats
+                "hourly_stats": hourly_stats,
+                "ticker_stats": ticker_stats
             }
             
     except Exception as e:
@@ -626,4 +706,219 @@ def get_trade_statistics(conn, user_id: int, start_date: str = None, end_date: s
             "error": str(e),
             "traceback": error_info
         }
+
+def get_ticker_trades(conn, user_id: int, ticker: str, start_date: str = None, end_date: str = None):
+    """Get all trades for a specific ticker within a date range"""
+    try:
+        with conn.db.cursor() as cursor:
+            query = """
+                SELECT 
+                    securityId,
+                    entry_times,
+                    entry_prices,
+                    exit_times,
+                    exit_prices,
+                    tradedirection
+                FROM trades 
+                WHERE userId = %s 
+                AND ticker = %s
+                AND status = 'Closed'
+            """
+            params = [user_id, ticker]
+
+            if start_date:
+                query += " AND DATE(entry_times[1]) >= %s"
+                params.append(start_date)
+            
+            if end_date:
+                query += " AND DATE(entry_times[1]) <= %s"
+                params.append(end_date)
+
+            cursor.execute(query, tuple(params))
+            trades = cursor.fetchall()
+
+            entries = []
+            exits = []
+
+            for trade in trades:
+                security_id = trade[0]
+                entry_times = trade[1]
+                entry_prices = trade[2]
+                exit_times = trade[3]
+                exit_prices = trade[4]
+                direction = trade[5]
+
+                # Process entries
+                for time, price in zip(entry_times, entry_prices):
+                    entries.append({
+                        "time": int(time.timestamp() * 1000),
+                        "price": float(price),
+                        "isLong": direction == "Long"
+                    })
+
+                # Process exits
+                for time, price in zip(exit_times, exit_prices):
+                    exits.append({
+                        "time": int(time.timestamp() * 1000),
+                        "price": float(price),
+                        "isLong": direction == "Long"
+                    })
+
+            return {
+                "securityId": security_id,
+                "entries": entries,
+                "exits": exits
+            }
+
+    except Exception as e:
+        error_info = traceback.format_exc()
+        print(f"Error getting ticker trades:\n{error_info}")
+        return {
+            "error": str(e),
+            "traceback": error_info
+        }
+
+def get_ticker_performance(conn, user_id: int, sort: str = "desc", date: str = None, hour: int = None, ticker: str = None):
+    """Get performance statistics by ticker with filters"""
+    try:
+        with conn.db.cursor() as cursor:
+            query = """
+                WITH ticker_stats AS (
+                    SELECT 
+                        ticker,
+                        MAX(securityId) as securityId,
+                        COUNT(*) as total_trades,
+                        COUNT(CASE WHEN closedPnL > 0 THEN 1 END) as winning_trades,
+                        COUNT(CASE WHEN closedPnL <= 0 THEN 1 END) as losing_trades,
+                        AVG(closedPnL) as avg_pnl,
+                        SUM(closedPnL) as total_pnl,
+                        MAX(entry_times[1]) as latest_entry,
+                        MAX(exit_times[array_length(exit_times, 1)]) as last_exit
+                    FROM trades 
+                    WHERE userId = %s 
+                    AND status = 'Closed'
+                    AND closedPnL IS NOT NULL
+                    {date_filter}
+                    {hour_filter}
+                    {ticker_filter}
+                    GROUP BY ticker
+                )
+                SELECT 
+                    ts.*,
+                    t.tradeId,
+                    t.entry_times,
+                    t.entry_prices,
+                    t.entry_shares,
+                    t.exit_times,
+                    t.exit_prices,
+                    t.exit_shares,
+                    t.tradedirection,
+                    t.closedPnL
+                FROM ticker_stats ts
+                LEFT JOIN trades t ON ts.ticker = t.ticker
+                WHERE t.userId = %s 
+                AND t.status = 'Closed'
+                AND t.closedPnL IS NOT NULL
+                {date_filter}
+                {hour_filter}
+                {ticker_filter}
+                ORDER BY ts.last_exit {sort_direction}
+            """
+
+            # Build the query with filters
+            date_filter = " AND DATE(entry_times[1]) = %s" if date else ""
+            hour_filter = " AND EXTRACT(HOUR FROM entry_times[1]) = %s" if hour is not None else ""
+            ticker_filter = " AND ticker = %s" if ticker else ""
+            
+            # Replace placeholders in the query
+            query = query.format(
+                date_filter=date_filter,
+                hour_filter=hour_filter,
+                ticker_filter=ticker_filter,
+                sort_direction="DESC" if sort.lower() == "desc" else "ASC"
+            )
+
+            # Build params list
+            params = [user_id]
+            if date:
+                params.append(date)
+            if hour is not None:
+                params.append(hour)
+            if ticker:
+                params.append(ticker)
+            # Add params for second part of query
+            params.extend([p for p in [user_id] + params[1:]])
+
+            eastern = pytz.timezone('America/New_York')
+            utc = pytz.UTC
+
+            cursor.execute(query, tuple(params))
+            rows = cursor.fetchall()
+            
+            ticker_stats = []
+            current_ticker = None
+            current_stats = None
+            
+            for row in rows:
+                ticker_name = row[0]
+                
+                if ticker_name != current_ticker:
+                    if current_stats is not None:
+                        ticker_stats.append(current_stats)
+                    
+                    current_ticker = ticker_name
+                    current_stats = {
+                        'ticker': ticker_name,
+                        'securityId': row[1],
+                        'total_trades': int(row[2]),
+                        'winning_trades': int(row[3]),
+                        'losing_trades': int(row[4]),
+                        'avg_pnl': round(float(row[5]) if row[5] else 0, 2),
+                        'total_pnl': round(float(row[6]) if row[6] else 0, 2),
+                        'timestamp': int(eastern.localize(row[8]).astimezone(utc).timestamp() * 1000) if row[8] else None,
+                        'trades': []  # Initialize empty trades array
+                    }
+                
+                # Add trade details if they exist
+                if row[9] is not None:  # tradeId exists
+                    # Create combined trades array
+                    combined_trades = []
+                    
+                    # Add entries
+                    for i in range(len(row[10])):
+                        combined_trades.append({
+                            'time': int(eastern.localize(row[10][i]).astimezone(utc).timestamp() * 1000),
+                            'price': float(row[11][i]),
+                            'shares': float(row[12][i]),
+                            'type': 'Short' if row[16] == 'Short' else 'Buy'
+                        })
+                    
+                    # Add exits
+                    for i in range(len(row[13])):
+                        combined_trades.append({
+                            'time': int(eastern.localize(row[13][i]).astimezone(utc).timestamp() * 1000),
+                            'price': float(row[14][i]),
+                            'shares': float(row[15][i]),
+                            'type': 'Buy to Cover' if row[16] == 'Short' else 'Sell'
+                        })
+                    
+                    # Sort combined trades by timestamp
+                    combined_trades.sort(key=lambda x: x['time'])
+                    
+                    # Extend the trades array instead of overwriting it
+                    current_stats['trades'].extend(combined_trades)
+                    
+                    # Sort all trades by timestamp after adding new ones
+                    current_stats['trades'].sort(key=lambda x: x['time'])
+            
+            # Add the last ticker stats
+            if current_stats is not None:
+                ticker_stats.append(current_stats)
+
+            return ticker_stats
+
+    except Exception as e:
+        error_info = traceback.format_exc()
+        print(f"Error getting ticker performance:\n{error_info}")
+        return []
     
