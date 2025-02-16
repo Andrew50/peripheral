@@ -82,6 +82,7 @@
 	}
 
 	function selectWatchlist(watchlistIdString: string) {
+		if (!watchlistIdString) return;
 		if (watchlistIdString === 'new') {
 			showWatchlistInput = true;
 			tick().then(() => {
@@ -119,6 +120,11 @@
 	function getWatchlistInitial(name: string): string {
 		return name.charAt(0).toUpperCase();
 	}
+
+	function handleWatchlistChange(event: Event) {
+		const target = event.target as HTMLSelectElement;
+		selectWatchlist(target.value);
+	}
 </script>
 
 <div tabindex="-1" class="feature-container" bind:this={container}>
@@ -126,11 +132,7 @@
 	<div class="controls-container">
 		{#if Array.isArray($watchlists)}
 			<div class="watchlist-container">
-				<select
-					id="watchlists"
-					bind:value={currentWatchlistId}
-					on:change={(event) => selectWatchlist(event.target.value)}
-				>
+				<select id="watchlists" bind:value={currentWatchlistId} on:change={handleWatchlistChange}>
 					{#each $watchlists as watchlist}
 						<option value={watchlist.watchlistId}>
 							{watchlist.watchlistName}
