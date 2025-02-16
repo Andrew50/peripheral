@@ -341,8 +341,6 @@
                         shares: t.shares
                     }))
                 })}
-                rowClass={(item) => item.total_pnl >= 0 ? 'profitable' : 'unprofitable'}
-                onRowClick={(ticker) => showTradesForTicker(ticker.ticker, selectedDate, selectedDate)}
             />
         </div>
     {/if}

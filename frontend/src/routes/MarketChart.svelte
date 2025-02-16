@@ -15,12 +15,7 @@
   const DATA_LENGTH = 30;
 
   // Update the chart constants for a more compact display
-  const CHART_MAX = 110.00;
-  const CHART_MIN = 90.00;
   const ROW_COUNT = 20;
-
-  // Derived "step" between each row
-  const STEP = (CHART_MAX - CHART_MIN) / (ROW_COUNT - 1);
 
   let data: PricePoint[] = [];
   let yAxisLabels = '';
@@ -32,6 +27,15 @@
   const isBrowser = typeof window !== 'undefined';
 
   let visible = false; // Add this for fade control
+
+  // Remove fixed CHART_MAX/MIN constants and make them dynamic
+  let currentMin = 90;
+  let currentMax = 110;
+  let basePrice = 90;
+
+  let moveCount = 0; // Track movement pattern
+  let downPhase = false; // Track if we're in a down phase
+  let downTicks = 0; // Track how long we've been moving down
 
   /* -------------------------------
    * Helpers
@@ -47,8 +51,8 @@
    * where row=0 is the TOP (CHART_MAX) and row=ROW_COUNT-1 is the BOTTOM (CHART_MIN).
    */
   function scaleValue(price: number): number {
-    // row = how far the price is below CHART_MAX, divided by STEP
-    const row = (CHART_MAX - price) / STEP;
+    const STEP = (currentMax - currentMin) / (ROW_COUNT - 1);
+    const row = (currentMax - price) / STEP;
     return Math.round(clamp(row, 0, ROW_COUNT - 1));
   }
 
@@ -56,78 +60,112 @@
    * Build the ASCII chart given the current data array.
    */
   function buildChart(points: PricePoint[]): void {
-    // Create two separate grids - one for lines and one for price indicators
-    const linesGrid: string[][] = Array.from({ length: ROW_COUNT }, () =>
-      Array.from({ length: DATA_LENGTH }, () => '│')
-    );
     const priceGrid: string[][] = Array.from({ length: ROW_COUNT }, () =>
       Array.from({ length: DATA_LENGTH }, () => ' ')
     );
 
-    // First pass: place vertical lines
+    // Add y-axis line
+    for (let row = 0; row < ROW_COUNT; row++) {
+      priceGrid[row][0] = '│';
+    }
+
+    // Add x-axis line at the bottom
+    for (let col = 0; col < DATA_LENGTH; col++) {
+      priceGrid[ROW_COUNT - 1][col] = '─';
+    }
+
+    // Add corner where axes meet
+    priceGrid[ROW_COUNT - 1][0] = '└';
+
+    // Place price indicators only if they're within the current scale range
     points.forEach((p, col) => {
-      const rowP = scaleValue(p.price);
+      // Skip null points or points below currentMin
+      if (!p.price || p.price < currentMin) return;
       
-      // Clear vertical lines below the price point
-      for (let r = rowP; r < ROW_COUNT; r++) {
-        linesGrid[r][col] = ' ';
-      }
-    });
-
-    // Second pass: place price indicators
-    points.forEach((p, col) => {
       const rowP = scaleValue(p.price);
 
-      // Add single arrow or dot for price movement
+      // Only show movement arrows after the first valid point
       let char = '·';
-      if (col > 0) {
+      if (col > 0 && points[col - 1]?.price >= currentMin) {
         const prevPrice = points[col - 1].price;
         if (p.price > prevPrice) {
-          char = '˄';
+          char = '<span style="color: #00ff00">˄</span>';
         } else if (p.price < prevPrice) {
-          char = '˅';
+          char = '<span style="color: #ff0000">˅</span>';
         }
       }
       
-      // Place single price indicator at the price point
-      priceGrid[rowP][col] = char;
+      // Don't overwrite axis lines with price indicators
+      if (col > 0) {
+        priceGrid[rowP][col] = char;
+      }
     });
 
-    // Generate y-axis labels separately
+    // Generate y-axis labels with current scale
     yAxisLabels = Array.from({ length: ROW_COUNT }, (_, r) => {
-      const labelPrice = CHART_MAX - r * STEP;
+      const STEP = (currentMax - currentMin) / (ROW_COUNT - 1);
+      const labelPrice = currentMax - r * STEP;
       return labelPrice.toFixed(2);
     }).join('\n');
 
-    // Generate chart content separately
-    const chartLines = Array.from({ length: ROW_COUNT }, (_, r) => {
-      const verticalLines = linesGrid[r].join('');
-      const priceIndicators = priceGrid[r].join('');
-      
-      // Overlay price indicators on top of vertical lines
-      let finalLine = '';
-      for (let i = 0; i < DATA_LENGTH; i++) {
-        finalLine += priceIndicators[i] === ' ' ? verticalLines[i] : priceIndicators[i];
-      }
-      
-      return finalLine;
-    });
-
-    chartContent = chartLines.join('\n') + '\n';
+    // Generate chart content
+    chartContent = priceGrid.map(row => row.join('')).join('\n') + '\n';
   }
 
   /**
    * Generate a random PricePoint close to a previous point.
    */
-  function generateDataPoint(prev?: PricePoint): PricePoint {
-    const lastPrice = prev?.price ?? 100;
-    // small random change in [-1..1]
-    const change = (Math.random() - 0.5) * 2;
+  function generateDataPoint(prev?: PricePoint, index?: number): PricePoint {
+    if (index !== undefined) {
+      // During initialization, start at base price
+      const price = basePrice + (Math.random() * 0.5);
+      
+      const high = price + Math.random() * 0.5;
+      const low = price - Math.random() * 0.5;
+      return { price, high, low };
+    }
+
+    // During animation
+    const lastPrice = prev?.price ?? basePrice;
+    
+    // Create a more complex pattern
+    moveCount = (moveCount + 1) % 8; // Longer pattern cycle
+    
+    // Decide if we should start a down phase
+    if (moveCount === 0) {
+      downPhase = Math.random() < 0.7; // 70% chance to start down phase
+      downTicks = Math.floor(Math.random() * 3) + 2; // 2-4 down ticks
+    }
+    
+    let change;
+    if (downPhase && downTicks > 0) {
+      // Down move phase
+      const downwardBias = -1.0;
+      const variation = (Math.random() * 0.6);
+      change = variation + downwardBias;
+      downTicks--;
+      
+      if (downTicks === 0) {
+        downPhase = false;
+      }
+    } else {
+      // Up move phase
+      const upwardBias = 1.8;
+      const variation = (Math.random() * 0.8);
+      change = variation + upwardBias;
+    }
+    
     const price = lastPrice + change;
 
-    // random offset for high/low
-    const high = price + Math.random() * 1.5;
-    const low = price - Math.random() * 1.5;
+    // Smoother scale adjustment
+    if (price > currentMax - 15) {
+      const scaleFactor = (price - (currentMax - 15)) / 15;
+      currentMin += scaleFactor * 1.2;
+      currentMax += scaleFactor * 2.0;
+    }
+
+    const high = price + Math.random() * 0.5;
+    const low = price - Math.random() * 0.5;
     return { price, high, low };
   }
 
@@ -140,12 +178,21 @@
     if (!isBrowser) return;
     frameId = window.requestAnimationFrame(animate);
 
-    if (Math.random() < 0.3) {
-      data.shift();
-      data.push(generateDataPoint(data[data.length - 1]));
+    // Update roughly 12 times per second
+    if (Math.random() < 0.2) {
+      // Instead of shifting and pushing, we'll maintain position at the right
+      const newPoint = generateDataPoint(data[data.length - 1]);
+      
+      // Move all points one step left
+      for (let i = 0; i < data.length - 1; i++) {
+        data[i] = data[i + 1];
+      }
+      
+      // Put new point at the end
+      data[data.length - 1] = newPoint;
+      
+      buildChart([...data]); // Create new array to trigger update
     }
-
-    buildChart(data);
   }
 
   /* -------------------------------
@@ -156,18 +203,29 @@
       visible = true;
     }
     
-    // Initialize data array
-    let p: PricePoint = { price: 100, high: 101, low: 99 };
-    data = [];
-    for (let i = 0; i < DATA_LENGTH; i++) {
-      p = generateDataPoint(p);
-      data.push(p);
-    }
+    // Initialize data array with empty points, filling from right to left
+    data = Array(DATA_LENGTH).fill(null).map((_, index) => {
+      if (index === DATA_LENGTH - 1) {
+        return {
+          price: basePrice,
+          high: basePrice,
+          low: basePrice
+        };
+      }
+      return {
+        price: null,
+        high: null,
+        low: null
+      };
+    });
 
-    // Start animation only in browser
-    if (isBrowser) {
-      animate();
-    }
+    // Delay the start of animation
+    setTimeout(() => {
+      // Start animation only in browser
+      if (isBrowser) {
+        animate();
+      }
+    }, 500);
   });
 
   onDestroy(() => {
@@ -180,7 +238,7 @@
 <div class="container" class:visible>
   <div class="chart-container">
     <pre class="y-axis">{yAxisLabels}</pre>
-    <pre class="chart">{chartContent}</pre>
+    <pre class="chart">{@html chartContent}</pre>
   </div>
 </div>
 
@@ -189,7 +247,7 @@
   min-height: 100vh;
   width: 100%;
   background: black;
-  color: #00ff00;
+  color: #ffffff;
   font-family: monospace;
   display: flex;
   align-items: center;
@@ -219,7 +277,7 @@
 }
 
 .y-axis {
-  font-size: 12px;
+  font-size: 18px;
   line-height: 1.1em;
   margin: 0;
   padding-right: 4px;
@@ -227,18 +285,18 @@
   font-variant-numeric: tabular-nums;
   text-align: right;
   flex-shrink: 0;
-  min-width: 60px;
+  min-width: 90px;
+  color: #ffffff;
 }
 
 .chart {
-  font-size: 12px;
+  font-size: 18px;
   line-height: 1.1em;
   margin: 0;
   white-space: pre;
   overflow-x: auto;
-  /* You can adjust alignment here; for example, center or left */
   text-align: left;
-  max-width: 1200px;
+  max-width: 1800px;
 }
 
 /* Responsive adjustments */
