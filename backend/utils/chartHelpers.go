@@ -15,7 +15,7 @@ func GetRequestStartEndTime(
 	multiplier int,
 	bars int,
 ) (models.Millis, models.Millis, error) {
-	fmt.Printf("\n\nlowerdate: %v, upperdate: %v, direction: %v, timespan: %v, multiplier: %v, bars: %v\n\n", lowerDate, upperDate, direction, timespan, multiplier, bars)
+
 	overestimate := 2.0
 	badReturn, err := MillisFromUTCTime(time.Now())
 	if direction != "backward" && direction != "forward" {
@@ -42,7 +42,6 @@ func GetRequestStartEndTime(
 		}
 		queryStartTime = lowerDate
 	}
-	fmt.Printf("\n\nqueryStartTime: %v, queryEndTime: %v\n\n", queryStartTime, queryEndTime)
 	startMillis, err := MillisFromUTCTime(queryStartTime)
 	if err != nil {
 		return badReturn, badReturn, err

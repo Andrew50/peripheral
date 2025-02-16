@@ -219,7 +219,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				continue
 			}
 		}
-		fmt.Printf("\n\n%v, %v, %v, %v, %v, %v\n\n", ticker, timespan, multiplier, queryBars, queryStartTime, queryEndTime)
+		//fmt.Printf("\n\n%v, %v, %v, %v, %v, %v\n\n", ticker, timespan, multiplier, queryBars, queryStartTime, queryEndTime)
 		date1, date2, err := utils.GetRequestStartEndTime(
 			queryStartTime, queryEndTime, args.Direction, timespan, multiplier, queryBars,
 		)
@@ -237,7 +237,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 
 		// If we have to aggregate (e.g., second->minute, or minute->hour), do so
 		if haveToAggregate {
-			fmt.Printf("\n\nhave to aggregate\n\n")
 			it, err := utils.GetAggsData(
 				conn.Polygon,
 				ticker,
@@ -266,7 +265,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			}
 		} else {
 			// Otherwise, we can directly pull from Polygon at the desired timeframe
-			fmt.Printf("\n\nnot aggregating\n\n")
 			it, err := utils.GetAggsData(
 				conn.Polygon,
 				ticker,
@@ -351,6 +349,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				}
 
 				if (args.Timestamp == 0 && marketStatus != "closed") || args.IsReplay {
+					fmt.Printf("\n\nrequesting incomplete bar\n\n")
 					incompleteAgg, err := requestIncompleteBar(
 						conn,
 						tickerForIncompleteAggregate,
@@ -389,6 +388,9 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			return nil, fmt.Errorf("issue with market status")
 		}
 		if (args.Timestamp == 0 && marketStatus != "closed") || args.IsReplay {
+			if debug {
+				fmt.Printf("\n\nrequesting incomplete bar\n\n")
+			}
 			incompleteAgg, err := requestIncompleteBar(
 				conn,
 				tickerForIncompleteAggregate,
@@ -399,6 +401,9 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				args.IsReplay,
 				easternLocation,
 			)
+			if debug {
+				fmt.Printf("\n\nincompleteAgg: %v\n\n", incompleteAgg)
+			}
 			if err != nil {
 				return nil, fmt.Errorf("issue with incomplete aggregate: %v", err)
 			}
@@ -408,9 +413,8 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			}
 			if incompleteAgg.Open != 0 {
 				// Only add incomplete bar if it's within regular hours or daily+ timeframes
-				// Only add incomplete bar if it's within regular hours or daily+ timeframes
 				incompleteTs := time.Unix(int64(incompleteAgg.Timestamp), 0)
-				if (utils.IsTimestampRegularHours(incompleteTs) && !args.ExtendedHours) ||
+				if (utils.IsTimestampRegularHours(incompleteTs)) ||
 					timespan == "day" || timespan == "week" || timespan == "month" {
 					barDataList = append(barDataList, incompleteAgg)
 				}
@@ -878,16 +882,11 @@ func buildHigherTimeframeFromLower(
 		// Filter out pre/post market if not extended
 		if extendedHours || utils.IsTimestampRegularHours(timestamp) {
 			diff := timestamp.Sub(barStartTime)
-
 			// If we're starting or we've exceeded the timeslice for the bar
 			if barStartTime.IsZero() || diff >= requiredDuration {
 				// If we have a bar in progress, store it
 				if !barStartTime.IsZero() {
 					barDataList = append(barDataList, currentBar)
-					*numBarsRemaining--
-					if *numBarsRemaining <= 0 {
-						break
-					}
 				}
 				// Start a new bar
 				currentBar = GetChartDataResults{
@@ -921,15 +920,15 @@ func buildHigherTimeframeFromLower(
 			*numBarsRemaining--
 		}
 	} else {
-		// For backward direction, we may need to slice off extra bars
-		barsToKeep := len(barDataList) - *numBarsRemaining
-		if barsToKeep < 0 {
-			barsToKeep = 0
-			*numBarsRemaining -= len(barDataList)
-		} else {
+		// For backward direction, we need to keep the most recent bars
+		// If we have more bars than needed, take the most recent ones
+		if len(barDataList) > *numBarsRemaining {
+			barDataList = barDataList[len(barDataList)-*numBarsRemaining:]
 			*numBarsRemaining = 0
+		} else {
+			// If we have fewer bars than needed, keep all and update remaining count
+			*numBarsRemaining -= len(barDataList)
 		}
-		barDataList = barDataList[barsToKeep:]
 	}
 
 	return barDataList, nil
