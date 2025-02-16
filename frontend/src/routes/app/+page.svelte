@@ -1,3 +1,4 @@
+<!-- +page.svelte -->
 <script lang="ts">
 	import '$lib/core/global.css';
 	import ChartContainer from '$lib/features/chart/chartContainer.svelte';
@@ -256,10 +257,8 @@
 		flex-direction: column;
 		padding: 10px;
 		padding-left: 0px;
-		/*scrollbar-color: var(--c4) var(--c1);
-        scrollbar-width: thin;*/
+		padding-right: 10px;
 		scrollbar-width: none;
-		/*justify-content: space-between;*/
 	}
 
 	.menu-content {
