@@ -15,7 +15,7 @@
 	export let list: Writable<Instance[]> = writable([]);
 	export let columns: Array<string>;
 	export let parentDelete = (v: Instance) => {};
-	export let formatters: {[key: string]: (value: any) => string} = {};
+	export let formatters: { [key: string]: (value: any) => string } = {};
 	export let expandable = false;
 	export let expandedContent: (item: any) => any = () => null;
 
@@ -254,7 +254,8 @@
 											{#each getAllOrders(watch) as order}
 												<tr>
 													<td>{UTCTimestampToESTString(order.time)}</td>
-													<td class={order.type.toLowerCase().replace(/\s+/g, '-')}>{order.type}</td>
+													<td class={order.type.toLowerCase().replace(/\s+/g, '-')}>{order.type}</td
+													>
 													<td>{order.price}</td>
 													<td>{order.shares}</td>
 												</tr>
@@ -281,7 +282,7 @@
 		padding: 1px;
 	}
 	.selected {
-		outline: 2px solid #4a9eff;
+		outline: 2px solid var(--primary-color);
 		outline-offset: -2px;
 	}
 
@@ -299,27 +300,30 @@
 		border-collapse: collapse;
 		margin: 0;
 		padding: 0;
-		color: white;
+		color: var(--text-color);
+		background: var(--surface-color);
 	}
 
-	th, td {
+	th,
+	td {
 		padding: 8px;
 		text-align: left;
 		border-bottom: 1px solid #444;
 	}
 
 	th {
-		background-color: #333;
+		background-color: var(--surface-2);
 		font-weight: bold;
+		color: var(--text-2);
 	}
 
 	tr {
-		background-color: #222;
+		background-color: var(--surface-1);
 		transition: background-color 0.2s;
 	}
 
 	tr:hover {
-		background-color: #2a2a2a;
+		background-color: var(--surface-hover);
 	}
 
 	.expandable {
@@ -338,14 +342,15 @@
 		height: 16px;
 		line-height: 16px;
 		text-align: center;
-		background-color: #444;
+		background-color: var(--surface-3);
 		border-radius: 3px;
 		font-weight: bold;
 		font-size: 12px;
+		color: var(--text-2);
 	}
 
 	.expanded-content {
-		background-color: #2a2a2a;
+		background-color: var(--surface-2);
 	}
 
 	.expanded-content td {
@@ -353,14 +358,14 @@
 	}
 
 	.trade-details {
-		background-color: #333;
+		background-color: var(--surface-2);
 		padding: 8px;
 		border-radius: 4px;
 	}
 
 	.trade-details h4 {
 		margin: 0 0 6px 0;
-		color: #888;
+		color: var(--text-2);
 		font-size: 0.9em;
 	}
 
@@ -370,7 +375,7 @@
 	}
 
 	.trade-details th {
-		background-color: #444;
+		background-color: var(--surface-3);
 		padding: 6px 8px;
 	}
 
@@ -382,27 +387,21 @@
 		background-color: #3a3a3a;
 	}
 
-	.entry {
-		color: #4caf50;
+	.entry,
+	.buy {
+		color: var(--positive-color);
 	}
 
-	.exit {
-		color: #f44336;
+	.exit,
+	.sell {
+		color: var(--negative-color);
 	}
 
 	.short {
-		color: #f44336;
+		color: var(--negative-color);
 	}
 
 	.buy-to-cover {
-		color: #4caf50;
-	}
-
-	.buy {
-		color: #4caf50;
-	}
-
-	.sell {
-		color: #f44336;
+		color: var(--positive-color);
 	}
 </style>
