@@ -154,17 +154,7 @@
 	}
 
 	function getAllOrders(trade) {
-		const entries = trade.entries?.map(entry => ({
-			...entry,
-			type: 'Entry'
-		})) || [];
-		
-		const exits = trade.exits?.map(exit => ({
-			...exit,
-			type: 'Exit'
-		})) || [];
-
-		return [...entries, ...exits].sort((a, b) => a.time - b.time);
+		return trade.trades || [];
 	}
 </script>
 
@@ -248,7 +238,7 @@
 					</tr>
 					{#if expandable && expandedRows.has(i)}
 						<tr class="expanded-content">
-							<td colspan={columns.length + 1}>
+							<td colspan={columns.length + (expandable ? 2 : 1)}>
 								<div class="trade-details">
 									<h4>Trade Details</h4>
 									<table>
@@ -264,8 +254,8 @@
 											{#each getAllOrders(watch) as order}
 												<tr>
 													<td>{UTCTimestampToESTString(order.time)}</td>
-													<td class={order.type.toLowerCase()}>{order.type}</td>
-													<td>${order.price.toFixed(2)}</td>
+													<td class={order.type.toLowerCase().replace(/\s+/g, '-')}>{order.type}</td>
+													<td>{order.price}</td>
 													<td>{order.shares}</td>
 												</tr>
 											{/each}
@@ -397,6 +387,22 @@
 	}
 
 	.exit {
+		color: #f44336;
+	}
+
+	.short {
+		color: #f44336;
+	}
+
+	.buy-to-cover {
+		color: #4caf50;
+	}
+
+	.buy {
+		color: #4caf50;
+	}
+
+	.sell {
 		color: #f44336;
 	}
 </style>

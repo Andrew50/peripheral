@@ -14,6 +14,7 @@
     let message = '';
     let trades = writable<Trade[]>([]);
 
+    let tickerStats = writable<TickerStats[]>([]);
     // Add filter states
     let sortDirection = "desc";
     let selectedDate = "";
@@ -41,6 +42,15 @@
             avg_pnl: number;
             total_pnl: number;
         }[];
+        ticker_stats: {
+            ticker: string;
+            total_trades: number;
+            winning_trades: number;
+            losing_trades: number;
+            win_rate: number;
+            avg_pnl: number;
+            total_pnl: number;
+        }[];
     } | null>(null);
     
     // Add statistics filters
@@ -48,11 +58,21 @@
     let statEndDate = "";
     let statTicker = "";
 
+
     interface Trade extends Instance {
         trade_direction: string;
         status: string;
         openQuantity: number;
         closedPnL: number | null;
+    }
+    interface TickerStats extends Instance{
+        ticker: string;
+        total_trades: number;
+        winning_trades: number;
+        losing_trades: number;
+        win_rate: number;
+        avg_pnl: number;
+        total_pnl: number;
     }
 
     async function handleFileUpload() {
@@ -131,6 +151,32 @@
         }
     }
 
+    // Add pullTickers function
+    async function pullTickers() {
+        try {
+            const params: any = { sort: sortDirection };
+            
+            if (selectedDate) {
+                params.date = selectedDate;
+            }
+            
+            if (selectedHour !== "") {
+                params.hour = selectedHour;
+            }
+
+            if (selectedTicker) {
+                params.ticker = selectedTicker.toUpperCase();
+            }
+
+            const result = await queueRequest('get_ticker_performance', params);
+            tickerStats.set(result);
+            message = 'Ticker stats loaded successfully';
+        } catch (error) {
+            message = `Error: ${error}`;
+            console.error('Load ticker stats error:', error);
+        }
+    }
+
     // Generate hours array for the select dropdown
     const hours = Array.from({ length: 24 }, (_, i) => ({
         value: i,
@@ -146,6 +192,12 @@
             on:click={() => activeTab = 'trades'}
         >
             Trades
+        </button>
+        <button 
+            class:active={activeTab === 'tickers'} 
+            on:click={() => activeTab = 'tickers'}
+        >
+            Tickers
         </button>
         <button 
             class:active={activeTab === 'statistics'} 
@@ -222,9 +274,75 @@
                 }}
                 expandable={true}
                 expandedContent={(trade) => ({
-                    entries: trade.entries,
-                    exits: trade.exits
+                    trades: trade.trades.map(t => ({
+                        time: UTCTimestampToESTString(t.time),
+                        type: t.type,
+                        price: `$${t.price.toFixed(2)}`,
+                        shares: t.shares
+                    }))
                 })}
+            />
+        </div>
+    {/if}
+
+    <!-- Tickers Tab -->
+    {#if activeTab === 'tickers'}
+        <div class="tab-content">
+            <h2>Ticker Performance</h2>
+            
+            <div class="filters-section">
+                <input 
+                    type="text" 
+                    placeholder="Ticker"
+                    bind:value={selectedTicker}
+                    on:change={pullTickers}
+                />
+                <select bind:value={sortDirection} on:change={pullTickers}>
+                    <option value="desc">Newest First</option>
+                    <option value="asc">Oldest First</option>
+                </select>
+
+                <input 
+                    type="date" 
+                    bind:value={selectedDate}
+                    on:change={pullTickers}
+                />
+
+                <select bind:value={selectedHour} on:change={pullTickers}>
+                    <option value="">All Hours</option>
+                    {#each hours as hour}
+                        <option value={hour.value}>{hour.label}</option>
+                    {/each}
+                </select>
+
+                <button on:click={pullTickers}>Refresh Tickers</button>
+            </div>
+
+            {#if message}
+                <p class="message">{message}</p>
+            {/if}
+
+            <List 
+                on:contextmenu={(event) => {event.preventDefault();}} 
+                list={tickerStats} 
+                columns={["ticker", "total_trades", "win_rate", "winning_trades", "losing_trades", "avg_pnl", "total_pnl"]}
+                formatters={{
+                    win_rate: (value) => `${value}%`,
+                    avg_pnl: (value) => `$${value.toFixed(2)}`,
+                    total_pnl: (value) => `$${value.toFixed(2)}`,
+                    
+                }}
+                expandable={true}
+                expandedContent={(ticker) => ({
+                    trades: ticker.trades.map(t => ({
+                        time: UTCTimestampToESTString(t.time),
+                        type: t.type,
+                        price: `$${t.price.toFixed(2)}`,
+                        shares: t.shares
+                    }))
+                })}
+                rowClass={(item) => item.total_pnl >= 0 ? 'profitable' : 'unprofitable'}
+                onRowClick={(ticker) => showTradesForTicker(ticker.ticker, selectedDate, selectedDate)}
             />
         </div>
     {/if}
@@ -356,6 +474,42 @@
                                 {#each $statistics.hourly_stats as stat}
                                     <tr class:profitable={stat.total_pnl > 0}>
                                         <td>{stat.hour_display}</td>
+                                        <td>{stat.total_trades}</td>
+                                        <td>{stat.win_rate}%</td>
+                                        <td>{stat.winning_trades}</td>
+                                        <td>{stat.losing_trades}</td>
+                                        <td class={stat.avg_pnl >= 0 ? 'positive' : 'negative'}>
+                                            ${stat.avg_pnl}
+                                        </td>
+                                        <td class={stat.total_pnl >= 0 ? 'positive' : 'negative'}>
+                                            ${stat.total_pnl}
+                                        </td>
+                                    </tr>
+                                {/each}
+                            </tbody>
+                        </table>
+                    </div>
+                {/if}
+
+                {#if $statistics?.ticker_stats}
+                    <div class="ticker-stats-container">
+                        <h3>Performance by Ticker</h3>
+                        <table class="ticker-stats-table">
+                            <thead>
+                                <tr>
+                                    <th>Ticker</th>
+                                    <th>Total Trades</th>
+                                    <th>Win Rate</th>
+                                    <th>Winning Trades</th>
+                                    <th>Losing Trades</th>
+                                    <th>Avg P/L</th>
+                                    <th>Total P/L</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {#each $statistics.ticker_stats as stat}
+                                    <tr class:profitable={stat.total_pnl > 0}>
+                                        <td>{stat.ticker}</td>
                                         <td>{stat.total_trades}</td>
                                         <td>{stat.win_rate}%</td>
                                         <td>{stat.winning_trades}</td>
@@ -607,5 +761,61 @@
 
     .negative {
         color: #f44336;
+    }
+
+    .ticker-stats-container {
+        margin-top: 20px;
+    }
+
+    .ticker-stats-container h3 {
+        color: #888;
+        margin-bottom: 15px;
+    }
+
+    .ticker-stats-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9em;
+    }
+
+    .ticker-stats-table th {
+        text-align: left;
+        padding: 8px;
+        border-bottom: 1px solid #444;
+        color: #888;
+        background-color: #333;
+    }
+
+    .ticker-stats-table td {
+        padding: 8px;
+        border-bottom: 1px solid #444;
+    }
+
+    .ticker-stats-table tr:hover {
+        background-color: #2a2a2a;
+    }
+
+    .ticker-stats-table tr.profitable {
+        background-color: rgba(76, 175, 80, 0.1);
+    }
+
+    .ticker-stats-table tr:not(.profitable) {
+        background-color: rgba(244, 67, 54, 0.1);
+    }
+
+    :global(.profitable) {
+        background: rgba(76, 175, 80, 0.1) !important;
+    }
+
+    :global(.unprofitable) {
+        background: rgba(244, 67, 54, 0.1) !important;
+    }
+
+    :global(.profitable:hover) {
+        background: rgba(76, 175, 80, 0.2) !important;
+    }
+
+    :global(.unprofitable:hover) {
+        background: rgba(244, 67, 54, 0.2) !important;
     }
 </style>
