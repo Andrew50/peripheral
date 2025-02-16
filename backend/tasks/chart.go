@@ -38,7 +38,7 @@ type GetChartDataResponse struct {
 	IsEarliestData bool                  `json:"isEarliestData"`
 }
 
-var debug = false // Flip to `true` to enable verbose debugging output
+var debug = true // Flip to `true` to enable verbose debugging output
 
 func MaxDivisorOf30(n int) int {
 	for k := n; k >= 1; k-- {
@@ -878,16 +878,11 @@ func buildHigherTimeframeFromLower(
 		// Filter out pre/post market if not extended
 		if extendedHours || utils.IsTimestampRegularHours(timestamp) {
 			diff := timestamp.Sub(barStartTime)
-
 			// If we're starting or we've exceeded the timeslice for the bar
 			if barStartTime.IsZero() || diff >= requiredDuration {
 				// If we have a bar in progress, store it
 				if !barStartTime.IsZero() {
 					barDataList = append(barDataList, currentBar)
-					*numBarsRemaining--
-					if *numBarsRemaining <= 0 {
-						break
-					}
 				}
 				// Start a new bar
 				currentBar = GetChartDataResults{
@@ -921,16 +916,17 @@ func buildHigherTimeframeFromLower(
 			*numBarsRemaining--
 		}
 	} else {
-		// For backward direction, we may need to slice off extra bars
-		barsToKeep := len(barDataList) - *numBarsRemaining
-		if barsToKeep < 0 {
-			barsToKeep = 0
-			*numBarsRemaining -= len(barDataList)
-		} else {
+		// For backward direction, we need to keep the most recent bars
+		// If we have more bars than needed, take the most recent ones
+		if len(barDataList) > *numBarsRemaining {
+			barDataList = barDataList[len(barDataList)-*numBarsRemaining:]
 			*numBarsRemaining = 0
+		} else {
+			// If we have fewer bars than needed, keep all and update remaining count
+			*numBarsRemaining -= len(barDataList)
 		}
-		barDataList = barDataList[barsToKeep:]
 	}
+	fmt.Printf("\n\nbarDataList: %v\n\n", barDataList)
 
 	return barDataList, nil
 }
