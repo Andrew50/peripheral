@@ -147,22 +147,32 @@ func GetMostRecentRegularClose(client *polygon.Client, ticker string, referenceT
 		return 0, fmt.Errorf("error iterating aggregates: %v", err)
 	}
 
-	// If no regular hours data found for that day, check the previous day
-	yesterdayLocal := startOfDay.AddDate(0, 0, -1)
-	yesterdayStart := models.Millis(yesterdayLocal)
-	yesterdayEnd := models.Millis(startOfDay.Add(-time.Nanosecond))
+	// If no regular hours data found for that day, keep checking previous days until we find data
+	currentDate := startOfDay
+	maxAttempts := 5 // Prevent infinite loop, should be enough to cover long weekends/holidays
 
-	iter, err = GetAggsData(client, ticker, 1, "day", yesterdayStart, yesterdayEnd, 1, "desc", true)
-	if err != nil {
-		return 0, fmt.Errorf("error getting previous day's data: %v", err)
+	for attempts := 0; attempts < maxAttempts; attempts++ {
+		previousDay := currentDate.AddDate(0, 0, -1)
+		dayStart := models.Millis(previousDay)
+		dayEnd := models.Millis(currentDate.Add(-time.Nanosecond))
+
+		iter, err = GetAggsData(client, ticker, 1, "day", dayStart, dayEnd, 1, "desc", true)
+		if err != nil {
+			return 0, fmt.Errorf("error getting historical data: %v", err)
+		}
+
+		for iter.Next() {
+			return iter.Item().Close, nil
+		}
+
+		if err := iter.Err(); err != nil {
+			return 0, fmt.Errorf("error iterating historical data: %v", err)
+		}
+
+		currentDate = previousDay
 	}
 
-	for iter.Next() {
-		return iter.Item().Close, nil
-	}
-
-	return 0, fmt.Errorf("no recent regular hours close found for %s", ticker)
-	//
+	return 0, fmt.Errorf("no recent regular hours close found for %s within last %d days", ticker, maxAttempts)
 }
 
 // GetMostRecentExtendedHoursClose gets the most recent extended-hours close relative to referenceTime
