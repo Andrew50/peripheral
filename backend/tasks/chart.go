@@ -38,7 +38,7 @@ type GetChartDataResponse struct {
 	IsEarliestData bool                  `json:"isEarliestData"`
 }
 
-var debug = true // Flip to `true` to enable verbose debugging output
+var debug = false // Flip to `true` to enable verbose debugging output
 
 func MaxDivisorOf30(n int) int {
 	for k := n; k >= 1; k-- {
@@ -219,7 +219,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				continue
 			}
 		}
-		fmt.Printf("\n\n%v, %v, %v, %v, %v, %v\n\n", ticker, timespan, multiplier, queryBars, queryStartTime, queryEndTime)
+		//fmt.Printf("\n\n%v, %v, %v, %v, %v, %v\n\n", ticker, timespan, multiplier, queryBars, queryStartTime, queryEndTime)
 		date1, date2, err := utils.GetRequestStartEndTime(
 			queryStartTime, queryEndTime, args.Direction, timespan, multiplier, queryBars,
 		)
@@ -237,7 +237,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 
 		// If we have to aggregate (e.g., second->minute, or minute->hour), do so
 		if haveToAggregate {
-			fmt.Printf("\n\nhave to aggregate\n\n")
 			it, err := utils.GetAggsData(
 				conn.Polygon,
 				ticker,
@@ -266,7 +265,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			}
 		} else {
 			// Otherwise, we can directly pull from Polygon at the desired timeframe
-			fmt.Printf("\n\nnot aggregating\n\n")
 			it, err := utils.GetAggsData(
 				conn.Polygon,
 				ticker,
@@ -351,6 +349,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				}
 
 				if (args.Timestamp == 0 && marketStatus != "closed") || args.IsReplay {
+					fmt.Printf("\n\nrequesting incomplete bar\n\n")
 					incompleteAgg, err := requestIncompleteBar(
 						conn,
 						tickerForIncompleteAggregate,
@@ -389,6 +388,9 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			return nil, fmt.Errorf("issue with market status")
 		}
 		if (args.Timestamp == 0 && marketStatus != "closed") || args.IsReplay {
+			if debug {
+				fmt.Printf("\n\nrequesting incomplete bar\n\n")
+			}
 			incompleteAgg, err := requestIncompleteBar(
 				conn,
 				tickerForIncompleteAggregate,
@@ -399,6 +401,9 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				args.IsReplay,
 				easternLocation,
 			)
+			if debug {
+				fmt.Printf("\n\nincompleteAgg: %v\n\n", incompleteAgg)
+			}
 			if err != nil {
 				return nil, fmt.Errorf("issue with incomplete aggregate: %v", err)
 			}
@@ -408,9 +413,8 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			}
 			if incompleteAgg.Open != 0 {
 				// Only add incomplete bar if it's within regular hours or daily+ timeframes
-				// Only add incomplete bar if it's within regular hours or daily+ timeframes
 				incompleteTs := time.Unix(int64(incompleteAgg.Timestamp), 0)
-				if (utils.IsTimestampRegularHours(incompleteTs) && !args.ExtendedHours) ||
+				if (utils.IsTimestampRegularHours(incompleteTs)) ||
 					timespan == "day" || timespan == "week" || timespan == "month" {
 					barDataList = append(barDataList, incompleteAgg)
 				}
@@ -926,7 +930,6 @@ func buildHigherTimeframeFromLower(
 			*numBarsRemaining -= len(barDataList)
 		}
 	}
-	fmt.Printf("\n\nbarDataList: %v\n\n", barDataList)
 
 	return barDataList, nil
 }
