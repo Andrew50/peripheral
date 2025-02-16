@@ -38,7 +38,7 @@ type GetChartDataResponse struct {
 	IsEarliestData bool                  `json:"isEarliestData"`
 }
 
-var debug = true // Flip to `true` to enable verbose debugging output
+var debug = false // Flip to `true` to enable verbose debugging output
 
 func MaxDivisorOf30(n int) int {
 	for k := n; k >= 1; k-- {
@@ -295,12 +295,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				}
 
 				ts := time.Time(item.Timestamp).In(easternLocation)
-				// Skip weekends for big timespans
-				if queryTimespan == "week" || queryTimespan == "month" || queryTimespan == "year" {
-					if ts.Weekday() == time.Saturday || ts.Weekday() == time.Sunday {
-						continue
-					}
-				}
 				// Skip out of hours if not extended hours
 				if (timespan == "minute" || timespan == "second" || timespan == "hour") &&
 					!args.ExtendedHours && !utils.IsTimestampRegularHours(ts) {
