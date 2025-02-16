@@ -265,7 +265,7 @@
 	.menu-content {
 		flex: 1;
 		overflow-y: auto;
-		margin-bottom: 33%; /* Leave space for ticker info */
+		margin-bottom: 45%; /* Leave space for ticker info */
 	}
 
 	.resize-handle {

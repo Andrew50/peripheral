@@ -1,5 +1,6 @@
 /*colors.css*/
 :root {
+    /* Core UI Colors */
     --c1: #2d3139;
     /* secondary - darker grey */
     --c2: #1a1c21;
@@ -12,41 +13,55 @@
     /* error - modern red */
     --c6: #22c55e;
     /* success - modern green */
+
+    /* Hover States */
     --c3-hover: #2563eb;
     /* blue hover */
     --c6-hover: #16a34a;
     /* green hover */
 
+    /* Font Colors */
     --f1: #f9fafb;
     /* primary text - off white */
     --f2: #9ca3af;
     /* secondary text - light grey */
 
-    /* Add some new accent colors */
+    /* Accent Colors */
     --accent-purple: #8b5cf6;
     --accent-indigo: #6366f1;
     --accent-yellow: #eab308;
+
+    /* UI Theme Colors */
+    --ui-bg-primary: rgba(0, 0, 0, 0.85);
+    --ui-bg-secondary: rgba(0, 0, 0, 0.3);
+    --ui-bg-hover: rgba(255, 255, 255, 0.05);
+    --ui-bg-element: rgba(255, 255, 255, 0.03);
+    --ui-border: rgba(255, 255, 255, 0.1);
+
+    /* Text Colors */
+    --text-primary: #e0e0e0;
+    --text-secondary: #999;
+
+    /* Effects */
+    --backdrop-blur: blur(4px);
 }
 
+/* Status Color Classes */
 .dark-green {
     color: #006400;
-    /* Dark green */
     font-weight: bold;
 }
 
 .green {
     color: #00ff00;
-    /* Bright green */
 }
 
 .red {
     color: #ff0000;
-    /* Bright red */
 }
 
 .dark-red {
     color: #8b0000;
-    /* Dark red */
     font-weight: bold;
 }
 
