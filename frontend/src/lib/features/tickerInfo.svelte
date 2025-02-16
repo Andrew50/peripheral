@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { privateRequest } from '$lib/core/backend';
-	import { activeChartInstance } from '$lib/features/chart/interface';
+	import { activeChartInstance, queryChart } from '$lib/features/chart/interface';
 	import type { Instance } from '$lib/core/types';
 	import { writable } from 'svelte/store';
 	import StreamCell from '$lib/utils/stream/streamCell.svelte';
@@ -93,12 +93,27 @@
 			currentHeight: !state.isExpanded ? state.currentHeight : 200
 		}));
 	}
+
+	function handleClick(event: MouseEvent | TouchEvent) {
+		// Don't trigger if clicking the expand button or drag handle
+		if (
+			event.target instanceof HTMLButtonElement ||
+			(event.target instanceof HTMLElement && event.target.classList.contains('drag-handle'))
+		)
+			return;
+
+		if ($activeChartInstance) {
+			queryChart($activeChartInstance);
+		}
+	}
 </script>
 
 <div
 	class="ticker-info-container {$tickerInfoState.isExpanded ? 'expanded' : ''}"
 	style="height: {$tickerInfoState.isExpanded ? $tickerInfoState.currentHeight : '30'}px"
 	bind:this={container}
+	on:click={handleClick}
+	on:touchstart={handleClick}
 >
 	<div
 		class="drag-handle"
@@ -108,7 +123,7 @@
 		<button class="expand-button" on:click|stopPropagation={toggleExpand}>
 			{$tickerInfoState.isExpanded ? '▼' : '▲'}
 		</button>
-		<span>Ticker Info - {$activeChartInstance?.ticker || 'No ticker selected'}</span>
+		<span>{$activeChartInstance?.ticker || 'NaN'}</span>
 	</div>
 
 	{#if $activeChartInstance !== null && $activeChartInstance !== null}
@@ -210,23 +225,28 @@
 
 <style>
 	.system-clock {
-		background-color: var(--c2);
-		padding: 0px 10px;
-		font-size: 1rem;
-		color: var(--f1);
+		background-color: var(--ui-bg-secondary);
+		padding: 8px;
+		font-size: 0.9rem;
+		color: var(--text-primary);
 		width: 100%;
 		text-align: center;
 		box-sizing: border-box;
+		border-bottom: 1px solid var(--ui-border);
 	}
+
 	.ticker-info-container {
 		position: absolute;
 		bottom: 0;
 		left: 0;
 		right: 0;
-		background: var(--c2);
-		border-top: 1px solid var(--c4);
+		background: var(--ui-bg-primary);
+		backdrop-filter: var(--backdrop-blur);
+		border-top: 1px solid var(--ui-border);
 		overflow: hidden;
 		will-change: height;
+		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		cursor: pointer;
 	}
 
 	.ticker-info-container.expanded {
@@ -240,35 +260,40 @@
 	.drag-handle {
 		width: 100%;
 		height: 30px;
-		background: #2a2e39;
+		background: var(--ui-bg-primary);
 		cursor: ns-resize;
 		display: flex;
 		align-items: center;
 		padding: 0 10px;
 		user-select: none;
-		touch-action: none; /* Improve touch handling */
+		touch-action: none;
+		border-bottom: 1px solid var(--ui-border);
+		color: var(--text-primary);
+		font-size: 14px;
+		font-weight: 500;
 	}
 
 	.expand-button {
 		background: none;
 		border: none;
-		color: #fff;
+		color: var(--text-secondary);
 		cursor: pointer;
 		padding: 5px;
 		margin-right: 10px;
-		z-index: 2; /* Ensure button is clickable */
+		z-index: 2;
+		transition: color 0.2s ease;
 	}
 
 	.expand-button:hover {
-		background: rgba(255, 255, 255, 0.1);
+		color: var(--text-primary);
 	}
 
 	.logo-container {
 		display: flex;
 		justify-content: center;
-		margin-bottom: 15px;
+		margin: 15px 0;
 		padding: 10px;
-		/*background: rgba(255, 255, 255, 0.05);*/
+		background: var(--ui-bg-element);
 		border-radius: 4px;
 	}
 
@@ -281,25 +306,25 @@
 	.description {
 		margin-top: 15px;
 		padding-top: 10px;
-		border-top: 1px solid var(--c4);
+		border-top: 1px solid var(--ui-border);
 	}
 
 	.description-text {
 		margin-top: 5px;
-		font-size: 11px;
-		line-height: 1.4;
-		color: #ccc;
+		font-size: 12px;
+		line-height: 1.5;
+		color: var(--text-primary);
 		white-space: pre-wrap;
 		word-break: break-word;
 	}
 
 	.content {
-		padding: 15px;
-		padding-bottom: 30px;
+		padding: 0 15px 30px;
 		overflow-y: auto;
-		scrollbar-width: none; /* Firefox */
-		-ms-overflow-style: none; /* Internet Explorer 10+ */
+		scrollbar-width: none;
+		-ms-overflow-style: none;
 		height: calc(100% - 30px);
+		color: var(--text-primary);
 	}
 
 	.content::-webkit-scrollbar {
@@ -310,26 +335,53 @@
 		display: flex;
 		justify-content: space-between;
 		margin-bottom: 8px;
-		color: #fff;
+		padding: 6px 8px;
 		font-size: 12px;
-		padding: 4px 0;
+		background: var(--ui-bg-element);
+		border-radius: 4px;
+	}
+
+	.info-row:hover {
+		background: var(--ui-bg-hover);
 	}
 
 	.label {
-		color: #8f95a3;
+		color: var(--text-secondary);
+		font-weight: 500;
 	}
 
 	.value {
 		font-family: monospace;
+		font-weight: 500;
+		font-feature-settings: 'tnum';
+		font-variant-numeric: tabular-nums;
 	}
 
 	.stream-cells {
-		display: flex;
-		gap: 10px; /* Adjust spacing between cells as needed */
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: 10px;
+		margin: 15px 0;
+		padding: 10px;
+		background: var(--ui-bg-secondary);
+		border-radius: 4px;
+		border: 1px solid var(--ui-border);
 	}
 
-	.stream-cell {
-		font-size: 4rem; /* Increase font size */
-		color: white;
+	.stream-cell-container {
+		padding: 8px;
+		background: var(--ui-bg-element);
+		border-radius: 4px;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+
+	.stream-cell-container .info-row {
+		margin: 0;
+		padding: 0;
+		background: none;
+		font-weight: 500;
+		color: var(--text-secondary);
 	}
 </style>

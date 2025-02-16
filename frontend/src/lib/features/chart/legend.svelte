@@ -99,16 +99,16 @@
 		position: absolute;
 		top: 10px;
 		left: 10px;
-		background-color: rgba(0, 0, 0, 0.85);
-		border: 1px solid rgba(255, 255, 255, 0.1);
+		background-color: var(--ui-bg-primary);
+		border: 1px solid var(--ui-border);
 		padding: 8px;
 		border-radius: 4px;
 		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-		color: #e0e0e0;
+		color: var(--text-primary);
 		z-index: 900;
 		width: 300px;
 		min-width: 300px;
-		backdrop-filter: blur(4px);
+		backdrop-filter: var(--backdrop-blur);
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 		user-select: none;
 		cursor: pointer;
@@ -120,13 +120,13 @@
 		gap: 8px;
 		margin-bottom: 6px;
 		padding-bottom: 4px;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+		border-bottom: 1px solid var(--ui-border);
 	}
 
 	.symbol {
 		font-size: 16px;
 		font-weight: 600;
-		color: #fff;
+		color: var(--text-primary);
 	}
 
 	.metadata {
@@ -139,9 +139,9 @@
 	.timestamp,
 	.session-type {
 		font-size: 12px;
-		color: #999;
+		color: var(--text-secondary);
 		padding: 2px 6px;
-		background: rgba(255, 255, 255, 0.1);
+		background: var(--ui-bg-element);
 		border-radius: 3px;
 	}
 
@@ -155,7 +155,7 @@
 		gap: 2px;
 		margin-bottom: 6px;
 		padding-bottom: 4px;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+		border-bottom: 1px solid var(--ui-border);
 	}
 
 	.price-row {
@@ -182,7 +182,7 @@
 
 	.label {
 		font-size: 12px;
-		color: #999;
+		color: var(--text-secondary);
 		font-weight: 500;
 		min-width: 35px;
 		flex-shrink: 0;
@@ -201,8 +201,8 @@
 
 	/* Hover effect */
 	.legend:hover {
-		background-color: rgba(0, 0, 0, 0.9);
-		border-color: rgba(255, 255, 255, 0.2);
+		background-color: var(--ui-bg-primary);
+		border-color: var(--ui-border);
 	}
 
 	/* Ensure legend stays within chart bounds */
