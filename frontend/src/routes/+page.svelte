@@ -86,7 +86,7 @@
     }
 
     .atlantis-container h1 {
-        color: #00ff00;
+        color: #3b82f6;
         font-family: monospace;
         font-size: 4rem;
         letter-spacing: 0.5rem;
