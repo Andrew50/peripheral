@@ -17,8 +17,10 @@ import (
 )
 
 var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, error){
-	"signup": Signup,
-	"login":  Login,
+	"signup":         Signup,
+	"login":          Login,
+	"googleLogin":    GoogleLogin,
+	"googleCallback": GoogleCallback,
 }
 
 var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{}, error){
@@ -33,7 +35,8 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	//chart
 	"getChartData": tasks.GetChartData,
 	//study
-	"getStudies":    tasks.GetStudies,
+	"getStudies": tasks.GetStudies,
+
 	"newStudy":      tasks.NewStudy,
 	"saveStudy":     tasks.SaveStudy,
 	"deleteStudy":   tasks.DeleteStudy,
