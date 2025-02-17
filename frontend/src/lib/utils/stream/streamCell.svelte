@@ -38,23 +38,31 @@
 		let closeStreamName = type === 'change % extended' ? 'close-extended' : 'close-regular';
 
 		// Set up new streams
+		releaseClose = addStream<CloseData>(instance, closeStreamName, (v: CloseData) => {
+			changeStore.update((s: ChangeStore) => {
+				const prevClose = v.price;
+				return {
+					...s,
+					prevClose,
+					change: s.price && prevClose ? getChange(s.price, prevClose) : '--'
+				};
+			});
+		});
+		
 		releaseSlow = addStream<TradeData>(instance, slowStreamName, (v: TradeData) => {
 			if (v && v.price) {
 				changeStore.update((s: ChangeStore) => {
-					s.price = v.price;
-					if (s.price && s.prevClose) s.change = getChange(s.price, s.prevClose);
-					return s;
+					const price = v.price;
+					console.log('prevClose', s.prevClose);
+					return {
+						...s,
+						price,
+						change: price && s.prevClose ? getChange(price, s.prevClose) : '--'
+					};
 				});
 			}
 		});
 
-		releaseClose = addStream<CloseData>(instance, closeStreamName, (v: CloseData) => {
-			changeStore.update((s: ChangeStore) => {
-				s.prevClose = v.price;
-				if (s.price && s.prevClose) s.change = getChange(s.price, s.prevClose);
-				return s;
-			});
-		});
 	}
 
 	// Watch for instance changes
@@ -68,6 +76,8 @@
 	});
 
 	function getChange(price: number, prevClose: number): string {
+		console.log('price', price);
+		console.log('prevClose', prevClose);
 		if (!price || !prevClose) return '--';
 		return ((price / prevClose - 1) * 100).toFixed(2) + '%';
 	}
@@ -75,7 +85,7 @@
 
 <div
 	class={type === 'change'
-		? $changeStore.price - $changeStore.prevClose < 0
+		? ($changeStore.price != null && $changeStore.prevClose != null && $changeStore.price - $changeStore.prevClose < 0)
 			? 'red'
 			: $changeStore.change === '--'
 				? 'white'
@@ -87,7 +97,9 @@
 			: ''}
 >
 	{#if type === 'change'}
-		{($changeStore.price - $changeStore.prevClose).toFixed(2)}
+		{$changeStore.price != null && $changeStore.prevClose != null 
+			? ($changeStore.price - $changeStore.prevClose).toFixed(2)
+			: '--'}
 	{:else if type === 'price'}
 		{$changeStore.price?.toFixed(2) ?? '--'}
 	{:else if type === 'change %' || type === 'change % extended'}
