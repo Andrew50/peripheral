@@ -287,7 +287,7 @@ type GetTickerMenuDetailsResults struct {
 	Market                      string  `json:"market"`
 	Locale                      string  `json:"locale"`
 	PrimaryExchange             string  `json:"primary_exchange"`
-	Active                      bool    `json:"active"`
+	Active                      string  `json:"active"`
 	MarketCap                   float64 `json:"market_cap"`
 	Description                 string  `json:"description"`
 	Logo                        string  `json:"logo"`
@@ -311,7 +311,10 @@ func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 			NULLIF(market, '') as market,
 			NULLIF(locale, '') as locale,
 			NULLIF(primary_exchange, '') as primary_exchange,
-			active,
+			CASE 
+				WHEN maxDate IS NULL THEN 'Now'
+				ELSE to_char(maxDate, 'YYYY-MM-DD')
+			END as active,
 			market_cap,
 			NULLIF(description, '') as description,
 			NULLIF(logo, '') as logo,
@@ -320,7 +323,11 @@ func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 			NULLIF(industry, '') as industry,
 			NULLIF(sector, '') as sector
 		FROM securities 
-		WHERE securityId = $1 AND maxDate IS NULL`
+		WHERE securityId = $1 AND (maxDate IS NULL OR maxDate = (
+			SELECT MAX(maxDate) 
+			FROM securities 
+			WHERE securityId = $1
+		))`
 
 	var results GetTickerMenuDetailsResults
 	err := conn.DB.QueryRow(context.Background(), query, args.SecurityId).Scan(

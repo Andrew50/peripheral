@@ -1,24 +1,54 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { privateRequest } from '$lib/core/backend';
-	import { activeChartInstance, queryChart } from '$lib/features/chart/interface';
+	import L1 from './l1.svelte';
+	import TimeAndSales from './timeAndSales.svelte';
+	import { get, writable, type Writable } from 'svelte/store';
+	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
 	import type { Instance } from '$lib/core/types';
-	import { writable } from 'svelte/store';
+	import { activeChartInstance, queryChart } from '$lib/features/chart/interface';
 	import StreamCell from '$lib/utils/stream/streamCell.svelte';
 	import { streamInfo, formatTimestamp } from '$lib/core/stores';
+	import { onMount } from 'svelte';
+	import { privateRequest } from '$lib/core/backend';
 
-	// Import the Quotes module here, so it can be toggled
-	import Quotes from '$lib/features/quotes/quotes.svelte';
-
-	const tickerInfoState = writable({
-		isExpanded: true,
-		currentHeight: 600
-	});
-
-	let showQuotes = false; // new dropdown toggle for Quotes
+	let instance: Writable<Instance> = writable({});
 	let container: HTMLDivElement;
+	let showTimeAndSales = false;
 	let isDragging = false;
 	let startY = 0;
+	let currentHeight = 600;
+
+	// Sync instance with activeChartInstance
+	activeChartInstance.subscribe((chartInstance) => {
+		if (chartInstance) {
+			instance.set(chartInstance);
+		}
+	});
+
+	function handleKey(event: KeyboardEvent) {
+		// Example: if user presses tab or alphanumeric, prompt ticker change
+		if (event.key == 'Tab' || /^[a-zA-Z0-9]$/.test(event.key)) {
+			const current = get(instance);
+			queryInstanceInput(['ticker'], ['ticker'], current)
+				.then((updated: Instance) => {
+					instance.set(updated);
+				})
+				.catch(() => {});
+		}
+	}
+
+	function toggleTimeAndSales() {
+		showTimeAndSales = !showTimeAndSales;
+	}
+
+	function handleClick(event: MouseEvent | TouchEvent) {
+		if ($activeChartInstance) {
+			queryChart($activeChartInstance);
+		}
+	}
+
+	$: if (container) {
+		container.addEventListener('keydown', handleKey);
+	}
 
 	onMount(() => {
 		activeChartInstance.subscribe((instance: Instance | null) => {
@@ -67,10 +97,7 @@
 		const deltaY = startY - currentY;
 		startY = currentY;
 
-		tickerInfoState.update((state) => ({
-			...state,
-			currentHeight: Math.min(Math.max(state.currentHeight + deltaY, 200), 800)
-		}));
+		currentHeight = Math.min(Math.max(currentHeight + deltaY, 200), 800);
 	}
 
 	function handleMouseUp() {
@@ -78,77 +105,69 @@
 		document.body.style.cursor = '';
 		document.body.style.userSelect = '';
 	}
-
-	function handleClick(event: MouseEvent | TouchEvent) {
-		// Only query chart if not clicking expand or drag handle
-		if (
-			event.target instanceof HTMLButtonElement ||
-			(event.target instanceof HTMLElement && event.target.classList.contains('drag-handle'))
-		) {
-			return;
-		}
-
-		if ($activeChartInstance) {
-			queryChart($activeChartInstance);
-		}
-	}
-
-	function toggleQuotes() {
-		showQuotes = !showQuotes;
-	}
 </script>
 
 <div
 	class="ticker-info-container expanded"
-	style="height: {$tickerInfoState.currentHeight}px"
+	style="height: {currentHeight}px"
 	bind:this={container}
 	on:click={handleClick}
 	on:touchstart={handleClick}
 >
-	<div
-		class="drag-handle"
-		on:mousedown={handleMouseDown}
-		on:touchstart|preventDefault={handleMouseDown}
-	>
-		<span class="ticker-name">{$activeChartInstance?.ticker || 'NaN'}</span>
-	</div>
-
-	{#if $activeChartInstance !== null}
-		<div class="content">
-			{#if $activeChartInstance.logo}
-				<div class="logo-container">
-					<img
-						src="data:image/svg+xml;base64,{$activeChartInstance.logo}"
-						alt="{$activeChartInstance.name} logo"
-						class="company-logo"
-					/>
-				</div>
-			{/if}
-			<div class="stream-cells">
-				<div class="stream-cell-container">
-					<span class="info-row">Price</span>
-					<StreamCell instance={$activeChartInstance} type="price" />
-				</div>
-				<div class="stream-cell-container">
-					<span class="info-row">Change %</span>
-					<StreamCell instance={$activeChartInstance} type="change %" />
-				</div>
-				<div class="stream-cell-container">
-					<span class="info-row">Change $</span>
-					<StreamCell instance={$activeChartInstance} type="change" />
-				</div>
-				<div class="stream-cell-container">
-					<span class="info-row">Change % extended</span>
-					<StreamCell instance={$activeChartInstance} type="change % extended" />
-				</div>
+	<div class="content">
+		{#if $activeChartInstance?.logo}
+			<div class="logo-container">
+				<img
+					src="data:image/svg+xml;base64,{$activeChartInstance.logo}"
+					alt="{$activeChartInstance.name} logo"
+					class="company-logo"
+				/>
 			</div>
+		{/if}
+
+		<div class="ticker-container">
+			<div class="ticker-display">
+				<span>{$instance.ticker || '--'}</span>
+			</div>
+		</div>
+
+		<div class="stream-cells">
+			<div class="stream-cell-container">
+				<span class="info-row">Price</span>
+				<StreamCell instance={$activeChartInstance} type="price" />
+			</div>
+			<div class="stream-cell-container">
+				<span class="info-row">Change %</span>
+				<StreamCell instance={$activeChartInstance} type="change %" />
+			</div>
+			<div class="stream-cell-container">
+				<span class="info-row">Change $</span>
+				<StreamCell instance={$activeChartInstance} type="change" />
+			</div>
+			<div class="stream-cell-container">
+				<span class="info-row">Change % extended</span>
+				<StreamCell instance={$activeChartInstance} type="change % extended" />
+			</div>
+		</div>
+
+		<div class="quotes-section">
+			<L1 {instance} />
+			<button class="toggle-button" on:click|stopPropagation={toggleTimeAndSales}>
+				{showTimeAndSales ? 'Hide T&S' : 'Show T&S'}
+			</button>
+			{#if showTimeAndSales}
+				<TimeAndSales {instance} />
+			{/if}
+		</div>
+
+		{#if $activeChartInstance}
 			<div class="info-row">
 				<span class="label">Name:</span>
 				<span class="value">{$activeChartInstance.name}</span>
 			</div>
 			<div class="info-row">
-				<span class="label">Status:</span>
-				<span class="value">{$activeChartInstance.active ? 'Active' : 'Inactive'}</span>
+				<span class="label">Active:</span>
+				<span class="value">{$activeChartInstance.active}</span>
 			</div>
 			<div class="info-row">
 				<span class="label">Market Cap:</span>
@@ -174,7 +193,6 @@
 				<span class="label">Industry:</span>
 				<span class="value">{$activeChartInstance.industry || 'N/A'}</span>
 			</div>
-
 			<div class="info-row">
 				<span class="label">Exchange:</span>
 				<span class="value">{$activeChartInstance.primary_exchange || 'N/A'}</span>
@@ -197,21 +215,8 @@
 					<p class="value description-text">{$activeChartInstance.description}</p>
 				</div>
 			{/if}
-
-			<!-- Toggle for showing quotes -->
-			<div class="info-row quotes-toggle">
-				<span class="label">Quotes:</span>
-				<button on:click|stopPropagation={toggleQuotes}>
-					{showQuotes ? 'Hide' : 'Show'}
-				</button>
-			</div>
-			{#if showQuotes}
-				<div class="quotes-section">
-					<Quotes />
-				</div>
-			{/if}
-		</div>
-	{/if}
+		{/if}
+	</div>
 </div>
 
 <style>
@@ -245,13 +250,46 @@
 		cursor: ns-resize;
 		display: flex;
 		align-items: center;
-		padding: 0 10px;
 		user-select: none;
 		touch-action: none;
-		border-bottom: 1px solid var(--ui-border);
 		color: var(--text-primary);
 		font-size: 14px;
 		font-weight: 500;
+	}
+
+	.ticker-container {
+		margin: 15px 0;
+		padding: 10px;
+		background: var(--ui-bg-secondary);
+		border-radius: 4px;
+		border: 1px solid var(--ui-border);
+	}
+
+	.ticker-display {
+		font-family: Arial, sans-serif;
+		font-size: 20px;
+		color: white;
+		background-color: black;
+		width: 100%;
+		height: 40px;
+		text-align: center;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 4px;
+	}
+
+	.content {
+		padding: 15px 15px 30px;
+		overflow-y: auto;
+		scrollbar-width: none;
+		-ms-overflow-style: none;
+		height: calc(100% - 30px);
+		color: var(--text-primary);
+	}
+
+	.content::-webkit-scrollbar {
+		display: none;
 	}
 
 	.logo-container {
@@ -262,51 +300,16 @@
 		background: var(--ui-bg-element);
 		border-radius: 4px;
 	}
+
 	.company-logo {
 		max-height: 40px;
 		max-width: 200px;
 		object-fit: contain;
 	}
 
-	.content {
-		padding: 0 15px 30px;
-		overflow-y: auto;
-		scrollbar-width: none;
-		-ms-overflow-style: none;
-		height: calc(100% - 30px);
-		color: var(--text-primary);
-	}
-	.content::-webkit-scrollbar {
-		display: none;
-	}
-
-	.info-row {
-		display: flex;
-		justify-content: space-between;
-		margin-bottom: 8px;
-		padding: 6px 8px;
-		font-size: 12px;
-		background: var(--ui-bg-element);
-		border-radius: 4px;
-	}
-
-	.info-row:hover {
-		background: var(--ui-bg-hover);
-	}
-	.label {
-		color: var(--text-secondary);
-		font-weight: 500;
-	}
-
-	.value {
-		font-family: monospace;
-		font-weight: 500;
-		font-variant-numeric: tabular-nums;
-	}
-
 	.stream-cells {
 		display: grid;
-		grid-template-columns: repeat(2, 1fr);
+		grid-template-columns: repeat(4, 1fr);
 		gap: 10px;
 		margin: 15px 0;
 		padding: 10px;
@@ -332,11 +335,60 @@
 		color: var(--text-secondary);
 	}
 
+	.quotes-section {
+		margin: 15px 0;
+		padding: 10px;
+		background: var(--ui-bg-secondary);
+		border-radius: 4px;
+		border: 1px solid var(--ui-border);
+	}
+
+	.toggle-button {
+		width: 100%;
+		margin: 8px 0;
+		padding: 8px;
+		background: var(--ui-bg-element);
+		border: 1px solid var(--ui-border);
+		border-radius: 4px;
+		color: var(--text-primary);
+		cursor: pointer;
+	}
+
+	.toggle-button:hover {
+		background: var(--ui-bg-hover);
+	}
+
+	.info-row {
+		display: flex;
+		justify-content: space-between;
+		margin-bottom: 8px;
+		padding: 6px 8px;
+		font-size: 12px;
+		background: var(--ui-bg-element);
+		border-radius: 4px;
+	}
+
+	.info-row:hover {
+		background: var(--ui-bg-hover);
+	}
+
+	.label {
+		color: var(--text-secondary);
+		font-weight: 500;
+	}
+
+	.value {
+		font-family: monospace;
+		font-weight: 500;
+		font-variant-numeric: tabular-nums;
+	}
+
 	.description {
 		margin-top: 15px;
 		padding-top: 10px;
 		border-top: 1px solid var(--ui-border);
 	}
+
 	.description-text {
 		margin-top: 5px;
 		font-size: 12px;
@@ -346,14 +398,8 @@
 		word-break: break-word;
 	}
 
-	.ticker-name {
-		font-weight: 600;
-	}
-
-	.quotes-toggle {
-		background: var(--ui-bg-element);
-	}
-	.quotes-section {
-		margin-top: 10px;
+	.ticker-cell {
+		padding: 0 !important;
+		overflow: hidden;
 	}
 </style>

@@ -9,7 +9,8 @@
 	import Study from '$lib/features/study.svelte';
 	import Journal from '$lib/features/journal.svelte';
 	import Watchlist from '$lib/features/watchlist.svelte';
-	import TickerInfo from '$lib/features/tickerInfo.svelte';
+	//import TickerInfo from '$lib/features/quotes/tickerInfo.svelte';
+	import Quote from '$lib/features/quotes/quote.svelte';
 
 	// Windows that will be opened in draggable divs
 	import Screener from '$lib/features/screen.svelte';
@@ -76,6 +77,9 @@
 	let lastSidebarMenu: Menu | null = null;
 	let lastBottomWindow: BottomWindow | null = null;
 
+	let profilePic = '';
+	let username = '';
+
 	function updateChartWidth() {
 		chartWidth = window.innerWidth - $menuWidth - (active_menu !== 'none' ? 60 : 0);
 	}
@@ -96,6 +100,9 @@
 		dispatchMenuChange.subscribe((menuName: string) => {
 			toggleMenu(menuName as Menu);
 		});
+
+		profilePic = sessionStorage.getItem('profilePic') || '';
+		username = sessionStorage.getItem('username') || '';
 	});
 
 	onDestroy(() => {
@@ -333,6 +340,24 @@
 		document.removeEventListener('mouseup', stopBottomResize);
 		document.body.style.cursor = 'default';
 	}
+
+	function getProfileDisplay() {
+		if (profilePic) {
+			return profilePic;
+		}
+		// Generate initial avatar if no profile pic
+		if (username) {
+			return `data:image/svg+xml,${encodeURIComponent(`
+				<svg width="28" height="28" xmlns="http://www.w3.org/2000/svg">
+					<circle cx="14" cy="14" r="14" fill="#4A5568"/>
+					<text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle">
+						${username.charAt(0).toUpperCase()}
+					</text>
+				</svg>
+			`)}`;
+		}
+		return 'default-avatar.png';
+	}
 </script>
 
 <div class="page" on:mousemove={onDrag} on:mouseup={stopDrag}>
@@ -398,7 +423,7 @@
 						</div>
 						<!-- Move TickerInfo inside sidebar-content -->
 						<div class="ticker-info-container">
-							<TickerInfo />
+							<Quote />
 						</div>
 					</div>
 				</div>
@@ -503,7 +528,7 @@
 				{/if}
 			</span>
 
-			<img src="pfp.png" alt="Profile" class="pfp" on:click={toggleSettings} />
+			<img src={getProfileDisplay()} alt="Profile" class="pfp" on:click={toggleSettings} />
 		</div>
 	</div>
 

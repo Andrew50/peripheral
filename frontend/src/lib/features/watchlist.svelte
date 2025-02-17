@@ -8,7 +8,6 @@
 	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
 	import { flagWatchlistId, watchlists, flagWatchlist } from '$lib/core/stores';
 	import '$lib/core/global.css';
-	import TickerInfo from '$lib/features/tickerInfo.svelte';
 
 	let activeList: Writable<Instance[]> = writable([]);
 	let newWatchlistName = '';
@@ -185,7 +184,6 @@
 		columns={['ticker', 'price', 'change', 'change %', 'change % extended']}
 		list={activeList}
 	/>
-	<TickerInfo />
 </div>
 
 <style>
