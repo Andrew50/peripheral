@@ -4,7 +4,10 @@ CREATE TABLE users (
     userId SERIAL PRIMARY KEY,
     username VARCHAR(100) UNIQUE NOT NULL,
     password VARCHAR(100) NOT NULL,
-    settings JSON
+    settings JSON,
+    email VARCHAR(255),
+    google_id VARCHAR(255),
+    profile_picture TEXT
 );
 CREATE INDEX idxUsers ON users (username, password);
 CREATE TABLE securities (
@@ -235,3 +238,5 @@ WHERE (
         sec.maxDate > TO_TIMESTAMP(ts.timestamp)
         OR sec.maxDate IS NULL
     );
+CREATE UNIQUE INDEX idx_users_email ON users(email)
+WHERE email IS NOT NULL;
