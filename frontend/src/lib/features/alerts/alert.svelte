@@ -14,7 +14,9 @@
 		const alertType = $selectedAlertType; // Get selected alert type from the dropdown
 
 		if (alertType === 'price') {
-			const inst = await queryInstanceInput(['ticker', 'price'],['ticker','price'], { ticker: '' });
+			const inst = await queryInstanceInput(['ticker', 'price'], ['ticker', 'price'], {
+				ticker: ''
+			});
 			//price?
 			console.log('inst', inst);
 			newPriceAlert(inst);
@@ -48,7 +50,7 @@
 
 <div class="controls-container">
 	<label for="alertType">Select Alert Type:</label>
-	<select id="alertType" bind:value={$selectedAlertType}>
+	<select class="default-select" id="alertType" bind:value={$selectedAlertType}>
 		<option value="price">Price</option>
 		<option value="setup">Setup</option>
 		<option value="algo">Algo</option>

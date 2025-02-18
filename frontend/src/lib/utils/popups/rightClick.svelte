@@ -184,39 +184,56 @@
 			{UTCTimestampToESTString($rightClickQuery.instance.timestamp)}
 		</div>
 		<div>
-			<button on:click={() => newStudy(get(rightClickQuery).instance)}> Add to Study </button>
+			<button class="wide-button" on:click={() => newStudy(get(rightClickQuery).instance)}>
+				Add to Study
+			</button>
 		</div>
-		<div><button on:click={(event) => sSample(event)}> Add to Sample </button></div>
+		<div>
+			<button class="wide-button" on:click={(event) => sSample(event)}> Add to Sample </button>
+		</div>
 		<!--<div><button on:click={()=>newJournal(get(rightClickQuery).instance)}> Add to Journal </button></div>-->
 		<div>
-			<button on:click={(event) => querySimilarInstances(event, get(rightClickQuery).instance)}>
+			<button
+				class="wide-button"
+				on:click={(event) => querySimilarInstances(event, get(rightClickQuery).instance)}
+			>
 				Similar Instances
 			</button>
 		</div>
 		<!--<div><button on:click={getStats}> Instance Stats </button></div>-->
-		<div><button on:click={() => startReplay($rightClickQuery.instance)}>Begin Replay</button></div>
+		<div>
+			<button class="wide-button" on:click={() => startReplay($rightClickQuery.instance)}
+				>Begin Replay</button
+			>
+		</div>
 		{#if $entryOpen}
 			<div>
-				<button on:click={() => embedInstance(get(rightClickQuery).instance)}> Embed </button>
+				<button class="wide-button" on:click={() => embedInstance(get(rightClickQuery).instance)}>
+					Embed
+				</button>
 			</div>
 		{/if}
 		{#if $rightClickQuery.source === 'chart'}
 			<div>
-				<button on:click={() => newPriceAlert($rightClickQuery.instance)}
+				<button class="wide-button" on:click={() => newPriceAlert($rightClickQuery.instance)}
 					>Add Alert {$rightClickQuery.instance.price?.toFixed(2)}</button
 				>
 			</div>
 			<div>
-				<button on:click={() => addHorizontalLine($rightClickQuery.instance.price)}
+				<button
+					class="wide-button"
+					on:click={() => addHorizontalLine($rightClickQuery.instance.price)}
 					>Add Horizontal Line {$rightClickQuery.instance.price?.toFixed(2)}</button
 				>
 			</div>
 		{:else if $rightClickQuery.source === 'embedded'}
-			<div><button on:click={() => completeRequest('edit')}> Edit </button></div>
+			<div>
+				<button class="wide-button" on:click={() => completeRequest('edit')}> Edit </button>
+			</div>
 			<!--<div><button on:click={()=>completeRequest("embdedSimilar")}> Embed Similar </button></div>-->
 		{:else if $rightClickQuery.source === 'list'}
 			<div>
-				<button on:click={() => flagSecurity($rightClickQuery.instance)}
+				<button class="wide-button" on:click={() => flagSecurity($rightClickQuery.instance)}
 					>{$rightClickQuery.instance.flagged ? 'Unflag' : 'Flag'}</button
 				>
 			</div>
@@ -234,8 +251,5 @@
 		/* Add these properties to prevent scrolling */
 		overflow: visible;
 		max-height: none;
-	}
-	button {
-		width: 100%;
 	}
 </style>
