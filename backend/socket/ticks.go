@@ -326,7 +326,6 @@ func getPrevCloseData(conn *utils.Conn, securityId int, timestamp int64) ([]Tick
 }
 
 func getInitialStreamValue(conn *utils.Conn, channelName string, timestamp int64) ([]byte, error) {
-	fmt.Printf("\n\ngetInitialStreamValue, channelname: %v\n\n", channelName)
 	parts := strings.Split(channelName, "-")
 	if len(parts) != 2 && len(parts) != 3 { //3 length means extended vs regular hours
 		return nil, fmt.Errorf("invalid channel name: %s", channelName)
