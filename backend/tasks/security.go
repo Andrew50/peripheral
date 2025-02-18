@@ -526,3 +526,25 @@ func GetSecurityClassifications(conn *utils.Conn, userId int, rawArgs json.RawMe
 		Industries: industries,
 	}, nil
 }
+
+type GetEdgarFilingsArgs struct {
+	SecurityId int   `json:"securityId"`
+	Timestamp  int64 `json:"timestamp"`
+}
+
+func GetEdgarFilings(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetEdgarFilingsArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+	if args.Timestamp == 0 {
+		args.Timestamp = time.Now().UnixMilli()
+	}
+	timestamp := time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6)
+	filings, err := utils.GetRecentEdgarFilings(conn, args.SecurityId, timestamp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get EDGAR filings: %v", err)
+	}
+
+	return filings, nil
+}
