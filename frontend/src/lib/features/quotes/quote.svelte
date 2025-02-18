@@ -230,9 +230,9 @@
 		border-top: 1px solid var(--ui-border);
 		overflow: hidden;
 		will-change: height;
-		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		font-family: var(--font-primary);
 		cursor: pointer;
-		height: 300px; /* Default height */
+		height: 300px;
 	}
 
 	.ticker-info-container.expanded {
@@ -241,42 +241,6 @@
 
 	.ticker-info-container:not(.expanded) {
 		transition: height 0.2s ease;
-	}
-
-	.drag-handle {
-		width: 100%;
-		height: 30px;
-		background: var(--ui-bg-primary);
-		cursor: ns-resize;
-		display: flex;
-		align-items: center;
-		user-select: none;
-		touch-action: none;
-		color: var(--text-primary);
-		font-size: 14px;
-		font-weight: 500;
-	}
-
-	.ticker-container {
-		margin: 15px 0;
-		padding: 10px;
-		background: var(--ui-bg-secondary);
-		border-radius: 4px;
-		border: 1px solid var(--ui-border);
-	}
-
-	.ticker-display {
-		font-family: Arial, sans-serif;
-		font-size: 20px;
-		color: white;
-		background-color: black;
-		width: 100%;
-		height: 40px;
-		text-align: center;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: 4px;
 	}
 
 	.content {
@@ -292,55 +256,24 @@
 		display: none;
 	}
 
-	.logo-container {
-		display: flex;
-		justify-content: center;
-		margin: 15px 0;
-		padding: 10px;
-		background: var(--ui-bg-element);
-		border-radius: 4px;
-	}
-
 	.company-logo {
 		max-height: 40px;
 		max-width: 200px;
 		object-fit: contain;
 	}
 
-	.stream-cells {
-		display: grid;
-		grid-template-columns: repeat(4, 1fr);
-		gap: 10px;
-		margin: 15px 0;
-		padding: 10px;
-		background: var(--ui-bg-secondary);
-		border-radius: 4px;
-		border: 1px solid var(--ui-border);
-	}
-
-	.stream-cell-container {
-		padding: 8px;
-		background: var(--ui-bg-element);
-		border-radius: 4px;
+	.ticker-display {
+		font-family: var(--font-primary);
+		font-size: 20px;
+		color: white;
+		background-color: black;
+		width: 100%;
+		height: 40px;
+		text-align: center;
 		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-
-	.stream-cell-container .info-row {
-		margin: 0;
-		padding: 0;
-		background: none;
-		font-weight: 500;
-		color: var(--text-secondary);
-	}
-
-	.quotes-section {
-		margin: 15px 0;
-		padding: 10px;
-		background: var(--ui-bg-secondary);
+		align-items: center;
+		justify-content: center;
 		border-radius: 4px;
-		border: 1px solid var(--ui-border);
 	}
 
 	.toggle-button {
@@ -358,48 +291,17 @@
 		background: var(--ui-bg-hover);
 	}
 
-	.info-row {
-		display: flex;
-		justify-content: space-between;
-		margin-bottom: 8px;
-		padding: 6px 8px;
-		font-size: 12px;
-		background: var(--ui-bg-element);
-		border-radius: 4px;
-	}
-
-	.info-row:hover {
-		background: var(--ui-bg-hover);
-	}
-
-	.label {
-		color: var(--text-secondary);
-		font-weight: 500;
-	}
-
-	.value {
-		font-family: monospace;
-		font-weight: 500;
-		font-variant-numeric: tabular-nums;
-	}
-
 	.description {
 		margin-top: 15px;
 		padding-top: 10px;
 		border-top: 1px solid var(--ui-border);
 	}
 
-	.description-text {
-		margin-top: 5px;
-		font-size: 12px;
-		line-height: 1.5;
-		color: var(--text-primary);
-		white-space: pre-wrap;
-		word-break: break-word;
-	}
-
-	.ticker-cell {
-		padding: 0 !important;
-		overflow: hidden;
+	.stream-cell-container .info-row {
+		margin: 0;
+		padding: 0;
+		background: none;
+		font-weight: 500;
+		color: var(--text-secondary);
 	}
 </style>
