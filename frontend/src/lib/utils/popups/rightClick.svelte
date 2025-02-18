@@ -244,12 +244,29 @@
 <style>
 	.popup-container {
 		width: 180px;
-		background-color: rgba(0, 0, 0, 0.5);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		border-radius: 4px;
-		padding: 4px;
-		/* Add these properties to prevent scrolling */
-		overflow: visible;
-		max-height: none;
+		background: var(--ui-bg-primary);
+		border: 1px solid var(--ui-border);
+		border-radius: 8px;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+		position: fixed;
+		z-index: 1000;
+	}
+
+	.wide-button {
+		width: 100%;
+		padding: 8px 12px;
+		text-align: left;
+		background: transparent;
+		border: none;
+		color: var(--text-primary);
+		font-size: 14px;
+		cursor: pointer;
+	}
+
+	.wide-button:hover {
+		background: var(--ui-bg-hover);
 	}
 </style>

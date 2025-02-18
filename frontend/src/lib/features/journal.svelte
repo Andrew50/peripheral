@@ -31,8 +31,8 @@
 	<div class="table-container">
 		<table>
 			<thead>
-				<tr>
-					<th>Date</th>
+				<tr class="defalt-tr">
+					<th class="defalt-th">Date</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -42,11 +42,11 @@
 							class="journal-row {journal.completed ? '' : 'active'}"
 							on:click={() => selectJournal(journal)}
 						>
-							<td>{ESTTimestampToESTString(journal.timestamp, true)}</td>
+							<td class="defalt-td">{ESTTimestampToESTString(journal.timestamp, true)}</td>
 						</tr>
 
 						{#if selectedJournalId == journal.journalId}
-							<tr>
+							<tr class="defalt-tr">
 								<td colspan="2" class="entry-cell">
 									<Entry completed={journal.completed} func="Journal" id={journal.journalId} />
 								</td>

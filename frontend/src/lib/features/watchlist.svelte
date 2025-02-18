@@ -267,7 +267,7 @@
 	.shortcut-container {
 		display: flex;
 		gap: 8px;
-		padding: 8px;
+		padding: 8px 8px 8px 16px;
 		flex-wrap: wrap;
 	}
 
@@ -283,6 +283,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-		padding: 8px;
+		padding: 8px 8px 8px 16px;
 	}
 </style>

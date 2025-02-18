@@ -11,11 +11,26 @@
 
 	const inactiveUserAlgoMenu = { x: 0, y: 0, status: 'inactive', algoId: null } as UserAlgoMenu;
 	let userAlgoMenu: Writable<UserAlgoMenu> = writable(inactiveUserAlgoMenu);
+	const MARGIN = 20; // Margin from window edges in pixels
+
+	// Initial position without height constraint
+	function getInitialPosition(x: number, y: number): { x: number; y: number } {
+		if (browser) {
+			const windowWidth = window.innerWidth;
+			const menuWidth = 200; // Same as our CSS width
+			return {
+				x: Math.min(Math.max(MARGIN, x), windowWidth - menuWidth - MARGIN),
+				y: Math.max(MARGIN, y)
+			};
+		}
+		return { x, y };
+	}
 
 	export async function queryAlgo(event: MouseEvent): Promise<number> {
+		const { x, y } = getInitialPosition(event.clientX, event.clientY);
 		const menuState: UserAlgoMenu = {
-			x: event.clientX,
-			y: event.clientY,
+			x,
+			y,
 			status: 'active',
 			algoId: null
 		};
@@ -84,6 +99,34 @@
 		userAlgoMenu.set({ ...inactiveUserAlgoMenu, algoId });
 	}
 
+	// Move constrainPosition here where it has access to menu
+	function constrainPosition(x: number, y: number): { x: number; y: number } {
+		if (browser) {
+			const windowWidth = window.innerWidth;
+			const windowHeight = window.innerHeight;
+			const menuWidth = 200;
+			const menuHeight = menu?.offsetHeight || 0;
+
+			return {
+				x: Math.min(Math.max(MARGIN, x), windowWidth - menuWidth - MARGIN),
+				y: Math.min(Math.max(MARGIN, y), windowHeight - menuHeight - MARGIN)
+			};
+		}
+		return { x, y };
+	}
+
+	// Update handleMouseMove to use constrainPosition
+	function handleMouseMove(event: MouseEvent): void {
+		if (isDragging) {
+			const deltaX = event.clientX - startX;
+			const deltaY = event.clientY - startY;
+			const { x, y } = constrainPosition(initialX + deltaX, initialY + deltaY);
+			userAlgoMenu.update((menuState) => {
+				return { ...menuState, x, y };
+			});
+		}
+	}
+
 	// ... existing mouse handling functions ...
 	function handleMouseDown(event: MouseEvent): void {
 		if (event.target && (event.target as HTMLElement).classList.contains('context-menu')) {
@@ -94,16 +137,6 @@
 			isDragging = true;
 			document.addEventListener('mousemove', handleMouseMove);
 			document.addEventListener('mouseup', handleMouseUp);
-		}
-	}
-
-	function handleMouseMove(event: MouseEvent): void {
-		if (isDragging) {
-			const deltaX = event.clientX - startX;
-			const deltaY = event.clientY - startY;
-			userAlgoMenu.update((menuState) => {
-				return { ...menuState, x: initialX + deltaX, y: initialY + deltaY };
-			});
 		}
 	}
 
@@ -123,13 +156,13 @@
 		<div class="content-container">
 			<table>
 				<thead>
-					<tr>
-						<th>Algorithm</th>
+					<tr class="defalt-tr">
+						<th class="defalt-th">Algorithm</th>
 					</tr>
 				</thead>
 				<tbody>
 					{#each algos as algo}
-						<tr>
+						<tr class="defalt-tr">
 							<td on:click={() => closeMenu(algo.algoId)}>
 								{algo.name}
 							</td>
@@ -140,3 +173,50 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	.popup-container {
+		width: 200px;
+		background: var(--ui-bg-primary);
+		border: 1px solid var(--ui-border);
+		border-radius: 8px;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+		position: fixed;
+		z-index: 1000;
+	}
+
+	.content-container {
+		padding: 12px;
+	}
+
+	table {
+		width: 100%;
+		border-collapse: collapse;
+	}
+
+	.defalt-tr {
+		border-bottom: 1px solid var(--ui-border);
+	}
+
+	.defalt-th {
+		text-align: left;
+		padding: 8px;
+		color: var(--text-secondary);
+		font-size: 14px;
+		font-weight: 500;
+	}
+
+	td {
+		padding: 8px;
+		color: var(--text-primary);
+		font-size: 14px;
+		cursor: pointer;
+	}
+
+	td:hover {
+		background: var(--ui-bg-hover);
+	}
+</style>
