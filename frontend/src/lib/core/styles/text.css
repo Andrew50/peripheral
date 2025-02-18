@@ -1,18 +1,45 @@
+:root {
+    --font-primary: 'Fira Sans', sans-serif;
+}
+
 span {
     color: var(--f1);
 }
+
 .error-message {
     color: var(--c5);
     margin-top: 10px;
     width: 80%;
 }
+
 label {
-      margin-right: 10px;
+    margin-right: 10px;
 }
+
 hr {
     color: var(--f2);
 }
 
 * {
-    font-family: 'Fira Sans', sans-serif; /* Monospace font for numbers */
+    font-family: var(--font-primary);
+}
+
+.monospace {
+    font-family: monospace;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+
+.label {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.description-text {
+    margin-top: 5px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
 }
