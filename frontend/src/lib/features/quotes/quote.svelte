@@ -127,25 +127,25 @@
 
 		<div class="ticker-container">
 			<div class="ticker-display">
-				<span>{$instance.ticker || '--'}</span>
+				<span class="ticker">{$instance.ticker || '--'}</span>
 			</div>
 		</div>
 
 		<div class="stream-cells">
 			<div class="stream-cell-container">
-				<span class="info-row">Price</span>
+				<span class="label">Price</span>
 				<StreamCell instance={$activeChartInstance} type="price" />
 			</div>
 			<div class="stream-cell-container">
-				<span class="info-row">Change %</span>
+				<span class="label">Change %</span>
 				<StreamCell instance={$activeChartInstance} type="change %" />
 			</div>
 			<div class="stream-cell-container">
-				<span class="info-row">Change $</span>
+				<span class="label">Change $</span>
 				<StreamCell instance={$activeChartInstance} type="change" />
 			</div>
 			<div class="stream-cell-container">
-				<span class="info-row">Change % extended</span>
+				<span class="label">Change % extended</span>
 				<StreamCell instance={$activeChartInstance} type="change % extended" />
 			</div>
 		</div>
@@ -276,28 +276,13 @@
 		border-radius: 4px;
 	}
 
-	.toggle-button {
-		width: 100%;
-		margin: 8px 0;
-		padding: 8px;
-		background: var(--ui-bg-element);
-		border: 1px solid var(--ui-border);
-		border-radius: 4px;
-		color: var(--text-primary);
-		cursor: pointer;
-	}
-
-	.toggle-button:hover {
-		background: var(--ui-bg-hover);
-	}
-
 	.description {
 		margin-top: 15px;
 		padding-top: 10px;
 		border-top: 1px solid var(--ui-border);
 	}
 
-	.stream-cell-container .info-row {
+	.stream-cell-container {
 		margin: 0;
 		padding: 0;
 		background: none;

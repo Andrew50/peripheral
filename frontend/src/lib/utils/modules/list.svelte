@@ -273,16 +273,8 @@
 {/if}
 
 <style>
-	.flag-icon {
-		color: var(--c3);
-		font-size: 16px;
-		margin-right: 5px;
-	}
-	.delete-button {
-		padding: 1px;
-	}
 	.selected {
-		outline: 2px solid var(--primary-color);
+		outline: 2px solid var(--ui-accent);
 		outline-offset: -2px;
 	}
 
@@ -300,30 +292,30 @@
 		border-collapse: collapse;
 		margin: 0;
 		padding: 0;
-		color: var(--text-color);
-		background: var(--surface-color);
+		color: var(--text-primary);
+		background: var(--ui-bg-primary);
 	}
 
 	th,
 	td {
 		padding: 8px;
 		text-align: left;
-		border-bottom: 1px solid #444;
+		border-bottom: 1px solid var(--ui-border);
 	}
 
 	th {
-		background-color: var(--surface-2);
+		background-color: var(--ui-bg-element);
 		font-weight: bold;
-		color: var(--text-2);
+		color: var(--text-secondary);
 	}
 
 	tr {
-		background-color: var(--surface-1);
+		background-color: var(--ui-bg-primary);
 		transition: background-color 0.2s;
 	}
 
 	tr:hover {
-		background-color: var(--surface-hover);
+		background-color: var(--ui-bg-hover);
 	}
 
 	.expandable {
@@ -337,20 +329,11 @@
 	}
 
 	.expand-icon {
-		display: inline-block;
-		width: 16px;
-		height: 16px;
-		line-height: 16px;
-		text-align: center;
-		background-color: var(--surface-3);
-		border-radius: 3px;
-		font-weight: bold;
-		font-size: 12px;
-		color: var(--text-2);
+		color: var(--text-secondary);
 	}
 
 	.expanded-content {
-		background-color: var(--surface-2);
+		background-color: var(--ui-bg-element);
 	}
 
 	.expanded-content td {
@@ -358,14 +341,14 @@
 	}
 
 	.trade-details {
-		background-color: var(--surface-2);
+		background-color: var(--ui-bg-element);
 		padding: 8px;
 		border-radius: 4px;
 	}
 
 	.trade-details h4 {
 		margin: 0 0 6px 0;
-		color: var(--text-2);
+		color: var(--text-secondary);
 		font-size: 0.9em;
 	}
 
@@ -375,7 +358,7 @@
 	}
 
 	.trade-details th {
-		background-color: var(--surface-3);
+		background-color: var(--ui-bg-element);
 		padding: 6px 8px;
 	}
 
@@ -384,24 +367,24 @@
 	}
 
 	.trade-details tr:hover {
-		background-color: #3a3a3a;
+		background-color: var(--ui-bg-hover);
 	}
 
 	.entry,
 	.buy {
-		color: var(--positive-color);
+		color: var(--positive);
 	}
 
 	.exit,
 	.sell {
-		color: var(--negative-color);
+		color: var(--negative);
 	}
 
 	.short {
-		color: var(--negative-color);
+		color: var(--negative);
 	}
 
 	.buy-to-cover {
-		color: var(--positive-color);
+		color: var(--positive);
 	}
 </style>

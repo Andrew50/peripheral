@@ -11,8 +11,8 @@
 	{#if $alertPopup}
 		<div class="alert-popup" transition:fade on:click={() => dismissAlert()}>
 			<div class="alert-content">
-				<span class="message">{$alertPopup.message}</span>
-				<span class="timestamp">{new Date($alertPopup.timestamp).toLocaleTimeString()}</span>
+				<span class="value">{$alertPopup.message}</span>
+				<span class="label">{new Date($alertPopup.timestamp).toLocaleTimeString()}</span>
 			</div>
 		</div>
 	{/if}
@@ -43,15 +43,5 @@
 		display: flex;
 		flex-direction: column;
 		gap: 5px;
-	}
-
-	.message {
-		color: var(--f1);
-		font-size: 14px;
-	}
-
-	.timestamp {
-		color: var(--f2);
-		font-size: 12px;
 	}
 </style>

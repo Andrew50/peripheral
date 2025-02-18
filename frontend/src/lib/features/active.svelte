@@ -98,7 +98,7 @@
 <div class="market-container">
 	{#if showConstituents}
 		<div class="header">
-			<button class="back-btn" on:click={goBack}>←</button>
+			<button class="utility-button" on:click={goBack}>←</button>
 			<h3>{selectedGroupName} Constituents</h3>
 		</div>
 		<List list={constituentsList} columns={['ticker', 'price', 'change', 'change %']} />
@@ -107,6 +107,7 @@
 			<div class="select-group">
 				<label for="timeframe">Timeframe</label>
 				<select
+					class="default-select"
 					id="timeframe"
 					bind:value={currentParams.timeframe}
 					on:change={() => params.set(currentParams)}
@@ -122,6 +123,7 @@
 			<div class="select-group">
 				<label for="group">Group</label>
 				<select
+					class="default-select"
 					id="group"
 					bind:value={currentParams.group}
 					on:change={() => params.set(currentParams)}
@@ -135,6 +137,7 @@
 			<div class="select-group">
 				<label for="metric">Metric</label>
 				<select
+					class="default-select"
 					id="metric"
 					bind:value={currentParams.metric}
 					on:change={() => params.set(currentParams)}

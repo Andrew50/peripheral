@@ -65,13 +65,13 @@
 	<Header />
 	<main>
 		<div class="center-container">
-			<button class="google-btn" on:click={handleGoogleLogin}>
+			<button class="wide-button" on:click={handleGoogleLogin}>
 				<img src="/google-icon.svg" alt="Google" />
 				Sign in with Google
 			</button>
 
 			<div class="divider">
-				<span>or</span>
+				<span class="divider-text">or</span>
 			</div>
 
 			<input autofocus placeholder="Username" bind:value={username} on:keydown={handleKeydown} />
@@ -82,9 +82,13 @@
 				on:keydown={handleKeydown}
 			/>
 			{#if loginMenu}
-				<button on:click={() => signIn(username, password)}>Sign In</button>
+				<button class="action-button wide-button" on:click={() => signIn(username, password)}
+					>Sign In</button
+				>
 			{:else}
-				<button on:click={() => signUp(username, password)} class="color2">Create Account</button>
+				<button class="action-button wide-button" on:click={() => signUp(username, password)}
+					>Create Account</button
+				>
 			{/if}
 			<p class="error-message">{$errorMessage}</p>
 		</div>
@@ -92,25 +96,6 @@
 </div>
 
 <style>
-	.google-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 10px;
-		background: white;
-		color: #757575;
-		border: 1px solid #ddd;
-		padding: 10px;
-		border-radius: 4px;
-		cursor: pointer;
-		width: 100%;
-	}
-
-	.google-btn img {
-		width: 18px;
-		height: 18px;
-	}
-
 	.divider {
 		display: flex;
 		align-items: center;
@@ -129,9 +114,5 @@
 		padding: 0 10px;
 		color: #757575;
 		font-size: 12px;
-	}
-
-	button {
-		width: 100%;
 	}
 </style>

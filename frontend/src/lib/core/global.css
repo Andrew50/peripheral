@@ -25,9 +25,12 @@ html {
     background-color: var(--c2);
 }*/
 
+@import './styles/text.css';
 @import './styles/table.css';
+@import './styles/button.css';
+@import './styles/span.css';
 @import './styles/div.css';
 @import './styles/misc.css';
 @import './styles/colors.css';
 @import './styles/input.css';
-@import './styles/text.css';
+@import './styles/select.css';

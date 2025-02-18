@@ -37,6 +37,7 @@
     --ui-bg-hover: rgba(255, 255, 255, 0.05);
     --ui-bg-element: rgba(255, 255, 255, 0.03);
     --ui-border: rgba(255, 255, 255, 0.1);
+    --ui-accent: var(--text-primary);
 
     /* Text Colors */
     --text-primary: #e0e0e0;

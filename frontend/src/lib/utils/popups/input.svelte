@@ -483,15 +483,15 @@
 		<div class="header">
 			<div class="title">{capitalize($inputQuery.inputType)} Input</div>
 			<div class="field-select">
-				<span>Field:</span>
-				<select class="input-type-select" bind:value={manualInputType}>
+				<span class="label">Field:</span>
+				<select class="default-select" bind:value={manualInputType}>
 					<option value="auto">Auto</option>
 					{#each $inputQuery.possibleKeys as key}
 						<option value={key}>{capitalize(key)}</option>
 					{/each}
 				</select>
 			</div>
-			<button class="close-button" on:click={closeWindow}>×</button>
+			<button class="utility-button" on:click={closeWindow}>×</button>
 		</div>
 
 		<div class="search-bar">
@@ -512,7 +512,7 @@
 								>
 									{key}
 								</span>
-								<span>
+								<span class="value">
 									{displayValue($inputQuery, key)}
 								</span>
 							</div>
@@ -523,7 +523,7 @@
 						{#if isLoadingSecurities}
 							<div class="loading-container">
 								<div class="loading-spinner"></div>
-								<span>Loading securities...</span>
+								<span class="label">Loading securities...</span>
 							</div>
 						{:else if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
 							<table>
@@ -578,7 +578,7 @@
 				{:else if $inputQuery.inputType === 'timestamp'}
 					<div class="span-container">
 						<div class="span-row">
-							<span>Timestamp</span>
+							<span class="label">Timestamp</span>
 							<input
 								type="datetime-local"
 								on:change={(e) => {
@@ -598,15 +598,15 @@
 				{:else if $inputQuery.inputType === 'timeframe'}
 					<div class="span-container">
 						<div class="span-row">
-							<span>Timeframe</span>
-							<span>{formatTimeframe($inputQuery.inputString)}</span>
+							<span class="label">Timeframe</span>
+							<span class="value">{formatTimeframe($inputQuery.inputString)}</span>
 						</div>
 					</div>
 				{:else if $inputQuery.inputType === 'extendedHours'}
 					<div class="span-container">
 						<div class="span-row">
-							<span>Extended Hours</span>
-							<span>{$inputQuery.instance.extendedHours ? 'True' : 'False'}</span>
+							<span class="label">Extended Hours</span>
+							<span class="value">{$inputQuery.instance.extendedHours ? 'True' : 'False'}</span>
 						</div>
 					</div>
 					0
@@ -637,8 +637,8 @@
 	.popup-container {
 		width: 700px;
 		height: 600px;
-		background: var(--c2);
-		border: 1px solid var(--c4);
+		background: var(--ui-bg-primary);
+		border: 1px solid var(--ui-border);
 		border-radius: 8px;
 		display: flex;
 		flex-direction: column;
@@ -677,27 +677,14 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: 8px 12px;
-		border-bottom: 1px solid var(--c4);
+		border-bottom: 1px solid var(--ui-border);
 		height: 40px;
 	}
 
 	.title {
 		font-size: 16px;
 		font-weight: 500;
-		color: #fff;
-	}
-
-	.close-button {
-		background: none;
-		border: none;
-		color: #666;
-		font-size: 20px;
-		cursor: pointer;
-		padding: 0 5px;
-	}
-
-	.close-button:hover {
-		color: #fff;
+		color: var(--text-primary);
 	}
 
 	.search-bar {
@@ -705,21 +692,21 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		border-bottom: 1px solid var(--c4);
+		border-bottom: 1px solid var(--ui-border);
 		height: 48px;
 	}
 
 	.search-bar input {
 		flex: 1;
-		background: #2d2d2d;
-		border: 1px solid #444;
+		background: var(--ui-bg-element);
+		border: 1px solid var(--ui-border);
 		padding: 6px 10px;
-		color: #fff;
+		color: var(--text-primary);
 		border-radius: 4px;
 	}
 
 	.search-icon {
-		color: #666;
+		color: var(--text-secondary);
 	}
 
 	.filters {
@@ -727,7 +714,7 @@
 		display: flex;
 		gap: 4px;
 		flex-wrap: wrap;
-		border-bottom: 1px solid var(--c4);
+		border-bottom: 1px solid var(--ui-border);
 		height: auto;
 		max-height: 80px;
 		overflow-y: auto;
@@ -735,8 +722,8 @@
 
 	.filter-bubble {
 		background: transparent;
-		border: 1px solid #444;
-		color: #888;
+		border: 1px solid var(--ui-border);
+		color: var(--text-secondary);
 		padding: 2px 8px;
 		border-radius: 8px;
 		font-size: 10px;
@@ -745,9 +732,9 @@
 	}
 
 	.filter-bubble.active {
-		background: #2962ff;
-		border-color: #2962ff;
-		color: white;
+		background: var(--ui-accent);
+		border-color: var(--ui-accent);
+		color: var(--text-primary);
 	}
 
 	.results {
@@ -766,12 +753,12 @@
 		align-items: center;
 		padding: 8px 12px;
 		cursor: pointer;
-		border-bottom: 1px solid var(--c4);
+		border-bottom: 1px solid var(--ui-border);
 		height: 40px;
 	}
 
 	.security-item:hover {
-		background: #2d2d2d;
+		background: var(--ui-bg-hover);
 	}
 
 	.security-icon {
@@ -806,13 +793,13 @@
 
 	.ticker {
 		font-weight: 600;
-		color: var(--f1);
+		color: var(--text-primary);
 		min-width: 60px;
 		font-size: 0.9em;
 	}
 
 	.name {
-		color: var(--f2);
+		color: var(--text-secondary);
 		font-size: 0.85em;
 		flex: 1;
 		white-space: nowrap;
@@ -825,36 +812,35 @@
 		align-items: center;
 		gap: 8px;
 		flex: 1;
-		color: var(--f2);
+		color: var(--text-secondary);
 		font-size: 0.8em;
 		margin-left: auto;
 	}
 
 	.sector {
-		color: var(--f2);
+		color: var(--text-secondary);
 		font-size: 0.8em;
 		margin-right: 8px;
 	}
 
 	.exchange {
-		color: var(--f2);
+		color: var(--text-secondary);
 		font-size: 0.8em;
 		min-width: 50px;
 	}
 
 	.date {
-		color: var(--f2);
+		color: var(--text-secondary);
 		align-items: center;
 		justify-content: center;
 		padding: 20px;
-		color: var(--f2);
 	}
 
 	.loading-spinner {
 		width: 30px;
 		height: 30px;
-		border: 3px solid var(--c4);
-		border-top: 3px solid var(--f1);
+		border: 3px solid var(--ui-border);
+		border-top: 3px solid var(--text-primary);
 		border-radius: 50%;
 		animation: spin 1s linear infinite;
 		margin-bottom: 10px;
@@ -877,22 +863,7 @@
 	}
 
 	.field-select span {
-		color: var(--f2);
+		color: var(--text-secondary);
 		font-size: 14px;
-	}
-
-	.input-type-select {
-		background: var(--c4);
-		color: var(--f1);
-		border: 1px solid var(--c4);
-		border-radius: 4px;
-		padding: 4px 8px;
-		font-size: 14px;
-		width: 120px;
-	}
-
-	.input-type-select option {
-		background: var(--c4);
-		color: var(--f1);
 	}
 </style>

@@ -1,0 +1,29 @@
+.default-select {
+    background: var(--ui-bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--ui-border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 14px;
+    width: 120px;
+}
+
+.default-select option {
+    background: var(--ui-bg-secondary);
+    color: var(--text-primary);
+}
+
+select {
+    padding: 10px;
+    width: 120px;
+    background-color: var(--c1);
+    color: var(--f1);
+    border: 1px solid var(--c4);
+    border-radius: 8px;
+    font-size: 16px;
+    transition: background-color 0.3s ease;
+}
+
+select:hover {
+    background-color: var(--c2);
+}

@@ -143,17 +143,6 @@
 		margin-bottom: 20px;
 	}
 
-	.controls-container button {
-		padding: 8px 16px;
-		background: var(--ui-bg-primary);
-		color: var(--text-primary);
-		border: 1px solid var(--ui-border);
-		border-radius: 4px;
-		cursor: pointer;
-		font-size: 14px;
-		transition: background 0.2s ease;
-	}
-
 	.controls-container button:hover {
 		background: var(--ui-bg-hover);
 	}

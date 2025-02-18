@@ -108,7 +108,7 @@
 
 	<div class="collapse-row" on:click|stopPropagation={toggleCollapse}>
 		<div class="divider"></div>
-		<button class="collapse-button" aria-label="Toggle legend">
+		<button class="utility-button" aria-label="Toggle legend">
 			<svg
 				class="arrow-icon"
 				viewBox="0 0 24 24"
@@ -303,19 +303,6 @@
 		background-color: var(--ui-border);
 		width: 100%;
 		margin: 2px 0;
-	}
-
-	.collapse-button {
-		background: transparent;
-		border: none;
-		padding: 0;
-		height: 14px;
-		cursor: pointer;
-		border-radius: 4px;
-		color: var(--text-secondary);
-		display: flex;
-		align-items: center;
-		justify-content: center;
 	}
 
 	.arrow-icon {

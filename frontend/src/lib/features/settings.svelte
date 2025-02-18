@@ -55,7 +55,12 @@
 
 			<div class="setting-row">
 				<label for="dolvol">Dollar Volume:</label>
-				<select id="dolvol" bind:value={tempSettings.dolvol} on:keypress={handleKeyPress}>
+				<select
+					class="default-select"
+					id="dolvol"
+					bind:value={tempSettings.dolvol}
+					on:keypress={handleKeyPress}
+				>
 					<option value={true}>Yes</option>
 					<option value={false}>No</option>
 				</select>
@@ -74,7 +79,12 @@
 
 			<div class="setting-row">
 				<label for="filterTaS">Display Trades Less than 100 shares:</label>
-				<select id="filterTaS" bind:value={tempSettings.filterTaS} on:keypress={handleKeyPress}>
+				<select
+					class="default-select"
+					id="filterTaS"
+					bind:value={tempSettings.filterTaS}
+					on:keypress={handleKeyPress}
+				>
 					<option value={true}>Yes</option>
 					<option value={false}>No</option>
 				</select>
@@ -82,7 +92,12 @@
 
 			<div class="setting-row">
 				<label for="divideTaS">Divide Time and Sales by 100:</label>
-				<select id="divideTaS" bind:value={tempSettings.divideTaS} on:keypress={handleKeyPress}>
+				<select
+					class="default-select"
+					id="divideTaS"
+					bind:value={tempSettings.divideTaS}
+					on:keypress={handleKeyPress}
+				>
 					<option value={true}>Yes</option>
 					<option value={false}>No</option>
 				</select>
@@ -93,7 +108,7 @@
 			<p class="error-message">{errorMessage}</p>
 		{/if}
 
-		<button class="apply-button" on:click={updateLayout}>Apply</button>
+		<button class="action-button" on:click={updateLayout}>Apply</button>
 	</div>
 </div>
 
@@ -162,21 +177,5 @@
 		color: var(--text-error);
 		margin-top: 16px;
 		font-size: 14px;
-	}
-
-	.apply-button {
-		margin-top: 20px;
-		padding: 8px 16px;
-		background: var(--ui-bg-primary);
-		color: var(--text-primary);
-		border: 1px solid var(--ui-border);
-		border-radius: 4px;
-		cursor: pointer;
-		font-size: 14px;
-		transition: background 0.2s ease;
-	}
-
-	.apply-button:hover {
-		background: var(--ui-bg-hover);
 	}
 </style>
