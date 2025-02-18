@@ -136,7 +136,6 @@
 	let mouseDownStartY = 0;
 	const DRAG_THRESHOLD = 3; // pixels of movement before considered a drag
 
-	
 	// Add new interface for alert lines
 	interface AlertLine {
 		price: number;
@@ -162,18 +161,18 @@
 			arrowSeries.setData([]);
 
 			// Add SEC filings request when loading new ticker
-			privateRequest<{bars: BarData[], isEarliestData: boolean}>('getEdgarFilings', {
+			privateRequest<{ bars: BarData[]; isEarliestData: boolean }>('getEdgarFilings', {
 				securityId: inst.securityId,
 				timestamp: inst.timestamp
 			})
-			.then((filings) => {
-				console.log('=== Recent SEC Filings ===');
-				console.table(filings);
-				console.log('=======================');
-			})
-			.catch((error) => {
-				console.error('Failed to fetch SEC filings:', error);
-			});
+				.then((filings) => {
+					console.log('=== Recent SEC Filings ===');
+					console.table(filings);
+					console.log('=======================');
+				})
+				.catch((error) => {
+					console.error('Failed to fetch SEC filings:', error);
+				});
 		}
 		if (isLoadingChartData || !inst.ticker || !inst.timeframe || !inst.securityId) {
 			return;
@@ -189,7 +188,7 @@
 		}
 		console.log(inst);
 		console.log(inst.extendedHours);
-		privateRequest<{bars: BarData[], isEarliestData: boolean}>('getChartData', {
+		privateRequest<{ bars: BarData[]; isEarliestData: boolean }>('getChartData', {
 			securityId: inst.securityId,
 			timeframe: inst.timeframe,
 			timestamp: inst.timestamp,
@@ -285,7 +284,7 @@
 					if (inst.direction == 'backward') {
 						chartEarliestDataReached = response.isEarliestData;
 					} else if (inst.direction == 'forward') {
-						console.log("chartLatestDataReached")
+						console.log('chartLatestDataReached');
 						chartLatestDataReached = true;
 					}
 				}
@@ -300,7 +299,7 @@
 					} else if (inst.direction == 'backward') {
 						chartCandleSeries.setData(newCandleData);
 						chartVolumeSeries.setData(newVolumeData);
-						if (arrowSeries && ('trades' in inst)) {
+						if (arrowSeries && 'trades' in inst) {
 							const markersByTime = new Map<
 								number,
 								{
@@ -313,7 +312,8 @@
 							if (inst.trades) {
 								inst.trades.forEach((trade) => {
 									const tradeTime = UTCSecondstoESTSeconds(trade.time / 1000);
-									const roundedTime = Math.floor(tradeTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+									const roundedTime =
+										Math.floor(tradeTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
 
 									if (!markersByTime.has(roundedTime)) {
 										markersByTime.set(roundedTime, { entries: [], exits: [] });
@@ -1087,12 +1087,12 @@
 
 	async function handleScreenshot() {
 		if (!chart) return;
-		
+
 		try {
 			// Get the entire chart container including legend
 			const chartContainer = document.getElementById(`chart_container-${chartId}`);
 			if (!chartContainer) return;
-			
+
 			// Use html2canvas to capture the entire container
 			const canvas = await html2canvas(chartContainer, {
 				backgroundColor: 'black', // Match your chart background
@@ -1100,21 +1100,21 @@
 				logging: false,
 				useCORS: true
 			});
-			
+
 			// Convert to blob
 			const blob = await new Promise<Blob>((resolve) => {
 				canvas.toBlob((blob) => {
 					if (blob) resolve(blob);
 				}, 'image/png');
 			});
-			
+
 			// Copy to clipboard
 			await navigator.clipboard.write([
 				new ClipboardItem({
 					[blob.type]: blob
 				})
 			]);
-			
+
 			console.log('Chart copied to clipboard!');
 		} catch (error) {
 			console.error('Failed to copy chart:', error);

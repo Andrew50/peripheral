@@ -1,150 +1,242 @@
 <!-- sample.svelte -->
 <script lang="ts" context="module">
-    import { writable } from 'svelte/store';
-    import type { Writable } from 'svelte/store';
-    import type { Setup } from '$lib/core/types';
-    import {newSetup} from '$lib/features/setups/interface'
-    import {setups} from '$lib/core/stores'
-    interface UserSetupMenu {
-        x: number;
-        y: number;
-        status: "active" | "inactive"
-        setup: Setup | null | "new"
-    }
+	import { writable } from 'svelte/store';
+	import type { Writable } from 'svelte/store';
+	import type { Setup } from '$lib/core/types';
+	import { newSetup } from '$lib/features/setups/interface';
+	import { setups } from '$lib/core/stores';
+	interface UserSetupMenu {
+		x: number;
+		y: number;
+		status: 'active' | 'inactive';
+		setup: Setup | null | 'new';
+	}
 
-    const inactiveUserSetupMenu = { x: 0, y: 0, status: "inactive"} as UserSetupMenu;
-    let userSetupMenu: Writable<UserSetupMenu> = writable(inactiveUserSetupMenu);
-    export async function querySetup(event: MouseEvent): Promise<number> {
-        const menuState: UserSetupMenu = {
-            x: event.clientX,
-            y: event.clientY,
-            status: "active",
-            setup: null,
-        };
-        userSetupMenu.set(menuState);
-        console.log("open")
-        return new Promise<number>((resolve, reject) => {
-            const unsubscribe = userSetupMenu.subscribe(async(menuState:UserSetupMenu) => {
-                if (menuState.status === "inactive") {
-                    console.log(menuState)
-                    if (menuState.setup === "new"){
-                        const i = await newSetup()
-                        console.log("resolved")
-                        unsubscribe();
-                        resolve(i)
-                    }else if (menuState.setup === null){
-                        unsubscribe();
-                        reject()
-                    }else{
-                        unsubscribe();
-                        resolve(menuState.setup.setupId)
-                    };  // Return the selected setup
-                }
-            });
-        });
-    }
+	const inactiveUserSetupMenu = { x: 0, y: 0, status: 'inactive' } as UserSetupMenu;
+	let userSetupMenu: Writable<UserSetupMenu> = writable(inactiveUserSetupMenu);
+
+	const MARGIN = 20;
+
+	// Initial position without height constraint
+	function getInitialPosition(x: number, y: number): { x: number; y: number } {
+		if (browser) {
+			const windowWidth = window.innerWidth;
+			const menuWidth = 200;
+			return {
+				x: Math.min(Math.max(MARGIN, x), windowWidth - menuWidth - MARGIN),
+				y: Math.max(MARGIN, y)
+			};
+		}
+		return { x, y };
+	}
+
+	export async function querySetup(event: MouseEvent): Promise<number> {
+		const { x, y } = getInitialPosition(event.clientX, event.clientY);
+		const menuState: UserSetupMenu = {
+			x,
+			y,
+			status: 'active',
+			setup: null
+		};
+		userSetupMenu.set(menuState);
+		console.log('open');
+		return new Promise<number>((resolve, reject) => {
+			const unsubscribe = userSetupMenu.subscribe(async (menuState: UserSetupMenu) => {
+				if (menuState.status === 'inactive') {
+					console.log(menuState);
+					if (menuState.setup === 'new') {
+						const i = await newSetup();
+						console.log('resolved');
+						unsubscribe();
+						resolve(i);
+					} else if (menuState.setup === null) {
+						unsubscribe();
+						reject();
+					} else {
+						unsubscribe();
+						resolve(menuState.setup.setupId);
+					} // Return the selected setup
+				}
+			});
+		});
+	}
 </script>
 
 <script lang="ts">
-    import { onMount } from 'svelte';
-    import {browser} from '$app/environment'
-    let menu: HTMLElement;
-    let startX: number;
-    let startY: number;
-    let initialX: number;
-    let initialY: number;
-    let isDragging = false;
-    onMount(() => {
-        userSetupMenu.subscribe((menuState) => {
-            if (browser){
-            if (menuState.status === "active") {
-                setTimeout(() => {
-                        document.addEventListener('click', handleClickOutside);
-                        document.addEventListener('keydown', handleKeyDown);
-                        document.addEventListener('mousedown', handleMouseDown);
-                    }, 0);
-            } else {
-                document.removeEventListener('click', handleClickOutside);
-                document.removeEventListener('keydown', handleKeyDown);
-                document.removeEventListener('mousedown', handleMouseDown);
-            }
-            }
-        });
-    });
-    function handleClickOutside(event: MouseEvent): void {
-        console.log(event.target)
-        console.log(menu)
-        if (menu && !menu.contains(event.target as Node)) {
-            console.log("close")
-            closeMenu();
-        }
-    }
-    function handleKeyDown(event: KeyboardEvent): void {
-        if (event.key === 'Escape') {
-            closeMenu();
-        }
-    }
+	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
+	let menu: HTMLElement;
+	let startX: number;
+	let startY: number;
+	let initialX: number;
+	let initialY: number;
+	let isDragging = false;
+	onMount(() => {
+		userSetupMenu.subscribe((menuState) => {
+			if (browser) {
+				if (menuState.status === 'active') {
+					setTimeout(() => {
+						document.addEventListener('click', handleClickOutside);
+						document.addEventListener('keydown', handleKeyDown);
+						document.addEventListener('mousedown', handleMouseDown);
+					}, 0);
+				} else {
+					document.removeEventListener('click', handleClickOutside);
+					document.removeEventListener('keydown', handleKeyDown);
+					document.removeEventListener('mousedown', handleMouseDown);
+				}
+			}
+		});
+	});
+	function handleClickOutside(event: MouseEvent): void {
+		console.log(event.target);
+		console.log(menu);
+		if (menu && !menu.contains(event.target as Node)) {
+			console.log('close');
+			closeMenu();
+		}
+	}
+	function handleKeyDown(event: KeyboardEvent): void {
+		if (event.key === 'Escape') {
+			closeMenu();
+		}
+	}
 
-    function closeMenu(setup:Setup|null|"new" = null): void {
-        console.trace()
-        userSetupMenu.set({...inactiveUserSetupMenu,setup:setup});
-    }
+	function closeMenu(setup: Setup | null | 'new' = null): void {
+		console.trace();
+		userSetupMenu.set({ ...inactiveUserSetupMenu, setup: setup });
+	}
 
-    function handleMouseDown(event: MouseEvent): void {
-        if (event.target && (event.target as HTMLElement).classList.contains('context-menu')) {
-            startX = event.clientX;
-            startY = event.clientY;
-            initialX = $userSetupMenu.x;
-            initialY = $userSetupMenu.y;
-            isDragging = true;
-            document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', handleMouseUp);
-        }
-    }
+	function handleMouseDown(event: MouseEvent): void {
+		if (event.target && (event.target as HTMLElement).classList.contains('context-menu')) {
+			startX = event.clientX;
+			startY = event.clientY;
+			initialX = $userSetupMenu.x;
+			initialY = $userSetupMenu.y;
+			isDragging = true;
+			document.addEventListener('mousemove', handleMouseMove);
+			document.addEventListener('mouseup', handleMouseUp);
+		}
+	}
 
-    function handleMouseMove(event: MouseEvent): void {
-        if (isDragging) {
-            const deltaX = event.clientX - startX;
-            const deltaY = event.clientY - startY;
-            userSetupMenu.update((menuState) => {
-                return { ...menuState, x: initialX + deltaX, y: initialY + deltaY };
-            });
-        }
-    }
+	function constrainPosition(x: number, y: number): { x: number; y: number } {
+		if (browser) {
+			const windowWidth = window.innerWidth;
+			const windowHeight = window.innerHeight;
+			const menuWidth = 200;
+			const menuHeight = menu?.offsetHeight || 0;
 
-    function handleMouseUp(): void {
-        isDragging = false;
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-    }
+			return {
+				x: Math.min(Math.max(MARGIN, x), windowWidth - menuWidth - MARGIN),
+				y: Math.min(Math.max(MARGIN, y), windowHeight - menuHeight - MARGIN)
+			};
+		}
+		return { x, y };
+	}
+
+	function handleMouseMove(event: MouseEvent): void {
+		if (isDragging) {
+			const deltaX = event.clientX - startX;
+			const deltaY = event.clientY - startY;
+			const { x, y } = constrainPosition(initialX + deltaX, initialY + deltaY);
+			userSetupMenu.update((menuState) => {
+				return { ...menuState, x, y };
+			});
+		}
+	}
+
+	function handleMouseUp(): void {
+		isDragging = false;
+		document.removeEventListener('mousemove', handleMouseMove);
+		document.removeEventListener('mouseup', handleMouseUp);
+	}
 </script>
 
-{#if $userSetupMenu.status === "active"}
-    <div class="popup-container" bind:this={menu} style="top: {$userSetupMenu.y}px; left: {$userSetupMenu.x}px;">
-        <div class="content-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>Setup</th>
-                </tr>
-            </thead>
-            <tbody>
-            {#if $setups && $setups.length > 0}
-                {#each $setups as setup}
-                <tr>
-                    <td on:click={() => {closeMenu(setup)}}>
-                        {setup.name}
-                    </td>
-                    </tr>
-                {/each}
-            {/if}
-            <tr>
-                <td on:click={() => {closeMenu("new")}}>
-                new
-                </td>
-                </tr>
-            </tbody>
-        </table>
-        </div>
-    </div>
+{#if $userSetupMenu.status === 'active'}
+	<div
+		class="popup-container"
+		bind:this={menu}
+		style="top: {$userSetupMenu.y}px; left: {$userSetupMenu.x}px;"
+	>
+		<div class="content-container">
+			<table>
+				<thead>
+					<tr class="defalt-tr">
+						<th class="defalt-th">Setup</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#if $setups && $setups.length > 0}
+						{#each $setups as setup}
+							<tr class="defalt-tr">
+								<td
+									on:click={() => {
+										closeMenu(setup);
+									}}
+								>
+									{setup.name}
+								</td>
+							</tr>
+						{/each}
+					{/if}
+					<tr class="defalt-tr">
+						<td
+							on:click={() => {
+								closeMenu('new');
+							}}
+						>
+							new
+						</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+	</div>
 {/if}
+
+<style>
+	.popup-container {
+		width: 200px;
+		background: var(--ui-bg-primary);
+		border: 1px solid var(--ui-border);
+		border-radius: 8px;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+		position: fixed;
+		z-index: 1000;
+	}
+
+	.content-container {
+		padding: 12px;
+	}
+
+	table {
+		width: 100%;
+		border-collapse: collapse;
+	}
+
+	.defalt-tr {
+		border-bottom: 1px solid var(--ui-border);
+	}
+
+	.defalt-th {
+		text-align: left;
+		padding: 8px;
+		color: var(--text-secondary);
+		font-size: 14px;
+		font-weight: 500;
+	}
+
+	td {
+		padding: 8px;
+		color: var(--text-primary);
+		font-size: 14px;
+		cursor: pointer;
+	}
+
+	td:hover {
+		background: var(--ui-bg-hover);
+	}
+</style>

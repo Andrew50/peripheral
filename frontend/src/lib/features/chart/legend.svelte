@@ -7,8 +7,20 @@
 	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
 	import { settings } from '$lib/core/stores';
 	import { UTCTimestampToESTString } from '$lib/core/timestamp';
+	import { onMount, onDestroy } from 'svelte';
+
+	// Add new props for chart dimensions
+	export let width: number;
+
+	let legendElement: HTMLDivElement;
+	let isOverflowing = false;
+	let showPriceGrid = true;
+	let showMetricsGrid = true;
+	let resizeObserver: ResizeObserver;
+	let checkOverflowTimeout: number;
 
 	let isCollapsed = false;
+	let isUpdating = false;
 
 	function toggleCollapse() {
 		isCollapsed = !isCollapsed;
@@ -44,13 +56,114 @@
 		}
 		return vol;
 	}
+
+	// Modify the debounced check overflow function
+	function debouncedCheckOverflow() {
+		if (checkOverflowTimeout) {
+			clearTimeout(checkOverflowTimeout);
+		}
+		checkOverflowTimeout = setTimeout(() => {
+			if (!isUpdating) {
+				checkOverflow();
+			}
+		}, 100);
+	}
+
+	// Function to check and handle overflow
+	function checkOverflow() {
+		if (!legendElement || isUpdating) return;
+
+		isUpdating = true;
+
+		const legendRect = legendElement.getBoundingClientRect();
+		const parentRect = legendElement.parentElement?.getBoundingClientRect();
+
+		if (!parentRect) {
+			isUpdating = false;
+			return;
+		}
+
+		// Store previous state
+		const prevShowMetrics = showMetricsGrid;
+		const prevShowPrice = showPriceGrid;
+		const prevOverflow = isOverflowing;
+
+		// Reset visibility
+		showPriceGrid = true;
+		showMetricsGrid = true;
+		isOverflowing = false;
+
+		// Check if legend is too wide
+		if (legendRect.right > parentRect.right - 10) {
+			isOverflowing = true;
+			showMetricsGrid = false;
+
+			// If still overflowing after a brief delay, hide price grid
+			if (legendRect.right > parentRect.right - 10) {
+				showPriceGrid = false;
+			}
+		}
+
+		// Only trigger update if state actually changed
+		if (
+			prevShowMetrics !== showMetricsGrid ||
+			prevShowPrice !== showPriceGrid ||
+			prevOverflow !== isOverflowing
+		) {
+			legendElement.style.width = 'auto';
+		}
+
+		// Reset the updating flag after a short delay
+		setTimeout(() => {
+			isUpdating = false;
+		}, 50);
+	}
+
+	onMount(() => {
+		// Initialize ResizeObserver with a more conservative callback
+		resizeObserver = new ResizeObserver((entries) => {
+			if (!isUpdating) {
+				debouncedCheckOverflow();
+			}
+		});
+
+		// Observe both the legend and its parent
+		if (legendElement) {
+			resizeObserver.observe(legendElement);
+			if (legendElement.parentElement) {
+				resizeObserver.observe(legendElement.parentElement);
+			}
+		}
+	});
+
+	onDestroy(() => {
+		// Clean up
+		if (checkOverflowTimeout) {
+			clearTimeout(checkOverflowTimeout);
+		}
+		if (resizeObserver) {
+			resizeObserver.disconnect();
+		}
+	});
+
+	// Watch for content changes that might affect size
+	$: if (hoveredCandleData || instance || width) {
+		debouncedCheckOverflow();
+	}
 </script>
 
 <div
+	bind:this={legendElement}
 	tabindex="-1"
+	role="button"
 	on:click={handleClick}
+	on:keydown={(e) => {
+		if (e.key === 'Enter' || e.key === ' ') {
+			handleClick(e);
+		}
+	}}
 	on:touchstart={handleClick}
-	class="legend {isCollapsed ? 'collapsed' : ''}"
+	class="legend {isCollapsed ? 'collapsed' : ''} {isOverflowing ? 'compact' : ''}"
 >
 	<div class="header">
 		{#if instance?.icon}
@@ -63,47 +176,60 @@
 		<span class="symbol">{instance?.ticker || 'NaN'}</span>
 		<span class="metadata">
 			<span class="timeframe">{instance?.timeframe ?? 'NA'}</span>
-			<span class="timestamp">{UTCTimestampToESTString(instance?.timestamp ?? 0)}</span>
-			<span class="session-type">{instance?.extendedHours ? 'Extended' : 'Regular'}</span>
+			{#if !isOverflowing}
+				<span class="timestamp">{UTCTimestampToESTString(instance?.timestamp ?? 0)}</span>
+				<span class="session-type">{instance?.extendedHours ? 'Extended' : 'Regular'}</span>
+			{/if}
 		</span>
 	</div>
 
 	{#if !isCollapsed}
-		<div class="price-grid" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">
-			<div class="price-row">
-				<span class="label">O</span>
-				<span class="value">{$hoveredCandleData.open.toFixed(2)}</span>
-				<span class="label">H</span>
-				<span class="value">{$hoveredCandleData.high.toFixed(2)}</span>
+		{#if showPriceGrid}
+			<div
+				class="price-grid"
+				style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}"
+			>
+				<div class="price-row">
+					<span class="label">O</span>
+					<span class="value">{$hoveredCandleData.open.toFixed(2)}</span>
+					<span class="label">H</span>
+					<span class="value">{$hoveredCandleData.high.toFixed(2)}</span>
+				</div>
+				<div class="price-row">
+					<span class="label">L</span>
+					<span class="value">{$hoveredCandleData.low.toFixed(2)}</span>
+					<span class="label">C</span>
+					<span class="value">{$hoveredCandleData.close.toFixed(2)}</span>
+				</div>
 			</div>
-			<div class="price-row">
-				<span class="label">L</span>
-				<span class="value">{$hoveredCandleData.low.toFixed(2)}</span>
-				<span class="label">C</span>
-				<span class="value">{$hoveredCandleData.close.toFixed(2)}</span>
-			</div>
-		</div>
+		{/if}
 
-		<div class="metrics-grid">
-			<div class="metric">
-				<span class="label">CHG</span>
-				<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">
-					{$hoveredCandleData.chg.toFixed(2)} ({$hoveredCandleData.chgprct.toFixed(2)}%)
-				</span>
+		{#if showMetricsGrid}
+			<div class="metrics-grid">
+				<div class="metric">
+					<span class="label">CHG</span>
+					<span
+						class="value"
+						style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}"
+					>
+						{$hoveredCandleData.chg.toFixed(2)} ({$hoveredCandleData.chgprct.toFixed(2)}%)
+					</span>
+				</div>
+				<div class="metric">
+					<span class="label">VOL</span>
+					<span class="value">{formatLargeNumber($hoveredCandleData.volume, $settings.dolvol)}</span
+					>
+				</div>
+				<div class="metric">
+					<span class="label">ADR</span>
+					<span class="value">{$hoveredCandleData.adr?.toFixed(2) ?? 'NA'}</span>
+				</div>
+				<div class="metric">
+					<span class="label">RVOL</span>
+					<span class="value">{$hoveredCandleData.rvol?.toFixed(2) ?? 'NA'}</span>
+				</div>
 			</div>
-			<div class="metric">
-				<span class="label">VOL</span>
-				<span class="value">{formatLargeNumber($hoveredCandleData.volume, $settings.dolvol)}</span>
-			</div>
-			<div class="metric">
-				<span class="label">ADR</span>
-				<span class="value">{$hoveredCandleData.adr?.toFixed(2) ?? 'NA'}</span>
-			</div>
-			<div class="metric">
-				<span class="label">RVOL</span>
-				<span class="value">{$hoveredCandleData.rvol?.toFixed(2) ?? 'NA'}</span>
-			</div>
-		</div>
+		{/if}
 	{/if}
 
 	<div class="collapse-row" on:click|stopPropagation={toggleCollapse}>
@@ -136,12 +262,49 @@
 		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 		color: var(--text-primary);
 		z-index: 900;
-		width: 300px;
-		min-width: 300px;
+		max-width: calc(100% - 20px);
+		width: fit-content;
+		min-width: min-content;
 		backdrop-filter: var(--backdrop-blur);
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 		user-select: none;
 		cursor: pointer;
+	}
+
+	/* Update hover styles to not affect width/layout */
+	.legend:hover {
+		background-color: var(--ui-bg-primary);
+		border-color: var(--ui-border);
+	}
+
+	/* Make compact styles more specific to override hover */
+	.legend.compact {
+		width: auto !important; /* Use !important to ensure it overrides hover */
+	}
+
+	.legend.compact .metadata {
+		flex-wrap: nowrap;
+		max-width: 100px !important;
+	}
+
+	.legend.compact .timeframe {
+		max-width: 100% !important;
+	}
+
+	/* Ensure compact state is maintained even on hover */
+	.legend.compact:hover .metadata {
+		flex-wrap: nowrap;
+		max-width: 100px !important;
+	}
+
+	.legend.compact:hover {
+		width: auto !important;
+	}
+
+	/* Hide elements in compact mode even on hover */
+	.legend.compact:hover .timestamp,
+	.legend.compact:hover .session-type {
+		display: none;
 	}
 
 	.header {
@@ -170,7 +333,6 @@
 		overflow: hidden;
 		flex: 1;
 		min-width: 0;
-		max-width: calc(100% - 16px);
 	}
 
 	.timeframe,
@@ -184,7 +346,6 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		max-width: calc(100% - 12px);
 	}
 
 	.timestamp {
@@ -239,12 +400,6 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		flex: 1;
-	}
-
-	/* Hover effect */
-	.legend:hover {
-		background-color: var(--ui-bg-primary);
-		border-color: var(--ui-border);
 	}
 
 	/* Ensure legend stays within chart bounds */

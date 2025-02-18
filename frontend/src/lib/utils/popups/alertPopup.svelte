@@ -30,18 +30,31 @@
 	}
 
 	.alert-popup {
-		background-color: var(--c2);
-		border: 1px solid var(--c4);
-		padding: 15px;
-		border-radius: 4px;
-		min-width: 200px;
-		cursor: pointer;
-		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+		width: 700px;
+		height: auto;
+		background: var(--ui-bg-primary);
+		border: 1px solid var(--ui-border);
+		border-radius: 8px;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+		padding: 12px;
 	}
 
 	.alert-content {
 		display: flex;
 		flex-direction: column;
-		gap: 5px;
+		gap: 8px;
+	}
+
+	.value {
+		color: var(--text-primary);
+		font-size: 14px;
+	}
+
+	.label {
+		color: var(--text-secondary);
+		font-size: 12px;
 	}
 </style>
