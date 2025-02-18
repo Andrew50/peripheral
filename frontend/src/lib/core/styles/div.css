@@ -1,4 +1,5 @@
 .main-container {
+    /* Main container for the app */
     top: 10vh;
     display: flex;
     justify-content: center;
@@ -21,6 +22,14 @@
     justify-content: flex-start;
     overflow-y: auto;
     overflow-x: hidden;
+}
+
+.app-container {
+    flex: 1;
+    display: flex;
+    position: relative;
+    overflow: hidden;
+    min-height: 0;
 }
 
 .table-container {
