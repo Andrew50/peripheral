@@ -528,12 +528,12 @@
 						{:else if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
 							<table>
 								<!--<thead>
-                        <tr>
+                        <tr class="defalt-tr">
 
-                            <th>Ticker</th>const capitalize = (str, lower = false) =>
+                            <th class="defalt-th">Ticker</th>const capitalize = (str, lower = false) =>
   (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, match => match.toUpperCase());
 ;
-                            <th>Delist Date</th>
+                            <th class="defalt-th">Delist Date</th>
                         </tr>const capitalize = (str, lower = false) =>
   (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, match => match.toUpperCase());
 ;
@@ -546,7 +546,7 @@
 												inputQuery.set(updatedQuery);
 											}}
 										>
-											<td>
+											<td class="defalt-td">
 												<div
 													style="background-color: transparent; width: 100px; height: 30px; display: flex; align-items: center; justify-content: center;"
 												>
@@ -566,9 +566,9 @@
 													{/if}-->
 												</div>
 											</td>
-											<td>{sec.ticker}</td>
-											<td>{sec.name}</td>
-											<td>{UTCTimestampToESTString(sec.timestamp)}</td>
+											<td class="defalt-td">{sec.ticker}</td>
+											<td class="defalt-td">{sec.name}</td>
+											<td class="defalt-td">{UTCTimestampToESTString(sec.timestamp)}</td>
 										</tr>
 									{/each}
 								</tbody>

@@ -161,10 +161,11 @@
 {#if $drawingMenuProps.active && !$drawingMenuProps.isDragging}
 	<div
 		bind:this={menuElement}
+		role="menu"
+		on:mousedown={handleClickOutside}
+		on:keydown={handleKeyDown}
 		class="drawing-menu"
 		style={menuStyle}
-		on:mousedown|stopPropagation
-		on:keydown|stopPropagation
 	>
 		<button on:click={removePriceLine}>Delete</button>
 		<input

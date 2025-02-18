@@ -158,20 +158,21 @@
 	}
 </script>
 
-{#if Array.isArray($list) && $list.length > 0}
-	<div class="table-container">
-		<table>
-			<thead>
-				<tr>
-					{#if expandable}
-						<th></th>
-					{/if}
-					{#each columns as col}
-						<th>{col}</th>
-					{/each}
-					<th></th>
-				</tr>
-			</thead>
+<div class="table-container">
+	<table>
+		<thead>
+			<tr class="defalt-tr">
+				{#if expandable}
+					<th class="defalt-th"></th>
+				{/if}
+				<th class="defalt-th"></th>
+				{#each columns as col}
+					<th data-type={col.toLowerCase().replace(/ /g, '-')}>{col}</th>
+				{/each}
+				<th class="defalt-th"></th>
+			</tr>
+		</thead>
+		{#if Array.isArray($list) && $list.length > 0}
 			<tbody>
 				{#each $list as watch, i}
 					<tr
@@ -192,14 +193,14 @@
 								<span class="expand-icon">{expandedRows.has(i) ? '−' : '+'}</span>
 							</td>
 						{/if}
-						<td>
+						<td class="defalt-td">
 							{#if isFlagged(watch, $flagWatchlist)}
 								<span class="flag-icon">⚑</span> <!-- Example flag icon -->
 							{/if}
 						</td>
 						{#each columns as col}
 							{#if ['price', 'change', 'change %', 'change % extended'].includes(col)}
-								<td>
+								<td class="defalt-td">
 									<StreamCell
 										on:contextmenu={(event) => {
 											event.preventDefault();
@@ -225,7 +226,7 @@
 								>
 							{/if}
 						{/each}
-						<td>
+						<td class="defalt-td">
 							<button
 								class="delete-button"
 								on:click={(event) => {
@@ -243,21 +244,21 @@
 									<h4>Trade Details</h4>
 									<table>
 										<thead>
-											<tr>
-												<th>Time</th>
-												<th>Type</th>
-												<th>Price</th>
-												<th>Shares</th>
+											<tr class="defalt-tr">
+												<th class="defalt-th">Time</th>
+												<th class="defalt-th">Type</th>
+												<th class="defalt-th">Price</th>
+												<th class="defalt-th">Shares</th>
 											</tr>
 										</thead>
 										<tbody>
 											{#each getAllOrders(watch) as order}
-												<tr>
-													<td>{UTCTimestampToESTString(order.time)}</td>
+												<tr class="defalt-tr">
+													<td class="defalt-td">{UTCTimestampToESTString(order.time)}</td>
 													<td class={order.type.toLowerCase().replace(/\s+/g, '-')}>{order.type}</td
 													>
-													<td>{order.price}</td>
-													<td>{order.shares}</td>
+													<td class="defalt-td">{order.price}</td>
+													<td class="defalt-td">{order.shares}</td>
 												</tr>
 											{/each}
 										</tbody>
@@ -268,9 +269,9 @@
 					{/if}
 				{/each}
 			</tbody>
-		</table>
-	</div>
-{/if}
+		{/if}
+	</table>
+</div>
 
 <style>
 	.selected {
@@ -294,6 +295,7 @@
 		padding: 0;
 		color: var(--text-primary);
 		background: var(--ui-bg-primary);
+		table-layout: fixed;
 	}
 
 	th,
@@ -386,5 +388,49 @@
 
 	.buy-to-cover {
 		color: var(--positive);
+	}
+
+	.table-container {
+		width: 100%;
+		overflow-x: auto;
+		scrollbar-width: thin;
+		max-width: 100%;
+		padding-bottom: 2px;
+		padding-right: 8px;
+	}
+
+	td:last-child {
+		position: sticky;
+		right: 8px;
+		width: 24px;
+		max-width: 24px;
+		padding: 0;
+		text-align: center;
+	}
+
+	th:last-child {
+		position: sticky;
+		right: 8px;
+		width: 24px;
+		max-width: 24px;
+		padding: 0;
+		background-color: var(--ui-bg-element);
+	}
+
+	.delete-button {
+		opacity: 0;
+		transition: opacity 0.2s ease;
+	}
+
+	tr:hover .delete-button {
+		opacity: 1;
+	}
+
+	tr:hover td {
+		background-color: var(--ui-bg-hover);
+	}
+
+	tr:hover td:last-child {
+		background-color: var(--ui-bg-hover);
 	}
 </style>

@@ -93,10 +93,10 @@
 	<div class="table-container">
 		<table>
 			<thead>
-				<tr>
-					<th>Ticker</th>
-					<th>Setup</th>
-					<th>Date</th>
+				<tr class="defalt-tr">
+					<th class="defalt-th">Ticker</th>
+					<th class="defalt-th">Setup</th>
+					<th class="defalt-th">Date</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -107,13 +107,15 @@
 							on:contextmenu={(event) => queryInstanceRightClick(event, study, 'header')}
 							on:click={() => selectStudy(study)}
 						>
-							<td>{study.ticker || 'N/A'}</td>
-							<td>{study.setupId ? getSetupNameById(study.setupId) : 'N/A'}</td>
-							<td>{study.timestamp ? UTCTimestampToESTString(study.timestamp) : 'N/A'}</td>
+							<td class="defalt-td">{study.ticker || 'N/A'}</td>
+							<td class="defalt-td">{study.setupId ? getSetupNameById(study.setupId) : 'N/A'}</td>
+							<td class="defalt-td"
+								>{study.timestamp ? UTCTimestampToESTString(study.timestamp) : 'N/A'}</td
+							>
 						</tr>
 
 						{#if selectedStudyId == study.studyId}
-							<tr>
+							<tr class="defalt-tr">
 								<td colspan="3" class="entry-cell">
 									<Entry
 										completed={study.completed}

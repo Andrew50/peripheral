@@ -13,9 +13,6 @@
 	let instance: Writable<Instance> = writable({});
 	let container: HTMLDivElement;
 	let showTimeAndSales = false;
-	let isDragging = false;
-	let startY = 0;
-	let currentHeight = 600;
 
 	// Sync instance with activeChartInstance
 	activeChartInstance.subscribe((chartInstance) => {
@@ -74,42 +71,17 @@
 		};
 	});
 
-	function handleMouseDown(e: MouseEvent | TouchEvent) {
-		if (e.target instanceof HTMLButtonElement) return;
-		isDragging = true;
-		if (e instanceof MouseEvent) {
-			startY = e.clientY;
-		} else {
-			startY = e.touches[0].clientY;
-		}
-		document.body.style.cursor = 'ns-resize';
-		document.body.style.userSelect = 'none';
-	}
-
 	function handleMouseMove(e: MouseEvent | TouchEvent) {
-		if (!isDragging) return;
-		let currentY;
-		if (e instanceof MouseEvent) {
-			currentY = e.clientY;
-		} else {
-			currentY = e.touches[0].clientY;
-		}
-		const deltaY = startY - currentY;
-		startY = currentY;
-
-		currentHeight = Math.min(Math.max(currentHeight + deltaY, 200), 800);
+		// This function is now empty as the height-related variables and functions are removed
 	}
 
 	function handleMouseUp() {
-		isDragging = false;
-		document.body.style.cursor = '';
-		document.body.style.userSelect = '';
+		// This function is now empty as the height-related variables and functions are removed
 	}
 </script>
 
 <div
-	class="ticker-info-container expanded"
-	style="height: {currentHeight}px"
+	class="ticker-info-container"
 	bind:this={container}
 	on:click={handleClick}
 	on:touchstart={handleClick}
@@ -221,18 +193,13 @@
 
 <style>
 	.ticker-info-container {
-		position: absolute;
-		bottom: 0;
-		left: 0;
-		right: 0;
 		background: var(--ui-bg-primary);
 		backdrop-filter: var(--backdrop-blur);
 		border-top: 1px solid var(--ui-border);
 		overflow: hidden;
 		will-change: height;
 		font-family: var(--font-primary);
-		cursor: pointer;
-		height: 300px;
+		height: 100%;
 	}
 
 	.ticker-info-container.expanded {
@@ -244,11 +211,11 @@
 	}
 
 	.content {
-		padding: 15px 15px 30px;
+		padding: 15px;
 		overflow-y: auto;
 		scrollbar-width: none;
 		-ms-overflow-style: none;
-		height: calc(100% - 30px);
+		height: 100%;
 		color: var(--text-primary);
 	}
 

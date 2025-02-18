@@ -227,7 +227,7 @@
 					{/each}
 				</select>
 
-				<button on:click={pullTrades}>Refresh Trades</button>
+				<button class="action-button" on:click={pullTrades}>Load Trades</button>
 			</div>
 
 			{#if message}
@@ -283,7 +283,7 @@
 					{/each}
 				</select>
 
-				<button on:click={pullTickers}>Refresh Tickers</button>
+				<button class="action-button" on:click={pullTickers}>Load Tickers</button>
 			</div>
 
 			{#if message}
@@ -349,7 +349,7 @@
 						placeholder="End Date"
 					/>
 				</div>
-				<button on:click={fetchStatistics}>Refresh Statistics</button>
+				<button class="action-button" on:click={fetchStatistics}>Load Statistics</button>
 			</div>
 
 			{#if $statistics}
@@ -384,19 +384,19 @@
 							<h3>Top Trades</h3>
 							<table>
 								<thead>
-									<tr>
-										<th>Date</th>
-										<th>Ticker</th>
-										<th>Direction</th>
-										<th>P/L</th>
+									<tr class="defalt-tr">
+										<th class="defalt-th">Date</th>
+										<th class="defalt-th">Ticker</th>
+										<th class="defalt-th">Direction</th>
+										<th class="defalt-th">P/L</th>
 									</tr>
 								</thead>
 								<tbody>
 									{#each $statistics.top_trades as trade}
-										<tr>
-											<td>{UTCTimestampToESTString(trade.timestamp)}</td>
-											<td>{trade.ticker}</td>
-											<td>{trade.direction}</td>
+										<tr class="defalt-tr">
+											<td class="defalt-td">{UTCTimestampToESTString(trade.timestamp)}</td>
+											<td class="defalt-td">{trade.ticker}</td>
+											<td class="defalt-td">{trade.direction}</td>
 											<td class="positive">${trade.pnl.toFixed(2)}</td>
 										</tr>
 									{/each}
@@ -408,19 +408,19 @@
 							<h3>Bottom Trades</h3>
 							<table>
 								<thead>
-									<tr>
-										<th>Date</th>
-										<th>Ticker</th>
-										<th>Direction</th>
-										<th>P/L</th>
+									<tr class="defalt-tr">
+										<th class="defalt-th">Date</th>
+										<th class="defalt-th">Ticker</th>
+										<th class="defalt-th">Direction</th>
+										<th class="defalt-th">P/L</th>
 									</tr>
 								</thead>
 								<tbody>
 									{#each $statistics.bottom_trades as trade}
-										<tr>
-											<td>{UTCTimestampToESTString(trade.timestamp)}</td>
-											<td>{trade.ticker}</td>
-											<td>{trade.direction}</td>
+										<tr class="defalt-tr">
+											<td class="defalt-td">{UTCTimestampToESTString(trade.timestamp)}</td>
+											<td class="defalt-td">{trade.ticker}</td>
+											<td class="defalt-td">{trade.direction}</td>
 											<td class="negative">${trade.pnl.toFixed(2)}</td>
 										</tr>
 									{/each}
@@ -435,24 +435,24 @@
 						<h3>Performance by Hour</h3>
 						<table class="hourly-stats-table">
 							<thead>
-								<tr>
-									<th>Hour</th>
-									<th>Total Trades</th>
-									<th>Win Rate</th>
-									<th>Winning Trades</th>
-									<th>Losing Trades</th>
-									<th>Avg P/L</th>
-									<th>Total P/L</th>
+								<tr class="defalt-tr">
+									<th class="defalt-th">Hour</th>
+									<th class="defalt-th">Total Trades</th>
+									<th class="defalt-th">Win Rate</th>
+									<th class="defalt-th">Winning Trades</th>
+									<th class="defalt-th">Losing Trades</th>
+									<th class="defalt-th">Avg P/L</th>
+									<th class="defalt-th">Total P/L</th>
 								</tr>
 							</thead>
 							<tbody>
 								{#each $statistics.hourly_stats as stat}
 									<tr class:profitable={stat.total_pnl > 0}>
-										<td>{stat.hour_display}</td>
-										<td>{stat.total_trades}</td>
-										<td>{stat.win_rate}%</td>
-										<td>{stat.winning_trades}</td>
-										<td>{stat.losing_trades}</td>
+										<td class="defalt-td">{stat.hour_display}</td>
+										<td class="defalt-td">{stat.total_trades}</td>
+										<td class="defalt-td">{stat.win_rate}%</td>
+										<td class="defalt-td">{stat.winning_trades}</td>
+										<td class="defalt-td">{stat.losing_trades}</td>
 										<td class={stat.avg_pnl >= 0 ? 'positive' : 'negative'}>
 											${stat.avg_pnl}
 										</td>
@@ -471,24 +471,24 @@
 						<h3>Performance by Ticker</h3>
 						<table class="ticker-stats-table">
 							<thead>
-								<tr>
-									<th>Ticker</th>
-									<th>Total Trades</th>
-									<th>Win Rate</th>
-									<th>Winning Trades</th>
-									<th>Losing Trades</th>
-									<th>Avg P/L</th>
-									<th>Total P/L</th>
+								<tr class="defalt-tr">
+									<th class="defalt-th">Ticker</th>
+									<th class="defalt-th">Total Trades</th>
+									<th class="defalt-th">Win Rate</th>
+									<th class="defalt-th">Winning Trades</th>
+									<th class="defalt-th">Losing Trades</th>
+									<th class="defalt-th">Avg P/L</th>
+									<th class="defalt-th">Total P/L</th>
 								</tr>
 							</thead>
 							<tbody>
 								{#each $statistics.ticker_stats as stat}
 									<tr class:profitable={stat.total_pnl > 0}>
-										<td>{stat.ticker}</td>
-										<td>{stat.total_trades}</td>
-										<td>{stat.win_rate}%</td>
-										<td>{stat.winning_trades}</td>
-										<td>{stat.losing_trades}</td>
+										<td class="defalt-td">{stat.ticker}</td>
+										<td class="defalt-td">{stat.total_trades}</td>
+										<td class="defalt-td">{stat.win_rate}%</td>
+										<td class="defalt-td">{stat.winning_trades}</td>
+										<td class="defalt-td">{stat.losing_trades}</td>
 										<td class={stat.avg_pnl >= 0 ? 'positive' : 'negative'}>
 											${stat.avg_pnl}
 										</td>
