@@ -1,3 +1,4 @@
+<!-- +page.svelte-->
 <script lang="ts">
 	import '$lib/core/global.css';
 	import ChartContainer from '$lib/features/chart/chartContainer.svelte';
@@ -368,7 +369,7 @@
 	<Setup />
 
 	<!-- Main area wrapper -->
-	<div class="main-area">
+	<div class="app-container">
 		<div class="content-wrapper">
 			<!-- Main content area -->
 			<div class="main-content">
@@ -434,7 +435,7 @@
 		<div class="sidebar-buttons">
 			{#each sidebarMenus as menu}
 				<button
-					class="side-btn {active_menu === menu ? 'active' : ''}"
+					class="toggle-button side-btn {active_menu === menu ? 'active' : ''}"
 					on:click={() => toggleMenu(menu)}
 					title={menu.charAt(0).toUpperCase() + menu.slice(1)}
 				>
@@ -448,31 +449,31 @@
 	<div class="bottom-bar">
 		<div class="bottom-bar-left">
 			<button
-				class={bottomWindows.some((w) => w.type === 'screener') ? 'active' : ''}
+				class="toggle-button {bottomWindows.some((w) => w.type === 'screener') ? 'active' : ''}"
 				on:click={() => openBottomWindow('screener')}
 			>
 				Screener
 			</button>
 			<button
-				class={bottomWindows.some((w) => w.type === 'active') ? 'active' : ''}
+				class="toggle-button {bottomWindows.some((w) => w.type === 'active') ? 'active' : ''}"
 				on:click={() => openBottomWindow('active')}
 			>
 				Active
 			</button>
 			<button
-				class={bottomWindows.some((w) => w.type === 'options') ? 'active' : ''}
+				class="toggle-button {bottomWindows.some((w) => w.type === 'options') ? 'active' : ''}"
 				on:click={() => openBottomWindow('options')}
 			>
 				Options
 			</button>
 			<button
-				class={bottomWindows.some((w) => w.type === 'setups') ? 'active' : ''}
+				class="toggle-button {bottomWindows.some((w) => w.type === 'setups') ? 'active' : ''}"
 				on:click={() => openBottomWindow('setups')}
 			>
 				Setups
 			</button>
 			<button
-				class={bottomWindows.some((w) => w.type === 'account') ? 'active' : ''}
+				class="toggle-button {bottomWindows.some((w) => w.type === 'account') ? 'active' : ''}"
 				on:click={() => openBottomWindow('account')}
 			>
 				Account
@@ -520,7 +521,7 @@
 			{/if}
 
 			<!-- Current timestamp -->
-			<span class="timestamp">
+			<span class="value">
 				{#if $streamInfo.timestamp !== undefined}
 					{formatTimestamp($streamInfo.timestamp)}
 				{:else}
@@ -547,6 +548,12 @@
 	{/if}
 </div>
 
+<!--/+page.svelte-->
+
+<!--/+page.svelte-->
+
+<!--/+page.svelte-->
+
 <style>
 	.page {
 		width: 100vw;
@@ -558,14 +565,6 @@
 		background-color: var(--c1);
 		margin: 0;
 		padding: 0;
-	}
-
-	.main-area {
-		flex: 1;
-		display: flex;
-		position: relative;
-		overflow: hidden;
-		min-height: 0;
 	}
 
 	.content-wrapper {
@@ -610,12 +609,12 @@
 
 	.sidebar {
 		height: 100%;
-		background-color: var(--c2);
+		background-color: var(--ui-bg-primary);
 		display: flex;
 		flex-direction: column;
 		position: relative;
 		flex-shrink: 0;
-		border-left: 1px solid var(--c4);
+		border-left: 1px solid var(--ui-border);
 		max-width: calc(100vw - 60px);
 	}
 
@@ -652,29 +651,12 @@
 
 	.side-btn {
 		flex: 0 0 60px;
-		border: none;
-		margin: 0;
-		background: none;
-		color: #fff;
-		cursor: pointer;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 8px;
 	}
 
 	.menu-icon {
 		width: 24px;
 		height: 24px;
 		object-fit: contain;
-	}
-
-	.side-btn.active {
-		background: var(--c4);
-	}
-
-	.side-btn:hover {
-		background: var(--c4);
 	}
 
 	.bottom-bar-left {
@@ -690,40 +672,12 @@
 		margin-left: auto;
 	}
 
-	.bottom-bar button {
-		background: none;
-		color: #fff;
-		border: none;
-		padding: 4px 8px;
-		cursor: pointer;
-		border-radius: 3px;
-		font-size: 0.9em;
-		height: 28px;
-		display: flex;
-		align-items: center;
-	}
-
-	.bottom-bar button.active {
-		background: var(--c4);
-	}
-
-	.bottom-bar button:hover {
-		background: var(--c4);
-	}
-
 	.bottom-bar .pfp {
 		width: 28px;
 		height: 28px;
 		border-radius: 50%;
 		cursor: pointer;
 		margin-left: 8px;
-	}
-
-	.timestamp {
-		cursor: pointer;
-		color: #fff;
-		font-size: 0.9em;
-		margin: 0 12px;
 	}
 
 	.speed-label {
@@ -834,7 +788,7 @@
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
-		padding: 8px;
+		/*padding: 8px;*/
 		scrollbar-width: none;
 	}
 

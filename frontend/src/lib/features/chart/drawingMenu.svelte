@@ -184,7 +184,4 @@
 		border-radius: 4px;
 		padding: 4px;
 	}
-	button {
-		width: 100%;
-	}
 </style>

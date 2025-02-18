@@ -2,26 +2,20 @@
     --font-primary: 'Fira Sans', sans-serif;
 }
 
-span {
+/* Base text elements */
+span,
+p,
+label,
+div {
     color: var(--f1);
+    font-family: var(--font-primary);
 }
 
+/* Text variants */
 .error-message {
     color: var(--c5);
     margin-top: 10px;
     width: 80%;
-}
-
-label {
-    margin-right: 10px;
-}
-
-hr {
-    color: var(--f2);
-}
-
-* {
-    font-family: var(--font-primary);
 }
 
 .monospace {
@@ -33,6 +27,17 @@ hr {
 .label {
     color: var(--text-secondary);
     font-weight: 500;
+    margin-right: 10px;
+}
+
+.value {
+    color: var(--text-primary);
+    font-weight: 500;
+    font-feature-settings: 'tnum';
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .description-text {
@@ -42,4 +47,35 @@ hr {
     color: var(--text-primary);
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+.info-row {
+    color: var(--text-secondary);
+    font-weight: 500;
+    font-size: 0.9em;
+    margin: 4px 0;
+}
+
+.title {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.metadata {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* Dividers */
+hr {
+    color: var(--f2);
+    border: none;
+    border-top: 1px solid var(--ui-border);
+    margin: 8px 0;
+}
+
+/* Global font settings */
+* {
+    font-family: var(--font-primary);
 }
