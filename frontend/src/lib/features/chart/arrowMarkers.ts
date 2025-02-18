@@ -57,6 +57,7 @@ function drawArrowDown(ctx: CanvasRenderingContext2D, x: number, y: number, size
 export class ArrowMarkersPaneView implements ICustomSeriesPaneView<Time, ArrowMarker, CustomSeriesOptions> {
 	private markers: ArrowMarker[] = [];
 	private options: CustomSeriesOptions = this.defaultOptions();
+	private visibleRange: { from: number; to: number } = { from: 0, to: 0 };
 
 	renderer(): ICustomSeriesPaneRenderer {
 		return {
@@ -68,15 +69,19 @@ export class ArrowMarkersPaneView implements ICustomSeriesPaneView<Time, ArrowMa
 						return;
 					}
 
-					// Draw each marker
-					for (const marker of this.markers) {
-						const x = marker.x;
+					// Only iterate over visible markers
+					for (let i = Math.floor(this.visibleRange.from); i < Math.ceil(this.visibleRange.to); i++) {
+						if (i < 0 || i >= this.markers.length) continue;
 						
+						const marker = this.markers[i];
+						const x = marker.x;
+						if(x === null) {
+							continue;
+						}
+
 						// Draw entry arrows
 						if (marker.originalData.entries?.length) {
 							marker.originalData.entries.forEach(entry => {
-								// For long entries: green up arrow
-								// For short entries: red down arrow
 								context.fillStyle = entry.isLong ? 'green' : 'red';
 								const y = priceToCoordinate(entry.price);
 								if (entry.isLong) {
@@ -90,8 +95,6 @@ export class ArrowMarkersPaneView implements ICustomSeriesPaneView<Time, ArrowMa
 						// Draw exit arrows
 						if (marker.originalData.exits?.length) {
 							marker.originalData.exits.forEach(exit => {
-								// For long exits: red down arrow
-								// For short exits: green up arrow
 								context.fillStyle = exit.isLong ? 'red' : 'green';
 								const y = priceToCoordinate(exit.price);
 								if (exit.isLong) {
@@ -139,6 +142,8 @@ export class ArrowMarkersPaneView implements ICustomSeriesPaneView<Time, ArrowMa
 		//console.log("ArrowMarkersPaneView update called with data:", data, "and seriesOptions:", seriesOptions);
 		this.markers = data.bars; // Assumes your data is in the "bars" property.
 		this.options = seriesOptions;
+		this.visibleRange = data.visibleRange;
+		console.log("visibleRange", this.visibleRange);
 	}
 
 	// Update price value builder to handle new structure

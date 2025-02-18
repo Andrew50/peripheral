@@ -116,3 +116,6 @@ ALTER TABLE users
 ADD COLUMN email VARCHAR(255),
     ADD COLUMN google_id VARCHAR(255),
     ADD COLUMN profile_picture TEXT;
+
+
+ALTER TABLE securities; 
