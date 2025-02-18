@@ -47,6 +47,7 @@
 	} from '$lib/core/timestamp';
 	import { addStream } from '$lib/utils/stream/interface';
 	import { ArrowMarkersPaneView, type ArrowMarker } from './arrowMarkers';
+	import html2canvas from 'html2canvas';
 	let bidLine: any;
 	let askLine: any;
 	let currentBarTimestamp: number;
@@ -159,6 +160,20 @@
 			bidLine.setData([]);
 			askLine.setData([]);
 			arrowSeries.setData([]);
+
+			// Add SEC filings request when loading new ticker
+			privateRequest<{bars: BarData[], isEarliestData: boolean}>('getEdgarFilings', {
+				securityId: inst.securityId,
+				timestamp: inst.timestamp
+			})
+			.then((filings) => {
+				console.log('=== Recent SEC Filings ===');
+				console.table(filings);
+				console.log('=======================');
+			})
+			.catch((error) => {
+				console.error('Failed to fetch SEC filings:', error);
+			});
 		}
 		if (isLoadingChartData || !inst.ticker || !inst.timeframe || !inst.securityId) {
 			return;
@@ -328,8 +343,6 @@
 								entries: data.entries,
 								exits: data.exits
 							}));
-
-							console.log('Setting arrow markers:', markers);
 							arrowSeries.setData(markers);
 						}
 					}
@@ -878,6 +891,8 @@
 					chartCandleSeries.coordinateToPrice(latestCrosshairPositionY) || 0,
 					currentChartInstance.securityId
 				);
+			} else if (event.key == 's' && event.altKey) {
+				handleScreenshot();
 			} else if (event.key == 'Tab' || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
 				// goes to input popup
 				if ($streamInfo.replayActive) {
@@ -1069,6 +1084,42 @@
 			}
 		});
 	});
+
+	async function handleScreenshot() {
+		if (!chart) return;
+		
+		try {
+			// Get the entire chart container including legend
+			const chartContainer = document.getElementById(`chart_container-${chartId}`);
+			if (!chartContainer) return;
+			
+			// Use html2canvas to capture the entire container
+			const canvas = await html2canvas(chartContainer, {
+				backgroundColor: 'black', // Match your chart background
+				scale: 2, // Higher quality
+				logging: false,
+				useCORS: true
+			});
+			
+			// Convert to blob
+			const blob = await new Promise<Blob>((resolve) => {
+				canvas.toBlob((blob) => {
+					if (blob) resolve(blob);
+				}, 'image/png');
+			});
+			
+			// Copy to clipboard
+			await navigator.clipboard.write([
+				new ClipboardItem({
+					[blob.type]: blob
+				})
+			]);
+			
+			console.log('Chart copied to clipboard!');
+		} catch (error) {
+			console.error('Failed to copy chart:', error);
+		}
+	}
 </script>
 
 <div autofocus class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
@@ -1077,9 +1128,3 @@
 	<Countdown instance={currentChartInstance} {currentBarTimestamp} />
 	<DrawingMenu {drawingMenuProps} />
 </div>
-
-<style>
-	.chart {
-		position: relative;
-	}
-</style>
