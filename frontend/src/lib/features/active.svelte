@@ -158,18 +158,18 @@
 			{:else}
 				<table>
 					<thead>
-						<tr>
-							<th>{currentParams.group}</th>
+						<tr class="defalt-tr">
+							<th class="defalt-th">{currentParams.group}</th>
 						</tr>
 					</thead>
 					<tbody>
 						{#each $list as item, i}
 							<tr class="group-row" on:click={() => handleRowClick(item)}>
-								<td>{item.group}</td>
+								<td class="defalt-td">{item.group}</td>
 							</tr>
 							{#if i === selectedRowIndex}
-								<tr>
-									<td>
+								<tr class="defalt-tr">
+									<td class="defalt-td">
 										<List
 											list={constituentsList}
 											columns={['ticker', 'price', 'change', 'change %']}

@@ -1,43 +1,55 @@
 /* Base table styles */
-table {
+.default-table {
     width: 100%;
     border-collapse: collapse;
     margin: 0;
     padding: 0;
     color: var(--text-primary);
     background: var(--ui-bg-primary);
+    table-layout: fixed;
+    font-size: 0.85rem;
+    /* Smaller base font size */
 }
 
-th,
-td {
-    padding: 8px;
+.default-th,
+.default-td {
+    padding: 4px 6px;
+    /* Reduce padding */
     text-align: left;
     border-bottom: 1px solid var(--ui-border);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
 }
 
-th {
+.default-th {
     background-color: var(--ui-bg-element);
     font-weight: bold;
     color: var(--text-secondary);
     position: sticky;
     top: 0;
     z-index: 1;
+    padding: 8px;
+    text-align: left;
+    border-bottom: 1px solid var(--ui-border);
 }
 
 /* Table row styles */
-tr {
+.default-tr {
     border-bottom: 1px solid var(--ui-border);
     color: var(--text-primary);
     background-color: var(--ui-bg-primary);
     transition: background-color 0.2s;
+    width: 100%;
 }
 
-tr:hover {
+.default-tr:hover {
     background-color: var(--ui-bg-hover);
     cursor: pointer;
 }
 
-tr.selected {
+.default-tr.selected {
     background-color: var(--ui-bg-element);
     outline: 2px solid var(--ui-accent);
     outline-offset: -2px;
@@ -47,7 +59,18 @@ tr.selected {
 .table-container {
     width: 100%;
     overflow-x: auto;
-    scrollbar-width: thin;
+    scrollbar-width: none;
+    /* Firefox */
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    max-width: 100%;
+    padding-bottom: 2px;
+    padding-right: 0;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.table-container::-webkit-scrollbar {
+    display: none;
 }
 
 /* Expandable rows */
@@ -79,4 +102,77 @@ tr.selected {
 
 .dark-green {
     color: #06735f;
+}
+
+/* Add specific width for action columns */
+.default-th:empty {
+    width: 24px;
+    max-width: 24px;
+    padding: 0;
+    flex: 0 0 24px;
+}
+
+/* Flag column */
+.default-td:nth-child(2) {
+    width: 24px;
+    max-width: 24px;
+    padding: 0;
+    text-align: center;
+    flex: 0 0 24px;
+}
+
+/* Delete button column */
+.default-td:last-child {
+    position: sticky;
+    right: 0;
+    background-color: inherit;
+    /* Use inherit instead of explicit color */
+    width: 24px;
+    max-width: 24px;
+    padding: 0;
+    text-align: center;
+    z-index: 1;
+}
+
+/* Update the header for delete column */
+.default-th:last-child {
+    position: sticky;
+    right: 0;
+    background-color: inherit;
+    /* Use inherit instead of explicit color */
+    width: 24px;
+    max-width: 24px;
+    padding: 0;
+    z-index: 2;
+}
+
+/* Remove the specific hover state for last column since it will inherit from tr:hover */
+.default-tr:hover .default-td:last-child {
+    background-color: inherit;
+}
+
+/* Style for the delete button */
+.delete-button {
+    padding: 0;
+    font-size: 0.8rem;
+    line-height: 1;
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+}
+
+/* Add specific widths for different column types */
+.default-th[data-type="ticker"] {
+    width: 60px;
+    /* Reduced from 80px */
+    max-width: 60px;
+}
+
+.default-th[data-type="price"],
+.default-th[data-type="change"],
+.default-th[data-type="change %"],
+.default-th[data-type="change % extended"] {
+    width: 70px;
+    /* Reduced from 100px */
+    max-width: 70px;
 }

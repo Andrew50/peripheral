@@ -42,11 +42,31 @@
 		dispatchMenuChange,
 		menuWidth
 	} from '$lib/core/stores';
+	import { writable } from 'svelte/store';
+
+	// Add import near the top with other imports
+	import Screensaver from '$lib/features/screensaver.svelte';
 
 	type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'journal';
 
+	// Initialize menuWidth store with 0 before any rendering
+	menuWidth.set(0);
+
+	// Initialize all sidebar state variables as closed
 	let active_menu: Menu = 'none';
+	let lastSidebarMenu: Menu | null = null;
+	let sidebarWidth = 0;
 	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'journal'];
+
+	// Initialize chartWidth with full width minus buttons
+	let chartWidth = browser ? window.innerWidth - 60 : 0; // 60px for sidebar buttons
+
+	// Force the menuWidth store to 0 again
+	$: {
+		if ($menuWidth !== 0 && active_menu === 'none') {
+			menuWidth.set(0);
+		}
+	}
 
 	// Bottom windows
 	type BottomWindowType = 'screener' | 'account' | 'active' | 'options' | 'setups' | 'settings';
@@ -66,32 +86,49 @@
 	// Replay controls
 	let replaySpeed = 1.0;
 
-	let chartWidth = 0;
-
 	// Resizing the bottom windows
 	let bottomWindowsHeight = 0;
 	let bottomResizing = false;
-	const MIN_BOTTOM_HEIGHT = 100;
+	const MIN_BOTTOM_HEIGHT = 250;
 	const MAX_BOTTOM_HEIGHT = 500;
 
 	// Add these state variables near the top with other state declarations
-	let lastSidebarMenu: Menu | null = null;
 	let lastBottomWindow: BottomWindow | null = null;
 
 	let profilePic = '';
 	let username = '';
 
+	let sidebarResizing = false;
+	let startY = 0;
+	let tickerHeight = 300; // Initial height
+	const MIN_TICKER_HEIGHT = 100;
+	const MAX_TICKER_HEIGHT = 600;
+
+	// Add state variables after other state declarations
+	let screensaverActive = false;
+	let inactivityTimer: NodeJS.Timeout | null = null;
+	const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
+
 	function updateChartWidth() {
+		if (active_menu === 'none') {
+			menuWidth.set(0);
+		}
 		chartWidth = window.innerWidth - $menuWidth - (active_menu !== 'none' ? 60 : 0);
 	}
 
 	onMount(() => {
+		// Set initial ticker height
+		document.documentElement.style.setProperty('--ticker-height', `${tickerHeight}px`);
+
 		if (browser) {
 			document.title = 'Atlantis';
+			// Force closed state
+			active_menu = 'none';
+			menuWidth.set(0);
+			lastSidebarMenu = null;
+
 			updateChartWidth();
 			window.addEventListener('resize', updateChartWidth);
-			menuWidth.set(0);
-			active_menu = 'none';
 		}
 		privateRequest<string>('verifyAuth', {}).catch(() => {
 			goto('/login');
@@ -104,12 +141,28 @@
 
 		profilePic = sessionStorage.getItem('profilePic') || '';
 		username = sessionStorage.getItem('username') || '';
+
+		// Setup activity listeners
+		const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+		activityEvents.forEach((event) => {
+			document.addEventListener(event, resetInactivityTimer);
+		});
+		resetInactivityTimer();
 	});
 
 	onDestroy(() => {
 		if (browser) {
 			window.removeEventListener('resize', updateChartWidth);
+			stopSidebarResize();
 		}
+
+		if (inactivityTimer) {
+			clearTimeout(inactivityTimer);
+		}
+		const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+		activityEvents.forEach((event) => {
+			document.removeEventListener(event, resetInactivityTimer);
+		});
 	});
 
 	function toggleMenu(menuName: Menu) {
@@ -155,7 +208,9 @@
 		} else {
 			clientX = event.touches[0].clientX;
 		}
-		let newWidth = window.innerWidth - clientX;
+
+		// Calculate width from right edge of window, excluding the sidebar buttons width
+		let newWidth = window.innerWidth - clientX - 60; // 60px is the width of sidebar buttons
 
 		if (newWidth > maxWidth) {
 			newWidth = maxWidth;
@@ -348,16 +403,70 @@
 		}
 		// Generate initial avatar if no profile pic
 		if (username) {
-			return `data:image/svg+xml,${encodeURIComponent(`
-				<svg width="28" height="28" xmlns="http://www.w3.org/2000/svg">
-					<circle cx="14" cy="14" r="14" fill="#4A5568"/>
-					<text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle">
-						${username.charAt(0).toUpperCase()}
-					</text>
-				</svg>
-			`)}`;
+			return `data:image/svg+xml,${encodeURIComponent(`<svg width="28" height="28" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="14" fill="#1a1c21"/><text x="14" y="19" font-family="Arial" font-size="14" fill="#e0e0e0" text-anchor="middle" font-weight="bold">${username.charAt(0).toUpperCase()}</text></svg>`)}`;
 		}
-		return 'default-avatar.png';
+		// Fallback if no username (shouldn't happen)
+		return `data:image/svg+xml,${encodeURIComponent(`<svg width="28" height="28" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="14" fill="#1a1c21"/><text x="14" y="19" font-family="Arial" font-size="14" fill="#e0e0e0" text-anchor="middle" font-weight="bold">?</text></svg>`)}`;
+	}
+
+	function startSidebarResize(event: MouseEvent | TouchEvent) {
+		event.preventDefault();
+		sidebarResizing = true;
+		if (event instanceof MouseEvent) {
+			startY = event.clientY;
+		} else {
+			startY = event.touches[0].clientY;
+		}
+		document.body.style.cursor = 'ns-resize';
+		document.addEventListener('mousemove', handleSidebarResize);
+		document.addEventListener('mouseup', stopSidebarResize);
+		document.addEventListener('touchmove', handleSidebarResize);
+		document.addEventListener('touchend', stopSidebarResize);
+	}
+
+	function handleSidebarResize(event: MouseEvent | TouchEvent) {
+		if (!sidebarResizing) return;
+
+		let currentY;
+		if (event instanceof MouseEvent) {
+			currentY = event.clientY;
+		} else {
+			currentY = event.touches[0].clientY;
+		}
+
+		const deltaY = startY - currentY;
+		startY = currentY;
+
+		tickerHeight = Math.min(Math.max(tickerHeight + deltaY, MIN_TICKER_HEIGHT), MAX_TICKER_HEIGHT);
+		// Update the CSS variable
+		document.documentElement.style.setProperty('--ticker-height', `${tickerHeight}px`);
+	}
+
+	function stopSidebarResize() {
+		if (!browser) return;
+
+		sidebarResizing = false;
+		document.body.style.cursor = '';
+		document.removeEventListener('mousemove', handleSidebarResize);
+		document.removeEventListener('mouseup', stopSidebarResize);
+		document.removeEventListener('touchmove', handleSidebarResize);
+		document.removeEventListener('touchend', stopSidebarResize);
+	}
+
+	// Add function after other function declarations
+	function resetInactivityTimer() {
+		if (inactivityTimer) {
+			clearTimeout(inactivityTimer);
+		}
+		if (!screensaverActive) {
+			inactivityTimer = setTimeout(() => {
+				screensaverActive = true;
+			}, INACTIVITY_TIMEOUT);
+		}
+	}
+
+	function toggleScreensaver() {
+		screensaverActive = !screensaverActive;
 	}
 </script>
 
@@ -422,7 +531,13 @@
 								<Journal />
 							{/if}
 						</div>
-						<!-- Move TickerInfo inside sidebar-content -->
+
+						<div
+							class="sidebar-resize-handle"
+							on:mousedown={startSidebarResize}
+							on:touchstart|preventDefault={startSidebarResize}
+						></div>
+
 						<div class="ticker-info-container">
 							<Quote />
 						</div>
@@ -529,6 +644,14 @@
 				{/if}
 			</span>
 
+			<button
+				class="toggle-button {screensaverActive ? 'active' : ''}"
+				on:click={toggleScreensaver}
+				title="Screensaver"
+			>
+				<i class="fas fa-tv"></i>
+			</button>
+
 			<img src={getProfileDisplay()} alt="Profile" class="pfp" on:click={toggleSettings} />
 		</div>
 	</div>
@@ -544,6 +667,12 @@
 					<Settings />
 				</div>
 			</div>
+		</div>
+	{/if}
+
+	{#if screensaverActive}
+		<div class="screensaver-overlay" on:click={() => (screensaverActive = false)}>
+			<Screensaver />
 		</div>
 	{/if}
 </div>
@@ -646,7 +775,7 @@
 	}
 
 	.resize-handle:hover {
-		background-color: var(--c4);
+		background-color: var(--c3);
 	}
 
 	.side-btn {
@@ -731,7 +860,7 @@
 
 	.window-content {
 		padding: 10px;
-		background-color: var(--c1);
+		background-color: var(--ui-bg-primary);
 		height: calc(100% - 30px);
 		overflow-y: auto;
 		scrollbar-width: none;
@@ -756,7 +885,7 @@
 		height: 100%;
 		display: flex;
 		flex-direction: column;
-		background: var(--c2);
+		background: var(--ui-bg-primary);
 	}
 
 	.window-content {
@@ -765,7 +894,7 @@
 		padding: 8px;
 		scrollbar-width: none;
 		height: 100%;
-		background: var(--c2);
+		background: var(--ui-bg-primary);
 	}
 
 	.bottom-resize-handle {
@@ -777,10 +906,11 @@
 		background: var(--c4);
 		cursor: ns-resize;
 		z-index: 100;
+		transition: background-color 0.2s;
 	}
 
 	.bottom-resize-handle:hover {
-		background: var(--c4);
+		background: var(--c3);
 	}
 
 	.sidebar-content {
@@ -788,21 +918,22 @@
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
-		/*padding: 8px;*/
-		scrollbar-width: none;
+		height: 100%;
 	}
 
 	.main-sidebar-content {
 		flex: 1;
 		overflow-y: auto;
 		scrollbar-width: none;
+		min-height: 0;
 	}
 
 	.ticker-info-container {
 		flex-shrink: 0;
 		border-top: 1px solid var(--c3);
-		margin-top: 8px;
-		padding-top: 8px;
+		background: var(--c2);
+		height: var(--ticker-height);
+		overflow: hidden;
 	}
 
 	.main-sidebar-content::-webkit-scrollbar,
@@ -900,5 +1031,30 @@
 	/* Only show border when windows are open */
 	.bottom-windows-container:not(:empty) {
 		border-top: 1px solid var(--c4);
+	}
+
+	.sidebar-resize-handle {
+		height: 4px;
+		background: var(--c4);
+		cursor: ns-resize;
+		margin: -2px 0;
+		z-index: 10;
+		position: relative;
+		transition: background-color 0.2s;
+	}
+
+	.sidebar-resize-handle:hover {
+		background: var(--c3);
+	}
+
+	.screensaver-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background-color: var(--c1);
+		z-index: 1000;
+		cursor: pointer;
 	}
 </style>
