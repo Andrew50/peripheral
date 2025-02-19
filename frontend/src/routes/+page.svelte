@@ -10,49 +10,58 @@
 		document.title = 'Atlantis';
 	}
 
-	let showChart = true;
 	let showHero = false;
 
 	onMount(() => {
 		setTimeout(() => {
-			showChart = false;
 			showHero = true;
-		}, 3000);
+		}, 1000);
 	});
 </script>
 
 <main class="main-container">
-	{#if showChart}
-		<div class="chart-container" transition:fade>
-			<MarketChart />
-		</div>
-	{/if}
+	<div class="chart-container">
+		<MarketChart />
+	</div>
 
 	{#if showHero}
 		<div class="hero-container" transition:fade>
 			<Header />
 			<div class="hero-content">
 				<h1>ATLANTIS</h1>
-				<p class="tagline">Your Gateway to Intelligent Trading</p>
+				<p class="tagline">Comprehensive Market Analysis Suite</p>
 				<div class="cta-buttons">
-					<a href="/signup" class="cta-button primary">Get Started Free</a>
+					<a href="/signup" class="cta-button primary">Get Started</a>
 					<a href="/login" class="cta-button secondary">Sign In</a>
 				</div>
 				<div class="features-grid">
 					<div class="feature-card">
-						<span class="feature-icon">📈</span>
-						<h3>Real-time Analytics</h3>
-						<p>Advanced market insights at your fingertips</p>
+						<div class="feature-header">
+							<span class="feature-icon">📊</span>
+							<h3>Advanced Charting</h3>
+						</div>
+						<p>Real-time data & historical replay with custom indicators</p>
 					</div>
 					<div class="feature-card">
-						<span class="feature-icon">🤖</span>
-						<h3>AI-Powered</h3>
-						<p>Smart predictions and trading signals</p>
+						<div class="feature-header">
+							<span class="feature-icon">🎯</span>
+							<h3>Pattern Recognition</h3>
+						</div>
+						<p>Custom screening patterns with real-time market alerts</p>
 					</div>
 					<div class="feature-card">
-						<span class="feature-icon">🔒</span>
-						<h3>Secure Platform</h3>
-						<p>Enterprise-grade security for your assets</p>
+						<div class="feature-header">
+							<span class="feature-icon">📈</span>
+							<h3>Trade Analysis</h3>
+						</div>
+						<p>Comprehensive trade journaling and performance metrics</p>
+					</div>
+					<div class="feature-card">
+						<div class="feature-header">
+							<span class="feature-icon">⚡</span>
+							<h3>Market Data</h3>
+						</div>
+						<p>Time & sales, level 2, and full US market coverage</p>
 					</div>
 				</div>
 			</div>
@@ -79,24 +88,25 @@
 	}
 
 	.chart-container {
-		position: absolute;
+		position: fixed;
 		top: 0;
 		left: 0;
 		right: 0;
 		bottom: 0;
+		z-index: 1;
+		opacity: 0.15;
+		pointer-events: none;
 	}
 
 	.hero-container {
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: linear-gradient(to bottom, #000000, #1a1a2e);
+		position: relative;
+		z-index: 2;
+		background: linear-gradient(to bottom, rgba(0, 0, 0, 0.85), rgba(26, 26, 46, 0.9));
+		min-height: 100vh;
 	}
 
 	.hero-content {
-		padding-top: 15vh;
+		padding-top: 12vh;
 		text-align: center;
 		height: calc(100vh - 80px);
 		overflow-y: auto;
@@ -106,16 +116,17 @@
 	h1 {
 		color: #3b82f6;
 		font-family: 'Space Mono', monospace;
-		font-size: 5rem;
-		letter-spacing: 0.8rem;
-		margin-bottom: 1rem;
+		font-size: 4rem;
+		letter-spacing: 0.5rem;
+		margin-bottom: 0.5rem;
 		text-transform: uppercase;
 	}
 
 	.tagline {
 		color: #94a3b8;
-		font-size: 1.5rem;
+		font-size: 1.25rem;
 		margin-bottom: 2rem;
+		font-weight: 300;
 	}
 
 	.cta-buttons {
@@ -156,38 +167,50 @@
 
 	.features-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-		gap: 2rem;
+		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+		gap: 1.5rem;
 		padding: 0 2rem;
 		max-width: 1200px;
 		margin: 0 auto;
-		max-height: calc(100vh - 80px - 15vh - 15rem);
 	}
 
 	.feature-card {
-		background: rgba(255, 255, 255, 0.05);
-		padding: 2rem;
+		background: rgba(30, 41, 59, 0.5);
+		padding: 1.5rem;
 		border-radius: 12px;
-		text-align: center;
+		text-align: left;
 		transition: transform 0.3s ease;
+		border: 1px solid rgba(59, 130, 246, 0.1);
 	}
 
-	.feature-card:hover {
-		transform: translateY(-5px);
+	.feature-header {
+		display: flex;
+		align-items: center;
+		margin-bottom: 0.75rem;
+		gap: 0.75rem;
 	}
 
 	.feature-icon {
-		font-size: 2.5rem;
-		margin-bottom: 1rem;
+		font-size: 1.5rem;
 	}
 
 	.feature-card h3 {
 		color: #e2e8f0;
-		margin-bottom: 0.5rem;
+		margin: 0;
+		font-size: 1.1rem;
+		font-weight: 500;
 	}
 
 	.feature-card p {
 		color: #94a3b8;
 		font-size: 0.9rem;
+		line-height: 1.4;
+		margin: 0;
+	}
+
+	.feature-card:hover {
+		transform: translateY(-2px);
+		background: rgba(30, 41, 59, 0.7);
+		border-color: rgba(59, 130, 246, 0.2);
 	}
 </style>
