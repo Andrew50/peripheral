@@ -9,7 +9,7 @@
 	import { newStudy } from '$lib/features/study.svelte';
 	import { get, writable } from 'svelte/store';
 	import { setSample } from '$lib/features/setups/interface';
-	import { querySimilarInstances } from '$lib/utils/popups/similar.svelte';
+	import { querySimilarInstances } from '$lib/features/similar/interface';
 	import { newPriceAlert } from '$lib/features/alerts/interface';
 	import { querySetup } from '$lib/utils/popups/setup.svelte';
 	import { startReplay } from '$lib/utils/stream/interface';
@@ -179,20 +179,33 @@
 		class="popup-container"
 		style="top: {$rightClickQuery.y}px; left: {$rightClickQuery.x}px;"
 	>
-		<div>
-			{$rightClickQuery.instance.ticker}
-			{UTCTimestampToESTString($rightClickQuery.instance.timestamp)}
+		<div class="header">
+			<div class="ticker">{$rightClickQuery.instance.ticker}</div>
+			<div class="timestamp">{UTCTimestampToESTString($rightClickQuery.instance.timestamp)}</div>
 		</div>
-		<div>
+
+		<div class="section">
+			<button class="wide-button" on:click={() => startReplay($rightClickQuery.instance)}
+				>Begin Replay</button
+			>
+			{#if $rightClickQuery.source === 'chart'}
+				<div class="separator"></div>
+				<button class="wide-button" on:click={() => newPriceAlert($rightClickQuery.instance)}
+					>Add Alert {$rightClickQuery.instance.price?.toFixed(2)}</button
+				>
+				<button
+					class="wide-button"
+					on:click={() => addHorizontalLine($rightClickQuery.instance.price)}
+					>Add Horizontal Line {$rightClickQuery.instance.price?.toFixed(2)}</button
+				>
+			{/if}
+		</div>
+
+		<div class="section">
 			<button class="wide-button" on:click={() => newStudy(get(rightClickQuery).instance)}>
 				Add to Study
 			</button>
-		</div>
-		<div>
 			<button class="wide-button" on:click={(event) => sSample(event)}> Add to Sample </button>
-		</div>
-		<!--<div><button on:click={()=>newJournal(get(rightClickQuery).instance)}> Add to Journal </button></div>-->
-		<div>
 			<button
 				class="wide-button"
 				on:click={(event) => querySimilarInstances(event, get(rightClickQuery).instance)}
@@ -200,39 +213,21 @@
 				Similar Instances
 			</button>
 		</div>
-		<!--<div><button on:click={getStats}> Instance Stats </button></div>-->
-		<div>
-			<button class="wide-button" on:click={() => startReplay($rightClickQuery.instance)}
-				>Begin Replay</button
-			>
-		</div>
+
 		{#if $entryOpen}
-			<div>
+			<div class="section">
 				<button class="wide-button" on:click={() => embedInstance(get(rightClickQuery).instance)}>
 					Embed
 				</button>
 			</div>
 		{/if}
-		{#if $rightClickQuery.source === 'chart'}
-			<div>
-				<button class="wide-button" on:click={() => newPriceAlert($rightClickQuery.instance)}
-					>Add Alert {$rightClickQuery.instance.price?.toFixed(2)}</button
-				>
-			</div>
-			<div>
-				<button
-					class="wide-button"
-					on:click={() => addHorizontalLine($rightClickQuery.instance.price)}
-					>Add Horizontal Line {$rightClickQuery.instance.price?.toFixed(2)}</button
-				>
-			</div>
-		{:else if $rightClickQuery.source === 'embedded'}
-			<div>
+
+		{#if $rightClickQuery.source === 'embedded'}
+			<div class="section">
 				<button class="wide-button" on:click={() => completeRequest('edit')}> Edit </button>
 			</div>
-			<!--<div><button on:click={()=>completeRequest("embdedSimilar")}> Embed Similar </button></div>-->
 		{:else if $rightClickQuery.source === 'list'}
-			<div>
+			<div class="section">
 				<button class="wide-button" on:click={() => flagSecurity($rightClickQuery.instance)}
 					>{$rightClickQuery.instance.flagged ? 'Unflag' : 'Flag'}</button
 				>
@@ -243,7 +238,7 @@
 
 <style>
 	.popup-container {
-		width: 180px;
+		width: 220px;
 		background: var(--ui-bg-primary);
 		border: 1px solid var(--ui-border);
 		border-radius: 8px;
@@ -253,6 +248,34 @@
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 		position: fixed;
 		z-index: 1000;
+		padding: 4px;
+	}
+
+	.header {
+		padding: 8px 12px;
+		border-bottom: 1px solid var(--ui-border);
+		margin-bottom: 4px;
+	}
+
+	.ticker {
+		font-size: 16px;
+		font-weight: 600;
+		color: var(--text-primary);
+	}
+
+	.timestamp {
+		font-size: 12px;
+		color: var(--text-secondary);
+		margin-top: 2px;
+	}
+
+	.section {
+		padding: 4px 0;
+		border-bottom: 1px solid var(--ui-border);
+	}
+
+	.section:last-child {
+		border-bottom: none;
 	}
 
 	.wide-button {
@@ -264,9 +287,18 @@
 		color: var(--text-primary);
 		font-size: 14px;
 		cursor: pointer;
+		border-radius: 4px;
+		transition: background-color 0.2s ease;
 	}
 
 	.wide-button:hover {
 		background: var(--ui-bg-hover);
+	}
+
+	.separator {
+		margin: 4px 8px;
+		height: 1px;
+		background: var(--ui-border);
+		opacity: 0.6;
 	}
 </style>
