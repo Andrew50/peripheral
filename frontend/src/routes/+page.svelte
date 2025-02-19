@@ -76,6 +76,8 @@
 		overflow: hidden;
 		background: black;
 		font-family: 'Inter', sans-serif;
+		min-height: 100vh;
+		min-width: 100vw;
 	}
 
 	.main-container {
@@ -84,15 +86,15 @@
 		height: 100vh;
 		margin: 0;
 		padding: 0;
-		overflow: hidden;
+		overflow: auto;
 	}
 
 	.chart-container {
 		position: fixed;
 		top: 0;
 		left: 0;
-		right: 0;
-		bottom: 0;
+		width: 100vw;
+		height: 100vh;
 		z-index: 1;
 		opacity: 0.15;
 		pointer-events: none;
@@ -103,6 +105,7 @@
 		z-index: 2;
 		background: linear-gradient(to bottom, rgba(0, 0, 0, 0.85), rgba(26, 26, 46, 0.9));
 		min-height: 100vh;
+		width: 100%;
 	}
 
 	.hero-content {
@@ -167,11 +170,25 @@
 
 	.features-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 		gap: 1.5rem;
 		padding: 0 2rem;
 		max-width: 1200px;
 		margin: 0 auto;
+		grid-template-columns: repeat(4, 1fr);
+	}
+
+	@media (max-width: 1200px) {
+		.features-grid {
+			grid-template-columns: repeat(2, 1fr);
+			max-width: 800px;
+		}
+	}
+
+	@media (max-width: 640px) {
+		.features-grid {
+			grid-template-columns: 1fr;
+			max-width: 400px;
+		}
 	}
 
 	.feature-card {

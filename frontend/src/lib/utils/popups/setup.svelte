@@ -45,10 +45,9 @@
 				if (menuState.status === 'inactive') {
 					console.log(menuState);
 					if (menuState.setup === 'new') {
-						const i = await newSetup();
-						console.log('resolved');
+						console.log('TODO: implement new setup functionality');
 						unsubscribe();
-						resolve(i);
+						reject();
 					} else if (menuState.setup === null) {
 						unsubscribe();
 						reject();
@@ -179,15 +178,6 @@
 							</tr>
 						{/each}
 					{/if}
-					<tr class="defalt-tr">
-						<td
-							on:click={() => {
-								closeMenu('new');
-							}}
-						>
-							new
-						</td>
-					</tr>
 				</tbody>
 			</table>
 		</div>

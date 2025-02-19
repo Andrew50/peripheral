@@ -20,6 +20,10 @@
 		errorMessageText = value;
 	});
 
+	// Add error handling for missing assets
+	let googleIconUrl = '/google-icon.svg';
+	let googleIconError = false;
+
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
 			if (loginMenu) {
@@ -28,6 +32,10 @@
 				signUp(username, password);
 			}
 		}
+	}
+
+	function handleGoogleIconError() {
+		googleIconError = true;
 	}
 
 	interface Login {
@@ -89,7 +97,9 @@
 			</p>
 
 			<button class="google-button" on:click={handleGoogleLogin}>
-				<img src="/google-icon.svg" alt="Google" />
+				{#if !googleIconError}
+					<img src={googleIconUrl} alt="Google" on:error={handleGoogleIconError} />
+				{/if}
 				<span>Continue with Google</span>
 			</button>
 
@@ -106,16 +116,27 @@
 					}
 				}}
 				class="auth-form"
-				on:keydown={handleKeydown}
 			>
 				<div class="form-group">
 					<label for="username">Username</label>
-					<input type="text" id="username" bind:value={username} required autofocus />
+					<input
+						type="text"
+						id="username"
+						bind:value={username}
+						required
+						on:keydown={handleKeydown}
+					/>
 				</div>
 
 				<div class="form-group">
 					<label for="password">Password</label>
-					<input type="password" id="password" bind:value={password} required />
+					<input
+						type="password"
+						id="password"
+						bind:value={password}
+						required
+						on:keydown={handleKeydown}
+					/>
 				</div>
 
 				{#if errorMessageText}
@@ -150,7 +171,14 @@
 <style>
 	.page-wrapper {
 		min-height: 100vh;
+		min-width: 100vw;
 		background: linear-gradient(to bottom, #000000, #1a1a2e);
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		overflow-y: auto;
 	}
 
 	.auth-container {
@@ -160,6 +188,7 @@
 		justify-content: center;
 		padding: 2rem;
 		padding-top: calc(80px + 2rem);
+		box-sizing: border-box;
 	}
 
 	.auth-card {
@@ -169,6 +198,7 @@
 		width: 100%;
 		max-width: 400px;
 		backdrop-filter: blur(10px);
+		margin: auto;
 	}
 
 	h1 {
@@ -260,6 +290,7 @@
 		font-weight: 500;
 		cursor: pointer;
 		transition: all 0.3s ease;
+		min-height: 44px;
 	}
 
 	.google-button:hover {

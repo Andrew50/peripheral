@@ -12,16 +12,15 @@ import (
 )
 
 const (
-	FastUpdateInterval      = 30 * time.Millisecond
-	SlowUpdateInterval      = 1000 * time.Millisecond
-	BaseBuffer              = 10000 // * time.Millisecond
-	MarketOpenHour          = 9
-	MarketOpenMinute        = 30
-	MarketCloseHour         = 16
-	MarketCloseMinute       = 0
-	ExtendedOpenHour        = 4
-	ExtendedCloseHour       = 20
-	TimestampUpdateInterval = 2 * time.Second
+	FastUpdateInterval = 30 * time.Millisecond
+	SlowUpdateInterval = 1000 * time.Millisecond
+	BaseBuffer         = 10000 // * time.Millisecond
+	MarketOpenHour     = 9
+	MarketOpenMinute   = 30
+	MarketCloseHour    = 16
+	MarketCloseMinute  = 0
+	ExtendedOpenHour   = 4
+	ExtendedCloseHour  = 20
 )
 
 /*
@@ -163,11 +162,6 @@ func (c *Client) StartLoop() {
 					c.accumulatedActiveTime += delta
 					simulatedElapsed := time.Duration(float64(c.accumulatedActiveTime) * c.replaySpeed)
 					c.simulatedTime = c.simulatedTimeStart + int64(simulatedElapsed/time.Millisecond)
-					if !c.isMarketOpen(c.simulatedTime) {
-						c.jumpToNextMarketOpen()
-						c.simulatedTimeStart = c.simulatedTime
-						c.accumulatedActiveTime = 0
-					}
 					if now.Sub(lastTimestampUpdate) >= TimestampUpdateInterval {
 						timestampUpdate := map[string]interface{}{
 							"channel":   "timestamp",
@@ -176,12 +170,14 @@ func (c *Client) StartLoop() {
 						jsonData, err := json.Marshal(timestampUpdate)
 						if err == nil {
 							c.send <- jsonData
-						} else {
-							fmt.Println("Error marshaling timestamp update:", err)
 						}
 						lastTimestampUpdate = now
 					}
-
+					if !c.isMarketOpen(c.simulatedTime) {
+						c.jumpToNextMarketOpen()
+						c.simulatedTimeStart = c.simulatedTime
+						c.accumulatedActiveTime = 0
+					}
 					for _, replayData := range c.replayData {
 						ticksToPush := make([]TickData, 0)
 						for e := replayData.data.Front(); e != nil; {

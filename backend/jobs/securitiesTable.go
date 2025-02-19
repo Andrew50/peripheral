@@ -501,15 +501,18 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 
 		details, err := utils.GetTickerDetails(conn.Polygon, ticker, "now")
 		if err != nil {
-			if test {
-				log.Printf("Failed to get details for %s: %v", ticker, err)
-			}
+			fmt.Printf("Failed to get details for %s: %v", ticker, err)
 			return
 		}
 
 		// Fetch both logo and icon
 		logoBase64, _ := fetchImage(details.Branding.LogoURL, conn.PolygonKey)
 		iconBase64, _ := fetchImage(details.Branding.IconURL, conn.PolygonKey)
+		currentPrice, err := utils.GetMostRecentRegularClose(conn.Polygon, ticker, time.Now())
+		if err != nil {
+			fmt.Printf("Failed to get current price for %s: %v", ticker, err)
+			//return
+		}
 
 		// Update the security record with all details
 		_, err = conn.DB.Exec(context.Background(),
@@ -523,7 +526,11 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 				 description = $7,
 				 logo = $8,
 				 icon = $9,
-				 share_class_shares_outstanding = $10
+				 share_class_shares_outstanding = $10,
+				 total_shares = CASE 
+					 WHEN $6 > 0 AND $12 > 0 THEN CAST(($6 / $12) AS BIGINT)
+					 ELSE NULL 
+				 END
 			 WHERE securityid = $11`,
 			details.Name,
 			string(details.Market),
@@ -535,7 +542,8 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 			logoBase64,
 			iconBase64,
 			details.ShareClassSharesOutstanding,
-			securityId)
+			securityId,
+			currentPrice)
 
 		if err != nil {
 			if test {

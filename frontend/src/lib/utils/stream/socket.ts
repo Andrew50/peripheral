@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { streamInfo } from '$lib/core/stores';
+import { streamInfo, handleTimestampUpdate } from '$lib/core/stores';
 import type { StreamInfo, TradeData, QuoteData } from "$lib/core/types";
 import { base_url } from '$lib/core/backend';
 import { browser } from '$app/environment'
@@ -74,7 +74,7 @@ function connect() {
                 handleAlert(data as AlertData);
             }
             else if (channelName === "timestamp") {
-                streamInfo.update((v: StreamInfo) => { return { ...v, timestamp: data.timestamp } })
+                handleTimestampUpdate(data.timestamp);
             } else {
                 const callbacks = activeChannels.get(channelName);
                 if (callbacks) {

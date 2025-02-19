@@ -11,6 +11,7 @@ funcMap = {
     "train": train,
     "screen": screen,
     "refillTrainerQueue": refillTrainerQueue,
+
     "handle_trade_upload": handle_trade_upload,
     "grab_user_trades": grab_user_trades,
     "update_sectors": update_sectors,
