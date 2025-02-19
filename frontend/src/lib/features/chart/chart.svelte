@@ -47,6 +47,7 @@
 	} from '$lib/core/timestamp';
 	import { addStream } from '$lib/utils/stream/interface';
 	import { ArrowMarkersPaneView, type ArrowMarker } from './arrowMarkers';
+	import { EventMarkersPaneView, type EventMarker } from './eventMarkers';
 	import html2canvas from 'html2canvas';
 	let bidLine: any;
 	let askLine: any;
@@ -147,6 +148,13 @@
 	let alertLines: AlertLine[] = [];
 
 	let arrowSeries: any = null; // Initialize as null
+	let eventSeries: ISeriesApi<'Custom', Time, EventMarker>;
+	let eventMarkerView: EventMarkersPaneView;
+	let selectedFiling: {
+		events: EventMarker['events'];
+		x: number;
+		y: number;
+	} | null = null;
 
 	function extendedHours(timestamp: number): boolean {
 		const date = new Date(timestamp);
@@ -155,24 +163,11 @@
 	}
 
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
+		eventSeries.setData([]); 
 		if (inst.requestType === 'loadNewTicker') {
 			bidLine.setData([]);
 			askLine.setData([]);
 			arrowSeries.setData([]);
-
-			// Add SEC filings request when loading new ticker
-			privateRequest<{ bars: BarData[]; isEarliestData: boolean }>('getEdgarFilings', {
-				securityId: inst.securityId,
-				timestamp: inst.timestamp
-			})
-				.then((filings) => {
-					console.log('=== Recent SEC Filings ===');
-					console.table(filings);
-					console.log('=======================');
-				})
-				.catch((error) => {
-					console.error('Failed to fetch SEC filings:', error);
-				});
 		}
 		if (isLoadingChartData || !inst.ticker || !inst.timeframe || !inst.securityId) {
 			return;
@@ -289,6 +284,45 @@
 					}
 				}
 				queuedLoad = () => {
+					
+					// Add SEC filings request when loading new ticker
+					privateRequest<any[]>('getEdgarFilings', {
+						securityId: inst.securityId,
+						timestamp: inst.timestamp,
+						limit: 100
+					})
+					.then((filings) => {
+						console.log(filings);
+						// Group filings by timestamp, rounded to the chart timeframe
+						const filingsByTime = new Map<number, Array<{ type: string, url: string }>>();
+						
+						filings.forEach(filing => {
+							const tradeTime = UTCSecondstoESTSeconds(filing.timestamp/1000);  
+							const roundedTime = Math.floor(tradeTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+
+							if (!filingsByTime.has(roundedTime)) {
+								filingsByTime.set(roundedTime, []);
+							}
+							filingsByTime.get(roundedTime)?.push({
+								type: 'filing',
+								title: filing.type,
+								url: filing.url  // Make sure we're passing the URL
+							});
+						});
+
+						// Convert to marker format
+						const eventMarkers = Array.from(filingsByTime.entries()).map(([time, events]) => ({
+							time: time as UTCTimestamp,
+							events: events
+						}));
+
+						// Update the event series
+						eventSeries.setData(eventMarkers);
+					})
+					.catch((error) => {
+							console.error('Failed to fetch SEC filings:', error);
+						});
+
 					if (inst.direction == 'forward') {
 						const visibleRange = chart.timeScale().getVisibleRange();
 						const vrFrom = visibleRange?.from as Time;
@@ -799,7 +833,9 @@
 			chartCandleSeries.removePriceLine(line.line);
 		});
 		alertLines = [];
-
+		if (eventSeries) {
+			eventSeries.setData([]);
+		}
 		if (arrowSeries) {
 			arrowSeries.setData([]);
 		}
@@ -964,6 +1000,8 @@
 			new ArrowMarkersPaneView(),
 			{}
 		);
+		eventMarkerView = new EventMarkersPaneView();
+		eventSeries = chart.addCustomSeries(eventMarkerView, {});
 
 		chart.subscribeCrosshairMove((param) => {
 			if (!chartCandleSeries.data().length || !param.point || !currentChartInstance.securityId) {
@@ -1083,6 +1121,26 @@
 				});
 			}
 		});
+
+		// Add click handler to chart container
+		const container = document.getElementById(`chart_container-${chartId}`);
+		container?.addEventListener('click', (e) => {
+			const rect = container.getBoundingClientRect();
+			const x = e.clientX - rect.left;
+			const y = e.clientY - rect.top;
+			
+			if (eventMarkerView.handleClick(x, y)) {
+				e.preventDefault();
+				e.stopPropagation();
+			} else {
+				// Click outside filing - close the popup
+				selectedFiling = null;
+			}
+		});
+
+		eventMarkerView.setClickCallback((events, x, y) => {
+			selectedFiling = { events, x, y };
+		});
 	});
 
 	async function handleScreenshot() {
@@ -1128,3 +1186,101 @@
 	<Countdown instance={currentChartInstance} {currentBarTimestamp} />
 	<DrawingMenu {drawingMenuProps} />
 </div>
+
+<!-- Add filing info overlay -->
+{#if selectedFiling}
+    <div 
+        class="filing-info"
+        style="
+            left: {selectedFiling.x - 100}px; 
+            top: {selectedFiling.y - (80 + selectedFiling.events.length * 40)}px"
+    >
+        <div class="filing-header">
+            <div class="filing-icon">📄</div>
+            <div class="filing-title">SEC Filings</div>
+        </div>
+        <div class="filing-content">
+            {#each selectedFiling.events as event}
+                <a 
+                    href={event.url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    class="filing-row"
+                >
+                    <span class="filing-type">{event.title}</span>
+                    <span class="filing-link">View</span>
+                </a>
+            {/each}
+        </div>
+    </div>
+{/if}
+
+<style>
+    .filing-info {
+        position: absolute;
+        background: #1E1E1E;
+        border: 1px solid #333;
+        border-radius: 4px;
+        padding: 8px;
+        z-index: 1000;
+        width: 200px;  /* Fixed width to help with centering */
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        transform: translateX(0);  /* Center popup above marker */
+    }
+
+    .filing-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #333;
+        margin-bottom: 8px;
+    }
+
+    .filing-icon {
+        font-size: 24px;  /* 50% bigger */
+    }
+
+    .filing-title {
+        color: #fff;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .filing-content {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .filing-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px;
+        text-decoration: none;
+        border-radius: 4px;
+        transition: background-color 0.2s;
+    }
+
+    .filing-row:hover {
+        background: rgba(156, 39, 176, 0.1);
+    }
+
+    .filing-type {
+        color: #ccc;
+        font-size: 13px;
+    }
+
+    .filing-link {
+        color: #9C27B0;
+        font-size: 12px;
+        padding: 2px 6px;
+        border-radius: 3px;
+        background: rgba(156, 39, 176, 0.1);
+    }
+
+    .filing-row:hover .filing-link {
+        background: rgba(156, 39, 176, 0.2);
+    }
+</style>
