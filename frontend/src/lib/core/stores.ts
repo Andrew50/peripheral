@@ -19,6 +19,10 @@ export const systemClockOffset = 0;
 export const dispatchMenuChange = writable("")
 export const algos: Writable<Algo[]> = writable([])
 
+// Add constants for menu width
+const MIN_MENU_WIDTH = 200;
+const DEFAULT_MENU_WIDTH = 300;
+
 export interface StreamInfo {
     replayActive: boolean,
     replaySpeed: number,
@@ -105,6 +109,22 @@ export function initStores() {
 }
 
 
+export type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'journal' | 'similar';
+
+export const activeMenu = writable<Menu>('none');
+
+export function changeMenu(menuName: Menu) {
+    activeMenu.update((current) => {
+        if (current === menuName || menuName === 'none') {
+            menuWidth.set(0);
+            return 'none';
+        }
+        if (current === 'none') {
+            menuWidth.set(DEFAULT_MENU_WIDTH);
+        }
+        return menuName;
+    });
+}
 
 
 

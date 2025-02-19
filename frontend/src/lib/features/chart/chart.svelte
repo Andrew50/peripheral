@@ -163,7 +163,7 @@
 	}
 
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
-		eventSeries.setData([]); 
+		eventSeries.setData([]);
 		if (inst.requestType === 'loadNewTicker') {
 			bidLine.setData([]);
 			askLine.setData([]);
@@ -284,44 +284,49 @@
 					}
 				}
 				queuedLoad = () => {
-					
 					// Add SEC filings request when loading new ticker
-					privateRequest<any[]>('getEdgarFilings', {
-						securityId: inst.securityId,
-						timestamp: inst.timestamp,
-						limit: 100
-					})
-					.then((filings) => {
-						console.log(filings);
-						// Group filings by timestamp, rounded to the chart timeframe
-						const filingsByTime = new Map<number, Array<{ type: string, url: string }>>();
-						
-						filings.forEach(filing => {
-							const tradeTime = UTCSecondstoESTSeconds(filing.timestamp/1000);  
-							const roundedTime = Math.floor(tradeTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+					try {
+						privateRequest<any[]>(
+							'getEdgarFilings',
+							{
+								securityId: inst.securityId,
+								timestamp: inst.timestamp,
+								limit: 100
+							},
+							false,
+							true
+						).then((filings) => {
+							console.log(filings);
+							// Group filings by timestamp, rounded to the chart timeframe
+							const filingsByTime = new Map<number, Array<{ type: string; url: string }>>();
 
-							if (!filingsByTime.has(roundedTime)) {
-								filingsByTime.set(roundedTime, []);
-							}
-							filingsByTime.get(roundedTime)?.push({
-								type: 'filing',
-								title: filing.type,
-								url: filing.url  // Make sure we're passing the URL
+							filings.forEach((filing) => {
+								const tradeTime = UTCSecondstoESTSeconds(filing.timestamp / 1000);
+								const roundedTime =
+									Math.floor(tradeTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+
+								if (!filingsByTime.has(roundedTime)) {
+									filingsByTime.set(roundedTime, []);
+								}
+								filingsByTime.get(roundedTime)?.push({
+									type: 'filing',
+									title: filing.type,
+									url: filing.url // Make sure we're passing the URL
+								});
 							});
-						});
 
-						// Convert to marker format
-						const eventMarkers = Array.from(filingsByTime.entries()).map(([time, events]) => ({
-							time: time as UTCTimestamp,
-							events: events
-						}));
+							// Convert to marker format
+							const eventMarkers = Array.from(filingsByTime.entries()).map(([time, events]) => ({
+								time: time as UTCTimestamp,
+								events: events
+							}));
 
-						// Update the event series
-						eventSeries.setData(eventMarkers);
-					})
-					.catch((error) => {
-							console.error('Failed to fetch SEC filings:', error);
+							// Update the event series
+							eventSeries.setData(eventMarkers);
 						});
+					} catch (error) {
+						console.warn('Failed to fetch SEC filings:', error);
+					}
 
 					if (inst.direction == 'forward') {
 						const visibleRange = chart.timeScale().getVisibleRange();
@@ -806,6 +811,13 @@
 		if (!req.securityId || !req.ticker || !req.timeframe) {
 			return;
 		}
+
+		// Check if chart is initialized
+		if (!chart || !chartCandleSeries) {
+			console.warn('Chart not yet initialized');
+			return;
+		}
+
 		hoveredCandleData.set(defaultHoveredCandleData);
 		chartEarliestDataReached = false;
 		chartLatestDataReached = false;
@@ -816,23 +828,31 @@
 			(req.timestamp == 0 ? Date.now() : req.timestamp) as number
 		);
 		chartExtendedHours = req.extendedHours ?? false;
-		if (
-			req.timeframe?.includes('m') ||
-			req.timeframe?.includes('w') ||
-			req.timeframe?.includes('d') ||
-			req.timeframe?.includes('q')
-		) {
-			chart.applyOptions({ timeScale: { timeVisible: false } });
-		} else {
-			chart.applyOptions({ timeScale: { timeVisible: true } });
+
+		// Apply time scale options only if chart exists
+		if (chart) {
+			if (
+				req.timeframe?.includes('m') ||
+				req.timeframe?.includes('w') ||
+				req.timeframe?.includes('d') ||
+				req.timeframe?.includes('q')
+			) {
+				chart.applyOptions({ timeScale: { timeVisible: false } });
+			} else {
+				chart.applyOptions({ timeScale: { timeVisible: true } });
+			}
 		}
+
 		backendLoadChartData(req);
 
 		// Clear existing alert lines when changing tickers
-		alertLines.forEach((line) => {
-			chartCandleSeries.removePriceLine(line.line);
-		});
-		alertLines = [];
+		if (chartCandleSeries) {
+			alertLines.forEach((line) => {
+				chartCandleSeries.removePriceLine(line.line);
+			});
+			alertLines = [];
+		}
+
 		if (eventSeries) {
 			eventSeries.setData([]);
 		}
@@ -840,29 +860,6 @@
 			arrowSeries.setData([]);
 		}
 	}
-
-	chartQueryDispatcher.subscribe((req: ChartQueryDispatch) => {
-		change(req);
-	});
-	chartEventDispatcher.subscribe((e: ChartEventDispatch) => {
-		if (!currentChartInstance || !currentChartInstance.securityId) return;
-		if (e.event == 'replay') {
-			//currentChartInstance.timestamp = $streamInfo.timestamp
-			currentChartInstance.timestamp = 0;
-			const req: ChartQueryDispatch = {
-				...currentChartInstance,
-				bars: 400,
-				direction: 'backward',
-				requestType: 'loadNewTicker',
-				includeLastBar: false,
-				chartId: chartId
-			};
-			console.log(req);
-			change(req);
-		} else if (e.event == 'addHorizontalLine') {
-			addHorizontalLine(e.data.price, e.data.securityId);
-		}
-	});
 
 	onMount(() => {
 		const chartOptions = {
@@ -1128,7 +1125,7 @@
 			const rect = container.getBoundingClientRect();
 			const x = e.clientX - rect.left;
 			const y = e.clientY - rect.top;
-			
+
 			if (eventMarkerView.handleClick(x, y)) {
 				e.preventDefault();
 				e.stopPropagation();
@@ -1140,6 +1137,29 @@
 
 		eventMarkerView.setClickCallback((events, x, y) => {
 			selectedFiling = { events, x, y };
+		});
+
+		// Add subscriptions after chart initialization
+		chartQueryDispatcher.subscribe((req: ChartQueryDispatch) => {
+			change(req);
+		});
+
+		chartEventDispatcher.subscribe((e: ChartEventDispatch) => {
+			if (!currentChartInstance || !currentChartInstance.securityId) return;
+			if (e.event == 'replay') {
+				currentChartInstance.timestamp = 0;
+				const req: ChartQueryDispatch = {
+					...currentChartInstance,
+					bars: 400,
+					direction: 'backward',
+					requestType: 'loadNewTicker',
+					includeLastBar: false,
+					chartId: chartId
+				};
+				change(req);
+			} else if (e.event == 'addHorizontalLine') {
+				addHorizontalLine(e.data.price, e.data.securityId);
+			}
 		});
 	});
 
@@ -1189,98 +1209,93 @@
 
 <!-- Add filing info overlay -->
 {#if selectedFiling}
-    <div 
-        class="filing-info"
-        style="
+	<div
+		class="filing-info"
+		style="
             left: {selectedFiling.x - 100}px; 
             top: {selectedFiling.y - (80 + selectedFiling.events.length * 40)}px"
-    >
-        <div class="filing-header">
-            <div class="filing-icon">📄</div>
-            <div class="filing-title">SEC Filings</div>
-        </div>
-        <div class="filing-content">
-            {#each selectedFiling.events as event}
-                <a 
-                    href={event.url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    class="filing-row"
-                >
-                    <span class="filing-type">{event.title}</span>
-                    <span class="filing-link">View</span>
-                </a>
-            {/each}
-        </div>
-    </div>
+	>
+		<div class="filing-header">
+			<div class="filing-icon">📄</div>
+			<div class="filing-title">SEC Filings</div>
+		</div>
+		<div class="filing-content">
+			{#each selectedFiling.events as event}
+				<a href={event.url} target="_blank" rel="noopener noreferrer" class="filing-row">
+					<span class="filing-type">{event.title}</span>
+					<span class="filing-link">View</span>
+				</a>
+			{/each}
+		</div>
+	</div>
 {/if}
 
 <style>
-    .filing-info {
-        position: absolute;
-        background: #1E1E1E;
-        border: 1px solid #333;
-        border-radius: 4px;
-        padding: 8px;
-        z-index: 1000;
-        width: 200px;  /* Fixed width to help with centering */
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        transform: translateX(0);  /* Center popup above marker */
-    }
+	.filing-info {
+		position: absolute;
+		background: #1e1e1e;
+		border: 1px solid #333;
+		border-radius: 4px;
+		padding: 8px;
+		z-index: 1000;
+		width: 200px; /* Fixed width to help with centering */
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+		transform: translateX(0); /* Center popup above marker */
+	}
 
-    .filing-header {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding-bottom: 8px;
-        border-bottom: 1px solid #333;
-        margin-bottom: 8px;
-    }
+	.filing-header {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding-bottom: 8px;
+		border-bottom: 1px solid #333;
+		margin-bottom: 8px;
+	}
 
-    .filing-icon {
-        font-size: 24px;  /* 50% bigger */
-    }
+	.filing-icon {
+		font-size: 24px; /* 50% bigger */
+	}
 
-    .filing-title {
-        color: #fff;
-        font-size: 14px;
-        font-weight: 500;
-    }
+	.filing-title {
+		color: #fff;
+		font-size: 14px;
+		font-weight: 500;
+	}
 
-    .filing-content {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-    }
+	.filing-content {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
 
-    .filing-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 8px;
-        text-decoration: none;
-        border-radius: 4px;
-        transition: background-color 0.2s;
-    }
+	.filing-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 8px;
+		text-decoration: none;
+		border-radius: 4px;
+		transition: background-color 0.2s;
+	}
 
-    .filing-row:hover {
-        background: rgba(156, 39, 176, 0.1);
-    }
+	.filing-row:hover {
+		background: rgba(156, 39, 176, 0.1);
+	}
 
-    .filing-type {
-        color: #ccc;
-        font-size: 13px;
-    }
+	.filing-type {
+		color: #ccc;
+		font-size: 13px;
+	}
 
-    .filing-link {
-        color: #9C27B0;
-        font-size: 12px;
-        padding: 2px 6px;
-        border-radius: 3px;
-        background: rgba(156, 39, 176, 0.1);
-    }
+	.filing-link {
+		color: #9c27b0;
+		font-size: 12px;
+		padding: 2px 6px;
+		border-radius: 3px;
+		background: rgba(156, 39, 176, 0.1);
+	}
 
-    .filing-row:hover .filing-link {
-        background: rgba(156, 39, 176, 0.2);
-    }
+	.filing-row:hover .filing-link {
+		background: rgba(156, 39, 176, 0.2);
+	}
 </style>

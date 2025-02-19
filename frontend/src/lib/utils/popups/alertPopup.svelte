@@ -30,8 +30,7 @@
 	}
 
 	.alert-popup {
-		width: 700px;
-		height: auto;
+		width: 300px;
 		background: var(--ui-bg-primary);
 		border: 1px solid var(--ui-border);
 		border-radius: 8px;
@@ -51,6 +50,7 @@
 	.value {
 		color: var(--text-primary);
 		font-size: 14px;
+		font-weight: 500;
 	}
 
 	.label {

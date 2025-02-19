@@ -1,4 +1,3 @@
-<!-- +page.svelte-->
 <script lang="ts">
 	import '$lib/core/global.css';
 	import ChartContainer from '$lib/features/chart/chartContainer.svelte';
@@ -6,12 +5,13 @@
 	import RightClick from '$lib/utils/popups/rightClick.svelte';
 	import Setup from '$lib/utils/popups/setup.svelte';
 	import Input from '$lib/utils/popups/input.svelte';
-	import Similar from '$lib/utils/popups/similar.svelte';
+	import Similar from '$lib/features/similar/similar.svelte';
 	import Study from '$lib/features/study.svelte';
 	import Journal from '$lib/features/journal.svelte';
 	import Watchlist from '$lib/features/watchlist.svelte';
 	//import TickerInfo from '$lib/features/quotes/tickerInfo.svelte';
 	import Quote from '$lib/features/quotes/quote.svelte';
+	import { activeMenu, changeMenu } from '$lib/core/stores';
 
 	// Windows that will be opened in draggable divs
 	import Screener from '$lib/features/screen.svelte';
@@ -42,31 +42,20 @@
 		dispatchMenuChange,
 		menuWidth
 	} from '$lib/core/stores';
-	import { writable } from 'svelte/store';
+	import { writable, type Writable } from 'svelte/store';
 
 	// Add import near the top with other imports
 	import Screensaver from '$lib/features/screensaver.svelte';
 
-	type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'journal';
-
-	// Initialize menuWidth store with 0 before any rendering
-	menuWidth.set(0);
+	type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'journal' | 'similar';
 
 	// Initialize all sidebar state variables as closed
-	let active_menu: Menu = 'none';
 	let lastSidebarMenu: Menu | null = null;
 	let sidebarWidth = 0;
-	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'journal'];
+	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'journal', 'similar'];
 
-	// Initialize chartWidth with full width minus buttons
-	let chartWidth = browser ? window.innerWidth - 60 : 0; // 60px for sidebar buttons
-
-	// Force the menuWidth store to 0 again
-	$: {
-		if ($menuWidth !== 0 && active_menu === 'none') {
-			menuWidth.set(0);
-		}
-	}
+	// Initialize chartWidth with a default value
+	let chartWidth = 0;
 
 	// Bottom windows
 	type BottomWindowType = 'screener' | 'account' | 'active' | 'options' | 'setups' | 'settings';
@@ -106,26 +95,42 @@
 
 	// Add state variables after other state declarations
 	let screensaverActive = false;
-	let inactivityTimer: NodeJS.Timeout | null = null;
+	let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
 	const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
 
-	function updateChartWidth() {
-		if (active_menu === 'none') {
-			menuWidth.set(0);
+	// Add a reactive statement to handle window events
+	$: if (draggingWindowId !== null) {
+		if (browser) {
+			window.addEventListener('mousemove', onDrag);
+			window.addEventListener('mouseup', stopDrag);
 		}
-		chartWidth = window.innerWidth - $menuWidth - (active_menu !== 'none' ? 60 : 0);
+	} else {
+		if (browser) {
+			window.removeEventListener('mousemove', onDrag);
+			window.removeEventListener('mouseup', stopDrag);
+		}
+	}
+
+	// Add reactive statement to update chart width when menuWidth changes
+
+	function updateChartWidth() {
+		if (browser) {
+			console.log('menuWidth', $menuWidth);
+			chartWidth = window.innerWidth - $menuWidth - 60; // 60px for sidebar buttons
+		}
 	}
 
 	onMount(() => {
-		// Set initial ticker height
-		document.documentElement.style.setProperty('--ticker-height', `${tickerHeight}px`);
+		// Set up a single menuWidth subscription
+		const unsubscribe = menuWidth.subscribe((width) => {
+			updateChartWidth();
+		});
 
 		if (browser) {
 			document.title = 'Atlantis';
-			// Force closed state
-			active_menu = 'none';
-			menuWidth.set(0);
+			// Set initial state once
 			lastSidebarMenu = null;
+			menuWidth.set(0);
 
 			updateChartWidth();
 			window.addEventListener('resize', updateChartWidth);
@@ -143,44 +148,52 @@
 		username = sessionStorage.getItem('username') || '';
 
 		// Setup activity listeners
-		const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
-		activityEvents.forEach((event) => {
-			document.addEventListener(event, resetInactivityTimer);
-		});
-		resetInactivityTimer();
+		if (browser) {
+			const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+			activityEvents.forEach((event) => {
+				document.addEventListener(event, resetInactivityTimer);
+			});
+			resetInactivityTimer();
+		}
+
+		// Clean up subscription on component destroy
+		return () => {
+			unsubscribe();
+		};
 	});
 
 	onDestroy(() => {
-		if (browser) {
-			window.removeEventListener('resize', updateChartWidth);
-			stopSidebarResize();
-		}
-
 		if (inactivityTimer) {
 			clearTimeout(inactivityTimer);
 		}
 		const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
-		activityEvents.forEach((event) => {
-			document.removeEventListener(event, resetInactivityTimer);
-		});
+		if (browser && document) {
+			window.removeEventListener('resize', updateChartWidth);
+			stopSidebarResize();
+			activityEvents.forEach((event) => {
+				document.removeEventListener(event, resetInactivityTimer);
+			});
+		}
 	});
 
 	function toggleMenu(menuName: Menu) {
-		lastSidebarMenu = null; // Clear stored state
-		if (active_menu === menuName || menuName === 'none') {
-			active_menu = 'none';
+		if (menuName === $activeMenu) {
+			// If clicking the same menu, close it
+			lastSidebarMenu = null;
 			menuWidth.set(0);
-			updateChartWidth();
-			if (browser) {
-				document.title = 'Atlantis';
-			}
+			changeMenu('none');
 		} else {
-			active_menu = menuName;
-			menuWidth.set(300);
-			updateChartWidth();
-			if (browser) {
-				document.title = `${menuName.charAt(0).toUpperCase() + menuName.slice(1)} - Atlantis`;
-			}
+			// Open new menu
+			lastSidebarMenu = null;
+			menuWidth.set(300); // Or whatever your default width is
+			changeMenu(menuName);
+		}
+
+		if (browser) {
+			document.title =
+				menuName === 'none'
+					? 'Atlantis'
+					: `${menuName.charAt(0).toUpperCase() + menuName.slice(1)} - Atlantis`;
 		}
 	}
 
@@ -217,14 +230,13 @@
 		}
 
 		// Store state before closing
-		if (newWidth < minWidth && active_menu !== 'none') {
-			lastSidebarMenu = active_menu;
-			active_menu = 'none';
+		if (newWidth < minWidth && lastSidebarMenu !== null) {
+			lastSidebarMenu = null;
 			menuWidth.set(0);
 		}
 		// Restore state if dragging back
 		else if (newWidth >= minWidth && lastSidebarMenu) {
-			active_menu = lastSidebarMenu;
+			lastSidebarMenu = lastSidebarMenu;
 			menuWidth.set(newWidth);
 			lastSidebarMenu = null;
 		}
@@ -470,11 +482,18 @@
 	}
 </script>
 
-<div class="page" on:mousemove={onDrag} on:mouseup={stopDrag}>
+<div
+	class="page"
+	role="application"
+	on:keydown={(e) => {
+		if (e.key === 'Escape') {
+			minimizeBottomWindow();
+		}
+	}}
+>
 	<!-- Global Popups -->
 	<Input />
 	<RightClick />
-	<Similar />
 	<Setup />
 
 	<!-- Main area wrapper -->
@@ -521,14 +540,16 @@
 					<div class="sidebar-content">
 						<!-- Main sidebar content -->
 						<div class="main-sidebar-content">
-							{#if active_menu === 'watchlist'}
+							{#if $activeMenu === 'watchlist'}
 								<Watchlist />
-							{:else if active_menu === 'alerts'}
+							{:else if $activeMenu === 'alerts'}
 								<Alerts />
-							{:else if active_menu === 'study'}
+							{:else if $activeMenu === 'study'}
 								<Study />
-							{:else if active_menu === 'journal'}
+							{:else if $activeMenu === 'journal'}
 								<Journal />
+							{:else if $activeMenu === 'similar'}
+								<Similar />
 							{/if}
 						</div>
 
@@ -550,7 +571,7 @@
 		<div class="sidebar-buttons">
 			{#each sidebarMenus as menu}
 				<button
-					class="toggle-button side-btn {active_menu === menu ? 'active' : ''}"
+					class="toggle-button side-btn {$activeMenu === menu ? 'active' : ''}"
 					on:click={() => toggleMenu(menu)}
 					title={menu.charAt(0).toUpperCase() + menu.slice(1)}
 				>
@@ -671,9 +692,17 @@
 	{/if}
 
 	{#if screensaverActive}
-		<div class="screensaver-overlay" on:click={() => (screensaverActive = false)}>
+		<button
+			class="screensaver-overlay"
+			on:click={() => (screensaverActive = false)}
+			on:keydown={(e) => {
+				if (e.key === 'Enter' || e.key === 'Space') {
+					screensaverActive = false;
+				}
+			}}
+		>
 			<Screensaver />
-		</div>
+		</button>
 	{/if}
 </div>
 
@@ -1056,5 +1085,9 @@
 		background-color: var(--c1);
 		z-index: 1000;
 		cursor: pointer;
+		border: none;
+		padding: 0;
+		width: 100%;
+		height: 100%;
 	}
 </style>

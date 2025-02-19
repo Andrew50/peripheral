@@ -17,7 +17,7 @@
 	function getInitialPosition(x: number, y: number): { x: number; y: number } {
 		if (browser) {
 			const windowWidth = window.innerWidth;
-			const menuWidth = 200; // Same as our CSS width
+			const menuWidth = 220; // Match our CSS width
 			return {
 				x: Math.min(Math.max(MARGIN, x), windowWidth - menuWidth - MARGIN),
 				y: Math.max(MARGIN, y)
@@ -104,7 +104,7 @@
 		if (browser) {
 			const windowWidth = window.innerWidth;
 			const windowHeight = window.innerHeight;
-			const menuWidth = 200;
+			const menuWidth = 220;
 			const menuHeight = menu?.offsetHeight || 0;
 
 			return {
@@ -176,7 +176,7 @@
 
 <style>
 	.popup-container {
-		width: 200px;
+		width: 220px;
 		background: var(--ui-bg-primary);
 		border: 1px solid var(--ui-border);
 		border-radius: 8px;
@@ -186,10 +186,11 @@
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 		position: fixed;
 		z-index: 1000;
+		padding: 4px;
 	}
 
 	.content-container {
-		padding: 12px;
+		padding: 8px;
 	}
 
 	table {
@@ -201,19 +202,26 @@
 		border-bottom: 1px solid var(--ui-border);
 	}
 
+	.defalt-tr:last-child {
+		border-bottom: none;
+	}
+
 	.defalt-th {
 		text-align: left;
-		padding: 8px;
+		padding: 8px 12px;
 		color: var(--text-secondary);
-		font-size: 14px;
-		font-weight: 500;
+		font-size: 12px;
+		font-weight: 600;
+		text-transform: uppercase;
 	}
 
 	td {
-		padding: 8px;
+		padding: 8px 12px;
 		color: var(--text-primary);
 		font-size: 14px;
 		cursor: pointer;
+		border-radius: 4px;
+		transition: background-color 0.2s ease;
 	}
 
 	td:hover {
