@@ -217,64 +217,6 @@ func GetSecuritiesFromTicker(conn *utils.Conn, userId int, rawArgs json.RawMessa
 	return securities, nil
 }
 
-type GetSimilarInstancesArgs struct {
-	Ticker     string `json:"ticker"`
-	SecurityId int    `json:"securityId"`
-	Timestamp  int64  `json:"timestamp"`
-	Timeframe  string `json:"timeframe"`
-}
-type GetSimilarInstancesResults struct {
-	Ticker     string `json:"ticker"`
-	SecurityId int    `json:"securityId"`
-	Timestamp  int64  `json:"timestamp"`
-	Timeframe  string `json:"timeframe"`
-}
-
-func GetSimilarInstances(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var args GetSimilarInstancesArgs
-	err := json.Unmarshal(rawArgs, &args)
-	if err != nil {
-		return nil, fmt.Errorf("9hsdf invalid args: %v", err)
-	}
-	var queryTicker string
-	conn.DB.QueryRow(context.Background(), `SELECT ticker from securities where securityId = $1
-         ORDER BY maxDate IS NULL DESC, maxDate DESC`, args.SecurityId).Scan(&queryTicker)
-	tickers, err := utils.GetPolygonRelatedTickers(conn.Polygon, queryTicker)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get related tickers: %v", err)
-	}
-	if len(tickers) == 0 {
-		return nil, fmt.Errorf("49sb no related tickers")
-	}
-	query := `
-		SELECT ticker, securityId
-		FROM securities
-		WHERE ticker = ANY($1) AND (maxDate IS NULL OR maxDate >= $2) AND minDate <= $2
-	`
-	timestamp := time.Unix(args.Timestamp, 0)
-	rows, err := conn.DB.Query(context.Background(), query, tickers, timestamp)
-	if err != nil {
-		return nil, fmt.Errorf("1imvd: %v", err)
-	}
-	defer rows.Close()
-	var results []GetSimilarInstancesResults
-	for rows.Next() {
-		var result GetSimilarInstancesResults
-		err := rows.Scan(&result.Ticker, &result.SecurityId)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan row: %v", err)
-		}
-		fmt.Print(result.Ticker)
-		result.Timestamp = args.Timestamp
-		result.Timeframe = args.Timeframe
-		results = append(results, result)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating over rows: %v", err)
-	}
-	return results, nil
-}
-
 type GetTickerDetailsArgs struct {
 	SecurityId int    `json:"securityId"`
 	Ticker     string `json:"ticker,omitempty"`
