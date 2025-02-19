@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -12,26 +13,22 @@ import (
 
 // EDGARFiling represents a single SEC filing
 type EDGARFiling struct {
-	Type string    `json:"type"` // e.g., "10-K", "8-K", "13F"
-	Date time.Time `json:"date"`
-	URL  string    `json:"url"`
+	Type      string    `json:"type"` // e.g., "10-K", "8-K", "13F"
+	Date      time.Time `json:"date"`
+	URL       string    `json:"url"`
+	Timestamp int64     `json:"timestamp"` // UTC timestamp in milliseconds
 }
 
 // Cache implementation with expiration
 type edgarCache struct {
 	sync.RWMutex
-	data   map[string][]EDGARFiling
-	expiry map[string]time.Time
 	cikMap map[string]string // ticker -> CIK mapping
 }
 
 var (
 	filingCache = &edgarCache{
-		data:   make(map[string][]EDGARFiling),
-		expiry: make(map[string]time.Time),
 		cikMap: make(map[string]string),
 	}
-	cacheExpiration = 30 * time.Minute
 )
 
 func fetchEdgarFilings(cik string) ([]EDGARFiling, error) {
@@ -70,6 +67,7 @@ func fetchEdgarFilings(cik string) ([]EDGARFiling, error) {
 				FilingDate      []string `json:"filingDate"`
 				Form            []string `json:"form"`
 				PrimaryDocument []string `json:"primaryDocument"`
+				FilingTime      []string `json:"acceptanceDateTime"`
 			} `json:"recent"`
 		} `json:"filings"`
 	}
@@ -101,6 +99,34 @@ func fetchEdgarFilings(cik string) ([]EDGARFiling, error) {
 			continue
 		}
 
+		// Parse the full timestamp
+		var timestampTime time.Time
+		if len(recent.FilingTime) > i {
+			timestampTime, err = time.Parse("2006-01-02T15:04:05.000Z", recent.FilingTime[i])
+			if err == nil {
+				// Convert to EST to check market hours
+				est, err := time.LoadLocation("America/New_York")
+				if err == nil {
+					estTime := timestampTime.In(est)
+
+					// Check if outside market hours (4 AM to 8 PM EST)
+					hour := estTime.Hour()
+					if hour < 4 || hour >= 20 {
+						// Set to midnight of the filing date
+						timestampTime = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
+					}
+				}
+			}
+		}
+
+		// If timestamp parsing failed, default to midnight of filing date in UTC
+		if timestampTime.IsZero() {
+			timestampTime = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
+		}
+
+		// Convert to UTC milliseconds
+		utcMillis := timestampTime.UTC().UnixMilli()
+
 		// Format the accession number by removing dashes
 		accessionNumber := strings.Replace(recent.AccessionNumber[i], "-", "", -1)
 
@@ -109,9 +135,10 @@ func fetchEdgarFilings(cik string) ([]EDGARFiling, error) {
 			cik, accessionNumber, recent.PrimaryDocument[i])
 
 		filings = append(filings, EDGARFiling{
-			Type: recent.Form[i],
-			Date: date,
-			URL:  htmlURL,
+			Type:      recent.Form[i],
+			Date:      date,
+			URL:       htmlURL,
+			Timestamp: utcMillis,
 		})
 	}
 
@@ -119,9 +146,22 @@ func fetchEdgarFilings(cik string) ([]EDGARFiling, error) {
 	return filings, nil
 }
 
-func GetRecentEdgarFilings(conn *Conn, securityId int, timestamp time.Time) ([]EDGARFiling, error) {
+// EdgarFilingOptions represents optional parameters for fetching EDGAR filings
+type EdgarFilingOptions struct {
+	From  *time.Time
+	To    *time.Time
+	Limit int
+}
+
+// GetRecentEdgarFilings retrieves SEC filings for a security with optional filters
+func GetRecentEdgarFilings(conn *Conn, securityId int, opts *EdgarFilingOptions) ([]EDGARFiling, error) {
 	// Get ticker for the security
-	ticker, err := GetTicker(conn, securityId, timestamp)
+	to := time.Now()
+	if opts != nil && opts.To != nil {
+		to = *opts.To
+	}
+
+	ticker, err := GetTicker(conn, securityId, to)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ticker: %v", err)
 	}
@@ -144,29 +184,55 @@ func GetRecentEdgarFilings(conn *Conn, securityId int, timestamp time.Time) ([]E
 		filingCache.Unlock()
 	}
 
-	// Check filings cache
-	filingCache.RLock()
-	if filings, exists := filingCache.data[cik]; exists {
-		if time.Now().Before(filingCache.expiry[cik]) {
-			filingCache.RUnlock()
-			return filings, nil
-		}
-	}
-	filingCache.RUnlock()
-
-	// Fetch from EDGAR
+	// Fetch filings directly (no caching)
 	filings, err := fetchEdgarFilings(cik)
 	if err != nil {
 		return nil, err
 	}
 
-	// Update cache
-	filingCache.Lock()
-	filingCache.data[cik] = filings
-	filingCache.expiry[cik] = time.Now().Add(cacheExpiration)
-	filingCache.Unlock()
+	// Filter filings based on options
+	var filteredFilings []EDGARFiling
+	for _, filing := range filings {
+		filingTime := time.UnixMilli(filing.Timestamp)
 
-	return filings, nil
+		// Apply date filters if provided
+		if opts != nil {
+			if opts.From != nil && filingTime.Before(*opts.From) {
+				continue
+			}
+			if opts.To != nil && filingTime.After(*opts.To) {
+				continue
+			}
+		}
+
+		filteredFilings = append(filteredFilings, filing)
+	}
+
+	fmt.Printf("Before sorting: %d filings\n", len(filteredFilings))
+
+	// Sort filings by timestamp in descending order (newest first)
+	sort.Slice(filteredFilings, func(i, j int) bool {
+		return filteredFilings[i].Timestamp > filteredFilings[j].Timestamp
+	})
+
+	// Apply limit to get most recent filings
+	if opts != nil && opts.Limit > 0 {
+		fmt.Printf("Applying limit: %d (current length: %d)\n", opts.Limit, len(filteredFilings))
+		if len(filteredFilings) > opts.Limit {
+			filteredFilings = filteredFilings[:opts.Limit]
+			fmt.Printf("After limit: %d filings\n", len(filteredFilings))
+		}
+	} else {
+		fmt.Printf("No limit applied. Opts: %+v\n", opts)
+	}
+
+	// Re-sort in ascending order for display
+	sort.Slice(filteredFilings, func(i, j int) bool {
+		return filteredFilings[i].Timestamp < filteredFilings[j].Timestamp
+	})
+
+	fmt.Printf("Final count: %d filings\n", len(filteredFilings))
+	return filteredFilings, nil
 }
 
 func fetchCIKFromSEC(ticker string) (string, error) {

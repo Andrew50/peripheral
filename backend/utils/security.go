@@ -1,25 +1,27 @@
 package utils
 
 import (
-    "fmt"
-    "context"
-    "time"
-    /*"encoding/json"
-    "net/http"
-	"github.com/jackc/pgx/v4"
-    "io/ioutil"*/
+	"context"
+	"fmt"
+	"time"
+
+	/*"encoding/json"
+	    "net/http"
+		"github.com/jackc/pgx/v4"
+	    "io/ioutil"*/
 
 	polygon "github.com/polygon-io/client-go/rest"
 	"github.com/polygon-io/client-go/rest/iter"
 	"github.com/polygon-io/client-go/rest/models"
 )
+
 func GetTicker(conn *Conn, securityId int, timestamp time.Time) (string, error) {
-    var ticker string
-    err := conn.DB.QueryRow(context.Background(),"SELECT ticker from securities where securityId = $1 and minDate <= $2 and (maxDate >= $2 or maxDate is NULL)",securityId,timestamp).Scan(&ticker)
-    if err != nil {
-        return "", fmt.Errorf("igw0ngb %v",err)
-    }
-    return ticker, nil
+	var ticker string
+	err := conn.DB.QueryRow(context.Background(), "SELECT ticker from securities where securityId = $1 and minDate <= $2 and (maxDate >= $2 or maxDate is NULL)", securityId, timestamp).Scan(&ticker)
+	if err != nil {
+		return "", fmt.Errorf("igw0ngb %v", err)
+	}
+	return ticker, nil
 
 }
 func GetTickerNews(client *polygon.Client, ticker string, millisTime models.Millis, ord string, limit int, compareType models.Comparator) *iter.Iter[models.TickerNews] {
