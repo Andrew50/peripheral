@@ -528,8 +528,11 @@ func GetSecurityClassifications(conn *utils.Conn, userId int, rawArgs json.RawMe
 }
 
 type GetEdgarFilingsArgs struct {
-	SecurityId int   `json:"securityId"`
-	Timestamp  int64 `json:"timestamp"`
+	SecurityId int    `json:"securityId"`
+	Timestamp  int64  `json:"timestamp"`
+	From       *int64 `json:"from,omitempty"`
+	To         *int64 `json:"to,omitempty"`
+	Limit      int    `json:"limit,omitempty"`
 }
 
 func GetEdgarFilings(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -537,11 +540,38 @@ func GetEdgarFilings(conn *utils.Conn, userId int, rawArgs json.RawMessage) (int
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
+
+	// Set default timestamp to now if not provided
 	if args.Timestamp == 0 {
 		args.Timestamp = time.Now().UnixMilli()
 	}
-	timestamp := time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6)
-	filings, err := utils.GetRecentEdgarFilings(conn, args.SecurityId, timestamp)
+
+	// Create EdgarFilingOptions from the args
+	var opts *utils.EdgarFilingOptions
+	if args.From != nil || args.To != nil || args.Limit > 0 {
+		opts = &utils.EdgarFilingOptions{
+			Limit: args.Limit,
+		}
+
+		// Convert From timestamp if provided
+		if args.From != nil {
+			fromTime := time.UnixMilli(*args.From)
+			opts.From = &fromTime
+		}
+
+		// Convert To timestamp if provided
+		if args.To != nil {
+			if *args.To == 0 {
+				now := time.Now()
+				opts.To = &now
+			} else {
+				toTime := time.UnixMilli(*args.To)
+				opts.To = &toTime
+			}
+		}
+	}
+
+	filings, err := utils.GetRecentEdgarFilings(conn, args.SecurityId, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get EDGAR filings: %v", err)
 	}
