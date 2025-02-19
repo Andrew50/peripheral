@@ -311,41 +311,47 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		margin-bottom: 6px;
-		padding-bottom: 4px;
+		margin-bottom: 8px;
+		padding-bottom: 8px;
 		border-bottom: 1px solid var(--ui-border);
 		min-width: 0;
 		flex-wrap: wrap;
 	}
 
 	.symbol {
-		font-size: 16px;
+		font-size: 14px;
+		line-height: 20px;
 		font-weight: 600;
 		color: var(--text-primary);
 		white-space: nowrap;
+		padding: 4px 10px;
+		background: var(--ui-bg-element);
+		border-radius: 4px;
+		border: 1px solid var(--ui-border);
 	}
 
 	.metadata {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: 8px;
 		flex-wrap: wrap;
 		overflow: hidden;
-		flex: 1;
 		min-width: 0;
 	}
 
 	.timeframe,
 	.timestamp,
 	.session-type {
-		font-size: 12px;
+		font-size: 13px;
+		line-height: 18px;
 		color: var(--text-secondary);
-		padding: 2px 6px;
+		padding: 4px 8px;
 		background: var(--ui-bg-element);
-		border-radius: 3px;
+		border-radius: 4px;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		border: 1px solid var(--ui-border);
 	}
 
 	.timestamp {
@@ -355,9 +361,9 @@
 	.price-grid {
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
-		margin-bottom: 6px;
-		padding-bottom: 4px;
+		gap: 4px;
+		margin-bottom: 8px;
+		padding-bottom: 8px;
 		border-bottom: 1px solid var(--ui-border);
 	}
 
@@ -366,12 +372,13 @@
 		grid-template-columns: 15px 70px 15px 70px;
 		gap: 8px;
 		align-items: center;
+		height: 20px;
 	}
 
 	.metrics-grid {
 		display: grid;
 		grid-template-columns: 60% 40%;
-		gap: 4px;
+		gap: 6px;
 		width: 100%;
 	}
 
@@ -381,10 +388,12 @@
 		gap: 6px;
 		width: 100%;
 		overflow: hidden;
+		height: 20px;
 	}
 
 	.label {
 		font-size: 12px;
+		line-height: 16px;
 		color: var(--text-secondary);
 		font-weight: 500;
 		min-width: 35px;
@@ -393,6 +402,7 @@
 
 	.value {
 		font-size: 12px;
+		line-height: 16px;
 		font-weight: 500;
 		font-feature-settings: 'tnum';
 		font-variant-numeric: tabular-nums;

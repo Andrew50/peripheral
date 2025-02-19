@@ -21,6 +21,8 @@ var (
 	UserToClient            = make(map[int]*Client)
 	UserToClientMutex       sync.RWMutex
 	//redisSubscriptions      = make(map[string]*redis.PubSub)
+	lastTimestampUpdate time.Time
+	timestampMutex      sync.RWMutex
 )
 
 type ReplayData struct {
@@ -312,4 +314,31 @@ func HandleWebSocket(conn *utils.Conn, ws *websocket.Conn, userID int) {
 	// Start the writePump and readPump goroutines
 	go client.writePump()
 	client.readPump(conn)
+}
+
+func broadcastTimestamp() {
+	timestampMutex.Lock()
+	now := time.Now()
+	if now.Sub(lastTimestampUpdate) >= TimestampUpdateInterval {
+		timestamp := now.UnixNano() / int64(time.Millisecond)
+		timestampUpdate := map[string]interface{}{
+			"channel":   "timestamp",
+			"timestamp": timestamp,
+		}
+		jsonData, err := json.Marshal(timestampUpdate)
+		if err == nil {
+			// Broadcast to all connected clients
+			for client := range UserToClient {
+				if c := UserToClient[client]; c != nil {
+					select {
+					case c.send <- jsonData:
+					default:
+						// Channel full or closed
+					}
+				}
+			}
+		}
+		lastTimestampUpdate = now
+	}
+	timestampMutex.Unlock()
 }
