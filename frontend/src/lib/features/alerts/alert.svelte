@@ -10,6 +10,24 @@
 	import { type Alert, type AlertLog, newAlert, newPriceAlert } from './interface';
 	let selectedAlertType = writable<string>('price');
 
+	// Add state for showing alert type descriptions
+	let alertTypeDescription = writable<string>('Set alerts based on price levels');
+
+	// Update description when alert type changes
+	$: {
+		switch ($selectedAlertType) {
+			case 'price':
+				$alertTypeDescription = 'Set alerts based on price levels';
+				break;
+			case 'setup':
+				$alertTypeDescription = 'Get notified when a setup triggers';
+				break;
+			case 'algo':
+				$alertTypeDescription = 'Get notified when an algorithm signals';
+				break;
+		}
+	}
+
 	async function createAlert(event: MouseEvent) {
 		const alertType = $selectedAlertType; // Get selected alert type from the dropdown
 
@@ -48,20 +66,35 @@
 	// Add derived stores for active and inactive alerts
 </script>
 
-<div class="controls-container">
-	<label for="alertType">Select Alert Type:</label>
-	<select class="default-select" id="alertType" bind:value={$selectedAlertType}>
-		<option value="price">Price</option>
-		<option value="setup">Setup</option>
-		<option value="algo">Algo</option>
-	</select>
-	<button
-		on:click={(event) => {
-			createAlert(event);
-		}}
-	>
-		New
-	</button>
+<div class="alert-creator">
+	<div class="alert-type-selector">
+		<h3>Create New Alert</h3>
+		<div class="alert-types">
+			<button
+				class="alert-type-btn {$selectedAlertType === 'price' ? 'active' : ''}"
+				on:click={() => ($selectedAlertType = 'price')}
+			>
+				<i class="fas fa-dollar-sign"></i>
+				Price Alert
+			</button>
+			<button
+				class="alert-type-btn {$selectedAlertType === 'setup' ? 'active' : ''}"
+				on:click={() => ($selectedAlertType = 'setup')}
+			>
+				<i class="fas fa-chart-line"></i>
+				Setup Alert
+			</button>
+			<button
+				class="alert-type-btn {$selectedAlertType === 'algo' ? 'active' : ''}"
+				on:click={() => ($selectedAlertType = 'algo')}
+			>
+				<i class="fas fa-robot"></i>
+				Algo Alert
+			</button>
+		</div>
+		<p class="description">{$alertTypeDescription}</p>
+		<button class="create-btn" on:click={(event) => createAlert(event)}> Create Alert </button>
+	</div>
 </div>
 
 <!-- Active Alerts -->
@@ -96,3 +129,68 @@
 	columns={['ticker', 'timestamp', 'alertType']}
 	parentDelete={deleteAlertLog}
 />
+
+<style>
+	.alert-creator {
+		background: var(--ui-bg-secondary);
+		border-radius: 8px;
+		padding: 20px;
+		margin-bottom: 24px;
+	}
+
+	.alert-type-selector {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+
+	.alert-types {
+		display: flex;
+		gap: 12px;
+	}
+
+	.alert-type-btn {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 12px 16px;
+		border-radius: 6px;
+		border: 1px solid var(--ui-border);
+		background: var(--ui-bg-primary);
+		color: var(--text-primary);
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.alert-type-btn:hover {
+		background: var(--ui-bg-hover);
+	}
+
+	.alert-type-btn.active {
+		background: var(--accent-primary);
+		color: white;
+		border-color: var(--accent-primary);
+	}
+
+	.description {
+		color: var(--text-secondary);
+		font-size: 14px;
+		margin: 0;
+	}
+
+	.create-btn {
+		background: var(--accent-primary);
+		color: white;
+		padding: 12px 24px;
+		border-radius: 6px;
+		border: none;
+		font-weight: 600;
+		cursor: pointer;
+		transition: background 0.2s ease;
+		align-self: flex-start;
+	}
+
+	.create-btn:hover {
+		background: var(--accent-primary-dark);
+	}
+</style>

@@ -14,7 +14,7 @@ export const menuWidth = writable(0);
 export let flagWatchlistId: number | undefined;
 export const entryOpen = writable(false)
 export let flagWatchlist: Writable<Instance[]>
-export const streamInfo = writable<StreamInfo>({ replayActive: false, replaySpeed: 1, replayPaused: false, startTimestamp: 0, timestamp: 0, extendedHours: false })
+export const streamInfo = writable<StreamInfo>({ replayActive: false, replaySpeed: 1, replayPaused: false, startTimestamp: 0, timestamp: Date.now(), extendedHours: false, serverTimeOffset: undefined })
 export const systemClockOffset = 0;
 export const dispatchMenuChange = writable("")
 export const algos: Writable<Algo[]> = writable([])
@@ -31,7 +31,7 @@ export interface StreamInfo {
     timestamp: number,
     extendedHours: boolean,
     lastUpdateTime?: number,
-    pauseTime?: number
+    serverTimeOffset?: number
 }
 export interface TimeEvent {
     event: "newDay" | "replay" | null,
@@ -100,7 +100,9 @@ export function initStores() {
                 const currentTime = Date.now();
                 const elapsedTime = v.lastUpdateTime ? currentTime - v.lastUpdateTime : 0;
                 v.timestamp += elapsedTime * v.replaySpeed;
-                v.lastUpdateTime = currentTime;  // Update the last update time
+                v.lastUpdateTime = currentTime;
+            } else if (!v.replayActive && v.serverTimeOffset !== undefined) {
+                v.timestamp = Date.now() + v.serverTimeOffset;
             }
             return v;
         });
@@ -145,3 +147,24 @@ export const activeChartInstance = writable<Instance>({
     extendedHours: false
 });
 
+export function handleTimestampUpdate(serverTimestamp: number) {
+    streamInfo.update(v => {
+        const now = Date.now();
+        const newOffset = serverTimestamp - now;
+
+        if (v.serverTimeOffset === undefined || Math.abs(newOffset - v.serverTimeOffset) > 1000) {
+            return {
+                ...v,
+                timestamp: serverTimestamp,
+                lastUpdateTime: now,
+                serverTimeOffset: newOffset
+            };
+        }
+
+        return {
+            ...v,
+            timestamp: serverTimestamp,
+            lastUpdateTime: now
+        };
+    });
+}
