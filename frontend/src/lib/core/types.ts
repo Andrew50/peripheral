@@ -62,6 +62,7 @@ export interface Settings {
     adrPeriod: number
     divideTaS: boolean
     filterTaS: boolean
+    showFilings: boolean
 }
 export interface StreamInfo {
     status: "replay" | "realtime" | "paused",

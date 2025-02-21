@@ -142,17 +142,17 @@ def handle_trade_upload(conn, file_content: str, user_id: int, additional_args: 
                 
                 if 'Limit' in trade_description or 'Stop Loss' in trade_description:
                     if 'FILLED AT' in fidelity_trade_status:
-                        trade_price = float(fidelity_trade_status.split('$')[1])
+                        trade_price = float(fidelity_trade_status.split('$')[1].replace(',', ''))
                         trade_shares = float(trade['Quantity'].replace(',', ''))
                     elif 'PARTIAL' in fidelity_trade_status:
                         trade_shares = float(fidelity_trade_status.split('\n')[3].split(' ')[0].replace(',', ''))
                         description_split = trade_description.split('$')
                         if(len(description_split) == 2):
-                            trade_price = float(description_split[1])
+                            trade_price = float(description_split[1].replace(',', ''))
                         elif len(description_split) == 3: 
-                            trade_price = float(description_split[2])
+                            trade_price = float(description_split[2].replace(',', ''))
                 elif 'Market' in trade_description: 
-                    trade_price = float(fidelity_trade_status.split('$')[1])
+                    trade_price = float(fidelity_trade_status.split('$')[1].replace(',', ''))
                     trade_shares = float(trade['Quantity'].replace(',', ''))
                 
                 if 'Sell' in trade_description or 'Short' in trade_description: 
@@ -413,8 +413,15 @@ def calculate_pnl(entry_prices, entry_shares, exit_prices, exit_shares, directio
     if is_option:
         pnl = pnl * Decimal('100')  # Multiply by 100 for options contracts
         total_contracts = total_entry_shares + total_exit_shares
-        commission = Decimal('0.65') * total_contracts  # $0.65 per contract
-        pnl = pnl - commission
+        
+        # Only apply commission if it's not a buy to close under $0.65
+        should_apply_commission = True
+        if direction == "Short" and avg_exit_price < Decimal('0.65'):
+            should_apply_commission = False
+            
+        if should_apply_commission:
+            commission = Decimal('0.65') * total_contracts  # $0.65 per contract
+            pnl = pnl - commission
 
     print("\ncalculated pnl: ", pnl)
     return float(round(pnl, 2))

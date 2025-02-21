@@ -38,9 +38,15 @@ export interface TimeEvent {
     UTCtimestamp: number
 }
 export let timeEvent: Writable<TimeEvent> = writable({ event: null, UTCtimestamp: 0 })
-const defaultSettings = {
-    chartRows: 1, chartColumns: 1, dolvol: false, adrPeriod: 20, divideTaS: false, filterTaS: false,
-}
+export const defaultSettings: Settings = {
+    chartRows: 2,
+    chartColumns: 2,
+    dolvol: false,
+    adrPeriod: 20,
+    filterTaS: true,
+    divideTaS: false,
+    showFilings: true
+};
 export let settings: Writable<Settings> = writable(defaultSettings)
 export function initStores() {
     privateRequest<Settings>("getSettings", {})
