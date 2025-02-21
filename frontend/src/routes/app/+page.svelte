@@ -823,6 +823,10 @@
 		left: -4px;
 		top: 0;
 		z-index: 100;
+		overflow: hidden;
+		font-size: 0;
+		line-height: 0;
+		text-indent: -9999px;
 	}
 
 	.resize-handle:hover {
