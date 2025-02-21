@@ -134,12 +134,14 @@ func fetchEdgarFilings(cik string) ([]EDGARFiling, error) {
 		htmlURL := fmt.Sprintf("https://www.sec.gov/Archives/edgar/data/%s/%s/%s",
 			cik, accessionNumber, recent.PrimaryDocument[i])
 
-		filings = append(filings, EDGARFiling{
-			Type:      recent.Form[i],
-			Date:      date,
-			URL:       htmlURL,
-			Timestamp: utcMillis,
-		})
+		if recent.Form[i] != "4" { // Only append non-Form 4 filings
+			filings = append(filings, EDGARFiling{
+				Type:      recent.Form[i],
+				Date:      date,
+				URL:       htmlURL,
+				Timestamp: utcMillis,
+			})
+		}
 	}
 
 	fmt.Printf("Found %d filings\n", len(filings))

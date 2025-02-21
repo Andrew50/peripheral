@@ -285,47 +285,52 @@
 				}
 				queuedLoad = () => {
 					// Add SEC filings request when loading new ticker
-					try {
-						privateRequest<any[]>(
-							'getEdgarFilings',
-							{
-								securityId: inst.securityId,
-								timestamp: inst.timestamp,
-								limit: 100
-							},
-							false,
-							true
-						).then((filings) => {
-							console.log(filings);
-							// Group filings by timestamp, rounded to the chart timeframe
-							const filingsByTime = new Map<number, Array<{ type: string; url: string }>>();
+					if (get(settings).showFilings) {
+						try {
+							const bars = chartCandleSeries.data();
+							if (bars.length > 0) {
+								const firstBar = bars[0];
+								const lastBar = bars[bars.length - 1];
+								
+								const fromTime = (ESTSecondstoUTCMillis(firstBar.time as UTCTimestamp) as number);
+								const toTime = (ESTSecondstoUTCMillis(lastBar.time as UTCTimestamp) as number);
+								console.log('time requested', fromTime, toTime);
+								
+								privateRequest<any[]>('getEdgarFilings', {
+									securityId: inst.securityId,
+									from: fromTime,
+									to: toTime,
+									limit: 100
+								})
+								.then((filings) => {
+									const filingsByTime = new Map<number, Array<{ type: string, url: string }>>();
+									
+									filings.forEach(filing => {
+										filing.timestamp = UTCSecondstoESTSeconds(filing.timestamp/1000) as UTCTimestamp;
+										const roundedTime = Math.floor(filing.timestamp / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+										
+										if (!filingsByTime.has(roundedTime)) {
+											filingsByTime.set(roundedTime, []);
+										}
+										filingsByTime.get(roundedTime)?.push({
+											type: 'filing',
+											title: filing.type,
+											url: filing.url
+										});
+									});
 
-							filings.forEach((filing) => {
-								const tradeTime = UTCSecondstoESTSeconds(filing.timestamp / 1000);
-								const roundedTime =
-									Math.floor(tradeTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
-
-								if (!filingsByTime.has(roundedTime)) {
-									filingsByTime.set(roundedTime, []);
-								}
-								filingsByTime.get(roundedTime)?.push({
-									type: 'filing',
-									title: filing.type,
-									url: filing.url // Make sure we're passing the URL
+									eventSeries.setData(Array.from(filingsByTime.entries()).map(([time, events]) => ({
+										time: time as UTCTimestamp,
+										events: events
+									})));
 								});
-							});
-
-							// Convert to marker format
-							const eventMarkers = Array.from(filingsByTime.entries()).map(([time, events]) => ({
-								time: time as UTCTimestamp,
-								events: events
-							}));
-
-							// Update the event series
-							eventSeries.setData(eventMarkers);
-						});
-					} catch (error) {
-						console.warn('Failed to fetch SEC filings:', error);
+							}
+						} catch (error) {
+							console.warn('Failed to fetch SEC filings:', error);
+						}
+					} else {
+						// Clear any existing filing markers when the setting is disabled
+						eventSeries.setData([]);
 					}
 
 					if (inst.direction == 'forward') {
@@ -1205,7 +1210,7 @@
 	<Shift {shiftOverlay} />
 	<Countdown instance={currentChartInstance} {currentBarTimestamp} />
 	<DrawingMenu {drawingMenuProps} />
-</div>
+</div>1
 
 <!-- Add filing info overlay -->
 {#if selectedFiling}
