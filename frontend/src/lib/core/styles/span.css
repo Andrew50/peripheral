@@ -11,7 +11,7 @@ span {
 }
 
 .symbol {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 600;
     color: var(--text-primary);
     white-space: nowrap;
@@ -20,14 +20,15 @@ span {
 .timeframe,
 .timestamp,
 .session-type {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-secondary);
-    padding: 2px 6px;
+    padding: 3px 8px;
     background: var(--ui-bg-element);
-    border-radius: 3px;
+    border-radius: 4px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    border: 1px solid var(--ui-border);
 }
 
 .price-value {

@@ -87,6 +87,12 @@
 	on:touchstart={handleClick}
 >
 	<div class="content">
+		<div class="ticker-container">
+			<div class="ticker-display">
+				<span class="ticker">{$instance.ticker || '--'}</span>
+			</div>
+		</div>
+
 		{#if $activeChartInstance?.logo}
 			<div class="logo-container">
 				<img
@@ -97,35 +103,29 @@
 			</div>
 		{/if}
 
-		<div class="ticker-container">
-			<div class="ticker-display">
-				<span class="ticker">{$instance.ticker || '--'}</span>
-			</div>
-		</div>
-
 		<div class="stream-cells">
 			<div class="stream-cell-container">
 				<span class="label">Price</span>
 				<StreamCell instance={$activeChartInstance} type="price" />
 			</div>
 			<div class="stream-cell-container">
-				<span class="label">Change %</span>
+				<span class="label">Chg %</span>
 				<StreamCell instance={$activeChartInstance} type="change %" />
 			</div>
 			<div class="stream-cell-container">
-				<span class="label">Change $</span>
+				<span class="label">Chg $</span>
 				<StreamCell instance={$activeChartInstance} type="change" />
 			</div>
 			<div class="stream-cell-container">
-				<span class="label">Change % extended</span>
+				<span class="label">Ext %</span>
 				<StreamCell instance={$activeChartInstance} type="change % extended" />
 			</div>
 		</div>
 
 		<div class="quotes-section">
 			<L1 {instance} />
-			<button class="toggle-button" on:click|stopPropagation={toggleTimeAndSales}>
-				{showTimeAndSales ? 'Hide T&S' : 'Show T&S'}
+			<button class="time-sales-button" on:click|stopPropagation={toggleTimeAndSales}>
+				{showTimeAndSales ? 'Hide Time & Sales' : 'Show Time & Sales'}
 			</button>
 			{#if showTimeAndSales}
 				<TimeAndSales {instance} />
@@ -144,14 +144,8 @@
 			<div class="info-row">
 				<span class="label">Market Cap:</span>
 				<span class="value">
-					{#if $activeChartInstance.market_cap}
-						{#if $activeChartInstance.market_cap >= 1e12}
-							${($activeChartInstance.market_cap / 1e12).toFixed(2)}T
-						{:else if $activeChartInstance.market_cap >= 1e9}
-							${($activeChartInstance.market_cap / 1e9).toFixed(2)}B
-						{:else}
-							${($activeChartInstance.market_cap / 1e6).toFixed(2)}M
-						{/if}
+					{#if $activeChartInstance?.totalShares}
+						<StreamCell instance={$activeChartInstance} type="market cap" />
 					{:else}
 						N/A
 					{/if}
@@ -231,16 +225,27 @@
 
 	.ticker-display {
 		font-family: var(--font-primary);
-		font-size: 20px;
-		color: white;
-		background-color: black;
+		font-size: 28px;
+		font-weight: 600;
+		color: var(--text-primary);
+		background: var(--ui-bg-secondary);
 		width: 100%;
-		height: 40px;
+		height: 50px;
 		text-align: center;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		border-radius: 4px;
+		border-radius: 6px;
+	}
+
+	.ticker {
+		letter-spacing: 0.5px;
+		text-transform: uppercase;
+	}
+
+	.ticker-container {
+		margin-bottom: 15px;
+		padding: 0 15%; /* Add padding on sides to make ticker display narrower */
 	}
 
 	.description {
@@ -255,5 +260,59 @@
 		background: none;
 		font-weight: 500;
 		color: var(--text-secondary);
+	}
+
+	.logo-container {
+		display: flex;
+		justify-content: center;
+		margin-bottom: 15px;
+	}
+
+	.stream-cells {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 8px;
+		margin: 15px 0;
+	}
+
+	.stream-cell-container {
+		margin: 0;
+		padding: 0;
+		background: none;
+		font-weight: 500;
+		color: var(--text-secondary);
+		overflow: hidden;
+	}
+
+	.stream-cell-container .label {
+		font-size: 0.85em;
+		display: block;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		margin-bottom: 2px;
+	}
+
+	.time-sales-button {
+		background: var(--ui-bg-secondary);
+		color: var(--text-primary);
+		border: 1px solid var(--ui-border);
+		border-radius: 4px;
+		padding: 6px 12px;
+		font-size: 0.9em;
+		cursor: pointer;
+		transition: background-color 0.2s;
+		margin: 10px 0;
+		width: 100%;
+	}
+
+	.time-sales-button:hover {
+		background: var(--ui-bg-hover);
+	}
+
+	.quotes-section {
+		margin-top: 15px;
+		border-top: 1px solid var(--ui-border);
+		padding-top: 15px;
 	}
 </style>

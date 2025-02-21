@@ -78,6 +78,8 @@
 					document.addEventListener('click', handleClick);
 					document.addEventListener('keydown', handleKeyDown);
 					await tick();
+					if (!rightClickMenu) return;
+
 					const menuRect = rightClickMenu.getBoundingClientRect();
 					const windowWidth = window.innerWidth;
 					const windowHeight = window.innerHeight;
