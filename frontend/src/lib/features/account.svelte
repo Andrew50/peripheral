@@ -5,6 +5,7 @@
 	import List from '$lib/utils/modules/list.svelte';
 	import { writable } from 'svelte/store';
 	import { UTCTimestampToESTString } from '$lib/core/timestamp';
+	import { onMount } from 'svelte';
 
 	// Add tab state
 	let activeTab = 'trades';
@@ -125,19 +126,11 @@
 	async function fetchStatistics() {
 		try {
 			const params: any = {};
-
-			if (statStartDate) {
-				params.start_date = statStartDate;
-			}
-
-			if (statEndDate) {
-				params.end_date = statEndDate;
-			}
-
-			if (statTicker) {
-				params.ticker = statTicker.toUpperCase();
-			}
-
+			
+			if (statStartDate) params.start_date = statStartDate;
+			if (statEndDate) params.end_date = statEndDate;
+			if (statTicker) params.ticker = statTicker.toUpperCase();
+			
 			const result = await queueRequest('get_trade_statistics', params);
 			statistics.set(result);
 			message = 'Statistics loaded successfully';
@@ -178,6 +171,7 @@
 		value: i,
 		label: `${i.toString().padStart(2, '0')}:00`
 	}));
+
 </script>
 
 <div class="account-container">
@@ -421,7 +415,9 @@
 											<td class="defalt-td">{UTCTimestampToESTString(trade.timestamp)}</td>
 											<td class="defalt-td">{trade.ticker}</td>
 											<td class="defalt-td">{trade.direction}</td>
-											<td class="negative">${trade.pnl.toFixed(2)}</td>
+											<td class={trade.pnl >= 0 ? 'positive' : 'negative'}>
+												${trade.pnl.toFixed(2)}
+											</td>
 										</tr>
 									{/each}
 								</tbody>
