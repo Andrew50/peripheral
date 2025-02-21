@@ -32,20 +32,19 @@ def grab_user_trades(conn, user_id: int, sort: str = "desc", date: str = None, h
             """
             params = [user_id]
             
-            # Add date filter if provided
+            # Modified ticker filter to include options
+            if ticker:
+                base_query += " AND (t.ticker = %s OR t.ticker LIKE %s)"
+                params.extend([ticker, f"{ticker}%"])  # Add both exact match and LIKE pattern
+            
+            # Add other existing filters
             if date:
                 base_query += " AND DATE(t.entry_times[1]) = %s"
                 params.append(date)
             
-            # Add hour filter if provided
             if hour is not None:
                 base_query += " AND EXTRACT(HOUR FROM t.entry_times[1]) = %s"
                 params.append(hour)
-
-            # Add ticker filter if provided
-            if ticker:
-                base_query += " AND t.ticker = %s"
-                params.append(ticker)
             
             # Add sorting
             sort_direction = "DESC" if sort.lower() == "desc" else "ASC"
@@ -181,250 +180,6 @@ def handle_trade_upload(conn, file_content: str, user_id: int, additional_args: 
             "message": f"Error: {str(e)}\nTraceback:\n{error_info}"
         }
 
-def parse_datetime(datetime_str):
-    datetime_str = ' '.join(datetime_str.split()) 
-    try: 
-        dt = datetime.strptime(datetime_str, '%I:%M:%S %p %m/%d/%Y')
-        date_only_str = dt.date().strftime('%m/%d/%Y') 
-
-        return dt, date_only_str    
-    except ValueError as e:
-        print(f"Error parsing datetime: {e}")
-        return None, None
-
-def process_trades(conn, user_id: int):
-    """Process trade_executions into consolidated trades"""
-    try:
-        with conn.db.cursor() as cursor:
-            print("\nStarting process_trades", flush=True)
-            cursor.execute("""
-                SELECT te.* 
-                FROM trade_executions te
-                WHERE te.userId = %s AND te.tradeId IS NULL
-                ORDER BY te.timestamp ASC
-            """, (user_id,))
-
-            executions = cursor.fetchall()
-            print(f"\nFound {len(executions)} unprocessed executions", flush=True)
-
-            for execution in executions:
-                print(f"\nProcessing execution: {execution}", flush=True)
-                execution_id = execution[0]
-                ticker = execution[3]
-                securityId = execution[2]
-                trade_date = execution[4]
-                trade_price = float(execution[5])
-                trade_size = int(execution[6])   
-                trade_ts = execution[7]           
-                direction = execution[8]          
-
-                cursor.execute("""
-                    SELECT * 
-                    FROM trades
-                    WHERE userId = %s
-                      AND ticker = %s
-                      AND status = 'Open'
-                    ORDER BY date DESC
-                    LIMIT 1
-                """, (user_id, ticker))
-
-                open_trade = cursor.fetchone()
-
-                if not open_trade:
-                    print("\nCreating new trade", flush=True)
-                    open_quantity = trade_size  
-
-                    cursor.execute("""
-                        INSERT INTO trades (
-                            userId, securityId, ticker, tradedirection, date, status, openQuantity,
-                            entry_times, entry_prices, entry_shares,
-                            exit_times, exit_prices, exit_shares
-                        )
-                        VALUES (
-                            %s, %s, %s, %s, %s, 'Open', %s,
-                            ARRAY[%s], ARRAY[%s], ARRAY[%s],
-                            ARRAY[]::timestamp[], ARRAY[]::decimal(10,4)[], ARRAY[]::int[]
-                        )
-                        RETURNING tradeId
-                    """, (
-                        user_id, securityId, ticker, direction, trade_date, open_quantity,
-                        trade_ts, trade_price, trade_size       
-                    ))
-
-                    new_trade_id = cursor.fetchone()[0]
-                    cursor.execute("""
-                        UPDATE trade_executions
-                        SET tradeId = %s
-                        WHERE executionId = %s
-                    """, (new_trade_id, execution_id))
-
-                else:
-                    print("\nUpdating existing trade", flush=True)
-                    trade_id = open_trade[0]
-                    trade_dir = open_trade[4]   
-                    old_open_qty = float(open_trade[7])  
-                    new_open_qty = old_open_qty + trade_size  
-                    print(f"\nTrade details - Direction: {trade_dir}, Old Qty: {old_open_qty}, New Qty: {new_open_qty}", flush=True)
-
-                    if trade_dir == direction:
-                        is_same_direction = (old_open_qty > 0 and trade_size > 0) or (old_open_qty < 0 and trade_size < 0)
-                        print(f"\nSame direction check: {is_same_direction}", flush=True)
-                        
-                        if is_same_direction:
-                            print("\nAdding to position", flush=True)
-                            cursor.execute("""
-                                UPDATE trades
-                                SET entry_times = array_append(entry_times, %s),
-                                    entry_prices = array_append(entry_prices, %s),
-                                    entry_shares = array_append(entry_shares, %s),
-                                    openQuantity = %s
-                                WHERE tradeId = %s
-                            """, (trade_ts, trade_price, trade_size, new_open_qty, trade_id))
-                        else:
-                            print("\nReducing position (same direction)", flush=True)
-                            cursor.execute("""
-                                UPDATE trades
-                                SET exit_times = array_append(exit_times, %s),
-                                    exit_prices = array_append(exit_prices, %s),
-                                    exit_shares = array_append(exit_shares, %s),
-                                    openQuantity = %s,
-                                    status = CASE
-                                        WHEN %s = 0 THEN 'Closed'
-                                        ELSE 'Open'
-                                    END
-                                WHERE tradeId = %s
-                            """, (trade_ts, trade_price, trade_size, new_open_qty, new_open_qty, trade_id))
-
-                            # Calculate and update P/L for partial exits
-                            cursor.execute("""
-                                SELECT entry_prices, entry_shares,
-                                       exit_prices, exit_shares,
-                                       tradedirection
-                                FROM trades
-                                WHERE tradeId = %s
-                            """, (trade_id,))
-                            trade_data = cursor.fetchone()
-                            updated_pnl = calculate_pnl(
-                                trade_data[0],
-                                trade_data[1],
-                                trade_data[2],
-                                trade_data[3],
-                                trade_data[4],
-                                ticker
-                            )
-                            cursor.execute("""
-                                UPDATE trades
-                                SET closedPnL = %s
-                                WHERE tradeId = %s
-                            """, (updated_pnl, trade_id))
-
-                    else:
-                        print("\nReducing position (opposite direction)", flush=True)
-                        cursor.execute("""
-                            UPDATE trades
-                            SET exit_times = array_append(exit_times, %s),
-                                exit_prices = array_append(exit_prices, %s),
-                                exit_shares = array_append(exit_shares, %s),
-                                openQuantity = %s,
-                                status = CASE
-                                    WHEN %s = 0 THEN 'Closed'
-                                    ELSE 'Open'
-                                END
-                            WHERE tradeId = %s
-                        """, (trade_ts, trade_price, trade_size, new_open_qty, new_open_qty, trade_id))
-
-                        # Calculate and update P/L for partial exits
-                        cursor.execute("""
-                            SELECT entry_prices, entry_shares,
-                                   exit_prices, exit_shares,
-                                   tradedirection
-                            FROM trades
-                            WHERE tradeId = %s
-                        """, (trade_id,))
-                        trade_data = cursor.fetchone()
-                        updated_pnl = calculate_pnl(
-                            trade_data[0],
-                            trade_data[1],
-                            trade_data[2],
-                            trade_data[3],
-                            trade_data[4],
-                            ticker
-                        )
-                        cursor.execute("""
-                            UPDATE trades
-                            SET closedPnL = %s
-                            WHERE tradeId = %s
-                        """, (updated_pnl, trade_id))
-
-                    cursor.execute("""
-                        UPDATE trade_executions
-                        SET tradeId = %s
-                        WHERE executionId = %s
-                    """, (trade_id, execution_id))
-
-            conn.db.commit()
-            print("\nAll trades processed successfully", flush=True)
-            return {"status": "success", "message": "Trades processed successfully"}
-
-    except Exception as e:
-        conn.db.rollback()
-        error_info = traceback.format_exc()
-        print(f"Error processing trades:\n{error_info}", flush=True)
-        return {
-            "status": "error",
-            "message": f"Error: {str(e)}\nTraceback:\n{error_info}"
-        }
-
-
-def calculate_pnl(entry_prices, entry_shares, exit_prices, exit_shares, direction, ticker):
-    """Calculate P&L for a completed trade"""
-    # Convert all numbers to Decimal for consistent decimal arithmetic
-    total_entry_value = Decimal('0')
-    total_entry_shares = Decimal('0')
-    total_exit_value = Decimal('0')
-    total_exit_shares = Decimal('0')
-
-    # Calculate totals for entries
-    for price, shares in zip(entry_prices, entry_shares):
-        price = Decimal(str(price))
-        shares = Decimal(str(abs(shares)))  # Use absolute value for shares
-        total_entry_value += price * shares
-        total_entry_shares += shares
-
-    # Calculate totals for exits
-    for price, shares in zip(exit_prices, exit_shares):
-        price = Decimal(str(price))
-        shares = Decimal(str(abs(shares)))  # Use absolute value for shares
-        total_exit_value += price * shares
-        total_exit_shares += shares
-
-    # Calculate weighted average prices
-    avg_entry_price = total_entry_value / total_entry_shares if total_entry_shares > 0 else Decimal('0')
-    avg_exit_price = total_exit_value / total_exit_shares if total_exit_shares > 0 else Decimal('0')
-
-    # Calculate P&L based on direction
-    if direction == "Long":
-        pnl = (avg_exit_price - avg_entry_price) * total_exit_shares
-    else:  # Short
-        pnl = (avg_entry_price - avg_exit_price) * total_exit_shares
-
-    # Check if it's an options trade (ticker contains 'C' or 'P' and is longer than 4 characters)
-    is_option = len(ticker) > 4 and ('C' in ticker or 'P' in ticker)
-    if is_option:
-        pnl = pnl * Decimal('100')  # Multiply by 100 for options contracts
-        total_contracts = total_entry_shares + total_exit_shares
-        
-        # Only apply commission if it's not a buy to close under $0.65
-        should_apply_commission = True
-        if direction == "Short" and avg_exit_price < Decimal('0.65'):
-            should_apply_commission = False
-            
-        if should_apply_commission:
-            commission = Decimal('0.65') * total_contracts  # $0.65 per contract
-            pnl = pnl - commission
-
-    print("\ncalculated pnl: ", pnl)
-    return float(round(pnl, 2))
 
 def get_trade_statistics(conn, user_id: int, start_date: str = None, end_date: str = None, ticker: str = None) -> dict:
     """
@@ -454,6 +209,12 @@ def get_trade_statistics(conn, user_id: int, start_date: str = None, end_date: s
             """
             params = [user_id]
 
+            # Modified ticker filter to include options
+            if ticker:
+                query += " AND (ticker = %s OR ticker LIKE %s)"
+                params.extend([ticker, f"{ticker}%"])
+
+            # Rest of the existing date filters
             if start_date:
                 query += " AND DATE(entry_times[1]) >= %s"
                 params.append(start_date)
@@ -461,10 +222,6 @@ def get_trade_statistics(conn, user_id: int, start_date: str = None, end_date: s
             if end_date:
                 query += " AND DATE(entry_times[1]) <= %s"
                 params.append(end_date)
-            
-            if ticker:
-                query += " AND ticker = %s"
-                params.append(ticker)
 
             cursor.execute(query, tuple(params))
             row = cursor.fetchone()
@@ -478,7 +235,7 @@ def get_trade_statistics(conn, user_id: int, start_date: str = None, end_date: s
             
             win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
             
-            # Update P/L curve query with date range
+            # Update P/L curve query with modified ticker filter
             pnl_query = """
                 SELECT 
                     entry_times[1] as trade_time,
@@ -499,15 +256,12 @@ def get_trade_statistics(conn, user_id: int, start_date: str = None, end_date: s
                 params.append(end_date)
             
             if ticker:
-                pnl_query += " AND ticker = %s"
-                params.append(ticker)
+                pnl_query += " AND (ticker = %s OR ticker LIKE %s)"
+                params.extend([ticker, f"{ticker}%"])
                 
             pnl_query += " ORDER BY entry_times[1] ASC"
 
-            eastern = pytz.timezone('America/New_York')
-            utc = pytz.UTC
-
-            # Add queries for top and bottom trades
+            # Update trades query for top/bottom trades
             trades_query = """
                 SELECT 
                     ticker,
@@ -530,46 +284,10 @@ def get_trade_statistics(conn, user_id: int, start_date: str = None, end_date: s
                 params.append(end_date)
             
             if ticker:
-                trades_query += " AND ticker = %s"
-                params.append(ticker)
+                trades_query += " AND (ticker = %s OR ticker LIKE %s)"
+                params.extend([ticker, f"{ticker}%"])
 
-            # Get top 5 trades
-            top_query = trades_query + " ORDER BY closedPnL DESC LIMIT 5"
-            cursor.execute(top_query, tuple(params))
-            top_trades = [{
-                'ticker': row[0],
-                'timestamp': int(eastern.localize(row[1]).astimezone(utc).timestamp() * 1000),
-                'direction': row[2],
-                'pnl': float(row[3])
-            } for row in cursor.fetchall()]
-
-            # Get bottom 5 trades
-            bottom_query = trades_query + " ORDER BY closedPnL ASC LIMIT 5"
-            cursor.execute(bottom_query, tuple(params))
-            bottom_trades = [{
-                'ticker': row[0],
-                'timestamp': int(eastern.localize(row[1]).astimezone(utc).timestamp() * 1000),
-                'direction': row[2],
-                'pnl': float(row[3])
-            } for row in cursor.fetchall()]
-
-            # Get P/L curve data
-            cursor.execute(pnl_query, tuple(params))
-            pnl_data = cursor.fetchall()
-            
-            cumulative_pnl = []
-            running_total = 0
-            
-            for row in pnl_data:
-                trade_time = int(eastern.localize(row[0]).astimezone(utc).timestamp() * 1000)
-                pnl = float(row[1])
-                running_total += pnl
-                cumulative_pnl.append({
-                    'timestamp': trade_time,
-                    'value': running_total
-                })
-
-            # Add query for hourly statistics
+            # Update hourly query
             hourly_query = """
                 SELECT 
                     EXTRACT(HOUR FROM entry_times[1]) as hour,
@@ -594,11 +312,88 @@ def get_trade_statistics(conn, user_id: int, start_date: str = None, end_date: s
                 params.append(end_date)
             
             if ticker:
-                hourly_query += " AND ticker = %s"
-                params.append(ticker)
+                hourly_query += " AND (ticker = %s OR ticker LIKE %s)"
+                params.extend([ticker, f"{ticker}%"])
             
             hourly_query += " GROUP BY EXTRACT(HOUR FROM entry_times[1]) ORDER BY hour"
 
+            # Update verification query
+            verification_query = """
+                SELECT COALESCE(SUM(closedPnL), 0) as verification_total
+                FROM trades 
+                WHERE userId = %s 
+                AND status = 'Closed'
+                AND closedPnL IS NOT NULL
+            """
+            verification_params = [user_id]
+            
+            if start_date:
+                verification_query += " AND DATE(entry_times[1]) >= %s"
+                verification_params.append(start_date)
+            if end_date:
+                verification_query += " AND DATE(entry_times[1]) <= %s"
+                verification_params.append(end_date)
+            if ticker:
+                verification_query += " AND (ticker = %s OR ticker LIKE %s)"
+                verification_params.extend([ticker, f"{ticker}%"])
+
+            cursor.execute(verification_query, tuple(verification_params))
+            verification_total = float(cursor.fetchone()[0])
+
+            cursor.execute(pnl_query, tuple(params))
+            pnl_data = cursor.fetchall()
+            
+            cumulative_pnl = []
+            running_total = 0
+            eastern = pytz.timezone('America/New_York')
+            utc = pytz.UTC
+            for row in pnl_data:
+                # Convert EST timestamp to UTC milliseconds
+                trade_time = eastern.localize(row[0]).astimezone(utc)
+                timestamp = int(trade_time.timestamp() * 1000)
+                pnl = float(row[1])
+                running_total += pnl
+                cumulative_pnl.append({
+                    'timestamp': timestamp,
+                    'value': running_total
+                })
+
+            # Get top 5 trades
+            cursor.execute(trades_query + " ORDER BY closedPnL DESC LIMIT 5", tuple(params))
+            top_trades = [{
+                'ticker': row[0],
+                'timestamp': int(eastern.localize(row[1]).astimezone(utc).timestamp() * 1000),
+                'direction': row[2],
+                'pnl': float(row[3])
+            } for row in cursor.fetchall()]
+
+            # Get bottom 5 trades, excluding the trade IDs from top trades
+            bottom_trades_query = trades_query + """
+                AND NOT (ticker, entry_times[1], tradedirection, closedPnL) IN (
+                    SELECT ticker, entry_times[1], tradedirection, closedPnL
+                    FROM trades 
+                    WHERE userId = %s 
+                    AND status = 'Closed'
+                    AND closedPnL IS NOT NULL
+                    ORDER BY closedPnL DESC 
+                    LIMIT 5
+                )
+                ORDER BY closedPnL ASC 
+                LIMIT 5
+            """
+            
+            # Add the user_id parameter again for the subquery
+            bottom_params = params + [user_id]
+            cursor.execute(bottom_trades_query, tuple(bottom_params))
+            
+            bottom_trades = [{
+                'ticker': row[0],
+                'timestamp': int(eastern.localize(row[1]).astimezone(utc).timestamp() * 1000),
+                'direction': row[2],
+                'pnl': float(row[3])
+            } for row in cursor.fetchall()]
+
+            # Get hourly statistics
             cursor.execute(hourly_query, tuple(params))
             hourly_stats = []
             
@@ -621,7 +416,7 @@ def get_trade_statistics(conn, user_id: int, start_date: str = None, end_date: s
                     'total_pnl': round(total_pnl, 2)
                 })
 
-            # Add query for ticker statistics
+            # Fix the ticker statistics query
             ticker_query = """
                 SELECT 
                     ticker,
@@ -634,27 +429,35 @@ def get_trade_statistics(conn, user_id: int, start_date: str = None, end_date: s
                 WHERE userId = %s 
                 AND status = 'Closed'
                 AND closedPnL IS NOT NULL
+                {date_filters}
+                {ticker_filter}
+                GROUP BY ticker
+                ORDER BY total_pnl DESC
             """
-            params = [user_id]
 
+            # Build the query with filters
+            date_filters = ""
             if start_date:
-                ticker_query += " AND DATE(entry_times[1]) >= %s"
-                params.append(start_date)
-            
+                date_filters += " AND DATE(entry_times[1]) >= %s"
             if end_date:
-                ticker_query += " AND DATE(entry_times[1]) <= %s"
-                params.append(end_date)
+                date_filters += " AND DATE(entry_times[1]) <= %s"
+            ticker_filter = " AND (ticker = %s OR ticker LIKE %s)" if ticker else ""
             
-            if ticker:
-                ticker_query += " AND ticker = %s"
-                params.append(ticker)
-            
-            ticker_query += """ 
-                GROUP BY ticker 
-                ORDER BY SUM(closedPnL) DESC
-            """
+            query = ticker_query.format(
+                date_filters=date_filters,
+                ticker_filter=ticker_filter
+            )
 
-            cursor.execute(ticker_query, tuple(params))
+            # Build params list
+            params = [user_id]
+            if start_date:
+                params.append(start_date)
+            if end_date:
+                params.append(end_date)
+            if ticker:
+                params.extend([ticker, f"{ticker}%"])
+
+            cursor.execute(query, tuple(params))
             ticker_stats = []
             
             for row in cursor.fetchall():
@@ -675,22 +478,6 @@ def get_trade_statistics(conn, user_id: int, start_date: str = None, end_date: s
                     'total_pnl': round(total_pnl, 2)
                 })
 
-            # Verify total P&L matches sum of ticker P&Ls
-            cursor.execute("""
-                SELECT COALESCE(SUM(closedPnL), 0) as verification_total
-                FROM trades 
-                WHERE userId = %s 
-                AND status = 'Closed'
-                AND closedPnL IS NOT NULL
-                """ + 
-                (" AND DATE(entry_times[1]) >= %s" if start_date else "") +
-                (" AND DATE(entry_times[1]) <= %s" if end_date else "") +
-                (" AND ticker = %s" if ticker else ""),
-                tuple(param for param in params if param is not None)
-            )
-            verification_total = float(cursor.fetchone()[0])
-
-            # Add verification to returned data
             return {
                 "total_trades": total_trades,
                 "winning_trades": winning_trades,
@@ -832,27 +619,25 @@ def get_ticker_performance(conn, user_id: int, sort: str = "desc", date: str = N
                 ORDER BY ts.last_exit {sort_direction}
             """
 
-            # Build the query with filters
-            date_filter = " AND DATE(entry_times[1]) = %s" if date else ""
-            hour_filter = " AND EXTRACT(HOUR FROM entry_times[1]) = %s" if hour is not None else ""
-            ticker_filter = " AND ticker = %s" if ticker else ""
+            # Modified the ticker filter condition
+            ticker_filter = " AND (ticker = %s OR ticker LIKE %s)" if ticker else ""
             
             # Replace placeholders in the query
             query = query.format(
-                date_filter=date_filter,
-                hour_filter=hour_filter,
+                date_filter=" AND DATE(entry_times[1]) = %s" if date else "",
+                hour_filter=" AND EXTRACT(HOUR FROM entry_times[1]) = %s" if hour is not None else "",
                 ticker_filter=ticker_filter,
                 sort_direction="DESC" if sort.lower() == "desc" else "ASC"
             )
 
-            # Build params list
+            # Build params list with modified ticker parameters
             params = [user_id]
             if date:
                 params.append(date)
             if hour is not None:
                 params.append(hour)
             if ticker:
-                params.append(ticker)
+                params.extend([ticker, f"{ticker}%"])
             # Add params for second part of query
             params.extend([p for p in [user_id] + params[1:]])
 
