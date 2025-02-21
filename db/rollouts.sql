@@ -113,9 +113,9 @@ ADD COLUMN name varchar(200),
     ADD COLUMN icon text,
     ADD COLUMN share_class_shares_outstanding bigint;
 ALTER TABLE users
-ADD COLUMN email VARCHAR(255),
-    ADD COLUMN google_id VARCHAR(255),
-    ADD COLUMN profile_picture TEXT;
+ADD COLUMN profile_picture TEXT;
+--ADD COLUMN google_id VARCHAR(255),
+---ADD COLUMN email VARCHAR(255),
 -------------------------
 ALTER TABLE securities
 ADD COLUMN total_shares BIGINT;
