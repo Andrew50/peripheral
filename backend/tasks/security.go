@@ -224,20 +224,20 @@ type GetTickerDetailsArgs struct {
 }
 
 type GetTickerMenuDetailsResults struct {
-	Ticker                      string        `json:"ticker"`
-	Name                        string        `json:"name"`
-	Market                      string        `json:"market"`
-	Locale                      string        `json:"locale"`
-	PrimaryExchange             string        `json:"primary_exchange"`
-	Active                      string        `json:"active"`
-	MarketCap                   float64       `json:"market_cap"`
-	Description                 string        `json:"description"`
-	Logo                        string        `json:"logo"`
-	ShareClassSharesOutstanding int64         `json:"share_class_shares_outstanding"`
-	Industry                    string        `json:"industry"`
-	Sector                      string        `json:"sector"`
-	Icon                        string        `json:"icon"`
-	TotalShares                 sql.NullInt64 `json:"totalShares"`
+	Ticker                      string          `json:"ticker"`
+	Name                        sql.NullString  `json:"name"`
+	Market                      sql.NullString  `json:"market"`
+	Locale                      sql.NullString  `json:"locale"`
+	PrimaryExchange             sql.NullString  `json:"primary_exchange"`
+	Active                      string          `json:"active"`
+	MarketCap                   sql.NullFloat64 `json:"market_cap"`
+	Description                 sql.NullString  `json:"description"`
+	Logo                        sql.NullString  `json:"logo"`
+	Icon                        sql.NullString  `json:"icon"`
+	ShareClassSharesOutstanding int64           `json:"share_class_shares_outstanding"`
+	Industry                    sql.NullString  `json:"industry"`
+	Sector                      sql.NullString  `json:"sector"`
+	TotalShares                 sql.NullInt64   `json:"totalShares"`
 }
 
 func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -246,7 +246,7 @@ func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
-	// Modified query to be more explicit and add NULLIF to handle empty strings
+	// Modified query to handle NULL market_cap
 	query := `
 		SELECT 
 			ticker,
@@ -258,7 +258,7 @@ func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 				WHEN maxDate IS NULL THEN 'Now'
 				ELSE to_char(maxDate, 'YYYY-MM-DD')
 			END as active,
-			market_cap,
+			NULLIF(market_cap, 0),  -- This will convert 0 to NULL
 			NULLIF(description, '') as description,
 			NULLIF(logo, '') as logo,
 			NULLIF(icon, '') as icon,
