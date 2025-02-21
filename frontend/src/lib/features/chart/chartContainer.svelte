@@ -1,10 +1,28 @@
 <script lang="ts">
 	import Chart from './chart.svelte';
 	import { settings } from '$lib/core/stores';
+	import { onMount } from 'svelte';
 	export let width: number;
+
+	// Add focus management
+	let containerRef: HTMLDivElement;
+
+	onMount(() => {
+		// Focus the container on mount
+		if (containerRef) {
+			containerRef.focus();
+		}
+	});
+
+	// Handle focus management
+	function handleContainerClick() {
+		if (containerRef) {
+			containerRef.focus();
+		}
+	}
 </script>
 
-<div class="chart-container">
+<div class="chart-container" bind:this={containerRef} on:click={handleContainerClick} tabindex="0">
 	{#each Array.from({ length: $settings.chartRows }) as _, j}
 		<div class="row" style="height: calc(100% / {$settings.chartRows})">
 			{#each Array.from({ length: $settings.chartColumns }) as _, i}
@@ -25,6 +43,7 @@
 		left: 0;
 		right: 0;
 		bottom: 0;
+		outline: none; /* Remove focus outline but maintain accessibility */
 	}
 
 	.row {

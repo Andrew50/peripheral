@@ -519,32 +519,32 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 		// Update the security record with all details
 		_, err = conn.DB.Exec(context.Background(),
 			`UPDATE securities 
-			 SET name = $1,
-				 market = $2,
-				 locale = $3,
-				 primary_exchange = $4,
+			 SET name = NULLIF($1, ''),
+				 market = NULLIF($2, ''),
+				 locale = NULLIF($3, ''),
+				 primary_exchange = NULLIF($4, ''),
 				 active = $5,
-				 market_cap = $6,
-				 description = $7,
-				 logo = $8,
-				 icon = $9,
-				 share_class_shares_outstanding = $10,
+				 market_cap = NULLIF($6, 0),
+				 description = NULLIF($7, ''),
+				 logo = NULLIF($8, ''),
+				 icon = NULLIF($9, ''),
+				 share_class_shares_outstanding = NULLIF($10, 0),
 				 total_shares = CASE 
-					 WHEN $6::numeric > 0 AND $12::numeric > 0 THEN CAST(($6::numeric / $12::numeric) AS BIGINT)
+					 WHEN NULLIF($6::numeric, 0) > 0 AND NULLIF($12::numeric, 0) > 0 
+					 THEN CAST(($6::numeric / $12::numeric) AS BIGINT)
 					 ELSE NULL 
 				 END
 			 WHERE securityid = $11`,
-			details.Name,
-			string(details.Market),
-			string(details.Locale),
-
-			details.PrimaryExchange,
+			utils.NullString(details.Name),
+			utils.NullString(string(details.Market)),
+			utils.NullString(string(details.Locale)),
+			utils.NullString(details.PrimaryExchange),
 			details.Active,
-			details.MarketCap,
-			details.Description,
-			logoBase64,
-			iconBase64,
-			details.ShareClassSharesOutstanding,
+			utils.NullInt64(int64(details.MarketCap)),
+			utils.NullString(details.Description),
+			utils.NullString(logoBase64),
+			utils.NullString(iconBase64),
+			utils.NullInt64(details.ShareClassSharesOutstanding),
 			securityId,
 			currentPrice)
 
