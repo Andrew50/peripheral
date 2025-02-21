@@ -1210,7 +1210,7 @@
 	}
 </script>
 
-<div autofocus class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
+<div class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
 	<Legend instance={currentChartInstance} {hoveredCandleData} />
 	<Shift {shiftOverlay} />
 	<Countdown instance={currentChartInstance} {currentBarTimestamp} />
