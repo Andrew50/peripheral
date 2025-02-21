@@ -77,7 +77,7 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 			switch msg := out.(type) {
 			case models.EquityAgg:
 				symbol = msg.Symbol
-				timestamp = msg.Timestamp
+				timestamp = msg.EndTimestamp
 			case models.EquityTrade:
 				symbol = msg.Symbol
 				timestamp = msg.Timestamp

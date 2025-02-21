@@ -358,6 +358,7 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 						if maxDate.Valid {
 							maxDtStr = maxDate.Time.Format(dateFormat)
 						} else {
+
 							maxDtStr = "NULL"
 						}
 						fmt.Printf("%s %d %s %s %s\n", ticker, secId, figi, minDtStr, maxDtStr)
@@ -381,6 +382,7 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 			}
 			if contains(diagnoses, "listing") {
 				_, err = conn.DB.Exec(context.Background(), "INSERT INTO securities (figi, ticker, minDate) values ($1,$2,$3)", sec.CompositeFIGI, sec.Ticker, currentDateString)
+
 				logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "listing exec", err)
 			}
 		}
@@ -528,13 +530,14 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 				 icon = $9,
 				 share_class_shares_outstanding = $10,
 				 total_shares = CASE 
-					 WHEN $6 > 0 AND $12 > 0 THEN CAST(($6 / $12) AS BIGINT)
+					 WHEN $6::numeric > 0 AND $12::numeric > 0 THEN CAST(($6::numeric / $12::numeric) AS BIGINT)
 					 ELSE NULL 
 				 END
 			 WHERE securityid = $11`,
 			details.Name,
 			string(details.Market),
 			string(details.Locale),
+
 			details.PrimaryExchange,
 			details.Active,
 			details.MarketCap,
