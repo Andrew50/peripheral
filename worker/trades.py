@@ -6,7 +6,7 @@ import traceback
 from datetime import datetime
 from decimal import Decimal
 import pytz
-
+from trade_helpers import parse_datetime, calculate_pnl, process_trades
 
 def grab_user_trades(conn, user_id: int, sort: str = "desc", date: str = None, hour: int = None, ticker: str = None):
     """
