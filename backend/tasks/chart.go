@@ -325,18 +325,34 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		var isEarliestData bool
 		if args.Direction == "backward" {
 			earliestBar := barDataList[0]
-			rows, err := conn.DB.Query(ctx, `
-				SELECT 1 FROM securities 
-				WHERE securityid = $1 
-				AND minDate < $2
-				LIMIT 1
-			`, args.SecurityId, time.Unix(int64(earliestBar.Timestamp), 0))
-			if err != nil {
-				return nil, fmt.Errorf("error checking earliest data: %w", err)
-			}
-			defer rows.Close()
 
-			isEarliestData = !rows.Next() // true if no earlier data exists
+			// Create a separate context with a shorter timeout for this quick check
+			checkCtx, checkCancel := context.WithTimeout(context.Background(), 1*time.Second)
+			defer checkCancel()
+
+			// Add index hint and optimize query
+			row := conn.DB.QueryRow(checkCtx, `
+				SELECT EXISTS (
+					SELECT 1 FROM securities 
+					WHERE securityid = $1 
+					AND minDate < $2
+					LIMIT 1
+				)
+			`, args.SecurityId, time.Unix(int64(earliestBar.Timestamp), 0))
+
+			var exists bool
+			err := row.Scan(&exists)
+			if err != nil {
+				if checkCtx.Err() == context.DeadlineExceeded {
+					// If timeout occurs, assume there might be earlier data
+					fmt.Printf("[DEBUG] Timeout occurred while checking earliest data\n")
+					isEarliestData = false
+				} else {
+					return nil, fmt.Errorf("error checking earliest data: %w", err)
+				}
+			} else {
+				isEarliestData = !exists
+			}
 		}
 
 		// For aggregator logic or forward queries, we skip reversing.

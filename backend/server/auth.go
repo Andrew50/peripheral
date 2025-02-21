@@ -184,7 +184,7 @@ func GoogleCallback(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, err
 		// User doesn't exist, create new user
 		username = googleUser.Name
 		err = conn.DB.QueryRow(context.Background(),
-			"INSERT INTO users (username, password, email, google_id, profile_picture) VALUES ($0, $2, $3, $4, $5) RETURNING userId",
+			"INSERT INTO users (username, password, email, google_id, profile_picture) VALUES ($1, $2, $3, $4, $5) RETURNING userId",
 			googleUser.Name, "", googleUser.Email, googleUser.ID, googleUser.Picture).Scan(&userId)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create user: %v", err)
