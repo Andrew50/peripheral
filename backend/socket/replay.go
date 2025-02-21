@@ -163,6 +163,7 @@ func (c *Client) StartLoop() {
 					simulatedElapsed := time.Duration(float64(c.accumulatedActiveTime) * c.replaySpeed)
 					c.simulatedTime = c.simulatedTimeStart + int64(simulatedElapsed/time.Millisecond)
 					if now.Sub(lastTimestampUpdate) >= TimestampUpdateInterval {
+
 						timestampUpdate := map[string]interface{}{
 							"channel":   "timestamp",
 							"timestamp": c.simulatedTime,

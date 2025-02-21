@@ -13,7 +13,7 @@ import (
 var eOpenRun = false
 var eCloseRun = false
 
-var useBS = false //alerts, securityUpdate, marketMetrics, sectorUpdate
+var useBS = true //alerts, securityUpdate, marketMetrics, sectorUpdate
 
 var (
 	polygonInitialized bool
@@ -124,7 +124,7 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 		fmt.Println("running close schedule ----------------------")
 		if useBS {
 
-			err := updateSecurities(conn, false)
+			err := simpleUpdateSecurities(conn)
 			if err != nil {
 				fmt.Println("schedule issue: dw000", err)
 			}
