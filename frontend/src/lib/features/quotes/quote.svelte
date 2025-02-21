@@ -132,55 +132,53 @@
 			{/if}
 		</div>
 
-		{#if $activeChartInstance}
-			<div class="info-row">
-				<span class="label">Name:</span>
-				<span class="value">{$activeChartInstance.name}</span>
+		<div class="info-row">
+			<span class="label">Name:</span>
+			<span class="value">{$activeChartInstance?.name}</span>
+		</div>
+		<div class="info-row">
+			<span class="label">Active:</span>
+			<span class="value">{$activeChartInstance?.active}</span>
+		</div>
+		<div class="info-row">
+			<span class="label">Market Cap:</span>
+			<span class="value">
+				{#if $activeChartInstance?.totalShares}
+					<StreamCell instance={$activeChartInstance} type="market cap" />
+				{:else}
+					N/A
+				{/if}
+			</span>
+		</div>
+		<div class="info-row">
+			<span class="label">Sector:</span>
+			<span class="value">{$activeChartInstance?.sector || 'N/A'}</span>
+		</div>
+		<div class="info-row">
+			<span class="label">Industry:</span>
+			<span class="value">{$activeChartInstance?.industry || 'N/A'}</span>
+		</div>
+		<div class="info-row">
+			<span class="label">Exchange:</span>
+			<span class="value">{$activeChartInstance?.primary_exchange || 'N/A'}</span>
+		</div>
+		<div class="info-row">
+			<span class="label">Market:</span>
+			<span class="value">{$activeChartInstance?.market || 'N/A'}</span>
+		</div>
+		<div class="info-row">
+			<span class="label">Shares Out:</span>
+			<span class="value">
+				{$activeChartInstance?.share_class_shares_outstanding
+					? `${($activeChartInstance.share_class_shares_outstanding / 1e6).toFixed(2)}M`
+					: 'N/A'}
+			</span>
+		</div>
+		{#if $activeChartInstance?.description}
+			<div class="description">
+				<span class="label">Description:</span>
+				<p class="value description-text">{$activeChartInstance?.description}</p>
 			</div>
-			<div class="info-row">
-				<span class="label">Active:</span>
-				<span class="value">{$activeChartInstance.active}</span>
-			</div>
-			<div class="info-row">
-				<span class="label">Market Cap:</span>
-				<span class="value">
-					{#if $activeChartInstance?.totalShares}
-						<StreamCell instance={$activeChartInstance} type="market cap" />
-					{:else}
-						N/A
-					{/if}
-				</span>
-			</div>
-			<div class="info-row">
-				<span class="label">Sector:</span>
-				<span class="value">{$activeChartInstance.sector || 'N/A'}</span>
-			</div>
-			<div class="info-row">
-				<span class="label">Industry:</span>
-				<span class="value">{$activeChartInstance.industry || 'N/A'}</span>
-			</div>
-			<div class="info-row">
-				<span class="label">Exchange:</span>
-				<span class="value">{$activeChartInstance.primary_exchange || 'N/A'}</span>
-			</div>
-			<div class="info-row">
-				<span class="label">Market:</span>
-				<span class="value">{$activeChartInstance.market || 'N/A'}</span>
-			</div>
-			<div class="info-row">
-				<span class="label">Shares Out:</span>
-				<span class="value">
-					{$activeChartInstance.share_class_shares_outstanding
-						? `${($activeChartInstance.share_class_shares_outstanding / 1e6).toFixed(2)}M`
-						: 'N/A'}
-				</span>
-			</div>
-			{#if $activeChartInstance.description}
-				<div class="description">
-					<span class="label">Description:</span>
-					<p class="value description-text">{$activeChartInstance.description}</p>
-				</div>
-			{/if}
 		{/if}
 	</div>
 </div>
