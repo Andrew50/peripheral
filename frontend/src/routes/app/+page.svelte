@@ -80,7 +80,7 @@
 	let bottomWindowsHeight = 0;
 	let bottomResizing = false;
 	const MIN_BOTTOM_HEIGHT = 250;
-	const MAX_BOTTOM_HEIGHT = 500;
+	const MAX_BOTTOM_HEIGHT = 800;
 
 	// Add these state variables near the top with other state declarations
 	let lastBottomWindow: BottomWindow | null = null;
