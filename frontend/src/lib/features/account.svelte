@@ -234,16 +234,24 @@
 				}}
 				list={trades}
 				columns={[
-					'Timestamp',
-					'Ticker',
-					'Trade Direction',
-					'Status',
-					'Open Quantity',
-					'Closed Pnl'
+					'timestamp',
+					'ticker',
+					'trade_direction',
+					'status',
+					'openQuantity',
+					'closedPnL'
 				]}
+				displayNames={{
+					'timestamp': 'Time',
+					'ticker': 'Ticker',
+					'trade_direction': 'Direction',
+					'status': 'Status',
+					'openQuantity': 'Quantity',
+					'closedPnL': 'P/L'
+				}}
 				formatters={{
 					timestamp: (value) => (value ? UTCTimestampToESTString(value) : 'N/A'),
-					closedPnL: (value) => (value !== null ? value.toFixed(2) : 'N/A')
+					closedPnL: (value) => (value !== null ? `$${value.toFixed(2)}` : 'N/A')
 				}}
 				expandable={true}
 				expandedContent={(trade) => ({
@@ -395,7 +403,7 @@
 								<tbody>
 									{#each $statistics.top_trades as trade}
 										<tr class="defalt-tr">
-											<td class="defalt-td">{UTCTimestampToESTString(trade.timestamp)}</td>
+											<td class="defalt-td">{UTCTimestampToESTString(Number(trade.timestamp))}</td>
 											<td class="defalt-td">{trade.ticker}</td>
 											<td class="defalt-td">{trade.direction}</td>
 											<td class="positive">${trade.pnl.toFixed(2)}</td>
@@ -419,7 +427,7 @@
 								<tbody>
 									{#each $statistics.bottom_trades as trade}
 										<tr class="defalt-tr">
-											<td class="defalt-td">{UTCTimestampToESTString(trade.timestamp)}</td>
+											<td class="defalt-td">{UTCTimestampToESTString(Number(trade.timestamp))}</td>
 											<td class="defalt-td">{trade.ticker}</td>
 											<td class="defalt-td">{trade.direction}</td>
 											<td class={trade.pnl >= 0 ? 'positive' : 'negative'}>
