@@ -101,7 +101,7 @@
 			<button class="utility-button" on:click={goBack}>←</button>
 			<h3>{selectedGroupName} Constituents</h3>
 		</div>
-		<List list={constituentsList} columns={['ticker', 'price', 'change', 'change %']} />
+		<List list={constituentsList} columns={['Ticker', 'Price', 'Chg', 'Chg%']} />
 	{:else}
 		<div class="controls">
 			<div class="select-group">
@@ -154,7 +154,7 @@
 
 		<div class="results">
 			{#if currentParams.group === 'stock'}
-				<List {list} columns={['ticker', 'price', 'change', 'change %']} />
+				<List {list} columns={['Ticker', 'Price', 'Chg', 'Chg%']} />
 			{:else}
 				<table>
 					<thead>
@@ -170,10 +170,7 @@
 							{#if i === selectedRowIndex}
 								<tr class="defalt-tr">
 									<td class="defalt-td">
-										<List
-											list={constituentsList}
-											columns={['ticker', 'price', 'change', 'change %']}
-										/>
+										<List list={constituentsList} columns={['Ticker', 'Price', 'Chg', 'Chg%']} />
 									</td>
 								</tr>
 							{/if}

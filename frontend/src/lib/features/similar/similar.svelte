@@ -43,7 +43,7 @@
 <script lang="ts">
 	import '$lib/core/global.css';
 
-	const columns = ['ticker', 'price', 'change %', 'change % extended'];
+	const columns = ['Ticker', 'Price', 'Chg%', 'Ext'];
 
 	function handleAddTicker() {
 		queryInstanceInput(['ticker'], ['ticker', 'timestamp'], $instance).then((ins: Instance) => {

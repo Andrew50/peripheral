@@ -125,6 +125,7 @@
 						bind:value={username}
 						required
 						on:keydown={handleKeydown}
+						autofocus
 					/>
 				</div>
 

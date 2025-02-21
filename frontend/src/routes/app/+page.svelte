@@ -89,7 +89,6 @@
 	let username = '';
 
 	let sidebarResizing = false;
-	let startY = 0;
 	let tickerHeight = 300; // Initial height
 	const MIN_TICKER_HEIGHT = 100;
 	const MAX_TICKER_HEIGHT = 600;
@@ -116,8 +115,13 @@
 
 	function updateChartWidth() {
 		if (browser) {
-			console.log('menuWidth', $menuWidth);
-			chartWidth = window.innerWidth - $menuWidth - 60; // 60px for sidebar buttons
+			const sidebarWidth = $menuWidth;
+			const maxSidebarWidth = Math.min(500, window.innerWidth - 60);
+
+			// Only reduce chart width if sidebar width is within bounds
+			if (sidebarWidth <= maxSidebarWidth) {
+				chartWidth = window.innerWidth - sidebarWidth - 60;
+			}
 		}
 	}
 
@@ -225,10 +229,7 @@
 
 		// Calculate width from right edge of window, excluding the sidebar buttons width
 		let newWidth = window.innerWidth - clientX - 60; // 60px is the width of sidebar buttons
-
-		if (newWidth > maxWidth) {
-			newWidth = maxWidth;
-		}
+		const maxSidebarWidth = Math.min(500, window.innerWidth - 60);
 
 		// Store state before closing
 		if (newWidth < minWidth && lastSidebarMenu !== null) {
@@ -238,15 +239,19 @@
 		// Restore state if dragging back
 		else if (newWidth >= minWidth && lastSidebarMenu) {
 			lastSidebarMenu = lastSidebarMenu;
-			menuWidth.set(newWidth);
+			menuWidth.set(Math.min(newWidth, maxSidebarWidth));
 			lastSidebarMenu = null;
 		}
 		// Normal resize
 		else if (newWidth >= minWidth) {
-			menuWidth.set(newWidth);
+			// Only update if we're within the maximum width
+			menuWidth.set(Math.min(newWidth, maxSidebarWidth));
 		}
 
-		updateChartWidth();
+		// Only update chart width if we're within bounds
+		if (newWidth <= maxSidebarWidth) {
+			updateChartWidth();
+		}
 	}
 
 	function stopResize() {
@@ -378,8 +383,14 @@
 
 	function handleBottomResize(event: MouseEvent) {
 		if (!bottomResizing) return;
+
+		// Get container dimensions
 		const containerBottom = window.innerHeight - 40; // 40px is bottom-bar height
+		const maxWidth = Math.max(window.innerWidth * 0.4, 600); // Reduce to 40% of window width
+
+		// Calculate new height and constrain horizontal position
 		const newHeight = containerBottom - event.clientY;
+		const newX = Math.min(event.clientX, maxWidth);
 
 		if (newHeight < MIN_BOTTOM_HEIGHT && bottomWindows.length > 0) {
 			// Store state before closing
@@ -390,14 +401,26 @@
 		// Restore state if dragging back
 		else if (newHeight >= MIN_BOTTOM_HEIGHT && lastBottomWindow) {
 			bottomWindowsHeight = newHeight;
-			bottomWindows = [lastBottomWindow];
+			bottomWindows = [
+				{
+					...lastBottomWindow,
+					width: Math.min(window.innerWidth, maxWidth),
+					x: Math.min(lastBottomWindow.x, maxWidth - 100) // Ensure handle is always reachable
+				}
+			];
 			lastBottomWindow = null;
 		}
 		// Normal resize
 		else if (newHeight >= MIN_BOTTOM_HEIGHT && newHeight <= MAX_BOTTOM_HEIGHT) {
 			bottomWindowsHeight = newHeight;
-		} else if (newHeight > MAX_BOTTOM_HEIGHT) {
-			bottomWindowsHeight = MAX_BOTTOM_HEIGHT;
+			// Update window width if it exists
+			if (bottomWindows.length > 0) {
+				bottomWindows = bottomWindows.map((w) => ({
+					...w,
+					width: Math.min(window.innerWidth, maxWidth),
+					x: Math.min(w.x, maxWidth - 100) // Ensure handle is always reachable
+				}));
+			}
 		}
 
 		updateChartWidth();
@@ -425,11 +448,6 @@
 	function startSidebarResize(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
 		sidebarResizing = true;
-		if (event instanceof MouseEvent) {
-			startY = event.clientY;
-		} else {
-			startY = event.touches[0].clientY;
-		}
 		document.body.style.cursor = 'ns-resize';
 		document.addEventListener('mousemove', handleSidebarResize);
 		document.addEventListener('mouseup', stopSidebarResize);
@@ -447,10 +465,13 @@
 			currentY = event.touches[0].clientY;
 		}
 
-		const deltaY = startY - currentY;
-		startY = currentY;
+		// Account for the bottom bar height (40px) and adjust for the drag handle position
+		const bottomBarHeight = 40;
+		const newHeight = window.innerHeight - currentY - bottomBarHeight;
 
-		tickerHeight = Math.min(Math.max(tickerHeight + deltaY, MIN_TICKER_HEIGHT), MAX_TICKER_HEIGHT);
+		// Clamp the height between min and max values
+		tickerHeight = Math.min(Math.max(newHeight, MIN_TICKER_HEIGHT), MAX_TICKER_HEIGHT);
+
 		// Update the CSS variable
 		document.documentElement.style.setProperty('--ticker-height', `${tickerHeight}px`);
 	}
@@ -774,7 +795,7 @@
 		position: relative;
 		flex-shrink: 0;
 		border-left: 1px solid var(--ui-border);
-		max-width: calc(100vw - 60px);
+		max-width: min(500px, calc(100vw - 60px)); /* Reduce max width to 500px */
 	}
 
 	.sidebar-buttons {
@@ -802,6 +823,10 @@
 		left: -4px;
 		top: 0;
 		z-index: 100;
+		overflow: hidden;
+		font-size: 0;
+		line-height: 0;
+		text-indent: -9999px;
 	}
 
 	.resize-handle:hover {
@@ -910,21 +935,35 @@
 		box-sizing: border-box;
 	}
 
+	.bottom-windows-container {
+		position: relative;
+		height: var(--bottom-height);
+		background: var(--c1);
+		border-top: 1px solid var(--c4);
+		overflow: hidden;
+		display: flex;
+		border-top: none;
+		max-width: 100%; /* Ensure container doesn't overflow */
+	}
+
 	.bottom-window {
 		width: 100%;
 		height: 100%;
 		display: flex;
 		flex-direction: column;
 		background: var(--ui-bg-primary);
+		min-width: 0; /* Allow window to shrink */
 	}
 
 	.window-content {
 		flex: 1;
 		overflow-y: auto;
+		overflow-x: hidden; /* Prevent horizontal overflow */
 		padding: 8px;
 		scrollbar-width: none;
 		height: 100%;
 		background: var(--ui-bg-primary);
+		min-width: 0; /* Allow content to shrink */
 	}
 
 	.bottom-resize-handle {
@@ -963,7 +1002,8 @@
 		border-top: 1px solid var(--c3);
 		background: var(--c2);
 		height: var(--ticker-height);
-		overflow: hidden;
+		overflow-y: auto;
+		overflow-x: hidden;
 	}
 
 	.main-sidebar-content::-webkit-scrollbar,
@@ -1046,21 +1086,6 @@
 		-moz-user-select: none;
 		-ms-user-select: none;
 		user-select: none;
-	}
-
-	.bottom-windows-container {
-		position: relative;
-		height: var(--bottom-height);
-		background: var(--c1);
-		border-top: 1px solid var(--c4);
-		overflow: hidden;
-		display: flex;
-		border-top: none;
-	}
-
-	/* Only show border when windows are open */
-	.bottom-windows-container:not(:empty) {
-		border-top: 1px solid var(--c4);
 	}
 
 	.sidebar-resize-handle {

@@ -291,24 +291,27 @@
 							if (bars.length > 0) {
 								const firstBar = bars[0];
 								const lastBar = bars[bars.length - 1];
-								
-								const fromTime = (ESTSecondstoUTCMillis(firstBar.time as UTCTimestamp) as number);
-								const toTime = (ESTSecondstoUTCMillis(lastBar.time as UTCTimestamp) as number);
+
+								const fromTime = ESTSecondstoUTCMillis(firstBar.time as UTCTimestamp) as number;
+								const toTime = ESTSecondstoUTCMillis(lastBar.time as UTCTimestamp) as number;
 								console.log('time requested', fromTime, toTime);
-								
+
 								privateRequest<any[]>('getEdgarFilings', {
 									securityId: inst.securityId,
 									from: fromTime,
 									to: toTime,
 									limit: 100
-								})
-								.then((filings) => {
-									const filingsByTime = new Map<number, Array<{ type: string, url: string }>>();
-									
-									filings.forEach(filing => {
-										filing.timestamp = UTCSecondstoESTSeconds(filing.timestamp/1000) as UTCTimestamp;
-										const roundedTime = Math.floor(filing.timestamp / chartTimeframeInSeconds) * chartTimeframeInSeconds;
-										
+								}).then((filings) => {
+									const filingsByTime = new Map<number, Array<{ type: string; url: string }>>();
+
+									filings.forEach((filing) => {
+										filing.timestamp = UTCSecondstoESTSeconds(
+											filing.timestamp / 1000
+										) as UTCTimestamp;
+										const roundedTime =
+											Math.floor(filing.timestamp / chartTimeframeInSeconds) *
+											chartTimeframeInSeconds;
+
 										if (!filingsByTime.has(roundedTime)) {
 											filingsByTime.set(roundedTime, []);
 										}
@@ -319,10 +322,12 @@
 										});
 									});
 
-									eventSeries.setData(Array.from(filingsByTime.entries()).map(([time, events]) => ({
-										time: time as UTCTimestamp,
-										events: events
-									})));
+									eventSeries.setData(
+										Array.from(filingsByTime.entries()).map(([time, events]) => ({
+											time: time as UTCTimestamp,
+											events: events
+										}))
+									);
 								});
 							}
 						} catch (error) {
@@ -1210,7 +1215,7 @@
 	<Shift {shiftOverlay} />
 	<Countdown instance={currentChartInstance} {currentBarTimestamp} />
 	<DrawingMenu {drawingMenuProps} />
-</div>1
+</div>
 
 <!-- Add filing info overlay -->
 {#if selectedFiling}

@@ -233,7 +233,14 @@
 					event.preventDefault();
 				}}
 				list={trades}
-				columns={['timestamp', 'ticker', 'trade_direction', 'status', 'openQuantity', 'closedPnL']}
+				columns={[
+					'Timestamp',
+					'Ticker',
+					'Trade Direction',
+					'Status',
+					'Open Quantity',
+					'Closed Pnl'
+				]}
 				formatters={{
 					timestamp: (value) => (value ? UTCTimestampToESTString(value) : 'N/A'),
 					closedPnL: (value) => (value !== null ? value.toFixed(2) : 'N/A')
@@ -516,6 +523,9 @@
 	.account-container {
 		padding: 20px;
 		color: white;
+		width: 100%;
+		min-width: 0; /* Allow container to shrink */
+		overflow-x: auto; /* Enable horizontal scrolling if needed */
 	}
 
 	.tab-navigation {
@@ -524,6 +534,7 @@
 		margin-bottom: 20px;
 		border-bottom: 1px solid #444;
 		padding-bottom: 10px;
+		flex-wrap: wrap; /* Allow wrapping */
 	}
 
 	.tab-navigation button.active {
@@ -545,6 +556,15 @@
 		gap: 10px;
 		align-items: center;
 		margin-bottom: 20px;
+		flex-wrap: wrap; /* Allow wrapping */
+	}
+
+	.upload-section button,
+	.upload-section input {
+		flex: 0 1 auto;
+		min-width: 80px;
+		max-width: 200px;
+		width: auto;
 	}
 
 	.filters-section {
@@ -552,6 +572,17 @@
 		gap: 10px;
 		align-items: center;
 		margin-bottom: 20px;
+		flex-wrap: wrap; /* Allow filters to wrap */
+		min-width: 0; /* Allow container to shrink */
+	}
+
+	.filters-section button,
+	.filters-section input,
+	.filters-section select {
+		flex: 0 1 auto; /* Allow shrinking */
+		min-width: 80px; /* Minimum width before wrapping */
+		max-width: 200px; /* Maximum width */
+		width: auto; /* Let it be flexible */
 	}
 
 	.message {
@@ -576,7 +607,7 @@
 
 	.statistics-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 		gap: 20px;
 		margin-top: 20px;
 	}
@@ -625,7 +656,7 @@
 
 	.best-worst-container {
 		display: grid;
-		grid-template-columns: 1fr 1fr;
+		grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 		gap: 20px;
 		margin-top: 20px;
 	}
@@ -665,6 +696,8 @@
 	}
 
 	.hourly-stats-container {
+		width: 100%;
+		overflow-x: auto;
 		margin-top: 20px;
 	}
 
@@ -675,6 +708,8 @@
 
 	.hourly-stats-table {
 		width: 100%;
+		min-width: 600px;
+		max-width: 100%;
 		border-collapse: collapse;
 		font-size: 0.9em;
 	}
@@ -713,6 +748,8 @@
 	}
 
 	.ticker-stats-container {
+		width: 100%;
+		overflow-x: auto;
 		margin-top: 20px;
 	}
 
@@ -723,6 +760,8 @@
 
 	.ticker-stats-table {
 		width: 100%;
+		min-width: 600px;
+		max-width: 100%;
 		border-collapse: collapse;
 		font-size: 0.9em;
 	}
@@ -766,5 +805,12 @@
 
 	:global(.unprofitable:hover) {
 		background: rgba(244, 67, 54, 0.2) !important;
+	}
+
+	/* Make tables more responsive */
+	table {
+		width: 100%;
+		min-width: 600px; /* Minimum width before horizontal scroll */
+		max-width: 100%;
 	}
 </style>
