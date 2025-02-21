@@ -35,6 +35,19 @@
 		);
 	}
 
+	function handleKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			queryInstanceInput(
+				'any',
+				['ticker', 'timeframe', 'timestamp', 'extendedHours'],
+				instance
+			).then((v: Instance) => {
+				queryChart(instance);
+			});
+		}
+	}
+
 	function formatLargeNumber(volume: number, dolvol: boolean): string {
 		if (volume === undefined) {
 			return 'NA';
@@ -157,11 +170,7 @@
 	tabindex="-1"
 	role="button"
 	on:click={handleClick}
-	on:keydown={(e) => {
-		if (e.key === 'Enter' || e.key === ' ') {
-			handleClick(e);
-		}
-	}}
+	on:keydown={handleKeydown}
 	on:touchstart={handleClick}
 	class="legend {isCollapsed ? 'collapsed' : ''} {isOverflowing ? 'compact' : ''}"
 >
@@ -175,7 +184,7 @@
 		{/if}
 		<span class="symbol">{instance?.ticker || 'NaN'}</span>
 		<span class="metadata">
-			<span class="timeframe">{instance?.timeframe ?? 'NA'}</span>
+			<span class="timeframe">{instance?.timeframe ?? '1d'}</span>
 			{#if !isOverflowing}
 				<span class="timestamp">{UTCTimestampToESTString(instance?.timestamp ?? 0)}</span>
 				<span class="session-type">{instance?.extendedHours ? 'Extended' : 'Regular'}</span>

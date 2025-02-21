@@ -233,7 +233,7 @@
 
 	<List
 		parentDelete={deleteItem}
-		columns={['ticker', 'price', 'change', 'change %', 'change % extended']}
+		columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Ext']}
 		list={activeList}
 	/>
 </div>
