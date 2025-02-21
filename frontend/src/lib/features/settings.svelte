@@ -143,7 +143,20 @@
 							<option value={false}>No</option>
 						</select>
 					</div>
-				</div>
+		
+			<div class="setting-row">
+				<label for="showFilings">Show SEC Filings:</label>
+				<select
+					class="default-select"
+					id="showFilings"
+					bind:value={tempSettings.showFilings}
+					on:keypress={handleKeyPress}
+				>
+					<option value={true}>Yes</option>
+					<option value={false}>No</option>
+				</select>
+			</div>
+		</div>
 			{:else if activeTab === 'account'}
 				<div class="settings-group">
 					<div class="info-message">Account settings coming soon</div>
