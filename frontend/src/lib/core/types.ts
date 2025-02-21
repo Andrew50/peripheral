@@ -77,6 +77,7 @@ export interface AlertData {
 }
 export interface AlertLog extends Instance, Alert { }
 export interface Alert {
+    active?: boolean;
     alertId?: number
     alertType: string
     setupId?: number

@@ -1,7 +1,7 @@
 //stores.ts
 import { writable } from 'svelte/store'
 //export let currentTimestamp = writable(0);
-import type { Settings, Algo, Setup, Instance, Watchlist, Alert, AlertLog, AlertData } from '$lib/core/types'
+import type { Settings, Setup, Instance, Watchlist, Alert, AlertLog, AlertData } from '$lib/core/types'
 import type { Writable } from 'svelte/store'
 import { privateRequest } from '$lib/core/backend'
 export const setups: Writable<Setup[]> = writable([]);
@@ -55,6 +55,10 @@ export function initStores() {
         })
     privateRequest<Setup[]>('getSetups', {})
         .then((v: Setup[]) => {
+            if (!v) {
+                setups.set([]);
+                return;
+            }
             v = v.map((v: Setup) => {
                 return {
                     ...v,
