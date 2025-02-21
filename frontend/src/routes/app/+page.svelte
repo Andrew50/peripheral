@@ -11,6 +11,7 @@
 	import Watchlist from '$lib/features/watchlist.svelte';
 	//import TickerInfo from '$lib/features/quotes/tickerInfo.svelte';
 	import Quote from '$lib/features/quotes/quote.svelte';
+	import Algo from '$lib/utils/popups/algo.svelte';
 	import { activeMenu, changeMenu } from '$lib/core/stores';
 
 	// Windows that will be opened in draggable divs
@@ -495,7 +496,7 @@
 	<Input />
 	<RightClick />
 	<Setup />
-
+	<Algo />
 	<!-- Main area wrapper -->
 	<div class="app-container">
 		<div class="content-wrapper">
