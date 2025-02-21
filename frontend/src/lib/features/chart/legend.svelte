@@ -133,6 +133,7 @@
 	}
 
 	onMount(() => {
+		console.log(instance);
 		// Initialize ResizeObserver with a more conservative callback
 		resizeObserver = new ResizeObserver((entries) => {
 			if (!isUpdating) {
@@ -184,7 +185,7 @@
 		{/if}
 		<span class="symbol">{instance?.ticker || 'NaN'}</span>
 		<span class="metadata">
-			<span class="timeframe">{instance?.timeframe ?? '1d'}</span>
+			<span class="timeframe">{instance?.timeframe || '1d'}</span>
 			{#if !isOverflowing}
 				<span class="timestamp">{UTCTimestampToESTString(instance?.timestamp ?? 0)}</span>
 				<span class="session-type">{instance?.extendedHours ? 'Extended' : 'Regular'}</span>
