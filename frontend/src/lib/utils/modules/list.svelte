@@ -18,6 +18,7 @@
 	export let formatters: { [key: string]: (value: any) => string } = {};
 	export let expandable = false;
 	export let expandedContent: (item: any) => any = () => null;
+	export let displayNames: {[key: string]: string} = {};
 
 	let selectedRowIndex = -1;
 	let expandedRows = new Set();
@@ -187,11 +188,11 @@
 		<thead>
 			<tr class="default-tr">
 				{#if expandable}
-					<th class="default-th"></th>
+					<th class="default-th expand-column" />
 				{/if}
 				<th class="default-th"></th>
 				{#each columns as col}
-					<th class="default-th" data-type={col.toLowerCase().replace(/ /g, '-')}>{col}</th>
+					<th class="default-th">{displayNames[col] || col}</th>
 				{/each}
 				<th class="default-th"></th>
 			</tr>
@@ -235,7 +236,7 @@
 										type={col.toLowerCase().replace(/ /g, '')}
 									/>
 								</td>
-							{:else if col === 'timestamp'}
+							{:else if col === 'Timestamp'}
 								<td
 									class="default-td"
 									on:contextmenu={(event) => {
