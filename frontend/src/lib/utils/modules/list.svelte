@@ -392,8 +392,7 @@
 
 	.table-container {
 		width: 100%;
-		overflow-x: auto;
-		scrollbar-width: thin;
+		overflow: hidden;
 		max-width: 100%;
 		padding-bottom: 2px;
 		padding-right: 8px;

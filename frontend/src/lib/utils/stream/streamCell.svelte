@@ -5,7 +5,7 @@
 	import type { TradeData, Instance, CloseData } from '$lib/core/types';
 
 	export let instance: Instance;
-	export let type: 'price' | 'change' | 'change %' | 'change % extended' = 'change';
+	export let type: 'price' | 'change' | 'change %' | 'change % extended' | 'market cap' = 'change';
 
 	let releaseSlow: Function = () => {};
 	let releaseClose: Function = () => {};
@@ -15,6 +15,7 @@
 		price?: number;
 		prevClose?: number;
 		change: string;
+		shares?: number;
 	}
 	let changeStore = writable<ChangeStore>({ change: '--' });
 
@@ -30,8 +31,12 @@
 		releaseClose();
 		releaseSlow();
 
-		// Reset the store
-		changeStore.set({ change: '--' });
+		// Reset the store with shares if market cap type
+		if (type === 'market cap' && instance.totalShares) {
+			changeStore.set({ change: '--', shares: instance.totalShares });
+		} else {
+			changeStore.set({ change: '--' });
+		}
 
 		// Decide which streams to use based on type
 		let slowStreamName = type === 'change % extended' ? 'slow-extended' : 'slow-regular';
@@ -48,12 +53,17 @@
 				};
 			});
 		});
-		
+
 		releaseSlow = addStream<TradeData>(instance, slowStreamName, (v: TradeData) => {
 			if (v && v.price) {
 				changeStore.update((s: ChangeStore) => {
 					const price = v.price;
-					console.log('prevClose', s.prevClose);
+					if (type === 'market cap') {
+						return {
+							...s,
+							price
+						};
+					}
 					return {
 						...s,
 						price,
@@ -62,7 +72,6 @@
 				});
 			}
 		});
-
 	}
 
 	// Watch for instance changes
@@ -81,11 +90,26 @@
 		if (!price || !prevClose) return '--';
 		return ((price / prevClose - 1) * 100).toFixed(2) + '%';
 	}
+
+	// Add formatMarketCap function
+	function formatMarketCap(price?: number, shares?: number): string {
+		if (!price || !shares) return 'N/A';
+		const marketCap = price * shares;
+		if (marketCap >= 1e12) {
+			return `$${(marketCap / 1e12).toFixed(2)}T`;
+		} else if (marketCap >= 1e9) {
+			return `$${(marketCap / 1e9).toFixed(2)}B`;
+		} else {
+			return `$${(marketCap / 1e6).toFixed(2)}M`;
+		}
+	}
 </script>
 
 <div
 	class={type === 'change'
-		? ($changeStore.price != null && $changeStore.prevClose != null && $changeStore.price - $changeStore.prevClose < 0)
+		? $changeStore.price != null &&
+			$changeStore.prevClose != null &&
+			$changeStore.price - $changeStore.prevClose < 0
 			? 'red'
 			: $changeStore.change === '--'
 				? 'white'
@@ -97,13 +121,15 @@
 			: ''}
 >
 	{#if type === 'change'}
-		{$changeStore.price != null && $changeStore.prevClose != null 
+		{$changeStore.price != null && $changeStore.prevClose != null
 			? ($changeStore.price - $changeStore.prevClose).toFixed(2)
 			: '--'}
 	{:else if type === 'price'}
 		{$changeStore.price?.toFixed(2) ?? '--'}
 	{:else if type === 'change %' || type === 'change % extended'}
 		{$changeStore.change}
+	{:else if type === 'market cap'}
+		{formatMarketCap($changeStore.price, $changeStore.shares)}
 	{:else}
 		{'--'}
 	{/if}

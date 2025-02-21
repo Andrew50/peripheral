@@ -224,19 +224,20 @@ type GetTickerDetailsArgs struct {
 }
 
 type GetTickerMenuDetailsResults struct {
-	Ticker                      string  `json:"ticker"`
-	Name                        string  `json:"name"`
-	Market                      string  `json:"market"`
-	Locale                      string  `json:"locale"`
-	PrimaryExchange             string  `json:"primary_exchange"`
-	Active                      string  `json:"active"`
-	MarketCap                   float64 `json:"market_cap"`
-	Description                 string  `json:"description"`
-	Logo                        string  `json:"logo"`
-	ShareClassSharesOutstanding int64   `json:"share_class_shares_outstanding"`
-	Industry                    string  `json:"industry"`
-	Sector                      string  `json:"sector"`
-	Icon                        string  `json:"icon"`
+	Ticker                      string        `json:"ticker"`
+	Name                        string        `json:"name"`
+	Market                      string        `json:"market"`
+	Locale                      string        `json:"locale"`
+	PrimaryExchange             string        `json:"primary_exchange"`
+	Active                      string        `json:"active"`
+	MarketCap                   float64       `json:"market_cap"`
+	Description                 string        `json:"description"`
+	Logo                        string        `json:"logo"`
+	ShareClassSharesOutstanding int64         `json:"share_class_shares_outstanding"`
+	Industry                    string        `json:"industry"`
+	Sector                      string        `json:"sector"`
+	Icon                        string        `json:"icon"`
+	TotalShares                 sql.NullInt64 `json:"totalShares"`
 }
 
 func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -263,7 +264,8 @@ func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 			NULLIF(icon, '') as icon,
 			share_class_shares_outstanding,
 			NULLIF(industry, '') as industry,
-			NULLIF(sector, '') as sector
+			NULLIF(sector, '') as sector,
+			total_shares
 		FROM securities 
 		WHERE securityId = $1 AND (maxDate IS NULL OR maxDate = (
 			SELECT MAX(maxDate) 
@@ -286,6 +288,7 @@ func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 		&results.ShareClassSharesOutstanding,
 		&results.Industry,
 		&results.Sector,
+		&results.TotalShares,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ticker details: %v", err)

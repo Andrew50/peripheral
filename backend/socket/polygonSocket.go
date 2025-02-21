@@ -30,6 +30,13 @@ var tickerToSecurityIdLock sync.RWMutex
 
 var polygonWSConn *polygonws.Client
 
+const TimestampUpdateInterval = 2 * time.Second
+
+var (
+	lastTickTimestamp  int64
+	tickTimestampMutex sync.RWMutex
+)
+
 func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 	err := polygonWS.Subscribe(polygonws.StocksQuotes)
 	if err != nil {
@@ -52,23 +59,43 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 	} else {
 		//fmt.Printf("debug: successfully connected to Polygon \n")
 	}
+
+	// Add timestamp ticker
+	timestampTicker := time.NewTicker(TimestampUpdateInterval)
+	defer timestampTicker.Stop()
+
 	for {
 		select {
+		case <-timestampTicker.C:
+			broadcastTimestamp()
 		case err := <-polygonWS.Error():
 			fmt.Printf("PolygonWS Error: %v", err)
 		case out := <-polygonWS.Output():
 			var symbol string
+			var timestamp int64
+
 			switch msg := out.(type) {
 			case models.EquityAgg:
 				symbol = msg.Symbol
+				timestamp = msg.Timestamp
 			case models.EquityTrade:
 				symbol = msg.Symbol
+				timestamp = msg.Timestamp
 			case models.EquityQuote:
 				symbol = msg.Symbol
+				timestamp = msg.Timestamp
 			default:
 				//jlog.Println("Unknown message type received")
 				continue
 			}
+
+			// Update the last tick timestamp
+			tickTimestampMutex.Lock()
+			if timestamp > lastTickTimestamp {
+				lastTickTimestamp = timestamp
+			}
+			tickTimestampMutex.Unlock()
+
 			tickerToSecurityIdLock.RLock()
 			securityId, exists := tickerToSecurityId[symbol]
 			tickerToSecurityIdLock.RUnlock()
