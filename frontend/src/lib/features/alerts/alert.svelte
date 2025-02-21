@@ -104,7 +104,7 @@
 		event.preventDefault();
 	}}
 	list={activeAlerts}
-	columns={['alertType', 'ticker', 'alertPrice']}
+	columns={['Alert Type', 'Ticker', 'Alert Price']}
 	parentDelete={deleteAlert}
 />
 
@@ -115,7 +115,7 @@
 		event.preventDefault();
 	}}
 	list={inactiveAlerts}
-	columns={['alertType', 'ticker', 'alertPrice']}
+	columns={['Alert Type', 'Ticker', 'Alert Price']}
 	parentDelete={deleteAlert}
 />
 
@@ -126,7 +126,7 @@
 		event.preventDefault();
 	}}
 	list={alertLogs}
-	columns={['ticker', 'timestamp', 'alertType']}
+	columns={['Ticker', 'Timestamp', 'Alert Type']}
 	parentDelete={deleteAlertLog}
 />
 
