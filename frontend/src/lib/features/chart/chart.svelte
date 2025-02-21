@@ -946,6 +946,8 @@
 					console.log(v);
 					currentChartInstance = v;
 					queryChart(v, true);
+					// Add focus back to chart container
+					chartContainer.focus();
 				});
 			} else if (event.key == 'Shift') {
 				shiftDown = true;
@@ -1171,6 +1173,13 @@
 				addHorizontalLine(e.data.price, e.data.securityId);
 			}
 		});
+
+		// Ensure chart container is focusable
+		if (chartContainer) {
+			chartContainer.setAttribute('tabindex', '-1');
+			// Focus the chart container initially
+			chartContainer.focus();
+		}
 	});
 
 	async function handleScreenshot() {
