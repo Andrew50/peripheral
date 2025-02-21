@@ -147,10 +147,34 @@
 	}
 
 	function formatValue(value: any, column: string): string {
-		if (formatters[column]) {
-			return formatters[column](value);
+		// Convert column name to camelCase
+		const normalizedCol = column
+			.replace(/ /g, '') // Remove spaces
+			.replace(/^[A-Z]/, (letter) => letter.toLowerCase()); // Decapitalize first letter
+
+		// Get the actual data property name based on the display column name
+		let dataKey = normalizedCol;
+		switch (normalizedCol) {
+			case 'chg':
+				dataKey = 'change';
+				break;
+			case 'chg%':
+				dataKey = 'change%';
+				break;
+			case 'ext':
+				dataKey = 'change%extended';
+				break;
+			default:
+				dataKey = normalizedCol;
 		}
-		return value?.toString() ?? 'N/A';
+
+		// Get value using the normalized data key
+		const rawValue = value[dataKey];
+
+		if (formatters[column]) {
+			return formatters[column](rawValue);
+		}
+		return rawValue?.toString() ?? 'N/A';
 	}
 
 	function getAllOrders(trade) {
@@ -159,23 +183,24 @@
 </script>
 
 <div class="table-container">
-	<table>
+	<table class="default-table">
 		<thead>
-			<tr class="defalt-tr">
+			<tr class="default-tr">
 				{#if expandable}
-					<th class="defalt-th"></th>
+					<th class="default-th"></th>
 				{/if}
-				<th class="defalt-th"></th>
+				<th class="default-th"></th>
 				{#each columns as col}
-					<th data-type={col.toLowerCase().replace(/ /g, '-')}>{col}</th>
+					<th class="default-th" data-type={col.toLowerCase().replace(/ /g, '-')}>{col}</th>
 				{/each}
-				<th class="defalt-th"></th>
+				<th class="default-th"></th>
 			</tr>
 		</thead>
 		{#if Array.isArray($list) && $list.length > 0}
 			<tbody>
 				{#each $list as watch, i}
 					<tr
+						class="default-tr"
 						on:mousedown={(event) => clickHandler(event, watch, i)}
 						on:touchstart={handleTouchStart}
 						on:touchend={handleTouchEnd}
@@ -189,44 +214,46 @@
 						on:click={() => expandable && toggleRow(i)}
 					>
 						{#if expandable}
-							<td class="expand-cell">
+							<td class="default-td expand-cell">
 								<span class="expand-icon">{expandedRows.has(i) ? '−' : '+'}</span>
 							</td>
 						{/if}
-						<td class="defalt-td">
+						<td class="default-td">
 							{#if isFlagged(watch, $flagWatchlist)}
-								<span class="flag-icon">⚑</span> <!-- Example flag icon -->
+								<span class="flag-icon">⚑</span>
 							{/if}
 						</td>
 						{#each columns as col}
-							{#if ['price', 'change', 'change %', 'change % extended'].includes(col)}
-								<td class="defalt-td">
+							{#if ['price', 'Chg', 'Chg%', 'Ext'].includes(col)}
+								<td class="default-td">
 									<StreamCell
 										on:contextmenu={(event) => {
 											event.preventDefault();
 											event.stopPropagation();
 										}}
 										instance={watch}
-										type={col}
+										type={col.toLowerCase().replace(/ /g, '')}
 									/>
 								</td>
 							{:else if col === 'timestamp'}
 								<td
+									class="default-td"
 									on:contextmenu={(event) => {
 										event.preventDefault();
 										event.stopPropagation();
-									}}>{UTCTimestampToESTString(watch[col])}</td
+									}}>{UTCTimestampToESTString(watch[col.toLowerCase()])}</td
 								>
 							{:else}
 								<td
+									class="default-td"
 									on:contextmenu={(event) => {
 										event.preventDefault();
 										event.stopPropagation();
-									}}>{formatValue(watch[col], col)}</td
+									}}>{formatValue(watch, col)}</td
 								>
 							{/if}
 						{/each}
-						<td class="defalt-td">
+						<td class="default-td">
 							<button
 								class="delete-button"
 								on:click={(event) => {

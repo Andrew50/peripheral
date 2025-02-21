@@ -18,6 +18,7 @@ export interface Instance {
     share_class_shares_outstanding?: number;
     industry?: string;
     sector?: string;
+    totalShares?: number;
 }
 export interface Setup {
     setupId: number;
