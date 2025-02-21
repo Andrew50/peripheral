@@ -79,7 +79,11 @@
 
 	async function handleGoogleLogin() {
 		try {
-			const response = await publicRequest<{ url: string }>('googleLogin', {});
+			// Pass the current origin to the backend
+			const currentOrigin = window.location.origin;
+			const response = await publicRequest<{ url: string }>('googleLogin', {
+				redirectOrigin: currentOrigin
+			});
 			window.location.href = response.url;
 		} catch (error) {
 			errorMessage.set('Failed to initialize Google login');

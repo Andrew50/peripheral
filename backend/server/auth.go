@@ -142,6 +142,16 @@ type GoogleLoginResponse struct {
 }
 
 func GoogleLogin(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
+	var args struct {
+		RedirectOrigin string `json:"redirectOrigin"`
+	}
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+
+	// Update the redirect URL based on the origin
+	googleOauthConfig.RedirectURL = args.RedirectOrigin + "/auth/google/callback"
+
 	state := generateState()
 	url := googleOauthConfig.AuthCodeURL(state)
 	return map[string]string{"url": url, "state": state}, nil
