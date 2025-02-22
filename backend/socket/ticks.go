@@ -281,26 +281,67 @@ func getPrevCloseData(conn *utils.Conn, securityId int, timestamp int64) ([]Tick
 		return nil, fmt.Errorf("issue loading eastern location: %v", err)
 	}
 
-	// Use the input timestamp to find the ticker
+	// Get the ticker
 	inputTime := time.Unix(timestamp/1000, (timestamp%1000)*1e6).In(easternLocation)
 	ticker, err := utils.GetTicker(conn, securityId, inputTime)
 	if err != nil {
 		return nil, fmt.Errorf("error getting ticker: %v", err)
 	}
 
-	// Get the previous day's timestamp to fetch the close data
-	prevDayTime := inputTime.AddDate(0, 0, -1)
-	startOfDay := time.Date(prevDayTime.Year(), prevDayTime.Month(), prevDayTime.Day(), 0, 0, 0, 0, easternLocation)
-	endOfDay := time.Date(prevDayTime.Year(), prevDayTime.Month(), prevDayTime.Day(), 23, 59, 59, 999999999, easternLocation)
+	// Get the most recent minute bar to determine last market activity
+	startOfDay := time.Date(inputTime.Year(), inputTime.Month(), inputTime.Day(), 0, 0, 0, 0, easternLocation)
+	startMillis := models.Millis(startOfDay.AddDate(0, 0, -5)) // Look back up to 5 days to find activity
+	endMillis := models.Millis(inputTime)
 
-	// Convert the start and end times to models.Millis
-	startOfDayMillis := models.Millis(startOfDay)
-	endOfDayMillis := models.Millis(endOfDay)
-
-	// Fetch more bars (set limit to a higher number, e.g., 10)
-	iter, err := utils.GetAggsData(conn.Polygon, ticker, 1, "day", startOfDayMillis, endOfDayMillis, 10, "desc", true)
+	iter, err := utils.GetAggsData(conn.Polygon, ticker, 1, "minute", startMillis, endMillis, 1, "desc", true)
 	if err != nil {
-		return nil, fmt.Errorf("error fetching aggregate data: %v", err)
+		return nil, fmt.Errorf("error fetching recent minute data: %v", err)
+	}
+
+	// Find the most recent minute bar
+	var lastActivityTime time.Time
+	for iter.Next() {
+		agg := iter.Item()
+		lastActivityTime = time.Time(agg.Timestamp)
+		break // We only need the most recent bar
+	}
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating minute data: %v", err)
+	}
+
+	if lastActivityTime.IsZero() {
+		return nil, fmt.Errorf("no recent market activity found for %s", ticker)
+	}
+
+	// Convert to Eastern time for session determination
+	lastActivityET := lastActivityTime.In(easternLocation)
+
+	var mostRecentSession time.Time
+	mostRecentSession = time.Date(lastActivityET.Year(), lastActivityET.Month(), lastActivityET.Day(), 16, 0, 0, 0, easternLocation)
+
+	// Get the previous session's close
+	prevSessionDay := mostRecentSession.AddDate(0, 0, -1)
+
+	// If the previous session would fall on a weekend, roll back to Friday
+	for prevSessionDay.Weekday() == time.Saturday || prevSessionDay.Weekday() == time.Sunday {
+		prevSessionDay = prevSessionDay.AddDate(0, 0, -1)
+	}
+
+	// Look for the previous session's close
+	prevSessionStart := time.Date(prevSessionDay.Year(), prevSessionDay.Month(), prevSessionDay.Day(), 0, 0, 0, 0, easternLocation)
+	prevSessionEnd := time.Date(prevSessionDay.Year(), prevSessionDay.Month(), prevSessionDay.Day(), 23, 59, 59, 999999999, easternLocation)
+
+	// Debug logging
+	fmt.Printf("Getting previous close for %s:\n", ticker)
+	fmt.Printf("  Input time: %v\n", inputTime)
+	fmt.Printf("  Last activity: %v\n", lastActivityET)
+	fmt.Printf("  Most recent session: %v\n", mostRecentSession)
+	fmt.Printf("  Looking for previous close between: %v and %v\n", prevSessionStart, prevSessionEnd)
+
+	// Get the previous session's daily bar
+	iter, err = utils.GetAggsData(conn.Polygon, ticker, 1, "day", models.Millis(prevSessionStart), models.Millis(prevSessionEnd), 1, "desc", true)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching previous session data: %v", err)
 	}
 
 	var closeDataList []TickData
@@ -308,21 +349,21 @@ func getPrevCloseData(conn *utils.Conn, securityId int, timestamp int64) ([]Tick
 		agg := iter.Item()
 		closeData := TradeData{
 			Price:      agg.Close,
-			Size:       0,                                                             // Size is not applicable for close data
-			Timestamp:  time.Time(agg.Timestamp).UnixNano() / int64(time.Millisecond), // Use the actual timestamp of each bar
-			ExchangeId: 0,                                                             // ExchangeId is not applicable for close data
+			Size:       0,
+			Timestamp:  time.Time(agg.Timestamp).UnixNano() / int64(time.Millisecond),
+			ExchangeId: 0,
 			Conditions: []int32{},
 			Channel:    "",
 		}
 		closeDataList = append(closeDataList, &closeData)
-
+		fmt.Printf("  Found previous close: $%.2f at %v\n", agg.Close, time.Time(agg.Timestamp))
 	}
 
 	if len(closeDataList) > 0 {
 		return closeDataList, nil
 	}
 
-	return nil, fmt.Errorf("no close data found for the specified date range")
+	return nil, fmt.Errorf("no close data found for the previous session")
 }
 
 func getInitialStreamValue(conn *utils.Conn, channelName string, timestamp int64) ([]byte, error) {
