@@ -44,7 +44,6 @@
 
 		// Set up new streams
 		releaseClose = addStream<CloseData>(instance, closeStreamName, (v: CloseData) => {
-			console.log('closedata v', v);
 			changeStore.update((s: ChangeStore) => {
 				const prevClose = v.price;
 				return {
@@ -56,20 +55,23 @@
 		});
 
 		releaseSlow = addStream<TradeData>(instance, slowStreamName, (v: TradeData) => {
-			console.log('tradedatav', v);
 			if (v && v.price) {
 				changeStore.update((s: ChangeStore) => {
 					const price = v.price;
+					// Always preserve the existing prevClose
+					const prevClose = s.prevClose;
 					if (type === 'market cap') {
 						return {
 							...s,
-							price
+							price,
+							prevClose  // Explicitly preserve prevClose
 						};
 					}
 					return {
 						...s,
 						price,
-						change: price && s.prevClose ? getChange(price, s.prevClose) : '--'
+						prevClose,  // Explicitly preserve prevClose
+						change: price && prevClose ? getChange(price, prevClose) : '--'
 					};
 				});
 			}
@@ -80,6 +82,9 @@
 	$: if (instance?.securityId) {
 		setupStreams();
 	}
+
+	// Add debug logging to see store updates
+	$: console.log('changeStore updated:', $changeStore);
 
 	onDestroy(() => {
 		releaseClose();

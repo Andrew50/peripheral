@@ -26,15 +26,21 @@ export function addStream<T extends StreamData>(instance: Instance, channelType:
     if (!instance.securityId) return () => { };
     const channelName = `${instance.securityId}-${channelType}`;
     const callbacks = activeChannels.get(channelName);
+
+    // If callbacks exist, this channel is already active
     if (callbacks) {
         if (!callbacks.includes(callback)) {
             callbacks.push(callback);
+            // Re-subscribe to get initial value
+            if (socket?.readyState === WebSocket.OPEN) {
+                subscribe(channelName);
+            }
         }
     } else {
+        // New channel, set up normally
         activeChannels.set(channelName, [callback]);
         subscribe(channelName);
     }
-    //getInitialValue(channelName, callback); //handled on backend now, kinda
 
     return () => releaseStream(channelName, callback);
 }
