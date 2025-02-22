@@ -15,14 +15,14 @@
 	});
 
 	// Handle focus management
-	function handleContainerClick() {
-		if (containerRef) {
-			containerRef.focus();
+	function handleKeyDown(event: KeyboardEvent) {
+		if (event.key === 'Tab') {
+			event.preventDefault(); // Prevent default tab behavior
 		}
 	}
 </script>
 
-<div class="chart-container" bind:this={containerRef} on:click={handleContainerClick} tabindex="0">
+<div class="chart-container" bind:this={containerRef} tabindex="0" on:keydown={handleKeyDown}>
 	{#each Array.from({ length: $settings.chartRows }) as _, j}
 		<div class="row" style="height: calc(100% / {$settings.chartRows})">
 			{#each Array.from({ length: $settings.chartColumns }) as _, i}
