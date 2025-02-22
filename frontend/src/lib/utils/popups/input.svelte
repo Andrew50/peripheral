@@ -143,7 +143,6 @@
 				const securities = await privateRequest<Instance[]>('getSecuritiesFromTicker', {
 					ticker: inputString
 				});
-				console.log(securities);
 				if (Array.isArray(securities) && securities.length > 0) {
 					return {
 						//inputValid: securities.some((v) => v.ticker === inputString),
