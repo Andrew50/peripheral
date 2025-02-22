@@ -260,7 +260,8 @@
 						type: t.type,
 						price: `$${t.price.toFixed(2)}`,
 						shares: t.shares
-					}))
+					})),
+					tradeId: trade.tradeId
 				})}
 			/>
 		</div>

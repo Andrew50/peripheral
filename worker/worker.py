@@ -3,6 +3,7 @@ from conn import Conn
 from train import train
 from screen import screen
 from trainerQueue import refillTrainerQueue
+from trade_analysis import find_similar_trades
 from trades import handle_trade_upload, grab_user_trades, get_trade_statistics, get_ticker_trades, get_ticker_performance
 from update_sectors import update_sectors
 from active import update_active
@@ -22,7 +23,8 @@ funcMap = {
     "update_active": update_active,
     "get_trade_statistics": get_trade_statistics,
     "get_ticker_trades": get_ticker_trades,
-    "get_ticker_performance": get_ticker_performance
+    "get_ticker_performance": get_ticker_performance,
+    "find_similar_trades": find_similar_trades
 }
 
 

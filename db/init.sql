@@ -161,36 +161,36 @@ CREATE TABLE horizontal_lines (
     unique (userId, securityId, price)
 );
 CREATE TABLE trades (
-    tradeId SERIAL PRIMARY KEY,
-    userId INT REFERENCES users(userId) ON DELETE CASCADE,
-    securityId INT,
-    ticker VARCHAR(20) NOT NULL,
-    tradeDirection VARCHAR(10) NOT NULL,
-    date DATE NOT NULL,
-    status VARCHAR(10) NOT NULL CHECK (status IN ('Open', 'Closed')),
-    openQuantity INT,
-    closedPnL DECIMAL(10, 2),
-    -- Store up to 20 entries
-    entry_times TIMESTAMP [] DEFAULT ARRAY []::TIMESTAMP [],
-    entry_prices DECIMAL(10, 4) [] DEFAULT ARRAY []::DECIMAL(10, 4) [],
-    entry_shares INT [] DEFAULT ARRAY []::INT [],
-    -- Store up to 50 exits
-    exit_times TIMESTAMP [] DEFAULT ARRAY []::TIMESTAMP [],
-    exit_prices DECIMAL(10, 4) [] DEFAULT ARRAY []::DECIMAL(10, 4) [],
-    exit_shares INT [] DEFAULT ARRAY []::INT []
-);
-CREATE TABLE trade_executions (
-    executionId SERIAL PRIMARY KEY,
-    userId INT REFERENCES users(userId) ON DELETE CASCADE,
-    securityId INT,
-    ticker VARCHAR(20) NOT NULL,
-    date DATE NOT NULL,
-    price DECIMAL(10, 4) NOT NULL,
-    size INT NOT NULL,
-    timestamp TIMESTAMP NOT NULL,
-    direction VARCHAR(10) NOT NULL,
-    tradeId INT REFERENCES trades(tradeId)
-);
+ tradeId SERIAL PRIMARY KEY,
+ userId INT REFERENCES users(userId) ON DELETE CASCADE,
+ securityId INT, 
+ ticker VARCHAR(20) NOT NULL,
+ tradeDirection VARCHAR(10) NOT NULL,
+ date DATE NOT NULL,
+ status VARCHAR(10) NOT NULL CHECK (status IN ('Open', 'Closed')),
+ openQuantity INT,
+ closedPnL DECIMAL(10, 2),
+ -- Store up to 20 entries
+ entry_times TIMESTAMP [] DEFAULT ARRAY []::TIMESTAMP [],
+ entry_prices DECIMAL(10, 4) [] DEFAULT ARRAY []::DECIMAL(10, 4) [],
+ entry_shares INT [] DEFAULT ARRAY []::INT [],
+ -- Store up to 50 exits
+ exit_times TIMESTAMP [] DEFAULT ARRAY []::TIMESTAMP [],
+ exit_prices DECIMAL(10, 4) [] DEFAULT ARRAY []::DECIMAL(10, 4) [],
+ exit_shares INT [] DEFAULT ARRAY []::INT []
+ );
+ CREATE TABLE trade_executions (
+ executionId SERIAL PRIMARY KEY,
+ userId INT REFERENCES users(userId) ON DELETE CASCADE,
+ securityId INT,
+ ticker VARCHAR(20) NOT NULL,
+ date DATE NOT NULL,
+ price DECIMAL(10, 4) NOT NULL,
+ size INT NOT NULL,
+ timestamp TIMESTAMP NOT NULL,
+ direction VARCHAR(10) NOT NULL,
+ tradeId INT REFERENCES trades(tradeId)
+ );
 CREATE INDEX idxUserIdSecurityIdPrice on horizontal_lines(userId, securityId, price);
 COPY securities(securityid, ticker, figi, minDate, maxDate)
 FROM '/docker-entrypoint-initdb.d/securities.csv' DELIMITER ',' CSV HEADER;

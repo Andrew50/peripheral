@@ -13,7 +13,7 @@ import (
 var eOpenRun = false
 var eCloseRun = false
 
-var useBS = false //alerts, securityUpdate, marketMetrics, sectorUpdate
+var useBS = true //alerts, securityUpdate, marketMetrics, sectorUpdate
 
 var (
 	polygonInitialized bool

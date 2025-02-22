@@ -44,6 +44,7 @@
 
 		// Set up new streams
 		releaseClose = addStream<CloseData>(instance, closeStreamName, (v: CloseData) => {
+			console.log('closedata v', v);
 			changeStore.update((s: ChangeStore) => {
 				const prevClose = v.price;
 				return {
@@ -55,6 +56,7 @@
 		});
 
 		releaseSlow = addStream<TradeData>(instance, slowStreamName, (v: TradeData) => {
+			console.log('tradedatav', v);
 			if (v && v.price) {
 				changeStore.update((s: ChangeStore) => {
 					const price = v.price;

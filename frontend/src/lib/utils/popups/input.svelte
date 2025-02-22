@@ -510,7 +510,7 @@
 										? 'red'
 										: ''}
 								>
-									{key}
+									{capitalize(key)}
 								</span>
 								<span class="value">
 									{displayValue($inputQuery, key)}

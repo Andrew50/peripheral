@@ -87,6 +87,7 @@ def grab_user_trades(conn, user_id: int, sort: str = "desc", date: str = None, h
                 combined_trades.sort(key=lambda x: x['time'])
                 
                 trade = {
+                    'tradeId': row[0],
                     'ticker': row[3],
                     'securityId': row[2],
                     'tradeStart': eastern.localize(row[9][0]).astimezone(utc).timestamp() * 1000 if row[9] else None,
@@ -713,4 +714,31 @@ def get_ticker_performance(conn, user_id: int, sort: str = "desc", date: str = N
         error_info = traceback.format_exc()
         print(f"Error getting ticker performance:\n{error_info}")
         return []
+
+def get_similar_trades(conn, trade_id: int, n_neighbors: int = 5):
+    """Get trades similar to the specified trade"""
+    try:
+        from trade_analysis import find_similar_trades
+        
+        similar_trades = find_similar_trades(conn, trade_id, n_neighbors)
+        
+        if not similar_trades:
+            return {
+                "status": "error",
+                "message": "No similar trades found"
+            }
+            
+        return {
+            "status": "success",
+            "similar_trades": similar_trades
+        }
+        
+    except Exception as e:
+        error_info = traceback.format_exc()
+        print(f"Error getting similar trades:\n{error_info}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "traceback": error_info
+        }
     
