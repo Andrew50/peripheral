@@ -3,7 +3,6 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { writable, get } from 'svelte/store';
 	import { UTCTimestampToESTString } from '$lib/core/timestamp';
-	import { queryInstanceRightClick } from '$lib/utils/popups/rightClick.svelte';
 	import type { Writable } from 'svelte/store';
 	import type { Instance } from '$lib/core/types';
 	import StreamCell from '$lib/utils/stream/streamCell.svelte';
@@ -11,6 +10,7 @@
 	import { flagWatchlist } from '$lib/core/stores';
 	import { flagSecurity } from '$lib/utils/flag';
 	import { newAlert } from '$lib/features/alerts/interface';
+	import { queueRequest } from '$lib/core/backend';
 	let longPressTimer: any;
 	export let list: Writable<Instance[]> = writable([]);
 	export let columns: Array<string>;
@@ -23,15 +23,16 @@
 	let selectedRowIndex = -1;
 	let expandedRows = new Set();
 
+	// Add these for similar trades handling
+	let similarTradesMap = new Map();
+	let loadingMap = new Map();
+	let errorMap = new Map();
+
 	function isFlagged(instance: Instance, flagWatch: Instance[]) {
 		if (!Array.isArray(flagWatch)) return false;
 		return flagWatch.some((item) => item.ticker === instance.ticker);
 	}
 
-	function rowRightClick(event: MouseEvent, watch: Instance) {
-		event.preventDefault();
-		queryInstanceRightClick(event, watch, 'list');
-	}
 	function deleteRow(event: MouseEvent, watch: Instance) {
 		event.stopPropagation();
 		event.preventDefault();
@@ -124,9 +125,7 @@
 			}
 		} else if (even === 1) {
 			flagSecurity(instance);
-		} else if (even === 2) {
-			rowRightClick(event, instance);
-		}
+		} 
 	}
 	function handleTouchStart(event, watch, i) {
 		longPressTimer = setTimeout(() => {
@@ -139,10 +138,14 @@
 	}
 
 	function toggleRow(index: number) {
+		console.log("Toggling row:", index);
 		if (expandedRows.has(index)) {
 			expandedRows.delete(index);
 		} else {
 			expandedRows.add(index);
+			// Debug log for expanded content
+			const content = expandedContent($list[index]);
+			console.log("Expanded content:", content);
 		}
 		expandedRows = expandedRows; // Trigger reactivity
 	}
@@ -180,6 +183,56 @@
 
 	function getAllOrders(trade) {
 		return trade.trades || [];
+	}
+
+	async function loadSimilarTrades(tradeId: number) {
+		if (!tradeId) {
+			console.log("No tradeId provided");
+			return;
+		}
+		
+		console.log("Loading similar trades for trade:", tradeId);
+		loadingMap.set(tradeId, true);
+		errorMap.delete(tradeId);
+		similarTradesMap = similarTradesMap;
+		
+		try {
+			console.log("Making request for trade:", tradeId);
+			const result = await queueRequest('find_similar_trades', { trade_id: tradeId });
+			console.log("Similar trades result:", result);
+			
+			if (result.status === 'success') {
+				similarTradesMap.set(tradeId, result.similar_trades);
+				console.log("Updated similarTradesMap:", similarTradesMap);
+			} else {
+				errorMap.set(tradeId, result.message);
+				console.log("Error from server:", result.message);
+			}
+		} catch (e) {
+			console.error("Error loading similar trades:", e);
+			errorMap.set(tradeId, `Error loading similar trades: ${e}`);
+		} finally {
+			loadingMap.delete(tradeId);
+			similarTradesMap = similarTradesMap;
+		}
+	}
+
+	// Modified reactive statement with more logging
+	$: {
+		if (expandedRows) {
+			console.log("Expanded rows changed:", expandedRows);
+			expandedRows.forEach((isExpanded, index) => {
+				console.log(`Checking row ${index}, expanded: ${isExpanded}`);
+				if (isExpanded && $list[index]) {
+					const content = expandedContent($list[index]);
+					console.log(`Content for row ${index}:`, content);
+					if (content?.tradeId) {
+						console.log(`Loading similar trades for row ${index}, tradeId: ${content.tradeId}`);
+						loadSimilarTrades(content.tradeId);
+					}
+				}
+			});
+		}
 	}
 </script>
 
@@ -291,6 +344,51 @@
 											{/each}
 										</tbody>
 									</table>
+
+									<!-- Add Similar Trades section -->
+									{#if expandedContent}
+										{@const content = expandedContent($list[i])}
+										{@const tradeId = content.tradeId}
+										{#if tradeId}
+											<h4>Similar Trades</h4>
+											{#if loadingMap.get(tradeId)}
+												<div class="loading">Loading similar trades...</div>
+											{:else if errorMap.get(tradeId)}
+												<div class="error">{errorMap.get(tradeId)}</div>
+											{:else if similarTradesMap.get(tradeId)?.length}
+												<table>
+													<thead>
+														<tr class="defalt-tr">
+															<th class="defalt-th">Date</th>
+															<th class="defalt-th">Ticker</th>
+															<th class="defalt-th">Direction</th>
+															<th class="defalt-th">P/L</th>
+															<th class="defalt-th">Similarity</th>
+														</tr>
+													</thead>
+													<tbody>
+														{#each similarTradesMap.get(tradeId) as similarTrade}
+															<tr class="defalt-tr">
+																<td class="defalt-td">
+																	{UTCTimestampToESTString(similarTrade.entry_time)}
+																</td>
+																<td class="defalt-td">{similarTrade.ticker}</td>
+																<td class="defalt-td">{similarTrade.direction}</td>
+																<td class={similarTrade.pnl >= 0 ? 'positive' : 'negative'}>
+																	${similarTrade.pnl.toFixed(2)}
+																</td>
+																<td class="defalt-td">
+																	{(similarTrade.similarity_score * 100).toFixed(1)}%
+																</td>
+															</tr>
+														{/each}
+													</tbody>
+												</table>
+											{:else}
+												<div class="no-results">No similar trades found</div>
+											{/if}
+										{/if}
+									{/if}
 								</div>
 							</td>
 						</tr>
@@ -459,5 +557,28 @@
 
 	tr:hover td:last-child {
 		background-color: var(--ui-bg-hover);
+	}
+
+	.loading, .error, .no-results {
+		padding: 10px;
+		text-align: center;
+		color: var(--text-secondary);
+	}
+
+	.error {
+		color: var(--negative);
+	}
+
+	.positive {
+		color: var(--positive);
+	}
+
+	.negative {
+		color: var(--negative);
+	}
+
+	h4 {
+		margin: 20px 0 10px 0;
+		color: var(--text-secondary);
 	}
 </style>
