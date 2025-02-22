@@ -278,7 +278,7 @@
 							{/if}
 						</td>
 						{#each columns as col}
-							{#if ['price', 'Chg', 'Chg%', 'Ext'].includes(col)}
+							{#if ['Price', 'Chg', 'Chg%', 'Ext'].includes(col)}
 								<td class="default-td">
 									<StreamCell
 										on:contextmenu={(event) => {
@@ -286,7 +286,15 @@
 											event.stopPropagation();
 										}}
 										instance={watch}
-										type={col.toLowerCase().replace(/ /g, '')}
+										type={(() => {
+											switch(col) {
+												case 'Price': return 'price';
+												case 'Chg': return 'change';
+												case 'Chg%': return 'change %';
+												case 'Ext': return 'change % extended';
+												default: return col.toLowerCase();
+											}
+										})()}
 									/>
 								</td>
 							{:else if col === 'Timestamp'}

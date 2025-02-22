@@ -198,7 +198,6 @@
 				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
 					return;
 				}
-				console.log(barDataList);
 				let newCandleData = barDataList.map((bar) => ({
 					time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
 					open: bar.open,
@@ -526,7 +525,6 @@
 
 		const upperPrice = chartCandleSeries.coordinateToPrice(mouseY - pixelBuffer) || 0;
 		const lowerPrice = chartCandleSeries.coordinateToPrice(mouseY + pixelBuffer) || 0;
-		console.log(upperPrice, lowerPrice);
 
 		if (upperPrice == 0 || lowerPrice == 0) return false;
 
@@ -562,7 +560,6 @@
 	}
 
 	function handleMouseDown(event: MouseEvent) {
-		console.log('handleMouseDown');
 		if (determineClickedLine(event)) {
 			console.log('determineClickedLine');
 			mouseDownStartX = event.clientX;
@@ -585,7 +582,6 @@
 			const handleMouseUpForClick = (upEvent: MouseEvent) => {
 				const deltaX = Math.abs(upEvent.clientX - mouseDownStartX);
 				const deltaY = Math.abs(upEvent.clientY - mouseDownStartY);
-				console.log(deltaX, deltaY);
 
 				if (deltaX <= DRAG_THRESHOLD && deltaY <= DRAG_THRESHOLD) {
 					console.log('click');
@@ -942,7 +938,6 @@
 					currentChartInstance.timestamp = 0;
 				}
 				queryInstanceInput('any', 'any', currentChartInstance).then((v: Instance) => {
-					console.log(v);
 					currentChartInstance = v;
 					queryChart(v, true);
 					// Refocus chart after input closes

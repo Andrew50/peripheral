@@ -21,6 +21,7 @@ export type StreamCallback = (v: TradeData | QuoteData | number) => void;
 
 export const activeChannels: Map<string, StreamCallback[]> = new Map();
 
+
 type SubscriptionRequest = {
     action: 'subscribe' | 'unsubscribe' | 'replay' | 'pause' | 'play' | 'realtime' | 'speed';
     channelName?: string;
