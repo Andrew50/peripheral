@@ -941,11 +941,13 @@
 				if ($streamInfo.replayActive) {
 					currentChartInstance.timestamp = 0;
 				}
-				console.log(currentChartInstance);
+				console.log("currentChartInstance", currentChartInstance);
 				queryInstanceInput('any', 'any', currentChartInstance).then((v: Instance) => {
 					console.log(v);
 					currentChartInstance = v;
 					queryChart(v, true);
+					// Refocus chart after input closes
+					setTimeout(() => chartContainer.focus(), 0);
 				});
 			} else if (event.key == 'Shift') {
 				shiftDown = true;
@@ -1130,6 +1132,8 @@
 		});
 
 		// Add click handler to chart container
+
+		
 		const container = document.getElementById(`chart_container-${chartId}`);
 		container?.addEventListener('click', (e) => {
 			const rect = container.getBoundingClientRect();
@@ -1171,6 +1175,9 @@
 				addHorizontalLine(e.data.price, e.data.securityId);
 			}
 		});
+
+		chartContainer.setAttribute('tabindex', '0');  // Make container focusable
+		chartContainer.focus();  // Focus the container
 	});
 
 	async function handleScreenshot() {
