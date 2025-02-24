@@ -43,6 +43,10 @@
 	export let expandedContent: (item: ExtendedInstance) => any = () => null;
 	export let displayNames: { [key: string]: string } = {};
 
+	// Add sorting state variables
+	let sortColumn: string | null = null;
+	let sortDirection: 'asc' | 'desc' = 'asc';
+
 	let selectedRowIndex = -1;
 	console.log('list', get(list));
 	let expandedRows = new Set<number>();
@@ -125,6 +129,102 @@
 		}
 	}
 
+	// Add function to handle sorting when a column header is clicked
+	function handleSort(column: string) {
+		// Prevent sorting on the empty columns
+		if (!column) return;
+
+		if (sortColumn === column) {
+			// Toggle direction if already sorting by this column
+			sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+		} else {
+			// Set new sort column and default to ascending
+			sortColumn = column;
+			sortDirection = 'asc';
+		}
+
+		// Apply the sorting
+		sortList();
+	}
+
+	// Function to get data key from column name
+	function getDataKey(column: string): string {
+		const normalizedCol = column
+			.replace(/ /g, '')
+			.replace(/^[A-Z]/, (letter) => letter.toLowerCase());
+
+		switch (normalizedCol) {
+			case 'chg':
+				return 'change';
+			case 'chg%':
+				return 'change%';
+			case 'ext':
+				return 'change%extended';
+			default:
+				return normalizedCol;
+		}
+	}
+
+	// Function to sort the list based on current sort column and direction
+	function sortList() {
+		if (!sortColumn) return;
+
+		list.update((items) => {
+			const sorted = [...items].sort((a, b) => {
+				const dataKey = getDataKey(sortColumn!);
+
+				// Get the values to compare
+				let valueA = a[dataKey];
+				let valueB = b[dataKey];
+
+				// Special handling for different data types
+				if (sortColumn === 'Price') {
+					const priceA = typeof a.price === 'number' ? a.price : 0;
+					const priceB = typeof b.price === 'number' ? b.price : 0;
+					return sortDirection === 'asc' ? priceA - priceB : priceB - priceA;
+				}
+
+				if (sortColumn === 'Chg') {
+					const changeA = typeof a.change === 'number' ? a.change : 0;
+					const changeB = typeof b.change === 'number' ? b.change : 0;
+					return sortDirection === 'asc' ? changeA - changeB : changeB - changeA;
+				}
+
+				if (sortColumn === 'Chg%') {
+					const pctA = typeof a['change%'] === 'number' ? a['change%'] : 0;
+					const pctB = typeof b['change%'] === 'number' ? b['change%'] : 0;
+					return sortDirection === 'asc' ? pctA - pctB : pctB - pctA;
+				}
+
+				if (sortColumn === 'Ext') {
+					const extA = typeof a['change%extended'] === 'number' ? a['change%extended'] : 0;
+					const extB = typeof b['change%extended'] === 'number' ? b['change%extended'] : 0;
+					return sortDirection === 'asc' ? extA - extB : extB - extA;
+				}
+
+				// Handle timestamps
+				if (dataKey === 'timestamp') {
+					const timeA = typeof valueA === 'number' ? valueA : 0;
+					const timeB = typeof valueB === 'number' ? valueB : 0;
+					return sortDirection === 'asc' ? timeA - timeB : timeB - timeA;
+				}
+
+				// Generic number handling
+				if (typeof valueA === 'number' && typeof valueB === 'number') {
+					return sortDirection === 'asc' ? valueA - valueB : valueB - valueA;
+				}
+
+				// For strings or other types, convert to string and compare
+				const strA = String(valueA || '').toLowerCase();
+				const strB = String(valueB || '').toLowerCase();
+
+				return sortDirection === 'asc' ? strA.localeCompare(strB) : strB.localeCompare(strA);
+			});
+
+			return sorted;
+		});
+	}
+
 	onMount(() => {
 		try {
 			isLoading = true;
@@ -167,7 +267,7 @@
 			}
 
 			// Check if we already loaded icons for these tickers
-			const newTickers = tickers.filter((ticker) => !iconsLoadedForTickers.has(ticker));
+			const newTickers = tickers.filter((ticker) => ticker && !iconsLoadedForTickers.has(ticker));
 			if (newTickers.length === 0) {
 				console.log('Icons already loaded for all tickers');
 				return;
@@ -411,8 +511,21 @@
 					{/if}
 					<th class="default-th"></th>
 					{#each columns as col}
-						<th class="default-th" data-type={col.toLowerCase().replace(/\s+/g, '-')}>
-							{displayNames[col] || col}
+						<th
+							class="default-th"
+							data-type={col.toLowerCase().replace(/\s+/g, '-')}
+							class:sortable={col !== ''}
+							class:sorting={sortColumn === col}
+							class:sort-asc={sortColumn === col && sortDirection === 'asc'}
+							class:sort-desc={sortColumn === col && sortDirection === 'desc'}
+							on:click={() => handleSort(col)}
+						>
+							<div class="th-content">
+								<span>{displayNames[col] || col}</span>
+								{#if sortColumn === col}
+									<span class="sort-icon">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+								{/if}
+							</div>
 						</th>
 					{/each}
 					<th class="default-th"></th>
@@ -616,6 +729,39 @@
 		background-color: var(--ui-bg-element);
 		font-weight: bold;
 		color: var(--text-secondary);
+	}
+
+	/* Sorting styles */
+	.sortable {
+		cursor: pointer;
+		user-select: none;
+		position: relative;
+	}
+
+	.th-content {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.sort-icon {
+		margin-left: 4px;
+		font-size: 0.8em;
+		opacity: 0.7;
+	}
+
+	.sorting {
+		background-color: var(--ui-bg-hover);
+	}
+
+	.sort-asc .sort-icon,
+	.sort-desc .sort-icon {
+		opacity: 1;
+		color: var(--ui-accent);
+	}
+
+	th.sortable:hover {
+		background-color: var(--ui-bg-hover);
 	}
 
 	tr {
