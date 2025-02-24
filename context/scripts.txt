@@ -2,3 +2,4 @@ chart.svelte
 chart.go
 chartHelper.go
 chart/interface.ts
+interface.ts 
