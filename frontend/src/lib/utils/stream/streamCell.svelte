@@ -40,8 +40,8 @@
 		}
 
 		// Decide which streams to use based on type
-		let slowStreamName = type === 'change % extended' ? 'slow-extended' : 'slow-regular';
-		let closeStreamName = type === 'change % extended' ? 'close-extended' : 'close-regular';
+		const slowStreamName = type === 'change % extended' ? 'slow-extended' : 'slow-regular';
+		const closeStreamName = type === 'change % extended' ? 'close-extended' : 'close-regular';
 
 		// Set up new streams
 		releaseClose = addStream<CloseData>(instance, closeStreamName, (v: CloseData) => {
@@ -59,19 +59,18 @@
 			if (v && v.price) {
 				changeStore.update((s: ChangeStore) => {
 					const price = v.price;
-					// Always preserve the existing prevClose
 					const prevClose = s.prevClose;
 					if (type === 'market cap') {
 						return {
 							...s,
 							price,
-							prevClose // Explicitly preserve prevClose
+							prevClose
 						};
 					}
 					return {
 						...s,
 						price,
-						prevClose, // Explicitly preserve prevClose
+						prevClose,
 						change: price && prevClose ? getChange(price, prevClose) : '--'
 					};
 				});
@@ -84,38 +83,27 @@
 		setupStreams();
 	}
 
-	// Add debug logging to see store updates
-	$: console.log('changeStore updated:', $changeStore);
-
 	onDestroy(() => {
 		releaseClose();
 		releaseSlow();
 	});
 
 	function getChange(price: number, prevClose: number): string {
-		console.log('price', price);
-		console.log('prevClose', prevClose);
+		// Removing frequent console logs for performance
 		if (!price || !prevClose) return '--';
 		return ((price / prevClose - 1) * 100).toFixed(2) + '%';
 	}
 
-	// Fix formatMarketCap function
 	function formatMarketCap(price?: number, shares?: number): string {
 		if (!price || !shares) return 'N/A';
-		// Calculate market cap in dollars (price * shares)
 		const marketCap = price * shares;
-		// Format based on size
 		if (marketCap >= 1e12) {
-			// Trillion
 			return `$${(marketCap / 1e12).toFixed(2)}T`;
 		} else if (marketCap >= 1e9) {
-			// Billion
 			return `$${(marketCap / 1e9).toFixed(2)}B`;
 		} else if (marketCap >= 1e6) {
-			// Million
 			return `$${(marketCap / 1e6).toFixed(2)}M`;
 		} else {
-			// Less than a million
 			return `$${marketCap.toFixed(2)}`;
 		}
 	}
@@ -150,5 +138,3 @@
 		{'--'}
 	{/if}
 </div>
-
-<!-- /streamCell.svelte -->
