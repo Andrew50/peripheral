@@ -34,7 +34,7 @@
 		HistogramData,
 		HistogramSeriesOptions
 	} from 'lightweight-charts';
-	import { calculateRVOL, calculateSMA, calculateSingleADR, calculateVWAP } from './indicators';
+	import { calculateRVOL, calculateSingleADR, calculateVWAP, calculateMultipleSMAs } from './indicators';
 	import type { Writable } from 'svelte/store';
 	import { writable, get } from 'svelte/store';
 	import { onMount } from 'svelte';
@@ -396,8 +396,12 @@
 					}
 					queuedLoad = null;
 
-					sma10Series.setData(calculateSMA(newCandleData, 10));
-					sma20Series.setData(calculateSMA(newCandleData, 20));
+				
+					const smaResults = calculateMultipleSMAs(newCandleData, [10, 20]);
+					sma10Series.setData(smaResults.get(10));
+					sma20Series.setData(smaResults.get(20));
+
+					
 					if (/^\d+$/.test(inst.timeframe ?? '')) {
 						vwapSeries.setData(calculateVWAP(newCandleData, newVolumeData));
 					} else {
@@ -1157,7 +1161,7 @@
 				currentChartInstance.timestamp = 0;
 				const req: ChartQueryDispatch = {
 					...currentChartInstance,
-					bars: 400,
+					bars: 300,
 					direction: 'backward',
 					requestType: 'loadNewTicker',
 					includeLastBar: false,
