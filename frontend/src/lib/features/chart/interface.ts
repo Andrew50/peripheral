@@ -34,10 +34,12 @@ export interface SecurityDateBounds {
     minDate: number;
     maxDate: number;
 }
+import { privateRequest } from '$lib/core/backend'
+import { streamInfo } from '$lib/core/stores'
 import type { Instance } from '$lib/core/types'
 import type { UTCTimestamp } from 'lightweight-charts'
 import type { Writable } from 'svelte/store'
-import { writable } from 'svelte/store'
+import { writable, get } from 'svelte/store'
 
 export type ChartId = number | "all"
 export type ChartEvent = "" | "replay" | "realtime" | "addHorizontalLine"
@@ -48,7 +50,18 @@ export const activeChartInstance: Writable<Instance | null> = writable(null)
 
 export function setActiveChart(chartId: ChartId, currentChartInstance: Instance) {
     selectedChartId = chartId
-    activeChartInstance.set(currentChartInstance)
+    // Create a new instance object to ensure reactivity
+    const updatedInstance = {
+        ...currentChartInstance,
+        ticker: currentChartInstance.ticker,
+        securityId: currentChartInstance.securityId,
+        timeframe: currentChartInstance.timeframe,
+        extendedHours: currentChartInstance.extendedHours ?? false,
+        timestamp: currentChartInstance.timestamp ?? 0,
+        detailsFetched: currentChartInstance.detailsFetched ?? false
+    }
+    // Force a new object reference to trigger store updates
+    activeChartInstance.set(updatedInstance)
 }
 
 export const chartQueryDispatcher: Writable<ChartQueryDispatch> = writable({ timestamp: 0, extendedHours: false, timeframe: "1d", ticker: "" })
@@ -65,16 +78,25 @@ export function queryChart(newInstance: Instance, includeLast: boolean = true): 
     newInstance.requestType = "loadNewTicker"
     newInstance.includeLastBar = includeLast
     newInstance.chartId = selectedChartId
-    /*console.log("instance: ", newInstance);
-    const req: ChartQueryDispatch = {
-        ...newInstance,
-        bars: 600,
-        direction: "backward",
-        requestType: "loadNewTicker",
-        includeLastBar: includeLast,
-        chartId: selectedChartId,
-    }*/
-    //chartQueryDispatcher.set(req)
-    chartQueryDispatcher.set(newInstance)
-    setActiveChart(selectedChartId, newInstance)
+
+    if (get(streamInfo).replayActive) {
+        newInstance.timestamp = get(streamInfo).timestamp
+    }
+
+    // Ensure we have all necessary instance properties
+    if (!newInstance.detailsFetched && newInstance.securityId) {
+        privateRequest('getTickerMenuDetails', { securityId: newInstance.securityId }, true)
+            .then((details) => {
+                const updatedInstance = {
+                    ...newInstance,
+                    ...details,
+                    detailsFetched: true
+                }
+                chartQueryDispatcher.set(updatedInstance)
+                setActiveChart(selectedChartId, updatedInstance)
+            })
+    } else {
+        chartQueryDispatcher.set(newInstance)
+        setActiveChart(selectedChartId, newInstance)
+    }
 }

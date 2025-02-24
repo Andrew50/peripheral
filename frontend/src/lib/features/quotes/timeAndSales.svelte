@@ -131,7 +131,7 @@
 					<tr class={trade.color}>
 						<td class="defalt-td">{trade.price}</td>
 						<td class="defalt-td">{trade.size}</td>
-						<td class="defalt-td">{trade.exchangeName.substring(0, 4)}</td>
+						<td class="defalt-td">{trade.exchangeName?.substring(0, 4) || '-'}</td>
 						<td class="defalt-td">{formatTime(trade.timestamp)}</td>
 					</tr>
 				{/each}
