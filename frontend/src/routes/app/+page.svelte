@@ -125,6 +125,8 @@
 		}
 	}
 
+	let keydownHandler: (event: KeyboardEvent) => void;
+
 	onMount(() => {
 		// Set up a single menuWidth subscription
 		const unsubscribe = menuWidth.subscribe((width) => {
@@ -139,6 +141,51 @@
 
 			updateChartWidth();
 			window.addEventListener('resize', updateChartWidth);
+
+			// Define the keydown handler
+			keydownHandler = (event: KeyboardEvent) => {
+				console.log('Global keydown event:', {
+					key: event.key,
+					activeElement: document.activeElement?.tagName,
+					activeElementId: document.activeElement?.id,
+					isBodyFocused: document.activeElement === document.body,
+					noFocus: !document.activeElement
+				});
+
+				// Only handle events when no element is focused or body is focused
+				console.log('Document active element:', document.activeElement);
+				if (!document.activeElement || document.activeElement === document.body) {
+					const chartContainer = document.getElementById(`chart_container-0`); // Assuming first chart has ID 0
+					console.log('Looking for chart container:', {
+						found: !!chartContainer,
+						containerId: 'chart_container-0'
+					});
+
+					if (chartContainer) {
+						console.log('Focusing chart and triggering event handler');
+
+						// Focus the chart container
+						chartContainer.focus();
+
+						// Get the native event handlers from the chart container
+						const nativeHandlers = (chartContainer as any)._svelte?.events?.keydown;
+
+						if (nativeHandlers) {
+							console.log('Found native handlers, calling directly');
+							// Call each handler directly with the original event
+							nativeHandlers.forEach((handler: Function) => {
+								handler.call(chartContainer, event);
+							});
+						} else {
+							console.log('No native handlers found on chart container');
+						}
+					}
+				}
+			};
+
+			// Add global keyboard event listener
+			document.addEventListener('keydown', keydownHandler);
+			console.log('Added global keydown handler');
 		}
 		privateRequest<string>('verifyAuth', {}).catch(() => {
 			goto('/login');
@@ -174,6 +221,9 @@
 		const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
 		if (browser && document) {
 			window.removeEventListener('resize', updateChartWidth);
+			// Remove global keyboard event listener using the stored handler
+			document.removeEventListener('keydown', keydownHandler);
+			console.log('Removed global keydown handler');
 			stopSidebarResize();
 			activityEvents.forEach((event) => {
 				document.removeEventListener(event, resetInactivityTimer);

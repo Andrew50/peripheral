@@ -3,6 +3,8 @@
 	import { settings } from '$lib/core/stores';
 	import { onMount, tick } from 'svelte';
 	import { get } from 'svelte/store';
+	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
+	import { queryChart } from './interface';
 	export let width: number;
 
 	// Add focus management
@@ -18,7 +20,36 @@
 
 		// Add global keyboard event listener for chart container
 		const handleGlobalKeydown = (event: KeyboardEvent) => {
+			// Check if input popup is active by looking for the hidden input
+			const hiddenInput = document.getElementById('hidden-input');
+			if (hiddenInput && document.activeElement === hiddenInput) {
+				// Input popup is active, don't trigger new input
+				return;
+			}
+
 			if (/^[a-zA-Z0-9]$/.test(event.key) && !event.ctrlKey && !event.metaKey) {
+				// Create an initial instance with the first key as the inputString
+				const initialKey = event.key.toUpperCase();
+
+				// Use type assertion to allow the inputString property
+				const instanceWithInput = {
+					inputString: initialKey
+				} as any;
+
+				queryInstanceInput(
+					'any',
+					['ticker', 'timeframe', 'timestamp', 'extendedHours'],
+					instanceWithInput
+				).then((updatedInstance) => {
+					queryChart(updatedInstance, true);
+					console.log('Updated instance:', updatedInstance);
+				});
+				console.log('Global keydown event:', {
+					key: event.key,
+					ctrlKey: event.ctrlKey,
+					metaKey: event.metaKey
+				});
+
 				// Only focus if we're not in an input field or similar
 				const activeElement = document.activeElement;
 				const isInput =
