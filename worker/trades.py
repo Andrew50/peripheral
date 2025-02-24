@@ -741,4 +741,48 @@ def get_similar_trades(conn, trade_id: int, n_neighbors: int = 5):
             "message": str(e),
             "traceback": error_info
         }
+
+def delete_all_user_trades(conn, user_id: int) -> dict:
+    """
+    Delete all trades and trade executions for a user
+    
+    Args:
+        conn: Database connection
+        user_id (int): User ID
+    """
+    try:
+        with conn.db.cursor() as cursor:
+            # Delete all trade executions for the user
+            cursor.execute("""
+                DELETE FROM trade_executions
+                WHERE userId = %s
+            """, (user_id,))
+            executions_deleted = cursor.rowcount
+            
+            # Delete all trades for the user
+            cursor.execute("""
+                DELETE FROM trades
+                WHERE userId = %s
+            """, (user_id,))
+            trades_deleted = cursor.rowcount
+            
+            # Commit the transaction
+            conn.db.commit()
+            
+            return {
+                "status": "success",
+                "message": f"Successfully deleted {trades_deleted} trades and {executions_deleted} trade executions",
+                "trades_deleted": trades_deleted,
+                "executions_deleted": executions_deleted
+            }
+            
+    except Exception as e:
+        conn.db.rollback()
+        error_info = traceback.format_exc()
+        print(f"Error deleting trades:\n{error_info}")
+        return {
+            "status": "error",
+            "message": f"Error: {str(e)}",
+            "traceback": error_info
+        }
     
