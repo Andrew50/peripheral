@@ -575,9 +575,17 @@ func GetIcons(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 
 	// Prepare a query to fetch icons for the given tickers
 	query := `
-		SELECT ticker, icon
-		FROM securities
-		WHERE ticker = ANY($1)
+		WITH latest_securities AS (
+			SELECT DISTINCT ON (ticker) ticker, icon
+			FROM securities
+			WHERE ticker = ANY($1)
+			ORDER BY ticker, maxDate DESC NULLS FIRST
+		)
+		SELECT ticker, CASE 
+			WHEN icon IS NULL OR icon = '' THEN ''
+			ELSE icon 
+		END as icon
+		FROM latest_securities
 	`
 
 	rows, err := conn.DB.Query(context.Background(), query, args.Tickers)
@@ -589,10 +597,16 @@ func GetIcons(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 	var results []GetIconsResults
 	for rows.Next() {
 		var result GetIconsResults
-		if err := rows.Scan(&result.Ticker, &result.Icon); err != nil {
+		var nullableIcon sql.NullString
+		if err := rows.Scan(&result.Ticker, &nullableIcon); err != nil {
 			return nil, fmt.Errorf("failed to scan icon: %v", err)
 		}
+		result.Icon = nullableIcon.String // Will be empty string if null
 		results = append(results, result)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over icons: %v", err)
 	}
 
 	return results, nil
