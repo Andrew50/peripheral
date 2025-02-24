@@ -34,7 +34,12 @@
 		HistogramData,
 		HistogramSeriesOptions
 	} from 'lightweight-charts';
-	import { calculateRVOL, calculateSingleADR, calculateVWAP, calculateMultipleSMAs } from './indicators';
+	import {
+		calculateRVOL,
+		calculateSingleADR,
+		calculateVWAP,
+		calculateMultipleSMAs
+	} from './indicators';
 	import type { Writable } from 'svelte/store';
 	import { writable, get } from 'svelte/store';
 	import { onMount } from 'svelte';
@@ -178,11 +183,11 @@
 			$streamInfo.replayActive &&
 			(inst.timestamp == 0 || (inst.timestamp ?? 0) > $streamInfo.timestamp)
 		) {
-			console.log('adjusting to stream timestamp');
+			('adjusting to stream timestamp');
 			inst.timestamp = Math.floor($streamInfo.timestamp);
 		}
-		console.log(inst);
-		console.log(inst.extendedHours);
+		inst;
+		inst.extendedHours;
 		privateRequest<{ bars: BarData[]; isEarliestData: boolean }>('getChartData', {
 			securityId: inst.securityId,
 			timeframe: inst.timeframe,
@@ -278,7 +283,7 @@
 					if (inst.direction == 'backward') {
 						chartEarliestDataReached = response.isEarliestData;
 					} else if (inst.direction == 'forward') {
-						console.log('chartLatestDataReached');
+						('chartLatestDataReached');
 						chartLatestDataReached = true;
 					}
 				}
@@ -293,7 +298,7 @@
 
 								const fromTime = ESTSecondstoUTCMillis(firstBar.time as UTCTimestamp) as number;
 								const toTime = ESTSecondstoUTCMillis(lastBar.time as UTCTimestamp) as number;
-								console.log('time requested', fromTime, toTime);
+								'time requested', fromTime, toTime;
 
 								privateRequest<any[]>('getEdgarFilings', {
 									securityId: inst.securityId,
@@ -396,12 +401,10 @@
 					}
 					queuedLoad = null;
 
-				
 					const smaResults = calculateMultipleSMAs(newCandleData, [10, 20]);
 					sma10Series.setData(smaResults.get(10));
 					sma20Series.setData(smaResults.get(20));
 
-					
 					if (/^\d+$/.test(inst.timeframe ?? '')) {
 						vwapSeries.setData(calculateVWAP(newCandleData, newVolumeData));
 					} else {
@@ -435,7 +438,7 @@
 						!chartLatestDataReached &&
 						!$streamInfo.replayActive
 					) {
-						console.log('1');
+						('1');
 						backendLoadChartData({
 							...currentChartInstance,
 							timestamp: ESTSecondstoUTCMillis(
@@ -565,7 +568,7 @@
 
 	function handleMouseDown(event: MouseEvent) {
 		if (determineClickedLine(event)) {
-			console.log('determineClickedLine');
+			('determineClickedLine');
 			mouseDownStartX = event.clientX;
 			mouseDownStartY = event.clientY;
 
@@ -588,7 +591,7 @@
 				const deltaY = Math.abs(upEvent.clientY - mouseDownStartY);
 
 				if (deltaX <= DRAG_THRESHOLD && deltaY <= DRAG_THRESHOLD) {
-					console.log('click');
+					('click');
 					// It's a click - show menu
 					drawingMenuProps.update((v) => ({
 						...v,
@@ -733,8 +736,8 @@
 		try {
 			const timeToRequestForUpdatingAggregate =
 				ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
-			console.log('chart timeframe: ', chartTimeframe);
-			console.log('timeToRequestForUpdatingAggregate: ', timeToRequestForUpdatingAggregate);
+			'chart timeframe: ', chartTimeframe;
+			'timeToRequestForUpdatingAggregate: ', timeToRequestForUpdatingAggregate;
 			const [barData] = await privateRequest<BarData[]>('getChartData', {
 				securityId: chartSecurityId,
 				timeframe: chartTimeframe,
@@ -1093,7 +1096,7 @@
 				if (chartEarliestDataReached) {
 					return;
 				}
-				console.log('2');
+				('2');
 				backendLoadChartData({
 					...currentChartInstance,
 					timestamp: ESTSecondstoUTCMillis(
@@ -1115,7 +1118,7 @@
 				if ($streamInfo.replayActive) {
 					return;
 				}
-				console.log('3');
+				('3');
 				backendLoadChartData({
 					...currentChartInstance,
 					timestamp: ESTSecondstoUTCMillis(
@@ -1207,7 +1210,7 @@
 				})
 			]);
 
-			console.log('Chart copied to clipboard!');
+			('Chart copied to clipboard!');
 		} catch (error) {
 			console.error('Failed to copy chart:', error);
 		}
