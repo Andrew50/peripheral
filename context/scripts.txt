@@ -1,5 +1,10 @@
 chart.svelte
-chart
+chartContainer.svelte
+input.svelte
+app/+page.svelte
+chart/interface.ts
+chart/legend.svelte
+
 
 
 
