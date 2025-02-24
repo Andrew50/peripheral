@@ -60,7 +60,7 @@ export function addHorizontalLine(price: number) {
     chartEventDispatcher.set({ event: "addHorizontalLine", chartId: selectedChartId, data: price })
 }
 export function queryChart(newInstance: Instance, includeLast: boolean = true): void {
-    newInstance.bars = 600
+    newInstance.bars = 400
     newInstance.direction = "backward"
     newInstance.requestType = "loadNewTicker"
     newInstance.includeLastBar = includeLast
