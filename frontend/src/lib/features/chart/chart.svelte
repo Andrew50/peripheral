@@ -163,6 +163,7 @@
 	}
 
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
+		console.log(inst);
 		eventSeries.setData([]);
 		if (inst.requestType === 'loadNewTicker') {
 			bidLine.setData([]);
@@ -622,6 +623,7 @@
 					v.y = v.startY;
 					v.startPrice = chartCandleSeries.coordinateToPrice(v.startY) || 0;
 					document.addEventListener('mousemove', shiftOverlayTrack);
+					document.addEventListener('mouseup', handleShiftOverlayEnd);
 				} else {
 					document.removeEventListener('mousemove', shiftOverlayTrack);
 				}
@@ -810,6 +812,10 @@
 	function change(newReq: ChartQueryDispatch) {
 		// Instead of creating a new object, update the existing one
 		Object.assign(currentChartInstance, newReq);
+		currentChartInstance = {
+			...currentChartInstance,
+			...newReq
+		};
 		const req = currentChartInstance;
 
 		if (chartId !== req.chartId) {
