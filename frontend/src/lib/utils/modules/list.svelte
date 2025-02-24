@@ -118,6 +118,7 @@
 		index: number,
 		force: number | null = null
 	) {
+		console.log("selected instance: ", instance);
 		let even;
 		if (force !== null) {
 			even = force;
