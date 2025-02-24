@@ -162,12 +162,8 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 					nextDispatchTimes.Unlock()
 				}
 			case models.EquityQuote:
-				channelNameType := getChannelNameType(msg.Timestamp)
-
-				channelName := fmt.Sprintf("%d-%s-quote", securityId, channelNameType)
+				channelName := fmt.Sprintf("%d-quote", securityId)
 				data := QuoteData{
-
-					//					Ticker:    msg.Symbol,
 					Timestamp: msg.Timestamp,
 					BidPrice:  msg.BidPrice,
 					AskPrice:  msg.AskPrice,
@@ -180,7 +176,6 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 					fmt.Printf("io1nv %v\n", err)
 					continue
 				}
-				//conn.Cache.Publish(context.Background(), channelName, jsonData)
 				broadcastToChannel(channelName, string(jsonData))
 			}
 

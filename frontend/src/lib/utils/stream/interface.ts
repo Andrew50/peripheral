@@ -32,10 +32,8 @@ export function addStream<T extends StreamData>(instance: Instance, channelType:
     if (callbacks) {
         if (!callbacks.includes(callback as StreamCallback)) {
             callbacks.push(callback as StreamCallback);
-            // Re-subscribe to get initial value
-            if (socket?.readyState === WebSocket.OPEN) {
-                subscribe(channelName);
-            }
+            // Always try to subscribe - the socket.ts will handle pending subscriptions
+            subscribe(channelName);
         }
     } else {
         // New channel, set up normally
