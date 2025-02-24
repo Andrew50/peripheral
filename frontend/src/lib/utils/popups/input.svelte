@@ -55,7 +55,7 @@
 		instance: Instance = {}
 	): Promise<Instance> {
 		// If an input query is already active, force its cancellation.
-		console.log(requiredKeys);
+		requiredKeys;
 		if (get(inputQuery).status !== 'inactive') {
 			if (activePromiseReject) {
 				activePromiseReject(new Error('User cancelled input'));
@@ -192,15 +192,15 @@
 	}
 
 	async function enterInput(iQ: InputQuery, tickerIndex: number = 0): Promise<InputQuery> {
-		console.log(iQ);
+		iQ;
 		if (iQ.inputType === 'ticker') {
 			const ts = iQ.instance.timestamp;
 			await waitForSecurityResult();
 			iQ = $inputQuery;
-			console.log(iQ);
+			iQ;
 			if (Array.isArray(iQ.securities) && iQ.securities.length > 0) {
 				iQ.instance = { ...iQ.instance, ...iQ.securities[tickerIndex] };
-				console.log(iQ.instance);
+				iQ.instance;
 				iQ.instance.timestamp = ts;
 			}
 		} else if (iQ.inputType === 'timeframe') {
@@ -217,7 +217,7 @@
 				iQ.status = 'active';
 			}
 		} else {
-			console.log(iQ.requiredKeys);
+			iQ.requiredKeys;
 			for (const attribute of iQ.requiredKeys) {
 				if (!iQ.instance[attribute]) {
 					iQ.status = 'active';
@@ -234,7 +234,7 @@
 	}
 
 	/*async function fetchSecurityDetails(securities: Instance[]): Promise<Instance[]> {
-		console.log(securities);
+		(securities);
 		return Promise.all(
 			securities.map(async (security) => {
 				const details = await privateRequest<Instance>('getTickerDetails', {
@@ -356,7 +356,7 @@
 										securities: securitiesWithDetails
 									};
 								});
-								console.log($inputQuery);
+								($inputQuery);
 							}
 						}
 					);*/
@@ -400,7 +400,7 @@
 			sectors: string[];
 			industries: string[];
 		};
-		privateRequest<SecurityClassifications>('getSecurityClassifications', {}, true).then(
+		privateRequest<SecurityClassifications>('getSecurityClassifications', {}, false).then(
 			(classifications: SecurityClassifications) => {
 				sectors = classifications.sectors;
 				industries = classifications.industries;

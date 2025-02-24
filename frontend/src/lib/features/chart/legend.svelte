@@ -133,7 +133,7 @@
 	}
 
 	onMount(() => {
-		console.log(instance);
+		instance;
 		// Initialize ResizeObserver with a more conservative callback
 		resizeObserver = new ResizeObserver((entries) => {
 			if (!isUpdating) {

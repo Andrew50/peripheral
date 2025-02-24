@@ -86,7 +86,7 @@
 	}
 
 	function editHorizontalLinePrice() {
-		console.log('updating price line price');
+		('updating price line price');
 
 		if ($drawingMenuProps.selectedLine !== null) {
 			addHorizontalLine($drawingMenuProps.selectedLinePrice, $drawingMenuProps.securityId);
@@ -106,7 +106,7 @@
 			menuElement.contains(event.target as Node) ||
 			(deleteButton && deleteButton.contains(event.target as Node))
 		) {
-			console.log('clicked inside menu');
+			('clicked inside menu');
 			return;
 		}
 
