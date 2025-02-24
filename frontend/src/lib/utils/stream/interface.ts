@@ -1,3 +1,4 @@
+// streamInterface.ts
 import { socket, subscribe, unsubscribe, activeChannels } from './socket'
 import type { SubscriptionRequest, StreamCallback } from './socket'
 import { DateTime } from 'luxon';
@@ -133,3 +134,4 @@ export function setExtended(extendedHours: boolean) {
     }
     streamInfo.update((r: ReplayInfo) => ({ ...r, extendedHours: extendedHours }));
 }
+// /streamInterface.ts

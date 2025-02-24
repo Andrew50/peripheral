@@ -80,3 +80,5 @@ func broadcastToChannel(channelName string, message string) {
 		}
 	}
 }
+
+// /realtime.go

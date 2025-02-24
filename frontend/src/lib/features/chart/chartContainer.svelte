@@ -1,17 +1,32 @@
 <script lang="ts">
 	import Chart from './chart.svelte';
 	import { settings } from '$lib/core/stores';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
+	import { get } from 'svelte/store';
 	export let width: number;
 
 	// Add focus management
 	let containerRef: HTMLDivElement;
 
-	onMount(() => {
-		// Focus the container on mount
+	onMount(async () => {
+		// Wait the next microtask so the DOM is ready
+		await tick();
+
 		if (containerRef) {
 			containerRef.focus();
 		}
+
+		// Add global keyboard event listener for chart container
+		const handleGlobalKeydown = (event: KeyboardEvent) => {
+			if (/^[a-zA-Z0-9]$/.test(event.key) && !event.ctrlKey && !event.metaKey) {
+				containerRef.focus();
+			}
+		};
+
+		document.addEventListener('keydown', handleGlobalKeydown);
+		return () => {
+			document.removeEventListener('keydown', handleGlobalKeydown);
+		};
 	});
 
 	// Handle focus management

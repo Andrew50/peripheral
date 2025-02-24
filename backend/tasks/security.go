@@ -234,7 +234,7 @@ type GetTickerMenuDetailsResults struct {
 	Description                 sql.NullString  `json:"description"`
 	Logo                        sql.NullString  `json:"logo"`
 	Icon                        sql.NullString  `json:"icon"`
-	ShareClassSharesOutstanding int64           `json:"share_class_shares_outstanding"`
+	ShareClassSharesOutstanding sql.NullInt64   `json:"share_class_shares_outstanding"`
 	Industry                    sql.NullString  `json:"industry"`
 	Sector                      sql.NullString  `json:"sector"`
 	TotalShares                 sql.NullInt64   `json:"totalShares"`
@@ -293,7 +293,41 @@ func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ticker details: %v", err)
 	}
-	return results, nil
+
+	// Create a map to store the results and handle NULL values
+	response := map[string]interface{}{
+		"ticker":                         results.Ticker,
+		"name":                           results.Name.String,
+		"market":                         results.Market.String,
+		"locale":                         results.Locale.String,
+		"primary_exchange":               results.PrimaryExchange.String,
+		"active":                         results.Active,
+		"market_cap":                     nil,
+		"description":                    results.Description.String,
+		"logo":                           results.Logo.String,
+		"icon":                           results.Icon.String,
+		"share_class_shares_outstanding": nil,
+		"industry":                       results.Industry.String,
+		"sector":                         results.Sector.String,
+		"totalShares":                    nil,
+	}
+
+	// Only include market_cap if it's valid
+	if results.MarketCap.Valid {
+		response["market_cap"] = results.MarketCap.Float64
+	}
+
+	// Only include totalShares if it's valid
+	if results.TotalShares.Valid {
+		response["totalShares"] = results.TotalShares.Int64
+	}
+
+	// Only include share_class_shares_outstanding if it's valid
+	if results.ShareClassSharesOutstanding.Valid {
+		response["share_class_shares_outstanding"] = results.ShareClassSharesOutstanding.Int64
+	}
+
+	return response, nil
 }
 
 type TickerDetailsResponse struct {

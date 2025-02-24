@@ -1127,7 +1127,6 @@
 
 		// Add click handler to chart container
 
-		
 		const container = document.getElementById(`chart_container-${chartId}`);
 		container?.addEventListener('click', (e) => {
 			const rect = container.getBoundingClientRect();
@@ -1170,8 +1169,8 @@
 			}
 		});
 
-		chartContainer.setAttribute('tabindex', '0');  // Make container focusable
-		chartContainer.focus();  // Focus the container
+		chartContainer.setAttribute('tabindex', '0'); // Make container focusable
+		chartContainer.focus(); // Focus the container
 	});
 
 	async function handleScreenshot() {
@@ -1212,7 +1211,7 @@
 </script>
 
 <div class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
-	<Legend instance={currentChartInstance} {hoveredCandleData} />
+	<Legend instance={currentChartInstance} {hoveredCandleData} {width} />
 	<Shift {shiftOverlay} />
 	<Countdown instance={currentChartInstance} {currentBarTimestamp} />
 	<DrawingMenu {drawingMenuProps} />

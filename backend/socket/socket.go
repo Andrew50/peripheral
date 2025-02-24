@@ -1,3 +1,4 @@
+// socket.go
 package socket
 
 import (
@@ -342,3 +343,5 @@ func broadcastTimestamp() {
 	}
 	timestampMutex.Unlock()
 }
+
+// /socket.go

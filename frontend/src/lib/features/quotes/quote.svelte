@@ -138,7 +138,7 @@
 		</div>
 		<div class="info-row">
 			<span class="label">Active:</span>
-			<span class="value">{$activeChartInstance?.active}</span>
+			<span class="value">{$activeChartInstance?.active || 'N/A'}</span>
 		</div>
 		<div class="info-row">
 			<span class="label">Market Cap:</span>
@@ -169,9 +169,11 @@
 		<div class="info-row">
 			<span class="label">Shares Out:</span>
 			<span class="value">
-				{$activeChartInstance?.share_class_shares_outstanding
-					? `${($activeChartInstance.share_class_shares_outstanding / 1e6).toFixed(2)}M`
-					: 'N/A'}
+				{#if $activeChartInstance?.share_class_shares_outstanding}
+					{($activeChartInstance.share_class_shares_outstanding / 1e6).toFixed(2)}M
+				{:else}
+					N/A
+				{/if}
 			</span>
 		</div>
 		{#if $activeChartInstance?.description}

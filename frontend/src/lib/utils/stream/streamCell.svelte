@@ -1,3 +1,4 @@
+<!-- streamCell.svelte -->
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { writable } from 'svelte/store';
@@ -64,13 +65,13 @@
 						return {
 							...s,
 							price,
-							prevClose  // Explicitly preserve prevClose
+							prevClose // Explicitly preserve prevClose
 						};
 					}
 					return {
 						...s,
 						price,
-						prevClose,  // Explicitly preserve prevClose
+						prevClose, // Explicitly preserve prevClose
 						change: price && prevClose ? getChange(price, prevClose) : '--'
 					};
 				});
@@ -98,16 +99,24 @@
 		return ((price / prevClose - 1) * 100).toFixed(2) + '%';
 	}
 
-	// Add formatMarketCap function
+	// Fix formatMarketCap function
 	function formatMarketCap(price?: number, shares?: number): string {
 		if (!price || !shares) return 'N/A';
+		// Calculate market cap in dollars (price * shares)
 		const marketCap = price * shares;
+		// Format based on size
 		if (marketCap >= 1e12) {
+			// Trillion
 			return `$${(marketCap / 1e12).toFixed(2)}T`;
 		} else if (marketCap >= 1e9) {
+			// Billion
 			return `$${(marketCap / 1e9).toFixed(2)}B`;
-		} else {
+		} else if (marketCap >= 1e6) {
+			// Million
 			return `$${(marketCap / 1e6).toFixed(2)}M`;
+		} else {
+			// Less than a million
+			return `$${marketCap.toFixed(2)}`;
 		}
 	}
 </script>
@@ -141,3 +150,5 @@
 		{'--'}
 	{/if}
 </div>
+
+<!-- /streamCell.svelte -->
