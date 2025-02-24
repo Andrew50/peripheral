@@ -98,7 +98,6 @@
 
 	async function pullTrades() {
 		try {
-			console.log('pulling trades');
 			const params: any = { sort: sortDirection };
 
 			if (selectedDate) {
@@ -115,7 +114,6 @@
 
 			const result = await queueRequest<Trade[]>('grab_user_trades', params);
 			trades.set(result);
-			console.log(result);
 			message = 'Trades loaded successfully';
 		} catch (error) {
 			message = `Error: ${error}`;
@@ -126,11 +124,11 @@
 	async function fetchStatistics() {
 		try {
 			const params: any = {};
-			
+
 			if (statStartDate) params.start_date = statStartDate;
 			if (statEndDate) params.end_date = statEndDate;
 			if (statTicker) params.ticker = statTicker.toUpperCase();
-			
+
 			const result = await queueRequest('get_trade_statistics', params);
 			statistics.set(result);
 			message = 'Statistics loaded successfully';
@@ -171,7 +169,6 @@
 		value: i,
 		label: `${i.toString().padStart(2, '0')}:00`
 	}));
-
 </script>
 
 <div class="account-container">
@@ -233,21 +230,14 @@
 					event.preventDefault();
 				}}
 				list={trades}
-				columns={[
-					'timestamp',
-					'ticker',
-					'trade_direction',
-					'status',
-					'openQuantity',
-					'closedPnL'
-				]}
+				columns={['timestamp', 'ticker', 'trade_direction', 'status', 'openQuantity', 'closedPnL']}
 				displayNames={{
-					'timestamp': 'Time',
-					'ticker': 'Ticker',
-					'trade_direction': 'Direction',
-					'status': 'Status',
-					'openQuantity': 'Quantity',
-					'closedPnL': 'P/L'
+					timestamp: 'Time',
+					ticker: 'Ticker',
+					trade_direction: 'Direction',
+					status: 'Status',
+					openQuantity: 'Quantity',
+					closedPnL: 'P/L'
 				}}
 				formatters={{
 					timestamp: (value) => (value ? UTCTimestampToESTString(value) : 'N/A'),

@@ -36,7 +36,7 @@
 				ticker: ''
 			});
 			//price?
-			console.log('inst', inst);
+			'inst', inst;
 			newPriceAlert(inst);
 		} else if (alertType === 'setup') {
 			const setupId = await querySetup(event);

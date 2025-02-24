@@ -15,9 +15,9 @@
 
 	// Watch for changes to similarQuery and fetch similar instances when activated
 	instance.subscribe((query) => {
-		console.log(query);
+		query;
 		if (query.ticker) {
-			console.log('ticker');
+			('ticker');
 			// Initialize similarInstances as empty array before fetching
 			similarList.set([]);
 
@@ -32,7 +32,7 @@
 				true
 			).then((instances) => {
 				if (instances) {
-					console.log(instances);
+					instances;
 					similarList.set(instances);
 				}
 			});
@@ -55,7 +55,7 @@
 
 	function handleDelete(instance: Instance) {
 		// Optional: Implement delete functionality if needed
-		console.log('Delete:', instance);
+		'Delete:', instance;
 	}
 </script>
 

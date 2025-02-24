@@ -39,13 +39,13 @@
 			setup: null
 		};
 		userSetupMenu.set(menuState);
-		console.log('open');
+		('open');
 		return new Promise<number>((resolve, reject) => {
 			const unsubscribe = userSetupMenu.subscribe(async (menuState: UserSetupMenu) => {
 				if (menuState.status === 'inactive') {
-					console.log(menuState);
+					menuState;
 					if (menuState.setup === 'new') {
-						console.log('TODO: implement new setup functionality');
+						('TODO: implement new setup functionality');
 						unsubscribe();
 						reject();
 					} else if (menuState.setup === null) {
@@ -88,10 +88,10 @@
 		});
 	});
 	function handleClickOutside(event: MouseEvent): void {
-		console.log(event.target);
-		console.log(menu);
+		event.target;
+		menu;
 		if (menu && !menu.contains(event.target as Node)) {
-			console.log('close');
+			('close');
 			closeMenu();
 		}
 	}

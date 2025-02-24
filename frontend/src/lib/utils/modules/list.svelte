@@ -10,7 +10,7 @@
 	import { flagWatchlist } from '$lib/core/stores';
 	import { flagSecurity } from '$lib/utils/flag';
 	import { newAlert } from '$lib/features/alerts/interface';
-	import { queueRequest } from '$lib/core/backend';
+	import { queueRequest, privateRequest } from '$lib/core/backend';
 	let longPressTimer: any;
 	export let list: Writable<Instance[]> = writable([]);
 	export let columns: Array<string>;
@@ -21,6 +21,7 @@
 	export let displayNames: { [key: string]: string } = {};
 
 	let selectedRowIndex = -1;
+	console.log('list', get(list));
 	let expandedRows = new Set();
 
 	// Add these for similar trades handling
@@ -28,7 +29,8 @@
 	let loadingMap = new Map();
 	let errorMap = new Map();
 
-	let iconsMap = new Map();
+	let isLoading = true;
+	let loadError = null;
 
 	function isFlagged(instance: Instance, flagWatch: Instance[]) {
 		if (!Array.isArray(flagWatch)) return false;
@@ -89,26 +91,79 @@
 		}
 	}
 	onMount(async () => {
-		window.addEventListener('keydown', handleKeydown);
-		const preventContextMenu = (event) => {
-			event.preventDefault();
-		};
+		try {
+			isLoading = true;
+			window.addEventListener('keydown', handleKeydown);
+			const preventContextMenu = (event) => {
+				event.preventDefault();
+			};
 
-		window.addEventListener('contextmenu', preventContextMenu);
+			window.addEventListener('contextmenu', preventContextMenu);
 
-		// Fetch icons if "Ticker" column is present
-		if (columns.includes('Ticker')) {
-			const tickers = get(list).map((item) => item.ticker);
-			const iconsResponse = await privateRequest('getIcons', { tickers });
-			iconsResponse.forEach((iconData) => {
-				iconsMap.set(iconData.ticker, iconData.icon);
-			});
+			// Updated icon handling - update list items directly
+			if (columns.includes('Ticker')) {
+				const tickers = get(list).map((item) => item.ticker);
+				const iconsResponse = await privateRequest('getIcons', { tickers });
+				if (iconsResponse && Array.isArray(iconsResponse)) {
+					list.update((items) => {
+						return items.map((item) => {
+							const iconData = iconsResponse.find((i) => i.ticker === item.ticker);
+							if (iconData && iconData.icon) {
+								const iconUrl = iconData.icon.startsWith('/9j/')
+									? `data:image/jpeg;base64,${iconData.icon}`
+									: `data:image/png;base64,${iconData.icon}`;
+								return { ...item, icon: iconUrl };
+							}
+							return item;
+						});
+					});
+				}
+			}
+
+			return () => {
+				window.removeEventListener('contextmenu', preventContextMenu);
+			};
+		} catch (error) {
+			loadError = error.message;
+			console.error('Failed to load data:', error);
+		} finally {
+			isLoading = false;
 		}
-
-		return () => {
-			window.removeEventListener('contextmenu', preventContextMenu);
-		};
 	});
+
+	// Add this reactive statement after the onMount block
+	$: if (columns?.includes('Ticker') && $list?.length > 0) {
+		console.log('List changed, loading icons for', $list.length, 'items');
+		const tickers = $list.map((item) => item.ticker).filter(Boolean);
+		console.log('Requesting icons for tickers:', tickers);
+
+		privateRequest('getIcons', { tickers }).then((iconsResponse) => {
+			console.log('Received icon response:', iconsResponse);
+
+			if (iconsResponse && Array.isArray(iconsResponse)) {
+				list.update((items) => {
+					console.log('Updating list with icons');
+					const updatedItems = items.map((item) => {
+						if (!item.ticker) return item;
+
+						const iconData = iconsResponse.find((i) => i.ticker === item.ticker);
+						console.log(`Processing icon for ${item.ticker}:`, iconData);
+
+						if (iconData && iconData.icon) {
+							const iconUrl = iconData.icon.startsWith('/9j/')
+								? `data:image/jpeg;base64,${iconData.icon}`
+								: `data:image/png;base64,${iconData.icon}`;
+							return { ...item, icon: iconUrl };
+						}
+						return item;
+					});
+					console.log('Updated list items:', updatedItems);
+					return updatedItems;
+				});
+			}
+		});
+	}
+
 	onDestroy(() => {
 		window.removeEventListener('keydown', handleKeydown);
 	});
@@ -124,7 +179,7 @@
 		} else {
 			even = event.button;
 		}
-		console.log(event);
+		event;
 		event.preventDefault();
 		event.stopPropagation();
 		if (even === 0) {
@@ -149,14 +204,14 @@
 	}
 
 	function toggleRow(index: number) {
-		console.log('Toggling row:', index);
+		'Toggling row:', index;
 		if (expandedRows.has(index)) {
 			expandedRows.delete(index);
 		} else {
 			expandedRows.add(index);
 			// Debug log for expanded content
 			const content = expandedContent($list[index]);
-			console.log('Expanded content:', content);
+			'Expanded content:', content;
 		}
 		expandedRows = expandedRows; // Trigger reactivity
 	}
@@ -198,26 +253,26 @@
 
 	async function loadSimilarTrades(tradeId: number) {
 		if (!tradeId) {
-			console.log('No tradeId provided');
+			('No tradeId provided');
 			return;
 		}
 
-		console.log('Loading similar trades for trade:', tradeId);
+		'Loading similar trades for trade:', tradeId;
 		loadingMap.set(tradeId, true);
 		errorMap.delete(tradeId);
 		similarTradesMap = similarTradesMap;
 
 		try {
-			console.log('Making request for trade:', tradeId);
+			'Making request for trade:', tradeId;
 			const result = await queueRequest('find_similar_trades', { trade_id: tradeId });
-			console.log('Similar trades result:', result);
+			'Similar trades result:', result;
 
 			if (result.status === 'success') {
 				similarTradesMap.set(tradeId, result.similar_trades);
-				console.log('Updated similarTradesMap:', similarTradesMap);
+				'Updated similarTradesMap:', similarTradesMap;
 			} else {
 				errorMap.set(tradeId, result.message);
-				console.log('Error from server:', result.message);
+				'Error from server:', result.message;
 			}
 		} catch (e) {
 			console.error('Error loading similar trades:', e);
@@ -231,203 +286,260 @@
 	// Modified reactive statement with more logging
 	$: {
 		if (expandedRows) {
-			console.log('Expanded rows changed:', expandedRows);
+			'Expanded rows changed:', expandedRows;
 			expandedRows.forEach((isExpanded, index) => {
-				console.log(`Checking row ${index}, expanded: ${isExpanded}`);
+				`Checking row ${index}, expanded: ${isExpanded}`;
 				if (isExpanded && $list[index]) {
 					const content = expandedContent($list[index]);
-					console.log(`Content for row ${index}:`, content);
+					`Content for row ${index}:`, content;
 					if (content?.tradeId) {
-						console.log(`Loading similar trades for row ${index}, tradeId: ${content.tradeId}`);
+						`Loading similar trades for row ${index}, tradeId: ${content.tradeId}`;
 						loadSimilarTrades(content.tradeId);
 					}
 				}
 			});
 		}
 	}
+
+	$: if (columns?.includes('Ticker') && $list?.length > 0) {
+		(async () => {
+			try {
+				isLoading = true;
+				const tickers = $list.map((item) => item.ticker).filter(Boolean);
+
+				if (tickers.length === 0) {
+					isLoading = false;
+					return;
+				}
+
+				const iconsResponse = await privateRequest('getIcons', { tickers });
+				if (iconsResponse && Array.isArray(iconsResponse)) {
+					list.update((items) => {
+						return items.map((item) => {
+							if (!item.ticker) return item;
+
+							const iconData = iconsResponse.find((i) => i.ticker === item.ticker);
+							if (iconData && iconData.icon) {
+								const iconUrl = iconData.icon.startsWith('/9j/')
+									? `data:image/jpeg;base64,${iconData.icon}`
+									: `data:image/png;base64,${iconData.icon}`;
+								return { ...item, icon: iconUrl };
+							}
+							return item;
+						});
+					});
+				}
+			} catch (error) {
+				console.error('Failed to load icons:', error);
+				// Don't set error state here as it's not critical functionality
+			} finally {
+				isLoading = false;
+			}
+		})();
+	}
 </script>
 
 <div class="table-container">
-	<table class="default-table">
-		<thead>
-			<tr class="default-tr">
-				{#if expandable}
-					<th class="default-th expand-column" />
-				{/if}
-				<th class="default-th"></th>
-				{#each columns as col}
-					<th class="default-th">{displayNames[col] || col}</th>
-				{/each}
-				<th class="default-th"></th>
-			</tr>
-		</thead>
-		{#if Array.isArray($list) && $list.length > 0}
-			<tbody>
-				{#each $list as watch, i}
-					<tr
-						class="default-tr"
-						on:mousedown={(event) => clickHandler(event, watch, i)}
-						on:touchstart={handleTouchStart}
-						on:touchend={handleTouchEnd}
-						id="row-{i}"
-						class:selected={i === selectedRowIndex}
-						on:contextmenu={(event) => {
-							event.preventDefault();
-						}}
-						class:expandable
-						class:expanded={expandedRows.has(i)}
-						on:click={() => expandable && toggleRow(i)}
-					>
-						{#if expandable}
-							<td class="default-td expand-cell">
-								<span class="expand-icon">{expandedRows.has(i) ? '−' : '+'}</span>
-							</td>
-						{/if}
-						<td class="default-td">
-							{#if isFlagged(watch, $flagWatchlist)}
-								<span class="flag-icon">⚑</span>
-							{/if}
-						</td>
-						{#each columns as col}
-							{#if col === 'Ticker'}
-								<td class="default-td">
-									{#if iconsMap.has(watch.ticker)}
-										<img src={iconsMap.get(watch.ticker)} alt="icon" class="ticker-icon" />
-									{/if}
-									{watch.ticker}
+	{#if isLoading}
+		<div class="loading">Loading...</div>
+	{:else if loadError}
+		<div class="error">
+			<p>Failed to load data: {loadError}</p>
+			<button on:click={() => window.location.reload()}>Retry</button>
+		</div>
+	{:else}
+		<table class="default-table">
+			<thead>
+				<tr class="default-tr">
+					{#if expandable}
+						<th class="default-th expand-column" />
+					{/if}
+					<th class="default-th"></th>
+					{#each columns as col}
+						<th class="default-th" data-type={col.toLowerCase().replace(/\s+/g, '-')}>
+							{displayNames[col] || col}
+						</th>
+					{/each}
+					<th class="default-th"></th>
+				</tr>
+			</thead>
+			{#if Array.isArray($list) && $list.length > 0}
+				<tbody>
+					{#each $list as watch, i}
+						<tr
+							class="default-tr"
+							on:mousedown={(event) => clickHandler(event, watch, i)}
+							on:touchstart={handleTouchStart}
+							on:touchend={handleTouchEnd}
+							id="row-{i}"
+							class:selected={i === selectedRowIndex}
+							on:contextmenu={(event) => {
+								event.preventDefault();
+							}}
+							class:expandable
+							class:expanded={expandedRows.has(i)}
+							on:click={() => expandable && toggleRow(i)}
+						>
+							{#if expandable}
+								<td class="default-td expand-cell">
+									<span class="expand-icon">{expandedRows.has(i) ? '−' : '+'}</span>
 								</td>
-							{:else if ['Price', 'Chg', 'Chg%', 'Ext'].includes(col)}
-								<td class="default-td">
-									<StreamCell
+							{/if}
+							<td class="default-td">
+								{#if isFlagged(watch, $flagWatchlist)}
+									<span class="flag-icon">⚑</span>
+								{/if}
+							</td>
+							{#each columns as col}
+								{#if col === 'Ticker'}
+									<td class="default-td">
+										{#if watch.icon}
+											<img
+												src={watch.icon}
+												alt={`${watch.ticker} icon`}
+												class="ticker-icon"
+												on:error={(e) => {
+													console.error(`Failed to load icon for ${watch.ticker}:`, e);
+													e.currentTarget.style.display = 'none';
+												}}
+											/>
+										{/if}
+										{watch.ticker}
+									</td>
+								{:else if ['Price', 'Chg', 'Chg%', 'Ext'].includes(col)}
+									<td class="default-td">
+										<StreamCell
+											on:contextmenu={(event) => {
+												event.preventDefault();
+												event.stopPropagation();
+											}}
+											instance={watch}
+											type={(() => {
+												switch (col) {
+													case 'Price':
+														return 'price';
+													case 'Chg':
+														return 'change';
+													case 'Chg%':
+														return 'change %';
+													case 'Ext':
+														return 'change % extended';
+													default:
+														return col.toLowerCase();
+												}
+											})()}
+										/>
+									</td>
+								{:else if col === 'Timestamp'}
+									<td
+										class="default-td"
 										on:contextmenu={(event) => {
 											event.preventDefault();
 											event.stopPropagation();
-										}}
-										instance={watch}
-										type={(() => {
-											switch (col) {
-												case 'Price':
-													return 'price';
-												case 'Chg':
-													return 'change';
-												case 'Chg%':
-													return 'change %';
-												case 'Ext':
-													return 'change % extended';
-												default:
-													return col.toLowerCase();
-											}
-										})()}
-									/>
-								</td>
-							{:else if col === 'Timestamp'}
-								<td
-									class="default-td"
-									on:contextmenu={(event) => {
-										event.preventDefault();
-										event.stopPropagation();
-									}}>{UTCTimestampToESTString(watch[col.toLowerCase()])}</td
+										}}>{UTCTimestampToESTString(watch[col.toLowerCase()])}</td
+									>
+								{:else}
+									<td
+										class="default-td"
+										on:contextmenu={(event) => {
+											event.preventDefault();
+											event.stopPropagation();
+										}}>{formatValue(watch, col)}</td
+									>
+								{/if}
+							{/each}
+							<td class="default-td">
+								<button
+									class="delete-button"
+									on:click={(event) => {
+										deleteRow(event, watch);
+									}}
 								>
-							{:else}
-								<td
-									class="default-td"
-									on:contextmenu={(event) => {
-										event.preventDefault();
-										event.stopPropagation();
-									}}>{formatValue(watch, col)}</td
-								>
-							{/if}
-						{/each}
-						<td class="default-td">
-							<button
-								class="delete-button"
-								on:click={(event) => {
-									deleteRow(event, watch);
-								}}
-							>
-								✕
-							</button>
-						</td>
-					</tr>
-					{#if expandable && expandedRows.has(i)}
-						<tr class="expanded-content">
-							<td colspan={columns.length + (expandable ? 2 : 1)}>
-								<div class="trade-details">
-									<h4>Trade Details</h4>
-									<table>
-										<thead>
-											<tr class="defalt-tr">
-												<th class="defalt-th">Time</th>
-												<th class="defalt-th">Type</th>
-												<th class="defalt-th">Price</th>
-												<th class="defalt-th">Shares</th>
-											</tr>
-										</thead>
-										<tbody>
-											{#each getAllOrders(watch) as order}
-												<tr class="defalt-tr">
-													<td class="defalt-td">{UTCTimestampToESTString(order.time)}</td>
-													<td class={order.type.toLowerCase().replace(/\s+/g, '-')}>{order.type}</td
-													>
-													<td class="defalt-td">{order.price}</td>
-													<td class="defalt-td">{order.shares}</td>
-												</tr>
-											{/each}
-										</tbody>
-									</table>
-
-									<!-- Add Similar Trades section -->
-									{#if expandedContent}
-										{@const content = expandedContent($list[i])}
-										{@const tradeId = content.tradeId}
-										{#if tradeId}
-											<h4>Similar Trades</h4>
-											{#if loadingMap.get(tradeId)}
-												<div class="loading">Loading similar trades...</div>
-											{:else if errorMap.get(tradeId)}
-												<div class="error">{errorMap.get(tradeId)}</div>
-											{:else if similarTradesMap.get(tradeId)?.length}
-												<table>
-													<thead>
-														<tr class="defalt-tr">
-															<th class="defalt-th">Date</th>
-															<th class="defalt-th">Ticker</th>
-															<th class="defalt-th">Direction</th>
-															<th class="defalt-th">P/L</th>
-															<th class="defalt-th">Similarity</th>
-														</tr>
-													</thead>
-													<tbody>
-														{#each similarTradesMap.get(tradeId) as similarTrade}
-															<tr class="defalt-tr">
-																<td class="defalt-td">
-																	{UTCTimestampToESTString(similarTrade.entry_time)}
-																</td>
-																<td class="defalt-td">{similarTrade.ticker}</td>
-																<td class="defalt-td">{similarTrade.direction}</td>
-																<td class={similarTrade.pnl >= 0 ? 'positive' : 'negative'}>
-																	${similarTrade.pnl.toFixed(2)}
-																</td>
-																<td class="defalt-td">
-																	{(similarTrade.similarity_score * 100).toFixed(1)}%
-																</td>
-															</tr>
-														{/each}
-													</tbody>
-												</table>
-											{:else}
-												<div class="no-results">No similar trades found</div>
-											{/if}
-										{/if}
-									{/if}
-								</div>
+									✕
+								</button>
 							</td>
 						</tr>
-					{/if}
-				{/each}
-			</tbody>
-		{/if}
-	</table>
+						{#if expandable && expandedRows.has(i)}
+							<tr class="expanded-content">
+								<td colspan={columns.length + (expandable ? 2 : 1)}>
+									<div class="trade-details">
+										<h4>Trade Details</h4>
+										<table>
+											<thead>
+												<tr class="defalt-tr">
+													<th class="defalt-th">Time</th>
+													<th class="defalt-th">Type</th>
+													<th class="defalt-th">Price</th>
+													<th class="defalt-th">Shares</th>
+												</tr>
+											</thead>
+											<tbody>
+												{#each getAllOrders(watch) as order}
+													<tr class="defalt-tr">
+														<td class="defalt-td">{UTCTimestampToESTString(order.time)}</td>
+														<td class={order.type.toLowerCase().replace(/\s+/g, '-')}
+															>{order.type}</td
+														>
+														<td class="defalt-td">{order.price}</td>
+														<td class="defalt-td">{order.shares}</td>
+													</tr>
+												{/each}
+											</tbody>
+										</table>
+
+										<!-- Add Similar Trades section -->
+										{#if expandedContent}
+											{@const content = expandedContent($list[i])}
+											{@const tradeId = content.tradeId}
+											{#if tradeId}
+												<h4>Similar Trades</h4>
+												{#if loadingMap.get(tradeId)}
+													<div class="loading">Loading similar trades...</div>
+												{:else if errorMap.get(tradeId)}
+													<div class="error">{errorMap.get(tradeId)}</div>
+												{:else if similarTradesMap.get(tradeId)?.length}
+													<table>
+														<thead>
+															<tr class="defalt-tr">
+																<th class="defalt-th">Date</th>
+																<th class="defalt-th">Ticker</th>
+																<th class="defalt-th">Direction</th>
+																<th class="defalt-th">P/L</th>
+																<th class="defalt-th">Similarity</th>
+															</tr>
+														</thead>
+														<tbody>
+															{#each similarTradesMap.get(tradeId) as similarTrade}
+																<tr class="defalt-tr">
+																	<td class="defalt-td">
+																		{UTCTimestampToESTString(similarTrade.entry_time)}
+																	</td>
+																	<td class="defalt-td">{similarTrade.ticker}</td>
+																	<td class="defalt-td">{similarTrade.direction}</td>
+																	<td class={similarTrade.pnl >= 0 ? 'positive' : 'negative'}>
+																		${similarTrade.pnl.toFixed(2)}
+																	</td>
+																	<td class="defalt-td">
+																		{(similarTrade.similarity_score * 100).toFixed(1)}%
+																	</td>
+																</tr>
+															{/each}
+														</tbody>
+													</table>
+												{:else}
+													<div class="no-results">No similar trades found</div>
+												{/if}
+											{/if}
+										{/if}
+									</div>
+								</td>
+							</tr>
+						{/if}
+					{/each}
+				</tbody>
+			{/if}
+		</table>
+	{/if}
 </div>
 
 <style>
@@ -620,5 +732,16 @@
 		height: 20px;
 		margin-right: 5px;
 		vertical-align: middle;
+	}
+
+	.loading,
+	.error {
+		text-align: center;
+		padding: 2rem;
+		color: var(--text-primary);
+	}
+
+	.error {
+		color: var(--c5);
 	}
 </style>

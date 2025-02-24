@@ -27,7 +27,7 @@
 		userSetupMenu.set(menuState);
 		return new Promise<Setup | 'new'>((resolve, reject) => {
 			const unsubscribe = userSetupMenu.subscribe((iQ: User) => {
-				console.log(iQ);
+				iQ;
 				if (iQ.status === 'cancelled') {
 					deactivate();
 					tick();
@@ -76,10 +76,10 @@
 		});
 	});
 	function handleClickOutside(event: MouseEvent): void {
-		console.log(event.target);
-		console.log(menu);
+		event.target;
+		menu;
 		if (menu && !menu.contains(event.target as Node)) {
-			console.log('close');
+			('close');
 			closeMenu();
 		}
 	}

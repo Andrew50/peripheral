@@ -64,7 +64,7 @@ export class ArrowMarkersPaneView implements ICustomSeriesPaneView<Time, ArrowMa
 			draw: (target, priceToCoordinate, visibleRange) => {
 				target.useMediaCoordinateSpace(({ context, mediaSize }) => {
 					const { width, height } = mediaSize;
-					
+
 					if (this.markers.length === 0) {
 						return;
 					}
@@ -72,10 +72,10 @@ export class ArrowMarkersPaneView implements ICustomSeriesPaneView<Time, ArrowMa
 					// Only iterate over visible markers
 					for (let i = Math.floor(this.visibleRange.from); i < Math.ceil(this.visibleRange.to); i++) {
 						if (i < 0 || i >= this.markers.length) continue;
-						
+
 						const marker = this.markers[i];
 						const x = marker.x;
-						if(x === null) {
+						if (x === null) {
 							continue;
 						}
 
@@ -117,9 +117,7 @@ export class ArrowMarkersPaneView implements ICustomSeriesPaneView<Time, ArrowMa
 		visibleRange: { from: number; to: number },
 		width: number
 	): number {
-		console.log(`timeToX called with markerTime: ${markerTime}, visibleRange: ${JSON.stringify(visibleRange)}, width: ${width}`);
 		const markerIndex = data.findIndex(d => d.time === markerTime);
-		console.log(`Found marker index: ${markerIndex} for markerTime: ${markerTime}`);
 		if (markerIndex < 0) {
 			console.error("Marker time not found in data. Data:", data);
 			return -100; // Sentinel value
@@ -133,7 +131,6 @@ export class ArrowMarkersPaneView implements ICustomSeriesPaneView<Time, ArrowMa
 		}
 		const relativePos = (markerIndex - from) / range;
 		const xPos = relativePos * width;
-		console.log(`Calculated relativePos: ${relativePos}, resulting x position: ${xPos}`);
 		return xPos;
 	}
 
@@ -143,7 +140,6 @@ export class ArrowMarkersPaneView implements ICustomSeriesPaneView<Time, ArrowMa
 		this.markers = data.bars; // Assumes your data is in the "bars" property.
 		this.options = seriesOptions;
 		this.visibleRange = data.visibleRange;
-		console.log("visibleRange", this.visibleRange);
 	}
 
 	// Update price value builder to handle new structure
@@ -162,12 +158,10 @@ export class ArrowMarkersPaneView implements ICustomSeriesPaneView<Time, ArrowMa
 	// Default options.
 	defaultOptions(): CustomSeriesOptions {
 		const defaultOpts = { color: 'green' };
-		console.log("ArrowMarkersPaneView defaultOptions called, returning:", defaultOpts);
 		return defaultOpts;
 	}
 
 	// Cleanup, if necessary.
 	destroy(): void {
-		console.log("ArrowMarkersPaneView destroy called");
 	}
 }

@@ -83,7 +83,7 @@
 					const menuRect = rightClickMenu.getBoundingClientRect();
 					const windowWidth = window.innerWidth;
 					const windowHeight = window.innerHeight;
-					console.log(v.y);
+					v.y;
 					let newX = v.x;
 					let newY = v.y;
 					const halfMenuWidth = Math.floor(menuRect.width * 0.5);
@@ -100,7 +100,7 @@
 							newY = halfMenuWidth + 40;
 						}
 					}
-					console.log(v.y);
+					v.y;
 					v.status = 'active';
 					rightClickQuery.update((c: RightClickQuery) => {
 						return {

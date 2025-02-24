@@ -113,7 +113,6 @@ function reconnect() {
 
 export function subscribe(channelName: string) {
     if (socket?.readyState === WebSocket.OPEN) {
-        console.log("subscribing to", channelName)
         const subscriptionRequest: SubscriptionRequest = {
             action: 'subscribe',
             channelName: channelName,
@@ -124,7 +123,6 @@ export function subscribe(channelName: string) {
 
 export function unsubscribe(channelName: string) {
     if (socket?.readyState === WebSocket.OPEN) {
-        console.log("unsubscribing from", channelName)
         const unsubscriptionRequest: SubscriptionRequest = {
             action: 'unsubscribe',
             channelName: channelName,

@@ -1,14 +1,5 @@
-utils/quote.go
-socket/socket.go
-stream/socket.ts
-streamCell.svelte
-stream/interface.ts
-socket/ticks.go
-cache/Dockerfile
-conn.go
-quote.go
-socket/realtime.go
-socket/replay.go
-polygonSocket.go
+chart.svelte
+chart
+
 
 
