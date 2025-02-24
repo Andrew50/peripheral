@@ -76,12 +76,18 @@
 			) as InstanceAttributes[];
 		}
 		await tick();
+
+		// Check if there's an initial inputString in the instance
+		const initialInputString = 'inputString' in instance ? (instance.inputString as string) : '';
+		delete instance.inputString; // Remove it from the instance object
+
 		// Initialize the query with passed instance info.
 		inputQuery.update((v: InputQuery) => ({
 			...v,
 			requiredKeys,
 			possibleKeys,
 			instance,
+			inputString: initialInputString, // Use the initial input string if provided
 			status: 'initializing'
 		}));
 
