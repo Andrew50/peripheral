@@ -28,7 +28,7 @@
 			const empty = !Array.isArray(aList);
 			if (empty || !aList.find((l: Instance) => l.ticker === i.ticker)) {
 				privateRequest<number>('newWatchlistItem', {
-					watchlistId: currentWatchlistId,
+					watchlistId: parseInt(currentWatchlistId, 10),
 					securityId: i.securityId
 				}).then((watchlistItemId: number) => {
 					activeList.update((v: Instance[]) => {

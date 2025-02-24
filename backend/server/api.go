@@ -31,6 +31,7 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"getCurrentTicker":        tasks.GetCurrentTicker,
 	//"getTickerDetails":        tasks.GetTickerDetails,
 	"getTickerMenuDetails": tasks.GetTickerMenuDetails,
+	"getIcons":             tasks.GetIcons,
 
 	//chart
 	"getChartData": tasks.GetChartData,
