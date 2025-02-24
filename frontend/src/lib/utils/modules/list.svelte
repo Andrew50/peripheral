@@ -151,25 +151,52 @@
 	async function loadIcons() {
 		try {
 			const tickers = $list.map((item) => item.ticker).filter(Boolean);
-			if (tickers.length === 0) return;
-
-			const iconsResponse = await privateRequest('getIcons', { tickers });
-			if (iconsResponse && Array.isArray(iconsResponse)) {
-				list.update((items) => {
-					return items.map((item) => {
-						if (!item.ticker) return item;
-
-						const iconData = iconsResponse.find((i) => i.ticker === item.ticker);
-						if (iconData && iconData.icon) {
-							const iconUrl = iconData.icon.startsWith('/9j/')
-								? `data:image/jpeg;base64,${iconData.icon}`
-								: `data:image/png;base64,${iconData.icon}`;
-							return { ...item, icon: iconUrl };
-						}
-						return item;
-					});
-				});
+			if (tickers.length === 0) {
+				console.log('No tickers to load icons for');
+				return;
 			}
+
+			console.log('Loading icons for tickers:', tickers);
+			const iconsResponse = await privateRequest('getIcons', { tickers });
+
+			if (!iconsResponse) {
+				console.warn('No icon response received');
+				return;
+			}
+
+			if (!Array.isArray(iconsResponse)) {
+				console.warn('Invalid icon response format:', iconsResponse);
+				return;
+			}
+
+			console.log('Received icons response:', iconsResponse);
+
+			list.update((items) => {
+				return items.map((item) => {
+					if (!item.ticker) return item;
+
+					const iconData = iconsResponse.find((i) => i.ticker === item.ticker);
+					if (!iconData) {
+						console.log('No icon data found for ticker:', item.ticker);
+						return item;
+					}
+
+					if (!iconData.icon) {
+						console.log('Empty icon for ticker:', item.ticker);
+						return item;
+					}
+
+					try {
+						const iconUrl = iconData.icon.startsWith('/9j/')
+							? `data:image/jpeg;base64,${iconData.icon}`
+							: `data:image/png;base64,${iconData.icon}`;
+						return { ...item, icon: iconUrl };
+					} catch (e) {
+						console.warn('Failed to process icon for ticker:', item.ticker, e);
+						return item;
+					}
+				});
+			});
 		} catch (error) {
 			console.error('Failed to load icons:', error);
 		}
