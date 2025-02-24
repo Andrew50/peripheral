@@ -23,7 +23,6 @@
 	let askPriceChange = 'no-change'; // Can be 'increase', 'decrease', or 'no-change'
 
 	function updateStore(v: QuoteData | TradeData | number) {
-		console.log('L1 component: Received quote update', v);
 		if (typeof v === 'object' && 'bidPrice' in v && 'askPrice' in v) {
 			// Check bid price change
 			if (v.bidPrice !== undefined && v.bidPrice !== previousBidPrice) {
@@ -39,19 +38,15 @@
 	}
 
 	instance.subscribe((inst: Instance) => {
-		console.log('L1 component: Instance update received', inst);
 		if (!inst.securityId) {
-			console.log('L1 component: No security ID, skipping stream setup');
 			return;
 		}
 
 		// Check if we already have a stream for this security ID
 		if (currentSecurityId === inst.securityId) {
-			console.log('L1 component: Already streaming this security ID, skipping');
 			return;
 		}
 
-		console.log('L1 component: Setting up new streams for securityId:', inst.securityId);
 		currentSecurityId = inst.securityId;
 		release();
 		release = addStream(inst, 'quote', updateStore);
