@@ -59,10 +59,7 @@ func initialize(conn *utils.Conn) {
 	// Queue sector update on first init
 
 	if useBS {
-		err := socket.InitAggregates(conn)
-		if err != nil {
-			fmt.Println("schedule issue: dfi0w20", err)
-		}
+		socket.InitAggregatesAsync(conn)
 
 		alertsInitMutex.Lock()
 		if !alertsInitialized {

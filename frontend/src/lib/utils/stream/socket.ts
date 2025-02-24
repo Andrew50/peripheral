@@ -1,11 +1,11 @@
 // socket.ts
 import { writable } from 'svelte/store';
 import { streamInfo, handleTimestampUpdate } from '$lib/core/stores';
-import type { StreamInfo, TradeData, QuoteData } from "$lib/core/types";
+import type { StreamInfo, TradeData, QuoteData, CloseData } from "$lib/core/types";
 import { base_url } from '$lib/core/backend';
 import { browser } from '$app/environment'
 import { handleAlert } from './alert';
-import type { AlertData } from './alert';
+import type { AlertData } from '$lib/core/types';
 export type TimeType = "regular" | "extended"
 export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
     "fast-regular" |
@@ -17,8 +17,8 @@ export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
     "quote" |
     "all" //all trades
 
-export type StreamData = TradeData | QuoteData | number;
-export type StreamCallback = (v: TradeData | QuoteData | number) => void;
+export type StreamData = TradeData | QuoteData | CloseData | number;
+export type StreamCallback = (v: TradeData | QuoteData | CloseData | number) => void;
 
 export const activeChannels: Map<string, StreamCallback[]> = new Map();
 
