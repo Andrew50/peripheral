@@ -43,22 +43,24 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 		log.Println("niv0: ", err)
 		return
 	} else {
-		//fmt.Printf("debug: successfully connected to Polygon Quotes\n ")
+		fmt.Println("✅ Connected to Polygon Quotes stream")
 	}
 	err = polygonWS.Subscribe(polygonws.StocksTrades)
 	if err != nil {
 		log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	} else {
-		//fmt.Printf("debug: successfully connected to Polygon Trades \n ")
+		fmt.Println("✅ Connected to Polygon Trades stream")
 	}
 	err = polygonWS.Subscribe(polygonws.StocksMinAggs)
 	if err != nil {
 		log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	} else {
-		//fmt.Printf("debug: successfully connected to Polygon \n")
+		fmt.Println("✅ Connected to Polygon Minute Aggregates stream")
 	}
+
+	fmt.Println("🚀 All Polygon streams initialized and ready to process data")
 
 	// Add timestamp ticker
 	timestampTicker := time.NewTicker(TimestampUpdateInterval)
