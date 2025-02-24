@@ -425,11 +425,14 @@ func getInitialStreamValue(conn *utils.Conn, channelName string, timestamp int64
 			conditions = []int32{}
 			tradeTimestamp = tradeTime.UnixNano() / 1e6
 		} else if extendedHours && utils.IsTimestampRegularHours(tradeTime) {
-			openPrice, err := utils.GetMostRecentExtendedHoursClose(conn.Polygon, ticker, tradeTime)
+			// When in extended hours mode but during regular trading hours
+			// We should use the daily open price as the reference point
+			// This represents how much the price has changed since the open (including pre-market activity)
+			dailyOpen, err := utils.GetDailyOpen(conn.Polygon, ticker, tradeTime)
 			if err != nil {
-				return nil, fmt.Errorf("error getting open price: %v", err)
+				return nil, fmt.Errorf("error getting daily open: %v", err)
 			}
-			price = openPrice
+			price = dailyOpen
 			size = 0
 			conditions = []int32{}
 			tradeTimestamp = tradeTime.UnixNano() / 1e6
@@ -468,16 +471,31 @@ func getInitialStreamValue(conn *utils.Conn, channelName string, timestamp int64
 			}
 			return json.Marshal(out)
 		} else {
-			// Extended hours close
-			closePrice, err := utils.GetMostRecentRegularClose(conn.Polygon, ticker, time.Now())
-			if err != nil {
-				return nil, err
+			// Extended hours close - for extended hours calculations
+			// During regular hours: use the previous day's close
+			// During extended hours: use the daily open price
+			var referencePrice float64
+			if utils.IsTimestampRegularHours(queryTime) {
+				// During regular hours, use previous day's close for extended hours calculation
+				prevCloseSlice, err := getPrevCloseData(conn, securityId, queryTime.UnixNano()/1e6)
+				if err != nil {
+					return nil, err
+				}
+				referencePrice = prevCloseSlice[0].GetPrice()
+			} else {
+				// During extended hours, use daily open
+				dailyOpen, err := utils.GetDailyOpen(conn.Polygon, ticker, queryTime)
+				if err != nil {
+					return nil, fmt.Errorf("error getting daily open: %v", err)
+				}
+				referencePrice = dailyOpen
 			}
+
 			out := struct {
 				Price   float64 `json:"price"`
 				Channel string  `json:"channel"`
 			}{
-				Price:   closePrice,
+				Price:   referencePrice,
 				Channel: channelName,
 			}
 			return json.Marshal(out)

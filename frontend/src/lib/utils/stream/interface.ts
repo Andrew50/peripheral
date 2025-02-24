@@ -23,15 +23,15 @@ export function releaseStream(channelName: string, callback: StreamCallback) {
     }
 }
 
-export function addStream<T extends StreamData>(instance: Instance, channelType: ChannelType, callback: StreamCallback): Function {
+export function addStream<T extends StreamData>(instance: Instance, channelType: ChannelType, callback: (v: T) => void): Function {
     if (!instance.securityId) return () => { };
     const channelName = `${instance.securityId}-${channelType}`;
     const callbacks = activeChannels.get(channelName);
 
     // If callbacks exist, this channel is already active
     if (callbacks) {
-        if (!callbacks.includes(callback)) {
-            callbacks.push(callback);
+        if (!callbacks.includes(callback as StreamCallback)) {
+            callbacks.push(callback as StreamCallback);
             // Re-subscribe to get initial value
             if (socket?.readyState === WebSocket.OPEN) {
                 subscribe(channelName);
@@ -39,11 +39,11 @@ export function addStream<T extends StreamData>(instance: Instance, channelType:
         }
     } else {
         // New channel, set up normally
-        activeChannels.set(channelName, [callback]);
+        activeChannels.set(channelName, [callback as StreamCallback]);
         subscribe(channelName);
     }
 
-    return () => releaseStream(channelName, callback);
+    return () => releaseStream(channelName, callback as StreamCallback);
 }
 export function startReplay(instance: Instance) {
     if (!instance.timestamp) return

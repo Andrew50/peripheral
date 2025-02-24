@@ -23,10 +23,12 @@ export type StreamCallback = (v: TradeData | QuoteData | number) => void;
 export const activeChannels: Map<string, StreamCallback[]> = new Map();
 
 
-type SubscriptionRequest = {
+export type SubscriptionRequest = {
     action: 'subscribe' | 'unsubscribe' | 'replay' | 'pause' | 'play' | 'realtime' | 'speed';
     channelName?: string;
     timestamp?: number;
+    speed?: number;
+    extendedHours?: boolean;
 };
 
 export let socket: WebSocket | null = null;
