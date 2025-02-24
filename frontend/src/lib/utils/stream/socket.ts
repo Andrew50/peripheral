@@ -21,7 +21,8 @@ export type StreamData = TradeData | QuoteData | CloseData | number;
 export type StreamCallback = (v: TradeData | QuoteData | CloseData | number) => void;
 
 export const activeChannels: Map<string, StreamCallback[]> = new Map();
-
+export const connectionStatus = writable<'connected' | 'disconnected' | 'connecting'>('connecting');
+export const pendingSubscriptions = new Set<string>();
 
 export type SubscriptionRequest = {
     action: 'subscribe' | 'unsubscribe' | 'replay' | 'pause' | 'play' | 'realtime' | 'speed';
@@ -37,7 +38,6 @@ const maxReconnectInterval: number = 30000;
 let reconnectAttempts: number = 0;
 const maxReconnectAttempts: number = 5;
 let shouldReconnect: boolean = true;
-const connectionStatus = writable<'connected' | 'disconnected' | 'connecting'>('connecting');
 connect()
 
 function connect() {
@@ -61,9 +61,13 @@ function connect() {
         connectionStatus.set('connected');
         reconnectAttempts = 0;
         reconnectInterval = 5000;
-        for (const [channelName] of activeChannels.keys()) {
+
+        // Resubscribe to all active channels and pending subscriptions
+        const allChannels = new Set([...activeChannels.keys(), ...pendingSubscriptions]);
+        for (const channelName of allChannels) {
             subscribe(channelName);
         }
+        pendingSubscriptions.clear();
     });
     socket.addEventListener('message', (event) => {
         let data
@@ -120,6 +124,9 @@ export function subscribe(channelName: string) {
             channelName: channelName,
         };
         socket.send(JSON.stringify(subscriptionRequest));
+    } else {
+        // Store the subscription request to be sent when connection is established
+        pendingSubscriptions.add(channelName);
     }
 }
 
