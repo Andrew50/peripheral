@@ -345,11 +345,18 @@
 
 					if (inst.direction == 'forward') {
 						const visibleRange = chart.timeScale().getVisibleRange();
-						const vrFrom = visibleRange?.from as Time;
-						const vrTo = visibleRange?.to as Time;
+						const vrFrom = visibleRange?.from;
+						const vrTo = visibleRange?.to;
+
+						// Only set visible range if both from and to values are valid
 						chartCandleSeries.setData(newCandleData);
 						chartVolumeSeries.setData(newVolumeData);
-						chart.timeScale().setVisibleRange({ from: vrFrom, to: vrTo });
+						if (vrFrom && vrTo && typeof vrFrom === 'number' && typeof vrTo === 'number') {
+							chart.timeScale().setVisibleRange({
+								from: vrFrom,
+								to: vrTo
+							});
+						}
 					} else if (inst.direction == 'backward') {
 						chartCandleSeries.setData(newCandleData);
 						chartVolumeSeries.setData(newVolumeData);
