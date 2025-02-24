@@ -11,61 +11,88 @@
 	import { flagSecurity } from '$lib/utils/flag';
 	import { newAlert } from '$lib/features/alerts/interface';
 	import { queueRequest, privateRequest } from '$lib/core/backend';
-	let longPressTimer: any;
-	export let list: Writable<Instance[]> = writable([]);
+	import type { Trade } from '$lib/core/types';
+
+	type StreamCellType = 'price' | 'change' | 'change %' | 'change % extended' | 'market cap';
+
+	interface SimilarTrade {
+		entry_time: number;
+		ticker: string;
+		direction: string;
+		pnl: number;
+		similarity_score: number;
+	}
+
+	interface ExtendedInstance extends Instance {
+		trades?: Trade[];
+		[key: string]: any; // Allow dynamic property access
+	}
+
+	interface ApiResponse {
+		status: string;
+		similar_trades?: SimilarTrade[];
+		message?: string;
+	}
+
+	let longPressTimer: ReturnType<typeof setTimeout>;
+	export let list: Writable<ExtendedInstance[]> = writable([]);
 	export let columns: Array<string>;
-	export let parentDelete = (v: Instance) => {};
+	export let parentDelete = (v: ExtendedInstance) => {};
 	export let formatters: { [key: string]: (value: any) => string } = {};
 	export let expandable = false;
-	export let expandedContent: (item: any) => any = () => null;
+	export let expandedContent: (item: ExtendedInstance) => any = () => null;
 	export let displayNames: { [key: string]: string } = {};
 
 	let selectedRowIndex = -1;
 	console.log('list', get(list));
-	let expandedRows = new Set();
+	let expandedRows = new Set<number>();
 
 	// Add these for similar trades handling
-	let similarTradesMap = new Map();
-	let loadingMap = new Map();
-	let errorMap = new Map();
+	let similarTradesMap = new Map<number, SimilarTrade[]>();
+	let loadingMap = new Map<number, boolean>();
+	let errorMap = new Map<number, string>();
 
 	let isLoading = true;
-	let loadError = null;
+	let loadError: string | null = null;
 
-	function isFlagged(instance: Instance, flagWatch: Instance[]) {
+	function isFlagged(instance: ExtendedInstance, flagWatch: ExtendedInstance[]) {
 		if (!Array.isArray(flagWatch)) return false;
 		return flagWatch.some((item) => item.ticker === instance.ticker);
 	}
 
-	function deleteRow(event: MouseEvent, watch: Instance) {
+	function deleteRow(event: MouseEvent, watch: ExtendedInstance) {
 		event.stopPropagation();
 		event.preventDefault();
-		list.update((v: Instance[]) => {
+		list.update((v: ExtendedInstance[]) => {
 			return v.filter((s) => s !== watch);
 		});
 		parentDelete(watch);
 	}
+
 	function createListAlert() {
+		const currentList = get(list);
+		if (selectedRowIndex < 0 || selectedRowIndex >= currentList.length) return;
+
+		const selectedItem = currentList[selectedRowIndex];
 		const alert = {
-			price: get(list)[selectedRowIndex].price
+			alertType: 'price',
+			price: selectedItem.price,
+			securityId: selectedItem.securityId,
+			ticker: selectedItem.ticker
 		};
-		for (let i = 0; i < get(list).length; i++) {
-			alert.securityId = get(list)[i].securityId;
-			alert.ticker = get(list)[i].ticker;
-			newAlert(alert);
-		}
+		newAlert(alert);
 	}
-	function handleKeydown(event: KeyboardEvent, watch: Instance) {
+
+	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'ArrowUp' || (event.key === ' ' && event.shiftKey)) {
 			event.preventDefault();
 			moveUp();
 		} else if (event.key === 'ArrowDown' || event.key === ' ') {
 			event.preventDefault();
 			moveDown();
-		} else {
-			return;
 		}
 	}
+
 	function moveDown() {
 		if (selectedRowIndex < $list.length - 1) {
 			selectedRowIndex++;
@@ -74,6 +101,7 @@
 		}
 		scrollToRow(selectedRowIndex);
 	}
+
 	function moveUp() {
 		if (selectedRowIndex > 0) {
 			selectedRowIndex--;
@@ -87,68 +115,51 @@
 		const row = document.getElementById(`row-${index}`);
 		if (row) {
 			row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-			queryChart(get(list)[selectedRowIndex]);
+			const currentList = get(list);
+			if (index >= 0 && index < currentList.length) {
+				queryChart(currentList[index]);
+			}
 		}
 	}
-	onMount(async () => {
+
+	onMount(() => {
 		try {
 			isLoading = true;
 			window.addEventListener('keydown', handleKeydown);
-			const preventContextMenu = (event) => {
-				event.preventDefault();
+			const preventContextMenu = (e: Event) => {
+				e.preventDefault();
 			};
 
 			window.addEventListener('contextmenu', preventContextMenu);
 
-			// Updated icon handling - update list items directly
-			if (columns.includes('Ticker')) {
-				const tickers = get(list).map((item) => item.ticker);
-				const iconsResponse = await privateRequest('getIcons', { tickers });
-				if (iconsResponse && Array.isArray(iconsResponse)) {
-					list.update((items) => {
-						return items.map((item) => {
-							const iconData = iconsResponse.find((i) => i.ticker === item.ticker);
-							if (iconData && iconData.icon) {
-								const iconUrl = iconData.icon.startsWith('/9j/')
-									? `data:image/jpeg;base64,${iconData.icon}`
-									: `data:image/png;base64,${iconData.icon}`;
-								return { ...item, icon: iconUrl };
-							}
-							return item;
-						});
-					});
-				}
+			// Load icons if needed
+			if (columns?.includes('Ticker') && $list?.length > 0) {
+				loadIcons();
 			}
 
 			return () => {
 				window.removeEventListener('contextmenu', preventContextMenu);
 			};
 		} catch (error) {
-			loadError = error.message;
+			loadError = error instanceof Error ? error.message : 'An unknown error occurred';
 			console.error('Failed to load data:', error);
 		} finally {
 			isLoading = false;
 		}
 	});
 
-	// Add this reactive statement after the onMount block
-	$: if (columns?.includes('Ticker') && $list?.length > 0) {
-		console.log('List changed, loading icons for', $list.length, 'items');
-		const tickers = $list.map((item) => item.ticker).filter(Boolean);
-		console.log('Requesting icons for tickers:', tickers);
+	async function loadIcons() {
+		try {
+			const tickers = $list.map((item) => item.ticker).filter(Boolean);
+			if (tickers.length === 0) return;
 
-		privateRequest('getIcons', { tickers }).then((iconsResponse) => {
-			console.log('Received icon response:', iconsResponse);
-
+			const iconsResponse = await privateRequest('getIcons', { tickers });
 			if (iconsResponse && Array.isArray(iconsResponse)) {
 				list.update((items) => {
-					console.log('Updating list with icons');
-					const updatedItems = items.map((item) => {
+					return items.map((item) => {
 						if (!item.ticker) return item;
 
 						const iconData = iconsResponse.find((i) => i.ticker === item.ticker);
-						console.log(`Processing icon for ${item.ticker}:`, iconData);
-
 						if (iconData && iconData.icon) {
 							const iconUrl = iconData.icon.startsWith('/9j/')
 								? `data:image/jpeg;base64,${iconData.icon}`
@@ -157,73 +168,71 @@
 						}
 						return item;
 					});
-					console.log('Updated list items:', updatedItems);
-					return updatedItems;
 				});
 			}
-		});
+		} catch (error) {
+			console.error('Failed to load icons:', error);
+		}
 	}
 
 	onDestroy(() => {
 		window.removeEventListener('keydown', handleKeydown);
 	});
+
 	function clickHandler(
 		event: MouseEvent,
-		instance: Instance,
+		instance: ExtendedInstance,
 		index: number,
 		force: number | null = null
 	) {
 		console.log('selected instance: ', instance);
-		let even;
-		if (force !== null) {
-			even = force;
-		} else {
-			even = event.button;
-		}
-		event;
+		const button = force !== null ? force : event.button;
+
 		event.preventDefault();
 		event.stopPropagation();
-		if (even === 0) {
+
+		if (button === 0) {
 			selectedRowIndex = index;
-			if ('openQuantity' in instance) {
-				queryChart(instance);
-			} else {
-				queryChart(instance);
-			}
-		} else if (even === 1) {
+			queryChart(instance);
+		} else if (button === 1) {
 			flagSecurity(instance);
 		}
 	}
-	function handleTouchStart(event, watch, i) {
+
+	function handleTouchStart(
+		event: TouchEvent & { currentTarget: EventTarget & HTMLTableRowElement },
+		watch: ExtendedInstance,
+		i: number
+	) {
+		event.preventDefault(); // Prevent default touch behavior
+		const target = event.currentTarget as HTMLElement;
 		longPressTimer = setTimeout(() => {
-			clickHandler(event, watch, i, 2); // The action you want to trigger
-		}, 600); // Time in milliseconds to consider a long press
+			clickHandler(new MouseEvent('mousedown'), watch, i, 2);
+		}, 600);
 	}
 
 	function handleTouchEnd() {
-		clearTimeout(longPressTimer); // Clear if it's a short tap
+		clearTimeout(longPressTimer);
 	}
 
 	function toggleRow(index: number) {
-		'Toggling row:', index;
 		if (expandedRows.has(index)) {
 			expandedRows.delete(index);
 		} else {
 			expandedRows.add(index);
-			// Debug log for expanded content
 			const content = expandedContent($list[index]);
-			'Expanded content:', content;
+			if (content?.tradeId) {
+				loadSimilarTrades(content.tradeId);
+			}
 		}
-		expandedRows = expandedRows; // Trigger reactivity
+		expandedRows = expandedRows;
 	}
 
-	function formatValue(value: any, column: string): string {
-		// Convert column name to camelCase
+	function formatValue(value: ExtendedInstance, column: string): string {
 		const normalizedCol = column
-			.replace(/ /g, '') // Remove spaces
-			.replace(/^[A-Z]/, (letter) => letter.toLowerCase()); // Decapitalize first letter
+			.replace(/ /g, '')
+			.replace(/^[A-Z]/, (letter) => letter.toLowerCase());
 
-		// Get the actual data property name based on the display column name
 		let dataKey = normalizedCol;
 		switch (normalizedCol) {
 			case 'chg':
@@ -239,7 +248,6 @@
 				dataKey = normalizedCol;
 		}
 
-		// Get value using the normalized data key
 		const rawValue = value[dataKey];
 
 		if (formatters[column]) {
@@ -248,95 +256,74 @@
 		return rawValue?.toString() ?? 'N/A';
 	}
 
-	function getAllOrders(trade) {
+	function getAllOrders(trade: ExtendedInstance): Trade[] {
 		return trade.trades || [];
 	}
 
 	async function loadSimilarTrades(tradeId: number) {
-		if (!tradeId) {
-			('No tradeId provided');
-			return;
-		}
+		if (!tradeId) return;
 
-		'Loading similar trades for trade:', tradeId;
 		loadingMap.set(tradeId, true);
 		errorMap.delete(tradeId);
 		similarTradesMap = similarTradesMap;
 
 		try {
-			'Making request for trade:', tradeId;
-			const result = await queueRequest('find_similar_trades', { trade_id: tradeId });
-			'Similar trades result:', result;
+			const result = await queueRequest<ApiResponse>('find_similar_trades', { trade_id: tradeId });
 
-			if (result.status === 'success') {
-				similarTradesMap.set(tradeId, result.similar_trades);
-				'Updated similarTradesMap:', similarTradesMap;
-			} else {
-				errorMap.set(tradeId, result.message);
-				'Error from server:', result.message;
+			if (result && typeof result === 'object' && 'status' in result) {
+				if (result.status === 'success' && result.similar_trades) {
+					similarTradesMap.set(tradeId, result.similar_trades);
+				} else if (result.message) {
+					errorMap.set(tradeId, result.message);
+				}
 			}
 		} catch (e) {
-			console.error('Error loading similar trades:', e);
-			errorMap.set(tradeId, `Error loading similar trades: ${e}`);
+			const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred';
+			console.error('Error loading similar trades:', errorMessage);
+			errorMap.set(tradeId, `Error loading similar trades: ${errorMessage}`);
 		} finally {
 			loadingMap.delete(tradeId);
 			similarTradesMap = similarTradesMap;
 		}
 	}
 
-	// Modified reactive statement with more logging
-	$: {
-		if (expandedRows) {
-			'Expanded rows changed:', expandedRows;
-			expandedRows.forEach((isExpanded, index) => {
-				`Checking row ${index}, expanded: ${isExpanded}`;
-				if (isExpanded && $list[index]) {
-					const content = expandedContent($list[index]);
-					`Content for row ${index}:`, content;
-					if (content?.tradeId) {
-						`Loading similar trades for row ${index}, tradeId: ${content.tradeId}`;
-						loadSimilarTrades(content.tradeId);
-					}
+	// Watch for list changes to load icons
+	$: if (columns?.includes('Ticker') && $list?.length > 0) {
+		loadIcons();
+	}
+
+	// Watch for expanded rows changes
+	$: if (expandedRows) {
+		expandedRows.forEach((index) => {
+			if ($list[index]) {
+				const content = expandedContent($list[index]);
+				if (content?.tradeId) {
+					loadSimilarTrades(content.tradeId);
 				}
-			});
+			}
+		});
+	}
+
+	function handleImageError(e: Event) {
+		const img = e.currentTarget as HTMLImageElement;
+		if (img) {
+			img.style.display = 'none';
 		}
 	}
 
-	$: if (columns?.includes('Ticker') && $list?.length > 0) {
-		(async () => {
-			try {
-				isLoading = true;
-				const tickers = $list.map((item) => item.ticker).filter(Boolean);
-
-				if (tickers.length === 0) {
-					isLoading = false;
-					return;
-				}
-
-				const iconsResponse = await privateRequest('getIcons', { tickers });
-				if (iconsResponse && Array.isArray(iconsResponse)) {
-					list.update((items) => {
-						return items.map((item) => {
-							if (!item.ticker) return item;
-
-							const iconData = iconsResponse.find((i) => i.ticker === item.ticker);
-							if (iconData && iconData.icon) {
-								const iconUrl = iconData.icon.startsWith('/9j/')
-									? `data:image/jpeg;base64,${iconData.icon}`
-									: `data:image/png;base64,${iconData.icon}`;
-								return { ...item, icon: iconUrl };
-							}
-							return item;
-						});
-					});
-				}
-			} catch (error) {
-				console.error('Failed to load icons:', error);
-				// Don't set error state here as it's not critical functionality
-			} finally {
-				isLoading = false;
-			}
-		})();
+	function getStreamCellType(col: string): StreamCellType {
+		switch (col) {
+			case 'Price':
+				return 'price';
+			case 'Chg':
+				return 'change';
+			case 'Chg%':
+				return 'change %';
+			case 'Ext':
+				return 'change % extended';
+			default:
+				return 'price'; // Fallback to price
+		}
 	}
 </script>
 
@@ -370,7 +357,7 @@
 						<tr
 							class="default-tr"
 							on:mousedown={(event) => clickHandler(event, watch, i)}
-							on:touchstart={handleTouchStart}
+							on:touchstart={(event) => handleTouchStart(event, watch, i)}
 							on:touchend={handleTouchEnd}
 							id="row-{i}"
 							class:selected={i === selectedRowIndex}
@@ -399,10 +386,7 @@
 												src={watch.icon}
 												alt={`${watch.ticker} icon`}
 												class="ticker-icon"
-												on:error={(e) => {
-													console.error(`Failed to load icon for ${watch.ticker}:`, e);
-													e.currentTarget.style.display = 'none';
-												}}
+												on:error={handleImageError}
 											/>
 										{/if}
 										{watch.ticker}
@@ -415,20 +399,7 @@
 												event.stopPropagation();
 											}}
 											instance={watch}
-											type={(() => {
-												switch (col) {
-													case 'Price':
-														return 'price';
-													case 'Chg':
-														return 'change';
-													case 'Chg%':
-														return 'change %';
-													case 'Ext':
-														return 'change % extended';
-													default:
-														return col.toLowerCase();
-												}
-											})()}
+											type={getStreamCellType(col)}
 										/>
 									</td>
 								{:else if col === 'Timestamp'}
@@ -488,17 +459,16 @@
 											</tbody>
 										</table>
 
-										<!-- Add Similar Trades section -->
 										{#if expandedContent}
-											{@const content = expandedContent($list[i])}
-											{@const tradeId = content.tradeId}
+											{@const content = expandedContent(watch)}
+											{@const tradeId = content?.tradeId}
 											{#if tradeId}
 												<h4>Similar Trades</h4>
 												{#if loadingMap.get(tradeId)}
 													<div class="loading">Loading similar trades...</div>
 												{:else if errorMap.get(tradeId)}
 													<div class="error">{errorMap.get(tradeId)}</div>
-												{:else if similarTradesMap.get(tradeId)?.length}
+												{:else if similarTradesMap.get(tradeId)}
 													<table>
 														<thead>
 															<tr class="defalt-tr">
@@ -510,7 +480,7 @@
 															</tr>
 														</thead>
 														<tbody>
-															{#each similarTradesMap.get(tradeId) as similarTrade}
+															{#each similarTradesMap.get(tradeId) || [] as similarTrade}
 																<tr class="defalt-tr">
 																	<td class="defalt-td">
 																		{UTCTimestampToESTString(similarTrade.entry_time)}
