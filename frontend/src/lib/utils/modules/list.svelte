@@ -12,6 +12,8 @@
 	import { newAlert } from '$lib/features/alerts/interface';
 	import { queueRequest, privateRequest } from '$lib/core/backend';
 	import type { Trade } from '$lib/core/types';
+	import { flip } from 'svelte/animate';
+	import { fade, fly } from 'svelte/transition';
 
 	type StreamCellType = 'price' | 'change' | 'change %' | 'change % extended' | 'market cap';
 
@@ -43,6 +45,11 @@
 	export let expandedContent: (item: ExtendedInstance) => any = () => null;
 	export let displayNames: { [key: string]: string } = {};
 
+	// Add sorting state variables
+	let sortColumn: string | null = null;
+	let sortDirection: 'asc' | 'desc' = 'asc';
+	let isSorting = false;
+
 	let selectedRowIndex = -1;
 	console.log('list', get(list));
 	let expandedRows = new Set<number>();
@@ -54,6 +61,9 @@
 
 	let isLoading = true;
 	let loadError: string | null = null;
+	// Add a flag to track icon loading state
+	let iconsLoadedForTickers = new Set<string>();
+	let isLoadingIcons = false;
 
 	function isFlagged(instance: ExtendedInstance, flagWatch: ExtendedInstance[]) {
 		if (!Array.isArray(flagWatch)) return false;
@@ -122,6 +132,110 @@
 		}
 	}
 
+	// Add function to handle sorting when a column header is clicked
+	function handleSort(column: string) {
+		// Prevent sorting on the empty columns
+		if (!column) return;
+
+		if (sortColumn === column) {
+			// Toggle direction if already sorting by this column
+			sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+		} else {
+			// Set new sort column and default to ascending
+			sortColumn = column;
+			sortDirection = 'asc';
+		}
+
+		// Apply the sorting with visual feedback
+		isSorting = true;
+		setTimeout(() => {
+			sortList();
+			// Give some time for the animation to be visible
+			setTimeout(() => {
+				isSorting = false;
+			}, 300);
+		}, 50);
+	}
+
+	// Function to get data key from column name
+	function getDataKey(column: string): string {
+		const normalizedCol = column
+			.replace(/ /g, '')
+			.replace(/^[A-Z]/, (letter) => letter.toLowerCase());
+
+		switch (normalizedCol) {
+			case 'chg':
+				return 'change';
+			case 'chg%':
+				return 'change%';
+			case 'ext':
+				return 'change%extended';
+			default:
+				return normalizedCol;
+		}
+	}
+
+	// Function to sort the list based on current sort column and direction
+	function sortList() {
+		if (!sortColumn) return;
+
+		list.update((items) => {
+			const sorted = [...items].sort((a, b) => {
+				// Handle special column cases first based on column name directly
+				if (sortColumn === 'Price') {
+					const priceA = typeof a.price === 'number' ? a.price : 0;
+					const priceB = typeof b.price === 'number' ? b.price : 0;
+					return sortDirection === 'asc' ? priceA - priceB : priceB - priceA;
+				}
+
+				if (sortColumn === 'Chg') {
+					const changeA = typeof a.change === 'number' ? a.change : 0;
+					const changeB = typeof b.change === 'number' ? b.change : 0;
+					return sortDirection === 'asc' ? changeA - changeB : changeB - changeA;
+				}
+
+				if (sortColumn === 'Chg%') {
+					const pctA = typeof a['change%'] === 'number' ? a['change%'] : 0;
+					const pctB = typeof b['change%'] === 'number' ? b['change%'] : 0;
+					return sortDirection === 'asc' ? pctA - pctB : pctB - pctA;
+				}
+
+				if (sortColumn === 'Ext') {
+					const extA = typeof a['change%extended'] === 'number' ? a['change%extended'] : 0;
+					const extB = typeof b['change%extended'] === 'number' ? b['change%extended'] : 0;
+					return sortDirection === 'asc' ? extA - extB : extB - extA;
+				}
+
+				// For other columns, use data key
+				const dataKey = getDataKey(sortColumn!);
+
+				// Get the values to compare
+				let valueA = a[dataKey];
+				let valueB = b[dataKey];
+
+				// Handle timestamps
+				if (dataKey === 'timestamp') {
+					const timeA = typeof valueA === 'number' ? valueA : 0;
+					const timeB = typeof valueB === 'number' ? valueB : 0;
+					return sortDirection === 'asc' ? timeA - timeB : timeB - timeA;
+				}
+
+				// Generic number handling
+				if (typeof valueA === 'number' && typeof valueB === 'number') {
+					return sortDirection === 'asc' ? valueA - valueB : valueB - valueA;
+				}
+
+				// For strings or other types, convert to string and compare
+				const strA = String(valueA || '').toLowerCase();
+				const strB = String(valueB || '').toLowerCase();
+
+				return sortDirection === 'asc' ? strA.localeCompare(strB) : strB.localeCompare(strA);
+			});
+
+			return sorted;
+		});
+	}
+
 	onMount(() => {
 		try {
 			isLoading = true;
@@ -149,29 +263,87 @@
 	});
 
 	async function loadIcons() {
+		// Skip if already loading or if no tickers
+		if (isLoadingIcons) {
+			return;
+		}
+
 		try {
-			const tickers = $list.map((item) => item.ticker).filter(Boolean);
-			if (tickers.length === 0) return;
-
-			const iconsResponse = await privateRequest('getIcons', { tickers });
-			if (iconsResponse && Array.isArray(iconsResponse)) {
-				list.update((items) => {
-					return items.map((item) => {
-						if (!item.ticker) return item;
-
-						const iconData = iconsResponse.find((i) => i.ticker === item.ticker);
-						if (iconData && iconData.icon) {
-							const iconUrl = iconData.icon.startsWith('/9j/')
-								? `data:image/jpeg;base64,${iconData.icon}`
-								: `data:image/png;base64,${iconData.icon}`;
-							return { ...item, icon: iconUrl };
-						}
-						return item;
-					});
-				});
+			isLoadingIcons = true;
+			// Get all unique, non-empty tickers from the list
+			const tickers = [...new Set($list.map((item) => item?.ticker).filter(Boolean))];
+			if (tickers.length === 0) {
+				console.log('No tickers to load icons for');
+				return;
 			}
+
+			// Check if we already loaded icons for these tickers
+			const newTickers = tickers.filter((ticker) => ticker && !iconsLoadedForTickers.has(ticker));
+			if (newTickers.length === 0) {
+				console.log('Icons already loaded for all tickers');
+				return;
+			}
+
+			console.log('Loading icons for tickers:', newTickers);
+			const iconsResponse = await privateRequest('getIcons', { tickers: newTickers });
+
+			if (!iconsResponse) {
+				console.warn('No icon response received');
+				return;
+			}
+
+			if (!Array.isArray(iconsResponse)) {
+				console.warn('Invalid icon response format:', iconsResponse);
+				return;
+			}
+
+			console.log('Received icons response:', iconsResponse.length, 'items');
+
+			// Create a map of ticker to icon for faster lookup
+			const iconMap = new Map();
+			iconsResponse.forEach((item) => {
+				if (item && item.ticker) {
+					iconMap.set(item.ticker, item.icon || '');
+					// Mark this ticker as processed
+					iconsLoadedForTickers.add(item.ticker);
+				}
+			});
+
+			list.update((items) => {
+				return items.map((item) => {
+					if (!item?.ticker || item.icon) return item; // Skip if no ticker or already has icon
+
+					// Look up the icon in our map
+					const iconData = iconMap.get(item.ticker);
+					if (!iconData) {
+						console.log('No icon data found for ticker:', item.ticker);
+						// Mark as processed even if no icon found to avoid repeated attempts
+						if (item.ticker) iconsLoadedForTickers.add(item.ticker);
+						return item;
+					}
+
+					if (!iconData.length) {
+						console.log('Empty icon for ticker:', item.ticker);
+						if (item.ticker) iconsLoadedForTickers.add(item.ticker);
+						return item;
+					}
+
+					try {
+						const iconUrl = iconData.startsWith('/9j/')
+							? `data:image/jpeg;base64,${iconData}`
+							: `data:image/png;base64,${iconData}`;
+						return { ...item, icon: iconUrl };
+					} catch (e) {
+						console.warn('Failed to process icon for ticker:', item.ticker, e);
+						if (item.ticker) iconsLoadedForTickers.add(item.ticker);
+						return item;
+					}
+				});
+			});
 		} catch (error) {
 			console.error('Failed to load icons:', error);
+		} finally {
+			isLoadingIcons = false;
 		}
 	}
 
@@ -287,9 +459,15 @@
 		}
 	}
 
-	// Watch for list changes to load icons
+	// Modify the reactive statement to only load icons for new tickers
 	$: if (columns?.includes('Ticker') && $list?.length > 0) {
-		loadIcons();
+		const newTickersExist = $list.some((item) => {
+			// Make sure ticker exists before checking
+			return typeof item?.ticker === 'string' && !iconsLoadedForTickers.has(item.ticker);
+		});
+		if (newTickersExist) {
+			loadIcons();
+		}
 	}
 
 	// Watch for expanded rows changes
@@ -336,7 +514,7 @@
 			<button on:click={() => window.location.reload()}>Retry</button>
 		</div>
 	{:else}
-		<table class="default-table">
+		<table class="default-table" class:sorting={isSorting}>
 			<thead>
 				<tr class="default-tr">
 					{#if expandable}
@@ -344,8 +522,21 @@
 					{/if}
 					<th class="default-th"></th>
 					{#each columns as col}
-						<th class="default-th" data-type={col.toLowerCase().replace(/\s+/g, '-')}>
-							{displayNames[col] || col}
+						<th
+							class="default-th"
+							data-type={col.toLowerCase().replace(/\s+/g, '-')}
+							class:sortable={col !== ''}
+							class:sorting={sortColumn === col}
+							class:sort-asc={sortColumn === col && sortDirection === 'asc'}
+							class:sort-desc={sortColumn === col && sortDirection === 'desc'}
+							on:click={() => handleSort(col)}
+						>
+							<div class="th-content">
+								<span>{displayNames[col] || col}</span>
+								{#if sortColumn === col}
+									<span class="sort-icon">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+								{/if}
+							</div>
 						</th>
 					{/each}
 					<th class="default-th"></th>
@@ -353,7 +544,7 @@
 			</thead>
 			{#if Array.isArray($list) && $list.length > 0}
 				<tbody>
-					{#each $list as watch, i}
+					{#each $list as watch, i (watch.securityId || i)}
 						<tr
 							class="default-tr"
 							on:mousedown={(event) => clickHandler(event, watch, i)}
@@ -367,6 +558,7 @@
 							class:expandable
 							class:expanded={expandedRows.has(i)}
 							on:click={() => expandable && toggleRow(i)}
+							transition:fade={{ duration: 150 }}
 						>
 							{#if expandable}
 								<td class="default-td expand-cell">
@@ -549,6 +741,59 @@
 		background-color: var(--ui-bg-element);
 		font-weight: bold;
 		color: var(--text-secondary);
+	}
+
+	/* Sorting styles */
+	.sortable {
+		cursor: pointer;
+		user-select: none;
+		position: relative;
+	}
+
+	.th-content {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.sort-icon {
+		margin-left: 4px;
+		font-size: 0.8em;
+		opacity: 0.7;
+	}
+
+	.sorting {
+		background-color: var(--ui-bg-hover);
+	}
+
+	table.sorting tbody tr {
+		opacity: 0.7;
+		transition: opacity 0.3s ease;
+	}
+
+	table.sorting {
+		position: relative;
+	}
+
+	table.sorting::after {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.05);
+		pointer-events: none;
+	}
+
+	.sort-asc .sort-icon,
+	.sort-desc .sort-icon {
+		opacity: 1;
+		color: var(--ui-accent);
+	}
+
+	th.sortable:hover {
+		background-color: var(--ui-bg-hover);
 	}
 
 	tr {
