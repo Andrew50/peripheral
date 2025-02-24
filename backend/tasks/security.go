@@ -557,3 +557,43 @@ func GetEdgarFilings(conn *utils.Conn, userId int, rawArgs json.RawMessage) (int
 
 	return filings, nil
 }
+
+type GetIconsArgs struct {
+	Tickers []string `json:"tickers"`
+}
+
+type GetIconsResults struct {
+	Ticker string `json:"ticker"`
+	Icon   string `json:"icon"`
+}
+
+func GetIcons(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetIconsArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+
+	// Prepare a query to fetch icons for the given tickers
+	query := `
+		SELECT ticker, icon
+		FROM securities
+		WHERE ticker = ANY($1)
+	`
+
+	rows, err := conn.DB.Query(context.Background(), query, args.Tickers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query icons: %v", err)
+	}
+	defer rows.Close()
+
+	var results []GetIconsResults
+	for rows.Next() {
+		var result GetIconsResults
+		if err := rows.Scan(&result.Ticker, &result.Icon); err != nil {
+			return nil, fmt.Errorf("failed to scan icon: %v", err)
+		}
+		results = append(results, result)
+	}
+
+	return results, nil
+}

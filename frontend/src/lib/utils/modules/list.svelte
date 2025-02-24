@@ -18,7 +18,7 @@
 	export let formatters: { [key: string]: (value: any) => string } = {};
 	export let expandable = false;
 	export let expandedContent: (item: any) => any = () => null;
-	export let displayNames: {[key: string]: string} = {};
+	export let displayNames: { [key: string]: string } = {};
 
 	let selectedRowIndex = -1;
 	let expandedRows = new Set();
@@ -27,6 +27,8 @@
 	let similarTradesMap = new Map();
 	let loadingMap = new Map();
 	let errorMap = new Map();
+
+	let iconsMap = new Map();
 
 	function isFlagged(instance: Instance, flagWatch: Instance[]) {
 		if (!Array.isArray(flagWatch)) return false;
@@ -86,13 +88,22 @@
 			queryChart(get(list)[selectedRowIndex]);
 		}
 	}
-	onMount(() => {
+	onMount(async () => {
 		window.addEventListener('keydown', handleKeydown);
 		const preventContextMenu = (event) => {
 			event.preventDefault();
 		};
 
 		window.addEventListener('contextmenu', preventContextMenu);
+
+		// Fetch icons if "Ticker" column is present
+		if (columns.includes('Ticker')) {
+			const tickers = get(list).map((item) => item.ticker);
+			const iconsResponse = await privateRequest('getIcons', { tickers });
+			iconsResponse.forEach((iconData) => {
+				iconsMap.set(iconData.ticker, iconData.icon);
+			});
+		}
 
 		return () => {
 			window.removeEventListener('contextmenu', preventContextMenu);
@@ -125,7 +136,7 @@
 			}
 		} else if (even === 1) {
 			flagSecurity(instance);
-		} 
+		}
 	}
 	function handleTouchStart(event, watch, i) {
 		longPressTimer = setTimeout(() => {
@@ -138,14 +149,14 @@
 	}
 
 	function toggleRow(index: number) {
-		console.log("Toggling row:", index);
+		console.log('Toggling row:', index);
 		if (expandedRows.has(index)) {
 			expandedRows.delete(index);
 		} else {
 			expandedRows.add(index);
 			// Debug log for expanded content
 			const content = expandedContent($list[index]);
-			console.log("Expanded content:", content);
+			console.log('Expanded content:', content);
 		}
 		expandedRows = expandedRows; // Trigger reactivity
 	}
@@ -187,29 +198,29 @@
 
 	async function loadSimilarTrades(tradeId: number) {
 		if (!tradeId) {
-			console.log("No tradeId provided");
+			console.log('No tradeId provided');
 			return;
 		}
-		
-		console.log("Loading similar trades for trade:", tradeId);
+
+		console.log('Loading similar trades for trade:', tradeId);
 		loadingMap.set(tradeId, true);
 		errorMap.delete(tradeId);
 		similarTradesMap = similarTradesMap;
-		
+
 		try {
-			console.log("Making request for trade:", tradeId);
+			console.log('Making request for trade:', tradeId);
 			const result = await queueRequest('find_similar_trades', { trade_id: tradeId });
-			console.log("Similar trades result:", result);
-			
+			console.log('Similar trades result:', result);
+
 			if (result.status === 'success') {
 				similarTradesMap.set(tradeId, result.similar_trades);
-				console.log("Updated similarTradesMap:", similarTradesMap);
+				console.log('Updated similarTradesMap:', similarTradesMap);
 			} else {
 				errorMap.set(tradeId, result.message);
-				console.log("Error from server:", result.message);
+				console.log('Error from server:', result.message);
 			}
 		} catch (e) {
-			console.error("Error loading similar trades:", e);
+			console.error('Error loading similar trades:', e);
 			errorMap.set(tradeId, `Error loading similar trades: ${e}`);
 		} finally {
 			loadingMap.delete(tradeId);
@@ -220,7 +231,7 @@
 	// Modified reactive statement with more logging
 	$: {
 		if (expandedRows) {
-			console.log("Expanded rows changed:", expandedRows);
+			console.log('Expanded rows changed:', expandedRows);
 			expandedRows.forEach((isExpanded, index) => {
 				console.log(`Checking row ${index}, expanded: ${isExpanded}`);
 				if (isExpanded && $list[index]) {
@@ -278,7 +289,14 @@
 							{/if}
 						</td>
 						{#each columns as col}
-							{#if ['Price', 'Chg', 'Chg%', 'Ext'].includes(col)}
+							{#if col === 'Ticker'}
+								<td class="default-td">
+									{#if iconsMap.has(watch.ticker)}
+										<img src={iconsMap.get(watch.ticker)} alt="icon" class="ticker-icon" />
+									{/if}
+									{watch.ticker}
+								</td>
+							{:else if ['Price', 'Chg', 'Chg%', 'Ext'].includes(col)}
 								<td class="default-td">
 									<StreamCell
 										on:contextmenu={(event) => {
@@ -287,12 +305,17 @@
 										}}
 										instance={watch}
 										type={(() => {
-											switch(col) {
-												case 'Price': return 'price';
-												case 'Chg': return 'change';
-												case 'Chg%': return 'change %';
-												case 'Ext': return 'change % extended';
-												default: return col.toLowerCase();
+											switch (col) {
+												case 'Price':
+													return 'price';
+												case 'Chg':
+													return 'change';
+												case 'Chg%':
+													return 'change %';
+												case 'Ext':
+													return 'change % extended';
+												default:
+													return col.toLowerCase();
 											}
 										})()}
 									/>
@@ -567,7 +590,9 @@
 		background-color: var(--ui-bg-hover);
 	}
 
-	.loading, .error, .no-results {
+	.loading,
+	.error,
+	.no-results {
 		padding: 10px;
 		text-align: center;
 		color: var(--text-secondary);
@@ -588,5 +613,12 @@
 	h4 {
 		margin: 20px 0 10px 0;
 		color: var(--text-secondary);
+	}
+
+	.ticker-icon {
+		width: 20px;
+		height: 20px;
+		margin-right: 5px;
+		vertical-align: middle;
 	}
 </style>
