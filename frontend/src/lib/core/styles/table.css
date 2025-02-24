@@ -12,21 +12,40 @@
     /* Smaller base font size */
 }
 
-.default-th,
-.default-td {
+/* Column width specifications */
+.default-th[data-type="ticker"] {
+    width: 80px;
+    min-width: 80px;
+    max-width: 80px;
+}
+
+.default-th[data-type="price"] {
+    width: 70px;
+    min-width: 70px;
+    max-width: 70px;
+}
+
+.default-th[data-type="chg"],
+.default-th[data-type="chg%"],
+.default-th[data-type="ext"] {
+    width: 60px;
+    min-width: 60px;
+    max-width: 60px;
+}
+
+/* Cell styles */
+.default-td,
+.default-th {
     padding: 2px 4px;
-    /* Reduced vertical padding */
     text-align: left;
     border-bottom: 1px solid var(--ui-border);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    min-width: 0;
-    font-size: 0.8rem;
     line-height: 1.1;
-    /* Reduced from 1.2 */
     height: 20px;
-    /* Reduced from 24px */
+    position: relative;
+    background-clip: padding-box;
 }
 
 .default-th {
@@ -112,7 +131,7 @@
     color: #06735f;
 }
 
-/* Add specific width for action columns */
+/* Empty header cells */
 .default-th:empty {
     width: 24px;
     max-width: 24px;
@@ -167,16 +186,22 @@
     margin: 0 auto;
 }
 
-/* Add specific widths for different column types */
-.default-th[data-type="ticker"] {
-    width: 55px;
-    max-width: 55px;
+/* Ticker cell specific styling */
+.default-td:has(img.ticker-icon) {
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
+    width: 80px;
+    padding-right: 8px;
+    z-index: 2;
+    background-color: inherit;
 }
 
-.default-th[data-type="price"],
-.default-th[data-type="change"],
-.default-th[data-type="change %"],
-.default-th[data-type="change % extended"] {
-    width: 60px;
-    max-width: 60px;
+/* Ticker icon */
+.ticker-icon {
+    width: 20px;
+    height: 20px;
+    margin-right: 5px;
+    vertical-align: middle;
+    display: inline-block;
 }

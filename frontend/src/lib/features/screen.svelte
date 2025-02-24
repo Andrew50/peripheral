@@ -28,7 +28,7 @@
 		const dateToScreen = get(selectedDate); // Get the currently selected date
 		queueRequest<Screen[]>('screen', { setupIds: setupIds, timestamp: dateToScreen / 1000 }).then(
 			(response) => {
-				console.log(response);
+				response;
 				screens.set(response);
 			}
 		);
