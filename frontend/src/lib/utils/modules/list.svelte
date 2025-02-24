@@ -12,6 +12,8 @@
 	import { newAlert } from '$lib/features/alerts/interface';
 	import { queueRequest, privateRequest } from '$lib/core/backend';
 	import type { Trade } from '$lib/core/types';
+	import { flip } from 'svelte/animate';
+	import { fade, fly } from 'svelte/transition';
 
 	type StreamCellType = 'price' | 'change' | 'change %' | 'change % extended' | 'market cap';
 
@@ -46,6 +48,7 @@
 	// Add sorting state variables
 	let sortColumn: string | null = null;
 	let sortDirection: 'asc' | 'desc' = 'asc';
+	let isSorting = false;
 
 	let selectedRowIndex = -1;
 	console.log('list', get(list));
@@ -143,8 +146,15 @@
 			sortDirection = 'asc';
 		}
 
-		// Apply the sorting
-		sortList();
+		// Apply the sorting with visual feedback
+		isSorting = true;
+		setTimeout(() => {
+			sortList();
+			// Give some time for the animation to be visible
+			setTimeout(() => {
+				isSorting = false;
+			}, 300);
+		}, 50);
 	}
 
 	// Function to get data key from column name
@@ -171,13 +181,7 @@
 
 		list.update((items) => {
 			const sorted = [...items].sort((a, b) => {
-				const dataKey = getDataKey(sortColumn!);
-
-				// Get the values to compare
-				let valueA = a[dataKey];
-				let valueB = b[dataKey];
-
-				// Special handling for different data types
+				// Handle special column cases first based on column name directly
 				if (sortColumn === 'Price') {
 					const priceA = typeof a.price === 'number' ? a.price : 0;
 					const priceB = typeof b.price === 'number' ? b.price : 0;
@@ -201,6 +205,13 @@
 					const extB = typeof b['change%extended'] === 'number' ? b['change%extended'] : 0;
 					return sortDirection === 'asc' ? extA - extB : extB - extA;
 				}
+
+				// For other columns, use data key
+				const dataKey = getDataKey(sortColumn!);
+
+				// Get the values to compare
+				let valueA = a[dataKey];
+				let valueB = b[dataKey];
 
 				// Handle timestamps
 				if (dataKey === 'timestamp') {
@@ -503,7 +514,7 @@
 			<button on:click={() => window.location.reload()}>Retry</button>
 		</div>
 	{:else}
-		<table class="default-table">
+		<table class="default-table" class:sorting={isSorting}>
 			<thead>
 				<tr class="default-tr">
 					{#if expandable}
@@ -533,7 +544,7 @@
 			</thead>
 			{#if Array.isArray($list) && $list.length > 0}
 				<tbody>
-					{#each $list as watch, i}
+					{#each $list as watch, i (watch.securityId || i)}
 						<tr
 							class="default-tr"
 							on:mousedown={(event) => clickHandler(event, watch, i)}
@@ -547,6 +558,7 @@
 							class:expandable
 							class:expanded={expandedRows.has(i)}
 							on:click={() => expandable && toggleRow(i)}
+							transition:fade={{ duration: 150 }}
 						>
 							{#if expandable}
 								<td class="default-td expand-cell">
@@ -752,6 +764,26 @@
 
 	.sorting {
 		background-color: var(--ui-bg-hover);
+	}
+
+	table.sorting tbody tr {
+		opacity: 0.7;
+		transition: opacity 0.3s ease;
+	}
+
+	table.sorting {
+		position: relative;
+	}
+
+	table.sorting::after {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.05);
+		pointer-events: none;
 	}
 
 	.sort-asc .sort-icon,
