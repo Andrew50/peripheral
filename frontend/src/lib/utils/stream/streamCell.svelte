@@ -47,6 +47,16 @@
 		releaseClose = addStream<CloseData>(instance, closeStreamName, (v: CloseData) => {
 			changeStore.update((s: ChangeStore) => {
 				const prevClose = v.price;
+
+				// Update the instance object with the prevClose value
+				if (type === 'change %') {
+					(instance as any)['prevClose'] = prevClose;
+				} else if (type === 'change % extended') {
+					(instance as any)['prevCloseExtended'] = prevClose;
+				} else {
+					(instance as any)['prevClose'] = prevClose;
+				}
+
 				return {
 					...s,
 					prevClose,
@@ -60,6 +70,31 @@
 				changeStore.update((s: ChangeStore) => {
 					const price = v.price;
 					const prevClose = s.prevClose;
+
+					// Update the instance with the price
+					(instance as any)['price'] = price;
+
+					// Update related fields on the instance based on type
+					if (type === 'change') {
+						// Calculate raw change and store it
+						if (price && prevClose) {
+							(instance as any)['change'] = price - prevClose;
+						}
+					} else if (type === 'change %') {
+						// Calculate percentage change and store it
+						if (price && prevClose) {
+							(instance as any)['change%'] = (price / prevClose - 1) * 100;
+						}
+					} else if (type === 'change % extended') {
+						// Calculate extended percentage change
+						if (price && prevClose) {
+							(instance as any)['change%extended'] = (price / prevClose - 1) * 100;
+						}
+					} else if (type === 'market cap' && instance.totalShares) {
+						// Calculate market cap
+						(instance as any)['marketCap'] = price * instance.totalShares;
+					}
+
 					if (type === 'market cap') {
 						return {
 							...s,
