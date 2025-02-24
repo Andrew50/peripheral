@@ -17,7 +17,7 @@ export interface ShiftOverlay {
 }
 
 export type ChartId = number;
-export type ChartEvent = '' | 'replay' | 'realtime' | 'addHorizontalLine';
+export type ChartEvent = string | number;
 
 let selectedChartId: ChartId = 0;
 
