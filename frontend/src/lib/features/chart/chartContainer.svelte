@@ -8,18 +8,27 @@
 	// Add focus management
 	let containerRef: HTMLDivElement;
 
-	onMount(async () => {
-		// Wait the next microtask so the DOM is ready
-		await tick();
-
-		if (containerRef) {
-			containerRef.focus();
-		}
+	onMount(() => {
+		// Wait for DOM to be ready
+		tick().then(() => {
+			if (containerRef) {
+				containerRef.focus();
+			}
+		});
 
 		// Add global keyboard event listener for chart container
 		const handleGlobalKeydown = (event: KeyboardEvent) => {
 			if (/^[a-zA-Z0-9]$/.test(event.key) && !event.ctrlKey && !event.metaKey) {
-				containerRef.focus();
+				// Only focus if we're not in an input field or similar
+				const activeElement = document.activeElement;
+				const isInput =
+					activeElement?.tagName === 'INPUT' ||
+					activeElement?.tagName === 'TEXTAREA' ||
+					activeElement?.getAttribute('contenteditable') === 'true';
+
+				if (!isInput && containerRef) {
+					containerRef.focus();
+				}
 			}
 		};
 

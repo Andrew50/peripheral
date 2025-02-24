@@ -13,11 +13,46 @@
 	let instance: Writable<Instance> = writable({});
 	let container: HTMLDivElement;
 	let showTimeAndSales = false;
+	let currentDetails: Record<string, any> = {};
+	let lastFetchedSecurityId: number | null = null;
 
-	// Sync instance with activeChartInstance
-	activeChartInstance.subscribe((chartInstance) => {
-		if (chartInstance) {
+	// Sync instance with activeChartInstance and handle details fetching
+	activeChartInstance.subscribe((chartInstance: Instance | null) => {
+		console.log('Quote component: activeChartInstance update received', chartInstance);
+		if (chartInstance?.ticker) {
+			// Only update if we have a valid ticker
+			console.log('Quote component: Setting new instance with ticker:', chartInstance.ticker);
 			instance.set(chartInstance);
+
+			// Handle details fetching in the main subscription
+			if (chartInstance.securityId && lastFetchedSecurityId !== chartInstance.securityId) {
+				console.log('Quote component: Fetching details for security ID:', chartInstance.securityId);
+				lastFetchedSecurityId = chartInstance.securityId;
+				privateRequest<Record<string, any>>(
+					'getTickerMenuDetails',
+					{ securityId: chartInstance.securityId },
+					true
+				)
+					.then((details) => {
+						console.log('Quote component: Received details:', details);
+						if (lastFetchedSecurityId === chartInstance.securityId) {
+							currentDetails = details;
+							// Update the instance directly instead of activeChartInstance
+							instance.update((inst) => ({
+								...inst,
+								...details
+							}));
+						} else {
+							console.log('Quote component: Ignoring stale details response');
+						}
+					})
+					.catch((error) => {
+						console.error('Quote component: Error fetching details:', error);
+						if (lastFetchedSecurityId === chartInstance.securityId) {
+							currentDetails = {};
+						}
+					});
+			}
 		}
 	});
 
@@ -48,20 +83,6 @@
 	}
 
 	onMount(() => {
-		activeChartInstance.subscribe((instance: Instance | null) => {
-			if (instance && !instance.detailsFetched && instance.securityId) {
-				privateRequest('getTickerMenuDetails', { securityId: instance.securityId }, true).then(
-					(details) => {
-						activeChartInstance.update((inst: Instance) => ({
-							...inst,
-							...details,
-							detailsFetched: true
-						}));
-					}
-				);
-			}
-		});
-
 		document.addEventListener('mousemove', handleMouseMove);
 		document.addEventListener('mouseup', handleMouseUp);
 
@@ -106,19 +127,19 @@
 		<div class="stream-cells">
 			<div class="stream-cell-container">
 				<span class="label">Price</span>
-				<StreamCell instance={$activeChartInstance} type="price" />
+				<StreamCell instance={$instance} type="price" />
 			</div>
 			<div class="stream-cell-container">
 				<span class="label">Chg %</span>
-				<StreamCell instance={$activeChartInstance} type="change %" />
+				<StreamCell instance={$instance} type="change %" />
 			</div>
 			<div class="stream-cell-container">
 				<span class="label">Chg $</span>
-				<StreamCell instance={$activeChartInstance} type="change" />
+				<StreamCell instance={$instance} type="change" />
 			</div>
 			<div class="stream-cell-container">
 				<span class="label">Ext %</span>
-				<StreamCell instance={$activeChartInstance} type="change % extended" />
+				<StreamCell instance={$instance} type="change % extended" />
 			</div>
 		</div>
 
@@ -134,17 +155,17 @@
 
 		<div class="info-row">
 			<span class="label">Name:</span>
-			<span class="value">{$activeChartInstance?.name}</span>
+			<span class="value">{$instance?.name || currentDetails?.name || 'N/A'}</span>
 		</div>
 		<div class="info-row">
 			<span class="label">Active:</span>
-			<span class="value">{$activeChartInstance?.active || 'N/A'}</span>
+			<span class="value">{$instance?.active || currentDetails?.active || 'N/A'}</span>
 		</div>
 		<div class="info-row">
 			<span class="label">Market Cap:</span>
 			<span class="value">
-				{#if $activeChartInstance?.totalShares}
-					<StreamCell instance={$activeChartInstance} type="market cap" />
+				{#if $instance?.totalShares || currentDetails?.totalShares}
+					<StreamCell instance={$instance} type="market cap" />
 				{:else}
 					N/A
 				{/if}
@@ -152,25 +173,30 @@
 		</div>
 		<div class="info-row">
 			<span class="label">Sector:</span>
-			<span class="value">{$activeChartInstance?.sector || 'N/A'}</span>
+			<span class="value">{$instance?.sector || currentDetails?.sector || 'N/A'}</span>
 		</div>
 		<div class="info-row">
 			<span class="label">Industry:</span>
-			<span class="value">{$activeChartInstance?.industry || 'N/A'}</span>
+			<span class="value">{$instance?.industry || currentDetails?.industry || 'N/A'}</span>
 		</div>
 		<div class="info-row">
 			<span class="label">Exchange:</span>
-			<span class="value">{$activeChartInstance?.primary_exchange || 'N/A'}</span>
+			<span class="value"
+				>{$instance?.primary_exchange || currentDetails?.primary_exchange || 'N/A'}</span
+			>
 		</div>
 		<div class="info-row">
 			<span class="label">Market:</span>
-			<span class="value">{$activeChartInstance?.market || 'N/A'}</span>
+			<span class="value">{$instance?.market || currentDetails?.market || 'N/A'}</span>
 		</div>
 		<div class="info-row">
 			<span class="label">Shares Out:</span>
 			<span class="value">
-				{#if $activeChartInstance?.share_class_shares_outstanding}
-					{($activeChartInstance.share_class_shares_outstanding / 1e6).toFixed(2)}M
+				{#if $instance?.share_class_shares_outstanding || currentDetails?.share_class_shares_outstanding}
+					{(
+						($instance?.share_class_shares_outstanding ||
+							currentDetails?.share_class_shares_outstanding) / 1e6
+					).toFixed(2)}M
 				{:else}
 					N/A
 				{/if}
