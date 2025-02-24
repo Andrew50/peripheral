@@ -84,17 +84,12 @@
 		setupStreams();
 	}
 
-	// Add debug logging to see store updates
-	$: console.log('changeStore updated:', $changeStore);
-
 	onDestroy(() => {
 		releaseClose();
 		releaseSlow();
 	});
 
 	function getChange(price: number, prevClose: number): string {
-		console.log('price', price);
-		console.log('prevClose', prevClose);
 		if (!price || !prevClose) return '--';
 		return ((price / prevClose - 1) * 100).toFixed(2) + '%';
 	}
