@@ -1,3 +1,4 @@
+// quote.go
 package utils
 
 import (
@@ -223,3 +224,5 @@ func GetMostRecentExtendedHoursClose(client *polygon.Client, ticker string, refe
 
 	return 0, fmt.Errorf("no recent extended hours close found for %s", ticker)
 }
+
+// /quote.go

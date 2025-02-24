@@ -1,3 +1,4 @@
+// ticks.go
 package socket
 
 import (
@@ -576,3 +577,5 @@ func getInitialStreamValue(conn *utils.Conn, channelName string, timestamp int64
 	}
 	return nil, nil
 }
+
+// /ticks.go

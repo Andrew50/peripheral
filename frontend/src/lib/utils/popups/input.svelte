@@ -42,7 +42,7 @@
 		possibleKeys: [],
 		instance: {}
 	};
-	let inputQuery: Writable<InputQuery> = writable({ ...inactiveInputQuery });
+	export const inputQuery: Writable<InputQuery> = writable({ ...inactiveInputQuery });
 
 	// Hold the reject function of the currently active promise (if any)
 	let activePromiseReject: ((reason?: any) => void) | null = null;

@@ -1,3 +1,4 @@
+// socket.ts
 import { writable } from 'svelte/store';
 import { streamInfo, handleTimestampUpdate } from '$lib/core/stores';
 import type { StreamInfo, TradeData, QuoteData } from "$lib/core/types";
@@ -142,7 +143,7 @@ export function unsubscribe(channelName: string) {
         case "close": func = "getClose"; break;
         case "quote": func = "getQuote"; break;
         case "all": func = "getTrade"; break;
-        case "fast_trades": func = "getTrade"; break;//these might have to change to not get 
+        case "fast_trades": func = "getTrade"; break;//these might have to change to not get
         case "slow_trades": func = "getTrade"; break;
         case "fast_quotes": func = "getQuote"; break;
         case "slow_quotes": func = "getQuote"; break;
@@ -152,3 +153,5 @@ export function unsubscribe(channelName: string) {
 }
 */
 
+
+// /socket.ts

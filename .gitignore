@@ -6,3 +6,4 @@ worker/core
 db/backups
 worker/venv
 backups/
+context/llm_context.txt

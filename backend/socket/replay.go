@@ -1,3 +1,4 @@
+// replay.go
 package socket
 
 import (
@@ -361,3 +362,5 @@ func (c *Client) setReplaySpeed(speed float64) {
 	defer c.mu.Unlock()
 	c.replaySpeed = speed
 }
+
+// /replay.go
