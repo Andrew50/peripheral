@@ -49,10 +49,10 @@
 			// For group items (sectors/industries)
 			selectedGroupName = item.group || '';
 			const constituents = item.constituents
-				.filter((c) => c.securityId) // Only include items with valid securityId
+				.filter((c) => c.securityId && c.ticker) // Only include items with valid securityId AND ticker
 				.map(
 					(c): Instance => ({
-						ticker: c.ticker,
+						ticker: String(c.ticker).trim(), // Ensure ticker is a valid string
 						securityId: c.securityId,
 						timestamp: 0, // Set timestamp to 0
 						price: 0,
@@ -132,14 +132,19 @@
 	function convertToInstances(items: ActiveResult[]): Instance[] {
 		return items
 			.map((item): Instance | null => {
-				// Ensure we have a valid securityId
+				// Ensure we have a valid securityId and ticker
 				if (!item.securityId) {
 					console.warn('Missing securityId for ticker:', item.ticker);
 					return null;
 				}
 
+				if (!item.ticker) {
+					console.warn('Missing ticker for securityId:', item.securityId);
+					return null;
+				}
+
 				return {
-					ticker: item.ticker,
+					ticker: String(item.ticker).trim(), // Ensure ticker is a valid string
 					securityId: item.securityId,
 					// Set timestamp to 0 to let the stream system handle it
 					timestamp: 0,

@@ -54,6 +54,9 @@
 
 	let isLoading = true;
 	let loadError: string | null = null;
+	// Add a flag to track icon loading state
+	let iconsLoadedForTickers = new Set<string>();
+	let isLoadingIcons = false;
 
 	function isFlagged(instance: ExtendedInstance, flagWatch: ExtendedInstance[]) {
 		if (!Array.isArray(flagWatch)) return false;
@@ -149,15 +152,29 @@
 	});
 
 	async function loadIcons() {
+		// Skip if already loading or if no tickers
+		if (isLoadingIcons) {
+			return;
+		}
+
 		try {
-			const tickers = $list.map((item) => item.ticker).filter(Boolean);
+			isLoadingIcons = true;
+			// Get all unique, non-empty tickers from the list
+			const tickers = [...new Set($list.map((item) => item?.ticker).filter(Boolean))];
 			if (tickers.length === 0) {
 				console.log('No tickers to load icons for');
 				return;
 			}
 
-			console.log('Loading icons for tickers:', tickers);
-			const iconsResponse = await privateRequest('getIcons', { tickers });
+			// Check if we already loaded icons for these tickers
+			const newTickers = tickers.filter((ticker) => !iconsLoadedForTickers.has(ticker));
+			if (newTickers.length === 0) {
+				console.log('Icons already loaded for all tickers');
+				return;
+			}
+
+			console.log('Loading icons for tickers:', newTickers);
+			const iconsResponse = await privateRequest('getIcons', { tickers: newTickers });
 
 			if (!iconsResponse) {
 				console.warn('No icon response received');
@@ -169,36 +186,53 @@
 				return;
 			}
 
-			console.log('Received icons response:', iconsResponse);
+			console.log('Received icons response:', iconsResponse.length, 'items');
+
+			// Create a map of ticker to icon for faster lookup
+			const iconMap = new Map();
+			iconsResponse.forEach((item) => {
+				if (item && item.ticker) {
+					iconMap.set(item.ticker, item.icon || '');
+					// Mark this ticker as processed
+					iconsLoadedForTickers.add(item.ticker);
+				}
+			});
 
 			list.update((items) => {
 				return items.map((item) => {
-					if (!item.ticker) return item;
+					if (!item?.ticker || item.icon) return item; // Skip if no ticker or already has icon
 
-					const iconData = iconsResponse.find((i) => i.ticker === item.ticker);
+					// Look up the icon in our map
+					const iconData = iconMap.get(item.ticker);
 					if (!iconData) {
 						console.log('No icon data found for ticker:', item.ticker);
+						// Mark as processed even if no icon found to avoid repeated attempts
+						if (item.ticker) iconsLoadedForTickers.add(item.ticker);
 						return item;
 					}
 
-					if (!iconData.icon) {
+					if (!iconData.length) {
 						console.log('Empty icon for ticker:', item.ticker);
+						if (item.ticker) iconsLoadedForTickers.add(item.ticker);
 						return item;
 					}
 
 					try {
-						const iconUrl = iconData.icon.startsWith('/9j/')
-							? `data:image/jpeg;base64,${iconData.icon}`
-							: `data:image/png;base64,${iconData.icon}`;
+						const iconUrl = iconData.startsWith('/9j/')
+							? `data:image/jpeg;base64,${iconData}`
+							: `data:image/png;base64,${iconData}`;
 						return { ...item, icon: iconUrl };
 					} catch (e) {
 						console.warn('Failed to process icon for ticker:', item.ticker, e);
+						if (item.ticker) iconsLoadedForTickers.add(item.ticker);
 						return item;
 					}
 				});
 			});
 		} catch (error) {
 			console.error('Failed to load icons:', error);
+		} finally {
+			isLoadingIcons = false;
 		}
 	}
 
@@ -314,9 +348,15 @@
 		}
 	}
 
-	// Watch for list changes to load icons
+	// Modify the reactive statement to only load icons for new tickers
 	$: if (columns?.includes('Ticker') && $list?.length > 0) {
-		loadIcons();
+		const newTickersExist = $list.some((item) => {
+			// Make sure ticker exists before checking
+			return typeof item?.ticker === 'string' && !iconsLoadedForTickers.has(item.ticker);
+		});
+		if (newTickersExist) {
+			loadIcons();
+		}
 	}
 
 	// Watch for expanded rows changes

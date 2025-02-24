@@ -483,12 +483,35 @@ func getInitialStreamValue(conn *utils.Conn, channelName string, timestamp int64
 				}
 				referencePrice = prevCloseSlice[0].GetPrice()
 			} else {
-				// During extended hours, use daily open
-				dailyOpen, err := utils.GetDailyOpen(conn.Polygon, ticker, queryTime)
+				// Check if we're in after-hours (post 4:00 PM) or pre-market
+				easternLocation, err := time.LoadLocation("America/New_York")
 				if err != nil {
-					return nil, fmt.Errorf("error getting daily open: %v", err)
+					return nil, fmt.Errorf("issue loading eastern location: %v", err)
 				}
-				referencePrice = dailyOpen
+
+				queryTimeET := queryTime.In(easternLocation)
+				currentHour := queryTimeET.Hour()
+
+				// After market hours (after 16:00 / 4:00 PM)
+				if currentHour >= 16 {
+					// Get the current day's regular market close price (4:00 PM close)
+					today := time.Date(queryTimeET.Year(), queryTimeET.Month(), queryTimeET.Day(), 0, 0, 0, 0, easternLocation)
+					marketCloseTime := time.Date(today.Year(), today.Month(), today.Day(), 16, 0, 0, 0, easternLocation)
+
+					// Get the closing price at 4:00 PM
+					closePrice, err := utils.GetMostRecentRegularClose(conn.Polygon, ticker, marketCloseTime)
+					if err != nil {
+						return nil, fmt.Errorf("error getting today's close price: %v", err)
+					}
+					referencePrice = closePrice
+				} else {
+					// Pre-market, use daily open
+					dailyOpen, err := utils.GetDailyOpen(conn.Polygon, ticker, queryTime)
+					if err != nil {
+						return nil, fmt.Errorf("error getting daily open: %v", err)
+					}
+					referencePrice = dailyOpen
+				}
 			}
 
 			out := struct {
