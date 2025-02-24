@@ -43,22 +43,24 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 		log.Println("niv0: ", err)
 		return
 	} else {
-		//fmt.Printf("debug: successfully connected to Polygon Quotes\n ")
+		fmt.Println("✅ Connected to Polygon Quotes stream")
 	}
 	err = polygonWS.Subscribe(polygonws.StocksTrades)
 	if err != nil {
 		log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	} else {
-		//fmt.Printf("debug: successfully connected to Polygon Trades \n ")
+		fmt.Println("✅ Connected to Polygon Trades stream")
 	}
 	err = polygonWS.Subscribe(polygonws.StocksMinAggs)
 	if err != nil {
 		log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	} else {
-		//fmt.Printf("debug: successfully connected to Polygon \n")
+		fmt.Println("✅ Connected to Polygon Minute Aggregates stream")
 	}
+
+	fmt.Println("🚀 All Polygon streams initialized and ready to process data")
 
 	// Add timestamp ticker
 	timestampTicker := time.NewTicker(TimestampUpdateInterval)
@@ -160,12 +162,8 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 					nextDispatchTimes.Unlock()
 				}
 			case models.EquityQuote:
-				channelNameType := getChannelNameType(msg.Timestamp)
-
-				channelName := fmt.Sprintf("%d-%s-quote", securityId, channelNameType)
+				channelName := fmt.Sprintf("%d-quote", securityId)
 				data := QuoteData{
-
-					//					Ticker:    msg.Symbol,
 					Timestamp: msg.Timestamp,
 					BidPrice:  msg.BidPrice,
 					AskPrice:  msg.AskPrice,
@@ -178,7 +176,6 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 					fmt.Printf("io1nv %v\n", err)
 					continue
 				}
-				//conn.Cache.Publish(context.Background(), channelName, jsonData)
 				broadcastToChannel(channelName, string(jsonData))
 			}
 

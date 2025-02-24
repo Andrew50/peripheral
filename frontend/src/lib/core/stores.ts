@@ -33,6 +33,16 @@ export interface StreamInfo {
     lastUpdateTime?: number,
     serverTimeOffset?: number
 }
+
+export interface ReplayInfo extends StreamInfo {
+    replayActive: boolean;
+    replayPaused: boolean;
+    replaySpeed: number;
+    startTimestamp: number;
+    pauseTime?: number;
+    extendedHours: boolean;
+}
+
 export interface TimeEvent {
     event: "newDay" | "replay" | null,
     UTCtimestamp: number

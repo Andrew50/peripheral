@@ -79,8 +79,8 @@
 	// Resizing the bottom windows
 	let bottomWindowsHeight = 0;
 	let bottomResizing = false;
-	const MIN_BOTTOM_HEIGHT = 250;
-	const MAX_BOTTOM_HEIGHT = 800;
+	const MIN_BOTTOM_HEIGHT = 50;
+	const MAX_BOTTOM_HEIGHT = 1200;
 
 	// Add these state variables near the top with other state declarations
 	let lastBottomWindow: BottomWindow | null = null;
@@ -322,8 +322,12 @@
 			bottomWindows = [];
 			return;
 		}
+
+		// Preserve current height if another window is already open
+		const currentHeight = bottomWindows.length > 0 ? bottomWindowsHeight : 200; // Use default only if no window is open
+
 		// Replace current if a different window is clicked
-		bottomWindowsHeight = 200; // default
+		bottomWindowsHeight = currentHeight;
 		bottomWindows = [
 			{
 				id: nextWindowId++,
