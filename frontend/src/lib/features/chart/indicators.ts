@@ -6,20 +6,74 @@ import type {IChartApi, ISeriesApi, CandlestickData, Time, WhitespaceData, Candl
 let dailyVolumeSecurityId = -1
 let dailyVolumeDate = -1
 let vol:number;
+
+interface SMAResult {
+    time: UTCTimestamp;
+    value: number;
+}
+
 export function calculateSMA(data: CandlestickData[], period: number): { time: UTCTimestamp, value: number }[] {
-    let smaData: { time: UTCTimestamp, value: number }[] = [];
-    for (let i = 0; i < data.length; i++) {
-        if (i >= period - 1) {
-            let sum = 0;
-            for (let j = 0; j < period; j++) {
-                sum += data[i - j].close;
-            }
-            const average = sum / period;
-            smaData.push({ time: data[i].time, value: average });
-        }
+    if (!Array.isArray(data) || period <= 0 || data.length < period) {
+        return [];
     }
+
+    const smaData: { time: UTCTimestamp, value: number }[] = [];
+    let sum = 0;
+
+    // Calculate initial sum for first period
+    for (let i = 0; i < period; i++) {
+        sum += data[i].close;
+    }
+
+    // First SMA value
+    smaData.push({
+        time: data[period - 1].time,
+        value: sum / period
+    });
+
+    // Use sliding window for remaining values
+    for (let i = period; i < data.length; i++) {
+        sum = sum - data[i - period].close + data[i].close;
+        smaData.push({
+            time: data[i].time,
+            value: sum / period
+        });
+    }
+
     return smaData;
 }
+
+export function calculateMultipleSMAs(
+    data: CandlestickData[], 
+    periods: number[]
+): Map<number, { time: UTCTimestamp, value: number }[]> {
+    const results = new Map();
+    
+    // Sort periods in ascending order for optimal calculation
+    const sortedPeriods = [...periods].sort((a, b) => a - b);
+    
+    for (const period of sortedPeriods) {
+        results.set(period, calculateSMA(data, period));
+    }
+    
+    return results;
+}
+
+// For real-time updates - only calculate the latest point
+export function updateSMAPoint(
+    prevClose: number[],  // Array of previous closing prices
+    newClose: number,     // New closing price
+    period: number
+): number {
+    if (prevClose.length < period - 1) {
+        return null;
+    }
+    
+    // Calculate SMA using the last 'period' values
+    const values = [...prevClose.slice(-(period - 1)), newClose];
+    return values.reduce((sum, val) => sum + val, 0) / period;
+}
+
 
 export function calculateSingleADR(data: CandlestickData[]): number {
     const period = get(settings).adrPeriod
