@@ -96,14 +96,6 @@
 
 		window.addEventListener('contextmenu', preventContextMenu);
 
-		// Fetch icons if "Ticker" column is present
-		if (columns.includes('Ticker')) {
-			const tickers = get(list).map((item) => item.ticker);
-			const iconsResponse = await privateRequest('getIcons', { tickers });
-			iconsResponse.forEach((iconData) => {
-				iconsMap.set(iconData.ticker, iconData.icon);
-			});
-		}
 
 		return () => {
 			window.removeEventListener('contextmenu', preventContextMenu);
