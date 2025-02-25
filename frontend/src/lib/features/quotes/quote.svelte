@@ -81,7 +81,7 @@
 		showTimeAndSales = !showTimeAndSales;
 	}
 
-	function handleClick(event: MouseEvent | TouchEvent) {
+	function handleClick(event?: MouseEvent | TouchEvent) {
 		if ($activeChartInstance) {
 			queryChart($activeChartInstance);
 		}
@@ -179,7 +179,16 @@
 <div
 	class="ticker-info-container"
 	bind:this={container}
+	role="region"
+	aria-label="Ticker Information"
 	on:click={handleClick}
+	on:keydown={(e) => {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			handleClick();
+		}
+	}}
+	tabindex="0"
 	on:touchstart={handleClick}
 >
 	<div class="content">
