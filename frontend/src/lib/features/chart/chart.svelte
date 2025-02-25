@@ -774,6 +774,12 @@
 			);
 
 			if (barIndex !== -1) {
+				// Create safe mutable copies for data updates
+				function createMutableCopy<T>(data: readonly T[]): T[] {
+					return [...data];
+				}
+
+				// Update bar data with safe copies
 				const updatedCandle = {
 					time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
 					open: barData.open,
@@ -781,16 +787,20 @@
 					low: barData.low,
 					close: barData.close
 				};
-				currentData[barIndex] = updatedCandle;
-				chartCandleSeries.setData(currentData);
 
-				const volumeData = chartVolumeSeries.data();
-				volumeData[barIndex] = {
+				// Create a new mutable copy of the data array before updating it
+				const updatedCandleData = createMutableCopy(currentData);
+				updatedCandleData[barIndex] = updatedCandle;
+				chartCandleSeries.setData(updatedCandleData);
+
+				// Create a new mutable copy of the volume data array before updating it
+				const updatedVolumeData = createMutableCopy(volumeData);
+				updatedVolumeData[barIndex] = {
 					time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
 					value: barData.volume * (dolvol ? barData.close : 1),
 					color: barData.close > barData.open ? '#089981' : '#ef5350'
 				};
-				chartVolumeSeries.setData(volumeData);
+				chartVolumeSeries.setData(updatedVolumeData);
 			}
 		} catch (error) {
 			console.error('Error fetching historical data:', error);
@@ -1072,6 +1082,12 @@
 				return; // Skip if the bar is not CandlestickData
 			}
 
+			// Get cursor bar index if it wasn't set in the validCrosshairPoint block
+			if (validCrosshairPoint && cursorBarIndex === undefined) {
+				const cursorTime = bar.time as number;
+				cursorBarIndex = allCandleData.findIndex((candle) => candle.time === cursorTime);
+			}
+
 			let barsForADR;
 			if (cursorBarIndex >= 20) {
 				barsForADR = allCandleData.slice(cursorBarIndex - 19, cursorBarIndex + 1);
@@ -1106,9 +1122,9 @@
 			});
 			if (currentChartInstance.timeframe && /^\d+$/.test(currentChartInstance.timeframe)) {
 				let barsForRVOL;
-				if (cursorBarIndex >= 1000) {
+				if (cursorBarIndex !== undefined && cursorBarIndex >= 1000) {
 					barsForADR = allCandleData.slice(cursorBarIndex - 1000, cursorBarIndex + 1);
-				} else {
+				} else if (cursorBarIndex !== undefined) {
 					// Transform the histogram data to the format expected by calculateRVOL
 					const volumeData = chartVolumeSeries.data().slice(0, cursorBarIndex + 1);
 					barsForRVOL = volumeData
