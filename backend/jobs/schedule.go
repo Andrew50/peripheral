@@ -111,6 +111,14 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 	eClose := time.Date(year, month, day, 20, 0, 0, 0, now.Location())
 	//open := time.Date(year, month, day, 9, 30, 0, 0, now.Location())
 	//close_ := time.Date(year, month, day, 16, 0, 0, 0, now.Location())
+	fmt.Printf("\n\nStarting EdgarFilingsService\n\n")
+	utils.StartEdgarFilingsService()
+	go func() {
+		for filing := range utils.NewFilingsChannel {
+			fmt.Printf("\n\nBroadcasting global SEC filing\n\n")
+			socket.BroadcastGlobalSECFiling(filing)
+		}
+	}()
 	if !eOpenRun && now.After(eOpen) && now.Before(eClose) {
 		eOpenRun = true
 		eCloseRun = false
