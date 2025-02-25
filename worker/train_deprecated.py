@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.layers import Input, Dense, LSTM, Bidirectional, Conv1D, Dropout, MultiHeadAttention, LayerNormalization
+from tensorflow.keras.layers import Input, Dense, LSTM, Bidirectional, Conv1D, Dropout, MultiHeadAttention, LayerNormalization, GlobalAveragePooling1D, Add
 from tensorflow.keras.optimizers import Adam
 
 # Global constants for the transformer model
@@ -23,11 +23,11 @@ def create_transformer_model(input_shape, num_transformer_blocks=4):
     input_layer = Input(shape=(None, input_shape[1]))  # Input shape (sequence_length, num_features)
     
     # Project input to the transformer's model dimension (D_MODEL)
-    x = layers.Bidirectional(layers.LSTM(64, return_sequences=True))(input_layer)
+    x = Bidirectional(LSTM(64, return_sequences=True))(input_layer)
     
     # Project input to the transformer's model dimension (D_MODEL)
     #projected_input = layers.Dense(D_MODEL)(input_layer)
-    projected_input = layers.Dense(D_MODEL)(x)
+    projected_input = Dense(D_MODEL)(x)
     
     # Add positional encoding
     seq_len = input_shape[0]
@@ -38,21 +38,21 @@ def create_transformer_model(input_shape, num_transformer_blocks=4):
     # Stack transformer blocks
     x = projected_input
     for _ in range(num_transformer_blocks):
-        attn_output = layers.MultiHeadAttention(num_heads=NUM_HEADS, key_dim=D_MODEL)(x, x)
-        attn_output = layers.Dropout(0.4)(attn_output)
-        attn_output = layers.Add()([x, attn_output])  # Residual connection
-        attn_output = layers.LayerNormalization(epsilon=1e-6)(attn_output)
+        attn_output = MultiHeadAttention(num_heads=NUM_HEADS, key_dim=D_MODEL)(x, x)
+        attn_output = Dropout(0.4)(attn_output)
+        attn_output = Add()([x, attn_output])  # Residual connection
+        attn_output = LayerNormalization(epsilon=1e-6)(attn_output)
 
         # Feedforward network
-        ffn_output = layers.Dense(FF_DIM, activation='relu')(attn_output)
-        ffn_output = layers.Dropout(0.4)(ffn_output)
-        ffn_output = layers.Dense(D_MODEL)(ffn_output)
-        x = layers.Add()([attn_output, ffn_output])  # Residual connection
-        x = layers.LayerNormalization(epsilon=1e-6)(x)
+        ffn_output = Dense(FF_DIM, activation='relu')(attn_output)
+        ffn_output = Dropout(0.4)(ffn_output)
+        ffn_output = Dense(D_MODEL)(ffn_output)
+        x = Add()([attn_output, ffn_output])  # Residual connection
+        x = LayerNormalization(epsilon=1e-6)(x)
     
     # Global average pooling and output
-    pooled_output = layers.GlobalAveragePooling1D()(x)
-    output_layer = layers.Dense(1, activation='sigmoid')(pooled_output)
+    pooled_output = GlobalAveragePooling1D()(x)
+    output_layer = Dense(1, activation='sigmoid')(pooled_output)
 
     model = Model(inputs=input_layer, outputs=output_layer)
     model.compile(optimizer=Adam(learning_rate=1e-3), loss='binary_crossentropy', 
