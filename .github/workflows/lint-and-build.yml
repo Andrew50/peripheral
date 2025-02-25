@@ -93,14 +93,14 @@ jobs:
       - name: Lint
         run: |
           cd frontend
-          # Only fail on errors, not warnings
-          npx eslint . --quiet || echo "Critical ESLint errors found, but continuing build process"
+          # Allow a moderate number of warnings (10) but fail on errors
+          npx eslint . --max-warnings=10
 
       - name: Type check
         run: |
           cd frontend
-          # Only fail on errors, not warnings
-          npx svelte-check --threshold error || echo "Type check found errors, but continuing build process"
+          # Use warning threshold but with a higher error limit
+          npx svelte-check --threshold warning --fail-on-warnings=false --fail-on-hints=false
 
       - name: Build
         run: |
