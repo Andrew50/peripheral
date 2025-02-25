@@ -6,6 +6,7 @@ import { base_url } from '$lib/core/backend';
 import { browser } from '$app/environment'
 import { handleAlert } from './alert';
 import type { AlertData } from './alert';
+import { handleGlobalSECFilingMessage } from './secfilings';
 export type TimeType = "regular" | "extended"
 export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
     "fast-regular" |
@@ -15,7 +16,8 @@ export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
     "close-regular" |
     "close-extended" |
     "quote" |
-    "all" //all trades
+    "all" | //all trades
+    "sec-filings" // global SEC filings feed
 
 export type StreamData = TradeData | QuoteData | number;
 export type StreamCallback = (v: TradeData | QuoteData | number) => void;
@@ -24,7 +26,7 @@ export const activeChannels: Map<string, StreamCallback[]> = new Map();
 
 
 type SubscriptionRequest = {
-    action: 'subscribe' | 'unsubscribe' | 'replay' | 'pause' | 'play' | 'realtime' | 'speed';
+    action: 'subscribe' | 'unsubscribe' | 'replay' | 'pause' | 'play' | 'realtime' | 'speed' | 'subscribe-sec-filings' | 'unsubscribe-sec-filings';
     channelName?: string;
     timestamp?: number;
 };
@@ -67,9 +69,23 @@ function connect() {
         let data
         try {
             data = JSON.parse(event.data);
+            console.log("Received message:", data);
         } catch {
             return
         }
+        
+        // Check if it's an array of SEC filings (each with channel="sec-filings")
+        if (Array.isArray(data) && data.length > 0 && data[0].channel === "sec-filings") {
+            // Special handling for SEC filings array
+            console.log("SEC filings array received:", data);
+            const callbacks = activeChannels.get("sec-filings");
+            if (callbacks) {
+                callbacks.forEach(callback => callback(data));
+            }
+            return;
+        }
+        
+        // Handle single messages as before
         const channelName = data.channel;
         if (channelName) {
             if (channelName === "alert") {
@@ -77,7 +93,16 @@ function connect() {
             }
             else if (channelName === "timestamp") {
                 handleTimestampUpdate(data.timestamp);
-            } else {
+            } 
+            else if (channelName === "sec-filings") {
+                // Special handling for single SEC filing
+                console.log("SEC filing message received:", data);
+                const callbacks = activeChannels.get(channelName);
+                if (callbacks) {
+                    callbacks.forEach(callback => callback(data));
+                }
+            }
+            else {
                 const callbacks = activeChannels.get(channelName);
                 if (callbacks) {
                     callbacks.forEach(callback => callback(data));
@@ -128,6 +153,22 @@ export function unsubscribe(channelName: string) {
             channelName: channelName,
         };
         socket.send(JSON.stringify(unsubscriptionRequest));
+    }
+}
+
+export function subscribeSECFilings() {
+    if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            action: 'subscribe-sec-filings'
+        }));
+    }
+}
+
+export function unsubscribeSECFilings() {
+    if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            action: 'unsubscribe-sec-filings'
+        }));
     }
 }
 

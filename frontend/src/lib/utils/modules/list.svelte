@@ -42,7 +42,7 @@
 	export let expandable = false;
 	export let expandedContent: (item: ExtendedInstance) => any = () => null;
 	export let displayNames: { [key: string]: string } = {};
-
+	export let linkColumns: string[] = [];
 	let selectedRowIndex = -1;
 	console.log('list', get(list));
 	let expandedRows = new Set<number>();
