@@ -69,5 +69,5 @@
 		event.preventDefault();
 	}}
 	list={screens}
-	columns={['Ticker', 'Chg', 'Setup', 'Score']}
+	columns={['Ticker', 'Chg%', 'Setup', 'Score', 'Ext.']}
 />

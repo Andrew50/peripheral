@@ -2,21 +2,34 @@ export let base_url: string;
 const pollInterval = 300; // Poll every 100ms
 import { goto } from '$app/navigation';
 
+// Default value for server-side rendering
 base_url = 'http://localhost:5057';
 
 if (typeof window !== 'undefined') {
+    // For client-side code
     if (window.location.hostname === 'localhost') {
-        /*const url = new URL(window.location.origin);
-        url.port = "5057";
+        // In development
+        const url = new URL(window.location.origin);
+        url.port = "5057"; // Switch to backend port
         base_url = url.toString();
-        base_url = base_url.substring(0, base_url.length - 1);*/
-        base_url = 'http://localhost:5057'; //dev
+        if (base_url.endsWith('/')) {
+            base_url = base_url.substring(0, base_url.length - 1);
+        }
+        console.log("Using development backend URL:", base_url);
     } else {
-        base_url = window.location.origin; //prod
+        // In production
+        base_url = window.location.origin;
+        console.log("Using production backend URL:", base_url);
     }
 }
 
+// For debugging
+console.log("Backend base_url set to:", base_url);
+
 export async function publicRequest<T>(func: string, args: any): Promise<T> {
+    // Log what's being sent
+    console.log(`Making ${func} request with args:`, args);
+
     const payload = JSON.stringify({
         func: func,
         args: args
@@ -42,7 +55,7 @@ export async function privateFileRequest<T>(func: string, file: File, additional
     try {
         authToken = sessionStorage.getItem("authToken")
     } catch {
-        return
+        throw new Error("Failed to get auth token");
     }
     const formData = new FormData();
     formData.append('file', file);
@@ -65,6 +78,7 @@ export async function privateFileRequest<T>(func: string, file: File, additional
 
     if (response.status === 401) {
         goto('/login');
+        throw new Error("Authentication failed");
     }
     if (!response.ok) {
         const errorMessage = await response.text();
@@ -80,7 +94,7 @@ export async function privateRequest<T>(func: string, args: any, verbose = false
     try {
         authToken = sessionStorage.getItem("authToken")
     } catch {
-        return
+        throw new Error("Failed to get auth token");
     }
     const headers = {
         'Content-Type': 'application/json',
@@ -115,10 +129,19 @@ export async function privateRequest<T>(func: string, args: any, verbose = false
 
 export async function queueRequest<T>(func: string, args: any, verbose = true): Promise<T> {
     let authToken;
-    authToken = sessionStorage.getItem("authToken")
+    try {
+        authToken = sessionStorage.getItem("authToken")
+        if (!authToken) {
+            throw new Error("No auth token found");
+        }
+    } catch (error) {
+        goto('/login');
+        throw new Error("Authentication failed: " + (error instanceof Error ? error.message : "Unknown error"));
+    }
+
     const headers = {
         'Content-Type': 'application/json',
-        ...(authToken ? { 'Authorization': authToken } : {}),
+        'Authorization': authToken,
     };
     const payload = {
         func: func,

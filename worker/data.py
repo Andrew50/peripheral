@@ -126,7 +126,12 @@ async def get_instance_data(session, args):
     else:
         end_time = dt
     multiplier, timespan = get_timeframe(tf)
-    bars += 1 #normalizaton will steal a bar
+    
+    # Check if bars is None and set a default value if it is
+    if bars is None:
+        bars = 50  # Setting a reasonable default value
+    else:
+        bars += 1  # normalizaton will steal a bar
  
     if timespan == 'minute':
         start_time = end_time - datetime.timedelta(minutes=bars * multiplier * 2)
@@ -244,4 +249,9 @@ async def async_get_tensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm
 # This function can now be called synchronously
 def getTensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm=False,normalize="rolling-log",dolvolReq=None,adrReq=None,mcapReq=None):
     #requires dt and ticker in instances
+    
+    # Ensure bars is not None
+    if bars is None:
+        bars = 50  # Setting a reasonable default
+    
     return asyncio.run(async_get_tensor(conn, ticker_dt_label_currentPrice_dict, tf, bars, pm,normalize,dolvolReq,adrReq,mcapReq))

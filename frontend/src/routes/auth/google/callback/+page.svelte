@@ -5,39 +5,100 @@
 
 	interface GoogleCallbackResponse {
 		token: string;
+		profilePic: string;
+		username: string;
 	}
+
+	let errorMessage = '';
 
 	onMount(async () => {
 		const urlParams = new URLSearchParams(window.location.search);
 		const code = urlParams.get('code');
 		const state = urlParams.get('state');
 
-		if (code && state) {
-			try {
-				const response = await publicRequest<GoogleCallbackResponse>('googleCallback', {
-					code,
-					state
-				});
-				sessionStorage.setItem('authToken', response.token);
-				goto('/app');
-			} catch (error) {
-				console.error('Google authentication failed:', error);
-				goto('/login');
-			}
-		} else {
-			goto('/login');
+		console.log('Received callback with code:', code ? 'present' : 'missing');
+		console.log('Received callback with state:', state);
+
+		// Verify the state parameter matches what we stored
+		const storedState = sessionStorage.getItem('googleAuthState');
+		console.log('Stored state:', storedState);
+
+		if (!code) {
+			console.error('No authorization code received');
+			errorMessage = 'Authorization failed: No code received';
+			setTimeout(() => goto('/login'), 3000);
+			return;
+		}
+
+		if (!state || state !== storedState) {
+			console.error('State mismatch or missing state parameter');
+			errorMessage = 'Authorization failed: Invalid state parameter';
+			setTimeout(() => goto('/login'), 3000);
+			return;
+		}
+
+		try {
+			console.log('Sending callback to backend...');
+			const response = await publicRequest<GoogleCallbackResponse>('googleCallback', {
+				code,
+				state
+			});
+			console.log('Google auth callback response:', response);
+
+			sessionStorage.setItem('authToken', response.token);
+			sessionStorage.setItem('profilePic', response.profilePic || '');
+			sessionStorage.setItem('username', response.username || '');
+
+			// Log what was stored
+			console.log('Stored in sessionStorage:', {
+				token: !!response.token,
+				profilePic: response.profilePic || '[empty]',
+				username: response.username || '[empty]'
+			});
+
+			// Clean up stored state
+			sessionStorage.removeItem('googleAuthState');
+
+			goto('/app');
+		} catch (error) {
+			console.error('Google authentication failed:', error);
+			errorMessage = typeof error === 'string' ? error : 'Authentication failed';
+			setTimeout(() => goto('/login'), 3000);
 		}
 	});
 </script>
 
-<div class="loading">Authenticating...</div>
+<div class="container">
+	{#if errorMessage}
+		<div class="error">
+			<h2>Authentication Error</h2>
+			<p>{errorMessage}</p>
+			<p>Redirecting to login page...</p>
+		</div>
+	{:else}
+		<div class="loading">Authenticating...</div>
+	{/if}
+</div>
 
 <style>
-	.loading {
+	.container {
 		display: flex;
 		justify-content: center;
 		align-items: center;
 		height: 100vh;
 		font-size: 1.2em;
+	}
+
+	.loading {
+		text-align: center;
+	}
+
+	.error {
+		color: #e74c3c;
+		text-align: center;
+		max-width: 400px;
+		padding: 20px;
+		background-color: rgba(0, 0, 0, 0.05);
+		border-radius: 8px;
 	}
 </style>
