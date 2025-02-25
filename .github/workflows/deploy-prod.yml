@@ -15,74 +15,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          registry: docker.io
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      # Build and push all images
-      - name: Build and push backend
-        uses: docker/build-push-action@v4
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile.prod
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend:latest
-
-      - name: Build and push frontend
-        uses: docker/build-push-action@v4
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile.prod
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest
-
-      - name: Build and push database
-        uses: docker/build-push-action@v4
-        with:
-          context: ./db
-          file: ./db/Dockerfile.prod
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/db:latest
-
-      - name: Build and push worker
-        uses: docker/build-push-action@v4
-        with:
-          context: ./worker
-          file: ./worker/Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/worker:latest
-
-      - name: Build and push tf
-        uses: docker/build-push-action@v4
-        with:
-          context: ./tf
-          file: ./tf/Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/tf:latest
-
-      - name: Build and push cache
-        uses: docker/build-push-action@v4
-        with:
-          context: ./cache
-          file: ./cache/Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/cache:latest
-
-      - name: Build and push nginx
-        uses: docker/build-push-action@v4
-        with:
-          context: ./nginx
-          file: ./nginx/Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/nginx:latest
-
-      # Deploy to your server
+      # Deploy to your server - build and push Docker images directly on the server
       - name: Deploy to production server
         uses: appleboy/ssh-action@master
         with:
@@ -94,11 +27,73 @@ jobs:
             git checkout prod
             git pull origin prod
             
+            # Set up environment for Docker login
+            echo "Attempting Docker login on remote server..."
+            export DOCKER_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+            export DOCKER_TOKEN="${{ secrets.DOCKERHUB_TOKEN }}"
+            
+            # Login to Docker Hub with verbose output
+            echo "Running Docker login command..."
+            docker login docker.io -u "$DOCKER_USERNAME" -p "$DOCKER_TOKEN" || {
+              echo "Docker login failed with exit code $?"
+              echo "Docker login error details:"
+              docker info
+              exit 1
+            }
+            echo "Docker login successful!"
+            
+            # Build and push images directly on the server
+            echo "Building and pushing Docker images..."
+            
+            # Backend
+            echo "Building backend image..."
+            docker build -t "$DOCKER_USERNAME/backend:latest" -f ./backend/Dockerfile.prod ./backend
+            echo "Pushing backend image..."
+            docker push "$DOCKER_USERNAME/backend:latest"
+            
+            # Frontend
+            echo "Building frontend image..."
+            docker build -t "$DOCKER_USERNAME/frontend:latest" -f ./frontend/Dockerfile.prod ./frontend
+            echo "Pushing frontend image..."
+            docker push "$DOCKER_USERNAME/frontend:latest"
+            
+            # Database
+            echo "Building database image..."
+            docker build -t "$DOCKER_USERNAME/db:latest" -f ./db/Dockerfile.prod ./db
+            echo "Pushing database image..."
+            docker push "$DOCKER_USERNAME/db:latest"
+            
+            # Worker
+            echo "Building worker image..."
+            docker build -t "$DOCKER_USERNAME/worker:latest" -f ./worker/Dockerfile ./worker
+            echo "Pushing worker image..."
+            docker push "$DOCKER_USERNAME/worker:latest"
+            
+            # TF
+            echo "Building tf image..."
+            docker build -t "$DOCKER_USERNAME/tf:latest" -f ./tf/Dockerfile ./tf
+            echo "Pushing tf image..."
+            docker push "$DOCKER_USERNAME/tf:latest"
+            
+            # Cache
+            echo "Building cache image..."
+            docker build -t "$DOCKER_USERNAME/cache:latest" -f ./cache/Dockerfile ./cache
+            echo "Pushing cache image..."
+            docker push "$DOCKER_USERNAME/cache:latest"
+            
+            # Nginx
+            echo "Building nginx image..."
+            docker build -t "$DOCKER_USERNAME/nginx:latest" -f ./nginx/Dockerfile ./nginx
+            echo "Pushing nginx image..."
+            docker push "$DOCKER_USERNAME/nginx:latest"
+            
             # Apply Kubernetes configurations
+            echo "Applying Kubernetes configurations..."
             cd prod
             kubectl apply -f config/
             
             # Perform rolling updates
+            echo "Performing rolling updates..."
             kubectl rollout restart deployment/backend
             kubectl rollout restart deployment/frontend
             kubectl rollout restart deployment/worker

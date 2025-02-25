@@ -15,55 +15,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          registry: docker.io
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PAT }}
-          # If using GitHub Container Registry, use these instead:
-          # registry: ghcr.io
-          # username: ${{ github.actor }}
-          # password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Build and push all images with unique tags based on commit SHA
-      - name: Set image tag
-        id: vars
-        run: echo "SHA_TAG=${GITHUB_SHA::8}" >> $GITHUB_ENV
-
-      - name: Build and push backend
-        uses: docker/build-push-action@v4
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile.prod
-          push: true
-          tags: |
-            billin19/backend:latest
-            billin19/backend:${{ env.SHA_TAG }}
-
-      - name: Build and push frontend
-        uses: docker/build-push-action@v4
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile.prod
-          push: true
-          tags: |
-            billin19/frontend:latest
-            billin19/frontend:${{ env.SHA_TAG }}
-
-      - name: Build and push worker
-        uses: docker/build-push-action@v4
-        with:
-          context: ./worker
-          file: ./worker/Dockerfile
-          push: true
-          tags: |
-            billin19/worker:latest
-            billin19/worker:${{ env.SHA_TAG }}
-
       # Set up kubectl
       - name: Set up kubectl
         uses: azure/setup-kubectl@v3
@@ -77,37 +28,96 @@ jobs:
           method: kubeconfig
           kubeconfig: ${{ secrets.KUBE_CONFIG }}
 
-      # Update image tags in manifests
-      - name: Update image tags in Kubernetes manifests
-        run: |
-          sed -i "s|image: billin19/backend:latest|image: billin19/backend:${{ env.SHA_TAG }}|g" prod/config/backend.yaml
-          sed -i "s|image: billin19/frontend:latest|image: billin19/frontend:${{ env.SHA_TAG }}|g" prod/config/frontend.yaml
-          sed -i "s|image: billin19/worker:latest|image: billin19/worker:${{ env.SHA_TAG }}|g" prod/config/worker.yaml
-          # Update other manifests similarly
-
-      # Apply Kubernetes manifests with zero downtime strategy
-      - name: Apply Kubernetes manifests
-        run: |
-          # Apply database changes first and wait for readiness
-          kubectl apply -f prod/config/db.yaml
-          kubectl rollout status statefulset/db --timeout=300s
-          
-          # Apply cache service
-          kubectl apply -f prod/config/cache.yaml
-          kubectl rollout status deployment/cache --timeout=300s
-          
-          # Apply backend services
-          kubectl apply -f prod/config/backend.yaml
-          kubectl rollout status deployment/backend --timeout=300s
-          
-          # Apply worker services
-          kubectl apply -f prod/config/worker.yaml
-          kubectl rollout status deployment/worker --timeout=300s
-          
-          # Apply frontend last
-          kubectl apply -f prod/config/frontend.yaml
-          kubectl rollout status deployment/frontend --timeout=300s
-          
-          # Apply nginx configuration
-          kubectl apply -f prod/config/nginx.yaml
-          kubectl rollout status deployment/nginx --timeout=300s 
+      # Deploy to remote server - build and push Docker images directly on the server
+      - name: Deploy to production server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.REMOTE_HOST }}
+          username: ${{ secrets.REMOTE_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /home/aj/dev/study
+            git checkout prod
+            git pull origin prod
+            
+            # Generate a unique tag based on commit SHA
+            SHA_TAG=$(git rev-parse --short HEAD)
+            echo "Using image tag: $SHA_TAG"
+            
+            # Set up environment for Docker login
+            echo "Attempting Docker login on remote server..."
+            export DOCKER_USERNAME="${{ secrets.DOCKER_USERNAME }}"
+            export DOCKER_TOKEN="${{ secrets.DOCKER_PAT }}"
+            
+            # Login to Docker Hub with verbose output
+            echo "Running Docker login command..."
+            docker login docker.io -u "$DOCKER_USERNAME" -p "$DOCKER_TOKEN" || {
+              echo "Docker login failed with exit code $?"
+              echo "Docker login error details:"
+              docker info
+              exit 1
+            }
+            echo "Docker login successful!"
+            
+            # Build and push images directly on the server
+            echo "Building and pushing Docker images with tag: $SHA_TAG"
+            
+            # Backend
+            echo "Building backend image..."
+            docker build -t "billin19/backend:latest" -t "billin19/backend:$SHA_TAG" -f ./backend/Dockerfile.prod ./backend
+            echo "Pushing backend images..."
+            docker push "billin19/backend:latest"
+            docker push "billin19/backend:$SHA_TAG"
+            
+            # Frontend
+            echo "Building frontend image..."
+            docker build -t "billin19/frontend:latest" -t "billin19/frontend:$SHA_TAG" -f ./frontend/Dockerfile.prod ./frontend
+            echo "Pushing frontend images..."
+            docker push "billin19/frontend:latest"
+            docker push "billin19/frontend:$SHA_TAG"
+            
+            # Worker
+            echo "Building worker image..."
+            docker build -t "billin19/worker:latest" -t "billin19/worker:$SHA_TAG" -f ./worker/Dockerfile ./worker
+            echo "Pushing worker images..."
+            docker push "billin19/worker:latest"
+            docker push "billin19/worker:$SHA_TAG"
+            
+            # Update image tags in manifests
+            echo "Updating image tags in Kubernetes manifests..."
+            sed -i "s|image: billin19/backend:latest|image: billin19/backend:$SHA_TAG|g" prod/config/backend.yaml
+            sed -i "s|image: billin19/frontend:latest|image: billin19/frontend:$SHA_TAG|g" prod/config/frontend.yaml
+            sed -i "s|image: billin19/worker:latest|image: billin19/worker:$SHA_TAG|g" prod/config/worker.yaml
+            
+            # Apply Kubernetes manifests with zero downtime strategy
+            echo "Applying Kubernetes manifests..."
+            
+            # Apply database changes first and wait for readiness
+            echo "Applying database configuration..."
+            kubectl apply -f prod/config/db.yaml
+            kubectl rollout status statefulset/db --timeout=300s
+            
+            # Apply cache service
+            echo "Applying cache configuration..."
+            kubectl apply -f prod/config/cache.yaml
+            kubectl rollout status deployment/cache --timeout=300s
+            
+            # Apply backend services
+            echo "Applying backend configuration..."
+            kubectl apply -f prod/config/backend.yaml
+            kubectl rollout status deployment/backend --timeout=300s
+            
+            # Apply worker services
+            echo "Applying worker configuration..."
+            kubectl apply -f prod/config/worker.yaml
+            kubectl rollout status deployment/worker --timeout=300s
+            
+            # Apply frontend last
+            echo "Applying frontend configuration..."
+            kubectl apply -f prod/config/frontend.yaml
+            kubectl rollout status deployment/frontend --timeout=300s
+            
+            # Apply nginx configuration
+            echo "Applying nginx configuration..."
+            kubectl apply -f prod/config/nginx.yaml
+            kubectl rollout status deployment/nginx --timeout=300s 
