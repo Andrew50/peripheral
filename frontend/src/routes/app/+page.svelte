@@ -21,6 +21,7 @@
 	import Setups from '$lib/features/setups/setups.svelte';
 	import Options from '$lib/features/options.svelte';
 	import Settings from '$lib/features/settings.svelte';
+	import Newsfeed from '$lib/features/newsfeed.svelte';
 
 	// Replay logic
 	import {
@@ -59,7 +60,7 @@
 	let chartWidth = 0;
 
 	// Bottom windows
-	type BottomWindowType = 'screener' | 'account' | 'active' | 'options' | 'setups' | 'settings';
+	type BottomWindowType = 'screener' | 'account' | 'active' | 'options' | 'setups' | 'settings' | 'newsfeed';
 	interface BottomWindow {
 		id: number;
 		type: BottomWindowType;
@@ -595,6 +596,8 @@
 									<Account />
 								{:else if w.type === 'settings'}
 									<Settings />
+								{:else if w.type === 'newsfeed'}
+									<Newsfeed />
 								{/if}
 							</div>
 						</div>
@@ -685,6 +688,12 @@
 				on:click={() => openBottomWindow('account')}
 			>
 				Account
+			</button>
+			<button
+				class="toggle-button {bottomWindows.some((w) => w.type === 'newsfeed') ? 'active' : ''}"
+				on:click={() => openBottomWindow('newsfeed')}
+			>
+				News
 			</button>
 		</div>
 
