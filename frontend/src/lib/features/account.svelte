@@ -174,13 +174,15 @@
 	}));
 
 	async function confirmDeleteAllTrades() {
-		if (confirm("Are you sure you want to delete ALL of your trades? This action cannot be undone.")) {
+		if (
+			confirm('Are you sure you want to delete ALL of your trades? This action cannot be undone.')
+		) {
 			try {
 				deletingTrades = true;
-				message = "Deleting all trades...";
-				
+				message = 'Deleting all trades...';
+
 				const result = await queueRequest('delete_all_user_trades', {});
-				
+
 				if (result.status === 'success') {
 					message = result.message;
 					// Refresh the trades list
@@ -246,12 +248,8 @@
 				</select>
 
 				<button class="action-button" on:click={pullTrades}>Load Trades</button>
-				
-				<button 
-					class="delete-button" 
-					on:click={confirmDeleteAllTrades} 
-					disabled={deletingTrades}
-				>
+
+				<button class="delete-button" on:click={confirmDeleteAllTrades} disabled={deletingTrades}>
 					{deletingTrades ? 'Deleting...' : 'Delete All Trades'}
 				</button>
 			</div>
@@ -861,7 +859,7 @@
 	.delete-button:hover {
 		background-color: #b71c1c;
 	}
-	
+
 	.delete-button:disabled {
 		background-color: #9e9e9e;
 		cursor: not-allowed;

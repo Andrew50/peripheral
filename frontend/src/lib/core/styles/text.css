@@ -1,5 +1,5 @@
 :root {
-    --font-primary: 'Fira Sans', sans-serif;
+	--font-primary: 'Fira Sans', sans-serif;
 }
 
 /* Base text elements */
@@ -7,75 +7,75 @@ span,
 p,
 label,
 div {
-    color: var(--f1);
-    font-family: var(--font-primary);
+	color: var(--f1);
+	font-family: var(--font-primary);
 }
 
 /* Text variants */
 .error-message {
-    color: var(--c5);
-    margin-top: 10px;
-    width: 80%;
+	color: var(--c5);
+	margin-top: 10px;
+	width: 80%;
 }
 
 .monospace {
-    font-family: monospace;
-    font-weight: 500;
-    font-variant-numeric: tabular-nums;
+	font-family: monospace;
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
 }
 
 .label {
-    color: var(--text-secondary);
-    font-weight: 500;
-    margin-right: 10px;
+	color: var(--text-secondary);
+	font-weight: 500;
+	margin-right: 10px;
 }
 
 .value {
-    color: var(--text-primary);
-    font-weight: 500;
-    font-feature-settings: 'tnum';
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+	color: var(--text-primary);
+	font-weight: 500;
+	font-feature-settings: 'tnum';
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .description-text {
-    margin-top: 5px;
-    font-size: 12px;
-    line-height: 1.5;
-    color: var(--text-primary);
-    white-space: pre-wrap;
-    word-break: break-word;
+	margin-top: 5px;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--text-primary);
+	white-space: pre-wrap;
+	word-break: break-word;
 }
 
 .info-row {
-    color: var(--text-secondary);
-    font-weight: 500;
-    font-size: 0.9em;
-    margin: 4px 0;
+	color: var(--text-secondary);
+	font-weight: 500;
+	font-size: 0.9em;
+	margin: 4px 0;
 }
 
 .title {
-    font-size: 16px;
-    font-weight: 500;
-    color: var(--text-primary);
+	font-size: 16px;
+	font-weight: 500;
+	color: var(--text-primary);
 }
 
 .metadata {
-    font-size: 12px;
-    color: var(--text-secondary);
+	font-size: 12px;
+	color: var(--text-secondary);
 }
 
 /* Dividers */
 hr {
-    color: var(--f2);
-    border: none;
-    border-top: 1px solid var(--ui-border);
-    margin: 8px 0;
+	color: var(--f2);
+	border: none;
+	border-top: 1px solid var(--ui-border);
+	margin: 8px 0;
 }
 
 /* Global font settings */
 * {
-    font-family: var(--font-primary);
+	font-family: var(--font-primary);
 }

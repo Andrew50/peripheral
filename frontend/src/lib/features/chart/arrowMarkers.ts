@@ -4,21 +4,21 @@ import type {
 	CustomData,
 	CustomSeriesOptions,
 	PaneRendererCustomData,
-	CustomSeriesWhitespaceData,
+	CustomSeriesWhitespaceData
 } from 'lightweight-charts';
 import type { Time, CustomSeriesPricePlotValues } from 'lightweight-charts';
 import { ColorType } from 'lightweight-charts';
 
 // Define your custom data type for arrow markers.
 export interface ArrowMarker extends CustomData<Time> {
-	time: Time;               // timestamp (must be in the chart's time format)
+	time: Time; // timestamp (must be in the chart's time format)
 	entries?: Array<{
 		price: number;
-		isLong: boolean;  // true for long entries, false for short entries
+		isLong: boolean; // true for long entries, false for short entries
 	}>;
 	exits?: Array<{
 		price: number;
-		isLong: boolean;  // true for long exits, false for short exits
+		isLong: boolean; // true for long exits, false for short exits
 	}>;
 }
 
@@ -54,7 +54,9 @@ function drawArrowDown(ctx: CanvasRenderingContext2D, x: number, y: number, size
 }
 
 // Custom series view for arrow markers.
-export class ArrowMarkersPaneView implements ICustomSeriesPaneView<Time, ArrowMarker, CustomSeriesOptions> {
+export class ArrowMarkersPaneView
+	implements ICustomSeriesPaneView<Time, ArrowMarker, CustomSeriesOptions>
+{
 	private markers: ArrowMarker[] = [];
 	private options: CustomSeriesOptions = this.defaultOptions();
 	private visibleRange: { from: number; to: number } = { from: 0, to: 0 };
@@ -70,7 +72,11 @@ export class ArrowMarkersPaneView implements ICustomSeriesPaneView<Time, ArrowMa
 					}
 
 					// Only iterate over visible markers
-					for (let i = Math.floor(this.visibleRange.from); i < Math.ceil(this.visibleRange.to); i++) {
+					for (
+						let i = Math.floor(this.visibleRange.from);
+						i < Math.ceil(this.visibleRange.to);
+						i++
+					) {
 						if (i < 0 || i >= this.markers.length) continue;
 
 						const marker = this.markers[i];
@@ -81,7 +87,7 @@ export class ArrowMarkersPaneView implements ICustomSeriesPaneView<Time, ArrowMa
 
 						// Draw entry arrows
 						if (marker.originalData.entries?.length) {
-							marker.originalData.entries.forEach(entry => {
+							marker.originalData.entries.forEach((entry) => {
 								context.fillStyle = entry.isLong ? 'green' : 'red';
 								const y = priceToCoordinate(entry.price);
 								if (entry.isLong) {
@@ -94,7 +100,7 @@ export class ArrowMarkersPaneView implements ICustomSeriesPaneView<Time, ArrowMa
 
 						// Draw exit arrows
 						if (marker.originalData.exits?.length) {
-							marker.originalData.exits.forEach(exit => {
+							marker.originalData.exits.forEach((exit) => {
 								context.fillStyle = exit.isLong ? 'red' : 'green';
 								const y = priceToCoordinate(exit.price);
 								if (exit.isLong) {
@@ -117,16 +123,16 @@ export class ArrowMarkersPaneView implements ICustomSeriesPaneView<Time, ArrowMa
 		visibleRange: { from: number; to: number },
 		width: number
 	): number {
-		const markerIndex = data.findIndex(d => d.time === markerTime);
+		const markerIndex = data.findIndex((d) => d.time === markerTime);
 		if (markerIndex < 0) {
-			console.error("Marker time not found in data. Data:", data);
+			console.error('Marker time not found in data. Data:', data);
 			return -100; // Sentinel value
 		}
 
 		const { from, to } = visibleRange; // these are indexes
 		const range = to - from;
 		if (range <= 0) {
-			console.error("Invalid visible range. Range <= 0", visibleRange);
+			console.error('Invalid visible range. Range <= 0', visibleRange);
 			return -100;
 		}
 		const relativePos = (markerIndex - from) / range;
@@ -135,7 +141,10 @@ export class ArrowMarkersPaneView implements ICustomSeriesPaneView<Time, ArrowMa
 	}
 
 	// Called whenever new data or options are provided.
-	update(data: PaneRendererCustomData<Time, ArrowMarker>, seriesOptions: CustomSeriesOptions): void {
+	update(
+		data: PaneRendererCustomData<Time, ArrowMarker>,
+		seriesOptions: CustomSeriesOptions
+	): void {
 		//console.log("ArrowMarkersPaneView update called with data:", data, "and seriesOptions:", seriesOptions);
 		this.markers = data.bars; // Assumes your data is in the "bars" property.
 		this.options = seriesOptions;
@@ -145,13 +154,15 @@ export class ArrowMarkersPaneView implements ICustomSeriesPaneView<Time, ArrowMa
 	// Update price value builder to handle new structure
 	priceValueBuilder(plotRow: ArrowMarker): CustomSeriesPricePlotValues {
 		const prices: number[] = [];
-		if (plotRow.entries) prices.push(...plotRow.entries.map(e => e.price));
-		if (plotRow.exits) prices.push(...plotRow.exits.map(e => e.price));
+		if (plotRow.entries) prices.push(...plotRow.entries.map((e) => e.price));
+		if (plotRow.exits) prices.push(...plotRow.exits.map((e) => e.price));
 		return prices;
 	}
 
 	// No marker is considered whitespace in this example.
-	isWhitespace(data: ArrowMarker | CustomSeriesWhitespaceData<Time>): data is CustomSeriesWhitespaceData<Time> {
+	isWhitespace(
+		data: ArrowMarker | CustomSeriesWhitespaceData<Time>
+	): data is CustomSeriesWhitespaceData<Time> {
 		return false;
 	}
 
@@ -162,6 +173,5 @@ export class ArrowMarkersPaneView implements ICustomSeriesPaneView<Time, ArrowMa
 	}
 
 	// Cleanup, if necessary.
-	destroy(): void {
-	}
+	destroy(): void {}
 }
