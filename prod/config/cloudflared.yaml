@@ -17,6 +17,7 @@ spec:
           image: cloudflare/cloudflared:latest
           command:
             [
+              "cloudflared",
               "tunnel",
               "run",
               "--token",
