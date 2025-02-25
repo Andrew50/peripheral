@@ -39,7 +39,7 @@ spec:
     spec:
       containers:
         - name: worker
-          image: billin19/worker:latest
+          image: billin19/worker:35f866d
           resources:
             requests:
               cpu: 500m
