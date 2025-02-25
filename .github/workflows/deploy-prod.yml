@@ -18,7 +18,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Login to Docker Hub or your registry
+      - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -35,7 +35,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile.prod
           push: true
-          tags: yourrepo/backend:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/backend:latest
 
       - name: Build and push frontend
         uses: docker/build-push-action@v4
@@ -43,7 +43,7 @@ jobs:
           context: ./frontend
           file: ./frontend/Dockerfile.prod
           push: true
-          tags: yourrepo/frontend:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/frontend:latest
 
       - name: Build and push database
         uses: docker/build-push-action@v4
@@ -51,7 +51,7 @@ jobs:
           context: ./db
           file: ./db/Dockerfile.prod
           push: true
-          tags: yourrepo/db:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/db:latest
 
       - name: Build and push worker
         uses: docker/build-push-action@v4
@@ -59,7 +59,7 @@ jobs:
           context: ./worker
           file: ./worker/Dockerfile
           push: true
-          tags: yourrepo/worker:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/worker:latest
 
       - name: Build and push tf
         uses: docker/build-push-action@v4
@@ -67,7 +67,7 @@ jobs:
           context: ./tf
           file: ./tf/Dockerfile
           push: true
-          tags: yourrepo/tf:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/tf:latest
 
       - name: Build and push cache
         uses: docker/build-push-action@v4
@@ -75,7 +75,7 @@ jobs:
           context: ./cache
           file: ./cache/Dockerfile
           push: true
-          tags: yourrepo/cache:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/cache:latest
 
       - name: Build and push nginx
         uses: docker/build-push-action@v4
@@ -83,7 +83,7 @@ jobs:
           context: ./nginx
           file: ./nginx/Dockerfile
           push: true
-          tags: yourrepo/nginx:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/nginx:latest
 
       # Deploy to your server
       - name: Deploy to production server
@@ -93,10 +93,19 @@ jobs:
           username: ${{ secrets.PROD_USERNAME }}
           key: ${{ secrets.PROD_SSH_KEY }}
           script: |
-            cd /path/to/your/app
+            cd /home/aj/dev/study
+            git checkout prod
             git pull origin prod
-            echo "DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}" > .env
-            echo "DOCKER_PASSWORD=${{ secrets.DOCKER_PASSWORD }}" >> .env
-            docker-compose -f docker-compose.prod.yaml pull
-            docker-compose -f docker-compose.prod.yaml down
-            docker-compose -f docker-compose.prod.yaml up -d 
+            
+            # Apply Kubernetes configurations
+            cd prod
+            kubectl apply -f config/
+            
+            # Perform rolling updates
+            kubectl rollout restart deployment/backend
+            kubectl rollout restart deployment/frontend
+            kubectl rollout restart deployment/worker
+            kubectl rollout restart deployment/tf
+            kubectl rollout restart deployment/db
+            kubectl rollout restart deployment/cache
+            kubectl rollout restart deployment/nginx 
