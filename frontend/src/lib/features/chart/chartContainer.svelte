@@ -77,7 +77,14 @@
 	}
 </script>
 
-<div class="chart-container" bind:this={containerRef} tabindex="0" on:keydown={handleKeyDown}>
+<div
+	class="chart-container"
+	bind:this={containerRef}
+	tabindex="0"
+	role="application"
+	aria-label="Chart Container"
+	on:keydown={handleKeyDown}
+>
 	{#each Array.from({ length: $settings.chartRows }) as _, j}
 		<div class="row" style="height: calc(100% / {$settings.chartRows})">
 			{#each Array.from({ length: $settings.chartColumns }) as _, i}
