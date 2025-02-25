@@ -44,7 +44,7 @@ export function calculateSMA(
 
 	// First SMA value
 	smaData.push({
-		time: data[period - 1].time,
+		time: data[period - 1].time as UTCTimestamp,
 		value: sum / period
 	});
 
@@ -52,7 +52,7 @@ export function calculateSMA(
 	for (let i = period; i < data.length; i++) {
 		sum = sum - data[i - period].close + data[i].close;
 		smaData.push({
-			time: data[i].time,
+			time: data[i].time as UTCTimestamp,
 			value: sum / period
 		});
 	}
@@ -81,7 +81,7 @@ export function updateSMAPoint(
 	prevClose: number[], // Array of previous closing prices
 	newClose: number, // New closing price
 	period: number
-): number {
+): number | null {
 	if (prevClose.length < period - 1) {
 		return null;
 	}
@@ -130,27 +130,26 @@ function getStartOfDayTimestamp(timestamp: number): number {
 export async function calculateRVOL(
 	volumeData: { time: UTCTimestamp; value: number }[],
 	securityId: number
-): number {
+): Promise<number> {
 	let volumeSum = 0;
 	if (!Array.isArray(volumeData)) {
 		return 0;
 	}
-	const dayDate = getStartOfDayTimestamp(volumeData[volumeData.length - 1].time); //new Date(volumeData[volumeData.length].time * 1000).toISOString().split('T')[0]; // Get the date part
+	const dayDate = getStartOfDayTimestamp(volumeData[volumeData.length - 1].time as number);
 	if (dayDate != dailyVolumeDate || securityId !== dailyVolumeSecurityId) {
-		vol = getVolMA(securityId, dayDate);
+		vol = await getVolMA(securityId, dayDate);
 		dailyVolumeDate = dayDate;
 		dailyVolumeSecurityId = securityId;
 	}
 	for (let i = volumeData.length - 1; i >= 0; i--) {
 		const dataPoint = volumeData[i];
-		const dataPointDate = getStartOfDayTimestamp(dataPoint.time); //new Date(dataPoint.time * 1000).toISOString().split('T')[0]; // Get the date part
+		const dataPointDate = getStartOfDayTimestamp(dataPoint.time as number);
 		if (dataPointDate !== dayDate) {
 			break;
 		}
 		volumeSum += dataPoint.value;
 	}
-	const volF = await vol;
-	return (volumeSum / volF) * 100;
+	return (volumeSum / vol) * 100;
 }
 
 export function calculateVWAP(
@@ -163,8 +162,8 @@ export function calculateVWAP(
 	let currentDay: string | null = null; // Track the current day
 	for (let i = 0; i < data.length; i++) {
 		const candle = data[i];
-		const volume = volumeData[i]?.value || 0;
-		const candleDate = new Date(candle.time * 1000).toISOString().split('T')[0];
+		const volume = volumeData[i]?.volume || 0;
+		const candleDate = new Date((candle.time as number) * 1000).toISOString().split('T')[0];
 		if (candleDate !== currentDay) {
 			cumulativeVolume = 0;
 			cumulativePriceVolume = 0;
@@ -175,7 +174,7 @@ export function calculateVWAP(
 		cumulativePriceVolume += typicalPrice * volume;
 		if (cumulativeVolume > 0) {
 			const vwap = cumulativePriceVolume / cumulativeVolume;
-			vwapData.push({ time: candle.time, value: vwap });
+			vwapData.push({ time: candle.time as UTCTimestamp, value: vwap });
 		}
 	}
 	return vwapData;
