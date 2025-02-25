@@ -1,0 +1,10 @@
+FROM redis:alpine
+
+# Use custom redis.conf optimized for production
+COPY redis.conf /usr/local/etc/redis/redis.conf
+
+# Expose Redis port
+EXPOSE 6379
+
+# Run Redis with the config file
+CMD ["redis-server", "/usr/local/etc/redis/redis.conf"] 

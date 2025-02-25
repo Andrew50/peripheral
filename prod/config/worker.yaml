@@ -39,7 +39,8 @@ spec:
     spec:
       containers:
         - name: worker
-          image: billin19/worker:35f866d
+          image: billin19/worker:prod
+          imagePullPolicy: Always
           resources:
             requests:
               cpu: 500m

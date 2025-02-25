@@ -14,10 +14,15 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: billin19/frontend:35f866d
+          image: billin19/frontend:prod
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
+          env:
+            - name: PUBLIC_BASE_URL
+              value: ""
+            - name: PUBLIC_RELATIVE_PATHS
+              value: "false"
           resources:
             requests:
               cpu: 500m

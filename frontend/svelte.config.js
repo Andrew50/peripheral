@@ -14,12 +14,17 @@ const config = {
 	}
 };*/
 import adapter from '@sveltejs/adapter-node';
-
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+
 export default {
 	preprocess: vitePreprocess(),
 	kit: {
-		adapter: adapter()
+		adapter: adapter(),
+		// Add paths configuration to handle the domain correctly
+		paths: {
+			base: '',
+			relative: false
+		}
 	}
 };
 
