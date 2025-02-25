@@ -23,20 +23,37 @@ jobs:
           echo "Checking if SSH_PRIVATE_KEY secret exists: ${{ secrets.SSH_PRIVATE_KEY != '' }}"
           echo "Checking if DOCKERHUB_USERNAME secret exists: ${{ secrets.DOCKERHUB_USERNAME != '' }}"
           echo "Checking if DOCKERHUB_TOKEN secret exists: ${{ secrets.DOCKERHUB_TOKEN != '' }}"
+          echo "Checking if CLOUDFLARE_CERT secret exists: ${{ secrets.CLOUDFLARE_CERT != '' }}"
 
-      # Set up SSH key and direct connection (without Cloudflare)
+      # Install Cloudflared
+      - name: Install Cloudflared
+        run: |
+          # Download and install cloudflared
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+          cloudflared version
+
+      # Set up SSH key and Cloudflare tunnel configuration
       - name: Set up SSH key
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+          CLOUDFLARE_CERT: ${{ secrets.CLOUDFLARE_CERT }}
         run: |
           mkdir -p ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           
-          # Create SSH config with direct connection
+          # Set up Cloudflare certificate
+          mkdir -p ~/.cloudflared
+          echo "$CLOUDFLARE_CERT" > ~/.cloudflared/cert.pem
+          chmod 600 ~/.cloudflared/cert.pem
+          
+          # Create SSH config with Cloudflare Access
           cat > ~/.ssh/config << EOF
-          Host *
+          Host $REMOTE_HOST
+              ProxyCommand cloudflared access ssh --hostname %h
+              User ${{ secrets.REMOTE_USER }}
               StrictHostKeyChecking no
               UserKnownHostsFile /dev/null
               IdentityFile ~/.ssh/id_rsa
@@ -48,7 +65,7 @@ jobs:
           echo "SSH config created:"
           cat ~/.ssh/config
 
-      # Deploy using direct SSH command
+      # Deploy using Cloudflare SSH command
       - name: Deploy to production server
         env:
           REMOTE_USER: ${{ secrets.REMOTE_USER }}
@@ -58,10 +75,10 @@ jobs:
         run: |
           # Test SSH connection
           echo "Testing SSH connection..."
-          ssh -v -p 22 "$REMOTE_USER@$REMOTE_HOST" "echo SSH connection successful"
+          ssh -v "$REMOTE_HOST" "echo SSH connection successful"
           
           # Now run the deployment commands
-          ssh -p 22 "$REMOTE_USER@$REMOTE_HOST" '
+          ssh "$REMOTE_HOST" '
             cd /home/aj/dev/study
             git checkout prod
             git pull origin prod
