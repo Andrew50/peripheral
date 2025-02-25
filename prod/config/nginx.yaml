@@ -51,8 +51,9 @@ spec:
                 name: backend-service
                 port:
                   number: 80
+          # Ensure proper handling of JavaScript modules
           - pathType: Prefix
-            path: "/app/immutable"
+            path: "/_app/immutable"
             backend:
               service:
                 name: frontend-service

@@ -25,9 +25,23 @@ COPY --from=builder /app/package-lock.json ./
 # Now we can use npm ci since package-lock.json is in sync
 RUN npm ci --omit=dev
 
+# Create a custom server.js file to handle MIME types properly
+RUN echo 'const { createServer } = require("http"); \
+    const { handler } = require("./build/handler.js"); \
+    const server = createServer((req, res) => { \
+    // Set proper MIME types for JavaScript modules \
+    if (req.url.endsWith(".js") || req.url.includes("/_app/immutable/")) { \
+    res.setHeader("Content-Type", "application/javascript"); \
+    } \
+    return handler(req, res); \
+    }); \
+    server.listen(3000, () => { \
+    console.log("Listening on port 3000"); \
+    });' > server.js
+
 # Expose the port
 EXPOSE 3000
 
-# Start the app in production mode
-CMD ["node", "build"]
+# Start the app with our custom server
+CMD ["node", "server.js"]
 
