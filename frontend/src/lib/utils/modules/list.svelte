@@ -49,7 +49,7 @@
 	let sortColumn: string | null = null;
 	let sortDirection: 'asc' | 'desc' = 'asc';
 	let isSorting = false;
-
+	export let linkColumns: string[] = [];
 	let selectedRowIndex = -1;
 	console.log('list', get(list));
 	let expandedRows = new Set<number>();
