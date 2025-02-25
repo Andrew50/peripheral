@@ -7,3 +7,18 @@ db/backups
 worker/venv
 backups/
 context/llm_context.txt
+
+# Python bytecode files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+env/
+venv/
+ENV/
+prod/env/
+.env
+.venv
