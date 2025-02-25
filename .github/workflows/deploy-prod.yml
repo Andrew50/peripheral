@@ -1,3 +1,6 @@
+# DISABLED: Using k8s-deploy.yml instead
+# To re-enable, remove the "if: false" condition below
+
 name: Deploy to Production
 
 on:
@@ -10,6 +13,7 @@ on:
 
 jobs:
   deploy:
+    if: false  # This prevents the workflow from running
     runs-on: ubuntu-latest
     environment: prod
     steps:
