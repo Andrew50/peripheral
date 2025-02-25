@@ -6,6 +6,7 @@ import (
 	"backend/alerts"
 	"backend/utils"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 )
@@ -75,7 +76,12 @@ func initialize(conn *utils.Conn) {
 	}
 	polygonInitMutex.Lock()
 	if !polygonInitialized {
-		socket.StartPolygonWS(conn, useBS)
+		err := socket.StartPolygonWS(conn, useBS)
+		if err != nil {
+			log.Printf("Failed to start Polygon WebSocket: %v", err)
+			// Continue with initialization even if Polygon WS fails
+			// You might want to add retry logic or better error handling here
+		}
 		polygonInitialized = true
 	}
 	polygonInitMutex.Unlock()
@@ -117,7 +123,10 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 		eOpenRun = false
 		eCloseRun = true
 		alerts.StopAlertLoop()
-		socket.StopPolygonWS()
+		if err := socket.StopPolygonWS(); err != nil {
+			log.Printf("Failed to stop Polygon WebSocket: %v", err)
+			// Continue execution even if stopping the websocket fails
+		}
 		fmt.Println("running close schedule ----------------------")
 		if useBS {
 
