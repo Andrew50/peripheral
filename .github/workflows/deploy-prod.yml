@@ -24,16 +24,8 @@ jobs:
           echo "Checking if DOCKERHUB_USERNAME secret exists: ${{ secrets.DOCKERHUB_USERNAME != '' }}"
           echo "Checking if DOCKERHUB_TOKEN secret exists: ${{ secrets.DOCKERHUB_TOKEN != '' }}"
 
-      # Install Cloudflared
-      - name: Install Cloudflared
-        run: |
-          # Download and install cloudflared
-          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-          sudo dpkg -i cloudflared-linux-amd64.deb
-          cloudflared version
-
-      # Set up SSH key and config
-      - name: Set up SSH key and config
+      # Set up SSH key and direct connection (without Cloudflare)
+      - name: Set up SSH key
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
@@ -42,10 +34,9 @@ jobs:
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           
-          # Create SSH config for Cloudflare Access
+          # Create SSH config with direct connection
           cat > ~/.ssh/config << EOF
-          Host $REMOTE_HOST
-              ProxyCommand cloudflared access ssh --hostname %h
+          Host *
               StrictHostKeyChecking no
               UserKnownHostsFile /dev/null
               IdentityFile ~/.ssh/id_rsa
@@ -57,7 +48,7 @@ jobs:
           echo "SSH config created:"
           cat ~/.ssh/config
 
-      # Deploy using direct SSH command with Cloudflare Access
+      # Deploy using direct SSH command
       - name: Deploy to production server
         env:
           REMOTE_USER: ${{ secrets.REMOTE_USER }}
@@ -66,11 +57,11 @@ jobs:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           # Test SSH connection
-          echo "Testing SSH connection through Cloudflare Access..."
-          ssh -v "$REMOTE_USER@$REMOTE_HOST" "echo SSH connection successful"
+          echo "Testing SSH connection..."
+          ssh -v -p 22 "$REMOTE_USER@$REMOTE_HOST" "echo SSH connection successful"
           
           # Now run the deployment commands
-          ssh "$REMOTE_USER@$REMOTE_HOST" '
+          ssh -p 22 "$REMOTE_USER@$REMOTE_HOST" '
             cd /home/aj/dev/study
             git checkout prod
             git pull origin prod
