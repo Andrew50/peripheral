@@ -4,7 +4,10 @@ import type {
 	CustomData,
 	CustomSeriesOptions,
 	PaneRendererCustomData,
-	CustomSeriesWhitespaceData
+	CustomSeriesWhitespaceData,
+	DeepPartial,
+	SeriesOptionsCommon,
+	PriceLineSource
 } from 'lightweight-charts';
 import type { Time, CustomSeriesPricePlotValues } from 'lightweight-charts';
 import { ColorType } from 'lightweight-charts';
@@ -100,6 +103,7 @@ export class ArrowMarkersPaneView
 							marker.originalData.entries.forEach((entry) => {
 								context.fillStyle = entry.isLong ? 'green' : 'red';
 								const y = priceToCoordinate(entry.price);
+								if (y === null) return;
 								if (entry.isLong) {
 									drawArrowUp(context, x as number, y, 7);
 								} else {
@@ -113,6 +117,7 @@ export class ArrowMarkersPaneView
 							marker.originalData.exits.forEach((exit) => {
 								context.fillStyle = exit.isLong ? 'red' : 'green';
 								const y = priceToCoordinate(exit.price);
+								if (y === null) return;
 								if (exit.isLong) {
 									drawArrowDown(context, x as number, y, 7);
 								} else {
@@ -156,7 +161,8 @@ export class ArrowMarkersPaneView
 		seriesOptions: CustomSeriesOptions
 	): void {
 		//console.log("ArrowMarkersPaneView update called with data:", data, "and seriesOptions:", seriesOptions);
-		this.markers = [...data.bars]; // Use spread operator to create a new array
+		// Use type assertion with unknown as intermediate step
+		this.markers = [...data.bars] as unknown as ArrowMarker[];
 		this.options = seriesOptions;
 		this.visibleRange = data.visibleRange || { from: 0, to: 0 }; // Provide default if null
 	}
@@ -179,19 +185,19 @@ export class ArrowMarkersPaneView
 	// Default options.
 	defaultOptions(): CustomSeriesOptions {
 		return {
-			color: 'green',
+			color: '#FF5722',
 			lastValueVisible: false,
 			title: 'Arrow Markers',
 			visible: true,
 			priceLineVisible: false,
-			priceLineSource: 'lastVisible',
+			priceLineSource: 'lastVisible' as unknown as PriceLineSource,
 			priceLineWidth: 1,
 			priceFormat: {
 				type: 'price',
 				precision: 2,
 				minMove: 0.01
 			}
-		};
+		} as CustomSeriesOptions;
 	}
 
 	// Cleanup, if necessary.
