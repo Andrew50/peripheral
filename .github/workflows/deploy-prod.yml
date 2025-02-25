@@ -23,7 +23,6 @@ jobs:
           username: ${{ secrets.REMOTE_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-          script_stop: true
           debug: true
           script: |
             cd /home/aj/dev/study
