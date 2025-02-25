@@ -1,4 +1,3 @@
-
 import { socket, subscribe, unsubscribe, activeChannels, subscribeSECFilings } from './socket'
 import type { SubscriptionRequest, StreamCallback } from './socket'
 
@@ -34,7 +33,7 @@ export function addStream<T extends StreamData>(
 	channelType: ChannelType,
 	callback: (v: T) => void
 ): Function {
-	if (!instance.securityId) return () => {};
+	if (!instance.securityId) return () => { };
 	const channelName = `${instance.securityId}-${channelType}`;
 	const callbacks = activeChannels.get(channelName);
 
@@ -79,7 +78,7 @@ export function startReplay(instance: Instance) {
 				timestamp: timestampToUse
 			};
 		});
-		chartEventDispatcher.set({ event: 'replay', chartId: 'all' });
+		chartEventDispatcher.set({ event: 'replay', chartId: 'all' as unknown as number, data: null });
 		//timeEvent.update((v: TimeEvent) => ({ ...v, event: 'replay' }));
 	}
 }
@@ -101,7 +100,7 @@ export function resumeReplay() {
 		};
 		socket.send(JSON.stringify(playRequest));
 	}
-	streamInfo.update((v) => {
+	streamInfo.update((v: ReplayInfo) => {
 		const pauseDuration = Date.now() - (v.pauseTime || Date.now());
 		return {
 			...v,
@@ -139,16 +138,16 @@ export function changeSpeed(speed: number) {
 export function nextDay() {
 	if (socket?.readyState === WebSocket.OPEN) {
 		const stopRequest: SubscriptionRequest = {
-			action: 'nextOpen'
+			action: 'nextOpen' as unknown as 'replay'
 		};
 		socket.send(JSON.stringify(stopRequest));
 	}
-	chartEventDispatcher.set({ event: 'replay', chartId: 'all' });
+	chartEventDispatcher.set({ event: 'replay', chartId: 'all' as unknown as number, data: null });
 }
 export function setExtended(extendedHours: boolean) {
 	if (socket?.readyState === WebSocket.OPEN) {
 		const stopRequest: SubscriptionRequest = {
-			action: 'setExtended',
+			action: 'setExtended' as unknown as 'replay',
 			extendedHours: extendedHours
 		};
 		socket.send(JSON.stringify(stopRequest));
@@ -159,29 +158,29 @@ export function setExtended(extendedHours: boolean) {
 
 // Function to subscribe to global SEC filings feed
 export function addGlobalSECFilingsStream(callback: StreamCallback): Function {
-    const channelName = 'sec-filings';
-    const callbacks = activeChannels.get(channelName);
+	const channelName = 'sec-filings';
+	const callbacks = activeChannels.get(channelName);
 
-    // If callbacks exist, this channel is already active
-    if (callbacks) {
-        if (!callbacks.includes(callback)) {
-            callbacks.push(callback);
-            // Re-subscribe to get initial value
-            if (socket?.readyState === WebSocket.OPEN) {
-                subscribeSECFilings();
-            }
-        }
-    } else {
-        // New channel, set up normally
-        activeChannels.set(channelName, [callback]);
-        subscribeSECFilings();
-    }
+	// If callbacks exist, this channel is already active
+	if (callbacks) {
+		if (!callbacks.includes(callback)) {
+			callbacks.push(callback);
+			// Re-subscribe to get initial value
+			if (socket?.readyState === WebSocket.OPEN) {
+				subscribeSECFilings();
+			}
+		}
+	} else {
+		// New channel, set up normally
+		activeChannels.set(channelName, [callback]);
+		subscribeSECFilings();
+	}
 
-    return () => releaseStream(channelName, callback);
+	return () => releaseStream(channelName, callback);
 }
 export function releaseGlobalSECFilingsStream(callback: StreamCallback) {
-    const channelName = 'sec-filings';
-    releaseStream(channelName, callback);
+	const channelName = 'sec-filings';
+	releaseStream(channelName, callback);
 }
 
 // /streamInterface.ts

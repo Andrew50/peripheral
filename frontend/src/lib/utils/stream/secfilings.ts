@@ -18,7 +18,7 @@ export interface Filing {
 // Function to handle incoming global SEC filing messages
 export function handleGlobalSECFilingMessage(data: StreamData) {
     console.log("SEC Filing message received:", data);
-    
+
     // If data is an array, it's the initial load
     if (Array.isArray(data)) {
         console.log("Initial SEC filings data:", data);
@@ -27,7 +27,7 @@ export function handleGlobalSECFilingMessage(data: StreamData) {
         console.log("New SEC filing:", data);
         globalFilings.update(currentFilings => {
             // Add the new filing at the beginning of the array
-            const updatedFilings = [data as Filing, ...currentFilings];
+            const updatedFilings = [data as unknown as Filing, ...currentFilings];
             // Keep only the most recent 100 filings
             if (updatedFilings.length > 100) {
                 return updatedFilings.slice(0, 100);
