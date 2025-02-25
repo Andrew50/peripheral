@@ -4,6 +4,7 @@ import type { Setup } from '$lib/core/types';
 
 export const setups = writable<Setup[]>([]);
 
+// Fetch setups from the backend
 privateRequest<Setup[]>('getSetups', {})
   .then((v: Setup[]) => {
     setups.set(v);
