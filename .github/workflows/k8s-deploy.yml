@@ -28,16 +28,25 @@ jobs:
           chmod 600 kubeconfig
           echo "KUBECONFIG=$(pwd)/kubeconfig" >> $GITHUB_ENV
 
-      # Deploy to remote server - build and push Docker images directly on the server
+      # Print debug info about secrets (masked in logs)
+      - name: Debug secrets
+        run: |
+          echo "Checking if REMOTE_HOST secret exists: ${{ secrets.REMOTE_HOST != '' }}"
+          echo "Checking if REMOTE_USER secret exists: ${{ secrets.REMOTE_USER != '' }}"
+          echo "Checking if SSH_PRIVATE_KEY secret exists: ${{ secrets.SSH_PRIVATE_KEY != '' }}"
+
+      # Set up SSH key
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.REMOTE_HOST }} >> ~/.ssh/known_hosts
+
+      # Deploy using direct SSH command
       - name: Deploy to production server
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.REMOTE_HOST }}
-          username: ${{ secrets.REMOTE_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          debug: true
-          script: |
+        run: |
+          ssh -v ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} << 'EOF'
             cd /home/aj/dev/study
             git checkout prod
             git pull origin prod
@@ -120,4 +129,5 @@ jobs:
             # Apply nginx configuration
             echo "Applying nginx configuration..."
             kubectl apply -f prod/config/nginx.yaml
-            kubectl rollout status deployment/nginx --timeout=300s 
+            kubectl rollout status deployment/nginx --timeout=300s
+          EOF 
