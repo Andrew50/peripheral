@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - prod  # Trigger on pushes to the prod branch
+  pull_request:
+    branches:
+      - prod  # Trigger on pull requests to the prod branch
 
 jobs:
   deploy:
