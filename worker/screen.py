@@ -95,7 +95,7 @@ def filter(conn, df, metadata, setupId, setupName, threshold, dolvolReq, adrReq,
                     "setupId": setupId,
                     "score": round(score[0] * 100),
                     "securityId": secId,
-                    "timestamp": int(meta["timestamp"].timestamp() * 1000) if meta["timestamp"] is not 0 else 0,
+                    "timestamp": int(meta["timestamp"].timestamp() * 1000) if meta["timestamp"] != 0 else 0,
                     "setup": setupName
                 })
             else:
@@ -109,6 +109,11 @@ def screen(conn, setupIds,timestamp=0,threshold=25,instances=None, user_id=None)
     with conn.db.cursor() as cursor:
         cursor.execute('SELECT MAX(bars),MIN(dolvol),Min(adr),MIN(mcap) FROM setups WHERE setupId = ANY(%s)', (setupIds,))
         maxBars, minDolvolReq,minAdrReq,minMcapReq = cursor.fetchone()
+    
+    # Ensure maxBars is not None
+    if maxBars is None:
+        maxBars = 50  # Setting a reasonable default
+        
     if instances is not None:
         instanceList = instances
     else:

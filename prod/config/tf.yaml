@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tf
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tf
+  template:
+    metadata:
+      labels:
+        app: tf
+    spec:
+      containers:
+        - name: tf
+          image: billin19/tf:latest
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 5000Mi
+            limits:
+              cpu: 5000m
+              memory: 10000Mi
+          volumeMounts:
+            - name: tf-persistent-storage
+              mountPath: /models
+      volumes:
+        - name: tf-persistent-storage
+          persistentVolumeClaim:
+            claimName: tf-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tf
+spec:
+  selector:
+    app: tf
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tf-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: tf-pv
+spec:
+  capacity:
+    storage: 20Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  local:
+    path: /mnt/disks/ssd4
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - minikube
