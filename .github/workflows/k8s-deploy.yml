@@ -34,19 +34,45 @@ jobs:
           echo "Checking if REMOTE_HOST secret exists: ${{ secrets.REMOTE_HOST != '' }}"
           echo "Checking if REMOTE_USER secret exists: ${{ secrets.REMOTE_USER != '' }}"
           echo "Checking if SSH_PRIVATE_KEY secret exists: ${{ secrets.SSH_PRIVATE_KEY != '' }}"
+          echo "Checking if DOCKERHUB_USERNAME secret exists: ${{ secrets.DOCKERHUB_USERNAME != '' }}"
+          echo "Checking if DOCKERHUB_TOKEN secret exists: ${{ secrets.DOCKERHUB_TOKEN != '' }}"
 
       # Set up SSH key
       - name: Set up SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.REMOTE_HOST }} >> ~/.ssh/known_hosts
+          
+          # Only run keyscan if REMOTE_HOST is not empty
+          if [ -n "$REMOTE_HOST" ]; then
+            ssh-keyscan "$REMOTE_HOST" >> ~/.ssh/known_hosts
+          else
+            echo "Error: REMOTE_HOST is empty or not set"
+            exit 1
+          fi
+          
+          # Verify the key was added
+          echo "SSH key setup complete. Contents of known_hosts:"
+          cat ~/.ssh/known_hosts
 
       # Deploy using direct SSH command
       - name: Deploy to production server
+        env:
+          REMOTE_USER: ${{ secrets.REMOTE_USER }}
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
-          ssh -v ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} << 'EOF'
+          # Verify SSH connection first
+          echo "Testing SSH connection..."
+          ssh -o StrictHostKeyChecking=accept-new -T "$REMOTE_USER@$REMOTE_HOST" "echo SSH connection successful"
+          
+          # Now run the deployment commands
+          ssh "$REMOTE_USER@$REMOTE_HOST" '
             cd /home/aj/dev/study
             git checkout prod
             git pull origin prod
@@ -60,7 +86,7 @@ jobs:
             
             # Use DOCKERHUB credentials for consistency across workflows
             echo "Running Docker login command..."
-            docker login docker.io -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}" || {
+            docker login docker.io -u "'$DOCKERHUB_USERNAME'" -p "'$DOCKERHUB_TOKEN'" || {
               echo "Docker login failed with exit code $?"
               echo "Docker login error details:"
               docker info
@@ -73,30 +99,30 @@ jobs:
             
             # Backend
             echo "Building backend image..."
-            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/backend:latest" -t "${{ secrets.DOCKERHUB_USERNAME }}/backend:$SHA_TAG" -f ./backend/Dockerfile.prod ./backend
+            docker build -t "'$DOCKERHUB_USERNAME'"/backend:latest -t "'$DOCKERHUB_USERNAME'"/backend:$SHA_TAG -f ./backend/Dockerfile.prod ./backend
             echo "Pushing backend images..."
-            docker push "${{ secrets.DOCKERHUB_USERNAME }}/backend:latest"
-            docker push "${{ secrets.DOCKERHUB_USERNAME }}/backend:$SHA_TAG"
+            docker push "'$DOCKERHUB_USERNAME'"/backend:latest
+            docker push "'$DOCKERHUB_USERNAME'"/backend:$SHA_TAG
             
             # Frontend
             echo "Building frontend image..."
-            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest" -t "${{ secrets.DOCKERHUB_USERNAME }}/frontend:$SHA_TAG" -f ./frontend/Dockerfile.prod ./frontend
+            docker build -t "'$DOCKERHUB_USERNAME'"/frontend:latest -t "'$DOCKERHUB_USERNAME'"/frontend:$SHA_TAG -f ./frontend/Dockerfile.prod ./frontend
             echo "Pushing frontend images..."
-            docker push "${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest"
-            docker push "${{ secrets.DOCKERHUB_USERNAME }}/frontend:$SHA_TAG"
+            docker push "'$DOCKERHUB_USERNAME'"/frontend:latest
+            docker push "'$DOCKERHUB_USERNAME'"/frontend:$SHA_TAG
             
             # Worker
             echo "Building worker image..."
-            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/worker:latest" -t "${{ secrets.DOCKERHUB_USERNAME }}/worker:$SHA_TAG" -f ./worker/Dockerfile ./worker
+            docker build -t "'$DOCKERHUB_USERNAME'"/worker:latest -t "'$DOCKERHUB_USERNAME'"/worker:$SHA_TAG -f ./worker/Dockerfile ./worker
             echo "Pushing worker images..."
-            docker push "${{ secrets.DOCKERHUB_USERNAME }}/worker:latest"
-            docker push "${{ secrets.DOCKERHUB_USERNAME }}/worker:$SHA_TAG"
+            docker push "'$DOCKERHUB_USERNAME'"/worker:latest
+            docker push "'$DOCKERHUB_USERNAME'"/worker:$SHA_TAG
             
             # Update image tags in manifests
             echo "Updating image tags in Kubernetes manifests..."
-            sed -i "s|image: ${{ secrets.DOCKERHUB_USERNAME }}/backend:latest|image: ${{ secrets.DOCKERHUB_USERNAME }}/backend:$SHA_TAG|g" prod/config/backend.yaml
-            sed -i "s|image: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest|image: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:$SHA_TAG|g" prod/config/frontend.yaml
-            sed -i "s|image: ${{ secrets.DOCKERHUB_USERNAME }}/worker:latest|image: ${{ secrets.DOCKERHUB_USERNAME }}/worker:$SHA_TAG|g" prod/config/worker.yaml
+            sed -i "s|image: "'$DOCKERHUB_USERNAME'"/backend:latest|image: "'$DOCKERHUB_USERNAME'"/backend:$SHA_TAG|g" prod/config/backend.yaml
+            sed -i "s|image: "'$DOCKERHUB_USERNAME'"/frontend:latest|image: "'$DOCKERHUB_USERNAME'"/frontend:$SHA_TAG|g" prod/config/frontend.yaml
+            sed -i "s|image: "'$DOCKERHUB_USERNAME'"/worker:latest|image: "'$DOCKERHUB_USERNAME'"/worker:$SHA_TAG|g" prod/config/worker.yaml
             
             # Apply Kubernetes manifests with zero downtime strategy
             echo "Applying Kubernetes manifests..."
@@ -130,4 +156,4 @@ jobs:
             echo "Applying nginx configuration..."
             kubectl apply -f prod/config/nginx.yaml
             kubectl rollout status deployment/nginx --timeout=300s
-          EOF 
+          ' 

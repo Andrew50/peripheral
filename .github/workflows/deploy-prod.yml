@@ -21,19 +21,45 @@ jobs:
           echo "Checking if REMOTE_HOST secret exists: ${{ secrets.REMOTE_HOST != '' }}"
           echo "Checking if REMOTE_USER secret exists: ${{ secrets.REMOTE_USER != '' }}"
           echo "Checking if SSH_PRIVATE_KEY secret exists: ${{ secrets.SSH_PRIVATE_KEY != '' }}"
+          echo "Checking if DOCKERHUB_USERNAME secret exists: ${{ secrets.DOCKERHUB_USERNAME != '' }}"
+          echo "Checking if DOCKERHUB_TOKEN secret exists: ${{ secrets.DOCKERHUB_TOKEN != '' }}"
 
       # Set up SSH key
       - name: Set up SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.REMOTE_HOST }} >> ~/.ssh/known_hosts
+          
+          # Only run keyscan if REMOTE_HOST is not empty
+          if [ -n "$REMOTE_HOST" ]; then
+            ssh-keyscan "$REMOTE_HOST" >> ~/.ssh/known_hosts
+          else
+            echo "Error: REMOTE_HOST is empty or not set"
+            exit 1
+          fi
+          
+          # Verify the key was added
+          echo "SSH key setup complete. Contents of known_hosts:"
+          cat ~/.ssh/known_hosts
 
       # Deploy using direct SSH command
       - name: Deploy to production server
+        env:
+          REMOTE_USER: ${{ secrets.REMOTE_USER }}
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
-          ssh -v ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} << 'EOF'
+          # Verify SSH connection first
+          echo "Testing SSH connection..."
+          ssh -o StrictHostKeyChecking=accept-new -T "$REMOTE_USER@$REMOTE_HOST" "echo SSH connection successful"
+          
+          # Now run the deployment commands
+          ssh "$REMOTE_USER@$REMOTE_HOST" '
             cd /home/aj/dev/study
             git checkout prod
             git pull origin prod
@@ -43,7 +69,7 @@ jobs:
             
             # Login to Docker Hub with verbose output
             echo "Running Docker login command..."
-            docker login docker.io -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}" || {
+            docker login docker.io -u "'$DOCKERHUB_USERNAME'" -p "'$DOCKERHUB_TOKEN'" || {
               echo "Docker login failed with exit code $?"
               echo "Docker login error details:"
               docker info
@@ -56,45 +82,45 @@ jobs:
             
             # Backend
             echo "Building backend image..."
-            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/backend:latest" -f ./backend/Dockerfile.prod ./backend
+            docker build -t "'$DOCKERHUB_USERNAME'"/backend:latest -f ./backend/Dockerfile.prod ./backend
             echo "Pushing backend image..."
-            docker push "${{ secrets.DOCKERHUB_USERNAME }}/backend:latest"
+            docker push "'$DOCKERHUB_USERNAME'"/backend:latest
             
             # Frontend
             echo "Building frontend image..."
-            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest" -f ./frontend/Dockerfile.prod ./frontend
+            docker build -t "'$DOCKERHUB_USERNAME'"/frontend:latest -f ./frontend/Dockerfile.prod ./frontend
             echo "Pushing frontend image..."
-            docker push "${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest"
+            docker push "'$DOCKERHUB_USERNAME'"/frontend:latest
             
             # Database
             echo "Building database image..."
-            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/db:latest" -f ./db/Dockerfile.prod ./db
+            docker build -t "'$DOCKERHUB_USERNAME'"/db:latest -f ./db/Dockerfile.prod ./db
             echo "Pushing database image..."
-            docker push "${{ secrets.DOCKERHUB_USERNAME }}/db:latest"
+            docker push "'$DOCKERHUB_USERNAME'"/db:latest
             
             # Worker
             echo "Building worker image..."
-            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/worker:latest" -f ./worker/Dockerfile ./worker
+            docker build -t "'$DOCKERHUB_USERNAME'"/worker:latest -f ./worker/Dockerfile ./worker
             echo "Pushing worker image..."
-            docker push "${{ secrets.DOCKERHUB_USERNAME }}/worker:latest"
+            docker push "'$DOCKERHUB_USERNAME'"/worker:latest
             
             # TF
             echo "Building tf image..."
-            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/tf:latest" -f ./tf/Dockerfile ./tf
+            docker build -t "'$DOCKERHUB_USERNAME'"/tf:latest -f ./tf/Dockerfile ./tf
             echo "Pushing tf image..."
-            docker push "${{ secrets.DOCKERHUB_USERNAME }}/tf:latest"
+            docker push "'$DOCKERHUB_USERNAME'"/tf:latest
             
             # Cache
             echo "Building cache image..."
-            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/cache:latest" -f ./cache/Dockerfile ./cache
+            docker build -t "'$DOCKERHUB_USERNAME'"/cache:latest -f ./cache/Dockerfile ./cache
             echo "Pushing cache image..."
-            docker push "${{ secrets.DOCKERHUB_USERNAME }}/cache:latest"
+            docker push "'$DOCKERHUB_USERNAME'"/cache:latest
             
             # Nginx
             echo "Building nginx image..."
-            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/nginx:latest" -f ./nginx/Dockerfile ./nginx
+            docker build -t "'$DOCKERHUB_USERNAME'"/nginx:latest -f ./nginx/Dockerfile ./nginx
             echo "Pushing nginx image..."
-            docker push "${{ secrets.DOCKERHUB_USERNAME }}/nginx:latest"
+            docker push "'$DOCKERHUB_USERNAME'"/nginx:latest
             
             # Apply Kubernetes configurations
             echo "Applying Kubernetes configurations..."
@@ -110,4 +136,4 @@ jobs:
             kubectl rollout restart deployment/db
             kubectl rollout restart deployment/cache
             kubectl rollout restart deployment/nginx
-          EOF 
+          ' 
