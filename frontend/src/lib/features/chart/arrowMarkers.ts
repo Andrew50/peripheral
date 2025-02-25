@@ -20,6 +20,17 @@ export interface ArrowMarker extends CustomData<Time> {
 		price: number;
 		isLong: boolean; // true for long exits, false for short exits
 	}>;
+	x?: number | null;
+	originalData?: {
+		entries?: Array<{
+			price: number;
+			isLong: boolean;
+		}>;
+		exits?: Array<{
+			price: number;
+			isLong: boolean;
+		}>;
+	};
 }
 
 // Helper functions to draw the arrows.
@@ -55,8 +66,7 @@ function drawArrowDown(ctx: CanvasRenderingContext2D, x: number, y: number, size
 
 // Custom series view for arrow markers.
 export class ArrowMarkersPaneView
-	implements ICustomSeriesPaneView<Time, ArrowMarker, CustomSeriesOptions>
-{
+	implements ICustomSeriesPaneView<Time, ArrowMarker, CustomSeriesOptions> {
 	private markers: ArrowMarker[] = [];
 	private options: CustomSeriesOptions = this.defaultOptions();
 	private visibleRange: { from: number; to: number } = { from: 0, to: 0 };
@@ -81,32 +91,32 @@ export class ArrowMarkersPaneView
 
 						const marker = this.markers[i];
 						const x = marker.x;
-						if (x === null) {
+						if (x === null || x === undefined) {
 							continue;
 						}
 
 						// Draw entry arrows
-						if (marker.originalData.entries?.length) {
+						if (marker.originalData?.entries?.length) {
 							marker.originalData.entries.forEach((entry) => {
 								context.fillStyle = entry.isLong ? 'green' : 'red';
 								const y = priceToCoordinate(entry.price);
 								if (entry.isLong) {
-									drawArrowUp(context, x, y, 7);
+									drawArrowUp(context, x as number, y, 7);
 								} else {
-									drawArrowDown(context, x, y, 7);
+									drawArrowDown(context, x as number, y, 7);
 								}
 							});
 						}
 
 						// Draw exit arrows
-						if (marker.originalData.exits?.length) {
+						if (marker.originalData?.exits?.length) {
 							marker.originalData.exits.forEach((exit) => {
 								context.fillStyle = exit.isLong ? 'red' : 'green';
 								const y = priceToCoordinate(exit.price);
 								if (exit.isLong) {
-									drawArrowDown(context, x, y, 7);
+									drawArrowDown(context, x as number, y, 7);
 								} else {
-									drawArrowUp(context, x, y, 7);
+									drawArrowUp(context, x as number, y, 7);
 								}
 							});
 						}
@@ -146,9 +156,9 @@ export class ArrowMarkersPaneView
 		seriesOptions: CustomSeriesOptions
 	): void {
 		//console.log("ArrowMarkersPaneView update called with data:", data, "and seriesOptions:", seriesOptions);
-		this.markers = data.bars; // Assumes your data is in the "bars" property.
+		this.markers = [...data.bars]; // Use spread operator to create a new array
 		this.options = seriesOptions;
-		this.visibleRange = data.visibleRange;
+		this.visibleRange = data.visibleRange || { from: 0, to: 0 }; // Provide default if null
 	}
 
 	// Update price value builder to handle new structure
@@ -168,10 +178,22 @@ export class ArrowMarkersPaneView
 
 	// Default options.
 	defaultOptions(): CustomSeriesOptions {
-		const defaultOpts = { color: 'green' };
-		return defaultOpts;
+		return {
+			color: 'green',
+			lastValueVisible: false,
+			title: 'Arrow Markers',
+			visible: true,
+			priceLineVisible: false,
+			priceLineSource: 'lastVisible',
+			priceLineWidth: 1,
+			priceFormat: {
+				type: 'price',
+				precision: 2,
+				minMove: 0.01
+			}
+		};
 	}
 
 	// Cleanup, if necessary.
-	destroy(): void {}
+	destroy(): void { }
 }
