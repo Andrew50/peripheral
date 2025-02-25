@@ -1,11 +1,11 @@
 // socket.ts
 import { writable } from 'svelte/store';
 import { streamInfo, handleTimestampUpdate } from '$lib/core/stores';
-import type { StreamInfo, TradeData, QuoteData } from "$lib/core/types";
+import type { StreamInfo, TradeData, QuoteData, CloseData } from "$lib/core/types";
 import { base_url } from '$lib/core/backend';
 import { browser } from '$app/environment'
 import { handleAlert } from './alert';
-import type { AlertData } from './alert';
+import type { AlertData } from '$lib/core/types';
 import { handleGlobalSECFilingMessage } from './secfilings';
 export type TimeType = "regular" | "extended"
 export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
@@ -19,16 +19,19 @@ export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
     "all" | //all trades
     "sec-filings" // global SEC filings feed
 
-export type StreamData = TradeData | QuoteData | number;
-export type StreamCallback = (v: TradeData | QuoteData | number) => void;
+export type StreamData = TradeData | QuoteData | CloseData | number;
+export type StreamCallback = (v: TradeData | QuoteData | CloseData | number) => void;
 
 export const activeChannels: Map<string, StreamCallback[]> = new Map();
+export const connectionStatus = writable<'connected' | 'disconnected' | 'connecting'>('connecting');
+export const pendingSubscriptions = new Set<string>();
 
-
-type SubscriptionRequest = {
+export type SubscriptionRequest = {
     action: 'subscribe' | 'unsubscribe' | 'replay' | 'pause' | 'play' | 'realtime' | 'speed' | 'subscribe-sec-filings' | 'unsubscribe-sec-filings';
     channelName?: string;
     timestamp?: number;
+    speed?: number;
+    extendedHours?: boolean;
 };
 
 export let socket: WebSocket | null = null;
@@ -37,7 +40,6 @@ const maxReconnectInterval: number = 30000;
 let reconnectAttempts: number = 0;
 const maxReconnectAttempts: number = 5;
 let shouldReconnect: boolean = true;
-const connectionStatus = writable<'connected' | 'disconnected' | 'connecting'>('connecting');
 connect()
 
 function connect() {
@@ -61,9 +63,13 @@ function connect() {
         connectionStatus.set('connected');
         reconnectAttempts = 0;
         reconnectInterval = 5000;
-        for (const [channelName] of activeChannels.keys()) {
+
+        // Resubscribe to all active channels and pending subscriptions
+        const allChannels = new Set([...activeChannels.keys(), ...pendingSubscriptions]);
+        for (const channelName of allChannels) {
             subscribe(channelName);
         }
+        pendingSubscriptions.clear();
     });
     socket.addEventListener('message', (event) => {
         let data
@@ -143,6 +149,9 @@ export function subscribe(channelName: string) {
             channelName: channelName,
         };
         socket.send(JSON.stringify(subscriptionRequest));
+    } else {
+        // Store the subscription request to be sent when connection is established
+        pendingSubscriptions.add(channelName);
     }
 }
 

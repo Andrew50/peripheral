@@ -573,25 +573,76 @@ func GetIcons(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
+	// Filter out any nil or empty ticker values
+	var validTickers []string
+	for _, ticker := range args.Tickers {
+		if ticker != "" {
+			validTickers = append(validTickers, ticker)
+		}
+	}
+
+	// If no valid tickers, return empty result
+	if len(validTickers) == 0 {
+		return []GetIconsResults{}, nil
+	}
+
 	// Prepare a query to fetch icons for the given tickers
 	query := `
-		SELECT ticker, icon
-		FROM securities
-		WHERE ticker = ANY($1)
+		WITH latest_securities AS (
+			SELECT DISTINCT ON (ticker) ticker, icon
+			FROM securities
+			WHERE ticker = ANY($1) AND ticker IS NOT NULL AND ticker != ''
+			ORDER BY ticker, maxDate DESC NULLS FIRST
+		)
+		SELECT ticker, CASE 
+			WHEN icon IS NULL OR icon = '' THEN ''
+			ELSE icon 
+		END as icon
+		FROM latest_securities
 	`
 
-	rows, err := conn.DB.Query(context.Background(), query, args.Tickers)
+	rows, err := conn.DB.Query(context.Background(), query, validTickers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query icons: %v", err)
 	}
 	defer rows.Close()
 
-	var results []GetIconsResults
+	// Create a map to store found icons by ticker
+	foundIcons := make(map[string]string)
+
+	// Scan results into the map
 	for rows.Next() {
-		var result GetIconsResults
-		if err := rows.Scan(&result.Ticker, &result.Icon); err != nil {
+		var nullableTicker, nullableIcon sql.NullString
+		if err := rows.Scan(&nullableTicker, &nullableIcon); err != nil {
 			return nil, fmt.Errorf("failed to scan icon: %v", err)
 		}
+
+		// Skip invalid tickers
+		if !nullableTicker.Valid || nullableTicker.String == "" {
+			continue
+		}
+
+		// Add to the found icons map
+		foundIcons[nullableTicker.String] = nullableIcon.String
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over icons: %v", err)
+	}
+
+	// Create results for all requested tickers, even if not found in DB
+	var results []GetIconsResults
+	for _, ticker := range validTickers {
+		result := GetIconsResults{
+			Ticker: ticker,
+			Icon:   "", // Default to empty icon
+		}
+
+		// If we found an icon for this ticker, use it
+		if icon, found := foundIcons[ticker]; found {
+			result.Icon = icon
+		}
+
 		results = append(results, result)
 	}
 
