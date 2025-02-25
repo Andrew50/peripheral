@@ -1,10 +1,5 @@
-chart.svelte
-chartContainer.svelte
-input.svelte
-app/+page.svelte
-chart/interface.ts
-chart/legend.svelte
-
-
-
-
+edgar.go 
+socket.ts 
+secfilingsfeed.svelte 
+socket.go 
+edgar_service.go 

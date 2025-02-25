@@ -675,7 +675,7 @@
 		const isExtendedHours = extendedHours(trade.timestamp);
 		if (
 			isExtendedHours &&
-			(!currentChartInstance.extendedHours || /^[dwm]/.test(currentChartInstance.timeframe))
+			(!currentChartInstance.extendedHours || /^[dwm]/.test(currentChartInstance.timeframe || ''))
 		) {
 			return;
 		}
@@ -683,6 +683,15 @@
 		const dolvol = get(settings).dolvol;
 		const mostRecentBar = chartCandleSeries.data().at(-1);
 		if (!mostRecentBar) return;
+
+		// Type guard for CandlestickData
+		const isCandlestick = (data: any): data is CandlestickData<Time> =>
+			'open' in data && 'high' in data && 'low' in data && 'close' in data;
+
+		// Type guard for HistogramData
+		const isHistogram = (data: any): data is HistogramData<Time> => 'value' in data;
+
+		if (!isCandlestick(mostRecentBar)) return;
 
 		currentBarTimestamp = mostRecentBar.time as number;
 		const tradeTime = UTCSecondstoESTSeconds(trade.timestamp / 1000);
@@ -703,7 +712,7 @@
 			}
 
 			const lastVolume = chartVolumeSeries.data().at(-1);
-			if (lastVolume) {
+			if (lastVolume && isHistogram(lastVolume)) {
 				chartVolumeSeries.update({
 					time: mostRecentBar.time,
 					value: lastVolume.value + trade.size,
@@ -765,6 +774,12 @@
 			);
 
 			if (barIndex !== -1) {
+				// Create safe mutable copies for data updates
+				function createMutableCopy<T>(data: readonly T[]): T[] {
+					return [...data];
+				}
+
+				// Update bar data with safe copies
 				const updatedCandle = {
 					time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
 					open: barData.open,
@@ -772,16 +787,20 @@
 					low: barData.low,
 					close: barData.close
 				};
-				currentData[barIndex] = updatedCandle;
-				chartCandleSeries.setData(currentData);
 
-				const volumeData = chartVolumeSeries.data();
-				volumeData[barIndex] = {
+				// Create a new mutable copy of the data array before updating it
+				const updatedCandleData = createMutableCopy(currentData);
+				updatedCandleData[barIndex] = updatedCandle;
+				chartCandleSeries.setData(updatedCandleData);
+
+				// Create a new mutable copy of the volume data array before updating it
+				const updatedVolumeData = createMutableCopy(volumeData);
+				updatedVolumeData[barIndex] = {
 					time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
 					value: barData.volume * (dolvol ? barData.close : 1),
 					color: barData.close > barData.open ? '#089981' : '#ef5350'
 				};
-				chartVolumeSeries.setData(volumeData);
+				chartVolumeSeries.setData(updatedVolumeData);
 			}
 		} catch (error) {
 			console.error('Error fetching historical data:', error);
@@ -1039,9 +1058,9 @@
 				param.point.y < 0
 			);
 			let bar;
-			let cursorBarIndex;
+			let cursorBarIndex: number | undefined;
 			if (!validCrosshairPoint) {
-				if (param.logical < 0) {
+				if (param?.logical < 0) {
 					bar = allCandleData[0];
 					cursorBarIndex = 0;
 				} else {
@@ -1053,9 +1072,25 @@
 				if (!bar) {
 					return;
 				}
+			}
+
+			// Type guard to check if bar is CandlestickData
+			const isCandlestick = (data: any): data is CandlestickData<Time> =>
+				'open' in data && 'high' in data && 'low' in data && 'close' in data;
+
+			if (!isCandlestick(bar)) {
+				return; // Skip if the bar is not CandlestickData
+			}
+
+			// Get cursor bar index if it wasn't set in the validCrosshairPoint block
+			if (validCrosshairPoint && cursorBarIndex === undefined) {
 				const cursorTime = bar.time as number;
 				cursorBarIndex = allCandleData.findIndex((candle) => candle.time === cursorTime);
 			}
+
+			// Ensure cursorBarIndex is defined before using it
+			if (cursorBarIndex === undefined) return;
+
 			let barsForADR;
 			if (cursorBarIndex >= 20) {
 				barsForADR = allCandleData.slice(cursorBarIndex - 19, cursorBarIndex + 1);
@@ -1065,35 +1100,52 @@
 			let chg = 0;
 			let chgprct = 0;
 			if (cursorBarIndex > 0) {
-				chg = bar.close - allCandleData[cursorBarIndex - 1].close;
-				chgprct = (bar.close / allCandleData[cursorBarIndex - 1].close - 1) * 100;
+				const prevBar = allCandleData[cursorBarIndex - 1];
+
+				if (isCandlestick(prevBar)) {
+					chg = bar.close - prevBar.close;
+					chgprct = (bar.close / prevBar.close - 1) * 100;
+				}
 			}
-			const mcap = $hoveredCandleData.mcap;
+
 			hoveredCandleData.set({
 				open: bar.open,
 				high: bar.high,
 				low: bar.low,
 				close: bar.close,
 				volume: volume,
-				adr: calculateSingleADR(barsForADR),
+				adr: calculateSingleADR(
+					barsForADR.filter(
+						(candle) => 'open' in candle && 'high' in candle && 'low' in candle && 'close' in candle
+					) as CandlestickData<Time>[]
+				),
 				chg: chg,
 				chgprct: chgprct,
-				rvol: 0,
-				mcap: mcap
+				rvol: 0
 			});
-			if (/^\d+$/.test(currentChartInstance.timeframe)) {
+			if (currentChartInstance.timeframe && /^\d+$/.test(currentChartInstance.timeframe)) {
 				let barsForRVOL;
-				if (cursorBarIndex >= 1000) {
+				if (cursorBarIndex !== undefined && cursorBarIndex >= 1000) {
 					barsForADR = allCandleData.slice(cursorBarIndex - 1000, cursorBarIndex + 1);
-				} else {
-					barsForRVOL = chartVolumeSeries.data().slice(0, cursorBarIndex + 1);
+				} else if (cursorBarIndex !== undefined) {
+					// Transform the histogram data to the format expected by calculateRVOL
+					const volumeData = chartVolumeSeries.data().slice(0, cursorBarIndex + 1);
+					barsForRVOL = volumeData
+						.filter((bar) => 'value' in bar) // Filter to ensure only HistogramData is included
+						.map((bar) => ({
+							time: bar.time as UTCTimestamp,
+							value: (bar as HistogramData<Time>).value || 0
+						}));
 				}
-				calculateRVOL(barsForRVOL, currentChartInstance.securityId).then((r: any) => {
-					hoveredCandleData.update((v) => {
-						v.rvol = r;
-						return v;
+				// Only call calculateRVOL if barsForRVOL is defined
+				if (barsForRVOL && barsForRVOL.length > 0) {
+					calculateRVOL(barsForRVOL, currentChartInstance.securityId).then((r: any) => {
+						hoveredCandleData.update((v) => {
+							v.rvol = r;
+							return v;
+						});
 					});
-				});
+				}
 			}
 			latestCrosshairPositionTime = bar.time as number;
 			latestCrosshairPositionY = param.point.y as number; //inccorect

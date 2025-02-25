@@ -7,11 +7,11 @@ import { get } from 'svelte/store';
 export const instance: Writable<Instance> = writable({ ticker: '', timestamp: 0 });
 
 export function querySimilarInstances(baseIns: Instance): void {
-    instance.update((ins) => ({
-        ...ins,
-        ...baseIns
-    }));
-    if (get(activeMenu) !== 'similar') {
-        changeMenu('similar');
-    }
+	instance.update((ins) => ({
+		...ins,
+		...baseIns
+	}));
+	if (get(activeMenu) !== 'similar') {
+		changeMenu('similar');
+	}
 }

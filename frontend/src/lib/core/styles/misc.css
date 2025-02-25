@@ -1,26 +1,25 @@
-
 .page {
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    position: absolute;
-    background-color: var(--c2);
-    overflow: hidden;
+	top: 0;
+	left: 0;
+	width: 100vw;
+	height: 100vh;
+	position: absolute;
+	background-color: var(--c2);
+	overflow: hidden;
 }
 h1 {
-    font-size: 24px;
-    color: var(--f1);
+	font-size: 24px;
+	color: var(--f1);
 }
 .content {
-    text-align: center;
+	text-align: center;
 }
-  main {
-    display: flex; 
-    justify-content: center;
-    align-items: center;
-    height: 100%;
-    width: 100%;
-    background-color: var(--c2);
-    position: absolute;
-  }
+main {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	height: 100%;
+	width: 100%;
+	background-color: var(--c2);
+	position: absolute;
+}

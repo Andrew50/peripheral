@@ -79,13 +79,25 @@
 
 	async function handleGoogleLogin() {
 		try {
-			// Pass the current origin to the backend
+			// Get and log the current origin
 			const currentOrigin = window.location.origin;
-			const response = await publicRequest<{ url: string }>('googleLogin', {
+			console.log('Current origin for Google login:', currentOrigin);
+
+			// Pass the current origin to the backend
+			const response = await publicRequest<{ url: string; state: string }>('googleLogin', {
 				redirectOrigin: currentOrigin
 			});
+			console.log('Google login redirect URL:', response.url);
+
+			// Store the state in sessionStorage to verify on return
+			if (response.state) {
+				sessionStorage.setItem('googleAuthState', response.state);
+			}
+
+			// Redirect to Google's OAuth page
 			window.location.href = response.url;
 		} catch (error) {
+			console.error('Failed to initialize Google login:', error);
 			errorMessage.set('Failed to initialize Google login');
 		}
 	}

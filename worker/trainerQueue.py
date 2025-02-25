@@ -3,7 +3,8 @@ from psycopg2.extras import execute_values
 from datetime import datetime, timedelta
 from screen import screen
 
-VALIDATION_CHANCE = .05
+VALIDATION_CHANCE = 0.05
+
 
 def generateSamples(conn, setupId):
     if random.random() < VALIDATION_CHANCE:
@@ -21,9 +22,10 @@ def generateSamples(conn, setupId):
             print("No validation instances found for the given setupId.")
             return []
         formatted_instances = [
-            { "ticker": instance[2],  
-                "dt": datetime.fromtimestamp(instance[1].timestamp()),  
-                "currentPrice": None,  
+            {
+                "ticker": instance[2],
+                "dt": datetime.fromtimestamp(instance[1].timestamp()),
+                "currentPrice": None,
             }
             for instance in instances
         ]
@@ -31,13 +33,23 @@ def generateSamples(conn, setupId):
     else:
         start_date = datetime(2004, 1, 1)
         end_date = datetime.now()
-        random_date = start_date + timedelta(days=random.randint(0, (end_date - start_date).days))
+        random_date = start_date + timedelta(
+            days=random.randint(0, (end_date - start_date).days)
+        )
         print(f"fetching from {random_date}")
         results = screen(conn, [setupId], timestamp=random_date, threshold=0)
-    closest_to_50 = sorted(results, key=lambda x: abs(x['score'] - 50))
+    closest_to_50 = sorted(results, key=lambda x: abs(x["score"] - 50))
     selected_instances = closest_to_50[:25]
-    samples = [(setupId, instance['securityId'], datetime.fromtimestamp(instance['timestamp'] / 1000)) for instance in selected_instances]
+    samples = [
+        (
+            setupId,
+            instance["securityId"],
+            datetime.fromtimestamp(instance["timestamp"] / 1000),
+        )
+        for instance in selected_instances
+    ]
     return samples
+
 
 def refillTrainerQueue(conn, setupId):
     err = None
@@ -52,8 +64,10 @@ def refillTrainerQueue(conn, setupId):
             VALUES %s
             ON CONFLICT (setupId,securityId,timestamp)
             DO UPDATE SET label = NULL
-        """ #set the label null becuase if it is a validation it will be a conflict
-        formatted_values = [(sample[0], sample[1], sample[2], None) for sample in samples]  # Add None for label
+        """  # set the label null becuase if it is a validation it will be a conflict
+        formatted_values = [
+            (sample[0], sample[1], sample[2], None) for sample in samples
+        ]  # Add None for label
         with conn.db.cursor() as cursor:
             execute_values(cursor, insert_query, formatted_values)
         samplesGot = len(formatted_values)
@@ -66,4 +80,3 @@ def refillTrainerQueue(conn, setupId):
             raise err
 
     return samplesGot
-
