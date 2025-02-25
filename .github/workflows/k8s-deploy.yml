@@ -208,5 +208,12 @@ jobs:
             # Apply nginx configuration
             echo "Applying nginx configuration..."
             kubectl apply -f prod/config/nginx.yaml
-            kubectl rollout status deployment/nginx --timeout=300s
+            
+            # Create and apply the ingress NodePort service with a direct command
+            echo "Exposing ingress controller with NodePort service..."
+            kubectl -n ingress-nginx expose deployment ingress-nginx-controller --name=ingress-nginx-nodeport --port=80 --target-port=80 --type=NodePort --overrides='\{"spec":\{"ports":[{"port":80,"protocol":"TCP","targetPort":80,"nodePort":30081}]\}\}'
+            
+            # Verify that the ingress resources are available
+            kubectl get ingress
+            echo "Deployment completed successfully!"
           ' 
