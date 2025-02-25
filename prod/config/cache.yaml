@@ -14,7 +14,8 @@ spec:
     spec:
       containers:
         - name: cache
-          image: redis:latest
+          image: billin19/cache:prod
+          imagePullPolicy: Always
           ports:
             - containerPort: 6379
           resources:
