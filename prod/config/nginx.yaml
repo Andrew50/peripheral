@@ -52,11 +52,13 @@ spec:
   type: NodePort
   selector:
     app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/instance: ingress-nginx
   ports:
     - protocol: TCP
       port: 80
       targetPort: 80
       nodePort: 30080
+  externalTrafficPolicy: Local
 
 ---
 apiVersion: v1
