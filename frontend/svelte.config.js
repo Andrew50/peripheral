@@ -19,11 +19,18 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 export default {
 	preprocess: vitePreprocess(),
 	kit: {
-		adapter: adapter(),
-		// Add paths configuration to handle the domain correctly
+		adapter: adapter({
+			// Ensure proper MIME types for JavaScript files
+			precompress: true
+		}),
+		// Fix paths configuration to handle the domain correctly
 		paths: {
 			base: '',
+			// Remove assets setting as it's causing issues
 			relative: false
+		},
+		alias: {
+			$lib: 'src/lib'
 		}
 	}
 };
