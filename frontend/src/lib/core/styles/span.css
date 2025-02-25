@@ -1,104 +1,100 @@
 /* Base span styles */
 span {
-    color: var(--text-primary);
+	color: var(--text-primary);
 }
 
 /* Span variants */
 .flag-icon {
-    color: var(--text-secondary);
-    font-size: 16px;
-    margin-right: 5px;
+	color: var(--text-secondary);
+	font-size: 16px;
+	margin-right: 5px;
 }
 
 .symbol {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text-primary);
-    white-space: nowrap;
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--text-primary);
+	white-space: nowrap;
 }
 
 .timeframe,
 .timestamp,
 .session-type {
-    font-size: 13px;
-    color: var(--text-secondary);
-    padding: 3px 8px;
-    background: var(--ui-bg-element);
-    border-radius: 4px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    border: 1px solid var(--ui-border);
+	font-size: 13px;
+	color: var(--text-secondary);
+	padding: 3px 8px;
+	background: var(--ui-bg-element);
+	border-radius: 4px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	border: 1px solid var(--ui-border);
 }
 
 .price-value {
-    font-family: monospace;
-    font-weight: 500;
+	font-family: monospace;
+	font-weight: 500;
 }
 
 /* Price change indicators */
 .increase {
-    color: var(--positive);
+	color: var(--positive);
 }
 
 .decrease {
-    color: var(--negative);
+	color: var(--negative);
 }
 
 .no-change {
-    color: var(--text-primary);
+	color: var(--text-primary);
 }
 
-
 .info-row {
-    margin: 0;
-    padding: 0;
-    background: none;
-    font-weight: 500;
-    color: var(--text-secondary);
+	margin: 0;
+	padding: 0;
+	background: none;
+	font-weight: 500;
+	color: var(--text-secondary);
 }
 
 .label {
-    color: var(--text-secondary);
+	color: var(--text-secondary);
 }
 
 .value {
-    color: var(--text-primary);
+	color: var(--text-primary);
 }
 
-
 .expand-icon {
-    display: inline-block;
-    width: 16px;
-    height: 16px;
-    line-height: 16px;
-    text-align: center;
-    background-color: var(--ui-bg-element);
-    border-radius: 3px;
-    font-weight: bold;
-    font-size: 12px;
-
+	display: inline-block;
+	width: 16px;
+	height: 16px;
+	line-height: 16px;
+	text-align: center;
+	background-color: var(--ui-bg-element);
+	border-radius: 3px;
+	font-weight: bold;
+	font-size: 12px;
 }
 
 .flag-icon {
-    color: var(--text-secondary);
-    font-size: 16px;
-    margin-right: 5px;
+	color: var(--text-secondary);
+	font-size: 16px;
+	margin-right: 5px;
 }
 
-
 .red {
-    color: var(--negative);
+	color: var(--negative);
 }
 
 .green {
-    color: var(--positive);
+	color: var(--positive);
 }
 
 /*unused*/
 .timestamp {
-    cursor: pointer;
-    color: #fff;
-    font-size: 0.9em;
-    margin: 0 12px;
+	cursor: pointer;
+	color: #fff;
+	font-size: 0.9em;
+	margin: 0 12px;
 }

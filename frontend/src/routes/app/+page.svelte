@@ -46,6 +46,9 @@
 	} from '$lib/core/stores';
 	import { writable, type Writable } from 'svelte/store';
 
+	// Import Instance from types
+	import type { Instance } from '$lib/core/types';
+
 	// Add import near the top with other imports
 	import Screensaver from '$lib/features/screensaver.svelte';
 
@@ -86,8 +89,12 @@
 	// Add these state variables near the top with other state declarations
 	let lastBottomWindow: BottomWindow | null = null;
 
-	let profilePic = '';
+	// Initialize with default question mark avatar
+	let profilePic = `data:image/svg+xml,${encodeURIComponent(`<svg width="28" height="28" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="14" fill="#1a1c21"/><text x="14" y="19" font-family="Arial" font-size="14" fill="#e0e0e0" text-anchor="middle" font-weight="bold">?</text></svg>`)}`;
 	let username = '';
+	let profilePicError = false;
+	let profileIconKey = 0;
+	let currentProfileDisplay = ''; // Add this to hold the current display value
 
 	let sidebarResizing = false;
 	let tickerHeight = 300; // Initial height
@@ -129,6 +136,29 @@
 	let keydownHandler: (event: KeyboardEvent) => void;
 
 	onMount(() => {
+		// Load profile data FIRST, before doing anything else
+		const storedProfilePic = sessionStorage.getItem('profilePic') || '';
+		username = sessionStorage.getItem('username') || '';
+
+		// Check if the stored profile pic is a real image URL or a generated SVG
+		if (storedProfilePic && !storedProfilePic.startsWith('data:image/svg+xml')) {
+			// It's a real image URL (like from Google)
+			profilePic = storedProfilePic;
+		} else {
+			// Either no profile pic or it's an SVG - we'll regenerate it based on username
+			profilePic = '';
+		}
+
+		console.log('Profile data on mount:', {
+			profilePic,
+			username,
+			hasProfilePic: !!profilePic,
+			hasUsername: !!username
+		});
+
+		// Reset error state
+		profilePicError = false;
+
 		// Set up a single menuWidth subscription
 		const unsubscribe = menuWidth.subscribe((width) => {
 			updateChartWidth();
@@ -197,8 +227,11 @@
 			toggleMenu(menuName as Menu);
 		});
 
-		profilePic = sessionStorage.getItem('profilePic') || '';
-		username = sessionStorage.getItem('username') || '';
+		// Force profile display to update
+		currentProfileDisplay = calculateProfileDisplay();
+
+		// Force refresh of the profile icon
+		profileIconKey++;
 
 		// Setup activity listeners
 		if (browser) {
@@ -488,16 +521,48 @@
 		document.body.style.cursor = 'default';
 	}
 
-	function getProfileDisplay() {
-		if (profilePic) {
+	// Add reactive statement for profile display
+	$: {
+		// Recalculate the profile display whenever these values change
+		if (profilePic || username || profilePicError) {
+			currentProfileDisplay = calculateProfileDisplay();
+			console.log('Profile display updated:', { currentProfileDisplay });
+		}
+	}
+
+	function calculateProfileDisplay() {
+		console.log('getProfileDisplay called:', {
+			profilePic,
+			username,
+			profilePicError
+		});
+
+		// If profile pic is available and no loading error, use it
+		if (profilePic && !profilePicError) {
+			console.log('Using profile picture URL');
 			return profilePic;
 		}
-		// Generate initial avatar if no profile pic
+
+		// If username is available, generate avatar with initial
 		if (username) {
-			return `data:image/svg+xml,${encodeURIComponent(`<svg width="28" height="28" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="14" fill="#1a1c21"/><text x="14" y="19" font-family="Arial" font-size="14" fill="#e0e0e0" text-anchor="middle" font-weight="bold">${username.charAt(0).toUpperCase()}</text></svg>`)}`;
+			const initial = username.charAt(0).toUpperCase();
+			console.log('Using username initial for avatar:', initial);
+			return `data:image/svg+xml,${encodeURIComponent(`<svg width="28" height="28" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="14" fill="#1a1c21"/><text x="14" y="19" font-family="Arial" font-size="14" fill="#e0e0e0" text-anchor="middle" font-weight="bold">${initial}</text></svg>`)}`;
 		}
-		// Fallback if no username (shouldn't happen)
+
+		// Fallback if nothing else is available
+		console.log('No username available, using ? fallback');
 		return `data:image/svg+xml,${encodeURIComponent(`<svg width="28" height="28" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="14" fill="#1a1c21"/><text x="14" y="19" font-family="Arial" font-size="14" fill="#e0e0e0" text-anchor="middle" font-weight="bold">?</text></svg>`)}`;
+	}
+
+	// Keep the getProfileDisplay function for backward compatibility
+	function getProfileDisplay() {
+		return currentProfileDisplay;
+	}
+
+	function handleProfilePicError() {
+		console.log('Profile picture failed to load:', profilePic);
+		profilePicError = true;
 	}
 
 	function startSidebarResize(event: MouseEvent | TouchEvent) {
@@ -556,6 +621,12 @@
 
 	function toggleScreensaver() {
 		screensaverActive = !screensaverActive;
+	}
+
+	// Add reactive statements to update the profile icon when data changes
+	$: if (profilePic || username) {
+		// Increment key to force re-render when profile data changes
+		profileIconKey++;
 	}
 </script>
 
@@ -758,7 +829,13 @@
 				<i class="fas fa-tv"></i>
 			</button>
 
-			<img src={getProfileDisplay()} alt="Profile" class="pfp" on:click={toggleSettings} />
+			<img
+				src={getProfileDisplay()}
+				alt="Profile"
+				class="pfp"
+				on:click={toggleSettings}
+				on:error={handleProfilePicError}
+			/>
 		</div>
 	</div>
 

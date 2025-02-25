@@ -1,111 +1,110 @@
 /* Base button styles */
 button {
-    padding: 8px 16px;
-    background: var(--ui-bg-secondary);
-    border: 1px solid var(--ui-border);
-    border-radius: 4px;
-    color: var(--text-primary);
-    cursor: pointer;
-    font-family: var(--font-primary);
-    font-size: 14px;
-    transition: all 0.2s ease;
+	padding: 8px 16px;
+	background: var(--ui-bg-secondary);
+	border: 1px solid var(--ui-border);
+	border-radius: 4px;
+	color: var(--text-primary);
+	cursor: pointer;
+	font-family: var(--font-primary);
+	font-size: 14px;
+	transition: all 0.2s ease;
 }
 
 button:hover {
-    background: var(--ui-bg-hover);
-    border-color: var(--ui-accent);
+	background: var(--ui-bg-hover);
+	border-color: var(--ui-accent);
 }
 
 button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+	opacity: 0.5;
+	cursor: not-allowed;
 }
 
 /* Used for the main function button in the window, bright blue */
 .action-button {
-    background: var(--c3)
+	background: var(--c3);
 }
 
 /* Embedded instance button */
 .embedded-button {
-    padding: 1px;
-    margin: 1px;
-    background: var(--ui-bg-element);
-    border: 1px solid var(--ui-border);
-    border-radius: 4px;
-    font-size: 12px;
+	padding: 1px;
+	margin: 1px;
+	background: var(--ui-bg-element);
+	border: 1px solid var(--ui-border);
+	border-radius: 4px;
+	font-size: 12px;
 }
-
 
 /* Fill the width of the container, used for login, rightclick menu, etc. */
 .wide-button {
-    width: 100%;
+	width: 100%;
 }
 
 /* When selected, the button will be highlighted
 Bottom and Side Bar Buttons, Screener type buttons, no background */
 .toggle-button {
-    background: none;
-    color: var(--text-primary);
-    border: none;
-    padding: 4px 8px;
-    cursor: pointer;
-    border-radius: 3px;
-    font-size: 0.9em;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+	background: none;
+	color: var(--text-primary);
+	border: none;
+	padding: 4px 8px;
+	cursor: pointer;
+	border-radius: 3px;
+	font-size: 0.9em;
+	height: 28px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
 
 .toggle-button:hover {
-    background: var(--ui-bg-secondary);
+	background: var(--ui-bg-secondary);
 }
 
 .toggle-button.active {
-    background: var(--ui-bg-hover);
+	background: var(--ui-bg-hover);
 }
 
 /*  square button
 Close, Delete, Collapse, etc. */
 .utility-button {
-    background: transparent;
-    border: none;
-    padding: 0;
-    width: 25px;
-    height: 25px;
-    color: var(--text-secondary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+	background: transparent;
+	border: none;
+	padding: 0;
+	width: 25px;
+	height: 25px;
+	color: var(--text-secondary);
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
 
 .utility-button:hover {
-    color: var(--text-primary);
+	color: var(--text-primary);
 }
 
 /* Circular shortcut buttons used in watchlists, etc */
 .shortcut-button {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: var(--ui-bg-secondary);
-    border: 1px solid var(--ui-border);
-    color: var(--text-primary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    font-size: 14px;
-    transition: all 0.2s ease;
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	background: var(--ui-bg-secondary);
+	border: 1px solid var(--ui-border);
+	color: var(--text-primary);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	font-size: 14px;
+	transition: all 0.2s ease;
 }
 
 .shortcut-button:hover {
-    background: var(--ui-bg-hover);
-    border-color: var(--ui-border);
+	background: var(--ui-bg-hover);
+	border-color: var(--ui-border);
 }
 
 .shortcut-button.active {
-    background: var(--c3);
-    border-color: var(--c3);
+	background: var(--c3);
+	border-color: var(--c3);
 }

@@ -1,0 +1,87 @@
+name: Deploy to Kubernetes
+
+on:
+  push:
+    branches:
+      - prod  # Trigger on pushes to the prod branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Docker Hub or your registry
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # Build and push all images with unique tags based on commit SHA
+      - name: Set image tag
+        id: vars
+        run: echo "SHA_TAG=${GITHUB_SHA::8}" >> $GITHUB_ENV
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.prod
+          push: true
+          tags: |
+            yourrepo/backend:latest
+            yourrepo/backend:${{ env.SHA_TAG }}
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v4
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile.prod
+          push: true
+          tags: |
+            yourrepo/frontend:latest
+            yourrepo/frontend:${{ env.SHA_TAG }}
+
+      # Add similar steps for other services...
+
+      # Set up kubectl
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      # Set up kubeconfig
+      - name: Configure Kubernetes credentials
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+
+      # Update image tags in manifests
+      - name: Update image tags in Kubernetes manifests
+        run: |
+          sed -i "s|image: yourrepo/backend:latest|image: yourrepo/backend:${{ env.SHA_TAG }}|g" kubernetes/backend-deployment.yaml
+          sed -i "s|image: yourrepo/frontend:latest|image: yourrepo/frontend:${{ env.SHA_TAG }}|g" kubernetes/frontend-deployment.yaml
+          # Update other manifests similarly
+
+      # Apply Kubernetes manifests with zero downtime strategy
+      - name: Apply Kubernetes manifests
+        run: |
+          # Apply database changes first and wait for readiness
+          kubectl apply -f kubernetes/db-statefulset.yaml
+          kubectl rollout status statefulset/db --timeout=300s
+          
+          # Apply other backend services
+          kubectl apply -f kubernetes/backend-deployment.yaml
+          kubectl rollout status deployment/backend --timeout=300s
+          
+          # Apply frontend last
+          kubectl apply -f kubernetes/frontend-deployment.yaml
+          kubectl rollout status deployment/frontend --timeout=300s
+          
+          # Apply ingress configuration
+          kubectl apply -f kubernetes/ingress.yaml 

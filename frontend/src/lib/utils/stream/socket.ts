@@ -1,23 +1,24 @@
 // socket.ts
 import { writable } from 'svelte/store';
 import { streamInfo, handleTimestampUpdate } from '$lib/core/stores';
-import type { StreamInfo, TradeData, QuoteData, CloseData } from "$lib/core/types";
+import type { StreamInfo, TradeData, QuoteData, CloseData } from '$lib/core/types';
 import { base_url } from '$lib/core/backend';
-import { browser } from '$app/environment'
+import { browser } from '$app/environment';
 import { handleAlert } from './alert';
 import type { AlertData } from '$lib/core/types';
-import { handleGlobalSECFilingMessage } from './secfilings';
-export type TimeType = "regular" | "extended"
+
+export type TimeType = 'regular' | 'extended';
 export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
-    "fast-regular" |
-    "fast-extended" |
-    "slow-regular" |
-    "slow-extended" |
-    "close-regular" |
-    "close-extended" |
-    "quote" |
-    "all" | //all trades
-    "sec-filings" // global SEC filings feed
+
+		| 'fast-regular'
+		| 'fast-extended'
+		| 'slow-regular'
+		| 'slow-extended'
+		| 'close-regular'
+		| 'close-extended'
+		| 'quote'
+		| 'all'; //all trades
+
 
 export type StreamData = TradeData | QuoteData | CloseData | number;
 export type StreamCallback = (v: TradeData | QuoteData | CloseData | number) => void;
@@ -27,12 +28,13 @@ export const connectionStatus = writable<'connected' | 'disconnected' | 'connect
 export const pendingSubscriptions = new Set<string>();
 
 export type SubscriptionRequest = {
-    action: 'subscribe' | 'unsubscribe' | 'replay' | 'pause' | 'play' | 'realtime' | 'speed' | 'subscribe-sec-filings' | 'unsubscribe-sec-filings';
-    channelName?: string;
-    timestamp?: number;
-    speed?: number;
-    extendedHours?: boolean;
-};
+
+	action: 'subscribe' | 'unsubscribe' | 'replay' | 'pause' | 'play' | 'realtime' | 'speed';
+	channelName?: string;
+	timestamp?: number;
+	speed?: number;
+	extendedHours?: boolean;
+
 
 export let socket: WebSocket | null = null;
 let reconnectInterval: number = 5000; //ms
@@ -40,130 +42,109 @@ const maxReconnectInterval: number = 30000;
 let reconnectAttempts: number = 0;
 const maxReconnectAttempts: number = 5;
 let shouldReconnect: boolean = true;
-connect()
+connect();
 
 function connect() {
-    if (!browser) return
-    try {
-        const token = sessionStorage.getItem("authToken")
-        const socketUrl = base_url + "/ws" + "?token=" + token;
-        socket = new WebSocket(socketUrl);
-    } catch (e) {
-        console.error(e);
-        setTimeout(connect, 1000);
-        return;
-    }
-    socket.addEventListener('close', () => {
-        connectionStatus.set('disconnected');
-        if (shouldReconnect) {
-            reconnect();
-        }
-    });
-    socket.addEventListener('open', () => {
-        connectionStatus.set('connected');
-        reconnectAttempts = 0;
-        reconnectInterval = 5000;
+	if (!browser) return;
+	try {
+		const token = sessionStorage.getItem('authToken');
+		const socketUrl = base_url + '/ws' + '?token=' + token;
+		socket = new WebSocket(socketUrl);
+	} catch (e) {
+		console.error(e);
+		setTimeout(connect, 1000);
+		return;
+	}
+	socket.addEventListener('close', () => {
+		connectionStatus.set('disconnected');
+		if (shouldReconnect) {
+			reconnect();
+		}
+	});
+	socket.addEventListener('open', () => {
+		connectionStatus.set('connected');
+		reconnectAttempts = 0;
+		reconnectInterval = 5000;
 
-        // Resubscribe to all active channels and pending subscriptions
-        const allChannels = new Set([...activeChannels.keys(), ...pendingSubscriptions]);
-        for (const channelName of allChannels) {
-            subscribe(channelName);
-        }
-        pendingSubscriptions.clear();
-    });
-    socket.addEventListener('message', (event) => {
-        let data
-        try {
-            data = JSON.parse(event.data);
-            console.log("Received message:", data);
-        } catch {
-            return
-        }
-        
-        // Check if it's an array of SEC filings (each with channel="sec-filings")
-        if (Array.isArray(data) && data.length > 0 && data[0].channel === "sec-filings") {
-            // Special handling for SEC filings array
-            console.log("SEC filings array received:", data);
-            const callbacks = activeChannels.get("sec-filings");
-            if (callbacks) {
-                callbacks.forEach(callback => callback(data));
-            }
-            return;
-        }
-        
-        // Handle single messages as before
-        const channelName = data.channel;
-        if (channelName) {
-            if (channelName === "alert") {
-                handleAlert(data as AlertData);
-            }
-            else if (channelName === "timestamp") {
-                handleTimestampUpdate(data.timestamp);
-            } 
-            else if (channelName === "sec-filings") {
-                // Special handling for single SEC filing
-                console.log("SEC filing message received:", data);
-                const callbacks = activeChannels.get(channelName);
-                if (callbacks) {
-                    callbacks.forEach(callback => callback(data));
-                }
-            }
-            else {
-                const callbacks = activeChannels.get(channelName);
-                if (callbacks) {
-                    callbacks.forEach(callback => callback(data));
-                }
-            }
-        }
-    });
-    socket.addEventListener('error', () => {
-        socket?.close();
-    });
+
+		// Resubscribe to all active channels and pending subscriptions
+		const allChannels = new Set([...activeChannels.keys(), ...pendingSubscriptions]);
+		for (const channelName of allChannels) {
+			subscribe(channelName);
+		}
+		pendingSubscriptions.clear();
+	});
+	socket.addEventListener('message', (event) => {
+		let data;
+		try {
+			data = JSON.parse(event.data);
+		} catch {
+			return;
+		}
+		const channelName = data.channel;
+		if (channelName) {
+			if (channelName === 'alert') {
+				handleAlert(data as AlertData);
+			} else if (channelName === 'timestamp') {
+				handleTimestampUpdate(data.timestamp);
+			} else {
+				const callbacks = activeChannels.get(channelName);
+				if (callbacks) {
+					callbacks.forEach((callback) => callback(data));
+				}
+			}
+		}
+	});
+	socket.addEventListener('error', () => {
+		socket?.close();
+	});
+
 }
 
 function disconnect() {
-    shouldReconnect = false;
-    connectionStatus.set('disconnected');
+	shouldReconnect = false;
+	connectionStatus.set('disconnected');
 
-    if (socket) {
-        activeChannels.forEach((_, channelName) => {
-            unsubscribe(channelName);
-        });
-        socket.close();
-        socket = null;
-    }
+	if (socket) {
+		activeChannels.forEach((_, channelName) => {
+			unsubscribe(channelName);
+		});
+		socket.close();
+		socket = null;
+	}
 }
 
 function reconnect() {
-    if (reconnectAttempts < maxReconnectAttempts) {
-        reconnectAttempts++;
-        const reconnectDelay = Math.min(reconnectInterval * reconnectAttempts, maxReconnectInterval);
-        setTimeout(connect, reconnectDelay);
-    }
+	if (reconnectAttempts < maxReconnectAttempts) {
+		reconnectAttempts++;
+		const reconnectDelay = Math.min(reconnectInterval * reconnectAttempts, maxReconnectInterval);
+		setTimeout(connect, reconnectDelay);
+	}
 }
 
 export function subscribe(channelName: string) {
-    if (socket?.readyState === WebSocket.OPEN) {
-        const subscriptionRequest: SubscriptionRequest = {
-            action: 'subscribe',
-            channelName: channelName,
-        };
-        socket.send(JSON.stringify(subscriptionRequest));
-    } else {
-        // Store the subscription request to be sent when connection is established
-        pendingSubscriptions.add(channelName);
-    }
+	if (socket?.readyState === WebSocket.OPEN) {
+		const subscriptionRequest: SubscriptionRequest = {
+			action: 'subscribe',
+			channelName: channelName
+		};
+		socket.send(JSON.stringify(subscriptionRequest));
+	} else {
+		// Store the subscription request to be sent when connection is established
+		pendingSubscriptions.add(channelName);
+	}
 }
 
 export function unsubscribe(channelName: string) {
-    if (socket?.readyState === WebSocket.OPEN) {
-        const unsubscriptionRequest: SubscriptionRequest = {
-            action: 'unsubscribe',
-            channelName: channelName,
-        };
-        socket.send(JSON.stringify(unsubscriptionRequest));
-    }
+	if (socket?.readyState === WebSocket.OPEN) {
+		const unsubscriptionRequest: SubscriptionRequest = {
+			action: 'unsubscribe',
+			channelName: channelName
+		};
+		socket.send(JSON.stringify(unsubscriptionRequest));
+	}
 }
+
 
 export function subscribeSECFilings() {
     if (socket?.readyState === WebSocket.OPEN) {
@@ -180,6 +161,7 @@ export function unsubscribeSECFilings() {
         }));
     }
 }
+
 
 
 /*export function getInitialValue(channelName: string, callback: StreamCallback) {
@@ -200,6 +182,5 @@ export function unsubscribeSECFilings() {
     //privateRequest(func,{securityId:securityId,timestamp:get(streamInfo).timestamp}).then((data: StreamData) => callback(data)); // might need to fixed
 }
 */
-
 
 // /socket.ts

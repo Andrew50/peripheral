@@ -23,7 +23,6 @@ export default {
 	}
 };
 
-
 /*import adapter from '@sveltejs/adapter-node'; // For production
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 

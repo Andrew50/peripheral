@@ -149,8 +149,14 @@ func GoogleLogin(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error)
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
+	// Print debug information
+	fmt.Printf("Received redirectOrigin: %s\n", args.RedirectOrigin)
+
 	// Update the redirect URL based on the origin
 	googleOauthConfig.RedirectURL = args.RedirectOrigin + "/auth/google/callback"
+
+	// Print the configured redirect URL for debugging
+	fmt.Printf("Updated RedirectURL to: %s\n", googleOauthConfig.RedirectURL)
 
 	state := generateState()
 	url := googleOauthConfig.AuthCodeURL(state)

@@ -38,11 +38,13 @@
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter' || event.key === ' ') {
 			event.preventDefault();
-			queryInstanceInput('any', ['ticker', 'timeframe', 'timestamp', 'extendedHours'], instance).then(
-				(v: Instance) => {
-					queryChart(v, true);
-				}
-			);
+			queryInstanceInput(
+				'any',
+				['ticker', 'timeframe', 'timestamp', 'extendedHours'],
+				instance
+			).then((v: Instance) => {
+				queryChart(v, true);
+			});
 		}
 	}
 
