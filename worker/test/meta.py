@@ -114,6 +114,11 @@ def user_label(data):
     return int(label)
 
 def adaptive_exploration(initial_data, vae, encoder, decoder, classifier, iterations=100):
+    # Define exploration parameters
+    success_threshold = 0.6  # Threshold for successful exploration
+    increase_factor = 1.2    # Factor to increase noise when successful
+    decay_factor = 0.8       # Factor to decrease noise when unsuccessful
+    
     global current_noise_level, success_count, total_count
 
     labeled_data = [(initial_data, 1)]  # Initial sample labeled as an example

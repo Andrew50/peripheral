@@ -95,7 +95,7 @@ def filter(conn, df, metadata, setupId, setupName, threshold, dolvolReq, adrReq,
                     "setupId": setupId,
                     "score": round(score[0] * 100),
                     "securityId": secId,
-                    "timestamp": int(meta["timestamp"].timestamp() * 1000) if meta["timestamp"] is not 0 else 0,
+                    "timestamp": int(meta["timestamp"].timestamp() * 1000) if meta["timestamp"] != 0 else 0,
                     "setup": setupName
                 })
             else:

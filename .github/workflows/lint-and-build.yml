@@ -27,6 +27,9 @@ jobs:
           version: latest
           working-directory: backend
           args: --timeout=5m
+          skip-cache: true
+          skip-pkg-cache: true
+          skip-build-cache: true
 
       - name: Go Build
         run: |
