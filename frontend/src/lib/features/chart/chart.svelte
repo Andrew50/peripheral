@@ -1058,9 +1058,9 @@
 				param.point.y < 0
 			);
 			let bar;
-			let cursorBarIndex;
+			let cursorBarIndex: number | undefined;
 			if (!validCrosshairPoint) {
-				if (param.logical < 0) {
+				if (param?.logical < 0) {
 					bar = allCandleData[0];
 					cursorBarIndex = 0;
 				} else {
@@ -1087,6 +1087,9 @@
 				const cursorTime = bar.time as number;
 				cursorBarIndex = allCandleData.findIndex((candle) => candle.time === cursorTime);
 			}
+
+			// Ensure cursorBarIndex is defined before using it
+			if (cursorBarIndex === undefined) return;
 
 			let barsForADR;
 			if (cursorBarIndex >= 20) {
