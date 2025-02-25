@@ -24,8 +24,16 @@ jobs:
           echo "Checking if DOCKERHUB_USERNAME secret exists: ${{ secrets.DOCKERHUB_USERNAME != '' }}"
           echo "Checking if DOCKERHUB_TOKEN secret exists: ${{ secrets.DOCKERHUB_TOKEN != '' }}"
 
-      # Set up SSH key
-      - name: Set up SSH key
+      # Install Cloudflared
+      - name: Install Cloudflared
+        run: |
+          # Download and install cloudflared
+          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared-linux-amd64.deb
+          cloudflared version
+
+      # Set up SSH key and config
+      - name: Set up SSH key and config
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
@@ -34,19 +42,22 @@ jobs:
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           
-          # Only run keyscan if REMOTE_HOST is not empty
-          if [ -n "$REMOTE_HOST" ]; then
-            ssh-keyscan "$REMOTE_HOST" >> ~/.ssh/known_hosts
-          else
-            echo "Error: REMOTE_HOST is empty or not set"
-            exit 1
-          fi
+          # Create SSH config for Cloudflare Access
+          cat > ~/.ssh/config << EOF
+          Host $REMOTE_HOST
+              ProxyCommand cloudflared access ssh --hostname %h
+              StrictHostKeyChecking no
+              UserKnownHostsFile /dev/null
+              IdentityFile ~/.ssh/id_rsa
+          EOF
           
-          # Verify the key was added
-          echo "SSH key setup complete. Contents of known_hosts:"
-          cat ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/config
+          
+          # Display SSH config for debugging
+          echo "SSH config created:"
+          cat ~/.ssh/config
 
-      # Deploy using direct SSH command
+      # Deploy using direct SSH command with Cloudflare Access
       - name: Deploy to production server
         env:
           REMOTE_USER: ${{ secrets.REMOTE_USER }}
@@ -54,9 +65,9 @@ jobs:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
-          # Verify SSH connection first
-          echo "Testing SSH connection..."
-          ssh -o StrictHostKeyChecking=accept-new -T "$REMOTE_USER@$REMOTE_HOST" "echo SSH connection successful"
+          # Test SSH connection
+          echo "Testing SSH connection through Cloudflare Access..."
+          ssh -v "$REMOTE_USER@$REMOTE_HOST" "echo SSH connection successful"
           
           # Now run the deployment commands
           ssh "$REMOTE_USER@$REMOTE_HOST" '
