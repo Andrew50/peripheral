@@ -11,6 +11,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: prod
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -44,8 +45,31 @@ jobs:
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+          REMOTE_USER: ${{ secrets.REMOTE_USER }}
           CLOUDFLARE_CERT: ${{ secrets.CLOUDFLARE_CERT }}
         run: |
+          # Set default values if secrets are not defined
+          if [ -z "$REMOTE_HOST" ]; then
+            echo "REMOTE_HOST not defined in secrets, using default value"
+            REMOTE_HOST="ssh.atlantis.trading"
+          fi
+          
+          if [ -z "$REMOTE_USER" ]; then
+            echo "REMOTE_USER not defined in secrets, using default value"
+            REMOTE_USER="aj"
+          fi
+          
+          # Validate that required secrets are not empty
+          if [ -z "$SSH_PRIVATE_KEY" ]; then
+            echo "ERROR: SSH_PRIVATE_KEY is empty or not set"
+            exit 1
+          fi
+          
+          if [ -z "$CLOUDFLARE_CERT" ]; then
+            echo "ERROR: CLOUDFLARE_CERT is empty or not set"
+            exit 1
+          fi
+          
           mkdir -p ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
@@ -55,20 +79,28 @@ jobs:
           echo "$CLOUDFLARE_CERT" > ~/.cloudflared/cert.pem
           chmod 600 ~/.cloudflared/cert.pem
           
-          # Create SSH config with Cloudflare Access
-          cat > ~/.ssh/config << EOF
-          Host $REMOTE_HOST
-              ProxyCommand cloudflared access ssh --hostname %h
-              User ${{ secrets.REMOTE_USER }}
-              StrictHostKeyChecking no
-              UserKnownHostsFile /dev/null
-              IdentityFile ~/.ssh/id_rsa
-          EOF
+          # Create SSH config script to avoid YAML indentation issues
+          echo '#!/bin/bash' > create_ssh_config.sh
+          echo "echo \"Host $REMOTE_HOST\" > ~/.ssh/config" >> create_ssh_config.sh
+          echo "echo \"    ProxyCommand cloudflared access ssh --hostname %h\" >> ~/.ssh/config" >> create_ssh_config.sh
+          echo "echo \"    User $REMOTE_USER\" >> ~/.ssh/config" >> create_ssh_config.sh
+          echo "echo \"    StrictHostKeyChecking no\" >> ~/.ssh/config" >> create_ssh_config.sh
+          echo "echo \"    UserKnownHostsFile /dev/null\" >> ~/.ssh/config" >> create_ssh_config.sh
+          echo "echo \"    IdentityFile ~/.ssh/id_rsa\" >> ~/.ssh/config" >> create_ssh_config.sh
+          
+          # Execute script to create config
+          chmod +x create_ssh_config.sh
+          ./create_ssh_config.sh
           
           chmod 600 ~/.ssh/config
           
-          # Display SSH config for debugging
+          # Display SSH config for debugging (with masking sensitive data)
           echo "SSH config created:"
+          echo "Host: $REMOTE_HOST"
+          echo "User: $REMOTE_USER"
+          echo "Config file exists: $(test -f ~/.ssh/config && echo 'Yes' || echo 'No')"
+          echo "Config file permissions: $(ls -la ~/.ssh/config | awk '{print $1}')"
+          echo "SSH config content:"
           cat ~/.ssh/config
 
       # Deploy using Cloudflare SSH command
@@ -79,21 +111,41 @@ jobs:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
+          # Set default values if secrets are not defined
+          if [ -z "$REMOTE_HOST" ]; then
+            echo "REMOTE_HOST not defined in secrets, using default value"
+            REMOTE_HOST="ssh.atlantis.trading"
+          fi
+          
+          if [ -z "$REMOTE_USER" ]; then
+            echo "REMOTE_USER not defined in secrets, using default value"
+            REMOTE_USER="aj"
+          fi
+          
           # Print debug information about SSH parameters
           echo "==== SSH CONNECTION DEBUG INFO ===="
-          echo "Target host: $REMOTE_HOST"
-          echo "SSH user: $REMOTE_USER"
+          echo "Target host: '$REMOTE_HOST'"
+          echo "SSH user: '$REMOTE_USER'"
+          echo "Docker username length: ${#DOCKERHUB_USERNAME}"
+          echo "Docker token defined: $([ -n "$DOCKERHUB_TOKEN" ] && echo 'Yes' || echo 'No')"
           echo "SSH config file contents:"
-          cat ~/.ssh/config | grep -v IdentityFile
+          cat ~/.ssh/config
+          echo "SSH config directory permissions:"
+          ls -la ~/.ssh/
           echo "Using identity file: ~/.ssh/id_rsa (exists: $(test -f ~/.ssh/id_rsa && echo 'Yes' || echo 'No'))"
+          echo "Identity file permissions: $(ls -la ~/.ssh/id_rsa | awk '{print $1}')"
           echo "Cloudflared cert exists: $(test -f ~/.cloudflared/cert.pem && echo 'Yes' || echo 'No')"
+          echo "Cloudflared cert permissions: $(ls -la ~/.cloudflared/cert.pem | awk '{print $1}')"
           echo "Cloudflared version: $(cloudflared --version)"
+          echo "Cloudflared info: $(cloudflared info)"
+          echo "Which cloudflared: $(which cloudflared)"
           echo "ProxyCommand that will be used: $(grep ProxyCommand ~/.ssh/config | cut -d' ' -f3-)"
+          echo "DNS resolution test for host: $(host $REMOTE_HOST || echo 'DNS resolution failed')"
           echo "==== END SSH DEBUG INFO ===="
           
-          # Test SSH connection
-          echo "Testing SSH connection..."
-          ssh -v "$REMOTE_HOST" "echo SSH connection successful"
+          # Test SSH connection with all debug flags
+          echo "Testing SSH connection with maximum verbosity..."
+          ssh -vvv "$REMOTE_HOST" "echo SSH connection successful"
           
           # Now run the deployment commands
           ssh "$REMOTE_HOST" '
