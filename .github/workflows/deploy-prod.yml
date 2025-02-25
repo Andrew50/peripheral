@@ -29,12 +29,10 @@ jobs:
             
             # Set up environment for Docker login
             echo "Attempting Docker login on remote server..."
-            export DOCKER_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
-            export DOCKER_TOKEN="${{ secrets.DOCKERHUB_TOKEN }}"
             
             # Login to Docker Hub with verbose output
             echo "Running Docker login command..."
-            docker login docker.io -u "$DOCKER_USERNAME" -p "$DOCKER_TOKEN" || {
+            docker login docker.io -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}" || {
               echo "Docker login failed with exit code $?"
               echo "Docker login error details:"
               docker info
@@ -47,45 +45,45 @@ jobs:
             
             # Backend
             echo "Building backend image..."
-            docker build -t "$DOCKER_USERNAME/backend:latest" -f ./backend/Dockerfile.prod ./backend
+            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/backend:latest" -f ./backend/Dockerfile.prod ./backend
             echo "Pushing backend image..."
-            docker push "$DOCKER_USERNAME/backend:latest"
+            docker push "${{ secrets.DOCKERHUB_USERNAME }}/backend:latest"
             
             # Frontend
             echo "Building frontend image..."
-            docker build -t "$DOCKER_USERNAME/frontend:latest" -f ./frontend/Dockerfile.prod ./frontend
+            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest" -f ./frontend/Dockerfile.prod ./frontend
             echo "Pushing frontend image..."
-            docker push "$DOCKER_USERNAME/frontend:latest"
+            docker push "${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest"
             
             # Database
             echo "Building database image..."
-            docker build -t "$DOCKER_USERNAME/db:latest" -f ./db/Dockerfile.prod ./db
+            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/db:latest" -f ./db/Dockerfile.prod ./db
             echo "Pushing database image..."
-            docker push "$DOCKER_USERNAME/db:latest"
+            docker push "${{ secrets.DOCKERHUB_USERNAME }}/db:latest"
             
             # Worker
             echo "Building worker image..."
-            docker build -t "$DOCKER_USERNAME/worker:latest" -f ./worker/Dockerfile ./worker
+            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/worker:latest" -f ./worker/Dockerfile ./worker
             echo "Pushing worker image..."
-            docker push "$DOCKER_USERNAME/worker:latest"
+            docker push "${{ secrets.DOCKERHUB_USERNAME }}/worker:latest"
             
             # TF
             echo "Building tf image..."
-            docker build -t "$DOCKER_USERNAME/tf:latest" -f ./tf/Dockerfile ./tf
+            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/tf:latest" -f ./tf/Dockerfile ./tf
             echo "Pushing tf image..."
-            docker push "$DOCKER_USERNAME/tf:latest"
+            docker push "${{ secrets.DOCKERHUB_USERNAME }}/tf:latest"
             
             # Cache
             echo "Building cache image..."
-            docker build -t "$DOCKER_USERNAME/cache:latest" -f ./cache/Dockerfile ./cache
+            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/cache:latest" -f ./cache/Dockerfile ./cache
             echo "Pushing cache image..."
-            docker push "$DOCKER_USERNAME/cache:latest"
+            docker push "${{ secrets.DOCKERHUB_USERNAME }}/cache:latest"
             
             # Nginx
             echo "Building nginx image..."
-            docker build -t "$DOCKER_USERNAME/nginx:latest" -f ./nginx/Dockerfile ./nginx
+            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/nginx:latest" -f ./nginx/Dockerfile ./nginx
             echo "Pushing nginx image..."
-            docker push "$DOCKER_USERNAME/nginx:latest"
+            docker push "${{ secrets.DOCKERHUB_USERNAME }}/nginx:latest"
             
             # Apply Kubernetes configurations
             echo "Applying Kubernetes configurations..."
