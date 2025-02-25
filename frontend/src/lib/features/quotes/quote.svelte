@@ -7,14 +7,23 @@
 	import { activeChartInstance, queryChart } from '$lib/features/chart/interface';
 	import StreamCell from '$lib/utils/stream/streamCell.svelte';
 	import { streamInfo, formatTimestamp } from '$lib/core/stores';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { privateRequest } from '$lib/core/backend';
+	import {
+		UTCSecondstoESTSeconds,
+		ESTSecondstoUTCSeconds,
+		ESTSecondstoUTCMillis,
+		getReferenceStartTimeForDateMilliseconds,
+		timeframeToSeconds
+	} from '$lib/core/timestamp';
 
 	let instance: Writable<Instance> = writable({});
 	let container: HTMLDivElement;
 	let showTimeAndSales = false;
 	let currentDetails: Record<string, any> = {};
 	let lastFetchedSecurityId: number | null = null;
+	let countdown = writable('--');
+	let countdownInterval: ReturnType<typeof setInterval>;
 
 	// Sync instance with activeChartInstance and handle details fetching
 	activeChartInstance.subscribe((chartInstance: Instance | null) => {
@@ -82,13 +91,79 @@
 		container.addEventListener('keydown', handleKey);
 	}
 
+	function formatTime(seconds: number): string {
+		const years = Math.floor(seconds / (365 * 24 * 60 * 60));
+		const months = Math.floor((seconds % (365 * 24 * 60 * 60)) / (30 * 24 * 60 * 60));
+		const weeks = Math.floor((seconds % (30 * 24 * 60 * 60)) / (7 * 24 * 60 * 60));
+		const days = Math.floor((seconds % (7 * 24 * 60 * 60)) / (24 * 60 * 60));
+		const hours = Math.floor((seconds % (24 * 60 * 60)) / (60 * 60));
+		const minutes = Math.floor((seconds % (60 * 60)) / 60);
+		const secs = Math.floor(seconds % 60);
+
+		if (years > 0) return `${years}y ${months}m`;
+		if (months > 0) return `${months}m ${weeks}w`;
+		if (weeks > 0) return `${weeks}w ${days}d`;
+		if (days > 0) return `${days}d ${hours}h`;
+		if (hours > 0) return `${hours}h ${minutes}m`;
+		if (minutes > 0) return `${minutes}m ${secs < 10 ? '0' : ''}${secs}s`;
+		return `${secs < 10 ? '0' : ''}${secs}s`;
+	}
+
+	function calculateCountdown() {
+		const currentInst = get(instance);
+		if (!currentInst?.timeframe) {
+			countdown.set('--');
+			return;
+		}
+
+		const currentTimeInSeconds = Math.floor($streamInfo.timestamp / 1000);
+		const chartTimeframeInSeconds = timeframeToSeconds(currentInst.timeframe, currentTimeInSeconds);
+
+		let nextBarClose =
+			currentTimeInSeconds -
+			(currentTimeInSeconds % chartTimeframeInSeconds) +
+			chartTimeframeInSeconds;
+
+		// For daily timeframes, adjust to market close (4:00 PM EST)
+		if (currentInst.timeframe.includes('d')) {
+			const nextCloseDate = new Date(nextBarClose * 1000);
+			const estOptions = { timeZone: 'America/New_York', hour12: false };
+			const formatter = new Intl.DateTimeFormat('en-US', {
+				...estOptions,
+				year: 'numeric',
+				month: 'numeric',
+				day: 'numeric'
+			});
+
+			const [month, day, year] = formatter.format(nextCloseDate).split('/');
+			const marketCloseDate = new Date(
+				`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T16:00:00`
+			);
+			marketCloseDate.setTime(
+				marketCloseDate.getTime() + marketCloseDate.getTimezoneOffset() * 60 * 1000
+			);
+			nextBarClose = Math.floor(marketCloseDate.getTime() / 1000);
+		}
+
+		const currentTimeEST = UTCSecondstoESTSeconds(currentTimeInSeconds);
+		const remainingTime = nextBarClose - currentTimeEST;
+
+		if (remainingTime > 0) {
+			countdown.set(formatTime(remainingTime));
+		} else {
+			countdown.set('Bar Closed');
+		}
+	}
+
 	onMount(() => {
 		document.addEventListener('mousemove', handleMouseMove);
 		document.addEventListener('mouseup', handleMouseUp);
+		countdownInterval = setInterval(calculateCountdown, 1000);
 
 		return () => {
 			document.removeEventListener('mousemove', handleMouseMove);
 			document.removeEventListener('mouseup', handleMouseUp);
+			clearInterval(countdownInterval);
 		};
 	});
 
@@ -151,6 +226,12 @@
 			{#if showTimeAndSales}
 				<TimeAndSales {instance} />
 			{/if}
+			<div class="countdown-section">
+				<div class="countdown-container">
+					<span class="countdown-label">Next Bar Close:</span>
+					<span class="countdown-value">{$countdown}</span>
+				</div>
+			</div>
 		</div>
 
 		<div class="info-row">
@@ -340,5 +421,39 @@
 		margin-top: 15px;
 		border-top: 1px solid var(--ui-border);
 		padding-top: 15px;
+	}
+
+	.countdown-section {
+		margin-top: 10px;
+		padding-top: 10px;
+		border-top: 1px solid var(--ui-border);
+	}
+
+	.countdown-container {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 8px;
+		background: var(--ui-bg-secondary);
+		border-radius: 4px;
+		border: 1px solid var(--ui-border);
+	}
+
+	.countdown-label {
+		color: var(--text-secondary);
+		font-size: 0.9em;
+		font-weight: 500;
+	}
+
+	.countdown-value {
+		font-family: var(--font-primary);
+		font-weight: 600;
+		font-size: 0.9em;
+		color: var(--text-primary);
+		padding: 4px 8px;
+		background: var(--ui-bg-primary);
+		border-radius: 4px;
+		min-width: 80px;
+		text-align: center;
 	}
 </style>
