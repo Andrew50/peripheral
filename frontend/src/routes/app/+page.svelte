@@ -63,7 +63,14 @@
 	let chartWidth = 0;
 
 	// Bottom windows
-	type BottomWindowType = 'screener' | 'account' | 'active' | 'options' | 'setups' | 'settings' | 'newsfeed';
+	type BottomWindowType =
+		| 'screener'
+		| 'account'
+		| 'active'
+		| 'options'
+		| 'setups'
+		| 'settings'
+		| 'newsfeed';
 	interface BottomWindow {
 		id: number;
 		type: BottomWindowType;
@@ -628,6 +635,27 @@
 		// Increment key to force re-render when profile data changes
 		profileIconKey++;
 	}
+
+	function handleKeyboardBottomResize(e: KeyboardEvent) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			startBottomResize(new MouseEvent('mousedown'));
+		}
+	}
+
+	function handleKeyboardSidebarResize(e: KeyboardEvent) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			startSidebarResize(new MouseEvent('mousedown'));
+		}
+	}
+
+	function handleKeyboardResize(e: KeyboardEvent) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			startResize(new MouseEvent('mousedown'));
+		}
+	}
 </script>
 
 <div
@@ -678,7 +706,14 @@
 						</div>
 					{/each}
 					{#if bottomWindows.length > 0}
-						<div class="bottom-resize-handle" on:mousedown={startBottomResize}></div>
+						<div
+							class="bottom-resize-handle"
+							role="separator"
+							aria-orientation="horizontal"
+							on:mousedown={startBottomResize}
+							on:keydown={handleKeyboardBottomResize}
+							tabindex="0"
+						></div>
 					{/if}
 				</div>
 			</div>
@@ -686,7 +721,15 @@
 			<!-- Sidebar -->
 			{#if $menuWidth > 0}
 				<div class="sidebar" style="width: {$menuWidth}px;">
-					<div class="resize-handle" on:mousedown={startResize} on:touchstart={startResize} />
+					<div
+						class="resize-handle"
+						role="separator"
+						aria-orientation="vertical"
+						on:mousedown={startResize}
+						on:touchstart={startResize}
+						on:keydown={handleKeyboardResize}
+						tabindex="0"
+					/>
 					<div class="sidebar-content">
 						<!-- Main sidebar content -->
 						<div class="main-sidebar-content">
@@ -705,8 +748,12 @@
 
 						<div
 							class="sidebar-resize-handle"
+							role="separator"
+							aria-orientation="horizontal"
 							on:mousedown={startSidebarResize}
 							on:touchstart|preventDefault={startSidebarResize}
+							on:keydown={handleKeyboardSidebarResize}
+							tabindex="0"
 						></div>
 
 						<div class="ticker-info-container">
@@ -829,18 +876,24 @@
 				<i class="fas fa-tv"></i>
 			</button>
 
-			<img
-				src={getProfileDisplay()}
-				alt="Profile"
-				class="pfp"
-				on:click={toggleSettings}
-				on:error={handleProfilePicError}
-			/>
+			<button class="profile-button" on:click={toggleSettings} aria-label="Toggle Settings">
+				<img src={getProfileDisplay()} alt="Profile" class="pfp" on:error={handleProfilePicError} />
+			</button>
 		</div>
 	</div>
 
 	{#if showSettingsPopup}
-		<div class="settings-overlay" on:click|self={toggleSettings}>
+		<div
+			class="settings-overlay"
+			role="dialog"
+			aria-label="Settings"
+			on:click|self={toggleSettings}
+			on:keydown={(e) => {
+				if (e.key === 'Escape') {
+					toggleSettings();
+				}
+			}}
+		>
 			<div class="settings-modal">
 				<div class="settings-header">
 					<h2>Settings</h2>
@@ -1215,12 +1268,8 @@
 	.bottom-bar button,
 	.side-btn,
 	.menu-icon,
-	.timestamp,
 	.pfp,
-	.window-header,
-	.window-title,
 	.close-btn,
-	.minimize-btn,
 	.speed-label {
 		-webkit-user-select: none;
 		-moz-user-select: none;
