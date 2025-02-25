@@ -122,6 +122,7 @@ export async function privateRequest<T>(
 
     if (response.status === 401) {
         goto('/login');
+        throw new Error('Authentication failed');
     } else if (response.ok) {
         const result = (await response.json()) as T;
         if (verbose) {

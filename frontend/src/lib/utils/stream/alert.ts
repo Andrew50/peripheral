@@ -23,8 +23,14 @@ export function handleAlert(data: AlertData) {
 		// Update alert logs
 		alertLogs.update((currentLogs: AlertLog[] | undefined) => {
 			if (currentLogs !== undefined) {
-				return [...currentLogs, data];
+				// Create an AlertLog object from the AlertData
+				const alertLog: AlertLog = {
+					...data,
+					alertType: 'triggered' // Add required property
+				};
+				return [...currentLogs, alertLog];
 			}
+			return currentLogs; // Return unchanged if undefined
 		});
 	}
 }

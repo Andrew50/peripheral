@@ -18,7 +18,10 @@ export function newAlert(alert: Alert) {
 	if (alert.price) {
 		alert.price = parseFloat(alert.price.toFixed(2));
 	}
-	privateRequest<Alert>('newAlert', alert).then((createdAlert: Alert) => {
+	// Convert Alert to Record<string, unknown> to satisfy the type requirement
+	const alertRecord: Record<string, unknown> = { ...alert };
+
+	privateRequest<Alert>('newAlert', alertRecord).then((createdAlert: Alert) => {
 		createdAlert.ticker = alert.ticker;
 		if (activeAlerts !== undefined) {
 			activeAlerts.update((currentAlerts: Alert[] | undefined) => {

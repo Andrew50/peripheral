@@ -675,7 +675,7 @@
 		const isExtendedHours = extendedHours(trade.timestamp);
 		if (
 			isExtendedHours &&
-			(!currentChartInstance.extendedHours || /^[dwm]/.test(currentChartInstance.timeframe))
+			(!currentChartInstance.extendedHours || /^[dwm]/.test(currentChartInstance.timeframe || ''))
 		) {
 			return;
 		}
@@ -683,6 +683,15 @@
 		const dolvol = get(settings).dolvol;
 		const mostRecentBar = chartCandleSeries.data().at(-1);
 		if (!mostRecentBar) return;
+
+		// Type guard for CandlestickData
+		const isCandlestick = (data: any): data is CandlestickData<Time> =>
+			'open' in data && 'high' in data && 'low' in data && 'close' in data;
+
+		// Type guard for HistogramData
+		const isHistogram = (data: any): data is HistogramData<Time> => 'value' in data;
+
+		if (!isCandlestick(mostRecentBar)) return;
 
 		currentBarTimestamp = mostRecentBar.time as number;
 		const tradeTime = UTCSecondstoESTSeconds(trade.timestamp / 1000);
@@ -703,7 +712,7 @@
 			}
 
 			const lastVolume = chartVolumeSeries.data().at(-1);
-			if (lastVolume) {
+			if (lastVolume && isHistogram(lastVolume)) {
 				chartVolumeSeries.update({
 					time: mostRecentBar.time,
 					value: lastVolume.value + trade.size,
@@ -1053,9 +1062,16 @@
 				if (!bar) {
 					return;
 				}
-				const cursorTime = bar.time as number;
-				cursorBarIndex = allCandleData.findIndex((candle) => candle.time === cursorTime);
 			}
+
+			// Type guard to check if bar is CandlestickData
+			const isCandlestick = (data: any): data is CandlestickData<Time> =>
+				'open' in data && 'high' in data && 'low' in data && 'close' in data;
+
+			if (!isCandlestick(bar)) {
+				return; // Skip if the bar is not CandlestickData
+			}
+
 			let barsForADR;
 			if (cursorBarIndex >= 20) {
 				barsForADR = allCandleData.slice(cursorBarIndex - 19, cursorBarIndex + 1);
@@ -1065,35 +1081,52 @@
 			let chg = 0;
 			let chgprct = 0;
 			if (cursorBarIndex > 0) {
-				chg = bar.close - allCandleData[cursorBarIndex - 1].close;
-				chgprct = (bar.close / allCandleData[cursorBarIndex - 1].close - 1) * 100;
+				const prevBar = allCandleData[cursorBarIndex - 1];
+
+				if (isCandlestick(prevBar)) {
+					chg = bar.close - prevBar.close;
+					chgprct = (bar.close / prevBar.close - 1) * 100;
+				}
 			}
-			const mcap = $hoveredCandleData.mcap;
+
 			hoveredCandleData.set({
 				open: bar.open,
 				high: bar.high,
 				low: bar.low,
 				close: bar.close,
 				volume: volume,
-				adr: calculateSingleADR(barsForADR),
+				adr: calculateSingleADR(
+					barsForADR.filter(
+						(candle) => 'open' in candle && 'high' in candle && 'low' in candle && 'close' in candle
+					) as CandlestickData<Time>[]
+				),
 				chg: chg,
 				chgprct: chgprct,
-				rvol: 0,
-				mcap: mcap
+				rvol: 0
 			});
-			if (/^\d+$/.test(currentChartInstance.timeframe)) {
+			if (currentChartInstance.timeframe && /^\d+$/.test(currentChartInstance.timeframe)) {
 				let barsForRVOL;
 				if (cursorBarIndex >= 1000) {
 					barsForADR = allCandleData.slice(cursorBarIndex - 1000, cursorBarIndex + 1);
 				} else {
-					barsForRVOL = chartVolumeSeries.data().slice(0, cursorBarIndex + 1);
+					// Transform the histogram data to the format expected by calculateRVOL
+					const volumeData = chartVolumeSeries.data().slice(0, cursorBarIndex + 1);
+					barsForRVOL = volumeData
+						.filter((bar) => 'value' in bar) // Filter to ensure only HistogramData is included
+						.map((bar) => ({
+							time: bar.time as UTCTimestamp,
+							value: (bar as HistogramData<Time>).value || 0
+						}));
 				}
-				calculateRVOL(barsForRVOL, currentChartInstance.securityId).then((r: any) => {
-					hoveredCandleData.update((v) => {
-						v.rvol = r;
-						return v;
+				// Only call calculateRVOL if barsForRVOL is defined
+				if (barsForRVOL && barsForRVOL.length > 0) {
+					calculateRVOL(barsForRVOL, currentChartInstance.securityId).then((r: any) => {
+						hoveredCandleData.update((v) => {
+							v.rvol = r;
+							return v;
+						});
 					});
-				});
+				}
 			}
 			latestCrosshairPositionTime = bar.time as number;
 			latestCrosshairPositionY = param.point.y as number; //inccorect
