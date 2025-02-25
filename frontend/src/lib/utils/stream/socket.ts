@@ -6,6 +6,7 @@ import { base_url } from '$lib/core/backend';
 import { browser } from '$app/environment';
 import { handleAlert } from './alert';
 import type { AlertData } from '$lib/core/types';
+
 export type TimeType = 'regular' | 'extended';
 export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
 
@@ -18,6 +19,7 @@ export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
 		| 'quote'
 		| 'all'; //all trades
 
+
 export type StreamData = TradeData | QuoteData | CloseData | number;
 export type StreamCallback = (v: TradeData | QuoteData | CloseData | number) => void;
 
@@ -26,12 +28,13 @@ export const connectionStatus = writable<'connected' | 'disconnected' | 'connect
 export const pendingSubscriptions = new Set<string>();
 
 export type SubscriptionRequest = {
+
 	action: 'subscribe' | 'unsubscribe' | 'replay' | 'pause' | 'play' | 'realtime' | 'speed';
 	channelName?: string;
 	timestamp?: number;
 	speed?: number;
 	extendedHours?: boolean;
-};
+
 
 export let socket: WebSocket | null = null;
 let reconnectInterval: number = 5000; //ms
@@ -62,6 +65,7 @@ function connect() {
 		connectionStatus.set('connected');
 		reconnectAttempts = 0;
 		reconnectInterval = 5000;
+
 
 		// Resubscribe to all active channels and pending subscriptions
 		const allChannels = new Set([...activeChannels.keys(), ...pendingSubscriptions]);
@@ -94,6 +98,7 @@ function connect() {
 	socket.addEventListener('error', () => {
 		socket?.close();
 	});
+
 }
 
 function disconnect() {
@@ -139,6 +144,25 @@ export function unsubscribe(channelName: string) {
 		socket.send(JSON.stringify(unsubscriptionRequest));
 	}
 }
+
+
+export function subscribeSECFilings() {
+    if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            action: 'subscribe-sec-filings'
+        }));
+    }
+}
+
+export function unsubscribeSECFilings() {
+    if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            action: 'unsubscribe-sec-filings'
+        }));
+    }
+}
+
+
 
 /*export function getInitialValue(channelName: string, callback: StreamCallback) {
     console.warn("getInitialValue", channelName)

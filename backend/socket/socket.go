@@ -84,6 +84,56 @@ type AlertMessage struct {
 	Ticker     string `json:"ticker"`
 }
 
+// SECFilingMessage represents a single SEC filing message to be sent over WebSocket
+type SECFilingMessage struct {
+	Type      string `json:"type"`      // Filing type (e.g., "10-K", "8-K")
+	Date      string `json:"date"`      // Filing date as string
+	URL       string `json:"url"`       // URL to the filing
+	Timestamp int64  `json:"timestamp"` // UTC timestamp in milliseconds
+	Ticker    string `json:"ticker"`    // The ticker symbol
+	Channel   string `json:"channel"`   // Channel name (always "sec-filings")
+}
+
+// BroadcastSECFiling sends a new SEC filing to all clients subscribed to the sec-filings channel
+func BroadcastSECFiling(filing utils.EDGARFiling, ticker string) {
+	filingMessage := SECFilingMessage{
+		Type:      filing.Type,
+		Date:      filing.Date.Format("2006-01-02"),
+		URL:       filing.URL,
+		Timestamp: filing.Timestamp,
+		Ticker:    ticker,
+		Channel:   "sec-filings",
+	}
+
+	jsonData, err := json.Marshal(filingMessage)
+	if err != nil {
+		fmt.Println("Error marshaling SEC filing:", err)
+		return
+	}
+
+	broadcastToChannel("sec-filings", string(jsonData))
+}
+
+// BroadcastGlobalSECFiling sends a new global SEC filing to all clients subscribed to the sec-filings channel
+func BroadcastGlobalSECFiling(filing utils.GlobalEDGARFiling) {
+	filingMessage := SECFilingMessage{
+		Type:      filing.Type,
+		Date:      filing.Date.Format("2006-01-02"),
+		URL:       filing.URL,
+		Timestamp: filing.Timestamp,
+		Ticker:    filing.Ticker,
+		Channel:   "sec-filings",
+	}
+
+	jsonData, err := json.Marshal(filingMessage)
+	if err != nil {
+		fmt.Println("Error marshaling global SEC filing:", err)
+		return
+	}
+
+	broadcastToChannel("sec-filings", string(jsonData))
+}
+
 func SendAlertToUser(userID int, alert AlertMessage) {
 	jsonData, err := json.Marshal(alert)
 	if err == nil {
@@ -151,6 +201,12 @@ func (c *Client) readPump(conn *utils.Conn) {
 		os.Stdout.Sync()
 		//fmt.Printf("clientMsg.Action: %v %v\n", clientMsg.Action, clientMsg.ChannelName)
 		switch clientMsg.Action {
+		case "subscribe-sec-filings":
+			// Special handler for SEC filings subscription
+			c.subscribeSECFilings(conn)
+		case "unsubscribe-sec-filings":
+			// Special handler for SEC filings unsubscription
+			c.unsubscribeSECFilings()
 		case "subscribe":
 			if c.replayActive {
 				c.subscribeReplay(clientMsg.ChannelName)
@@ -342,6 +398,78 @@ func broadcastTimestamp() {
 		lastTimestampUpdate = now
 	}
 	timestampMutex.Unlock()
+}
+
+// subscribeSECFilings handles subscription to the SEC filings feed
+func (c *Client) subscribeSECFilings(conn *utils.Conn) {
+	channelName := "sec-filings"
+	fmt.Printf("\nGot subscription to SEC filings feed\n")
+
+	// Add client to the channel subscribers
+	channelsMutex.Lock()
+	if _, exists := channelSubscribers[channelName]; !exists {
+		channelSubscribers[channelName] = make(map[*Client]bool)
+	}
+	channelSubscribers[channelName][c] = true
+	channelSubscriberCounts[channelName]++
+	channelsMutex.Unlock()
+
+	// Get the latest filings from the cache
+	if conn != nil {
+		// Get the latest 50 filings from the cache
+		latestFilings := utils.GetLatestEdgarFilings()
+
+		// Limit to 50 filings if there are more
+		if len(latestFilings) > 50 {
+			latestFilings = latestFilings[:50]
+		}
+
+		if len(latestFilings) > 0 {
+			// Add channel field to each filing
+			filingMessages := make([]SECFilingMessage, len(latestFilings))
+			for i, filing := range latestFilings {
+				filingMessages[i] = SECFilingMessage{
+					Type:      filing.Type,
+					Date:      filing.Date.Format("2006-01-02"),
+					URL:       filing.URL,
+					Timestamp: filing.Timestamp,
+					Ticker:    filing.Ticker,
+					Channel:   "sec-filings",
+				}
+			}
+
+			// Send the initial data
+			jsonData, err := json.Marshal(filingMessages)
+			if err == nil {
+				c.send <- jsonData
+				fmt.Printf("Sent %d initial SEC filings to client\n", len(filingMessages))
+			} else {
+				fmt.Println("Error marshaling SEC filings:", err)
+			}
+		} else {
+			fmt.Println("No SEC filings available to send initially")
+		}
+	}
+
+	fmt.Printf("Client subscribed to SEC filings feed, %d subscribers\n",
+		channelSubscriberCounts[channelName])
+}
+
+// unsubscribeSECFilings handles unsubscription from the SEC filings feed
+func (c *Client) unsubscribeSECFilings() {
+	channelName := "sec-filings"
+
+	channelsMutex.Lock()
+	defer channelsMutex.Unlock()
+
+	if subscribers, exists := channelSubscribers[channelName]; exists {
+		if _, ok := subscribers[c]; ok {
+			delete(subscribers, c)
+			channelSubscriberCounts[channelName]--
+			fmt.Printf("Client unsubscribed from SEC filings feed, %d subscribers remaining\n",
+				channelSubscriberCounts[channelName])
+		}
+	}
 }
 
 // /socket.go
