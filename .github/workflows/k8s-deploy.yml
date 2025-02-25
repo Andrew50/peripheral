@@ -18,11 +18,15 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Login to Docker Hub or your registry
+      - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          # If using GitHub Container Registry, use these instead:
+          # registry: ghcr.io
+          # username: ${{ github.actor }}
+          # password: ${{ secrets.GITHUB_TOKEN }}
 
       # Build and push all images with unique tags based on commit SHA
       - name: Set image tag
@@ -36,8 +40,8 @@ jobs:
           file: ./backend/Dockerfile.prod
           push: true
           tags: |
-            yourrepo/backend:latest
-            yourrepo/backend:${{ env.SHA_TAG }}
+            billin19/backend:latest
+            billin19/backend:${{ env.SHA_TAG }}
 
       - name: Build and push frontend
         uses: docker/build-push-action@v4
@@ -46,10 +50,18 @@ jobs:
           file: ./frontend/Dockerfile.prod
           push: true
           tags: |
-            yourrepo/frontend:latest
-            yourrepo/frontend:${{ env.SHA_TAG }}
+            billin19/frontend:latest
+            billin19/frontend:${{ env.SHA_TAG }}
 
-      # Add similar steps for other services...
+      - name: Build and push worker
+        uses: docker/build-push-action@v4
+        with:
+          context: ./worker
+          file: ./worker/Dockerfile
+          push: true
+          tags: |
+            billin19/worker:latest
+            billin19/worker:${{ env.SHA_TAG }}
 
       # Set up kubectl
       - name: Set up kubectl
@@ -67,24 +79,34 @@ jobs:
       # Update image tags in manifests
       - name: Update image tags in Kubernetes manifests
         run: |
-          sed -i "s|image: yourrepo/backend:latest|image: yourrepo/backend:${{ env.SHA_TAG }}|g" kubernetes/backend-deployment.yaml
-          sed -i "s|image: yourrepo/frontend:latest|image: yourrepo/frontend:${{ env.SHA_TAG }}|g" kubernetes/frontend-deployment.yaml
+          sed -i "s|image: billin19/backend:latest|image: billin19/backend:${{ env.SHA_TAG }}|g" prod/config/backend.yaml
+          sed -i "s|image: billin19/frontend:latest|image: billin19/frontend:${{ env.SHA_TAG }}|g" prod/config/frontend.yaml
+          sed -i "s|image: billin19/worker:latest|image: billin19/worker:${{ env.SHA_TAG }}|g" prod/config/worker.yaml
           # Update other manifests similarly
 
       # Apply Kubernetes manifests with zero downtime strategy
       - name: Apply Kubernetes manifests
         run: |
           # Apply database changes first and wait for readiness
-          kubectl apply -f kubernetes/db-statefulset.yaml
+          kubectl apply -f prod/config/db.yaml
           kubectl rollout status statefulset/db --timeout=300s
           
-          # Apply other backend services
-          kubectl apply -f kubernetes/backend-deployment.yaml
+          # Apply cache service
+          kubectl apply -f prod/config/cache.yaml
+          kubectl rollout status deployment/cache --timeout=300s
+          
+          # Apply backend services
+          kubectl apply -f prod/config/backend.yaml
           kubectl rollout status deployment/backend --timeout=300s
           
+          # Apply worker services
+          kubectl apply -f prod/config/worker.yaml
+          kubectl rollout status deployment/worker --timeout=300s
+          
           # Apply frontend last
-          kubectl apply -f kubernetes/frontend-deployment.yaml
+          kubectl apply -f prod/config/frontend.yaml
           kubectl rollout status deployment/frontend --timeout=300s
           
-          # Apply ingress configuration
-          kubectl apply -f kubernetes/ingress.yaml 
+          # Apply nginx configuration
+          kubectl apply -f prod/config/nginx.yaml
+          kubectl rollout status deployment/nginx --timeout=300s 
