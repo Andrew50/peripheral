@@ -4,7 +4,8 @@ import type {
 	CustomData,
 	CustomSeriesOptions,
 	PaneRendererCustomData,
-	CustomSeriesWhitespaceData
+	CustomSeriesWhitespaceData,
+	PriceLineSource
 } from 'lightweight-charts';
 import type { Time, CustomSeriesPricePlotValues } from 'lightweight-charts';
 import { ColorType } from 'lightweight-charts';
@@ -139,7 +140,7 @@ export class EventMarkersPaneView
 		data: PaneRendererCustomData<Time, EventMarker>,
 		seriesOptions: CustomSeriesOptions
 	): void {
-		this.markers = [...data.bars]; // Use spread operator to create mutable copy
+		this.markers = [...data.bars] as unknown as EventMarker[]; // Use type assertion with unknown as intermediate step
 		this.options = seriesOptions;
 		this.visibleRange = data.visibleRange || { from: 0, to: 0 }; // Handle null case
 	}
@@ -162,14 +163,14 @@ export class EventMarkersPaneView
 			title: 'Event Markers',
 			visible: true,
 			priceLineVisible: false,
-			priceLineSource: "lastVisible" as const,
+			priceLineSource: "lastVisible" as unknown as PriceLineSource,
 			priceLineWidth: 1,
 			priceFormat: {
 				type: 'price',
 				precision: 2,
 				minMove: 0.01
 			}
-		};
+		} as CustomSeriesOptions;
 	}
 
 	destroy(): void { }
