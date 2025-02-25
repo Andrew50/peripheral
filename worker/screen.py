@@ -2,26 +2,35 @@ import requests
 import datetime
 from data import getTensor
 
+
 def getHistoricalTickers(conn, timestamp):
-    if isinstance(timestamp, (int, float)):  # Assuming timestamp is a Unix timestamp in seconds
+    if isinstance(
+        timestamp, (int, float)
+    ):  # Assuming timestamp is a Unix timestamp in seconds
         timestamp = datetime.datetime.fromtimestamp(timestamp)
     with conn.db.cursor() as cursor:
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT ticker 
             FROM securities 
             WHERE minDate <= %s 
               AND (maxDate > %s OR maxDate IS NULL)
-        ''', (timestamp, timestamp))
+        """,
+            (timestamp, timestamp),
+        )
         tickers = cursor.fetchall()
     filtered_tickers = []
     for ticker in tickers:
-        filtered_tickers.append({
-            "ticker": ticker[0],  # ticker[0] because fetchall() returns tuples
-            "dt": timestamp,
-            "label": ticker[0],
-            "currentPrice": None  # Set currentPrice to None for historical data
-        })
+        filtered_tickers.append(
+            {
+                "ticker": ticker[0],  # ticker[0] because fetchall() returns tuples
+                "dt": timestamp,
+                "label": ticker[0],
+                "currentPrice": None,  # Set currentPrice to None for historical data
+            }
+        )
     return filtered_tickers
+
 
 def getCurrentTickersAndPrice(conn):
 
@@ -31,23 +40,22 @@ def getCurrentTickersAndPrice(conn):
 
     if response.status_code != 200:
         raise Exception(f"Failed to retrieve data: {response.text}")
-    dataByTicker = response.json().get('tickers', [])
+    dataByTicker = response.json().get("tickers", [])
     filtered_tickers = []
     for ticker_data in dataByTicker:
-        ticker = ticker_data['ticker']
-        currentPrice = ticker_data.get('lastTrade', {}).get("p",None)
-        filtered_tickers.append({"ticker":ticker,
-                                 "dt": 0,
-                                 "label": ticker,
-                                 "currentPrice":currentPrice})
+        ticker = ticker_data["ticker"]
+        currentPrice = ticker_data.get("lastTrade", {}).get("p", None)
+        filtered_tickers.append(
+            {"ticker": ticker, "dt": 0, "label": ticker, "currentPrice": currentPrice}
+        )
 
     return filtered_tickers
 
 
-def getCurrentSecId(conn,ticker):
+def getCurrentSecId(conn, ticker):
     query = f"SELECT securityId from securities where ticker = %s Order by maxdate is null desc,maxdate desc"
     with conn.db.cursor() as cursor:
-        cursor.execute(query,(ticker,))
+        cursor.execute(query, (ticker,))
 
         val = cursor.fetchone()
         if val is not None:
@@ -55,15 +63,20 @@ def getCurrentSecId(conn,ticker):
         else:
             return None
 
-def filter(conn, df, metadata, setupId, setupName, threshold, dolvolReq, adrReq, mcapReq):
+
+def filter(
+    conn, df, metadata, setupId, setupName, threshold, dolvolReq, adrReq, mcapReq
+):
     # Step 1: Filter by dolvol, adr, and mcap
     filtered_metadata = []
     filtered_indices = []
 
     for i, meta in enumerate(metadata):
-        if (meta.get('dolvol', 0) >= dolvolReq and
-            meta.get('adr', 0) >= adrReq and
-            meta.get('mcap', 0) >= mcapReq):
+        if (
+            meta.get("dolvol", 0) >= dolvolReq
+            and meta.get("adr", 0) >= adrReq
+            and meta.get("mcap", 0) >= mcapReq
+        ):
             filtered_metadata.append(meta)
             filtered_indices.append(i)
 
@@ -77,7 +90,7 @@ def filter(conn, df, metadata, setupId, setupName, threshold, dolvolReq, adrReq,
         "instances": df.tolist()  # Convert numpy array to list for JSON serialization
     }
     response = requests.post(url, json=payload, headers=headers)
-    
+
     if response.status_code != 200:
         raise Exception(f"Failed to make prediction: {response.text}")
 
@@ -90,45 +103,68 @@ def filter(conn, df, metadata, setupId, setupName, threshold, dolvolReq, adrReq,
         if score[0] * 100 >= threshold:
             secId = getCurrentSecId(conn, meta["ticker"])
             if secId:
-                results.append({
-                    "ticker": meta["ticker"],
-                    "setupId": setupId,
-                    "score": round(score[0] * 100),
-                    "securityId": secId,
-                    "timestamp": int(meta["timestamp"].timestamp() * 1000) if meta["timestamp"] != 0 else 0,
-                    "setup": setupName
-                })
+                results.append(
+                    {
+                        "ticker": meta["ticker"],
+                        "setupId": setupId,
+                        "score": round(score[0] * 100),
+                        "securityId": secId,
+                        "timestamp": (
+                            int(meta["timestamp"].timestamp() * 1000)
+                            if meta["timestamp"] != 0
+                            else 0
+                        ),
+                        "setup": setupName,
+                    }
+                )
             else:
                 print(f"FAILED TO GET SEC ID FOR {meta['ticker']}")
-    
+
     return results
 
 
-def screen(conn, setupIds,timestamp=0,threshold=25,instances=None, user_id=None):
+def screen(conn, setupIds, timestamp=0, threshold=25, instances=None, user_id=None):
     tf = "1d"
     with conn.db.cursor() as cursor:
-        cursor.execute('SELECT MAX(bars),MIN(dolvol),Min(adr),MIN(mcap) FROM setups WHERE setupId = ANY(%s)', (setupIds,))
-        maxBars, minDolvolReq,minAdrReq,minMcapReq = cursor.fetchone()
-    
+        cursor.execute(
+            "SELECT MAX(bars),MIN(dolvol),Min(adr),MIN(mcap) FROM setups WHERE setupId = ANY(%s)",
+            (setupIds,),
+        )
+        maxBars, minDolvolReq, minAdrReq, minMcapReq = cursor.fetchone()
+
     # Ensure maxBars is not None
     if maxBars is None:
         maxBars = 50  # Setting a reasonable default
-        
+
     if instances is not None:
         instanceList = instances
     else:
         if timestamp == 0:
             instanceList = getCurrentTickersAndPrice(conn)
-        else: 
-            instanceList = getHistoricalTickers(conn,timestamp)
-    data, meta = getTensor(conn, instanceList, tf, maxBars,dolvolReq=minDolvolReq,adrReq= minAdrReq,mcapReq=minMcapReq,normalize="rolling-log")
+        else:
+            instanceList = getHistoricalTickers(conn, timestamp)
+    data, meta = getTensor(
+        conn,
+        instanceList,
+        tf,
+        maxBars,
+        dolvolReq=minDolvolReq,
+        adrReq=minAdrReq,
+        mcapReq=minMcapReq,
+        normalize="rolling-log",
+    )
     results = []
     for setupId in setupIds:
         with conn.db.cursor() as cursor:
-            cursor.execute('SELECT bars, name, dolvol, adr, mcap FROM setups WHERE setupId = %s', (setupId,))
-            bars,setupName,dolvol,adr,mcap = cursor.fetchone()
+            cursor.execute(
+                "SELECT bars, name, dolvol, adr, mcap FROM setups WHERE setupId = %s",
+                (setupId,),
+            )
+            bars, setupName, dolvol, adr, mcap = cursor.fetchone()
         cropped_data = data[:, -bars:, :]  # Take the last `bars` from the data
-        results += filter(conn, cropped_data, meta, setupId,setupName, threshold,dolvol,adr,mcap)
-    sorted_results = sorted(results, key=lambda x: x['score'], reverse=True)
+        results += filter(
+            conn, cropped_data, meta, setupId, setupName, threshold, dolvol, adr, mcap
+        )
+    sorted_results = sorted(results, key=lambda x: x["score"], reverse=True)
 
     return sorted_results
