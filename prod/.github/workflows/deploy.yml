@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - prod-beta  # Deploy when pushing to the prod-beta branch
+  pull_request:
+    branches:
+      - prod-beta  # Deploy when creating a pull request to the prod-beta branch
   workflow_dispatch:  # Allow manual triggering
 
 jobs:
