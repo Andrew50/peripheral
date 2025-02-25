@@ -1,4 +1,17 @@
+import tensorflow as tf
+from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.layers import Input, Dense, LSTM, Bidirectional, Conv1D, Dropout, MultiHeadAttention, LayerNormalization
+from tensorflow.keras.optimizers import Adam
 
+# Global constants for the transformer model
+D_MODEL = 128  # Dimension of the model
+NUM_HEADS = 8  # Number of attention heads
+FF_DIM = 512  # Feed-forward network dimension
+LEARNING_RATE = 1e-3  # Learning rate for optimizer
+CONV_FILTER_UNITS = [32, 64, 64]  # Units for Conv1D layers
+CONV_FILTER_KERNAL_SIZES = [5, 3, 3]  # Kernel sizes for Conv1D layers
+BI_LSTM_UNITS = [64, 32, 16]  # Units for Bidirectional LSTM layers
+DROPOUT_PERCENTS = [0.4, 0.3]  # Dropout rates
 
 def positional_encoding(seq_len, d_model):
     positions = tf.cast(tf.range(start=0, limit=seq_len, delta=1), dtype=tf.float32)
