@@ -1,6 +1,7 @@
-// streamInterface.ts
-import { socket, subscribe, unsubscribe, activeChannels } from './socket';
-import type { SubscriptionRequest, StreamCallback } from './socket';
+
+import { socket, subscribe, unsubscribe, activeChannels, subscribeSECFilings } from './socket'
+import type { SubscriptionRequest, StreamCallback } from './socket'
+
 import { DateTime } from 'luxon';
 import { eventChart } from '$lib/features/chart/interface';
 import { streamInfo } from '$lib/core/stores';
@@ -52,6 +53,7 @@ export function addStream<T extends StreamData>(
 
 	return () => releaseStream(channelName, callback as StreamCallback);
 }
+
 export function startReplay(instance: Instance) {
 	if (!instance.timestamp) return;
 	if (get(streamInfo).replayActive) {
@@ -153,4 +155,33 @@ export function setExtended(extendedHours: boolean) {
 	}
 	streamInfo.update((r: ReplayInfo) => ({ ...r, extendedHours: extendedHours }));
 }
+
+
+// Function to subscribe to global SEC filings feed
+export function addGlobalSECFilingsStream(callback: StreamCallback): Function {
+    const channelName = 'sec-filings';
+    const callbacks = activeChannels.get(channelName);
+
+    // If callbacks exist, this channel is already active
+    if (callbacks) {
+        if (!callbacks.includes(callback)) {
+            callbacks.push(callback);
+            // Re-subscribe to get initial value
+            if (socket?.readyState === WebSocket.OPEN) {
+                subscribeSECFilings();
+            }
+        }
+    } else {
+        // New channel, set up normally
+        activeChannels.set(channelName, [callback]);
+        subscribeSECFilings();
+    }
+
+    return () => releaseStream(channelName, callback);
+}
+export function releaseGlobalSECFilingsStream(callback: StreamCallback) {
+    const channelName = 'sec-filings';
+    releaseStream(channelName, callback);
+}
+
 // /streamInterface.ts
