@@ -2,7 +2,6 @@
 <script lang="ts">
 	import Legend from './legend.svelte';
 	import Shift from './shift.svelte';
-	import Countdown from './countdown.svelte';
 	import DrawingMenu from './drawingMenu.svelte';
 	import { privateRequest } from '$lib/core/backend';
 	import { type DrawingMenuProps, addHorizontalLine, drawingMenuProps } from './drawingMenu.svelte';
@@ -1233,7 +1232,6 @@
 <div class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
 	<Legend instance={currentChartInstance} {hoveredCandleData} {width} />
 	<Shift {shiftOverlay} />
-	<Countdown instance={currentChartInstance} {currentBarTimestamp} />
 	<DrawingMenu {drawingMenuProps} />
 </div>
 

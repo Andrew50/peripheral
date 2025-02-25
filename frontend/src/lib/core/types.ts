@@ -86,3 +86,15 @@ export interface Alert {
     ticker?: string
     price?: number
 }
+
+export interface Trade {
+    time: number;
+    type: string;
+    price: number;
+    shares: number;
+    tradeId?: number;
+    trade_direction?: string;
+    status?: string;
+    openQuantity?: number;
+    closedPnL?: number | null;
+}
