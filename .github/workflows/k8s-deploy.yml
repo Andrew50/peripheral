@@ -21,12 +21,12 @@ jobs:
         with:
           version: 'latest'
 
-      # Set up kubeconfig
-      - name: Configure Kubernetes credentials
-        uses: azure/k8s-set-context@v3
-        with:
-          method: kubeconfig
-          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+      # Set up kubeconfig directly from secret
+      - name: Set up kubeconfig file
+        run: |
+          echo "${{ secrets.KUBE_CONFIG }}" > kubeconfig
+          chmod 600 kubeconfig
+          echo "KUBECONFIG=$(pwd)/kubeconfig" >> $GITHUB_ENV
 
       # Deploy to remote server - build and push Docker images directly on the server
       - name: Deploy to production server
@@ -46,12 +46,10 @@ jobs:
             
             # Set up environment for Docker login
             echo "Attempting Docker login on remote server..."
-            export DOCKER_USERNAME="${{ secrets.DOCKER_USERNAME }}"
-            export DOCKER_TOKEN="${{ secrets.DOCKER_PAT }}"
             
-            # Login to Docker Hub with verbose output
+            # Use DOCKERHUB credentials for consistency across workflows
             echo "Running Docker login command..."
-            docker login docker.io -u "$DOCKER_USERNAME" -p "$DOCKER_TOKEN" || {
+            docker login docker.io -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}" || {
               echo "Docker login failed with exit code $?"
               echo "Docker login error details:"
               docker info
@@ -64,30 +62,30 @@ jobs:
             
             # Backend
             echo "Building backend image..."
-            docker build -t "billin19/backend:latest" -t "billin19/backend:$SHA_TAG" -f ./backend/Dockerfile.prod ./backend
+            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/backend:latest" -t "${{ secrets.DOCKERHUB_USERNAME }}/backend:$SHA_TAG" -f ./backend/Dockerfile.prod ./backend
             echo "Pushing backend images..."
-            docker push "billin19/backend:latest"
-            docker push "billin19/backend:$SHA_TAG"
+            docker push "${{ secrets.DOCKERHUB_USERNAME }}/backend:latest"
+            docker push "${{ secrets.DOCKERHUB_USERNAME }}/backend:$SHA_TAG"
             
             # Frontend
             echo "Building frontend image..."
-            docker build -t "billin19/frontend:latest" -t "billin19/frontend:$SHA_TAG" -f ./frontend/Dockerfile.prod ./frontend
+            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest" -t "${{ secrets.DOCKERHUB_USERNAME }}/frontend:$SHA_TAG" -f ./frontend/Dockerfile.prod ./frontend
             echo "Pushing frontend images..."
-            docker push "billin19/frontend:latest"
-            docker push "billin19/frontend:$SHA_TAG"
+            docker push "${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest"
+            docker push "${{ secrets.DOCKERHUB_USERNAME }}/frontend:$SHA_TAG"
             
             # Worker
             echo "Building worker image..."
-            docker build -t "billin19/worker:latest" -t "billin19/worker:$SHA_TAG" -f ./worker/Dockerfile ./worker
+            docker build -t "${{ secrets.DOCKERHUB_USERNAME }}/worker:latest" -t "${{ secrets.DOCKERHUB_USERNAME }}/worker:$SHA_TAG" -f ./worker/Dockerfile ./worker
             echo "Pushing worker images..."
-            docker push "billin19/worker:latest"
-            docker push "billin19/worker:$SHA_TAG"
+            docker push "${{ secrets.DOCKERHUB_USERNAME }}/worker:latest"
+            docker push "${{ secrets.DOCKERHUB_USERNAME }}/worker:$SHA_TAG"
             
             # Update image tags in manifests
             echo "Updating image tags in Kubernetes manifests..."
-            sed -i "s|image: billin19/backend:latest|image: billin19/backend:$SHA_TAG|g" prod/config/backend.yaml
-            sed -i "s|image: billin19/frontend:latest|image: billin19/frontend:$SHA_TAG|g" prod/config/frontend.yaml
-            sed -i "s|image: billin19/worker:latest|image: billin19/worker:$SHA_TAG|g" prod/config/worker.yaml
+            sed -i "s|image: ${{ secrets.DOCKERHUB_USERNAME }}/backend:latest|image: ${{ secrets.DOCKERHUB_USERNAME }}/backend:$SHA_TAG|g" prod/config/backend.yaml
+            sed -i "s|image: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest|image: ${{ secrets.DOCKERHUB_USERNAME }}/frontend:$SHA_TAG|g" prod/config/frontend.yaml
+            sed -i "s|image: ${{ secrets.DOCKERHUB_USERNAME }}/worker:latest|image: ${{ secrets.DOCKERHUB_USERNAME }}/worker:$SHA_TAG|g" prod/config/worker.yaml
             
             # Apply Kubernetes manifests with zero downtime strategy
             echo "Applying Kubernetes manifests..."
