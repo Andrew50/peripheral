@@ -1,36 +1,33 @@
-import type { Alert, Instance } from '$lib/core/types'
-import { writable } from 'svelte/store'
-
-
+import type { Alert, Instance } from '$lib/core/types';
+import { writable } from 'svelte/store';
 
 import { privateRequest } from '$lib/core/backend';
 import { activeAlerts, inactiveAlerts } from '$lib/core/stores';
 
 export function newPriceAlert(instance: Instance) {
-    if (!instance.price || !instance.securityId) return;
-    newAlert({
-        securityId: instance.securityId,
-        price: instance.price,
-        alertType: 'price',
-        ticker: instance.ticker
-    })
+	if (!instance.price || !instance.securityId) return;
+	newAlert({
+		securityId: instance.securityId,
+		price: instance.price,
+		alertType: 'price',
+		ticker: instance.ticker
+	});
 }
 
 export function newAlert(alert: Alert) {
-    if (alert.price) {
-        alert.price = parseFloat(alert.price.toFixed(2));
-    }
-    privateRequest<Alert>('newAlert', alert).then((createdAlert: Alert) => {
-        createdAlert.ticker = alert.ticker;
-        if (activeAlerts !== undefined) {
-            activeAlerts.update((currentAlerts: Alert[] | undefined) => {
-                if (Array.isArray(currentAlerts) && currentAlerts.length > 0) {
-                    return [...currentAlerts, createdAlert]
-                } else {
-                    return [createdAlert]
-                }
-            })
-        }
-    })
-
+	if (alert.price) {
+		alert.price = parseFloat(alert.price.toFixed(2));
+	}
+	privateRequest<Alert>('newAlert', alert).then((createdAlert: Alert) => {
+		createdAlert.ticker = alert.ticker;
+		if (activeAlerts !== undefined) {
+			activeAlerts.update((currentAlerts: Alert[] | undefined) => {
+				if (Array.isArray(currentAlerts) && currentAlerts.length > 0) {
+					return [...currentAlerts, createdAlert];
+				} else {
+					return [createdAlert];
+				}
+			});
+		}
+	});
 }
