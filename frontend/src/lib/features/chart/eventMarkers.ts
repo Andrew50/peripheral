@@ -5,18 +5,28 @@ import type {
 	CustomSeriesOptions,
 	PaneRendererCustomData,
 	CustomSeriesWhitespaceData,
+	PriceLineSource
 } from 'lightweight-charts';
 import type { Time, CustomSeriesPricePlotValues } from 'lightweight-charts';
 import { ColorType } from 'lightweight-charts';
 
 // Define your custom data type for event markers.
 export interface EventMarker extends CustomData<Time> {
-	time: Time;               // timestamp (must be in the chart's time format)
+	time: Time; // timestamp (must be in the chart's time format)
 	events: Array<{
-		type: 'filing';  // We can add more event types later if needed
-		title: string;  // e.g., "10-K", "8-K", etc.
-		url: string;  // Add URL for clicking through to filing
+		type: 'filing'; // We can add more event types later if needed
+		title: string; // e.g., "10-K", "8-K", etc.
+		url: string; // Add URL for clicking through to filing
 	}>;
+	// Add missing properties
+	x?: number | null;
+	originalData?: {
+		events?: Array<{
+			type: 'filing';
+			title: string;
+			url: string;
+		}>;
+	};
 }
 
 interface MarkerPosition {
@@ -26,21 +36,27 @@ interface MarkerPosition {
 }
 
 // Helper function to draw event markers
-function drawEventMarker(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, count: number) {
+function drawEventMarker(
+	ctx: CanvasRenderingContext2D,
+	x: number,
+	y: number,
+	size: number,
+	count: number
+) {
 	// Draw a purple circle for SEC filings
-	ctx.fillStyle = '#9C27B0';  // Purple color
+	ctx.fillStyle = '#9C27B0'; // Purple color
 	ctx.strokeStyle = 'white';
 	ctx.lineWidth = 1;
-	
+
 	ctx.beginPath();
-	ctx.arc(x, y, size * 1.5, 0, 2 * Math.PI);  // 50% bigger
+	ctx.arc(x, y, size * 1.5, 0, 2 * Math.PI); // 50% bigger
 	ctx.fill();
 	ctx.stroke();
 
 	// If there are multiple events, add a count
 	if (count > 1) {
 		ctx.fillStyle = 'white';
-		ctx.font = '11px sans-serif';  // Slightly larger font for the count
+		ctx.font = '11px sans-serif'; // Slightly larger font for the count
 		ctx.textAlign = 'center';
 		ctx.textBaseline = 'middle';
 		ctx.fillText(count.toString(), x, y);
@@ -48,7 +64,8 @@ function drawEventMarker(ctx: CanvasRenderingContext2D, x: number, y: number, si
 }
 
 // Custom series view for event markers.
-export class EventMarkersPaneView implements ICustomSeriesPaneView<Time, EventMarker, CustomSeriesOptions> {
+export class EventMarkersPaneView
+	implements ICustomSeriesPaneView<Time, EventMarker, CustomSeriesOptions> {
 	private markers: EventMarker[] = [];
 	private markerPositions: MarkerPosition[] = [];
 	private options: CustomSeriesOptions = this.defaultOptions();
@@ -63,12 +80,10 @@ export class EventMarkersPaneView implements ICustomSeriesPaneView<Time, EventMa
 	// Add method to handle clicks
 	public handleClick(x: number, y: number) {
 		const clickRadius = 10; // Area around marker that's clickable
-		
+
 		for (const marker of this.markerPositions) {
-			const distance = Math.sqrt(
-				Math.pow(marker.x - x, 2) + Math.pow(marker.y - y, 2)
-			);
-			
+			const distance = Math.sqrt(Math.pow(marker.x - x, 2) + Math.pow(marker.y - y, 2));
+
 			if (distance <= clickRadius) {
 				this.clickCallback?.(marker.events, marker.x, marker.y);
 				return true;
@@ -82,7 +97,7 @@ export class EventMarkersPaneView implements ICustomSeriesPaneView<Time, EventMa
 			draw: (target, priceToCoordinate, visibleRange) => {
 				target.useMediaCoordinateSpace(({ context, mediaSize }) => {
 					const { width, height } = mediaSize;
-					
+
 					if (this.markers.length === 0) {
 						return;
 					}
@@ -91,22 +106,26 @@ export class EventMarkersPaneView implements ICustomSeriesPaneView<Time, EventMa
 					this.markerPositions = [];
 
 					// Only iterate over visible markers
-					for (let i = Math.floor(this.visibleRange.from); i < Math.ceil(this.visibleRange.to); i++) {
+					for (
+						let i = Math.floor(this.visibleRange.from);
+						i < Math.ceil(this.visibleRange.to);
+						i++
+					) {
 						if (i < 0 || i >= this.markers.length) continue;
-						
+
 						const marker = this.markers[i];
 						const x = marker.x;
-						if(x === null) {
+						if (x === null || x === undefined) {
 							continue;
 						}
 
-						if (marker.originalData.events?.length) {
-							const y = height - 20;  // 20px from bottom
-							drawEventMarker(context, x, y, 5, marker.originalData.events.length);
-							
+						if (marker.originalData?.events?.length) {
+							const y = height - 20; // 20px from bottom
+							drawEventMarker(context, x as number, y, 5, marker.originalData.events.length);
+
 							// Store marker position for click detection
 							this.markerPositions.push({
-								x,
+								x: x as number,
 								y,
 								events: marker.originalData.events
 							});
@@ -117,30 +136,42 @@ export class EventMarkersPaneView implements ICustomSeriesPaneView<Time, EventMa
 		};
 	}
 
-	update(data: PaneRendererCustomData<Time, EventMarker>, seriesOptions: CustomSeriesOptions): void {
-		this.markers = data.bars;
+	update(
+		data: PaneRendererCustomData<Time, EventMarker>,
+		seriesOptions: CustomSeriesOptions
+	): void {
+		this.markers = [...data.bars] as unknown as EventMarker[]; // Use type assertion with unknown as intermediate step
 		this.options = seriesOptions;
-		this.visibleRange = data.visibleRange;
+		this.visibleRange = data.visibleRange || { from: 0, to: 0 }; // Handle null case
 	}
 
 	priceValueBuilder(plotRow: EventMarker): CustomSeriesPricePlotValues {
 		const prices: number[] = [];
-		if (plotRow.events) prices.push(...plotRow.events.map(e => e.price));
-		return prices;
+		return prices; // Return empty array as we're not showing price-related data
 	}
 
-	isWhitespace(data: EventMarker | CustomSeriesWhitespaceData<Time>): data is CustomSeriesWhitespaceData<Time> {
+	isWhitespace(
+		data: EventMarker | CustomSeriesWhitespaceData<Time>
+	): data is CustomSeriesWhitespaceData<Time> {
 		return false;
 	}
 
 	defaultOptions(): CustomSeriesOptions {
 		return {
 			color: '#9C27B0',
-			lastValueVisible: false,  // Don't show the last value label
-			priceLineVisible: false,  // Don't show the price line
-			baseLineVisible: false,   // Don't show the base line
-		};
+			lastValueVisible: false,
+			title: 'Event Markers',
+			visible: true,
+			priceLineVisible: false,
+			priceLineSource: "lastVisible" as unknown as PriceLineSource,
+			priceLineWidth: 1,
+			priceFormat: {
+				type: 'price',
+				precision: 2,
+				minMove: 0.01
+			}
+		} as CustomSeriesOptions;
 	}
 
-	destroy(): void {}
+	destroy(): void { }
 }
