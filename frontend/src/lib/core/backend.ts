@@ -17,7 +17,7 @@ if (typeof window !== 'undefined') {
         }
         console.log('Using development backend URL:', base_url);
     } else {
-        // In production
+        // In production always use the current origin
         base_url = window.location.origin;
         console.log('Using production backend URL:', base_url);
     }

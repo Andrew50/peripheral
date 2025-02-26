@@ -34,6 +34,10 @@ CONV_FILTER_KERNAL_SIZES = [5]
 BI_LSTM_UNITS = [64, 16]
 DROPOUT_PERCENTS = [0.5]
 
+# Define global parameters for adaptive exploration
+success_threshold = 0.6  # Threshold for successful exploration
+increase_factor = 1.2  # Factor to increase noise when successful
+decay_factor = 0.8  # Factor to decrease noise when unsuccessful
 
 def create_vae_and_decoder(input_shape=(30, 4), latent_dim=2):
     # Encoder
