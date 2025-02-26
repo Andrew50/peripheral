@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-server-js
+data:
+  server.js: |
+    import { createServer } from 'http';
+    import { handler } from './build/handler.js';
+    import path from 'path';
+    import { fileURLToPath } from 'url';
+
+    const server = createServer((req, res) => {
+      // Set proper MIME types for JavaScript modules
+      const url = req.url;
+      
+      // Log the request for debugging
+      console.log(`Request: ${url}`);
+      
+      // Handle JavaScript files
+      if (url.endsWith('.js')) {
+        res.setHeader('Content-Type', 'application/javascript');
+      } 
+      // Handle JavaScript module files
+      else if (url.endsWith('.mjs')) {
+        res.setHeader('Content-Type', 'application/javascript');
+      } 
+      // Handle CSS files
+      else if (url.endsWith('.css')) {
+        res.setHeader('Content-Type', 'text/css');
+      } 
+      // Handle SvelteKit's _app directory (contains JS modules)
+      else if (url.includes('/_app/')) {
+        // Check file extension
+        const ext = path.extname(url);
+        if (ext === '.js' || ext === '.mjs' || ext === '') {
+          res.setHeader('Content-Type', 'application/javascript');
+        } else if (ext === '.css') {
+          res.setHeader('Content-Type', 'text/css');
+        }
+      }
+      
+      // Pass the request to the SvelteKit handler
+      return handler(req, res);
+    });
+
+    server.listen(3000, '0.0.0.0', () => {
+      console.log('SvelteKit server running on port 3000');
+    });
