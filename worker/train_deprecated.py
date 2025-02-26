@@ -1,18 +1,8 @@
 import tensorflow as tf
-from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.layers import (
-    Input,
-    Dense,
-    LSTM,
-    Bidirectional,
-    Conv1D,
-    Dropout,
-    MultiHeadAttention,
-    LayerNormalization,
-    GlobalAveragePooling1D,
-    Add,
-)
+from tensorflow.keras.layers import Input, Dense, Dropout, LSTM, Bidirectional, Add, LayerNormalization, GlobalAveragePooling1D, MultiHeadAttention
+from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
+import numpy as np
 
 # Global constants for the transformer model
 D_MODEL = 128  # Dimension of the model
