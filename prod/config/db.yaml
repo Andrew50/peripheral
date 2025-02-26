@@ -17,7 +17,7 @@ spec:
           #image: db:latest
           image: billin19/db:latest
           ports:
-            - containerPort: 3306
+            - containerPort: 5432
           volumeMounts:
             - name: db-persistent-storage
               mountPath: /var/lib/db
@@ -46,8 +46,8 @@ spec:
     app: db
   ports:
     - protocol: TCP
-      port: 3306
-      targetPort: 3306
+      port: 5432
+      targetPort: 5432
   type: ClusterIP
 
 ---
