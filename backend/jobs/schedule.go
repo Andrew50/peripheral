@@ -112,7 +112,7 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 	//open := time.Date(year, month, day, 9, 30, 0, 0, now.Location())
 	//close_ := time.Date(year, month, day, 16, 0, 0, 0, now.Location())
 	fmt.Printf("\n\nStarting EdgarFilingsService\n\n")
-	utils.StartEdgarFilingsService()
+	utils.StartEdgarFilingsService(conn)
 	go func() {
 		for filing := range utils.NewFilingsChannel {
 			fmt.Printf("\n\nBroadcasting global SEC filing\n\n")
