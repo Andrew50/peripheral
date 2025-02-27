@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -39,26 +40,88 @@ var (
 func fetchEdgarFilings(cik string) ([]EDGARFiling, error) {
 	fmt.Printf("Fetching SEC filings for CIK: %s\n", cik)
 
+	var allFilings []EDGARFiling
+	maxResults := 1500 // Maximum number of filings to fetch
+	perPage := 100     // Number of results per API call
+
+	// For pagination
+	for start := 0; start < maxResults; start += perPage {
+		// Check if we already have enough filings
+		if len(allFilings) >= maxResults {
+			break
+		}
+
+		filings, err := fetchEdgarFilingsTickerPage(cik, start, perPage)
+		if err != nil {
+			return allFilings, err // Return what we've got so far with the error
+		}
+
+		// If we got fewer results than requested, we've reached the end
+		if len(filings) < perPage {
+			allFilings = append(allFilings, filings...)
+			break
+		}
+
+		allFilings = append(allFilings, filings...)
+
+		// Add a small delay between requests to avoid rate limiting
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	fmt.Printf("Found %d filings\n", len(allFilings))
+	return allFilings, nil
+}
+
+// fetchEdgarFilingsPage fetches a single page of SEC filings with pagination
+func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFiling, error) {
 	url := fmt.Sprintf("https://data.sec.gov/submissions/CIK%s.json", cik)
-	fmt.Printf("Making request to URL: %s\n", url)
 
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
+	// Create HTTP client with reasonable timeout
+	client := &http.Client{
+		Timeout: 30 * time.Second,
 	}
 
-	req.Header.Set("User-Agent", "atlantis admin@atlantis.trading")
+	// Make the request with retries for rate limiting
+	var resp *http.Response
+	var err error
+	maxRetries := 5
+	retryDelay := 1 * time.Second
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		// SEC requires a User-Agent header
+		req.Header.Set("User-Agent", "atlantis admin@atlantis.trading")
+
+		resp, err = client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		// Check for rate limiting (429)
+		if resp.StatusCode == 429 {
+			resp.Body.Close()
+
+			// Exponential backoff
+			waitTime := retryDelay * time.Duration(1<<attempt)
+			fmt.Printf("Rate limited by SEC API (429). Retrying in %v...\n", waitTime)
+			time.Sleep(waitTime)
+			continue
+		}
+
+		// If we get here, we have a non-429 response
+		break
 	}
+
+	// Check if all retries failed
+	if resp.StatusCode == 429 {
+		return nil, fmt.Errorf("SEC API rate limit exceeded after %d retries", maxRetries)
+	}
+
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("SEC API returned status: %d", resp.StatusCode)
-	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -149,7 +212,6 @@ func fetchEdgarFilings(cik string) ([]EDGARFiling, error) {
 		}
 	}
 
-	fmt.Printf("Found %d filings\n", len(filings))
 	return filings, nil
 }
 
@@ -283,16 +345,6 @@ type AtomCategory struct {
 	Label string `xml:"label,attr"`
 }
 
-// extractTicker attempts to extract a ticker symbol from the company name
-func extractTicker(companyName string) string {
-	if idx := strings.Index(companyName, "("); idx != -1 {
-		if endIdx := strings.Index(companyName[idx:], ")"); endIdx != -1 {
-			return companyName[idx+1 : idx+endIdx]
-		}
-	}
-	return "" // Return empty string if no ticker is found
-}
-
 func fetchCIKFromSEC(ticker string) (string, error) {
 	// SEC company lookup endpoint
 	url := fmt.Sprintf("https://www.sec.gov/files/company_tickers.json")
@@ -344,63 +396,35 @@ func fetchCIKFromSEC(ticker string) (string, error) {
 }
 
 // fetchTickerFromCIK retrieves the ticker symbol for a given CIK
-func fetchTickerFromCIK(cik string) string {
-	// Reverse lookup in the cache
+func fetchTickerFromCIK(conn *Conn, cik string) string {
+	// Method 1: Reverse lookup in the cache
 	filingCache.RLock()
-	defer filingCache.RUnlock()
-
 	for ticker, cachedCIK := range filingCache.cikMap {
 		if cachedCIK == cik {
+			filingCache.RUnlock()
 			return ticker
 		}
 	}
+	filingCache.RUnlock()
 
-	// If not in cache, would need to query SEC API
-	// This is a fallback that attempts to get ticker from SEC data
-	url := "https://www.sec.gov/files/company_tickers.json"
-	client := &http.Client{Timeout: 10 * time.Second}
+	// Method 2: Query our securities table
+	if conn != nil {
+		// Remove leading zeros from CIK for numeric comparison
+		trimmedCIK := strings.TrimLeft(cik, "0")
 
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		fmt.Printf("Error creating request for ticker lookup: %v\n", err)
-		return ""
-	}
+		var ticker string
+		err := conn.DB.QueryRow(context.Background(),
+			`SELECT ticker FROM securities 
+			 WHERE cik = $1 AND maxDate IS NULL 
+			 LIMIT 1`,
+			trimmedCIK).Scan(&ticker)
 
-	req.Header.Set("User-Agent", "atlantis admin@atlantis.trading")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Printf("Error fetching ticker data: %v\n", err)
-		return ""
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("SEC API returned status: %d\n", resp.StatusCode)
-		return ""
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Printf("Error reading response body: %v\n", err)
-		return ""
-	}
-
-	var result map[string]struct {
-		CIK    int    `json:"cik_str"`
-		Ticker string `json:"ticker"`
-		Name   string `json:"title"`
-	}
-
-	if err := json.Unmarshal(body, &result); err != nil {
-		fmt.Printf("Error unmarshaling JSON: %v\n", err)
-		return ""
-	}
-
-	targetCIK := strings.TrimLeft(cik, "0")
-	for _, company := range result {
-		if fmt.Sprintf("%d", company.CIK) == targetCIK {
-			return company.Ticker
+		if err == nil && ticker != "" {
+			// Add to cache for future lookups
+			filingCache.Lock()
+			filingCache.cikMap[ticker] = cik
+			filingCache.Unlock()
+			return ticker
 		}
 	}
 
@@ -408,35 +432,88 @@ func fetchTickerFromCIK(cik string) string {
 }
 
 // FetchLatestEdgarFilings fetches the latest SEC filings from the RSS feed
-func FetchLatestEdgarFilings() ([]GlobalEDGARFiling, error) {
-	// Try the JSON API first, fall back to HTML parsing if that fails
-	filings, err := FetchLatestEdgarFilingsJSON()
-	if err != nil {
-		return nil, err
+func FetchLatestEdgarFilings(conn *Conn) ([]GlobalEDGARFiling, error) {
+	var allFilings []GlobalEDGARFiling
+	maxResults := 1500 // Maximum number of filings to fetch
+	perPage := 100     // Number of results per API request
+
+	for page := 1; len(allFilings) < maxResults; page++ {
+		filings, err := fetchEdgarFilingsPage(page, perPage)
+		if err != nil {
+			// Return what we've fetched so far along with the error
+			return allFilings, fmt.Errorf("error fetching page %d: %w", page, err)
+		}
+
+		if len(filings) == 0 {
+			// No more results
+			break
+		}
+
+		allFilings = append(allFilings, filings...)
+
+		// If we got fewer results than requested, we've reached the end
+		if len(filings) < perPage {
+			break
+		}
+
+		// Add a delay between requests to avoid rate limiting
+		time.Sleep(300 * time.Millisecond)
 	}
-	return filings, nil
+
+	return allFilings, nil
 }
 
-// FetchLatestEdgarFilingsJSON fetches SEC filings using the SEC.gov Atom feed
-func FetchLatestEdgarFilingsJSON() ([]GlobalEDGARFiling, error) {
-	// Now fetch the latest filings using the SEC browse endpoint
-	url := "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=&company=&dateb=&owner=include&start=0&count=100&output=atom"
+func fetchEdgarFilingsPage(page int, perPage int) ([]GlobalEDGARFiling, error) {
+	// Assuming the SEC API supports a page parameter
+	url := fmt.Sprintf("https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&owner=include&count=%d&start=%d&output=atom",
+		perPage, (page-1)*perPage)
 
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
+	// Create a client with reasonable timeout
+	client := &http.Client{
+		Timeout: 30 * time.Second,
 	}
 
-	// SEC API requires detailed User-Agent header
-	req.Header.Set("User-Agent", "Atlantis Equities admin@atlantis.trading")
-	req.Header.Set("Accept", "application/xml, application/atom+xml, text/xml, */*;q=0.8")
+	// Implement retry logic for rate limiting
+	var resp *http.Response
+	var err error
+	maxRetries := 5
+	retryDelay := 1 * time.Second
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %v", err)
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %v", err)
+		}
+
+		// Add required headers
+		req.Header.Set("User-Agent", "atlantis admin@atlantis.trading")
+		req.Header.Set("Accept", "application/xml, application/atom+xml, text/xml, */*;q=0.8")
+
+		resp, err = client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to make request: %v", err)
+		}
+
+		// Check for rate limiting
+		if resp.StatusCode == 429 {
+			resp.Body.Close()
+			waitTime := retryDelay * time.Duration(1<<attempt)
+			fmt.Printf("Rate limited by SEC API (429). Retrying in %v (page %d)...\n", waitTime, page)
+			time.Sleep(waitTime)
+			continue
+		}
+
+		// Non-429 status, break out of retry loop
+		break
 	}
+
+	if resp.StatusCode == 429 {
+		return nil, fmt.Errorf("SEC API rate limit exceeded after %d retries", maxRetries)
+	}
+
 	defer resp.Body.Close()
 
+	// Process response body as before
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %v", err)
@@ -471,16 +548,13 @@ func parseEdgarXMLFeed(body []byte) ([]GlobalEDGARFiling, error) {
 
 		// Format date as YYYY-MM-DD for the date field
 		date := utcTime.Format("2006-01-02")
-
-		// Extract CIK from entry title
-		//cik := extractCIK(entry)
+		cik := extractCIK(entry)
 
 		// Try to convert CIK to ticker
-		/*ticker := ""
-		if cik != "" {
-			ticker = fetchTickerFromCIK(cik)
-		}*/
 		ticker := ""
+		if cik != "" {
+			ticker = fetchTickerFromCIK(conn, cik)
+		}
 
 		// Extract company name from title (Format: "FORM_TYPE - COMPANY_NAME (ID) (Role)")
 		companyName := parseCompanyName(entry.Title)
@@ -536,80 +610,6 @@ func extractCIK(entry AtomEntry) string {
 	}
 
 	return ""
-}
-
-// cikToTicker attempts to convert a CIK to a ticker symbol
-func cikToTicker(cik string) string {
-	if cik == "" {
-		return ""
-	}
-
-	// Option 1: Use a predefined mapping
-	tickerMap := map[string]string{
-		// Some common examples
-		"1018724": "AAPL", // Apple
-		"1045810": "GOOG", // Alphabet (Google)
-		"1326801": "FB",   // Meta (Facebook)
-		"1467858": "TWTR", // Twitter
-		// Add more as needed
-	}
-
-	if ticker, exists := tickerMap[cik]; exists {
-		return ticker
-	}
-
-	// Option 2: Call an external API (implement as needed)
-	// return fetchTickerFromAPI(cik)
-
-	// Option 3: Query the SEC website or database
-	// Example placeholder - implement the actual logic
-	ticker, err := lookupTickerByCIK(cik)
-	if err == nil && ticker != "" {
-		return ticker
-	}
-
-	return ""
-}
-
-// lookupTickerByCIK looks up a ticker symbol using a CIK
-func lookupTickerByCIK(cik string) (string, error) {
-	// This is a simplified example - you would need to implement
-	// the actual logic to query the SEC or a financial data provider
-
-	// Example: Query SEC EDGAR API
-	url := fmt.Sprintf("https://data.sec.gov/submissions/CIK%s.json", cik)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return "", err
-	}
-
-	// SEC requires a user agent with contact info
-	req.Header.Add("User-Agent", "YourApp youremail@example.com")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("SEC API returned status code %d", resp.StatusCode)
-	}
-
-	var data struct {
-		Tickers []string `json:"tickers"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return "", err
-	}
-
-	if len(data.Tickers) > 0 {
-		return data.Tickers[0], nil
-	}
-
-	return "", fmt.Errorf("no ticker found for CIK %s", cik)
 }
 
 // Helper functions to extract specific pieces from the Atom entries
