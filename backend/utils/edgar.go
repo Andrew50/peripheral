@@ -1,12 +1,13 @@
 package utils
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -241,91 +242,57 @@ func GetRecentEdgarFilings(conn *Conn, securityId int, opts *EdgarFilingOptions)
 	return filteredFilings, nil
 }
 
-// GlobalEDGARFiling represents the structure of a filing in your application
+// GlobalEDGARFiling represents a SEC filing in the EDGAR database
 type GlobalEDGARFiling struct {
-	Type      string
-	Date      time.Time
-	URL       string
-	Timestamp int64
-	Ticker    string
-	Channel   string
+	CompanyName     string `json:"company_name"`
+	Type            string `json:"type"`
+	Date            string `json:"date"`
+	URL             string `json:"url"`
+	AccessionNumber string `json:"accession_number"`
+	Description     string `json:"description,omitempty"`
+	Ticker          string `json:"ticker"`
+	Timestamp       int64  `json:"timestamp"` // UTC timestamp in milliseconds
 }
 
-// AtomFeed represents the structure of the SEC RSS Atom feed
+// AtomFeed represents the root element of the SEC EDGAR Atom feed
 type AtomFeed struct {
 	XMLName xml.Name    `xml:"feed"`
+	Title   string      `xml:"title"`
+	Updated string      `xml:"updated"`
 	Entries []AtomEntry `xml:"entry"`
 }
 
-// AtomEntry represents an individual filing entry in the feed
+// AtomEntry represents a single filing entry in the EDGAR Atom feed
 type AtomEntry struct {
-	Title string `xml:"title"`
-	Link  struct {
-		Href string `xml:"href,attr"`
-	} `xml:"link"`
-	Updated  string `xml:"updated"`
-	Category struct {
-		Term string `xml:"term,attr"`
-	} `xml:"category"`
+	Title    string       `xml:"title"`
+	Link     AtomLink     `xml:"link"`
+	Summary  string       `xml:"summary"`
+	Updated  string       `xml:"updated"`
+	Category AtomCategory `xml:"category"`
+	ID       string       `xml:"id"`
 }
 
-// ConvertAtomEntryToFiling converts an AtomEntry from the SEC RSS feed to a GlobalEDGARFiling
-func ConvertAtomEntryToFiling(entry AtomEntry) (GlobalEDGARFiling, error) {
-	// Get filing type from the category term attribute
-	filingType := entry.Category.Term
+// AtomLink represents a link element in an Atom entry
+type AtomLink struct {
+	Href string `xml:"href,attr"`
+}
 
-	// Parse the time from Updated field
-	parsedTime, err := time.Parse(time.RFC3339, entry.Updated)
-	if err != nil {
-		return GlobalEDGARFiling{}, fmt.Errorf("failed to parse time: %v", err)
-	}
+// AtomCategory represents the category element in an Atom entry
+type AtomCategory struct {
+	Term  string `xml:"term,attr"`
+	Label string `xml:"label,attr"`
+}
 
-	// Extract ticker symbol from title
-	companyName := ""
-	parts := strings.Split(entry.Title, " - ")
-	if len(parts) > 0 {
-		companyName = parts[0]
-	}
-	ticker := extractTicker(companyName)
-
-	// If no ticker in title, extract CIK and try to get ticker from it
-	if ticker == "" && len(parts) > 1 {
-		cik := extractCIK(parts[1])
-		if cik != "" {
-			ticker = fetchTickerFromCIK(cik)
+// extractTicker attempts to extract a ticker symbol from the company name
+func extractTicker(companyName string) string {
+	if idx := strings.Index(companyName, "("); idx != -1 {
+		if endIdx := strings.Index(companyName[idx:], ")"); endIdx != -1 {
+			return companyName[idx+1 : idx+endIdx]
 		}
 	}
-
-	return GlobalEDGARFiling{
-		Type:      filingType,
-		Date:      parsedTime,
-		URL:       entry.Link.Href,
-		Timestamp: parsedTime.UnixMilli(),
-		Ticker:    ticker,
-		Channel:   "sec_rss",
-	}, nil
+	return "" // Return empty string if no ticker is found
 }
 
-// extractCIK attempts to extract a CIK from the text
-func extractCIK(text string) string {
-	// Look for pattern (numbers) in text
-	start := strings.Index(text, "(")
-	if start != -1 {
-		end := strings.Index(text[start:], ")")
-		if end != -1 {
-			cikText := text[start+1 : start+end]
-			// Remove any non-digit characters
-			cik := ""
-			for _, c := range cikText {
-				if c >= '0' && c <= '9' {
-					cik += string(c)
-				}
-			}
-			return cik
-		}
-	}
-	return ""
-}
 func fetchCIKFromSEC(ticker string) (string, error) {
 	// SEC company lookup endpoint
 	url := fmt.Sprintf("https://www.sec.gov/files/company_tickers.json")
@@ -442,160 +409,229 @@ func fetchTickerFromCIK(cik string) string {
 
 // FetchLatestEdgarFilings fetches the latest SEC filings from the RSS feed
 func FetchLatestEdgarFilings() ([]GlobalEDGARFiling, error) {
-	return FetchPaginatedEdgarFilings(1, 100)
-}
-
-// FetchPaginatedEdgarFilings fetches multiple pages of SEC filings with pagination
-func FetchPaginatedEdgarFilings(pages int, itemsPerPage int) ([]GlobalEDGARFiling, error) {
-	var allFilings []GlobalEDGARFiling
-
-	// Set up rate limiting parameters
-	baseDelay := 2 * time.Second // Initial delay between requests
-	maxDelay := 30 * time.Second // Maximum delay to wait
-	maxRetries := 5              // Maximum number of retries
-
-	for page := 0; page < pages; page++ {
-		start := page * itemsPerPage
-
-		// Define the SEC RSS feed URL with pagination parameters
-		url := fmt.Sprintf("https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&output=atom&start=%d&count=%d",
-			start, itemsPerPage)
-
-		// Implement retry logic with exponential backoff
-		var resp *http.Response
-		var err error
-		currentDelay := baseDelay
-
-		for retries := 0; retries <= maxRetries; retries++ {
-			if retries > 0 {
-				retryTime := currentDelay + time.Duration(rand.Intn(1000))*time.Millisecond
-				fmt.Printf("Retry #%d after %v due to status %d\n", retries, retryTime, resp.StatusCode)
-				time.Sleep(retryTime)
-				currentDelay *= 2 // exponential backoff
-				if currentDelay > maxDelay {
-					currentDelay = maxDelay
-				}
-			}
-
-			fmt.Printf("Fetching page %d/%d (start=%d, count=%d) - attempt %d\n",
-				page+1, pages, start, itemsPerPage, retries+1)
-
-			// Create an HTTP client with a timeout
-			client := &http.Client{
-				Timeout: 30 * time.Second, // Increased timeout
-			}
-
-			// Create and configure the HTTP request
-			req, reqErr := http.NewRequest("GET", url, nil)
-			if reqErr != nil {
-				return nil, fmt.Errorf("failed to create request: %v", reqErr)
-			}
-
-			// SEC API requires detailed User-Agent header
-			req.Header.Set("User-Agent", "atlantis admin@atlantis.trading")
-			req.Header.Set("Accept-Encoding", "gzip, deflate")
-			req.Header.Set("Host", "www.sec.gov")
-
-			// Execute the request
-			resp, err = client.Do(req)
-			if err != nil {
-				if retries >= maxRetries {
-					return nil, fmt.Errorf("failed to fetch SEC RSS feed after %d retries: %v",
-						retries, err)
-				}
-				continue // Try again
-			}
-
-			// If successful or error other than 429, break the retry loop
-			if resp.StatusCode == http.StatusOK ||
-				(resp.StatusCode != http.StatusTooManyRequests && retries >= maxRetries) {
-				break
-			}
-
-			// Close the response body if we're going to retry
-			resp.Body.Close()
-		}
-
-		defer resp.Body.Close()
-
-		// Final check of the response status
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("SEC API returned status: %d after maximum retries", resp.StatusCode)
-		}
-
-		// Decode the XML into the feed struct
-		var feed AtomFeed
-		decoder := xml.NewDecoder(resp.Body)
-		decoder.CharsetReader = func(charsetName string, input io.Reader) (io.Reader, error) {
-			return charset.NewReader(input, charsetName)
-		}
-
-		if err := decoder.Decode(&feed); err != nil {
-			return nil, fmt.Errorf("failed to parse XML: %v", err)
-		}
-
-		// Check if we've reached the end of results
-		if len(feed.Entries) == 0 {
-			fmt.Printf("No more results available after page %d\n", page)
-			break
-		}
-
-		// Convert AtomEntry objects to GlobalEDGARFiling objects
-		pageFilings := 0
-		for _, entry := range feed.Entries {
-			filing, err := ConvertAtomEntryToFiling(entry)
-			if err != nil {
-				// Log the error but continue processing other entries
-				fmt.Printf("Error converting filing entry: %v\n", err)
-				continue
-			}
-
-			// Filter out Form 4 filings and entries without tickers
-			if filing.Type != "4" && filing.Ticker != "" {
-				allFilings = append(allFilings, filing)
-				pageFilings++
-			}
-		}
-
-		fmt.Printf("Page %d: Found %d entries, added %d filtered filings\n",
-			page+1, len(feed.Entries), pageFilings)
-
-		// If we got fewer results than requested, we've reached the end
-		if len(feed.Entries) < itemsPerPage {
-			fmt.Printf("Reached last page with %d entries\n", len(feed.Entries))
-			break
-		}
-
-		// Add a mandatory delay between requests to respect rate limits (1-5 seconds)
-		if page < pages-1 {
-			delay := baseDelay + time.Duration(rand.Intn(3000))*time.Millisecond
-			fmt.Printf("Waiting %v before next request...\n", delay)
-			time.Sleep(delay)
-		}
-	}
-
-	fmt.Printf("Successfully fetched and converted %d filings from %d pages\n", len(allFilings), pages)
-	return allFilings, nil
-}
-
-func main() {
-	filings, err := FetchLatestEdgarFilings()
+	// Try the JSON API first, fall back to HTML parsing if that fails
+	filings, err := FetchLatestEdgarFilingsJSON()
 	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-		return
+		return nil, err
 	}
-	for _, filing := range filings {
-		fmt.Printf("Type: %s, URL: %s, Date: %s, Ticker: %s\n",
-			filing.Type, filing.URL, filing.Date.Format(time.RFC3339), filing.Ticker)
-	}
+	return filings, nil
 }
 
-// extractTicker attempts to extract a ticker symbol from the company name
-func extractTicker(companyName string) string {
-	if idx := strings.Index(companyName, "("); idx != -1 {
-		if endIdx := strings.Index(companyName[idx:], ")"); endIdx != -1 {
-			return companyName[idx+1 : idx+endIdx]
-		}
+// FetchLatestEdgarFilingsJSON fetches SEC filings using the SEC.gov Atom feed
+func FetchLatestEdgarFilingsJSON() ([]GlobalEDGARFiling, error) {
+	// Now fetch the latest filings using the SEC browse endpoint
+	url := "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=&company=&dateb=&owner=include&start=0&count=100&output=atom"
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
-	return "" // Return empty string if no ticker is found
+
+	// SEC API requires detailed User-Agent header
+	req.Header.Set("User-Agent", "Atlantis Equities admin@atlantis.trading")
+	req.Header.Set("Accept", "application/xml, application/atom+xml, text/xml, */*;q=0.8")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	return parseEdgarXMLFeed(body)
+}
+
+// parseEdgarXMLFeed parses the SEC EDGAR Atom XML feed
+func parseEdgarXMLFeed(body []byte) ([]GlobalEDGARFiling, error) {
+	decoder := xml.NewDecoder(bytes.NewReader(body))
+	decoder.CharsetReader = charset.NewReaderLabel
+
+	var feed AtomFeed
+	if err := decoder.Decode(&feed); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal XML: %v", err)
+	}
+
+	var filings []GlobalEDGARFiling
+	for _, entry := range feed.Entries {
+		// Extract date and time from the updated field
+		updatedTime, err := time.Parse(time.RFC3339, entry.Updated)
+		if err != nil {
+			fmt.Printf("Error parsing time %s: %v\n", entry.Updated, err)
+			// Use current time as fallback instead of skipping
+			updatedTime = time.Now()
+		}
+
+		// Convert to UTC and get timestamp in milliseconds
+		utcTime := updatedTime.UTC()
+		utcTimestampMs := utcTime.UnixNano() / int64(time.Millisecond)
+
+		// Format date as YYYY-MM-DD for the date field
+		date := utcTime.Format("2006-01-02")
+
+		// Extract CIK from entry title
+		//cik := extractCIK(entry)
+
+		// Try to convert CIK to ticker
+		/*ticker := ""
+		if cik != "" {
+			ticker = fetchTickerFromCIK(cik)
+		}*/
+		ticker := ""
+
+		// Extract company name from title (Format: "FORM_TYPE - COMPANY_NAME (ID) (Role)")
+		companyName := parseCompanyName(entry.Title)
+
+		// Extract accession number from the ID field
+		accessionNumber := ""
+		if idParts := strings.Split(entry.ID, "="); len(idParts) > 1 {
+			accessionNumber = idParts[1]
+		}
+		// Create filing object
+		filing := GlobalEDGARFiling{
+			CompanyName:     companyName,
+			Type:            entry.Category.Term,
+			Date:            date,
+			URL:             entry.Link.Href,
+			AccessionNumber: accessionNumber,
+			Description:     entry.Summary,
+			Timestamp:       utcTimestampMs,
+			Ticker:          ticker,
+		}
+
+		if filing.Type == "4" || ticker == "" {
+			continue
+		}
+
+		filings = append(filings, filing)
+	}
+
+	return filings, nil
+}
+
+// extractCIK extracts the CIK from an EDGAR Atom feed entry
+func extractCIK(entry AtomEntry) string {
+	// Extract CIK from title format: "FormType - CompanyName (CIK) (Role)"
+	titleRegex := regexp.MustCompile(`\((\d+)\)`)
+	matches := titleRegex.FindStringSubmatch(entry.Title)
+	if len(matches) > 1 {
+		return matches[1]
+	}
+
+	// Method 2: Try to extract from ID using regex
+	cikRegex := regexp.MustCompile(`CIK=(\d+)`)
+	matches = cikRegex.FindStringSubmatch(entry.ID)
+	if len(matches) > 1 {
+		return matches[1]
+	}
+
+	// Method 3: Try to extract from summary
+	cikContentRegex := regexp.MustCompile(`CIK: (\d+)`)
+	matches = cikContentRegex.FindStringSubmatch(entry.Summary)
+	if len(matches) > 1 {
+		return matches[1]
+	}
+
+	return ""
+}
+
+// cikToTicker attempts to convert a CIK to a ticker symbol
+func cikToTicker(cik string) string {
+	if cik == "" {
+		return ""
+	}
+
+	// Option 1: Use a predefined mapping
+	tickerMap := map[string]string{
+		// Some common examples
+		"1018724": "AAPL", // Apple
+		"1045810": "GOOG", // Alphabet (Google)
+		"1326801": "FB",   // Meta (Facebook)
+		"1467858": "TWTR", // Twitter
+		// Add more as needed
+	}
+
+	if ticker, exists := tickerMap[cik]; exists {
+		return ticker
+	}
+
+	// Option 2: Call an external API (implement as needed)
+	// return fetchTickerFromAPI(cik)
+
+	// Option 3: Query the SEC website or database
+	// Example placeholder - implement the actual logic
+	ticker, err := lookupTickerByCIK(cik)
+	if err == nil && ticker != "" {
+		return ticker
+	}
+
+	return ""
+}
+
+// lookupTickerByCIK looks up a ticker symbol using a CIK
+func lookupTickerByCIK(cik string) (string, error) {
+	// This is a simplified example - you would need to implement
+	// the actual logic to query the SEC or a financial data provider
+
+	// Example: Query SEC EDGAR API
+	url := fmt.Sprintf("https://data.sec.gov/submissions/CIK%s.json", cik)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+
+	// SEC requires a user agent with contact info
+	req.Header.Add("User-Agent", "YourApp youremail@example.com")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("SEC API returned status code %d", resp.StatusCode)
+	}
+
+	var data struct {
+		Tickers []string `json:"tickers"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return "", err
+	}
+
+	if len(data.Tickers) > 0 {
+		return data.Tickers[0], nil
+	}
+
+	return "", fmt.Errorf("no ticker found for CIK %s", cik)
+}
+
+// Helper functions to extract specific pieces from the Atom entries
+func parseCompanyName(title string) string {
+	// Extract company name from title like "FORM_TYPE - COMPANY_NAME (ID) (Role)"
+	parts := strings.Split(title, " - ")
+	if len(parts) < 2 {
+		return title
+	}
+	companyWithID := parts[1]
+	companyParts := strings.Split(companyWithID, " (")
+	if len(companyParts) < 1 {
+		return companyWithID
+	}
+	return companyParts[0]
+}
+
+func parseFilingDate(updated string) string {
+	// Convert the ISO 8601 timestamp to the desired format
+	t, err := time.Parse(time.RFC3339, updated)
+	if err != nil {
+		return updated
+	}
+	return t.Format("2006-01-02")
 }
