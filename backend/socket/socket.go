@@ -117,15 +117,21 @@ func BroadcastSECFiling(filing utils.EDGARFiling, ticker string) {
 // BroadcastGlobalSECFiling sends a new global SEC filing to all clients subscribed to the sec-filings channel
 func BroadcastGlobalSECFiling(filing utils.GlobalEDGARFiling) {
 	filingMessage := SECFilingMessage{
-		Type: filing.Type,
-		Date: filing.Date,
-		URL:  filing.URL,
-		//Timestamp: filing.Timestamp,
-		Ticker:  filing.Ticker,
-		Channel: "sec-filings",
+		Type:      filing.Type,
+		Date:      filing.Date,
+		URL:       filing.URL,
+		Timestamp: filing.Timestamp,
+		Ticker:    filing.Ticker,
+		Channel:   "sec-filings",
 	}
 
-	jsonData, err := json.Marshal(filingMessage)
+	// Create a wrapper with data property to match the expected format
+	wrapper := map[string]interface{}{
+		"channel": "sec-filings",
+		"data":    filingMessage,
+	}
+
+	jsonData, err := json.Marshal(wrapper)
 	if err != nil {
 		fmt.Println("Error marshaling global SEC filing:", err)
 		return
