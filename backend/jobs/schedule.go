@@ -112,7 +112,7 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 	//open := time.Date(year, month, day, 9, 30, 0, 0, now.Location())
 	//close_ := time.Date(year, month, day, 16, 0, 0, 0, now.Location())
 	fmt.Printf("\n\nStarting EdgarFilingsService\n\n")
-	utils.StartEdgarFilingsService()
+	utils.StartEdgarFilingsService(conn)
 	go func() {
 		for filing := range utils.NewFilingsChannel {
 			fmt.Printf("\n\nBroadcasting global SEC filing\n\n")
@@ -137,8 +137,11 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 		}
 		fmt.Println("running close schedule ----------------------")
 		if useBS {
-
-			err := simpleUpdateSecurities(conn)
+			err := updateSecurityCik(conn)
+			if err != nil {
+				fmt.Println("schedule issue: updating ticker ciks l44lgkkvv", err)
+			}
+			err = simpleUpdateSecurities(conn)
 			if err != nil {
 				fmt.Println("schedule issue: dw000", err)
 			}

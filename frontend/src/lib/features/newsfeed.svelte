@@ -103,29 +103,34 @@
 	}
 
 	// Function to handle incoming global SEC filing messages
-	function handleGlobalSECFilingMessage(data: any) {
-		console.log("SEC Filing message received:", data);
+	function handleGlobalSECFilingMessage(message: any) {
+		console.log("SEC Filing message received:", message);
 		
-		// If data is an array, it's the initial load
-		if (Array.isArray(data)) {
-			console.log("Initial SEC filings data:", data);
-			globalFilings.set(data);
+		// Check if the message has a data property that is an array
+		if (message.data && Array.isArray(message.data)) {
+			console.log("Initial SEC filings data:", message.data);
+			globalFilings.set(message.data);
 			isLoadingGlobalFilings = false;
-			globalFilingsMessage = data.length > 0 ? 
-				`Loaded ${data.length} recent SEC filings` : 
+			globalFilingsMessage = message.data.length > 0 ? 
+				`Loaded ${message.data.length} recent SEC filings` : 
 				'No recent SEC filings found';
-		} else {
-			console.log("New SEC filing:", data);
+		} else if (message.data) {
+			// Handle single filing update
+			console.log("New SEC filing:", message.data);
 			globalFilings.update(currentFilings => {
 				// Add the new filing at the beginning of the array
-				const updatedFilings = [data, ...currentFilings];
+				const updatedFilings = [message.data, ...currentFilings];
 				// Keep only the most recent 100 filings
 				if (updatedFilings.length > 100) {
 					return updatedFilings.slice(0, 100);
 				}
+				console.log("Updated SEC filings:", updatedFilings);
 				return updatedFilings;
 			});
-			globalFilingsMessage = `New SEC filing: ${data.type} for ${data.ticker}`;
+			globalFilingsMessage = `New SEC filing: ${message.data.type} for ${message.data.ticker || message.data.company_name}`;
+		} else {
+			console.error("Received unexpected message format:", message);
+			globalFilingsMessage = "Received data in unexpected format";
 		}
 	}
 
