@@ -137,8 +137,11 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 		}
 		fmt.Println("running close schedule ----------------------")
 		if useBS {
-
-			err := simpleUpdateSecurities(conn)
+			err := updateSecurityCik(conn)
+			if err != nil {
+				fmt.Println("schedule issue: updating ticker ciks l44lgkkvv", err)
+			}
+			err = simpleUpdateSecurities(conn)
 			if err != nil {
 				fmt.Println("schedule issue: dw000", err)
 			}
