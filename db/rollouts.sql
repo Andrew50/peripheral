@@ -119,3 +119,14 @@ ADD COLUMN profile_picture TEXT;
 -------------------------
 ALTER TABLE securities
 ADD COLUMN total_shares BIGINT;
+
+
+-----------------------
+
+ALTER TABLE securities 
+ADD COLUMN cik int; 
+
+alter table securities
+rename column cik to cik_varchar; 
+alter table securities 
+add column cik int; 
