@@ -3,7 +3,7 @@
 	import { privateRequest } from '$lib/core/backend';
 	import { subscribeSECFilings, unsubscribeSECFilings } from '$lib/utils/stream/socket';
 	import { addGlobalSECFilingsStream } from '$lib/utils/stream/interface';
-	import { globalFilings, formatTimestamp, type Filing } from '$lib/utils/stream/secfilings';
+	import { globalFilings, formatTimestamp, handleSECFilingMessage } from '$lib/utils/stream/secfilings';
 	import { queryChart } from '$lib/features/chart/interface';
 
 	// Local component state
@@ -11,7 +11,7 @@
 	let globalFilingsMessage = 'Loading SEC filings...';
 
 	// Function to handle clicking on a filing
-	function handleFilingClick(filing: Filing) {
+	function handleFilingClick(filing) {
 		// Find the security by ticker and load its chart
 		if (filing.ticker) {
 			queryChart({ ticker: filing.ticker });
@@ -21,9 +21,10 @@
 	function refreshFilings() {
 		isLoadingGlobalFilings = true;
 		globalFilingsMessage = 'Refreshing SEC filings...';
-		privateRequest<Filing[]>('getLatestEdgarFilings', {})
+		privateRequest('getLatestEdgarFilings', {})
 			.then(filings => {
-				globalFilings.set(filings);
+				console.log('Received filings from API:', filings);
+				handleSECFilingMessage(filings); // Use the same handler for consistency
 				isLoadingGlobalFilings = false;
 				globalFilingsMessage = filings.length > 0 ? 
 					`Loaded ${filings.length} recent SEC filings` : 
@@ -36,21 +37,29 @@
 			});
 	}
 
+	// Function to handle WebSocket messages for SEC filings
+	function handleSocketMessage(data) {
+		console.log("SEC Filing message received via socket:", data);
+		handleSECFilingMessage(data);
+		isLoadingGlobalFilings = false;
+		
+		// Update message based on filings count
+		const filingsCount = $globalFilings.length;
+		globalFilingsMessage = filingsCount > 0 ? 
+			`Loaded ${filingsCount} recent SEC filings` : 
+			'No recent SEC filings found';
+	}
+
 	onMount(async () => {
 		try {
-			// Load initial data
-			const initialFilings = await privateRequest<Filing[]>('getLatestEdgarFilings', {});
-			globalFilings.set(initialFilings);
-			isLoadingGlobalFilings = false;
-			console.log(initialFilings);
-			globalFilingsMessage = initialFilings.length > 0 ? 
-				`Loaded ${initialFilings.length} recent SEC filings` : 
-				'No recent SEC filings found';
-			
 			// Subscribe to real-time updates
-			subscribeSECFilings();
+			const unsubscribe = addGlobalSECFilingsStream(handleSocketMessage);
+			
+			return () => {
+				unsubscribe();
+			};
 		} catch (error) {
-			console.error('Failed to load initial SEC filings:', error);
+			console.error('Failed to subscribe to SEC filings:', error);
 			globalFilingsMessage = `Error loading SEC filings: ${error}`;
 			isLoadingGlobalFilings = false;
 		}
@@ -87,9 +96,15 @@
 				{#each $globalFilings as filing}
 					<div class="filing-item" on:click={() => handleFilingClick(filing)}>
 						<div class="filing-header">
-							<span class="filing-type">{filing.type}</span>
+							<span class="filing-type">{filing.type || 'Unknown'}</span>
+							<span class="filing-company">{filing.company_name || 'Unknown Company'}</span>
 							<span class="filing-ticker">{filing.ticker || 'Unknown'}</span>
-							<span class="filing-date">{formatTimestamp(filing.timestamp)}</span>
+						</div>
+						<div class="filing-date">
+							Filed: {filing.date || 'Unknown date'} 
+							{#if filing.timestamp}
+								({formatTimestamp(filing.timestamp)})
+							{/if}
 						</div>
 						<div class="filing-actions">
 							<a href={filing.url} target="_blank" rel="noopener noreferrer" class="filing-link">
@@ -107,12 +122,12 @@
 
 <style>
 	.sec-filings-feed {
-		padding: 20px;
-		color: white;
-		height: 100%;
-		overflow-y: auto;
 		display: flex;
 		flex-direction: column;
+		height: 100%;
+		padding: 16px;
+		background-color: #1a1a1a;
+		color: #f0f0f0;
 	}
 
 	.header-section {
@@ -183,6 +198,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
+		overflow-y: auto;
 	}
 
 	.filing-item {
@@ -209,6 +225,14 @@
 		color: #4caf50;
 	}
 
+	.filing-company {
+		flex-grow: 1;
+		margin: 0 10px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
 	.filing-ticker {
 		color: #2196f3;
 	}
@@ -216,6 +240,7 @@
 	.filing-date {
 		color: #aaa;
 		font-size: 0.9em;
+		margin-bottom: 8px;
 	}
 
 	.filing-actions {

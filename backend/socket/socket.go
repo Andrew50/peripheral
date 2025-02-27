@@ -117,12 +117,12 @@ func BroadcastSECFiling(filing utils.EDGARFiling, ticker string) {
 // BroadcastGlobalSECFiling sends a new global SEC filing to all clients subscribed to the sec-filings channel
 func BroadcastGlobalSECFiling(filing utils.GlobalEDGARFiling) {
 	filingMessage := SECFilingMessage{
-		Type:      filing.Type,
-		Date:      filing.Date.Format("2006-01-02"),
-		URL:       filing.URL,
-		Timestamp: filing.Timestamp,
-		Ticker:    filing.Ticker,
-		Channel:   "sec-filings",
+		Type: filing.Type,
+		Date: filing.Date,
+		URL:  filing.URL,
+		//Timestamp: filing.Timestamp,
+		Ticker:  filing.Ticker,
+		Channel: "sec-filings",
 	}
 
 	jsonData, err := json.Marshal(filingMessage)
@@ -416,7 +416,7 @@ func (c *Client) subscribeSECFilings(conn *utils.Conn) {
 
 	// Get the latest filings from the cache
 	if conn != nil {
-		// Get the latest 50 filings from the cache
+		// Get the latest filings from the cache
 		latestFilings := utils.GetLatestEdgarFilings()
 
 		// Limit to 50 filings if there are more
@@ -425,24 +425,24 @@ func (c *Client) subscribeSECFilings(conn *utils.Conn) {
 		}
 
 		if len(latestFilings) > 0 {
-			// Add channel field to each filing
-			filingMessages := make([]SECFilingMessage, len(latestFilings))
-			for i, filing := range latestFilings {
-				filingMessages[i] = SECFilingMessage{
-					Type:      filing.Type,
-					Date:      filing.Date.Format("2006-01-02"),
-					URL:       filing.URL,
-					Timestamp: filing.Timestamp,
-					Ticker:    filing.Ticker,
-					Channel:   "sec-filings",
-				}
+			fmt.Printf("Found %d SEC filings to send initially\n", len(latestFilings))
+
+			// Debug: Print the first filing's timestamp
+			if len(latestFilings) > 0 {
+				fmt.Printf("First filing timestamp: %d\n", latestFilings[0].Timestamp)
+			}
+
+			// Create a message with channel information
+			message := map[string]interface{}{
+				"channel": channelName,
+				"data":    latestFilings,
 			}
 
 			// Send the initial data
-			jsonData, err := json.Marshal(filingMessages)
+			jsonData, err := json.Marshal(message)
 			if err == nil {
 				c.send <- jsonData
-				fmt.Printf("Sent %d initial SEC filings to client\n", len(filingMessages))
+				fmt.Printf("Sent %d initial SEC filings to client\n", len(latestFilings))
 			} else {
 				fmt.Println("Error marshaling SEC filings:", err)
 			}

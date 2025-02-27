@@ -39,7 +39,18 @@ spec:
     spec:
       containers:
         - name: worker
-          image: billin19/worker:latest
+          image: billin19/worker:prod
+          imagePullPolicy: Always
+          env:
+            - name: REDIS_HOST
+              value: "cache"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: redis-password
           resources:
             requests:
               cpu: 500m
@@ -47,6 +58,44 @@ spec:
             limits:
               cpu: 5000m
               memory: 8000Mi
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - >
+                  python3 -c "
+                  import redis;
+                  import os;
+                  r = redis.Redis(
+                    host=os.environ['REDIS_HOST'],
+                    port=int(os.environ['REDIS_PORT']),
+                    password=os.environ['REDIS_PASSWORD']
+                  );
+                  r.ping()
+                  "
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - >
+                  python3 -c "
+                  import redis;
+                  import os;
+                  r = redis.Redis(
+                    host=os.environ['REDIS_HOST'],
+                    port=int(os.environ['REDIS_PORT']),
+                    password=os.environ['REDIS_PASSWORD']
+                  );
+                  r.ping()
+                  "
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
       #     volumeMounts:
       #       - name: worker-volume
       #         mountPath: /app/models

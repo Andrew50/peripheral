@@ -1,3 +1,7 @@
+# IMPORTANT: THIS FILE IS FOR DEVELOPMENT PURPOSES ONLY
+# Production deployment is handled via Kubernetes in the /prod directory
+# The configurations below should NOT be used for actual production deployment
+
 services:
     backend:
         build:

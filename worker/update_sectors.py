@@ -58,7 +58,7 @@ def update_sectors(conn) -> Dict[str, int]:
         # Process results and update database
         for ticker, new_sector, new_industry, error in results:
             if error:
-                print(f"Failed to update {ticker}: {error}")
+                #print(f"Failed to update {ticker}: {error}")
                 stats["failed"] += 1
                 continue
 
