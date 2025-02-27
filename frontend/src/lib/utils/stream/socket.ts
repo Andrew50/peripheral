@@ -150,6 +150,9 @@ export function subscribeSECFilings() {
 		socket.send(JSON.stringify({
 			action: 'subscribe-sec-filings'
 		}));
+	} else {
+		// Store the subscription request to be sent when connection is established
+		pendingSubscriptions.add('sec-filings');
 	}
 }
 
@@ -159,6 +162,9 @@ export function unsubscribeSECFilings() {
 			action: 'unsubscribe-sec-filings'
 		}));
 	}
+	
+	// Remove from pending subscriptions if present
+	pendingSubscriptions.delete('sec-filings');
 }
 
 
@@ -183,3 +189,24 @@ export function unsubscribeSECFilings() {
 */
 
 // /socket.ts
+
+// Add browser window close handler
+if (browser) {
+	window.addEventListener('beforeunload', () => {
+		// Unsubscribe from all channels
+		activeChannels.forEach((_, channelName) => {
+			if (channelName === 'sec-filings') {
+				unsubscribeSECFilings();
+			} else {
+				unsubscribe(channelName);
+			}
+		});
+		
+		// Close the socket
+		if (socket && socket.readyState === WebSocket.OPEN) {
+			// Set flag to prevent automatic reconnection
+			shouldReconnect = false;
+			socket.close();
+		}
+	});
+}

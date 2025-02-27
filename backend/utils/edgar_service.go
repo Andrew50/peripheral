@@ -38,7 +38,7 @@ func StartEdgarFilingsService(conn *Conn) {
 
 	// Start periodic fetching
 	go func() {
-		ticker := time.NewTicker(1 * time.Minute) // Adjust frequency as needed
+		ticker := time.NewTicker(10 * time.Second) // Adjust frequency as needed
 		defer ticker.Stop()
 
 		for range ticker.C {
