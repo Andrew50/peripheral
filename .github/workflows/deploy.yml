@@ -1,15 +1,21 @@
 name: Deploy to Kubernetes
 
 on:
+  # Deploy when pushing to stable branches
   push:
     branches:
-      - dev        # Deploy when pushing to the dev branch
-      - prod       # Deploy when pushing to the prod branch
+      - dev
+      - prod
+  
+  # Different trigger for pull requests with explicit configuration
   pull_request:
+    types: [opened, synchronize, reopened]
     branches:
-      - dev        # Deploy when creating a pull request to the dev branch
-      - prod       # Deploy when creating a pull request to the prod branch
-  workflow_dispatch:  # Allow manual triggering
+      - dev
+      - prod
+  
+  # Manual triggering
+  workflow_dispatch:
     inputs:
       branch:
         description: 'Branch to deploy'
@@ -20,27 +26,53 @@ jobs:
   deploy:
     runs-on: self-hosted  # Using self-hosted runner instead of ubuntu-latest
     steps:
+      # Print debugging information before checkout
+      - name: Debug Event Information
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+          echo "GitHub ref: ${{ github.ref }}"
+          echo "GitHub head ref: ${{ github.head_ref }}"
+          echo "GitHub base ref: ${{ github.base_ref }}"
+          echo "GitHub ref name: ${{ github.ref_name }}"
+          echo "Custom branch input: ${{ github.event.inputs.branch }}"
+
+      # Determine which branch to checkout based on event type
+      - name: Set checkout target
+        id: set-target
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "CHECKOUT_REF=${{ github.head_ref }}" >> $GITHUB_ENV
+            echo "Using PR head branch: ${{ github.head_ref }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.branch }}" ]; then
+            echo "CHECKOUT_REF=${{ github.event.inputs.branch }}" >> $GITHUB_ENV
+            echo "Using manual input branch: ${{ github.event.inputs.branch }}"
+          else
+            echo "CHECKOUT_REF=${{ github.ref_name }}" >> $GITHUB_ENV
+            echo "Using current branch: ${{ github.ref_name }}"
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          ref: ${{ github.event.inputs.branch || github.ref_name }}
+          ref: ${{ env.CHECKOUT_REF }}
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 1
           lfs: false
       
-      # Add diagnostic step to see what's available
+      # Add diagnostic step to see what's available after checkout
       - name: Show Git Information
         run: |
-          echo "Current ref: ${{ github.ref }}"
-          echo "Current branch: ${{ github.ref_name }}"
-          echo "Event name: ${{ github.event_name }}"
+          echo "Current directory: $(pwd)"
+          echo "Directory contents: $(ls -la)"
+          echo "Git status: $(git status)"
+          echo "Current branch: $(git branch --show-current)"
           git --version
           
       - name: Deploy to server
         env:
           DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
           DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
-          GITHUB_REF_NAME: ${{ github.event.inputs.branch || github.ref_name }}
+          GITHUB_REF_NAME: ${{ env.CHECKOUT_REF }}
         run: |
           # Make script executable
           chmod +x prod/deploy-prod.sh
