@@ -149,7 +149,7 @@ jobs:
 
       # Upload replication info for the backup server
       - name: Upload replication info
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: replication-info
           path: replication-info.json
