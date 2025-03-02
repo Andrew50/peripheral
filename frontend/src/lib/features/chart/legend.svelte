@@ -28,7 +28,7 @@
 
 	function handleClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
-		queryInstanceInput('any', ['ticker', 'timeframe', 'timestamp', 'extendedHours'], instance).then(
+		queryInstanceInput([], ['ticker', 'timeframe', 'timestamp', 'extendedHours'], instance).then(
 			(v: Instance) => {
 				queryChart(v, true);
 			}
