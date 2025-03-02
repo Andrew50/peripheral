@@ -42,8 +42,8 @@ jobs:
         id: set-target
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "CHECKOUT_REF=${{ github.head_ref }}" >> $GITHUB_ENV
-            echo "Using PR head branch: ${{ github.head_ref }}"
+            echo "CHECKOUT_REF=${{ github.base_ref }}" >> $GITHUB_ENV
+            echo "Using PR target branch: ${{ github.base_ref }}"
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.branch }}" ]; then
             echo "CHECKOUT_REF=${{ github.event.inputs.branch }}" >> $GITHUB_ENV
             echo "Using manual input branch: ${{ github.event.inputs.branch }}"
@@ -82,4 +82,5 @@ jobs:
           chmod +x prod/deploy-prod.sh
           
           # Run deployment script with GitHub secrets
+          # For pull requests, CHECKOUT_REF is set to the target branch (github.base_ref)
           DOCKER_USER="${{ secrets.DOCKER_USERNAME }}" DOCKER_TOKEN="${{ secrets.DOCKER_TOKEN }}" GITHUB_REF_NAME="${{ env.CHECKOUT_REF }}" ./prod/deploy-prod.sh 
