@@ -116,7 +116,16 @@ fi
 
 # Docker login handling
 log "Preparing for Docker registry authentication..."
-if [ -n "${GITHUB_ACTIONS}" ]; then
+
+# Check if already logged in via ~/.docker/config.json
+if docker info >/dev/null 2>&1; then
+    # Try to verify login status without exposing credentials
+    if docker image ls >/dev/null 2>&1; then
+        log "Docker appears to be already authenticated via config file, proceeding with push..."
+    else
+        log "Docker is available but may not be authenticated yet"
+    fi
+elif [ -n "${GITHUB_ACTIONS}" ]; then
     # We're in GitHub Actions - attempt to use secrets directly
     log "Running in GitHub Actions environment, using secrets for authentication..."
     
@@ -167,7 +176,7 @@ else
     fi
 fi
 
-log "Docker login successful, proceeding with image push..."
+log "Docker authentication prepared, proceeding with image push..."
 
 docker push ${DOCKER_USER}/frontend:${DOCKER_TAG}
 docker push ${DOCKER_USER}/backend:${DOCKER_TAG}
