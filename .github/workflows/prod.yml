@@ -68,7 +68,7 @@ jobs:
             cd /home/aj/dev/study
             
             # Update code
-            git checkout prod
+            git checkout origin/prod
             git pull origin prod
             
             # Generate tag from commit SHA
@@ -115,31 +115,27 @@ jobs:
             # Apply Kubernetes manifests in order
             echo "Applying Kubernetes manifests..."
             kubectl apply -f prod/config/db.yaml
-            kubectl rollout status statefulset/db --timeout=300s
+            kubectl rollout status deployment/db --timeout=600s
             
             kubectl apply -f prod/config/cache.yaml
-            kubectl rollout status deployment/cache --timeout=300s
+            kubectl rollout status deployment/cache --timeout=600s
             
             kubectl apply -f prod/config/backend.yaml
-            kubectl rollout status deployment/backend --timeout=300s
+            kubectl rollout status deployment/backend --timeout=600s
             
             kubectl apply -f prod/config/worker.yaml
-            kubectl rollout status deployment/worker --timeout=300s
+            kubectl rollout status deployment/worker --timeout=600s
             
             kubectl apply -f prod/config/frontend.yaml
-            kubectl rollout status deployment/frontend --timeout=300s
+            kubectl rollout status deployment/frontend --timeout=600s
             
             kubectl apply -f prod/config/nginx.yaml
             
             # Expose ingress controller
             kubectl -n ingress-nginx expose deployment ingress-nginx-controller --name=ingress-nginx-nodeport --port=80 --target-port=80 --type=NodePort --overrides='\{"spec":\{"ports":[{"port":80,"protocol":"TCP","targetPort":80,"nodePort":30081}]\}\}'
             
-            # Save replication info for backup server
-            MYSQL_STATUS=$(kubectl exec -n default $(kubectl get pods -n default -l app=db,role=primary -o jsonpath="{.items[0].metadata.name}") -- mysql -uroot -p"'"$DB_ROOT_PASSWORD"'" -e "SHOW MASTER STATUS\G")
-            MYSQL_FILE=$(echo "$MYSQL_STATUS" | grep File | awk "{ print \$2 }")
-            MYSQL_POS=$(echo "$MYSQL_STATUS" | grep Position | awk "{ print \$2 }")
-            
-            echo "{\"primary_host\":\"$REMOTE_HOST\",\"mysql_file\":\"$MYSQL_FILE\",\"mysql_pos\":$MYSQL_POS,\"deploy_id\":\"$(date +%s)-$(git rev-parse --short HEAD)\",\"namespace\":\"default\",\"environment\":\"prod\"}" > /tmp/replication-info.json
+            # Save deployment info for backup server
+            echo "{\"primary_host\":\"$REMOTE_HOST\",\"deploy_id\":\"$(date +%s)-$(git rev-parse --short HEAD)\",\"namespace\":\"default\",\"environment\":\"prod\"}" > /tmp/replication-info.json
             
             echo "Primary deployment completed successfully!"
           ' 
@@ -226,7 +222,7 @@ jobs:
             cd /home/aj/dev/study
             
             # Update code
-            git checkout prod
+            git checkout origin/prod
             git pull origin prod
             
             # Docker login
@@ -255,7 +251,7 @@ jobs:
               name: db-replica
               namespace: default
             spec:
-              serviceName: \"db-replica\"
+              serviceName: "db-replica"
               replicas: 1
               selector:
                 matchLabels:
@@ -268,36 +264,26 @@ jobs:
                     role: replica
                 spec:
                   containers:
-                  - name: mysql
-                    image: mysql:8.0
+                  - name: postgres
+                    image: postgres:15
                     env:
-                    - name: MYSQL_ROOT_PASSWORD
-                      value: \"$DB_ROOT_PASSWORD\"
-                    - name: MYSQL_DATABASE
-                      value: \"app_db\"
+                    - name: POSTGRES_PASSWORD
+                      value: "$DB_ROOT_PASSWORD"
+                    - name: POSTGRES_DB
+                      value: "app_db"
                     ports:
-                    - containerPort: 3306
-                      name: mysql
+                    - containerPort: 5432
+                      name: postgres
                     volumeMounts:
-                    - name: mysql-replica-data
-                      mountPath: /var/lib/mysql
+                    - name: postgres-replica-data
+                      mountPath: /var/lib/postgresql/data
                     - name: replication-config
-                      mountPath: /etc/mysql/conf.d
-                    args:
-                    - --server-id=2
-                    - --log-bin=mysql-bin
-                    - --binlog-format=ROW
-                    - --relay-log=mysql-relay-bin
-                    - --read-only=ON
-                  volumes:
-                  - name: replication-config
-                    configMap:
-                      name: mysql-replica-config
+                      mountPath: /etc/postgresql/conf.d
               volumeClaimTemplates:
               - metadata:
-                  name: mysql-replica-data
+                  name: postgres-replica-data
                 spec:
-                  accessModes: [ \"ReadWriteOnce\" ]
+                  accessModes: [ "ReadWriteOnce" ]
                   resources:
                     requests:
                       storage: 1Gi
@@ -308,16 +294,13 @@ jobs:
             apiVersion: v1
             kind: ConfigMap
             metadata:
-              name: mysql-replica-config
+              name: postgres-replica-config
               namespace: default
             data:
-              my.cnf: |
-                [mysqld]
-                server-id=2
-                log_bin=mysql-bin
-                binlog_format=ROW
-                relay-log=mysql-relay-bin
-                read-only=ON
+              postgresql.conf: |
+                wal_level = replica
+                max_wal_senders = 10
+                hot_standby = on
             YAML
             
             cat > prod/config/db-replica-service.yaml << YAML
@@ -331,41 +314,33 @@ jobs:
                 app: db
                 role: replica
               ports:
-              - port: 3306
-                targetPort: 3306
+              - port: 5432
+                targetPort: 5432
             YAML
             
             # Apply replica database configuration
             kubectl apply -f prod/config/db-replica-statefulset.yaml
             kubectl apply -f prod/config/db-replica-configmap.yaml
             kubectl apply -f prod/config/db-replica-service.yaml
-            kubectl rollout status statefulset/db-replica --timeout=300s
+            kubectl rollout status statefulset/db-replica --timeout=600s
             
-            # Set up replication
-            kubectl exec -it \$(kubectl get pods -l app=db,role=replica -o jsonpath=\"{.items[0].metadata.name}\") -- \
-              mysql -uroot -p\"$DB_ROOT_PASSWORD\" -e \"
-              STOP SLAVE;
-              CHANGE MASTER TO MASTER_HOST='\$(kubectl get service db -o jsonpath=\"{.spec.clusterIP}\")', 
-                             MASTER_USER='root', 
-                             MASTER_PASSWORD='$DB_ROOT_PASSWORD', 
-                             MASTER_LOG_FILE='$MYSQL_FILE', 
-                             MASTER_LOG_POS=$MYSQL_POS;
-              START SLAVE;
-              SHOW SLAVE STATUS\\G;
-              \"
+            # Set up PostgreSQL replication
+            kubectl exec -it \$(kubectl get pods -l app=db,role=replica -o jsonpath="{.items[0].metadata.name}") -- \
+              bash -c "echo 'host replication replicator 0.0.0.0/0 md5' >> /var/lib/postgresql/data/pg_hba.conf && \
+                      pg_ctl reload"
             
             # Apply remaining configurations
             kubectl apply -f prod/config/cache.yaml
-            kubectl rollout status deployment/cache --timeout=300s
+            kubectl rollout status deployment/cache --timeout=600s
             
             kubectl apply -f prod/config/backend.yaml
-            kubectl rollout status deployment/backend --timeout=300s
+            kubectl rollout status deployment/backend --timeout=600s
             
             kubectl apply -f prod/config/worker.yaml
-            kubectl rollout status deployment/worker --timeout=300s
+            kubectl rollout status deployment/worker --timeout=600s
             
             kubectl apply -f prod/config/frontend.yaml
-            kubectl rollout status deployment/frontend --timeout=300s
+            kubectl rollout status deployment/frontend --timeout=600s
             
             # Create backup ingress config
             sed \"s/atlantis.trading/backup.atlantis.trading/g\" prod/config/nginx.yaml > prod/config/backup-nginx.yaml
