@@ -13,7 +13,7 @@
 	import { newPriceAlert } from '$lib/features/alerts/interface';
 	import { querySetup } from '$lib/utils/popups/setup.svelte';
 	import { startReplay } from '$lib/utils/stream/interface';
-	import { addHorizontalLine } from '$lib/features/chart/interface';
+	import { addHorizontalLine } from '$lib/features/chart/drawingMenu.svelte';
 	interface RightClickQuery {
 		x?: number;
 		y?: number;
@@ -197,7 +197,7 @@
 				>
 				<button
 					class="wide-button"
-					on:click={() => addHorizontalLine($rightClickQuery.instance.price?.toFixed(2))}
+					on:click={() => addHorizontalLine($rightClickQuery.instance.price, $rightClickQuery.instance.securityId)}
 					>Add Horizontal Line {$rightClickQuery.instance.price?.toFixed(2)}</button
 				>
 			{/if}
