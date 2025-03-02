@@ -14,18 +14,35 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
+# Function to log errors
+error_log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
+}
+
 log "Starting deployment process for branch: ${BRANCH}..."
+
+# Validate that we have the required variables
+if [ -z "${BRANCH}" ]; then
+    error_log "Branch name is not set. Please check GITHUB_REF_NAME or set a default branch."
+    exit 1
+fi
 
 # SSH into the remote server and execute deployment
 # Using Cloudflare Access SSH
 ssh ${REMOTE_USER}@${REMOTE_HOST} << EOF
-    cd ${REMOTE_DIR}
+    set -e  # Exit immediately if a command exits with a non-zero status
+    cd ${REMOTE_DIR} || { echo "Failed to change directory to ${REMOTE_DIR}"; exit 1; }
 
     # Pull latest code
     log "Pulling latest code from ${BRANCH}..."
-    git remote set-url origin git@github.com:Andrew50/study.git
-    git checkout ${BRANCH}
-    git pull origin ${BRANCH}
+    git remote set-url origin git@github.com:Andrew50/study.git || { error_log "Failed to set git remote URL"; exit 1; }
+    
+    # Fetch the branch first to check if it exists
+    git fetch origin ${BRANCH} || { error_log "Failed to fetch branch ${BRANCH}. Check if the branch exists."; exit 1; }
+    
+    # Checkout and pull
+    git checkout ${BRANCH} || { error_log "Failed to checkout branch ${BRANCH}"; exit 1; }
+    git pull origin ${BRANCH} || { error_log "Failed to pull latest code from branch ${BRANCH}"; exit 1; }
 
     # Build new Docker images with branch-specific tag
     log "Building Docker images for ${BRANCH}..."
