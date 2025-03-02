@@ -37,26 +37,36 @@ log "Executing deployment process on runner for branch: ${BRANCH}"
 set -e  # Exit immediately if a command exits with a non-zero status
 echo "Running deployment as $(whoami) in directory $(pwd)"
 
-# Pull latest code - should be unnecessary with GitHub Actions but keeping for consistency
-log "Pulling latest code from ${BRANCH}..."
-git remote set-url origin git@github.com:Andrew50/study.git || { error_log "Failed to set git remote URL"; exit 1; }
+# For GitHub Actions, the code is already checked out, so we can skip the git operations
+log "Using already checked out code for deployment..."
 
-# Fetch all branches to ensure we have the reference
-echo "Fetching all branches to ensure ${BRANCH} exists..."
-git fetch --all || { error_log "Failed to fetch all branches"; exit 1; }
-
-# Check if branch exists
-if git show-ref --verify --quiet refs/remotes/origin/${BRANCH}; then
-    echo "Branch ${BRANCH} found in remote"
+# Check if we're in a GitHub Actions environment
+if [ -n "${GITHUB_ACTIONS}" ]; then
+    log "Running in GitHub Actions environment, skipping git operations..."
 else
-    error_log "Branch ${BRANCH} not found in remote. Available branches:"
-    git branch -a
-    exit 1
-fi
+    # Only perform git operations if not in GitHub Actions
+    log "Not in GitHub Actions, performing git operations..."
+    
+    # Use HTTPS instead of SSH to avoid password prompts
+    git remote set-url origin https://github.com/Andrew50/study.git || { error_log "Failed to set git remote URL"; exit 1; }
 
-# Checkout and pull - this is likely redundant in GitHub Actions but keeping for consistency
-git checkout ${BRANCH} || { error_log "Failed to checkout branch ${BRANCH}"; exit 1; }
-git pull origin ${BRANCH} || { error_log "Failed to pull latest code from branch ${BRANCH}"; exit 1; }
+    # Fetch all branches to ensure we have the reference
+    echo "Fetching all branches to ensure ${BRANCH} exists..."
+    git fetch --all || { error_log "Failed to fetch all branches"; exit 1; }
+
+    # Check if branch exists
+    if git show-ref --verify --quiet refs/remotes/origin/${BRANCH}; then
+        echo "Branch ${BRANCH} found in remote"
+    else
+        error_log "Branch ${BRANCH} not found in remote. Available branches:"
+        git branch -a
+        exit 1
+    fi
+
+    # Checkout and pull
+    git checkout ${BRANCH} || { error_log "Failed to checkout branch ${BRANCH}"; exit 1; }
+    git pull origin ${BRANCH} || { error_log "Failed to pull latest code from branch ${BRANCH}"; exit 1; }
+fi
 
 # Build new Docker images with branch-specific tag
 log "Building Docker images for ${BRANCH}..."
@@ -91,6 +101,7 @@ echo "${DOCKER_TOKEN}" | docker login -u ${DOCKER_USER} --password-stdin
 
 docker push ${DOCKER_USER}/frontend:${DOCKER_TAG}
 docker push ${DOCKER_USER}/backend:${DOCKER_TAG}
+docker push ${DOCKER_USER}/worker:${DOCKER_TAG}
 docker push ${DOCKER_USER}/worker:${DOCKER_TAG}
 docker push ${DOCKER_USER}/tf:${DOCKER_TAG}
 docker push ${DOCKER_USER}/db:${DOCKER_TAG}
