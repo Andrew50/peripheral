@@ -1,0 +1,38 @@
+name: Deploy to Kubernetes
+
+on:
+  push:
+    branches:
+      - dev        # Deploy when pushing to the dev branch
+      - prod       # Deploy when pushing to the prod branch
+  pull_request:
+    branches:
+      - dev        # Deploy when creating a pull request to the dev branch
+      - prod       # Deploy when creating a pull request to the prod branch
+  workflow_dispatch:  # Allow manual triggering
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: true
+        default: 'dev'
+
+jobs:
+  deploy:
+    runs-on: self-hosted  # Using self-hosted runner instead of ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref_name }}
+        
+      - name: Deploy to server
+        env:
+          DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+          GITHUB_REF_NAME: ${{ github.event.inputs.branch || github.ref_name }}
+        run: |
+          # Make script executable
+          chmod +x prod/deploy-prod.sh
+          
+          # Run deployment script
+          ./prod/deploy-prod.sh 
