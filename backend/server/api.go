@@ -65,6 +65,8 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	//settings
 	"getSettings": tasks.GetSettings,
 	"setSettings": tasks.SetSettings,
+	//profile
+	"updateProfilePicture": UpdateProfilePicture,
 	//exchanges
 	"getExchanges": tasks.GetExchanges,
 	//setups
