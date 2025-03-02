@@ -3,15 +3,17 @@ name: Deploy to Kubernetes
 on:
   push:
     branches:
-      - prod  # Trigger on pushes to the prod branch
+      - prod
+      - test
   pull_request:
     branches:
-      - prod  # Trigger on pull requests to the prod branch
+      - prod
+      - test
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: prod
+    environment: ${{ github.ref == 'refs/heads/prod' && 'prod' || 'dev' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -277,3 +279,63 @@ jobs:
             kubectl get ingress
             echo "Deployment completed successfully!"
           ' 
+
+      - name: Set environment variables
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/prod" ]]; then
+            echo "ENVIRONMENT=prod" >> $GITHUB_ENV
+            echo "DOMAIN=atlantis.trading" >> $GITHUB_ENV
+            echo "NAMESPACE=default" >> $GITHUB_ENV
+            echo "REPLICA_HOST=${{ secrets.PROD_REPLICA_HOST }}" >> $GITHUB_ENV
+          else
+            echo "ENVIRONMENT=dev" >> $GITHUB_ENV
+            echo "DOMAIN=dev.atlantis.trading" >> $GITHUB_ENV
+            echo "NAMESPACE=dev" >> $GITHUB_ENV
+            echo "REPLICA_HOST=${{ secrets.DEV_REPLICA_HOST }}" >> $GITHUB_ENV
+          fi
+          echo "DEPLOY_ID=$(date +%s)-$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_ENV
+          echo "deploy_id=$(date +%s)-$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_OUTPUT
+      
+      - name: Deploy primary database
+        env:
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+          DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
+        run: |
+          ssh "$REMOTE_HOST" '
+            # ... similar to existing deployment logic but with environment variables ...
+            
+            # Create namespace if it doesn't exist
+            kubectl create namespace '"$NAMESPACE"' --dry-run=client -o yaml | kubectl apply -f -
+            
+            # Update manifests with environment variables
+            sed -i "s|__NAMESPACE__|'"$NAMESPACE"'|g" config/*.yaml
+            sed -i "s|__DOMAIN__|'"$DOMAIN"'|g" config/*.yaml
+            
+            # Apply databases and other resources
+            kubectl apply -f config/db-primary.yaml -n '"$NAMESPACE"'
+            
+            # Get replication info
+            PRIMARY_POD=$(kubectl get pods -l app=db,role=primary -n '"$NAMESPACE"' -o jsonpath="{.items[0].metadata.name}")
+            PRIMARY_IP=$(minikube ip)
+            
+            MYSQL_STATUS=$(kubectl exec $PRIMARY_POD -n '"$NAMESPACE"' -- mysql -uroot -p"'"$DB_ROOT_PASSWORD"'" -e "SHOW MASTER STATUS\G")
+            MYSQL_FILE=$(echo "$MYSQL_STATUS" | grep File | awk "{ print \$2 }")
+            MYSQL_POS=$(echo "$MYSQL_STATUS" | grep Position | awk "{ print \$2 }")
+            
+            # Store replication info in a file
+            echo "{\"primary_ip\":\"$PRIMARY_IP\",\"mysql_file\":\"$MYSQL_FILE\",\"mysql_pos\":$MYSQL_POS,\"deploy_id\":\"'"$DEPLOY_ID"'\",\"namespace\":\"'"$NAMESPACE"'\",\"environment\":\"'"$ENVIRONMENT"'\"}" > /tmp/replication-info.json
+          '
+          
+          # Download replication info from primary server
+          scp "$REMOTE_HOST:/tmp/replication-info.json" ./replication-info.json
+          
+          # Upload as an artifact for the replica workflow
+          echo "Uploading replication info for replica deployment"
+      
+      - name: Upload replication info
+        uses: actions/upload-artifact@v3
+        with:
+          name: replication-info
+          path: replication-info.json
+          retention-days: 1 
