@@ -156,6 +156,16 @@
 		top: ${$drawingMenuProps.clientY}px;
 		pointer-events: ${$drawingMenuProps.isDragging ? 'none' : 'auto'};
 	`;
+
+	// Add this computed property to format the price
+	$: formattedPrice = $drawingMenuProps.selectedLinePrice !== undefined && 
+						$drawingMenuProps.selectedLinePrice !== null ? 
+						parseFloat($drawingMenuProps.selectedLinePrice).toFixed(2) : "0.00";
+	
+	// Handle input changes
+	function handlePriceInput(e) {
+		$drawingMenuProps.selectedLinePrice = parseFloat(e.target.value);
+	}
 </script>
 
 {#if $drawingMenuProps.active && !$drawingMenuProps.isDragging}
@@ -168,11 +178,15 @@
 		style={menuStyle}
 	>
 		<button on:click={removePriceLine}>Delete</button>
-		<input
-			on:change={editHorizontalLinePrice}
-			bind:value={$drawingMenuProps.selectedLinePrice}
-			type="number"
-		/>
+		<div>
+			<input
+				value={formattedPrice}
+				on:input={handlePriceInput}
+				on:change={editHorizontalLinePrice}
+				type="number"
+				step="0.01"
+			/>
+		</div>
 	</div>
 {/if}
 
