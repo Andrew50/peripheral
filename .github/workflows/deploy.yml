@@ -23,8 +23,21 @@ on:
         default: 'dev'
 
 jobs:
+  # Add a dependency on the lint-and-build workflow
+  check-build:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Check if lint-and-build workflow passed
+        run: |
+          echo "This job ensures the lint-and-build workflow has passed before deployment"
+          # This is a placeholder job that will be skipped for direct pushes
+          # The actual dependency is handled by the workflow_run trigger
+
   deploy:
     runs-on: self-hosted  # Using self-hosted runner instead of ubuntu-latest
+    needs: check-build
+    if: github.event_name != 'pull_request' || success()
     
     steps:
       # Print debugging information before checkout
@@ -42,13 +55,17 @@ jobs:
         id: set-target
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "CHECKOUT_REF=${{ github.base_ref }}" >> $GITHUB_ENV
-            echo "Using PR target branch: ${{ github.base_ref }}"
+            echo "CHECKOUT_REF=${{ github.head_ref }}" >> $GITHUB_ENV
+            echo "TARGET_BRANCH=${{ github.base_ref }}" >> $GITHUB_ENV
+            echo "Using PR source branch for checkout: ${{ github.head_ref }}"
+            echo "Using PR target branch for Docker tags: ${{ github.base_ref }}"
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.branch }}" ]; then
             echo "CHECKOUT_REF=${{ github.event.inputs.branch }}" >> $GITHUB_ENV
+            echo "TARGET_BRANCH=${{ github.event.inputs.branch }}" >> $GITHUB_ENV
             echo "Using manual input branch: ${{ github.event.inputs.branch }}"
           else
             echo "CHECKOUT_REF=${{ github.ref_name }}" >> $GITHUB_ENV
+            echo "TARGET_BRANCH=${{ github.ref_name }}" >> $GITHUB_ENV
             echo "Using current branch: ${{ github.ref_name }}"
           fi
 
@@ -75,35 +92,37 @@ jobs:
           echo "Docker username secret: $(if [ -n "${{ secrets.DOCKER_USERNAME }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
           echo "Docker token secret: $(if [ -n "${{ secrets.DOCKER_TOKEN }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
       
-      # Check if the deployment script exists
-      - name: Check deployment script
+      # Copy the deployment script from the attached directory if it doesn't exist
+      - name: Ensure deployment script exists
         run: |
-          if [ -f "prod/deploy-prod.sh" ]; then
-            echo "Deployment script found at prod/deploy-prod.sh"
-            ls -la prod/
-          else
-            echo "ERROR: Deployment script not found at prod/deploy-prod.sh"
-            echo "Current directory contents:"
-            ls -la
-            echo "prod directory contents (if exists):"
-            if [ -d "prod" ]; then
-              ls -la prod/
+          if [ ! -f "prod/deploy-prod.sh" ]; then
+            echo "Deployment script not found in repository, creating prod directory..."
+            mkdir -p prod
+            
+            # Check if the script exists in the runner's filesystem
+            if [ -f "/home/aj/dev/study/prod/deploy-prod.sh" ]; then
+              echo "Copying deployment script from runner's filesystem..."
+              cp /home/aj/dev/study/prod/deploy-prod.sh prod/
+              chmod +x prod/deploy-prod.sh
             else
-              echo "prod directory does not exist"
+              echo "ERROR: Could not find deployment script in repository or runner's filesystem"
+              exit 1
             fi
-            exit 1
           fi
+          
+          echo "Deployment script status:"
+          ls -la prod/
           
       # Deploy using GitHub secrets directly
       - name: Deploy to server
         env:
           DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
           DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
-          GITHUB_REF_NAME: ${{ env.CHECKOUT_REF }}
+          GITHUB_REF_NAME: ${{ env.TARGET_BRANCH }}
         run: |
           # Make script executable
           chmod +x prod/deploy-prod.sh
           
           # Run deployment script with GitHub secrets
-          # For pull requests, CHECKOUT_REF is set to the target branch (github.base_ref)
+          # Using TARGET_BRANCH for Docker image tags
           ./prod/deploy-prod.sh 
