@@ -1,0 +1,77 @@
+name: Deploy After Successful Build
+
+on:
+  workflow_run:
+    workflows: ["Lint and Build Check"]
+    types:
+      - completed
+    branches:
+      - dev
+      - prod
+
+jobs:
+  deploy-if-build-succeeded:
+    runs-on: self-hosted
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    
+    steps:
+      - name: Debug Event Information
+        run: |
+          echo "Workflow run event triggered by: ${{ github.event.workflow_run.head_branch }}"
+          echo "Workflow run conclusion: ${{ github.event.workflow_run.conclusion }}"
+          echo "Workflow run name: ${{ github.event.workflow_run.name }}"
+      
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
+          lfs: false
+      
+      - name: Show Git Information
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Directory contents: $(ls -la)"
+          echo "Git status: $(git status)"
+          echo "Current branch: $(git branch --show-current)"
+      
+      # Verify secrets are available without exposing them
+      - name: Verify Docker Credentials
+        run: |
+          echo "Docker username secret: $(if [ -n "${{ secrets.DOCKER_USERNAME }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
+          echo "Docker token secret: $(if [ -n "${{ secrets.DOCKER_TOKEN }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
+      
+      # Ensure deployment script exists
+      - name: Ensure deployment script exists
+        run: |
+          if [ ! -f "prod/deploy-prod.sh" ]; then
+            echo "Deployment script not found in repository, creating prod directory..."
+            mkdir -p prod
+            
+            # Check if the script exists in the runner's filesystem
+            if [ -f "/home/aj/dev/study/prod/deploy-prod.sh" ]; then
+              echo "Copying deployment script from runner's filesystem..."
+              cp /home/aj/dev/study/prod/deploy-prod.sh prod/
+              chmod +x prod/deploy-prod.sh
+            else
+              echo "ERROR: Could not find deployment script in repository or runner's filesystem"
+              exit 1
+            fi
+          fi
+          
+          echo "Deployment script status:"
+          ls -la prod/
+      
+      # Deploy using GitHub secrets directly
+      - name: Deploy to server
+        env:
+          DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+          GITHUB_REF_NAME: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          # Make script executable
+          chmod +x prod/deploy-prod.sh
+          
+          # Run deployment script with GitHub secrets
+          ./prod/deploy-prod.sh 
