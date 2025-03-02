@@ -111,6 +111,14 @@ jobs:
             # Ensure prod/config directory exists
             mkdir -p prod/config
             
+            # Debug: List files in prod/config directory
+            echo "Listing files in prod/config directory:"
+            ls -la prod/config/
+            
+            # Run the script to ensure all config files exist
+            chmod +x scripts/ensure-config-files.sh
+            ./scripts/ensure-config-files.sh "'$DOCKERHUB_USERNAME'" "'$DB_ROOT_PASSWORD'"
+            
             # Verify config files exist
             echo "Verifying config files..."
             for file in db.yaml cache.yaml backend.yaml worker.yaml frontend.yaml nginx.yaml; do
