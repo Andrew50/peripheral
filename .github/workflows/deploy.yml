@@ -263,6 +263,41 @@ jobs:
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
           }
           
+          # Function to monitor deployment rollout with timeout
+          monitor_rollout() {
+            local deployment=$1
+            local timeout=${2:-300}  # Default timeout of 5 minutes
+            local start_time=$(date +%s)
+            
+            log "Monitoring $deployment rollout status with ${timeout}s timeout..."
+            
+            while true; do
+              status=$(kubectl rollout status deployment/$deployment --timeout=10s || echo "FAILED")
+              current_time=$(date +%s)
+              elapsed=$((current_time - start_time))
+              
+              if [[ $status != *"FAILED"* ]]; then
+                log "$deployment deployment succeeded after ${elapsed} seconds."
+                return 0
+              fi
+              
+              if [ $elapsed -gt $timeout ]; then
+                error_log "$deployment deployment timed out after ${elapsed} seconds."
+                log "Collecting debug information for $deployment..."
+                kubectl describe deployment $deployment
+                kubectl get pods -l app=$deployment
+                kubectl logs -l app=$deployment --tail=50 || true
+                
+                # Continue with other deployments instead of failing
+                log "Continuing with other deployments despite $deployment failure..."
+                return 1
+              fi
+              
+              log "Still waiting for $deployment deployment... (${elapsed}s elapsed)"
+              sleep 10
+            done
+          }
+          
           # Apply Kubernetes configurations
           log "Applying Kubernetes configurations..."
           if [ "${{ env.TARGET_BRANCH }}" = "dev" ]; then
@@ -294,68 +329,25 @@ jobs:
           # Perform rolling updates for zero downtime using branch-specific image tags
           log "Performing rolling updates for zero downtime using images tagged with: ${{ env.DOCKER_TAG }}..."
           
-          # Update backend deployment with timeout handling
+          # Update backend deployment
           log "Updating backend deployment..."
           kubectl set image deployment/backend backend=$DOCKER_USERNAME/backend:${{ env.DOCKER_TAG }}
-          
-          # Monitor rollout with a timeout
-          log "Monitoring backend rollout status..."
-          timeout=300  # 5 minutes timeout
-          start_time=$(date +%s)
-          
-          while true; do
-            status=$(kubectl rollout status deployment/backend --timeout=10s || echo "FAILED")
-            current_time=$(date +%s)
-            elapsed=$((current_time - start_time))
-            
-            if [[ $status != *"FAILED"* ]]; then
-              log "Backend deployment succeeded after ${elapsed} seconds."
-              break
-            fi
-            
-            if [ $elapsed -gt $timeout ]; then
-              error_log "Backend deployment timed out after ${elapsed} seconds."
-              log "Collecting debug information..."
-              kubectl describe deployment backend
-              kubectl get pods -l app=backend
-              kubectl logs -l app=backend --tail=50
-              kubectl get events --sort-by='.lastTimestamp'
-              
-              # Continue with other deployments instead of failing
-              log "Continuing with other deployments despite backend failure..."
-              break
-            fi
-            
-            log "Still waiting for backend deployment... (${elapsed}s elapsed)"
-            sleep 10
-          done
+          monitor_rollout backend
           
           # Update frontend deployment
           log "Updating frontend deployment..."
           kubectl set image deployment/frontend frontend=$DOCKER_USERNAME/frontend:${{ env.DOCKER_TAG }}
-          kubectl rollout status deployment/frontend --timeout=5m || {
-            error_log "Frontend deployment failed or timed out."
-            kubectl describe deployment frontend
-            # Continue with other deployments
-          }
+          monitor_rollout frontend 180  # 3 minute timeout
           
-          # Update worker deployment - fix the container name from 'backend' to 'worker'
+          # Update worker deployment
           log "Updating worker deployment..."
           kubectl set image deployment/worker worker=$DOCKER_USERNAME/worker:${{ env.DOCKER_TAG }}
-          kubectl rollout status deployment/worker --timeout=5m || {
-            error_log "Worker deployment failed or timed out."
-            kubectl describe deployment worker
-            # Continue with other deployments
-          }
+          monitor_rollout worker 180  # 3 minute timeout
           
           # Update tf deployment
           log "Updating tf deployment..."
           kubectl set image deployment/tf tf=$DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }}
-          kubectl rollout status deployment/tf --timeout=5m || {
-            error_log "TF deployment failed or timed out."
-            kubectl describe deployment tf
-            # Continue with other deployments
-          }
+          monitor_rollout tf 180  # 3 minute timeout
           
           # Final status check
           log "Checking final deployment status..."
@@ -579,6 +571,41 @@ jobs:
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
           }
           
+          # Function to monitor deployment rollout with timeout
+          monitor_rollout() {
+            local deployment=$1
+            local timeout=${2:-300}  # Default timeout of 5 minutes
+            local start_time=$(date +%s)
+            
+            log "Monitoring $deployment rollout status with ${timeout}s timeout..."
+            
+            while true; do
+              status=$(kubectl rollout status deployment/$deployment --timeout=10s || echo "FAILED")
+              current_time=$(date +%s)
+              elapsed=$((current_time - start_time))
+              
+              if [[ $status != *"FAILED"* ]]; then
+                log "$deployment deployment succeeded after ${elapsed} seconds."
+                return 0
+              fi
+              
+              if [ $elapsed -gt $timeout ]; then
+                error_log "$deployment deployment timed out after ${elapsed} seconds."
+                log "Collecting debug information for $deployment..."
+                kubectl describe deployment $deployment
+                kubectl get pods -l app=$deployment
+                kubectl logs -l app=$deployment --tail=50 || true
+                
+                # Continue with other deployments instead of failing
+                log "Continuing with other deployments despite $deployment failure..."
+                return 1
+              fi
+              
+              log "Still waiting for $deployment deployment... (${elapsed}s elapsed)"
+              sleep 10
+            done
+          }
+          
           # Apply Kubernetes configurations
           log "Applying Kubernetes configurations..."
           if [ "${{ env.TARGET_BRANCH }}" = "dev" ]; then
@@ -610,68 +637,25 @@ jobs:
           # Perform rolling updates for zero downtime using branch-specific image tags
           log "Performing rolling updates for zero downtime using images tagged with: ${{ env.DOCKER_TAG }}..."
           
-          # Update backend deployment with timeout handling
+          # Update backend deployment
           log "Updating backend deployment..."
           kubectl set image deployment/backend backend=$DOCKER_USERNAME/backend:${{ env.DOCKER_TAG }}
-          
-          # Monitor rollout with a timeout
-          log "Monitoring backend rollout status..."
-          timeout=300  # 5 minutes timeout
-          start_time=$(date +%s)
-          
-          while true; do
-            status=$(kubectl rollout status deployment/backend --timeout=10s || echo "FAILED")
-            current_time=$(date +%s)
-            elapsed=$((current_time - start_time))
-            
-            if [[ $status != *"FAILED"* ]]; then
-              log "Backend deployment succeeded after ${elapsed} seconds."
-              break
-            fi
-            
-            if [ $elapsed -gt $timeout ]; then
-              error_log "Backend deployment timed out after ${elapsed} seconds."
-              log "Collecting debug information..."
-              kubectl describe deployment backend
-              kubectl get pods -l app=backend
-              kubectl logs -l app=backend --tail=50
-              kubectl get events --sort-by='.lastTimestamp'
-              
-              # Continue with other deployments instead of failing
-              log "Continuing with other deployments despite backend failure..."
-              break
-            fi
-            
-            log "Still waiting for backend deployment... (${elapsed}s elapsed)"
-            sleep 10
-          done
+          monitor_rollout backend
           
           # Update frontend deployment
           log "Updating frontend deployment..."
           kubectl set image deployment/frontend frontend=$DOCKER_USERNAME/frontend:${{ env.DOCKER_TAG }}
-          kubectl rollout status deployment/frontend --timeout=5m || {
-            error_log "Frontend deployment failed or timed out."
-            kubectl describe deployment frontend
-            # Continue with other deployments
-          }
+          monitor_rollout frontend 180  # 3 minute timeout
           
-          # Update worker deployment - fix the container name from 'backend' to 'worker'
+          # Update worker deployment
           log "Updating worker deployment..."
           kubectl set image deployment/worker worker=$DOCKER_USERNAME/worker:${{ env.DOCKER_TAG }}
-          kubectl rollout status deployment/worker --timeout=5m || {
-            error_log "Worker deployment failed or timed out."
-            kubectl describe deployment worker
-            # Continue with other deployments
-          }
+          monitor_rollout worker 180  # 3 minute timeout
           
           # Update tf deployment
           log "Updating tf deployment..."
           kubectl set image deployment/tf tf=$DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }}
-          kubectl rollout status deployment/tf --timeout=5m || {
-            error_log "TF deployment failed or timed out."
-            kubectl describe deployment tf
-            # Continue with other deployments
-          }
+          monitor_rollout tf 180  # 3 minute timeout
           
           # Final status check
           log "Checking final deployment status..."
