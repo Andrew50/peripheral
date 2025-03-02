@@ -73,11 +73,11 @@ fi
 
 # Build new Docker images with branch-specific tag
 log "Building Docker images with tag: ${DOCKER_TAG}..."
-docker build -t ${DOCKER_USER}/frontend:${DOCKER_TAG} services/frontend
-docker build -t ${DOCKER_USER}/backend:${DOCKER_TAG} services/backend
-docker build -t ${DOCKER_USER}/worker:${DOCKER_TAG} services/worker
-docker build -t ${DOCKER_USER}/tf:${DOCKER_TAG} services/tf
-docker build -t ${DOCKER_USER}/db:${DOCKER_TAG} services/db
+docker build -t ${DOCKER_USER}/frontend:${DOCKER_TAG} frontend
+docker build -t ${DOCKER_USER}/backend:${DOCKER_TAG} backend
+docker build -t ${DOCKER_USER}/worker:${DOCKER_TAG} worker
+docker build -t ${DOCKER_USER}/tf:${DOCKER_TAG} tf
+docker build -t ${DOCKER_USER}/db:${DOCKER_TAG} db
 
 # For prod branch, also tag as latest
 # For dev branch, also tag as development
@@ -129,15 +129,15 @@ fi
 log "Applying Kubernetes configurations..."
 if [ "${BRANCH}" = "dev" ]; then
     # Dev-specific configurations (if they exist)
-    if [ -d "deployment/dev/config" ]; then
-        kubectl apply -f deployment/dev/config
+    if [ -d "prod/config/dev" ]; then
+        kubectl apply -f prod/config/dev
     else
         # Fall back to prod config if no dev config exists
-        kubectl apply -f deployment/prod/config
+        kubectl apply -f prod/config
     fi
 else
     # Default to prod config for prod branch or any other branch
-    kubectl apply -f deployment/prod/config
+    kubectl apply -f prod/config
 fi
 
 # Perform rolling updates for zero downtime using branch-specific image tags
