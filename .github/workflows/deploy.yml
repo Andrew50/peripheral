@@ -25,6 +25,11 @@ on:
 jobs:
   deploy:
     runs-on: self-hosted  # Using self-hosted runner instead of ubuntu-latest
+    # Define environment variables at the job level
+    env:
+      DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+    
     steps:
       # Print debugging information before checkout
       - name: Debug Event Information
@@ -67,6 +72,14 @@ jobs:
           echo "Git status: $(git status)"
           echo "Current branch: $(git branch --show-current)"
           git --version
+      
+      # Verify secrets are available
+      - name: Verify Docker Credentials
+        run: |
+          echo "Docker username status: $(if [ -n "${{ secrets.DOCKER_USERNAME }}" ]; then echo "is set in secrets"; else echo "is NOT set in secrets"; fi)"
+          echo "Docker token status: $(if [ -n "${{ secrets.DOCKER_TOKEN }}" ]; then echo "is set in secrets"; else echo "is NOT set in secrets"; fi)"
+          echo "Environment DOCKER_USER: $(if [ -n "$DOCKER_USER" ]; then echo "is set in env"; else echo "is NOT set in env"; fi)"
+          echo "Environment DOCKER_TOKEN: $(if [ -n "$DOCKER_TOKEN" ]; then echo "is set in env"; else echo "is NOT set in env"; fi)"
           
       - name: Deploy to server
         env:
@@ -85,4 +98,4 @@ jobs:
           chmod +x prod/deploy-prod.sh
           
           # Run deployment script with explicit environment variable passing
-          DOCKER_USER="${DOCKER_USER}" DOCKER_TOKEN="${DOCKER_TOKEN}" GITHUB_REF_NAME="${GITHUB_REF_NAME}" ./prod/deploy-prod.sh 
+          ./prod/deploy-prod.sh 
