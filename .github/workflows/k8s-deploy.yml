@@ -149,6 +149,64 @@ jobs:
             }
             echo "Docker login successful!"
             
+            # Check and start Minikube before building images
+            echo "Checking Minikube status..."
+            if ! command -v minikube &> /dev/null; then
+              echo "Minikube not found. Installing Minikube..."
+              # Install Minikube based on OS
+              if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+                # Windows installation
+                curl -Lo minikube.exe https://storage.googleapis.com/minikube/releases/latest/minikube-windows-amd64.exe
+                chmod +x minikube.exe
+                mv minikube.exe /usr/local/bin/minikube
+              else
+                # Linux installation
+                curl -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+                chmod +x minikube
+                sudo mv minikube /usr/local/bin/
+              fi
+            fi
+            
+            # Check if Minikube is running, start it if not
+            if ! minikube status &>/dev/null; then
+              echo "Minikube is not running, starting it now..."
+              
+              # Check if Docker is running
+              if ! docker info &>/dev/null; then
+                echo "Docker is not running. Starting Minikube with alternative driver..."
+                # Try to start with different drivers based on availability
+                if command -v virtualbox &> /dev/null; then
+                  echo "Using VirtualBox driver..."
+                  minikube start --driver=virtualbox
+                else
+                  # For Linux without Docker, try KVM or other drivers
+                  if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+                    if command -v virsh &> /dev/null; then
+                      echo "Using KVM2 driver..."
+                      minikube start --driver=kvm2
+                    else
+                      echo "Using podman driver..."
+                      minikube start --driver=podman || minikube start --driver=none
+                    fi
+                  else
+                    # For Windows without Docker, try Hyper-V
+                    echo "Using Hyper-V driver..."
+                    minikube start --driver=hyperv || minikube start --driver=virtualbox
+                  fi
+                fi
+              else
+                # Docker is running, use it as the driver
+                echo "Using Docker driver..."
+                minikube start --driver=docker
+              fi
+            fi
+            
+            # Ensure Minikube is running and kubectl is configured
+            echo "Verifying Minikube is running..."
+            minikube status
+            echo "Configuring kubectl to use Minikube..."
+            eval $(minikube -p minikube docker-env)
+            
             # Build and push images directly on the server
             echo "Building and pushing Docker images with tag: $SHA_TAG"
             
