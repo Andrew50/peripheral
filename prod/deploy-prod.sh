@@ -105,7 +105,15 @@ log "Docker user: ${DOCKER_USER}"
 log "Docker token status: $(if [ -n "${DOCKER_TOKEN}" ]; then echo "is set"; else echo "is NOT set"; fi)"
 log "GitHub environment: $(if [ -n "${GITHUB_ACTIONS}" ]; then echo "Running in GitHub Actions"; else echo "Not running in GitHub Actions"; fi)"
 
-# Use Docker credentials from environment variables
+# Check if Docker user is set
+if [ -z "${DOCKER_USER}" ]; then
+    error_log "DOCKER_USER environment variable is not set. Please set it before running this script."
+    error_log "For GitHub Actions, ensure the secret DOCKER_USERNAME is properly configured in your repository settings."
+    error_log "Repository Settings > Secrets and variables > Actions > Repository secrets"
+    exit 1
+fi
+
+# Check if Docker token is set
 if [ -z "${DOCKER_TOKEN}" ]; then
     error_log "DOCKER_TOKEN environment variable is not set. Please set it before running this script."
     error_log "For GitHub Actions, ensure the secret DOCKER_TOKEN is properly configured in your repository settings."
@@ -115,17 +123,34 @@ if [ -z "${DOCKER_TOKEN}" ]; then
     error_log "Available environment variables (names only):"
     env | cut -d= -f1 | grep -i docker || echo "No Docker-related variables found"
     
-    exit 1
+    # Check if we're in an interactive environment and offer manual login
+    if [ -t 0 ]; then
+        read -p "Do you want to log in to Docker manually? (y/n): " manual_login
+        if [ "$manual_login" = "y" ] || [ "$manual_login" = "Y" ]; then
+            log "Attempting manual Docker login..."
+            docker login -u ${DOCKER_USER} || {
+                error_log "Manual Docker login failed. Please check your credentials."
+                exit 1
+            }
+            log "Manual Docker login successful, proceeding with image push..."
+        else
+            error_log "Aborting deployment due to missing Docker token."
+            exit 1
+        fi
+    else
+        error_log "Not in an interactive terminal and DOCKER_TOKEN is not set. Cannot proceed with deployment."
+        exit 1
+    fi
+else
+    # Perform Docker login with the token
+    log "Attempting Docker login with token..."
+    echo "${DOCKER_TOKEN}" | docker login -u ${DOCKER_USER} --password-stdin || {
+        error_log "Docker login failed. Please check your credentials."
+        exit 1
+    }
+    log "Docker login successful, proceeding with image push..."
 fi
 
-# Perform Docker login with the token
-log "Attempting Docker login..."
-echo "${DOCKER_TOKEN}" | docker login -u ${DOCKER_USER} --password-stdin || {
-    error_log "Docker login failed. Please check your credentials."
-    exit 1
-}
-
-log "Docker login successful, proceeding with image push..."
 docker push ${DOCKER_USER}/frontend:${DOCKER_TAG}
 docker push ${DOCKER_USER}/backend:${DOCKER_TAG}
 docker push ${DOCKER_USER}/worker:${DOCKER_TAG}
