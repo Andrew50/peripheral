@@ -16,11 +16,10 @@ spec:
         - name: cache
           image: redis:7.2-alpine
           imagePullPolicy: Always
-          command: ["redis-server"]
-          args:
-            - "/etc/redis/redis.conf"
-            - "--requirepass"
-            - "$(REDIS_PASSWORD)"
+          command:
+            - /bin/sh
+            - -c
+            - redis-server /etc/redis/redis.conf --requirepass "${REDIS_PASSWORD}"
           ports:
             - containerPort: 6379
           resources:

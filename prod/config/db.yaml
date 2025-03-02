@@ -23,7 +23,10 @@ spec:
               mountPath: /var/lib/db
           env:
             - name: db_ROOT_PASSWORD
-              value: 7+WCy76_2$%g
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: db_ROOT_PASSWORD
           resources:
             requests:
               cpu: 5000m
