@@ -74,13 +74,36 @@ jobs:
         run: |
           echo "Docker username secret: $(if [ -n "${{ secrets.DOCKER_USERNAME }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
           echo "Docker token secret: $(if [ -n "${{ secrets.DOCKER_TOKEN }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
+      
+      # Check if the deployment script exists
+      - name: Check deployment script
+        run: |
+          if [ -f "prod/deploy-prod.sh" ]; then
+            echo "Deployment script found at prod/deploy-prod.sh"
+            ls -la prod/
+          else
+            echo "ERROR: Deployment script not found at prod/deploy-prod.sh"
+            echo "Current directory contents:"
+            ls -la
+            echo "prod directory contents (if exists):"
+            if [ -d "prod" ]; then
+              ls -la prod/
+            else
+              echo "prod directory does not exist"
+            fi
+            exit 1
+          fi
           
       # Deploy using GitHub secrets directly
       - name: Deploy to server
+        env:
+          DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+          GITHUB_REF_NAME: ${{ env.CHECKOUT_REF }}
         run: |
           # Make script executable
           chmod +x prod/deploy-prod.sh
           
           # Run deployment script with GitHub secrets
           # For pull requests, CHECKOUT_REF is set to the target branch (github.base_ref)
-          DOCKER_USER="${{ secrets.DOCKER_USERNAME }}" DOCKER_TOKEN="${{ secrets.DOCKER_TOKEN }}" GITHUB_REF_NAME="${{ env.CHECKOUT_REF }}" ./prod/deploy-prod.sh 
+          ./prod/deploy-prod.sh 
