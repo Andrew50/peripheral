@@ -1,4 +1,4 @@
-import json, traceback, datetime, psycopg2
+import json, traceback, datetime, psycopg2, redis
 from conn import Conn
 from train import train
 from screen import screen
@@ -14,6 +14,7 @@ from trades import (
 )
 from update_sectors import update_sectors
 from active import update_active
+import time
 
 funcMap = {
     "train": train,
@@ -39,35 +40,52 @@ def process_tasks():
     data = Conn(True)
     print("starting queue listening", flush=True)
     while True:
-        task = data.cache.brpop("queue", timeout=60)
-        if not task:
-            data.check_connection()
-        else:
-            _, task_message = task
-            task_data = json.loads(task_message)
-            task_id, func_ident, args = (
-                task_data["id"],
-                task_data["func"],
-                task_data["args"],
-            )
-
-            print(f"starting {func_ident} {args} {task_id}", flush=True)
-            try:
-                data.cache.set(task_id, json.dumps("running"))
-                start = datetime.datetime.now()
-                result = funcMap[func_ident](data, **args)
-
-                data.cache.set(task_id, packageResponse(result, "completed"))
-                # print(f"finished {func_ident} {args} time: {datetime.datetime.now() - start} result: {result}", flush=True)
-            except psycopg2.InterfaceError:
-                exception = traceback.format_exc()
-                data.cache.set(task_id, packageResponse(exception, "error"))
-                print(exception, flush=True)
+        try:
+            task = data.cache.brpop("queue", timeout=60)
+            if not task:
                 data.check_connection()
-            except:
-                exception = traceback.format_exc()
-                data.cache.set(task_id, packageResponse(exception, "error"))
-                print(exception, flush=True)
+            else:
+                _, task_message = task
+                task_data = json.loads(task_message)
+                task_id, func_ident, args = (
+                    task_data["id"],
+                    task_data["func"],
+                    task_data["args"],
+                )
+
+                print(f"starting {func_ident} {args} {task_id}", flush=True)
+                try:
+                    data.cache.set(task_id, json.dumps("running"))
+                    start = datetime.datetime.now()
+                    result = funcMap[func_ident](data, **args)
+
+                    data.cache.set(task_id, packageResponse(result, "completed"))
+                    print(f"finished {func_ident} {args} time: {datetime.datetime.now() - start}", flush=True)
+                except psycopg2.InterfaceError:
+                    exception = traceback.format_exc()
+                    try:
+                        data.cache.set(task_id, packageResponse(exception, "error"))
+                    except redis.exceptions.ConnectionError:
+                        print("Redis connection error when setting task error status", flush=True)
+                    print(exception, flush=True)
+                    data.check_connection()
+                except Exception:
+                    exception = traceback.format_exc()
+                    try:
+                        data.cache.set(task_id, packageResponse(exception, "error"))
+                    except redis.exceptions.ConnectionError:
+                        print("Redis connection error when setting task error status", flush=True)
+                    print(exception, flush=True)
+        except redis.exceptions.ConnectionError as e:
+            print(f"Redis connection error: {e}", flush=True)
+            print("Attempting to reconnect...", flush=True)
+            # Reinitialize the connection
+            data = Conn(True)
+        except Exception as e:
+            print(f"Unexpected error in main loop: {e}", flush=True)
+            print(traceback.format_exc(), flush=True)
+            # Sleep briefly to avoid tight loop if there's a persistent error
+            time.sleep(5)
 
 
 if __name__ == "__main__":
