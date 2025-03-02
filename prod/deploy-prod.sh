@@ -4,7 +4,9 @@ set -e
 # Configuration - these are now set from GitHub secrets or passed from workflow
 DOCKER_USER="${DOCKER_USER:-billin19}" # Will be replaced by the GitHub workflow
 BRANCH="${GITHUB_REF_NAME:-prod}" # Get branch name from GitHub Actions, default to prod if not set
-DOCKER_TAG="${BRANCH}" # Use branch name as the Docker tag
+
+# Sanitize branch name for Docker tags (replace / with - and other invalid characters)
+DOCKER_TAG=$(echo "${BRANCH}" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_.-]/-/g')
 
 # Function to log messages with timestamps
 log() {
@@ -21,6 +23,7 @@ log "Deployment script diagnostics:"
 log "Current working directory: $(pwd)"
 log "Current user: $(whoami)"
 log "Current branch: ${BRANCH}"
+log "Docker tag: ${DOCKER_TAG}"
 log "Files in current directory: $(ls -la)"
 
 log "Starting deployment process for branch: ${BRANCH}..."
@@ -69,7 +72,7 @@ else
 fi
 
 # Build new Docker images with branch-specific tag
-log "Building Docker images for ${BRANCH}..."
+log "Building Docker images with tag: ${DOCKER_TAG}..."
 docker build -t ${DOCKER_USER}/frontend:${DOCKER_TAG} services/frontend
 docker build -t ${DOCKER_USER}/backend:${DOCKER_TAG} services/backend
 docker build -t ${DOCKER_USER}/worker:${DOCKER_TAG} services/worker
@@ -101,7 +104,6 @@ echo "${DOCKER_TOKEN}" | docker login -u ${DOCKER_USER} --password-stdin
 
 docker push ${DOCKER_USER}/frontend:${DOCKER_TAG}
 docker push ${DOCKER_USER}/backend:${DOCKER_TAG}
-docker push ${DOCKER_USER}/worker:${DOCKER_TAG}
 docker push ${DOCKER_USER}/worker:${DOCKER_TAG}
 docker push ${DOCKER_USER}/tf:${DOCKER_TAG}
 docker push ${DOCKER_USER}/db:${DOCKER_TAG}
