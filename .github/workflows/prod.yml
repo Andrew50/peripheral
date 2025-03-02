@@ -68,7 +68,8 @@ jobs:
             cd /home/aj/dev/study
             
             # Update code
-            git checkout origin/prod
+            git fetch origin
+            git checkout prod || git checkout -b prod origin/prod
             git pull origin prod
             
             # Generate tag from commit SHA
@@ -107,32 +108,116 @@ jobs:
             docker push "'$DOCKERHUB_USERNAME'"/worker:latest
             docker push "'$DOCKERHUB_USERNAME'"/worker:$SHA_TAG
             
+            # Ensure prod/config directory exists
+            mkdir -p prod/config
+            
+            # Verify config files exist
+            echo "Verifying config files..."
+            for file in db.yaml cache.yaml backend.yaml worker.yaml frontend.yaml nginx.yaml; do
+              if [ ! -f "prod/config/$file" ]; then
+                echo "Error: prod/config/$file not found"
+                exit 1
+              else
+                echo "✓ Found prod/config/$file"
+              fi
+            done
+            
             # Update image tags in manifests
             sed -i "s|image: "'$DOCKERHUB_USERNAME'"/backend:latest|image: "'$DOCKERHUB_USERNAME'"/backend:$SHA_TAG|g" prod/config/backend.yaml
             sed -i "s|image: "'$DOCKERHUB_USERNAME'"/frontend:latest|image: "'$DOCKERHUB_USERNAME'"/frontend:$SHA_TAG|g" prod/config/frontend.yaml
             sed -i "s|image: "'$DOCKERHUB_USERNAME'"/worker:latest|image: "'$DOCKERHUB_USERNAME'"/worker:$SHA_TAG|g" prod/config/worker.yaml
             
-            # Apply Kubernetes manifests in order
+            # Create namespace if it doesn't exist
+            kubectl create namespace default --dry-run=client -o yaml | kubectl apply -f -
+            
+            # Apply Kubernetes manifests in order with proper error handling
             echo "Applying Kubernetes manifests..."
+            
+            echo "Applying database configuration..."
             kubectl apply -f prod/config/db.yaml
-            kubectl rollout status deployment/db --timeout=600s
+            if [ $? -ne 0 ]; then
+              echo "Failed to apply database configuration. Check the file and try again."
+              exit 1
+            fi
             
+            echo "Waiting for database to be ready..."
+            kubectl rollout status deployment/db --timeout=600s || {
+              echo "Database deployment timed out. Running debug script..."
+              ./scripts/debug-deployment.sh default
+              exit 1
+            }
+            
+            echo "Applying cache configuration..."
             kubectl apply -f prod/config/cache.yaml
-            kubectl rollout status deployment/cache --timeout=600s
+            if [ $? -ne 0 ]; then
+              echo "Failed to apply cache configuration. Check the file and try again."
+              exit 1
+            fi
             
+            echo "Waiting for cache to be ready..."
+            kubectl rollout status deployment/cache --timeout=600s || {
+              echo "Cache deployment timed out. Running debug script..."
+              ./scripts/debug-deployment.sh default
+              exit 1
+            }
+            
+            echo "Applying backend configuration..."
             kubectl apply -f prod/config/backend.yaml
-            kubectl rollout status deployment/backend --timeout=600s
+            if [ $? -ne 0 ]; then
+              echo "Failed to apply backend configuration. Check the file and try again."
+              exit 1
+            fi
             
+            echo "Waiting for backend to be ready..."
+            kubectl rollout status deployment/backend --timeout=600s || {
+              echo "Backend deployment timed out. Running debug script..."
+              ./scripts/debug-deployment.sh default
+              exit 1
+            }
+            
+            echo "Applying worker configuration..."
             kubectl apply -f prod/config/worker.yaml
-            kubectl rollout status deployment/worker --timeout=600s
+            if [ $? -ne 0 ]; then
+              echo "Failed to apply worker configuration. Check the file and try again."
+              exit 1
+            fi
             
+            echo "Waiting for worker to be ready..."
+            kubectl rollout status deployment/worker --timeout=600s || {
+              echo "Worker deployment timed out. Running debug script..."
+              ./scripts/debug-deployment.sh default
+              exit 1
+            }
+            
+            echo "Applying frontend configuration..."
             kubectl apply -f prod/config/frontend.yaml
-            kubectl rollout status deployment/frontend --timeout=600s
+            if [ $? -ne 0 ]; then
+              echo "Failed to apply frontend configuration. Check the file and try again."
+              exit 1
+            fi
             
+            echo "Waiting for frontend to be ready..."
+            kubectl rollout status deployment/frontend --timeout=600s || {
+              echo "Frontend deployment timed out. Running debug script..."
+              ./scripts/debug-deployment.sh default
+              exit 1
+            }
+            
+            echo "Applying nginx configuration..."
             kubectl apply -f prod/config/nginx.yaml
+            if [ $? -ne 0 ]; then
+              echo "Failed to apply nginx configuration. Check the file and try again."
+              exit 1
+            fi
             
             # Expose ingress controller
-            kubectl -n ingress-nginx expose deployment ingress-nginx-controller --name=ingress-nginx-nodeport --port=80 --target-port=80 --type=NodePort --overrides='\{"spec":\{"ports":[{"port":80,"protocol":"TCP","targetPort":80,"nodePort":30081}]\}\}'
+            kubectl -n ingress-nginx expose deployment ingress-nginx-controller \
+              --name=ingress-nginx-nodeport \
+              --port=80 \
+              --target-port=80 \
+              --type=NodePort \
+              --overrides='\{"spec":\{"ports":[{"port":80,"protocol":"TCP","targetPort":80,"nodePort":30081}]\}\}' \
+              --dry-run=client -o yaml | kubectl apply -f -
             
             # Save deployment info for backup server
             echo "{\"primary_host\":\"$REMOTE_HOST\",\"deploy_id\":\"$(date +%s)-$(git rev-parse --short HEAD)\",\"namespace\":\"default\",\"environment\":\"prod\"}" > /tmp/replication-info.json
