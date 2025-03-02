@@ -342,20 +342,16 @@ func getStockEdgarFilings(conn *utils.Conn, securityId int, opts EdgarFilingOpti
 		filteredFilings = append(filteredFilings, filing)
 	}
 
-	fmt.Printf("Before sorting: %d filings\n", len(filteredFilings))
-
 	// Sort filings by timestamp in ascending order (oldest first)
 	sort.Slice(filteredFilings, func(i, j int) bool {
 		return filteredFilings[i].Timestamp < filteredFilings[j].Timestamp
 	})
 
-	fmt.Printf("Final count: %d filings\n", len(filteredFilings))
 	return filteredFilings, nil
 }
 
 // fetchEdgarFilings fetches filings for a specific CIK
 func fetchEdgarFilings(cik string) ([]utils.EDGARFiling, error) {
-	fmt.Printf("Fetching SEC filings for CIK: %s\n", cik)
 
 	// Format CIK with leading zeros to make it 10 digits long
 	paddedCik := cik
@@ -397,7 +393,6 @@ func fetchEdgarFilings(cik string) ([]utils.EDGARFiling, error) {
 
 			// Exponential backoff
 			waitTime := retryDelay * time.Duration(1<<attempt)
-			fmt.Printf("Rate limited by SEC API (429). Retrying in %v...\n", waitTime)
 			time.Sleep(waitTime)
 			continue
 		}
@@ -535,6 +530,5 @@ func parseEdgarFilingsResponse(body []byte, cik string) ([]utils.EDGARFiling, er
 		})
 	}
 
-	fmt.Printf("Found %d filings\n", len(filings))
 	return filings, nil
 }

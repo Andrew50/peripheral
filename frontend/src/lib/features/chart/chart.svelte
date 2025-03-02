@@ -52,7 +52,7 @@
 	import { addStream } from '$lib/utils/stream/interface';
 	import { ArrowMarkersPaneView, type ArrowMarker } from './arrowMarkers';
 	import { EventMarkersPaneView, type EventMarker } from './eventMarkers';
-	import html2canvas from 'html2canvas';
+	import { adjustEventsToTradingDays, handleScreenshot } from './chartHelpers';
 	let bidLine: any;
 	let askLine: any;
 	let currentBarTimestamp: number;
@@ -309,7 +309,6 @@
 									from: fromTime,
 									to: toTime
 								}).then((events) => {
-									console.log('events', events);
 									const eventsByTime = new Map<number, Array<{ 
 										type: string; 
 										title: string; 
@@ -366,12 +365,20 @@
 										}
 									});
 
-									eventSeries.setData(
-										Array.from(eventsByTime.entries()).map(([time, events]) => ({
+									// Convert the event data to the format expected by the markers series
+									let eventData: EventMarker[] = [];
+									eventsByTime.forEach((events, time) => {
+										eventData.push({
 											time: time as UTCTimestamp,
-											events: events
-										}))
-									);
+											events: events,
+										});
+									});
+
+									// Adjust events to nearest trading days
+									eventData = adjustEventsToTradingDays(eventData, chartCandleSeries.data());
+									
+									// Set the data on the event markers series
+									eventSeries.setData(eventData);
 								});
 							}
 						} catch (error) {
@@ -1010,7 +1017,7 @@
 					currentChartInstance.securityId
 				);
 			} else if (event.key == 's' && event.altKey) {
-				handleScreenshot();
+				handleScreenshot(chartId);
 			} else if (event.key == 'Tab' || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
 				// goes to input popup
 				if ($streamInfo.replayActive) {
@@ -1311,41 +1318,7 @@
 		chartContainer.focus(); // Focus the container
 	});
 
-	async function handleScreenshot() {
-		if (!chart) return;
-
-		try {
-			// Get the entire chart container including legend
-			const chartContainer = document.getElementById(`chart_container-${chartId}`);
-			if (!chartContainer) return;
-
-			// Use html2canvas to capture the entire container
-			const canvas = await html2canvas(chartContainer, {
-				backgroundColor: 'black', // Match your chart background
-				scale: 2, // Higher quality
-				logging: false,
-				useCORS: true
-			});
-
-			// Convert to blob
-			const blob = await new Promise<Blob>((resolve) => {
-				canvas.toBlob((blob) => {
-					if (blob) resolve(blob);
-				}, 'image/png');
-			});
-
-			// Copy to clipboard
-			await navigator.clipboard.write([
-				new ClipboardItem({
-					[blob.type]: blob
-				})
-			]);
-
-			('Chart copied to clipboard!');
-		} catch (error) {
-			console.error('Failed to copy chart:', error);
-		}
-	}
+	
 
 	// Handle event marker clicks
 	function handleEventClick(events: EventMarker['events'], x: number, y: number) {
@@ -1376,6 +1349,7 @@
 	function closeEventPopup() {
 		selectedEvent = null;
 	}
+
 </script>
 
 <div class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
