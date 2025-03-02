@@ -130,3 +130,19 @@ alter table securities
 rename column cik to cik_varchar; 
 alter table securities 
 add column cik int; 
+
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_type VARCHAR(20);
+
+-- Set default values:
+-- If google_id is not null or empty, set auth_type to 'google'
+-- Otherwise, set auth_type to 'password'
+UPDATE users 
+SET auth_type = CASE 
+    WHEN google_id IS NOT NULL AND google_id != '' THEN 'google' 
+    ELSE 'password' 
+END
+WHERE auth_type IS NULL;
+
+-- Make the auth_type column non-nullable after populating it
+ALTER TABLE users ALTER COLUMN auth_type SET NOT NULL; 
