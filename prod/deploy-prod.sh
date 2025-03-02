@@ -19,6 +19,13 @@ error_log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
 }
 
+# Print diagnostic information
+log "Deployment script diagnostics:"
+log "Current working directory: $(pwd)"
+log "Current user: $(whoami)"
+log "Current branch: ${BRANCH}"
+log "Files in current directory: $(ls -la)"
+
 log "Starting deployment process for branch: ${BRANCH}..."
 
 # Validate that we have the required variables
@@ -29,16 +36,30 @@ fi
 
 # SSH into the remote server and execute deployment
 # Using Cloudflare Access SSH
+log "Connecting to remote server: ${REMOTE_USER}@${REMOTE_HOST}"
 ssh ${REMOTE_USER}@${REMOTE_HOST} << EOF
     set -e  # Exit immediately if a command exits with a non-zero status
+    echo "Connected to remote server as \$(whoami) in directory \$(pwd)"
+    
     cd ${REMOTE_DIR} || { echo "Failed to change directory to ${REMOTE_DIR}"; exit 1; }
+    echo "Changed to directory: \$(pwd)"
 
     # Pull latest code
     log "Pulling latest code from ${BRANCH}..."
     git remote set-url origin git@github.com:Andrew50/study.git || { error_log "Failed to set git remote URL"; exit 1; }
     
-    # Fetch the branch first to check if it exists
-    git fetch origin ${BRANCH} || { error_log "Failed to fetch branch ${BRANCH}. Check if the branch exists."; exit 1; }
+    # Fetch all branches to ensure we have the reference
+    echo "Fetching all branches to ensure ${BRANCH} exists..."
+    git fetch --all || { error_log "Failed to fetch all branches"; exit 1; }
+    
+    # Check if branch exists
+    if git show-ref --verify --quiet refs/remotes/origin/${BRANCH}; then
+        echo "Branch ${BRANCH} found in remote"
+    else
+        error_log "Branch ${BRANCH} not found in remote. Available branches:"
+        git branch -a
+        exit 1
+    fi
     
     # Checkout and pull
     git checkout ${BRANCH} || { error_log "Failed to checkout branch ${BRANCH}"; exit 1; }
