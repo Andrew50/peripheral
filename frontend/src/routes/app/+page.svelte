@@ -52,6 +52,9 @@
 	// Add import near the top with other imports
 	import Screensaver from '$lib/features/screensaver.svelte';
 
+	// Add new import for Query component
+	import Query from '$lib/features/query.svelte';
+
 	type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'journal' | 'similar';
 
 	// Initialize all sidebar state variables as closed
@@ -70,7 +73,8 @@
 		| 'options'
 		| 'setups'
 		| 'settings'
-		| 'newsfeed';
+		| 'newsfeed'
+		| 'query';
 	interface BottomWindow {
 		id: number;
 		type: BottomWindowType;
@@ -701,6 +705,8 @@
 									<Settings />
 								{:else if w.type === 'newsfeed'}
 									<Newsfeed />
+								{:else if w.type === 'query'}
+									<Query />
 								{/if}
 							</div>
 						</div>
@@ -786,6 +792,12 @@
 				on:click={() => openBottomWindow('screener')}
 			>
 				Screener
+			</button>
+			<button
+				class="toggle-button {bottomWindows.some((w) => w.type === 'query') ? 'active' : ''}"
+				on:click={() => openBottomWindow('query')}
+			>
+				Query
 			</button>
 			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'active') ? 'active' : ''}"
