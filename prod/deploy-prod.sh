@@ -100,7 +100,17 @@ fi
 # Push Docker images to registry
 log "Pushing Docker images to registry with tag: ${DOCKER_TAG}..."
 # Use Docker credentials from environment variables
-echo "${DOCKER_TOKEN}" | docker login -u ${DOCKER_USER} --password-stdin
+if [ -z "${DOCKER_TOKEN}" ]; then
+    error_log "DOCKER_TOKEN environment variable is not set. Please set it before running this script."
+    error_log "For GitHub Actions, ensure the secret is properly configured."
+    exit 1
+fi
+
+# Perform Docker login with the token
+echo "${DOCKER_TOKEN}" | docker login -u ${DOCKER_USER} --password-stdin || {
+    error_log "Docker login failed. Please check your credentials."
+    exit 1
+}
 
 docker push ${DOCKER_USER}/frontend:${DOCKER_TAG}
 docker push ${DOCKER_USER}/backend:${DOCKER_TAG}
