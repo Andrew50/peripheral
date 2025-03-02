@@ -9,6 +9,7 @@
 	import { writable } from 'svelte/store';
 
 	export let loginMenu: boolean = false;
+	let email = '';
 	let username = '';
 	let password = '';
 	let errorMessage = writable('');
@@ -27,9 +28,9 @@
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
 			if (loginMenu) {
-				signIn(username, password);
+				signIn(email, password);
 			} else {
-				signUp(username, password);
+				signUp(email, username, password);
 			}
 		}
 	}
@@ -45,10 +46,10 @@
 		username: string;
 	}
 
-	async function signIn(username: string, password: string) {
+	async function signIn(email: string, password: string) {
 		loading = true;
 		try {
-			const r = await publicRequest<Login>('login', { username: username, password: password });
+			const r = await publicRequest<Login>('login', { email: email, password: password });
 			if (browser) {
 				sessionStorage.setItem('authToken', r.token);
 				sessionStorage.setItem('profilePic', r.profilePic);
@@ -66,13 +67,17 @@
 		}
 	}
 
-	async function signUp(username: string, password: string) {
+	async function signUp(email: string, username: string, password: string) {
 		loading = true;
 		try {
-			await publicRequest('signup', { username: username, password: password });
-			await signIn(username, password);
-		} catch {
-			errorMessage.set('Failed to create account');
+			await publicRequest('signup', { email: email, username: username, password: password });
+			await signIn(email, password);
+		} catch (error) {
+			if (error instanceof Error) {
+				errorMessage.set(error.message);
+			} else {
+				errorMessage.set('Failed to create account');
+			}
 			loading = false;
 		}
 	}
@@ -154,24 +159,39 @@
 			<form
 				on:submit|preventDefault={() => {
 					if (loginMenu) {
-						signIn(username, password);
+						signIn(email, password);
 					} else {
-						signUp(username, password);
+						signUp(email, username, password);
 					}
 				}}
 				class="auth-form"
 			>
 				<div class="form-group">
-					<label for="username">Username</label>
+					<label for="email">Email</label>
 					<input
-						type="text"
-						id="username"
-						bind:value={username}
+						type="email"
+						id="email"
+						bind:value={email}
 						required
 						on:keydown={handleKeydown}
 						autofocus
+						placeholder="your.email@example.com"
 					/>
 				</div>
+
+				{#if !loginMenu}
+					<div class="form-group">
+						<label for="username">Display Name</label>
+						<input
+							type="text"
+							id="username"
+							bind:value={username}
+							required
+							on:keydown={handleKeydown}
+							placeholder="How others will see you"
+						/>
+					</div>
+				{/if}
 
 				<div class="form-group">
 					<label for="password">Password</label>
