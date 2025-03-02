@@ -21,10 +21,33 @@ spec:
           imagePullPolicy: Always
           ports:
             - containerPort: 5057
+          env:
+            # Database connection
+            - name: DB_HOST
+              value: "db"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              value: "root"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: db_ROOT_PASSWORD
+            # Redis connection
+            - name: REDIS_HOST
+              value: "cache"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: redis-password
           resources:
             requests:
               cpu: 1000m
               memory: 2000Mi
             limits:
-              cpu: 5000m
-              memory: 10000Mi
+              cpu: 10000m
+              memory: 20000Mi

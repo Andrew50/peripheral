@@ -31,6 +31,8 @@ jobs:
           echo "Checking if DOCKERHUB_USERNAME secret exists: ${{ secrets.DOCKERHUB_USERNAME != '' }}"
           echo "Checking if DOCKERHUB_TOKEN secret exists: ${{ secrets.DOCKERHUB_TOKEN != '' }}"
           echo "Checking if CLOUDFLARE_CERT secret exists: ${{ secrets.CLOUDFLARE_CERT != '' }}"
+          echo "Checking if REDIS_PASSWORD secret exists: ${{ secrets.REDIS_PASSWORD != '' }}"
+          echo "Checking if DB_ROOT_PASSWORD secret exists: ${{ secrets.DB_ROOT_PASSWORD != '' }}"
 
       # Install Cloudflared
       - name: Install Cloudflared
