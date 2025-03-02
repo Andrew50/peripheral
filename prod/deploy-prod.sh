@@ -99,19 +99,33 @@ fi
 
 # Push Docker images to registry
 log "Pushing Docker images to registry with tag: ${DOCKER_TAG}..."
+
+# Debug information about environment variables (without revealing secrets)
+log "Docker user: ${DOCKER_USER}"
+log "Docker token status: $(if [ -n "${DOCKER_TOKEN}" ]; then echo "is set"; else echo "is NOT set"; fi)"
+log "GitHub environment: $(if [ -n "${GITHUB_ACTIONS}" ]; then echo "Running in GitHub Actions"; else echo "Not running in GitHub Actions"; fi)"
+
 # Use Docker credentials from environment variables
 if [ -z "${DOCKER_TOKEN}" ]; then
     error_log "DOCKER_TOKEN environment variable is not set. Please set it before running this script."
-    error_log "For GitHub Actions, ensure the secret is properly configured."
+    error_log "For GitHub Actions, ensure the secret DOCKER_TOKEN is properly configured in your repository settings."
+    error_log "Repository Settings > Secrets and variables > Actions > Repository secrets"
+    
+    # List available environment variables (without values) for debugging
+    error_log "Available environment variables (names only):"
+    env | cut -d= -f1 | grep -i docker || echo "No Docker-related variables found"
+    
     exit 1
 fi
 
 # Perform Docker login with the token
+log "Attempting Docker login..."
 echo "${DOCKER_TOKEN}" | docker login -u ${DOCKER_USER} --password-stdin || {
     error_log "Docker login failed. Please check your credentials."
     exit 1
 }
 
+log "Docker login successful, proceeding with image push..."
 docker push ${DOCKER_USER}/frontend:${DOCKER_TAG}
 docker push ${DOCKER_USER}/backend:${DOCKER_TAG}
 docker push ${DOCKER_USER}/worker:${DOCKER_TAG}
