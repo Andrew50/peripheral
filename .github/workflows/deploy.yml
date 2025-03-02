@@ -25,10 +25,6 @@ on:
 jobs:
   deploy:
     runs-on: self-hosted  # Using self-hosted runner instead of ubuntu-latest
-    # Define environment variables at the job level
-    env:
-      DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
     
     steps:
       # Print debugging information before checkout
@@ -73,29 +69,17 @@ jobs:
           echo "Current branch: $(git branch --show-current)"
           git --version
       
-      # Verify secrets are available
+      # Verify secrets are available without exposing them
       - name: Verify Docker Credentials
         run: |
-          echo "Docker username status: $(if [ -n "${{ secrets.DOCKER_USERNAME }}" ]; then echo "is set in secrets"; else echo "is NOT set in secrets"; fi)"
-          echo "Docker token status: $(if [ -n "${{ secrets.DOCKER_TOKEN }}" ]; then echo "is set in secrets"; else echo "is NOT set in secrets"; fi)"
-          echo "Environment DOCKER_USER: $(if [ -n "$DOCKER_USER" ]; then echo "is set in env"; else echo "is NOT set in env"; fi)"
-          echo "Environment DOCKER_TOKEN: $(if [ -n "$DOCKER_TOKEN" ]; then echo "is set in env"; else echo "is NOT set in env"; fi)"
+          echo "Docker username secret: $(if [ -n "${{ secrets.DOCKER_USERNAME }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
+          echo "Docker token secret: $(if [ -n "${{ secrets.DOCKER_TOKEN }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
           
+      # Deploy using GitHub secrets directly
       - name: Deploy to server
-        env:
-          DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
-          GITHUB_REF_NAME: ${{ env.CHECKOUT_REF }}
         run: |
-          # Debug environment (without revealing secrets)
-          echo "Environment variables available (names only):"
-          env | cut -d= -f1 | sort
-          
-          echo "Docker username status: $(if [ -n "$DOCKER_USER" ]; then echo "is set"; else echo "is NOT set"; fi)"
-          echo "Docker token status: $(if [ -n "$DOCKER_TOKEN" ]; then echo "is set"; else echo "is NOT set"; fi)"
-          
           # Make script executable
           chmod +x prod/deploy-prod.sh
           
-          # Run deployment script with explicit environment variable passing
-          ./prod/deploy-prod.sh 
+          # Run deployment script with GitHub secrets
+          DOCKER_USER="${{ secrets.DOCKER_USERNAME }}" DOCKER_TOKEN="${{ secrets.DOCKER_TOKEN }}" GITHUB_REF_NAME="${{ env.CHECKOUT_REF }}" ./prod/deploy-prod.sh 

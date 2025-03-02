@@ -119,9 +119,17 @@ if [ -z "${DOCKER_TOKEN}" ]; then
     error_log "For GitHub Actions, ensure the secret DOCKER_TOKEN is properly configured in your repository settings."
     error_log "Repository Settings > Secrets and variables > Actions > Repository secrets"
     
-    # List available environment variables (without values) for debugging
-    error_log "Available environment variables (names only):"
-    env | cut -d= -f1 | grep -i docker || echo "No Docker-related variables found"
+    # If in GitHub Actions, provide more specific guidance
+    if [ -n "${GITHUB_ACTIONS}" ]; then
+        error_log "This script is running in GitHub Actions but DOCKER_TOKEN is not set."
+        error_log "Please add the DOCKER_TOKEN secret in your GitHub repository:"
+        error_log "1. Go to your repository on GitHub"
+        error_log "2. Navigate to Settings > Secrets and variables > Actions"
+        error_log "3. Click 'New repository secret'"
+        error_log "4. Name: DOCKER_TOKEN"
+        error_log "5. Value: Your Docker Hub access token"
+        error_log "6. Click 'Add secret'"
+    fi
     
     # Check if we're in an interactive environment and offer manual login
     if [ -t 0 ]; then
@@ -146,6 +154,7 @@ else
     log "Attempting Docker login with token..."
     echo "${DOCKER_TOKEN}" | docker login -u ${DOCKER_USER} --password-stdin || {
         error_log "Docker login failed. Please check your credentials."
+        error_log "If you're using GitHub Actions, verify that the DOCKER_TOKEN secret contains a valid Docker Hub access token."
         exit 1
     }
     log "Docker login successful, proceeding with image push..."
