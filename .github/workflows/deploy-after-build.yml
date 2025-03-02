@@ -49,19 +49,24 @@ jobs:
             echo "Deployment script not found in repository, creating prod directory..."
             mkdir -p prod
             
-            # Check if the script exists in the runner's filesystem
-            if [ -f "/home/aj/dev/study/prod/deploy-prod.sh" ]; then
-              echo "Copying deployment script from runner's filesystem..."
-              cp /home/aj/dev/study/prod/deploy-prod.sh prod/
-              chmod +x prod/deploy-prod.sh
+            # Create an error message with diagnostic information
+            echo "ERROR: Could not find deployment script at prod/deploy-prod.sh"
+            echo "Current directory contents:"
+            ls -la
+            echo "prod directory contents (if exists):"
+            if [ -d "prod" ]; then
+              ls -la prod/
             else
-              echo "ERROR: Could not find deployment script in repository or runner's filesystem"
-              exit 1
+              echo "prod directory does not exist"
             fi
+            
+            # Exit with error
+            exit 1
+          else
+            echo "Deployment script found at: $(pwd)/prod/deploy-prod.sh"
+            chmod +x prod/deploy-prod.sh
+            ls -la prod/
           fi
-          
-          echo "Deployment script status:"
-          ls -la prod/
       
       # Deploy using GitHub secrets directly
       - name: Deploy to server
