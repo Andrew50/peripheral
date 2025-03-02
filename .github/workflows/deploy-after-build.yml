@@ -82,6 +82,11 @@ jobs:
           echo "GITHUB_REF_NAME: ${GITHUB_REF_NAME}"
           echo "GITHUB_ACTIONS: ${GITHUB_ACTIONS}"
           
+          # Perform Docker login directly in the workflow
+          # This creates ~/.docker/config.json with the credentials
+          echo "Performing Docker login directly in the workflow..."
+          echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+          
           # Make script executable
           chmod +x prod/deploy-prod.sh
           
