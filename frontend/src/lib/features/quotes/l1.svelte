@@ -56,6 +56,10 @@
 		release();
 		currentSecurityId = null;
 	});
+
+	// Format for compact display
+	$: bidDisplay = `${$store?.bidPrice?.toFixed(2) ?? '--'}×${$store?.bidSize ?? '--'}`;
+	$: askDisplay = `${$store?.askPrice?.toFixed(2) ?? '--'}×${$store?.askSize ?? '--'}`;
 </script>
 
 <div class="quote-container">
@@ -63,7 +67,6 @@
 		<!-- Bid section on the left -->
 		<div class="bid">
 			<div class="price">
-				<span class="label">Bid:</span>
 				<span class="value {bidPriceChange}">{$store?.bidPrice?.toFixed(2) ?? '--'}</span>
 			</div>
 			<div class="size">
@@ -74,7 +77,6 @@
 		<!-- Ask section on the right -->
 		<div class="ask">
 			<div class="price">
-				<span class="label">Ask:</span>
 				<span class="value {askPriceChange}">{$store?.askPrice?.toFixed(2) ?? '--'}</span>
 			</div>
 			<div class="size">
@@ -140,5 +142,30 @@
 
 	.no-change {
 		color: white;
+	}
+
+	/* Update the bid-ask-row styles */
+	.bid-ask-row {
+		display: flex;
+		gap: 10px;
+		margin: 4px 0;
+	}
+
+	.bid {
+		background-color: rgba(64, 84, 178, 0.6);
+		color: #a1b0ff;
+		padding: 2px 8px;
+		border-radius: 12px;
+		font-size: 14px;
+		font-family: monospace;
+	}
+
+	.ask {
+		background-color: rgba(178, 64, 64, 0.6);
+		color: #ff9e9e;
+		padding: 2px 8px;
+		border-radius: 12px;
+		font-size: 14px;
+		font-family: monospace;
 	}
 </style>

@@ -73,8 +73,8 @@ export interface TimeEvent {
 }
 export const timeEvent: Writable<TimeEvent> = writable({ event: null, UTCtimestamp: 0 });
 export const defaultSettings: Settings = {
-    chartRows: 2,
-    chartColumns: 2,
+    chartRows: 1,
+    chartColumns: 1,
     dolvol: false,
     adrPeriod: 20,
     filterTaS: true,

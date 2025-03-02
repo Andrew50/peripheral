@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"regexp"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +24,47 @@ type EDGARFiling struct {
 	Timestamp int64     `json:"timestamp"` // UTC timestamp in milliseconds
 }
 
+// GlobalEDGARFiling represents a SEC filing in the EDGAR database
+type GlobalEDGARFiling struct {
+	CompanyName     string `json:"company_name"`
+	Type            string `json:"type"`
+	Date            string `json:"date"`
+	URL             string `json:"url"`
+	AccessionNumber string `json:"accession_number"`
+	Description     string `json:"description,omitempty"`
+	Ticker          string `json:"ticker"`
+	Timestamp       int64  `json:"timestamp"` // UTC timestamp in milliseconds
+}
+
+// AtomFeed represents the root element of the SEC EDGAR Atom feed
+type AtomFeed struct {
+	XMLName xml.Name    `xml:"feed"`
+	Title   string      `xml:"title"`
+	Updated string      `xml:"updated"`
+	Entries []AtomEntry `xml:"entry"`
+}
+
+// AtomEntry represents a single filing entry in the EDGAR Atom feed
+type AtomEntry struct {
+	Title    string       `xml:"title"`
+	Link     AtomLink     `xml:"link"`
+	Summary  string       `xml:"summary"`
+	Updated  string       `xml:"updated"`
+	Category AtomCategory `xml:"category"`
+	ID       string       `xml:"id"`
+}
+
+// AtomLink represents a link element in an Atom entry
+type AtomLink struct {
+	Href string `xml:"href,attr"`
+}
+
+// AtomCategory represents the category element in an Atom entry
+type AtomCategory struct {
+	Term  string `xml:"term,attr"`
+	Label string `xml:"label,attr"`
+}
+
 // Cache implementation with expiration
 type edgarCache struct {
 	sync.RWMutex
@@ -36,6 +76,74 @@ var (
 		cikMap: make(map[string]string),
 	}
 )
+
+// fetchTickerFromCIK retrieves the ticker symbol for a given CIK
+func fetchTickerFromCIK(conn *Conn, cik string) string {
+	// Method 1: Reverse lookup in the cache
+	filingCache.RLock()
+	for ticker, cachedCIK := range filingCache.cikMap {
+		if cachedCIK == cik {
+			filingCache.RUnlock()
+			return ticker
+		}
+	}
+	filingCache.RUnlock()
+
+	// Method 2: Query our securities table
+	if conn != nil {
+		// Remove leading zeros from CIK for numeric comparison
+		trimmedCIK := strings.TrimLeft(cik, "0")
+
+		var ticker string
+		err := conn.DB.QueryRow(context.Background(),
+			`SELECT ticker FROM securities 
+			 WHERE cik = $1 AND maxDate IS NULL 
+			 LIMIT 1`,
+			trimmedCIK).Scan(&ticker)
+
+		if err == nil && ticker != "" {
+			// Add to cache for future lookups
+			filingCache.Lock()
+			filingCache.cikMap[ticker] = cik
+			filingCache.Unlock()
+			return ticker
+		}
+	}
+
+	return ""
+}
+
+// FetchLatestEdgarFilings fetches the latest SEC filings from the RSS feed
+func FetchLatestEdgarFilings(conn *Conn) ([]GlobalEDGARFiling, error) {
+	var allFilings []GlobalEDGARFiling
+	maxResults := 1500 // Maximum number of filings to fetch
+	perPage := 100     // Number of results per API request
+
+	for page := 1; len(allFilings) < maxResults; page++ {
+		filings, err := fetchEdgarFilingsPage(page, perPage)
+		if err != nil {
+			// Return what we've fetched so far along with the error
+			return allFilings, fmt.Errorf("error fetching page %d: %w", page, err)
+		}
+
+		if len(filings) == 0 {
+			// No more results
+			break
+		}
+
+		allFilings = append(allFilings, filings...)
+
+		// If we got fewer results than requested, we've reached the end
+		if len(filings) < perPage {
+			break
+		}
+
+		// Add a delay between requests to avoid rate limiting
+		time.Sleep(300 * time.Millisecond)
+	}
+
+	return allFilings, nil
+}
 
 func fetchEdgarFilings(cik string) ([]EDGARFiling, error) {
 	fmt.Printf("Fetching SEC filings for CIK: %s\n", cik)
@@ -215,136 +323,6 @@ func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFilin
 	return filings, nil
 }
 
-// EdgarFilingOptions represents optional parameters for fetching EDGAR filings
-type EdgarFilingOptions struct {
-	From  *time.Time
-	To    *time.Time
-	Limit int
-}
-
-// GetRecentEdgarFilings retrieves SEC filings for a security with optional filters
-func GetRecentEdgarFilings(conn *Conn, securityId int, opts *EdgarFilingOptions) ([]EDGARFiling, error) {
-	// Get ticker for the security
-	to := time.Now()
-	if opts != nil && opts.To != nil {
-		to = *opts.To
-	}
-
-	ticker, err := GetTicker(conn, securityId, to)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get ticker: %v", err)
-	}
-
-	// Check CIK cache first
-	filingCache.RLock()
-	cik, exists := filingCache.cikMap[ticker]
-	filingCache.RUnlock()
-
-	if !exists {
-		// Fetch CIK from SEC
-		cik, err = fetchCIKFromSEC(ticker)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get CIK for %s: %v", ticker, err)
-		}
-
-		// Cache the CIK
-		filingCache.Lock()
-		filingCache.cikMap[ticker] = cik
-		filingCache.Unlock()
-	}
-
-	// Fetch filings directly (no caching)
-	filings, err := fetchEdgarFilings(cik)
-	if err != nil {
-		return nil, err
-	}
-
-	// Filter filings based on options
-	var filteredFilings []EDGARFiling
-	for _, filing := range filings {
-		filingTime := time.UnixMilli(filing.Timestamp)
-
-		// Apply date filters if provided
-		if opts != nil {
-			if opts.From != nil && filingTime.Before(*opts.From) {
-				continue
-			}
-			if opts.To != nil && filingTime.After(*opts.To) {
-				continue
-			}
-		}
-
-		filteredFilings = append(filteredFilings, filing)
-	}
-
-	fmt.Printf("Before sorting: %d filings\n", len(filteredFilings))
-
-	// Sort filings by timestamp in descending order (newest first)
-	sort.Slice(filteredFilings, func(i, j int) bool {
-		return filteredFilings[i].Timestamp > filteredFilings[j].Timestamp
-	})
-
-	// Apply limit to get most recent filings
-	if opts != nil && opts.Limit > 0 {
-		fmt.Printf("Applying limit: %d (current length: %d)\n", opts.Limit, len(filteredFilings))
-		if len(filteredFilings) > opts.Limit {
-			filteredFilings = filteredFilings[:opts.Limit]
-			fmt.Printf("After limit: %d filings\n", len(filteredFilings))
-		}
-	} else {
-		fmt.Printf("No limit applied. Opts: %+v\n", opts)
-	}
-
-	// Re-sort in ascending order for display
-	sort.Slice(filteredFilings, func(i, j int) bool {
-		return filteredFilings[i].Timestamp < filteredFilings[j].Timestamp
-	})
-
-	fmt.Printf("Final count: %d filings\n", len(filteredFilings))
-	return filteredFilings, nil
-}
-
-// GlobalEDGARFiling represents a SEC filing in the EDGAR database
-type GlobalEDGARFiling struct {
-	CompanyName     string `json:"company_name"`
-	Type            string `json:"type"`
-	Date            string `json:"date"`
-	URL             string `json:"url"`
-	AccessionNumber string `json:"accession_number"`
-	Description     string `json:"description,omitempty"`
-	Ticker          string `json:"ticker"`
-	Timestamp       int64  `json:"timestamp"` // UTC timestamp in milliseconds
-}
-
-// AtomFeed represents the root element of the SEC EDGAR Atom feed
-type AtomFeed struct {
-	XMLName xml.Name    `xml:"feed"`
-	Title   string      `xml:"title"`
-	Updated string      `xml:"updated"`
-	Entries []AtomEntry `xml:"entry"`
-}
-
-// AtomEntry represents a single filing entry in the EDGAR Atom feed
-type AtomEntry struct {
-	Title    string       `xml:"title"`
-	Link     AtomLink     `xml:"link"`
-	Summary  string       `xml:"summary"`
-	Updated  string       `xml:"updated"`
-	Category AtomCategory `xml:"category"`
-	ID       string       `xml:"id"`
-}
-
-// AtomLink represents a link element in an Atom entry
-type AtomLink struct {
-	Href string `xml:"href,attr"`
-}
-
-// AtomCategory represents the category element in an Atom entry
-type AtomCategory struct {
-	Term  string `xml:"term,attr"`
-	Label string `xml:"label,attr"`
-}
-
 func fetchCIKFromSEC(ticker string) (string, error) {
 	// SEC company lookup endpoint
 	url := fmt.Sprintf("https://www.sec.gov/files/company_tickers.json")
@@ -393,74 +371,6 @@ func fetchCIKFromSEC(ticker string) (string, error) {
 	}
 
 	return "", fmt.Errorf("no CIK found for ticker %s", ticker)
-}
-
-// fetchTickerFromCIK retrieves the ticker symbol for a given CIK
-func fetchTickerFromCIK(conn *Conn, cik string) string {
-	// Method 1: Reverse lookup in the cache
-	filingCache.RLock()
-	for ticker, cachedCIK := range filingCache.cikMap {
-		if cachedCIK == cik {
-			filingCache.RUnlock()
-			return ticker
-		}
-	}
-	filingCache.RUnlock()
-
-	// Method 2: Query our securities table
-	if conn != nil {
-		// Remove leading zeros from CIK for numeric comparison
-		trimmedCIK := strings.TrimLeft(cik, "0")
-
-		var ticker string
-		err := conn.DB.QueryRow(context.Background(),
-			`SELECT ticker FROM securities 
-			 WHERE cik = $1 AND maxDate IS NULL 
-			 LIMIT 1`,
-			trimmedCIK).Scan(&ticker)
-
-		if err == nil && ticker != "" {
-			// Add to cache for future lookups
-			filingCache.Lock()
-			filingCache.cikMap[ticker] = cik
-			filingCache.Unlock()
-			return ticker
-		}
-	}
-
-	return ""
-}
-
-// FetchLatestEdgarFilings fetches the latest SEC filings from the RSS feed
-func FetchLatestEdgarFilings(conn *Conn) ([]GlobalEDGARFiling, error) {
-	var allFilings []GlobalEDGARFiling
-	maxResults := 1500 // Maximum number of filings to fetch
-	perPage := 100     // Number of results per API request
-
-	for page := 1; len(allFilings) < maxResults; page++ {
-		filings, err := fetchEdgarFilingsPage(page, perPage)
-		if err != nil {
-			// Return what we've fetched so far along with the error
-			return allFilings, fmt.Errorf("error fetching page %d: %w", page, err)
-		}
-
-		if len(filings) == 0 {
-			// No more results
-			break
-		}
-
-		allFilings = append(allFilings, filings...)
-
-		// If we got fewer results than requested, we've reached the end
-		if len(filings) < perPage {
-			break
-		}
-
-		// Add a delay between requests to avoid rate limiting
-		time.Sleep(300 * time.Millisecond)
-	}
-
-	return allFilings, nil
 }
 
 func fetchEdgarFilingsPage(page int, perPage int) ([]GlobalEDGARFiling, error) {
