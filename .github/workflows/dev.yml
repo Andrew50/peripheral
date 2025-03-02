@@ -1,0 +1,165 @@
+name: Deploy to Test Environment
+
+on:
+  push:
+    branches:
+      - test
+  pull_request:
+    branches:
+      - test
+
+jobs:
+  deploy-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Use ssh-agent for SSH key management
+      - name: Set up SSH key using ssh-agent
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      
+      # Set up Cloudflare access
+      - name: Configure Cloudflare Access
+        env:
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST || 'ssh.atlantis.trading' }}
+          REMOTE_USER: ${{ secrets.REMOTE_USER || 'aj' }}
+          CLOUDFLARE_CERT: ${{ secrets.CLOUDFLARE_CERT }}
+        run: |
+          # Install Cloudflared
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+          
+          # Set up Cloudflare certificate
+          mkdir -p ~/.cloudflared
+          echo "$CLOUDFLARE_CERT" > ~/.cloudflared/cert.pem
+          chmod 600 ~/.cloudflared/cert.pem
+          
+          # Create SSH config
+          mkdir -p ~/.ssh
+          echo "Host $REMOTE_HOST" > ~/.ssh/config
+          echo "    ProxyCommand cloudflared access ssh --hostname %h" >> ~/.ssh/config
+          echo "    User $REMOTE_USER" >> ~/.ssh/config
+          echo "    StrictHostKeyChecking no" >> ~/.ssh/config
+          echo "    UserKnownHostsFile /dev/null" >> ~/.ssh/config
+          echo "    ServerAliveInterval 60" >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
+          
+          # Test SSH connection
+          ssh -v "$REMOTE_HOST" "echo SSH connection successful" || {
+            echo "SSH connection failed"
+            exit 1
+          }
+
+      # Deploy to test server
+      - name: Deploy to test environment
+        env:
+          REMOTE_USER: ${{ secrets.REMOTE_USER || 'aj' }}
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST || 'ssh.atlantis.trading' }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
+        run: |
+          # Execute deployment script on remote server
+          ssh "$REMOTE_HOST" '
+            cd /home/aj/dev/study
+            
+            # Update code
+            git checkout test
+            git pull origin test
+            
+            # Generate tag from commit SHA
+            SHA_TAG=$(git rev-parse --short HEAD)
+            
+            # Docker login
+            docker login docker.io -u "'$DOCKERHUB_USERNAME'" -p "'$DOCKERHUB_TOKEN'" || {
+              echo "Docker login failed"
+              exit 1
+            }
+            
+            # Ensure Minikube is running
+            if ! minikube status &>/dev/null; then
+              echo "Starting Minikube..."
+              minikube start --driver=docker || minikube start --driver=none
+            fi
+            
+            # Configure kubectl for Minikube
+            eval $(minikube -p minikube docker-env)
+            
+            # Set namespace for test deployment
+            TEST_NAMESPACE="test"
+            kubectl create namespace $TEST_NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+            
+            # Build and push images
+            echo "Building and pushing images with tag: $SHA_TAG"
+            
+            # Backend
+            docker build -t "'$DOCKERHUB_USERNAME'"/backend:test -t "'$DOCKERHUB_USERNAME'"/backend:test-$SHA_TAG -f ./backend/Dockerfile.prod ./backend
+            docker push "'$DOCKERHUB_USERNAME'"/backend:test
+            docker push "'$DOCKERHUB_USERNAME'"/backend:test-$SHA_TAG
+            
+            # Frontend
+            docker build -t "'$DOCKERHUB_USERNAME'"/frontend:test -t "'$DOCKERHUB_USERNAME'"/frontend:test-$SHA_TAG -f ./frontend/Dockerfile.prod ./frontend
+            docker push "'$DOCKERHUB_USERNAME'"/frontend:test
+            docker push "'$DOCKERHUB_USERNAME'"/frontend:test-$SHA_TAG
+            
+            # Worker
+            docker build -t "'$DOCKERHUB_USERNAME'"/worker:test -t "'$DOCKERHUB_USERNAME'"/worker:test-$SHA_TAG -f ./worker/Dockerfile ./worker
+            docker push "'$DOCKERHUB_USERNAME'"/worker:test
+            docker push "'$DOCKERHUB_USERNAME'"/worker:test-$SHA_TAG
+            
+            # Update config files for test environment
+            mkdir -p test/config
+            cp -rf prod/config/* test/config/
+            
+            # Update namespace and image tags in test config files
+            for file in test/config/*.yaml; do
+              sed -i "s/namespace: default/namespace: $TEST_NAMESPACE/g" "$file"
+              sed -i "s/name: production/name: test/g" "$file"
+            done
+            
+            # Update image tags in manifests
+            sed -i "s|image: "'$DOCKERHUB_USERNAME'"/backend:latest|image: "'$DOCKERHUB_USERNAME'"/backend:test-$SHA_TAG|g" test/config/backend.yaml
+            sed -i "s|image: "'$DOCKERHUB_USERNAME'"/frontend:latest|image: "'$DOCKERHUB_USERNAME'"/frontend:test-$SHA_TAG|g" test/config/frontend.yaml
+            sed -i "s|image: "'$DOCKERHUB_USERNAME'"/worker:latest|image: "'$DOCKERHUB_USERNAME'"/worker:test-$SHA_TAG|g" test/config/worker.yaml
+            
+            # Apply Kubernetes manifests in order
+            echo "Applying Kubernetes manifests..."
+            kubectl apply -f test/config/db.yaml
+            kubectl rollout status statefulset/db -n $TEST_NAMESPACE --timeout=300s
+            
+            kubectl apply -f test/config/cache.yaml
+            kubectl rollout status deployment/cache -n $TEST_NAMESPACE --timeout=300s
+            
+            kubectl apply -f test/config/backend.yaml
+            kubectl rollout status deployment/backend -n $TEST_NAMESPACE --timeout=300s
+            
+            kubectl apply -f test/config/worker.yaml
+            kubectl rollout status deployment/worker -n $TEST_NAMESPACE --timeout=300s
+            
+            kubectl apply -f test/config/frontend.yaml
+            kubectl rollout status deployment/frontend -n $TEST_NAMESPACE --timeout=300s
+            
+            kubectl apply -f test/config/nginx.yaml
+            
+            # Expose ingress controller
+            kubectl -n $TEST_NAMESPACE expose deployment ingress-nginx-controller \
+              --name=ingress-nginx-nodeport-test \
+              --port=80 \
+              --target-port=80 \
+              --type=NodePort \
+              --overrides='\{"spec":\{"ports":[{"port":80,"protocol":"TCP","targetPort":80,"nodePort":30082}]\}\}'
+            
+            echo "Test deployment completed successfully!"
+          '
+
+      - name: Set environment variables for test
+        id: env
+        run: |
+          echo "ENVIRONMENT=test" >> $GITHUB_ENV
+          echo "DOMAIN=dev.atlantis.trading" >> $GITHUB_ENV
+          echo "NAMESPACE=test" >> $GITHUB_ENV
+          echo "DEPLOY_ID=$(date +%s)-$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_ENV
+          echo "deploy_id=$(date +%s)-$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_OUTPUT
