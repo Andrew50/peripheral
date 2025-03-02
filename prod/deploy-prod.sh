@@ -3,6 +3,7 @@ set -e
 
 # Configuration - these are now set from GitHub secrets or passed from workflow
 DOCKER_USER="${DOCKER_USER:-billin19}" # Will be replaced by the GitHub workflow
+# GITHUB_REF_NAME will be the target branch of the PR or the current branch for direct pushes
 BRANCH="${GITHUB_REF_NAME:-prod}" # Get branch name from GitHub Actions, default to prod if not set
 
 # Sanitize branch name for Docker tags (replace / with - and other invalid characters)
