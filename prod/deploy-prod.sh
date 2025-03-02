@@ -73,11 +73,11 @@ fi
 
 # Build new Docker images with branch-specific tag
 log "Building Docker images with tag: ${DOCKER_TAG}..."
-docker build -t ${DOCKER_USER}/frontend:${DOCKER_TAG} frontend
-docker build -t ${DOCKER_USER}/backend:${DOCKER_TAG} backend
-docker build -t ${DOCKER_USER}/worker:${DOCKER_TAG} worker
-docker build -t ${DOCKER_USER}/tf:${DOCKER_TAG} tf
-docker build -t ${DOCKER_USER}/db:${DOCKER_TAG} db
+docker build -t ${DOCKER_USER}/frontend:${DOCKER_TAG} -f frontend/Dockerfile.prod frontend
+docker build -t ${DOCKER_USER}/backend:${DOCKER_TAG} -f backend/Dockerfile.prod backend
+docker build -t ${DOCKER_USER}/worker:${DOCKER_TAG} -f worker/Dockerfile.prod worker
+docker build -t ${DOCKER_USER}/tf:${DOCKER_TAG} -f tf/Dockerfile.prod tf
+docker build -t ${DOCKER_USER}/db:${DOCKER_TAG} -f db/Dockerfile.prod db
 
 # For prod branch, also tag as latest
 # For dev branch, also tag as development
