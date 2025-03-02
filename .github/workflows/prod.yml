@@ -1,0 +1,541 @@
+name: Deploy to Production Environment
+
+on:
+  push:
+    branches:
+      - prod
+  pull_request:
+    branches:
+      - prod
+
+jobs:
+  deploy-primary:
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Set up kubectl
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      # Print debug info about secrets (masked in logs)
+      - name: Debug secrets
+        run: |
+          echo "Checking if REMOTE_HOST secret exists: ${{ secrets.REMOTE_HOST != '' }}"
+          echo "Checking if REMOTE_USER secret exists: ${{ secrets.REMOTE_USER != '' }}"
+          echo "Checking if SSH_PRIVATE_KEY secret exists: ${{ secrets.SSH_PRIVATE_KEY != '' }}"
+          echo "Checking if DOCKERHUB_USERNAME secret exists: ${{ secrets.DOCKERHUB_USERNAME != '' }}"
+          echo "Checking if DOCKERHUB_TOKEN secret exists: ${{ secrets.DOCKERHUB_TOKEN != '' }}"
+          echo "Checking if CLOUDFLARE_CERT secret exists: ${{ secrets.CLOUDFLARE_CERT != '' }}"
+          echo "Checking if REDIS_PASSWORD secret exists: ${{ secrets.REDIS_PASSWORD != '' }}"
+          echo "Checking if DB_ROOT_PASSWORD secret exists: ${{ secrets.DB_ROOT_PASSWORD != '' }}"
+
+      # Install Cloudflared
+      - name: Install Cloudflared
+        run: |
+          # Download and install cloudflared
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+          cloudflared version
+
+      # Use ssh-agent for improved key management
+      - name: Set up SSH key using ssh-agent
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      
+      # Set up Cloudflare access and SSH config
+      - name: Configure Cloudflare Access
+        env:
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST || 'ssh.atlantis.trading' }}
+          REMOTE_USER: ${{ secrets.REMOTE_USER || 'aj' }}
+          CLOUDFLARE_CERT: ${{ secrets.CLOUDFLARE_CERT }}
+        run: |
+          # Validate Cloudflare cert
+          if [ -z "$CLOUDFLARE_CERT" ]; then
+            echo "ERROR: CLOUDFLARE_CERT is empty or not set"
+            exit 1
+          fi
+          
+          # Set up Cloudflare certificate
+          mkdir -p ~/.cloudflared
+          echo "$CLOUDFLARE_CERT" > ~/.cloudflared/cert.pem
+          chmod 600 ~/.cloudflared/cert.pem
+          
+          # Create SSH config properly
+          mkdir -p ~/.ssh
+          
+          echo "Host $REMOTE_HOST" > ~/.ssh/config
+          echo "    ProxyCommand cloudflared access ssh --hostname %h" >> ~/.ssh/config
+          echo "    User $REMOTE_USER" >> ~/.ssh/config
+          echo "    StrictHostKeyChecking no" >> ~/.ssh/config
+          echo "    UserKnownHostsFile /dev/null" >> ~/.ssh/config
+          echo "    ServerAliveInterval 60" >> ~/.ssh/config
+          echo "    ConnectTimeout 30" >> ~/.ssh/config
+          echo "    KexAlgorithms +diffie-hellman-group1-sha1,diffie-hellman-group14-sha1" >> ~/.ssh/config
+          echo "    PubkeyAcceptedAlgorithms +ssh-rsa" >> ~/.ssh/config
+          echo "    HostkeyAlgorithms +ssh-rsa" >> ~/.ssh/config
+          
+          chmod 600 ~/.ssh/config
+          
+          # Display SSH config for debugging
+          echo "SSH config created:"
+          cat ~/.ssh/config
+          
+          # Verify cloudflared can connect
+          echo "Testing cloudflared connection..."
+          cloudflared access ssh-config --hostname $REMOTE_HOST || echo "Cloudflared access ssh-config failed"
+
+      # Deploy using Cloudflare SSH command
+      - name: Deploy to production server
+        env:
+          REMOTE_USER: ${{ secrets.REMOTE_USER || 'aj' }}
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST || 'ssh.atlantis.trading' }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          # Print debug information about SSH parameters
+          echo "==== SSH CONNECTION DEBUG INFO ===="
+          echo "Target host: '$REMOTE_HOST'"
+          echo "SSH user: '$REMOTE_USER'"
+          echo "Docker username length: ${#DOCKERHUB_USERNAME}"
+          echo "Docker token defined: $([ -n "$DOCKERHUB_TOKEN" ] && echo 'Yes' || echo 'No')"
+          echo "SSH config file contents:"
+          cat ~/.ssh/config
+          echo "==== END SSH DEBUG INFO ===="
+          
+          # Test SSH connection with verbose output
+          echo "Testing SSH connection with maximum verbosity..."
+          ssh -v "$REMOTE_HOST" "echo SSH connection successful" || {
+            echo "SSH connection failed, trying to display more information..."
+            ssh-add -L
+            echo "SSH key authentication failed, check if the public key is in the server's ~/.ssh/authorized_keys file"
+            exit 1
+          }
+          
+          # Now run the deployment commands
+          ssh "$REMOTE_HOST" '
+            cd /home/aj/dev/study
+            git checkout prod
+            git pull origin prod
+            
+            # Generate a unique tag based on commit SHA
+            SHA_TAG=$(git rev-parse --short HEAD)
+            echo "Using image tag: $SHA_TAG for PRODUCTION deployment"
+            
+            # Set up environment for Docker login
+            echo "Attempting Docker login on remote server..."
+            
+            # Use DOCKERHUB credentials
+            echo "Running Docker login command..."
+            docker login docker.io -u "'$DOCKERHUB_USERNAME'" -p "'$DOCKERHUB_TOKEN'" || {
+              echo "Docker login failed with exit code $?"
+              exit 1
+            }
+            echo "Docker login successful!"
+            
+            # Check and start Minikube before building images
+            echo "Checking Minikube status..."
+            if ! command -v minikube &> /dev/null; then
+              echo "Minikube not found. Installing Minikube..."
+              # Install Minikube
+              curl -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+              chmod +x minikube
+              sudo mv minikube /usr/local/bin/
+            fi
+            
+            # Check if Minikube is running, start it if not
+            if ! minikube status &>/dev/null; then
+              echo "Minikube is not running, starting it now..."
+              
+              # Check if Docker is running
+              if ! docker info &>/dev/null; then
+                echo "Docker is not running. Starting Minikube with alternative driver..."
+                if command -v virsh &> /dev/null; then
+                  echo "Using KVM2 driver..."
+                  minikube start --driver=kvm2
+                else
+                  echo "Using podman driver..."
+                  minikube start --driver=podman || minikube start --driver=none
+                fi
+              else
+                # Docker is running, use it as the driver
+                echo "Using Docker driver..."
+                minikube start --driver=docker
+              fi
+            fi
+            
+            # Ensure Minikube is running and kubectl is configured
+            echo "Verifying Minikube is running..."
+            minikube status
+            echo "Configuring kubectl to use Minikube..."
+            eval $(minikube -p minikube docker-env)
+            
+            # Set namespace for production deployment
+            PROD_NAMESPACE="default"
+            
+            # Build and push images directly on the server
+            echo "Building and pushing Docker images with tag: $SHA_TAG"
+            
+            # Backend
+            echo "Building backend image for production..."
+            docker build -t "'$DOCKERHUB_USERNAME'"/backend:latest -t "'$DOCKERHUB_USERNAME'"/backend:$SHA_TAG -f ./backend/Dockerfile.prod ./backend
+            echo "Pushing backend production images..."
+            docker push "'$DOCKERHUB_USERNAME'"/backend:latest
+            docker push "'$DOCKERHUB_USERNAME'"/backend:$SHA_TAG
+            
+            # Frontend
+            echo "Building frontend image for production..."
+            docker build -t "'$DOCKERHUB_USERNAME'"/frontend:latest -t "'$DOCKERHUB_USERNAME'"/frontend:$SHA_TAG -f ./frontend/Dockerfile.prod ./frontend
+            echo "Pushing frontend production images..."
+            docker push "'$DOCKERHUB_USERNAME'"/frontend:latest
+            docker push "'$DOCKERHUB_USERNAME'"/frontend:$SHA_TAG
+            
+            # Worker
+            echo "Building worker image for production..."
+            docker build -t "'$DOCKERHUB_USERNAME'"/worker:latest -t "'$DOCKERHUB_USERNAME'"/worker:$SHA_TAG -f ./worker/Dockerfile ./worker
+            echo "Pushing worker production images..."
+            docker push "'$DOCKERHUB_USERNAME'"/worker:latest
+            docker push "'$DOCKERHUB_USERNAME'"/worker:$SHA_TAG
+            
+            # Update image tags in manifests
+            echo "Updating image tags in Kubernetes manifests for production environment..."
+            
+            # Update image tags in production config files
+            sed -i "s|image: "'$DOCKERHUB_USERNAME'"/backend:latest|image: "'$DOCKERHUB_USERNAME'"/backend:$SHA_TAG|g" prod/config/backend.yaml
+            sed -i "s|image: "'$DOCKERHUB_USERNAME'"/frontend:latest|image: "'$DOCKERHUB_USERNAME'"/frontend:$SHA_TAG|g" prod/config/frontend.yaml
+            sed -i "s|image: "'$DOCKERHUB_USERNAME'"/worker:latest|image: "'$DOCKERHUB_USERNAME'"/worker:$SHA_TAG|g" prod/config/worker.yaml
+            
+            # Apply Kubernetes manifests with zero downtime strategy for production environment
+            echo "Applying Kubernetes manifests for production environment..."
+            
+            # Apply database changes first and wait for readiness
+            echo "Applying database configuration..."
+            kubectl apply -f prod/config/db.yaml
+            kubectl rollout status statefulset/db --timeout=300s
+            
+            # Apply cache service
+            echo "Applying cache configuration..."
+            kubectl apply -f prod/config/cache.yaml
+            kubectl rollout status deployment/cache --timeout=300s
+            
+            # Apply backend services
+            echo "Applying backend configuration..."
+            kubectl apply -f prod/config/backend.yaml
+            kubectl rollout status deployment/backend --timeout=300s
+            
+            # Apply worker services
+            echo "Applying worker configuration..."
+            kubectl apply -f prod/config/worker.yaml
+            kubectl rollout status deployment/worker --timeout=300s
+            
+            # Apply frontend last
+            echo "Applying frontend configuration..."
+            kubectl apply -f prod/config/frontend.yaml
+            kubectl rollout status deployment/frontend --timeout=300s
+            
+            # Apply nginx configuration
+            echo "Applying nginx configuration..."
+            kubectl apply -f prod/config/nginx.yaml
+            
+            # Create and apply the ingress NodePort service with a direct command
+            echo "Exposing ingress controller with NodePort service..."
+            kubectl -n ingress-nginx expose deployment ingress-nginx-controller --name=ingress-nginx-nodeport --port=80 --target-port=80 --type=NodePort --overrides='\{"spec":\{"ports":[{"port":80,"protocol":"TCP","targetPort":80,"nodePort":30081}]\}\}'
+            
+            # Verify that the ingress resources are available
+            kubectl get ingress
+            
+            # Save replication info for the backup server
+            MYSQL_STATUS=$(kubectl exec -n $PROD_NAMESPACE $(kubectl get pods -n $PROD_NAMESPACE -l app=db,role=primary -o jsonpath="{.items[0].metadata.name}") -- mysql -uroot -p"'"$DB_ROOT_PASSWORD"'" -e "SHOW MASTER STATUS\G")
+            MYSQL_FILE=$(echo "$MYSQL_STATUS" | grep File | awk "{ print \$2 }")
+            MYSQL_POS=$(echo "$MYSQL_STATUS" | grep Position | awk "{ print \$2 }")
+            
+            # Store replication info in a file
+            echo "{\"primary_host\":\"$REMOTE_HOST\",\"mysql_file\":\"$MYSQL_FILE\",\"mysql_pos\":$MYSQL_POS,\"deploy_id\":\"$(date +%s)-$(git rev-parse --short HEAD)\",\"namespace\":\"$PROD_NAMESPACE\",\"environment\":\"prod\"}" > /tmp/replication-info.json
+            
+            echo "Production deployment to primary server completed successfully!"
+          ' 
+          
+          # Download replication info from primary server
+          scp "$REMOTE_HOST:/tmp/replication-info.json" ./replication-info.json
+
+      # Upload replication info for the backup server
+      - name: Upload replication info
+        uses: actions/upload-artifact@v3
+        with:
+          name: replication-info
+          path: replication-info.json
+          retention-days: 1
+          
+      - name: Set environment variables
+        id: env
+        run: |
+          echo "ENVIRONMENT=prod" >> $GITHUB_ENV
+          echo "DOMAIN=atlantis.trading" >> $GITHUB_ENV
+          echo "NAMESPACE=default" >> $GITHUB_ENV
+          echo "DEPLOY_ID=$(date +%s)-$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_ENV
+          echo "deploy_id=$(date +%s)-$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_OUTPUT
+          
+  deploy-backup:
+    needs: deploy-primary
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      # Download replication info from the primary server
+      - name: Download replication info
+        uses: actions/download-artifact@v3
+        with:
+          name: replication-info
+          path: ./
+          
+      # Set up kubectl
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+          
+      # Install Cloudflared
+      - name: Install Cloudflared
+        run: |
+          # Download and install cloudflared
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+          cloudflared version
+          
+      # Use ssh-agent for improved key management
+      - name: Set up SSH key for backup server
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.BACKUP_SSH_PRIVATE_KEY }}
+      
+      # Set up Cloudflare access and SSH config for backup server
+      - name: Configure Cloudflare Access for backup server
+        env:
+          BACKUP_HOST: ${{ secrets.BACKUP_HOST }}
+          BACKUP_USER: ${{ secrets.BACKUP_USER || 'aj' }}
+          CLOUDFLARE_CERT: ${{ secrets.CLOUDFLARE_CERT }}
+        run: |
+          # Validate Cloudflare cert
+          if [ -z "$CLOUDFLARE_CERT" ]; then
+            echo "ERROR: CLOUDFLARE_CERT is empty or not set"
+            exit 1
+          fi
+          
+          # Set up Cloudflare certificate
+          mkdir -p ~/.cloudflared
+          echo "$CLOUDFLARE_CERT" > ~/.cloudflared/cert.pem
+          chmod 600 ~/.cloudflared/cert.pem
+          
+          # Create SSH config properly
+          mkdir -p ~/.ssh
+          
+          echo "Host $BACKUP_HOST" > ~/.ssh/config
+          echo "    ProxyCommand cloudflared access ssh --hostname %h" >> ~/.ssh/config
+          echo "    User $BACKUP_USER" >> ~/.ssh/config
+          echo "    StrictHostKeyChecking no" >> ~/.ssh/config
+          echo "    UserKnownHostsFile /dev/null" >> ~/.ssh/config
+          echo "    ServerAliveInterval 60" >> ~/.ssh/config
+          echo "    ConnectTimeout 30" >> ~/.ssh/config
+          echo "    KexAlgorithms +diffie-hellman-group1-sha1,diffie-hellman-group14-sha1" >> ~/.ssh/config
+          echo "    PubkeyAcceptedAlgorithms +ssh-rsa" >> ~/.ssh/config
+          echo "    HostkeyAlgorithms +ssh-rsa" >> ~/.ssh/config
+          
+          chmod 600 ~/.ssh/config
+          
+      # Deploy to backup server with replication info
+      - name: Deploy to backup server
+        env:
+          BACKUP_HOST: ${{ secrets.BACKUP_HOST }}
+          BACKUP_USER: ${{ secrets.BACKUP_USER || 'aj' }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
+        run: |
+          # Load replication info
+          REPLICATION_INFO=$(cat replication-info.json)
+          MYSQL_FILE=$(echo $REPLICATION_INFO | jq -r '.mysql_file')
+          MYSQL_POS=$(echo $REPLICATION_INFO | jq -r '.mysql_pos')
+          DEPLOY_ID=$(echo $REPLICATION_INFO | jq -r '.deploy_id')
+          
+          echo "Deploying to backup server with replication info:"
+          echo "MySQL File: $MYSQL_FILE"
+          echo "MySQL Position: $MYSQL_POS"
+          echo "Deploy ID: $DEPLOY_ID"
+          
+          # Test SSH connection to backup server
+          echo "Testing SSH connection to backup server..."
+          ssh -v "$BACKUP_HOST" "echo SSH connection to backup server successful" || {
+            echo "SSH connection to backup server failed"
+            exit 1
+          }
+          
+          # Now run the deployment commands on backup server
+          ssh "$BACKUP_HOST" '
+            cd /home/aj/dev/study
+            git checkout prod
+            git pull origin prod
+            
+            # Set up environment for Docker login
+            echo "Attempting Docker login on backup server..."
+            docker login docker.io -u "'$DOCKERHUB_USERNAME'" -p "'$DOCKERHUB_TOKEN'" || {
+              echo "Docker login on backup server failed"
+              exit 1
+            }
+            
+            # Check and start Minikube before applying configs
+            echo "Checking Minikube status on backup server..."
+            if ! minikube status &>/dev/null; then
+              echo "Minikube is not running on backup server, starting it now..."
+              minikube start --driver=docker
+            fi
+            
+            # Ensure Minikube is running and kubectl is configured
+            echo "Verifying Minikube is running on backup server..."
+            minikube status
+            echo "Configuring kubectl to use Minikube on backup server..."
+            eval $(minikube -p minikube docker-env)
+            
+            # Set up replication for the database
+            # Apply Kubernetes manifests but with replica config
+            echo "Applying Kubernetes manifests for backup server..."
+            
+            # Update the db backup configuration for replication
+            cat > prod/config/db-replica.yaml <<EOL
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db-replica
+  namespace: default
+spec:
+  serviceName: "db-replica"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db
+      role: replica
+  template:
+    metadata:
+      labels:
+        app: db
+        role: replica
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:8.0
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: "'$DB_ROOT_PASSWORD'"
+        - name: MYSQL_DATABASE
+          value: "app_db"
+        ports:
+        - containerPort: 3306
+          name: mysql
+        volumeMounts:
+        - name: mysql-replica-data
+          mountPath: /var/lib/mysql
+        - name: replication-config
+          mountPath: /etc/mysql/conf.d
+        args:
+        - --server-id=2
+        - --log-bin=mysql-bin
+        - --binlog-format=ROW
+        - --relay-log=mysql-relay-bin
+        - --read-only=ON
+      volumes:
+      - name: replication-config
+        configMap:
+          name: mysql-replica-config
+  volumeClaimTemplates:
+  - metadata:
+      name: mysql-replica-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-replica-config
+  namespace: default
+data:
+  my.cnf: |
+    [mysqld]
+    server-id=2
+    log_bin=mysql-bin
+    binlog_format=ROW
+    relay-log=mysql-relay-bin
+    read-only=ON
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-replica
+  namespace: default
+spec:
+  selector:
+    app: db
+    role: replica
+  ports:
+  - port: 3306
+    targetPort: 3306
+EOL
+            
+            # Apply replica database configuration
+            kubectl apply -f prod/config/db-replica.yaml
+            kubectl rollout status statefulset/db-replica --timeout=300s
+            
+            # Set up replication
+            kubectl exec -it $(kubectl get pods -l app=db,role=replica -o jsonpath="{.items[0].metadata.name}") -- mysql -uroot -p"'$DB_ROOT_PASSWORD'" -e "
+            STOP SLAVE;
+            CHANGE MASTER TO MASTER_HOST='"'"'$(kubectl get service db -o jsonpath="{.spec.clusterIP}")'"'"', 
+                           MASTER_USER='"'"'root'"'"', 
+                           MASTER_PASSWORD='"'"'$DB_ROOT_PASSWORD'"'"', 
+                           MASTER_LOG_FILE='"'"'$MYSQL_FILE'"'"', 
+                           MASTER_LOG_POS=$MYSQL_POS;
+            START SLAVE;
+            SHOW SLAVE STATUS\G;
+            "
+            
+            # Apply the rest of configurations similar to primary but with different ingress setup
+            # Apply cache service
+            echo "Applying cache configuration..."
+            kubectl apply -f prod/config/cache.yaml
+            kubectl rollout status deployment/cache --timeout=300s
+            
+            # Apply backend services
+            echo "Applying backend configuration..."
+            kubectl apply -f prod/config/backend.yaml
+            kubectl rollout status deployment/backend --timeout=300s
+            
+            # Apply worker services
+            echo "Applying worker configuration..."
+            kubectl apply -f prod/config/worker.yaml
+            kubectl rollout status deployment/worker --timeout=300s
+            
+            # Apply frontend last
+            echo "Applying frontend configuration..."
+            kubectl apply -f prod/config/frontend.yaml
+            kubectl rollout status deployment/frontend --timeout=300s
+            
+            # Create and apply backup ingress config
+            echo "Applying backup server nginx configuration..."
+            sed "s/atlantis.trading/backup.atlantis.trading/g" prod/config/nginx.yaml > prod/config/backup-nginx.yaml
+            kubectl apply -f prod/config/backup-nginx.yaml
+            
+            # Create and apply the ingress NodePort service with a direct command
+            echo "Exposing ingress controller with NodePort service for backup..."
+            kubectl -n ingress-nginx expose deployment ingress-nginx-controller --name=ingress-nginx-nodeport-backup --port=80 --target-port=80 --type=NodePort --overrides='\{"spec":\{"ports":[{"port":80,"protocol":"TCP","targetPort":80,"nodePort":30083}]\}\}'
+            
+            # Verify that the ingress resources are available
+            kubectl get ingress
+            echo "Backup server deployment completed successfully!"
+          '
