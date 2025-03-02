@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/polygon-io/client-go/rest/models"
@@ -37,113 +38,157 @@ func GetChartEvents(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inte
 	if err != nil {
 		return nil, fmt.Errorf("error fetching ticker for %d: %w", args.SecurityId, err)
 	}
-	var events []ChartEvent
 
-	splits, err := getStockSplits(conn, ticker)
-	if err != nil {
-		return nil, fmt.Errorf("error fetching splits for %s: %w", ticker, err)
-	}
-	dividends, err := getStockDividends(conn, ticker)
-	if err != nil {
-		return nil, fmt.Errorf("error fetching dividends for %s: %w", ticker, err)
-	}
+	// Create a WaitGroup to synchronize goroutines
+	var wg sync.WaitGroup
+	wg.Add(3) // Three tasks: splits, dividends, SEC filings
+
+	// Create a mutex to protect the events slice during concurrent writes
+	var mutex sync.Mutex
+	var events []ChartEvent
+	var splitErr, dividendErr, secFilingErr error
+
 	// Load New York location for timezone conversion
 	nyLoc, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		return nil, fmt.Errorf("error loading New York timezone: %w", err)
 	}
-	for _, split := range splits {
-		// Parse the execution date from the split
-		splitDate := time.Time(split.ExecutionDate)
 
-		// Set to 4 AM New York time on that date
-		splitDateET := time.Date(
-			splitDate.Year(),
-			splitDate.Month(),
-			splitDate.Day(),
-			4, 0, 0, 0,
-			nyLoc,
-		)
-		splitTo := int(math.Round(split.SplitTo))
-		splitFrom := int(math.Round(split.SplitFrom))
-		ratio := fmt.Sprintf("%d:%d", splitTo, splitFrom)
-
-		// Create a structured value
-		valueMap := map[string]interface{}{
-			"ratio": ratio,
-			"date":  splitDateET.Format("2006-01-02"),
-		}
-
-		// Convert the map to JSON
-		valueJSON, err := json.Marshal(valueMap)
+	// Fetch splits in parallel
+	go func() {
+		defer wg.Done()
+		splits, err := getStockSplits(conn, ticker)
 		if err != nil {
-			return nil, fmt.Errorf("error creating split value: %w", err)
+			splitErr = fmt.Errorf("error fetching splits for %s: %w", ticker, err)
+			return
 		}
 
-		// Convert to UTC timestamp
-		utcTimestamp := splitDateET.UTC().Unix() * 1000
-		// Add to events if it's within the requested time range
-		if utcTimestamp >= args.From && utcTimestamp <= args.To {
-			events = append(events, ChartEvent{
-				Timestamp: utcTimestamp,
-				Type:      "split",
-				Value:     string(valueJSON),
-			})
+		// Process splits and add to events with mutex protection
+		var splitEvents []ChartEvent
+		for _, split := range splits {
+			// Parse the execution date from the split
+			splitDate := time.Time(split.ExecutionDate)
+
+			// Set to 4 AM New York time on that date
+			splitDateET := time.Date(
+				splitDate.Year(),
+				splitDate.Month(),
+				splitDate.Day(),
+				4, 0, 0, 0,
+				nyLoc,
+			)
+			splitTo := int(math.Round(split.SplitTo))
+			splitFrom := int(math.Round(split.SplitFrom))
+			ratio := fmt.Sprintf("%d:%d", splitTo, splitFrom)
+
+			// Create a structured value
+			valueMap := map[string]interface{}{
+				"ratio": ratio,
+				"date":  splitDateET.Format("2006-01-02"),
+			}
+
+			// Convert the map to JSON
+			valueJSON, err := json.Marshal(valueMap)
+			if err != nil {
+				splitErr = fmt.Errorf("error creating split value: %w", err)
+				return
+			}
+
+			// Convert to UTC timestamp
+			utcTimestamp := splitDateET.UTC().Unix() * 1000
+			// Add to events if it's within the requested time range
+			if utcTimestamp >= args.From && utcTimestamp <= args.To {
+				splitEvents = append(splitEvents, ChartEvent{
+					Timestamp: utcTimestamp,
+					Type:      "split",
+					Value:     string(valueJSON),
+				})
+			}
 		}
-	}
-	// Process dividends similarly
-	for _, dividend := range dividends {
-		// Parse the ex-dividend date
-		exDate, err := time.Parse("2006-01-02", dividend.ExDividendDate)
+
+		// Add split events to the main events slice
+		mutex.Lock()
+		events = append(events, splitEvents...)
+		mutex.Unlock()
+	}()
+
+	// Fetch dividends in parallel
+	go func() {
+		defer wg.Done()
+		dividends, err := getStockDividends(conn, ticker)
 		if err != nil {
-			return nil, fmt.Errorf("error parsing dividend date %s: %w", dividend.ExDividendDate, err)
-		}
-		payDate := time.Time(dividend.PayDate)
-		payDateString := payDate.Format("2006-01-02")
-		exDateET := time.Date( //set to 4 am new york time on that date
-			exDate.Year(),
-			exDate.Month(),
-			exDate.Day(),
-			4, 0, 0, 0,
-			nyLoc,
-		)
-		utcTimestamp := exDateET.UTC().Unix() * 1000
-
-		// Create a structured value with multiple pieces of information
-		valueMap := map[string]interface{}{
-			"amount":  fmt.Sprintf("%.2f", dividend.CashAmount),
-			"exDate":  dividend.ExDividendDate,
-			"payDate": payDateString,
+			dividendErr = fmt.Errorf("error fetching dividends for %s: %w", ticker, err)
+			return
 		}
 
-		// Convert the map to JSON
-		valueJSON, err := json.Marshal(valueMap)
+		// Process dividends and add to events with mutex protection
+		var dividendEvents []ChartEvent
+		for _, dividend := range dividends {
+			// Parse the ex-dividend date
+			exDate, err := time.Parse("2006-01-02", dividend.ExDividendDate)
+			if err != nil {
+				dividendErr = fmt.Errorf("error parsing dividend date %s: %w", dividend.ExDividendDate, err)
+				return
+			}
+			payDate := time.Time(dividend.PayDate)
+			payDateString := payDate.Format("2006-01-02")
+			exDateET := time.Date( //set to 4 am new york time on that date
+				exDate.Year(),
+				exDate.Month(),
+				exDate.Day(),
+				4, 0, 0, 0,
+				nyLoc,
+			)
+			utcTimestamp := exDateET.UTC().Unix() * 1000
+
+			// Create a structured value with multiple pieces of information
+			valueMap := map[string]interface{}{
+				"amount":  fmt.Sprintf("%.2f", dividend.CashAmount),
+				"exDate":  dividend.ExDividendDate,
+				"payDate": payDateString,
+			}
+
+			// Convert the map to JSON
+			valueJSON, err := json.Marshal(valueMap)
+			if err != nil {
+				dividendErr = fmt.Errorf("error creating dividend value: %w", err)
+				return
+			}
+
+			// Add to events if it's within the requested time range
+			if utcTimestamp >= args.From && utcTimestamp <= args.To {
+				dividendEvents = append(dividendEvents, ChartEvent{
+					Timestamp: utcTimestamp,
+					Type:      "dividend",
+					Value:     string(valueJSON),
+				})
+			}
+		}
+
+		// Add dividend events to the main events slice
+		mutex.Lock()
+		events = append(events, dividendEvents...)
+		mutex.Unlock()
+	}()
+
+	// Get SEC filings in parallel
+	go func() {
+		defer wg.Done()
+		from := time.Unix(args.From/1000, 0)
+		to := time.Unix(args.To/1000, 0)
+
+		filings, err := getStockEdgarFilings(conn, args.SecurityId, EdgarFilingOptions{
+			From: &from,
+			To:   &to,
+		})
 		if err != nil {
-			return nil, fmt.Errorf("error creating dividend value: %w", err)
+			// Log the error but don't fail the entire request
+			secFilingErr = fmt.Errorf("Error fetching SEC filings for %s: %v", ticker, err)
+			return
 		}
 
-		// Add to events if it's within the requested time range
-		if utcTimestamp >= args.From && utcTimestamp <= args.To {
-			events = append(events, ChartEvent{
-				Timestamp: utcTimestamp,
-				Type:      "dividend",
-				Value:     string(valueJSON),
-			})
-		}
-	}
-
-	// Get SEC filings for the ticker
-	from := time.Unix(args.From/1000, 0)
-	to := time.Unix(args.To/1000, 0)
-
-	filings, err := getStockEdgarFilings(conn, args.SecurityId, EdgarFilingOptions{
-		From: &from,
-		To:   &to,
-	})
-	if err != nil {
-		// Log the error but don't fail the entire request
-		fmt.Printf("Error fetching SEC filings for %s: %v\n", ticker, err)
-	} else {
+		// Process SEC filings and add to events with mutex protection
+		var filingEvents []ChartEvent
 		// Process SEC filings
 		for _, filing := range filings {
 			// The timestamp is already in UTC milliseconds
@@ -165,13 +210,33 @@ func GetChartEvents(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inte
 
 			// Add to events if it's within the requested time range
 			if utcTimestamp >= args.From && utcTimestamp <= args.To {
-				events = append(events, ChartEvent{
+				filingEvents = append(filingEvents, ChartEvent{
 					Timestamp: utcTimestamp,
 					Type:      "sec_filing",
 					Value:     string(valueJSON),
 				})
 			}
 		}
+
+		// Add filing events to the main events slice
+		mutex.Lock()
+		events = append(events, filingEvents...)
+		mutex.Unlock()
+	}()
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	// Check for errors (we'll report the first one we find)
+	if splitErr != nil {
+		return nil, splitErr
+	}
+	if dividendErr != nil {
+		return nil, dividendErr
+	}
+	if secFilingErr != nil {
+		// Log the error but don't fail the request
+		fmt.Println(secFilingErr)
 	}
 
 	// Sort events by timestamp in ascending order
