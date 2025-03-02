@@ -74,8 +74,15 @@ jobs:
           DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
           GITHUB_REF_NAME: ${{ env.CHECKOUT_REF }}
         run: |
+          # Debug environment (without revealing secrets)
+          echo "Environment variables available (names only):"
+          env | cut -d= -f1 | sort
+          
+          echo "Docker username status: $(if [ -n "$DOCKER_USER" ]; then echo "is set"; else echo "is NOT set"; fi)"
+          echo "Docker token status: $(if [ -n "$DOCKER_TOKEN" ]; then echo "is set"; else echo "is NOT set"; fi)"
+          
           # Make script executable
           chmod +x prod/deploy-prod.sh
           
-          # Run deployment script
-          ./prod/deploy-prod.sh 
+          # Run deployment script with explicit environment variable passing
+          DOCKER_USER="${DOCKER_USER}" DOCKER_TOKEN="${DOCKER_TOKEN}" GITHUB_REF_NAME="${GITHUB_REF_NAME}" ./prod/deploy-prod.sh 
