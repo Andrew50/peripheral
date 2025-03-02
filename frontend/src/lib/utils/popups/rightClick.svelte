@@ -197,7 +197,7 @@
 				>
 				<button
 					class="wide-button"
-					on:click={() => addHorizontalLine($rightClickQuery.instance.price)}
+					on:click={() => addHorizontalLine($rightClickQuery.instance.price?.toFixed(2))}
 					>Add Horizontal Line {$rightClickQuery.instance.price?.toFixed(2)}</button
 				>
 			{/if}
