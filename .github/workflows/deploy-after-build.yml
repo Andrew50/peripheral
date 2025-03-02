@@ -42,53 +42,152 @@ jobs:
           echo "Docker username secret: $(if [ -n "${{ secrets.DOCKER_USERNAME }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
           echo "Docker token secret: $(if [ -n "${{ secrets.DOCKER_TOKEN }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
       
-      # Ensure deployment script exists
-      - name: Ensure deployment script exists
+      # Setup and configuration
+      - name: Setup deployment
         run: |
-          if [ ! -f "prod/deploy-prod.sh" ]; then
-            echo "Deployment script not found in repository, creating prod directory..."
-            mkdir -p prod
-            
-            # Create an error message with diagnostic information
-            echo "ERROR: Could not find deployment script at prod/deploy-prod.sh"
-            echo "Current directory contents:"
-            ls -la
-            echo "prod directory contents (if exists):"
-            if [ -d "prod" ]; then
-              ls -la prod/
-            else
-              echo "prod directory does not exist"
-            fi
-            
-            # Exit with error
-            exit 1
-          else
-            echo "Deployment script found at: $(pwd)/prod/deploy-prod.sh"
-            chmod +x prod/deploy-prod.sh
-            ls -la prod/
+          # Function to log messages with timestamps
+          log() {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+          }
+
+          # Function to log errors
+          error_log() {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
+          }
+
+          # Print diagnostic information
+          log "Deployment script diagnostics:"
+          log "Current working directory: $(pwd)"
+          log "Current user: $(whoami)"
+          log "Current branch: ${{ github.event.workflow_run.head_branch }}"
+          
+          # Sanitize branch name for Docker tags (replace / with - and other invalid characters)
+          DOCKER_TAG=$(echo "${{ github.event.workflow_run.head_branch }}" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_.-]/-/g')
+          echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
+          
+          log "Docker tag: ${DOCKER_TAG}"
+          log "Files in current directory: $(ls -la)"
+          log "Starting deployment process for branch: ${{ github.event.workflow_run.head_branch }}..."
+          log "Using already checked out code for deployment..."
+
+      # Build Docker images
+      - name: Build Docker Images
+        run: |
+          # Function to log messages with timestamps
+          log() {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+          }
+          
+          log "Building Docker images with tag: ${{ env.DOCKER_TAG }}..."
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/frontend:${{ env.DOCKER_TAG }} -f frontend/Dockerfile.prod frontend
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/backend:${{ env.DOCKER_TAG }} -f backend/Dockerfile.prod backend
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/worker:${{ env.DOCKER_TAG }} -f worker/Dockerfile.prod worker
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/tf:${{ env.DOCKER_TAG }} -f tf/Dockerfile.prod tf
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/db:${{ env.DOCKER_TAG }} -f db/Dockerfile.prod db
+          
+          # For prod branch, also tag as latest
+          # For dev branch, also tag as development
+          if [ "${{ github.event.workflow_run.head_branch }}" = "prod" ]; then
+            log "Tagging images as 'latest' for production..."
+            docker tag ${{ secrets.DOCKER_USERNAME }}/frontend:${{ env.DOCKER_TAG }} ${{ secrets.DOCKER_USERNAME }}/frontend:latest
+            docker tag ${{ secrets.DOCKER_USERNAME }}/backend:${{ env.DOCKER_TAG }} ${{ secrets.DOCKER_USERNAME }}/backend:latest
+            docker tag ${{ secrets.DOCKER_USERNAME }}/worker:${{ env.DOCKER_TAG }} ${{ secrets.DOCKER_USERNAME }}/worker:latest
+            docker tag ${{ secrets.DOCKER_USERNAME }}/tf:${{ env.DOCKER_TAG }} ${{ secrets.DOCKER_USERNAME }}/tf:latest
+            docker tag ${{ secrets.DOCKER_USERNAME }}/db:${{ env.DOCKER_TAG }} ${{ secrets.DOCKER_USERNAME }}/db:latest
+          elif [ "${{ github.event.workflow_run.head_branch }}" = "dev" ]; then
+            log "Tagging images as 'development' for development environment..."
+            docker tag ${{ secrets.DOCKER_USERNAME }}/frontend:${{ env.DOCKER_TAG }} ${{ secrets.DOCKER_USERNAME }}/frontend:development
+            docker tag ${{ secrets.DOCKER_USERNAME }}/backend:${{ env.DOCKER_TAG }} ${{ secrets.DOCKER_USERNAME }}/backend:development
+            docker tag ${{ secrets.DOCKER_USERNAME }}/worker:${{ env.DOCKER_TAG }} ${{ secrets.DOCKER_USERNAME }}/worker:development
+            docker tag ${{ secrets.DOCKER_USERNAME }}/tf:${{ env.DOCKER_TAG }} ${{ secrets.DOCKER_USERNAME }}/tf:development
+            docker tag ${{ secrets.DOCKER_USERNAME }}/db:${{ env.DOCKER_TAG }} ${{ secrets.DOCKER_USERNAME }}/db:development
           fi
-      
-      # Deploy using GitHub secrets directly
-      - name: Deploy to server
-        env:
-          DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
-          GITHUB_REF_NAME: ${{ github.event.workflow_run.head_branch }}
+
+      # Push Docker images
+      - name: Login to Docker Hub and Push Images
         run: |
-          # Debug environment (without revealing secrets)
-          echo "Environment variables configured:"
-          echo "DOCKER_USER: ${DOCKER_USER}"
-          echo "DOCKER_TOKEN status: $(if [ -n "${DOCKER_TOKEN}" ]; then echo "is set"; else echo "is NOT set"; fi)"
-          echo "GITHUB_REF_NAME: ${GITHUB_REF_NAME}"
-          echo "GITHUB_ACTIONS: ${GITHUB_ACTIONS}"
+          # Function to log messages with timestamps
+          log() {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+          }
           
-          # Perform Docker login directly in the workflow
-          # This creates ~/.docker/config.json with the credentials
-          echo "Performing Docker login directly in the workflow..."
-          echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+          # Function to log errors
+          error_log() {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
+          }
           
-          # Make script executable
-          chmod +x prod/deploy-prod.sh
+          log "Pushing Docker images to registry with tag: ${{ env.DOCKER_TAG }}..."
           
-          # Run deployment script with GitHub secrets
-          ./prod/deploy-prod.sh 
+          # Directly use GitHub secrets for Docker login
+          log "Logging into Docker Hub using GitHub secrets..."
+          echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin || {
+            error_log "Docker login failed. Please check your credentials."
+            exit 1
+          }
+          
+          log "Docker login successful, proceeding with image push..."
+          
+          # Push images with the branch-specific tag
+          docker push ${{ secrets.DOCKER_USERNAME }}/frontend:${{ env.DOCKER_TAG }}
+          docker push ${{ secrets.DOCKER_USERNAME }}/backend:${{ env.DOCKER_TAG }}
+          docker push ${{ secrets.DOCKER_USERNAME }}/worker:${{ env.DOCKER_TAG }}
+          docker push ${{ secrets.DOCKER_USERNAME }}/tf:${{ env.DOCKER_TAG }}
+          docker push ${{ secrets.DOCKER_USERNAME }}/db:${{ env.DOCKER_TAG }}
+          
+          # Push additional tags based on branch
+          if [ "${{ github.event.workflow_run.head_branch }}" = "prod" ]; then
+            log "Pushing 'latest' tagged images..."
+            docker push ${{ secrets.DOCKER_USERNAME }}/frontend:latest
+            docker push ${{ secrets.DOCKER_USERNAME }}/backend:latest
+            docker push ${{ secrets.DOCKER_USERNAME }}/worker:latest
+            docker push ${{ secrets.DOCKER_USERNAME }}/tf:latest
+            docker push ${{ secrets.DOCKER_USERNAME }}/db:latest
+          elif [ "${{ github.event.workflow_run.head_branch }}" = "dev" ]; then
+            log "Pushing 'development' tagged images..."
+            docker push ${{ secrets.DOCKER_USERNAME }}/frontend:development
+            docker push ${{ secrets.DOCKER_USERNAME }}/backend:development
+            docker push ${{ secrets.DOCKER_USERNAME }}/worker:development
+            docker push ${{ secrets.DOCKER_USERNAME }}/tf:development
+            docker push ${{ secrets.DOCKER_USERNAME }}/db:development
+          fi
+
+      # Deploy to Kubernetes
+      - name: Deploy to Kubernetes
+        run: |
+          # Function to log messages with timestamps
+          log() {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+          }
+          
+          # Apply Kubernetes configurations
+          log "Applying Kubernetes configurations..."
+          if [ "${{ github.event.workflow_run.head_branch }}" = "dev" ]; then
+            # Dev-specific configurations (if they exist)
+            if [ -d "prod/config/dev" ]; then
+              kubectl apply -f prod/config/dev
+            else
+              # Fall back to prod config if no dev config exists
+              kubectl apply -f prod/config
+            fi
+          else
+            # Default to prod config for prod branch or any other branch
+            kubectl apply -f prod/config
+          fi
+          
+          # Perform rolling updates for zero downtime using branch-specific image tags
+          log "Performing rolling updates for zero downtime using images tagged with: ${{ env.DOCKER_TAG }}..."
+          
+          # Update deployments with zero downtime
+          kubectl set image deployment/backend backend=${{ secrets.DOCKER_USERNAME }}/backend:${{ env.DOCKER_TAG }}
+          kubectl rollout status deployment/backend
+          
+          kubectl set image deployment/frontend frontend=${{ secrets.DOCKER_USERNAME }}/frontend:${{ env.DOCKER_TAG }}
+          kubectl rollout status deployment/frontend
+          
+          kubectl set image deployment/worker worker=${{ secrets.DOCKER_USERNAME }}/worker:${{ env.DOCKER_TAG }}
+          kubectl rollout status deployment/worker
+          
+          kubectl set image deployment/tf tf=${{ secrets.DOCKER_USERNAME }}/tf:${{ env.DOCKER_TAG }}
+          kubectl rollout status deployment/tf
+          
+          log "Deployment of branch ${{ github.event.workflow_run.head_branch }} completed successfully!" 
