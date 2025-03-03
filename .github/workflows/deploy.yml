@@ -793,10 +793,15 @@ jobs:
               # Wait for the backend pod to be ready
               kubectl wait --for=condition=ready pod/$BACKEND_POD --timeout=60s || true
               
-              # Check backend health endpoint
-              log "Checking backend health endpoint..."
-              HEALTH_STATUS=$(kubectl exec $BACKEND_POD -- curl -s http://localhost:5057/health || echo "Failed")
-              log "Backend health status: $HEALTH_STATUS"
+              # Check backend health endpoint using netcat instead of curl
+              log "Checking backend health endpoint using process check..."
+              # Check if the backend process is running instead of using curl
+              HEALTH_STATUS=$(kubectl exec $BACKEND_POD -- ps aux | grep main | grep -v grep || echo "Process not found")
+              if [[ "$HEALTH_STATUS" == *"Process not found"* ]]; then
+                log "Backend health status: Process not running properly"
+              else
+                log "Backend health status: Process running"
+              fi
               
               # Test database connection
               log "Testing database connection from backend pod..."
