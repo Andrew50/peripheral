@@ -286,6 +286,10 @@ jobs:
           TEMP_DIR=$(mktemp -d)
           SECRETS_FILE="$TEMP_DIR/secrets.yaml"
           
+          # Store the secrets in variables first
+          DB_PASSWORD_B64=$(echo -n "${{ secrets.DB_ROOT_PASSWORD }}" | base64 -w 0)
+          REDIS_PASSWORD_B64=$(echo -n "${{ secrets.REDIS_PASSWORD }}" | base64 -w 0)
+          
           # Create the secrets YAML with the password from GitHub secrets
           cat > "$SECRETS_FILE" << EOF
           apiVersion: v1
@@ -294,7 +298,7 @@ jobs:
             name: redis-secret
           type: Opaque
           data:
-            redis-password: $(echo -n "${{ secrets.REDIS_PASSWORD }}" | base64 -w 0)
+            redis-password: ${REDIS_PASSWORD_B64}
           ---
           apiVersion: v1
           kind: Secret
@@ -302,7 +306,8 @@ jobs:
             name: db-secret
           type: Opaque
           data:
-            db-password: $(echo -n "${{ secrets.DB_ROOT_PASSWORD }}" | base64 -w 0)
+            db-password: ${DB_PASSWORD_B64}
+            db_ROOT_PASSWORD: ${DB_PASSWORD_B64}
           EOF
           
           # Apply the secrets to Kubernetes
@@ -364,19 +369,19 @@ jobs:
             fi
           }
           
-          # Apply Kubernetes configurations
+          # Apply Kubernetes configurations, excluding secrets.yaml
           log "Applying Kubernetes configurations..."
           if [ "${{ env.TARGET_BRANCH }}" = "dev" ]; then
             # Dev-specific configurations
             if [ -d "prod/config/dev" ]; then
-              kubectl apply -f prod/config/dev
+              find prod/config/dev -type f -name "*.yaml" ! -name "secrets.yaml" -exec kubectl apply -f {} \;
             else
               # Fall back to prod config if no dev config exists
-              kubectl apply -f prod/config
+              find prod/config -type f -name "*.yaml" ! -name "secrets.yaml" -exec kubectl apply -f {} \;
             fi
           else
             # Default to prod config for prod branch
-            kubectl apply -f prod/config
+            find prod/config -type f -name "*.yaml" ! -name "secrets.yaml" -exec kubectl apply -f {} \;
           fi
           
           # Add debugging information about the cluster and deployments
