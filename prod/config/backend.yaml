@@ -20,7 +20,7 @@ spec:
           image: billin19/backend:prod
           imagePullPolicy: Always
           ports:
-            - containerPort: 8000
+            - containerPort: 5057
           env:
             # Database connection
             - name: DB_HOST
@@ -49,18 +49,24 @@ spec:
                 secretKeyRef:
                   name: redis-secret
                   key: redis-password
+            # Add Polygon API key
+            - name: POLYGON_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: polygon-secret
+                  key: api-key
           # Add health check for the backend
           livenessProbe:
             httpGet:
               path: /health
-              port: 8000
+              port: 5057
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
           readinessProbe:
             httpGet:
               path: /health
-              port: 8000
+              port: 5057
             initialDelaySeconds: 5
             periodSeconds: 10
           resources:
@@ -81,6 +87,6 @@ spec:
   selector:
     app: backend
   ports:
-    - port: 8000
-      targetPort: 8000
+    - port: 5057
+      targetPort: 5057
   type: ClusterIP
