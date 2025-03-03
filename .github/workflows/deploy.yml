@@ -370,8 +370,8 @@ jobs:
           fi
           
           REDIS_SECRET_KEYS=$(kubectl get secret redis-secret -o jsonpath='{.data}' | jq -r 'keys[]')
-          if [[ "$REDIS_SECRET_KEYS" != *"redis-password"* ]]; then
-            error_log "redis-password key is missing from redis-secret"
+          if [[ "$REDIS_SECRET_KEYS" != *"REDIS_PASSWORD"* ]]; then
+            error_log "REDIS_PASSWORD key is missing from redis-secret"
             exit 1
           fi
           
