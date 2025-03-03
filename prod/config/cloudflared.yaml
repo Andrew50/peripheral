@@ -14,28 +14,21 @@ spec:
     spec:
       containers:
         - name: cloudflared
-          image: cloudflare/cloudflared:2023.8.0
+          image: cloudflare/cloudflared:latest
           imagePullPolicy: Always
-          args:
-            - tunnel
-            - --no-autoupdate
-            - run
-          env:
-            - name: TUNNEL_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: cloudflare-secret
-                  key: tunnel-token
           command:
-            - /bin/sh
-            - -c
-            - |
-              /usr/local/bin/cloudflared tunnel --no-autoupdate run --token=$TUNNEL_TOKEN --url=http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+            - cloudflared
+            - tunnel
+            - run
+            - --url
+            - http://ingress-nodeport.default.svc.cluster.local:80
+            - --token
+            - eyJhIjoiYTAxOGU0Yzg4YmUwZWQ0NGRhN2VhNTY4YjMxMTZiM2MiLCJ0IjoiMjdjMzY2MGUtMmI4YS00YTE1LWIwMDAtOGVjZWYxMjFmYjdjIiwicyI6IllXUmhPVE5pT0dFdE5qUTBOUzAwWTJZM0xXSTVZV0l0TlRaaU9XVTRObVJoWkdFMiJ9
           resources:
             requests:
               cpu: 100m
               memory: 128Mi
             limits:
               cpu: 500m
-              memory: 512Mi
+              memory: 256Mi
       restartPolicy: Always
