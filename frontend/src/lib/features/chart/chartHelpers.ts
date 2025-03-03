@@ -133,4 +133,3 @@ export function adjustEventsToTradingDays(events: any[], candleData: any[]) {
     // Convert the map back to an array
     return Array.from(mergedEventsMap.values());
 }
-
