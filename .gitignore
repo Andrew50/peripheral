@@ -22,3 +22,8 @@ ENV/
 prod/env/
 .env
 .venv
+
+prod/config/redis-secret.yaml
+prod/config/db-secret.yaml
+prod/config/cloudflare-secret.yaml
+prod/config/polygon-secret.yaml
