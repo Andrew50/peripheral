@@ -255,6 +255,10 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			aggregatedData, err := buildHigherTimeframeFromLower(
 				it, multiplier, timespan, args.ExtendedHours, easternLocation, &numBarsRemaining, args.Direction,
 			)
+			if len(aggregatedData) > 0 {
+				lastBar := aggregatedData[len(aggregatedData)-1]
+				fmt.Printf("\n\n aggregatedData: %+v\n", lastBar)
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -928,10 +932,16 @@ func buildHigherTimeframeFromLower(
 	}
 
 	// Flush last bar if needed
-	// For forward direction, we add the last bar
+	if !barStartTime.IsZero() {
+		// Always add the last bar if we have one in progress,
+		// regardless of direction - this fixes the missing latest bar
+		barDataList = append(barDataList, currentBar)
+	}
+
+	// Now handle the direction-specific logic
 	if direction == "forward" {
-		if !barStartTime.IsZero() && *numBarsRemaining > 0 {
-			barDataList = append(barDataList, currentBar)
+		// For forward direction, we've already added the last bar above
+		if *numBarsRemaining > 0 {
 			*numBarsRemaining--
 		}
 	} else {
