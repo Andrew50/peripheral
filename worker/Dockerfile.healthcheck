@@ -6,8 +6,8 @@ WORKDIR /app
 RUN pip install --no-cache-dir psycopg2-binary redis
 
 # Copy the health check script
-COPY db_healthcheck.py .
-RUN chmod +x db_healthcheck.py
+COPY db_check.py .
+RUN chmod +x db_check.py
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
@@ -18,4 +18,4 @@ ENV HEALTHCHECK_MAX_INTERVAL=300
 USER nobody
 
 # Run the health check script
-CMD ["python", "-u", "db_healthcheck.py"] 
+CMD ["python", "-u", "db_check.py"]
