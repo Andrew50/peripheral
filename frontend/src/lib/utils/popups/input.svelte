@@ -7,6 +7,18 @@
 	import { tick } from 'svelte';
 	import type { Writable } from 'svelte/store';
 	import type { Instance } from '$lib/core/types';
+
+	/**
+	 * Focus Management Strategy:
+	 * 1. When input component is activated, we store the previously focused element
+	 * 2. We use a hidden input element that's positioned on top of the visible input to capture keyboard events
+	 * 3. We add a document click handler to detect clicks outside the input window, which cancels the input
+	 * 4. When input is completed or cancelled, we restore focus to the previously focused element
+	 * 5. We clean up all event listeners when the component is destroyed or deactivated
+	 *
+	 * This approach prevents the input from capturing all keyboard events when it's not active.
+	 */
+
 	const allKeys = ['ticker', 'timestamp', 'timeframe', 'extendedHours', 'price'] as const;
 	let currentSecurityResultRequest = 0;
 
@@ -395,15 +407,23 @@
 	// Instead of repeatedly adding/removing listeners in the store subscription,
 	// we add the keydown listener once on mount and remove it on destroy.
 	let unsubscribe: () => void;
+	let componentActive = false;
+
+	// Define keydownHandler to call the handleKeyDown function
 	const keydownHandler = (event: KeyboardEvent) => {
 		handleKeyDown(event);
 	};
+
 	onMount(() => {
 		prevFocusedElement = document.activeElement as HTMLElement;
 
 		unsubscribe = inputQuery.subscribe((v: InputQuery) => {
 			if (browser) {
 				if (v.status === 'initializing') {
+					componentActive = true;
+					// Store the currently focused element before focusing the input
+					prevFocusedElement = document.activeElement as HTMLElement;
+
 					// Focus the hidden input (after a tick to allow rendering)
 					tick().then(() => {
 						const input = document.getElementById('hidden-input');
@@ -417,13 +437,41 @@
 								input.setAttribute('data-has-listener', 'true');
 							}
 						}
+
+						// Add a click handler to the document to detect clicks outside the popup
+						if (!document.body.hasAttribute('data-input-click-listener')) {
+							document.body.addEventListener('mousedown', handleOutsideClick);
+							document.body.setAttribute('data-input-click-listener', 'true');
+						}
 					});
 					// Use update() to mark that the UI is now active.
 					inputQuery.update((state) => ({ ...state, status: 'active' }));
 				} else if (v.status === 'shutdown') {
+					componentActive = false;
+					// Remove focus from the hidden input before restoring previous focus
+					const hiddenInput = document.getElementById('hidden-input');
+					if (hiddenInput && document.activeElement === hiddenInput) {
+						hiddenInput.blur();
+					}
+
+					// Remove document click handler when component is inactive
+					document.body.removeEventListener('mousedown', handleOutsideClick);
+					document.body.removeAttribute('data-input-click-listener');
+
 					// Restore focus and then update to inactive.
 					prevFocusedElement?.focus();
 					inputQuery.update((state) => ({ ...state, status: 'inactive', inputString: '' }));
+				} else if (v.status === 'cancelled') {
+					componentActive = false;
+					// Remove focus from the hidden input when cancelled
+					const hiddenInput = document.getElementById('hidden-input');
+					if (hiddenInput && document.activeElement === hiddenInput) {
+						hiddenInput.blur();
+					}
+
+					// Remove document click handler
+					document.body.removeEventListener('mousedown', handleOutsideClick);
+					document.body.removeAttribute('data-input-click-listener');
 				}
 			}
 		});
@@ -439,6 +487,20 @@
 			}
 		);
 	});
+
+	// Handle clicks outside the input window to cancel it
+	function handleOutsideClick(event: MouseEvent) {
+		if (!componentActive) return;
+
+		const inputWindow = document.getElementById('input-window');
+		const target = event.target as Node;
+
+		// If we clicked outside the input window, cancel the input
+		if (inputWindow && !inputWindow.contains(target)) {
+			inputQuery.update((v) => ({ ...v, status: 'cancelled' }));
+		}
+	}
+
 	onDestroy(() => {
 		try {
 			// Remove the event listener from the hidden input instead of the document
@@ -446,8 +508,11 @@
 			if (hiddenInput) {
 				hiddenInput.removeEventListener('keydown', keydownHandler);
 			}
-			// document.removeEventListener('keydown', keydownHandler);
-			// document.removeEventListener('touchstart', onTouch);
+
+			// Remove document click handler if it exists
+			document.body.removeEventListener('mousedown', handleOutsideClick);
+			document.body.removeAttribute('data-input-click-listener');
+
 			unsubscribe();
 		} catch (error) {
 			console.error('Error removing event listeners:', error);
@@ -545,6 +610,10 @@
 				on:click={() => {
 					// Only focus hidden input when user clicks this visible input field
 					document.getElementById('hidden-input')?.focus();
+				}}
+				on:keydown={(e) => {
+					// Forward keyboard events to the hidden input handler
+					handleKeyDown(e);
 				}}
 			/>
 		</div>
@@ -686,7 +755,7 @@
 			autocomplete="off"
 			type="text"
 			id="hidden-input"
-			style="position: absolute; top: -100px; left: -100px; opacity: 0; pointer-events: auto; z-index: -1; height: 1px; width: 1px;"
+			style="position: absolute; top: 0; left: 0; opacity: 0; pointer-events: none; height: 100%; width: 100%;"
 		/>
 	</div>
 {/if}
@@ -752,6 +821,7 @@
 		gap: 8px;
 		border-bottom: 1px solid var(--ui-border);
 		height: 48px;
+		position: relative;
 	}
 
 	.search-bar input {
