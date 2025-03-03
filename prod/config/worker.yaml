@@ -71,7 +71,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: db-secret
-                  key: db-password
+                  key: DB_ROOT_PASSWORD
             - name: DB_HOST
               value: "db"
             - name: DB_PORT
@@ -96,7 +96,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: db-secret
-                  key: db-password
+                  key: DB_ROOT_PASSWORD
             - name: DB_HOST
               value: "db"
             - name: DB_PORT

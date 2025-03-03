@@ -37,12 +37,12 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: db-secret
-                  key: db-password
+                  key: DB_ROOT_PASSWORD
             - name: DB_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: db-secret
-                  key: db_ROOT_PASSWORD
+                  key: DB_ROOT_PASSWORD
             # Redis connection
             - name: REDIS_HOST
               value: "cache"
