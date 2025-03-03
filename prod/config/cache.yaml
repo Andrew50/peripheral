@@ -18,8 +18,8 @@ spec:
     spec:
       containers:
         - name: cache
-          image: redis:latest
-          imagePullPolicy: Always
+          image: redis:8.0-alpine
+          imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
             - -c
@@ -47,19 +47,21 @@ spec:
           livenessProbe:
             exec:
               command:
-                - redis-cli
-                - ping
-            initialDelaySeconds: 60
-            periodSeconds: 20
+                - sh
+                - -c
+                - redis-cli -a $REDIS_PASSWORD ping
+            initialDelaySeconds: 30
+            periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
           readinessProbe:
             exec:
               command:
-                - redis-cli
-                - ping
-            initialDelaySeconds: 30
-            periodSeconds: 10
+                - sh
+                - -c
+                - redis-cli -a $REDIS_PASSWORD ping
+            initialDelaySeconds: 15
+            periodSeconds: 5
             timeoutSeconds: 5
             failureThreshold: 3
       volumes:
@@ -130,8 +132,8 @@ data:
     protected-mode yes
     port 6379
     tcp-backlog 511
-    timeout 0
-    tcp-keepalive 300
+    timeout 300
+    tcp-keepalive 60
     daemonize no
     supervised no
     pidfile /var/run/redis_6379.pid
@@ -180,3 +182,6 @@ data:
     dynamic-hz yes
     aof-rewrite-incremental-fsync yes
     rdb-save-incremental-fsync yes
+    maxclients 10000
+    io-threads 4
+    io-threads-do-reads yes
