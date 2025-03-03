@@ -37,9 +37,42 @@ spec:
       labels:
         app: worker
     spec:
+      initContainers:
+        - name: wait-for-db
+          image: ${DOCKER_USERNAME:-billin19}/worker:${IMAGE_TAG:-prod}
+          command:
+            - /bin/sh
+            - -c
+            - >
+              echo "Waiting for database to be ready...";
+              until python3 -c "import psycopg2; psycopg2.connect(host='db', port=5432, user='postgres', password='pass')"; do
+                echo "Database not ready yet, retrying in 5 seconds...";
+                sleep 5;
+              done;
+              echo "Database is ready.";
+              echo "Checking Redis connection...";
+              python3 -c "
+              import redis, os;
+              host=os.environ.get('REDIS_HOST');
+              port=int(os.environ.get('REDIS_PORT'));
+              password=os.environ.get('REDIS_PASSWORD');
+              r = redis.Redis(host=host, port=port, password=password);
+              r.ping();
+              print('Redis connection successful.');
+              "
+          env:
+            - name: REDIS_HOST
+              value: "cache"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: redis-password
       containers:
         - name: worker
-          image: billin19/worker:prod
+          image: ${DOCKER_USERNAME:-billin19}/worker:${IMAGE_TAG:-prod}
           imagePullPolicy: Always
           env:
             - name: REDIS_HOST
@@ -51,6 +84,10 @@ spec:
                 secretKeyRef:
                   name: redis-secret
                   key: redis-password
+            - name: REDIS_RETRY_ATTEMPTS
+              value: "20"
+            - name: REDIS_RETRY_DELAY
+              value: "10"
           resources:
             requests:
               cpu: 500m
@@ -63,39 +100,63 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - >
+                - |
                   python3 -c "
-                  import redis;
-                  import os;
-                  r = redis.Redis(
-                    host=os.environ['REDIS_HOST'],
-                    port=int(os.environ['REDIS_PORT']),
-                    password=os.environ['REDIS_PASSWORD']
-                  );
-                  r.ping()
+                  import os, time, socket
+                  host=os.environ['REDIS_HOST']
+                  port=int(os.environ['REDIS_PORT'])
+                  s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                  try:
+                      s.connect((host, port))
+                      s.close()
+                      exit(0)
+                  except Exception as e:
+                      print(f'Redis connection failed: {e}')
+                      exit(1)
                   "
-            initialDelaySeconds: 30
-            periodSeconds: 15
-            timeoutSeconds: 5
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
           readinessProbe:
             exec:
               command:
                 - /bin/sh
                 - -c
-                - >
+                - |
                   python3 -c "
-                  import redis;
-                  import os;
-                  r = redis.Redis(
-                    host=os.environ['REDIS_HOST'],
-                    port=int(os.environ['REDIS_PORT']),
-                    password=os.environ['REDIS_PASSWORD']
-                  );
-                  r.ping()
+                  import os, time, socket, psycopg2
+                  # Check Redis connection
+                  host=os.environ['REDIS_HOST']
+                  port=int(os.environ['REDIS_PORT'])
+                  s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                  try:
+                      s.connect((host, port))
+                      s.close()
+                      print('Redis connection successful')
+                  except Exception as e:
+                      print(f'Redis connection failed: {e}')
+                      exit(1)
+
+                  # Check DB connection
+                  try:
+                      conn = psycopg2.connect(
+                          host='db',
+                          port=5432,
+                          user='postgres',
+                          password='pass'
+                      )
+                      conn.close()
+                      print('Database connection successful')
+                      exit(0)
+                  except Exception as e:
+                      print(f'Database connection failed: {e}')
+                      exit(1)
                   "
-            initialDelaySeconds: 5
-            periodSeconds: 10
-            timeoutSeconds: 5
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 3
       #     volumeMounts:
       #       - name: worker-volume
       #         mountPath: /app/models

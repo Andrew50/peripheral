@@ -17,10 +17,10 @@ spec:
       restartPolicy: Always # Update the restart policy to "Always"
       containers:
         - name: backend
-          image: billin19/backend:prod
+          image: ${DOCKER_USERNAME:-billin19}/backend:${IMAGE_TAG:-prod}
           imagePullPolicy: Always
           ports:
-            - containerPort: 5057
+            - containerPort: 8000
           env:
             # Database connection
             - name: DB_HOST
@@ -28,12 +28,12 @@ spec:
             - name: DB_PORT
               value: "5432"
             - name: DB_USER
-              value: "root"
+              value: "postgres"
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: db-secret
-                  key: db_ROOT_PASSWORD
+                  key: db-password
             # Redis connection
             - name: REDIS_HOST
               value: "cache"
@@ -46,8 +46,8 @@ spec:
                   key: redis-password
           resources:
             requests:
-              cpu: 1000m
-              memory: 2000Mi
+              cpu: 500m
+              memory: 1000Mi
             limits:
-              cpu: 10000m
-              memory: 20000Mi
+              cpu: 5000m
+              memory: 5000Mi
