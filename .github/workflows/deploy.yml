@@ -54,6 +54,8 @@ jobs:
     env:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+      DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
+      REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
     
     steps:
       # Print debugging information before checkout
@@ -171,6 +173,7 @@ jobs:
           docker build -t $DOCKER_USERNAME/worker:${{ env.DOCKER_TAG }} -f worker/Dockerfile.prod worker
           docker build -t $DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }} -f worker/Dockerfile.healthcheck worker
           docker build -t $DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }} -f tf/Dockerfile.prod tf
+          docker build -t $DOCKER_USERNAME/nginx:${{ env.DOCKER_TAG }} -f nginx/Dockerfile nginx
           
           # Build DB image with cron installed for scheduled backups
           log "Building DB image with secure configuration..."
@@ -186,6 +189,7 @@ jobs:
             docker tag $DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/worker-healthcheck:latest
             docker tag $DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/tf:latest
             docker tag $DOCKER_USERNAME/db:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/db:latest
+            docker tag $DOCKER_USERNAME/nginx:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/nginx:latest
           elif [ "${{ env.TARGET_BRANCH }}" = "dev" ]; then
             log "Tagging images as 'development' for development environment..."
             docker tag $DOCKER_USERNAME/frontend:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/frontend:development
@@ -194,6 +198,7 @@ jobs:
             docker tag $DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/worker-healthcheck:development
             docker tag $DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/tf:development
             docker tag $DOCKER_USERNAME/db:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/db:development
+            docker tag $DOCKER_USERNAME/nginx:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/nginx:development
           fi
 
       # Push Docker images
@@ -240,6 +245,7 @@ jobs:
           docker push $DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }}
           docker push $DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }}
           docker push $DOCKER_USERNAME/db:${{ env.DOCKER_TAG }}
+          docker push $DOCKER_USERNAME/nginx:${{ env.DOCKER_TAG }}
           
           # Push additional tags based on branch
           if [ "${{ env.TARGET_BRANCH }}" = "prod" ]; then
@@ -250,6 +256,7 @@ jobs:
             docker push $DOCKER_USERNAME/worker-healthcheck:latest
             docker push $DOCKER_USERNAME/tf:latest
             docker push $DOCKER_USERNAME/db:latest
+            docker push $DOCKER_USERNAME/nginx:latest
           elif [ "${{ env.TARGET_BRANCH }}" = "dev" ]; then
             log "Pushing 'development' tagged images..."
             docker push $DOCKER_USERNAME/frontend:development
@@ -258,6 +265,7 @@ jobs:
             docker push $DOCKER_USERNAME/worker-healthcheck:development
             docker push $DOCKER_USERNAME/tf:development
             docker push $DOCKER_USERNAME/db:development
+            docker push $DOCKER_USERNAME/nginx:development
           fi
 
       # Update Kubernetes secrets with database password
@@ -280,7 +288,14 @@ jobs:
             exit 1
           fi
           
-          log "Updating Kubernetes secrets with secure database password..."
+          # Check if REDIS_PASSWORD secret is set
+          if [ -z "${{ secrets.REDIS_PASSWORD }}" ]; then
+            error_log "REDIS_PASSWORD secret is not available"
+            error_log "Please add the REDIS_PASSWORD secret in your GitHub repository"
+            exit 1
+          fi
+          
+          log "Updating Kubernetes secrets with secure database and Redis passwords..."
           
           # Create a temporary file for the secrets
           TEMP_DIR=$(mktemp -d)
@@ -312,6 +327,17 @@ jobs:
           
           # Apply the secrets to Kubernetes
           kubectl apply -f "$SECRETS_FILE"
+          
+          # Verify the secrets were created successfully
+          if ! kubectl get secret redis-secret &>/dev/null; then
+            error_log "Failed to create redis-secret"
+            exit 1
+          fi
+          
+          if ! kubectl get secret db-secret &>/dev/null; then
+            error_log "Failed to create db-secret"
+            exit 1
+          fi
           
           # Clean up
           rm -rf "$TEMP_DIR"
@@ -367,6 +393,27 @@ jobs:
                 kubectl logs $WORKER_POD -c db-healthcheck --tail=50 || true
               fi
             fi
+            
+            # Additional debugging for backend deployment
+            if [ "$deployment" = "backend" ]; then
+              log "Checking backend pod status and connectivity..."
+              log "Backend pod status:"
+              kubectl get pods -l app=backend
+              kubectl describe pods -l app=backend
+              
+              # Get the backend pod name
+              BACKEND_POD=$(kubectl get pods -l app=backend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+              if [ -n "$BACKEND_POD" ]; then
+                log "Checking backend environment variables:"
+                kubectl exec $BACKEND_POD -- env | grep -E 'DB_|REDIS_' || true
+                
+                log "Testing database connection from backend pod:"
+                kubectl exec $BACKEND_POD -- sh -c "nc -zv \$DB_HOST \$DB_PORT" || true
+                
+                log "Testing Redis connection from backend pod:"
+                kubectl exec $BACKEND_POD -- sh -c "nc -zv \$REDIS_HOST \$REDIS_PORT" || true
+              fi
+            fi
           }
           
           # Apply Kubernetes configurations, excluding secrets.yaml
@@ -391,7 +438,7 @@ jobs:
           kubectl get deployments
           
           # Define the deployments to update
-          deployments=("backend" "frontend" "worker" "tf")
+          deployments=("backend" "frontend" "worker" "tf" "nginx")
           
           # Update image tags for all deployments
           log "Updating deployments with images tagged: ${{ env.DOCKER_TAG }}..."
@@ -424,7 +471,7 @@ jobs:
           
           # Set timeout values for each deployment (in seconds)
           declare -A timeouts
-          timeouts=([backend]=300 [frontend]=180 [worker]=300 [tf]=180)
+          timeouts=([backend]=300 [frontend]=180 [worker]=300 [tf]=180 [nginx]=180)
           
           # Track start time for each deployment
           declare -A start_times
@@ -505,6 +552,39 @@ jobs:
             log "Final deployment status:"
             kubectl get deployments
             kubectl get pods
+            
+            # Verify backend connectivity to database and Redis
+            log "Verifying backend connectivity to database and Redis..."
+            BACKEND_POD=$(kubectl get pods -l app=backend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+            if [ -n "$BACKEND_POD" ]; then
+              # Wait for the backend pod to be ready
+              kubectl wait --for=condition=ready pod/$BACKEND_POD --timeout=60s || true
+              
+              # Check backend health endpoint
+              log "Checking backend health endpoint..."
+              HEALTH_STATUS=$(kubectl exec $BACKEND_POD -- curl -s http://localhost:8000/health || echo "Failed")
+              log "Backend health status: $HEALTH_STATUS"
+              
+              # Test database connection
+              log "Testing database connection from backend pod..."
+              DB_CONN_TEST=$(kubectl exec $BACKEND_POD -- sh -c "nc -zv \$DB_HOST \$DB_PORT" 2>&1 || echo "Connection failed")
+              log "Database connection test: $DB_CONN_TEST"
+              
+              # Test Redis connection
+              log "Testing Redis connection from backend pod..."
+              REDIS_CONN_TEST=$(kubectl exec $BACKEND_POD -- sh -c "nc -zv \$REDIS_HOST \$REDIS_PORT" 2>&1 || echo "Connection failed")
+              log "Redis connection test: $REDIS_CONN_TEST"
+              
+              # If any connection test failed, log a warning but don't fail the deployment
+              if [[ "$DB_CONN_TEST" == *"Connection failed"* ]] || [[ "$REDIS_CONN_TEST" == *"Connection failed"* ]]; then
+                log "WARNING: Backend connectivity tests failed. The deployment completed but the backend may not function correctly."
+                log "Please check the logs and configuration for the backend, database, and Redis services."
+              else
+                log "Backend connectivity tests passed successfully."
+              fi
+            else
+              log "WARNING: Could not find backend pod to verify connectivity."
+            fi
             
             log "Deployment process completed successfully for branch ${{ env.TARGET_BRANCH }}."
           fi 

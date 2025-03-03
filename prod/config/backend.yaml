@@ -34,6 +34,11 @@ spec:
                 secretKeyRef:
                   name: db-secret
                   key: db-password
+            - name: DB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: db_ROOT_PASSWORD
             # Redis connection
             - name: REDIS_HOST
               value: "cache"
@@ -44,6 +49,20 @@ spec:
                 secretKeyRef:
                   name: redis-secret
                   key: redis-password
+          # Add health check for the backend
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
           resources:
             requests:
               cpu: 500m
@@ -51,3 +70,17 @@ spec:
             limits:
               cpu: 5000m
               memory: 5000Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  labels:
+    app: backend
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: ClusterIP
