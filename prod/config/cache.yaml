@@ -4,6 +4,10 @@ kind: Deployment
 metadata:
   name: cache
 spec:
+  # Ensure only one replica to avoid conflicts
+  replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: cache
@@ -14,13 +18,12 @@ spec:
     spec:
       containers:
         - name: cache
-          image: redis:7.2-alpine
-          imagePullPolicy: Always
-          command: ["redis-server"]
-          args:
-            - "/etc/redis/redis.conf"
-            - "--requirepass"
-            - "$(REDIS_PASSWORD)"
+          image: redis:alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - redis-server /etc/redis/redis.conf --requirepass "${REDIS_PASSWORD}"
           ports:
             - containerPort: 6379
           resources:
@@ -35,7 +38,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: redis-secret
-                  key: redis-password
+                  key: REDIS_PASSWORD
           volumeMounts:
             - name: redis-config
               mountPath: /etc/redis
@@ -44,17 +47,23 @@ spec:
           livenessProbe:
             exec:
               command:
-                - redis-cli
-                - ping
+                - sh
+                - -c
+                - redis-cli -a $REDIS_PASSWORD ping
             initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
           readinessProbe:
             exec:
               command:
-                - redis-cli
-                - ping
-            initialDelaySeconds: 5
+                - sh
+                - -c
+                - redis-cli -a $REDIS_PASSWORD ping
+            initialDelaySeconds: 15
             periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 3
       volumes:
         - name: redis-config
           configMap:
@@ -123,8 +132,8 @@ data:
     protected-mode yes
     port 6379
     tcp-backlog 511
-    timeout 0
-    tcp-keepalive 300
+    timeout 300
+    tcp-keepalive 60
     daemonize no
     supervised no
     pidfile /var/run/redis_6379.pid
@@ -173,3 +182,6 @@ data:
     dynamic-hz yes
     aof-rewrite-incremental-fsync yes
     rdb-save-incremental-fsync yes
+    maxclients 10000
+    io-threads 4
+    io-threads-do-reads yes

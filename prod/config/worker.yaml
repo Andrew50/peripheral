@@ -43,14 +43,37 @@ spec:
           imagePullPolicy: Always
           env:
             - name: REDIS_HOST
-              value: "cache"
+              value: cache
             - name: REDIS_PORT
               value: "6379"
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
+                  key: REDIS_PASSWORD
                   name: redis-secret
-                  key: redis-password
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: DB_ROOT_PASSWORD
+                  name: db-secret
+            - name: DB_HOST
+              value: db
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              value: postgres
+            - name: REDIS_RETRY_ATTEMPTS
+              value: "20"
+            - name: REDIS_RETRY_DELAY
+              value: "10"
+            - name: REDIS_SOCKET_TIMEOUT
+              value: "60"
+            - name: REDIS_SOCKET_CONNECT_TIMEOUT
+              value: "30"
+            - name: REDIS_SOCKET_KEEPALIVE
+              value: "true"
+            - name: REDIS_HEALTH_CHECK_INTERVAL
+              value: "30"
           resources:
             requests:
               cpu: 500m
@@ -63,39 +86,99 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - >
-                  python3 -c "
-                  import redis;
-                  import os;
+                - |
+                  python3 -c '
+                  import os, time, socket, redis
+                  host=os.environ["REDIS_HOST"]
+                  port=int(os.environ["REDIS_PORT"])
+                  password=os.environ["REDIS_PASSWORD"]
                   r = redis.Redis(
-                    host=os.environ['REDIS_HOST'],
-                    port=int(os.environ['REDIS_PORT']),
-                    password=os.environ['REDIS_PASSWORD']
-                  );
+                      host=host,
+                      port=port,
+                      password=password,
+                      socket_timeout=5,
+                      socket_connect_timeout=5,
+                      health_check_interval=5
+                  )
                   r.ping()
-                  "
-            initialDelaySeconds: 30
-            periodSeconds: 15
-            timeoutSeconds: 5
+                  '
+            failureThreshold: 5
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
           readinessProbe:
             exec:
               command:
                 - /bin/sh
                 - -c
-                - >
-                  python3 -c "
-                  import redis;
-                  import os;
+                - |
+                  python3 -c '
+                  import os, time, socket, redis, psycopg2
+                  # Check Redis connection
+                  host=os.environ["REDIS_HOST"]
+                  port=int(os.environ["REDIS_PORT"])
+                  password=os.environ["REDIS_PASSWORD"]
                   r = redis.Redis(
-                    host=os.environ['REDIS_HOST'],
-                    port=int(os.environ['REDIS_PORT']),
-                    password=os.environ['REDIS_PASSWORD']
-                  );
+                      host=host,
+                      port=port,
+                      password=password,
+                      socket_timeout=5,
+                      socket_connect_timeout=5,
+                      health_check_interval=5
+                  )
                   r.ping()
-                  "
-            initialDelaySeconds: 5
-            periodSeconds: 10
-            timeoutSeconds: 5
+                  print("Redis connection successful")
+                  # Check DB connection
+                  conn = psycopg2.connect(
+                      host=os.environ.get("DB_HOST"),
+                      port=int(os.environ.get("DB_PORT")),
+                      user=os.environ.get("DB_USER"),
+                      password=os.environ.get("DB_PASSWORD")
+                  )
+                  conn.close()
+                  print("Database connection successful")
+                  '
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 10
+
+        # Health check sidecar container - temporarily commented out until image is available
+        # - name: db-healthcheck
+        #   image: billin19/worker-healthcheck:prod
+        #   imagePullPolicy: Always
+        #   env:
+        #     - name: REDIS_HOST
+        #       value: "cache"
+        #     - name: REDIS_PORT
+        #       value: "6379"
+        #     - name: REDIS_PASSWORD
+        #       valueFrom:
+        #         secretKeyRef:
+        #           name: redis-secret
+        #           key: redis-password
+        #     - name: DB_PASSWORD
+        #       valueFrom:
+        #         secretKeyRef:
+        #           name: db-secret
+        #           key: db-password
+        #     - name: DB_HOST
+        #       value: "db"
+        #     - name: DB_PORT
+        #       value: "5432"
+        #     - name: DB_USER
+        #       value: "postgres"
+        #     - name: HEALTHCHECK_INTERVAL
+        #       value: "30"
+        #     - name: HEALTHCHECK_MAX_INTERVAL
+        #       value: "300"
+        #   resources:
+        #     requests:
+        #       cpu: 50m
+        #       memory: 64Mi
+        #     limits:
+        #       cpu: 100m
+        #       memory: 128Mi
       #     volumeMounts:
       #       - name: worker-volume
       #         mountPath: /app/models

@@ -1,12 +1,14 @@
 FROM tensorflow/serving
 WORKDIR /app
 COPY models.config /tmp/models.config
+COPY models.config /models/models.config
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 #ADD default /models/default/1
 ADD default /default-models/default/1
 RUN chmod +x /usr/local/bin/entrypoint.sh
 #RUN mkdir -p /models && chmod -R 777 /models
 RUN mkdir -p /default-models && chmod -R 777 /default-models
+RUN mkdir -p /models && chmod -R 777 /models
 #ENV MODEL_BASE_PATH=/models
 #ENV MODEL_CONFIG_FILE=/models/models.config
 RUN ls -l /models

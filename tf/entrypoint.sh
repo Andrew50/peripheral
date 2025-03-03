@@ -3,6 +3,10 @@
 CONFIG_FILE="/models/models.config"
 DEFAULT_CONFIG_FILE="/tmp/models.config"
 
+# Ensure models directory exists with proper permissions
+mkdir -p /models
+chmod -R 777 /models
+
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Creating default models.config"
     cp $DEFAULT_CONFIG_FILE $CONFIG_FILE

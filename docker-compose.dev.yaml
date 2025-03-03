@@ -51,9 +51,9 @@ services:
 
 
     worker: 
-        build: #satish was here
+        build:
             context: ./worker
-            dockerfile: Dockerfile
+            dockerfile: Dockerfile.dev
         networks:
             - compose_network
         volumes:

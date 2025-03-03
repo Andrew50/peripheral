@@ -11,6 +11,6 @@ COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 WORKDIR /app
 COPY --from=builder /app/main /app/main
 EXPOSE 5057
-ENV POLYGON_API_KEY="ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm"
+# Environment variables will be provided by Kubernetes
 ENV IN_CONTAINER=true
 ENTRYPOINT ["/app/main"]
