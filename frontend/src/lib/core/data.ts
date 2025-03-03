@@ -1,5 +1,10 @@
+import { writable } from 'svelte/store';
+import { privateRequest } from '$lib/core/backend';
+import type { Setup } from '$lib/core/types';
 
-export let setups<
+export const setups = writable<Setup[]>([]);
+
+// Fetch setups from the backend
 privateRequest<Setup[]>('getSetups', {})
   .then((v: Setup[]) => {
     setups.set(v);

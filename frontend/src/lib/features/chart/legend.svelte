@@ -30,7 +30,7 @@
 		event.preventDefault();
 		queryInstanceInput('any', ['ticker', 'timeframe', 'timestamp', 'extendedHours'], instance).then(
 			(v: Instance) => {
-				queryChart(instance);
+				queryChart(v, true);
 			}
 		);
 	}
@@ -43,7 +43,7 @@
 				['ticker', 'timeframe', 'timestamp', 'extendedHours'],
 				instance
 			).then((v: Instance) => {
-				queryChart(instance);
+				queryChart(v, true);
 			});
 		}
 	}
@@ -132,8 +132,31 @@
 		}, 50);
 	}
 
+	// Add reactive statements to log changes
+	$: {
+		console.log('Instance updated:', {
+			ticker: instance?.ticker,
+			timeframe: instance?.timeframe,
+			timestamp: instance?.timestamp,
+			extendedHours: instance?.extendedHours,
+			fullInstance: instance
+		});
+	}
+
+	// Add reactive statement specifically for ticker changes
+	$: {
+		if (instance?.ticker) {
+			console.log('Ticker changed to:', instance.ticker);
+		}
+	}
+
+	// Watch for content changes that might affect size
+	$: if (hoveredCandleData || instance || width) {
+		debouncedCheckOverflow();
+	}
+
 	onMount(() => {
-		console.log(instance);
+		instance;
 		// Initialize ResizeObserver with a more conservative callback
 		resizeObserver = new ResizeObserver((entries) => {
 			if (!isUpdating) {

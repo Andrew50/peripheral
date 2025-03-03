@@ -3,23 +3,63 @@
 	import { settings } from '$lib/core/stores';
 	import { onMount, tick } from 'svelte';
 	import { get } from 'svelte/store';
+	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
+	import { queryChart } from './interface';
 	export let width: number;
 
 	// Add focus management
 	let containerRef: HTMLDivElement;
 
-	onMount(async () => {
-		// Wait the next microtask so the DOM is ready
-		await tick();
-
-		if (containerRef) {
-			containerRef.focus();
-		}
+	onMount(() => {
+		// Wait for DOM to be ready
+		tick().then(() => {
+			if (containerRef) {
+				containerRef.focus();
+			}
+		});
 
 		// Add global keyboard event listener for chart container
 		const handleGlobalKeydown = (event: KeyboardEvent) => {
+			// Check if input popup is active by looking for the hidden input
+			const hiddenInput = document.getElementById('hidden-input');
+			if (hiddenInput && document.activeElement === hiddenInput) {
+				// Input popup is active, don't trigger new input
+				return;
+			}
+
 			if (/^[a-zA-Z0-9]$/.test(event.key) && !event.ctrlKey && !event.metaKey) {
-				containerRef.focus();
+				// Create an initial instance with the first key as the inputString
+				const initialKey = event.key.toUpperCase();
+
+				// Use type assertion to allow the inputString property
+				const instanceWithInput = {
+					inputString: initialKey
+				} as any;
+
+				queryInstanceInput(
+					'any',
+					['ticker', 'timeframe', 'timestamp', 'extendedHours'],
+					instanceWithInput
+				).then((updatedInstance) => {
+					queryChart(updatedInstance, true);
+					console.log('Updated instance:', updatedInstance);
+				});
+				console.log('Global keydown event:', {
+					key: event.key,
+					ctrlKey: event.ctrlKey,
+					metaKey: event.metaKey
+				});
+
+				// Only focus if we're not in an input field or similar
+				const activeElement = document.activeElement;
+				const isInput =
+					activeElement?.tagName === 'INPUT' ||
+					activeElement?.tagName === 'TEXTAREA' ||
+					activeElement?.getAttribute('contenteditable') === 'true';
+
+				if (!isInput && containerRef) {
+					containerRef.focus();
+				}
 			}
 		};
 
@@ -37,7 +77,14 @@
 	}
 </script>
 
-<div class="chart-container" bind:this={containerRef} tabindex="0" on:keydown={handleKeyDown}>
+<div
+	class="chart-container"
+	bind:this={containerRef}
+	tabindex="0"
+	role="application"
+	aria-label="Chart Container"
+	on:keydown={handleKeyDown}
+>
 	{#each Array.from({ length: $settings.chartRows }) as _, j}
 		<div class="row" style="height: calc(100% / {$settings.chartRows})">
 			{#each Array.from({ length: $settings.chartColumns }) as _, i}

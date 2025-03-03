@@ -14,15 +14,26 @@ const config = {
 	}
 };*/
 import adapter from '@sveltejs/adapter-node';
-
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+
 export default {
 	preprocess: vitePreprocess(),
 	kit: {
-		adapter: adapter()
+		adapter: adapter({
+			// Ensure proper MIME types for JavaScript files
+			precompress: true
+		}),
+		// Fix paths configuration to handle the domain correctly
+		paths: {
+			base: '',
+			// Remove assets setting as it's causing issues
+			relative: false
+		},
+		alias: {
+			$lib: 'src/lib'
+		}
 	}
 };
-
 
 /*import adapter from '@sveltejs/adapter-node'; // For production
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';

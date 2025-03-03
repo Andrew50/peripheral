@@ -4,6 +4,7 @@
 	import { privateRequest } from '$lib/core/backend';
 	import { writable } from 'svelte/store';
 	import List from '$lib/utils/modules/list.svelte';
+	import { browser } from '$app/environment';
 
 	interface ActiveResult {
 		ticker?: string;
@@ -16,6 +17,8 @@
 	const constituentsList = writable<Instance[]>([]);
 	let showConstituents = false;
 	let selectedGroupName = '';
+	let isLoading = writable(true);
+	let loadError = writable<string | null>(null);
 	type Timeframe = '1 day' | '1 week' | '1 month' | '6 month' | '1 year';
 	type Group = 'stock' | 'sector' | 'industry';
 	type Metric =
@@ -45,10 +48,17 @@
 		if (item.constituents) {
 			// For group items (sectors/industries)
 			selectedGroupName = item.group || '';
-			const constituents = item.constituents.map((c) => ({
-				...c,
-				timestamp: Date.now()
-			}));
+			const constituents = item.constituents
+				.filter((c) => c.securityId && c.ticker) // Only include items with valid securityId AND ticker
+				.map(
+					(c): Instance => ({
+						ticker: String(c.ticker).trim(), // Ensure ticker is a valid string
+						securityId: c.securityId,
+						timestamp: 0, // Set timestamp to 0
+						price: 0,
+						active: true
+					})
+				);
 			constituentsList.set(constituents);
 
 			// Toggle the selected row
@@ -63,19 +73,43 @@
 	}
 
 	onMount(() => {
+		if (!browser) return; // Only run in browser context
+
 		const unsubscribe = params.subscribe((p: Params) => {
-			privateRequest<ActiveResult[]>('getActive', p, true).then((results: ActiveResult[]) => {
-				const instances = results.map((result) => ({
-					...result,
-					timestamp: Date.now()
-				}));
-				list.set(instances);
-				// Reset constituents view when params change
-				showConstituents = false;
-				selectedGroupName = '';
-				selectedRowIndex = null;
-			});
+			isLoading.set(true);
+			loadError.set(null);
+
+			privateRequest<ActiveResult[]>('getActive', p, true)
+				.then((results: ActiveResult[]) => {
+					if (!results || !Array.isArray(results)) {
+						throw new Error('Invalid response format');
+					}
+
+					// Filter out any results without securityId
+					const validResults = results.filter(
+						(r) => r.securityId || (r.constituents && r.constituents.some((c) => c.securityId))
+					);
+
+					if (validResults.length === 0) {
+						console.warn('No valid results found');
+					}
+
+					list.set(validResults);
+					// Reset constituents view when params change
+					showConstituents = false;
+					selectedGroupName = '';
+					selectedRowIndex = null;
+				})
+				.catch((error) => {
+					console.error('Error fetching active data:', error);
+					loadError.set(error.message || 'Failed to load data');
+					list.set([]);
+				})
+				.finally(() => {
+					isLoading.set(false);
+				});
 		});
+
 		return () => {
 			unsubscribe();
 		};
@@ -93,10 +127,44 @@
 			params.set(currentParams);
 		}
 	});
+
+	// Add this function to convert ActiveResult to Instance
+	function convertToInstances(items: ActiveResult[]): Instance[] {
+		return items
+			.map((item): Instance | null => {
+				// Ensure we have a valid securityId and ticker
+				if (!item.securityId) {
+					console.warn('Missing securityId for ticker:', item.ticker);
+					return null;
+				}
+
+				if (!item.ticker) {
+					console.warn('Missing ticker for securityId:', item.securityId);
+					return null;
+				}
+
+				return {
+					ticker: String(item.ticker).trim(), // Ensure ticker is a valid string
+					securityId: item.securityId,
+					// Set timestamp to 0 to let the stream system handle it
+					timestamp: 0,
+					price: 0,
+					active: true
+				};
+			})
+			.filter(Boolean) as Instance[]; // Remove any null items
+	}
 </script>
 
 <div class="market-container">
-	{#if showConstituents}
+	{#if $isLoading}
+		<div class="loading">Loading...</div>
+	{:else if $loadError}
+		<div class="error">
+			<p>{$loadError}</p>
+			<button class="retry-button" on:click={() => params.set($params)}>Retry</button>
+		</div>
+	{:else if showConstituents}
 		<div class="header">
 			<button class="utility-button" on:click={goBack}>←</button>
 			<h3>{selectedGroupName} Constituents</h3>
@@ -154,7 +222,10 @@
 
 		<div class="results">
 			{#if currentParams.group === 'stock'}
-				<List {list} columns={['Ticker', 'Price', 'Chg', 'Chg%']} />
+				<List
+					list={writable(convertToInstances($list))}
+					columns={['Ticker', 'Price', 'Chg', 'Chg%']}
+				/>
 			{:else}
 				<table>
 					<thead>
@@ -307,5 +378,25 @@
 
 	.group-row:hover {
 		background-color: #252525;
+	}
+
+	.error {
+		color: var(--negative);
+		text-align: center;
+		padding: 20px;
+	}
+
+	.retry-button {
+		background: var(--ui-bg-secondary);
+		color: var(--text-primary);
+		border: 1px solid var(--ui-border);
+		border-radius: 4px;
+		padding: 8px 16px;
+		margin-top: 10px;
+		cursor: pointer;
+	}
+
+	.retry-button:hover {
+		background: var(--ui-bg-hover);
 	}
 </style>

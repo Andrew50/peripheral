@@ -21,6 +21,7 @@
 	import Setups from '$lib/features/setups/setups.svelte';
 	import Options from '$lib/features/options.svelte';
 	import Settings from '$lib/features/settings.svelte';
+	import Newsfeed from '$lib/features/newsfeed.svelte';
 
 	// Replay logic
 	import {
@@ -45,6 +46,9 @@
 	} from '$lib/core/stores';
 	import { writable, type Writable } from 'svelte/store';
 
+	// Import Instance from types
+	import type { Instance } from '$lib/core/types';
+
 	// Add import near the top with other imports
 	import Screensaver from '$lib/features/screensaver.svelte';
 
@@ -59,7 +63,14 @@
 	let chartWidth = 0;
 
 	// Bottom windows
-	type BottomWindowType = 'screener' | 'account' | 'active' | 'options' | 'setups' | 'settings';
+	type BottomWindowType =
+		| 'screener'
+		| 'account'
+		| 'active'
+		| 'options'
+		| 'setups'
+		| 'settings'
+		| 'newsfeed';
 	interface BottomWindow {
 		id: number;
 		type: BottomWindowType;
@@ -79,14 +90,18 @@
 	// Resizing the bottom windows
 	let bottomWindowsHeight = 0;
 	let bottomResizing = false;
-	const MIN_BOTTOM_HEIGHT = 250;
-	const MAX_BOTTOM_HEIGHT = 800;
+	const MIN_BOTTOM_HEIGHT = 50;
+	const MAX_BOTTOM_HEIGHT = 1200;
 
 	// Add these state variables near the top with other state declarations
 	let lastBottomWindow: BottomWindow | null = null;
 
-	let profilePic = '';
+	// Initialize with default question mark avatar
+	let profilePic = `data:image/svg+xml,${encodeURIComponent(`<svg width="28" height="28" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="14" fill="#1a1c21"/><text x="14" y="19" font-family="Arial" font-size="14" fill="#e0e0e0" text-anchor="middle" font-weight="bold">?</text></svg>`)}`;
 	let username = '';
+	let profilePicError = false;
+	let profileIconKey = 0;
+	let currentProfileDisplay = ''; // Add this to hold the current display value
 
 	let sidebarResizing = false;
 	let tickerHeight = 300; // Initial height
@@ -125,7 +140,32 @@
 		}
 	}
 
+	let keydownHandler: (event: KeyboardEvent) => void;
+
 	onMount(() => {
+		// Load profile data FIRST, before doing anything else
+		const storedProfilePic = sessionStorage.getItem('profilePic') || '';
+		username = sessionStorage.getItem('username') || '';
+
+		// Check if the stored profile pic is a real image URL or a generated SVG
+		if (storedProfilePic && !storedProfilePic.startsWith('data:image/svg+xml')) {
+			// It's a real image URL (like from Google)
+			profilePic = storedProfilePic;
+		} else {
+			// Either no profile pic or it's an SVG - we'll regenerate it based on username
+			profilePic = '';
+		}
+
+		console.log('Profile data on mount:', {
+			profilePic,
+			username,
+			hasProfilePic: !!profilePic,
+			hasUsername: !!username
+		});
+
+		// Reset error state
+		profilePicError = false;
+
 		// Set up a single menuWidth subscription
 		const unsubscribe = menuWidth.subscribe((width) => {
 			updateChartWidth();
@@ -139,6 +179,51 @@
 
 			updateChartWidth();
 			window.addEventListener('resize', updateChartWidth);
+
+			// Define the keydown handler
+			keydownHandler = (event: KeyboardEvent) => {
+				console.log('Global keydown event:', {
+					key: event.key,
+					activeElement: document.activeElement?.tagName,
+					activeElementId: document.activeElement?.id,
+					isBodyFocused: document.activeElement === document.body,
+					noFocus: !document.activeElement
+				});
+
+				// Only handle events when no element is focused or body is focused
+				console.log('Document active element:', document.activeElement);
+				if (!document.activeElement || document.activeElement === document.body) {
+					const chartContainer = document.getElementById(`chart_container-0`); // Assuming first chart has ID 0
+					console.log('Looking for chart container:', {
+						found: !!chartContainer,
+						containerId: 'chart_container-0'
+					});
+
+					if (chartContainer) {
+						console.log('Focusing chart and triggering event handler');
+
+						// Focus the chart container
+						chartContainer.focus();
+
+						// Get the native event handlers from the chart container
+						const nativeHandlers = (chartContainer as any)._svelte?.events?.keydown;
+
+						if (nativeHandlers) {
+							console.log('Found native handlers, calling directly');
+							// Call each handler directly with the original event
+							nativeHandlers.forEach((handler: Function) => {
+								handler.call(chartContainer, event);
+							});
+						} else {
+							console.log('No native handlers found on chart container');
+						}
+					}
+				}
+			};
+
+			// Add global keyboard event listener
+			document.addEventListener('keydown', keydownHandler);
+			console.log('Added global keydown handler');
 		}
 		privateRequest<string>('verifyAuth', {}).catch(() => {
 			goto('/login');
@@ -149,8 +234,11 @@
 			toggleMenu(menuName as Menu);
 		});
 
-		profilePic = sessionStorage.getItem('profilePic') || '';
-		username = sessionStorage.getItem('username') || '';
+		// Force profile display to update
+		currentProfileDisplay = calculateProfileDisplay();
+
+		// Force refresh of the profile icon
+		profileIconKey++;
 
 		// Setup activity listeners
 		if (browser) {
@@ -174,6 +262,9 @@
 		const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
 		if (browser && document) {
 			window.removeEventListener('resize', updateChartWidth);
+			// Remove global keyboard event listener using the stored handler
+			document.removeEventListener('keydown', keydownHandler);
+			console.log('Removed global keydown handler');
 			stopSidebarResize();
 			activityEvents.forEach((event) => {
 				document.removeEventListener(event, resetInactivityTimer);
@@ -272,8 +363,12 @@
 			bottomWindows = [];
 			return;
 		}
+
+		// Preserve current height if another window is already open
+		const currentHeight = bottomWindows.length > 0 ? bottomWindowsHeight : 200; // Use default only if no window is open
+
 		// Replace current if a different window is clicked
-		bottomWindowsHeight = 200; // default
+		bottomWindowsHeight = currentHeight;
 		bottomWindows = [
 			{
 				id: nextWindowId++,
@@ -433,16 +528,48 @@
 		document.body.style.cursor = 'default';
 	}
 
-	function getProfileDisplay() {
-		if (profilePic) {
+	// Add reactive statement for profile display
+	$: {
+		// Recalculate the profile display whenever these values change
+		if (profilePic || username || profilePicError) {
+			currentProfileDisplay = calculateProfileDisplay();
+			console.log('Profile display updated:', { currentProfileDisplay });
+		}
+	}
+
+	function calculateProfileDisplay() {
+		console.log('getProfileDisplay called:', {
+			profilePic,
+			username,
+			profilePicError
+		});
+
+		// If profile pic is available and no loading error, use it
+		if (profilePic && !profilePicError) {
+			console.log('Using profile picture URL');
 			return profilePic;
 		}
-		// Generate initial avatar if no profile pic
+
+		// If username is available, generate avatar with initial
 		if (username) {
-			return `data:image/svg+xml,${encodeURIComponent(`<svg width="28" height="28" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="14" fill="#1a1c21"/><text x="14" y="19" font-family="Arial" font-size="14" fill="#e0e0e0" text-anchor="middle" font-weight="bold">${username.charAt(0).toUpperCase()}</text></svg>`)}`;
+			const initial = username.charAt(0).toUpperCase();
+			console.log('Using username initial for avatar:', initial);
+			return `data:image/svg+xml,${encodeURIComponent(`<svg width="28" height="28" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="14" fill="#1a1c21"/><text x="14" y="19" font-family="Arial" font-size="14" fill="#e0e0e0" text-anchor="middle" font-weight="bold">${initial}</text></svg>`)}`;
 		}
-		// Fallback if no username (shouldn't happen)
+
+		// Fallback if nothing else is available
+		console.log('No username available, using ? fallback');
 		return `data:image/svg+xml,${encodeURIComponent(`<svg width="28" height="28" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="14" fill="#1a1c21"/><text x="14" y="19" font-family="Arial" font-size="14" fill="#e0e0e0" text-anchor="middle" font-weight="bold">?</text></svg>`)}`;
+	}
+
+	// Keep the getProfileDisplay function for backward compatibility
+	function getProfileDisplay() {
+		return currentProfileDisplay;
+	}
+
+	function handleProfilePicError() {
+		console.log('Profile picture failed to load:', profilePic);
+		profilePicError = true;
 	}
 
 	function startSidebarResize(event: MouseEvent | TouchEvent) {
@@ -502,6 +629,33 @@
 	function toggleScreensaver() {
 		screensaverActive = !screensaverActive;
 	}
+
+	// Add reactive statements to update the profile icon when data changes
+	$: if (profilePic || username) {
+		// Increment key to force re-render when profile data changes
+		profileIconKey++;
+	}
+
+	function handleKeyboardBottomResize(e: KeyboardEvent) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			startBottomResize(new MouseEvent('mousedown'));
+		}
+	}
+
+	function handleKeyboardSidebarResize(e: KeyboardEvent) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			startSidebarResize(new MouseEvent('mousedown'));
+		}
+	}
+
+	function handleKeyboardResize(e: KeyboardEvent) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			startResize(new MouseEvent('mousedown'));
+		}
+	}
 </script>
 
 <div
@@ -545,12 +699,21 @@
 									<Account />
 								{:else if w.type === 'settings'}
 									<Settings />
+								{:else if w.type === 'newsfeed'}
+									<Newsfeed />
 								{/if}
 							</div>
 						</div>
 					{/each}
 					{#if bottomWindows.length > 0}
-						<div class="bottom-resize-handle" on:mousedown={startBottomResize}></div>
+						<div
+							class="bottom-resize-handle"
+							role="separator"
+							aria-orientation="horizontal"
+							on:mousedown={startBottomResize}
+							on:keydown={handleKeyboardBottomResize}
+							tabindex="0"
+						></div>
 					{/if}
 				</div>
 			</div>
@@ -558,7 +721,15 @@
 			<!-- Sidebar -->
 			{#if $menuWidth > 0}
 				<div class="sidebar" style="width: {$menuWidth}px;">
-					<div class="resize-handle" on:mousedown={startResize} on:touchstart={startResize} />
+					<div
+						class="resize-handle"
+						role="separator"
+						aria-orientation="vertical"
+						on:mousedown={startResize}
+						on:touchstart={startResize}
+						on:keydown={handleKeyboardResize}
+						tabindex="0"
+					/>
 					<div class="sidebar-content">
 						<!-- Main sidebar content -->
 						<div class="main-sidebar-content">
@@ -577,8 +748,12 @@
 
 						<div
 							class="sidebar-resize-handle"
+							role="separator"
+							aria-orientation="horizontal"
 							on:mousedown={startSidebarResize}
 							on:touchstart|preventDefault={startSidebarResize}
+							on:keydown={handleKeyboardSidebarResize}
+							tabindex="0"
 						></div>
 
 						<div class="ticker-info-container">
@@ -635,6 +810,12 @@
 				on:click={() => openBottomWindow('account')}
 			>
 				Account
+			</button>
+			<button
+				class="toggle-button {bottomWindows.some((w) => w.type === 'newsfeed') ? 'active' : ''}"
+				on:click={() => openBottomWindow('newsfeed')}
+			>
+				News
 			</button>
 		</div>
 
@@ -695,12 +876,24 @@
 				<i class="fas fa-tv"></i>
 			</button>
 
-			<img src={getProfileDisplay()} alt="Profile" class="pfp" on:click={toggleSettings} />
+			<button class="profile-button" on:click={toggleSettings} aria-label="Toggle Settings">
+				<img src={getProfileDisplay()} alt="Profile" class="pfp" on:error={handleProfilePicError} />
+			</button>
 		</div>
 	</div>
 
 	{#if showSettingsPopup}
-		<div class="settings-overlay" on:click|self={toggleSettings}>
+		<div
+			class="settings-overlay"
+			role="dialog"
+			aria-label="Settings"
+			on:click|self={toggleSettings}
+			on:keydown={(e) => {
+				if (e.key === 'Escape') {
+					toggleSettings();
+				}
+			}}
+		>
 			<div class="settings-modal">
 				<div class="settings-header">
 					<h2>Settings</h2>
@@ -1075,12 +1268,8 @@
 	.bottom-bar button,
 	.side-btn,
 	.menu-icon,
-	.timestamp,
 	.pfp,
-	.window-header,
-	.window-title,
 	.close-btn,
-	.minimize-btn,
 	.speed-label {
 		-webkit-user-select: none;
 		-moz-user-select: none;
