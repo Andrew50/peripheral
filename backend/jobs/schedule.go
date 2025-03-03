@@ -25,9 +25,24 @@ var (
 )
 
 func StartScheduler(conn *utils.Conn) chan struct{} {
-
-	go initialize(conn)
-	//eventLoop(time.Now(), conn)
+	// Check if the system has been initialized
+	initialized, err := conn.Cache.Get(context.Background(), "INITIALIZED").Result()
+	if err != nil || initialized != "true" {
+		fmt.Println("System not initialized yet, starting initialization...")
+		// Run initialization in a goroutine
+		go func() {
+			initialize(conn)
+			// Set the INITIALIZED flag to true in Redis after initialization is complete
+			err := conn.Cache.Set(context.Background(), "INITIALIZED", "true", 0).Err()
+			if err != nil {
+				fmt.Printf("Failed to set INITIALIZED flag in Redis: %v\n", err)
+			} else {
+				fmt.Println("Initialization completed and INITIALIZED flag set in Redis")
+			}
+		}()
+	} else {
+		fmt.Println("System already initialized, skipping initialization")
+	}
 
 	updateSectors(conn)
 
@@ -38,7 +53,6 @@ func StartScheduler(conn *utils.Conn) chan struct{} {
 	quit := make(chan struct{})
 	if err != nil {
 		panic(fmt.Errorf("219jv %v", err))
-
 	}
 
 	go func() {

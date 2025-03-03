@@ -19,6 +19,7 @@ export interface Instance {
     industry?: string;
     sector?: string;
     totalShares?: number;
+    sortOrder?: number;
 }
 export interface Setup {
     setupId: number;

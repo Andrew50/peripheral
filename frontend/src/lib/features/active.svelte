@@ -12,9 +12,9 @@
 		group?: string;
 		market_cap?: number;
 		dollar_volume?: number;
-		constituents?: { 
-			ticker: string; 
-			securityId: number; 
+		constituents?: {
+			ticker: string;
+			securityId: number;
 			market_cap: number;
 			dollar_volume: number;
 		}[];
@@ -69,14 +69,18 @@
 			const constituents = item.constituents
 				.filter((c) => c.securityId && c.ticker) // Only include items with valid securityId AND ticker
 				.map(
-					(c): Instance => ({
+					(c, index): Instance => ({
 						ticker: String(c.ticker).trim(), // Ensure ticker is a valid string
 						securityId: c.securityId,
 						timestamp: 0, // Set timestamp to 0
-						price: 0,  // Initialize price to 0
+						price: 0, // Initialize price to 0
 						active: true,
-						market_cap: c.market_cap,
-						dollar_volume: c.dollar_volume
+						extendedHours: true, // Initialize extended hours property
+						// Make sure market cap and dollar volume are correctly passed
+						market_cap: typeof c.market_cap === 'number' ? c.market_cap : undefined,
+						dollar_volume: typeof c.dollar_volume === 'number' ? c.dollar_volume : undefined,
+						// Add a sort order property to preserve backend sorting
+						sortOrder: index
 					})
 				);
 			constituentsList.set(constituents);
@@ -123,14 +127,14 @@
 		maxMarketCap = '';
 		minDollarVolume = '';
 		maxDollarVolume = '';
-		
+
 		// Remove filter parameters
 		const requestParams: Params = {
 			timeframe: currentParams.timeframe,
 			group: currentParams.group,
 			metric: currentParams.metric
 		};
-		
+
 		params.set(requestParams);
 	}
 
@@ -178,10 +182,12 @@
 					if (validResults.length === 0) {
 						console.warn('No valid results found');
 					} else {
-						console.log('[Active] Valid results with securityIds:', 
-							validResults.map(r => r.securityId ? 
-								`${r.ticker}: ${r.securityId}` : 
-								`${r.group}: ${r.constituents?.map(c => `${c.ticker}: ${c.securityId}`).join(', ')}`
+						console.log(
+							'[Active] Valid results with securityIds:',
+							validResults.map((r) =>
+								r.securityId
+									? `${r.ticker}: ${r.securityId}`
+									: `${r.group}: ${r.constituents?.map((c) => `${c.ticker}: ${c.securityId}`).join(', ')}`
 							)
 						);
 					}
@@ -223,29 +229,43 @@
 	// Add this function to convert ActiveResult to Instance
 	function convertToInstances(items: ActiveResult[]): Instance[] {
 		console.log('[Active] Converting items to instances:', items);
-		
+
 		const instances = items
-			.filter(item => item.ticker && item.securityId) // Only include items with securityId AND ticker
-			.map((item): Instance => {
-				return {
+			.filter((item) => item.ticker && item.securityId) // Only include items with securityId AND ticker
+			.map((item, index): Instance => {
+				// Create the instance with properly initialized values
+				const instance: Instance = {
 					ticker: String(item.ticker).trim(), // Ensure ticker is a valid string
 					securityId: item.securityId,
 					timestamp: 0, // Set timestamp to 0
 					price: 0, // Initialize price to 0
 					active: true,
-					market_cap: item.market_cap,
-					dollar_volume: item.dollar_volume
+					extendedHours: true, // Initialize extended hours property to true to show extended hours data
+					// Make sure market cap and dollar volume are correctly passed
+					market_cap: typeof item.market_cap === 'number' ? item.market_cap : undefined,
+					dollar_volume: typeof item.dollar_volume === 'number' ? item.dollar_volume : undefined,
+					// Add a sort order property to preserve backend sorting
+					sortOrder: index
 				};
+
+				return instance;
 			});
-			
+
 		console.log('[Active] Converted instances:', instances);
 		return instances;
+	}
+
+	// Function to ensure instances are sorted by sortOrder before passing to the List component
+	function preserveOrder(instances: Instance[]): Instance[] {
+		return [...instances].sort((a, b) =>
+			a.sortOrder !== undefined && b.sortOrder !== undefined ? a.sortOrder - b.sortOrder : 0
+		);
 	}
 
 	// Format market cap and dollar volume for display
 	function formatCurrency(value: number | undefined): string {
 		if (value === undefined || value === null) return 'N/A';
-		
+
 		// Format based on size
 		if (value >= 1e12) {
 			return `$${(value / 1e12).toFixed(2)}T`;
@@ -273,12 +293,16 @@
 			<button class="utility-button" on:click={goBack}>←</button>
 			<h3>{selectedGroupName} Constituents</h3>
 		</div>
-		<List 
-			list={constituentsList} 
-			columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Market Cap', 'Dollar Vol']}
+		<List
+			list={writable(preserveOrder($constituentsList))}
+			columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Ext', 'Market Cap', 'Dollar Vol']}
 			formatters={{
 				'Market Cap': (value) => formatCurrency(value),
-				'Dollar Vol': (value) => formatCurrency(value)
+				'Dollar Vol': (value) => formatCurrency(value),
+				Ext: (value) => {
+					if (value === undefined || value === null) return 'N/A';
+					return value > 0 ? `+${value.toFixed(2)}%` : `${value.toFixed(2)}%`;
+				}
 			}}
 		/>
 	{:else}
@@ -341,7 +365,7 @@
 			<div class="filter-container">
 				<div class="filter-group">
 					<label for="minMarketCap">Min Market Cap ($M)</label>
-					<input 
+					<input
 						type="number"
 						id="minMarketCap"
 						bind:value={minMarketCap}
@@ -351,7 +375,7 @@
 				</div>
 				<div class="filter-group">
 					<label for="maxMarketCap">Max Market Cap ($M)</label>
-					<input 
+					<input
 						type="number"
 						id="maxMarketCap"
 						bind:value={maxMarketCap}
@@ -361,7 +385,7 @@
 				</div>
 				<div class="filter-group">
 					<label for="minDollarVolume">Min Dollar Volume ($M)</label>
-					<input 
+					<input
 						type="number"
 						id="minDollarVolume"
 						bind:value={minDollarVolume}
@@ -371,7 +395,7 @@
 				</div>
 				<div class="filter-group">
 					<label for="maxDollarVolume">Max Dollar Volume ($M)</label>
-					<input 
+					<input
 						type="number"
 						id="maxDollarVolume"
 						bind:value={maxDollarVolume}
@@ -389,14 +413,18 @@
 		<div class="results">
 			{#if currentParams.group === 'stock'}
 				{#if $list.length > 0}
-					{@const instances = convertToInstances($list)}
+					{@const instances = preserveOrder(convertToInstances($list))}
 					{#if instances.length > 0}
 						<List
 							list={writable(instances)}
-							columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Market Cap', 'Dollar Vol']}
+							columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Ext', 'Market Cap', 'Dollar Vol']}
 							formatters={{
 								'Market Cap': (value) => formatCurrency(value),
-								'Dollar Vol': (value) => formatCurrency(value)
+								'Dollar Vol': (value) => formatCurrency(value),
+								Ext: (value) => {
+									if (value === undefined || value === null) return 'N/A';
+									return value > 0 ? `+${value.toFixed(2)}%` : `${value.toFixed(2)}%`;
+								}
 							}}
 						/>
 					{:else}
@@ -420,12 +448,24 @@
 							{#if i === selectedRowIndex}
 								<tr class="defalt-tr">
 									<td class="defalt-td">
-										<List 
-											list={constituentsList} 
-											columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Market Cap', 'Dollar Vol']}
+										<List
+											list={writable(preserveOrder($constituentsList))}
+											columns={[
+												'Ticker',
+												'Price',
+												'Chg',
+												'Chg%',
+												'Ext',
+												'Market Cap',
+												'Dollar Vol'
+											]}
 											formatters={{
 												'Market Cap': (value) => formatCurrency(value),
-												'Dollar Vol': (value) => formatCurrency(value)
+												'Dollar Vol': (value) => formatCurrency(value),
+												Ext: (value) => {
+													if (value === undefined || value === null) return 'N/A';
+													return value > 0 ? `+${value.toFixed(2)}%` : `${value.toFixed(2)}%`;
+												}
 											}}
 										/>
 									</td>
@@ -465,7 +505,9 @@
 		align-items: flex-end;
 	}
 
-	.filter-button, .apply-button, .clear-button {
+	.filter-button,
+	.apply-button,
+	.clear-button {
 		background-color: #1a1a1a;
 		color: white;
 		border: 1px solid #333;
@@ -475,7 +517,9 @@
 		transition: background-color 0.2s;
 	}
 
-	.filter-button:hover, .apply-button:hover, .clear-button:hover {
+	.filter-button:hover,
+	.apply-button:hover,
+	.clear-button:hover {
 		background-color: #252525;
 		border-color: #444;
 	}
@@ -520,7 +564,7 @@
 		margin-left: auto;
 	}
 
-	input[type="number"] {
+	input[type='number'] {
 		background-color: #252525;
 		border: 1px solid #333;
 		color: white;
