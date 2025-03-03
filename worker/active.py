@@ -36,7 +36,13 @@ def calculate_active(data):
     with data.db.cursor() as cursor:
         cursor.execute(
             """
-            SELECT ticker, sector, industry, securityId FROM securities 
+            SELECT 
+                ticker, 
+                sector, 
+                industry, 
+                securityId,
+                COALESCE(share_class_shares_outstanding, 0) as outstanding_shares
+            FROM securities 
             WHERE maxDate is NULL
         """
         )
@@ -48,6 +54,21 @@ def calculate_active(data):
     ticker_to_idx = {label["ticker"]: i for i, label in enumerate(labels)}
     timeframes = ["1 day", "1 week", "1 month", "6 month", "1 year"]
     groups = ["stock", "sector", "industry"]
+
+    # Helper function to convert NumPy types to native Python types
+    def convert_numpy_types(obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return convert_numpy_types(obj.tolist())
+        elif isinstance(obj, list):
+            return [convert_numpy_types(item) for item in obj]
+        elif isinstance(obj, dict):
+            return {key: convert_numpy_types(value) for key, value in obj.items()}
+        else:
+            return obj
 
     # Loop over each timeframe
     for timeframe in timeframes:
@@ -79,7 +100,7 @@ def calculate_active(data):
             if not security:
                 continue
 
-            _, sector, industry, securityId = security
+            _, sector, industry, securityId, outstanding_shares = security
 
             idx = ticker_to_idx.get(ticker)
             if idx is None or idx >= len(tensor) or len(tensor[idx]) < lookback_bars:
@@ -94,32 +115,38 @@ def calculate_active(data):
             price_val = ((current_price - past_price) / past_price) * 100
 
             # Compute a volume metric (as provided in the original code)
-            # Note: this metric multiplies close by open; adjust if needed.
+            # Note: this is raw volume
             volume_segment = tensor[idx][-lookback_bars:]
             volume_val = np.sum(volume_segment[:, 4])
-
+            
+            # Calculate dollar volume (price * volume)
+            dollar_volume = current_price * volume_segment[-1, 4]
+            
+            # Calculate market cap (current price * outstanding shares)
+            current_market_cap = current_price * outstanding_shares
+            
             # Only calculate gap if timeframe is "1 day"
             gap_val = calculate_gap(tensor, idx) if timeframe == "1 day" else None
 
             # Stock-level metrics (each stock is a unique entry)
-            group_results["stock"]["price"].append((ticker, securityId, price_val))
-            group_results["stock"]["volume"].append((ticker, securityId, volume_val))
+            group_results["stock"]["price"].append((ticker, securityId, price_val, current_market_cap, dollar_volume))
+            group_results["stock"]["volume"].append((ticker, securityId, volume_val, current_market_cap, dollar_volume))
             if timeframe == "1 day":
-                group_results["stock"]["gap"].append((ticker, securityId, gap_val))
+                group_results["stock"]["gap"].append((ticker, securityId, gap_val, current_market_cap, dollar_volume))
 
             # For sector group: only add if sector is known
             if sector and sector != "Unknown":
                 if sector not in sector_constituents:
                     sector_constituents[sector] = {"price": [], "volume": [], "gap": []}
                 sector_constituents[sector]["price"].append(
-                    {"ticker": ticker, "securityId": securityId, "value": price_val}
+                    {"ticker": ticker, "securityId": securityId, "value": price_val, "market_cap": current_market_cap, "dollar_volume": dollar_volume}
                 )
                 sector_constituents[sector]["volume"].append(
-                    {"ticker": ticker, "securityId": securityId, "value": volume_val}
+                    {"ticker": ticker, "securityId": securityId, "value": volume_val, "market_cap": current_market_cap, "dollar_volume": dollar_volume}
                 )
                 if timeframe == "1 day":
                     sector_constituents[sector]["gap"].append(
-                        {"ticker": ticker, "securityId": securityId, "value": gap_val}
+                        {"ticker": ticker, "securityId": securityId, "value": gap_val, "market_cap": current_market_cap, "dollar_volume": dollar_volume}
                     )
 
             # For industry group: only add if industry is known
@@ -131,14 +158,14 @@ def calculate_active(data):
                         "gap": [],
                     }
                 industry_constituents[industry]["price"].append(
-                    {"ticker": ticker, "securityId": securityId, "value": price_val}
+                    {"ticker": ticker, "securityId": securityId, "value": price_val, "market_cap": current_market_cap, "dollar_volume": dollar_volume}
                 )
                 industry_constituents[industry]["volume"].append(
-                    {"ticker": ticker, "securityId": securityId, "value": volume_val}
+                    {"ticker": ticker, "securityId": securityId, "value": volume_val, "market_cap": current_market_cap, "dollar_volume": dollar_volume}
                 )
                 if timeframe == "1 day":
                     industry_constituents[industry]["gap"].append(
-                        {"ticker": ticker, "securityId": securityId, "value": gap_val}
+                        {"ticker": ticker, "securityId": securityId, "value": gap_val, "market_cap": current_market_cap, "dollar_volume": dollar_volume}
                     )
 
         # Now aggregate the sector and industry metrics from their constituents.
@@ -208,11 +235,12 @@ def calculate_active(data):
                 # Build results for leaders
                 result_list = []
                 for entry in leaders:
-                    name, sid, agg_value = entry
                     if group == "stock":
+                        name, sid, agg_value, market_cap, dollar_volume = entry
                         # For stocks, we simply output ticker and securityId
-                        result = {"ticker": name, "securityId": sid}
+                        result = {"ticker": name, "securityId": sid, "market_cap": market_cap, "dollar_volume": dollar_volume}
                     else:
+                        name, sid, agg_value = entry
                         # For sectors/industries, get the list of constituent stocks
                         if group == "sector":
                             constituents_data = sector_constituents.get(name, {}).get(
@@ -227,22 +255,23 @@ def calculate_active(data):
                             constituents_data, key=lambda x: x["value"], reverse=True
                         )
                         constituents = [
-                            {"ticker": c["ticker"], "securityId": c["securityId"]}
+                            {"ticker": c["ticker"], "securityId": c["securityId"], "market_cap": c["market_cap"], "dollar_volume": c["dollar_volume"]}
                             for c in sorted_constituents[:TOP_CONSTITUENTS]
                         ]
                         result = {"group": name, "constituents": constituents}
                     result_list.append(result)
 
                 key = f"active:{timeframe}:{group}:{metric_type} leader"
-                data.cache.set(key, json.dumps(result_list))
+                data.cache.set(key, json.dumps(convert_numpy_types(result_list)))
 
                 # Build results for laggards
                 result_list = []
                 for entry in laggards:
-                    name, sid, agg_value = entry
                     if group == "stock":
-                        result = {"ticker": name, "securityId": sid}
+                        name, sid, agg_value, market_cap, dollar_volume = entry
+                        result = {"ticker": name, "securityId": sid, "market_cap": market_cap, "dollar_volume": dollar_volume}
                     else:
+                        name, sid, agg_value = entry
                         if group == "sector":
                             constituents_data = sector_constituents.get(name, {}).get(
                                 metric_type, []
@@ -256,16 +285,16 @@ def calculate_active(data):
                             constituents_data, key=lambda x: x["value"]
                         )
                         constituents = [
-                            {"ticker": c["ticker"], "securityId": c["securityId"]}
+                            {"ticker": c["ticker"], "securityId": c["securityId"], "market_cap": c["market_cap"], "dollar_volume": c["dollar_volume"]}
                             for c in sorted_constituents[:TOP_CONSTITUENTS]
                         ]
                         result = {"group": name, "constituents": constituents}
                     result_list.append(result)
 
                 key = f"active:{timeframe}:{group}:{metric_type} laggard"
-                data.cache.set(key, json.dumps(result_list))
+                data.cache.set(key, json.dumps(convert_numpy_types(result_list)))
 
-    print("Market metrics update completed")
+    print("Market metrics update completed")    
     return "Market metrics updated successfully"
 
 
