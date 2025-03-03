@@ -7,12 +7,16 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONFAULTHANDLER=1
 
 # Install production dependencies only
-RUN pip install --no-cache-dir watchdog
+RUN pip install --no-cache-dir psycopg2-binary redis
 RUN pip install --no-deps --no-cache-dir tensorflow-serving-api==2.17.0
 
 # Copy requirements and install them
 COPY requirements.txt .
 RUN pip install -r requirements.txt --no-cache-dir
+
+# Copy database check script first (for layer caching)
+COPY db_check.py .
+RUN chmod +x db_check.py
 
 # Copy application code
 COPY . .
