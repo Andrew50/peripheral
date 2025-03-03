@@ -145,7 +145,7 @@ spec:
     spec:
       containers:
         - name: controller
-          image: ${NGINX_IMAGE:-k8s.gcr.io/ingress-nginx/controller:v1.2.1}
+          image: k8s.gcr.io/ingress-nginx/controller:v1.2.1
           imagePullPolicy: IfNotPresent
           lifecycle:
             preStop:
@@ -154,7 +154,7 @@ spec:
                   - /wait-shutdown
           args:
             - /nginx-ingress-controller
-            - --publish-service=default/ingress-nodeport
+            - --publish-service=ingress-nginx/ingress-nodeport
             - --election-id=ingress-controller-leader
             - --controller-class=k8s.io/ingress-nginx
             - --configmap=default/ingress-nginx-controller
