@@ -117,7 +117,7 @@
 		}
 
 		const currentTimeInSeconds = Math.floor($streamInfo.timestamp / 1000);
-		const chartTimeframeInSeconds = timeframeToSeconds(currentInst.timeframe, currentTimeInSeconds);
+		const chartTimeframeInSeconds = timeframeToSeconds(currentInst.timeframe);
 
 		let nextBarClose =
 			currentTimeInSeconds -
@@ -126,8 +126,8 @@
 
 		// For daily timeframes, adjust to market close (4:00 PM EST)
 		if (currentInst.timeframe.includes('d')) {
-			const nextCloseDate = new Date(nextBarClose * 1000);
-			const estOptions = { timeZone: 'America/New_York', hour12: false };
+			const currentDate = new Date(currentTimeInSeconds * 1000);
+			const estOptions = { timeZone: 'America/New_York' };
 			const formatter = new Intl.DateTimeFormat('en-US', {
 				...estOptions,
 				year: 'numeric',
@@ -135,18 +135,27 @@
 				day: 'numeric'
 			});
 
-			const [month, day, year] = formatter.format(nextCloseDate).split('/');
-			const marketCloseDate = new Date(
-				`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T16:00:00`
-			);
-			marketCloseDate.setTime(
-				marketCloseDate.getTime() + marketCloseDate.getTimezoneOffset() * 60 * 1000
-			);
+			const [month, day, year] = formatter.format(currentDate).split('/');
+			
+			const marketCloseDate = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T16:00:00-04:00`);
+			
 			nextBarClose = Math.floor(marketCloseDate.getTime() / 1000);
+			
+			if (currentTimeInSeconds >= nextBarClose) {
+				marketCloseDate.setDate(marketCloseDate.getDate() + 1);
+				
+				const dayOfWeek = marketCloseDate.getDay(); // 0 = Sunday, 6 = Saturday
+				if (dayOfWeek === 0) { // Sunday
+					marketCloseDate.setDate(marketCloseDate.getDate() + 1); // Move to Monday
+				} else if (dayOfWeek === 6) { // Saturday
+					marketCloseDate.setDate(marketCloseDate.getDate() + 2); // Move to Monday
+				}
+				
+				nextBarClose = Math.floor(marketCloseDate.getTime() / 1000);
+			}
 		}
 
-		const currentTimeEST = UTCSecondstoESTSeconds(currentTimeInSeconds);
-		const remainingTime = nextBarClose - currentTimeEST;
+		const remainingTime = nextBarClose - currentTimeInSeconds;
 
 		if (remainingTime > 0) {
 			countdown.set(formatTime(remainingTime));
