@@ -98,6 +98,12 @@ export async function privateRequest<T>(
     args: Record<string, unknown>,
     verbose = false
 ): Promise<T> {
+    // Skip API calls during SSR to prevent crashes
+    if (typeof window === 'undefined') {
+        console.log('Skipping API call during SSR for endpoint:', func);
+        return {} as T; // Return empty data during SSR
+    }
+
     let authToken;
     try {
         authToken = sessionStorage.getItem('authToken');
