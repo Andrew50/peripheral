@@ -1,8 +1,7 @@
-/*colors.css*/
 :root {
-	/* Core UI Colors */
+	/* Base UI Colors */
 	--c1: #2d3139;
-	/* secondary - darker grey */
+	/* a darker grey */
 	--c2: #1a1c21;
 	/* base - dark background */
 	--c3: #3b82f6;
@@ -26,72 +25,52 @@
 	--f2: #9ca3af;
 	/* secondary text - light grey */
 
-	/* Accent Colors */
+	/* Additional Accents */
 	--accent-purple: #8b5cf6;
 	--accent-indigo: #6366f1;
 	--accent-yellow: #eab308;
 
-	/* UI Theme Colors */
+	/* UI Theme Colors (reused by Svelte components) */
 	--ui-bg-primary: rgba(0, 0, 0, 0.85);
 	--ui-bg-secondary: rgba(0, 0, 0, 0.3);
 	--ui-bg-hover: rgba(255, 255, 255, 0.05);
 	--ui-bg-element: rgba(255, 255, 255, 0.03);
+	--ui-bg-highlight: #222;
 	--ui-border: rgba(255, 255, 255, 0.1);
-	--ui-accent: var(--text-primary);
+	--ui-accent: #3b82f6;
 
 	/* Text Colors */
 	--text-primary: #e0e0e0;
 	--text-secondary: #999;
 
-	/* Effects */
+	/* Up/Down Colors */
+	--color-up: #66bb6a;
+	--color-up-strong: #43a047;
+	--color-down: #ef5350;
+	--color-down-strong: #e53935;
+
 	--backdrop-blur: blur(4px);
 }
 
-/* Status Color Classes */
+/* Sample color classes (for trade coloring) */
 .dark-green {
-	color: #006400;
+	color: var(--color-up-strong);
 	font-weight: bold;
 }
 
 .green {
-	color: #00ff00;
+	color: var(--color-up);
 }
 
 .red {
-	color: #ff0000;
+	color: var(--color-down);
 }
 
 .dark-red {
-	color: #8b0000;
+	color: var(--color-down-strong);
 	font-weight: bold;
 }
 
 .white {
-	color: white;
-}
-
-.green {
-	color: green;
-}
-
-.red {
-	color: red;
-}
-
-.white {
-	color: white;
-}
-
-/*span.green {
-    color: var(--c5);
-    font-weight: bold;
-}
-span.red {
-    color: var(--c5);
-    font-weight: bold;
-}
-*/
-span.blue {
-	color: var(--c3);
-	font-weight: bold;
+	color: var(--text-primary);
 }
