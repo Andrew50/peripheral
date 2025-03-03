@@ -1,4 +1,5 @@
-import time, psycopg2, redis, os
+import time, psycopg2, redis, os, sys
+from datetime import datetime, timedelta
 
 
 class Conn:
@@ -16,102 +17,88 @@ class Conn:
         self.redis_max_retries = int(os.environ.get("REDIS_RETRY_ATTEMPTS", "5"))
         self.redis_retry_delay = int(os.environ.get("REDIS_RETRY_DELAY", "1"))
         
-        # Connect to database with retries
-        self._connect_to_db(db_host)
+        # Initial connection with 1-minute timeout
+        start_time = datetime.now()
+        timeout = timedelta(minutes=1)
+        last_db_error = None
+        last_redis_error = None
         
-        # Connect to Redis with retries
-        self._connect_to_redis(cache_host)
+        while datetime.now() - start_time < timeout:
+            try:
+                # Try to establish both connections
+                self._connect_to_db(db_host)
+                self._connect_to_redis(cache_host)
+                
+                # If we get here, both connections were successful
+                print("Successfully connected to both database and Redis", flush=True)
+                self.tf = tf_host
+                self.polygon = os.environ.get("POLYGON_API_KEY", "")
+                return
+                
+            except psycopg2.OperationalError as e:
+                last_db_error = str(e)
+                print(f"Database connection failed: {e}", flush=True)
+                time.sleep(2)  # Short sleep before retry
+                
+            except redis.ConnectionError as e:
+                last_redis_error = str(e)
+                print(f"Redis connection failed: {e}", flush=True)
+                time.sleep(2)  # Short sleep before retry
+                
+            except Exception as e:
+                print(f"Unexpected error during connection: {e}", flush=True)
+                time.sleep(2)  # Short sleep before retry
         
-        self.tf = tf_host
-        self.polygon = os.environ.get("POLYGON_API_KEY", "")
+        # If we get here, we've timed out
+        error_msg = "Failed to establish connections within 1 minute:\n"
+        if last_db_error:
+            error_msg += f"Database error: {last_db_error}\n"
+        if last_redis_error:
+            error_msg += f"Redis error: {last_redis_error}"
+        print(error_msg, flush=True)
+        sys.exit(1)
 
-    def _connect_to_db(self, db_host, max_retries=5):
-        retry_count = 0
-        backoff_time = 1
-        
+    def _connect_to_db(self, db_host):
         # Get database credentials from environment variables
         db_port = os.environ.get("DB_PORT", "5432")
         db_user = os.environ.get("DB_USER", "postgres")
         db_password = os.environ.get("DB_PASSWORD", "")
         
-        while retry_count < max_retries:
-            try:
-                self.db = psycopg2.connect(
-                    host=db_host, 
-                    port=db_port, 
-                    user=db_user, 
-                    password=db_password
-                )
-                print("Successfully connected to database", flush=True)
-                return
-            except psycopg2.OperationalError as e:
-                retry_count += 1
-                print(f"Database connection attempt {retry_count}/{max_retries} failed: {e}", flush=True)
-                if retry_count < max_retries:
-                    print(f"Retrying in {backoff_time} seconds...", flush=True)
-                    time.sleep(backoff_time)
-                    backoff_time *= 2  # Exponential backoff
-                else:
-                    print("Max retries reached. Could not connect to database.", flush=True)
-                    raise
+        self.db = psycopg2.connect(
+            host=db_host, 
+            port=db_port, 
+            user=db_user, 
+            password=db_password,
+            connect_timeout=5  # Short timeout for individual connection attempts
+        )
+        # Test the connection
+        with self.db.cursor() as cursor:
+            cursor.execute("SELECT 1")
     
-    def _connect_to_redis(self, cache_host, max_retries=None):
-        if max_retries is None:
-            max_retries = self.redis_max_retries
-            
-        retry_count = 0
-        backoff_time = self.redis_retry_delay
-        
+    def _connect_to_redis(self, cache_host):
         # Get Redis configuration from environment variables
         redis_port = int(os.environ.get("REDIS_PORT", "6379"))
         redis_password = os.environ.get("REDIS_PASSWORD", "")
         
-        while retry_count < max_retries:
-            try:
-                # Create Redis connection with password if available
-                if redis_password:
-                    self.cache = redis.Redis(
-                        host=cache_host, 
-                        port=redis_port, 
-                        password=redis_password,
-                        socket_timeout=5.0,
-                        socket_connect_timeout=5.0,
-                        retry_on_timeout=True
-                    )
-                else:
-                    self.cache = redis.Redis(
-                        host=cache_host, 
-                        port=redis_port,
-                        socket_timeout=5.0,
-                        socket_connect_timeout=5.0,
-                        retry_on_timeout=True
-                    )
-                
-                # Test the connection
-                self.cache.ping()
-                print("Successfully connected to Redis", flush=True)
-                return
-            except (redis.exceptions.ConnectionError, redis.exceptions.ResponseError, redis.exceptions.TimeoutError) as e:
-                retry_count += 1
-                print(f"Redis connection attempt {retry_count}/{max_retries} failed: {e}", flush=True)
-                if retry_count < max_retries:
-                    print(f"Retrying in {backoff_time} seconds...", flush=True)
-                    time.sleep(backoff_time)
-                    backoff_time *= 2  # Exponential backoff
-                else:
-                    print("Max retries reached. Could not connect to Redis. Will continue to retry in the background.", flush=True)
-                    # Instead of raising, create a minimal Redis client that will retry on operations
-                    self.cache = redis.Redis(
-                        host=cache_host, 
-                        port=6379,
-                        socket_timeout=10.0,
-                        socket_connect_timeout=10.0,
-                        retry_on_timeout=True,
-                        health_check_interval=30
-                    )
-                    return
+        # Create Redis connection with password if available
+        redis_params = {
+            "host": cache_host,
+            "port": redis_port,
+            "socket_timeout": 5.0,
+            "socket_connect_timeout": 5.0,
+            "retry_on_timeout": True,
+            "health_check_interval": 30
+        }
+        
+        if redis_password:
+            redis_params["password"] = redis_password
+            
+        self.cache = redis.Redis(**redis_params)
+        # Test the connection
+        self.cache.ping()
 
     def check_connection(self):
+        """Check both database and Redis connections."""
         try:
             self.cache.ping()
             with self.db.cursor() as cursor:
@@ -123,6 +110,7 @@ class Conn:
                 self._connect_to_redis("cache")
             except Exception as e:
                 print(f"Failed to reconnect to Redis: {e}", flush=True)
+                raise
         except psycopg2.OperationalError as e:
             print(f"Database connection error during check: {e}", flush=True)
             print("Attempting to reconnect to database...", flush=True)
@@ -130,6 +118,7 @@ class Conn:
                 self._connect_to_db("db")
             except Exception as e:
                 print(f"Failed to reconnect to database: {e}", flush=True)
+                raise
         except Exception as e:
             print(f"Unexpected error during connection check: {e}", flush=True)
-            self.__init__()
+            raise
