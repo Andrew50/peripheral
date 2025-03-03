@@ -189,9 +189,17 @@ export const activeChartInstance = writable<Instance>({
 
 export function handleTimestampUpdate(serverTimestamp: number) {
     streamInfo.update((v) => {
+
+        if (v.replayActive) {
+            const now = Date.now();
+            const newOffset = serverTimestamp - now;
+            return {
+                ...v,
+                serverTimeOffset: newOffset
+            }
+        }
         const now = Date.now();
         const newOffset = serverTimestamp - now;
-
         if (v.serverTimeOffset === undefined || Math.abs(newOffset - v.serverTimeOffset) > 1000) {
             return {
                 ...v,
