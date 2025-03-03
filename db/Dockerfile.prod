@@ -7,6 +7,11 @@ COPY samples.csv /docker-entrypoint-initdb.d/samples.csv
 COPY backup.sh /usr/local/bin/backup.sh
 COPY start.sh /usr/local/bin/start.sh
 COPY prod.conf /etc/postgresql/postgresql.conf
+
+# Install cron
+RUN apt-get update && apt-get install -y cron && \
+    mkdir -p /var/log && touch /var/log/cron.log
+
 RUN chmod +x /usr/local/bin/backup.sh /usr/local/bin/start.sh
 #midnight every day
 RUN (echo "0 0 * * * /usr/local/bin/backup.sh >> /var/log/cron.log 2>&1") | crontab -
