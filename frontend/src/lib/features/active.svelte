@@ -55,7 +55,7 @@
 						ticker: String(c.ticker).trim(), // Ensure ticker is a valid string
 						securityId: c.securityId,
 						timestamp: 0, // Set timestamp to 0
-						price: 0,
+						price: 0,  // Initialize price to 0
 						active: true
 					})
 				);
@@ -79,11 +79,20 @@
 			isLoading.set(true);
 			loadError.set(null);
 
-			privateRequest<ActiveResult[]>('getActive', p, true)
+			// Create a serializable object from the params
+			const requestParams = {
+				timeframe: p.timeframe,
+				group: p.group,
+				metric: p.metric
+			};
+
+			privateRequest<ActiveResult[]>('getActive', requestParams, true)
 				.then((results: ActiveResult[]) => {
 					if (!results || !Array.isArray(results)) {
 						throw new Error('Invalid response format');
 					}
+
+					console.log('[Active] Raw response from getActive:', results);
 
 					// Filter out any results without securityId
 					const validResults = results.filter(
@@ -92,6 +101,13 @@
 
 					if (validResults.length === 0) {
 						console.warn('No valid results found');
+					} else {
+						console.log('[Active] Valid results with securityIds:', 
+							validResults.map(r => r.securityId ? 
+								`${r.ticker}: ${r.securityId}` : 
+								`${r.group}: ${r.constituents?.map(c => `${c.ticker}: ${c.securityId}`).join(', ')}`
+							)
+						);
 					}
 
 					list.set(validResults);
@@ -130,29 +146,22 @@
 
 	// Add this function to convert ActiveResult to Instance
 	function convertToInstances(items: ActiveResult[]): Instance[] {
-		return items
-			.map((item): Instance | null => {
-				// Ensure we have a valid securityId and ticker
-				if (!item.securityId) {
-					console.warn('Missing securityId for ticker:', item.ticker);
-					return null;
-				}
-
-				if (!item.ticker) {
-					console.warn('Missing ticker for securityId:', item.securityId);
-					return null;
-				}
-
+		console.log('[Active] Converting items to instances:', items);
+		
+		const instances = items
+			.filter(item => item.ticker && item.securityId) // Only include items with securityId AND ticker
+			.map((item): Instance => {
 				return {
 					ticker: String(item.ticker).trim(), // Ensure ticker is a valid string
 					securityId: item.securityId,
-					// Set timestamp to 0 to let the stream system handle it
-					timestamp: 0,
-					price: 0,
+					timestamp: 0, // Set timestamp to 0
+					price: 0, // Initialize price to 0
 					active: true
 				};
-			})
-			.filter(Boolean) as Instance[]; // Remove any null items
+			});
+			
+		console.log('[Active] Converted instances:', instances);
+		return instances;
 	}
 </script>
 
@@ -222,10 +231,19 @@
 
 		<div class="results">
 			{#if currentParams.group === 'stock'}
-				<List
-					list={writable(convertToInstances($list))}
-					columns={['Ticker', 'Price', 'Chg', 'Chg%']}
-				/>
+				{#if $list.length > 0}
+					{@const instances = convertToInstances($list)}
+					{#if instances.length > 0}
+						<List
+							list={writable(instances)}
+							columns={['Ticker', 'Price', 'Chg', 'Chg%']}
+						/>
+					{:else}
+						<div class="no-data">No valid stocks found with security IDs</div>
+					{/if}
+				{:else}
+					<div class="no-data">No stocks available</div>
+				{/if}
 			{:else}
 				<table>
 					<thead>
@@ -241,7 +259,10 @@
 							{#if i === selectedRowIndex}
 								<tr class="defalt-tr">
 									<td class="defalt-td">
-										<List list={constituentsList} columns={['Ticker', 'Price', 'Chg', 'Chg%']} />
+										<List 
+											list={constituentsList} 
+											columns={['Ticker', 'Price', 'Chg', 'Chg%']} 
+										/>
 									</td>
 								</tr>
 							{/if}
