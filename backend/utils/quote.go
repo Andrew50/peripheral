@@ -4,6 +4,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	polygon "github.com/polygon-io/client-go/rest"
@@ -24,8 +25,44 @@ func GetAggsData(client *polygon.Client, ticker string, multiplier int, timefram
 		From:       fromMillis,
 		To:         toMillis,
 	}.WithOrder(models.Order(resultsOrder)).WithLimit(bars).WithAdjusted(isAdjusted)
-	iter := client.ListAggs(context.Background(), params)
-	return iter, nil
+
+	// Add retry logic for API calls
+	maxRetries := 3
+	var lastErr error
+	var iter *iter.Iter[models.Agg]
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// Create a context with timeout for each attempt
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+
+		iter = client.ListAggs(ctx, params)
+
+		// Test the iterator by trying to get the first item
+		if iter.Next() {
+			// Reset the iterator
+			cancel()
+			iter = client.ListAggs(context.Background(), params)
+			return iter, nil
+		}
+
+		lastErr = iter.Err()
+		cancel()
+
+		if lastErr != nil {
+			log.Printf("WARN RESTY Get %s: %v, Attempt %d", ticker, lastErr, attempt)
+
+			if attempt < maxRetries {
+				// Exponential backoff
+				backoffTime := time.Duration(attempt*2) * time.Second
+				time.Sleep(backoffTime)
+			}
+		} else {
+			// No error but no data either
+			return iter, nil
+		}
+	}
+
+	return nil, fmt.Errorf("failed to get aggregates data after %d attempts: %v", maxRetries, lastErr)
 }
 
 func GetTradeAtTimestamp(client *polygon.Client, securityId int, timestamp time.Time) (models.Trade, error) {
