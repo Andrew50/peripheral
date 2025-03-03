@@ -53,6 +53,7 @@
 	import { ArrowMarkersPaneView, type ArrowMarker } from './arrowMarkers';
 	import { EventMarkersPaneView, type EventMarker } from './eventMarkers';
 	import { adjustEventsToTradingDays, handleScreenshot } from './chartHelpers';
+	import { SessionHighlighting, createDefaultSessionHighlighter } from './sessionShade';
 	let bidLine: any;
 	let askLine: any;
 	let currentBarTimestamp: number;
@@ -164,6 +165,8 @@
 		x: number;
 		y: number;
 	} | null = null;
+
+	let sessionHighlighting: SessionHighlighting;
 
 	function extendedHours(timestamp: number): boolean {
 		const date = new Date(timestamp);
@@ -309,6 +312,13 @@
 								to: toTime,
 								includeSECFilings: get(settings).showFilings
 							}).then((events) => {
+								// Check if events is empty or undefined
+								if (!events || events.length === 0) {
+									// Clear any existing events data
+									eventSeries.setData([]);
+									return; // Exit early
+								}
+								
 								const eventsByTime = new Map<number, Array<{ 
 									type: string; 
 									title: string; 
@@ -948,6 +958,13 @@
 		if (arrowSeries) {
 			arrowSeries.setData([]);
 		}
+
+		// Reset session highlighting when changing securities
+		if (sessionHighlighting) {
+			chartCandleSeries.detachPrimitive(sessionHighlighting);
+			sessionHighlighting = new SessionHighlighting(createDefaultSessionHighlighter());
+			chartCandleSeries.attachPrimitive(sessionHighlighting);
+		}
 	}
 
 	onMount(() => {
@@ -1313,6 +1330,12 @@
 
 		chartContainer.setAttribute('tabindex', '0'); // Make container focusable
 		chartContainer.focus(); // Focus the container
+
+		// Create session highlighting
+		if (chart) {
+			sessionHighlighting = new SessionHighlighting(createDefaultSessionHighlighter());
+			chartCandleSeries.attachPrimitive(sessionHighlighting);
+		}
 	});
 
 	
