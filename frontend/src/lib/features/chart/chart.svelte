@@ -52,7 +52,7 @@
 	import { addStream } from '$lib/utils/stream/interface';
 	import { ArrowMarkersPaneView, type ArrowMarker } from './arrowMarkers';
 	import { EventMarkersPaneView, type EventMarker } from './eventMarkers';
-	import html2canvas from 'html2canvas';
+	import { adjustEventsToTradingDays, handleScreenshot } from './chartHelpers';
 	let bidLine: any;
 	let askLine: any;
 	let currentBarTimestamp: number;
@@ -294,93 +294,97 @@
 				}
 				queuedLoad = () => {
 					// Add SEC filings request when loading new ticker
-					if (get(settings).showFilings) {
-						try {
-							const bars = chartCandleSeries.data();
-							if (bars.length > 0) {
-								const firstBar = bars[0];
-								const lastBar = bars[bars.length - 1];
+					try {
+						const bars = chartCandleSeries.data();
+						if (bars.length > 0) {
+							const firstBar = bars[0];
+							const lastBar = bars[bars.length - 1];
 
-								const fromTime = ESTSecondstoUTCMillis(firstBar.time as UTCTimestamp) as number;
-								const toTime = ESTSecondstoUTCMillis(lastBar.time as UTCTimestamp) as number;
+							const fromTime = ESTSecondstoUTCMillis(firstBar.time as UTCTimestamp) as number;
+							const toTime = ESTSecondstoUTCMillis(lastBar.time as UTCTimestamp) as number;
 
-								privateRequest<any[]>('getChartEvents', {
-									securityId: inst.securityId,
-									from: fromTime,
-									to: toTime
-								}).then((events) => {
-									console.log('events', events);
-									const eventsByTime = new Map<number, Array<{ 
-										type: string; 
-										title: string; 
-										url?: string; 
-										value?: string;
-										exDate?: string;
-										payoutDate?: string;
-									}>>();
+							privateRequest<any[]>('getChartEvents', {
+								securityId: inst.securityId,
+								from: fromTime,
+								to: toTime,
+								includeSECFilings: get(settings).showFilings
+							}).then((events) => {
+								const eventsByTime = new Map<number, Array<{ 
+									type: string; 
+									title: string; 
+									url?: string; 
+									value?: string;
+									exDate?: string;
+									payoutDate?: string;
+								}>>();
 
-									events.forEach((event) => {
-										// Convert timestamp from UTC milliseconds to EST seconds
-										event.timestamp = UTCSecondstoESTSeconds(
-											event.timestamp / 1000
-										) as UTCTimestamp;
-										
-										// Round to the nearest timeframe
-										const roundedTime =
-											Math.floor(event.timestamp / chartTimeframeInSeconds) *
-											chartTimeframeInSeconds;
+								events.forEach((event) => {
+									// Convert timestamp from UTC milliseconds to EST seconds
+									event.timestamp = UTCSecondstoESTSeconds(
+										event.timestamp / 1000
+									) as UTCTimestamp;
+									
+									// Round to the nearest timeframe
+									const roundedTime =
+										Math.floor(event.timestamp / chartTimeframeInSeconds) *
+										chartTimeframeInSeconds;
 
-										if (!eventsByTime.has(roundedTime)) {
-											eventsByTime.set(roundedTime, []);
-										}
-										
-										// Parse the JSON string into an object
-										let valueObj = {};
-										try {
-											valueObj = JSON.parse(event.value);
-										} catch (e) {
-											console.error("Failed to parse event value:", e, event.value);
-										}
-										
-										// Create proper event object based on type
-										if (event.type === "sec_filing") {
-											eventsByTime.get(roundedTime)?.push({
-												type: 'sec_filing',
-												title: valueObj.type || "SEC Filing",
-												url: valueObj.url
-											});
-										} else if (event.type === "split") {
-											eventsByTime.get(roundedTime)?.push({
-												type: 'split',
-												title: `Split: ${valueObj.ratio || "unknown"}`,
-												value: valueObj.ratio
-											});
-										} else if (event.type === "dividend") {
-											eventsByTime.get(roundedTime)?.push({
-												type: 'dividend',
-												title: `Dividend: $${valueObj.amount || "0.00"}`,
-												value: valueObj.amount,
-												exDate: valueObj.exDate || "Unknown",
-												payoutDate: valueObj.payDate || "Unknown"
-											});
-										}
-									});
-
-									eventSeries.setData(
-										Array.from(eventsByTime.entries()).map(([time, events]) => ({
-											time: time as UTCTimestamp,
-											events: events
-										}))
-									);
+									if (!eventsByTime.has(roundedTime)) {
+										eventsByTime.set(roundedTime, []);
+									}
+									
+									// Parse the JSON string into an object
+									let valueObj = {};
+									try {
+										valueObj = JSON.parse(event.value);
+									} catch (e) {
+										console.error("Failed to parse event value:", e, event.value);
+									}
+									
+									// Create proper event object based on type
+									if (event.type === "sec_filing") {
+										eventsByTime.get(roundedTime)?.push({
+											type: 'sec_filing',
+											title: valueObj.type || "SEC Filing",
+											url: valueObj.url
+										});
+									} else if (event.type === "split") {
+										eventsByTime.get(roundedTime)?.push({
+											type: 'split',
+											title: `Split: ${valueObj.ratio || "unknown"}`,
+											value: valueObj.ratio
+										});
+									} else if (event.type === "dividend") {
+										eventsByTime.get(roundedTime)?.push({
+											type: 'dividend',
+											title: `Dividend: $${valueObj.amount || "0.00"}`,
+											value: valueObj.amount,
+											exDate: valueObj.exDate || "Unknown",
+											payoutDate: valueObj.payDate || "Unknown"
+										});
+									}
 								});
-							}
-						} catch (error) {
-							console.warn('Failed to fetch chart events:', error);
+
+								// Convert the event data to the format expected by the markers series
+								let eventData: EventMarker[] = [];
+								eventsByTime.forEach((events, time) => {
+									eventData.push({
+										time: time as UTCTimestamp,
+										events: events,
+									});
+								});
+
+								// Adjust events to nearest trading days
+								eventData = adjustEventsToTradingDays(eventData, chartCandleSeries.data());
+								
+								// Set the data on the event markers series
+								eventSeries.setData(eventData);
+							});
 						}
-					} else {
-						// Clear any existing event markers when the setting is disabled
-						eventSeries.setData([]);
+					} catch (error) {
+						console.warn('Failed to fetch chart events:', error);
 					}
+				
 
 					if (inst.direction == 'forward') {
 						const visibleRange = chart.timeScale().getVisibleRange();
@@ -1010,7 +1014,7 @@
 					currentChartInstance.securityId
 				);
 			} else if (event.key == 's' && event.altKey) {
-				handleScreenshot();
+				handleScreenshot(chartId);
 			} else if (event.key == 'Tab' || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
 				// goes to input popup
 				if ($streamInfo.replayActive) {
@@ -1311,41 +1315,7 @@
 		chartContainer.focus(); // Focus the container
 	});
 
-	async function handleScreenshot() {
-		if (!chart) return;
-
-		try {
-			// Get the entire chart container including legend
-			const chartContainer = document.getElementById(`chart_container-${chartId}`);
-			if (!chartContainer) return;
-
-			// Use html2canvas to capture the entire container
-			const canvas = await html2canvas(chartContainer, {
-				backgroundColor: 'black', // Match your chart background
-				scale: 2, // Higher quality
-				logging: false,
-				useCORS: true
-			});
-
-			// Convert to blob
-			const blob = await new Promise<Blob>((resolve) => {
-				canvas.toBlob((blob) => {
-					if (blob) resolve(blob);
-				}, 'image/png');
-			});
-
-			// Copy to clipboard
-			await navigator.clipboard.write([
-				new ClipboardItem({
-					[blob.type]: blob
-				})
-			]);
-
-			('Chart copied to clipboard!');
-		} catch (error) {
-			console.error('Failed to copy chart:', error);
-		}
-	}
+	
 
 	// Handle event marker clicks
 	function handleEventClick(events: EventMarker['events'], x: number, y: number) {
@@ -1376,6 +1346,7 @@
 	function closeEventPopup() {
 		selectedEvent = null;
 	}
+
 </script>
 
 <div class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
