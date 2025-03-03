@@ -17,9 +17,10 @@ import (
 )
 
 type GetChartEventsArgs struct {
-	SecurityId int   `json:"securityId"`
-	From       int64 `json:"from"`
-	To         int64 `json:"to"`
+	SecurityId        int   `json:"securityId"`
+	From              int64 `json:"from"`
+	To                int64 `json:"to"`
+	IncludeSECFilings bool  `json:"includeSECFilings"`
 }
 
 type ChartEvent struct {
@@ -41,7 +42,13 @@ func GetChartEvents(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inte
 
 	// Create a WaitGroup to synchronize goroutines
 	var wg sync.WaitGroup
-	wg.Add(3) // Three tasks: splits, dividends, SEC filings
+
+	// Only add SEC filings to the waitgroup if requested
+	if args.IncludeSECFilings {
+		wg.Add(3) // Three tasks: splits, dividends, SEC filings
+	} else {
+		wg.Add(2) // Only two tasks: splits and dividends
+	}
 
 	// Create a mutex to protect the events slice during concurrent writes
 	var mutex sync.Mutex
@@ -171,58 +178,60 @@ func GetChartEvents(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inte
 		mutex.Unlock()
 	}()
 
-	// Get SEC filings in parallel
-	go func() {
-		defer wg.Done()
-		from := time.Unix(args.From/1000, 0)
-		to := time.Unix(args.To/1000, 0)
+	// Only fetch SEC filings if requested
+	if args.IncludeSECFilings {
+		go func() {
+			defer wg.Done()
+			from := time.Unix(args.From/1000, 0)
+			to := time.Unix(args.To/1000, 0)
 
-		filings, err := getStockEdgarFilings(conn, args.SecurityId, EdgarFilingOptions{
-			From: &from,
-			To:   &to,
-		})
-		if err != nil {
-			// Log the error but don't fail the entire request
-			secFilingErr = fmt.Errorf("Error fetching SEC filings for %s: %v", ticker, err)
-			return
-		}
-
-		// Process SEC filings and add to events with mutex protection
-		var filingEvents []ChartEvent
-		// Process SEC filings
-		for _, filing := range filings {
-			// The timestamp is already in UTC milliseconds
-			utcTimestamp := filing.Timestamp
-
-			// Create a structured value with filing information
-			valueMap := map[string]interface{}{
-				"type": filing.Type,
-				"date": filing.Date.Format("2006-01-02"),
-				"url":  filing.URL,
-			}
-
-			// Convert the map to JSON
-			valueJSON, err := json.Marshal(valueMap)
+			filings, err := getStockEdgarFilings(conn, args.SecurityId, EdgarFilingOptions{
+				From: &from,
+				To:   &to,
+			})
 			if err != nil {
-				fmt.Printf("Error creating filing value: %v\n", err)
-				continue
+				// Log the error but don't fail the entire request
+				secFilingErr = fmt.Errorf("Error fetching SEC filings for %s: %v", ticker, err)
+				return
 			}
 
-			// Add to events if it's within the requested time range
-			if utcTimestamp >= args.From && utcTimestamp <= args.To {
-				filingEvents = append(filingEvents, ChartEvent{
-					Timestamp: utcTimestamp,
-					Type:      "sec_filing",
-					Value:     string(valueJSON),
-				})
-			}
-		}
+			// Process SEC filings and add to events with mutex protection
+			var filingEvents []ChartEvent
+			// Process SEC filings
+			for _, filing := range filings {
+				// The timestamp is already in UTC milliseconds
+				utcTimestamp := filing.Timestamp
 
-		// Add filing events to the main events slice
-		mutex.Lock()
-		events = append(events, filingEvents...)
-		mutex.Unlock()
-	}()
+				// Create a structured value with filing information
+				valueMap := map[string]interface{}{
+					"type": filing.Type,
+					"date": filing.Date.Format("2006-01-02"),
+					"url":  filing.URL,
+				}
+
+				// Convert the map to JSON
+				valueJSON, err := json.Marshal(valueMap)
+				if err != nil {
+					fmt.Printf("Error creating filing value: %v\n", err)
+					continue
+				}
+
+				// Add to events if it's within the requested time range
+				if utcTimestamp >= args.From && utcTimestamp <= args.To {
+					filingEvents = append(filingEvents, ChartEvent{
+						Timestamp: utcTimestamp,
+						Type:      "sec_filing",
+						Value:     string(valueJSON),
+					})
+				}
+			}
+
+			// Add filing events to the main events slice
+			mutex.Lock()
+			events = append(events, filingEvents...)
+			mutex.Unlock()
+		}()
+	}
 
 	// Wait for all goroutines to complete
 	wg.Wait()
