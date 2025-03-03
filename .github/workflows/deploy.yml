@@ -404,6 +404,49 @@ jobs:
           DB_NAME=$(kubectl exec $DB_POD -- sh -c 'echo $POSTGRES_DB' 2>/dev/null || echo "postgres")
           log "Using database name: $DB_NAME"
           
+          # Scale down services that access the database to prevent conflicts during migration
+          log "Entering maintenance mode: Scaling down services that access the database..."
+          
+          # Save current replica counts to restore later
+          WORKER_REPLICAS=$(kubectl get deployment worker -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "1")
+          BACKEND_REPLICAS=$(kubectl get deployment backend -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "1")
+          TF_REPLICAS=$(kubectl get deployment tf -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "1")
+          
+          log "Current replica counts - Worker: $WORKER_REPLICAS, Backend: $BACKEND_REPLICAS, TF: $TF_REPLICAS"
+          
+          # Scale down services
+          log "Scaling down worker deployment..."
+          kubectl scale deployment worker --replicas=0 || log "Warning: Failed to scale down worker deployment"
+          
+          log "Scaling down backend deployment..."
+          kubectl scale deployment backend --replicas=0 || log "Warning: Failed to scale down backend deployment"
+          
+          log "Scaling down tf deployment..."
+          kubectl scale deployment tf --replicas=0 || log "Warning: Failed to scale down tf deployment"
+          
+          # Wait for pods to terminate
+          log "Waiting for pods to terminate..."
+          sleep 10
+          
+          # Check if all database-accessing pods are terminated
+          RUNNING_PODS=$(kubectl get pods -l 'app in (worker,backend,tf)' --field-selector=status.phase=Running 2>/dev/null | wc -l)
+          TIMEOUT=60
+          ELAPSED=0
+          
+          while [ $RUNNING_PODS -gt 1 ] && [ $ELAPSED -lt $TIMEOUT ]; do
+            log "Waiting for pods to terminate... ($ELAPSED/$TIMEOUT seconds)"
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+            RUNNING_PODS=$(kubectl get pods -l 'app in (worker,backend,tf)' --field-selector=status.phase=Running 2>/dev/null | wc -l)
+          done
+          
+          if [ $RUNNING_PODS -gt 1 ]; then
+            log "Warning: Some pods are still running after waiting $TIMEOUT seconds. Proceeding anyway."
+            kubectl get pods -l 'app in (worker,backend,tf)'
+          else
+            log "All database-accessing pods have been terminated."
+          fi
+          
           # Create a temporary directory for migrations on the pod
           kubectl exec $DB_POD -- mkdir -p /tmp/rollouts
           
@@ -426,13 +469,22 @@ jobs:
           }
           kubectl exec $DB_POD -- chmod +x /tmp/run_migrations.sh
           
-          # Execute the migration runner
-          log "Running migrations..."
-          MIGRATION_RESULT=$(kubectl exec $DB_POD -- bash /tmp/run_migrations.sh "$DB_NAME" 2>&1)
+          # Execute the migration runner with a timeout
+          log "Running migrations with a timeout of 300 seconds..."
+          timeout 300 kubectl exec $DB_POD -- bash /tmp/run_migrations.sh "$DB_NAME" > migration_output.log 2>&1
+          MIGRATION_EXIT_CODE=$?
           
-          # Check if the execution was successful
-          if [ $? -ne 0 ]; then
-            error_log "Failed to run migrations:"
+          # Capture the output
+          MIGRATION_RESULT=$(cat migration_output.log)
+          
+          # Check if the execution was successful or timed out
+          if [ $MIGRATION_EXIT_CODE -eq 124 ]; then
+            error_log "Migration timed out after 300 seconds."
+            error_log "Last output from migration:"
+            error_log "$(tail -n 20 migration_output.log)"
+            exit 1
+          elif [ $MIGRATION_EXIT_CODE -ne 0 ]; then
+            error_log "Failed to run migrations (exit code $MIGRATION_EXIT_CODE):"
             error_log "$MIGRATION_RESULT"
             exit 1
           fi
@@ -442,8 +494,27 @@ jobs:
           
           # Clean up
           kubectl exec $DB_POD -- rm -rf /tmp/rollouts /tmp/run_migrations.sh
+          rm -f migration_output.log
           
           log "Database schema updated successfully"
+          
+          # Scale services back up
+          log "Exiting maintenance mode: Scaling services back up..."
+          
+          log "Scaling worker deployment back to $WORKER_REPLICAS replicas..."
+          kubectl scale deployment worker --replicas=$WORKER_REPLICAS || log "Warning: Failed to scale worker deployment back up"
+          
+          log "Scaling backend deployment back to $BACKEND_REPLICAS replicas..."
+          kubectl scale deployment backend --replicas=$BACKEND_REPLICAS || log "Warning: Failed to scale backend deployment back up"
+          
+          log "Scaling tf deployment back to $TF_REPLICAS replicas..."
+          kubectl scale deployment tf --replicas=$TF_REPLICAS || log "Warning: Failed to scale tf deployment back up"
+          
+          log "Services scaled back up. Waiting for pods to become ready..."
+          sleep 5
+          
+          # Show the status of the deployments
+          kubectl get deployments
 
       # Deploy to Kubernetes
       - name: Deploy to Kubernetes
