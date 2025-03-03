@@ -78,8 +78,15 @@
 		await tick();
 
 		// Check if there's an initial inputString in the instance
-		const initialInputString = 'inputString' in instance ? (instance.inputString as string) : '';
-		delete instance.inputString; // Remove it from the instance object
+		const initialInputString =
+			'inputString' in instance && instance['inputString'] != null
+				? String(instance['inputString'])
+				: '';
+		// Remove inputString property (not part of the Instance interface)
+		if ('inputString' in instance) {
+			const instanceAny = instance as any;
+			delete instanceAny.inputString;
+		}
 
 		// Initialize the query with passed instance info.
 		inputQuery.update((v: InputQuery) => ({
@@ -260,10 +267,19 @@
 
 	// Mark handleKeyDown as async so we can await the validate call if needed.
 	async function handleKeyDown(event: KeyboardEvent): Promise<void> {
-		// Only process keys when the input UI is active
+		// Only process events when:
+		// 1. The input query is active
+		// 2. The hidden input is the active element
 		const currentState = get(inputQuery);
-		if (currentState.status !== 'active') return;
+		const hiddenInput = document.getElementById('hidden-input');
+
+		if (currentState.status !== 'active' || document.activeElement !== hiddenInput) {
+			return;
+		}
+
+		// We're on the hidden input, so we can stop propagation
 		event.stopPropagation();
+
 		let iQ = { ...currentState };
 		if (event.key === 'Escape') {
 			inputQuery.update((q) => ({ ...q, status: 'cancelled' }));
@@ -384,13 +400,23 @@
 	};
 	onMount(() => {
 		prevFocusedElement = document.activeElement as HTMLElement;
-		document.addEventListener('keydown', keydownHandler);
+
 		unsubscribe = inputQuery.subscribe((v: InputQuery) => {
 			if (browser) {
 				if (v.status === 'initializing') {
 					// Focus the hidden input (after a tick to allow rendering)
 					tick().then(() => {
-						document.getElementById('hidden-input')?.focus();
+						const input = document.getElementById('hidden-input');
+						if (input) {
+							// Focus only during initialization
+							input.focus();
+
+							// Add listener if not already added
+							if (!input.hasAttribute('data-has-listener')) {
+								input.addEventListener('keydown', keydownHandler);
+								input.setAttribute('data-has-listener', 'true');
+							}
+						}
 					});
 					// Use update() to mark that the UI is now active.
 					inputQuery.update((state) => ({ ...state, status: 'active' }));
@@ -415,7 +441,12 @@
 	});
 	onDestroy(() => {
 		try {
-			document.removeEventListener('keydown', keydownHandler);
+			// Remove the event listener from the hidden input instead of the document
+			const hiddenInput = document.getElementById('hidden-input');
+			if (hiddenInput) {
+				hiddenInput.removeEventListener('keydown', keydownHandler);
+			}
+			// document.removeEventListener('keydown', keydownHandler);
 			// document.removeEventListener('touchstart', onTouch);
 			unsubscribe();
 		} catch (error) {
@@ -489,18 +520,33 @@
 			<div class="title">{capitalize($inputQuery.inputType)} Input</div>
 			<div class="field-select">
 				<span class="label">Field:</span>
-				<select class="default-select" bind:value={manualInputType}>
+				<select
+					class="default-select"
+					bind:value={manualInputType}
+					on:click|stopPropagation
+					on:change|stopPropagation
+				>
 					<option value="auto">Auto</option>
 					{#each $inputQuery.possibleKeys as key}
 						<option value={key}>{capitalize(key)}</option>
 					{/each}
 				</select>
 			</div>
-			<button class="utility-button" on:click={closeWindow}>×</button>
+			<button class="utility-button" on:click|stopPropagation={closeWindow}>×</button>
 		</div>
 
 		<div class="search-bar">
-			<input type="text" placeholder="Enter Value" value={$inputQuery.inputString} readonly />
+			<input
+				type="text"
+				placeholder="Enter Value"
+				value={$inputQuery.inputString}
+				readonly
+				tabindex="-1"
+				on:click={() => {
+					// Only focus hidden input when user clicks this visible input field
+					document.getElementById('hidden-input')?.focus();
+				}}
+			/>
 		</div>
 		<div class="content-container">
 			{#if $inputQuery.instance && Object.keys($inputQuery.instance).length > 0}
@@ -573,7 +619,11 @@
 											</td>
 											<td class="defalt-td">{sec.ticker}</td>
 											<td class="defalt-td">{sec.name}</td>
-											<td class="defalt-td">{UTCTimestampToESTString(sec.timestamp)}</td>
+											<td class="defalt-td"
+												>{sec.timestamp !== undefined
+													? UTCTimestampToESTString(sec.timestamp)
+													: ''}</td
+											>
 										</tr>
 									{/each}
 								</tbody>
@@ -587,7 +637,10 @@
 							<input
 								type="datetime-local"
 								on:change={(e) => {
-									const date = new Date(e.target?.value ?? '');
+									// Use type casting in a different way that works better with Svelte compiler
+									const target = e.target;
+									const inputValue = target && 'value' in target ? String(target.value) : '';
+									const date = new Date(inputValue);
 									inputQuery.update((q) => ({
 										...q,
 										instance: {
@@ -629,14 +682,14 @@
 				</button>
 			{/each}
 		</div>-->
+		<input
+			autocomplete="off"
+			type="text"
+			id="hidden-input"
+			style="position: absolute; top: -100px; left: -100px; opacity: 0; pointer-events: auto; z-index: -1; height: 1px; width: 1px;"
+		/>
 	</div>
 {/if}
-<input
-	autocomplete="off"
-	type="text"
-	id="hidden-input"
-	style="position: absolute; opacity: 0; z-index: -1;"
-/>
 
 <style>
 	.popup-container {
