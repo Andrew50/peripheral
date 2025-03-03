@@ -4,8 +4,8 @@ import time, psycopg2, redis, os
 class Conn:
     def __init__(self, inside_container=True):
         if inside_container:
-            cache_host = "cache"
-            db_host = "db"
+            cache_host = os.environ.get("REDIS_HOST", "cache")
+            db_host = os.environ.get("DB_HOST", "db")
             tf_host = "http://tf:8501/"
         else:
             cache_host = "localhost"
@@ -23,16 +23,24 @@ class Conn:
         self._connect_to_redis(cache_host)
         
         self.tf = tf_host
-        self.polygon = "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm"
+        self.polygon = os.environ.get("POLYGON_API_KEY", "")
 
     def _connect_to_db(self, db_host, max_retries=5):
         retry_count = 0
         backoff_time = 1
         
+        # Get database credentials from environment variables
+        db_port = os.environ.get("DB_PORT", "5432")
+        db_user = os.environ.get("DB_USER", "postgres")
+        db_password = os.environ.get("DB_PASSWORD", "")
+        
         while retry_count < max_retries:
             try:
                 self.db = psycopg2.connect(
-                    host=db_host, port="5432", user="postgres", password="pass"
+                    host=db_host, 
+                    port=db_port, 
+                    user=db_user, 
+                    password=db_password
                 )
                 print("Successfully connected to database", flush=True)
                 return
@@ -54,16 +62,17 @@ class Conn:
         retry_count = 0
         backoff_time = self.redis_retry_delay
         
+        # Get Redis configuration from environment variables
+        redis_port = int(os.environ.get("REDIS_PORT", "6379"))
+        redis_password = os.environ.get("REDIS_PASSWORD", "")
+        
         while retry_count < max_retries:
             try:
-                # Get Redis password from environment variable
-                redis_password = os.environ.get("REDIS_PASSWORD", "")
-                
                 # Create Redis connection with password if available
                 if redis_password:
                     self.cache = redis.Redis(
                         host=cache_host, 
-                        port=6379, 
+                        port=redis_port, 
                         password=redis_password,
                         socket_timeout=5.0,
                         socket_connect_timeout=5.0,
@@ -72,7 +81,7 @@ class Conn:
                 else:
                     self.cache = redis.Redis(
                         host=cache_host, 
-                        port=6379,
+                        port=redis_port,
                         socket_timeout=5.0,
                         socket_connect_timeout=5.0,
                         retry_on_timeout=True

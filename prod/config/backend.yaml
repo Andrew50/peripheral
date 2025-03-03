@@ -17,7 +17,7 @@ spec:
       restartPolicy: Always # Update the restart policy to "Always"
       containers:
         - name: backend
-          image: ${DOCKER_USERNAME:-billin19}/backend:${IMAGE_TAG:-prod}
+          image: billin19/backend:prod
           imagePullPolicy: Always
           ports:
             - containerPort: 8000

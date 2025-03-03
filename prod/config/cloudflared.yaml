@@ -14,13 +14,13 @@ spec:
     spec:
       containers:
         - name: cloudflared
-          image: ${CLOUDFLARED_IMAGE:-cloudflare/cloudflared:2023.8.0}
+          image: cloudflare/cloudflared:2023.8.0
           imagePullPolicy: Always
           args:
             - tunnel
             - --no-autoupdate
             - run
-            - --token=${CLOUDFLARE_TUNNEL_TOKEN}
+            - --token=your-tunnel-token-here
           resources:
             requests:
               cpu: 100m
