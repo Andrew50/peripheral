@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -222,6 +223,11 @@ func GoogleCallback(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, err
 
 func generateState() string {
 	b := make([]byte, 16)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		// If there's an error reading random bytes, log it and return a fallback value
+		log.Printf("Error generating random state: %v", err)
+		// Use current time as fallback for some randomness
+		return base64.URLEncoding.EncodeToString([]byte(time.Now().String()))
+	}
 	return base64.URLEncoding.EncodeToString(b)
 }

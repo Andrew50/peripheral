@@ -15,16 +15,15 @@ spec:
       containers:
         - name: cloudflared
           image: cloudflare/cloudflared:latest
+          imagePullPolicy: Always
           command:
-            [
-              "cloudflared",
-              "tunnel",
-              "run",
-              "--url",
-              "http://ingress-nodeport.default.svc.cluster.local:80",
-              "--token",
-              "eyJhIjoiYTAxOGU0Yzg4YmUwZWQ0NGRhN2VhNTY4YjMxMTZiM2MiLCJ0IjoiMjdjMzY2MGUtMmI4YS00YTE1LWIwMDAtOGVjZWYxMjFmYjdjIiwicyI6IllXUmhPVE5pT0dFdE5qUTBOUzAwWTJZM0xXSTVZV0l0TlRaaU9XVTRObVJoWkdFMiJ9",
-            ]
+            - cloudflared
+            - tunnel
+            - run
+            - --url
+            - http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+            - --token
+            - eyJhIjoiYTAxOGU0Yzg4YmUwZWQ0NGRhN2VhNTY4YjMxMTZiM2MiLCJ0IjoiMjdjMzY2MGUtMmI4YS00YTE1LWIwMDAtOGVjZWYxMjFmYjdjIiwicyI6IllXUmhPVE5pT0dFdE5qUTBOUzAwWTJZM0xXSTVZV0l0TlRaaU9XVTRObVJoWkdFMiJ9
           resources:
             requests:
               cpu: 100m
@@ -32,5 +31,4 @@ spec:
             limits:
               cpu: 500m
               memory: 256Mi
-          imagePullPolicy: Always
       restartPolicy: Always

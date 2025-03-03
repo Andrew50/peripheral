@@ -389,6 +389,26 @@ func WSHandler(conn *utils.Conn) http.HandlerFunc {
 	}
 }
 
+// Health check endpoint handler
+func healthHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Create a response object
+		response := map[string]string{
+			"status":  "healthy",
+			"service": "backend",
+		}
+
+		// Set content type header
+		w.Header().Set("Content-Type", "application/json")
+
+		// Write the response
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			log.Printf("Error encoding health response: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		}
+	}
+}
+
 func StartServer() {
 	conn, cleanup := utils.InitConn(true)
 	defer cleanup()
@@ -400,6 +420,7 @@ func StartServer() {
 	http.HandleFunc("/poll", pollHandler(conn))
 	http.HandleFunc("/ws", WSHandler(conn))
 	http.HandleFunc("/private-upload", private_upload_handler(conn))
+	http.HandleFunc("/health", healthHandler())
 	fmt.Println("debug: Server running on port 5057 ----------------------------------------------------------")
 	if err := http.ListenAndServe(":5057", nil); err != nil {
 		log.Fatal(err)
