@@ -11,7 +11,7 @@ div {
 	font-family: var(--font-primary);
 }
 
-/* Text variants */
+/* Error and monotext styling */
 .error-message {
 	color: var(--c5);
 	margin-top: 10px;
@@ -75,7 +75,7 @@ hr {
 	margin: 8px 0;
 }
 
-/* Global font settings */
+/* Global font settings for all elements */
 * {
 	font-family: var(--font-primary);
 }
