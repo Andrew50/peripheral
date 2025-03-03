@@ -26,6 +26,12 @@ CREATE TABLE IF NOT EXISTS schema_versions (
   exit 1
 }
 
+# Set a longer statement timeout to allow for long-running migrations
+log "Setting statement timeout to 5 minutes..."
+PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d "$DB_NAME" -c "SET statement_timeout = '300000';" || {
+  log "Warning: Failed to set statement timeout"
+}
+
 # Get list of migration files sorted by version
 MIGRATION_FILES=$(find "$MIGRATIONS_DIR" -name "*.sql" | sort)
 
@@ -50,23 +56,56 @@ for MIGRATION_FILE in $MIGRATION_FILES; do
       DESCRIPTION="$VERSION migration"
     fi
     
-    # Apply the migration
-    PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d "$DB_NAME" -f "$MIGRATION_FILE" || {
-      error_log "Failed to apply migration: $VERSION"
-      exit 1
-    }
+    # Create a temporary file with transaction control and lock timeout
+    TEMP_SQL=$(mktemp)
+    cat > "$TEMP_SQL" << EOF
+-- Set lock timeout to 10 seconds for this transaction
+SET lock_timeout = '10000';
+
+-- Start transaction
+BEGIN;
+
+-- Apply the migration
+$(cat "$MIGRATION_FILE")
+
+-- Record the migration in schema_versions
+INSERT INTO schema_versions (version, description)
+VALUES ('$VERSION', '$DESCRIPTION')
+ON CONFLICT (version) DO NOTHING;
+
+-- Commit transaction
+COMMIT;
+EOF
     
-    # Record the migration in schema_versions
-    PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d "$DB_NAME" -c "
-      INSERT INTO schema_versions (version, description)
-      VALUES ('$VERSION', '$DESCRIPTION')
-      ON CONFLICT (version) DO NOTHING;
-    " || {
-      error_log "Failed to record migration in schema_versions: $VERSION"
-      exit 1
-    }
+    # Apply the migration with retries
+    MAX_RETRIES=3
+    RETRY_COUNT=0
+    SUCCESS=false
     
-    log "Successfully applied migration: $VERSION"
+    while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$SUCCESS" != "true" ]; do
+      if [ $RETRY_COUNT -gt 0 ]; then
+        log "Retrying migration ($RETRY_COUNT of $MAX_RETRIES)..."
+        sleep 5
+      fi
+      
+      PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d "$DB_NAME" -f "$TEMP_SQL" 2>&1 && SUCCESS=true
+      
+      if [ "$SUCCESS" != "true" ]; then
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        log "Migration attempt failed. Error output:"
+        PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d "$DB_NAME" -f "$TEMP_SQL" 2>&1 || true
+      fi
+    done
+    
+    # Clean up temp file
+    rm -f "$TEMP_SQL"
+    
+    if [ "$SUCCESS" = "true" ]; then
+      log "Successfully applied migration: $VERSION"
+    else
+      error_log "Failed to apply migration after $MAX_RETRIES attempts: $VERSION"
+      exit 1
+    fi
   else
     log "Migration already applied: $VERSION"
   fi
