@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
 )
 
 type GetActiveArgs struct {
@@ -77,12 +79,46 @@ func GetActive(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface
 	// Apply filters to the results
 	filteredResults := filterResults(results, args)
 
+	// Sort the filtered results based on metric (leader/laggard)
+	// Leaders should have highest values first, laggards should have lowest values first
+	isLeader := strings.Contains(args.Metric, "leader")
+	sortResults(filteredResults, isLeader, args.Group)
+
 	// Return only the top MAX_RESULTS items
 	if len(filteredResults) > MAX_RESULTS {
 		return filteredResults[:MAX_RESULTS], nil
 	}
 
 	return filteredResults, nil
+}
+
+// sortResults ensures that filtered results are properly sorted before being returned
+func sortResults(results []ActiveResult, isLeader bool, group string) {
+	if len(results) <= 1 {
+		return // No need to sort a single item or empty list
+	}
+
+	if group == "stock" {
+		// For stocks, sort directly by ADR
+		if isLeader {
+			// Sort by descending ADR for leaders (highest first)
+			sort.Slice(results, func(i, j int) bool {
+				return results[i].ADR > results[j].ADR
+			})
+		} else {
+			// Sort by ascending ADR for laggards (lowest first)
+			sort.Slice(results, func(i, j int) bool {
+				return results[i].ADR < results[j].ADR
+			})
+		}
+	} else {
+		// For sectors/industries, sort by their group name
+		// This doesn't affect the constituents sorting
+		// as that was already done by the Python worker
+		sort.Slice(results, func(i, j int) bool {
+			return results[i].Group < results[j].Group
+		})
+	}
 }
 
 // Filter results based on provided criteria
