@@ -392,10 +392,7 @@ func WSHandler(conn *utils.Conn) http.HandlerFunc {
 // Health check endpoint handler
 func healthHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Add CORS headers
-		addCORSHeaders(w)
-
-		// Create a response with status information
+		// Create a response object
 		response := map[string]string{
 			"status":  "healthy",
 			"service": "backend",
@@ -405,7 +402,10 @@ func healthHandler() http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 
 		// Write the response
-		json.NewEncoder(w).Encode(response)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			log.Printf("Error encoding health response: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		}
 	}
 }
 
