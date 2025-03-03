@@ -7,6 +7,11 @@ on:
 jobs:
   lint-and-build-backend:
     runs-on: ubuntu-latest
+    # Add permissions block for annotations
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: read
     steps:
       - uses: actions/checkout@v3
 
@@ -26,11 +31,11 @@ jobs:
         with:
           version: latest
           working-directory: backend
-          args: --timeout=5m --config=.golangci.yml
+          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number
           skip-cache: true
           skip-pkg-cache: true
           skip-build-cache: true
-          only-new-issues: true  # Only report new issues to reduce noise
+          # Remove the only-new-issues parameter since it requires fetching the patch
 
       - name: Go Build
         run: |

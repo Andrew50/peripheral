@@ -152,8 +152,8 @@ func public_handler(conn *utils.Conn) http.HandlerFunc {
 			if handleError(w, err, req.Function) {
 				return
 			}
-			err = json.NewEncoder(w).Encode(result)
-			if handleError(w, err, "encoding response") {
+			if err := json.NewEncoder(w).Encode(result); err != nil {
+				handleError(w, err, "encoding response")
 				return
 			}
 			return
@@ -258,8 +258,8 @@ func private_handler(conn *utils.Conn) http.HandlerFunc {
 			if handleError(w, err, req.Function) {
 				return
 			}
-			err = json.NewEncoder(w).Encode(result)
-			if handleError(w, err, "encoding response") {
+			if err := json.NewEncoder(w).Encode(result); err != nil {
+				handleError(w, err, "encoding response")
 				return
 			}
 		} else {
@@ -316,8 +316,8 @@ func queueHandler(conn *utils.Conn) http.HandlerFunc {
 		response := map[string]string{
 			"taskId": taskId,
 		}
-		err = json.NewEncoder(w).Encode(response)
-		if handleError(w, err, "190v0id") {
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			handleError(w, err, "190v0id")
 			return
 		}
 	}
@@ -346,8 +346,8 @@ func pollHandler(conn *utils.Conn) http.HandlerFunc {
 		if handleError(w, err, fmt.Sprintf("executing function %s", req.TaskId)) {
 			return
 		}
-		err = json.NewEncoder(w).Encode(result)
-		if handleError(w, err, "19inv0id") {
+		if err := json.NewEncoder(w).Encode(result); err != nil {
+			handleError(w, err, "19inv0id")
 			return
 		}
 	}
