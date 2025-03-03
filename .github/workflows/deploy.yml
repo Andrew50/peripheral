@@ -379,7 +379,7 @@ jobs:
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
           }
           
-          log "Running database rollouts from rollouts.sql file..."
+          log "Running database migrations from rollouts folder..."
           
           # Get the database pod name
           DB_POD=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
@@ -400,33 +400,48 @@ jobs:
             exit 1
           }
           
-          # Copy the rollouts.sql file to the database pod
-          log "Copying rollouts.sql to the database pod..."
-          kubectl cp db/rollouts.sql $DB_POD:/tmp/rollouts.sql || {
-            error_log "Failed to copy rollouts.sql to the database pod."
-            exit 1
-          }
-          
           # Get the database name from the pod environment
           DB_NAME=$(kubectl exec $DB_POD -- sh -c 'echo $POSTGRES_DB' 2>/dev/null || echo "postgres")
           log "Using database name: $DB_NAME"
           
-          # Execute the SQL file against the database
-          log "Executing rollouts.sql against the database..."
-          ROLLOUT_RESULT=$(kubectl exec $DB_POD -- sh -c "PGPASSWORD=\$POSTGRES_PASSWORD psql -U postgres -d $DB_NAME -f /tmp/rollouts.sql" 2>&1)
+          # Create a temporary directory for migrations on the pod
+          kubectl exec $DB_POD -- mkdir -p /tmp/rollouts
+          
+          # Copy all migration files to the pod
+          log "Copying migration files to the database pod..."
+          for MIGRATION_FILE in db/rollouts/*.sql; do
+            FILENAME=$(basename "$MIGRATION_FILE")
+            log "Copying $FILENAME..."
+            kubectl cp "$MIGRATION_FILE" "$DB_POD:/tmp/rollouts/$FILENAME" || {
+              error_log "Failed to copy migration file: $FILENAME"
+              exit 1
+            }
+          done
+          
+          # Copy the migration runner to the pod
+          log "Copying migration runner script..."
+          kubectl cp "db/run_migrations.sh" "$DB_POD:/tmp/run_migrations.sh" || {
+            error_log "Failed to copy migration runner script"
+            exit 1
+          }
+          kubectl exec $DB_POD -- chmod +x /tmp/run_migrations.sh
+          
+          # Execute the migration runner
+          log "Running migrations..."
+          MIGRATION_RESULT=$(kubectl exec $DB_POD -- bash /tmp/run_migrations.sh "$DB_NAME" 2>&1)
           
           # Check if the execution was successful
           if [ $? -ne 0 ]; then
-            error_log "Failed to execute rollouts.sql:"
-            error_log "$ROLLOUT_RESULT"
+            error_log "Failed to run migrations:"
+            error_log "$MIGRATION_RESULT"
             exit 1
           fi
           
-          log "Database rollouts executed successfully:"
-          echo "$ROLLOUT_RESULT"
+          log "Database migrations executed successfully:"
+          echo "$MIGRATION_RESULT"
           
-          # Clean up the SQL file from the pod
-          kubectl exec $DB_POD -- rm -f /tmp/rollouts.sql
+          # Clean up
+          kubectl exec $DB_POD -- rm -rf /tmp/rollouts /tmp/run_migrations.sh
           
           log "Database schema updated successfully"
 
