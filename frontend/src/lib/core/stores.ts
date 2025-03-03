@@ -79,7 +79,8 @@ export const defaultSettings: Settings = {
     adrPeriod: 20,
     filterTaS: true,
     divideTaS: false,
-    showFilings: true
+    showFilings: true,
+    enableScreensaver: true
 };
 export const settings: Writable<Settings> = writable(defaultSettings);
 export function initStores() {
