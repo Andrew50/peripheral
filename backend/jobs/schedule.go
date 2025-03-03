@@ -104,6 +104,11 @@ func updateMarketMetrics(conn *utils.Conn) error {
 
 }
 
+func isWeekend(now time.Time) bool {
+	weekday := now.Weekday()
+	return weekday == time.Saturday || weekday == time.Sunday
+}
+
 func eventLoop(now time.Time, conn *utils.Conn) {
 	year, month, day := now.Date()
 
@@ -119,7 +124,7 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 			socket.BroadcastGlobalSECFiling(filing)
 		}
 	}()
-	if !eOpenRun && now.After(eOpen) && now.Before(eClose) {
+	if !eOpenRun && now.After(eOpen) && now.Before(eClose) && !isWeekend(now) {
 		eOpenRun = true
 		eCloseRun = false
 		fmt.Println("running open schedule ----------------------")
@@ -127,7 +132,7 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 		initialize(conn)
 		pushJournals(conn, year, month, day)
 	}
-	if !eCloseRun && now.After(eClose) {
+	if (!eCloseRun && now.After(eClose)) || isWeekend(now) {
 		eOpenRun = false
 		eCloseRun = true
 		alerts.StopAlertLoop()
@@ -141,6 +146,11 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 			if err != nil {
 				fmt.Println("schedule issue: updating ticker ciks l44lgkkvv", err)
 			}
+			fmt.Println("updating market metrics !!!!!!!!!!!!!!!!!!!!!!!!!!")
+			err = updateMarketMetrics(conn)
+			if err != nil {
+				fmt.Println("schedule issue: market metrics update:", err)
+			}
 			err = simpleUpdateSecurities(conn)
 			if err != nil {
 				fmt.Println("schedule issue: dw000", err)
@@ -152,10 +162,6 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 			err = updateSectors(conn)
 			if err != nil {
 				fmt.Println("schedule issue: sector update close:", err)
-			}
-			err = updateMarketMetrics(conn)
-			if err != nil {
-				fmt.Println("schedule issue: market metrics update:", err)
 			}
 		}
 

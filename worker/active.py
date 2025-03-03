@@ -270,6 +270,7 @@ def calculate_active(data):
 
 
 def update_active(data, **args):
+    print("updating active metrics !!!!!!!!!!!!!!!!!!!!")
     return calculate_active(data)
 
 
