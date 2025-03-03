@@ -172,7 +172,7 @@ jobs:
           docker build -t $DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }} -f worker/Dockerfile.healthcheck worker
           docker build -t $DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }} -f tf/Dockerfile.prod tf
           
-          # Build DB image without hardcoded password
+          # Build DB image with cron installed for scheduled backups
           log "Building DB image with secure configuration..."
           docker build -t $DOCKER_USERNAME/db:${{ env.DOCKER_TAG }} -f db/Dockerfile.prod db
           
