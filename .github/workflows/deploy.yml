@@ -57,6 +57,9 @@ jobs:
       DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
       REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
       POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
     
     steps:
       # Print debugging information before checkout
@@ -303,6 +306,27 @@ jobs:
             exit 1
           fi
           
+          # Check if GOOGLE_CLIENT_ID secret is set
+          if [ -z "${{ secrets.GOOGLE_CLIENT_ID }}" ]; then
+            error_log "GOOGLE_CLIENT_ID secret is not available"
+            error_log "Please add the GOOGLE_CLIENT_ID secret in your GitHub repository"
+            exit 1
+          fi
+          
+          # Check if GOOGLE_CLIENT_SECRET secret is set
+          if [ -z "${{ secrets.GOOGLE_CLIENT_SECRET }}" ]; then
+            error_log "GOOGLE_CLIENT_SECRET secret is not available"
+            error_log "Please add the GOOGLE_CLIENT_SECRET secret in your GitHub repository"
+            exit 1
+          fi
+          
+          # Check if JWT_SECRET secret is set
+          if [ -z "${{ secrets.JWT_SECRET }}" ]; then
+            error_log "JWT_SECRET secret is not available"
+            error_log "Please add the JWT_SECRET secret in your GitHub repository"
+            exit 1
+          fi
+          
           log "Updating Kubernetes secrets with secure database and Redis passwords..."
           
           # Create a temporary file for the secrets
@@ -313,6 +337,9 @@ jobs:
           DB_PASSWORD_B64=$(echo -n "${{ secrets.DB_ROOT_PASSWORD }}" | base64 -w 0)
           REDIS_PASSWORD_B64=$(echo -n "${{ secrets.REDIS_PASSWORD }}" | base64 -w 0)
           POLYGON_API_KEY_B64=$(echo -n "${{ secrets.POLYGON_API_KEY }}" | base64 -w 0)
+          GOOGLE_CLIENT_ID_B64=$(echo -n "${{ secrets.GOOGLE_CLIENT_ID }}" | base64 -w 0)
+          GOOGLE_CLIENT_SECRET_B64=$(echo -n "${{ secrets.GOOGLE_CLIENT_SECRET }}" | base64 -w 0)
+          JWT_SECRET_B64=$(echo -n "${{ secrets.JWT_SECRET }}" | base64 -w 0)
           
           # Create the secrets YAML with the password from GitHub secrets
           # Standardize on DB_ROOT_PASSWORD as the primary database password key
@@ -340,6 +367,23 @@ jobs:
           type: Opaque
           data:
             api-key: ${POLYGON_API_KEY_B64}
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: google-oauth-secret
+          type: Opaque
+          data:
+            GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID_B64}
+            GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET_B64}
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: jwt-secret
+          type: Opaque
+          data:
+            JWT_SECRET: ${JWT_SECRET_B64}
           EOF
           
           # Apply the secrets to Kubernetes
@@ -361,6 +405,16 @@ jobs:
             exit 1
           fi
           
+          if ! kubectl get secret google-oauth-secret &>/dev/null; then
+            error_log "Failed to create google-oauth-secret"
+            exit 1
+          fi
+          
+          if ! kubectl get secret jwt-secret &>/dev/null; then
+            error_log "Failed to create jwt-secret"
+            exit 1
+          fi
+          
           # Verify the secrets have the correct keys
           log "Verifying secret keys are properly configured..."
           DB_SECRET_KEYS=$(kubectl get secret db-secret -o jsonpath='{.data}' | jq -r 'keys[]')
@@ -372,6 +426,18 @@ jobs:
           REDIS_SECRET_KEYS=$(kubectl get secret redis-secret -o jsonpath='{.data}' | jq -r 'keys[]')
           if [[ "$REDIS_SECRET_KEYS" != *"REDIS_PASSWORD"* ]]; then
             error_log "REDIS_PASSWORD key is missing from redis-secret"
+            exit 1
+          fi
+          
+          GOOGLE_SECRET_KEYS=$(kubectl get secret google-oauth-secret -o jsonpath='{.data}' | jq -r 'keys[]')
+          if [[ "$GOOGLE_SECRET_KEYS" != *"GOOGLE_CLIENT_ID"* ]] || [[ "$GOOGLE_SECRET_KEYS" != *"GOOGLE_CLIENT_SECRET"* ]]; then
+            error_log "Google OAuth keys are missing from google-oauth-secret"
+            exit 1
+          fi
+          
+          JWT_SECRET_KEYS=$(kubectl get secret jwt-secret -o jsonpath='{.data}' | jq -r 'keys[]')
+          if [[ "$JWT_SECRET_KEYS" != *"JWT_SECRET"* ]]; then
+            error_log "JWT_SECRET key is missing from jwt-secret"
             exit 1
           fi
           
