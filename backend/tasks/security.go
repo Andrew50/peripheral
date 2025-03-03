@@ -235,9 +235,10 @@ type GetTickerMenuDetailsResults struct {
 	Logo                        sql.NullString  `json:"logo"`
 	Icon                        sql.NullString  `json:"icon"`
 	ShareClassSharesOutstanding sql.NullInt64   `json:"share_class_shares_outstanding"`
-	Industry                    sql.NullString  `json:"industry"`
-	Sector                      sql.NullString  `json:"sector"`
-	TotalShares                 sql.NullInt64   `json:"totalShares"`
+
+	Industry    sql.NullString `json:"industry"`
+	Sector      sql.NullString `json:"sector"`
+	TotalShares sql.NullInt64  `json:"totalShares"`
 }
 
 func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
