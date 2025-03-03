@@ -1,0 +1,39 @@
+name: Branch Protection Check
+
+on:
+  pull_request:
+    branches:
+      - prod
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-source-branch:
+    name: Verify Source Branch
+    runs-on: ubuntu-latest
+    outputs:
+      branch_check_passed: ${{ steps.branch_check.outputs.passed }}
+    steps:
+      - name: Check if PR is from main branch
+        id: branch_check
+        run: |
+          echo "Pull request from: $GITHUB_HEAD_REF to: $GITHUB_BASE_REF"
+          if [ "$GITHUB_HEAD_REF" != "main" ]; then
+            echo "::error::Error: Pull requests to 'prod' are only allowed from 'main' branch"
+            echo "Current source branch: $GITHUB_HEAD_REF"
+            echo "passed=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "Source branch check passed: PR is from 'main' to 'prod'"
+          echo "passed=true" >> $GITHUB_OUTPUT
+      
+      - name: Provide instructions for branch protection setup
+        run: |
+          echo "IMPORTANT: To complete the branch protection setup:"
+          echo "1. Go to your repository Settings > Branches > Branch protection rules"
+          echo "2. Create or edit the rule for the 'prod' branch"
+          echo "3. Enable 'Require pull requests before merging'"
+          echo "4. Enable 'Require status checks to pass before merging'"
+          echo "5. Search for and select 'Verify Source Branch' as a required status check"
+          echo "6. Save the branch protection rule"
+          echo ""
+          echo "Once configured, PRs to 'prod' will only be mergeable if they come from 'main'" 
