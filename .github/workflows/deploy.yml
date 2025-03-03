@@ -56,6 +56,7 @@ jobs:
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
       DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
       REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+      POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
     
     steps:
       # Print debugging information before checkout
@@ -295,6 +296,13 @@ jobs:
             exit 1
           fi
           
+          # Check if POLYGON_API_KEY secret is set
+          if [ -z "${{ secrets.POLYGON_API_KEY }}" ]; then
+            error_log "POLYGON_API_KEY secret is not available"
+            error_log "Please add the POLYGON_API_KEY secret in your GitHub repository"
+            exit 1
+          fi
+          
           log "Updating Kubernetes secrets with secure database and Redis passwords..."
           
           # Create a temporary file for the secrets
@@ -304,6 +312,7 @@ jobs:
           # Store the secrets in variables first
           DB_PASSWORD_B64=$(echo -n "${{ secrets.DB_ROOT_PASSWORD }}" | base64 -w 0)
           REDIS_PASSWORD_B64=$(echo -n "${{ secrets.REDIS_PASSWORD }}" | base64 -w 0)
+          POLYGON_API_KEY_B64=$(echo -n "${{ secrets.POLYGON_API_KEY }}" | base64 -w 0)
           
           # Create the secrets YAML with the password from GitHub secrets
           cat > "$SECRETS_FILE" << EOF
@@ -323,6 +332,14 @@ jobs:
           data:
             db-password: ${DB_PASSWORD_B64}
             db_ROOT_PASSWORD: ${DB_PASSWORD_B64}
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: polygon-secret
+          type: Opaque
+          data:
+            api-key: ${POLYGON_API_KEY_B64}
           EOF
           
           # Apply the secrets to Kubernetes
@@ -336,6 +353,11 @@ jobs:
           
           if ! kubectl get secret db-secret &>/dev/null; then
             error_log "Failed to create db-secret"
+            exit 1
+          fi
+          
+          if ! kubectl get secret polygon-secret &>/dev/null; then
+            error_log "Failed to create polygon-secret"
             exit 1
           fi
           
@@ -562,7 +584,7 @@ jobs:
               
               # Check backend health endpoint
               log "Checking backend health endpoint..."
-              HEALTH_STATUS=$(kubectl exec $BACKEND_POD -- curl -s http://localhost:8000/health || echo "Failed")
+              HEALTH_STATUS=$(kubectl exec $BACKEND_POD -- curl -s http://localhost:5057/health || echo "Failed")
               log "Backend health status: $HEALTH_STATUS"
               
               # Test database connection
