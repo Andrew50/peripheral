@@ -10,7 +10,14 @@
 		ticker?: string;
 		securityId?: number;
 		group?: string;
-		constituents?: { ticker: string; securityId: number }[];
+		market_cap?: number;
+		dollar_volume?: number;
+		constituents?: { 
+			ticker: string; 
+			securityId: number; 
+			market_cap: number;
+			dollar_volume: number;
+		}[];
 	}
 
 	const list = writable<ActiveResult[]>([]);
@@ -32,6 +39,10 @@
 		timeframe: Timeframe;
 		group: Group;
 		metric: Metric;
+		minMarketCap?: number;
+		maxMarketCap?: number;
+		minDollarVolume?: number;
+		maxDollarVolume?: number;
 	}
 
 	const params = writable<Params>({
@@ -39,6 +50,13 @@
 		group: 'stock',
 		metric: 'price leader'
 	});
+
+	// Filter inputs
+	let minMarketCap: string = '';
+	let maxMarketCap: string = '';
+	let minDollarVolume: string = '';
+	let maxDollarVolume: string = '';
+	let showFilters: boolean = false;
 
 	let selectedRowIndex: number | null = null;
 
@@ -56,7 +74,9 @@
 						securityId: c.securityId,
 						timestamp: 0, // Set timestamp to 0
 						price: 0,  // Initialize price to 0
-						active: true
+						active: true,
+						market_cap: c.market_cap,
+						dollar_volume: c.dollar_volume
 					})
 				);
 			constituentsList.set(constituents);
@@ -72,6 +92,48 @@
 		selectedGroupName = '';
 	}
 
+	function toggleFilters() {
+		showFilters = !showFilters;
+	}
+
+	function applyFilters() {
+		// Parse filter values
+		const requestParams: Params = {
+			...currentParams
+		};
+
+		if (minMarketCap) {
+			requestParams.minMarketCap = parseFloat(minMarketCap) * 1000000; // Convert from millions to actual value
+		}
+		if (maxMarketCap) {
+			requestParams.maxMarketCap = parseFloat(maxMarketCap) * 1000000; // Convert from millions to actual value
+		}
+		if (minDollarVolume) {
+			requestParams.minDollarVolume = parseFloat(minDollarVolume) * 1000000; // Convert from millions to actual value
+		}
+		if (maxDollarVolume) {
+			requestParams.maxDollarVolume = parseFloat(maxDollarVolume) * 1000000; // Convert from millions to actual value
+		}
+
+		params.set(requestParams);
+	}
+
+	function clearFilters() {
+		minMarketCap = '';
+		maxMarketCap = '';
+		minDollarVolume = '';
+		maxDollarVolume = '';
+		
+		// Remove filter parameters
+		const requestParams: Params = {
+			timeframe: currentParams.timeframe,
+			group: currentParams.group,
+			metric: currentParams.metric
+		};
+		
+		params.set(requestParams);
+	}
+
 	onMount(() => {
 		if (!browser) return; // Only run in browser context
 
@@ -80,11 +142,25 @@
 			loadError.set(null);
 
 			// Create a serializable object from the params
-			const requestParams = {
+			const requestParams: any = {
 				timeframe: p.timeframe,
 				group: p.group,
 				metric: p.metric
 			};
+
+			// Add filter parameters if they exist
+			if (p.minMarketCap !== undefined) {
+				requestParams.minMarketCap = p.minMarketCap;
+			}
+			if (p.maxMarketCap !== undefined) {
+				requestParams.maxMarketCap = p.maxMarketCap;
+			}
+			if (p.minDollarVolume !== undefined) {
+				requestParams.minDollarVolume = p.minDollarVolume;
+			}
+			if (p.maxDollarVolume !== undefined) {
+				requestParams.maxDollarVolume = p.maxDollarVolume;
+			}
 
 			privateRequest<ActiveResult[]>('getActive', requestParams, true)
 				.then((results: ActiveResult[]) => {
@@ -156,12 +232,31 @@
 					securityId: item.securityId,
 					timestamp: 0, // Set timestamp to 0
 					price: 0, // Initialize price to 0
-					active: true
+					active: true,
+					market_cap: item.market_cap,
+					dollar_volume: item.dollar_volume
 				};
 			});
 			
 		console.log('[Active] Converted instances:', instances);
 		return instances;
+	}
+
+	// Format market cap and dollar volume for display
+	function formatCurrency(value: number | undefined): string {
+		if (value === undefined || value === null) return 'N/A';
+		
+		// Format based on size
+		if (value >= 1e12) {
+			return `$${(value / 1e12).toFixed(2)}T`;
+		} else if (value >= 1e9) {
+			return `$${(value / 1e9).toFixed(2)}B`;
+		} else if (value >= 1e6) {
+			return `$${(value / 1e6).toFixed(2)}M`;
+		} else if (value >= 1e3) {
+			return `$${(value / 1e3).toFixed(2)}K`;
+		}
+		return `$${value.toFixed(2)}`;
 	}
 </script>
 
@@ -178,7 +273,14 @@
 			<button class="utility-button" on:click={goBack}>←</button>
 			<h3>{selectedGroupName} Constituents</h3>
 		</div>
-		<List list={constituentsList} columns={['Ticker', 'Price', 'Chg', 'Chg%']} />
+		<List 
+			list={constituentsList} 
+			columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Market Cap', 'Dollar Vol']}
+			formatters={{
+				'Market Cap': (value) => formatCurrency(value),
+				'Dollar Vol': (value) => formatCurrency(value)
+			}}
+		/>
 	{:else}
 		<div class="controls">
 			<div class="select-group">
@@ -227,7 +329,62 @@
 					<option value="gap laggard">Gap Laggards</option>
 				</select>
 			</div>
+
+			<div class="filter-toggle">
+				<button class="filter-button" on:click={toggleFilters}>
+					{showFilters ? 'Hide Filters' : 'Show Filters'}
+				</button>
+			</div>
 		</div>
+
+		{#if showFilters}
+			<div class="filter-container">
+				<div class="filter-group">
+					<label for="minMarketCap">Min Market Cap ($M)</label>
+					<input 
+						type="number"
+						id="minMarketCap"
+						bind:value={minMarketCap}
+						placeholder="e.g. 100"
+						min="0"
+					/>
+				</div>
+				<div class="filter-group">
+					<label for="maxMarketCap">Max Market Cap ($M)</label>
+					<input 
+						type="number"
+						id="maxMarketCap"
+						bind:value={maxMarketCap}
+						placeholder="e.g. 10000"
+						min="0"
+					/>
+				</div>
+				<div class="filter-group">
+					<label for="minDollarVolume">Min Dollar Volume ($M)</label>
+					<input 
+						type="number"
+						id="minDollarVolume"
+						bind:value={minDollarVolume}
+						placeholder="e.g. 1"
+						min="0"
+					/>
+				</div>
+				<div class="filter-group">
+					<label for="maxDollarVolume">Max Dollar Volume ($M)</label>
+					<input 
+						type="number"
+						id="maxDollarVolume"
+						bind:value={maxDollarVolume}
+						placeholder="e.g. 100"
+						min="0"
+					/>
+				</div>
+				<div class="filter-actions">
+					<button class="apply-button" on:click={applyFilters}>Apply Filters</button>
+					<button class="clear-button" on:click={clearFilters}>Clear Filters</button>
+				</div>
+			</div>
+		{/if}
 
 		<div class="results">
 			{#if currentParams.group === 'stock'}
@@ -236,7 +393,11 @@
 					{#if instances.length > 0}
 						<List
 							list={writable(instances)}
-							columns={['Ticker', 'Price', 'Chg', 'Chg%']}
+							columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Market Cap', 'Dollar Vol']}
+							formatters={{
+								'Market Cap': (value) => formatCurrency(value),
+								'Dollar Vol': (value) => formatCurrency(value)
+							}}
 						/>
 					{:else}
 						<div class="no-data">No valid stocks found with security IDs</div>
@@ -261,7 +422,11 @@
 									<td class="defalt-td">
 										<List 
 											list={constituentsList} 
-											columns={['Ticker', 'Price', 'Chg', 'Chg%']} 
+											columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Market Cap', 'Dollar Vol']}
+											formatters={{
+												'Market Cap': (value) => formatCurrency(value),
+												'Dollar Vol': (value) => formatCurrency(value)
+											}}
 										/>
 									</td>
 								</tr>
@@ -293,6 +458,75 @@
 		display: flex;
 		flex-direction: column;
 		gap: 5px;
+	}
+
+	.filter-toggle {
+		display: flex;
+		align-items: flex-end;
+	}
+
+	.filter-button, .apply-button, .clear-button {
+		background-color: #1a1a1a;
+		color: white;
+		border: 1px solid #333;
+		border-radius: 4px;
+		padding: 8px 16px;
+		cursor: pointer;
+		transition: background-color 0.2s;
+	}
+
+	.filter-button:hover, .apply-button:hover, .clear-button:hover {
+		background-color: #252525;
+		border-color: #444;
+	}
+
+	.apply-button {
+		background-color: #089981;
+		border-color: #089981;
+	}
+
+	.apply-button:hover {
+		background-color: #07806d;
+		border-color: #07806d;
+	}
+
+	.clear-button {
+		background-color: #333;
+		border-color: #444;
+	}
+
+	.filter-container {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 15px;
+		padding: 15px;
+		background-color: #1a1a1a;
+		border-radius: 4px;
+		border: 1px solid #333;
+		margin-top: -10px;
+	}
+
+	.filter-group {
+		display: flex;
+		flex-direction: column;
+		gap: 5px;
+		min-width: 160px;
+	}
+
+	.filter-actions {
+		display: flex;
+		gap: 10px;
+		align-items: flex-end;
+		margin-left: auto;
+	}
+
+	input[type="number"] {
+		background-color: #252525;
+		border: 1px solid #333;
+		color: white;
+		border-radius: 4px;
+		padding: 8px;
+		width: 100%;
 	}
 
 	label {
@@ -417,7 +651,9 @@
 		cursor: pointer;
 	}
 
-	.retry-button:hover {
-		background: var(--ui-bg-hover);
+	.no-data {
+		text-align: center;
+		padding: 20px;
+		color: #888;
 	}
 </style>

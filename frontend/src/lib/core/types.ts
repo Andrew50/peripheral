@@ -11,6 +11,7 @@ export interface Instance {
     primary_exchange?: string;
     active?: boolean;
     market_cap?: number;
+    dollar_volume?: number;
     description?: string;
     logo?: string;
     icon?: string;

@@ -203,6 +203,7 @@
 			isreplay: $streamInfo.replayActive
 		})
 			.then((response) => {
+				console.log(response);
 				const barDataList = response.bars;
 				blockingChartQueryDispatch = inst;
 				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
