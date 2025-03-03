@@ -113,16 +113,29 @@ export function resumeReplay() {
 
 export function stopReplay() {
 	if (socket?.readyState === WebSocket.OPEN) {
-		const stopRequest: SubscriptionRequest = {
+		const realtimeRequest: SubscriptionRequest = {
 			action: 'realtime'
 		};
-		socket.send(JSON.stringify(stopRequest));
+		socket.send(JSON.stringify(realtimeRequest));
+		
+		// When leaving replay mode, we need to update streamInfo
+		streamInfo.update((v) => {
+			// Calculate current live timestamp using serverTimeOffset
+			// This ensures we immediately show the correct live time
+			const currentLiveTime = Date.now() + (v.serverTimeOffset || 0);
+			
+			return {
+				...v,
+				replayActive: false,
+				replayPaused: false,
+				timestamp: currentLiveTime,
+				lastUpdateTime: Date.now()
+			};
+		});
+		
+		// Notify charts to update
+		chartEventDispatcher.set({ event: 'realtime', chartId: 'all' as unknown as number, data: null });
 	}
-	streamInfo.update((r: ReplayInfo) => ({
-		...r,
-		replayActive: false,
-		timestamp: getRealTimeTime()
-	}));
 }
 export function changeSpeed(speed: number) {
 	if (socket?.readyState === WebSocket.OPEN) {
