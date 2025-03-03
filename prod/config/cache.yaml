@@ -4,6 +4,10 @@ kind: Deployment
 metadata:
   name: cache
 spec:
+  # Ensure only one replica to avoid conflicts
+  replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: cache
@@ -14,7 +18,7 @@ spec:
     spec:
       containers:
         - name: cache
-          image: redis:7.2-alpine
+          image: redis:latest
           imagePullPolicy: Always
           command:
             - /bin/sh
@@ -45,15 +49,19 @@ spec:
               command:
                 - redis-cli
                 - ping
-            initialDelaySeconds: 30
-            periodSeconds: 10
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
           readinessProbe:
             exec:
               command:
                 - redis-cli
                 - ping
-            initialDelaySeconds: 5
-            periodSeconds: 5
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
       volumes:
         - name: redis-config
           configMap:

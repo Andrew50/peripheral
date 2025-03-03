@@ -252,7 +252,7 @@ jobs:
 
       # Deploy to Kubernetes
       - name: Deploy to Kubernetes
-        continue-on-error: true  # Prevent workflow failure if deployments have issues
+        continue-on-error: false  # Changed from true to false to ensure workflow fails if deployment fails
         run: |
           # Function to log messages with timestamps
           log() {
@@ -304,6 +304,41 @@ jobs:
             fi
           }
           
+          # Function to record the current version of all deployments (for rollback)
+          record_current_versions() {
+            log "Recording current deployment versions for potential rollback..."
+            mkdir -p /tmp/k8s-rollback
+            
+            for deployment in "${deployments[@]}"; do
+              # Get the current image for each deployment
+              current_image=$(kubectl get deployment $deployment -o jsonpath="{.spec.template.spec.containers[0].image}" 2>/dev/null || echo "")
+              if [ -n "$current_image" ]; then
+                echo "$current_image" > /tmp/k8s-rollback/$deployment.version
+                log "Current $deployment version: $current_image"
+              else
+                log "Warning: Could not determine current version for $deployment"
+              fi
+            done
+          }
+          
+          # Function to roll back all deployments if any fail
+          rollback_all_deployments() {
+            log "Rolling back all deployments to previous versions..."
+            
+            for deployment in "${deployments[@]}"; do
+              if [ -f "/tmp/k8s-rollback/$deployment.version" ]; then
+                previous_image=$(cat /tmp/k8s-rollback/$deployment.version)
+                if [ -n "$previous_image" ]; then
+                  log "Rolling back $deployment to $previous_image"
+                  kubectl set image deployment/$deployment $deployment=$previous_image || log "Warning: Rollback failed for $deployment"
+                  kubectl rollout status deployment/$deployment --timeout=60s || log "Warning: Rollback status check failed for $deployment"
+                fi
+              fi
+            done
+            
+            log "Rollback completed. Some services may need manual attention."
+          }
+          
           # Apply Kubernetes configurations
           log "Applying Kubernetes configurations..."
           if [ "${{ env.TARGET_BRANCH }}" = "dev" ]; then
@@ -329,12 +364,14 @@ jobs:
           if ! kubectl get deployment backend &> /dev/null; then
             error_log "Backend deployment not found! Checking namespace..."
             kubectl get namespaces
-            # Don't exit with error
-            log "Will attempt to proceed with other deployments..."
+            # Fail since we can't proceed without the backend
+            log "Cannot proceed without backend deployment."
+            exit 1
           fi
           
-          # Define the deployments to update
+          # Define the deployments to update and record current versions for rollback
           deployments=("backend" "frontend" "worker" "tf")
+          record_current_versions
           
           # Perform rolling updates for all deployments at once
           log "Performing rolling updates for zero downtime using images tagged with: ${{ env.DOCKER_TAG }}..."
@@ -361,6 +398,7 @@ jobs:
           done
           
           # Continue monitoring until all deployments are completed or timed out
+          deployment_failed=false
           while true; do
             all_completed=true
             
@@ -386,6 +424,7 @@ jobs:
                 error_log "$deployment deployment timed out after ${elapsed} seconds."
                 collect_debug_info $deployment
                 deployment_status[$deployment]="failed"
+                deployment_failed=true
               else
                 # Still waiting for this deployment
                 all_completed=false
@@ -402,17 +441,40 @@ jobs:
             sleep 10
           done
           
-          # Report final status
-          log "Deployment process completed. Status summary:"
-          for deployment in "${deployments[@]}"; do
-            log "  - $deployment: ${deployment_status[$deployment]}"
-          done
-          
-          # Final status check
-          log "Checking final deployment status..."
-          kubectl get deployments
-          
-          log "Deployment process completed for branch ${{ env.TARGET_BRANCH }}. Some services may require attention."
+          # Check for any failed deployments and rollback if needed
+          if [ "$deployment_failed" = true ]; then
+            error_log "One or more deployments failed. Rolling back all deployments to maintain synchronization."
+            rollback_all_deployments
+            
+            # Report final status after rollback
+            log "Deployment FAILED and rollback completed. Status summary:"
+            for deployment in "${deployments[@]}"; do
+              if [ "${deployment_status[$deployment]}" = "failed" ]; then
+                log "  - $deployment: FAILED (rolled back)"
+              else
+                log "  - $deployment: ${deployment_status[$deployment]} (rolled back)"
+              fi
+            done
+            
+            # Final status check after rollback
+            log "Checking final deployment status after rollback..."
+            kubectl get deployments
+            
+            log "Deployment process failed for branch ${{ env.TARGET_BRANCH }}. All services have been rolled back to previous versions."
+            exit 1  # Fail the GitHub action
+          else
+            # Report final status
+            log "Deployment process completed. Status summary:"
+            for deployment in "${deployments[@]}"; do
+              log "  - $deployment: ${deployment_status[$deployment]}"
+            done
+            
+            # Final status check
+            log "Checking final deployment status..."
+            kubectl get deployments
+            
+            log "Deployment process completed successfully for branch ${{ env.TARGET_BRANCH }}."
+          fi
 
   deploy-if-build-succeeded:
     runs-on: self-hosted
@@ -619,7 +681,7 @@ jobs:
 
       # Deploy to Kubernetes
       - name: Deploy to Kubernetes
-        continue-on-error: true  # Prevent workflow failure if deployments have issues
+        continue-on-error: false  # Changed from true to false to ensure workflow fails if deployment fails
         run: |
           # Function to log messages with timestamps
           log() {
@@ -671,6 +733,41 @@ jobs:
             fi
           }
           
+          # Function to record the current version of all deployments (for rollback)
+          record_current_versions() {
+            log "Recording current deployment versions for potential rollback..."
+            mkdir -p /tmp/k8s-rollback
+            
+            for deployment in "${deployments[@]}"; do
+              # Get the current image for each deployment
+              current_image=$(kubectl get deployment $deployment -o jsonpath="{.spec.template.spec.containers[0].image}" 2>/dev/null || echo "")
+              if [ -n "$current_image" ]; then
+                echo "$current_image" > /tmp/k8s-rollback/$deployment.version
+                log "Current $deployment version: $current_image"
+              else
+                log "Warning: Could not determine current version for $deployment"
+              fi
+            done
+          }
+          
+          # Function to roll back all deployments if any fail
+          rollback_all_deployments() {
+            log "Rolling back all deployments to previous versions..."
+            
+            for deployment in "${deployments[@]}"; do
+              if [ -f "/tmp/k8s-rollback/$deployment.version" ]; then
+                previous_image=$(cat /tmp/k8s-rollback/$deployment.version)
+                if [ -n "$previous_image" ]; then
+                  log "Rolling back $deployment to $previous_image"
+                  kubectl set image deployment/$deployment $deployment=$previous_image || log "Warning: Rollback failed for $deployment"
+                  kubectl rollout status deployment/$deployment --timeout=60s || log "Warning: Rollback status check failed for $deployment"
+                fi
+              fi
+            done
+            
+            log "Rollback completed. Some services may need manual attention."
+          }
+          
           # Apply Kubernetes configurations
           log "Applying Kubernetes configurations..."
           if [ "${{ env.TARGET_BRANCH }}" = "dev" ]; then
@@ -696,12 +793,14 @@ jobs:
           if ! kubectl get deployment backend &> /dev/null; then
             error_log "Backend deployment not found! Checking namespace..."
             kubectl get namespaces
-            # Don't exit with error
-            log "Will attempt to proceed with other deployments..."
+            # Fail since we can't proceed without the backend
+            log "Cannot proceed without backend deployment."
+            exit 1
           fi
           
-          # Define the deployments to update
+          # Define the deployments to update and record current versions for rollback
           deployments=("backend" "frontend" "worker" "tf")
+          record_current_versions
           
           # Perform rolling updates for all deployments at once
           log "Performing rolling updates for zero downtime using images tagged with: ${{ env.DOCKER_TAG }}..."
@@ -728,6 +827,7 @@ jobs:
           done
           
           # Continue monitoring until all deployments are completed or timed out
+          deployment_failed=false
           while true; do
             all_completed=true
             
@@ -753,6 +853,7 @@ jobs:
                 error_log "$deployment deployment timed out after ${elapsed} seconds."
                 collect_debug_info $deployment
                 deployment_status[$deployment]="failed"
+                deployment_failed=true
               else
                 # Still waiting for this deployment
                 all_completed=false
@@ -769,14 +870,37 @@ jobs:
             sleep 10
           done
           
-          # Report final status
-          log "Deployment process completed. Status summary:"
-          for deployment in "${deployments[@]}"; do
-            log "  - $deployment: ${deployment_status[$deployment]}"
-          done
-          
-          # Final status check
-          log "Checking final deployment status..."
-          kubectl get deployments
-          
-          log "Deployment process completed for branch ${{ env.TARGET_BRANCH }}. Some services may require attention." 
+          # Check for any failed deployments and rollback if needed
+          if [ "$deployment_failed" = true ]; then
+            error_log "One or more deployments failed. Rolling back all deployments to maintain synchronization."
+            rollback_all_deployments
+            
+            # Report final status after rollback
+            log "Deployment FAILED and rollback completed. Status summary:"
+            for deployment in "${deployments[@]}"; do
+              if [ "${deployment_status[$deployment]}" = "failed" ]; then
+                log "  - $deployment: FAILED (rolled back)"
+              else
+                log "  - $deployment: ${deployment_status[$deployment]} (rolled back)"
+              fi
+            done
+            
+            # Final status check after rollback
+            log "Checking final deployment status after rollback..."
+            kubectl get deployments
+            
+            log "Deployment process failed for branch ${{ env.TARGET_BRANCH }}. All services have been rolled back to previous versions."
+            exit 1  # Fail the GitHub action
+          else
+            # Report final status
+            log "Deployment process completed. Status summary:"
+            for deployment in "${deployments[@]}"; do
+              log "  - $deployment: ${deployment_status[$deployment]}"
+            done
+            
+            # Final status check
+            log "Checking final deployment status..."
+            kubectl get deployments
+            
+            log "Deployment process completed successfully for branch ${{ env.TARGET_BRANCH }}."
+          fi 
