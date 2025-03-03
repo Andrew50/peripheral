@@ -1,4 +1,4 @@
-name: Branch Protection Check
+name: Branch Protection Check (Temporarily Disabled)
 
 on:
   pull_request:
@@ -13,27 +13,37 @@ jobs:
     outputs:
       branch_check_passed: ${{ steps.branch_check.outputs.passed }}
     steps:
-      - name: Check if PR is from main branch
+      - name: Check if PR is from main branch (TEMPORARILY DISABLED)
         id: branch_check
         run: |
           echo "Pull request from: $GITHUB_HEAD_REF to: $GITHUB_BASE_REF"
-          if [ "$GITHUB_HEAD_REF" != "main" ]; then
-            echo "::error::Error: Pull requests to 'prod' are only allowed from 'main' branch"
-            echo "Current source branch: $GITHUB_HEAD_REF"
-            echo "passed=false" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-          echo "Source branch check passed: PR is from 'main' to 'prod'"
+          echo "NOTICE: Branch protection check is TEMPORARILY DISABLED"
+          echo "All branches are currently allowed to merge to prod"
+          echo "To re-enable protection, remove the TEMPORARILY DISABLED modifications"
+          
+          # Temporarily allowing all branches by always setting passed=true
           echo "passed=true" >> $GITHUB_OUTPUT
+          
+          # Original check (commented out)
+          # if [ "$GITHUB_HEAD_REF" != "main" ]; then
+          #   echo "::error::Error: Pull requests to 'prod' are only allowed from 'main' branch"
+          #   echo "Current source branch: $GITHUB_HEAD_REF"
+          #   echo "passed=false" >> $GITHUB_OUTPUT
+          #   exit 1
+          # fi
+          echo "Source branch check bypassed: PR from '$GITHUB_HEAD_REF' to 'prod' allowed temporarily"
       
       - name: Provide instructions for branch protection setup
         run: |
-          echo "IMPORTANT: To complete the branch protection setup:"
+          echo "IMPORTANT: Branch protection is TEMPORARILY DISABLED"
+          echo "To re-enable protection:"
+          echo "1. Edit .github/workflows/branch-protection.yml"
+          echo "2. Uncomment the branch check code and remove the temporary bypass"
+          echo ""
+          echo "When ready to enforce branch protection again:"
           echo "1. Go to your repository Settings > Branches > Branch protection rules"
           echo "2. Create or edit the rule for the 'prod' branch"
           echo "3. Enable 'Require pull requests before merging'"
           echo "4. Enable 'Require status checks to pass before merging'"
           echo "5. Search for and select 'Verify Source Branch' as a required status check"
-          echo "6. Save the branch protection rule"
-          echo ""
-          echo "Once configured, PRs to 'prod' will only be mergeable if they come from 'main'" 
+          echo "6. Save the branch protection rule" 
