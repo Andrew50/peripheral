@@ -425,13 +425,14 @@ jobs:
             exit 1
           }
           
-          # Set the correct database password in the pod
-          log "Ensuring database password is correctly set..."
-          # Update the POSTGRES_PASSWORD environment variable in the database pod
-          kubectl set env pod/$DB_POD POSTGRES_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }} || {
-            error_log "Failed to update database password. This may cause connectivity issues."
-            # Continue anyway, as the pod might have been created with the correct password initially
-          }
+          # Get the database password from the Kubernetes secret
+          log "Retrieving database credentials from Kubernetes secret..."
+          DB_PASSWORD=$(kubectl get secret db-secret -o jsonpath='{.data.DB_ROOT_PASSWORD}' | base64 --decode)
+          if [ -z "$DB_PASSWORD" ]; then
+            # Fall back to the GitHub secret if the Kubernetes secret doesn't have the password
+            log "Warning: Could not retrieve DB_ROOT_PASSWORD from Kubernetes secret, using GitHub secret instead."
+            DB_PASSWORD="${{ secrets.DB_ROOT_PASSWORD }}"
+          fi
           
           # Get the database name from the pod environment
           DB_NAME=$(kubectl exec $DB_POD -- sh -c 'echo $POSTGRES_DB' 2>/dev/null || echo "postgres")
@@ -494,36 +495,42 @@ jobs:
             }
           done
           
-          # Create a custom migration runner script with the correct password
-          log "Creating migration runner script with correct credentials..."
-          MIGRATION_RUNNER=$(cat <<EOF
-          #!/bin/bash
-          # Migration runner with explicit password
-          DB_NAME=\${1:-postgres}
-          echo "Running migrations on database: \$DB_NAME"
-          # Use the explicitly set POSTGRES_PASSWORD environment variable
-          export PGPASSWORD="\$POSTGRES_PASSWORD"
-          for sql_file in /tmp/rollouts/*.sql; do
-            echo "Applying migration: \$(basename \$sql_file)"
-            psql -U postgres -d "\$DB_NAME" -f "\$sql_file" || exit 1
-          done
-          echo "All migrations applied successfully"
-          EOF
-          )
+          # Create a migration script that uses the password directly
+          log "Creating migration script with secure credentials..."
+          cat > migration_runner.sh << 'EOF'
+#!/bin/bash
+# Migration runner with explicit password
+DB_NAME="${1:-postgres}"
+echo "Running migrations on database: $DB_NAME"
+# Use the explicitly provided password from the environment variable
+export PGPASSWORD="$DB_PASSWORD"
+for sql_file in /tmp/rollouts/*.sql; do
+  echo "Applying migration: $(basename $sql_file)"
+  psql -U postgres -d "$DB_NAME" -f "$sql_file" || exit 1
+done
+echo "All migrations applied successfully"
+EOF
+
+          # Replace the placeholder with the actual password
+          sed -i "s/\$DB_PASSWORD/$DB_PASSWORD/g" migration_runner.sh
           
-          # Write the custom migration runner to a temporary file
-          echo "$MIGRATION_RUNNER" > migration_runner.sh
-          
-          # Copy the custom migration runner to the pod and make it executable
-          log "Copying custom migration runner script..."
+          # Copy the migration runner to the pod and make it executable
+          log "Copying migration runner script..."
           kubectl cp "migration_runner.sh" "$DB_POD:/tmp/run_migrations.sh" || {
-            error_log "Failed to copy custom migration runner script"
+            error_log "Failed to copy migration runner script"
             exit 1
           }
           kubectl exec $DB_POD -- chmod +x /tmp/run_migrations.sh
           
           # Clean up the local temporary file
           rm -f migration_runner.sh
+          
+          # Add diagnostic information before running migrations
+          log "Checking database connectivity from pod..."
+          kubectl exec $DB_POD -- sh -c "pg_isready -U postgres" || {
+            log "Warning: Database connectivity check failed. This might cause migration issues."
+            kubectl exec $DB_POD -- sh -c "env | grep POSTGRES"
+          }
           
           # Execute the migration runner with a timeout
           log "Running migrations with a timeout of 300 seconds..."
