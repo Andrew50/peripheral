@@ -33,6 +33,10 @@ const (
 var (
 	AggData      = make(map[int]*SecurityData)
 	AggDataMutex sync.RWMutex
+
+	// Add initialization tracking
+	aggsInitialized     bool
+	aggsInitializedLock sync.RWMutex
 )
 
 type TimeframeData struct {
@@ -100,7 +104,26 @@ func min64(a, b float64) float64 {
 	return b
 }
 
+// Function to check if aggs are initialized
+func areAggsInitialized() bool {
+	aggsInitializedLock.RLock()
+	defer aggsInitializedLock.RUnlock()
+	return aggsInitialized
+}
+
+// Function to set aggs initialization status
+func setAggsInitialized(value bool) {
+	aggsInitializedLock.Lock()
+	defer aggsInitializedLock.Unlock()
+	aggsInitialized = value
+}
+
 func appendTick(conn *utils.Conn, securityId int, timestamp int64, price float64, intVolume int64) error {
+	// Check if aggs are initialized
+	if !areAggsInitialized() {
+		return fmt.Errorf("aggregates not yet initialized")
+	}
+
 	volume := float64(intVolume)
 
 	AggDataMutex.RLock() // Acquire read lock
@@ -178,9 +201,23 @@ func GetTimeframeData(securityId int, timeframe int, extendedHours bool) ([][]fl
 	return result, nil
 }
 
-// Function to initialize aggregates
-func InitAggregates(conn *utils.Conn) error {
-	//setAggsInitialized(false) // Set to false at the start
+// InitAggregatesAsync starts the initialization process in a goroutine
+func InitAggregatesAsync(conn *utils.Conn) {
+	setAggsInitialized(false)
+	fmt.Println("Starting aggregates initialization in background...")
+	go func() {
+		if err := initAggregatesInternal(conn); err != nil {
+			fmt.Printf("Error initializing aggregates: %v\n", err)
+			return
+		}
+		setAggsInitialized(true)
+		fmt.Println("✅ Aggregates initialization completed - Ready to process ticks")
+	}()
+}
+
+// Internal function that does the actual initialization work
+func initAggregatesInternal(conn *utils.Conn) error {
+	fmt.Println("Loading historical data and initializing aggregates...")
 	ctx := context.Background()
 
 	query := `
@@ -238,28 +275,9 @@ func InitAggregates(conn *utils.Conn) error {
 	AggData = data
 	AggDataMutex.Unlock() // Release write lock
 
-	//	setAggsInitialized(true) // Set to true after successful initialization
-	fmt.Println("Finished initializing aggregates")
 	return nil
 }
 
-// Function to initialize alerts
-
-// Function to safely set the aggsInitialized flag
-/*func setAggsInitialized(value bool) {
-	AggsInitializedLock.Lock()
-	defer AggsInitializedLock.Unlock()
-	AggsInitialized = value
-	fmt.Println("debug: aggsInitialized:----------------------", AggsInitialized)
-}
-
-// Function to safely get the aggsInitialized flag
-func IsAggsInitialized() bool {
-	AggsInitializedLock.RLock()
-	defer AggsInitializedLock.RUnlock()
-	return AggsInitialized
-}
-*/
 // Function to process securities concurrently with a fixed number of workers
 type result struct {
 	securityId int

@@ -10,6 +10,7 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "prettier --check . && eslint .",
+		"lint:fix": "prettier --write . && eslint . --fix",
 		"format": "prettier --write ."
 	},
 	"devDependencies": {
@@ -35,8 +36,8 @@
 	"dependencies": {
 		"collections": "^5.1.13",
 		"date-fns": "^3.6.0",
-		"lightweight-charts": "^4.2.0",
 		"html2canvas": "^1.4.1",
+		"lightweight-charts": "^4.2.0",
 		"luxon": "^3.5.0",
 		"quill": "^2.0.2"
 	}

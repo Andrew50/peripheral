@@ -1,20 +1,29 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { type Writable, writable } from 'svelte/store';
-	import type { QuoteData, Instance } from '$lib/core/types';
+	import type { QuoteData, Instance, TradeData } from '$lib/core/types';
 	import { addStream } from '$lib/utils/stream/interface';
 	import { derived } from 'svelte/store';
 
 	export let instance: Writable<Instance>;
-	let store: Writable<QuoteData> = writable({});
+	let store = writable<QuoteData>({
+		timestamp: 0,
+		bidPrice: 0,
+		askPrice: 0,
+		bidSize: 0,
+		askSize: 0
+	});
+	let quoteStore: Writable<QuoteData>;
+	let currentSecurityId: number | null = null;
 	let release: Function = () => {};
 
 	let previousBidPrice = 0;
 	let previousAskPrice = 0;
 	let bidPriceChange = 'no-change'; // Can be 'increase', 'decrease', or 'no-change'
 	let askPriceChange = 'no-change'; // Can be 'increase', 'decrease', or 'no-change'
-	function updateStore(v: QuoteData) {
-		if (v) {
+
+	function updateStore(v: QuoteData | TradeData | number) {
+		if (typeof v === 'object' && 'bidPrice' in v && 'askPrice' in v) {
 			// Check bid price change
 			if (v.bidPrice !== undefined && v.bidPrice !== previousBidPrice) {
 				bidPriceChange = v.bidPrice > previousBidPrice ? 'increase' : 'decrease';
@@ -29,13 +38,23 @@
 	}
 
 	instance.subscribe((inst: Instance) => {
-		if (!inst.securityId) return;
+		if (!inst.securityId) {
+			return;
+		}
+
+		// Check if we already have a stream for this security ID
+		if (currentSecurityId === inst.securityId) {
+			return;
+		}
+
+		currentSecurityId = inst.securityId;
 		release();
 		release = addStream(inst, 'quote', updateStore);
 	});
 
 	onDestroy(() => {
 		release();
+		currentSecurityId = null;
 	});
 </script>
 

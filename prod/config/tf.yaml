@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tf
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tf
+  template:
+    metadata:
+      labels:
+        app: tf
+    spec:
+      initContainers:
+        - name: init-models-dir
+          image: busybox
+          command: ["sh", "-c", "mkdir -p /models && chmod -R 777 /models"]
+          volumeMounts:
+            - name: tf-persistent-storage
+              mountPath: /models
+      containers:
+        - name: tf
+          image: billin19/tf:prod
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 5000Mi
+            limits:
+              cpu: 5000m
+              memory: 10000Mi
+          volumeMounts:
+            - name: tf-persistent-storage
+              mountPath: /models
+            - name: tf-config
+              mountPath: /tmp/models.config
+              subPath: models.config
+      volumes:
+        - name: tf-persistent-storage
+          persistentVolumeClaim:
+            claimName: tf-pvc
+        - name: tf-config
+          configMap:
+            name: tf-models-config
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tf-models-config
+data:
+  models.config: |
+    model_config_list: {
+      config: {
+        name: 'default'
+        base_path: '/models/default'
+        model_platform: 'tensorflow'
+        model_version_policy: { all: {} }
+      }
+    }
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tf
+spec:
+  selector:
+    app: tf
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tf-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: tf-pv
+spec:
+  capacity:
+    storage: 20Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  local:
+    path: /mnt/disks/ssd4
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - minikube
