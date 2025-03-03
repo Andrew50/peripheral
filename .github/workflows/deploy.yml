@@ -315,7 +315,7 @@ jobs:
           POLYGON_API_KEY_B64=$(echo -n "${{ secrets.POLYGON_API_KEY }}" | base64 -w 0)
           
           # Create the secrets YAML with the password from GitHub secrets
-          # Include ALL possible key names that might be used by applications
+          # Standardize on DB_ROOT_PASSWORD as the primary database password key
           cat > "$SECRETS_FILE" << EOF
           apiVersion: v1
           kind: Secret
@@ -332,11 +332,8 @@ jobs:
             name: db-secret
           type: Opaque
           data:
-            db-password: ${DB_PASSWORD_B64}
-            db_ROOT_PASSWORD: ${DB_PASSWORD_B64}
             DB_ROOT_PASSWORD: ${DB_PASSWORD_B64}
             POSTGRES_PASSWORD: ${DB_PASSWORD_B64}
-            password: ${DB_PASSWORD_B64}
           ---
           apiVersion: v1
           kind: Secret
@@ -365,6 +362,22 @@ jobs:
             error_log "Failed to create polygon-secret"
             exit 1
           fi
+          
+          # Verify the secrets have the correct keys
+          log "Verifying secret keys are properly configured..."
+          DB_SECRET_KEYS=$(kubectl get secret db-secret -o jsonpath='{.data}' | jq -r 'keys[]')
+          if [[ "$DB_SECRET_KEYS" != *"DB_ROOT_PASSWORD"* ]]; then
+            error_log "DB_ROOT_PASSWORD key is missing from db-secret"
+            exit 1
+          fi
+          
+          REDIS_SECRET_KEYS=$(kubectl get secret redis-secret -o jsonpath='{.data}' | jq -r 'keys[]')
+          if [[ "$REDIS_SECRET_KEYS" != *"redis-password"* ]]; then
+            error_log "redis-password key is missing from redis-secret"
+            exit 1
+          fi
+          
+          log "Secret key verification passed"
           
           # Clean up
           rm -rf "$TEMP_DIR"
