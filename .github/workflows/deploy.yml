@@ -60,6 +60,7 @@ jobs:
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      GOOGLE_REDIRECT_URL: "https://atlantis.trading/auth/google/callback"
     
     steps:
       # Print debugging information before checkout
