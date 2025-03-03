@@ -5,7 +5,8 @@
 	import List from '$lib/utils/modules/list.svelte';
 	import { UTCTimestampToESTString } from '$lib/core/timestamp';
 	import { activeChartInstance } from '$lib/core/stores';
-	import { addGlobalSECFilingsStream } from '$lib/utils/stream/interface';
+	import { addGlobalSECFilingsStream, releaseGlobalSECFilingsStream } from '$lib/utils/stream/interface';
+	import { subscribeSECFilings, unsubscribeSECFilings } from '$lib/utils/stream/socket';
 
 	// Add tab state
 	let activeTab = 'filings';
@@ -13,12 +14,10 @@
 	// Store for SEC filings
 	let filings = writable<Filing[]>([]);
 	let isLoadingFilings = false;
-	let message = '';
 
 	// Store for global SEC filings
 	let globalFilings = writable<GlobalFiling[]>([]);
 	let isLoadingGlobalFilings = false;
-	let globalFilingsMessage = '';
 
 	// Store for news articles (for future implementation)
 	let news = writable<NewsItem[]>([]);
@@ -73,7 +72,6 @@
 		if (!currentSecurityId) return;
 		
 		isLoadingFilings = true;
-		message = 'Loading SEC filings...';
 		
 		try {
 			// Get current time for "to" parameter
@@ -90,12 +88,8 @@
 			});
 			
 			filings.set(result);
-			message = result.length > 0 ? 
-				`Loaded ${result.length} SEC filings for ${currentTicker}` : 
-				`No SEC filings found for ${currentTicker}`;
 		} catch (error) {
 			console.error('Failed to load SEC filings:', error);
-			message = `Error loading SEC filings: ${error}`;
 			filings.set([]);
 		} finally {
 			isLoadingFilings = false;
@@ -103,36 +97,43 @@
 	}
 
 	// Function to handle incoming global SEC filing messages
-	function handleGlobalSECFilingMessage(data: any) {
-		console.log("SEC Filing message received:", data);
+	function handleGlobalSECFilingMessage(message: any) {
+		console.log("SEC Filing message received:", message);
 		
-		// If data is an array, it's the initial load
-		if (Array.isArray(data)) {
-			console.log("Initial SEC filings data:", data);
-			globalFilings.set(data);
+		// Check if the message has a data property that is an array
+		if (message.data && Array.isArray(message.data)) {
+			console.log("Initial SEC filings data:", message.data);
+			globalFilings.set(message.data);
 			isLoadingGlobalFilings = false;
-			globalFilingsMessage = data.length > 0 ? 
-				`Loaded ${data.length} recent SEC filings` : 
-				'No recent SEC filings found';
-		} else {
-			console.log("New SEC filing:", data);
+		} else if (message.data) {
+			// Handle single filing update
+			console.log("New SEC filing:", message.data);
 			globalFilings.update(currentFilings => {
 				// Add the new filing at the beginning of the array
-				const updatedFilings = [data, ...currentFilings];
+				const updatedFilings = [message.data, ...currentFilings];
 				// Keep only the most recent 100 filings
 				if (updatedFilings.length > 100) {
 					return updatedFilings.slice(0, 100);
 				}
+				console.log("Updated SEC filings:", updatedFilings);
 				return updatedFilings;
 			});
-			globalFilingsMessage = `New SEC filing: ${data.type} for ${data.ticker}`;
+		} else {
+			console.error("Received unexpected message format:", message);
 		}
 	}
 
 	// Function to subscribe to global SEC filings
 	function subscribeToGlobalFilings() {
 		isLoadingGlobalFilings = true;
-		globalFilingsMessage = 'Loading global SEC filings...';
+		
+		// First unsubscribe if we're already subscribed
+		if (unsubscribeGlobalFilings) {
+			unsubscribeGlobalFilings();
+		}
+		
+		// Clear current filings to show we're refreshing
+		globalFilings.set([]);
 		
 		// Use the addGlobalSECFilingsStream function to subscribe
 		unsubscribeGlobalFilings = addGlobalSECFilingsStream(handleGlobalSECFilingMessage);
@@ -143,16 +144,13 @@
 		if (!currentTicker) return;
 		
 		isLoadingNews = true;
-		message = 'Loading news...';
-		
+
 		try {
 			// This would be replaced with an actual API call in the future
 			// For now, just set an empty array
 			news.set([]);
-			message = 'News feed will be implemented in a future update';
 		} catch (error) {
 			console.error('Failed to load news:', error);
-			message = `Error loading news: ${error}`;
 			news.set([]);
 		} finally {
 			isLoadingNews = false;
@@ -161,19 +159,25 @@
 
 	// Load appropriate data when tab changes
 	function handleTabChange(tab: string) {
-		activeTab = tab;
-		
-		if (tab === 'filings') {
-			loadFilings();
-		} else if (tab === 'news') {
-			loadNews();
-		} else if (tab === 'global-filings') {
-			subscribeToGlobalFilings();
+		if (tab === 'filings' && activeTab !== 'filings') {
+			// Subscribe when switching to filings tab
+			subscribeSECFilings();
+			secFilingsSubscribeFn = addGlobalSECFilingsStream(handleGlobalSECFilingMessage);
+		} else if (activeTab === 'filings' && tab !== 'filings') {
+			// Unsubscribe when switching away from filings tab
+			if (secFilingsSubscribeFn) {
+				secFilingsSubscribeFn();
+				secFilingsSubscribeFn = null;
+			}
+			unsubscribeSECFilings();
 		}
+		
+		activeTab = tab;
 	}
 
 	// Variable to hold the unsubscribe function
 	let unsubscribeGlobalFilings: Function | null = null;
+	let secFilingsSubscribeFn: Function | null = null;
 
 	// Initial load
 	onMount(() => {
@@ -188,19 +192,32 @@
 		if (unsubscribeGlobalFilings) {
 			unsubscribeGlobalFilings();
 		}
+		if (secFilingsSubscribeFn) {
+			secFilingsSubscribeFn();
+			unsubscribeSECFilings();
+		}
 	});
 </script>
 
 <div class="newsfeed-container">
 	<!-- Tab Navigation -->
 	<div class="tab-navigation">
-		<button class:active={activeTab === 'filings'} on:click={() => handleTabChange('filings')}>
-			SEC Filings
+		<button
+			class={activeTab === 'filings' ? 'active' : ''}
+			on:click={() => (activeTab = 'filings')}
+		>
+			Global SEC Filings
 		</button>
-		<button class:active={activeTab === 'global-filings'} on:click={() => handleTabChange('global-filings')}>
-			Global Filings
+		<button
+			class={activeTab === 'ticker-filings' ? 'active' : ''}
+			on:click={() => (activeTab = 'ticker-filings')}
+		>
+			Current Ticker Filings
 		</button>
-		<button class:active={activeTab === 'news'} on:click={() => handleTabChange('news')}>
+		<button
+			class={activeTab === 'news' ? 'active' : ''}
+			on:click={() => (activeTab = 'news')}
+		>
 			News
 		</button>
 		<button class:active={activeTab === 'social'} on:click={() => handleTabChange('social')}>
@@ -215,55 +232,11 @@
 	{#if activeTab === 'filings'}
 		<div class="tab-content">
 			<div class="header-section">
-				<h2>SEC Filings for {currentTicker || 'Current Ticker'}</h2>
-				<button class="refresh-button" on:click={loadFilings} disabled={isLoadingFilings}>
-					{isLoadingFilings ? 'Loading...' : 'Refresh'}
-				</button>
-			</div>
-
-			{#if message}
-				<p class="message">{message}</p>
-			{/if}
-
-			{#if isLoadingFilings}
-				<div class="loading-container">
-					<div class="loading-spinner"></div>
-					<span>Loading SEC filings...</span>
-				</div>
-			{:else}
-				<List
-					list={filings}
-					columns={['type', 'timestamp', 'url']}
-					displayNames={{
-						type: 'Filing Type',
-						timestamp: 'Date',
-						url: 'Link'
-					}}
-					formatters={{
-						timestamp: (value) => UTCTimestampToESTString(value),
-						url: (value) => 'View Filing'
-					}}
-					linkColumns={{
-						url: (item) => item.url
-					}}
-				/>
-			{/if}
-		</div>
-	{/if}
-
-	<!-- Global SEC Filings Tab -->
-	{#if activeTab === 'global-filings'}
-		<div class="tab-content">
-			<div class="header-section">
-				<h2>Global SEC Filings Feed</h2>
+				<h2>Global SEC Filings</h2>
 				<button class="refresh-button" on:click={subscribeToGlobalFilings} disabled={isLoadingGlobalFilings}>
 					{isLoadingGlobalFilings ? 'Loading...' : 'Refresh'}
 				</button>
 			</div>
-
-			{#if globalFilingsMessage}
-				<p class="message">{globalFilingsMessage}</p>
-			{/if}
 
 			{#if isLoadingGlobalFilings}
 				<div class="loading-container">
@@ -292,10 +265,20 @@
 		</div>
 	{/if}
 
+	<!-- Current Ticker SEC Filings Tab -->
+	{#if activeTab === 'ticker-filings'}
+		<div class="tab-content">
+			<svelte:component this={import('./tickerfilings.svelte')} />
+		</div>
+	{/if}
+
 	<!-- News Tab (placeholder) -->
 	{#if activeTab === 'news'}
 		<div class="tab-content">
-			<h2>News Feed</h2>
+			<h2>Latest News</h2>
+			<button class="refresh-button" on:click={loadNews} disabled={isLoadingNews}>
+				Refresh
+			</button>
 			<p class="message">News feed will be implemented in a future update.</p>
 		</div>
 	{/if}

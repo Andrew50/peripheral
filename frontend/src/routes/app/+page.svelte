@@ -52,6 +52,9 @@
 	// Add import near the top with other imports
 	import Screensaver from '$lib/features/screensaver.svelte';
 
+	// Add new import for Query component
+	import Query from '$lib/features/query.svelte';
+
 	type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'journal' | 'similar';
 
 	// Initialize all sidebar state variables as closed
@@ -70,7 +73,8 @@
 		| 'options'
 		| 'setups'
 		| 'settings'
-		| 'newsfeed';
+		| 'newsfeed'
+		| 'query';
 	interface BottomWindow {
 		id: number;
 		type: BottomWindowType;
@@ -97,7 +101,7 @@
 	let lastBottomWindow: BottomWindow | null = null;
 
 	// Initialize with default question mark avatar
-	let profilePic = `data:image/svg+xml,${encodeURIComponent(`<svg width="28" height="28" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="14" fill="#1a1c21"/><text x="14" y="19" font-family="Arial" font-size="14" fill="#e0e0e0" text-anchor="middle" font-weight="bold">?</text></svg>`)}`;
+	let profilePic = '';
 	let username = '';
 	let profilePicError = false;
 	let profileIconKey = 0;
@@ -151,9 +155,19 @@
 		if (storedProfilePic && !storedProfilePic.startsWith('data:image/svg+xml')) {
 			// It's a real image URL (like from Google)
 			profilePic = storedProfilePic;
+		} else if (storedProfilePic) {
+			// It's an SVG - use it directly
+			profilePic = storedProfilePic;
+		} else if (username) {
+			// Generate avatar based on username
+			const initial = username.charAt(0).toUpperCase();
+			profilePic = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">${initial}</text></svg>`;
+			
+			// Store it for future use
+			sessionStorage.setItem('profilePic', profilePic);
 		} else {
-			// Either no profile pic or it's an SVG - we'll regenerate it based on username
-			profilePic = '';
+			// No username available, use a more visible question mark
+			profilePic = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">?</text></svg>`;
 		}
 
 		console.log('Profile data on mount:', {
@@ -554,12 +568,27 @@
 		if (username) {
 			const initial = username.charAt(0).toUpperCase();
 			console.log('Using username initial for avatar:', initial);
-			return `data:image/svg+xml,${encodeURIComponent(`<svg width="28" height="28" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="14" fill="#1a1c21"/><text x="14" y="19" font-family="Arial" font-size="14" fill="#e0e0e0" text-anchor="middle" font-weight="bold">${initial}</text></svg>`)}`;
+			// Use a simpler SVG format to ensure browser compatibility
+			const avatar = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">${initial}</text></svg>`;
+			
+			// Update the profilePic value so we don't regenerate each time
+			profilePic = avatar;
+			if (browser) {
+				sessionStorage.setItem('profilePic', avatar);
+			}
+			
+			return avatar;
 		}
 
-		// Fallback if nothing else is available
+		// Fallback if nothing else is available - improved visibility with simpler SVG format
 		console.log('No username available, using ? fallback');
-		return `data:image/svg+xml,${encodeURIComponent(`<svg width="28" height="28" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="14" fill="#1a1c21"/><text x="14" y="19" font-family="Arial" font-size="14" fill="#e0e0e0" text-anchor="middle" font-weight="bold">?</text></svg>`)}`;
+		// Use a simpler SVG format to ensure browser compatibility
+		const fallbackAvatar = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">?</text></svg>`;
+		
+		// Store this fallback
+		profilePic = fallbackAvatar;
+		
+		return fallbackAvatar;
 	}
 
 	// Keep the getProfileDisplay function for backward compatibility
@@ -570,6 +599,23 @@
 	function handleProfilePicError() {
 		console.log('Profile picture failed to load:', profilePic);
 		profilePicError = true;
+		
+		// Generate a fallback immediately
+		if (username) {
+			const initial = username.charAt(0).toUpperCase();
+			profilePic = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">${initial}</text></svg>`;
+		} else {
+			profilePic = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">?</text></svg>`;
+		}
+		
+		// Update the stored value with our fallback
+		if (browser) {
+			sessionStorage.setItem('profilePic', profilePic);
+		}
+		
+		// Force refresh
+		currentProfileDisplay = profilePic;
+		profileIconKey++;
 	}
 
 	function startSidebarResize(event: MouseEvent | TouchEvent) {
@@ -701,6 +747,8 @@
 									<Settings />
 								{:else if w.type === 'newsfeed'}
 									<Newsfeed />
+								{:else if w.type === 'query'}
+									<Query />
 								{/if}
 							</div>
 						</div>
@@ -786,6 +834,12 @@
 				on:click={() => openBottomWindow('screener')}
 			>
 				Screener
+			</button>
+			<button
+				class="toggle-button {bottomWindows.some((w) => w.type === 'query') ? 'active' : ''}"
+				on:click={() => openBottomWindow('query')}
+			>
+				Query
 			</button>
 			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'active') ? 'active' : ''}"
@@ -877,7 +931,15 @@
 			</button>
 
 			<button class="profile-button" on:click={toggleSettings} aria-label="Toggle Settings">
-				<img src={getProfileDisplay()} alt="Profile" class="pfp" on:error={handleProfilePicError} />
+				<!-- Add key to force re-render when the profile changes -->
+				{#key profileIconKey}
+					<img 
+						src={getProfileDisplay()} 
+						alt="Profile" 
+						class="pfp" 
+						on:error={handleProfilePicError} 
+					/>
+				{/key}
 			</button>
 		</div>
 	</div>
@@ -1055,6 +1117,10 @@
 		border-radius: 50%;
 		cursor: pointer;
 		margin-left: 8px;
+		background-color: var(--c3);
+		border: 1px solid var(--c4);
+		overflow: hidden;
+		display: block;
 	}
 
 	.speed-label {
@@ -1304,5 +1370,15 @@
 		padding: 0;
 		width: 100%;
 		height: 100%;
+	}
+
+	.profile-button {
+		background: none;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 	}
 </style>
