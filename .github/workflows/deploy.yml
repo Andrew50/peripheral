@@ -107,7 +107,7 @@ jobs:
         run: |
           echo "Docker username secret: $(if [ -n "${{ secrets.DOCKER_USERNAME }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
           echo "Docker token secret: $(if [ -n "${{ secrets.DOCKER_TOKEN }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
-          echo "DB password secret: $(if [ -n "${{ secrets.DB_PASSWORD }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
+          echo "DB password secret: $(if [ -n "${{ secrets.DB_ROOT_PASSWORD }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
       
       # Setup and configuration
       - name: Setup deployment
@@ -273,10 +273,10 @@ jobs:
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
           }
           
-          # Check if DB_PASSWORD secret is set
-          if [ -z "${{ secrets.DB_PASSWORD }}" ]; then
-            error_log "DB_PASSWORD secret is not available"
-            error_log "Please add the DB_PASSWORD secret in your GitHub repository"
+          # Check if DB_ROOT_PASSWORD secret is set
+          if [ -z "${{ secrets.DB_ROOT_PASSWORD }}" ]; then
+            error_log "DB_ROOT_PASSWORD secret is not available"
+            error_log "Please add the DB_ROOT_PASSWORD secret in your GitHub repository"
             exit 1
           fi
           
@@ -302,7 +302,7 @@ jobs:
             name: db-secret
           type: Opaque
           data:
-            db-password: $(echo -n "${{ secrets.DB_PASSWORD }}" | base64 -w 0)
+            db-password: $(echo -n "${{ secrets.DB_ROOT_PASSWORD }}" | base64 -w 0)
           EOF
           
           # Apply the secrets to Kubernetes
