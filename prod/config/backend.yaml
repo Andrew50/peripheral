@@ -4,8 +4,12 @@ metadata:
   name: backend
   labels:
     app: backend
+  annotations:
+    kubernetes.io/description: "Backend deployment - DO NOT SCALE beyond 1 replica"
 spec:
   replicas: 1
+  strategy:
+    type: Recreate # Ensures no more than 1 pod exists during updates
   selector:
     matchLabels:
       app: backend
