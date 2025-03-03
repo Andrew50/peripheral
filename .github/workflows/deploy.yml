@@ -315,6 +315,7 @@ jobs:
           POLYGON_API_KEY_B64=$(echo -n "${{ secrets.POLYGON_API_KEY }}" | base64 -w 0)
           
           # Create the secrets YAML with the password from GitHub secrets
+          # Include ALL possible key names that might be used by applications
           cat > "$SECRETS_FILE" << EOF
           apiVersion: v1
           kind: Secret
@@ -323,6 +324,7 @@ jobs:
           type: Opaque
           data:
             redis-password: ${REDIS_PASSWORD_B64}
+            REDIS_PASSWORD: ${REDIS_PASSWORD_B64}
           ---
           apiVersion: v1
           kind: Secret
@@ -332,6 +334,9 @@ jobs:
           data:
             db-password: ${DB_PASSWORD_B64}
             db_ROOT_PASSWORD: ${DB_PASSWORD_B64}
+            DB_ROOT_PASSWORD: ${DB_PASSWORD_B64}
+            POSTGRES_PASSWORD: ${DB_PASSWORD_B64}
+            password: ${DB_PASSWORD_B64}
           ---
           apiVersion: v1
           kind: Secret
@@ -365,6 +370,15 @@ jobs:
           rm -rf "$TEMP_DIR"
           
           log "Kubernetes secrets updated successfully"
+          
+          # Restart pods to apply the new secrets
+          log "Restarting pods to apply the new secrets..."
+          kubectl rollout restart deployment/backend
+          kubectl rollout restart deployment/worker
+          
+          # Wait for the restart to begin
+          sleep 5
+          log "Deployments restarted to pick up new secrets"
 
       # Run database rollouts
       - name: Run Database Rollouts
@@ -398,6 +412,14 @@ jobs:
             error_log "Database pod is not ready after waiting 120 seconds."
             kubectl describe pod/$DB_POD
             exit 1
+          }
+          
+          # Set the correct database password in the pod
+          log "Ensuring database password is correctly set..."
+          # Update the POSTGRES_PASSWORD environment variable in the database pod
+          kubectl set env pod/$DB_POD POSTGRES_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }} || {
+            error_log "Failed to update database password. This may cause connectivity issues."
+            # Continue anyway, as the pod might have been created with the correct password initially
           }
           
           # Get the database name from the pod environment
@@ -461,13 +483,36 @@ jobs:
             }
           done
           
-          # Copy the migration runner to the pod
-          log "Copying migration runner script..."
-          kubectl cp "db/run_migrations.sh" "$DB_POD:/tmp/run_migrations.sh" || {
-            error_log "Failed to copy migration runner script"
+          # Create a custom migration runner script with the correct password
+          log "Creating migration runner script with correct credentials..."
+          MIGRATION_RUNNER=$(cat <<EOF
+          #!/bin/bash
+          # Migration runner with explicit password
+          DB_NAME=\${1:-postgres}
+          echo "Running migrations on database: \$DB_NAME"
+          # Use the explicitly set POSTGRES_PASSWORD environment variable
+          export PGPASSWORD="\$POSTGRES_PASSWORD"
+          for sql_file in /tmp/rollouts/*.sql; do
+            echo "Applying migration: \$(basename \$sql_file)"
+            psql -U postgres -d "\$DB_NAME" -f "\$sql_file" || exit 1
+          done
+          echo "All migrations applied successfully"
+          EOF
+          )
+          
+          # Write the custom migration runner to a temporary file
+          echo "$MIGRATION_RUNNER" > migration_runner.sh
+          
+          # Copy the custom migration runner to the pod and make it executable
+          log "Copying custom migration runner script..."
+          kubectl cp "migration_runner.sh" "$DB_POD:/tmp/run_migrations.sh" || {
+            error_log "Failed to copy custom migration runner script"
             exit 1
           }
           kubectl exec $DB_POD -- chmod +x /tmp/run_migrations.sh
+          
+          # Clean up the local temporary file
+          rm -f migration_runner.sh
           
           # Execute the migration runner with a timeout
           log "Running migrations with a timeout of 300 seconds..."
