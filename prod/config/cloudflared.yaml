@@ -14,23 +14,18 @@ spec:
     spec:
       containers:
         - name: cloudflared
-          image: cloudflare/cloudflared:latest
-          command:
-            [
-              "cloudflared",
-              "tunnel",
-              "run",
-              "--url",
-              "http://ingress-nodeport.default.svc.cluster.local:80",
-              "--token",
-              "eyJhIjoiYTAxOGU0Yzg4YmUwZWQ0NGRhN2VhNTY4YjMxMTZiM2MiLCJ0IjoiMjdjMzY2MGUtMmI4YS00YTE1LWIwMDAtOGVjZWYxMjFmYjdjIiwicyI6IllXUmhPVE5pT0dFdE5qUTBOUzAwWTJZM0xXSTVZV0l0TlRaaU9XVTRObVJoWkdFMiJ9",
-            ]
+          image: ${CLOUDFLARED_IMAGE:-cloudflare/cloudflared:2023.8.0}
+          imagePullPolicy: Always
+          args:
+            - tunnel
+            - --no-autoupdate
+            - run
+            - --token=${CLOUDFLARE_TUNNEL_TOKEN}
           resources:
             requests:
               cpu: 100m
               memory: 128Mi
             limits:
               cpu: 500m
-              memory: 256Mi
-          imagePullPolicy: Always
+              memory: 512Mi
       restartPolicy: Always
