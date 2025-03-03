@@ -45,7 +45,18 @@ spec:
             - -c
             - >
               echo "Waiting for database and Redis to be ready...";
-              python3 /app/db_check.py
+              if [ -f "/app/db_check.py" ]; then
+                python3 /app/db_check.py
+              else
+                echo "db_check.py not found, using inline script";
+                until python3 -c "import psycopg2, os; psycopg2.connect(host=os.environ.get('DB_HOST'), port=int(os.environ.get('DB_PORT')), user=os.environ.get('DB_USER'), password=os.environ.get('DB_PASSWORD'))"; do
+                  echo "Database not ready yet, retrying in 5 seconds...";
+                  sleep 5;
+                done;
+                echo "Database is ready.";
+                echo "Checking Redis connection...";
+                python3 -c "import redis, os; host=os.environ.get('REDIS_HOST'); port=int(os.environ.get('REDIS_PORT')); password=os.environ.get('REDIS_PASSWORD'); r = redis.Redis(host=host, port=port, password=password); r.ping(); print('Redis connection successful.');"
+              fi
           env:
             - name: REDIS_HOST
               value: "cache"
@@ -109,7 +120,11 @@ spec:
                 - /bin/sh
                 - -c
                 - |
-                  python3 /app/db_check.py
+                  if [ -f "/app/db_check.py" ]; then
+                    python3 /app/db_check.py
+                  else
+                    python3 -c 'import os, time, socket; host=os.environ["REDIS_HOST"]; port=int(os.environ["REDIS_PORT"]); s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); try: s.connect((host, port)); s.close(); exit(0); except Exception as e: print(f"Redis connection failed: {e}"); exit(1);'
+                  fi
             initialDelaySeconds: 60
             periodSeconds: 30
             timeoutSeconds: 10
@@ -120,48 +135,52 @@ spec:
                 - /bin/sh
                 - -c
                 - |
-                  python3 /app/db_check.py
+                  if [ -f "/app/db_check.py" ]; then
+                    python3 /app/db_check.py
+                  else
+                    python3 -c 'import os, time, socket, psycopg2; host=os.environ["REDIS_HOST"]; port=int(os.environ["REDIS_PORT"]); s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); try: s.connect((host, port)); s.close(); print("Redis connection successful"); except Exception as e: print(f"Redis connection failed: {e}"); exit(1); try: conn = psycopg2.connect(host=os.environ.get("DB_HOST"), port=int(os.environ.get("DB_PORT")), user=os.environ.get("DB_USER"), password=os.environ.get("DB_PASSWORD")); conn.close(); print("Database connection successful"); exit(0); except Exception as e: print(f"Database connection failed: {e}"); exit(1);'
+                  fi
             initialDelaySeconds: 30
             periodSeconds: 20
             timeoutSeconds: 10
             failureThreshold: 3
 
-        # Health check sidecar container
-        - name: db-healthcheck
-          image: billin19/worker-healthcheck:prod
-          imagePullPolicy: Always
-          env:
-            - name: REDIS_HOST
-              value: "cache"
-            - name: REDIS_PORT
-              value: "6379"
-            - name: REDIS_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: redis-secret
-                  key: redis-password
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: db-secret
-                  key: db-password
-            - name: DB_HOST
-              value: "db"
-            - name: DB_PORT
-              value: "5432"
-            - name: DB_USER
-              value: "postgres"
-            - name: HEALTHCHECK_INTERVAL
-              value: "30"
-            - name: HEALTHCHECK_MAX_INTERVAL
-              value: "300"
-          resources:
-            requests:
-              cpu: 50m
-              memory: 64Mi
-            limits:
-              cpu: 100m
-              memory: 128Mi
+        # Health check sidecar container - temporarily commented out until image is available
+        # - name: db-healthcheck
+        #   image: billin19/worker-healthcheck:prod
+        #   imagePullPolicy: Always
+        #   env:
+        #     - name: REDIS_HOST
+        #       value: "cache"
+        #     - name: REDIS_PORT
+        #       value: "6379"
+        #     - name: REDIS_PASSWORD
+        #       valueFrom:
+        #         secretKeyRef:
+        #           name: redis-secret
+        #           key: redis-password
+        #     - name: DB_PASSWORD
+        #       valueFrom:
+        #         secretKeyRef:
+        #           name: db-secret
+        #           key: db-password
+        #     - name: DB_HOST
+        #       value: "db"
+        #     - name: DB_PORT
+        #       value: "5432"
+        #     - name: DB_USER
+        #       value: "postgres"
+        #     - name: HEALTHCHECK_INTERVAL
+        #       value: "30"
+        #     - name: HEALTHCHECK_MAX_INTERVAL
+        #       value: "300"
+        #   resources:
+        #     requests:
+        #       cpu: 50m
+        #       memory: 64Mi
+        #     limits:
+        #       cpu: 100m
+        #       memory: 128Mi
       #     volumeMounts:
       #       - name: worker-volume
       #         mountPath: /app/models
