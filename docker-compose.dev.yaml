@@ -10,6 +10,11 @@ services:
             - ./backend/:/app
         networks:
             - compose_network
+        environment:
+            - DB_USER=postgres
+            - DB_PASSWORD=devpassword
+            - DB_HOST=db
+            - POSTGRES_DB=postgres
     db:
         build:
            context: ./db
@@ -21,6 +26,10 @@ services:
         volumes:
             - db:/var/lib/postgresql/data
         restart: unless-stopped
+        environment:
+            - POSTGRES_USER=postgres
+            - POSTGRES_PASSWORD=devpassword
+            - POSTGRES_DB=postgres
 
 
     frontend:
@@ -48,6 +57,9 @@ services:
             - tf:/models
         networks:
           - compose_network
+        environment:
+            - MODEL_NAME=1
+            - MODEL_VERSION=9
 
 
     worker: 
@@ -60,6 +72,13 @@ services:
             - ./worker:/app #for hot reload
             - tf:/models
         restart: unless-stopped
+        environment:
+            - DB_USER=postgres
+            - DB_PASSWORD=devpassword
+            - DB_HOST=db
+            - REDIS_HOST=cache
+            - TF_MODEL_NAME=1
+            - TF_MODEL_VERSION=9
         deploy:
           resources:
             limits:
