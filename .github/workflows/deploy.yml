@@ -400,10 +400,22 @@ jobs:
             log "Updating $deployment deployment..."
             kubectl set image deployment/$deployment $deployment=$DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }}
             
-            # If this is the worker deployment, also update the healthcheck container
+            # If this is the worker deployment, also check if the healthcheck container exists
             if [ "$deployment" = "worker" ]; then
-              log "Updating worker-healthcheck container in worker deployment..."
-              kubectl set image deployment/worker db-healthcheck=$DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }}
+              log "Checking for healthcheck container in worker deployment..."
+              
+              # Check if the healthcheck container exists in the deployment
+              CONTAINERS=$(kubectl get deployment/worker -o jsonpath='{.spec.template.spec.containers[*].name}' 2>/dev/null)
+              if [[ $CONTAINERS == *"db-healthcheck"* ]]; then
+                log "Found db-healthcheck container, updating image..."
+                kubectl set image deployment/worker db-healthcheck=$DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }}
+              elif [[ $CONTAINERS == *"worker-healthcheck"* ]]; then
+                log "Found worker-healthcheck container, updating image..."
+                kubectl set image deployment/worker worker-healthcheck=$DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }}
+              else
+                log "No healthcheck container found in worker deployment. This is expected if the container is commented out in the configuration."
+                log "Skipping healthcheck container update."
+              fi
             fi
           done
           
