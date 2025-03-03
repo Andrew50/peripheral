@@ -15,7 +15,7 @@ var (
 )
 
 // StartEdgarFilingsService starts a background service to fetch and broadcast SEC filings
-func StartEdgarFilingsService() {
+func StartEdgarFilingsService(conn *Conn) {
 	edgarServiceMutex.Lock()
 	defer edgarServiceMutex.Unlock()
 	if edgarServiceRunning {
@@ -27,7 +27,7 @@ func StartEdgarFilingsService() {
 	edgarServiceRunning = true
 
 	// Initial fetch
-	filings, err := FetchLatestEdgarFilings()
+	filings, err := FetchLatestEdgarFilings(conn)
 	if err != nil {
 		fmt.Printf("Error fetching initial SEC filings: %v\n", err)
 	} else {
@@ -38,11 +38,11 @@ func StartEdgarFilingsService() {
 
 	// Start periodic fetching
 	go func() {
-		ticker := time.NewTicker(1 * time.Minute) // Adjust frequency as needed
+		ticker := time.NewTicker(10 * time.Second) // Adjust frequency as needed
 		defer ticker.Stop()
 
 		for range ticker.C {
-			newFilings, err := FetchLatestEdgarFilings()
+			newFilings, err := FetchLatestEdgarFilings(conn)
 			if err != nil {
 				fmt.Printf("Error fetching SEC filings: %v\n", err)
 				continue
