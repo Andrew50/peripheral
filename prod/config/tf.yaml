@@ -21,7 +21,7 @@ spec:
               mountPath: /models
       containers:
         - name: tf
-          image: ${DOCKER_USERNAME:-billin19}/tf:${IMAGE_TAG:-prod}
+          image: billin19/tf:prod
           resources:
             requests:
               cpu: 1000m

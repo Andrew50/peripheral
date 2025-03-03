@@ -347,7 +347,10 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 						var figi string
 						var minDate sql.NullTime
 						var maxDate sql.NullTime
-						rows.Scan(&secId, &ticker, &figi, &minDate, &maxDate)
+						if err := rows.Scan(&secId, &ticker, &figi, &minDate, &maxDate); err != nil {
+							log.Printf("Error scanning row: %v", err)
+							continue
+						}
 						var minDtStr string
 						var maxDtStr string
 						if minDate.Valid {
