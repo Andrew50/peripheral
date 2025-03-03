@@ -52,7 +52,8 @@
 	import { addStream } from '$lib/utils/stream/interface';
 	import { ArrowMarkersPaneView, type ArrowMarker } from './arrowMarkers';
 	import { EventMarkersPaneView, type EventMarker } from './eventMarkers';
-	import html2canvas from 'html2canvas';
+	import { adjustEventsToTradingDays, handleScreenshot } from './chartHelpers';
+	import { SessionHighlighting, createDefaultSessionHighlighter } from './sessionShade';
 	let bidLine: any;
 	let askLine: any;
 	let currentBarTimestamp: number;
@@ -154,11 +155,18 @@
 	let arrowSeries: any = null; // Initialize as null
 	let eventSeries: ISeriesApi<'Custom', Time, EventMarker>;
 	let eventMarkerView: EventMarkersPaneView;
-	let selectedFiling: {
+	let selectedEvent: {
 		events: EventMarker['events'];
 		x: number;
 		y: number;
 	} | null = null;
+	let hoveredEvent: {
+		events: EventMarker['events'];
+		x: number;
+		y: number;
+	} | null = null;
+
+	let sessionHighlighting: SessionHighlighting;
 
 	function extendedHours(timestamp: number): boolean {
 		const date = new Date(timestamp);
@@ -289,58 +297,104 @@
 				}
 				queuedLoad = () => {
 					// Add SEC filings request when loading new ticker
-					if (get(settings).showFilings) {
-						try {
-							const bars = chartCandleSeries.data();
-							if (bars.length > 0) {
-								const firstBar = bars[0];
-								const lastBar = bars[bars.length - 1];
+					try {
+						const bars = chartCandleSeries.data();
+						if (bars.length > 0) {
+							const firstBar = bars[0];
+							const lastBar = bars[bars.length - 1];
 
-								const fromTime = ESTSecondstoUTCMillis(firstBar.time as UTCTimestamp) as number;
-								const toTime = ESTSecondstoUTCMillis(lastBar.time as UTCTimestamp) as number;
-								'time requested', fromTime, toTime;
+							const fromTime = ESTSecondstoUTCMillis(firstBar.time as UTCTimestamp) as number;
+							const toTime = ESTSecondstoUTCMillis(lastBar.time as UTCTimestamp) as number;
 
-								privateRequest<any[]>('getEdgarFilings', {
-									securityId: inst.securityId,
-									from: fromTime,
-									to: toTime,
-									limit: 100
-								}).then((filings) => {
-									const filingsByTime = new Map<number, Array<{ type: string; url: string }>>();
+							privateRequest<any[]>('getChartEvents', {
+								securityId: inst.securityId,
+								from: fromTime,
+								to: toTime,
+								includeSECFilings: get(settings).showFilings
+							}).then((events) => {
+								// Check if events is empty or undefined
+								if (!events || events.length === 0) {
+									// Clear any existing events data
+									eventSeries.setData([]);
+									return; // Exit early
+								}
+								
+								const eventsByTime = new Map<number, Array<{ 
+									type: string; 
+									title: string; 
+									url?: string; 
+									value?: string;
+									exDate?: string;
+									payoutDate?: string;
+								}>>();
 
-									filings.forEach((filing) => {
-										filing.timestamp = UTCSecondstoESTSeconds(
-											filing.timestamp / 1000
-										) as UTCTimestamp;
-										const roundedTime =
-											Math.floor(filing.timestamp / chartTimeframeInSeconds) *
-											chartTimeframeInSeconds;
+								events.forEach((event) => {
+									// Convert timestamp from UTC milliseconds to EST seconds
+									event.timestamp = UTCSecondstoESTSeconds(
+										event.timestamp / 1000
+									) as UTCTimestamp;
+									
+									// Round to the nearest timeframe
+									const roundedTime =
+										Math.floor(event.timestamp / chartTimeframeInSeconds) *
+										chartTimeframeInSeconds;
 
-										if (!filingsByTime.has(roundedTime)) {
-											filingsByTime.set(roundedTime, []);
-										}
-										filingsByTime.get(roundedTime)?.push({
-											type: 'filing',
-											title: filing.type,
-											url: filing.url
+									if (!eventsByTime.has(roundedTime)) {
+										eventsByTime.set(roundedTime, []);
+									}
+									
+									// Parse the JSON string into an object
+									let valueObj = {};
+									try {
+										valueObj = JSON.parse(event.value);
+									} catch (e) {
+										console.error("Failed to parse event value:", e, event.value);
+									}
+									
+									// Create proper event object based on type
+									if (event.type === "sec_filing") {
+										eventsByTime.get(roundedTime)?.push({
+											type: 'sec_filing',
+											title: valueObj.type || "SEC Filing",
+											url: valueObj.url
 										});
-									});
-
-									eventSeries.setData(
-										Array.from(filingsByTime.entries()).map(([time, events]) => ({
-											time: time as UTCTimestamp,
-											events: events
-										}))
-									);
+									} else if (event.type === "split") {
+										eventsByTime.get(roundedTime)?.push({
+											type: 'split',
+											title: `Split: ${valueObj.ratio || "unknown"}`,
+											value: valueObj.ratio
+										});
+									} else if (event.type === "dividend") {
+										eventsByTime.get(roundedTime)?.push({
+											type: 'dividend',
+											title: `Dividend: $${valueObj.amount || "0.00"}`,
+											value: valueObj.amount,
+											exDate: valueObj.exDate || "Unknown",
+											payoutDate: valueObj.payDate || "Unknown"
+										});
+									}
 								});
-							}
-						} catch (error) {
-							console.warn('Failed to fetch SEC filings:', error);
+
+								// Convert the event data to the format expected by the markers series
+								let eventData: EventMarker[] = [];
+								eventsByTime.forEach((events, time) => {
+									eventData.push({
+										time: time as UTCTimestamp,
+										events: events,
+									});
+								});
+
+								// Adjust events to nearest trading days
+								eventData = adjustEventsToTradingDays(eventData, chartCandleSeries.data());
+								
+								// Set the data on the event markers series
+								eventSeries.setData(eventData);
+							});
 						}
-					} else {
-						// Clear any existing filing markers when the setting is disabled
-						eventSeries.setData([]);
+					} catch (error) {
+						console.warn('Failed to fetch chart events:', error);
 					}
+				
 
 					if (inst.direction == 'forward') {
 						const visibleRange = chart.timeScale().getVisibleRange();
@@ -485,7 +539,8 @@
 
 		// Update the line position visually
 		$drawingMenuProps.selectedLine.applyOptions({
-			price: newPrice
+			price: newPrice,
+			title: `Price: ${newPrice.toFixed(2)}`
 		});
 
 		// Update the stored price in horizontalLines array
@@ -903,6 +958,13 @@
 		if (arrowSeries) {
 			arrowSeries.setData([]);
 		}
+
+		// Reset session highlighting when changing securities
+		if (sessionHighlighting) {
+			chartCandleSeries.detachPrimitive(sessionHighlighting);
+			sessionHighlighting = new SessionHighlighting(createDefaultSessionHighlighter());
+			chartCandleSeries.attachPrimitive(sessionHighlighting);
+		}
 	}
 
 	onMount(() => {
@@ -969,7 +1031,7 @@
 					currentChartInstance.securityId
 				);
 			} else if (event.key == 's' && event.altKey) {
-				handleScreenshot();
+				handleScreenshot(chartId);
 			} else if (event.key == 'Tab' || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
 				// goes to input popup
 				if ($streamInfo.replayActive) {
@@ -1042,7 +1104,15 @@
 			{}
 		);
 		eventMarkerView = new EventMarkersPaneView();
-		eventSeries = chart.addCustomSeries(eventMarkerView, {});
+		eventSeries = chart.addCustomSeries(eventMarkerView, {
+			priceFormat: {
+				type: 'custom',
+				minMove: 0.00000001,
+				formatter: (price: any) => {
+					return '';
+				}
+			}
+		}) as ISeriesApi<'Custom', Time, EventMarker>;
 
 		chart.subscribeCrosshairMove((param) => {
 			if (!chartCandleSeries.data().length || !param.point || !currentChartInstance.securityId) {
@@ -1196,9 +1266,28 @@
 			}
 		});
 
-		// Add click handler to chart container
-
+		// Add mousemove handler for the chart container
 		const container = document.getElementById(`chart_container-${chartId}`);
+		container?.addEventListener('mousemove', (e) => {
+			const rect = container.getBoundingClientRect();
+			const x = e.clientX - rect.left;
+			const y = e.clientY - rect.top;
+			
+			// Pass mouse move to event marker view
+			if (eventMarkerView && eventMarkerView.handleMouseMove(x, y)) {
+				// If the state changed and we need a redraw, request one
+				chart.applyOptions({});
+			}
+		});
+
+		container?.addEventListener('mouseleave', () => {
+			if (eventMarkerView && eventMarkerView.clearHover()) {
+				// If we cleared the hover state, request a redraw
+				hoveredEvent = null;
+				chart.applyOptions({});
+			}
+		});
+
 		container?.addEventListener('click', (e) => {
 			const rect = container.getBoundingClientRect();
 			const x = e.clientX - rect.left;
@@ -1209,13 +1298,12 @@
 				e.stopPropagation();
 			} else {
 				// Click outside filing - close the popup
-				selectedFiling = null;
+				selectedEvent = null;
 			}
 		});
 
-		eventMarkerView.setClickCallback((events, x, y) => {
-			selectedFiling = { events, x, y };
-		});
+		eventMarkerView.setClickCallback(handleEventClick);
+		eventMarkerView.setHoverCallback(handleEventHover);
 
 		// Add subscriptions after chart initialization
 		chartQueryDispatcher.subscribe((req: ChartQueryDispatch) => {
@@ -1242,43 +1330,46 @@
 
 		chartContainer.setAttribute('tabindex', '0'); // Make container focusable
 		chartContainer.focus(); // Focus the container
+
+		// Create session highlighting
+		if (chart) {
+			sessionHighlighting = new SessionHighlighting(createDefaultSessionHighlighter());
+			chartCandleSeries.attachPrimitive(sessionHighlighting);
+		}
 	});
 
-	async function handleScreenshot() {
-		if (!chart) return;
+	
 
-		try {
-			// Get the entire chart container including legend
-			const chartContainer = document.getElementById(`chart_container-${chartId}`);
-			if (!chartContainer) return;
-
-			// Use html2canvas to capture the entire container
-			const canvas = await html2canvas(chartContainer, {
-				backgroundColor: 'black', // Match your chart background
-				scale: 2, // Higher quality
-				logging: false,
-				useCORS: true
-			});
-
-			// Convert to blob
-			const blob = await new Promise<Blob>((resolve) => {
-				canvas.toBlob((blob) => {
-					if (blob) resolve(blob);
-				}, 'image/png');
-			});
-
-			// Copy to clipboard
-			await navigator.clipboard.write([
-				new ClipboardItem({
-					[blob.type]: blob
-				})
-			]);
-
-			('Chart copied to clipboard!');
-		} catch (error) {
-			console.error('Failed to copy chart:', error);
+	// Handle event marker clicks
+	function handleEventClick(events: EventMarker['events'], x: number, y: number) {
+		// Check if clicking on the same event that's already selected
+		if (selectedEvent && 
+			Math.abs(selectedEvent.x - x) < 10 && 
+			Math.abs(selectedEvent.y - y) < 10 &&
+			selectedEvent.events.length === events.length) {
+			// If clicking on the same event, close the popup
+			selectedEvent = null;
+		} else {
+			// Otherwise, select the new event
+			selectedEvent = { events, x, y };
+			hoveredEvent = null; // Clear hover when clicked
 		}
 	}
+
+	// Handle event marker hover
+	function handleEventHover(events: EventMarker['events'] | null, x: number, y: number) {
+		if (events) {
+			hoveredEvent = { events, x, y };
+		} else {
+			hoveredEvent = null;
+		}
+	}
+
+	// Handle closing the event popup
+	function closeEventPopup() {
+		selectedEvent = null;
+	}
+
 </script>
 
 <div class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
@@ -1287,95 +1378,161 @@
 	<DrawingMenu {drawingMenuProps} />
 </div>
 
-<!-- Add filing info overlay -->
-{#if selectedFiling}
+<!-- Replace the filing info overlay with a more generic event info overlay -->
+{#if selectedEvent}
 	<div
-		class="filing-info"
+		class="event-info"
 		style="
-            left: {selectedFiling.x - 100}px; 
-            top: {selectedFiling.y - (80 + selectedFiling.events.length * 40)}px"
+            left: {selectedEvent.x - 100}px; 
+            top: {selectedEvent.y - (80 + selectedEvent.events.length * 40)}px"
 	>
-		<div class="filing-header">
-			<div class="filing-icon">📄</div>
-			<div class="filing-title">SEC Filings</div>
+		<div class="event-header">
+			{#if selectedEvent.events[0]?.type === 'sec_filing'}
+				<div class="event-icon" style="color: #9C27B0;">📄</div>
+				<div class="event-title">SEC Filings</div>
+			{:else if selectedEvent.events[0]?.type === 'split'}
+				<div class="event-icon" style="color: #FFD700;">📊</div>
+				<div class="event-title">Stock Splits</div>
+			{:else if selectedEvent.events[0]?.type === 'dividend'}
+				<div class="event-icon" style="color: #2196F3;">💰</div>
+				<div class="event-title">Dividends</div>
+			{:else}
+				<div class="event-icon">📅</div>
+				<div class="event-title">Events</div>
+			{/if}
+			<button class="close-button" on:click={closeEventPopup}>×</button>
 		</div>
-		<div class="filing-content">
-			{#each selectedFiling.events as event}
-				<a href={event.url} target="_blank" rel="noopener noreferrer" class="filing-row">
-					<span class="filing-type">{event.title}</span>
-					<span class="filing-link">View</span>
-				</a>
+		<div class="event-content">
+			{#each selectedEvent.events as event}
+				{#if event.type === 'sec_filing'}
+					<a href={event.url} target="_blank" rel="noopener noreferrer" class="event-row filing-link">
+						<span class="event-type">{event.title}</span>
+						<span class="event-link">View →</span>
+					</a>
+				{:else if event.type === 'split'}
+					<div class="event-row">
+						<span class="event-type">{event.title}</span>
+					</div>
+				{:else if event.type === 'dividend'}
+					<div class="event-row dividend-row">
+						<div class="dividend-details">
+							<span class="event-type">{event.title}</span>
+							{#if event.exDate}
+								<span class="dividend-date">Ex-Date: {event.exDate}</span>
+							{/if}
+							{#if event.payoutDate}
+								<span class="dividend-date">Payout: {event.payoutDate}</span>
+							{/if}
+						</div>
+					</div>
+				{:else}
+					<div class="event-row">
+						<span class="event-type">{event.title}</span>
+					</div>
+				{/if}
 			{/each}
 		</div>
 	</div>
 {/if}
 
 <style>
-	.filing-info {
+	.event-info {
 		position: absolute;
 		background: #1e1e1e;
 		border: 1px solid #333;
 		border-radius: 4px;
 		padding: 8px;
 		z-index: 1000;
-		width: 200px; /* Fixed width to help with centering */
+		width: 220px; /* Increased width to accommodate more content */
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 		transform: translateX(0); /* Center popup above marker */
 	}
 
-	.filing-header {
+	.event-header {
 		display: flex;
 		align-items: center;
 		gap: 8px;
 		padding-bottom: 8px;
 		border-bottom: 1px solid #333;
 		margin-bottom: 8px;
+		position: relative;
 	}
 
-	.filing-icon {
-		font-size: 24px; /* 50% bigger */
+	.close-button {
+		position: absolute;
+		right: 0;
+		top: 0;
+		background: none;
+		border: none;
+		color: #888;
+		font-size: 18px;
+		cursor: pointer;
+		padding: 0 4px;
 	}
 
-	.filing-title {
+	.close-button:hover {
 		color: #fff;
-		font-size: 14px;
-		font-weight: 500;
 	}
 
-	.filing-content {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
+	.event-icon {
+		font-size: 1.2rem;
 	}
 
-	.filing-row {
+	.event-title {
+		font-weight: bold;
+	}
+
+	.event-content {
+		max-height: 150px;
+		overflow-y: auto;
+	}
+
+	.event-row {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: 8px;
+		padding: 4px 0;
+		border-bottom: 1px solid #333;
+		color: #fff;
 		text-decoration: none;
-		border-radius: 4px;
+	}
+
+	.event-row:last-child {
+		border-bottom: none;
+	}
+
+	.event-type {
+		font-size: 0.9rem;
+	}
+
+	.event-link {
+		color: #4caf50;
+		font-size: 0.8rem;
+	}
+	
+	.filing-link {
+		cursor: pointer;
 		transition: background-color 0.2s;
 	}
-
-	.filing-row:hover {
-		background: rgba(156, 39, 176, 0.1);
+	
+	.filing-link:hover {
+		background-color: #333;
 	}
-
-	.filing-type {
-		color: #ccc;
-		font-size: 13px;
+	
+	.dividend-row {
+		flex-direction: column;
+		align-items: flex-start;
 	}
-
-	.filing-link {
-		color: #9c27b0;
-		font-size: 12px;
-		padding: 2px 6px;
-		border-radius: 3px;
-		background: rgba(156, 39, 176, 0.1);
+	
+	.dividend-details {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
 	}
-
-	.filing-row:hover .filing-link {
-		background: rgba(156, 39, 176, 0.2);
+	
+	.dividend-date {
+		font-size: 0.8rem;
+		color: #bbb;
+		margin-top: 2px;
 	}
 </style>

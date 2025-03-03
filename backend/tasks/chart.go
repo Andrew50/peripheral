@@ -928,10 +928,16 @@ func buildHigherTimeframeFromLower(
 	}
 
 	// Flush last bar if needed
-	// For forward direction, we add the last bar
+	if !barStartTime.IsZero() {
+		// Always add the last bar if we have one in progress,
+		// regardless of direction - this fixes the missing latest bar
+		barDataList = append(barDataList, currentBar)
+	}
+
+	// Now handle the direction-specific logic
 	if direction == "forward" {
-		if !barStartTime.IsZero() && *numBarsRemaining > 0 {
-			barDataList = append(barDataList, currentBar)
+		// For forward direction, we've already added the last bar above
+		if *numBarsRemaining > 0 {
 			*numBarsRemaining--
 		}
 	} else {
