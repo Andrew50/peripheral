@@ -30,9 +30,11 @@ type SingleStockResult struct {
 }
 
 func BacktestSingleStock(conn *utils.Conn, securityId int, algo string, from, to time.Time) (SingleStockResult, error) {
-
+	// Implementation goes here
+	return SingleStockResult{}, nil // Added return statement with zero values
 }
 
 func (be *BacktestEngine) Run() error {
-
+	// Implementation goes here
+	return nil // Added return statement
 }

@@ -1,10 +1,9 @@
-import type { Writable } from 'svelte/store';
 export interface Instance {
-    ticker?: string
-    timestamp?: number
-    securityId?: number
-    timeframe?: string
-    extendedHours?: boolean
+    ticker?: string;
+    timestamp?: number;
+    securityId?: number;
+    timeframe?: string;
+    extendedHours?: boolean;
     price?: number;
     name?: string;
     market?: string;
@@ -30,11 +29,11 @@ export interface Setup {
     adr: number;
     mcap: number;
     score: number;
-    activeScreen: boolean
+    activeScreen: boolean;
 }
 export interface Watchlist {
-    watchlistName: string
-    watchlistId: number
+    watchlistName: string;
+    watchlistId: number;
 }
 export interface CloseData {
     price: number;
@@ -56,18 +55,18 @@ export interface QuoteData {
     askSize: number;
 }
 export interface Settings {
-    chartColumns: number
-    chartRows: number
-    dolvol: boolean
-    adrPeriod: number
-    divideTaS: boolean
-    filterTaS: boolean
-    showFilings: boolean
+    chartColumns: number;
+    chartRows: number;
+    dolvol: boolean;
+    adrPeriod: number;
+    divideTaS: boolean;
+    filterTaS: boolean;
+    showFilings: boolean;
 }
 export interface StreamInfo {
-    status: "replay" | "realtime" | "paused",
-    startTimestamp: number | null,
-    replaySpeed: number,
+    status: 'replay' | 'realtime' | 'paused';
+    startTimestamp: number | null;
+    replaySpeed: number;
 }
 export interface AlertData {
     message: string;
@@ -78,11 +77,23 @@ export interface AlertData {
 export interface AlertLog extends Instance, Alert { }
 export interface Alert {
     active?: boolean;
-    alertId?: number
-    alertType: string
-    setupId?: number
-    algoId?: number
-    securityId?: number
-    ticker?: string
-    price?: number
+    alertId?: number;
+    alertType: string;
+    setupId?: number;
+    algoId?: number;
+    securityId?: number;
+    ticker?: string;
+    price?: number;
+}
+
+export interface Trade {
+    time: number;
+    type: string;
+    price: number;
+    shares: number;
+    tradeId?: number;
+    trade_direction?: string;
+    status?: string;
+    openQuantity?: number;
+    closedPnL?: number | null;
 }

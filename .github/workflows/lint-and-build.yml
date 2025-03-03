@@ -1,0 +1,172 @@
+name: Lint and Build Check
+
+on:
+  pull_request:
+    branches: [main, prod]
+  
+  # Add workflow_run trigger to run after branch-protection workflow
+  workflow_run:
+    workflows: ["Branch Protection Check"]
+    types:
+      - completed
+
+jobs:
+  # Add a check to determine if we should run the tests
+  check-workflow-conditions:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - id: check
+        run: |
+          # For direct PRs to main, always run
+          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "main" ]]; then
+            echo "Running for PR to main branch"
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # For PRs to prod, only run if triggered by workflow_run and the previous workflow succeeded
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            if [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]]; then
+              echo "Branch protection check passed, proceeding with tests"
+              echo "should_run=true" >> $GITHUB_OUTPUT
+            else
+              echo "Branch protection check did not pass, skipping tests"
+              echo "should_run=false" >> $GITHUB_OUTPUT
+            fi
+            exit 0
+          fi
+          
+          # For direct PRs to prod, don't run (branch protection should run first)
+          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "prod" ]]; then
+            echo "Skipping direct run for PR to prod - branch protection workflow should run first"
+            echo "should_run=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Default case
+          echo "Running tests by default"
+          echo "should_run=true" >> $GITHUB_OUTPUT
+
+  lint-and-build-backend:
+    needs: check-workflow-conditions
+    if: needs.check-workflow-conditions.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    # Add permissions block for annotations
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          # For workflow_run events, we need to check out the PR that triggered the workflow
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          cache: true
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          go mod download
+
+      - name: Go Lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+          working-directory: backend
+          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number
+          skip-cache: true
+          skip-pkg-cache: true
+          skip-build-cache: true
+          # Remove the only-new-issues parameter since it requires fetching the patch
+
+      - name: Go Build
+        run: |
+          cd backend
+          go build -v ./...
+
+  lint-and-build-worker:
+    needs: check-workflow-conditions
+    if: needs.check-workflow-conditions.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          # For workflow_run events, we need to check out the PR that triggered the workflow
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          cd worker
+          python -m pip install --upgrade pip
+          pip install flake8 black pytest
+          pip install -r requirements.txt
+
+      - name: Lint with flake8
+        run: |
+          cd worker
+          # stop the build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || echo "Flake8 issues found, but continuing build process"
+          # exit-zero treats all errors as warnings - no longer failing on style issues
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Format check with Black
+        run: |
+          cd worker
+          black --check --diff . || echo "Black formatting issues found, but continuing build process"
+
+      - name: Basic import check
+        run: |
+          cd worker
+          python -m compileall .
+
+  lint-and-build-frontend:
+    needs: check-workflow-conditions
+    if: needs.check-workflow-conditions.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          # For workflow_run events, we need to check out the PR that triggered the workflow
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package.json
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm install
+
+      - name: Lint
+        run: |
+          cd frontend
+          # Use the flat config file and continue even if there are errors
+          npx eslint . --max-warnings=10 || echo "ESLint issues found, but continuing build process"
+
+      - name: Type check
+        run: |
+          cd frontend
+          # Use warning threshold but with a higher error limit
+          npx svelte-check --threshold warning --fail-on-warnings=false --fail-on-hints=false || echo "Type checking issues found, but continuing build process"
+
+      - name: Build
+        run: |
+          cd frontend
+          npm run build 

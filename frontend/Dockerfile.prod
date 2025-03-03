@@ -28,6 +28,6 @@ RUN npm ci --omit=dev
 # Expose the port
 EXPOSE 3000
 
-# Start the app in production mode
+# Start the app with the built-in SvelteKit server
 CMD ["node", "build"]
 

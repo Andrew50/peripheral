@@ -54,7 +54,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-
 	if debug {
 		fmt.Printf("[DEBUG] GetChartData: SecurityId=%d, Timeframe=%s, Direction=%s\n",
 			args.SecurityId, args.Timeframe, args.Direction)

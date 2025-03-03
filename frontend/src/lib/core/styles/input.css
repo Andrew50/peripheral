@@ -1,18 +1,18 @@
 input {
-  display: block;
-  color: var(--f1);
-  margin: 6px 6px;
-  border: none;
-  padding: 8px;
-  background-color: var(--c1);
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 16px;
-  box-sizing: border-box;
-  max-width: 100%;
-  width: 100%;
+	display: block;
+	color: var(--f1);
+	margin: 6px 6px;
+	border: none;
+	padding: 8px;
+	background-color: var(--c1);
+	border-radius: 5px;
+	cursor: pointer;
+	font-size: 16px;
+	box-sizing: border-box;
+	max-width: 100%;
+	width: 100%;
 }
 
 input:focus {
-  outline: none;
+	outline: none;
 }

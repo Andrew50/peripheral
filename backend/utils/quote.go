@@ -225,4 +225,51 @@ func GetMostRecentExtendedHoursClose(client *polygon.Client, ticker string, refe
 	return 0, fmt.Errorf("no recent extended hours close found for %s", ticker)
 }
 
+// GetDailyOpen gets the opening price for the day of the given timestamp
+func GetDailyOpen(client *polygon.Client, ticker string, referenceTime time.Time) (float64, error) {
+	easternLocation, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return 0, fmt.Errorf("error loading location: %v", err)
+	}
+
+	refLocal := referenceTime.In(easternLocation)
+	startOfDay := time.Date(refLocal.Year(), refLocal.Month(), refLocal.Day(), 0, 0, 0, 0, easternLocation)
+	endOfDay := time.Date(refLocal.Year(), refLocal.Month(), refLocal.Day(), 23, 59, 59, 999999999, easternLocation)
+
+	// Get daily bar for this specific day
+	startMillis := models.Millis(startOfDay)
+	endMillis := models.Millis(endOfDay)
+
+	iter, err := GetAggsData(client, ticker, 1, "day", startMillis, endMillis, 1, "asc", true)
+	if err != nil {
+		return 0, fmt.Errorf("error getting daily data: %v", err)
+	}
+
+	// The first (and likely only) bar should contain the open
+	if iter.Next() {
+		return iter.Item().Open, nil
+	}
+
+	if err := iter.Err(); err != nil {
+		return 0, fmt.Errorf("error iterating daily data: %v", err)
+	}
+
+	// If no data for today, try getting the first minute bar of the day
+	minuteIter, err := GetAggsData(client, ticker, 1, "minute", startMillis, endMillis, 1, "asc", true)
+	if err != nil {
+		return 0, fmt.Errorf("error getting minute data: %v", err)
+	}
+
+	if minuteIter.Next() {
+		return minuteIter.Item().Open, nil
+	}
+
+	if err := minuteIter.Err(); err != nil {
+		return 0, fmt.Errorf("error iterating minute data: %v", err)
+	}
+
+	// If still no data, try the previous close as fallback
+	return GetMostRecentRegularClose(client, ticker, startOfDay.Add(-time.Nanosecond))
+}
+
 // /quote.go
