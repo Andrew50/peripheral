@@ -23,7 +23,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: db-secret
-                  key: db-password
+                  key: DB_ROOT_PASSWORD
           resources:
             requests:
               cpu: 1000m
