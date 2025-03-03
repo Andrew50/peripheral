@@ -136,21 +136,25 @@
 			});
 
 			const [month, day, year] = formatter.format(currentDate).split('/');
-			
-			const marketCloseDate = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T16:00:00-04:00`);
-			
+
+			const marketCloseDate = new Date(
+				`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T16:00:00-04:00`
+			);
+
 			nextBarClose = Math.floor(marketCloseDate.getTime() / 1000);
-			
+
 			if (currentTimeInSeconds >= nextBarClose) {
 				marketCloseDate.setDate(marketCloseDate.getDate() + 1);
-				
+
 				const dayOfWeek = marketCloseDate.getDay(); // 0 = Sunday, 6 = Saturday
-				if (dayOfWeek === 0) { // Sunday
+				if (dayOfWeek === 0) {
+					// Sunday
 					marketCloseDate.setDate(marketCloseDate.getDate() + 1); // Move to Monday
-				} else if (dayOfWeek === 6) { // Saturday
+				} else if (dayOfWeek === 6) {
+					// Saturday
 					marketCloseDate.setDate(marketCloseDate.getDate() + 2); // Move to Monday
 				}
-				
+
 				nextBarClose = Math.floor(marketCloseDate.getTime() / 1000);
 			}
 		}
@@ -207,11 +211,11 @@
 			</div>
 		</div>
 
-		{#if $activeChartInstance?.logo}
+		{#if $instance?.logo || currentDetails?.logo}
 			<div class="logo-container">
 				<img
-					src="data:image/svg+xml;base64,{$activeChartInstance.logo}"
-					alt="{$activeChartInstance.name} logo"
+					src="data:image/svg+xml;base64,{$instance?.logo || currentDetails?.logo}"
+					alt="{$instance?.name || currentDetails?.name || 'Company'} logo"
 					class="company-logo"
 				/>
 			</div>
@@ -422,17 +426,28 @@
 		background: var(--ui-bg-secondary);
 		color: var(--text-primary);
 		border: 1px solid var(--ui-border);
-		border-radius: 4px;
-		padding: 6px 12px;
+		border-radius: 6px;
+		padding: 8px 12px;
 		font-size: 0.9em;
 		cursor: pointer;
-		transition: background-color 0.2s;
+		transition: all 0.2s ease;
 		margin: 10px 0;
 		width: 100%;
+		font-weight: 500;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 	}
 
 	.time-sales-button:hover {
 		background: var(--ui-bg-hover);
+		transform: translateY(-1px);
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	}
+
+	.time-sales-button:active {
+		transform: translateY(0);
+		box-shadow: none;
 	}
 
 	.quotes-section {

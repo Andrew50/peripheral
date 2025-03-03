@@ -46,6 +46,20 @@ def calculate_adr(tensor, idx, lookback_days=20):
     return sum(daily_ranges) / len(daily_ranges)
 
 
+def day_over_day_change(tensor_bars):
+    """
+    Returns % change from second-to-last bar's close to last bar's close.
+    If fewer than 2 bars, returns None or 0.
+    """
+    if len(tensor_bars) < 2:
+        return None  # Not enough data to calculate day-over-day change
+    prev_close = tensor_bars[-2][3]
+    curr_close = tensor_bars[-1][3]
+    if prev_close == 0:
+        return None  # Avoid division by zero
+    return 100.0 * (curr_close - prev_close) / prev_close
+
+
 def calculate_active(data):
     with data.db.cursor() as cursor:
         cursor.execute(
@@ -117,22 +131,26 @@ def calculate_active(data):
             _, sector, industry, securityId, outstanding_shares = security
 
             idx = ticker_to_idx.get(ticker)
-            if idx is None or idx >= len(tensor) or len(tensor[idx]) < lookback_bars:
+            if idx is None or idx >= len(tensor) or len(tensor[idx]) < (lookback_bars + 1):
                 continue
 
             # Calculate price return in percentage over the lookback period
             current_price = tensor[idx][-1][3]  # current close
             
-            # Fix for 1-day timeframe calculation
+            # Use helper function for 1-day timeframe
             if timeframe == "1 day":
-                past_price = tensor[idx][-2][3]  # yesterday's close for 1-day timeframe
+                price_val = day_over_day_change(tensor[idx])
+                if price_val is None:
+                    continue  # Skip if we couldn't calculate the change
             else:
                 past_price = tensor[idx][-(lookback_bars+1)][3]  # past close for other timeframes
-                
-            # print(f"timeframe: {timeframe}, ticker: {ticker}, current_price: {current_price}, past_price: {past_price}")
-            if past_price == 0:
-                continue  # avoid division by zero
-            price_val = ((current_price - past_price) / past_price) * 100
+                if past_price == 0:
+                    continue  # avoid division by zero
+                price_val = ((current_price - past_price) / past_price) * 100
+
+            # Skip if we have a NaN or None change value
+            if price_val is None or np.isnan(price_val):
+                continue
 
             # Compute a volume metric (as provided in the original code)
             # Note: this is raw volume
@@ -157,7 +175,7 @@ def calculate_active(data):
             if timeframe == "1 day":
                 group_results["stock"]["gap"].append((ticker, securityId, gap_val, current_market_cap, dollar_volume, adr_val))
 
-            # For sector group: only add if sector is known
+            # For sector group: only add if sector is known (not null/Unknown)
             if sector and sector != "Unknown":
                 if sector not in sector_constituents:
                     sector_constituents[sector] = {"price": [], "volume": [], "gap": []}
@@ -169,13 +187,13 @@ def calculate_active(data):
                     {"ticker": ticker, "securityId": securityId, "value": volume_val, 
                      "market_cap": current_market_cap, "dollar_volume": dollar_volume, "adr": adr_val}
                 )
-                if timeframe == "1 day":
+                if timeframe == "1 day" and gap_val is not None and not np.isnan(gap_val):
                     sector_constituents[sector]["gap"].append(
                         {"ticker": ticker, "securityId": securityId, "value": gap_val, 
                          "market_cap": current_market_cap, "dollar_volume": dollar_volume, "adr": adr_val}
                     )
 
-            # For industry group: only add if industry is known
+            # For industry group: only add if industry is known (not null/Unknown)
             if industry and industry != "Unknown":
                 if industry not in industry_constituents:
                     industry_constituents[industry] = {
@@ -191,7 +209,7 @@ def calculate_active(data):
                     {"ticker": ticker, "securityId": securityId, "value": volume_val, 
                      "market_cap": current_market_cap, "dollar_volume": dollar_volume, "adr": adr_val}
                 )
-                if timeframe == "1 day":
+                if timeframe == "1 day" and gap_val is not None and not np.isnan(gap_val):
                     industry_constituents[industry]["gap"].append(
                         {"ticker": ticker, "securityId": securityId, "value": gap_val, 
                          "market_cap": current_market_cap, "dollar_volume": dollar_volume, "adr": adr_val}
@@ -201,39 +219,45 @@ def calculate_active(data):
         for sector, metrics in sector_constituents.items():
             # For "price" metric
             if metrics["price"]:
-                avg_price = sum(item["value"] for item in metrics["price"]) / len(
-                    metrics["price"]
-                )
-                group_results["sector"]["price"].append((sector, None, avg_price))
+                # Filter out any NaN values before calculating average
+                valid_prices = [item["value"] for item in metrics["price"] if item["value"] is not None and not np.isnan(item["value"])]
+                if valid_prices:
+                    avg_price = sum(valid_prices) / len(valid_prices)
+                    group_results["sector"]["price"].append((sector, None, avg_price))
             # For "volume" metric
             if metrics["volume"]:
-                avg_volume = sum(item["value"] for item in metrics["volume"]) / len(
-                    metrics["volume"]
-                )
-                group_results["sector"]["volume"].append((sector, None, avg_volume))
+                # Filter out any NaN values before calculating average
+                valid_volumes = [item["value"] for item in metrics["volume"] if item["value"] is not None and not np.isnan(item["value"])]
+                if valid_volumes:
+                    avg_volume = sum(valid_volumes) / len(valid_volumes)
+                    group_results["sector"]["volume"].append((sector, None, avg_volume))
             # For "gap" metric (only if applicable)
             if timeframe == "1 day" and metrics["gap"]:
-                avg_gap = sum(item["value"] for item in metrics["gap"]) / len(
-                    metrics["gap"]
-                )
-                group_results["sector"]["gap"].append((sector, None, avg_gap))
+                # Filter out any NaN values before calculating average
+                valid_gaps = [item["value"] for item in metrics["gap"] if item["value"] is not None and not np.isnan(item["value"])]
+                if valid_gaps:
+                    avg_gap = sum(valid_gaps) / len(valid_gaps)
+                    group_results["sector"]["gap"].append((sector, None, avg_gap))
 
         for industry, metrics in industry_constituents.items():
             if metrics["price"]:
-                avg_price = sum(item["value"] for item in metrics["price"]) / len(
-                    metrics["price"]
-                )
-                group_results["industry"]["price"].append((industry, None, avg_price))
+                # Filter out any NaN values before calculating average
+                valid_prices = [item["value"] for item in metrics["price"] if item["value"] is not None and not np.isnan(item["value"])]
+                if valid_prices:
+                    avg_price = sum(valid_prices) / len(valid_prices)
+                    group_results["industry"]["price"].append((industry, None, avg_price))
             if metrics["volume"]:
-                avg_volume = sum(item["value"] for item in metrics["volume"]) / len(
-                    metrics["volume"]
-                )
-                group_results["industry"]["volume"].append((industry, None, avg_volume))
+                # Filter out any NaN values before calculating average
+                valid_volumes = [item["value"] for item in metrics["volume"] if item["value"] is not None and not np.isnan(item["value"])]
+                if valid_volumes:
+                    avg_volume = sum(valid_volumes) / len(valid_volumes)
+                    group_results["industry"]["volume"].append((industry, None, avg_volume))
             if timeframe == "1 day" and metrics["gap"]:
-                avg_gap = sum(item["value"] for item in metrics["gap"]) / len(
-                    metrics["gap"]
-                )
-                group_results["industry"]["gap"].append((industry, None, avg_gap))
+                # Filter out any NaN values before calculating average
+                valid_gaps = [item["value"] for item in metrics["gap"] if item["value"] is not None and not np.isnan(item["value"])]
+                if valid_gaps:
+                    avg_gap = sum(valid_gaps) / len(valid_gaps)
+                    group_results["industry"]["gap"].append((industry, None, avg_gap))
 
         print(f"Storing results for {timeframe}...")
         # For each group and metric, sort and then store leaders and laggards
