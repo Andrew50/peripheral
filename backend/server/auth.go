@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -16,13 +17,15 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-var private_key = []byte("2dde9fg9")
+// Get JWT secret from environment variable or use a fallback for development
+var private_key = []byte(getEnvOrDefault("JWT_SECRET", "2dde9fg9"))
 
+// Get OAuth configuration from environment variables
 var (
 	googleOauthConfig = &oauth2.Config{
-		ClientID:     "831615706061-uojs1kjl4lhe70crmf771s2s2dflejpo.apps.googleusercontent.com",
-		ClientSecret: "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",
-		RedirectURL:  "http://localhost:5173/auth/google/callback",
+		ClientID:     getEnvOrDefault("GOOGLE_CLIENT_ID", ""),
+		ClientSecret: getEnvOrDefault("GOOGLE_CLIENT_SECRET", ""),
+		RedirectURL:  getEnvOrDefault("GOOGLE_REDIRECT_URL", ""),
 		Scopes: []string{
 			"https://www.googleapis.com/auth/userinfo.email",
 			"https://www.googleapis.com/auth/userinfo.profile",
@@ -30,6 +33,15 @@ var (
 		Endpoint: google.Endpoint,
 	}
 )
+
+// Helper function to get environment variables with defaults
+func getEnvOrDefault(key, defaultValue string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	return value
+}
 
 type Claims struct {
 	UserID int `json:"userId"`
@@ -150,14 +162,21 @@ func GoogleLogin(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error)
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
+	// Validate that we have the required OAuth configuration
+	if googleOauthConfig.ClientID == "" || googleOauthConfig.ClientSecret == "" {
+		return nil, fmt.Errorf("Google OAuth is not configured properly. Missing client ID or secret")
+	}
+
 	// Print debug information
 	fmt.Printf("Received redirectOrigin: %s\n", args.RedirectOrigin)
 
-	// Update the redirect URL based on the origin
-	googleOauthConfig.RedirectURL = args.RedirectOrigin + "/auth/google/callback"
+	// Update the redirect URL based on the origin if no environment variable is set
+	if os.Getenv("GOOGLE_REDIRECT_URL") == "" {
+		googleOauthConfig.RedirectURL = args.RedirectOrigin + "/auth/google/callback"
+	}
 
 	// Print the configured redirect URL for debugging
-	fmt.Printf("Updated RedirectURL to: %s\n", googleOauthConfig.RedirectURL)
+	fmt.Printf("Using RedirectURL: %s\n", googleOauthConfig.RedirectURL)
 
 	state := generateState()
 	url := googleOauthConfig.AuthCodeURL(state)
