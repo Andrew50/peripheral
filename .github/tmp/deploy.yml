@@ -495,19 +495,21 @@ jobs:
             }
           done
           
-          # Create a migration script using multiple echo commands instead of heredoc
+          # Create a migration script that uses the password directly
           log "Creating migration script with secure credentials..."
-          echo '#!/bin/bash' > migration_runner.sh
-          echo '# Migration runner with explicit password' >> migration_runner.sh
-          echo 'DB_NAME="${1:-postgres}"' >> migration_runner.sh
-          echo 'echo "Running migrations on database: $DB_NAME"' >> migration_runner.sh
-          echo '# Use the explicitly provided password from the environment variable' >> migration_runner.sh
-          echo 'export PGPASSWORD="$DB_PASSWORD"' >> migration_runner.sh
-          echo 'for sql_file in /tmp/rollouts/*.sql; do' >> migration_runner.sh
-          echo '  echo "Applying migration: $(basename $sql_file)"' >> migration_runner.sh
-          echo '  psql -U postgres -d "$DB_NAME" -f "$sql_file" || exit 1' >> migration_runner.sh
-          echo 'done' >> migration_runner.sh
-          echo 'echo "All migrations applied successfully"' >> migration_runner.sh
+          cat > migration_runner.sh << 'EOL'
+          #!/bin/bash
+          # Migration runner with explicit password
+          DB_NAME="${1:-postgres}"
+          echo "Running migrations on database: $DB_NAME"
+          # Use the explicitly provided password from the environment variable
+          export PGPASSWORD="$DB_PASSWORD"
+          for sql_file in /tmp/rollouts/*.sql; do
+            echo "Applying migration: $(basename $sql_file)"
+            psql -U postgres -d "$DB_NAME" -f "$sql_file" || exit 1
+          done
+          echo "All migrations applied successfully"
+          EOL
 
           # Replace the placeholder with the actual password
           sed -i "s/\$DB_PASSWORD/$DB_PASSWORD/g" migration_runner.sh
