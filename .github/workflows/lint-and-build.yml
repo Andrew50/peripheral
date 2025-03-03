@@ -4,11 +4,65 @@ on:
   pull_request:
     branches: [main, prod]
   
+  # Add workflow_run trigger to run after branch-protection workflow
+  workflow_run:
+    workflows: ["Branch Protection Check"]
+    types:
+      - completed
+
 jobs:
-  lint-and-build-backend:
+  # Add a check to determine if we should run the tests
+  check-workflow-conditions:
     runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - id: check
+        run: |
+          # For direct PRs to main, always run
+          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "main" ]]; then
+            echo "Running for PR to main branch"
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # For PRs to prod, only run if triggered by workflow_run and the previous workflow succeeded
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            if [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]]; then
+              echo "Branch protection check passed, proceeding with tests"
+              echo "should_run=true" >> $GITHUB_OUTPUT
+            else
+              echo "Branch protection check did not pass, skipping tests"
+              echo "should_run=false" >> $GITHUB_OUTPUT
+            fi
+            exit 0
+          fi
+          
+          # For direct PRs to prod, don't run (branch protection should run first)
+          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "prod" ]]; then
+            echo "Skipping direct run for PR to prod - branch protection workflow should run first"
+            echo "should_run=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Default case
+          echo "Running tests by default"
+          echo "should_run=true" >> $GITHUB_OUTPUT
+
+  lint-and-build-backend:
+    needs: check-workflow-conditions
+    if: needs.check-workflow-conditions.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    # Add permissions block for annotations
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: read
     steps:
       - uses: actions/checkout@v3
+        with:
+          # For workflow_run events, we need to check out the PR that triggered the workflow
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -26,11 +80,11 @@ jobs:
         with:
           version: latest
           working-directory: backend
-          args: --timeout=5m --config=.golangci.yml
+          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number
           skip-cache: true
           skip-pkg-cache: true
           skip-build-cache: true
-          only-new-issues: true  # Only report new issues to reduce noise
+          # Remove the only-new-issues parameter since it requires fetching the patch
 
       - name: Go Build
         run: |
@@ -38,9 +92,14 @@ jobs:
           go build -v ./...
 
   lint-and-build-worker:
+    needs: check-workflow-conditions
+    if: needs.check-workflow-conditions.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+        with:
+          # For workflow_run events, we need to check out the PR that triggered the workflow
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -74,9 +133,14 @@ jobs:
           python -m compileall .
 
   lint-and-build-frontend:
+    needs: check-workflow-conditions
+    if: needs.check-workflow-conditions.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+        with:
+          # For workflow_run events, we need to check out the PR that triggered the workflow
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v3

@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "5"
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{},"name":"db","namespace":"default"},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"db"}},"template":{"metadata":{"labels":{"app":"db"}},"spec":{"containers":[{"env":[{"name":"POSTGRES_PASSWORD","valueFrom":{"secretKeyRef":{"key":"DB_ROOT_PASSWORD","name":"db-secret"}}}],"image":"billin19/db:prod","imagePullPolicy":"Always","name":"db","ports":[{"containerPort":5432}],"resources":{"limits":{"cpu":"5000m","memory":"10000Mi"},"requests":{"cpu":"1000m","memory":"2000Mi"}},"volumeMounts":[{"mountPath":"/var/lib/postgresql/data","name":"db-pvc"}]}],"volumes":[{"name":"db-pvc","persistentVolumeClaim":{"claimName":"db-pvc"}}]}}}}
+  creationTimestamp: "2025-03-03T00:29:45Z"
+  generation: 5
+  name: db
+  namespace: default
+  resourceVersion: "505741"
+  uid: 08e4bbc7-6de7-4388-853f-b5d9de6f9107
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: db
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: db
+    spec:
+      containers:
+      - env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: DB_ROOT_PASSWORD
+              name: db-secret
+        image: billin19/db:prod
+        imagePullPolicy: Always
+        name: db
+        ports:
+        - containerPort: 5432
+          protocol: TCP
+        resources:
+          limits:
+            cpu: "5"
+            memory: 10000Mi
+          requests:
+            cpu: "1"
+            memory: 2000Mi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: db-pvc
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: db-pvc
+        persistentVolumeClaim:
+          claimName: db-pvc
+status:
+  availableReplicas: 1
+  conditions:
+  - lastTransitionTime: "2025-03-03T04:19:27Z"
+    lastUpdateTime: "2025-03-03T04:19:27Z"
+    message: Deployment has minimum availability.
+    reason: MinimumReplicasAvailable
+    status: "True"
+    type: Available
+  - lastTransitionTime: "2025-03-03T00:44:40Z"
+    lastUpdateTime: "2025-03-03T04:35:33Z"
+    message: ReplicaSet "db-8598f6bcdd" is progressing.
+    reason: ReplicaSetUpdated
+    status: "True"
+    type: Progressing
+  observedGeneration: 5
+  readyReplicas: 1
+  replicas: 2
+  unavailableReplicas: 1
+  updatedReplicas: 1

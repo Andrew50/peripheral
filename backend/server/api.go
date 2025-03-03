@@ -154,8 +154,8 @@ func public_handler(conn *utils.Conn) http.HandlerFunc {
 			if handleError(w, err, req.Function) {
 				return
 			}
-			err = json.NewEncoder(w).Encode(result)
-			if handleError(w, err, "encoding response") {
+			if err := json.NewEncoder(w).Encode(result); err != nil {
+				handleError(w, err, "encoding response")
 				return
 			}
 			return
@@ -260,8 +260,8 @@ func private_handler(conn *utils.Conn) http.HandlerFunc {
 			if handleError(w, err, req.Function) {
 				return
 			}
-			err = json.NewEncoder(w).Encode(result)
-			if handleError(w, err, "encoding response") {
+			if err := json.NewEncoder(w).Encode(result); err != nil {
+				handleError(w, err, "encoding response")
 				return
 			}
 		} else {
@@ -318,8 +318,8 @@ func queueHandler(conn *utils.Conn) http.HandlerFunc {
 		response := map[string]string{
 			"taskId": taskId,
 		}
-		err = json.NewEncoder(w).Encode(response)
-		if handleError(w, err, "190v0id") {
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			handleError(w, err, "190v0id")
 			return
 		}
 	}
@@ -348,8 +348,8 @@ func pollHandler(conn *utils.Conn) http.HandlerFunc {
 		if handleError(w, err, fmt.Sprintf("executing function %s", req.TaskId)) {
 			return
 		}
-		err = json.NewEncoder(w).Encode(result)
-		if handleError(w, err, "19inv0id") {
+		if err := json.NewEncoder(w).Encode(result); err != nil {
+			handleError(w, err, "19inv0id")
 			return
 		}
 	}
@@ -391,6 +391,26 @@ func WSHandler(conn *utils.Conn) http.HandlerFunc {
 	}
 }
 
+// Health check endpoint handler
+func healthHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Create a response object
+		response := map[string]string{
+			"status":  "healthy",
+			"service": "backend",
+		}
+
+		// Set content type header
+		w.Header().Set("Content-Type", "application/json")
+
+		// Write the response
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			log.Printf("Error encoding health response: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		}
+	}
+}
+
 func StartServer() {
 	conn, cleanup := utils.InitConn(true)
 	defer cleanup()
@@ -402,6 +422,7 @@ func StartServer() {
 	http.HandleFunc("/poll", pollHandler(conn))
 	http.HandleFunc("/ws", WSHandler(conn))
 	http.HandleFunc("/private-upload", private_upload_handler(conn))
+	http.HandleFunc("/health", healthHandler())
 	fmt.Println("debug: Server running on port 5057 ----------------------------------------------------------")
 	if err := http.ListenAndServe(":5057", nil); err != nil {
 		log.Fatal(err)
