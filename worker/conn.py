@@ -91,7 +91,7 @@ class Conn:
                 self.cache.ping()
                 print("Successfully connected to Redis", flush=True)
                 return
-            except (redis.exceptions.ConnectionError, redis.exceptions.ResponseError) as e:
+            except (redis.exceptions.ConnectionError, redis.exceptions.ResponseError, redis.exceptions.TimeoutError) as e:
                 retry_count += 1
                 print(f"Redis connection attempt {retry_count}/{max_retries} failed: {e}", flush=True)
                 if retry_count < max_retries:
@@ -99,8 +99,17 @@ class Conn:
                     time.sleep(backoff_time)
                     backoff_time *= 2  # Exponential backoff
                 else:
-                    print("Max retries reached. Could not connect to Redis.", flush=True)
-                    raise
+                    print("Max retries reached. Could not connect to Redis. Will continue to retry in the background.", flush=True)
+                    # Instead of raising, create a minimal Redis client that will retry on operations
+                    self.cache = redis.Redis(
+                        host=cache_host, 
+                        port=6379,
+                        socket_timeout=10.0,
+                        socket_connect_timeout=10.0,
+                        retry_on_timeout=True,
+                        health_check_interval=30
+                    )
+                    return
 
     def check_connection(self):
         try:
