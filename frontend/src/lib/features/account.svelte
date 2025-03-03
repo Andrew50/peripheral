@@ -59,6 +59,9 @@
 	let statEndDate = '';
 	let statTicker = '';
 
+	// Add this in the script section at the top
+	let deletingTrades = false;
+
 	interface Trade extends Instance {
 		trade_direction: string;
 		status: string;
@@ -98,7 +101,6 @@
 
 	async function pullTrades() {
 		try {
-			console.log('pulling trades');
 			const params: any = { sort: sortDirection };
 
 			if (selectedDate) {
@@ -115,7 +117,6 @@
 
 			const result = await queueRequest<Trade[]>('grab_user_trades', params);
 			trades.set(result);
-			console.log(result);
 			message = 'Trades loaded successfully';
 		} catch (error) {
 			message = `Error: ${error}`;
@@ -126,11 +127,11 @@
 	async function fetchStatistics() {
 		try {
 			const params: any = {};
-			
+
 			if (statStartDate) params.start_date = statStartDate;
 			if (statEndDate) params.end_date = statEndDate;
 			if (statTicker) params.ticker = statTicker.toUpperCase();
-			
+
 			const result = await queueRequest('get_trade_statistics', params);
 			statistics.set(result);
 			message = 'Statistics loaded successfully';
@@ -172,6 +173,31 @@
 		label: `${i.toString().padStart(2, '0')}:00`
 	}));
 
+	async function confirmDeleteAllTrades() {
+		if (
+			confirm('Are you sure you want to delete ALL of your trades? This action cannot be undone.')
+		) {
+			try {
+				deletingTrades = true;
+				message = 'Deleting all trades...';
+
+				const result = await queueRequest('delete_all_user_trades', {});
+
+				if (result.status === 'success') {
+					message = result.message;
+					// Refresh the trades list
+					trades.set([]);
+				} else {
+					message = `Error: ${result.message}`;
+				}
+			} catch (error) {
+				message = `Error: ${error}`;
+				console.error('Delete trades error:', error);
+			} finally {
+				deletingTrades = false;
+			}
+		}
+	}
 </script>
 
 <div class="account-container">
@@ -222,6 +248,10 @@
 				</select>
 
 				<button class="action-button" on:click={pullTrades}>Load Trades</button>
+
+				<button class="delete-button" on:click={confirmDeleteAllTrades} disabled={deletingTrades}>
+					{deletingTrades ? 'Deleting...' : 'Delete All Trades'}
+				</button>
 			</div>
 
 			{#if message}
@@ -233,21 +263,14 @@
 					event.preventDefault();
 				}}
 				list={trades}
-				columns={[
-					'timestamp',
-					'ticker',
-					'trade_direction',
-					'status',
-					'openQuantity',
-					'closedPnL'
-				]}
+				columns={['timestamp', 'Ticker', 'trade_direction', 'status', 'openQuantity', 'closedPnL']}
 				displayNames={{
-					'timestamp': 'Time',
-					'ticker': 'Ticker',
-					'trade_direction': 'Direction',
-					'status': 'Status',
-					'openQuantity': 'Quantity',
-					'closedPnL': 'P/L'
+					timestamp: 'Time',
+					Ticker: 'Ticker',
+					trade_direction: 'Direction',
+					status: 'Status',
+					openQuantity: 'Quantity',
+					closedPnL: 'P/L'
 				}}
 				formatters={{
 					timestamp: (value) => (value ? UTCTimestampToESTString(value) : 'N/A'),
@@ -306,7 +329,7 @@
 				}}
 				list={tickerStats}
 				columns={[
-					'ticker',
+					'Ticker',
 					'total_trades',
 					'win_rate',
 					'winning_trades',
@@ -314,6 +337,15 @@
 					'avg_pnl',
 					'total_pnl'
 				]}
+				displayNames={{
+					Ticker: 'Ticker',
+					total_trades: 'Total Trades',
+					win_rate: 'Win Rate',
+					winning_trades: 'Winning Trades',
+					losing_trades: 'Losing Trades',
+					avg_pnl: 'Avg P/L',
+					total_pnl: 'Total P/L'
+				}}
 				formatters={{
 					win_rate: (value) => `${value}%`,
 					avg_pnl: (value) => `$${value.toFixed(2)}`,
@@ -392,52 +424,38 @@
 					<div class="best-worst-container">
 						<div class="trade-list">
 							<h3>Top Trades</h3>
-							<table>
-								<thead>
-									<tr class="defalt-tr">
-										<th class="defalt-th">Date</th>
-										<th class="defalt-th">Ticker</th>
-										<th class="defalt-th">Direction</th>
-										<th class="defalt-th">P/L</th>
-									</tr>
-								</thead>
-								<tbody>
-									{#each $statistics.top_trades as trade}
-										<tr class="defalt-tr">
-											<td class="defalt-td">{UTCTimestampToESTString(Number(trade.timestamp))}</td>
-											<td class="defalt-td">{trade.ticker}</td>
-											<td class="defalt-td">{trade.direction}</td>
-											<td class="positive">${trade.pnl.toFixed(2)}</td>
-										</tr>
-									{/each}
-								</tbody>
-							</table>
+							<List
+								list={writable($statistics.top_trades)}
+								columns={['timestamp', 'ticker', 'direction', 'pnl']}
+								displayNames={{
+									timestamp: 'Date',
+									ticker: 'Ticker',
+									direction: 'Direction',
+									pnl: 'P/L'
+								}}
+								formatters={{
+									timestamp: (value) => UTCTimestampToESTString(Number(value)),
+									pnl: (value) => `$${value.toFixed(2)}`
+								}}
+							/>
 						</div>
 
 						<div class="trade-list">
 							<h3>Bottom Trades</h3>
-							<table>
-								<thead>
-									<tr class="defalt-tr">
-										<th class="defalt-th">Date</th>
-										<th class="defalt-th">Ticker</th>
-										<th class="defalt-th">Direction</th>
-										<th class="defalt-th">P/L</th>
-									</tr>
-								</thead>
-								<tbody>
-									{#each $statistics.bottom_trades as trade}
-										<tr class="defalt-tr">
-											<td class="defalt-td">{UTCTimestampToESTString(Number(trade.timestamp))}</td>
-											<td class="defalt-td">{trade.ticker}</td>
-											<td class="defalt-td">{trade.direction}</td>
-											<td class={trade.pnl >= 0 ? 'positive' : 'negative'}>
-												${trade.pnl.toFixed(2)}
-											</td>
-										</tr>
-									{/each}
-								</tbody>
-							</table>
+							<List
+								list={writable($statistics.bottom_trades)}
+								columns={['timestamp', 'ticker', 'direction', 'pnl']}
+								displayNames={{
+									timestamp: 'Date',
+									ticker: 'Ticker',
+									direction: 'Direction',
+									pnl: 'P/L'
+								}}
+								formatters={{
+									timestamp: (value) => UTCTimestampToESTString(Number(value)),
+									pnl: (value) => `$${value.toFixed(2)}`
+								}}
+							/>
 						</div>
 					</div>
 				{/if}
@@ -481,36 +499,25 @@
 				{#if $statistics?.ticker_stats}
 					<div class="ticker-stats-container">
 						<h3>Performance by Ticker</h3>
-						<table class="ticker-stats-table">
-							<thead>
-								<tr class="defalt-tr">
-									<th class="defalt-th">Ticker</th>
-									<th class="defalt-th">Total Trades</th>
-									<th class="defalt-th">Win Rate</th>
-									<th class="defalt-th">Winning Trades</th>
-									<th class="defalt-th">Losing Trades</th>
-									<th class="defalt-th">Avg P/L</th>
-									<th class="defalt-th">Total P/L</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each $statistics.ticker_stats as stat}
-									<tr class:profitable={stat.total_pnl > 0}>
-										<td class="defalt-td">{stat.ticker}</td>
-										<td class="defalt-td">{stat.total_trades}</td>
-										<td class="defalt-td">{stat.win_rate}%</td>
-										<td class="defalt-td">{stat.winning_trades}</td>
-										<td class="defalt-td">{stat.losing_trades}</td>
-										<td class={stat.avg_pnl >= 0 ? 'positive' : 'negative'}>
-											${stat.avg_pnl}
-										</td>
-										<td class={stat.total_pnl >= 0 ? 'positive' : 'negative'}>
-											${stat.total_pnl}
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
+						<List
+							list={writable($statistics.ticker_stats)}
+							columns={['ticker', 'total_trades', 'win_rate', 'winning_trades', 'losing_trades', 'avg_pnl', 'total_pnl']}
+							displayNames={{
+								ticker: 'Ticker',
+								total_trades: 'Total Trades',
+								win_rate: 'Win Rate',
+								winning_trades: 'Winning Trades',
+								losing_trades: 'Losing Trades',
+								avg_pnl: 'Avg P/L',
+								total_pnl: 'Total P/L'
+							}}
+							formatters={{
+								win_rate: (value) => `${value}%`,
+								avg_pnl: (value) => `$${value}`,
+								total_pnl: (value) => `$${value}`
+							}}
+							rowClass={(item) => item.total_pnl > 0 ? 'profitable' : 'unprofitable'}
+						/>
 					</div>
 				{/if}
 			{:else}
@@ -668,12 +675,15 @@
 		grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 		gap: 20px;
 		margin-top: 20px;
+		width: 100%;
 	}
 
 	.trade-list {
 		background-color: #333;
 		padding: 15px;
 		border-radius: 8px;
+		width: 100%;
+		overflow-x: auto;
 	}
 
 	.trade-list h3 {
@@ -686,6 +696,8 @@
 		width: 100%;
 		border-collapse: collapse;
 		font-size: 0.9em;
+		table-layout: fixed;
+		min-width: 350px;
 	}
 
 	.trade-list th {
@@ -695,9 +707,34 @@
 		color: #888;
 	}
 
+	.trade-list th:nth-child(1), 
+	.trade-list td:nth-child(1) {
+		width: 33%;
+	}
+
+	.trade-list th:nth-child(2), 
+	.trade-list td:nth-child(2) {
+		width: 17%;
+	}
+
+	.trade-list th:nth-child(3), 
+	.trade-list td:nth-child(3) {
+		width: 17%;
+	}
+
+	.trade-list th:nth-child(4), 
+	.trade-list td:nth-child(4) {
+		width: 33%;
+		text-align: right;
+		padding-right: 12px;
+	}
+
 	.trade-list td {
 		padding: 8px;
 		border-bottom: 1px solid #444;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.trade-list tr:last-child td {
@@ -821,5 +858,24 @@
 		width: 100%;
 		min-width: 600px; /* Minimum width before horizontal scroll */
 		max-width: 100%;
+	}
+
+	.delete-button {
+		background-color: #d32f2f;
+		color: white;
+		border: none;
+		padding: 8px 16px;
+		border-radius: 4px;
+		cursor: pointer;
+		margin-left: 8px;
+	}
+
+	.delete-button:hover {
+		background-color: #b71c1c;
+	}
+
+	.delete-button:disabled {
+		background-color: #9e9e9e;
+		cursor: not-allowed;
 	}
 </style>

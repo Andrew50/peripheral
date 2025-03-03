@@ -213,7 +213,6 @@ func (c *Client) StartLoop() {
 								case "fast-regular", "fast-extended":
 									fallthrough
 								case "quote":
-									fmt.Printf("\n\nchannelType: %v\n\n", channelType)
 									c.send <- jsonMarshalTick(aggregateTicks(ticksToPush, replayData.baseDataType), replayData.securityId, channelType)
 								}
 							}

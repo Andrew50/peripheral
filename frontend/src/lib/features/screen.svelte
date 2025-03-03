@@ -28,7 +28,7 @@
 		const dateToScreen = get(selectedDate); // Get the currently selected date
 		queueRequest<Screen[]>('screen', { setupIds: setupIds, timestamp: dateToScreen / 1000 }).then(
 			(response) => {
-				console.log(response);
+				response;
 				screens.set(response);
 			}
 		);
@@ -61,13 +61,76 @@
 	{/if}
 </div>
 
-<button on:click={changeDate}> Change Date </button>
-<button on:click={runScreen}> Screen {UTCTimestampToESTString($selectedDate)} </button>
+<div class="button-row">
+	<button on:click={changeDate}> Change Date </button>
+	<button on:click={runScreen}> Screen {UTCTimestampToESTString($selectedDate)} </button>
+</div>
 
 <List
 	on:contextmenu={(event) => {
 		event.preventDefault();
 	}}
 	list={screens}
-	columns={['Ticker', 'Chg', 'Setup', 'Score']}
+	columns={['Ticker', 'Chg%', 'Setup', 'Score', 'Ext.']}
 />
+
+<style>
+	.controls-container {
+		display: flex;
+		justify-content: flex-start;
+		gap: 8px;
+		margin-bottom: 14px;
+		margin-top: 8px;
+		flex-wrap: wrap;
+		width: 100%;
+	}
+
+	.toggle-button {
+		margin-right: 0;
+		padding: 6px 10px;
+		min-width: 70px;
+		height: 32px;
+		font-weight: 500;
+		transition: all 0.2s ease;
+		border-radius: 6px;
+		position: relative;
+		overflow: hidden;
+	}
+
+	.toggle-button:after {
+		content: '';
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		width: 0;
+		height: 2px;
+		background: var(--ui-accent, #4a80f0);
+		transition: width 0.2s ease;
+	}
+
+	.toggle-button:hover:after {
+		width: 100%;
+	}
+
+	.toggle-button.active {
+		background: var(--ui-bg-hover);
+		border-bottom: 2px solid var(--ui-accent, #4a80f0);
+	}
+
+	.toggle-button.active:after {
+		width: 100%;
+	}
+
+	.button-row {
+		display: flex;
+		gap: 10px;
+		margin-bottom: 16px;
+	}
+
+	button {
+		min-width: 120px;
+		border-radius: 6px;
+		font-weight: 500;
+		letter-spacing: 0.3px;
+	}
+</style>

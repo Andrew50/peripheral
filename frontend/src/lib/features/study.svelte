@@ -76,7 +76,7 @@
 		loadStudies();
 	});
 	function getSetupNameById(setupId: number) {
-		console.log(setupId);
+		setupId;
 		const setup = $setups.find((s) => s.setupId === setupId);
 		return setup ? setup.name : null; // Return setupName if found, otherwise return null
 	}

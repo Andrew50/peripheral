@@ -6,6 +6,7 @@ import (
 	"backend/alerts"
 	"backend/utils"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 )
@@ -59,10 +60,7 @@ func initialize(conn *utils.Conn) {
 	// Queue sector update on first init
 
 	if useBS {
-		err := socket.InitAggregates(conn)
-		if err != nil {
-			fmt.Println("schedule issue: dfi0w20", err)
-		}
+		socket.InitAggregatesAsync(conn)
 
 		alertsInitMutex.Lock()
 		if !alertsInitialized {
@@ -78,7 +76,12 @@ func initialize(conn *utils.Conn) {
 	}
 	polygonInitMutex.Lock()
 	if !polygonInitialized {
-		socket.StartPolygonWS(conn, useBS)
+		err := socket.StartPolygonWS(conn, useBS)
+		if err != nil {
+			log.Printf("Failed to start Polygon WebSocket: %v", err)
+			// Continue with initialization even if Polygon WS fails
+			// You might want to add retry logic or better error handling here
+		}
 		polygonInitialized = true
 	}
 	polygonInitMutex.Unlock()
@@ -108,6 +111,14 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 	eClose := time.Date(year, month, day, 20, 0, 0, 0, now.Location())
 	//open := time.Date(year, month, day, 9, 30, 0, 0, now.Location())
 	//close_ := time.Date(year, month, day, 16, 0, 0, 0, now.Location())
+	fmt.Printf("\n\nStarting EdgarFilingsService\n\n")
+	utils.StartEdgarFilingsService()
+	go func() {
+		for filing := range utils.NewFilingsChannel {
+			fmt.Printf("\n\nBroadcasting global SEC filing\n\n")
+			socket.BroadcastGlobalSECFiling(filing)
+		}
+	}()
 	if !eOpenRun && now.After(eOpen) && now.Before(eClose) {
 		eOpenRun = true
 		eCloseRun = false
@@ -120,7 +131,10 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 		eOpenRun = false
 		eCloseRun = true
 		alerts.StopAlertLoop()
-		socket.StopPolygonWS()
+		if err := socket.StopPolygonWS(); err != nil {
+			log.Printf("Failed to stop Polygon WebSocket: %v", err)
+			// Continue execution even if stopping the websocket fails
+		}
 		fmt.Println("running close schedule ----------------------")
 		if useBS {
 

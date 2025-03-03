@@ -1,0 +1,22 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install only the required dependencies
+RUN pip install --no-cache-dir psycopg2-binary redis
+
+# Copy the connection module and health check script
+COPY conn.py .
+COPY health_check.py .
+RUN chmod +x health_check.py
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV HEALTHCHECK_INTERVAL=30
+ENV HEALTHCHECK_MAX_INTERVAL=300
+
+# Run with minimal privileges
+USER nobody
+
+# Run the health check script
+CMD ["python", "-u", "health_check.py"]

@@ -7,17 +7,61 @@
 	import { activeChartInstance, queryChart } from '$lib/features/chart/interface';
 	import StreamCell from '$lib/utils/stream/streamCell.svelte';
 	import { streamInfo, formatTimestamp } from '$lib/core/stores';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { privateRequest } from '$lib/core/backend';
+	import {
+		UTCSecondstoESTSeconds,
+		ESTSecondstoUTCSeconds,
+		ESTSecondstoUTCMillis,
+		getReferenceStartTimeForDateMilliseconds,
+		timeframeToSeconds
+	} from '$lib/core/timestamp';
 
 	let instance: Writable<Instance> = writable({});
 	let container: HTMLDivElement;
 	let showTimeAndSales = false;
+	let currentDetails: Record<string, any> = {};
+	let lastFetchedSecurityId: number | null = null;
+	let countdown = writable('--');
+	let countdownInterval: ReturnType<typeof setInterval>;
 
-	// Sync instance with activeChartInstance
-	activeChartInstance.subscribe((chartInstance) => {
-		if (chartInstance) {
+	// Sync instance with activeChartInstance and handle details fetching
+	activeChartInstance.subscribe((chartInstance: Instance | null) => {
+		console.log('Quote component: activeChartInstance update received', chartInstance);
+		if (chartInstance?.ticker) {
+			// Only update if we have a valid ticker
+			console.log('Quote component: Setting new instance with ticker:', chartInstance.ticker);
 			instance.set(chartInstance);
+
+			// Handle details fetching in the main subscription
+			if (chartInstance.securityId && lastFetchedSecurityId !== chartInstance.securityId) {
+				console.log('Quote component: Fetching details for security ID:', chartInstance.securityId);
+				lastFetchedSecurityId = chartInstance.securityId;
+				privateRequest<Record<string, any>>(
+					'getTickerMenuDetails',
+					{ securityId: chartInstance.securityId },
+					true
+				)
+					.then((details) => {
+						console.log('Quote component: Received details:', details);
+						if (lastFetchedSecurityId === chartInstance.securityId) {
+							currentDetails = details;
+							// Update the instance directly instead of activeChartInstance
+							instance.update((inst) => ({
+								...inst,
+								...details
+							}));
+						} else {
+							console.log('Quote component: Ignoring stale details response');
+						}
+					})
+					.catch((error) => {
+						console.error('Quote component: Error fetching details:', error);
+						if (lastFetchedSecurityId === chartInstance.securityId) {
+							currentDetails = {};
+						}
+					});
+			}
 		}
 	});
 
@@ -37,7 +81,7 @@
 		showTimeAndSales = !showTimeAndSales;
 	}
 
-	function handleClick(event: MouseEvent | TouchEvent) {
+	function handleClick(event?: MouseEvent | TouchEvent) {
 		if ($activeChartInstance) {
 			queryChart($activeChartInstance);
 		}
@@ -47,27 +91,79 @@
 		container.addEventListener('keydown', handleKey);
 	}
 
-	onMount(() => {
-		activeChartInstance.subscribe((instance: Instance | null) => {
-			if (instance && !instance.detailsFetched && instance.securityId) {
-				privateRequest('getTickerMenuDetails', { securityId: instance.securityId }, true).then(
-					(details) => {
-						activeChartInstance.update((inst: Instance) => ({
-							...inst,
-							...details,
-							detailsFetched: true
-						}));
-					}
-				);
-			}
-		});
+	function formatTime(seconds: number): string {
+		const years = Math.floor(seconds / (365 * 24 * 60 * 60));
+		const months = Math.floor((seconds % (365 * 24 * 60 * 60)) / (30 * 24 * 60 * 60));
+		const weeks = Math.floor((seconds % (30 * 24 * 60 * 60)) / (7 * 24 * 60 * 60));
+		const days = Math.floor((seconds % (7 * 24 * 60 * 60)) / (24 * 60 * 60));
+		const hours = Math.floor((seconds % (24 * 60 * 60)) / (60 * 60));
+		const minutes = Math.floor((seconds % (60 * 60)) / 60);
+		const secs = Math.floor(seconds % 60);
 
+		if (years > 0) return `${years}y ${months}m`;
+		if (months > 0) return `${months}m ${weeks}w`;
+		if (weeks > 0) return `${weeks}w ${days}d`;
+		if (days > 0) return `${days}d ${hours}h`;
+		if (hours > 0) return `${hours}h ${minutes}m`;
+		if (minutes > 0) return `${minutes}m ${secs < 10 ? '0' : ''}${secs}s`;
+		return `${secs < 10 ? '0' : ''}${secs}s`;
+	}
+
+	function calculateCountdown() {
+		const currentInst = get(instance);
+		if (!currentInst?.timeframe) {
+			countdown.set('--');
+			return;
+		}
+
+		const currentTimeInSeconds = Math.floor($streamInfo.timestamp / 1000);
+		const chartTimeframeInSeconds = timeframeToSeconds(currentInst.timeframe, currentTimeInSeconds);
+
+		let nextBarClose =
+			currentTimeInSeconds -
+			(currentTimeInSeconds % chartTimeframeInSeconds) +
+			chartTimeframeInSeconds;
+
+		// For daily timeframes, adjust to market close (4:00 PM EST)
+		if (currentInst.timeframe.includes('d')) {
+			const nextCloseDate = new Date(nextBarClose * 1000);
+			const estOptions = { timeZone: 'America/New_York', hour12: false };
+			const formatter = new Intl.DateTimeFormat('en-US', {
+				...estOptions,
+				year: 'numeric',
+				month: 'numeric',
+				day: 'numeric'
+			});
+
+			const [month, day, year] = formatter.format(nextCloseDate).split('/');
+			const marketCloseDate = new Date(
+				`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T16:00:00`
+			);
+			marketCloseDate.setTime(
+				marketCloseDate.getTime() + marketCloseDate.getTimezoneOffset() * 60 * 1000
+			);
+			nextBarClose = Math.floor(marketCloseDate.getTime() / 1000);
+		}
+
+		const currentTimeEST = UTCSecondstoESTSeconds(currentTimeInSeconds);
+		const remainingTime = nextBarClose - currentTimeEST;
+
+		if (remainingTime > 0) {
+			countdown.set(formatTime(remainingTime));
+		} else {
+			countdown.set('Bar Closed');
+		}
+	}
+
+	onMount(() => {
 		document.addEventListener('mousemove', handleMouseMove);
 		document.addEventListener('mouseup', handleMouseUp);
+		countdownInterval = setInterval(calculateCountdown, 1000);
 
 		return () => {
 			document.removeEventListener('mousemove', handleMouseMove);
 			document.removeEventListener('mouseup', handleMouseUp);
+			clearInterval(countdownInterval);
 		};
 	});
 
@@ -83,7 +179,16 @@
 <div
 	class="ticker-info-container"
 	bind:this={container}
+	role="region"
+	aria-label="Ticker Information"
 	on:click={handleClick}
+	on:keydown={(e) => {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			handleClick();
+		}
+	}}
+	tabindex="0"
 	on:touchstart={handleClick}
 >
 	<div class="content">
@@ -106,19 +211,19 @@
 		<div class="stream-cells">
 			<div class="stream-cell-container">
 				<span class="label">Price</span>
-				<StreamCell instance={$activeChartInstance} type="price" />
+				<StreamCell instance={$instance} type="price" />
 			</div>
 			<div class="stream-cell-container">
 				<span class="label">Chg %</span>
-				<StreamCell instance={$activeChartInstance} type="change %" />
+				<StreamCell instance={$instance} type="change %" />
 			</div>
 			<div class="stream-cell-container">
 				<span class="label">Chg $</span>
-				<StreamCell instance={$activeChartInstance} type="change" />
+				<StreamCell instance={$instance} type="change" />
 			</div>
 			<div class="stream-cell-container">
 				<span class="label">Ext %</span>
-				<StreamCell instance={$activeChartInstance} type="change % extended" />
+				<StreamCell instance={$instance} type="change % extended" />
 			</div>
 		</div>
 
@@ -130,21 +235,27 @@
 			{#if showTimeAndSales}
 				<TimeAndSales {instance} />
 			{/if}
+			<div class="countdown-section">
+				<div class="countdown-container">
+					<span class="countdown-label">Next Bar Close:</span>
+					<span class="countdown-value">{$countdown}</span>
+				</div>
+			</div>
 		</div>
 
 		<div class="info-row">
 			<span class="label">Name:</span>
-			<span class="value">{$activeChartInstance?.name}</span>
+			<span class="value">{$instance?.name || currentDetails?.name || 'N/A'}</span>
 		</div>
 		<div class="info-row">
 			<span class="label">Active:</span>
-			<span class="value">{$activeChartInstance?.active || 'N/A'}</span>
+			<span class="value">{$instance?.active || currentDetails?.active || 'N/A'}</span>
 		</div>
 		<div class="info-row">
 			<span class="label">Market Cap:</span>
 			<span class="value">
-				{#if $activeChartInstance?.totalShares}
-					<StreamCell instance={$activeChartInstance} type="market cap" />
+				{#if $instance?.totalShares || currentDetails?.totalShares}
+					<StreamCell instance={$instance} type="market cap" />
 				{:else}
 					N/A
 				{/if}
@@ -152,25 +263,30 @@
 		</div>
 		<div class="info-row">
 			<span class="label">Sector:</span>
-			<span class="value">{$activeChartInstance?.sector || 'N/A'}</span>
+			<span class="value">{$instance?.sector || currentDetails?.sector || 'N/A'}</span>
 		</div>
 		<div class="info-row">
 			<span class="label">Industry:</span>
-			<span class="value">{$activeChartInstance?.industry || 'N/A'}</span>
+			<span class="value">{$instance?.industry || currentDetails?.industry || 'N/A'}</span>
 		</div>
 		<div class="info-row">
 			<span class="label">Exchange:</span>
-			<span class="value">{$activeChartInstance?.primary_exchange || 'N/A'}</span>
+			<span class="value"
+				>{$instance?.primary_exchange || currentDetails?.primary_exchange || 'N/A'}</span
+			>
 		</div>
 		<div class="info-row">
 			<span class="label">Market:</span>
-			<span class="value">{$activeChartInstance?.market || 'N/A'}</span>
+			<span class="value">{$instance?.market || currentDetails?.market || 'N/A'}</span>
 		</div>
 		<div class="info-row">
 			<span class="label">Shares Out:</span>
 			<span class="value">
-				{#if $activeChartInstance?.share_class_shares_outstanding}
-					{($activeChartInstance.share_class_shares_outstanding / 1e6).toFixed(2)}M
+				{#if $instance?.share_class_shares_outstanding || currentDetails?.share_class_shares_outstanding}
+					{(
+						($instance?.share_class_shares_outstanding ||
+							currentDetails?.share_class_shares_outstanding) / 1e6
+					).toFixed(2)}M
 				{:else}
 					N/A
 				{/if}
@@ -314,5 +430,39 @@
 		margin-top: 15px;
 		border-top: 1px solid var(--ui-border);
 		padding-top: 15px;
+	}
+
+	.countdown-section {
+		margin-top: 10px;
+		padding-top: 10px;
+		border-top: 1px solid var(--ui-border);
+	}
+
+	.countdown-container {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 8px;
+		background: var(--ui-bg-secondary);
+		border-radius: 4px;
+		border: 1px solid var(--ui-border);
+	}
+
+	.countdown-label {
+		color: var(--text-secondary);
+		font-size: 0.9em;
+		font-weight: 500;
+	}
+
+	.countdown-value {
+		font-family: var(--font-primary);
+		font-weight: 600;
+		font-size: 0.9em;
+		color: var(--text-primary);
+		padding: 4px 8px;
+		background: var(--ui-bg-primary);
+		border-radius: 4px;
+		min-width: 80px;
+		text-align: center;
 	}
 </style>
