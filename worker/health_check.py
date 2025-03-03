@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 """
 Health check script that uses the connection checking functionality from conn.py
 """
