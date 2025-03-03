@@ -87,7 +87,7 @@ def calculate_active(data):
 
             # Calculate price return in percentage over the lookback period
             current_price = tensor[idx][-1][3]  # current close
-            past_price = tensor[idx][-lookback_bars][3]  # past close
+            past_price = tensor[idx][-(lookback_bars+1)][3]  # past close
             # print(f"timeframe: {timeframe}, ticker: {ticker}, current_price: {current_price}, past_price: {past_price}")
             if past_price == 0:
                 continue  # avoid division by zero

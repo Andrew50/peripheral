@@ -5,6 +5,7 @@ import (
 	//"backend/alerts"
 	"backend/alerts"
 	"backend/utils"
+	"context"
 	"fmt"
 	"log"
 	"sync"
@@ -25,7 +26,7 @@ var (
 
 func StartScheduler(conn *utils.Conn) chan struct{} {
 
-	//go initialize(conn)
+	go initialize(conn)
 	//eventLoop(time.Now(), conn)
 
 	updateSectors(conn)
@@ -56,6 +57,13 @@ func StartScheduler(conn *utils.Conn) chan struct{} {
 }
 
 func initialize(conn *utils.Conn) {
+	// Clear worker queue on initialization to prevent backlog
+	err := conn.Cache.Del(context.Background(), "queue").Err()
+	if err != nil {
+		fmt.Println("Failed to clear worker queue:", err)
+	} else {
+		fmt.Println("Worker queue cleared successfully during initialization")
+	}
 
 	// Queue sector update on first init
 
