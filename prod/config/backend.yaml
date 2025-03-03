@@ -52,7 +52,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: redis-secret
-                  key: redis-password
+                  key: REDIS_PASSWORD
             # Add Polygon API key
             - name: POLYGON_API_KEY
               valueFrom:
