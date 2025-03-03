@@ -2,14 +2,14 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   annotations:
-    deployment.kubernetes.io/revision: "15"
+    deployment.kubernetes.io/revision: "22"
     kubectl.kubernetes.io/last-applied-configuration: |
-      {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{},"name":"worker","namespace":"default"},"spec":{"replicas":3,"selector":{"matchLabels":{"app":"worker"}},"template":{"metadata":{"labels":{"app":"worker"}},"spec":{"containers":[{"env":[{"name":"REDIS_HOST","value":"cache"},{"name":"REDIS_PORT","value":"6379"},{"name":"REDIS_PASSWORD","valueFrom":{"secretKeyRef":{"key":"redis-password","name":"redis-secret"}}},{"name":"DB_PASSWORD","valueFrom":{"secretKeyRef":{"key":"db-password","name":"db-secret"}}},{"name":"DB_HOST","value":"db"},{"name":"DB_PORT","value":"5432"},{"name":"DB_USER","value":"postgres"},{"name":"REDIS_RETRY_ATTEMPTS","value":"20"},{"name":"REDIS_RETRY_DELAY","value":"10"}],"image":"billin19/worker:prod","imagePullPolicy":"Always","livenessProbe":{"exec":{"command":["/bin/sh","-c","if [ -f \"/app/db_check.py\" ]; then\n  python3 /app/db_check.py\nelse\n  python3 -c 'import os, time, socket; host=os.environ[\"REDIS_HOST\"]; port=int(os.environ[\"REDIS_PORT\"]); s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); try: s.connect((host, port)); s.close(); exit(0); except Exception as e: print(f\"Redis connection failed: {e}\"); exit(1);'\nfi\n"]},"failureThreshold":5,"initialDelaySeconds":60,"periodSeconds":30,"timeoutSeconds":10},"name":"worker","readinessProbe":{"exec":{"command":["/bin/sh","-c","if [ -f \"/app/db_check.py\" ]; then\n  python3 /app/db_check.py\nelse\n  python3 -c 'import os, time, socket, psycopg2; host=os.environ[\"REDIS_HOST\"]; port=int(os.environ[\"REDIS_PORT\"]); s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); try: s.connect((host, port)); s.close(); print(\"Redis connection successful\"); except Exception as e: print(f\"Redis connection failed: {e}\"); exit(1); try: conn = psycopg2.connect(host=os.environ.get(\"DB_HOST\"), port=int(os.environ.get(\"DB_PORT\")), user=os.environ.get(\"DB_USER\"), password=os.environ.get(\"DB_PASSWORD\")); conn.close(); print(\"Database connection successful\"); exit(0); except Exception as e: print(f\"Database connection failed: {e}\"); exit(1);'\nfi\n"]},"failureThreshold":3,"initialDelaySeconds":30,"periodSeconds":20,"timeoutSeconds":10},"resources":{"limits":{"cpu":"5000m","memory":"8000Mi"},"requests":{"cpu":"500m","memory":"5000Mi"}}}],"initContainers":[{"command":["/bin/sh","-c","echo \"Waiting for database and Redis to be ready...\"; if [ -f \"/app/db_check.py\" ]; then\n  python3 /app/db_check.py\nelse\n  echo \"db_check.py not found, using inline script\";\n  until python3 -c \"import psycopg2, os; psycopg2.connect(host=os.environ.get('DB_HOST'), port=int(os.environ.get('DB_PORT')), user=os.environ.get('DB_USER'), password=os.environ.get('DB_PASSWORD'))\"; do\n    echo \"Database not ready yet, retrying in 5 seconds...\";\n    sleep 5;\n  done;\n  echo \"Database is ready.\";\n  echo \"Checking Redis connection...\";\n  python3 -c \"import redis, os; host=os.environ.get('REDIS_HOST'); port=int(os.environ.get('REDIS_PORT')); password=os.environ.get('REDIS_PASSWORD'); r = redis.Redis(host=host, port=port, password=password); r.ping(); print('Redis connection successful.');\"\nfi\n"],"env":[{"name":"REDIS_HOST","value":"cache"},{"name":"REDIS_PORT","value":"6379"},{"name":"REDIS_PASSWORD","valueFrom":{"secretKeyRef":{"key":"redis-password","name":"redis-secret"}}},{"name":"DB_PASSWORD","valueFrom":{"secretKeyRef":{"key":"db-password","name":"db-secret"}}},{"name":"DB_HOST","value":"db"},{"name":"DB_PORT","value":"5432"},{"name":"DB_USER","value":"postgres"}],"image":"billin19/worker:prod","name":"wait-for-db"}]}}}}
+      {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{},"name":"worker","namespace":"default"},"spec":{"replicas":3,"selector":{"matchLabels":{"app":"worker"}},"template":{"metadata":{"labels":{"app":"worker"}},"spec":{"containers":[{"env":[{"name":"REDIS_HOST","value":"cache"},{"name":"REDIS_PORT","value":"6379"},{"name":"REDIS_PASSWORD","valueFrom":{"secretKeyRef":{"key":"redis-password","name":"redis-secret"}}},{"name":"DB_PASSWORD","valueFrom":{"secretKeyRef":{"key":"db-password","name":"db-secret"}}},{"name":"DB_HOST","value":"db"},{"name":"DB_PORT","value":"5432"},{"name":"DB_USER","value":"postgres"},{"name":"REDIS_RETRY_ATTEMPTS","value":"20"},{"name":"REDIS_RETRY_DELAY","value":"10"},{"name":"REDIS_SOCKET_TIMEOUT","value":"60"},{"name":"REDIS_SOCKET_CONNECT_TIMEOUT","value":"30"}],"image":"billin19/worker:prod","imagePullPolicy":"Always","livenessProbe":{"exec":{"command":["/bin/sh","-c","if [ -f \"/app/db_check.py\" ]; then\n  python3 /app/db_check.py\nelse\n  python3 -c 'import os, time, socket; host=os.environ[\"REDIS_HOST\"]; port=int(os.environ[\"REDIS_PORT\"]); s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); try: s.connect((host, port)); s.close(); exit(0); except Exception as e: print(f\"Redis connection failed: {e}\"); exit(1);'\nfi\n"]},"failureThreshold":5,"initialDelaySeconds":60,"periodSeconds":30,"timeoutSeconds":10},"name":"worker","readinessProbe":{"exec":{"command":["/bin/sh","-c","if [ -f \"/app/db_check.py\" ]; then\n  python3 /app/db_check.py\nelse\n  python3 -c 'import os, time, socket, psycopg2; host=os.environ[\"REDIS_HOST\"]; port=int(os.environ[\"REDIS_PORT\"]); s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); try: s.connect((host, port)); s.close(); print(\"Redis connection successful\"); except Exception as e: print(f\"Redis connection failed: {e}\"); exit(1); try: conn = psycopg2.connect(host=os.environ.get(\"DB_HOST\"), port=int(os.environ.get(\"DB_PORT\")), user=os.environ.get(\"DB_USER\"), password=os.environ.get(\"DB_PASSWORD\")); conn.close(); print(\"Database connection successful\"); exit(0); except Exception as e: print(f\"Database connection failed: {e}\"); exit(1);'\nfi\n"]},"failureThreshold":3,"initialDelaySeconds":30,"periodSeconds":20,"timeoutSeconds":10},"resources":{"limits":{"cpu":"5000m","memory":"8000Mi"},"requests":{"cpu":"500m","memory":"5000Mi"}}}],"initContainers":[{"command":["/bin/sh","-c","echo \"Waiting for database and Redis to be ready...\"; if [ -f \"/app/db_check.py\" ]; then\n  python3 /app/db_check.py\nelse\n  echo \"db_check.py not found, using inline script\";\n  until python3 -c \"import psycopg2, os; psycopg2.connect(host=os.environ.get('DB_HOST'), port=int(os.environ.get('DB_PORT')), user=os.environ.get('DB_USER'), password=os.environ.get('DB_PASSWORD'))\"; do\n    echo \"Database not ready yet, retrying in 5 seconds...\";\n    sleep 5;\n  done;\n  echo \"Database is ready.\";\n  echo \"Checking Redis connection...\";\n  python3 -c \"import redis, os; host=os.environ.get('REDIS_HOST'); port=int(os.environ.get('REDIS_PORT')); password=os.environ.get('REDIS_PASSWORD'); r = redis.Redis(host=host, port=port, password=password); r.ping(); print('Redis connection successful.');\"\nfi\n"],"env":[{"name":"REDIS_HOST","value":"cache"},{"name":"REDIS_PORT","value":"6379"},{"name":"REDIS_PASSWORD","valueFrom":{"secretKeyRef":{"key":"redis-password","name":"redis-secret"}}},{"name":"DB_PASSWORD","valueFrom":{"secretKeyRef":{"key":"db-password","name":"db-secret"}}},{"name":"DB_HOST","value":"db"},{"name":"DB_PORT","value":"5432"},{"name":"DB_USER","value":"postgres"}],"image":"billin19/worker:prod","name":"wait-for-db"}]}}}}
   creationTimestamp: "2025-03-03T00:30:19Z"
-  generation: 15
+  generation: 28
   name: worker
   namespace: default
-  resourceVersion: "488506"
+  resourceVersion: "500171"
   uid: 4fce47d8-f966-436c-9954-ca05eebf4859
 spec:
   progressDeadlineSeconds: 600
@@ -26,147 +26,161 @@ spec:
   template:
     metadata:
       annotations:
-        kubectl.kubernetes.io/restartedAt: "2025-03-02T20:19:33-05:00"
+        kubectl.kubernetes.io/restartedAt: "2025-03-02T22:42:40-05:00"
       creationTimestamp: null
       labels:
         app: worker
     spec:
       containers:
-      - env:
-        - name: REDIS_HOST
-          value: cache
-        - name: REDIS_PORT
-          value: "6379"
-        - name: REDIS_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              key: redis-password
-              name: redis-secret
-        - name: DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              key: db-password
-              name: db-secret
-        - name: DB_HOST
-          value: db
-        - name: DB_PORT
-          value: "5432"
-        - name: DB_USER
-          value: postgres
-        - name: REDIS_RETRY_ATTEMPTS
-          value: "20"
-        - name: REDIS_RETRY_DELAY
-          value: "10"
-        image: billin19/worker:prod
-        imagePullPolicy: Always
-        livenessProbe:
-          exec:
-            command:
+        - command:
             - /bin/sh
             - -c
-            - |
-              if [ -f "/app/db_check.py" ]; then
-                python3 /app/db_check.py
-              else
-                python3 -c 'import os, time, socket; host=os.environ["REDIS_HOST"]; port=int(os.environ["REDIS_PORT"]); s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); try: s.connect((host, port)); s.close(); exit(0); except Exception as e: print(f"Redis connection failed: {e}"); exit(1);'
-              fi
-          failureThreshold: 5
-          initialDelaySeconds: 60
-          periodSeconds: 30
-          successThreshold: 1
-          timeoutSeconds: 10
-        name: worker
-        readinessProbe:
-          exec:
-            command:
-            - /bin/sh
-            - -c
-            - |
-              if [ -f "/app/db_check.py" ]; then
-                python3 /app/db_check.py
-              else
-                python3 -c 'import os, time, socket, psycopg2; host=os.environ["REDIS_HOST"]; port=int(os.environ["REDIS_PORT"]); s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); try: s.connect((host, port)); s.close(); print("Redis connection successful"); except Exception as e: print(f"Redis connection failed: {e}"); exit(1); try: conn = psycopg2.connect(host=os.environ.get("DB_HOST"), port=int(os.environ.get("DB_PORT")), user=os.environ.get("DB_USER"), password=os.environ.get("DB_PASSWORD")); conn.close(); print("Database connection successful"); exit(0); except Exception as e: print(f"Database connection failed: {e}"); exit(1);'
-              fi
-          failureThreshold: 3
-          initialDelaySeconds: 30
-          periodSeconds: 20
-          successThreshold: 1
-          timeoutSeconds: 10
-        resources:
-          limits:
-            cpu: "5"
-            memory: 8000Mi
-          requests:
-            cpu: 500m
-            memory: 5000Mi
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
+            - cp /conn-patch/conn.py /app/conn.py && python3 /app/worker.py
+          env:
+            - name: REDIS_HOST
+              value: cache
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: redis-password
+                  name: redis-secret
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: db-password
+                  name: db-secret
+            - name: DB_HOST
+              value: db
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              value: postgres
+            - name: REDIS_RETRY_ATTEMPTS
+              value: "20"
+            - name: REDIS_RETRY_DELAY
+              value: "10"
+            - name: REDIS_SOCKET_TIMEOUT
+              value: "60"
+            - name: REDIS_SOCKET_CONNECT_TIMEOUT
+              value: "30"
+          image: billin19/worker:prod
+          imagePullPolicy: Always
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  if [ -f "/app/db_check.py" ]; then
+                    python3 /app/db_check.py
+                  else
+                    python3 -c 'import os, time, socket; host=os.environ["REDIS_HOST"]; port=int(os.environ["REDIS_PORT"]); s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); try: s.connect((host, port)); s.close(); exit(0); except Exception as e: print(f"Redis connection failed: {e}"); exit(1);'
+                  fi
+            failureThreshold: 5
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 10
+          name: worker
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  if [ -f "/app/db_check.py" ]; then
+                    python3 /app/db_check.py
+                  else
+                    python3 -c 'import os, time, socket, psycopg2; host=os.environ["REDIS_HOST"]; port=int(os.environ["REDIS_PORT"]); s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); try: s.connect((host, port)); s.close(); print("Redis connection successful"); except Exception as e: print(f"Redis connection failed: {e}"); exit(1); try: conn = psycopg2.connect(host=os.environ.get("DB_HOST"), port=int(os.environ.get("DB_PORT")), user=os.environ.get("DB_USER"), password=os.environ.get("DB_PASSWORD")); conn.close(); print("Database connection successful"); exit(0); except Exception as e: print(f"Database connection failed: {e}"); exit(1);'
+                  fi
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            successThreshold: 1
+            timeoutSeconds: 10
+          resources:
+            limits:
+              cpu: "5"
+              memory: 8000Mi
+            requests:
+              cpu: 500m
+              memory: 5000Mi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - name: conn-patch
+              mountPath: /conn-patch
       dnsPolicy: ClusterFirst
       initContainers:
-      - command:
-        - /bin/sh
-        - -c
-        - |
-          echo "Waiting for database and Redis to be ready..."; if [ -f "/app/db_check.py" ]; then
-            python3 /app/db_check.py
-          else
-            echo "db_check.py not found, using inline script";
-            until python3 -c "import psycopg2, os; psycopg2.connect(host=os.environ.get('DB_HOST'), port=int(os.environ.get('DB_PORT')), user=os.environ.get('DB_USER'), password=os.environ.get('DB_PASSWORD'))"; do
-              echo "Database not ready yet, retrying in 5 seconds...";
-              sleep 5;
-            done;
-            echo "Database is ready.";
-            echo "Checking Redis connection...";
-            python3 -c "import redis, os; host=os.environ.get('REDIS_HOST'); port=int(os.environ.get('REDIS_PORT')); password=os.environ.get('REDIS_PASSWORD'); r = redis.Redis(host=host, port=port, password=password); r.ping(); print('Redis connection successful.');"
-          fi
-        env:
-        - name: REDIS_HOST
-          value: cache
-        - name: REDIS_PORT
-          value: "6379"
-        - name: REDIS_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              key: redis-password
-              name: redis-secret
-        - name: DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              key: db-password
-              name: db-secret
-        - name: DB_HOST
-          value: db
-        - name: DB_PORT
-          value: "5432"
-        - name: DB_USER
-          value: postgres
-        image: billin19/worker:prod
-        imagePullPolicy: IfNotPresent
-        name: wait-for-db
-        resources: {}
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
+        - command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Waiting for database and Redis to be ready..."; if [ -f "/app/db_check.py" ]; then
+                python3 /app/db_check.py
+              else
+                echo "db_check.py not found, using inline script";
+                until python3 -c "import psycopg2, os; psycopg2.connect(host=os.environ.get('DB_HOST'), port=int(os.environ.get('DB_PORT')), user=os.environ.get('DB_USER'), password=os.environ.get('DB_PASSWORD'))"; do
+                  echo "Database not ready yet, retrying in 5 seconds...";
+                  sleep 5;
+                done;
+                echo "Database is ready.";
+                echo "Checking Redis connection...";
+                python3 -c "import redis, os; host=os.environ.get('REDIS_HOST'); port=int(os.environ.get('REDIS_PORT')); password=os.environ.get('REDIS_PASSWORD'); r = redis.Redis(host=host, port=port, password=password); r.ping(); print('Redis connection successful.');"
+              fi
+          env:
+            - name: REDIS_HOST
+              value: cache
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: redis-password
+                  name: redis-secret
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: db-password
+                  name: db-secret
+            - name: DB_HOST
+              value: db
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              value: postgres
+          image: billin19/worker:prod
+          imagePullPolicy: IfNotPresent
+          name: wait-for-db
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
       terminationGracePeriodSeconds: 30
+      volumes:
+        - name: conn-patch
+          configMap:
+            name: worker-conn-patch
 status:
   availableReplicas: 3
   conditions:
-  - lastTransitionTime: "2025-03-03T01:21:43Z"
-    lastUpdateTime: "2025-03-03T01:21:43Z"
-    message: Deployment has minimum availability.
-    reason: MinimumReplicasAvailable
-    status: "True"
-    type: Available
-  - lastTransitionTime: "2025-03-03T00:44:40Z"
-    lastUpdateTime: "2025-03-03T01:29:20Z"
-    message: ReplicaSet "worker-547474666c" is progressing.
-    reason: ReplicaSetUpdated
-    status: "True"
-    type: Progressing
-  observedGeneration: 15
+    - lastTransitionTime: "2025-03-03T03:43:53Z"
+      lastUpdateTime: "2025-03-03T03:43:53Z"
+      message: Deployment has minimum availability.
+      reason: MinimumReplicasAvailable
+      status: "True"
+      type: Available
+    - lastTransitionTime: "2025-03-03T00:44:40Z"
+      lastUpdateTime: "2025-03-03T03:44:41Z"
+      message: ReplicaSet "worker-5898bd89bc" has successfully progressed.
+      reason: NewReplicaSetAvailable
+      status: "True"
+      type: Progressing
+  observedGeneration: 28
   readyReplicas: 3
-  replicas: 4
-  unavailableReplicas: 1
-  updatedReplicas: 1
+  replicas: 3
+  updatedReplicas: 3
