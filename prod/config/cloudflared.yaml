@@ -20,7 +20,17 @@ spec:
             - tunnel
             - --no-autoupdate
             - run
-            - --token=your-tunnel-token-here
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflare-secret
+                  key: tunnel-token
+          command:
+            - /bin/sh
+            - -c
+            - |
+              /usr/local/bin/cloudflared tunnel --no-autoupdate run --token=$TUNNEL_TOKEN --url=http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
           resources:
             requests:
               cpu: 100m
