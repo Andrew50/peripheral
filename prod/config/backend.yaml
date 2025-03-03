@@ -4,8 +4,12 @@ metadata:
   name: backend
   labels:
     app: backend
+  annotations:
+    kubernetes.io/description: "Backend deployment - DO NOT SCALE beyond 1 replica"
 spec:
   replicas: 1
+  strategy:
+    type: Recreate # Ensures no more than 1 pod exists during updates
   selector:
     matchLabels:
       app: backend
@@ -28,8 +32,13 @@ spec:
             - name: DB_PORT
               value: "5432"
             - name: DB_USER
-              value: "root"
+              value: "postgres"
             - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: db-password
+            - name: DB_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: db-secret
@@ -44,10 +53,44 @@ spec:
                 secretKeyRef:
                   name: redis-secret
                   key: redis-password
+            # Add Polygon API key
+            - name: POLYGON_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: polygon-secret
+                  key: api-key
+          # Add health check for the backend
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5057
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5057
+            initialDelaySeconds: 5
+            periodSeconds: 10
           resources:
             requests:
-              cpu: 1000m
-              memory: 2000Mi
+              cpu: 500m
+              memory: 1000Mi
             limits:
-              cpu: 10000m
-              memory: 20000Mi
+              cpu: 5000m
+              memory: 5000Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  labels:
+    app: backend
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 5057
+      targetPort: 5057
+  type: ClusterIP

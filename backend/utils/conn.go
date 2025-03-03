@@ -2,7 +2,10 @@ package utils
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"net/url"
+	"os"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -12,25 +15,40 @@ import (
 
 type Conn struct {
 	//Cache *redis.Client
-	DB        *pgxpool.Pool
-	Polygon   *polygon.Client
-	Cache     *redis.Client
-    PolygonKey string
+	DB         *pgxpool.Pool
+	Polygon    *polygon.Client
+	Cache      *redis.Client
+	PolygonKey string
 }
 
 var conn *Conn
 
 func InitConn(inContainer bool) (*Conn, func()) {
-	//TODO change this sahit to use env vars as well
+	// Get database connection details from environment variables
+	dbHost := getEnv("DB_HOST", "db")
+	dbPort := getEnv("DB_PORT", "5432")
+	dbUser := getEnv("DB_USER", "postgres")
+	dbPassword := getEnv("DB_PASSWORD", "")
+
+	// Get Redis connection details from environment variables
+	redisHost := getEnv("REDIS_HOST", "cache")
+	redisPort := getEnv("REDIS_PORT", "6379")
+	redisPassword := getEnv("REDIS_PASSWORD", "")
+
 	var dbUrl string
 	var cacheUrl string
+
+	// URL encode the password to handle special characters
+	encodedPassword := url.QueryEscape(dbPassword)
+
 	if inContainer {
-		dbUrl = "postgres://postgres:pass@db:5432"
-		cacheUrl = "redis:6379"
+		dbUrl = fmt.Sprintf("postgres://%s:%s@%s:%s", dbUser, encodedPassword, dbHost, dbPort)
+		cacheUrl = fmt.Sprintf("%s:%s", redisHost, redisPort)
 	} else {
-		dbUrl = "postgres://postgres:pass@localhost:5432"
-		cacheUrl = "localhost:6379"
+		dbUrl = fmt.Sprintf("postgres://%s:%s@localhost:%s", dbUser, encodedPassword, dbPort)
+		cacheUrl = fmt.Sprintf("localhost:%s", redisPort)
 	}
+
 	var dbConn *pgxpool.Pool
 	var err error
 	for true {
@@ -43,9 +61,16 @@ func InitConn(inContainer bool) (*Conn, func()) {
 			break
 		}
 	}
+
 	var cache *redis.Client
 	for {
-		cache = redis.NewClient(&redis.Options{Addr: cacheUrl})
+		// Use Redis password if provided
+		opts := &redis.Options{Addr: cacheUrl}
+		if redisPassword != "" {
+			opts.Password = redisPassword
+		}
+
+		cache = redis.NewClient(opts)
 		err = cache.Ping(context.Background()).Err()
 		if err != nil {
 			//if strings.Contains(err.Error(), "the database system is starting up") {
@@ -55,13 +80,22 @@ func InitConn(inContainer bool) (*Conn, func()) {
 			break
 		}
 	}
-    polygonKey := "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm"
+
+	polygonKey := getEnv("POLYGON_API_KEY", "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm")
 	polygonConn := polygon.New(polygonKey)
-    conn = &Conn{DB: dbConn, Cache: cache, Polygon: polygonConn,PolygonKey:polygonKey}
+	conn = &Conn{DB: dbConn, Cache: cache, Polygon: polygonConn, PolygonKey: polygonKey}
 
 	cleanup := func() {
 		conn.DB.Close()
 		conn.Cache.Close()
 	}
 	return conn, cleanup
+}
+
+// Helper function to get environment variables with fallback
+func getEnv(key, fallback string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+	return fallback
 }

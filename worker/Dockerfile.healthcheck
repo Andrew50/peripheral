@@ -1,0 +1,21 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install only the required dependencies
+RUN pip install --no-cache-dir psycopg2-binary redis
+
+# Copy the health check script
+COPY db_check.py .
+RUN chmod +x db_check.py
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV HEALTHCHECK_INTERVAL=30
+ENV HEALTHCHECK_MAX_INTERVAL=300
+
+# Run with minimal privileges
+USER nobody
+
+# Run the health check script
+CMD ["python", "-u", "db_check.py"]

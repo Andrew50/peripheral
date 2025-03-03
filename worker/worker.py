@@ -15,6 +15,7 @@ from trades import (
 from update_sectors import update_sectors
 from active import update_active
 import time
+import os
 
 funcMap = {
     "train": train,
@@ -36,119 +37,98 @@ def packageResponse(result, status):
     return json.dumps({"status": status, "result": result})
 
 
-def safe_redis_operation(operation_func, fallback_value=None, max_retries=3):
-    """Execute a Redis operation safely with retries"""
-    retry_count = 0
-    backoff_time = 1
+def safe_redis_operation(func, *args, **kwargs):
+    """Execute a Redis operation with retry logic"""
+    max_retries = int(os.environ.get("REDIS_RETRY_ATTEMPTS", "5"))
+    retry_delay = int(os.environ.get("REDIS_RETRY_DELAY", "1"))
     
-    while retry_count < max_retries:
+    for attempt in range(max_retries):
         try:
-            return operation_func()
-        except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as e:
-            retry_count += 1
-            print(f"Redis operation failed (attempt {retry_count}/{max_retries}): {e}", flush=True)
-            if retry_count < max_retries:
-                print(f"Retrying in {backoff_time} seconds...", flush=True)
-                time.sleep(backoff_time)
-                backoff_time *= 2
+            return func(*args, **kwargs)
+        except redis.exceptions.ConnectionError as e:
+            if attempt < max_retries - 1:
+                print(f"Redis operation failed (attempt {attempt+1}/{max_retries}): {e}", flush=True)
+                time.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
             else:
-                print(f"Max retries reached for Redis operation. Using fallback value.", flush=True)
-                return fallback_value
+                print(f"Redis operation failed after {max_retries} attempts: {e}", flush=True)
+                raise
 
 
 def process_tasks():
-    data = Conn(True)
-    print("starting queue listening", flush=True)
-    consecutive_errors = 0
+    data = None
+    reconnect_delay = 1
+    max_reconnect_delay = 60
     
     while True:
         try:
-            # Use safe Redis operation for brpop
-            task = safe_redis_operation(
-                lambda: data.cache.brpop("queue", timeout=60),
-                fallback_value=None
-            )
-            
-            if not task:
-                # If no task or operation failed, check connection and wait
-                try:
-                    data.check_connection()
-                except Exception as e:
-                    print(f"Connection check failed: {e}", flush=True)
-                    time.sleep(5)  # Wait before retrying
-                continue
-                
-            _, task_message = task
-            task_data = json.loads(task_message)
-            task_id, func_ident, args = (
-                task_data["id"],
-                task_data["func"],
-                task_data["args"],
-            )
-
-            print(f"starting {func_ident} {args} {task_id}", flush=True)
-            try:
-                # Use safe Redis operation for setting task status
-                safe_redis_operation(
-                    lambda: data.cache.set(task_id, json.dumps("running")),
-                    fallback_value=None
-                )
-                
-                start = datetime.datetime.now()
-                result = funcMap[func_ident](data, **args)
-
-                # Use safe Redis operation for setting task result
-                safe_redis_operation(
-                    lambda: data.cache.set(task_id, packageResponse(result, "completed")),
-                    fallback_value=None
-                )
-                
-                print(f"finished {func_ident} {args} time: {datetime.datetime.now() - start}", flush=True)
-                consecutive_errors = 0  # Reset error counter on success
-                
-            except psycopg2.InterfaceError:
-                exception = traceback.format_exc()
-                safe_redis_operation(
-                    lambda: data.cache.set(task_id, packageResponse(exception, "error")),
-                    fallback_value=None
-                )
-                print(exception, flush=True)
-                data.check_connection()
-                
-            except Exception:
-                exception = traceback.format_exc()
-                safe_redis_operation(
-                    lambda: data.cache.set(task_id, packageResponse(exception, "error")),
-                    fallback_value=None
-                )
-                print(exception, flush=True)
-                
-        except redis.exceptions.ConnectionError as e:
-            consecutive_errors += 1
-            print(f"Redis connection error ({consecutive_errors}): {e}", flush=True)
-            print("Attempting to reconnect...", flush=True)
-            
-            # Exponential backoff based on consecutive errors
-            backoff_time = min(30, 2 ** consecutive_errors)
-            print(f"Waiting {backoff_time} seconds before reconnecting...", flush=True)
-            time.sleep(backoff_time)
-            
-            # Reinitialize the connection
-            try:
+            if data is None:
                 data = Conn(True)
-                print("Connection reinitialized successfully", flush=True)
-            except Exception as conn_error:
-                print(f"Failed to reinitialize connection: {conn_error}", flush=True)
+            
+            print("starting queue listening", flush=True)
+            
+            while True:
+                try:
+                    # Use a shorter timeout to allow for more frequent connection checks
+                    task = safe_redis_operation(data.cache.brpop, "queue", timeout=30)
+                    
+                    if not task:
+                        # No task received, check connection and continue
+                        try:
+                            data.check_connection()
+                            reconnect_delay = 1  # Reset backoff on successful check
+                        except Exception as e:
+                            print(f"Connection check failed: {e}", flush=True)
+                            raise  # Re-raise to trigger reconnection
+                    else:
+                        _, task_message = task
+                        task_data = json.loads(task_message)
+                        task_id, func_ident, args = (
+                            task_data["id"],
+                            task_data["func"],
+                            task_data["args"],
+                        )
+
+                        print(f"starting {func_ident} {args} {task_id}", flush=True)
+                        try:
+                            safe_redis_operation(data.cache.set, task_id, json.dumps("running"))
+                            start = datetime.datetime.now()
+                            result = funcMap[func_ident](data, **args)
+
+                            safe_redis_operation(data.cache.set, task_id, packageResponse(result, "completed"))
+                            print(f"finished {func_ident} {args} time: {datetime.datetime.now() - start}", flush=True)
+                        except psycopg2.InterfaceError:
+                            exception = traceback.format_exc()
+                            try:
+                                safe_redis_operation(data.cache.set, task_id, packageResponse(exception, "error"))
+                            except redis.exceptions.ConnectionError:
+                                print("Redis connection error when setting task error status", flush=True)
+                            print(exception, flush=True)
+                            data.check_connection()
+                        except Exception:
+                            exception = traceback.format_exc()
+                            try:
+                                safe_redis_operation(data.cache.set, task_id, packageResponse(exception, "error"))
+                            except redis.exceptions.ConnectionError:
+                                print("Redis connection error when setting task error status", flush=True)
+                            print(exception, flush=True)
                 
+                except redis.exceptions.ConnectionError as e:
+                    print(f"Redis connection error in task loop: {e}", flush=True)
+                    print("Attempting to reconnect...", flush=True)
+                    # Break inner loop to reinitialize connection
+                    raise
+        
         except Exception as e:
-            consecutive_errors += 1
-            print(f"Unexpected error in main loop ({consecutive_errors}): {e}", flush=True)
+            print(f"Error in main process loop: {e}", flush=True)
             print(traceback.format_exc(), flush=True)
             
-            # Sleep with exponential backoff to avoid tight loop if there's a persistent error
-            backoff_time = min(60, 2 ** consecutive_errors)
-            print(f"Waiting {backoff_time} seconds before continuing...", flush=True)
-            time.sleep(backoff_time)
+            # Reset connection
+            data = None
+            
+            # Sleep with exponential backoff before retrying
+            print(f"Retrying connection in {reconnect_delay} seconds...", flush=True)
+            time.sleep(reconnect_delay)
+            reconnect_delay = min(reconnect_delay * 2, max_reconnect_delay)
 
 
 if __name__ == "__main__":

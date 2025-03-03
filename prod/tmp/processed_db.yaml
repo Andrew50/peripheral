@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: db
-          image: billin19/db:prod
+          image: ${DOCKER_USERNAME:-billin19}/db:${IMAGE_TAG:-prod}
           imagePullPolicy: Always
           ports:
             - containerPort: 5432

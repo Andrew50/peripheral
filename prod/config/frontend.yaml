@@ -25,8 +25,22 @@ spec:
               value: "false"
           resources:
             requests:
-              cpu: 500m
-              memory: 1000Mi
+              cpu: 100m
+              memory: 128Mi
             limits:
-              cpu: 5000m
-              memory: 5000Mi
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  selector:
+    app: frontend
+  ports:
+    - port: 80
+      targetPort: 3000
+  type: ClusterIP

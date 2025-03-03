@@ -54,6 +54,9 @@ jobs:
     env:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+      DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
+      REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+      POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
     
     steps:
       # Print debugging information before checkout
@@ -107,6 +110,7 @@ jobs:
         run: |
           echo "Docker username secret: $(if [ -n "${{ secrets.DOCKER_USERNAME }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
           echo "Docker token secret: $(if [ -n "${{ secrets.DOCKER_TOKEN }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
+          echo "DB password secret: $(if [ -n "${{ secrets.DB_ROOT_PASSWORD }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
       
       # Setup and configuration
       - name: Setup deployment
@@ -168,7 +172,12 @@ jobs:
           docker build -t $DOCKER_USERNAME/frontend:${{ env.DOCKER_TAG }} -f frontend/Dockerfile.prod frontend
           docker build -t $DOCKER_USERNAME/backend:${{ env.DOCKER_TAG }} -f backend/Dockerfile.prod backend
           docker build -t $DOCKER_USERNAME/worker:${{ env.DOCKER_TAG }} -f worker/Dockerfile.prod worker
+          docker build -t $DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }} -f worker/Dockerfile.healthcheck worker
           docker build -t $DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }} -f tf/Dockerfile.prod tf
+          docker build -t $DOCKER_USERNAME/nginx:${{ env.DOCKER_TAG }} -f nginx/Dockerfile nginx
+          
+          # Build DB image with cron installed for scheduled backups
+          log "Building DB image with secure configuration..."
           docker build -t $DOCKER_USERNAME/db:${{ env.DOCKER_TAG }} -f db/Dockerfile.prod db
           
           # For prod branch, also tag as latest
@@ -178,15 +187,19 @@ jobs:
             docker tag $DOCKER_USERNAME/frontend:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/frontend:latest
             docker tag $DOCKER_USERNAME/backend:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/backend:latest
             docker tag $DOCKER_USERNAME/worker:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/worker:latest
+            docker tag $DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/worker-healthcheck:latest
             docker tag $DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/tf:latest
             docker tag $DOCKER_USERNAME/db:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/db:latest
+            docker tag $DOCKER_USERNAME/nginx:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/nginx:latest
           elif [ "${{ env.TARGET_BRANCH }}" = "dev" ]; then
             log "Tagging images as 'development' for development environment..."
             docker tag $DOCKER_USERNAME/frontend:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/frontend:development
             docker tag $DOCKER_USERNAME/backend:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/backend:development
             docker tag $DOCKER_USERNAME/worker:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/worker:development
+            docker tag $DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/worker-healthcheck:development
             docker tag $DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/tf:development
             docker tag $DOCKER_USERNAME/db:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/db:development
+            docker tag $DOCKER_USERNAME/nginx:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/nginx:development
           fi
 
       # Push Docker images
@@ -230,8 +243,10 @@ jobs:
           docker push $DOCKER_USERNAME/frontend:${{ env.DOCKER_TAG }}
           docker push $DOCKER_USERNAME/backend:${{ env.DOCKER_TAG }}
           docker push $DOCKER_USERNAME/worker:${{ env.DOCKER_TAG }}
+          docker push $DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }}
           docker push $DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }}
           docker push $DOCKER_USERNAME/db:${{ env.DOCKER_TAG }}
+          docker push $DOCKER_USERNAME/nginx:${{ env.DOCKER_TAG }}
           
           # Push additional tags based on branch
           if [ "${{ env.TARGET_BRANCH }}" = "prod" ]; then
@@ -239,20 +254,270 @@ jobs:
             docker push $DOCKER_USERNAME/frontend:latest
             docker push $DOCKER_USERNAME/backend:latest
             docker push $DOCKER_USERNAME/worker:latest
+            docker push $DOCKER_USERNAME/worker-healthcheck:latest
             docker push $DOCKER_USERNAME/tf:latest
             docker push $DOCKER_USERNAME/db:latest
+            docker push $DOCKER_USERNAME/nginx:latest
           elif [ "${{ env.TARGET_BRANCH }}" = "dev" ]; then
             log "Pushing 'development' tagged images..."
             docker push $DOCKER_USERNAME/frontend:development
             docker push $DOCKER_USERNAME/backend:development
             docker push $DOCKER_USERNAME/worker:development
+            docker push $DOCKER_USERNAME/worker-healthcheck:development
             docker push $DOCKER_USERNAME/tf:development
             docker push $DOCKER_USERNAME/db:development
+            docker push $DOCKER_USERNAME/nginx:development
           fi
+
+      # Update Kubernetes secrets with database password
+      - name: Update Kubernetes Secrets
+        run: |
+          # Function to log messages with timestamps
+          log() {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+          }
+          
+          # Function to log errors
+          error_log() {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
+          }
+          
+          # Check if DB_ROOT_PASSWORD secret is set
+          if [ -z "${{ secrets.DB_ROOT_PASSWORD }}" ]; then
+            error_log "DB_ROOT_PASSWORD secret is not available"
+            error_log "Please add the DB_ROOT_PASSWORD secret in your GitHub repository"
+            exit 1
+          fi
+          
+          # Check if REDIS_PASSWORD secret is set
+          if [ -z "${{ secrets.REDIS_PASSWORD }}" ]; then
+            error_log "REDIS_PASSWORD secret is not available"
+            error_log "Please add the REDIS_PASSWORD secret in your GitHub repository"
+            exit 1
+          fi
+          
+          # Check if POLYGON_API_KEY secret is set
+          if [ -z "${{ secrets.POLYGON_API_KEY }}" ]; then
+            error_log "POLYGON_API_KEY secret is not available"
+            error_log "Please add the POLYGON_API_KEY secret in your GitHub repository"
+            exit 1
+          fi
+          
+          log "Updating Kubernetes secrets with secure database and Redis passwords..."
+          
+          # Create a temporary file for the secrets
+          TEMP_DIR=$(mktemp -d)
+          SECRETS_FILE="$TEMP_DIR/secrets.yaml"
+          
+          # Store the secrets in variables first
+          DB_PASSWORD_B64=$(echo -n "${{ secrets.DB_ROOT_PASSWORD }}" | base64 -w 0)
+          REDIS_PASSWORD_B64=$(echo -n "${{ secrets.REDIS_PASSWORD }}" | base64 -w 0)
+          POLYGON_API_KEY_B64=$(echo -n "${{ secrets.POLYGON_API_KEY }}" | base64 -w 0)
+          
+          # Create the secrets YAML with the password from GitHub secrets
+          cat > "$SECRETS_FILE" << EOF
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: redis-secret
+          type: Opaque
+          data:
+            redis-password: ${REDIS_PASSWORD_B64}
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: db-secret
+          type: Opaque
+          data:
+            db-password: ${DB_PASSWORD_B64}
+            db_ROOT_PASSWORD: ${DB_PASSWORD_B64}
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: polygon-secret
+          type: Opaque
+          data:
+            api-key: ${POLYGON_API_KEY_B64}
+          EOF
+          
+          # Apply the secrets to Kubernetes
+          kubectl apply -f "$SECRETS_FILE"
+          
+          # Verify the secrets were created successfully
+          if ! kubectl get secret redis-secret &>/dev/null; then
+            error_log "Failed to create redis-secret"
+            exit 1
+          fi
+          
+          if ! kubectl get secret db-secret &>/dev/null; then
+            error_log "Failed to create db-secret"
+            exit 1
+          fi
+          
+          if ! kubectl get secret polygon-secret &>/dev/null; then
+            error_log "Failed to create polygon-secret"
+            exit 1
+          fi
+          
+          # Clean up
+          rm -rf "$TEMP_DIR"
+          
+          log "Kubernetes secrets updated successfully"
+
+      # Run database rollouts
+      - name: Run Database Rollouts
+        run: |
+          # Function to log messages with timestamps
+          log() {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+          }
+          
+          # Function to log errors
+          error_log() {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
+          }
+          
+          log "Running database migrations from rollouts folder..."
+          
+          # Get the database pod name
+          DB_POD=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+          
+          if [ -z "$DB_POD" ]; then
+            error_log "Database pod not found. Make sure the database is deployed and running."
+            kubectl get pods
+            exit 1
+          fi
+          
+          log "Found database pod: $DB_POD"
+          
+          # Wait for the database pod to be ready
+          log "Waiting for database pod to be ready..."
+          kubectl wait --for=condition=ready pod/$DB_POD --timeout=120s || {
+            error_log "Database pod is not ready after waiting 120 seconds."
+            kubectl describe pod/$DB_POD
+            exit 1
+          }
+          
+          # Get the database name from the pod environment
+          DB_NAME=$(kubectl exec $DB_POD -- sh -c 'echo $POSTGRES_DB' 2>/dev/null || echo "postgres")
+          log "Using database name: $DB_NAME"
+          
+          # Scale down services that access the database to prevent conflicts during migration
+          log "Entering maintenance mode: Scaling down services that access the database..."
+          
+          # Save current replica counts to restore later
+          WORKER_REPLICAS=$(kubectl get deployment worker -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "1")
+          BACKEND_REPLICAS=$(kubectl get deployment backend -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "1")
+          TF_REPLICAS=$(kubectl get deployment tf -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "1")
+          
+          log "Current replica counts - Worker: $WORKER_REPLICAS, Backend: $BACKEND_REPLICAS, TF: $TF_REPLICAS"
+          
+          # Scale down services
+          log "Scaling down worker deployment..."
+          kubectl scale deployment worker --replicas=0 || log "Warning: Failed to scale down worker deployment"
+          
+          log "Scaling down backend deployment..."
+          kubectl scale deployment backend --replicas=0 || log "Warning: Failed to scale down backend deployment"
+          
+          log "Scaling down tf deployment..."
+          kubectl scale deployment tf --replicas=0 || log "Warning: Failed to scale down tf deployment"
+          
+          # Wait for pods to terminate
+          log "Waiting for pods to terminate..."
+          sleep 10
+          
+          # Check if all database-accessing pods are terminated
+          RUNNING_PODS=$(kubectl get pods -l 'app in (worker,backend,tf)' --field-selector=status.phase=Running 2>/dev/null | wc -l)
+          TIMEOUT=60
+          ELAPSED=0
+          
+          while [ $RUNNING_PODS -gt 1 ] && [ $ELAPSED -lt $TIMEOUT ]; do
+            log "Waiting for pods to terminate... ($ELAPSED/$TIMEOUT seconds)"
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+            RUNNING_PODS=$(kubectl get pods -l 'app in (worker,backend,tf)' --field-selector=status.phase=Running 2>/dev/null | wc -l)
+          done
+          
+          if [ $RUNNING_PODS -gt 1 ]; then
+            log "Warning: Some pods are still running after waiting $TIMEOUT seconds. Proceeding anyway."
+            kubectl get pods -l 'app in (worker,backend,tf)'
+          else
+            log "All database-accessing pods have been terminated."
+          fi
+          
+          # Create a temporary directory for migrations on the pod
+          kubectl exec $DB_POD -- mkdir -p /tmp/rollouts
+          
+          # Copy all migration files to the pod
+          log "Copying migration files to the database pod..."
+          for MIGRATION_FILE in db/rollouts/*.sql; do
+            FILENAME=$(basename "$MIGRATION_FILE")
+            log "Copying $FILENAME..."
+            kubectl cp "$MIGRATION_FILE" "$DB_POD:/tmp/rollouts/$FILENAME" || {
+              error_log "Failed to copy migration file: $FILENAME"
+              exit 1
+            }
+          done
+          
+          # Copy the migration runner to the pod
+          log "Copying migration runner script..."
+          kubectl cp "db/run_migrations.sh" "$DB_POD:/tmp/run_migrations.sh" || {
+            error_log "Failed to copy migration runner script"
+            exit 1
+          }
+          kubectl exec $DB_POD -- chmod +x /tmp/run_migrations.sh
+          
+          # Execute the migration runner with a timeout
+          log "Running migrations with a timeout of 300 seconds..."
+          timeout 300 kubectl exec $DB_POD -- bash /tmp/run_migrations.sh "$DB_NAME" > migration_output.log 2>&1
+          MIGRATION_EXIT_CODE=$?
+          
+          # Capture the output
+          MIGRATION_RESULT=$(cat migration_output.log)
+          
+          # Check if the execution was successful or timed out
+          if [ $MIGRATION_EXIT_CODE -eq 124 ]; then
+            error_log "Migration timed out after 300 seconds."
+            error_log "Last output from migration:"
+            error_log "$(tail -n 20 migration_output.log)"
+            exit 1
+          elif [ $MIGRATION_EXIT_CODE -ne 0 ]; then
+            error_log "Failed to run migrations (exit code $MIGRATION_EXIT_CODE):"
+            error_log "$MIGRATION_RESULT"
+            exit 1
+          fi
+          
+          log "Database migrations executed successfully:"
+          echo "$MIGRATION_RESULT"
+          
+          # Clean up
+          kubectl exec $DB_POD -- rm -rf /tmp/rollouts /tmp/run_migrations.sh
+          rm -f migration_output.log
+          
+          log "Database schema updated successfully"
+          
+          # Scale services back up
+          log "Exiting maintenance mode: Scaling services back up..."
+          
+          log "Scaling worker deployment back to $WORKER_REPLICAS replicas..."
+          kubectl scale deployment worker --replicas=$WORKER_REPLICAS || log "Warning: Failed to scale worker deployment back up"
+          
+          log "Scaling backend deployment back to $BACKEND_REPLICAS replicas..."
+          kubectl scale deployment backend --replicas=$BACKEND_REPLICAS || log "Warning: Failed to scale backend deployment back up"
+          
+          log "Scaling tf deployment back to $TF_REPLICAS replicas..."
+          kubectl scale deployment tf --replicas=$TF_REPLICAS || log "Warning: Failed to scale tf deployment back up"
+          
+          log "Services scaled back up. Waiting for pods to become ready..."
+          sleep 5
+          
+          # Show the status of the deployments
+          kubectl get deployments
 
       # Deploy to Kubernetes
       - name: Deploy to Kubernetes
-        continue-on-error: true  # Prevent workflow failure if deployments have issues
         run: |
           # Function to log messages with timestamps
           log() {
@@ -274,7 +539,7 @@ jobs:
               return 1  # Failed or still in progress
             fi
           }
-
+          
           # Function to collect debug information for failed deployments
           collect_debug_info() {
             local deployment=$1
@@ -282,41 +547,60 @@ jobs:
             kubectl describe deployment $deployment
             kubectl get pods -l app=$deployment
             
-            # Capture more detailed logs with error filtering
+            # Capture logs with error filtering
             log "Last 50 lines of logs for $deployment pods:"
             kubectl logs -l app=$deployment --tail=50 || true
             
-            # Additional debugging for Redis connection issues if this is worker deployment
+            # Additional debugging for worker deployment
             if [ "$deployment" = "worker" ]; then
-              log "Checking Redis connectivity from worker perspective..."
-              log "Redis pod status:"
-              kubectl get pods -l app=cache
-              kubectl describe pods -l app=cache
-              log "Testing Redis connectivity:"
-              # Try to get a shell in a worker pod to test redis connection manually
+              log "Checking worker pod status and connectivity..."
+              log "Worker pod status:"
+              kubectl get pods -l app=worker
+              kubectl describe pods -l app=worker
+              
+              # Check the db-healthcheck container logs if it exists
               WORKER_POD=$(kubectl get pods -l app=worker -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
               if [ -n "$WORKER_POD" ]; then
-                kubectl exec -it $WORKER_POD -- sh -c "echo 'Testing Redis connection' && python3 -c 'import redis; import os; print(\"Redis Host:\", os.environ.get(\"REDIS_HOST\")); print(\"Redis Port:\", os.environ.get(\"REDIS_PORT\"));'" || true
+                log "Checking db-healthcheck container logs:"
+                kubectl logs $WORKER_POD -c db-healthcheck --tail=50 || true
               fi
+            fi
+            
+            # Additional debugging for backend deployment
+            if [ "$deployment" = "backend" ]; then
+              log "Checking backend pod status and connectivity..."
+              log "Backend pod status:"
+              kubectl get pods -l app=backend
+              kubectl describe pods -l app=backend
               
-              log "Checking Redis service endpoints:"
-              kubectl get endpoints cache
+              # Get the backend pod name
+              BACKEND_POD=$(kubectl get pods -l app=backend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+              if [ -n "$BACKEND_POD" ]; then
+                log "Checking backend environment variables:"
+                kubectl exec $BACKEND_POD -- env | grep -E 'DB_|REDIS_' || true
+                
+                log "Testing database connection from backend pod:"
+                kubectl exec $BACKEND_POD -- sh -c "nc -zv \$DB_HOST \$DB_PORT" || true
+                
+                log "Testing Redis connection from backend pod:"
+                kubectl exec $BACKEND_POD -- sh -c "nc -zv \$REDIS_HOST \$REDIS_PORT" || true
+              fi
             fi
           }
           
-          # Apply Kubernetes configurations
+          # Apply Kubernetes configurations, excluding secrets.yaml
           log "Applying Kubernetes configurations..."
           if [ "${{ env.TARGET_BRANCH }}" = "dev" ]; then
-            # Dev-specific configurations (if they exist)
+            # Dev-specific configurations
             if [ -d "prod/config/dev" ]; then
-              kubectl apply -f prod/config/dev
+              find prod/config/dev -type f -name "*.yaml" ! -name "secrets.yaml" -exec kubectl apply -f {} \;
             else
               # Fall back to prod config if no dev config exists
-              kubectl apply -f prod/config
+              find prod/config -type f -name "*.yaml" ! -name "secrets.yaml" -exec kubectl apply -f {} \;
             fi
           else
-            # Default to prod config for prod branch or any other branch
-            kubectl apply -f prod/config
+            # Default to prod config for prod branch
+            find prod/config -type f -name "*.yaml" ! -name "secrets.yaml" -exec kubectl apply -f {} \;
           fi
           
           # Add debugging information about the cluster and deployments
@@ -325,32 +609,41 @@ jobs:
           kubectl get pods -o wide
           kubectl get deployments
           
-          # Check if backend deployment exists
-          if ! kubectl get deployment backend &> /dev/null; then
-            error_log "Backend deployment not found! Checking namespace..."
-            kubectl get namespaces
-            # Don't exit with error
-            log "Will attempt to proceed with other deployments..."
-          fi
-          
           # Define the deployments to update
-          deployments=("backend" "frontend" "worker" "tf")
+          deployments=("backend" "frontend" "worker" "tf" "nginx")
           
-          # Perform rolling updates for all deployments at once
-          log "Performing rolling updates for zero downtime using images tagged with: ${{ env.DOCKER_TAG }}..."
+          # Update image tags for all deployments
+          log "Updating deployments with images tagged: ${{ env.DOCKER_TAG }}..."
           
-          # Update all deployments at once
           for deployment in "${deployments[@]}"; do
             log "Updating $deployment deployment..."
             kubectl set image deployment/$deployment $deployment=$DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }}
+            
+            # If this is the worker deployment, also check if the healthcheck container exists
+            if [ "$deployment" = "worker" ]; then
+              log "Checking for healthcheck container in worker deployment..."
+              
+              # Check if the healthcheck container exists in the deployment
+              CONTAINERS=$(kubectl get deployment/worker -o jsonpath='{.spec.template.spec.containers[*].name}' 2>/dev/null)
+              if [[ $CONTAINERS == *"db-healthcheck"* ]]; then
+                log "Found db-healthcheck container, updating image..."
+                kubectl set image deployment/worker db-healthcheck=$DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }}
+              elif [[ $CONTAINERS == *"worker-healthcheck"* ]]; then
+                log "Found worker-healthcheck container, updating image..."
+                kubectl set image deployment/worker worker-healthcheck=$DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }}
+              else
+                log "No healthcheck container found in worker deployment. This is expected if the container is commented out in the configuration."
+                log "Skipping healthcheck container update."
+              fi
+            fi
           done
           
-          # Monitor all deployments in a loop
-          log "Monitoring all deployments..."
+          # Monitor deployments
+          log "Monitoring deployments for successful rollout..."
           
           # Set timeout values for each deployment (in seconds)
           declare -A timeouts
-          timeouts=([backend]=300 [frontend]=180 [worker]=180 [tf]=180)
+          timeouts=([backend]=300 [frontend]=180 [worker]=300 [tf]=180 [nginx]=180)
           
           # Track start time for each deployment
           declare -A start_times
@@ -361,6 +654,7 @@ jobs:
           done
           
           # Continue monitoring until all deployments are completed or timed out
+          deployment_failed=false
           while true; do
             all_completed=true
             
@@ -386,6 +680,7 @@ jobs:
                 error_log "$deployment deployment timed out after ${elapsed} seconds."
                 collect_debug_info $deployment
                 deployment_status[$deployment]="failed"
+                deployment_failed=true
               else
                 # Still waiting for this deployment
                 all_completed=false
@@ -393,7 +688,7 @@ jobs:
               fi
             done
             
-            # Check if all deployments are completed (success or failed)
+            # Check if all deployments are completed
             if [ "$all_completed" = true ]; then
               break
             fi
@@ -402,381 +697,66 @@ jobs:
             sleep 10
           done
           
-          # Report final status
-          log "Deployment process completed. Status summary:"
-          for deployment in "${deployments[@]}"; do
-            log "  - $deployment: ${deployment_status[$deployment]}"
-          done
-          
-          # Final status check
-          log "Checking final deployment status..."
-          kubectl get deployments
-          
-          log "Deployment process completed for branch ${{ env.TARGET_BRANCH }}. Some services may require attention."
-
-  deploy-if-build-succeeded:
-    runs-on: self-hosted
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    # Add this environment section:
-    environment:
-      name: ${{ github.event.workflow_run.head_branch == 'prod' && 'production' || 'development' }}
-
-    steps:
-      # Print debugging information before checkout
-      - name: Debug Event Information
-        run: |
-          echo "Event name: ${{ github.event_name }}"
-          echo "GitHub ref: ${{ github.ref }}"
-          echo "GitHub head ref: ${{ github.head_ref }}"
-          echo "GitHub base ref: ${{ github.base_ref }}"
-          echo "GitHub ref name: ${{ github.ref_name }}"
-          echo "Custom branch input: ${{ github.event.inputs.branch }}"
-
-      # Determine which branch to checkout based on event type
-      - name: Set checkout target
-        id: set-target
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "CHECKOUT_REF=${{ github.head_ref }}" >> $GITHUB_ENV
-            echo "TARGET_BRANCH=${{ github.base_ref }}" >> $GITHUB_ENV
-            echo "Using PR source branch for checkout: ${{ github.head_ref }}"
-            echo "Using PR target branch for Docker tags: ${{ github.base_ref }}"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.branch }}" ]; then
-            echo "CHECKOUT_REF=${{ github.event.inputs.branch }}" >> $GITHUB_ENV
-            echo "TARGET_BRANCH=${{ github.event.inputs.branch }}" >> $GITHUB_ENV
-            echo "Using manual input branch: ${{ github.event.inputs.branch }}"
-          else
-            echo "CHECKOUT_REF=${{ github.ref_name }}" >> $GITHUB_ENV
-            echo "TARGET_BRANCH=${{ github.ref_name }}" >> $GITHUB_ENV
-            echo "Using current branch: ${{ github.ref_name }}"
-          fi
-
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ env.CHECKOUT_REF }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 1
-          lfs: false
-      
-      # Add diagnostic step to see what's available after checkout
-      - name: Show Git Information
-        run: |
-          echo "Current directory: $(pwd)"
-          echo "Directory contents: $(ls -la)"
-          echo "Git status: $(git status)"
-          echo "Current branch: $(git branch --show-current)"
-          git --version
-      
-      # Verify secrets are available without exposing them
-      - name: Verify Docker Credentials
-        run: |
-          echo "Docker username secret: $(if [ -n "${{ secrets.DOCKER_USERNAME }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
-          echo "Docker token secret: $(if [ -n "${{ secrets.DOCKER_TOKEN }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
-      
-      # Setup and configuration
-      - name: Setup deployment
-        run: |
-          # Function to log messages with timestamps
-          log() {
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
-          }
-
-          # Function to log errors
-          error_log() {
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
-          }
-
-          # Print diagnostic information
-          log "Deployment script diagnostics:"
-          log "Current working directory: $(pwd)"
-          log "Current user: $(whoami)"
-          log "Current branch: ${{ env.TARGET_BRANCH }}"
-          
-          # Sanitize branch name for Docker tags (replace / with - and other invalid characters)
-          DOCKER_TAG=$(echo "${{ env.TARGET_BRANCH }}" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_.-]/-/g')
-          echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
-          
-          log "Docker tag: ${DOCKER_TAG}"
-          log "Files in current directory: $(ls -la)"
-          log "Starting deployment process for branch: ${{ env.TARGET_BRANCH }}..."
-          log "Using already checked out code for deployment..."
-
-      # Build Docker images
-      - name: Build Docker Images
-        run: |
-          # Function to log messages with timestamps
-          log() {
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
-          }
-          
-          # Function to log errors
-          error_log() {
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
-          }
-          
-          # Modified check for Docker credentials using env context
-          if [ -z "$DOCKER_USERNAME" ]; then
-            error_log "DOCKER_USERNAME secret is not available"
-            error_log "Please add the DOCKER_USERNAME secret in your GitHub repository:"
-            error_log "1. Go to your repository on GitHub"
-            error_log "2. Navigate to Settings > Secrets and variables > Actions"
-            error_log "3. Click 'New repository secret'"
-            error_log "4. Name: DOCKER_USERNAME"
-            error_log "5. Value: Your Docker Hub username"
-            error_log "6. Click 'Add secret'"
-            exit 1
-          fi
-          
-          log "Building Docker images with tag: ${{ env.DOCKER_TAG }}..."
-          log "Using Docker username: $DOCKER_USERNAME"
-          
-          docker build -t $DOCKER_USERNAME/frontend:${{ env.DOCKER_TAG }} -f frontend/Dockerfile.prod frontend
-          docker build -t $DOCKER_USERNAME/backend:${{ env.DOCKER_TAG }} -f backend/Dockerfile.prod backend
-          docker build -t $DOCKER_USERNAME/worker:${{ env.DOCKER_TAG }} -f worker/Dockerfile.prod worker
-          docker build -t $DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }} -f tf/Dockerfile.prod tf
-          docker build -t $DOCKER_USERNAME/db:${{ env.DOCKER_TAG }} -f db/Dockerfile.prod db
-          
-          # For prod branch, also tag as latest
-          # For dev branch, also tag as development
-          if [ "${{ env.TARGET_BRANCH }}" = "prod" ]; then
-            log "Tagging images as 'latest' for production..."
-            docker tag $DOCKER_USERNAME/frontend:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/frontend:latest
-            docker tag $DOCKER_USERNAME/backend:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/backend:latest
-            docker tag $DOCKER_USERNAME/worker:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/worker:latest
-            docker tag $DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/tf:latest
-            docker tag $DOCKER_USERNAME/db:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/db:latest
-          elif [ "${{ env.TARGET_BRANCH }}" = "dev" ]; then
-            log "Tagging images as 'development' for development environment..."
-            docker tag $DOCKER_USERNAME/frontend:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/frontend:development
-            docker tag $DOCKER_USERNAME/backend:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/backend:development
-            docker tag $DOCKER_USERNAME/worker:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/worker:development
-            docker tag $DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/tf:development
-            docker tag $DOCKER_USERNAME/db:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/db:development
-          fi
-
-      # Push Docker images
-      - name: Login to Docker Hub and Push Images
-        run: |
-          # Function to log messages with timestamps
-          log() {
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
-          }
-          
-          # Function to log errors
-          error_log() {
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
-          }
-          
-          log "Preparing to push Docker images to registry with tag: ${{ env.DOCKER_TAG }}..."
-          
-          # Check Docker token and fail if not set
-          if [ -z "$DOCKER_TOKEN" ]; then
-            error_log "DOCKER_TOKEN secret is not available"
-            error_log "Please add the DOCKER_TOKEN secret in your GitHub repository:"
-            error_log "1. Go to your repository on GitHub"
-            error_log "2. Navigate to Settings > Secrets and variables > Actions"
-            error_log "3. Click 'New repository secret'"
-            error_log "4. Name: DOCKER_TOKEN"
-            error_log "5. Value: Your Docker Hub access token"
-            error_log "6. Click 'Add secret'"
-            exit 1
-          fi
-
-          
-          # Directly use environment variables for Docker login
-          log "Logging into Docker Hub using username: $DOCKER_USERNAME..."
-          echo "$DOCKER_TOKEN" | docker login -u "$DOCKER_USERNAME" --password-stdin || {
-            error_log "Docker login failed. Please check your credentials."
-            exit 1
-          }
-          
-          log "Docker login successful, proceeding with image push..."
-          
-          # Push images with the branch-specific tag
-          docker push $DOCKER_USERNAME/frontend:${{ env.DOCKER_TAG }}
-          docker push $DOCKER_USERNAME/backend:${{ env.DOCKER_TAG }}
-          docker push $DOCKER_USERNAME/worker:${{ env.DOCKER_TAG }}
-          docker push $DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }}
-          docker push $DOCKER_USERNAME/db:${{ env.DOCKER_TAG }}
-          
-          # Push additional tags based on branch
-          if [ "${{ env.TARGET_BRANCH }}" = "prod" ]; then
-            log "Pushing 'latest' tagged images..."
-            docker push $DOCKER_USERNAME/frontend:latest
-            docker push $DOCKER_USERNAME/backend:latest
-            docker push $DOCKER_USERNAME/worker:latest
-            docker push $DOCKER_USERNAME/tf:latest
-            docker push $DOCKER_USERNAME/db:latest
-          elif [ "${{ env.TARGET_BRANCH }}" = "dev" ]; then
-            log "Pushing 'development' tagged images..."
-            docker push $DOCKER_USERNAME/frontend:development
-            docker push $DOCKER_USERNAME/backend:development
-            docker push $DOCKER_USERNAME/worker:development
-            docker push $DOCKER_USERNAME/tf:development
-            docker push $DOCKER_USERNAME/db:development
-          fi
-
-      # Deploy to Kubernetes
-      - name: Deploy to Kubernetes
-        continue-on-error: true  # Prevent workflow failure if deployments have issues
-        run: |
-          # Function to log messages with timestamps
-          log() {
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
-          }
-          
-          # Function to log errors
-          error_log() {
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
-          }
-          
-          # Function to check deployment status
-          check_deployment_status() {
-            local deployment=$1
-            status=$(kubectl rollout status deployment/$deployment --timeout=10s 2>/dev/null || echo "FAILED")
-            if [[ $status != *"FAILED"* ]]; then
-              return 0  # Success
-            else
-              return 1  # Failed or still in progress
-            fi
-          }
-
-          # Function to collect debug information for failed deployments
-          collect_debug_info() {
-            local deployment=$1
-            log "Collecting debug information for $deployment..."
-            kubectl describe deployment $deployment
-            kubectl get pods -l app=$deployment
+          # Check for any failed deployments
+          if [ "$deployment_failed" = true ]; then
+            error_log "One or more deployments failed. Check the logs for details."
             
-            # Capture more detailed logs with error filtering
-            log "Last 50 lines of logs for $deployment pods:"
-            kubectl logs -l app=$deployment --tail=50 || true
-            
-            # Additional debugging for Redis connection issues if this is worker deployment
-            if [ "$deployment" = "worker" ]; then
-              log "Checking Redis connectivity from worker perspective..."
-              log "Redis pod status:"
-              kubectl get pods -l app=cache
-              kubectl describe pods -l app=cache
-              log "Testing Redis connectivity:"
-              # Try to get a shell in a worker pod to test redis connection manually
-              WORKER_POD=$(kubectl get pods -l app=worker -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-              if [ -n "$WORKER_POD" ]; then
-                kubectl exec -it $WORKER_POD -- sh -c "echo 'Testing Redis connection' && python3 -c 'import redis; import os; print(\"Redis Host:\", os.environ.get(\"REDIS_HOST\")); print(\"Redis Port:\", os.environ.get(\"REDIS_PORT\"));'" || true
-              fi
-              
-              log "Checking Redis service endpoints:"
-              kubectl get endpoints cache
-            fi
-          }
-          
-          # Apply Kubernetes configurations
-          log "Applying Kubernetes configurations..."
-          if [ "${{ env.TARGET_BRANCH }}" = "dev" ]; then
-            # Dev-specific configurations (if they exist)
-            if [ -d "prod/config/dev" ]; then
-              kubectl apply -f prod/config/dev
-            else
-              # Fall back to prod config if no dev config exists
-              kubectl apply -f prod/config
-            fi
-          else
-            # Default to prod config for prod branch or any other branch
-            kubectl apply -f prod/config
-          fi
-          
-          # Add debugging information about the cluster and deployments
-          log "Getting cluster information before deployment..."
-          kubectl get nodes
-          kubectl get pods -o wide
-          kubectl get deployments
-          
-          # Check if backend deployment exists
-          if ! kubectl get deployment backend &> /dev/null; then
-            error_log "Backend deployment not found! Checking namespace..."
-            kubectl get namespaces
-            # Don't exit with error
-            log "Will attempt to proceed with other deployments..."
-          fi
-          
-          # Define the deployments to update
-          deployments=("backend" "frontend" "worker" "tf")
-          
-          # Perform rolling updates for all deployments at once
-          log "Performing rolling updates for zero downtime using images tagged with: ${{ env.DOCKER_TAG }}..."
-          
-          # Update all deployments at once
-          for deployment in "${deployments[@]}"; do
-            log "Updating $deployment deployment..."
-            kubectl set image deployment/$deployment $deployment=$DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }}
-          done
-          
-          # Monitor all deployments in a loop
-          log "Monitoring all deployments..."
-          
-          # Set timeout values for each deployment (in seconds)
-          declare -A timeouts
-          timeouts=([backend]=300 [frontend]=180 [worker]=180 [tf]=180)
-          
-          # Track start time for each deployment
-          declare -A start_times
-          declare -A deployment_status
-          for deployment in "${deployments[@]}"; do
-            start_times[$deployment]=$(date +%s)
-            deployment_status[$deployment]="pending"
-          done
-          
-          # Continue monitoring until all deployments are completed or timed out
-          while true; do
-            all_completed=true
-            
+            # Report final status
+            log "Deployment FAILED. Status summary:"
             for deployment in "${deployments[@]}"; do
-              # Skip if this deployment is already completed or failed
-              if [ "${deployment_status[$deployment]}" != "pending" ]; then
-                continue
-              fi
-              
-              # Check if the deployment is successful
-              if check_deployment_status $deployment; then
-                log "$deployment deployment succeeded."
-                deployment_status[$deployment]="success"
-                continue
-              fi
-              
-              # Check if the deployment has timed out
-              current_time=$(date +%s)
-              elapsed=$((current_time - start_times[$deployment]))
-              timeout=${timeouts[$deployment]}
-              
-              if [ $elapsed -gt $timeout ]; then
-                error_log "$deployment deployment timed out after ${elapsed} seconds."
-                collect_debug_info $deployment
-                deployment_status[$deployment]="failed"
-              else
-                # Still waiting for this deployment
-                all_completed=false
-                log "Still waiting for $deployment deployment... (${elapsed}s elapsed, timeout: ${timeout}s)"
-              fi
+              log "  - $deployment: ${deployment_status[$deployment]}"
             done
             
-            # Check if all deployments are completed (success or failed)
-            if [ "$all_completed" = true ]; then
-              break
+            # Final status check
+            log "Final deployment status:"
+            kubectl get deployments
+            kubectl get pods
+            
+            exit 1  # Fail the GitHub action
+          else
+            # Report final status
+            log "Deployment process completed successfully. Status summary:"
+            for deployment in "${deployments[@]}"; do
+              log "  - $deployment: ${deployment_status[$deployment]}"
+            done
+            
+            # Final status check
+            log "Final deployment status:"
+            kubectl get deployments
+            kubectl get pods
+            
+            # Verify backend connectivity to database and Redis
+            log "Verifying backend connectivity to database and Redis..."
+            BACKEND_POD=$(kubectl get pods -l app=backend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+            if [ -n "$BACKEND_POD" ]; then
+              # Wait for the backend pod to be ready
+              kubectl wait --for=condition=ready pod/$BACKEND_POD --timeout=60s || true
+              
+              # Check backend health endpoint
+              log "Checking backend health endpoint..."
+              HEALTH_STATUS=$(kubectl exec $BACKEND_POD -- curl -s http://localhost:5057/health || echo "Failed")
+              log "Backend health status: $HEALTH_STATUS"
+              
+              # Test database connection
+              log "Testing database connection from backend pod..."
+              DB_CONN_TEST=$(kubectl exec $BACKEND_POD -- sh -c "nc -zv \$DB_HOST \$DB_PORT" 2>&1 || echo "Connection failed")
+              log "Database connection test: $DB_CONN_TEST"
+              
+              # Test Redis connection
+              log "Testing Redis connection from backend pod..."
+              REDIS_CONN_TEST=$(kubectl exec $BACKEND_POD -- sh -c "nc -zv \$REDIS_HOST \$REDIS_PORT" 2>&1 || echo "Connection failed")
+              log "Redis connection test: $REDIS_CONN_TEST"
+              
+              # If any connection test failed, log a warning but don't fail the deployment
+              if [[ "$DB_CONN_TEST" == *"Connection failed"* ]] || [[ "$REDIS_CONN_TEST" == *"Connection failed"* ]]; then
+                log "WARNING: Backend connectivity tests failed. The deployment completed but the backend may not function correctly."
+                log "Please check the logs and configuration for the backend, database, and Redis services."
+              else
+                log "Backend connectivity tests passed successfully."
+              fi
+            else
+              log "WARNING: Could not find backend pod to verify connectivity."
             fi
             
-            # Wait before checking again
-            sleep 10
-          done
-          
-          # Report final status
-          log "Deployment process completed. Status summary:"
-          for deployment in "${deployments[@]}"; do
-            log "  - $deployment: ${deployment_status[$deployment]}"
-          done
-          
-          # Final status check
-          log "Checking final deployment status..."
-          kubectl get deployments
-          
-          log "Deployment process completed for branch ${{ env.TARGET_BRANCH }}. Some services may require attention." 
+            log "Deployment process completed successfully for branch ${{ env.TARGET_BRANCH }}."
+          fi 
