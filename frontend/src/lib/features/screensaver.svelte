@@ -5,8 +5,12 @@
 	import { onMount, onDestroy } from 'svelte';
 	import '$lib/core/global.css';
 	import { createEventDispatcher } from 'svelte';
+	import { settings } from '$lib/core/stores';
+	import { get } from 'svelte/store';
 
 	const dispatch = createEventDispatcher();
+
+	export let active = false;
 
 	const tfs = ['1w', '1d', '1h', '1'];
 	let instances: Instance[] = [];
@@ -16,7 +20,58 @@
 	let tfIndex = 0;
 	let speed = 5; //seconds
 
+	// Inactivity timer settings
+	const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
+	let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function startInactivityTimer() {
+		// Only start timer if screensaver is enabled in settings
+		if (!get(settings).enableScreensaver) return;
+
+		// Clear any existing timer
+		if (inactivityTimer) {
+			clearTimeout(inactivityTimer);
+		}
+
+		// Set new timer
+		inactivityTimer = setTimeout(() => {
+			startScreensaver();
+		}, INACTIVITY_TIMEOUT);
+	}
+
+	function resetInactivityTimer() {
+		startInactivityTimer();
+	}
+
+	function startScreensaver() {
+		// Only start if screensaver is enabled in settings
+		if (!get(settings).enableScreensaver) return;
+
+		if (!active) {
+			active = true;
+			if (instances.length > 0) {
+				loopActive = true;
+				loop();
+			} else {
+				// Load instances if not already loaded
+				privateRequest<Instance[]>('getScreensavers', {}).then((v: Instance[]) => {
+					instances = v;
+					loopActive = true;
+					loop();
+				});
+			}
+		}
+	}
+
+	function stopScreensaver() {
+		active = false;
+		loopActive = false;
+		resetInactivityTimer();
+	}
+
 	function loop() {
+		if (!active || instances.length === 0) return;
+
 		const instance = instances[securityIndex];
 		instance.timeframe = tfs[tfIndex];
 		queryChart(instance);
@@ -36,47 +91,94 @@
 	}
 
 	function handleClick() {
+		stopScreensaver();
 		dispatch('exit');
 	}
 
+	function handleUserActivity() {
+		resetInactivityTimer();
+	}
+
+	// Subscribe to settings changes
+	let unsubscribe: () => void;
+
 	onMount(() => {
+		// Load instances on mount
 		privateRequest<Instance[]>('getScreensavers', {}).then((v: Instance[]) => {
 			instances = v;
-			loopActive = true;
-			loop();
+			if (active) {
+				loopActive = true;
+				loop();
+			}
 		});
+
+		// Set up activity listeners
+		window.addEventListener('mousemove', handleUserActivity);
+		window.addEventListener('mousedown', handleUserActivity);
+		window.addEventListener('keypress', handleUserActivity);
+		window.addEventListener('touchstart', handleUserActivity);
+		window.addEventListener('scroll', handleUserActivity);
+
+		// Subscribe to settings changes
+		unsubscribe = settings.subscribe((newSettings) => {
+			// If screensaver setting is disabled and screensaver is active, stop it
+			if (!newSettings.enableScreensaver && active) {
+				stopScreensaver();
+			}
+
+			// If screensaver setting is enabled and timer isn't running, start it
+			if (newSettings.enableScreensaver && !inactivityTimer) {
+				startInactivityTimer();
+			}
+		});
+
+		// Start the inactivity timer if screensaver is enabled
+		if (get(settings).enableScreensaver) {
+			startInactivityTimer();
+		}
 	});
 
 	onDestroy(() => {
 		loopActive = false;
+
+		// Clean up activity listeners
+		window.removeEventListener('mousemove', handleUserActivity);
+		window.removeEventListener('mousedown', handleUserActivity);
+		window.removeEventListener('keypress', handleUserActivity);
+		window.removeEventListener('touchstart', handleUserActivity);
+		window.removeEventListener('scroll', handleUserActivity);
+
+		// Clear the inactivity timer
+		if (inactivityTimer) {
+			clearTimeout(inactivityTimer);
+		}
+
+		// Unsubscribe from settings
+		if (unsubscribe) {
+			unsubscribe();
+		}
 	});
 </script>
 
-<!-- Small screensaver indicator in the corner -->
-<div
-	class="screensaver-container"
-	on:click={handleClick}
-	role="button"
-	tabindex="0"
-	on:keydown={(e) => e.key === 'Escape' && handleClick()}
->
-	<div class="screensaver-badge">
-		<div class="screensaver-content">
-			<div class="screensaver-title">
-				Screensaver Active
-				<span class="click-hint">(Click to exit)</span>
-			</div>
-			{#if instances.length > 0 && instances[securityIndex]}
-				<div class="screensaver-info">
-					<span class="ticker">{instances[securityIndex].symbol || 'Loading...'}</span>
-					<span class="timeframe">{tfs[tfIndex]}</span>
+{#if active}
+	<!-- Simple screensaver indicator in the corner -->
+	<div
+		class="screensaver-container"
+		on:click={handleClick}
+		role="button"
+		tabindex="0"
+		on:keydown={(e) => e.key === 'Escape' && handleClick()}
+	>
+		<div class="screensaver-badge">
+			<div class="screensaver-content">
+				<div class="screensaver-title">
+					Screensaver Active
+					<span class="click-hint">(Click to exit)</span>
 				</div>
-			{:else}
-				<div class="screensaver-info">Loading charts...</div>
-			{/if}
+			</div>
 		</div>
 	</div>
-</div>
+{/if}
 
 <style>
 	.screensaver-container {
@@ -127,10 +229,10 @@
 	.screensaver-title {
 		font-size: 0.9rem;
 		font-weight: bold;
-		margin-bottom: 4px;
 		color: var(--f1);
 		display: flex;
 		align-items: center;
+		flex-wrap: nowrap;
 	}
 
 	.screensaver-title::before {
@@ -142,13 +244,15 @@
 		border-radius: 50%;
 		margin-right: 6px;
 		animation: blink 1.5s infinite;
+		flex-shrink: 0;
 	}
 
 	.click-hint {
-		font-size: 0.7rem;
+		font-size: 0.65rem;
 		font-weight: normal;
 		color: var(--f2);
-		margin-left: 8px;
+		margin-left: 6px;
+		white-space: nowrap;
 	}
 
 	@keyframes blink {
@@ -159,25 +263,5 @@
 		50% {
 			opacity: 0.3;
 		}
-	}
-
-	.screensaver-info {
-		font-size: 0.8rem;
-		display: flex;
-		gap: 8px;
-		align-items: center;
-	}
-
-	.ticker {
-		font-weight: bold;
-		color: var(--f1);
-	}
-
-	.timeframe {
-		color: var(--f2);
-		background-color: var(--c3);
-		padding: 2px 4px;
-		border-radius: 3px;
-		font-size: 0.7rem;
 	}
 </style>

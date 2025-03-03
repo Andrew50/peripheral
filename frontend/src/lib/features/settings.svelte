@@ -10,7 +10,7 @@
 	let errorMessage: string = '';
 	let tempSettings: Settings = { ...get(settings) }; // Create a local copy to work with
 	let activeTab: 'chart' | 'format' | 'account' = 'chart';
-	
+
 	// Add profile picture state
 	let profilePic = browser ? sessionStorage.getItem('profilePic') || '' : '';
 	let username = browser ? sessionStorage.getItem('username') || '' : '';
@@ -44,62 +44,62 @@
 		}
 		goto('/');
 	}
-	
+
 	// Generate initial avatar SVG from username
 	function generateInitialAvatar(username: string) {
 		const initial = username.charAt(0).toUpperCase();
 		return `data:image/svg+xml,${encodeURIComponent(`<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#1a1c21"/><text x="50" y="65" font-family="Arial" font-size="40" fill="#e0e0e0" text-anchor="middle" font-weight="bold">${initial}</text></svg>`)}`;
 	}
-	
+
 	// Handle file selection for profile picture upload
 	function handleFileSelect(event: Event) {
 		const input = event.target as HTMLInputElement;
 		if (input.files && input.files.length > 0) {
 			uploadedImage = input.files[0];
-			
+
 			// Validate file type
 			if (!uploadedImage.type.match('image.*')) {
 				uploadStatus = 'Please select an image file';
 				previewUrl = '';
 				return;
 			}
-			
+
 			// Create a preview URL
 			previewUrl = URL.createObjectURL(uploadedImage);
 			uploadStatus = '';
 		}
 	}
-	
+
 	// Update profile picture
 	async function updateProfilePicture() {
 		if (!uploadedImage) {
 			uploadStatus = 'Please select an image to upload';
 			return;
 		}
-		
+
 		try {
 			uploadStatus = 'Uploading...';
-			
+
 			// Convert image to base64
 			const reader = new FileReader();
 			reader.readAsDataURL(uploadedImage);
 			reader.onload = async () => {
 				const base64String = reader.result as string;
-				
+
 				try {
 					// Send to backend
-					await privateRequest('updateProfilePicture', { 
-						profilePicture: base64String 
+					await privateRequest('updateProfilePicture', {
+						profilePicture: base64String
 					});
-					
+
 					// Update in session storage
 					if (browser) {
 						sessionStorage.setItem('profilePic', base64String);
 					}
-					
+
 					profilePic = base64String;
 					uploadStatus = 'Profile picture updated successfully!';
-					
+
 					// Clear file input
 					uploadedImage = null;
 				} catch (error) {
@@ -112,17 +112,17 @@
 			uploadStatus = 'Error processing image. Please try again.';
 		}
 	}
-	
+
 	// Reset to default initial avatar
 	function resetToDefaultAvatar() {
 		if (username) {
 			const defaultAvatar = generateInitialAvatar(username);
 			profilePic = defaultAvatar;
-			
+
 			if (browser) {
 				sessionStorage.setItem('profilePic', defaultAvatar);
 			}
-			
+
 			// Clear uploaded state
 			uploadedImage = null;
 			previewUrl = '';
@@ -224,6 +224,20 @@
 							</select>
 						</div>
 					</div>
+
+					<div class="setting-item">
+						<label for="enableScreensaver">Enable Screensaver</label>
+						<div class="toggle-container">
+							<select
+								id="enableScreensaver"
+								bind:value={tempSettings.enableScreensaver}
+								on:keypress={handleKeyPress}
+							>
+								<option value={true}>Yes</option>
+								<option value={false}>No</option>
+							</select>
+						</div>
+					</div>
 				</div>
 			</div>
 
@@ -262,23 +276,21 @@
 		{:else if activeTab === 'account'}
 			<div class="settings-section">
 				<h3>Account Information</h3>
-				
+
 				<div class="profile-section">
 					<div class="profile-picture-container">
 						<div class="profile-picture">
 							{#if profilePic}
-								<img 
-									src={profilePic} 
-									alt="Profile" 
-									class="profile-image" 
-									on:error={() => { profilePic = generateInitialAvatar(username); }}
+								<img
+									src={profilePic}
+									alt="Profile"
+									class="profile-image"
+									on:error={() => {
+										profilePic = generateInitialAvatar(username);
+									}}
 								/>
 							{:else if username}
-								<img 
-									src={generateInitialAvatar(username)} 
-									alt="Profile" 
-									class="profile-image"
-								/>
+								<img src={generateInitialAvatar(username)} alt="Profile" class="profile-image" />
 							{:else}
 								<div class="profile-placeholder">?</div>
 							{/if}
@@ -287,41 +299,39 @@
 							{username || 'User'}
 						</div>
 					</div>
-					
+
 					<div class="profile-upload-section">
 						<h4>Update Profile Picture</h4>
-						
+
 						<div class="file-upload">
-							<label for="profile-pic-upload" class="file-upload-label">
-								Choose Image
-							</label>
-							<input 
-								type="file" 
-								id="profile-pic-upload" 
+							<label for="profile-pic-upload" class="file-upload-label"> Choose Image </label>
+							<input
+								type="file"
+								id="profile-pic-upload"
 								accept="image/*"
 								on:change={handleFileSelect}
 							/>
-							
+
 							{#if previewUrl}
 								<div class="preview-container">
 									<img src={previewUrl} alt="Preview" class="preview-image" />
 								</div>
 							{/if}
-							
+
 							<div class="upload-actions">
-								<button 
-									class="upload-button" 
+								<button
+									class="upload-button"
 									on:click={updateProfilePicture}
 									disabled={!uploadedImage}
 								>
 									Upload
 								</button>
-								
+
 								<button class="reset-button" on:click={resetToDefaultAvatar}>
 									Reset to Default
 								</button>
 							</div>
-							
+
 							{#if uploadStatus}
 								<div class="upload-status">
 									{uploadStatus}
@@ -330,7 +340,7 @@
 						</div>
 					</div>
 				</div>
-				
+
 				<div class="account-actions">
 					<button class="logout-button" on:click={handleLogout}>Logout</button>
 				</div>
@@ -541,14 +551,14 @@
 		gap: 20px;
 		margin-bottom: 20px;
 	}
-	
+
 	.profile-picture-container {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		gap: 10px;
 	}
-	
+
 	.profile-picture {
 		width: 100px;
 		height: 100px;
@@ -560,48 +570,48 @@
 		justify-content: center;
 		border: 2px solid var(--c3);
 	}
-	
+
 	.profile-image {
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
 	}
-	
+
 	.profile-placeholder {
 		font-size: 48px;
 		color: var(--f2);
 		font-weight: bold;
 	}
-	
+
 	.username-display {
 		font-size: 16px;
 		font-weight: 500;
 		color: var(--f1);
 	}
-	
+
 	.profile-upload-section {
 		background-color: var(--c2);
 		border-radius: 4px;
 		padding: 16px;
 		border: 1px solid var(--c3);
 	}
-	
+
 	.profile-upload-section h4 {
 		margin: 0 0 12px 0;
 		font-size: 14px;
 		color: var(--f2);
 	}
-	
+
 	.file-upload {
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
 	}
-	
-	.file-upload input[type="file"] {
+
+	.file-upload input[type='file'] {
 		display: none;
 	}
-	
+
 	.file-upload-label {
 		background-color: var(--c3);
 		color: var(--f1);
@@ -612,11 +622,11 @@
 		font-size: 14px;
 		transition: background-color 0.2s;
 	}
-	
+
 	.file-upload-label:hover {
 		background-color: var(--c4);
 	}
-	
+
 	.preview-container {
 		width: 100%;
 		height: 120px;
@@ -628,19 +638,20 @@
 		background-color: var(--c1);
 		border: 1px solid var(--c3);
 	}
-	
+
 	.preview-image {
 		max-width: 100%;
 		max-height: 100%;
 		object-fit: contain;
 	}
-	
+
 	.upload-actions {
 		display: flex;
 		gap: 10px;
 	}
-	
-	.upload-button, .reset-button {
+
+	.upload-button,
+	.reset-button {
 		padding: 8px 12px;
 		border-radius: 4px;
 		font-size: 14px;
@@ -648,32 +659,32 @@
 		flex: 1;
 		transition: background-color 0.2s;
 	}
-	
+
 	.upload-button {
 		background-color: #3b82f6;
 		color: white;
 		border: none;
 	}
-	
+
 	.upload-button:hover:not(:disabled) {
 		background-color: #2563eb;
 	}
-	
+
 	.upload-button:disabled {
 		background-color: #93c5fd;
 		cursor: not-allowed;
 	}
-	
+
 	.reset-button {
 		background-color: var(--c3);
 		color: var(--f1);
 		border: 1px solid var(--c4);
 	}
-	
+
 	.reset-button:hover {
 		background-color: var(--c4);
 	}
-	
+
 	.upload-status {
 		padding: 8px;
 		text-align: center;

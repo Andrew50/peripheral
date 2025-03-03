@@ -115,7 +115,7 @@
 	// Add state variables after other state declarations
 	let screensaverActive = false;
 	let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
-	const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
+	const INACTIVITY_TIMEOUT = 5 * 1000; // 5 seconds in milliseconds
 
 	// Add a reactive statement to handle window events
 	$: if (draggingWindowId !== null) {

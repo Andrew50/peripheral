@@ -246,7 +246,7 @@ func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
-	// Modified query to handle NULL market_cap
+	// Modified query to handle NULL market_cap and missing columns
 	query := `
 		SELECT 
 			ticker,
@@ -265,7 +265,14 @@ func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 			share_class_shares_outstanding,
 			NULLIF(industry, '') as industry,
 			NULLIF(sector, '') as sector,
-			total_shares
+			CASE 
+				WHEN EXISTS (
+					SELECT 1 FROM information_schema.columns 
+					WHERE table_name = 'securities' AND column_name = 'total_shares'
+				) 
+				THEN (SELECT total_shares FROM securities WHERE securityId = $1 LIMIT 1)
+				ELSE 0
+			END as total_shares
 		FROM securities 
 		WHERE securityId = $1 AND (maxDate IS NULL OR maxDate = (
 			SELECT MAX(maxDate) 
