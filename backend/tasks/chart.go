@@ -255,10 +255,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			aggregatedData, err := buildHigherTimeframeFromLower(
 				it, multiplier, timespan, args.ExtendedHours, easternLocation, &numBarsRemaining, args.Direction,
 			)
-			if len(aggregatedData) > 0 {
-				lastBar := aggregatedData[len(aggregatedData)-1]
-				fmt.Printf("\n\n aggregatedData: %+v\n", lastBar)
-			}
 			if err != nil {
 				return nil, err
 			}
