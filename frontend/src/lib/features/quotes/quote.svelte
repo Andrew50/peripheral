@@ -18,12 +18,13 @@
 	} from '$lib/core/timestamp';
 
 	let instance: Writable<Instance> = writable({});
-	let container: HTMLDivElement;
+	let container: HTMLButtonElement;
 	let showTimeAndSales = false;
 	let currentDetails: Record<string, any> = {};
 	let lastFetchedSecurityId: number | null = null;
 	let countdown = writable('--');
 	let countdownInterval: ReturnType<typeof setInterval>;
+	let logoLoadError = false;
 
 	// Sync instance with activeChartInstance and handle details fetching
 	activeChartInstance.subscribe((chartInstance: Instance | null) => {
@@ -32,6 +33,9 @@
 			// Only update if we have a valid ticker
 			console.log('Quote component: Setting new instance with ticker:', chartInstance.ticker);
 			instance.set(chartInstance);
+
+			// Reset logo error state when instance changes
+			logoLoadError = false;
 
 			// Handle details fetching in the main subscription
 			if (chartInstance.securityId && lastFetchedSecurityId !== chartInstance.securityId) {
@@ -189,19 +193,12 @@
 	}
 </script>
 
-<div
+<button
 	class="ticker-info-container"
 	bind:this={container}
 	role="region"
 	aria-label="Ticker Information"
 	on:click={handleClick}
-	on:keydown={(e) => {
-		if (e.key === 'Enter' || e.key === ' ') {
-			e.preventDefault();
-			handleClick();
-		}
-	}}
-	tabindex="0"
 	on:touchstart={handleClick}
 >
 	<div class="content">
@@ -211,14 +208,23 @@
 			</div>
 		</div>
 
-		{#if $instance?.logo || currentDetails?.logo}
+		{#if ($instance?.logo || currentDetails?.logo) && !logoLoadError}
 			<div class="logo-container">
 				<img
 					src={$instance?.logo || currentDetails?.logo}
 					alt="{$instance?.name || currentDetails?.name || 'Company'} logo"
 					class="company-logo"
-					on:error={() => {}}
+					on:error={() => {
+						logoLoadError = true;
+						console.error('Failed to load company logo');
+					}}
 				/>
+			</div>
+		{:else if $instance?.ticker || currentDetails?.ticker}
+			<div class="logo-container fallback-logo">
+				<div class="ticker-logo">
+					{($instance?.ticker || currentDetails?.ticker || '').charAt(0)}
+				</div>
 			</div>
 		{/if}
 
@@ -313,7 +319,7 @@
 			</div>
 		{/if}
 	</div>
-</div>
+</button>
 
 <style>
 	.ticker-info-container {
@@ -324,6 +330,13 @@
 		will-change: height;
 		font-family: var(--font-primary);
 		height: 100%;
+		width: 100%;
+		padding: 0;
+		margin: 0;
+		text-align: left;
+		border: none;
+		cursor: pointer;
+		display: block;
 	}
 
 	.ticker-info-container.expanded {
@@ -351,6 +364,26 @@
 		max-height: 40px;
 		max-width: 200px;
 		object-fit: contain;
+	}
+
+	.fallback-logo {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+	}
+
+	.ticker-logo {
+		width: 40px;
+		height: 40px;
+		border-radius: 50%;
+		background: var(--ui-bg-secondary);
+		color: var(--text-primary);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 20px;
+		font-weight: bold;
+		text-transform: uppercase;
 	}
 
 	.ticker-display {

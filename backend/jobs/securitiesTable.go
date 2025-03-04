@@ -553,14 +553,14 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 				 locale = NULLIF($3, ''),
 				 primary_exchange = NULLIF($4, ''),
 				 active = $5,
-				 market_cap = NULLIF($6, 0)::NUMERIC,
+				 market_cap = NULLIF($6::BIGINT, 0),
 				 description = NULLIF($7, ''),
 				 logo = NULLIF($8, ''),
 				 icon = NULLIF($9, ''),
-				 share_class_shares_outstanding = CAST(NULLIF($10, 0) AS BIGINT),
+				 share_class_shares_outstanding = NULLIF($10::BIGINT, 0),
 				 total_shares = CASE 
-					 WHEN NULLIF($6::numeric, 0) > 0 AND NULLIF($12::numeric, 0) > 0 
-					 THEN CAST(($6::numeric / $12::numeric) AS BIGINT)
+					 WHEN NULLIF($6::BIGINT, 0) > 0 AND NULLIF($12, 0) > 0 
+					 THEN CAST(($6::BIGINT / $12) AS BIGINT)
 					 ELSE NULL 
 				 END
 			 WHERE securityid = $11`,
@@ -579,9 +579,17 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 
 		if err != nil {
 			if test {
-				log.Printf("Failed to update details for %s: %v", ticker, err)
+				log.Printf("Failed to update details for %s: Column error - market_cap=%v, share_class_shares_outstanding=%v - Error: %v",
+					ticker,
+					details.MarketCap,
+					details.ShareClassSharesOutstanding,
+					err)
 			}
-			errChan <- fmt.Errorf("failed to update %s: %v", ticker, err)
+			errChan <- fmt.Errorf("failed to update %s: Column error - market_cap=%v, share_class_shares_outstanding=%v - Error: %v",
+				ticker,
+				details.MarketCap,
+				details.ShareClassSharesOutstanding,
+				err)
 			return
 		}
 

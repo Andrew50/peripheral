@@ -24,8 +24,8 @@ func GetTicker(conn *Conn, securityId int, timestamp time.Time) (string, error) 
 	return ticker, nil
 
 }
-func GetCIKFromTicker(conn *Conn, ticker string, timestamp time.Time) (int, error) {
-	var cik int
+func GetCIKFromTicker(conn *Conn, ticker string, timestamp time.Time) (int64, error) {
+	var cik int64
 	err := conn.DB.QueryRow(context.Background(), "SELECT cik from securities where ticker = $1 and minDate <= $2 and (maxDate >= $2 or maxDate is NULL)", ticker, timestamp).Scan(&cik)
 	if err != nil {
 		return 0, fmt.Errorf("3333w0ngb %v", err)
