@@ -98,6 +98,8 @@ export function queryChart(newInstance: Instance, includeLast: boolean = true): 
 	// Ensure we have all necessary instance properties
 	if (!newInstance.name && newInstance.securityId) {
 		console.log('interface.ts: Fetching details for security ID:', newInstance.securityId);
+		console.log('interface.ts: Type of securityId:', typeof newInstance.securityId);
+		console.log('interface.ts: Full instance object:', JSON.stringify(newInstance, null, 2));
 		privateRequest<Record<string, any>>(
 			'getTickerMenuDetails',
 			{ securityId: newInstance.securityId },
