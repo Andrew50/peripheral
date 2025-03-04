@@ -65,6 +65,7 @@ func GetActive(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface
 	cacheKey := fmt.Sprintf("active:%s:%s:%s", args.Timeframe, args.Group, args.Metric)
 
 	// Try to get from cache
+
 	cached, err := conn.Cache.Get(context.Background(), cacheKey).Result()
 	if err != nil {
 		return []ActiveResult{}, nil // Return empty array if not found
