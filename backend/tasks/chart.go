@@ -641,7 +641,7 @@ func requestIncompleteBar(
 	// ------------------------
 	// 4) Flatten all data into a single slice
 	// ------------------------
-	combined := make([]combinedData, 0, len(dailyBars)+len(minuteBars)+len(secondBars)+len(tradeList))
+	combined := make([]combinedData, 0, len(dailyBars)+len(minuteBars)+len(secondBars)+len(tradeList)+50)
 
 	// (A) daily
 	for _, agg := range dailyBars {

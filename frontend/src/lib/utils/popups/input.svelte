@@ -7,6 +7,18 @@
 	import { tick } from 'svelte';
 	import type { Writable } from 'svelte/store';
 	import type { Instance } from '$lib/core/types';
+
+	/**
+	 * Focus Management Strategy:
+	 * 1. When input component is activated, we store the previously focused element
+	 * 2. We use a hidden input element that's positioned on top of the visible input to capture keyboard events
+	 * 3. We add a document click handler to detect clicks outside the input window, which cancels the input
+	 * 4. When input is completed or cancelled, we restore focus to the previously focused element
+	 * 5. We clean up all event listeners when the component is destroyed or deactivated
+	 *
+	 * This approach prevents the input from capturing all keyboard events when it's not active.
+	 */
+
 	const allKeys = ['ticker', 'timestamp', 'timeframe', 'extendedHours', 'price'] as const;
 	let currentSecurityResultRequest = 0;
 
@@ -78,8 +90,15 @@
 		await tick();
 
 		// Check if there's an initial inputString in the instance
-		const initialInputString = 'inputString' in instance ? (instance.inputString as string) : '';
-		delete instance.inputString; // Remove it from the instance object
+		const initialInputString =
+			'inputString' in instance && instance['inputString'] != null
+				? String(instance['inputString'])
+				: '';
+		// Remove inputString property (not part of the Instance interface)
+		if ('inputString' in instance) {
+			const instanceAny = instance as any;
+			delete instanceAny.inputString;
+		}
 
 		// Initialize the query with passed instance info.
 		inputQuery.update((v: InputQuery) => ({
@@ -260,115 +279,130 @@
 
 	// Mark handleKeyDown as async so we can await the validate call if needed.
 	async function handleKeyDown(event: KeyboardEvent): Promise<void> {
-		// Only process keys when the input UI is active
+		// Get current state directly from the store to ensure we have latest state
 		const currentState = get(inputQuery);
-		if (currentState.status !== 'active') return;
+		const hiddenInput = document.getElementById('hidden-input');
+
+		// Make sure we're in active state
+		if (currentState.status !== 'active') {
+			return;
+		}
+
+		// Always prevent default behavior for our captured keys to avoid browser handling
+		if (
+			event.key === 'Enter' ||
+			event.key === 'Tab' ||
+			event.key === 'Escape' ||
+			/^[a-zA-Z0-9]$/.test(event.key) ||
+			/[-:.]/.test(event.key) ||
+			(event.key === ' ' && currentState.inputType === 'timestamp') ||
+			event.key === 'Backspace'
+		) {
+			event.preventDefault();
+		}
+
+		// Stop propagation to prevent double-handling
 		event.stopPropagation();
+
 		let iQ = { ...currentState };
 		if (event.key === 'Escape') {
 			inputQuery.update((q) => ({ ...q, status: 'cancelled' }));
+			return;
 		} else if (event.key === 'Enter') {
-			event.preventDefault();
 			if (iQ.inputValid) {
 				const updatedQuery = await enterInput(iQ, 0);
 				inputQuery.set(updatedQuery);
 			}
+			return;
 		} else if (event.key === 'Tab') {
-			event.preventDefault();
 			inputQuery.update((q) => ({
 				...q,
 				instance: { ...q.instance, extendedHours: !q.instance.extendedHours }
 			}));
-		} else {
-			// Process alphanumeric and a few special characters.
-			if (
-				/^[a-zA-Z0-9]$/.test(event.key) ||
-				/[-:.]/.test(event.key) ||
-				(event.key === ' ' && iQ.inputType === 'timestamp')
-			) {
-				const key = iQ.inputType === 'timeframe' ? event.key : event.key.toUpperCase();
-				iQ.inputString += key;
-			} else if (event.key === 'Backspace') {
-				iQ.inputString = iQ.inputString.slice(0, -1);
-			}
+			return;
+		}
 
-			// Only auto-classify if manualInputType is set to 'auto'
-			if (manualInputType === 'auto') {
-				// classify the input string into a type
-				if (iQ.inputString !== '') {
-					if (iQ.possibleKeys.includes('ticker') && /^[A-Z]$/.test(iQ.inputString)) {
-						iQ.inputType = 'ticker';
-					} else if (
-						iQ.possibleKeys.includes('price') &&
-						/^(?:\d*\.\d+|\d{3,})$/.test(iQ.inputString)
-					) {
-						iQ.inputType = 'price';
-						iQ.securities = [];
-					} else if (
-						iQ.possibleKeys.includes('timeframe') &&
-						/^\d{1,2}[hdwmqs]?$/i.test(iQ.inputString)
-					) {
-						iQ.inputType = 'timeframe';
-						iQ.securities = [];
-					} else if (iQ.possibleKeys.includes('timestamp') && /^[\d-]+$/.test(iQ.inputString)) {
-						iQ.inputType = 'timestamp';
-						iQ.securities = [];
-					} else if (iQ.possibleKeys.includes('ticker')) {
-						iQ.inputType = 'ticker';
-					} else {
-						iQ.inputType = '';
-					}
+		// Process input keys
+		if (
+			/^[a-zA-Z0-9]$/.test(event.key) ||
+			/[-:.]/.test(event.key) ||
+			(event.key === ' ' && iQ.inputType === 'timestamp')
+		) {
+			// Transform the key based on input type
+			const key = iQ.inputType === 'timeframe' ? event.key : event.key.toUpperCase();
+			const newInputString = iQ.inputString + key;
+
+			// Update inputString immediately
+			inputQuery.update((v) => ({
+				...v,
+				inputString: newInputString
+			}));
+
+			// Then determine input type
+			determineInputType(newInputString);
+		} else if (event.key === 'Backspace') {
+			const newInputString = iQ.inputString.slice(0, -1);
+
+			// Update inputString immediately
+			inputQuery.update((v) => ({
+				...v,
+				inputString: newInputString
+			}));
+
+			// Then determine input type
+			determineInputType(newInputString);
+		}
+	}
+
+	function determineInputType(inputString: string): void {
+		const iQ = get(inputQuery);
+		let inputType = iQ.inputType;
+
+		// Only auto-classify if manualInputType is set to 'auto'
+		if (manualInputType === 'auto') {
+			if (inputString !== '') {
+				if (iQ.possibleKeys.includes('ticker') && /^[A-Z]$/.test(inputString)) {
+					inputType = 'ticker';
+				} else if (iQ.possibleKeys.includes('price') && /^(?:\d*\.\d+|\d{3,})$/.test(inputString)) {
+					inputType = 'price';
+				} else if (
+					iQ.possibleKeys.includes('timeframe') &&
+					/^\d{1,2}[hdwmqs]?$/i.test(inputString)
+				) {
+					inputType = 'timeframe';
+				} else if (iQ.possibleKeys.includes('timestamp') && /^[\d-]+$/.test(inputString)) {
+					inputType = 'timestamp';
+				} else if (iQ.possibleKeys.includes('ticker')) {
+					inputType = 'ticker';
 				} else {
-					iQ.inputType = '';
+					inputType = '';
 				}
 			} else {
-				// Use the manually selected input type
-				iQ.inputType = manualInputType;
+				inputType = '';
 			}
-
-			inputQuery.update((v: InputQuery) => ({
-				...v,
-				inputString: iQ.inputString,
-				inputType: iQ.inputType
-			}));
-			currentSecurityResultRequest++;
-			const thisSecurityResultRequest = currentSecurityResultRequest;
-
-			// Validate asynchronously, and then update the store.
-			validateInput(iQ.inputString, iQ.inputType).then((validationResp: ValidateResponse) => {
-				if (thisSecurityResultRequest === currentSecurityResultRequest) {
-					inputQuery.update((v: InputQuery) => ({
-						...v,
-						...validationResp
-					}));
-					loadedSecurityResultRequest = thisSecurityResultRequest;
-
-					/*fetchSecurityDetails([...validationResp.securities]).then(
-						(securitiesWithDetails: Instance[]) => {
-							if (thisSecurityResultRequest === currentSecurityResultRequest) {
-								inputQuery.update((v: InputQuery) => {
-									// Merge the newly fetched details into the instance if it matches
-									/*if (v.instance && 'ticker' in v.instance && v.instance.ticker) {
-										const matchedSec = securitiesWithDetails.find(
-											(sec) => sec.ticker === v.instance.ticker
-										);
-										if (matchedSec) {
-											v.instance = { ...v.instance, ...matchedSec };
-										}
-									}*/
-					/*
-									return {
-										...v,
-										securities: securitiesWithDetails
-									};
-								});
-								($inputQuery);
-							}
-						}
-					);*/
-				}
-			});
+		} else {
+			// Use the manually selected input type
+			inputType = manualInputType;
 		}
+
+		// Update the input type
+		inputQuery.update((v) => ({
+			...v,
+			inputType
+		}));
+
+		// Trigger validation
+		currentSecurityResultRequest++;
+		const thisSecurityResultRequest = currentSecurityResultRequest;
+		validateInput(inputString, inputType).then((validationResp: ValidateResponse) => {
+			if (thisSecurityResultRequest === currentSecurityResultRequest) {
+				inputQuery.update((v: InputQuery) => ({
+					...v,
+					...validationResp
+				}));
+				loadedSecurityResultRequest = thisSecurityResultRequest;
+			}
+		});
 	}
 
 	// onTouch handler (if needed) now removes the UI by updating via update() too.
@@ -379,25 +413,69 @@
 	// Instead of repeatedly adding/removing listeners in the store subscription,
 	// we add the keydown listener once on mount and remove it on destroy.
 	let unsubscribe: () => void;
+	let componentActive = false;
+
+	// Define keydownHandler to call the handleKeyDown function
 	const keydownHandler = (event: KeyboardEvent) => {
 		handleKeyDown(event);
 	};
+
 	onMount(() => {
 		prevFocusedElement = document.activeElement as HTMLElement;
-		document.addEventListener('keydown', keydownHandler);
+
 		unsubscribe = inputQuery.subscribe((v: InputQuery) => {
 			if (browser) {
 				if (v.status === 'initializing') {
+					componentActive = true;
+					// Store the currently focused element before focusing the input
+					prevFocusedElement = document.activeElement as HTMLElement;
+
 					// Focus the hidden input (after a tick to allow rendering)
 					tick().then(() => {
-						document.getElementById('hidden-input')?.focus();
+						const input = document.getElementById('hidden-input');
+						if (input) {
+							// Focus only during initialization
+							input.focus();
+
+							// Add listener directly on the input element
+							input.removeEventListener('keydown', keydownHandler); // Remove any existing listener first
+							input.addEventListener('keydown', keydownHandler);
+							input.setAttribute('data-has-listener', 'true');
+						}
+
+						// Add a click handler to the document to detect clicks outside the popup
+						document.body.removeEventListener('mousedown', handleOutsideClick); // Remove any existing listener first
+						document.body.addEventListener('mousedown', handleOutsideClick);
+						document.body.setAttribute('data-input-click-listener', 'true');
 					});
 					// Use update() to mark that the UI is now active.
 					inputQuery.update((state) => ({ ...state, status: 'active' }));
 				} else if (v.status === 'shutdown') {
+					componentActive = false;
+					// Remove focus from the hidden input before restoring previous focus
+					const hiddenInput = document.getElementById('hidden-input');
+					if (hiddenInput && document.activeElement === hiddenInput) {
+						hiddenInput.blur();
+					}
+
+					// Remove document click handler when component is inactive
+					document.body.removeEventListener('mousedown', handleOutsideClick);
+					document.body.removeAttribute('data-input-click-listener');
+
 					// Restore focus and then update to inactive.
 					prevFocusedElement?.focus();
 					inputQuery.update((state) => ({ ...state, status: 'inactive', inputString: '' }));
+				} else if (v.status === 'cancelled') {
+					componentActive = false;
+					// Remove focus from the hidden input when cancelled
+					const hiddenInput = document.getElementById('hidden-input');
+					if (hiddenInput && document.activeElement === hiddenInput) {
+						hiddenInput.blur();
+					}
+
+					// Remove document click handler
+					document.body.removeEventListener('mousedown', handleOutsideClick);
+					document.body.removeAttribute('data-input-click-listener');
 				}
 			}
 		});
@@ -413,10 +491,32 @@
 			}
 		);
 	});
+
+	// Handle clicks outside the input window to cancel it
+	function handleOutsideClick(event: MouseEvent) {
+		if (!componentActive) return;
+
+		const inputWindow = document.getElementById('input-window');
+		const target = event.target as Node;
+
+		// If we clicked outside the input window, cancel the input
+		if (inputWindow && !inputWindow.contains(target)) {
+			inputQuery.update((v) => ({ ...v, status: 'cancelled' }));
+		}
+	}
+
 	onDestroy(() => {
 		try {
-			document.removeEventListener('keydown', keydownHandler);
-			// document.removeEventListener('touchstart', onTouch);
+			// Remove the event listener from the hidden input instead of the document
+			const hiddenInput = document.getElementById('hidden-input');
+			if (hiddenInput) {
+				hiddenInput.removeEventListener('keydown', keydownHandler);
+			}
+
+			// Remove document click handler if it exists
+			document.body.removeEventListener('mousedown', handleOutsideClick);
+			document.body.removeAttribute('data-input-click-listener');
+
 			unsubscribe();
 		} catch (error) {
 			console.error('Error removing event listeners:', error);
@@ -484,23 +584,48 @@
 </script>
 
 {#if $inputQuery.status === 'active' || $inputQuery.status === 'initializing'}
-	<div class="popup-container" id="input-window" tabindex="-1">
+	<div
+		class="popup-container"
+		id="input-window"
+		tabindex="-1"
+		on:click|stopPropagation={() => {
+			// When clicking anywhere inside the popup, refocus the hidden input
+			const hiddenInput = document.getElementById('hidden-input');
+			if (hiddenInput) hiddenInput.focus();
+		}}
+	>
 		<div class="header">
 			<div class="title">{capitalize($inputQuery.inputType)} Input</div>
 			<div class="field-select">
 				<span class="label">Field:</span>
-				<select class="default-select" bind:value={manualInputType}>
+				<select
+					class="default-select"
+					bind:value={manualInputType}
+					on:click|stopPropagation
+					on:change|stopPropagation
+				>
 					<option value="auto">Auto</option>
 					{#each $inputQuery.possibleKeys as key}
 						<option value={key}>{capitalize(key)}</option>
 					{/each}
 				</select>
 			</div>
-			<button class="utility-button" on:click={closeWindow}>×</button>
+			<button class="utility-button" on:click|stopPropagation={closeWindow}>×</button>
 		</div>
 
 		<div class="search-bar">
-			<input type="text" placeholder="Enter Value" value={$inputQuery.inputString} readonly />
+			<input
+				type="text"
+				placeholder="Enter Value"
+				value={$inputQuery.inputString}
+				readonly
+				tabindex="-1"
+				on:click|stopPropagation={() => {
+					// Refocus hidden input when clicking the visible input
+					const hiddenInput = document.getElementById('hidden-input');
+					if (hiddenInput) hiddenInput.focus();
+				}}
+			/>
 		</div>
 		<div class="content-container">
 			{#if $inputQuery.instance && Object.keys($inputQuery.instance).length > 0}
@@ -573,7 +698,11 @@
 											</td>
 											<td class="defalt-td">{sec.ticker}</td>
 											<td class="defalt-td">{sec.name}</td>
-											<td class="defalt-td">{UTCTimestampToESTString(sec.timestamp)}</td>
+											<td class="defalt-td"
+												>{sec.timestamp !== undefined
+													? UTCTimestampToESTString(sec.timestamp)
+													: ''}</td
+											>
 										</tr>
 									{/each}
 								</tbody>
@@ -587,7 +716,10 @@
 							<input
 								type="datetime-local"
 								on:change={(e) => {
-									const date = new Date(e.target?.value ?? '');
+									// Use type casting in a different way that works better with Svelte compiler
+									const target = e.target;
+									const inputValue = target && 'value' in target ? String(target.value) : '';
+									const date = new Date(inputValue);
 									inputQuery.update((q) => ({
 										...q,
 										instance: {
@@ -629,14 +761,23 @@
 				</button>
 			{/each}
 		</div>-->
+		<input
+			autocomplete="off"
+			type="text"
+			id="hidden-input"
+			style="position: absolute; top: 0; left: 0; opacity: 0; pointer-events: none; height: 100%; width: 100%;"
+			on:blur={() => {
+				// Refocus if we lose focus but component is still active
+				if (componentActive) {
+					setTimeout(() => {
+						const hiddenInput = document.getElementById('hidden-input');
+						if (hiddenInput && componentActive) hiddenInput.focus();
+					}, 0);
+				}
+			}}
+		/>
 	</div>
 {/if}
-<input
-	autocomplete="off"
-	type="text"
-	id="hidden-input"
-	style="position: absolute; opacity: 0; z-index: -1;"
-/>
 
 <style>
 	.popup-container {
@@ -699,6 +840,7 @@
 		gap: 8px;
 		border-bottom: 1px solid var(--ui-border);
 		height: 48px;
+		position: relative;
 	}
 
 	.search-bar input {
