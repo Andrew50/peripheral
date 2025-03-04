@@ -81,13 +81,17 @@ class Conn:
         redis_password = os.environ.get("REDIS_PASSWORD", "")
         redis_db = int(os.environ.get("REDIS_DB", "0"))
         
+        # Get socket timeout values from environment variables or use defaults
+        socket_timeout = float(os.environ.get("REDIS_SOCKET_TIMEOUT", "10.0"))
+        socket_connect_timeout = float(os.environ.get("REDIS_SOCKET_CONNECT_TIMEOUT", "10.0"))
+        
         # Create Redis connection with password if available
         redis_params = {
             "host": cache_host,
             "port": redis_port,
             "db": redis_db,
-            "socket_timeout": 5.0,  # Reduced from 10.0 to fail faster
-            "socket_connect_timeout": 5.0,  # Reduced from 10.0 to fail faster
+            "socket_timeout": socket_timeout,  # Increased from 5.0 to allow more time for operations
+            "socket_connect_timeout": socket_connect_timeout,  # Increased from 5.0 to allow more time for connection
             "socket_keepalive": True,  # Enable TCP keepalive
             "socket_keepalive_options": {
                 # TCP_KEEPIDLE: time before sending keepalive probes
