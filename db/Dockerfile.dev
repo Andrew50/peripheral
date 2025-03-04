@@ -9,4 +9,10 @@ COPY dev.conf /etc/postgresql/postgresql.conf
 # Copy the migrations script
 COPY run_migrations.sh /app/run_migrations.sh
 RUN chmod +x /app/run_migrations.sh
-CMD ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+# Copy the watch script
+COPY watch_rollouts.sh /app/watch_rollouts.sh
+RUN chmod +x /app/watch_rollouts.sh
+# Create a startup script that runs both PostgreSQL and the watcher
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+CMD ["/app/start.sh"]

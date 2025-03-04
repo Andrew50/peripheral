@@ -14,6 +14,11 @@ error_log() {
 # Make the script executable
 chmod +x ./dev.bash
 
+# Ensure rollouts directory exists
+log "Ensuring rollouts directory exists..."
+mkdir -p ./db/rollouts
+chmod 777 ./db/rollouts
+
 # Start Docker Compose
 log "Starting Docker Compose environment..."
 docker-compose -f docker-compose.dev.yaml -p dev up -d --build --scale worker=5 
@@ -69,11 +74,23 @@ else
   "
 fi
 
-# Run migrations
-log "Running database migrations..."
-docker exec \
-  -e POSTGRES_PASSWORD=devpassword \
-  dev-db-1 bash -c "/app/run_migrations.sh postgres"
+# Ensure all rollout files are copied to the container
+log "Copying rollout files to the database container..."
+for ROLLOUT_FILE in ./db/rollouts/*.sql; do
+  if [ -f "$ROLLOUT_FILE" ]; then
+    FILENAME=$(basename "$ROLLOUT_FILE")
+    log "Copying $FILENAME to container..."
+    docker cp "$ROLLOUT_FILE" dev-db-1:/tmp/rollouts/
+  fi
+done
+
+# Trigger migrations manually to ensure they run
+log "Triggering migrations manually..."
+docker exec dev-db-1 bash -c "/app/run_migrations.sh postgres"
+
+# Wait for migrations to complete
+log "Waiting for migrations to complete..."
+sleep 5
 
 # Show migration status after running migrations
 log "Migration status after running migrations:"
