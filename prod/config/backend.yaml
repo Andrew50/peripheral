@@ -84,22 +84,25 @@ spec:
             httpGet:
               path: /health
               port: 5057
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 5
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /health
               port: 5057
-            initialDelaySeconds: 5
-            periodSeconds: 10
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 3
           resources:
             requests:
-              cpu: 500m
-              memory: 1000Mi
+              cpu: "1000m"
+              memory: "2000Mi"
             limits:
-              cpu: 5000m
-              memory: 5000Mi
+              cpu: "8000m"
+              memory: "8000Mi"
 ---
 apiVersion: v1
 kind: Service
