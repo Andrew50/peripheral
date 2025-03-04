@@ -276,8 +276,14 @@
 					}).then((res: HorizontalLine[]) => {
 						if (res !== null && res.length > 0) {
 							for (const line of res) {
-								//night need to be later
-								addHorizontalLine(line.price, currentChartInstance.securityId, line.id); //TO IMPLEMENT
+								//might need to be later
+								addHorizontalLine(
+									line.price, 
+									currentChartInstance.securityId, 
+									line.id,
+									line.color || '#FFFFFF',  // Use default white if color not provided
+									line.lineWidth || 1       // Use default 1px if lineWidth not provided
+								); 
 							}
 						}
 					});

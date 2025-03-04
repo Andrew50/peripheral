@@ -11,6 +11,8 @@ type HorizontalLine struct {
 	Id         int     `json:"id"`
 	SecurityId int     `json:"securityId"`
 	Price      float64 `json:"price"`
+	Color      string  `json:"color"`
+	LineWidth  int     `json:"lineWidth"`
 }
 
 type GetHorizontalLinesArgs struct {
@@ -23,7 +25,7 @@ func GetHorizontalLines(conn *utils.Conn, userId int, rawArgs json.RawMessage) (
 		return nil, fmt.Errorf("error parsing args: %v", err)
 	}
 	rows, err := conn.DB.Query(context.Background(), `
-		SELECT id, securityId, price
+		SELECT id, securityId, price, color, line_width
 		FROM horizontal_lines
 		WHERE securityId = $1
 		AND userId = $2`, args.SecurityId, userId)
@@ -35,7 +37,7 @@ func GetHorizontalLines(conn *utils.Conn, userId int, rawArgs json.RawMessage) (
 	var lines []HorizontalLine
 	for rows.Next() {
 		var line HorizontalLine
-		if err := rows.Scan(&line.Id, &line.SecurityId, &line.Price); err != nil {
+		if err := rows.Scan(&line.Id, &line.SecurityId, &line.Price, &line.Color, &line.LineWidth); err != nil {
 			return nil, fmt.Errorf("error scanning horizontal line: %v", err)
 		}
 		lines = append(lines, line)
@@ -68,11 +70,20 @@ func SetHorizontalLine(conn *utils.Conn, userId int, rawArgs json.RawMessage) (i
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error parsing args: %v", err)
 	}
+
+	// Set default values if not provided
+	if args.Color == "" {
+		args.Color = "#FFFFFF" // Default to white
+	}
+	if args.LineWidth == 0 {
+		args.LineWidth = 1 // Default to 1px
+	}
+
 	var id int
 	err := conn.DB.QueryRow(context.Background(), `
-		INSERT INTO horizontal_lines (securityId, price, userId)
-		VALUES ($1, $2, $3)
-		RETURNING id`, args.SecurityId, args.Price, userId).Scan(&id)
+		INSERT INTO horizontal_lines (securityId, price, userId, color, line_width)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id`, args.SecurityId, args.Price, userId, args.Color, args.LineWidth).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("error inserting horizontal line: %v", err)
 	}
@@ -83,6 +94,8 @@ type UpdateHorizontalLineArgs struct {
 	Id         int     `json:"id"`
 	SecurityId int     `json:"securityId"`
 	Price      float64 `json:"price"`
+	Color      string  `json:"color"`
+	LineWidth  int     `json:"lineWidth"`
 }
 
 func UpdateHorizontalLine(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -93,9 +106,9 @@ func UpdateHorizontalLine(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 
 	cmdTag, err := conn.DB.Exec(context.Background(), `
 		UPDATE horizontal_lines
-		SET price = $1
-		WHERE id = $2 AND userId = $3 AND securityId = $4`,
-		args.Price, args.Id, userId, args.SecurityId)
+		SET price = $1, color = $2, line_width = $3
+		WHERE id = $4 AND userId = $5 AND securityId = $6`,
+		args.Price, args.Color, args.LineWidth, args.Id, userId, args.SecurityId)
 
 	if err != nil {
 		return nil, fmt.Errorf("error updating horizontal line: %v", err)
