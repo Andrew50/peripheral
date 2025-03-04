@@ -201,9 +201,12 @@
 	<div class="header">
 		{#if instance?.icon}
 			<img
-				src="data:image/jpeg;base64,{instance.icon}"
+				src={instance.icon.startsWith('data:')
+					? instance.icon
+					: `data:image/jpeg;base64,${instance.icon}`}
 				alt="{instance.name} logo"
 				class="company-logo"
+				on:error={() => {}}
 			/>
 		{/if}
 		<span class="symbol">{instance?.ticker || 'NaN'}</span>

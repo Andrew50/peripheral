@@ -67,8 +67,9 @@ func GetActive(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface
 	// Try to get from cache
 
 	cached, err := conn.Cache.Get(context.Background(), cacheKey).Result()
+
 	if err != nil {
-		return []ActiveResult{}, nil // Return empty array if not found
+		return []ActiveResult{}, fmt.Errorf("f02kfdsd %v", err) // Return empty array if not found
 	}
 
 	var results []ActiveResult

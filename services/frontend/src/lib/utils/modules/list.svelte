@@ -575,7 +575,9 @@
 									<td class="default-td">
 										{#if watch.icon}
 											<img
-												src={watch.icon}
+												src={watch.icon.startsWith('data:')
+													? watch.icon
+													: `data:image/jpeg;base64,${watch.icon}`}
 												alt={`${watch.ticker} icon`}
 												class="ticker-icon"
 												on:error={handleImageError}

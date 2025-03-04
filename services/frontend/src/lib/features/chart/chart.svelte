@@ -1026,6 +1026,8 @@
 				}
 
 				// IMPORTANT: Prevent fall-through so Alt+R doesn't open the input window
+				event.stopPropagation();
+				event.preventDefault();
 				return;
 			} else if (event.key == 'h' && event.altKey) {
 				addHorizontalLine(
@@ -1045,12 +1047,24 @@
 				if ($streamInfo.replayActive) {
 					currentChartInstance.timestamp = 0;
 				}
-				queryInstanceInput('any', 'any', currentChartInstance).then((v: Instance) => {
-					currentChartInstance = v;
-					queryChart(v, true);
-					// Refocus chart after input closes
-					setTimeout(() => chartContainer.focus(), 0);
-				});
+
+				// Store the first keystroke in the instance to pass it to the input component
+				// Don't lowercase - pass the original key case to allow input component to handle it
+				const firstKey = event.key === 'Tab' ? '' : event.key;
+
+				// Prevent default and stop propagation immediately
+				event.preventDefault();
+				event.stopPropagation();
+
+				// Pass the first key as inputString to the query input
+				queryInstanceInput('any', 'any', { ...currentChartInstance, inputString: firstKey }).then(
+					(v: Instance) => {
+						currentChartInstance = v;
+						queryChart(v, true);
+						// Refocus chart after input closes
+						setTimeout(() => chartContainer.focus(), 0);
+					}
+				);
 			} else if (event.key == 'Shift') {
 				shiftDown = true;
 			} else if (event.key == 'Escape') {
