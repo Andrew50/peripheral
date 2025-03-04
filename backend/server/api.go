@@ -65,6 +65,8 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	//settings
 	"getSettings": tasks.GetSettings,
 	"setSettings": tasks.SetSettings,
+	//profile
+	"updateProfilePicture": UpdateProfilePicture,
 	//exchanges
 	"getExchanges": tasks.GetExchanges,
 	//setups
@@ -103,8 +105,8 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"getActive": tasks.GetActive,
 	//sector, industry
 	"getSecurityClassifications": tasks.GetSecurityClassifications,
-	"getEdgarFilings":            tasks.GetEdgarFilings,
 	"getLatestEdgarFilings":      tasks.GetLatestEdgarFilings,
+	"getChartEvents":             tasks.GetChartEvents,
 }
 
 func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }

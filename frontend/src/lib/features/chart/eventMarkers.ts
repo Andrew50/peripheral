@@ -14,17 +14,23 @@ import { ColorType } from 'lightweight-charts';
 export interface EventMarker extends CustomData<Time> {
 	time: Time; // timestamp (must be in the chart's time format)
 	events: Array<{
-		type: 'filing'; // We can add more event types later if needed
-		title: string; // e.g., "10-K", "8-K", etc.
-		url: string; // Add URL for clicking through to filing
+		type: string; // 'sec_filing', 'split', 'dividend'
+		title: string; 
+		url?: string; // URL for clicking through (optional)
+		value?: string; // Additional data like split ratio or dividend amount
+		exDate?: string;
+		payoutDate?: string;
 	}>;
 	// Add missing properties
 	x?: number | null;
 	originalData?: {
 		events?: Array<{
-			type: 'filing';
+			type: string;
 			title: string;
-			url: string;
+			url?: string;
+			value?: string;
+			exDate?: string;
+			payoutDate?: string;
 		}>;
 	};
 }
@@ -33,33 +39,76 @@ interface MarkerPosition {
 	x: number;
 	y: number;
 	events: EventMarker['events'];
+	radius: number;
 }
 
-// Helper function to draw event markers
+// Helper function to draw event markers with different colors based on type
 function drawEventMarker(
 	ctx: CanvasRenderingContext2D,
 	x: number,
 	y: number,
 	size: number,
-	count: number
+	events: EventMarker['events'],
+	isHovered: boolean = false
 ) {
-	// Draw a purple circle for SEC filings
-	ctx.fillStyle = '#9C27B0'; // Purple color
-	ctx.strokeStyle = 'white';
-	ctx.lineWidth = 1;
+	// Get the first event to determine the color (all events at same timestamp should be same type)
+	const eventType = events[0]?.type || 'sec_filing';
+	
+	// Color mapping for different event types
+	const colorMap: Record<string, string> = {
+		'sec_filing': '#9C27B0', // Purple for filings
+		'split': '#FFD700',  // Yellow for splits
+		'dividend': '#2196F3' // Blue for dividends
+	};
+	
+	// Get the color based on event type or default to filing color (purple)
+	const color = colorMap[eventType] || colorMap['sec_filing'];
+	
+	// Increase size if hovered
+	const markerSize = isHovered ? size * 2 : size * 1.5;
+	
+	// Draw the circle with the appropriate color
+	ctx.fillStyle = color;
+	ctx.strokeStyle = isHovered ? 'white' : 'rgba(255, 255, 255, 0.7)';
+	ctx.lineWidth = isHovered ? 2 : 1;
+	
+	// Add a subtle glow effect when hovered
+	if (isHovered) {
+		ctx.shadowColor = color;
+		ctx.shadowBlur = 8;
+	}
 
 	ctx.beginPath();
-	ctx.arc(x, y, size * 1.5, 0, 2 * Math.PI); // 50% bigger
+	ctx.arc(x, y, markerSize, 0, 2 * Math.PI);
 	ctx.fill();
 	ctx.stroke();
+	
+	// Reset shadow
+	ctx.shadowColor = 'transparent';
+	ctx.shadowBlur = 0;
 
 	// If there are multiple events, add a count
-	if (count > 1) {
+	if (events.length > 1) {
 		ctx.fillStyle = 'white';
-		ctx.font = '11px sans-serif'; // Slightly larger font for the count
+		ctx.font = isHovered ? '12px sans-serif' : '11px sans-serif';
 		ctx.textAlign = 'center';
 		ctx.textBaseline = 'middle';
-		ctx.fillText(count.toString(), x, y);
+		ctx.fillText(events.length.toString(), x, y);
+	} else {
+		// For single events, add a letter indicator based on type
+		if (eventType === 'dividend') {
+			ctx.fillStyle = 'white';
+			ctx.font = isHovered ? '12px sans-serif' : '10px sans-serif';
+			ctx.textAlign = 'center';
+			ctx.textBaseline = 'middle';
+			ctx.fillText('D', x, y);
+		} else if (eventType === 'split') {
+			ctx.fillStyle = 'white';
+			ctx.font = isHovered ? '12px sans-serif' : '10px sans-serif';
+			ctx.textAlign = 'center';
+			ctx.textBaseline = 'middle';
+			ctx.fillText('S', x, y);
+		}
 	}
 }
 
@@ -71,24 +120,92 @@ export class EventMarkersPaneView
 	private options: CustomSeriesOptions = this.defaultOptions();
 	private visibleRange: { from: number; to: number } = { from: 0, to: 0 };
 	private clickCallback?: (events: EventMarker['events'], x: number, y: number) => void;
+	private hoverCallback?: (events: EventMarker['events'] | null, x: number, y: number) => void;
+	private hoveredMarkerIndex: number = -1;
+	private lastMousePosition: {x: number, y: number} = {x: 0, y: 0};
 
 	// Add method to set click handler
 	public setClickCallback(callback: (events: EventMarker['events'], x: number, y: number) => void) {
 		this.clickCallback = callback;
 	}
 
-	// Add method to handle clicks
-	public handleClick(x: number, y: number) {
-		const clickRadius = 10; // Area around marker that's clickable
+	// Add method to set hover handler
+	public setHoverCallback(callback: (events: EventMarker['events'] | null, x: number, y: number) => void) {
+		this.hoverCallback = callback;
+	}
 
-		for (const marker of this.markerPositions) {
+	// Method to handle mouse move for hover detection
+	public handleMouseMove(x: number, y: number) {
+		this.lastMousePosition = {x, y};
+		
+		// Find the closest marker within detection radius
+		let closestMarker = -1;
+		let closestDistance = Number.POSITIVE_INFINITY;
+		const hoverRadius = 15; // Area around marker that's considered hoverable
+		
+		for (let i = 0; i < this.markerPositions.length; i++) {
+			const marker = this.markerPositions[i];
 			const distance = Math.sqrt(Math.pow(marker.x - x, 2) + Math.pow(marker.y - y, 2));
-
-			if (distance <= clickRadius) {
-				this.clickCallback?.(marker.events, marker.x, marker.y);
-				return true;
+			
+			if (distance <= hoverRadius && distance < closestDistance) {
+				closestDistance = distance;
+				closestMarker = i;
 			}
 		}
+		
+		// Only trigger callback if hover state changed
+		if (closestMarker !== this.hoveredMarkerIndex) {
+			this.hoveredMarkerIndex = closestMarker;
+			
+			if (closestMarker >= 0) {
+				const marker = this.markerPositions[closestMarker];
+				this.hoverCallback?.(marker.events, marker.x, marker.y);
+			} else {
+				this.hoverCallback?.(null, x, y);
+			}
+			
+			return true; // State changed, request redraw
+		}
+		
+		return false; // No change
+	}
+
+	// Method to clear hover state when mouse leaves chart
+	public clearHover() {
+		if (this.hoveredMarkerIndex !== -1) {
+			this.hoveredMarkerIndex = -1;
+			this.hoverCallback?.(null, 0, 0);
+			return true; // State changed, request redraw
+		}
+		return false; // No change
+	}
+
+	// Improved click detection that prioritizes closest marker
+	public handleClick(x: number, y: number) {
+		// Use smaller click radius for better precision
+		const clickRadius = 15;
+		
+		// Find the closest marker within detection radius
+		let closestMarker = -1;
+		let closestDistance = Number.POSITIVE_INFINITY;
+		
+		for (let i = 0; i < this.markerPositions.length; i++) {
+			const marker = this.markerPositions[i];
+			const distance = Math.sqrt(Math.pow(marker.x - x, 2) + Math.pow(marker.y - y, 2));
+			
+			if (distance <= clickRadius && distance < closestDistance) {
+				closestDistance = distance;
+				closestMarker = i;
+			}
+		}
+		
+		// If we found a marker to click
+		if (closestMarker >= 0) {
+			const marker = this.markerPositions[closestMarker];
+			this.clickCallback?.(marker.events, marker.x, marker.y);
+			return true;
+		}
+		
 		return false;
 	}
 
@@ -121,15 +238,35 @@ export class EventMarkersPaneView
 
 						if (marker.originalData?.events?.length) {
 							const y = height - 20; // 20px from bottom
-							drawEventMarker(context, x as number, y, 5, marker.originalData.events.length);
-
-							// Store marker position for click detection
+							const markerSize = 5;
+							
+							// Store marker position for click/hover detection BEFORE drawing
+							// so we can use the index for hover detection
+							const positionIndex = this.markerPositions.length;
 							this.markerPositions.push({
 								x: x as number,
 								y,
-								events: marker.originalData.events
+								events: marker.originalData.events,
+								radius: markerSize * 1.5 // Store the radius for accurate detection
 							});
+							
+							// Check if THIS marker is the one being hovered
+							const isHovered = positionIndex === this.hoveredMarkerIndex;
+							
+							drawEventMarker(
+								context, 
+								x as number, 
+								y, 
+								markerSize, 
+								marker.originalData.events,
+								isHovered
+							);
 						}
+					}
+					
+					// Check if mouse is over any marker and update hover state
+					if (this.lastMousePosition.x && this.lastMousePosition.y) {
+						this.handleMouseMove(this.lastMousePosition.x, this.lastMousePosition.y);
 					}
 				});
 			}

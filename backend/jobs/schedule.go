@@ -5,6 +5,7 @@ import (
 	//"backend/alerts"
 	"backend/alerts"
 	"backend/utils"
+	"context"
 	"fmt"
 	"log"
 	"sync"
@@ -25,7 +26,7 @@ var (
 
 func StartScheduler(conn *utils.Conn) chan struct{} {
 
-	//go initialize(conn)
+	go initialize(conn)
 	//eventLoop(time.Now(), conn)
 
 	updateSectors(conn)
@@ -56,6 +57,13 @@ func StartScheduler(conn *utils.Conn) chan struct{} {
 }
 
 func initialize(conn *utils.Conn) {
+	// Clear worker queue on initialization to prevent backlog
+	err := conn.Cache.Del(context.Background(), "queue").Err()
+	if err != nil {
+		fmt.Println("Failed to clear worker queue:", err)
+	} else {
+		fmt.Println("Worker queue cleared successfully during initialization")
+	}
 
 	// Queue sector update on first init
 
@@ -104,6 +112,11 @@ func updateMarketMetrics(conn *utils.Conn) error {
 
 }
 
+func isWeekend(now time.Time) bool {
+	weekday := now.Weekday()
+	return weekday == time.Saturday || weekday == time.Sunday
+}
+
 func eventLoop(now time.Time, conn *utils.Conn) {
 	year, month, day := now.Date()
 
@@ -112,14 +125,14 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 	//open := time.Date(year, month, day, 9, 30, 0, 0, now.Location())
 	//close_ := time.Date(year, month, day, 16, 0, 0, 0, now.Location())
 	fmt.Printf("\n\nStarting EdgarFilingsService\n\n")
-	utils.StartEdgarFilingsService()
+	utils.StartEdgarFilingsService(conn)
 	go func() {
 		for filing := range utils.NewFilingsChannel {
 			fmt.Printf("\n\nBroadcasting global SEC filing\n\n")
 			socket.BroadcastGlobalSECFiling(filing)
 		}
 	}()
-	if !eOpenRun && now.After(eOpen) && now.Before(eClose) {
+	if !eOpenRun && now.After(eOpen) && now.Before(eClose) && !isWeekend(now) {
 		eOpenRun = true
 		eCloseRun = false
 		fmt.Println("running open schedule ----------------------")
@@ -127,7 +140,7 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 		initialize(conn)
 		pushJournals(conn, year, month, day)
 	}
-	if !eCloseRun && now.After(eClose) {
+	if (!eCloseRun && now.After(eClose)) || isWeekend(now) {
 		eOpenRun = false
 		eCloseRun = true
 		alerts.StopAlertLoop()
@@ -137,8 +150,16 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 		}
 		fmt.Println("running close schedule ----------------------")
 		if useBS {
-
-			err := simpleUpdateSecurities(conn)
+			err := updateSecurityCik(conn)
+			if err != nil {
+				fmt.Println("schedule issue: updating ticker ciks l44lgkkvv", err)
+			}
+			fmt.Println("updating market metrics !!!!!!!!!!!!!!!!!!!!!!!!!!")
+			err = updateMarketMetrics(conn)
+			if err != nil {
+				fmt.Println("schedule issue: market metrics update:", err)
+			}
+			err = simpleUpdateSecurities(conn)
 			if err != nil {
 				fmt.Println("schedule issue: dw000", err)
 			}
@@ -149,10 +170,6 @@ func eventLoop(now time.Time, conn *utils.Conn) {
 			err = updateSectors(conn)
 			if err != nil {
 				fmt.Println("schedule issue: sector update close:", err)
-			}
-			err = updateMarketMetrics(conn)
-			if err != nil {
-				fmt.Println("schedule issue: market metrics update:", err)
 			}
 		}
 

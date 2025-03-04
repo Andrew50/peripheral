@@ -28,7 +28,7 @@
 
 	function handleClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
-		queryInstanceInput('any', ['ticker', 'timeframe', 'timestamp', 'extendedHours'], instance).then(
+		queryInstanceInput([], ['ticker', 'timeframe', 'timestamp', 'extendedHours'], instance).then(
 			(v: Instance) => {
 				queryChart(v, true);
 			}
@@ -227,8 +227,6 @@
 					<span class="value">{$hoveredCandleData.open.toFixed(2)}</span>
 					<span class="label">H</span>
 					<span class="value">{$hoveredCandleData.high.toFixed(2)}</span>
-				</div>
-				<div class="price-row">
 					<span class="label">L</span>
 					<span class="value">{$hoveredCandleData.low.toFixed(2)}</span>
 					<span class="label">C</span>
@@ -394,7 +392,6 @@
 	.price-grid {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
 		margin-bottom: 8px;
 		padding-bottom: 8px;
 		border-bottom: 1px solid var(--ui-border);
@@ -402,8 +399,8 @@
 
 	.price-row {
 		display: grid;
-		grid-template-columns: 15px 70px 15px 70px;
-		gap: 8px;
+		grid-template-columns: 15px 45px 15px 45px 15px 45px 15px 45px;
+		gap: 4px;
 		align-items: center;
 		height: 20px;
 	}

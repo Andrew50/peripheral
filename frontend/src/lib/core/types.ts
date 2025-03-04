@@ -11,6 +11,7 @@ export interface Instance {
     primary_exchange?: string;
     active?: boolean;
     market_cap?: number;
+    dollar_volume?: number;
     description?: string;
     logo?: string;
     icon?: string;
@@ -62,6 +63,7 @@ export interface Settings {
     divideTaS: boolean;
     filterTaS: boolean;
     showFilings: boolean;
+    enableScreensaver: boolean;
 }
 export interface StreamInfo {
     status: 'replay' | 'realtime' | 'paused';

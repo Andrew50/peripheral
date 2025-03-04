@@ -73,13 +73,14 @@ export interface TimeEvent {
 }
 export const timeEvent: Writable<TimeEvent> = writable({ event: null, UTCtimestamp: 0 });
 export const defaultSettings: Settings = {
-    chartRows: 2,
-    chartColumns: 2,
+    chartRows: 1,
+    chartColumns: 1,
     dolvol: false,
     adrPeriod: 20,
     filterTaS: true,
     divideTaS: false,
-    showFilings: true
+    showFilings: true,
+    enableScreensaver: true
 };
 export const settings: Writable<Settings> = writable(defaultSettings);
 export function initStores() {
@@ -188,9 +189,17 @@ export const activeChartInstance = writable<Instance>({
 
 export function handleTimestampUpdate(serverTimestamp: number) {
     streamInfo.update((v) => {
+
+        if (v.replayActive) {
+            const now = Date.now();
+            const newOffset = serverTimestamp - now;
+            return {
+                ...v,
+                serverTimeOffset: newOffset
+            }
+        }
         const now = Date.now();
         const newOffset = serverTimestamp - now;
-
         if (v.serverTimeOffset === undefined || Math.abs(newOffset - v.serverTimeOffset) > 1000) {
             return {
                 ...v,

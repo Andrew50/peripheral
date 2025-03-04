@@ -235,9 +235,10 @@ type GetTickerMenuDetailsResults struct {
 	Logo                        sql.NullString  `json:"logo"`
 	Icon                        sql.NullString  `json:"icon"`
 	ShareClassSharesOutstanding sql.NullInt64   `json:"share_class_shares_outstanding"`
-	Industry                    sql.NullString  `json:"industry"`
-	Sector                      sql.NullString  `json:"sector"`
-	TotalShares                 sql.NullInt64   `json:"totalShares"`
+
+	Industry    sql.NullString `json:"industry"`
+	Sector      sql.NullString `json:"sector"`
+	TotalShares sql.NullInt64  `json:"totalShares"`
 }
 
 func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -246,7 +247,7 @@ func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
-	// Modified query to handle NULL market_cap
+	// Modified query to handle NULL market_cap and missing columns
 	query := `
 		SELECT 
 			ticker,
@@ -265,7 +266,14 @@ func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 			share_class_shares_outstanding,
 			NULLIF(industry, '') as industry,
 			NULLIF(sector, '') as sector,
-			total_shares
+			CASE 
+				WHEN EXISTS (
+					SELECT 1 FROM information_schema.columns 
+					WHERE table_name = 'securities' AND column_name = 'total_shares'
+				) 
+				THEN (SELECT total_shares FROM securities WHERE securityId = $1 LIMIT 1)
+				ELSE 0
+			END as total_shares
 		FROM securities 
 		WHERE securityId = $1 AND (maxDate IS NULL OR maxDate = (
 			SELECT MAX(maxDate) 
@@ -504,58 +512,6 @@ func GetSecurityClassifications(conn *utils.Conn, userId int, rawArgs json.RawMe
 		Sectors:    sectors,
 		Industries: industries,
 	}, nil
-}
-
-type GetEdgarFilingsArgs struct {
-	SecurityId int    `json:"securityId"`
-	Timestamp  int64  `json:"timestamp"`
-	From       *int64 `json:"from,omitempty"`
-	To         *int64 `json:"to,omitempty"`
-	Limit      int    `json:"limit,omitempty"`
-}
-
-func GetEdgarFilings(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var args GetEdgarFilingsArgs
-	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		return nil, fmt.Errorf("invalid args: %v", err)
-	}
-
-	// Set default timestamp to now if not provided
-	if args.Timestamp == 0 {
-		args.Timestamp = time.Now().UnixMilli()
-	}
-
-	// Create EdgarFilingOptions from the args
-	var opts *utils.EdgarFilingOptions
-	if args.From != nil || args.To != nil || args.Limit > 0 {
-		opts = &utils.EdgarFilingOptions{
-			Limit: args.Limit,
-		}
-
-		// Convert From timestamp if provided
-		if args.From != nil {
-			fromTime := time.UnixMilli(*args.From)
-			opts.From = &fromTime
-		}
-
-		// Convert To timestamp if provided
-		if args.To != nil {
-			if *args.To == 0 {
-				now := time.Now()
-				opts.To = &now
-			} else {
-				toTime := time.UnixMilli(*args.To)
-				opts.To = &toTime
-			}
-		}
-	}
-
-	filings, err := utils.GetRecentEdgarFilings(conn, args.SecurityId, opts)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get EDGAR filings: %v", err)
-	}
-
-	return filings, nil
 }
 
 type GetIconsArgs struct {

@@ -7,9 +7,11 @@ CREATE TABLE users (
     settings JSON,
     email VARCHAR(255),
     google_id VARCHAR(255),
-    profile_picture TEXT
+    profile_picture TEXT,
+    auth_type VARCHAR(20) DEFAULT 'password' -- 'password' for password-only auth, 'google' for Google-only auth, 'both' for users who can use either method
 );
 CREATE INDEX idxUsers ON users (username, password);
+CREATE INDEX idxUserAuthType ON users(auth_type);
 CREATE TABLE securities (
     securityid SERIAL,
     ticker varchar(10) not null,
@@ -30,6 +32,7 @@ CREATE TABLE securities (
     industry varchar(100),
     minDate timestamp,
     maxDate timestamp,
+    cik int, 
     unique (ticker, minDate),
     unique (ticker, maxDate),
     unique (securityid, minDate),
@@ -194,8 +197,8 @@ CREATE TABLE trades (
 CREATE INDEX idxUserIdSecurityIdPrice on horizontal_lines(userId, securityId, price);
 COPY securities(securityid, ticker, figi, minDate, maxDate)
 FROM '/docker-entrypoint-initdb.d/securities.csv' DELIMITER ',' CSV HEADER;
-INSERT INTO users (userId, username, password)
-VALUES (0, 'user', 'pass');
+INSERT INTO users (userId, username, password, auth_type)
+VALUES (0, 'user', 'pass', 'password');
 Insert into setups (
         setupid,
         userid,

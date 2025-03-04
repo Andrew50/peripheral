@@ -58,6 +58,7 @@ type LoginResponse struct {
 }
 
 type SignupArgs struct {
+	Email    string `json:"email"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
@@ -67,16 +68,42 @@ func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	if err := json.Unmarshal(rawArgs, &a); err != nil {
 		return nil, fmt.Errorf("Signup invalid args: %v", err)
 	}
-	_, err := conn.DB.Exec(context.Background(), "INSERT INTO users (username, password) VALUES ($1, $2)", a.Username, a.Password)
+
+	// Check if email already exists
+	var count int
+	err := conn.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM users WHERE email=$1", a.Email).Scan(&count)
 	if err != nil {
-		return "", err
+		return nil, fmt.Errorf("Error checking email: %v", err)
 	}
-	result, err := Login(conn, rawArgs)
+
+	if count > 0 {
+		return nil, fmt.Errorf("Email already registered")
+	}
+
+	// Insert new user with auth_type='password'
+	_, err = conn.DB.Exec(context.Background(),
+		"INSERT INTO users (username, email, password, auth_type) VALUES ($1, $2, $3, $4)",
+		a.Username, a.Email, a.Password, "password")
+	if err != nil {
+		return nil, fmt.Errorf("Error creating user: %v", err)
+	}
+
+	// Create modified login args with the email
+	loginArgs, err := json.Marshal(map[string]string{
+		"email":    a.Email,
+		"password": a.Password,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("Error preparing login: %v", err)
+	}
+
+	// Log in the new user
+	result, err := Login(conn, loginArgs)
 	return result, err
 }
 
 type LoginArgs struct {
-	Username string `json:"username"`
+	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
@@ -89,11 +116,30 @@ func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var resp LoginResponse
 	var userId int
 	var profilePicture sql.NullString
+	var authType string
+
+	// First check if the user exists and get their auth_type
 	err := conn.DB.QueryRow(context.Background(),
-		"SELECT userId, username, profile_picture FROM users WHERE username=$1 AND password=$2",
-		a.Username, a.Password).Scan(&userId, &resp.Username, &profilePicture)
+		"SELECT userId, username, profile_picture, auth_type FROM users WHERE email=$1",
+		a.Email).Scan(&userId, &resp.Username, &profilePicture, &authType)
+
 	if err != nil {
 		return nil, fmt.Errorf("Invalid Credentials: %v", err)
+	}
+
+	// Check if this is a Google-only auth user trying to use password login
+	if authType == "google" {
+		return nil, fmt.Errorf("This account uses Google Sign-In. Please login with Google")
+	}
+
+	// Now verify the password for password-based or both auth types
+	var passwordMatch bool
+	err = conn.DB.QueryRow(context.Background(),
+		"SELECT (password = $1) FROM users WHERE userId=$2 AND (auth_type='password' OR auth_type='both')",
+		a.Password, userId).Scan(&passwordMatch)
+
+	if err != nil || !passwordMatch {
+		return nil, fmt.Errorf("Invalid Credentials")
 	}
 
 	token, err := create_token(userId)
@@ -213,18 +259,29 @@ func GoogleCallback(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, err
 	// Check if user exists, if not create new user
 	var userId int
 	var username string
+	var authType string
+
 	err = conn.DB.QueryRow(context.Background(),
-		"SELECT userId, username FROM users WHERE email = $1",
-		googleUser.Email).Scan(&userId, &username)
+		"SELECT userId, username, auth_type FROM users WHERE email = $1",
+		googleUser.Email).Scan(&userId, &username, &authType)
 
 	if err != nil {
-		// User doesn't exist, create new user
+		// User doesn't exist, create new user with auth_type='google'
 		username = googleUser.Name
 		err = conn.DB.QueryRow(context.Background(),
-			"INSERT INTO users (username, password, email, google_id, profile_picture) VALUES ($1, $2, $3, $4, $5) RETURNING userId",
-			googleUser.Name, "", googleUser.Email, googleUser.ID, googleUser.Picture).Scan(&userId)
+			"INSERT INTO users (username, password, email, google_id, profile_picture, auth_type) VALUES ($1, $2, $3, $4, $5, $6) RETURNING userId",
+			googleUser.Name, "", googleUser.Email, googleUser.ID, googleUser.Picture, "google").Scan(&userId)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create user: %v", err)
+		}
+	} else if authType == "password" {
+		// If this was a password user who is now using Google, update their account to link Google
+		// but change auth_type to "both" to preserve password login ability
+		_, err = conn.DB.Exec(context.Background(),
+			"UPDATE users SET google_id = $1, profile_picture = $2, auth_type = $3 WHERE userId = $4",
+			googleUser.ID, googleUser.Picture, "both", userId)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update user with Google info: %v", err)
 		}
 	}
 
@@ -250,4 +307,30 @@ func generateState() string {
 		return base64.URLEncoding.EncodeToString([]byte(time.Now().String()))
 	}
 	return base64.URLEncoding.EncodeToString(b)
+}
+
+// Add this new type for updating profile picture
+type UpdateProfilePictureArgs struct {
+	ProfilePicture string `json:"profilePicture"`
+}
+
+// Add this new function to handle profile picture updates
+func UpdateProfilePicture(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args UpdateProfilePictureArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+
+	// Update the user's profile picture in the database
+	_, err := conn.DB.Exec(
+		context.Background(),
+		"UPDATE users SET profile_picture = $1 WHERE userId = $2",
+		args.ProfilePicture,
+		userId,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update profile picture: %v", err)
+	}
+
+	return map[string]string{"status": "success"}, nil
 }
