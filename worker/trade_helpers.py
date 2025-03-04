@@ -44,6 +44,7 @@ def calculate_pnl(
         total_exit_value += price * shares
         total_exit_shares += shares
 
+
     # Calculate weighted average prices
     avg_entry_price = (
         total_entry_value / total_entry_shares
