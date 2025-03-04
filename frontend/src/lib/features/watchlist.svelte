@@ -12,10 +12,20 @@
 	let activeList: Writable<Instance[]> = writable([]);
 	let newWatchlistName = '';
 	let currentWatchlistId: number;
+	let previousWatchlistId: number;
 	let container: HTMLDivElement;
 	let newNameInput: HTMLInputElement;
 	let showWatchlistInput = false;
 	let confirmingDelete = false;
+
+	function closeNewWatchlistWindow() {
+		showWatchlistInput = false;
+		newWatchlistName = '';
+		currentWatchlistId = previousWatchlistId;
+		tick().then(() => {
+			selectWatchlist(String(previousWatchlistId));
+		});
+	}
 
 	onMount(() => {
 		selectWatchlist(flagWatchlistId);
@@ -96,6 +106,7 @@
 		if (!watchlistIdString) return;
 
 		if (watchlistIdString === 'new') {
+			previousWatchlistId = currentWatchlistId;
 			showWatchlistInput = true;
 			tick().then(() => {
 				newNameInput.focus();
@@ -120,6 +131,7 @@
 		}
 
 		showWatchlistInput = false;
+		newWatchlistName = '';
 		const watchlistId = parseInt(watchlistIdString);
 		if (watchlistId === flagWatchlistId) {
 			activeList = flagWatchlist;
@@ -152,6 +164,9 @@
 
 	function handleWatchlistChange(event: Event) {
 		const target = event.target as HTMLSelectElement;
+		if (target.value !== 'new') {
+			previousWatchlistId = parseInt(target.value);
+		}
 		selectWatchlist(target.value);
 	}
 </script>
@@ -195,8 +210,7 @@
 							if (event.key === 'Enter') {
 								newWatchlist();
 							} else if (event.key === 'Escape') {
-								showWatchlistInput = false;
-								selectWatchlist(String(currentWatchlistId));
+								closeNewWatchlistWindow();
 							}
 						}}
 						bind:value={newWatchlistName}
@@ -204,13 +218,7 @@
 					/>
 					<div class="new-watchlist-buttons">
 						<button class="utility-button" on:click={newWatchlist}>✓</button>
-						<button
-							class="utility-button"
-							on:click={() => {
-								showWatchlistInput = false;
-								selectWatchlist(String(currentWatchlistId));
-							}}>✕</button
-						>
+						<button class="utility-button" on:click={closeNewWatchlistWindow}>✕</button>
 					</div>
 				</div>
 			{/if}
@@ -242,20 +250,74 @@
 	.watchlist-selector {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: 12px;
+		padding: 4px;
+		background: var(--ui-bg-secondary);
+		border-radius: 6px;
+		border: 1px solid var(--ui-border);
+	}
+
+	.watchlist-selector select {
+		flex: 1;
+		min-width: 200px;
+	}
+
+	.watchlist-selector .utility-button {
+		background: var(--ui-bg-primary);
+		color: var(--text-primary);
+		border: 1px solid var(--ui-border);
+		border-radius: 4px;
+		width: 32px;
+		height: 32px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 18px;
+		transition: all 0.2s ease;
+	}
+
+	.watchlist-selector .utility-button:hover {
+		background: var(--ui-bg-hover);
+		transform: translateY(-1px);
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 	}
 
 	.new-watchlist-container {
-		margin-top: 8px;
-		padding: 8px;
+		margin-top: 12px;
+		padding: 16px;
 		background: var(--ui-bg-secondary);
-		border-radius: 4px;
+		border-radius: 8px;
 		border: 1px solid var(--ui-border);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+		animation: slideDown 0.2s ease-out;
+	}
+
+	@keyframes slideDown {
+		from {
+			opacity: 0;
+			transform: translateY(-10px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 
 	.new-watchlist-container .input {
 		width: 100%;
-		margin-bottom: 8px;
+		margin-bottom: 12px;
+		padding: 10px 12px;
+		border-radius: 6px;
+		border: 1px solid var(--ui-border);
+		background: var(--ui-bg-primary);
+		color: var(--text-primary);
+		font-size: 14px;
+		transition: all 0.2s ease;
+	}
+
+	.new-watchlist-container .input:focus {
+		border-color: var(--accent-color);
+		box-shadow: 0 0 0 2px rgba(var(--accent-color-rgb), 0.1);
 	}
 
 	.new-watchlist-buttons {
@@ -264,25 +326,109 @@
 		gap: 8px;
 	}
 
+	.new-watchlist-buttons .utility-button {
+		padding: 8px 16px;
+		border-radius: 4px;
+		border: 1px solid var(--ui-border);
+		background: var(--ui-bg-primary);
+		color: var(--text-primary);
+		font-size: 14px;
+		transition: all 0.2s ease;
+		min-width: 40px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.new-watchlist-buttons .utility-button:hover {
+		background: var(--ui-bg-hover);
+		transform: translateY(-1px);
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	}
+
 	.shortcut-container {
 		display: flex;
 		gap: 8px;
-		padding: 8px 8px 8px 16px;
+		padding: 12px 16px;
 		flex-wrap: wrap;
+		border-bottom: 1px solid var(--ui-border);
+		background: var(--ui-bg-secondary);
 	}
 
-	/* Ensure existing styles remain */
+	.shortcut-button {
+		padding: 8px 12px;
+		border-radius: 6px;
+		border: 1px solid var(--ui-border);
+		background: var(--ui-bg-primary);
+		color: var(--text-primary);
+		font-size: 14px;
+		font-weight: 500;
+		transition: all 0.2s ease;
+		min-width: 36px;
+		height: 36px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.shortcut-button:hover {
+		background: var(--ui-bg-hover);
+		transform: translateY(-1px);
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	}
+
+	.shortcut-button.active {
+		background: var(--accent-color);
+		color: var(--text-on-accent);
+		border-color: var(--accent-color);
+	}
+
 	.feature-container {
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
+		height: 100%;
+		background: var(--ui-bg-primary);
+		border-radius: 8px;
+		overflow: hidden;
 	}
 
-	/* Update existing style */
 	.controls-container {
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-		padding: 8px 8px 8px 16px;
+		padding: 16px;
+		background: var(--ui-bg-primary);
+		border-bottom: 1px solid var(--ui-border);
+	}
+
+	:global(.default-select) {
+		padding: 8px 12px;
+		border-radius: 6px;
+		border: 1px solid var(--ui-border);
+		background: var(--ui-bg-primary);
+		color: var(--text-primary);
+		font-size: 14px;
+		transition: all 0.2s ease;
+	}
+
+	:global(.default-select:hover) {
+		border-color: var(--accent-color);
+	}
+
+	:global(.default-select:focus) {
+		border-color: var(--accent-color);
+		box-shadow: 0 0 0 2px rgba(var(--accent-color-rgb), 0.1);
+	}
+
+	:global(.default-select option) {
+		background: var(--ui-bg-primary);
+		color: var(--text-primary);
+		padding: 8px;
+	}
+
+	:global(.default-select optgroup) {
+		font-weight: 600;
+		color: var(--text-secondary);
 	}
 </style>
