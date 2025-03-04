@@ -1,5 +1,6 @@
 import numpy as np
 import json
+import os
 from datetime import datetime, timedelta
 from conn import Conn
 from data import getTensor
@@ -382,3 +383,5 @@ def update_active(data, **args):
 if __name__ == "__main__":
     data = Conn(False)
     update_active(data)
+
+

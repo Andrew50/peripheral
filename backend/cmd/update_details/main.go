@@ -126,11 +126,11 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 				 locale = NULLIF($3, ''),
 				 primary_exchange = NULLIF($4, ''),
 				 active = $5,
-				 market_cap = NULLIF($6, 0),
+				 market_cap = CAST(NULLIF($6, 0) AS NUMERIC),
 				 description = NULLIF($7, ''),
 				 logo = NULLIF($8, ''),
 				 icon = NULLIF($9, ''),
-				 share_class_shares_outstanding = NULLIF($10, 0),
+				 share_class_shares_outstanding = CAST(NULLIF($10, 0) AS BIGINT),
 				 total_shares = CASE 
 					 WHEN NULLIF($6::numeric, 0) > 0 AND NULLIF($12::numeric, 0) > 0 
 					 THEN CAST(($6::numeric / $12::numeric) AS BIGINT)

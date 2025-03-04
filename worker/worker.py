@@ -48,24 +48,33 @@ def safe_redis_operation(func, *args, **kwargs):
     
     for attempt in range(max_retries):
         try:
-            # Set a timeout for the operation if not already specified
-            if 'timeout' not in kwargs and hasattr(func, '__name__'):
-                if func.__name__ == 'brpop':
-                    # Use a shorter timeout for blocking operations
-                    kwargs['timeout'] = 5
-                elif func.__name__ in ['get', 'set', 'ping']:
-                    # Use a short timeout for simple operations
-                    kwargs['timeout'] = 2
+            # Special handling for brpop which needs timeout as a positional argument
+            if func.__name__ == 'brpop' and 'timeout' in kwargs:
+                timeout_val = kwargs.pop('timeout')
+                return func(*args, timeout_val)
             
+            # For all other Redis operations, don't add a timeout parameter
+            # Redis operations like 'set', 'get', 'ping' don't accept a timeout parameter
+            # They rely on the socket_timeout configured at the connection level
             return func(*args, **kwargs)
-        except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as e:
+            
+        except redis.exceptions.TimeoutError as e:
+            # Handle timeout errors specifically - these often indicate network issues
             if attempt < max_retries - 1:
-                # Calculate delay with exponential backoff and jitter, but cap it
                 retry_delay = min(base_retry_delay * (2 ** attempt), max_retry_delay)
                 jitter = random.uniform(0, 0.1 * retry_delay)  # 10% jitter
                 total_delay = retry_delay + jitter
                 
-                print(f"Redis operation failed (attempt {attempt+1}/{max_retries}): {e}. Retrying in {total_delay:.2f}s", flush=True)
+                print(f"Redis operation timed out (attempt {attempt+1}/{max_retries}): {e}. Retrying in {total_delay:.2f}s", flush=True)
+                
+                # For timeout errors, we should try to reset the connection if possible
+                if hasattr(func, '__self__') and hasattr(func.__self__, 'connection_pool'):
+                    try:
+                        # Try to reset the connection pool
+                        print("Attempting to reset Redis connection pool...", flush=True)
+                        func.__self__.connection_pool.reset()
+                    except Exception as reset_error:
+                        print(f"Failed to reset connection pool: {reset_error}", flush=True)
                 
                 # Use shorter sleep intervals with checks to allow for cleaner interruption
                 sleep_interval = 0.5
@@ -79,7 +88,31 @@ def safe_redis_operation(func, *args, **kwargs):
                 if remaining_time > 0:
                     time.sleep(remaining_time)
             else:
-                print(f"Redis operation failed after {max_retries} attempts: {e}", flush=True)
+                print(f"Redis operation timed out after {max_retries} attempts: {e}", flush=True)
+                raise
+                
+        except redis.exceptions.ConnectionError as e:
+            if attempt < max_retries - 1:
+                # Calculate delay with exponential backoff and jitter, but cap it
+                retry_delay = min(base_retry_delay * (2 ** attempt), max_retry_delay)
+                jitter = random.uniform(0, 0.1 * retry_delay)  # 10% jitter
+                total_delay = retry_delay + jitter
+                
+                print(f"Redis connection error (attempt {attempt+1}/{max_retries}): {e}. Retrying in {total_delay:.2f}s", flush=True)
+                
+                # Use shorter sleep intervals with checks to allow for cleaner interruption
+                sleep_interval = 0.5
+                sleep_count = int(total_delay / sleep_interval)
+                
+                for _ in range(sleep_count):
+                    time.sleep(sleep_interval)
+                
+                # Sleep any remaining time
+                remaining_time = total_delay - (sleep_count * sleep_interval)
+                if remaining_time > 0:
+                    time.sleep(remaining_time)
+            else:
+                print(f"Redis connection error after {max_retries} attempts: {e}", flush=True)
                 raise
         except Exception as e:
             print(f"Unexpected Redis error: {e}", flush=True)
@@ -100,6 +133,8 @@ def process_tasks():
             if data is None:
                 data = Conn(True)
                 print("Successfully connected to both database and Redis", flush=True)
+                # Reset reconnect delay after successful connection
+                reconnect_delay = 1
             
             print("starting queue listening", flush=True)
             
@@ -113,9 +148,16 @@ def process_tasks():
                         try:
                             # Ping Redis to keep connection alive
                             safe_redis_operation(data.cache.ping)
-                            reconnect_delay = 1  # Reset backoff on successful check
+                            # Reset backoff on successful check
+                            reconnect_delay = 1
                         except Exception as e:
                             print(f"Connection check failed: {e}", flush=True)
+                            # Try to reset the connection pool before raising
+                            try:
+                                data.cache.connection_pool.reset()
+                                print("Reset Redis connection pool after failed ping", flush=True)
+                            except Exception as reset_error:
+                                print(f"Failed to reset connection pool: {reset_error}", flush=True)
                             raise  # Re-raise to trigger reconnection
                     else:
                         _, task_message = task
@@ -128,36 +170,82 @@ def process_tasks():
 
                         print(f"starting {func_ident} {args} {task_id}", flush=True)
                         try:
-                            safe_redis_operation(data.cache.set, task_id, json.dumps("running"))
+                            # Set task status to running
+                            try:
+                                safe_redis_operation(data.cache.set, task_id, json.dumps("running"))
+                            except Exception as e:
+                                print(f"Failed to set task status to running: {e}", flush=True)
+                                # Continue with task execution even if status update fails
+                            
                             start = datetime.datetime.now()
                             result = funcMap[func_ident](data, **args)
 
-                            safe_redis_operation(data.cache.set, task_id, packageResponse(result, "completed"))
-                            print(f"finished {func_ident} {args} time: {datetime.datetime.now() - start}", flush=True)
+                            # Set task status to completed
+                            try:
+                                safe_redis_operation(data.cache.set, task_id, packageResponse(result, "completed"))
+                                print(f"finished {func_ident} {args} time: {datetime.datetime.now() - start}", flush=True)
+                            except Exception as e:
+                                print(f"Failed to set task status to completed: {e}", flush=True)
+                                # Task was executed successfully but status update failed
                             
                             # Ping Redis after task completion to keep connection alive
-                            safe_redis_operation(data.cache.ping)
+                            try:
+                                safe_redis_operation(data.cache.ping)
+                            except Exception as e:
+                                print(f"Failed to ping Redis after task completion: {e}", flush=True)
+                                # Try to reset the connection pool
+                                try:
+                                    data.cache.connection_pool.reset()
+                                    print("Reset Redis connection pool after failed ping", flush=True)
+                                except Exception as reset_error:
+                                    print(f"Failed to reset connection pool: {reset_error}", flush=True)
                         except psycopg2.InterfaceError:
                             exception = traceback.format_exc()
                             try:
                                 safe_redis_operation(data.cache.set, task_id, packageResponse(exception, "error"))
-                            except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError):
-                                print("Redis connection error when setting task error status", flush=True)
+                            except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as redis_err:
+                                print(f"Redis connection error when setting task error status: {redis_err}", flush=True)
+                                # Try to reset the connection pool
+                                try:
+                                    data.cache.connection_pool.reset()
+                                    print("Reset Redis connection pool after connection error", flush=True)
+                                except Exception as reset_error:
+                                    print(f"Failed to reset connection pool: {reset_error}", flush=True)
                             print(exception, flush=True)
-                            data.check_connection()
+                            # Check and potentially reconnect to the database
+                            try:
+                                data.check_connection()
+                            except Exception as conn_err:
+                                print(f"Failed to check/reconnect to database: {conn_err}", flush=True)
+                                # Force a full reconnection on the next iteration
+                                data = None
+                                break
                         except Exception:
                             exception = traceback.format_exc()
                             try:
                                 safe_redis_operation(data.cache.set, task_id, packageResponse(exception, "error"))
-                            except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError):
-                                print("Redis connection error when setting task error status", flush=True)
+                            except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as redis_err:
+                                print(f"Redis connection error when setting task error status: {redis_err}", flush=True)
+                                # Try to reset the connection pool
+                                try:
+                                    data.cache.connection_pool.reset()
+                                    print("Reset Redis connection pool after connection error", flush=True)
+                                except Exception as reset_error:
+                                    print(f"Failed to reset connection pool: {reset_error}", flush=True)
                             print(exception, flush=True)
                 
                 except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as e:
                     print(f"Redis connection error in task loop: {e}", flush=True)
                     print("Attempting to reconnect...", flush=True)
+                    # Try to reset the connection pool before breaking
+                    try:
+                        data.cache.connection_pool.reset()
+                        print("Reset Redis connection pool after connection error", flush=True)
+                    except Exception as reset_error:
+                        print(f"Failed to reset connection pool: {reset_error}", flush=True)
                     # Break inner loop to reinitialize connection
-                    raise
+                    data = None
+                    break
         
         except Exception as e:
             print(f"Error in main process loop: {e}", flush=True)
@@ -169,8 +257,8 @@ def process_tasks():
             # Sleep with exponential backoff before retrying, but with a more reasonable cap
             print(f"Retrying connection in {reconnect_delay} seconds...", flush=True)
             
-            # Use shorter sleep intervals to allow for cleaner interruption
-            sleep_interval = 0.5
+            # Use shorter sleep intervals with checks to allow for cleaner interruption
+            sleep_interval = 1
             sleep_count = int(reconnect_delay / sleep_interval)
             
             for _ in range(sleep_count):
@@ -180,7 +268,8 @@ def process_tasks():
             remaining_time = reconnect_delay - (sleep_count * sleep_interval)
             if remaining_time > 0:
                 time.sleep(remaining_time)
-                
+            
+            # Increase backoff for next attempt, but cap it
             reconnect_delay = min(reconnect_delay * 2, max_reconnect_delay)
 
 

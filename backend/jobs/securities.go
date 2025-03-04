@@ -116,18 +116,72 @@ func simpleUpdateSecurities(conn *utils.Conn) error {
 			}
 
 			if hasDelisted {
-				// If it exists but was delisted, update the existing row
-				_, err := conn.DB.Exec(context.Background(),
-					`UPDATE securities 
-					SET maxDate = NULL,
-						minDate = '2003-10-01',
-						figi = $2
-					WHERE ticker = $1 
-					AND maxDate IS NOT NULL`,
-					sec.Ticker, sec.CompositeFIGI,
-				)
+				// First check if there's already an active record with this ticker
+				var activeExists bool
+				err := conn.DB.QueryRow(context.Background(),
+					`SELECT EXISTS(
+						SELECT 1 FROM securities 
+						WHERE ticker = $1 
+						AND maxDate IS NULL
+					)`,
+					sec.Ticker,
+				).Scan(&activeExists)
+
 				if err != nil {
-					return fmt.Errorf("failed to reactivate ticker %s: %w", sec.Ticker, err)
+					return fmt.Errorf("failed to check active ticker %s: %w", sec.Ticker, err)
+				}
+
+				if activeExists {
+					// Skip this ticker as it's already active
+					fmt.Printf("Skipping reactivation of %s as it's already active\n", sec.Ticker)
+					continue
+				}
+
+				// Check if there's a record with the same ticker and minDate
+				var duplicateExists bool
+				err = conn.DB.QueryRow(context.Background(),
+					`SELECT EXISTS(
+						SELECT 1 FROM securities 
+						WHERE ticker = $1 
+						AND minDate = '2003-10-01'
+						AND maxDate IS NOT NULL
+					)`,
+					sec.Ticker,
+				).Scan(&duplicateExists)
+
+				if err != nil {
+					return fmt.Errorf("failed to check duplicate ticker %s: %w", sec.Ticker, err)
+				}
+
+				if duplicateExists {
+					// If a duplicate exists, use a different approach - update the most recent record
+					_, err := conn.DB.Exec(context.Background(),
+						`UPDATE securities 
+						SET maxDate = NULL,
+							figi = $2
+						WHERE ticker = $1 
+						AND maxDate IS NOT NULL
+						ORDER BY maxDate DESC
+						LIMIT 1`,
+						sec.Ticker, sec.CompositeFIGI,
+					)
+					if err != nil {
+						return fmt.Errorf("failed to reactivate ticker %s with alternative approach: %w", sec.Ticker, err)
+					}
+				} else {
+					// If it exists but was delisted and no duplicate exists, update the existing row
+					_, err := conn.DB.Exec(context.Background(),
+						`UPDATE securities 
+						SET maxDate = NULL,
+							minDate = '2003-10-01',
+							figi = $2
+						WHERE ticker = $1 
+						AND maxDate IS NOT NULL`,
+						sec.Ticker, sec.CompositeFIGI,
+					)
+					if err != nil {
+						return fmt.Errorf("failed to reactivate ticker %s: %w", sec.Ticker, err)
+					}
 				}
 			} else {
 				// If it's completely new, insert it
