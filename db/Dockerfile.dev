@@ -6,4 +6,7 @@ COPY init.sql /docker-entrypoint-initdb.d/init.sql
 COPY securities.csv /docker-entrypoint-initdb.d/securities.csv
 COPY samples.csv /docker-entrypoint-initdb.d/samples.csv
 COPY dev.conf /etc/postgresql/postgresql.conf
+# Copy the migrations script
+COPY run_migrations.sh /app/run_migrations.sh
+RUN chmod +x /app/run_migrations.sh
 CMD ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]

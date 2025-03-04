@@ -450,6 +450,25 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 func updateSecurityDetails(conn *utils.Conn, test bool) error {
 	// Query active securities (where maxDate is null)
 	fmt.Println("Updating security details")
+
+	// First, count how many securities need updating
+	var count int
+	err := conn.DB.QueryRow(context.Background(),
+		`SELECT COUNT(*) 
+		 FROM securities 
+		 WHERE maxDate IS NULL AND (logo IS NULL OR icon IS NULL)`).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("failed to count securities needing updates: %v", err)
+	}
+
+	fmt.Printf("Found %d securities that need logo/icon updates\n", count)
+
+	// If no securities need updating, return success
+	if count == 0 {
+		fmt.Println("No securities need logo/icon updates, job completed successfully")
+		return nil
+	}
+
 	rows, err := conn.DB.Query(context.Background(),
 		`SELECT securityid, ticker 
 		 FROM securities 
@@ -527,11 +546,11 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 				 locale = NULLIF($3, ''),
 				 primary_exchange = NULLIF($4, ''),
 				 active = $5,
-				 market_cap = NULLIF($6, 0),
+				 market_cap = NULLIF($6, '')::NUMERIC,
 				 description = NULLIF($7, ''),
 				 logo = NULLIF($8, ''),
 				 icon = NULLIF($9, ''),
-				 share_class_shares_outstanding = NULLIF($10, 0),
+				 share_class_shares_outstanding = CAST(NULLIF($10, 0) AS BIGINT),
 				 total_shares = CASE 
 					 WHEN NULLIF($6::numeric, 0) > 0 AND NULLIF($12::numeric, 0) > 0 
 					 THEN CAST(($6::numeric / $12::numeric) AS BIGINT)
@@ -543,7 +562,7 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 			utils.NullString(string(details.Locale)),
 			utils.NullString(details.PrimaryExchange),
 			details.Active,
-			utils.NullInt64(int64(details.MarketCap)),
+			fmt.Sprintf("%d", details.MarketCap), // Convert to string to avoid int overflow
 			utils.NullString(details.Description),
 			utils.NullString(logoBase64),
 			utils.NullString(iconBase64),
