@@ -1,4 +1,4 @@
-import time, psycopg2, redis, os, sys
+import time, psycopg2, redis, os, sys, socket
 from datetime import datetime, timedelta
 
 
@@ -79,46 +79,82 @@ class Conn:
         # Get Redis configuration from environment variables
         redis_port = int(os.environ.get("REDIS_PORT", "6379"))
         redis_password = os.environ.get("REDIS_PASSWORD", "")
+        redis_db = int(os.environ.get("REDIS_DB", "0"))
         
         # Create Redis connection with password if available
         redis_params = {
             "host": cache_host,
             "port": redis_port,
-            "socket_timeout": 5.0,
-            "socket_connect_timeout": 5.0,
+            "db": redis_db,
+            "socket_timeout": 5.0,  # Reduced from 10.0 to fail faster
+            "socket_connect_timeout": 5.0,  # Reduced from 10.0 to fail faster
+            "socket_keepalive": True,  # Enable TCP keepalive
+            "socket_keepalive_options": {
+                # TCP_KEEPIDLE: time before sending keepalive probes
+                socket.TCP_KEEPIDLE: 30,  # Reduced from 60
+                # TCP_KEEPINTVL: time between keepalive probes
+                socket.TCP_KEEPINTVL: 10,  # Reduced from 30
+                # TCP_KEEPCNT: number of keepalive probes
+                socket.TCP_KEEPCNT: 3  # Reduced from 5
+            },
             "retry_on_timeout": True,
-            "health_check_interval": 30
+            "health_check_interval": 10,  # Reduced from 15 to check more frequently
+            "max_connections": 10,  # Limit the number of connections
+            "decode_responses": False,  # Don't decode responses automatically
+            "client_name": f"worker-{os.getpid()}"  # Add client name for better debugging
         }
         
         if redis_password:
             redis_params["password"] = redis_password
             
-        self.cache = redis.Redis(**redis_params)
+        # Create a Redis connection pool
+        pool = redis.ConnectionPool(**redis_params)
+        self.cache = redis.Redis(connection_pool=pool)
+        
         # Test the connection
         self.cache.ping()
 
     def check_connection(self):
         """Check both database and Redis connections."""
+        redis_ok = False
+        db_ok = False
+        
+        # Check Redis connection
         try:
             self.cache.ping()
-            with self.db.cursor() as cursor:
-                cursor.execute("SELECT 1")
-        except (redis.exceptions.ConnectionError, redis.exceptions.ResponseError) as e:
+            redis_ok = True
+        except (redis.exceptions.ConnectionError, redis.exceptions.ResponseError, redis.exceptions.TimeoutError) as e:
             print(f"Redis connection error during check: {e}", flush=True)
             print("Attempting to reconnect to Redis...", flush=True)
             try:
-                self._connect_to_redis("cache")
+                # Use the same host as the initial connection
+                cache_host = os.environ.get("REDIS_HOST", "cache")
+                self._connect_to_redis(cache_host)
+                redis_ok = True
+                print("Successfully reconnected to Redis", flush=True)
             except Exception as e:
                 print(f"Failed to reconnect to Redis: {e}", flush=True)
                 raise
+        
+        # Check database connection
+        try:
+            with self.db.cursor() as cursor:
+                cursor.execute("SELECT 1")
+            db_ok = True
         except psycopg2.OperationalError as e:
             print(f"Database connection error during check: {e}", flush=True)
             print("Attempting to reconnect to database...", flush=True)
             try:
-                self._connect_to_db("db")
+                # Use the same host as the initial connection
+                db_host = os.environ.get("DB_HOST", "db")
+                self._connect_to_db(db_host)
+                db_ok = True
+                print("Successfully reconnected to database", flush=True)
             except Exception as e:
                 print(f"Failed to reconnect to database: {e}", flush=True)
                 raise
         except Exception as e:
             print(f"Unexpected error during connection check: {e}", flush=True)
             raise
+            
+        return redis_ok and db_ok
