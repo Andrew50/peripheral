@@ -546,7 +546,7 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 				 locale = NULLIF($3, ''),
 				 primary_exchange = NULLIF($4, ''),
 				 active = $5,
-				 market_cap = NULLIF($6, '')::NUMERIC,
+				 market_cap = NULLIF($6, 0)::NUMERIC,
 				 description = NULLIF($7, ''),
 				 logo = NULLIF($8, ''),
 				 icon = NULLIF($9, ''),
@@ -562,7 +562,7 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 			utils.NullString(string(details.Locale)),
 			utils.NullString(details.PrimaryExchange),
 			details.Active,
-			fmt.Sprintf("%d", details.MarketCap), // Convert to string to avoid int overflow
+			utils.NullInt64(int64(details.MarketCap)),
 			utils.NullString(details.Description),
 			utils.NullString(logoBase64),
 			utils.NullString(iconBase64),
