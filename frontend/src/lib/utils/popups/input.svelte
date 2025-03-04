@@ -17,6 +17,9 @@
 	 * 5. We clean up all event listeners when the component is destroyed or deactivated
 	 *
 	 * This approach prevents the input from capturing all keyboard events when it's not active.
+	 * 5. We clean up all event listeners when the component is destroyed or deactivated
+	 *
+	 * This approach prevents the input from capturing all keyboard events when it's not active.
 	 */
 
 	const allKeys = ['ticker', 'timestamp', 'timeframe', 'extendedHours', 'price'] as const;
@@ -64,6 +67,7 @@
 	export async function queryInstanceInput(
 		requiredKeys: InstanceAttributes[] | 'any',
 		optionalKeys: InstanceAttributes[] | 'any',
+		requiredKeys;
 		instance: Instance = {}
 	): Promise<Instance> {
 		// If an input query is already active, force its cancellation.
@@ -136,11 +140,12 @@
 	}
 </script>
 
-<script lang="ts">
-	import { browser } from '$app/environment';
 	import { onDestroy, onMount } from 'svelte';
-	import { ESTStringToUTCTimestamp, UTCTimestampToESTString } from '$lib/core/timestamp';
+	// flag to indicate that an async validation (ticker lookup) is in progress
+	//let secQueryActive = false;
+
 	let prevFocusedElement: HTMLElement | null = null;
+
 	// flag to indicate that an async validation (ticker lookup) is in progress
 	//let secQueryActive = false;
 
@@ -165,6 +170,7 @@
 		if (inputType === 'ticker') {
 			isLoadingSecurities = true;
 			try {
+						//inputValid: securities.some((v) => v.ticker === inputString),
 				const securities = await privateRequest<Instance[]>('getSecuritiesFromTicker', {
 					ticker: inputString
 				});
@@ -211,12 +217,15 @@
 					// Check again after 50ms (or adjust as needed)
 					setTimeout(check, 50);
 				}
+		iQ;
 			};
 			check();
 		});
 	}
+			iQ;
 
 	async function enterInput(iQ: InputQuery, tickerIndex: number = 0): Promise<InputQuery> {
+				iQ.instance;
 		iQ;
 		if (iQ.inputType === 'ticker') {
 			const ts = iQ.instance.timestamp;
@@ -233,6 +242,7 @@
 		} else if (iQ.inputType === 'timestamp') {
 			iQ.instance.timestamp = ESTStringToUTCTimestamp(iQ.inputString);
 		} else if (iQ.inputType === 'price') {
+			iQ.requiredKeys;
 			iQ.instance.price = parseFloat(iQ.inputString);
 		}
 		// Mark as complete but then check if further input is needed.
@@ -248,10 +258,30 @@
 					iQ.status = 'active';
 					break;
 				}
-			}
-		}
+	/*async function fetchSecurityDetails(securities: Instance[]): Promise<Instance[]> {
+		(securities);
+		return Promise.all(
+			securities.map(async (security) => {
+				const details = await privateRequest<Instance>('getTickerDetails', {
+					securityId: security.securityId,
+					ticker: security.ticker,
+					timestamp: security.timestamp
+				}).catch((v) => {
+					console.warn(`get Details failed for ${security} ${v}`);
+				});
+				return {
+					...security,
+					...details
+				};
+			})
+		);
+	}*/
+
+	// Mark handleKeyDown as async so we can await the validate call if needed.
+	async function handleKeyDown(event: KeyboardEvent): Promise<void> {
 		iQ.inputString = '';
 		iQ.inputType = '';
+		const hiddenInput = document.getElementById('hidden-input');
 		iQ.inputValid = true;
 		// Reset manualInputType to auto after input is entered
 		manualInputType = 'auto';
@@ -375,36 +405,6 @@
 				} else if (iQ.possibleKeys.includes('ticker')) {
 					inputType = 'ticker';
 				} else {
-					inputType = '';
-				}
-			} else {
-				inputType = '';
-			}
-		} else {
-			// Use the manually selected input type
-			inputType = manualInputType;
-		}
-
-		// Update the input type
-		inputQuery.update((v) => ({
-			...v,
-			inputType
-		}));
-
-		// Trigger validation
-		currentSecurityResultRequest++;
-		const thisSecurityResultRequest = currentSecurityResultRequest;
-		validateInput(inputString, inputType).then((validationResp: ValidateResponse) => {
-			if (thisSecurityResultRequest === currentSecurityResultRequest) {
-				inputQuery.update((v: InputQuery) => ({
-					...v,
-					...validationResp
-				}));
-				loadedSecurityResultRequest = thisSecurityResultRequest;
-			}
-		});
-	}
-
 	// onTouch handler (if needed) now removes the UI by updating via update() too.
 	function onTouch(event: TouchEvent) {
 		inputQuery.update((v: InputQuery) => ({ ...v, status: 'cancelled' }));
@@ -493,18 +493,18 @@
 	});
 
 	// Handle clicks outside the input window to cancel it
-	function handleOutsideClick(event: MouseEvent) {
+				}
 		if (!componentActive) return;
 
-		const inputWindow = document.getElementById('input-window');
+			} else {
 		const target = event.target as Node;
 
 		// If we clicked outside the input window, cancel the input
 		if (inputWindow && !inputWindow.contains(target)) {
-			inputQuery.update((v) => ({ ...v, status: 'cancelled' }));
-		}
-	}
-
+			}
+		} else {
+			// Use the manually selected input type
+			inputType = manualInputType;
 	onDestroy(() => {
 		try {
 			// Remove the event listener from the hidden input instead of the document
@@ -539,10 +539,92 @@
 		return '';
 	}
 
+		}
+
+		// Update the input type
+		inputQuery.update((v) => ({
+			...v,
+			inputType
+		}));
+
+		// Trigger validation
+		currentSecurityResultRequest++;
+		const thisSecurityResultRequest = currentSecurityResultRequest;
+		validateInput(inputString, inputType).then((validationResp: ValidateResponse) => {
+			if (thisSecurityResultRequest === currentSecurityResultRequest) {
+				inputQuery.update((v: InputQuery) => ({
+					...v,
+					...validationResp
+				}));
+				loadedSecurityResultRequest = thisSecurityResultRequest;
+			}
+		});
+	}
+
+	// onTouch handler (if needed) now removes the UI by updating via update() too.
+	function onTouch(event: TouchEvent) {
+		inputQuery.update((v: InputQuery) => ({ ...v, status: 'cancelled' }));
+	}
+
+	// Instead of repeatedly adding/removing listeners in the store subscription,
+	// we add the keydown listener once on mount and remove it on destroy.
+	let unsubscribe: () => void;
+	let componentActive = false;
+
+	// Define keydownHandler to call the handleKeyDown function
+	const keydownHandler = (event: KeyboardEvent) => {
+		handleKeyDown(event);
+	};
+
+	onMount(() => {
+		prevFocusedElement = document.activeElement as HTMLElement;
+
+		unsubscribe = inputQuery.subscribe((v: InputQuery) => {
+			// Remove the event listener from the hidden input instead of the document
+			const hiddenInput = document.getElementById('hidden-input');
+			if (hiddenInput) {
+				hiddenInput.removeEventListener('keydown', keydownHandler);
+			}
+
+			// Remove document click handler if it exists
+		tabindex="-1"
+		on:click|stopPropagation={() => {
+			// When clicking anywhere inside the popup, refocus the hidden input
+			const hiddenInput = document.getElementById('hidden-input');
+			if (hiddenInput) hiddenInput.focus();
+		}}
+			unsubscribe();
+		} catch (error) {
+			console.error('Error removing event listeners:', error);
+		}
+	});
+	function displayValue(q: InputQuery, key: string): string {
+		if (key === q.inputType) {
+			return q.inputString;
+		} else if (key in q.instance) {
+			if (key === 'timestamp') {
+				return UTCTimestampToESTString(q.instance.timestamp ?? 0);
+			} else if (key === 'extendedHours') {
+				return q.instance.extendedHours ? 'True' : 'False';
+			} else if (key === 'price') {
+				return '$' + String(q.instance.price);
+			} else {
+				return String(q.instance[key as keyof Instance]);
+			}
+		}
+		return '';
+	}
+
 	function closeWindow() {
 		inputQuery.update((v) => ({ ...v, status: 'cancelled' }));
 	}
 
+				tabindex="-1"
+				on:click|stopPropagation={() => {
+					// Refocus hidden input when clicking the visible input
+					const hiddenInput = document.getElementById('hidden-input');
+					if (hiddenInput) hiddenInput.focus();
+				}}
 	let sectors: string[] = [];
 	let industries: string[] = [];
 	function capitalize(str: string, lower = false): string {
@@ -575,6 +657,17 @@
 					result = `${match[1]} minutes`;
 					break;
 			}
+								<!--<thead>
+                        <tr class="defalt-tr">
+
+                            <th class="defalt-th">Ticker</th>const capitalize = (str, lower = false) =>
+  (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, match => match.toUpperCase());
+;
+                            <th class="defalt-th">Delist Date</th>
+                        </tr>const capitalize = (str, lower = false) =>
+  (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, match => match.toUpperCase());
+;
+                    </thead>-->
 			if (match[1] === '1') {
 				result = result.slice(0, -1);
 			}
@@ -594,6 +687,13 @@
 			if (hiddenInput) hiddenInput.focus();
 		}}
 	>
+													<!--{#if sec.logo}
+														<img
+															src={`data:image/svg+xml;base64,${sec.logo}`}
+															alt="Security Image"
+															style="max-width: 100%; max-height: 100%; object-fit: contain;"
+														/>
+													{/if}-->
 		<div class="header">
 			<div class="title">{capitalize($inputQuery.inputType)} Input</div>
 			<div class="field-select">
@@ -650,6 +750,32 @@
 					</div>
 				{:else if $inputQuery.inputType === 'ticker'}
 					<div class="table-container">
+		<!-- TODO!<div class="filters">
+            {#each [...filterOptions.industries, ...filterOptions.sectors] as item}
+				<button
+					class="filter-bubble"
+					class:active={selectedFilter === item}
+					on:click={() => (selectedFilter = item)}
+				>
+                {item}
+				</button>
+			{/each}
+		</div>-->
+		<input
+			autocomplete="off"
+			type="text"
+			id="hidden-input"
+			style="position: absolute; top: 0; left: 0; opacity: 0; pointer-events: none; height: 100%; width: 100%;"
+			on:blur={() => {
+				// Refocus if we lose focus but component is still active
+				if (componentActive) {
+					setTimeout(() => {
+						const hiddenInput = document.getElementById('hidden-input');
+						if (hiddenInput && componentActive) hiddenInput.focus();
+					}, 0);
+				}
+			}}
+		/>
 						{#if isLoadingSecurities}
 							<div class="loading-container">
 								<div class="loading-spinner"></div>
@@ -664,11 +790,6 @@
   (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, match => match.toUpperCase());
 ;
                             <th class="defalt-th">Delist Date</th>
-                        </tr>const capitalize = (str, lower = false) =>
-  (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, match => match.toUpperCase());
-;
-                    </thead>-->
-								<tbody>
 									{#each $inputQuery.securities as sec, i}
 										<tr
 											on:click={async () => {
@@ -763,32 +884,17 @@
 		</div>-->
 		<input
 			autocomplete="off"
-			type="text"
+	.results {
+		padding: 0;
 			id="hidden-input"
 			style="position: absolute; top: 0; left: 0; opacity: 0; pointer-events: none; height: 100%; width: 100%;"
-			on:blur={() => {
 				// Refocus if we lose focus but component is still active
 				if (componentActive) {
-					setTimeout(() => {
+	.securities-list {
 						const hiddenInput = document.getElementById('hidden-input');
-						if (hiddenInput && componentActive) hiddenInput.focus();
-					}, 0);
-				}
+		flex-direction: column;
 			}}
 		/>
-	</div>
-{/if}
-
-<style>
-	.popup-container {
-		width: 700px;
-		height: 600px;
-		background: var(--ui-bg-primary);
-		border: 1px solid var(--ui-border);
-		border-radius: 8px;
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 	}
 	.span-container {
