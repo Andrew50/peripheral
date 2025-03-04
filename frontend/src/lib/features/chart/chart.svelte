@@ -168,6 +168,12 @@
 
 	let sessionHighlighting: SessionHighlighting;
 
+	// Add throttling variables for chart updates
+	let pendingBarUpdate: any = null;
+	let pendingVolumeUpdate: any = null;
+	let lastUpdateTime = 0;
+	const updateThrottleMs = 100;
+
 	function extendedHours(timestamp: number): boolean {
 		const date = new Date(timestamp);
 		const minutes = date.getHours() * 60 + date.getMinutes();
@@ -759,31 +765,76 @@
 		const sameBar = tradeTime < currentBarTimestamp + chartTimeframeInSeconds;
 
 		if (sameBar) {
-			// Update existing bar
-			if (trade.size >= 100) {
-				if (!trade.conditions?.some((condition) => excludedConditions.has(condition))) {
-					chartCandleSeries.update({
+			// Use throttled updates
+			const now = Date.now();
+			
+			// Initialize pendingBarUpdate if this is the first update in this throttle window
+			if (!pendingBarUpdate) {
+				pendingBarUpdate = {
+					time: mostRecentBar.time,
+					open: mostRecentBar.open,
+					high: mostRecentBar.high,
+					low: mostRecentBar.low,
+					close: mostRecentBar.close
+				};
+			}
+			
+			// Initialize pendingVolumeUpdate
+			if (!pendingVolumeUpdate) {
+				const lastVolume = chartVolumeSeries.data().at(-1);
+				if (lastVolume && isHistogram(lastVolume)) {
+					pendingVolumeUpdate = {
 						time: mostRecentBar.time,
-						open: mostRecentBar.open,
-						high: Math.max(mostRecentBar.high, trade.price),
-						low: Math.min(mostRecentBar.low, trade.price),
-						close: trade.price
-					});
+						value: lastVolume.value,
+						color: mostRecentBar.close > mostRecentBar.open ? '#089981' : '#ef5350'
+					};
 				}
 			}
-
-			const lastVolume = chartVolumeSeries.data().at(-1);
-			if (lastVolume && isHistogram(lastVolume)) {
-				chartVolumeSeries.update({
-					time: mostRecentBar.time,
-					value: lastVolume.value + trade.size,
-					color: mostRecentBar.close > mostRecentBar.open ? '#089981' : '#ef5350'
-				});
+			
+			// Update pending data with new trade
+			if (trade.size >= 100 && !trade.conditions?.some((condition) => excludedConditions.has(condition))) {
+				pendingBarUpdate.high = Math.max(pendingBarUpdate.high, trade.price);
+				pendingBarUpdate.low = Math.min(pendingBarUpdate.low, trade.price);
+				pendingBarUpdate.close = trade.price;
+				
 			}
+			if (pendingVolumeUpdate) {
+					pendingVolumeUpdate.value += trade.size;
+					pendingVolumeUpdate.color = pendingBarUpdate.close > pendingBarUpdate.open ? '#089981' : '#ef5350';
+				}
+			
+			// Apply updates only if throttle time has passed
+			if (now - lastUpdateTime >= updateThrottleMs) {
+				if (pendingBarUpdate) {
+					chartCandleSeries.update(pendingBarUpdate);
+					pendingBarUpdate = null;
+				}
+				
+				if (pendingVolumeUpdate) {
+					chartVolumeSeries.update(pendingVolumeUpdate);
+					pendingVolumeUpdate = null;
+				}
+				
+				lastUpdateTime = now;
+			}
+			
 			return;
 		}
 
-		// Create new bar
+		// Create new bar - immediate update for new bars
+		// Reset throttling state for new bars
+		if (pendingBarUpdate) {
+			chartCandleSeries.update(pendingBarUpdate);
+			pendingBarUpdate = null;
+		}
+		
+		if (pendingVolumeUpdate) {
+			chartVolumeSeries.update(pendingVolumeUpdate);
+			pendingVolumeUpdate = null;
+		}
+		
+		lastUpdateTime = Date.now();
+		
 		const referenceStartTime = getReferenceStartTimeForDateMilliseconds(
 			trade.timestamp,
 			currentChartInstance.extendedHours
@@ -1342,6 +1393,19 @@
 			sessionHighlighting = new SessionHighlighting(createDefaultSessionHighlighter());
 			chartCandleSeries.attachPrimitive(sessionHighlighting);
 		}
+
+		return () => {
+			// Apply any pending updates before unmounting
+			if (pendingBarUpdate) {
+				chartCandleSeries.update(pendingBarUpdate);
+			}
+			
+			if (pendingVolumeUpdate) {
+				chartVolumeSeries.update(pendingVolumeUpdate);
+			}
+			
+			// ... any other cleanup code ...
+		};
 	});
 
 	
