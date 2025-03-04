@@ -16,8 +16,8 @@ chmod +x ./dev.bash
 
 # Ensure rollouts directory exists
 log "Ensuring rollouts directory exists..."
-mkdir -p ./db/rollouts
-chmod 777 ./db/rollouts
+mkdir -p ../../services/db/rollouts
+chmod 777 ../../services/db/rollouts
 
 # Start Docker Compose
 log "Starting Docker Compose environment..."
@@ -76,7 +76,7 @@ fi
 
 # Ensure all rollout files are copied to the container
 log "Copying rollout files to the database container..."
-for ROLLOUT_FILE in ./db/rollouts/*.sql; do
+for ROLLOUT_FILE in ../../services/db/rollouts/*.sql; do
   if [ -f "$ROLLOUT_FILE" ]; then
     FILENAME=$(basename "$ROLLOUT_FILE")
     log "Copying $FILENAME to container..."

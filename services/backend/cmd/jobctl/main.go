@@ -250,6 +250,14 @@ func runJob(jobName string) {
 	fmt.Printf("Running job '%s'...\n", job.Name)
 	startTime := time.Now()
 
+	// Get initial queue length to compare after job execution
+	initialQueueLen, err := conn.Cache.LLen(context.Background(), "queue").Result()
+	if err != nil {
+		fmt.Printf("Warning: Could not get initial queue length: %v\n", err)
+		initialQueueLen = 0
+	}
+
+	// Execute the job function
 	err = job.Function(conn)
 
 	duration := time.Since(startTime).Round(time.Millisecond)
@@ -267,6 +275,177 @@ func runJob(jobName string) {
 	err = conn.Cache.Set(context.Background(), getJobLastRunKey(job.Name), lastRunStr, 0).Err()
 	if err != nil {
 		fmt.Printf("Error saving last run time: %v\n", err)
+	}
+
+	// Check if the job added items to the queue
+	currentQueueLen, err := conn.Cache.LLen(context.Background(), "queue").Result()
+	if err != nil {
+		fmt.Printf("Warning: Could not get current queue length: %v\n", err)
+		return
+	}
+
+	// If new items were added to the queue, monitor them
+	if currentQueueLen > initialQueueLen {
+		fmt.Printf("\nDetected %d new task(s) in the queue. Monitoring worker logs...\n", currentQueueLen-initialQueueLen)
+
+		// Get the queued items
+		queueItems, err := conn.Cache.LRange(context.Background(), "queue", 0, currentQueueLen-1).Result()
+		if err != nil {
+			fmt.Printf("Error getting queue items: %v\n", err)
+			return
+		}
+
+		// Extract task IDs for monitoring
+		var taskIDs []string
+		var taskFuncs []string
+		for _, item := range queueItems {
+			var queueArgs utils.QueueArgs
+			if err := json.Unmarshal([]byte(item), &queueArgs); err != nil {
+				fmt.Printf("Error parsing queue item: %v\n", err)
+				continue
+			}
+			taskIDs = append(taskIDs, queueArgs.ID)
+			taskFuncs = append(taskFuncs, queueArgs.Func)
+		}
+
+		// Print task information
+		fmt.Println("\nQueued tasks:")
+		for i, id := range taskIDs {
+			fmt.Printf("  %d: %s (ID: %s)\n", i+1, taskFuncs[i], id)
+		}
+
+		// Monitor task status
+		fmt.Println("\nWaiting for worker to process tasks...")
+		monitorTasks(conn, taskIDs)
+	}
+}
+
+// monitorTasks polls the status of tasks and displays their progress
+func monitorTasks(conn *utils.Conn, taskIDs []string) {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	completedTasks := make(map[string]bool)
+	startTime := time.Now()
+	timeout := 5 * time.Minute
+
+	// Store previous statuses to avoid printing duplicates
+	previousStatuses := make(map[string]string)
+
+	// Print header
+	fmt.Println("\n=== TASK MONITORING ===")
+	fmt.Printf("Started at: %s\n", startTime.Format("2006-01-02 15:04:05"))
+	fmt.Printf("Monitoring %d task(s)\n", len(taskIDs))
+	fmt.Println("-------------------------")
+
+	for {
+		select {
+		case <-ticker.C:
+			allCompleted := true
+			for _, taskID := range taskIDs {
+				if completedTasks[taskID] {
+					continue
+				}
+
+				// Get task status
+				statusJSON, err := conn.Cache.Get(context.Background(), taskID).Result()
+				if err != nil {
+					newStatus := fmt.Sprintf("Error: %v", err)
+					if previousStatuses[taskID] != newStatus {
+						fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
+						previousStatuses[taskID] = newStatus
+					}
+					continue
+				}
+
+				// Parse status
+				var status string
+				var result map[string]interface{}
+
+				// First try to parse as simple string (for "queued" or "running" status)
+				err = json.Unmarshal([]byte(statusJSON), &status)
+				if err == nil {
+					// Simple status
+					if previousStatuses[taskID] != status {
+						fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, status)
+						previousStatuses[taskID] = status
+					}
+
+					if status != "completed" && status != "error" {
+						allCompleted = false
+					} else {
+						completedTasks[taskID] = true
+					}
+				} else {
+					// Try to parse as response object
+					err = json.Unmarshal([]byte(statusJSON), &result)
+					if err != nil {
+						newStatus := fmt.Sprintf("Error parsing status: %v", err)
+						if previousStatuses[taskID] != newStatus {
+							fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
+							previousStatuses[taskID] = newStatus
+						}
+						continue
+					}
+
+					// Check status field
+					if status, ok := result["status"].(string); ok {
+						if previousStatuses[taskID] != status {
+							fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, status)
+							previousStatuses[taskID] = status
+						}
+
+						if status == "completed" || status == "error" {
+							fmt.Printf("\n=== TASK %s DETAILS ===\n", taskID)
+
+							// If there's a result, print it
+							if result, ok := result["result"]; ok {
+								resultJSON, _ := json.MarshalIndent(result, "", "  ")
+								fmt.Printf("Result:\n%s\n", string(resultJSON))
+							}
+
+							// If there's an error, print it
+							if errMsg, ok := result["error"].(string); ok && errMsg != "" {
+								fmt.Printf("Error: %s\n", errMsg)
+							}
+
+							fmt.Println("======================")
+							completedTasks[taskID] = true
+						} else {
+							allCompleted = false
+						}
+					} else {
+						allCompleted = false
+					}
+				}
+			}
+
+			if allCompleted {
+				duration := time.Since(startTime).Round(time.Millisecond)
+				fmt.Printf("\n=== MONITORING COMPLETE ===\n")
+				fmt.Printf("All %d tasks completed in %v\n", len(taskIDs), duration)
+				return
+			}
+
+			// Check for timeout
+			if time.Since(startTime) > timeout {
+				fmt.Printf("\n=== MONITORING TIMEOUT ===\n")
+				fmt.Printf("Timeout after %v waiting for tasks to complete.\n", timeout)
+				fmt.Printf("%d/%d tasks completed.\n", len(completedTasks), len(taskIDs))
+
+				// List incomplete tasks
+				if len(completedTasks) < len(taskIDs) {
+					fmt.Println("\nIncomplete tasks:")
+					for _, taskID := range taskIDs {
+						if !completedTasks[taskID] {
+							fmt.Printf("  - %s (Last status: %s)\n", taskID, previousStatuses[taskID])
+						}
+					}
+				}
+
+				return
+			}
+		}
 	}
 }
 
@@ -322,9 +501,22 @@ func getQueueStatus() {
 		if queueLen > 10 {
 			fmt.Printf("... and %d more items\n", queueLen-10)
 		}
+
+		// Add a hint about the monitor command
+		fmt.Println("\nTip: Use 'jobctl monitor <task_id>' to monitor a specific task's execution.")
 	} else {
 		fmt.Println("Queue is empty")
 	}
+}
+
+func monitorTask(taskID string) {
+	// Create a connection
+	conn, cleanup := utils.InitConn(true)
+	defer cleanup()
+
+	// Monitor a single task
+	fmt.Printf("Monitoring task %s...\n", taskID)
+	monitorTasks(conn, []string{taskID})
 }
 
 func printUsage() {
@@ -365,6 +557,18 @@ func printUsage() {
 			usage:       "queue",
 			description: "Get status of the job queue",
 			execute:     func(args []string) { getQueueStatus() },
+		},
+		"monitor": {
+			usage:       "monitor [task_id]",
+			description: "Monitor a specific task by ID",
+			execute: func(args []string) {
+				if len(args) < 1 {
+					fmt.Println("Error: task ID is required")
+					printUsage()
+					return
+				}
+				monitorTask(args[0])
+			},
 		},
 		"help": {
 			usage:       "help",
@@ -429,6 +633,18 @@ func main() {
 			usage:       "queue",
 			description: "Get status of the job queue",
 			execute:     func(args []string) { getQueueStatus() },
+		},
+		"monitor": {
+			usage:       "monitor [task_id]",
+			description: "Monitor a specific task by ID",
+			execute: func(args []string) {
+				if len(args) < 1 {
+					fmt.Println("Error: task ID is required")
+					printUsage()
+					return
+				}
+				monitorTask(args[0])
+			},
 		},
 		"help": {
 			usage:       "help",

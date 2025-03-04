@@ -170,13 +170,6 @@
 			profilePic = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">?</text></svg>`;
 		}
 
-		console.log('Profile data on mount:', {
-			profilePic,
-			username,
-			hasProfilePic: !!profilePic,
-			hasUsername: !!username
-		});
-
 		// Reset error state
 		profilePicError = false;
 
@@ -196,26 +189,20 @@
 
 			// Define the keydown handler
 			keydownHandler = (event: KeyboardEvent) => {
-				console.log('Global keydown event:', {
-					key: event.key,
-					activeElement: document.activeElement?.tagName,
-					activeElementId: document.activeElement?.id,
-					isBodyFocused: document.activeElement === document.body,
-					noFocus: !document.activeElement
-				});
+				// Check if input window is active - don't handle keyboard events when input is active
+				const inputWindow = document.getElementById('input-window');
+				const hiddenInput = document.getElementById('hidden-input');
+
+				// Don't interfere with the input component's keyboard events
+				if (inputWindow || hiddenInput === document.activeElement) {
+					return;
+				}
 
 				// Only handle events when no element is focused or body is focused
-				console.log('Document active element:', document.activeElement);
 				if (!document.activeElement || document.activeElement === document.body) {
 					const chartContainer = document.getElementById(`chart_container-0`); // Assuming first chart has ID 0
-					console.log('Looking for chart container:', {
-						found: !!chartContainer,
-						containerId: 'chart_container-0'
-					});
 
 					if (chartContainer) {
-						console.log('Focusing chart and triggering event handler');
-
 						// Focus the chart container
 						chartContainer.focus();
 
@@ -223,13 +210,10 @@
 						const nativeHandlers = (chartContainer as any)._svelte?.events?.keydown;
 
 						if (nativeHandlers) {
-							console.log('Found native handlers, calling directly');
 							// Call each handler directly with the original event
 							nativeHandlers.forEach((handler: Function) => {
 								handler.call(chartContainer, event);
 							});
-						} else {
-							console.log('No native handlers found on chart container');
 						}
 					}
 				}
@@ -237,7 +221,6 @@
 
 			// Add global keyboard event listener
 			document.addEventListener('keydown', keydownHandler);
-			console.log('Added global keydown handler');
 		}
 		privateRequest<string>('verifyAuth', {}).catch(() => {
 			goto('/login');
@@ -271,8 +254,6 @@
 
 			// Initialize the timer
 			resetInactivityTimer();
-
-			console.log('Screensaver activity listeners initialized');
 		}
 
 		// Clean up subscription on component destroy
@@ -291,7 +272,6 @@
 			window.removeEventListener('resize', updateChartWidth);
 			// Remove global keyboard event listener using the stored handler
 			document.removeEventListener('keydown', keydownHandler);
-			console.log('Removed global keydown handler');
 			stopSidebarResize();
 
 			// Clean up all activity listeners
@@ -299,8 +279,6 @@
 			activityEvents.forEach((event) => {
 				document.removeEventListener(event, resetInactivityTimer);
 			});
-
-			console.log('Cleaned up screensaver activity listeners');
 		}
 	});
 
@@ -565,27 +543,18 @@
 		// Recalculate the profile display whenever these values change
 		if (profilePic || username || profilePicError) {
 			currentProfileDisplay = calculateProfileDisplay();
-			console.log('Profile display updated:', { currentProfileDisplay });
 		}
 	}
 
 	function calculateProfileDisplay() {
-		console.log('getProfileDisplay called:', {
-			profilePic,
-			username,
-			profilePicError
-		});
-
 		// If profile pic is available and no loading error, use it
 		if (profilePic && !profilePicError) {
-			console.log('Using profile picture URL');
 			return profilePic;
 		}
 
 		// If username is available, generate avatar with initial
 		if (username) {
 			const initial = username.charAt(0).toUpperCase();
-			console.log('Using username initial for avatar:', initial);
 			// Use a simpler SVG format to ensure browser compatibility
 			const avatar = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">${initial}</text></svg>`;
 
@@ -599,7 +568,6 @@
 		}
 
 		// Fallback if nothing else is available - improved visibility with simpler SVG format
-		console.log('No username available, using ? fallback');
 		// Use a simpler SVG format to ensure browser compatibility
 		const fallbackAvatar = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">?</text></svg>`;
 
@@ -615,7 +583,6 @@
 	}
 
 	function handleProfilePicError() {
-		console.log('Profile picture failed to load:', profilePic);
 		profilePicError = true;
 
 		// Generate a fallback immediately

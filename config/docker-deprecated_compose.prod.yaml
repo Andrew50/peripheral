@@ -5,7 +5,7 @@
 services:
     backend:
         build:
-            context: ./backend
+            context: ../services/backend
             dockerfile: Dockerfile.prod
         restart: unless-stopped
         networks:
@@ -13,19 +13,19 @@ services:
 
     db:
         build:
-           context: ./db
+           context: ../services/db
            dockerfile: Dockerfile.prod
         networks:
             - compose_network
         volumes:
             - db:/var/lib/postgresql/data
-            - ./backups:/backups
+            - ../backups:/backups
         restart: unless-stopped
 
 
     frontend:
         build:
-            context: ./frontend
+            context: ../services/frontend
             dockerfile: Dockerfile.prod
         environment:
           - WATCHPACK_POLLING=true #enable polling
@@ -35,7 +35,7 @@ services:
 
     tf:
         build:
-            context: ./tf
+            context: ../services/tf
             dockerfile: Dockerfile
         restart: unless-stopped
         volumes:
@@ -46,7 +46,7 @@ services:
 
     worker: 
         build: #satish was here
-            context: ./worker
+            context: ../services/worker
             dockerfile: Dockerfile
         networks:
             - compose_network
@@ -57,7 +57,7 @@ services:
 
     cache:
         build:
-            context: ./cache
+            context: ../services/cache
             dockerfile: Dockerfile
         networks:
           - compose_network
@@ -70,7 +70,7 @@ services:
 
     nginx:
         build:
-            context: ./nginx
+            context: ../services/nginx
             dockerfile: Dockerfile
               #ports:
               #- "80:80"
