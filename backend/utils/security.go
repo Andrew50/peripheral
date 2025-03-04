@@ -24,6 +24,15 @@ func GetTicker(conn *Conn, securityId int, timestamp time.Time) (string, error) 
 	return ticker, nil
 
 }
+func GetCIKFromTicker(conn *Conn, ticker string, timestamp time.Time) (int, error) {
+	var cik int
+	err := conn.DB.QueryRow(context.Background(), "SELECT cik from securities where ticker = $1 and minDate <= $2 and (maxDate >= $2 or maxDate is NULL)", ticker, timestamp).Scan(&cik)
+	if err != nil {
+		return 0, fmt.Errorf("3333w0ngb %v", err)
+	}
+	return cik, nil
+}
+
 func GetTickerNews(client *polygon.Client, ticker string, millisTime models.Millis, ord string, limit int, compareType models.Comparator) *iter.Iter[models.TickerNews] {
 	sortOrder := models.Asc
 	if ord == "desc" {
