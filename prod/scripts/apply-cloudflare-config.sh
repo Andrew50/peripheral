@@ -40,7 +40,7 @@ kubectl apply -f "$TEMP_DIR/cloudflare-secret.yaml"
 
 # Apply the updated cloudflared configuration
 log "Applying the updated cloudflared configuration..."
-kubectl apply -f prod/config/cloudflared.yaml
+kubectl apply -f ../../config/prod/config/cloudflared.yaml
 
 # Delete any existing cloudflared pods to force a restart with the new configuration
 log "Restarting cloudflared pods..."

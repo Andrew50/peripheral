@@ -436,7 +436,18 @@ func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 			}
 		}
 
+		// Ensure the content type doesn't already contain a data URL prefix
+		if strings.HasPrefix(contentType, "data:") {
+			return "", fmt.Errorf("invalid content type: %s", contentType)
+		}
+
 		base64Data := base64.StdEncoding.EncodeToString(imageData)
+
+		// Check if base64Data already contains a data URL prefix to prevent duplication
+		if strings.HasPrefix(base64Data, "data:") {
+			return base64Data, nil
+		}
+
 		return fmt.Sprintf("data:%s;base64,%s", contentType, base64Data), nil
 	}
 
