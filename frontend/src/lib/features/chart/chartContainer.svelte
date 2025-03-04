@@ -27,6 +27,18 @@
 				return;
 			}
 
+			// Check if the user is currently in any standard input field
+			const activeElement = document.activeElement;
+			const isInputField =
+				activeElement?.tagName === 'INPUT' ||
+				activeElement?.tagName === 'TEXTAREA' ||
+				activeElement?.getAttribute('contenteditable') === 'true';
+
+			// If user is typing in any input field, don't intercept keystrokes
+			if (isInputField) {
+				return;
+			}
+
 			if (/^[a-zA-Z0-9]$/.test(event.key) && !event.ctrlKey && !event.metaKey) {
 				// Create an initial instance with the first key as the inputString
 				const initialKey = event.key.toUpperCase();
@@ -51,13 +63,7 @@
 				});
 
 				// Only focus if we're not in an input field or similar
-				const activeElement = document.activeElement;
-				const isInput =
-					activeElement?.tagName === 'INPUT' ||
-					activeElement?.tagName === 'TEXTAREA' ||
-					activeElement?.getAttribute('contenteditable') === 'true';
-
-				if (!isInput && containerRef) {
+				if (containerRef) {
 					containerRef.focus();
 				}
 			}
