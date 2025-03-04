@@ -409,7 +409,14 @@ func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 			return "", fmt.Errorf("failed to read image data: %v", err)
 		}
 
-		return base64.StdEncoding.EncodeToString(imageData), nil
+		contentType := resp.Header.Get("Content-Type")
+		if contentType == "" {
+			// Default to image/svg+xml if Content-Type is not provided
+			contentType = "image/svg+xml"
+		}
+
+		base64Data := base64.StdEncoding.EncodeToString(imageData)
+		return fmt.Sprintf("data:%s;base64,%s", contentType, base64Data), nil
 	}
 
 	// Fetch both logo and icon
