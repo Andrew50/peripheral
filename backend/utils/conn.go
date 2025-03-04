@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"time"
@@ -65,7 +66,22 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	var cache *redis.Client
 	for {
 		// Use Redis password if provided
-		opts := &redis.Options{Addr: cacheUrl}
+		opts := &redis.Options{
+			Addr: cacheUrl,
+			// Add connection pool settings
+			PoolSize:     20,               // Increased from 10
+			MinIdleConns: 10,               // Increased from 5
+			PoolTimeout:  60 * time.Second, // Increased from 30
+			// Add timeouts
+			ReadTimeout:  30 * time.Second, // Increased from 10
+			WriteTimeout: 30 * time.Second, // Increased from 10
+			// Add retry settings
+			MaxRetries:      5,
+			MinRetryBackoff: 1 * time.Second,
+			MaxRetryBackoff: 10 * time.Second,
+			// Add dial timeout
+			DialTimeout: 15 * time.Second,
+		}
 		if redisPassword != "" {
 			opts.Password = redisPassword
 		}
@@ -82,8 +98,26 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	}
 
 	polygonKey := getEnv("POLYGON_API_KEY", "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm")
-	polygonConn := polygon.New(polygonKey)
-	conn = &Conn{DB: dbConn, Cache: cache, Polygon: polygonConn, PolygonKey: polygonKey}
+
+	// Configure the HTTP client with better timeout settings
+	httpClient := &http.Client{
+		Timeout: 120 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:          200,
+			MaxIdleConnsPerHost:   50,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   15 * time.Second,
+			DisableKeepAlives:     false,
+			ResponseHeaderTimeout: 60 * time.Second,
+			ExpectContinueTimeout: 10 * time.Second,
+			MaxConnsPerHost:       100,
+		},
+	}
+
+	// Create Polygon client with custom HTTP client
+	polygonClient := polygon.NewWithClient(polygonKey, httpClient)
+
+	conn = &Conn{DB: dbConn, Cache: cache, Polygon: polygonClient, PolygonKey: polygonKey}
 
 	cleanup := func() {
 		conn.DB.Close()
