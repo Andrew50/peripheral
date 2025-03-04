@@ -11,8 +11,8 @@
 	export let instance: Writable<Instance>;
 	let store: Writable<TradeData>;
 	let quoteStore: Writable<QuoteData>;
-	let releaseTrade = () => {};
-	let releaseQuote = () => {};
+	let releaseTrade: () => void = () => {};
+	let releaseQuote: () => void = () => {};
 	let unsubscribeTrade = () => {};
 	let unsubscribeQuote = () => {};
 
@@ -71,8 +71,8 @@
 		releaseQuote();
 
 		// Add new streams using the passed update functions
-		releaseTrade = addStream<TradeData>(instance, 'all', updateTradeStore);
-		releaseQuote = addStream<QuoteData>(instance, 'quote', updateQuoteStore);
+		releaseTrade = addStream<TradeData>(instance, 'all', updateTradeStore) as () => void;
+		releaseQuote = addStream<QuoteData>(instance, 'quote', updateQuoteStore) as () => void;
 
 		// Reset trades
 		allTrades = [];
@@ -119,28 +119,28 @@
 	<table class="trade-table">
 		{#if Array.isArray(allTrades)}
 			<thead>
-				<tr class="defalt-tr">
-					<th class="defalt-th">Price</th>
-					<th class="defalt-th">{$settings.divideTaS ? 'Sz*100' : 'Size'}</th>
-					<th class="defalt-th">Exch</th>
-					<th class="defalt-th">Time</th>
+				<tr class="header-row">
+					<th>Price</th>
+					<th>{$settings.divideTaS ? 'Sz*100' : 'Size'}</th>
+					<th>Exch</th>
+					<th>Time</th>
 				</tr>
 			</thead>
 			<tbody>
 				{#each allTrades as trade}
-					<tr class={trade.color}>
-						<td class="defalt-td">{trade.price}</td>
-						<td class="defalt-td">{trade.size}</td>
-						<td class="defalt-td">{trade.exchangeName?.substring(0, 4) || '-'}</td>
-						<td class="defalt-td">{formatTime(trade.timestamp)}</td>
+					<tr class="trade-row {trade.color}">
+						<td>{trade.price}</td>
+						<td>{trade.size}</td>
+						<td>{trade.exchangeName?.substring(0, 4) || '-'}</td>
+						<td>{formatTime(trade.timestamp)}</td>
 					</tr>
 				{/each}
 				{#each Array(maxLength - allTrades.length).fill(0) as _}
-					<tr class="defalt-tr">
-						<td class="defalt-td">&nbsp;</td>
-						<td class="defalt-td">&nbsp;</td>
-						<td class="defalt-td">&nbsp;</td>
-						<td class="defalt-td">&nbsp;</td>
+					<tr class="empty-row">
+						<td>&nbsp;</td>
+						<td>&nbsp;</td>
+						<td>&nbsp;</td>
+						<td>&nbsp;</td>
 					</tr>
 				{/each}
 			</tbody>
@@ -150,11 +150,26 @@
 
 <style>
 	.time-and-sales {
-		font-family: Arial, sans-serif;
+		font-family: var(
+			--font-primary,
+			-apple-system,
+			BlinkMacSystemFont,
+			Segoe UI,
+			Roboto,
+			Oxygen,
+			Ubuntu,
+			Cantarell,
+			Open Sans,
+			Helvetica Neue,
+			sans-serif
+		);
 		font-size: 12px;
 		width: 100%;
 		overflow-y: auto;
-		background-color: black;
+		background-color: var(--ui-bg-secondary, rgba(18, 18, 18, 0.9));
+		border-radius: 6px;
+		border: 1px solid var(--ui-border, #333);
+		margin-top: 5px;
 	}
 
 	.trade-table {
@@ -165,14 +180,20 @@
 
 	.trade-table th,
 	.trade-table td {
-		padding: 2px 4px;
-		text-align: left;
+		padding: 3px 6px;
+		text-align: right;
 		font-size: 12px;
 		border: none;
-		background-color: black;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		line-height: 1.5;
+	}
+
+	/* First column left-aligned */
+	.trade-table th:first-child,
+	.trade-table td:first-child {
+		text-align: left;
 	}
 
 	.trade-table th:nth-child(1),
@@ -193,9 +214,50 @@
 	}
 
 	.trade-table th {
-		color: white;
-		font-weight: bold;
-		background-color: #333;
-		padding: 2px 4px;
+		color: var(--text-primary, #fff);
+		font-weight: 600;
+		background-color: var(--ui-bg-highlight, #222);
+		padding: 3px 6px;
+		font-size: 11px;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		opacity: 0.85;
+	}
+
+	.header-row {
+		position: sticky;
+		top: 0;
+		z-index: 1;
+	}
+
+	.trade-row {
+		background-color: transparent;
+		transition: background-color 0.15s ease;
+	}
+
+	.trade-row:hover {
+		background-color: var(--ui-bg-hover, rgba(255, 255, 255, 0.05));
+	}
+
+	.empty-row td {
+		color: transparent;
+		height: 15px;
+	}
+
+	/* Color styles */
+	.dark-green {
+		color: var(--color-up-strong, #43a047);
+	}
+	.green {
+		color: var(--color-up, #66bb6a);
+	}
+	.dark-red {
+		color: var(--color-down-strong, #e53935);
+	}
+	.red {
+		color: var(--color-down, #ef5350);
+	}
+	.white {
+		color: var(--text-primary, #fff);
 	}
 </style>

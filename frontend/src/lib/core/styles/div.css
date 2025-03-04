@@ -1,5 +1,4 @@
 .main-container {
-	/* Main container for the app */
 	top: 10vh;
 	display: flex;
 	justify-content: center;
@@ -9,7 +8,6 @@
 	left: 0;
 	right: 0;
 	background-color: var(--c2);
-	/* Example background color */
 }
 
 .feature-container {
@@ -36,8 +34,6 @@
 	border-radius: 4px;
 	overflow: scroll;
 	margin-top: 5px;
-	margin-left: 0px;
-	margin-right: 0px;
 	width: 100%;
 	flex-grow: 1;
 	scrollbar-width: none;
@@ -77,9 +73,7 @@
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	/* Center items horizontally */
 	justify-content: center;
-	/* Center items vertically */
 }
 
 .content-container {

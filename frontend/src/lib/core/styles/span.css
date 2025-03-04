@@ -1,9 +1,10 @@
 /* Base span styles */
 span {
 	color: var(--text-primary);
+	font-family: var(--font-primary, sans-serif);
 }
 
-/* Span variants */
+/* Various utility classes for spans */
 .flag-icon {
 	color: var(--text-secondary);
 	font-size: 16px;
@@ -36,13 +37,12 @@ span {
 	font-weight: 500;
 }
 
-/* Price change indicators */
 .increase {
-	color: var(--positive);
+	color: var(--color-up, #66bb6a);
 }
 
 .decrease {
-	color: var(--negative);
+	color: var(--color-down, #ef5350);
 }
 
 .no-change {
@@ -50,8 +50,6 @@ span {
 }
 
 .info-row {
-	margin: 0;
-	padding: 0;
 	background: none;
 	font-weight: 500;
 	color: var(--text-secondary);
@@ -59,17 +57,18 @@ span {
 
 .label {
 	color: var(--text-secondary);
+	font-weight: 500;
 }
 
 .value {
 	color: var(--text-primary);
+	font-weight: 500;
 }
 
 .expand-icon {
 	display: inline-block;
 	width: 16px;
 	height: 16px;
-	line-height: 16px;
 	text-align: center;
 	background-color: var(--ui-bg-element);
 	border-radius: 3px;
@@ -77,24 +76,11 @@ span {
 	font-size: 12px;
 }
 
-.flag-icon {
-	color: var(--text-secondary);
-	font-size: 16px;
-	margin-right: 5px;
-}
-
+/* Example red/green classes (commonly used) */
 .red {
-	color: var(--negative);
+	color: var(--color-down);
 }
 
 .green {
-	color: var(--positive);
-}
-
-/*unused*/
-.timestamp {
-	cursor: pointer;
-	color: #fff;
-	font-size: 0.9em;
-	margin: 0 12px;
+	color: var(--color-up);
 }
