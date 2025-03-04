@@ -161,6 +161,8 @@ CREATE TABLE horizontal_lines (
     securityId int,
     --references securities(securityId),
     price float not null,
+    color varchar(20) DEFAULT '#FFFFFF', -- Default to white
+    line_width int DEFAULT 1, -- Default to 1px
     unique (userId, securityId, price)
 );
 CREATE TABLE trades (
