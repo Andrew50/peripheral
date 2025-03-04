@@ -214,9 +214,10 @@
 		{#if $instance?.logo || currentDetails?.logo}
 			<div class="logo-container">
 				<img
-					src="data:image/svg+xml;base64,{$instance?.logo || currentDetails?.logo}"
+					src={$instance?.logo || currentDetails?.logo}
 					alt="{$instance?.name || currentDetails?.name || 'Company'} logo"
 					class="company-logo"
+					on:error={() => {}}
 				/>
 			</div>
 		{/if}
