@@ -99,7 +99,7 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"setHorizontalLine":    tasks.SetHorizontalLine,
 	"getHorizontalLines":   tasks.GetHorizontalLines,
 	"deleteHorizontalLine": tasks.DeleteHorizontalLine,
-	//"updateHorizontalLine": tasks.UpdateHorizontalLine,
+	"updateHorizontalLine": tasks.UpdateHorizontalLine,
 	//active
 
 	"getActive": tasks.GetActive,
