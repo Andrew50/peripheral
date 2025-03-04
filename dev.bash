@@ -84,3 +84,7 @@ docker exec -e POSTGRES_PASSWORD=devpassword dev-db-1 psql -U postgres -d postgr
 log "Development environment is ready!"
 log "To view logs: docker-compose -f docker-compose.dev.yaml logs -f"
 log "To stop: docker-compose -f docker-compose.dev.yaml down" 
+
+# Enter the log stream automatically
+log "Entering log stream. Press Ctrl+C to exit..."
+docker-compose -f docker-compose.dev.yaml -p dev logs -f 
