@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -78,18 +79,50 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 		}
 		defer resp.Body.Close()
 
+		// Check if the response status is OK
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("failed to fetch image, status code: %d", resp.StatusCode)
+		}
+
 		imageData, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return "", fmt.Errorf("failed to read image data: %v", err)
 		}
 
+		// If no image data was returned, return empty string
+		if len(imageData) == 0 {
+			return "", fmt.Errorf("empty image data received")
+		}
+
 		contentType := resp.Header.Get("Content-Type")
 		if contentType == "" {
-			// Default to image/svg+xml if Content-Type is not provided
-			contentType = "image/svg+xml"
+			// Try to detect content type from image data
+			contentType = http.DetectContentType(imageData)
+
+			// If still empty, default to a safe type based on URL extension
+			if contentType == "" || contentType == "application/octet-stream" {
+				if strings.HasSuffix(strings.ToLower(url), ".svg") {
+					contentType = "image/svg+xml"
+				} else if strings.HasSuffix(strings.ToLower(url), ".png") {
+					contentType = "image/png"
+				} else {
+					contentType = "image/jpeg"
+				}
+			}
+		}
+
+		// Ensure the content type doesn't already contain a data URL prefix
+		if strings.HasPrefix(contentType, "data:") {
+			return "", fmt.Errorf("invalid content type: %s", contentType)
 		}
 
 		base64Data := base64.StdEncoding.EncodeToString(imageData)
+
+		// Check if base64Data already contains a data URL prefix to prevent duplication
+		if strings.HasPrefix(base64Data, "data:") {
+			return base64Data, nil
+		}
+
 		return fmt.Sprintf("data:%s;base64,%s", contentType, base64Data), nil
 	}
 
@@ -166,7 +199,7 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 		}
 
 		if test {
-			log.Printf("Successfully updated details for %s", ticker)
+			//log.Printf("Successfully updated details for %s", ticker)
 		}
 
 		// Increment the security count

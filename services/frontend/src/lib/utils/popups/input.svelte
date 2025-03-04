@@ -21,10 +21,12 @@
 
 	const allKeys = ['ticker', 'timestamp', 'timeframe', 'extendedHours', 'price'] as const;
 	let currentSecurityResultRequest = 0;
+	let loadedSecurityResultRequest = -1;
+	let manualInputType: string = 'auto';
 
 	type InstanceAttributes = (typeof allKeys)[number];
 	let filterOptions = [];
-	let loadedSecurityResultRequest = -1;
+
 	privateRequest<[]>('getSecurityClassifications', {}).then((v: []) => {
 		filterOptions = v;
 	});
@@ -55,6 +57,119 @@
 		instance: {}
 	};
 	export const inputQuery: Writable<InputQuery> = writable({ ...inactiveInputQuery });
+
+	// Move validateInput here
+	async function validateInput(
+		inputString: string,
+		inputType: string
+	): Promise<{
+		inputValid: boolean;
+		securities: Instance[];
+	}> {
+		if (inputType === 'ticker') {
+			let isLoadingSecurities = true;
+			try {
+				const securities = await privateRequest<Instance[]>('getSecuritiesFromTicker', {
+					ticker: inputString
+				});
+				if (Array.isArray(securities) && securities.length > 0) {
+					return {
+						//inputValid: securities.some((v) => v.ticker === inputString),
+						inputValid: true,
+						securities: securities
+					};
+				}
+				return { inputValid: false, securities: [] };
+			} finally {
+				isLoadingSecurities = false;
+			}
+		} else if (inputType === 'timeframe') {
+			const regex = /^\d{1,3}[yqmwhds]?$/i;
+			return { inputValid: regex.test(inputString), securities: [] };
+		} else if (inputType === 'timestamp') {
+			const formats = ['yyyy-MM-dd H:m:ss', 'yyyy-MM-dd H:m', 'yyyy-MM-dd H', 'yyyy-MM-dd'];
+			for (const format of formats) {
+				try {
+					const parsedDate = parse(inputString, format, new Date());
+					if (!isNaN(parsedDate.getTime())) {
+						return { inputValid: true, securities: [] };
+					}
+				} catch {
+					/* try next format */
+				}
+			}
+			return { inputValid: false, securities: [] };
+		} else if (inputType === 'price') {
+			const price = parseFloat(inputString);
+			return { inputValid: !isNaN(price) && price > 0, securities: [] };
+		}
+		return { inputValid: false, securities: [] };
+	}
+
+	// Define determineInputType at module level
+	export function determineInputType(inputString: string): void {
+		const iQ = get(inputQuery);
+		let inputType = iQ.inputType;
+
+		// Only auto-classify if manualInputType is set to 'auto'
+		if (manualInputType === 'auto') {
+			if (inputString !== '') {
+				// Test for ticker - check for uppercase letters
+				if (iQ.possibleKeys.includes('ticker') && /^[A-Z]$/.test(inputString)) {
+					inputType = 'ticker';
+				} else if (iQ.possibleKeys.includes('price') && /^(?:\d*\.\d+|\d{3,})$/.test(inputString)) {
+					inputType = 'price';
+				} else if (
+					iQ.possibleKeys.includes('timeframe') &&
+					/^\d{1,2}[hdwmqs]?$/i.test(inputString)
+				) {
+					inputType = 'timeframe';
+				} else if (iQ.possibleKeys.includes('timestamp') && /^[\d-]+$/.test(inputString)) {
+					inputType = 'timestamp';
+				} else if (iQ.possibleKeys.includes('ticker')) {
+					// If it's a letter that isn't already matched as something else, default to ticker
+					if (/^[a-zA-Z]$/.test(inputString)) {
+						inputType = 'ticker';
+						// If the letter is lowercase, convert it to uppercase for ticker input
+						if (inputString !== inputString.toUpperCase()) {
+							inputQuery.update((q) => ({
+								...q,
+								inputString: inputString.toUpperCase()
+							}));
+						}
+					} else {
+						inputType = '';
+					}
+				} else {
+					inputType = '';
+				}
+			} else {
+				inputType = '';
+			}
+		} else {
+			// Use the manually selected input type
+			inputType = manualInputType;
+		}
+
+		// Update the input type
+		inputQuery.update((v) => ({
+			...v,
+			inputType
+		}));
+
+		// Trigger validation
+		currentSecurityResultRequest++;
+		const thisSecurityResultRequest = currentSecurityResultRequest;
+		validateInput(inputString.toUpperCase(), inputType).then((validationResp) => {
+			if (thisSecurityResultRequest === currentSecurityResultRequest) {
+				inputQuery.update((v: InputQuery) => ({
+					...v,
+					...validationResp
+				}));
+				loadedSecurityResultRequest = thisSecurityResultRequest;
+			}
+		});
+	}
 
 	// Hold the reject function of the currently active promise (if any)
 	let activePromiseReject: ((reason?: any) => void) | null = null;
@@ -110,6 +225,16 @@
 			status: 'initializing'
 		}));
 
+		// Wait for next tick to ensure UI updates
+		await tick();
+
+		// If we have an initial input string, determine its type immediately
+		if (initialInputString) {
+			await tick(); // ensure UI is ready
+			// Use setTimeout to ensure this runs after all other synchronous code
+			setTimeout(() => determineInputType(initialInputString), 0);
+		}
+
 		// Return a new promise that resolves when input is complete or rejects on cancellation.
 		return new Promise<Instance>((resolve, reject) => {
 			// Save the reject function so a subsequent call can cancel this query.
@@ -146,8 +271,6 @@
 
 	let isLoadingSecurities = false;
 
-	let manualInputType: string = 'auto';
-
 	// Add this reactive statement
 	$: if (manualInputType !== 'auto' && $inputQuery.status === 'active') {
 		inputQuery.update((v) => ({
@@ -159,61 +282,6 @@
 	interface ValidateResponse {
 		inputValid: boolean;
 		securities: Instance[];
-	}
-
-	async function validateInput(inputString: string, inputType: string): Promise<ValidateResponse> {
-		if (inputType === 'ticker') {
-			isLoadingSecurities = true;
-			try {
-				const securities = await privateRequest<Instance[]>('getSecuritiesFromTicker', {
-					ticker: inputString
-				});
-				if (Array.isArray(securities) && securities.length > 0) {
-					return {
-						//inputValid: securities.some((v) => v.ticker === inputString),
-						inputValid: true,
-						securities: securities
-					};
-				}
-				return { inputValid: false, securities: [] };
-			} finally {
-				isLoadingSecurities = false;
-			}
-		} else if (inputType === 'timeframe') {
-			const regex = /^\d{1,3}[yqmwhds]?$/i;
-			return { inputValid: regex.test(inputString), securities: [] };
-		} else if (inputType === 'timestamp') {
-			const formats = ['yyyy-MM-dd H:m:ss', 'yyyy-MM-dd H:m', 'yyyy-MM-dd H', 'yyyy-MM-dd'];
-			for (const format of formats) {
-				try {
-					const parsedDate = parse(inputString, format, new Date());
-					if (!isNaN(parsedDate.getTime())) {
-						return { inputValid: true, securities: [] };
-					}
-				} catch {
-					/* try next format */
-				}
-			}
-			return { inputValid: false, securities: [] };
-		} else if (inputType === 'price') {
-			const price = parseFloat(inputString);
-			return { inputValid: !isNaN(price) && price > 0, securities: [] };
-		}
-		return { inputValid: false, securities: [] };
-	}
-
-	async function waitForSecurityResult(): Promise<void> {
-		return new Promise((resolve) => {
-			const check = () => {
-				if (loadedSecurityResultRequest === currentSecurityResultRequest) {
-					resolve();
-				} else {
-					// Check again after 50ms (or adjust as needed)
-					setTimeout(check, 50);
-				}
-			};
-			check();
-		});
 	}
 
 	async function enterInput(iQ: InputQuery, tickerIndex: number = 0): Promise<InputQuery> {
@@ -258,24 +326,19 @@
 		return iQ;
 	}
 
-	/*async function fetchSecurityDetails(securities: Instance[]): Promise<Instance[]> {
-		(securities);
-		return Promise.all(
-			securities.map(async (security) => {
-				const details = await privateRequest<Instance>('getTickerDetails', {
-					securityId: security.securityId,
-					ticker: security.ticker,
-					timestamp: security.timestamp
-				}).catch((v) => {
-					console.warn(`get Details failed for ${security} ${v}`);
-				});
-				return {
-					...security,
-					...details
-				};
-			})
-		);
-	}*/
+	async function waitForSecurityResult(): Promise<void> {
+		return new Promise((resolve) => {
+			const check = () => {
+				if (loadedSecurityResultRequest === currentSecurityResultRequest) {
+					resolve();
+				} else {
+					// Check again after 50ms (or adjust as needed)
+					setTimeout(check, 50);
+				}
+			};
+			check();
+		});
+	}
 
 	// Mark handleKeyDown as async so we can await the validate call if needed.
 	async function handleKeyDown(event: KeyboardEvent): Promise<void> {
@@ -286,6 +349,11 @@
 		// Make sure we're in active state
 		if (currentState.status !== 'active') {
 			return;
+		}
+
+		// Allow Ctrl+R to reload the page
+		if (event.ctrlKey && event.key === 'r') {
+			return; // Don't prevent default, allow browser to handle the reload
 		}
 
 		// Always prevent default behavior for our captured keys to avoid browser handling
@@ -329,7 +397,18 @@
 			(event.key === ' ' && iQ.inputType === 'timestamp')
 		) {
 			// Transform the key based on input type
-			const key = iQ.inputType === 'timeframe' ? event.key : event.key.toUpperCase();
+			let key;
+			if (iQ.inputType === 'ticker') {
+				// Always uppercase for tickers
+				key = event.key.toUpperCase();
+			} else if (iQ.inputType === 'timeframe') {
+				// Keep original case for timeframe
+				key = event.key;
+			} else {
+				// Default transformation based on context
+				key = event.key.toUpperCase();
+			}
+
 			const newInputString = iQ.inputString + key;
 
 			// Update inputString immediately
@@ -352,57 +431,6 @@
 			// Then determine input type
 			determineInputType(newInputString);
 		}
-	}
-
-	function determineInputType(inputString: string): void {
-		const iQ = get(inputQuery);
-		let inputType = iQ.inputType;
-
-		// Only auto-classify if manualInputType is set to 'auto'
-		if (manualInputType === 'auto') {
-			if (inputString !== '') {
-				if (iQ.possibleKeys.includes('ticker') && /^[A-Z]$/.test(inputString)) {
-					inputType = 'ticker';
-				} else if (iQ.possibleKeys.includes('price') && /^(?:\d*\.\d+|\d{3,})$/.test(inputString)) {
-					inputType = 'price';
-				} else if (
-					iQ.possibleKeys.includes('timeframe') &&
-					/^\d{1,2}[hdwmqs]?$/i.test(inputString)
-				) {
-					inputType = 'timeframe';
-				} else if (iQ.possibleKeys.includes('timestamp') && /^[\d-]+$/.test(inputString)) {
-					inputType = 'timestamp';
-				} else if (iQ.possibleKeys.includes('ticker')) {
-					inputType = 'ticker';
-				} else {
-					inputType = '';
-				}
-			} else {
-				inputType = '';
-			}
-		} else {
-			// Use the manually selected input type
-			inputType = manualInputType;
-		}
-
-		// Update the input type
-		inputQuery.update((v) => ({
-			...v,
-			inputType
-		}));
-
-		// Trigger validation
-		currentSecurityResultRequest++;
-		const thisSecurityResultRequest = currentSecurityResultRequest;
-		validateInput(inputString, inputType).then((validationResp: ValidateResponse) => {
-			if (thisSecurityResultRequest === currentSecurityResultRequest) {
-				inputQuery.update((v: InputQuery) => ({
-					...v,
-					...validationResp
-				}));
-				loadedSecurityResultRequest = thisSecurityResultRequest;
-			}
-		});
 	}
 
 	// onTouch handler (if needed) now removes the UI by updating via update() too.
@@ -441,6 +469,12 @@
 							input.removeEventListener('keydown', keydownHandler); // Remove any existing listener first
 							input.addEventListener('keydown', keydownHandler);
 							input.setAttribute('data-has-listener', 'true');
+
+							// Process initial input string if present
+							if (v.inputString) {
+								// Ensure the input string is processed after the component is fully initialized
+								setTimeout(() => determineInputType(v.inputString), 10);
+							}
 						}
 
 						// Add a click handler to the document to detect clicks outside the popup
@@ -682,16 +716,20 @@
 												>
 													{#if sec.icon}
 														<img
-															src={`data:image/jpeg;base64,${sec.icon}`}
+															src={sec.icon.startsWith('data:')
+																? sec.icon
+																: `data:image/jpeg;base64,${sec.icon}`}
 															alt="Security Image"
 															style="max-width: 100%; max-height: 100%; object-fit: contain;"
+															on:error={() => {}}
 														/>
 													{/if}
 													<!--{#if sec.logo}
 														<img
-															src={`data:image/svg+xml;base64,${sec.logo}`}
+															src={sec.logo.startsWith('data:') ? sec.logo : `data:image/svg+xml;base64,${sec.logo}`}
 															alt="Security Image"
 															style="max-width: 100%; max-height: 100%; object-fit: contain;"
+															on:error={() => {}}
 														/>
 													{/if}-->
 												</div>

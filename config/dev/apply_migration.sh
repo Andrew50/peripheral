@@ -4,7 +4,7 @@ set -e
 # Check if a migration file was provided
 if [ $# -lt 1 ]; then
   echo "Usage: $0 <migration_file>"
-  echo "Example: $0 db/rollouts/007_fix_cik_type.sql"
+  echo "Example: $0 ../../services/db/rollouts/007_fix_cik_type.sql"
   exit 1
 fi
 

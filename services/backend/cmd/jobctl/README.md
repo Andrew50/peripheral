@@ -6,6 +6,7 @@ JobCTL is a command-line interface for managing and monitoring backend jobs. It 
 - Check job status
 - Run jobs manually
 - Monitor the job queue
+- Monitor worker task execution
 
 ## Usage
 
@@ -57,6 +58,12 @@ Run a specific job:
 jobctl run [job_name]
 ```
 
+When running a job that queues tasks for the worker, the CLI will automatically:
+1. Detect if new tasks were added to the queue
+2. Display information about the queued tasks
+3. Monitor the tasks until they complete or timeout
+4. Show the results or errors from the worker
+
 ### Check Queue Status
 
 Check the status of the job queue:
@@ -64,6 +71,16 @@ Check the status of the job queue:
 ```bash
 jobctl queue
 ```
+
+### Monitor a Task
+
+Monitor a specific task by its ID:
+
+```bash
+jobctl monitor [task_id]
+```
+
+This is useful when you have a task ID from a previous operation and want to check its status and output.
 
 ### Help
 
@@ -93,4 +110,9 @@ Check the status of the sector update job:
 Check the job queue:
 ```bash
 ./backend/jobctl queue
+```
+
+Monitor a specific task:
+```bash
+./backend/jobctl monitor 123e4567-e89b-12d3-a456-426614174000
 ``` 

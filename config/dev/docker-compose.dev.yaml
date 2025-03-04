@@ -1,13 +1,13 @@
 services:
   backend:
     build:
-      context: ./backend
+      context: ../../services/backend
       dockerfile: Dockerfile.dev
     restart: unless-stopped
     ports:
       - "5057:5057"
     volumes:
-      - ./backend/:/app
+      - ../../services/backend/:/app
     networks:
       - compose_network
     environment:
@@ -17,7 +17,7 @@ services:
       - POSTGRES_DB=postgres
   db:
     build:
-      context: ./db
+      context: ../../services/db
       dockerfile: Dockerfile.dev
     ports:
       - "5432:5432"
@@ -25,7 +25,7 @@ services:
       - compose_network
     volumes:
       - db:/var/lib/postgresql/data
-      - ./db/rollouts:/tmp/rollouts:rw
+      - ../../services/db/rollouts:/tmp/rollouts:rw
     restart: unless-stopped
     environment:
       - POSTGRES_USER=postgres
@@ -34,10 +34,10 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ../../services/frontend
       dockerfile: Dockerfile.dev
     volumes:
-      - ./frontend:/app
+      - ../../services/frontend:/app
       - /app/node_modules
     environment:
       - WATCHPACK_POLLING=true #enable polling
@@ -47,7 +47,7 @@ services:
 
   tf:
     build:
-      context: ./tf
+      context: ../../services/tf
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
@@ -63,12 +63,12 @@ services:
 
   worker:
     build:
-      context: ./worker
+      context: ../../services/worker
       dockerfile: Dockerfile.dev
     networks:
       - compose_network
     volumes:
-      - ./worker:/app #for hot reload
+      - ../../services/worker:/app #for hot reload
       - tf:/models
     restart: unless-stopped
     environment:
@@ -88,7 +88,7 @@ services:
 
   cache:
     build:
-      context: ./cache
+      context: ../../services/cache
       dockerfile: Dockerfile
     ports:
       - 6379:6379
