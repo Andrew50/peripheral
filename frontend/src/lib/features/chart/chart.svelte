@@ -318,59 +318,59 @@
 									eventSeries.setData([]);
 									return; // Exit early
 								}
-								
-								const eventsByTime = new Map<number, Array<{ 
-									type: string; 
-									title: string; 
-									url?: string; 
-									value?: string;
-									exDate?: string;
-									payoutDate?: string;
-								}>>();
+
+								const eventsByTime = new Map<
+									number,
+									Array<{
+										type: string;
+										title: string;
+										url?: string;
+										value?: string;
+										exDate?: string;
+										payoutDate?: string;
+									}>
+								>();
 
 								events.forEach((event) => {
 									// Convert timestamp from UTC milliseconds to EST seconds
-									event.timestamp = UTCSecondstoESTSeconds(
-										event.timestamp / 1000
-									) as UTCTimestamp;
-									
+									event.timestamp = UTCSecondstoESTSeconds(event.timestamp / 1000) as UTCTimestamp;
+
 									// Round to the nearest timeframe
 									const roundedTime =
-										Math.floor(event.timestamp / chartTimeframeInSeconds) *
-										chartTimeframeInSeconds;
+										Math.floor(event.timestamp / chartTimeframeInSeconds) * chartTimeframeInSeconds;
 
 									if (!eventsByTime.has(roundedTime)) {
 										eventsByTime.set(roundedTime, []);
 									}
-									
+
 									// Parse the JSON string into an object
 									let valueObj = {};
 									try {
 										valueObj = JSON.parse(event.value);
 									} catch (e) {
-										console.error("Failed to parse event value:", e, event.value);
+										console.error('Failed to parse event value:', e, event.value);
 									}
-									
+
 									// Create proper event object based on type
-									if (event.type === "sec_filing") {
+									if (event.type === 'sec_filing') {
 										eventsByTime.get(roundedTime)?.push({
 											type: 'sec_filing',
-											title: valueObj.type || "SEC Filing",
+											title: valueObj.type || 'SEC Filing',
 											url: valueObj.url
 										});
-									} else if (event.type === "split") {
+									} else if (event.type === 'split') {
 										eventsByTime.get(roundedTime)?.push({
 											type: 'split',
-											title: `Split: ${valueObj.ratio || "unknown"}`,
+											title: `Split: ${valueObj.ratio || 'unknown'}`,
 											value: valueObj.ratio
 										});
-									} else if (event.type === "dividend") {
+									} else if (event.type === 'dividend') {
 										eventsByTime.get(roundedTime)?.push({
 											type: 'dividend',
-											title: `Dividend: $${valueObj.amount || "0.00"}`,
+											title: `Dividend: $${valueObj.amount || '0.00'}`,
 											value: valueObj.amount,
-											exDate: valueObj.exDate || "Unknown",
-											payoutDate: valueObj.payDate || "Unknown"
+											exDate: valueObj.exDate || 'Unknown',
+											payoutDate: valueObj.payDate || 'Unknown'
 										});
 									}
 								});
@@ -380,13 +380,13 @@
 								eventsByTime.forEach((events, time) => {
 									eventData.push({
 										time: time as UTCTimestamp,
-										events: events,
+										events: events
 									});
 								});
 
 								// Adjust events to nearest trading days
 								eventData = adjustEventsToTradingDays(eventData, chartCandleSeries.data());
-								
+
 								// Set the data on the event markers series
 								eventSeries.setData(eventData);
 							});
@@ -394,7 +394,6 @@
 					} catch (error) {
 						console.warn('Failed to fetch chart events:', error);
 					}
-				
 
 					if (inst.direction == 'forward') {
 						const visibleRange = chart.timeScale().getVisibleRange();
@@ -1019,12 +1018,15 @@
 		chartContainer.addEventListener('keydown', (event) => {
 			setActiveChart(chartId, currentChartInstance);
 			if (event.key == 'r' && event.altKey) {
-				//alt + r reset view
+				// alt + r reset view
 				if (currentChartInstance.timestamp && !$streamInfo.replayActive) {
 					queryChart({ timestamp: 0 });
 				} else {
 					chart.timeScale().resetTimeScale();
 				}
+
+				// IMPORTANT: Prevent fall-through so Alt+R doesn't open the input window
+				return;
 			} else if (event.key == 'h' && event.altKey) {
 				addHorizontalLine(
 					chartCandleSeries.coordinateToPrice(latestCrosshairPositionY) || 0,
@@ -1032,7 +1034,13 @@
 				);
 			} else if (event.key == 's' && event.altKey) {
 				handleScreenshot(chartId);
-			} else if (event.key == 'Tab' || /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
+			} else if (
+				event.key === 'Tab' ||
+				(!event.ctrlKey &&
+					!event.altKey &&
+					!event.metaKey &&
+					/^[a-zA-Z0-9]$/.test(event.key.toLowerCase()))
+			) {
 				// goes to input popup
 				if ($streamInfo.replayActive) {
 					currentChartInstance.timestamp = 0;
@@ -1272,7 +1280,7 @@
 			const rect = container.getBoundingClientRect();
 			const x = e.clientX - rect.left;
 			const y = e.clientY - rect.top;
-			
+
 			// Pass mouse move to event marker view
 			if (eventMarkerView && eventMarkerView.handleMouseMove(x, y)) {
 				// If the state changed and we need a redraw, request one
@@ -1338,15 +1346,15 @@
 		}
 	});
 
-	
-
 	// Handle event marker clicks
 	function handleEventClick(events: EventMarker['events'], x: number, y: number) {
 		// Check if clicking on the same event that's already selected
-		if (selectedEvent && 
-			Math.abs(selectedEvent.x - x) < 10 && 
+		if (
+			selectedEvent &&
+			Math.abs(selectedEvent.x - x) < 10 &&
 			Math.abs(selectedEvent.y - y) < 10 &&
-			selectedEvent.events.length === events.length) {
+			selectedEvent.events.length === events.length
+		) {
 			// If clicking on the same event, close the popup
 			selectedEvent = null;
 		} else {
@@ -1369,7 +1377,6 @@
 	function closeEventPopup() {
 		selectedEvent = null;
 	}
-
 </script>
 
 <div class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
@@ -1405,7 +1412,12 @@
 		<div class="event-content">
 			{#each selectedEvent.events as event}
 				{#if event.type === 'sec_filing'}
-					<a href={event.url} target="_blank" rel="noopener noreferrer" class="event-row filing-link">
+					<a
+						href={event.url}
+						target="_blank"
+						rel="noopener noreferrer"
+						class="event-row filing-link"
+					>
 						<span class="event-type">{event.title}</span>
 						<span class="event-link">View →</span>
 					</a>
@@ -1509,27 +1521,27 @@
 		color: #4caf50;
 		font-size: 0.8rem;
 	}
-	
+
 	.filing-link {
 		cursor: pointer;
 		transition: background-color 0.2s;
 	}
-	
+
 	.filing-link:hover {
 		background-color: #333;
 	}
-	
+
 	.dividend-row {
 		flex-direction: column;
 		align-items: flex-start;
 	}
-	
+
 	.dividend-details {
 		display: flex;
 		flex-direction: column;
 		width: 100%;
 	}
-	
+
 	.dividend-date {
 		font-size: 0.8rem;
 		color: #bbb;
