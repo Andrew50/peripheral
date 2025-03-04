@@ -86,11 +86,36 @@
 	}
 
 	function editHorizontalLinePrice() {
-		('updating price line price');
-
 		if ($drawingMenuProps.selectedLine !== null) {
-			addHorizontalLine($drawingMenuProps.selectedLinePrice, $drawingMenuProps.securityId);
-			deleteHorizontalLine($drawingMenuProps.selectedLine);
+			// Update the existing line instead of creating a new one and deleting the old one
+			const price = parseFloat($drawingMenuProps.selectedLinePrice.toFixed(2));
+			$drawingMenuProps.selectedLine.applyOptions({
+				price: price,
+				title: `Price: ${price}`
+			});
+			
+			// Update the stored price in horizontalLines array
+			const lineIndex = $drawingMenuProps.horizontalLines.findIndex(
+				(line) => line.line === $drawingMenuProps.selectedLine
+			);
+			
+			if (lineIndex !== -1) {
+				$drawingMenuProps.horizontalLines[lineIndex].price = price;
+				
+				// Update in backend
+				privateRequest<void>(
+					'updateHorizontalLine',
+					{
+						id: $drawingMenuProps.horizontalLines[lineIndex].id,
+						price: price,
+						securityId: $drawingMenuProps.securityId
+					},
+					true
+				);
+			}
+			
+			// Keep the menu open
+			// No need to reset selectedLine or active state
 		}
 	}
 
