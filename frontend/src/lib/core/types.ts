@@ -63,6 +63,7 @@ export interface Settings {
     divideTaS: boolean;
     filterTaS: boolean;
     showFilings: boolean;
+    enableScreensaver: boolean;
 }
 export interface StreamInfo {
     status: 'replay' | 'realtime' | 'paused';

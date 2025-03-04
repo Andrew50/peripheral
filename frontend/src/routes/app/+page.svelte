@@ -115,7 +115,7 @@
 	// Add state variables after other state declarations
 	let screensaverActive = false;
 	let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
-	const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
+	const INACTIVITY_TIMEOUT = 5 * 1000; // 5 seconds in milliseconds
 
 	// Add a reactive statement to handle window events
 	$: if (draggingWindowId !== null) {
@@ -162,7 +162,7 @@
 			// Generate avatar based on username
 			const initial = username.charAt(0).toUpperCase();
 			profilePic = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">${initial}</text></svg>`;
-			
+
 			// Store it for future use
 			sessionStorage.setItem('profilePic', profilePic);
 		} else {
@@ -256,11 +256,23 @@
 
 		// Setup activity listeners
 		if (browser) {
-			const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+			// Use more specific events that indicate user activity
+			const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
+
+			// Remove any existing listeners first to avoid duplicates
+			activityEvents.forEach((event) => {
+				document.removeEventListener(event, resetInactivityTimer);
+			});
+
+			// Add the listeners
 			activityEvents.forEach((event) => {
 				document.addEventListener(event, resetInactivityTimer);
 			});
+
+			// Initialize the timer
 			resetInactivityTimer();
+
+			console.log('Screensaver activity listeners initialized');
 		}
 
 		// Clean up subscription on component destroy
@@ -273,16 +285,22 @@
 		if (inactivityTimer) {
 			clearTimeout(inactivityTimer);
 		}
-		const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+
+		// Clean up all activity listeners
 		if (browser && document) {
 			window.removeEventListener('resize', updateChartWidth);
 			// Remove global keyboard event listener using the stored handler
 			document.removeEventListener('keydown', keydownHandler);
 			console.log('Removed global keydown handler');
 			stopSidebarResize();
+
+			// Clean up all activity listeners
+			const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
 			activityEvents.forEach((event) => {
 				document.removeEventListener(event, resetInactivityTimer);
 			});
+
+			console.log('Cleaned up screensaver activity listeners');
 		}
 	});
 
@@ -570,13 +588,13 @@
 			console.log('Using username initial for avatar:', initial);
 			// Use a simpler SVG format to ensure browser compatibility
 			const avatar = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">${initial}</text></svg>`;
-			
+
 			// Update the profilePic value so we don't regenerate each time
 			profilePic = avatar;
 			if (browser) {
 				sessionStorage.setItem('profilePic', avatar);
 			}
-			
+
 			return avatar;
 		}
 
@@ -584,10 +602,10 @@
 		console.log('No username available, using ? fallback');
 		// Use a simpler SVG format to ensure browser compatibility
 		const fallbackAvatar = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">?</text></svg>`;
-		
+
 		// Store this fallback
 		profilePic = fallbackAvatar;
-		
+
 		return fallbackAvatar;
 	}
 
@@ -599,7 +617,7 @@
 	function handleProfilePicError() {
 		console.log('Profile picture failed to load:', profilePic);
 		profilePicError = true;
-		
+
 		// Generate a fallback immediately
 		if (username) {
 			const initial = username.charAt(0).toUpperCase();
@@ -607,12 +625,12 @@
 		} else {
 			profilePic = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">?</text></svg>`;
 		}
-		
+
 		// Update the stored value with our fallback
 		if (browser) {
 			sessionStorage.setItem('profilePic', profilePic);
 		}
-		
+
 		// Force refresh
 		currentProfileDisplay = profilePic;
 		profileIconKey++;
@@ -667,6 +685,7 @@
 		}
 		if (!screensaverActive) {
 			inactivityTimer = setTimeout(() => {
+				// Only activate screensaver, don't hide the chart
 				screensaverActive = true;
 			}, INACTIVITY_TIMEOUT);
 		}
@@ -674,6 +693,10 @@
 
 	function toggleScreensaver() {
 		screensaverActive = !screensaverActive;
+		// If turning off screensaver, reset the inactivity timer
+		if (!screensaverActive) {
+			resetInactivityTimer();
+		}
 	}
 
 	// Add reactive statements to update the profile icon when data changes
@@ -726,6 +749,9 @@
 				<!-- Chart area -->
 				<div class="chart-wrapper">
 					<ChartContainer width={chartWidth} />
+					{#if screensaverActive}
+						<Screensaver on:exit={() => (screensaverActive = false)} />
+					{/if}
 				</div>
 
 				<!-- Bottom windows container -->
@@ -933,11 +959,11 @@
 			<button class="profile-button" on:click={toggleSettings} aria-label="Toggle Settings">
 				<!-- Add key to force re-render when the profile changes -->
 				{#key profileIconKey}
-					<img 
-						src={getProfileDisplay()} 
-						alt="Profile" 
-						class="pfp" 
-						on:error={handleProfilePicError} 
+					<img
+						src={getProfileDisplay()}
+						alt="Profile"
+						class="pfp"
+						on:error={handleProfilePicError}
 					/>
 				{/key}
 			</button>
@@ -966,20 +992,6 @@
 				</div>
 			</div>
 		</div>
-	{/if}
-
-	{#if screensaverActive}
-		<button
-			class="screensaver-overlay"
-			on:click={() => (screensaverActive = false)}
-			on:keydown={(e) => {
-				if (e.key === 'Enter' || e.key === 'Space') {
-					screensaverActive = false;
-				}
-			}}
-		>
-			<Screensaver />
-		</button>
 	{/if}
 </div>
 
