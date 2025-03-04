@@ -2,7 +2,7 @@
 backend/tmp/main
 backend/app.log
 worker/__pycache__
-worker/core
+worker/core*
 db/backups
 worker/venv
 backups/

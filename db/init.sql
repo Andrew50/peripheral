@@ -32,7 +32,7 @@ CREATE TABLE securities (
     industry varchar(100),
     minDate timestamp,
     maxDate timestamp,
-    cik int,
+    cik bigint,
     unique (ticker, minDate),
     unique (ticker, maxDate),
     unique (securityid, minDate),

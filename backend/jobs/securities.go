@@ -231,7 +231,7 @@ func updateSecurityCik(conn *utils.Conn) error {
 
 	// Parse the JSON response
 	var secData map[string]struct {
-		CikStr int    `json:"cik_str"`
+		CikStr int64  `json:"cik_str"`
 		Ticker string `json:"ticker"`
 		Title  string `json:"title"`
 	}

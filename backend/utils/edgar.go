@@ -353,7 +353,7 @@ func fetchCIKFromSEC(ticker string) (string, error) {
 
 	// The SEC returns a map of numbered entries
 	var result map[string]struct {
-		CIK    int    `json:"cik_str"`
+		CIK    int64  `json:"cik_str"`
 		Ticker string `json:"ticker"`
 		Name   string `json:"title"`
 	}

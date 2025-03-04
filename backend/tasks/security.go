@@ -39,7 +39,7 @@ type GetMarketCapArgs struct {
 }
 
 type GetMarketCapResults struct {
-	MarketCap int `json:"marketCap"`
+	MarketCap int64 `json:"marketCap"`
 }
 
 func GetMarketCap(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -57,7 +57,7 @@ func GetMarketCap(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		return GetMarketCapResults{MarketCap: 0}, nil
 	}
 
-	return GetMarketCapResults{MarketCap: int(details.MarketCap)}, nil
+	return GetMarketCapResults{MarketCap: int64(details.MarketCap)}, nil
 }
 
 type GetPrevCloseArgs struct {
@@ -404,34 +404,54 @@ func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 		}
 		defer resp.Body.Close()
 
+		// Check if the response status is OK
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("failed to fetch image, status code: %d", resp.StatusCode)
+		}
+
 		imageData, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return "", fmt.Errorf("failed to read image data: %v", err)
 		}
 
+		// If no image data was returned, return empty string
+		if len(imageData) == 0 {
+			return "", fmt.Errorf("empty image data received")
+		}
+
 		contentType := resp.Header.Get("Content-Type")
 		if contentType == "" {
-			// Default to image/svg+xml if Content-Type is not provided
-			contentType = "image/svg+xml"
+			// Try to detect content type from image data
+			contentType = http.DetectContentType(imageData)
+
+			// If still empty, default to a safe type based on URL extension
+			if contentType == "" || contentType == "application/octet-stream" {
+				if strings.HasSuffix(strings.ToLower(url), ".svg") {
+					contentType = "image/svg+xml"
+				} else if strings.HasSuffix(strings.ToLower(url), ".png") {
+					contentType = "image/png"
+				} else {
+					contentType = "image/jpeg"
+				}
+			}
 		}
 
 		base64Data := base64.StdEncoding.EncodeToString(imageData)
 		return fmt.Sprintf("data:%s;base64,%s", contentType, base64Data), nil
 	}
 
-	// Fetch both logo and icon
+	// Fetch both logo and icon with proper error handling
+	logoBase64, logoErr := fetchImage(details.Branding.LogoURL)
+	if logoErr != nil {
+		fmt.Printf("Warning: Failed to fetch logo: %v\n", logoErr)
+		logoBase64 = "" // Set to empty string on error
+	}
 
-	logoBase64, err := fetchImage(details.Branding.LogoURL)
-	iconBase64, err := fetchImage(details.Branding.IconURL)
-	/*
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch logo: %v", err)	const defaultIcons = {
-			stock: '<svg>...</svg>', // Add your default SVG content
-			fund: '<svg>...</svg>',
-			futures: '<svg>...</svg>',
-			forex: '<svg>...</svg>',
-			indices: '<svg>...</svg>'
-		} as const;*/
+	iconBase64, iconErr := fetchImage(details.Branding.IconURL)
+	if iconErr != nil {
+		fmt.Printf("Warning: Failed to fetch icon: %v\n", iconErr)
+		iconBase64 = "" // Set to empty string on error
+	}
 
 	response := TickerDetailsResponse{
 		Ticker:                      details.Ticker,

@@ -74,6 +74,7 @@ jobs:
         run: |
           cd backend
           go mod download
+          go install honnef.co/go/tools/cmd/staticcheck@latest
 
       - name: Go Lint
         uses: golangci/golangci-lint-action@v3
@@ -84,7 +85,14 @@ jobs:
           skip-cache: true
           skip-pkg-cache: true
           skip-build-cache: true
-          # Remove the only-new-issues parameter since it requires fetching the patch
+          # Fail on any issues
+          only-new-issues: false
+
+      - name: Go Staticcheck
+        run: |
+          cd backend
+          # Run staticcheck with strict settings to catch unused variables, error handling issues, etc.
+          staticcheck -checks=all ./...
 
       - name: Go Build
         run: |
@@ -118,14 +126,14 @@ jobs:
         run: |
           cd worker
           # stop the build if there are Python syntax errors or undefined names
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || echo "Flake8 issues found, but continuing build process"
-          # exit-zero treats all errors as warnings - no longer failing on style issues
-          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Now fail on style issues as well
+          flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
 
       - name: Format check with Black
         run: |
           cd worker
-          black --check --diff . || echo "Black formatting issues found, but continuing build process"
+          black --check --diff .
 
       - name: Basic import check
         run: |
@@ -157,14 +165,14 @@ jobs:
       - name: Lint
         run: |
           cd frontend
-          # Use the flat config file and continue even if there are errors
-          npx eslint . --max-warnings=10 || echo "ESLint issues found, but continuing build process"
+          # Fail on any ESLint warnings
+          npx eslint . --max-warnings=0
 
       - name: Type check
         run: |
           cd frontend
-          # Use warning threshold but with a higher error limit
-          npx svelte-check --threshold warning --fail-on-warnings=false --fail-on-hints=false || echo "Type checking issues found, but continuing build process"
+          # Fail on warnings and hints
+          npx svelte-check --threshold warning --fail-on-warnings=true --fail-on-hints=true
 
       - name: Build
         run: |
