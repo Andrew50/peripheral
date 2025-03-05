@@ -361,6 +361,11 @@
 			return;
 		}
 
+		// Ignore any keyboard events with Control or Alt modifiers
+		if (event.ctrlKey || event.altKey) {
+			return; // Allow the browser to handle these key combinations
+		}
+
 		// Allow Ctrl+R to reload the page
 		if (event.ctrlKey && event.key === 'r') {
 			return; // Don't prevent default, allow browser to handle the reload
