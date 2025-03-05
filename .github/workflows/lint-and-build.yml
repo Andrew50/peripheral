@@ -100,7 +100,7 @@ jobs:
         with:
           version: latest
           working-directory: services/backend
-          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number --max-issues-per-linter=10 --max-same-issues=5
+          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number --max-issues-per-linter=10 --max-same-issues=5 --build-tags=all
           skip-cache: true
           skip-pkg-cache: true
           skip-build-cache: true
@@ -113,16 +113,16 @@ jobs:
           cd services/backend
           # Run staticcheck with less strict settings
           # First run to print all issues
-          staticcheck -checks=all,-ST1000,-ST1003,-ST1016 ./... || true
+          staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016 ./... || true
           # Second run to actually fail the build only on critical issues
-          staticcheck -checks=all,-ST1000,-ST1003,-ST1016,-SA4006,-SA5000,-SA6000 ./...
+          staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016,-SA4006,-SA5000,-SA6000 ./...
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Go Build
         run: |
           cd services/backend
-          go build -v ./...
+          go build -v -tags=all ./...
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 

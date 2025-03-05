@@ -27,7 +27,7 @@
 	let currentBid = 0;
 	let currentAsk = 0;
 	const maxLength = 20;
-	let prevSecId = -1;
+	let prevSecId: number = -1;
 	let divideTaS = get(settings).divideTaS;
 	let filterTaS = get(settings).filterTaS;
 
@@ -64,8 +64,11 @@
 	// Subscribe to instance changes
 	let currentSecurityId: number | null = null;
 	instance.subscribe((instance: Instance) => {
-		if (!instance.securityId || instance.securityId === prevSecId) return;
-		currentSecurityId = instance.securityId;
+		// Convert securityId to number or use null if it doesn't exist
+		const securityIdNum = instance.securityId !== undefined ? Number(instance.securityId) : null;
+
+		if (!securityIdNum || securityIdNum === prevSecId) return;
+		currentSecurityId = securityIdNum;
 		// Release previous streams
 		releaseTrade();
 		releaseQuote();
@@ -77,7 +80,7 @@
 		// Reset trades
 		allTrades = [];
 
-		prevSecId = instance.securityId ?? -1;
+		prevSecId = securityIdNum;
 	});
 
 	// Cleanup on destroy

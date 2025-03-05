@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	import { goto } from '$app/navigation';
 	import '$lib/core/global.css';
 	import { onMount } from 'svelte';
@@ -12,7 +12,7 @@
 		});
 	});
 
-	function navigateTo(page) {
+	function navigateTo(page: string) {
 		goto(page);
 		isMobileMenuOpen = false;
 	}
