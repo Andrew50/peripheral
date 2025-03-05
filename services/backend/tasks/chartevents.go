@@ -15,6 +15,7 @@ import (
 
 	"github.com/polygon-io/client-go/rest/models"
 )
+
 // GetChartEventsArgs represents a structure for handling GetChartEventsArgs data.
 type GetChartEventsArgs struct {
 	SecurityID        int   `json:"securityId"`
@@ -22,12 +23,14 @@ type GetChartEventsArgs struct {
 	To                int64 `json:"to"`
 	IncludeSECFilings bool  `json:"includeSECFilings"`
 }
+
 // ChartEvent represents a structure for handling ChartEvent data.
 type ChartEvent struct {
 	Timestamp int64  `json:"timestamp"`
 	Type      string `json:"type"`
 	Value     string `json:"value"`
 }
+
 // GetChartEvents performs operations related to GetChartEvents functionality.
 func GetChartEvents(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetChartEventsArgs
@@ -191,7 +194,7 @@ func GetChartEvents(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inte
 			})
 			if err != nil {
 				// Log the error but don't fail the entire request
-				secFilingErr = fmt.Errorf("Error fetching SEC filings for %s: %v", ticker, err)
+				secFilingErr = fmt.Errorf("error fetching SEC filings for %s: %v", ticker, err)
 				return
 			}
 
