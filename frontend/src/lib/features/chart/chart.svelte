@@ -469,6 +469,8 @@
 								entries: data.entries,
 								exits: data.exits
 							}));
+							// Sort markers by timestamp (time) in ascending order
+							markers.sort((a, b) => a.time - b.time);
 							arrowSeries.setData(markers);
 						}
 					}
@@ -1158,7 +1160,10 @@
 		});
 		arrowSeries = chart.addCustomSeries<ArrowMarker, CustomSeriesOptions>(
 			new ArrowMarkersPaneView(),
-			{}
+			{
+				title: '',
+				priceScaleId: 'right'
+			}
 		);
 		eventMarkerView = new EventMarkersPaneView();
 		eventSeries = chart.addCustomSeries(eventMarkerView, {
