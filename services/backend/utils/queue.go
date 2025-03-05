@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 )
+
 // Poll performs operations related to Poll functionality.
 func Poll(conn *Conn, taskId string) (json.RawMessage, error) {
 	task := conn.Cache.Get(context.Background(), taskId).Val()
@@ -16,6 +17,7 @@ func Poll(conn *Conn, taskId string) (json.RawMessage, error) {
 	result := json.RawMessage([]byte(task)) //its already json and you dont care about its contents utnil frontend so just push the json
 	return result, nil
 }
+
 // QueueArgs represents a structure for handling QueueArgs data.
 type QueueArgs struct {
 	ID   string      `json:"id"`
@@ -23,9 +25,12 @@ type QueueArgs struct {
 	Args interface{} `json:"args"`
 }
 
+// queueResponse represents the response from a queue operation
+// nolint:unused
 type queueResponse struct {
 	TaskID string `json:"taskId"`
 }
+
 // Queue performs operations related to Queue functionality.
 func Queue(conn *Conn, funcName string, arguments interface{}) (string, error) {
 	id := uuid.New().String()
@@ -51,6 +56,7 @@ func Queue(conn *Conn, funcName string, arguments interface{}) (string, error) {
 	}
 	return id, nil
 }
+
 // CheckSampleQueue performs operations related to CheckSampleQueue functionality.
 func CheckSampleQueue(conn *Conn, setupId int, addedSample bool) {
 	if addedSample {

@@ -40,11 +40,15 @@ func withSilentOutput(fn func() error) error {
 }
 
 // silentLogger implements a logger that discards all messages
+// nolint:unused
 type silentLogger struct{}
 
+// Printf implements the logger interface
+// nolint:unused
 func (l *silentLogger) Printf(format string, v ...interface{}) {}
 
 // configurePolygonClient creates a new Polygon client with silent logging
+// nolint:unused
 func configurePolygonClient(apiKey string) *polygon.Client {
 	// Create a new client with the API key
 	return polygon.New(apiKey)
@@ -81,6 +85,7 @@ func retryWithBackoff[T any](operation string, ticker string, maxRetries int, sh
 
 	return result, fmt.Errorf("failed to %s after %d attempts: %v", operation, maxRetries, lastErr)
 }
+
 // GetAggsData performs operations related to GetAggsData functionality.
 func GetAggsData(client *polygon.Client, ticker string, multiplier int, timeframe string,
 	fromMillis models.Millis, toMillis models.Millis, bars int, resultsOrder string, isAdjusted bool) (*iter.Iter[models.Agg], error) {
@@ -133,6 +138,7 @@ func GetAggsData(client *polygon.Client, ticker string, multiplier int, timefram
 
 	return nil, fmt.Errorf("failed to get aggregates data after %d attempts: %v", maxRetries, lastErr)
 }
+
 // GetTradeAtTimestamp performs operations related to GetTradeAtTimestamp functionality.
 func GetTradeAtTimestamp(client *polygon.Client, securityId int, timestamp time.Time) (models.Trade, error) {
 	ticker, err := GetTicker(conn, securityId, timestamp)
@@ -157,6 +163,7 @@ func GetTradeAtTimestamp(client *polygon.Client, securityId int, timestamp time.
 	}
 	return models.Trade{}, fmt.Errorf("no trade found for ticker %s at timestamp %v", ticker, nanoTimestamp)
 }
+
 // GetQuoteAtTimestamp performs operations related to GetQuoteAtTimestamp functionality.
 func GetQuoteAtTimestamp(client *polygon.Client, securityId int, timestamp time.Time) (models.Quote, error) {
 	ticker, err := GetTicker(conn, securityId, timestamp)
@@ -186,6 +193,7 @@ func GetQuoteAtTimestamp(client *polygon.Client, securityId int, timestamp time.
 	}
 	return models.Quote{}, fmt.Errorf("no quote found for ticker %s at timestamp %v", ticker, nanoTimestamp)
 }
+
 // GetLastQuote performs operations related to GetLastQuote functionality.
 func GetLastQuote(client *polygon.Client, ticker string) (models.LastQuote, error) {
 	params := &models.GetLastQuoteParams{
@@ -218,6 +226,7 @@ func GetLastQuote(client *polygon.Client, ticker string) (models.LastQuote, erro
 
 	return result, fmt.Errorf("failed to get last quote after %d attempts: %v", maxRetries, lastErr)
 }
+
 // GetQuote performs operations related to GetQuote functionality.
 func GetQuote(client *polygon.Client, ticker string, nanoTimestamp models.Nanos, ord string, compareType models.Comparator, numResults int) *iter.Iter[models.Quote] {
 	sortOrder := models.Desc
@@ -232,6 +241,7 @@ func GetQuote(client *polygon.Client, ticker string, nanoTimestamp models.Nanos,
 		WithLimit(numResults)
 	return client.ListQuotes(context.Background(), params)
 }
+
 // GetLastTrade performs operations related to GetLastTrade functionality.
 func GetLastTrade(client *polygon.Client, ticker string) (models.LastTrade, error) {
 	params := &models.GetLastTradeParams{
@@ -264,6 +274,7 @@ func GetLastTrade(client *polygon.Client, ticker string) (models.LastTrade, erro
 
 	return result, fmt.Errorf("failed to get last trade after %d attempts: %v", maxRetries, lastErr)
 }
+
 // GetTrade performs operations related to GetTrade functionality.
 func GetTrade(client *polygon.Client, ticker string, nanoTimestamp models.Nanos, ord string, compareType models.Comparator, numResults int) (*iter.Iter[models.Trade], error) {
 	sortOrder := models.Desc

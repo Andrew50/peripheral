@@ -29,6 +29,7 @@ import (
 
 // logAction logs security-related actions for debugging and auditing purposes.
 // Currently unused but kept for debugging and future use.
+// nolint:unused
 func logAction(test bool, loop int, ticker string, targetTicker string, figi string, currentDate string, action string, err error) {
 	if test {
 		if err != nil {

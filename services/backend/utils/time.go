@@ -141,7 +141,8 @@ func GetTimeFrame(timeframeString string) (int, string, string, int, error) {
 	return 0, "", "", 0, fmt.Errorf("incorrect timeframe passed")
 }
 
-// getStartOfTimeWindow performs operations related to getStartOfTimeWindow functionality.
+// getStartOfTimeWindow calculates the start of a time window based on the given parameters
+// nolint:unused
 func getStartOfTimeWindow(timestamp time.Time, multiplier int, timespan string, extendedHours bool, location *time.Location) (time.Time, error) {
 
 	timestamp = timestamp.In(location)

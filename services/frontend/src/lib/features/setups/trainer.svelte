@@ -6,12 +6,6 @@
 	import { queryChart } from '$lib/features/chart/interface';
 	import { ESTSecondstoUTCSeconds } from '$lib/core/timestamp';
 
-	interface Setup {
-		setupId: number;
-		name: string;
-		score?: number;
-	}
-
 	export let setup: Setup | null = null;
 	export let handleExit: (
 		event: MouseEvent & { currentTarget: EventTarget & HTMLButtonElement }
