@@ -41,14 +41,20 @@ func withSilentOutput(fn func() error) error {
 
 // silentLogger implements a logger that discards all messages
 // nolint:unused
+//
+//lint:ignore U1000 kept for future logging control
 type silentLogger struct{}
 
 // Printf implements the logger interface
 // nolint:unused
+//
+//lint:ignore U1000 kept for future logging control
 func (l *silentLogger) Printf(format string, v ...interface{}) {}
 
 // configurePolygonClient creates a new Polygon client with silent logging
 // nolint:unused
+//
+//lint:ignore U1000 kept for future client configuration
 func configurePolygonClient(apiKey string) *polygon.Client {
 	// Create a new client with the API key
 	return polygon.New(apiKey)
