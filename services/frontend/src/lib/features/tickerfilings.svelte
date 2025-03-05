@@ -28,7 +28,7 @@
 		if (chartInstance?.ticker && chartInstance?.securityId) {
 			if (currentTicker !== chartInstance.ticker) {
 				currentTicker = chartInstance.ticker;
-				currentSecurityId = chartInstance.securityId;
+				currentSecurityId = Number(chartInstance.securityId);
 				fetchFilings();
 			}
 		}
@@ -86,9 +86,7 @@
 <div class="ticker-filings-container">
 	<div class="header-section">
 		<h2>{currentTicker ? `${currentTicker} SEC Filings` : 'SEC Filings'}</h2>
-		<button class="refresh-button" on:click={fetchFilings} disabled={isLoading}>
-			Refresh
-		</button>
+		<button class="refresh-button" on:click={fetchFilings} disabled={isLoading}> Refresh </button>
 	</div>
 
 	{#if message}
@@ -193,8 +191,12 @@
 	}
 
 	@keyframes spin {
-		0% { transform: rotate(0deg); }
-		100% { transform: rotate(360deg); }
+		0% {
+			transform: rotate(0deg);
+		}
+		100% {
+			transform: rotate(360deg);
+		}
 	}
 
 	.filings-list {
@@ -258,4 +260,4 @@
 		align-items: center;
 		justify-content: center;
 	}
-</style> 
+</style>

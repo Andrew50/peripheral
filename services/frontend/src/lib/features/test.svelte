@@ -3,7 +3,11 @@
 	import { startReplay, addStream } from '$lib/utils/stream/interface';
 	import '$lib/core/global.css';
 
-	let store = writable('blank');
+	interface StoreType {
+		price: number;
+	}
+
+	const store = writable<StoreType>({ price: 0 });
 
 	function test() {
 		//startReplay(1725894480000)

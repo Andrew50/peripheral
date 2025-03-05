@@ -1,44 +1,9 @@
-work through the errors in this file. as you fix them remove them from the list. fix them quickly and concisely.
 Run cd services/frontend
 
 ====================================
 Loading svelte-check in workspace: /home/runner/work/study/study/services/frontend
 Getting Svelte diagnostics...
 
-Preprocessing failed
-Error: Transform failed with 1 error:
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1666:10: ERROR: The symbol "isChartEventData" has already been declared
-    at failureErrorWithLog (/home/runner/work/study/study/services/frontend/node_modules/esbuild/lib/main.js:1472:15)
-    at /home/runner/work/study/study/services/frontend/node_modules/esbuild/lib/main.js:755:50
-    at responseCallbacks.<computed> (/home/runner/work/study/study/services/frontend/node_modules/esbuild/lib/main.js:622:9)
-    at handleIncomingPacket (/home/runner/work/study/study/services/frontend/node_modules/esbuild/lib/main.js:677:12)
-    at Socket.readFromStdout (/home/runner/work/study/study/services/frontend/node_modules/esbuild/lib/main.js:600:7)
-    at Socket.emit (node:events:517:28)
-    at addChunk (node:internal/streams/readable:368:12)
-    at readableAddChunk (node:internal/streams/readable:341:9)
-    at Readable.push (node:internal/streams/readable:278:10)
-    at Pipe.onStreamRead (node:internal/stream_base_commons:190:23) {
-  errors: [Getter/Setter],
-  warnings: [Getter/Setter],
-  frame: '\n' +
-    '\x1B[33mThe symbol "isChartEventData" has already been declared\x1B[39m\n' +
-    '1664|  \t}\n' +
-    '1665|  \n' +
-    '1666|  \tfunction isChartEventData(data: any): data is ChartEventData {\n' +
-    '   |            ^\n' +
-    "1667|  \t\treturn data && typeof data.type === 'string' && typeof data.url === 'string';\n" +
-    '1668|  \t}\n',
-  loc: {
-    column: 10,
-    file: '/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte',
-    length: 16,
-    line: 1666,
-    lineText: '\tfunction isChartEventData(data: any): data is ChartEventData {',
-    namespace: '',
-    suggestion: ''
-  },
-  __source: 'Script'
-}
 /home/runner/work/study/study/services/frontend/src/lib/utils/stream/streamCell.svelte:29:3
 Error: Type 'string | number | null' is not assignable to type 'number | null'.
   Type 'string' is not assignable to type 'number'. (ts)
@@ -161,22 +126,7 @@ Error: Type 'Writable<AlertLog[] | undefined>' is not assignable to type 'Writab
 	columns={['Ticker', 'Timestamp', 'Alert Type']}
 
 
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:2:19
-Error: Transform failed with 1 error:
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1666:10: ERROR: The symbol "isChartEventData" has already been declared (svelte(script))
-<!-- chart.svelte-->
-<script lang="ts">
-	import Legend from './legend.svelte';
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:143:3
-Error: Object literal may only specify known properties, and 'extendedHours' does not exist in type 'Instance'. (ts)
-		price: 0,
-		extendedHours: false
-	};
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:326:7
+/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:360:7
 Error: Type 'string | number | undefined' is not assignable to type 'number | undefined'.
   Type 'string' is not assignable to type 'number'. (ts)
 						chartCandleSeries: chartCandleSeries,
@@ -184,356 +134,11 @@ Error: Type 'string | number | undefined' is not assignable to type 'number | un
 					}));
 
 
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:339:10
-Error: Argument of type 'string | number' is not assignable to parameter of type 'number'.
-  Type 'string' is not assignable to type 'number'. (ts)
-									line.price,
-									currentChartInstance.securityId,
-									line.id,
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:353:30
+/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:386:30
 Error: 'inst.bars' is possibly 'undefined'. (ts)
 				}
 				if (barDataList.length < inst.bars) {
 					if (inst.direction == 'backward') {
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:421:28
-Error: Property 'type' does not exist on type '{}'. (ts)
-											type: 'sec_filing',
-											title: valueObj.type || 'SEC Filing',
-											url: valueObj.url
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:422:26
-Error: Property 'url' does not exist on type '{}'. (ts)
-											title: valueObj.type || 'SEC Filing',
-											url: valueObj.url
-										});
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:427:38
-Error: Property 'ratio' does not exist on type '{}'. (ts)
-											type: 'split',
-											title: `Split: ${valueObj.ratio || 'unknown'}`,
-											value: valueObj.ratio
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:428:28
-Error: Property 'ratio' does not exist on type '{}'. (ts)
-											title: `Split: ${valueObj.ratio || 'unknown'}`,
-											value: valueObj.ratio
-										});
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:433:42
-Error: Property 'amount' does not exist on type '{}'. (ts)
-											type: 'dividend',
-											title: `Dividend: $${valueObj.amount || '0.00'}`,
-											value: valueObj.amount,
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:434:28
-Error: Property 'amount' does not exist on type '{}'. (ts)
-											title: `Dividend: $${valueObj.amount || '0.00'}`,
-											value: valueObj.amount,
-											exDate: valueObj.exDate || 'Unknown',
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:435:29
-Error: Property 'exDate' does not exist on type '{}'. (ts)
-											value: valueObj.amount,
-											exDate: valueObj.exDate || 'Unknown',
-											payoutDate: valueObj.payDate || 'Unknown'
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:436:33
-Error: Property 'payDate' does not exist on type '{}'. (ts)
-											exDate: valueObj.exDate || 'Unknown',
-											payoutDate: valueObj.payDate || 'Unknown'
-										});
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:451:58
-Error: Argument of type 'readonly (CandlestickData<Time> | WhitespaceData<Time>)[]' is not assignable to parameter of type 'any[]'.
-  The type 'readonly (CandlestickData<Time> | WhitespaceData<Time>)[]' is 'readonly' and cannot be assigned to the mutable type 'any[]'. (ts)
-								// Adjust events to nearest trading days
-								eventData = adjustEventsToTradingDays(eventData, chartCandleSeries.data());
-
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:489:21
-Error: Property 'forEach' does not exist on type '{}'. (ts)
-							if (inst.trades) {
-								inst.trades.forEach((trade) => {
-									const tradeTime = UTCSecondstoESTSeconds(trade.time / 1000);
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:489:30
-Error: Parameter 'trade' implicitly has an 'any' type. (ts)
-							if (inst.trades) {
-								inst.trades.forEach((trade) => {
-									const tradeTime = UTCSecondstoESTSeconds(trade.time / 1000);
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:528:26
-Error: Argument of type '{ time: UTCTimestamp; value: number; }[] | undefined' is not assignable to parameter of type '(WhitespaceData<Time> | { time: UTCTimestamp; value: number; })[]'.
-  Type 'undefined' is not assignable to type '(WhitespaceData<Time> | { time: UTCTimestamp; value: number; })[]'. (ts)
-					const smaResults = calculateMultipleSMAs(newCandleData, [10, 20]);
-					sma10Series.setData(smaResults.get(10));
-					sma20Series.setData(smaResults.get(20));
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:529:26
-Error: Argument of type '{ time: UTCTimestamp; value: number; }[] | undefined' is not assignable to parameter of type '(WhitespaceData<Time> | { time: UTCTimestamp; value: number; })[]'.
-  Type 'undefined' is not assignable to type '(WhitespaceData<Time> | { time: UTCTimestamp; value: number; })[]'. (ts)
-					sma10Series.setData(smaResults.get(10));
-					sma20Series.setData(smaResults.get(20));
-
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:548:7
-Error: Type 'Function' is not assignable to type '() => void'.
-  Type 'Function' provides no match for the signature '(): void'. (ts)
-						}
-						releaseFast = addStream(inst, 'all', updateLatestChartBar);
-						releaseQuote = addStream(inst, 'quote', updateLatestQuote);
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:549:7
-Error: Type 'Function' is not assignable to type '() => void'.
-  Type 'Function' provides no match for the signature '(): void'. (ts)
-						releaseFast = addStream(inst, 'all', updateLatestChartBar);
-						releaseQuote = addStream(inst, 'quote', updateLatestQuote);
-					}
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:795:27
-Error: Property 'extendedHours' does not exist on type 'Instance'. (ts)
-			isExtendedHours &&
-			(!currentChartInstance.extendedHours || /^[dwm]/.test(currentChartInstance.timeframe || ''))
-		) {
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:893:25
-Error: Property 'extendedHours' does not exist on type 'Instance'. (ts)
-			trade.timestamp,
-			currentChartInstance.extendedHours
-		);
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:921:4
-Error: Left side of comma operator is unused and has no side effects. (ts)
-				ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
-			'chart timeframe: ', chartTimeframe;
-			'timeToRequestForUpdatingAggregate: ', timeToRequestForUpdatingAggregate;
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:922:4
-Error: Left side of comma operator is unused and has no side effects. (ts)
-			'chart timeframe: ', chartTimeframe;
-			'timeToRequestForUpdatingAggregate: ', timeToRequestForUpdatingAggregate;
-			const [barData] = await privateRequest<BarData[]>('getChartData', {
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:962:49
-Error: Cannot find name 'volumeData'. (ts)
-				// Create a new mutable copy of the volume data array before updating it
-				const updatedVolumeData = createMutableCopy(volumeData);
-				updatedVolumeData[barIndex] = {
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:968:31
-Error: Argument of type 'unknown[]' is not assignable to parameter of type '(WhitespaceData<Time> | HistogramData<Time>)[]'.
-  Type 'unknown' is not assignable to type 'WhitespaceData<Time> | HistogramData<Time>'. (ts)
-				};
-				chartVolumeSeries.setData(updatedVolumeData);
-			}
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:979:38
-Error: Argument of type 'IPriceLine' is not assignable to parameter of type 'import("/home/runner/work/study/study/services/frontend/node_modules/lightweight-charts/dist/typings").IPriceLine'.
-  Type 'IPriceLine' is missing the following properties from type 'IPriceLine': applyOptions, options (ts)
-		alertLines.forEach((line) => {
-			chartCandleSeries.removePriceLine(line.line);
-		});
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:998:6
-Error: Type 'IPriceLine' is missing the following properties from type 'IPriceLine': price, color, lineWidth, lineStyle, and 2 more. (ts)
-					price: alert.alertPrice,
-					line: priceLine,
-					alertId: alert.alertId
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:999:6
-Error: Type 'number | undefined' is not assignable to type 'number'.
-  Type 'undefined' is not assignable to type 'number'. (ts)
-					line: priceLine,
-					alertId: alert.alertId
-				});
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1008:3
-Error: Type '{ bars?: number; direction?: "forward" | "backward"; requestType?: "loadNewTicker" | "loadAdditionalData"; includeLastBar?: boolean; chartId?: string | number | undefined; securityId: string | number; ... 19 more ...; sortOrder?: number; }' is not assignable to type 'Instance'.
-  Types of property 'chartId' are incompatible.
-    Type 'string | number | undefined' is not assignable to type 'string | undefined'.
-      Type 'number' is not assignable to type 'string'. (ts)
-		Object.assign(currentChartInstance, newReq);
-		currentChartInstance = {
-			...currentChartInstance,
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1014:7
-Error: This comparison appears to be unintentional because the types 'number' and 'string | undefined' have no overlap. (ts)
-
-		if (chartId !== req.chartId) {
-			return;
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1037:4
-Error: Expected 1 arguments, but got 2. (ts)
-			req.timeframe,
-			(req.timestamp == 0 ? Date.now() : req.timestamp) as number
-		);
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1039:28
-Error: Property 'extendedHours' does not exist on type 'Instance'. (ts)
-		);
-		chartExtendedHours = req.extendedHours ?? false;
-
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1060:39
-Error: Argument of type 'IPriceLine' is not assignable to parameter of type 'import("/home/runner/work/study/study/services/frontend/node_modules/lightweight-charts/dist/typings").IPriceLine'.
-  Type 'IPriceLine' is missing the following properties from type 'IPriceLine': applyOptions, options (ts)
-			alertLines.forEach((line) => {
-				chartCandleSeries.removePriceLine(line.line);
-			});
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1113:29
-Error: Object is possibly 'null'. (ts)
-			const timestamp = ESTSecondstoUTCMillis(latestCrosshairPositionTime);
-			const price = Math.round(chartCandleSeries.coordinateToPrice(event.clientY) * 100) / 100 || 0;
-			const inst: Instance = {
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1155:6
-Error: Argument of type 'string | number' is not assignable to parameter of type 'number'.
-  Type 'string' is not assignable to type 'number'. (ts)
-					chartCandleSeries.coordinateToPrice(latestCrosshairPositionY) || 0,
-					currentChartInstance.securityId
-				);
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1158:22
-Error: Argument of type 'number' is not assignable to parameter of type 'string'. (ts)
-			} else if (event.key == 's' && event.altKey) {
-				handleScreenshot(chartId);
-			} else if (
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1180:65
-Error: Object literal may only specify known properties, and 'inputString' does not exist in type 'Instance'. (ts)
-				// Pass the first key as inputString to the query input
-				queryInstanceInput('any', 'any', { ...currentChartInstance, inputString: firstKey })
-					.then((v: Instance) => {
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1181:12
-Error: Argument of type '(v: Instance) => void' is not assignable to parameter of type '(value: Instance) => void | PromiseLike<void>'.
-  Types of parameters 'v' and 'value' are incompatible.
-    Type 'import("/home/runner/work/study/study/services/frontend/src/lib/core/types").Instance' is not assignable to type 'Instance'.
-      Types of property 'securityId' are incompatible.
-        Type 'string | number | undefined' is not assignable to type 'string | number'.
-          Type 'undefined' is not assignable to type 'string | number'. (ts)
-				queryInstanceInput('any', 'any', { ...currentChartInstance, inputString: firstKey })
-					.then((v: Instance) => {
-						currentChartInstance = v;
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1196:26
-Error: Argument of type '(v: ShiftOverlay) => { isActive: false; startX: number; startY: number; x: number; y: number; width: number; height: number; startPrice: number; currentPrice: number; } | undefined' is not assignable to parameter of type 'Updater<ShiftOverlay>'.
-  Type '{ isActive: false; startX: number; startY: number; x: number; y: number; width: number; height: number; startPrice: number; currentPrice: number; } | undefined' is not assignable to type 'ShiftOverlay'.
-    Type 'undefined' is not assignable to type 'ShiftOverlay'. (ts)
-				if (get(shiftOverlay).isActive) {
-					shiftOverlay.update((v: ShiftOverlay) => {
-						if (v.isActive) {
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1231:20
-Error: Cannot find name 'LineWidth'. (ts)
-			lastValueVisible: false
-		} as DeepPartial<LineWidth>;
-		sma10Series = chart.addLineSeries({ color: 'purple', ...smaOptions });
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1268:33
-Error: Cannot find name 'isVolumeData'. Did you mean 'volumeData'? (ts)
-			const volumeData = param.seriesData.get(chartVolumeSeries);
-			const volume = volumeData && isVolumeData(volumeData) ? volumeData.value : 0;
-			const allCandleData = chartCandleSeries.data();
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1268:71
-Error: Property 'value' does not exist on type 'CustomData<Time> | BarData<Time> | LineData<Time> | HistogramData<Time>'.
-  Property 'value' does not exist on type 'CustomData<Time>'. (ts)
-			const volumeData = param.seriesData.get(chartVolumeSeries);
-			const volume = volumeData && isVolumeData(volumeData) ? volumeData.value : 0;
-			const allCandleData = chartCandleSeries.data();
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1354:33
-Error: Argument of type 'string | number' is not assignable to parameter of type 'number'.
-  Type 'string' is not assignable to type 'number'. (ts)
-				if (barsForRVOL && barsForRVOL.length > 0) {
-					calculateRVOL(barsForRVOL, currentChartInstance.securityId).then((r: any) => {
-						hoveredCandleData.update((v) => {
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1610:11
-Error: Duplicate function implementation. (ts)
-
-	function isChartEventData(data: unknown): data is ChartEventData {
-		if (!data || typeof data !== 'object') return false;
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1630:38
-Error: Cannot find name 'bufferInScreenSizes'. (ts)
-	const calculateBars = (instance: Partial<Instance>): number => {
-		return instance.bars || Math.floor(bufferInScreenSizes * barsOnScreen) + 100;
-	};
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1630:60
-Error: Cannot find name 'barsOnScreen'. (ts)
-	const calculateBars = (instance: Partial<Instance>): number => {
-		return instance.bars || Math.floor(bufferInScreenSizes * barsOnScreen) + 100;
-	};
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1655:34
-Error: Cannot find name 'bufferInScreenSizes'. (ts)
-			price: data.price || 0,
-			bars: data.bars || Math.floor(bufferInScreenSizes * barsOnScreen) + 100
-		};
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1655:56
-Error: Cannot find name 'barsOnScreen'. (ts)
-			price: data.price || 0,
-			bars: data.bars || Math.floor(bufferInScreenSizes * barsOnScreen) + 100
-		};
-
-
-/home/runner/work/study/study/services/frontend/src/lib/features/chart/chart.svelte:1667:11
-Error: Duplicate function implementation. (ts)
-
-	function isChartEventData(data: any): data is ChartEventData {
-		return data && typeof data.type === 'string' && typeof data.url === 'string';
 
 
 /home/runner/work/study/study/services/frontend/src/lib/features/quotes/l1.svelte:50:3
@@ -695,24 +300,54 @@ Error: Argument of type 'string' is not assignable to parameter of type 'Setup'.
 
 
 ====================================
-svelte-check found 86 errors and 78 warnings in 27 files
-./trades.py:127:5: F841 local variable '_' is assigned to but never used except Exception as _:
-    ^
-./trades.py:560:5: F841 local variable '_' is assigned to but never used
-    except Exception as _:
-    ^
-./trades.py:563:30: F821 undefined name 'e'
-        return {"error": str(e), "traceback": error_info}
-                             ^
-./trades.py:631:5: F841 local variable '_' is assigned to but never used
-    except Exception as _:
-    ^
-./trades.py:634:30: F821 undefined name 'e'
-        return {"error": str(e), "traceback": error_info}
-                             ^
-./trades.py:808:5: F841 local variable '_' is assigned to but never used
-    except Exception as _:
-    ^
-2     F821 undefined name 'e'
-4     F841 local variable '_' is assigned to but never used
-6
+svelte-check found 38 errors and 78 warnings in 27 files
+
+Error:
+Error: jobs/securitiesTable.go:34:6: func logAction is unused (U1000)
+Error: jobs/securitiesTable.go:50:6: func validateTickerString is unused (U1000)
+Error: jobs/securitiesTable.go:70:6: func diff is unused (U1000)
+Error: jobs/securitiesTable.go:112:6: func dataExists is unused (U1000)
+Error: jobs/securitiesTable.go:137:6: func toFilteredMap is unused (U1000)
+Error: jobs/securitiesTable.go:151:6: func contains is unused (U1000)
+Error: jobs/securitiesTable.go:164:6: func updateSecurities is unused (U1000)
+Error: jobs/securitiesTable.go:402:6: this value of err is never used (SA4006)
+Error: jobs/securitiesTable.go:442:3: this value of yesterdayDateString is never used (SA4006)
+Error: jobs/securitiesTable.go:633:3: empty branch (SA9003)
+Error: tasks/alerts.go:125:3: this value of err is never used (SA4006)
+Error: tasks/chart.go:497:3: this value of currentDayStart is never used (SA4006)
+Error: tasks/chart.go:958:6: func max is unused (U1000)
+Error: tasks/chart.go:965:6: func min is unused (U1000)
+Error: tasks/chartevents.go:194:20: error strings should not be capitalized (ST1005)
+Error: tasks/setups.go:10:1: comment on exported type SetupResult should be of the form "SetupResult ..." (with optional leading article) (ST1021)
+Error: utils/chartHelpers.go:43:2: this value of err is never used (SA4006)
+Error: utils/edgar.go:148:6: func fetchEdgarFilings is unused (U1000)
+Error: utils/edgar.go:184:6: func fetchEdgarFilingsTickerPage is unused (U1000)
+Error: utils/edgar.go:326:6: func fetchCIKFromSEC is unused (U1000)
+Error: utils/edgar.go:540:6: func parseFilingDate is unused (U1000)
+Error: utils/queue.go:26:6: type queueResponse is unused (U1000)
+Error: utils/quote.go:43:6: type silentLogger is unused (U1000)
+Error: utils/quote.go:45:24: func (*silentLogger).Printf is unused (U1000)
+Error: utils/quote.go:48:6: func configurePolygonClient is unused (U1000)
+Error: utils/time.go:145:6: func getStartOfTimeWindow is unused (U1000)
+Error: jobs/securitiesTable.go:34:6: func logAction is unused (U1000)
+Error: jobs/securitiesTable.go:50:6: func validateTickerString is unused (U1000)
+Error: jobs/securitiesTable.go:70:6: func diff is unused (U1000)
+Error: jobs/securitiesTable.go:112:6: func dataExists is unused (U1000)
+Error: jobs/securitiesTable.go:137:6: func toFilteredMap is unused (U1000)
+Error: jobs/securitiesTable.go:151:6: func contains is unused (U1000)
+Error: jobs/securitiesTable.go:164:6: func updateSecurities is unused (U1000)
+Error: jobs/securitiesTable.go:633:3: empty branch (SA9003)
+Error: tasks/chart.go:958:6: func max is unused (U1000)
+Error: tasks/chart.go:965:6: func min is unused (U1000)
+Error: tasks/chartevents.go:194:20: error strings should not be capitalized (ST1005)
+Error: tasks/setups.go:10:1: comment on exported type SetupResult should be of the form "SetupResult ..." (with optional leading article) (ST1021)
+Error: utils/edgar.go:148:6: func fetchEdgarFilings is unused (U1000)
+Error: utils/edgar.go:184:6: func fetchEdgarFilingsTickerPage is unused (U1000)
+Error: utils/edgar.go:326:6: func fetchCIKFromSEC is unused (U1000)
+Error: utils/edgar.go:540:6: func parseFilingDate is unused (U1000)
+Error: utils/queue.go:26:6: type queueResponse is unused (U1000)
+Error: utils/quote.go:43:6: type silentLogger is unused (U1000)
+Error: utils/quote.go:45:24: func (*silentLogger).Printf is unused (U1000)
+Error: utils/quote.go:48:6: func configurePolygonClient is unused (U1000)
+Error: utils/time.go:145:6: func getStartOfTimeWindow is unused (U1000)
+Error: Process completed with exit code 1.

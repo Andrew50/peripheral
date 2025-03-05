@@ -357,7 +357,7 @@
 					drawingMenuProps.update((v) => ({
 						...v,
 						chartCandleSeries: chartCandleSeries,
-						securityId: inst.securityId
+						securityId: Number(inst.securityId)
 					}));
 					for (const line of $drawingMenuProps.horizontalLines) {
 						chartCandleSeries.removePriceLine(line.line);
@@ -383,7 +383,7 @@
 				if (inst.timestamp == 0) {
 					chartLatestDataReached = true;
 				}
-				if (barDataList.length < inst.bars) {
+				if (barDataList.length < (inst.bars ?? 0)) {
 					if (inst.direction == 'backward') {
 						chartEarliestDataReached = response.isEarliestData;
 					} else if (inst.direction == 'forward') {
