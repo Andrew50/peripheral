@@ -41,6 +41,7 @@ type SetupResult struct {
 	Mcap      float64 `json:"mcap"`
 	Score     int     `json:"score"`
 }
+
 // GetSetups performs operations related to GetSetups functionality.
 func GetSetups(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(), `
@@ -60,6 +61,7 @@ func GetSetups(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface
 	}
 	return setupResults, nil
 }
+
 // NewSetupArgs represents a structure for handling NewSetupArgs data.
 type NewSetupArgs struct {
 	Name      string  `json:"name"`
@@ -70,6 +72,7 @@ type NewSetupArgs struct {
 	Adr       float64 `json:"adr"`
 	Mcap      float64 `json:"mcap"`
 }
+
 // NewSetup performs operations related to NewSetup functionality.
 func NewSetup(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args NewSetupArgs
@@ -84,14 +87,14 @@ func NewSetup(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 		INSERT INTO setups (name, timeframe, bars, threshold, dolvol, adr, mcap, userId) 
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING setupId`,
 		args.Name, args.Timeframe, args.Bars, args.Threshold, args.Dolvol, args.Adr, args.Mcap, userId,
-	).Scan(&setupId)
+	).Scan(&setupID)
 
 	if err != nil {
 		return nil, fmt.Errorf("dkngvw0 %v", err)
 	}
-	utils.CheckSampleQueue(conn, setupId, false)
+	utils.CheckSampleQueue(conn, setupID, false)
 	return SetupResult{
-		SetupID:   setupId,
+		SetupID:   setupID,
 		Name:      args.Name,
 		Timeframe: args.Timeframe,
 		Bars:      args.Bars,
@@ -101,10 +104,12 @@ func NewSetup(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 		Mcap:      args.Mcap,
 	}, nil
 }
+
 // DeleteSetupArgs represents a structure for handling DeleteSetupArgs data.
 type DeleteSetupArgs struct {
 	SetupID int `json:"setupId"`
 }
+
 // DeleteSetup performs operations related to DeleteSetup functionality.
 func DeleteSetup(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteSetupArgs
@@ -120,6 +125,7 @@ func DeleteSetup(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	}
 	return nil, nil
 }
+
 // SetSetupArgs represents a structure for handling SetSetupArgs data.
 type SetSetupArgs struct {
 	SetupID   int     `json:"setupId"`
@@ -131,6 +137,7 @@ type SetSetupArgs struct {
 	Adr       float64 `json:"adr"`
 	Mcap      float64 `json:"mcap"`
 }
+
 // SetSetup performs operations related to SetSetup functionality.
 func SetSetup(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args SetSetupArgs

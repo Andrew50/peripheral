@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"time"
 )
+
 // LabelTrainingQueueInstanceArgs represents a structure for handling LabelTrainingQueueInstanceArgs data.
 type LabelTrainingQueueInstanceArgs struct {
 	SampleID int  `json:"sampleId"`
 	Label    bool `json:"label"` // Include the label to be assigned (true/false)
 }
+
 // LabelTrainingQueueInstance performs operations related to LabelTrainingQueueInstance functionality.
 func LabelTrainingQueueInstance(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args LabelTrainingQueueInstanceArgs
@@ -24,16 +26,19 @@ func LabelTrainingQueueInstance(conn *utils.Conn, userId int, rawArgs json.RawMe
 		SET label = $1
 		WHERE sampleId = $2
 		RETURNING setupId`,
-		args.Label, args.SampleID).Scan(&setupId)
+		args.Label, args.SampleID).Scan(&setupID)
 	if err != nil {
 		return nil, fmt.Errorf("error updating and retrieving setupId: %v", err)
 	}
-	utils.CheckSampleQueue(conn, setupId, args.Label)
+	utils.CheckSampleQueue(conn, setupID, args.Label)
 	return nil, nil
 }
+
 // GetTrainingQueueArgs represents a structure for handling GetTrainingQueueArgs data.
 type GetTrainingQueueArgs struct {
 	SetupID int `json:"setupId"`
+}
+
 // GetTrainingQueueResult represents a structure for handling GetTrainingQueueResult data.
 type GetTrainingQueueResult struct {
 	SampleID   int    `json:"sampleId"`
@@ -41,6 +46,7 @@ type GetTrainingQueueResult struct {
 	Timestamp  int64  `json:"timestamp"`
 	Ticker     string `json:"ticker"`
 }
+
 // GetTrainingQueue performs operations related to GetTrainingQueue functionality.
 func GetTrainingQueue(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetTrainingQueueArgs
@@ -63,15 +69,15 @@ func GetTrainingQueue(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 	defer rows.Close()
 	var trainingQueue []GetTrainingQueueResult
 	for rows.Next() {
-		var sampleID, securityId int
+		var sampleID, securityID int
 		var timestamp time.Time
 		var ticker string
-		if err := rows.Scan(&sampleId, &securityId, &timestamp, &ticker); err != nil {
+		if err := rows.Scan(&sampleID, &securityID, &timestamp, &ticker); err != nil {
 			return nil, fmt.Errorf("error scanning row: %v", err)
 		}
 		trainingQueue = append(trainingQueue, GetTrainingQueueResult{
-			SampleID:   sampleId,
-			SecurityID: securityId,
+			SampleID:   sampleID,
+			SecurityID: securityID,
 			Timestamp:  timestamp.Unix(), // Convert to Unix timestamp in milliseconds
 			Ticker:     ticker,           // Add ticker to the struct
 		})
@@ -79,12 +85,14 @@ func GetTrainingQueue(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 
 	return trainingQueue, nil
 }
+
 // SetSampleArgs represents a structure for handling SetSampleArgs data.
 type SetSampleArgs struct {
 	SecurityID int   `json:"securityId"`
 	Timestamp  int64 `json:"timestamp"` // Unix timestamp in milliseconds
 	SetupID    int   `json:"setupId"`
 }
+
 // SetSample performs operations related to SetSample functionality.
 func SetSample(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args SetSampleArgs

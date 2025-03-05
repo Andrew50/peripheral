@@ -116,6 +116,7 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 }
 
 func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
+
 // Request represents a structure for handling Request data.
 type Request struct {
 	Function  string          `json:"func"`
@@ -180,7 +181,7 @@ func privateUploadHandler(conn *utils.Conn) http.HandlerFunc {
 			return
 		}
 		token_string := r.Header.Get("Authorization")
-		userId, err := validate_token(token_string)
+		userId, err := validateToken(token_string)
 		if handleError(w, err, "auth") {
 			return
 		}
@@ -278,7 +279,7 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 		}
 		//fmt.Println("debug: got private request")
 		token_string := r.Header.Get("Authorization")
-		user_id, err := validate_token(token_string)
+		user_id, err := validateToken(token_string)
 		if handleError(w, err, "auth") {
 			return
 		}
@@ -304,6 +305,7 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 		}
 	}
 }
+
 // QueueRequest represents a structure for handling QueueRequest data.
 type QueueRequest struct {
 	Function  string      `json:"func"`
@@ -318,7 +320,7 @@ func queueHandler(conn *utils.Conn) http.HandlerFunc {
 		}
 		fmt.Println("debug: got queue request")
 		token_string := r.Header.Get("Authorization")
-		userId, err := validate_token(token_string)
+		userId, err := validateToken(token_string)
 		if handleError(w, err, "auth") {
 			return
 		}
@@ -357,6 +359,7 @@ func queueHandler(conn *utils.Conn) http.HandlerFunc {
 		}
 	}
 }
+
 // PollRequest represents a structure for handling PollRequest data.
 type PollRequest struct {
 	TaskID string `json:"taskId"`
@@ -369,7 +372,7 @@ func pollHandler(conn *utils.Conn) http.HandlerFunc {
 			return
 		}
 		token_string := r.Header.Get("Authorization")
-		_, err := validate_token(token_string)
+		_, err := validateToken(token_string)
 		if handleError(w, err, "auth") {
 			return
 		}
@@ -387,6 +390,7 @@ func pollHandler(conn *utils.Conn) http.HandlerFunc {
 		}
 	}
 }
+
 // WSHandler performs operations related to WSHandler functionality.
 func WSHandler(conn *utils.Conn) http.HandlerFunc {
 	upgrader := websocket.Upgrader{
@@ -406,7 +410,7 @@ func WSHandler(conn *utils.Conn) http.HandlerFunc {
 		}
 
 		// Validate the token and extract the user ID
-		userID, err := validate_token(token)
+		userID, err := validateToken(token)
 		if err != nil {
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
@@ -443,18 +447,19 @@ func healthHandler() http.HandlerFunc {
 		}
 	}
 }
+
 // StartServer performs operations related to StartServer functionality.
 func StartServer() {
 	conn, cleanup := utils.InitConn(true)
 	defer cleanup()
 	stopScheduler := jobs.StartScheduler(conn)
 	defer close(stopScheduler)
-	http.HandleFunc("/public", public_handler(conn))
-	http.HandleFunc("/private", private_handler(conn))
+	http.HandleFunc("/public", publicHandler(conn))
+	http.HandleFunc("/private", privateHandler(conn))
 	http.HandleFunc("/queue", queueHandler(conn))
 	http.HandleFunc("/poll", pollHandler(conn))
 	http.HandleFunc("/ws", WSHandler(conn))
-	http.HandleFunc("/private-upload", private_upload_handler(conn))
+	http.HandleFunc("/private-upload", privateUploadHandler(conn))
 	http.HandleFunc("/health", healthHandler())
 	fmt.Println("debug: Server running on port 5057 ----------------------------------------------------------")
 	if err := http.ListenAndServe(":5057", nil); err != nil {
