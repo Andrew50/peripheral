@@ -4,9 +4,8 @@ import io
 from screen import getCurrentSecId
 import traceback
 from datetime import datetime
-from decimal import Decimal
 import pytz
-from trade_helpers import parse_datetime, calculate_pnl, process_trades
+from trade_helpers import parse_datetime, process_trades
 
 
 def grab_user_trades(
