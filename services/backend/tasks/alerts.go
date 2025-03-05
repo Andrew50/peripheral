@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 )
+
 // Alert represents a structure for handling Alert data.
 type Alert struct {
 	AlertID    int      `json:"alertId"`
@@ -19,6 +20,7 @@ type Alert struct {
 	Active     bool     `json:"active"`
 	AlgoID     *int     `json:"algoId,omitempty"`
 }
+
 // GetAlerts performs operations related to GetAlerts functionality.
 func GetAlerts(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(), `
@@ -43,6 +45,7 @@ func GetAlerts(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface
 
 	return alerts, nil
 }
+
 // GetAlertLogsResult represents a structure for handling GetAlertLogsResult data.
 type GetAlertLogsResult struct {
 	AlertLogID int     `json:"alertLogId"`
@@ -51,6 +54,7 @@ type GetAlertLogsResult struct {
 	SecurityID int     `json:"securityId"`
 	Ticker     *string `json:"ticker,omitempty"` // Ticker from the securities table
 }
+
 // GetAlertLogs performs operations related to GetAlertLogs functionality.
 func GetAlertLogs(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(), `
@@ -78,6 +82,7 @@ func GetAlertLogs(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	}
 	return logs, nil
 }
+
 // NewAlertArgs represents a structure for handling NewAlertArgs data.
 type NewAlertArgs struct {
 	AlertType  string   `json:"alertType"`
@@ -87,6 +92,7 @@ type NewAlertArgs struct {
 	Ticker     *string  `json:"ticker,omitempty"`
 	AlgoID     *int     `json:"algoId,omitempty"`
 }
+
 // NewAlert performs operations related to NewAlert functionality.
 func NewAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args NewAlertArgs
@@ -116,7 +122,7 @@ func NewAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 		insertQuery = `
 			INSERT INTO alerts (userId, alertType, price, securityID, active, direction) 
 			VALUES ($1, $2, $3, $4, true, $5) RETURNING alertId`
-		err = conn.DB.QueryRow(context.Background(), insertQuery, userId, args.AlertType, *args.Price, *args.SecurityID, direction).Scan(&alertId)
+		err = conn.DB.QueryRow(context.Background(), insertQuery, userId, args.AlertType, *args.Price, *args.SecurityID, direction).Scan(&alertID)
 
 	} else if args.AlertType == "setup" {
 		if args.SetupID == nil {
@@ -125,7 +131,7 @@ func NewAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 		insertQuery = `
 			INSERT INTO alerts (userId, alertType, setupId, active) 
 			VALUES ($1, $2, $3, true) RETURNING alertId`
-		err = conn.DB.QueryRow(context.Background(), insertQuery, userId, args.AlertType, *args.SetupID).Scan(&alertId)
+		err = conn.DB.QueryRow(context.Background(), insertQuery, userId, args.AlertType, *args.SetupID).Scan(&alertID)
 
 	} else if args.AlertType == "algo" {
 		if args.AlgoID == nil {
@@ -134,7 +140,7 @@ func NewAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 		insertQuery = `
 			INSERT INTO alerts (userId, alertType, algoId, active) 
 			VALUES ($1, $2, $3, true) RETURNING alertId`
-		err = conn.DB.QueryRow(context.Background(), insertQuery, userId, args.AlertType, *args.AlgoID).Scan(&alertId)
+		err = conn.DB.QueryRow(context.Background(), insertQuery, userId, args.AlertType, *args.AlgoID).Scan(&alertID)
 	} else {
 		return nil, fmt.Errorf("invalid alertType: %s", args.AlertType)
 	}
@@ -142,7 +148,7 @@ func NewAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 		return nil, fmt.Errorf("error creating new alert: %v", err)
 	}
 	newAlert := Alert{
-		AlertID:    alertId,
+		AlertID:    alertID,
 		AlertType:  args.AlertType,
 		Price:      args.Price,      // If setup type, price will be null
 		SecurityID: args.SecurityID, // If setup type, securityId will be null
@@ -164,10 +170,12 @@ func NewAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 
 	return newAlert, nil
 }
+
 // DeleteAlertArgs represents a structure for handling DeleteAlertArgs data.
 type DeleteAlertArgs struct {
 	AlertID int `json:"alertId"`
 }
+
 // DeleteAlert performs operations related to DeleteAlert functionality.
 func DeleteAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteAlertArgs

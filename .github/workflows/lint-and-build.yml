@@ -155,18 +155,11 @@ jobs:
         run: |
           cd services/worker
           
-          # 1) Fail the build if we have critical errors (syntax errors, undefined names, etc.)
-          #    --select=E9 catches syntax errors
-          #    --select=F7,F82 catches undefined names/variables
-          #    Feel free to add additional codes here that you consider "not just style."
-          flake8 . --count --select=E9,F7,F82 --show-source --statistics
-          
-          # 2) Run a second pass for style checks, but do not fail (exit code = 0),
-          #    so style issues are reported but won't break the workflow
-          flake8 . --count --max-complexity=15 --max-line-length=127 \
-              --ignore=E203,E501,W503,W291,W293 \
-              --statistics --exit-zero
-
+          flake8 . \
+            --count \
+            --select=C901,E9,E711,E722,F7,F82,F401,F541,F811,F841 \
+            --show-source \
+            --statistics
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Format check with Black
