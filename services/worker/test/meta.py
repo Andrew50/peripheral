@@ -1,8 +1,8 @@
 import numpy as np
 from tensorflow.keras import backend as K
 import tensorflow as tf
-from tensorflow.keras import layers, models, optimizers
-from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras import layers
+from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import (
     Dense,
     LSTM,
@@ -14,14 +14,9 @@ from tensorflow.keras.layers import (
     Input,
 )
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.layers import Bidirectional
-from tensorflow.keras.callbacks import EarlyStopping
-from tensorflow.keras import layers, models, backend as K
 import matplotlib.pyplot as plt
 import mplfinance as mpf
 import pandas as pd
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.optimizers import Adam
 
 # Hyperparameters
 LATENT_DIM = 2

@@ -3,8 +3,8 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import mplfinance as mpf
 import pandas as pd
-from tensorflow.keras import layers, models, optimizers
-from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras import layers, models
+from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (
     Dense,
     LSTM,
