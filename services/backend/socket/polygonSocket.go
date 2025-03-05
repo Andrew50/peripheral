@@ -23,10 +23,8 @@ var useAlerts bool
 
 const slowRedisTimeout = 1 * time.Second // Adjust the timeout as needed
 
-var tickerToSecurityID map[string]int
-var tickerToSecurityIDLock sync.RWMutex
-
-// Add this package-level variable
+var tickerToSecurityId map[string]int
+var tickerToSecurityIdLock sync.RWMutex
 
 var polygonWSConn *polygonws.Client
 
@@ -36,6 +34,7 @@ var (
 	lastTickTimestamp  int64
 	tickTimestampMutex sync.RWMutex
 )
+
 // StreamPolygonDataToRedis performs operations related to StreamPolygonDataToRedis functionality.
 func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 	err := polygonWS.Subscribe(polygonws.StocksQuotes)
@@ -191,6 +190,8 @@ func StreamPolygonDataToRedis(conn *utils.Conn, polygonWS *polygonws.Client) {
 			log.Println("Error publishing to Redis:", err)
 		}
 	}
+*/
+
 // StartPolygonWS performs operations related to StartPolygonWS functionality.
 func StartPolygonWS(conn *utils.Conn, _useAlerts bool) error {
 	useAlerts = _useAlerts
@@ -215,6 +216,7 @@ func StartPolygonWS(conn *utils.Conn, _useAlerts bool) error {
 	go StreamPolygonDataToRedis(conn, polygonWSConn)
 	return nil
 }
+
 // StopPolygonWS performs operations related to StopPolygonWS functionality.
 func StopPolygonWS() error {
 	if polygonWSConn == nil {
@@ -225,7 +227,8 @@ func StopPolygonWS() error {
 	return nil
 }
 
-func initTickerToSecurityIDMap(conn *utils.Conn) error {
+// initTickerToSecurityIdMap initializes the map of ticker symbols to security IDs
+func initTickerToSecurityIdMap(conn *utils.Conn) error {
 	tickerToSecurityIdLock.Lock()
 	defer tickerToSecurityIdLock.Unlock()
 	tickerToSecurityId = make(map[string]int)
@@ -236,7 +239,7 @@ func initTickerToSecurityIDMap(conn *utils.Conn) error {
 	defer rows.Close()
 	for rows.Next() {
 		var ticker string
-		var securityID int
+		var securityId int
 		if err := rows.Scan(&ticker, &securityId); err != nil {
 			return err
 		}
