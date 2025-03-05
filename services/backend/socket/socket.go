@@ -53,7 +53,6 @@ type Client struct {
 	simulatedTimeStart    int64
 	accumulatedActiveTime time.Duration
 	lastTickTime          time.Time
-	accumulatedPauseTime  time.Duration
 }
 
 /*
