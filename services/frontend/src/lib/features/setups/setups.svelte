@@ -1,0 +1,208 @@
+<script lang="ts">
+	import { queueRequest, privateRequest } from '$lib/core/backend';
+	import type { Setup as CoreSetup } from '$lib/core/types';
+	import { setups } from '$lib/core/stores';
+	import '$lib/core/global.css';
+	import Trainer from './trainer.svelte';
+	import { onMount } from 'svelte';
+	import type { Subscriber, Updater } from 'svelte/store';
+	import { eventDispatcher } from './interface';
+	import type { SetupEvent } from './interface';
+
+	// Extend the core Setup type to include the 'new' state
+	type SetupId = number | 'new' | null;
+	interface EditableSetup extends Omit<CoreSetup, 'setupId' | 'activeScreen'> {
+		setupId: SetupId;
+		activeScreen: boolean | string;
+	}
+
+	let selectedSetupId: SetupId = 'new';
+	let trainingSetup: CoreSetup | null = null;
+	let editedSetup: EditableSetup | null = {
+		setupId: 'new',
+		name: '',
+		timeframe: '',
+		bars: 0,
+		threshold: 0,
+		dolvol: 0,
+		adr: 0,
+		mcap: 0,
+		score: 0,
+		activeScreen: false
+	};
+
+	onMount(() => {
+		eventDispatcher.subscribe((v) => {
+			if (v === 'new') {
+				editedSetup = {
+					setupId: 'new',
+					name: '',
+					timeframe: '',
+					bars: 0,
+					threshold: 0,
+					dolvol: 0,
+					adr: 0,
+					mcap: 0,
+					score: 0,
+					activeScreen: false
+				};
+				selectedSetupId = 'new';
+			}
+		});
+	});
+
+	function editSetup(setup: EditableSetup) {
+		selectedSetupId = setup.setupId;
+		editedSetup = { ...setup }; // Create a copy for editing
+	}
+	function cancelEdit() {
+		selectedSetupId = null;
+		editedSetup = null;
+		eventDispatcher.set('cancel');
+	}
+
+	function train(setup: EditableSetup) {
+		// Convert EditableSetup to CoreSetup for the Trainer component
+		if (typeof setup.setupId === 'number') {
+			trainingSetup = {
+				...setup,
+				setupId: setup.setupId,
+				activeScreen: typeof setup.activeScreen === 'boolean' ? setup.activeScreen : false
+			};
+		}
+	}
+
+	function createNewSetup() {
+		editedSetup = {
+			setupId: 'new', //temp id
+			name: '',
+			timeframe: '',
+			bars: 0,
+			threshold: 0,
+			dolvol: 0,
+			adr: 0,
+			mcap: 0,
+			score: 0,
+			activeScreen: false
+		};
+		selectedSetupId = 'new';
+	}
+	function manualTrain() {
+		if (selectedSetupId === null || selectedSetupId === 'new') return;
+		queueRequest('train', { setupId: selectedSetupId });
+	}
+	function deleteSetup() {
+		if (!selectedSetupId || selectedSetupId === 'new') return;
+
+		privateRequest('deleteSetup', { setupId: selectedSetupId }).then(() => {
+			setups.update((currentSetups) => {
+				return currentSetups.filter((setup) => setup.setupId !== selectedSetupId);
+			});
+			selectedSetupId = null;
+		});
+	}
+	function saveSetup() {
+		if (!editedSetup) return;
+
+		if (selectedSetupId === 'new') {
+			privateRequest<CoreSetup>('newSetup', { ...editedSetup }).then((s: CoreSetup) => {
+				setups.update((o: CoreSetup[]) => [...o, s]);
+				selectedSetupId = s.setupId;
+				editedSetup = { ...s, activeScreen: false };
+			});
+		} else {
+			privateRequest<void>('setSetup', { ...editedSetup }).then(() => {
+				setups.update((currentSetups: CoreSetup[]) =>
+					currentSetups.map((s) => {
+						if (editedSetup && s.setupId === editedSetup.setupId) {
+							// Convert EditableSetup to CoreSetup
+							const convertedSetup: CoreSetup = {
+								...editedSetup,
+								setupId: typeof editedSetup.setupId === 'number' ? editedSetup.setupId : 0,
+								activeScreen:
+									typeof editedSetup.activeScreen === 'boolean' ? editedSetup.activeScreen : false
+							};
+							return convertedSetup;
+						}
+						return s;
+					})
+				);
+			});
+		}
+	}
+</script>
+
+{#if selectedSetupId === null && trainingSetup === null}
+	<button on:click={createNewSetup}>New Setup</button>
+	<div class="table-container">
+		<table>
+			<thead>
+				<tr class="defalt-tr">
+					<th class="defalt-th">Setup</th>
+					<th class="defalt-th">Score</th>
+					<th class="defalt-th">Actions</th>
+				</tr>
+			</thead>
+			<tbody>
+				{#if Array.isArray($setups) && $setups.length > 0}
+					{#each $setups as setup}
+						<tr class="defalt-tr">
+							<td class="defalt-td">{setup.name}</td>
+							<td class="defalt-td">{setup.score}</td>
+							<td class="defalt-td">
+								<button
+									on:click={() => train({ ...setup, setupId: setup.setupId, activeScreen: false })}
+									>Train</button
+								>
+								<button
+									on:click={() =>
+										editSetup({ ...setup, setupId: setup.setupId, activeScreen: false })}
+									>Edit</button
+								>
+							</td>
+						</tr>
+					{/each}
+				{:else}
+					<tr class="defalt-tr">
+						<td colspan="2">No setups available.</td>
+					</tr>
+				{/if}
+			</tbody>
+		</table>
+	</div>
+{:else if selectedSetupId !== null && editedSetup !== null}
+	<div>
+		<label>Name: <input type="text" bind:value={editedSetup.name} /></label>
+	</div>
+	<div>
+		<label>Timeframe: <input type="text" bind:value={editedSetup.timeframe} /></label>
+	</div>
+	<div>
+		<label>Bars: <input type="number" bind:value={editedSetup.bars} /></label>
+	</div>
+	<div>
+		<label>Threshold: <input type="number" bind:value={editedSetup.threshold} /></label>
+	</div>
+	<div>
+		<label>DolVol: <input type="number" bind:value={editedSetup.dolvol} /></label>
+	</div>
+	<div>
+		<label>ADR: <input type="number" bind:value={editedSetup.adr} /></label>
+	</div>
+	<div>
+		<label>MCap: <input type="number" bind:value={editedSetup.mcap} /></label>
+	</div>
+	<button on:click={saveSetup}>Save</button>
+	<button on:click={cancelEdit}>Cancel</button>
+	<button on:click={manualTrain}>(dev) Manual Train</button>
+	{#if selectedSetupId !== 'new'}
+		<button on:click={deleteSetup}>Delete</button>
+	{/if}
+{:else if trainingSetup !== null}
+	<Trainer
+		handleExit={() => {
+			trainingSetup = null;
+		}}
+		setup={trainingSetup}
+	/>
+{/if}
