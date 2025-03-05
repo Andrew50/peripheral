@@ -1,0 +1,241 @@
+Order Status
+03/03/2025 07:58:19 PM ET
+
+"Symbol","Status","Order Type","Quantity","Trade Description","Order Time","Cancel Date","Account","Trade Type"
+"TSLA","FILLED AT
+$282.30","Limit at $282.30","1,500","Sell 1500 Limit at $282.30  ","07:55:24 PM
+03/03/2025","--","Joint WROS - TOD (Z05391727)","Margin"
+"TSLA","FILLED AT
+$282.00","Limit at $282.00","1,500","Buy 1500 Limit at $282.00  ","07:50:15 PM
+03/03/2025","--","Joint WROS - TOD (Z05391727)","Margin"
+"TSLA","FILLED AT
+$284.40","Limit at $284.40","1,073","Sell 1073 Limit at $284.40  ","06:29:46 PM
+03/03/2025","--","Joint WROS - TOD (Z05391727)","Margin"
+"TSLA","VERIFIED
+CANCELLED
+PARTIAL FILL
+427 OF 1500","Limit at $283.80","1,500","Sell 1500 Limit at $283.80  ","06:23:28 PM
+03/03/2025","12:00:00 AM
+03/03/2025","Joint WROS - TOD (Z05391727)","Margin"
+"TSLA","FILLED AT
+$283.5999","Limit at $283.60","1,500","Buy 1500 Limit at $283.60  ","05:26:04 PM
+03/03/2025","--","Joint WROS - TOD (Z05391727)","Margin"
+"TSLA","FILLED AT
+$285.90","Limit at $285.90","2,500","Buy 2500 Limit at $285.90  ","04:22:15 PM
+03/03/2025","--","Joint WROS - TOD (Z05391727)","Margin"
+"NVDA","FILLED AT
+$114.68","Limit at $114.70","963","Buy to Cover 963 Limit at $114.70  ","04:16:27 PM
+03/03/2025","--","Joint WROS - TOD (Z05391727)","Short"
+"NVDA","VERIFIED
+CANCELLED
+PARTIAL FILL
+1 OF 964","Limit at $114.54","964","Buy to Cover 964 Limit at $114.54  ","04:15:27 PM
+03/03/2025","12:00:00 AM
+03/03/2025","Joint WROS - TOD (Z05391727)","Short"
+"NVDA","VERIFIED
+CANCELLED
+PARTIAL FILL
+964 OF 7000","Limit at $114.59","7,000","Sell Short 7000 Limit at $114.59  ","04:14:30 PM
+03/03/2025","12:00:00 AM
+03/03/2025","Joint WROS - TOD (Z05391727)","Short"
+"TSLA","FILLED AT
+$282.50","Limit at $282.50","2,500","Sell 2500 Limit at $282.50  ","03:54:47 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"TSLA","FILLED AT
+$281.3952","Market","2,500","Buy 2500 at Market  ","03:54:11 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"NVDA","FILLED AT
+$112.845","Market","1,694","Sell 1694 at Market  ","03:49:50 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"NVDA","FILLED AT
+$112.8781","Market","1,694","Buy to Cover 1694 at Market  ","03:49:39 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Short"
+"NVDA","FILLED AT
+$112.5121","Limit at $112.50","5,000","Sell 5000 Limit at $112.50  ","03:48:22 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"NVDA","FILLED AT
+$112.855","Market","1,694","Buy 1694 at Market  ","03:47:22 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"NVDA","FILLED AT
+$112.92","Limit at $112.92","1,694","Sell Short 1694 Limit at $112.92  ","03:46:21 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Short"
+"NVDA","FILLED AT
+$112.90","Limit at $112.90","5,000","Buy 5000 Limit at $112.90  ","03:45:22 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"NVDA","FILLED AT
+$112.90","Limit at $112.90","4,500","Sell 4500 Limit at $112.90  ","03:35:47 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"NVDA","FILLED AT
+$112.884","Market","4,500","Buy 4500 at Market  ","03:34:55 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"NVDA","FILLED AT
+$112.636","Market","4,500","Sell 4500 at Market  ","03:25:35 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"NVDA","FILLED AT
+$112.4999","Market","4,500","Buy 4500 at Market  ","03:25:11 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"NVDA250307P98","FILLED AT
+$0.40","Limit at $0.40","100","Sell to Open 100 Mar 07 2025 $98.00 Puts Limit at $0.40  ","03:18:12 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"IBIT250307P46","FILLED AT
+$0.49","Limit at $0.49","150","Buy to Close 150 Mar 07 2025 $46.00 Puts Limit at $0.49  ","02:58:59 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"IBIT250307P46","FILLED AT
+$0.51","Limit at $0.51","150","Sell to Open 150 Mar 07 2025 $46.00 Puts Limit at $0.51  ","02:56:42 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"APP","FILLED AT
+$343.04","Market","1,000","Sell 1000 at Market  ","02:51:57 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"APP","FILLED AT
+$345.8702","Stop Loss at $346.10","1,000","Sell 1000 Stop Loss at $346.10  ","02:50:47 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"APP","FILLED AT
+$347.02","Market","1,000","Buy 1000 at Market  ","02:50:33 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"APP","FILLED AT
+$346.705","Market","1,000","Buy 1000 at Market  ","02:47:58 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"APP","FILLED AT
+$348.0482","Market","1,000","Sell 1000 at Market  ","02:07:28 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"APP","FILLED AT
+$347.4389","Market","1,000","Buy 1000 at Market  ","02:06:56 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"NVDA","FILLED AT
+$116.655","Limit at $116.64","6,000","Sell 6000 Limit at $116.64  ","02:00:25 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"NVDA","FILLED AT
+$116.628","Market","6,000","Buy 6000 at Market  ","01:59:32 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"IBIT","FILLED AT
+$49.85","Limit at $49.85","10,000","Sell 10000 Limit at $49.85  ","01:48:43 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Cash"
+"IBIT","FILLED AT
+$49.75","Limit at $49.75","10,000","Buy 10000 Limit at $49.75  ","01:48:22 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Cash"
+"IBIT","FILLED AT
+$50.00","Limit at $50.00","10,000","Sell 10000 Limit at $50.00  ","01:30:31 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Cash"
+"IBIT","FILLED AT
+$49.80","Limit at $49.80","10,000","Buy 10000 Limit at $49.80  ","01:29:39 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Cash"
+"NVDA","FILLED AT
+$117.9472","Market","7,500","Buy to Cover 7500 at Market  ","12:32:45 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Short"
+"NVDA","FILLED AT
+$118.45","Limit at $118.45","7,500","Sell Short 7500 Limit at $118.45  ","12:27:30 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Short"
+"APP","FILLED AT
+$348.955","Market","1,000","Sell 1000 at Market  ","12:08:19 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"APP","FILLED AT
+$348.44","Market","1,000","Buy 1000 at Market  ","12:03:36 PM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"TSLA","FILLED AT
+$300.00","Limit at $300.00","3,500","Sell 3500 Limit at $300.00  ","11:49:04 AM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"TSLA","FILLED AT
+$299.50","Limit at $299.50","3,500","Buy 3500 Limit at $299.50  ","11:48:17 AM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"TSLA","FILLED AT
+$298.30","Limit at $298.30","2,000","Sell 2000 Limit at $298.30  ","11:41:40 AM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"TSLA","FILLED AT
+$298.20","Limit at $298.20","2,000","Buy 2000 Limit at $298.20  ","11:41:11 AM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"NVDA","FILLED AT
+$119.56","Limit at $119.55","8,000","Sell 8000 Limit at $119.55  ","11:20:30 AM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"NVDA","FILLED AT
+$119.509","Limit at $119.56","8,000","Buy 8000 Limit at $119.56  ","11:19:27 AM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"TSLA","FILLED AT
+$298.5701","Limit at $298.50","2,000","Sell 2000 Limit at $298.50  ","11:14:39 AM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"TSLA","FILLED AT
+$298.276","Market","2,000","Buy 2000 at Market  ","11:13:39 AM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"APP","FILLED AT
+$341.935","Market","1,000","Sell 1000 at Market  ","10:22:03 AM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"APP","FILLED AT
+$341.6794","Market","1,000","Buy 1000 at Market  ","10:21:37 AM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"COIN250307P185","FILLED AT
+$0.58","Limit at $0.57","5","Sell to Open 5 Mar 07 2025 $185.00 Puts Limit at $0.57  ","10:13:50 AM
+03/03/2025","04:00:00 PM
+03/04/2025","SEP-IRA (210682233)","Cash"
+"IBIT","FILLED AT
+$50.90","Limit at $50.90","12,000","Sell 12000 Limit at $50.90  ","10:00:44 AM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Cash"
+"IBIT","FILLED AT
+$50.8863","Market","12,000","Buy 12000 at Market  ","09:57:44 AM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Cash"
+"APP","FILLED AT
+$348.19","Market","1,200","Sell 1200 at Market  ","09:46:05 AM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"APP","FILLED AT
+$344.09","Market","1,200","Buy 1200 at Market  ","09:44:36 AM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"MSTR","FILLED AT
+$286.00","Limit at $286.00","1,200","Sell 1200 Limit at $286.00  ","09:40:25 AM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"MSTR","FILLED AT
+$285.86","Market","1,200","Buy 1200 at Market  ","09:39:35 AM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"MSTR","FILLED AT
+$293.01","Market","1,500","Sell 1500 at Market  ","09:33:44 AM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"MSTR","FILLED AT
+$292.83","Market","1,500","Buy 1500 at Market  ","09:33:14 AM
+03/03/2025","04:00:00 PM
+03/04/2025","Joint WROS - TOD (Z05391727)","Margin"
+"","","","","","","","",""
