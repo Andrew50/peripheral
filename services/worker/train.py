@@ -4,7 +4,6 @@ import datetime
 import numpy as np
 import tensorflow as tf
 import keras_cv
-from tensorflow.keras import layers
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import (
     Dense,

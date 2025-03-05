@@ -136,7 +136,7 @@ async def get_instance_data(session, args):
         tf,
         bars,
         currentPrice,
-        pm,
+        _,  # pm parameter not used
         dolvolReq,
         adrReq,
         mcapReq,
