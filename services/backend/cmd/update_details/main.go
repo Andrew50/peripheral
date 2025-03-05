@@ -127,7 +127,7 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 	}
 
 	// Worker function to process each security
-	processSecurity := func(securityId int, ticker string) {
+	processSecurity := func(securityID int, ticker string) {
 		defer wg.Done()
 		defer func() { <-sem }() // Release semaphore slot
 
@@ -187,7 +187,7 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 			utils.NullString(logoBase64),
 			utils.NullString(iconBase64),
 			utils.NullInt64(details.ShareClassSharesOutstanding),
-			securityId,
+			securityID,
 			currentPrice)
 
 		if err != nil {
@@ -212,13 +212,13 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 	for rows.Next() {
 		var securityID int
 		var ticker string
-		if err := rows.Scan(&securityId, &ticker); err != nil {
+		if err := rows.Scan(&securityID, &ticker); err != nil {
 			return fmt.Errorf("failed to scan security row: %v", err)
 		}
 
 		sem <- struct{}{} // Acquire semaphore slot
 		wg.Add(1)
-		go processSecurity(securityId, ticker)
+		go processSecurity(securityID, ticker)
 	}
 
 	// Wait for all workers to complete
