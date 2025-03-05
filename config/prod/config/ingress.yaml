@@ -53,6 +53,20 @@ spec:
                 port:
                   number: 5057
           - pathType: Prefix
+            path: "/health"
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5057
+          - pathType: Prefix
+            path: "/backend/health"
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5057
+          - pathType: Prefix
             path: "/_app"
             backend:
               service:
