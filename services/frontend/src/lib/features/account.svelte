@@ -501,7 +501,15 @@
 						<h3>Performance by Ticker</h3>
 						<List
 							list={writable($statistics.ticker_stats)}
-							columns={['ticker', 'total_trades', 'win_rate', 'winning_trades', 'losing_trades', 'avg_pnl', 'total_pnl']}
+							columns={[
+								'ticker',
+								'total_trades',
+								'win_rate',
+								'winning_trades',
+								'losing_trades',
+								'avg_pnl',
+								'total_pnl'
+							]}
 							displayNames={{
 								ticker: 'Ticker',
 								total_trades: 'Total Trades',
@@ -516,7 +524,7 @@
 								avg_pnl: (value) => `$${value}`,
 								total_pnl: (value) => `$${value}`
 							}}
-							rowClass={(item) => item.total_pnl > 0 ? 'profitable' : 'unprofitable'}
+							rowClass={(item) => (item.total_pnl > 0 ? 'profitable' : 'unprofitable')}
 						/>
 					</div>
 				{/if}
@@ -707,22 +715,22 @@
 		color: #888;
 	}
 
-	.trade-list th:nth-child(1), 
+	.trade-list th:nth-child(1),
 	.trade-list td:nth-child(1) {
 		width: 33%;
 	}
 
-	.trade-list th:nth-child(2), 
+	.trade-list th:nth-child(2),
 	.trade-list td:nth-child(2) {
 		width: 17%;
 	}
 
-	.trade-list th:nth-child(3), 
+	.trade-list th:nth-child(3),
 	.trade-list td:nth-child(3) {
 		width: 17%;
 	}
 
-	.trade-list th:nth-child(4), 
+	.trade-list th:nth-child(4),
 	.trade-list td:nth-child(4) {
 		width: 33%;
 		text-align: right;

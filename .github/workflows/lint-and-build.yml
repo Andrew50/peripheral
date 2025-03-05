@@ -101,11 +101,10 @@ jobs:
         with:
           version: latest
           working-directory: services/backend
-          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number --issues-exit-code=0
+          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number --max-issues-per-linter=0 --max-same-issues=0
           skip-cache: true
           skip-pkg-cache: true
           skip-build-cache: true
-          # Fail on any issues
           only-new-issues: false
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
@@ -114,7 +113,10 @@ jobs:
         run: |
           cd services/backend
           # Run staticcheck with strict settings to catch unused variables, error handling issues, etc.
-          staticcheck -checks=all -fail=0 ./...
+          # First run to print all issues
+          staticcheck -checks=all ./... || true
+          # Second run to actually fail the build if there are issues
+          staticcheck -checks=all ./...
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
