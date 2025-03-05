@@ -7,7 +7,7 @@ import (
 	"fmt"
 )
 
-
+// GetSettings performs operations related to GetSettings functionality.
 func GetSettings(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
     var settings json.RawMessage
 	err := conn.DB.QueryRow(context.Background(), "SELECT settings from users where userId = $1", userId).Scan(&settings)
@@ -16,10 +16,10 @@ func GetSettings(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	}
 	return settings, nil
 }
-
+// SetSettingsArgs represents a structure for handling SetSettingsArgs data.
 type SetSettingsArgs struct {
 	Settings    json.RawMessage             `json:"settings"`
-}
+// SetSettings performs operations related to SetSettings functionality.
 func SetSettings(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args SetSettingsArgs
 	err := json.Unmarshal(rawArgs, &args)

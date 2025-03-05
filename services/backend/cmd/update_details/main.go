@@ -210,7 +210,7 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 
 	// Process all securities
 	for rows.Next() {
-		var securityId int
+		var securityID int
 		var ticker string
 		if err := rows.Scan(&securityId, &ticker); err != nil {
 			return fmt.Errorf("failed to scan security row: %v", err)

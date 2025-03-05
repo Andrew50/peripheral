@@ -15,29 +15,29 @@ import (
 
 	"github.com/polygon-io/client-go/rest/models"
 )
-
+// GetChartEventsArgs represents a structure for handling GetChartEventsArgs data.
 type GetChartEventsArgs struct {
-	SecurityId        int   `json:"securityId"`
+	SecurityID        int   `json:"securityId"`
 	From              int64 `json:"from"`
 	To                int64 `json:"to"`
 	IncludeSECFilings bool  `json:"includeSECFilings"`
 }
-
+// ChartEvent represents a structure for handling ChartEvent data.
 type ChartEvent struct {
 	Timestamp int64  `json:"timestamp"`
 	Type      string `json:"type"`
 	Value     string `json:"value"`
 }
-
+// GetChartEvents performs operations related to GetChartEvents functionality.
 func GetChartEvents(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetChartEventsArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 	// Convert from milliseconds to seconds for time.Unix
-	ticker, err := utils.GetTicker(conn, args.SecurityId, time.Unix(args.From/1000, 0))
+	ticker, err := utils.GetTicker(conn, args.SecurityID, time.Unix(args.From/1000, 0))
 	if err != nil {
-		return nil, fmt.Errorf("error fetching ticker for %d: %w", args.SecurityId, err)
+		return nil, fmt.Errorf("error fetching ticker for %d: %w", args.SecurityID, err)
 	}
 
 	// Create a WaitGroup to synchronize goroutines
@@ -185,7 +185,7 @@ func GetChartEvents(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inte
 			from := time.Unix(args.From/1000, 0)
 			to := time.Unix(args.To/1000, 0)
 
-			filings, err := getStockEdgarFilings(conn, args.SecurityId, EdgarFilingOptions{
+			filings, err := getStockEdgarFilings(conn, args.SecurityID, EdgarFilingOptions{
 				From: &from,
 				To:   &to,
 			})

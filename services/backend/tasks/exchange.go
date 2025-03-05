@@ -7,16 +7,16 @@ import (
 	"io"
 	"net/http"
 )
-
+// Exchange represents a structure for handling Exchange data.
 type Exchange struct {
 	ID         int    `json:"id"`
 	MIC        string `json:"mic"`
 }
-
+// Response represents a structure for handling Response data.
 type Response struct {
 	Results []Exchange `json:"results"`
 }
-
+// GetExchanges performs operations related to GetExchanges functionality.
 func GetExchanges(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	url := fmt.Sprintf( "https://api.polygon.io/v3/reference/exchanges?asset_class=stocks&apiKey=%s", conn.PolygonKey)
 	resp, err := http.Get(url)

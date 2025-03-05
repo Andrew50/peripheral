@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 )
-
+// GetActiveArgs represents a structure for handling GetActiveArgs data.
 type GetActiveArgs struct {
 	Timeframe       string   `json:"timeframe"`
 	Group           string   `json:"group"`
@@ -20,23 +20,23 @@ type GetActiveArgs struct {
 	MinADR          *float64 `json:"minADR,omitempty"`
 	MaxADR          *float64 `json:"maxADR,omitempty"`
 }
-
+// StockResult represents a structure for handling StockResult data.
 type StockResult struct {
 	Ticker       string  `json:"ticker"`
-	SecurityId   int     `json:"securityId"`
+	SecurityID   int     `json:"securityId"`
 	MarketCap    float64 `json:"market_cap"`
 	DollarVolume float64 `json:"dollar_volume"`
 	ADR          float64 `json:"adr"`
 }
-
+// GroupConstituent represents a structure for handling GroupConstituent data.
 type GroupConstituent struct {
 	Ticker       string  `json:"ticker"`
-	SecurityId   int     `json:"securityId"`
+	SecurityID   int     `json:"securityId"`
 	MarketCap    float64 `json:"market_cap"`
 	DollarVolume float64 `json:"dollar_volume"`
 	ADR          float64 `json:"adr"`
 }
-
+// GroupResult represents a structure for handling GroupResult data.
 type GroupResult struct {
 	Group        string             `json:"group"`
 	Constituents []GroupConstituent `json:"constituents"`
@@ -45,7 +45,7 @@ type GroupResult struct {
 // ActiveResult is a union type that can be either StockResult or GroupResult
 type ActiveResult struct {
 	Ticker       string             `json:"ticker,omitempty"`
-	SecurityId   int                `json:"securityId,omitempty"`
+	SecurityID   int                `json:"securityId,omitempty"`
 	MarketCap    float64            `json:"market_cap,omitempty"`
 	DollarVolume float64            `json:"dollar_volume,omitempty"`
 	ADR          float64            `json:"adr,omitempty"`
@@ -54,7 +54,7 @@ type ActiveResult struct {
 }
 
 const MAX_RESULTS = 20 // Number of results to return
-
+// GetActive performs operations related to GetActive functionality.
 func GetActive(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetActiveArgs
 	err := json.Unmarshal(rawArgs, &args)

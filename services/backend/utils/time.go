@@ -18,7 +18,7 @@ func init(){
         panic(err)
     }
 }
-
+// StringToTime performs operations related to StringToTime functionality.
 func StringToTime(datetimeStr string) (time.Time, error) {
 	layouts := []string{
 		time.DateTime,
@@ -57,10 +57,10 @@ func StringToTime(datetimeStr string) (time.Time, error) {
 	return parsedTime, nil*/
 
 }
-
+// MillisFromUTCTime performs operations related to MillisFromUTCTime functionality.
 func MillisFromUTCTime(timeObj time.Time) (models.Millis, error) {
 	return models.Millis(timeObj), nil
-}
+// MillisFromDatetimeString performs operations related to MillisFromDatetimeString functionality.
 func MillisFromDatetimeString(datetime string) (models.Millis, error) {
 	layouts := []string{
 		time.DateTime,
@@ -77,10 +77,10 @@ func MillisFromDatetimeString(datetime string) (models.Millis, error) {
 	}
 	return models.Millis(time.Now()), fmt.Errorf("212k invalid string datetime")
 
-}
+// NanosFromUTCTime performs operations related to NanosFromUTCTime functionality.
 func NanosFromUTCTime(timeObj time.Time) (models.Nanos, error) {
 	return models.Nanos(timeObj), nil
-}
+// NanosFromDatetimeString performs operations related to NanosFromDatetimeString functionality.
 func NanosFromDatetimeString(datetime string) (models.Nanos, error) {
 	layouts := []string{
 		time.RFC3339Nano,
@@ -98,7 +98,7 @@ func NanosFromDatetimeString(datetime string) (models.Nanos, error) {
 	return models.Nanos(time.Now()), nil
 }
 
-
+// GetTimeFrame performs operations related to GetTimeFrame functionality.
 func GetTimeFrame(timeframeString string) (int, string, string, int, error) {
 	// if no identifer is passed, it means that it should be minute data
 	lastChar := rune(timeframeString[len(timeframeString)-1])
@@ -160,7 +160,7 @@ func getStartOfTimeWindow(timestamp time.Time, multiplier int, timespan string, 
 	}
 	return time.Time{}, fmt.Errorf("done")
 }
-
+// TimespanStringToDuration performs operations related to TimespanStringToDuration functionality.
 func TimespanStringToDuration(timespan string) time.Duration {
 	switch timespan {
 	case "second":
@@ -180,7 +180,7 @@ func TimespanStringToDuration(timespan string) time.Duration {
 	default:
 		return time.Minute
 	}
-}
+// IsTimestampRegularHours performs operations related to IsTimestampRegularHours functionality.
 func IsTimestampRegularHours(timestamp time.Time) bool {
     marketOpenTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 9, 30, 0, 0, easternLocation)
     marketCloseTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 16, 0, 0, 0, easternLocation)
