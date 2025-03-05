@@ -8,17 +8,17 @@
 	import type { Subscriber, Updater } from 'svelte/store';
 
 	// Extend the core Setup type to include the 'new' state
-	type SetupId = number | 'new';
+	type SetupId = number | 'new' | null;
 	interface EditableSetup extends Omit<CoreSetup, 'setupId' | 'activeScreen'> {
 		setupId: SetupId;
 		activeScreen: boolean | string;
 	}
 
-	type SetupEvent = 'new' | 'edit' | 'delete' | 'train';
+	type SetupEvent = 'new' | 'edit' | 'delete' | 'train' | 'cancel';
 
 	let selectedSetupId: SetupId = 'new';
 	let trainingSetup: EditableSetup | null = null;
-	let editedSetup: EditableSetup = {
+	let editedSetup: EditableSetup | null = {
 		setupId: 'new',
 		name: '',
 		timeframe: '',
@@ -82,6 +82,7 @@
 		selectedSetupId = 'new';
 	}
 	function manualTrain() {
+		if (selectedSetupId === null) return;
 		queueRequest('train', { setupId: selectedSetupId });
 	}
 	function deleteSetup() {
@@ -95,16 +96,32 @@
 		});
 	}
 	function saveSetup() {
+		if (!editedSetup) return;
+
 		if (selectedSetupId === 'new') {
-			privateRequest<CoreSetup>('newSetup', editedSetup).then((s: CoreSetup) => {
-				setups.update((o: CoreSetup[]) => [...o, s]);
-				selectedSetupId = s.setupId;
-				editedSetup = { ...s, activeScreen: false };
-			});
+			privateRequest<CoreSetup>('newSetup', editedSetup as Record<string, unknown>).then(
+				(s: CoreSetup) => {
+					setups.update((o: CoreSetup[]) => [...o, s]);
+					selectedSetupId = s.setupId;
+					editedSetup = { ...s, activeScreen: false };
+				}
+			);
 		} else {
-			privateRequest<void>('setSetup', editedSetup).then(() => {
+			privateRequest<void>('setSetup', editedSetup as Record<string, unknown>).then(() => {
 				setups.update((currentSetups: CoreSetup[]) =>
-					currentSetups.map((s) => (s.setupId === editedSetup.setupId ? editedSetup : s))
+					currentSetups.map((s) => {
+						if (editedSetup && s.setupId === editedSetup.setupId) {
+							// Convert EditableSetup to CoreSetup
+							const convertedSetup: CoreSetup = {
+								...editedSetup,
+								setupId: typeof editedSetup.setupId === 'number' ? editedSetup.setupId : 0,
+								activeScreen:
+									typeof editedSetup.activeScreen === 'boolean' ? editedSetup.activeScreen : false
+							};
+							return convertedSetup;
+						}
+						return s;
+					})
 				);
 			});
 		}
@@ -129,8 +146,15 @@
 							<td class="defalt-td">{setup.name}</td>
 							<td class="defalt-td">{setup.score}</td>
 							<td class="defalt-td">
-								<button on:click={() => train(setup)}>Train</button>
-								<button on:click={() => editSetup(setup)}>Edit</button>
+								<button
+									on:click={() => train({ ...setup, setupId: setup.setupId, activeScreen: false })}
+									>Train</button
+								>
+								<button
+									on:click={() =>
+										editSetup({ ...setup, setupId: setup.setupId, activeScreen: false })}
+									>Edit</button
+								>
 							</td>
 						</tr>
 					{/each}
@@ -142,7 +166,7 @@
 			</tbody>
 		</table>
 	</div>
-{:else if selectedSetupId !== null}
+{:else if selectedSetupId !== null && editedSetup !== null}
 	<div>
 		<label>Name: <input type="text" bind:value={editedSetup.name} /></label>
 	</div>

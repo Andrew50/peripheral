@@ -2,14 +2,14 @@
 	import { alertPopup } from '$lib/core/stores';
 	import { fade } from 'svelte/transition';
 
-	function dismissAlert(alertId: number) {
+	function dismissAlert(alertId: number = 0) {
 		alertPopup.set(null);
 	}
 </script>
 
 <div class="alert-container">
 	{#if $alertPopup}
-		<div class="alert-popup" transition:fade on:click={() => dismissAlert()}>
+		<div class="alert-popup" transition:fade on:click={() => dismissAlert($alertPopup.alertId)}>
 			<div class="alert-content">
 				<span class="value">{$alertPopup.message}</span>
 				<span class="label">{new Date($alertPopup.timestamp).toLocaleTimeString()}</span>

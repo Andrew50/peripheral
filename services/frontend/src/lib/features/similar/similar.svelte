@@ -55,7 +55,7 @@
 
 	function handleDelete(instance: Instance) {
 		// Optional: Implement delete functionality if needed
-		'Delete:', instance;
+		console.log('Delete:', instance);
 	}
 </script>
 

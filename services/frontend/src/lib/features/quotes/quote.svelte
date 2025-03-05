@@ -40,7 +40,8 @@
 			// Handle details fetching in the main subscription
 			if (chartInstance.securityId && lastFetchedSecurityId !== chartInstance.securityId) {
 				console.log('Quote component: Fetching details for security ID:', chartInstance.securityId);
-				lastFetchedSecurityId = chartInstance.securityId;
+				// Convert securityId to number before assigning to lastFetchedSecurityId
+				lastFetchedSecurityId = Number(chartInstance.securityId);
 				privateRequest<Record<string, any>>(
 					'getTickerMenuDetails',
 					{ securityId: chartInstance.securityId },
@@ -48,7 +49,7 @@
 				)
 					.then((details) => {
 						console.log('Quote component: Received details:', details);
-						if (lastFetchedSecurityId === chartInstance.securityId) {
+						if (lastFetchedSecurityId === Number(chartInstance.securityId)) {
 							currentDetails = details;
 							// Update the instance directly instead of activeChartInstance
 							instance.update((inst) => ({
@@ -61,7 +62,7 @@
 					})
 					.catch((error) => {
 						console.error('Quote component: Error fetching details:', error);
-						if (lastFetchedSecurityId === chartInstance.securityId) {
+						if (lastFetchedSecurityId === Number(chartInstance.securityId)) {
 							currentDetails = {};
 						}
 					});
