@@ -1,8 +1,9 @@
-import type { Alert, Instance } from '$lib/core/types';
+import type { Alert, AlertLog, Instance } from '$lib/core/types';
 import { writable } from 'svelte/store';
-
 import { privateRequest } from '$lib/core/backend';
 import { activeAlerts, inactiveAlerts } from '$lib/core/stores';
+
+export type { Alert, AlertLog };
 
 export function newPriceAlert(instance: Instance) {
 	if (!instance.price || !instance.securityId) return;

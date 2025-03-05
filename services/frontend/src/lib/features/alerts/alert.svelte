@@ -7,7 +7,8 @@
 	import { queryAlgo } from '$lib/utils/popups/algo.svelte';
 	import { privateRequest } from '$lib/core/backend';
 	import { activeAlerts, inactiveAlerts, alertLogs } from '$lib/core/stores';
-	import { type Alert, type AlertLog, newAlert, newPriceAlert } from './interface';
+	import type { Alert, AlertLog } from '$lib/core/types';
+	import { newAlert, newPriceAlert } from './interface';
 	let selectedAlertType = writable<string>('price');
 
 	// Add state for showing alert type descriptions
