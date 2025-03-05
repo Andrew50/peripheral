@@ -9,7 +9,12 @@
 	import { flagWatchlistId, watchlists, flagWatchlist } from '$lib/core/stores';
 	import '$lib/core/global.css';
 
-	let activeList: Writable<Instance[]> = writable([]);
+	// Extended Instance type to include watchlistItemId
+	interface WatchlistItem extends Instance {
+		watchlistItemId?: number;
+	}
+
+	let activeList: Writable<WatchlistItem[]> = writable([]);
 	let newWatchlistName = '';
 	let currentWatchlistId: number;
 	let previousWatchlistId: number;
@@ -28,20 +33,23 @@
 	}
 
 	onMount(() => {
-		selectWatchlist(flagWatchlistId);
+		// Convert flagWatchlistId to string to fix type issue
+		if (flagWatchlistId !== undefined) {
+			selectWatchlist(String(flagWatchlistId));
+		}
 	});
 
 	function addInstance() {
 		const inst = { ticker: '', timestamp: 0 };
-		queryInstanceInput(['ticker'], ['ticker', 'timestamp'], inst).then((i: Instance) => {
+		queryInstanceInput(['ticker'], ['ticker', 'timestamp'], inst).then((i: WatchlistItem) => {
 			const aList = get(activeList);
 			const empty = !Array.isArray(aList);
-			if (empty || !aList.find((l: Instance) => l.ticker === i.ticker)) {
+			if (empty || !aList.find((l: WatchlistItem) => l.ticker === i.ticker)) {
 				privateRequest<number>('newWatchlistItem', {
-					watchlistId: parseInt(currentWatchlistId, 10),
+					watchlistId: currentWatchlistId,
 					securityId: i.securityId
 				}).then((watchlistItemId: number) => {
-					activeList.update((v: Instance[]) => {
+					activeList.update((v: WatchlistItem[]) => {
 						i.watchlistItemId = watchlistItemId;
 						if (empty) {
 							return [i];
@@ -89,7 +97,7 @@
 		);
 	}
 
-	function deleteItem(item: Instance) {
+	function deleteItem(item: WatchlistItem) {
 		if (!item.watchlistItemId) {
 			throw new Error('missing id on delete');
 		}
@@ -115,17 +123,32 @@
 		}
 
 		if (watchlistIdString === 'delete') {
-			if (confirmingDelete) {
-				deleteWatchlist(currentWatchlistId);
-				confirmingDelete = false;
+			// Get watchlist name before showing confirmation
+			const watchlistsValue = get(watchlists);
+
+			// Make sure we have the current watchlist ID as a number for comparison
+			const currentWatchlistIdNum = Number(currentWatchlistId);
+
+			// Debug the watchlists and current ID to verify what we're looking for
+			console.log('Current watchlist ID:', currentWatchlistIdNum);
+			console.log('Available watchlists:', watchlistsValue);
+
+			// Find the watchlist by ID, ensuring type consistency
+			const watchlist = Array.isArray(watchlistsValue)
+				? watchlistsValue.find((w) => Number(w.watchlistId) === currentWatchlistIdNum)
+				: null;
+
+			console.log('Found watchlist:', watchlist);
+
+			// Use the actual name or fall back to the ID if name is not available
+			const watchlistName = watchlist?.watchlistName || `Watchlist #${currentWatchlistIdNum}`;
+
+			if (confirm(`Are you sure you want to delete "${watchlistName}"?`)) {
+				// Ensure we're passing a number to deleteWatchlist
+				deleteWatchlist(Number(currentWatchlistId));
 			} else {
-				confirmingDelete = true;
-				const watchlist = get(watchlists).find((w) => w.watchlistId === currentWatchlistId);
-				if (!confirm(`Are you sure you want to delete "${watchlist?.watchlistName}"?`)) {
-					selectWatchlist(String(currentWatchlistId));
-					return;
-				}
-				deleteWatchlist(currentWatchlistId);
+				// User canceled, reset the dropdown
+				selectWatchlist(String(currentWatchlistId));
 			}
 			return;
 		}
@@ -134,22 +157,34 @@
 		newWatchlistName = '';
 		const watchlistId = parseInt(watchlistIdString);
 		if (watchlistId === flagWatchlistId) {
-			activeList = flagWatchlist;
+			activeList = flagWatchlist as unknown as Writable<WatchlistItem[]>;
 		} else {
-			activeList = writable<Instance[]>([]);
+			activeList = writable<WatchlistItem[]>([]);
 		}
 		currentWatchlistId = watchlistId;
-		privateRequest<Instance[]>('getWatchlistItems', { watchlistId: watchlistId }).then(
-			(v: Instance[]) => {
+		privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId }).then(
+			(v: WatchlistItem[]) => {
 				activeList.set(v);
 			}
 		);
 	}
 
 	function deleteWatchlist(id: number) {
-		privateRequest<void>('deleteWatchlist', { watchlistId: id }).then(() => {
+		// Ensure id is a number before sending to the backend
+		const watchlistId = typeof id === 'string' ? parseInt(id, 10) : id;
+
+		privateRequest<void>('deleteWatchlist', { watchlistId }).then(() => {
 			watchlists.update((v: Watchlist[]) => {
-				return v.filter((v: Watchlist) => v.watchlistId !== id);
+				// After deletion, select another watchlist if available
+				const updatedWatchlists = v.filter((watchlist: Watchlist) => watchlist.watchlistId !== id);
+
+				// If we deleted the current watchlist, select another one
+				if (id === currentWatchlistId && updatedWatchlists.length > 0) {
+					// Select the first available watchlist
+					setTimeout(() => selectWatchlist(String(updatedWatchlists[0].watchlistId)), 10);
+				}
+
+				return updatedWatchlists;
 			});
 			if (id === flagWatchlistId) {
 				flagWatchlist.set([]);
@@ -164,10 +199,16 @@
 
 	function handleWatchlistChange(event: Event) {
 		const target = event.target as HTMLSelectElement;
-		if (target.value !== 'new') {
-			previousWatchlistId = parseInt(target.value);
+		const value = target.value;
+
+		// Handle special values
+		if (value !== 'new' && value !== 'delete') {
+			previousWatchlistId = parseInt(value, 10);
+			currentWatchlistId = parseInt(value, 10);
 		}
-		selectWatchlist(target.value);
+
+		// Always pass the string value to selectWatchlist
+		selectWatchlist(value);
 	}
 </script>
 
@@ -179,12 +220,12 @@
 				<select
 					class="default-select"
 					id="watchlists"
-					bind:value={currentWatchlistId}
+					value={currentWatchlistId?.toString()}
 					on:change={handleWatchlistChange}
 				>
 					<optgroup label="My Watchlists">
 						{#each $watchlists as watchlist}
-							<option value={watchlist.watchlistId}>
+							<option value={watchlist.watchlistId.toString()}>
 								{watchlist.watchlistName}
 							</option>
 						{/each}
