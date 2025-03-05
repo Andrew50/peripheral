@@ -41,7 +41,7 @@
 	let unsubscribeFn: Function | null = null;
 
 	// Function to handle clicking on a filing
-	function handleFilingClick(filing: Filing) {
+	function handleFilingClick(filing: Instance) {
 		// Find the security by ticker and load its chart
 		if (filing.ticker) {
 			queryChart({ ticker: filing.ticker });
@@ -50,7 +50,7 @@
 
 	function refreshFilings() {
 		isLoadingGlobalFilings = true;
-		privateRequest('getLatestEdgarFilings', {})
+		privateRequest<Filing[]>('getLatestEdgarFilings', {})
 			.then((filings) => {
 				console.log('Received filings from API:', filings);
 				handleSECFilingMessage(filings);
@@ -110,13 +110,17 @@
 		<List
 			list={filingsList}
 			columns={['ticker', 'type', 'timestamp', 'url']}
+			displayNames={{
+				ticker: 'Ticker',
+				type: 'Type',
+				timestamp: 'Time',
+				url: 'URL'
+			}}
 			formatters={{
 				timestamp: (value) => formatTimestamp(value)
 			}}
-			linkColumns={{
-				url: (item) => item.url
-			}}
-			on:rowClick={(e) => handleFilingClick(e.detail)}
+			linkColumns={['url']}
+			on:rowClick={({ detail }) => handleFilingClick(detail)}
 		/>
 	</div>
 </div>

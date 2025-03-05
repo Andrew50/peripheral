@@ -150,14 +150,17 @@
 			return v;
 		});
 	}
-	function completeRequest(result: RightClickResult, func: Function | null = null) {
+	function completeRequest(
+		result: RightClickResult,
+		func: ((instance: Instance) => void) | null = null
+	) {
 		rightClickQuery.update((v: RightClickQuery) => {
 			v.status = 'complete';
 			v.result = result;
 			return v;
 		});
 		if (func !== null) {
-			func(rightClickQuery.instance);
+			func(get(rightClickQuery).instance);
 		}
 	}
 	function embedSimilar(): void {
@@ -182,8 +185,12 @@
 		style="top: {$rightClickQuery.y}px; left: {$rightClickQuery.x}px;"
 	>
 		<div class="header">
-			<div class="ticker">{$rightClickQuery.instance.ticker}</div>
-			<div class="timestamp">{UTCTimestampToESTString($rightClickQuery.instance.timestamp)}</div>
+			<div class="ticker">{$rightClickQuery.instance.ticker || ''}</div>
+			<div class="timestamp">
+				{$rightClickQuery.instance.timestamp
+					? UTCTimestampToESTString($rightClickQuery.instance.timestamp)
+					: ''}
+			</div>
 		</div>
 
 		<div class="section">
@@ -197,8 +204,11 @@
 				>
 				<button
 					class="wide-button"
-					on:click={() => addHorizontalLine($rightClickQuery.instance.price, $rightClickQuery.instance.securityId)}
-					>Add Horizontal Line {$rightClickQuery.instance.price?.toFixed(2)}</button
+					on:click={() =>
+						addHorizontalLine(
+							$rightClickQuery.instance.price || 0,
+							$rightClickQuery.instance.securityId || 0
+						)}>Add Horizontal Line {$rightClickQuery.instance.price?.toFixed(2)}</button
 				>
 			{/if}
 		</div>
@@ -210,7 +220,7 @@
 			<button class="wide-button" on:click={(event) => sSample(event)}> Add to Sample </button>
 			<button
 				class="wide-button"
-				on:click={(event) => querySimilarInstances(event, get(rightClickQuery).instance)}
+				on:click={(event) => querySimilarInstances($rightClickQuery.instance)}
 			>
 				Similar Instances
 			</button>
