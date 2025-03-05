@@ -1,9 +1,8 @@
 package jobs
 
 import (
-	"backend/socket"
-	//"backend/alerts"
 	"backend/alerts"
+	"backend/socket"
 	"backend/utils"
 	"context"
 	"encoding/json"
@@ -525,6 +524,7 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	fmt.Printf("\n=== JOB START: %s ===\n", jobName)
 	fmt.Printf("Time: %s\n", now.Format("2006-01-02 15:04:05"))
 
+	// Queue the job if it's not already running
 	var taskID string
 	var err error
 
@@ -532,10 +532,12 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	if strings.HasPrefix(jobName, "queue:") {
 		// Extract the function name from the job name
 		funcName := strings.TrimPrefix(jobName, "queue:")
-		// Queue the job and get a task ID
-		taskId, err = utils.Queue(s.Conn, funcName, nil)
+		// Queue the job
+		taskID, err = utils.Queue(s.Conn, funcName, nil)
 		if err != nil {
-			fmt.Printf("Error queuing job %s: %v\n", jobName, err)
+			log.Printf("Error queueing job %s: %v", job.Name, err)
+			job.ExecutionMutex.Unlock()
+			return
 		}
 	} else {
 		// Execute the job directly
@@ -563,7 +565,7 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 		fmt.Printf("Duration: %v\n", duration)
 
 		// If we have a task ID, poll for the result to verify completion
-		if taskId != "" {
+		if taskID != "" {
 			go func() {
 				// Poll for the result with a timeout
 				maxRetries := 30
@@ -571,7 +573,7 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 				taskSucceeded := false
 
 				for i := 0; i < maxRetries; i++ {
-					result, pollErr := utils.Poll(s.Conn, taskId)
+					result, pollErr := utils.Poll(s.Conn, taskID)
 					if pollErr == nil && result != nil {
 						// Try to parse the result to check for errors
 						var resultMap map[string]interface{}
@@ -597,13 +599,14 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 
 						fmt.Printf("\n=== JOB VERIFIED COMPLETION: %s ===\n", jobName)
 						fmt.Printf("Completion Time: %s\n", completionTime.Format("2006-01-02 15:04:05"))
+						fmt.Printf("Task ID: %s\n", taskID)
 						break
 					}
 
 					// If we've reached the last retry, log a timeout
 					if i == maxRetries-1 && !taskSucceeded {
 						fmt.Printf("\n=== JOB VERIFICATION TIMEOUT: %s ===\n", jobName)
-						fmt.Printf("Task ID: %s\n", taskId)
+						fmt.Printf("Task ID: %s\n", taskID)
 						fmt.Printf("Timed out after %d retries\n", maxRetries)
 					}
 
@@ -771,7 +774,7 @@ func stopAlertLoop() {
 	}
 }
 
-// Stop function for polygon websocket
+// stopPolygonWebSocket stops the Polygon WebSocket if it's running
 func stopPolygonWebSocket() {
 	polygonInitMutex.Lock()
 	defer polygonInitMutex.Unlock()

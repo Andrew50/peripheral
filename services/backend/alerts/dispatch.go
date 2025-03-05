@@ -16,6 +16,7 @@ const (
 )
 
 var bot *telebot.Bot
+
 // InitTelegramBot performs operations related to InitTelegramBot functionality.
 func InitTelegramBot() error {
 	botToken := "7500247744:AAGNsmjWYfb97XzppT2E0_8qoArgxLOz7e0"
@@ -30,6 +31,8 @@ func InitTelegramBot() error {
 	}
 	//log.Println("debug: Telegram bot initialized successfully")
 	return err
+}
+
 // SendTelegramMessage performs operations related to SendTelegramMessage functionality.
 func SendTelegramMessage(msg string, chatID int64) {
 	recipient := telebot.ChatID(chatID)
