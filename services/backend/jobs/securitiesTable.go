@@ -162,7 +162,7 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 		defer file.Close()
 
 		log.SetOutput(file)
-		query := fmt.Sprintf("TRUNCATE TABLE securities RESTART IDENTITY CASCADE")
+		query := "TRUNCATE TABLE securities RESTART IDENTITY CASCADE"
 		_, err = conn.DB.Exec(context.Background(), query)
 		if err != nil {
 			return fmt.Errorf("unable to truncate table for test")
@@ -193,6 +193,10 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 	for currentDate := startDate; currentDate.Before(time.Now()); currentDate = currentDate.AddDate(0, 0, 1) {
 		currentDateString := currentDate.Format(dateFormat)
 		yesterdayDateString := currentDate.AddDate(0, 0, -1).Format(dateFormat)
+		if err != nil {
+			log.Printf("Error formatting date: %v", err)
+			return err
+		}
 		polyTickers, err := utils.AllTickers(conn.Polygon, currentDateString)
 		if err != nil {
 			return fmt.Errorf("423n %v", err)
@@ -540,16 +544,22 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 
 		details, err := utils.GetTickerDetails(conn.Polygon, ticker, "now")
 		if err != nil {
-			fmt.Printf("Failed to get details for %s: %v", ticker, err)
+			log.Printf("Failed to get details for %s: %v", ticker, err)
 			return
 		}
 
 		// Fetch both logo and icon
-		logoBase64, _ := fetchImage(details.Branding.LogoURL, conn.PolygonKey)
-		iconBase64, _ := fetchImage(details.Branding.IconURL, conn.PolygonKey)
+		logoBase64, err := fetchImage(details.Branding.LogoURL, conn.PolygonKey)
+		if err != nil {
+			log.Printf("Failed to fetch logo for %s: %v", ticker, err)
+		}
+		iconBase64, err := fetchImage(details.Branding.IconURL, conn.PolygonKey)
+		if err != nil {
+			log.Printf("Failed to fetch icon for %s: %v", ticker, err)
+		}
 		currentPrice, err := utils.GetMostRecentRegularClose(conn.Polygon, ticker, time.Now())
 		if err != nil {
-			fmt.Printf("Failed to get current price for %s: %v", ticker, err)
+			log.Printf("Failed to get current price for %s: %v", ticker, err)
 			return
 		}
 
