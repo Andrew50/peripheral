@@ -173,16 +173,16 @@ jobs:
           log "Building Docker images with tag: ${{ env.DOCKER_TAG }}..."
           log "Using Docker username: $DOCKER_USERNAME"
           
-          docker build -t $DOCKER_USERNAME/frontend:${{ env.DOCKER_TAG }} -f frontend/Dockerfile.prod frontend
-          docker build -t $DOCKER_USERNAME/backend:${{ env.DOCKER_TAG }} -f backend/Dockerfile.prod backend
-          docker build -t $DOCKER_USERNAME/worker:${{ env.DOCKER_TAG }} -f worker/Dockerfile.prod worker
-          docker build -t $DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }} -f worker/Dockerfile.healthcheck worker
-          docker build -t $DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }} -f tf/Dockerfile.prod tf
-          docker build -t $DOCKER_USERNAME/nginx:${{ env.DOCKER_TAG }} -f nginx/Dockerfile nginx
+          docker build -t $DOCKER_USERNAME/frontend:${{ env.DOCKER_TAG }} -f services/frontend/Dockerfile.prod services/frontend
+          docker build -t $DOCKER_USERNAME/backend:${{ env.DOCKER_TAG }} -f services/backend/Dockerfile.prod services/backend
+          docker build -t $DOCKER_USERNAME/worker:${{ env.DOCKER_TAG }} -f services/worker/Dockerfile.prod services/worker
+          docker build -t $DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }} -f services/worker/Dockerfile.healthcheck services/worker
+          docker build -t $DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }} -f services/tf/Dockerfile.prod services/tf
+          docker build -t $DOCKER_USERNAME/nginx:${{ env.DOCKER_TAG }} -f services/nginx/Dockerfile services/nginx
           
           # Build DB image with cron installed for scheduled backups
           log "Building DB image with secure configuration..."
-          docker build -t $DOCKER_USERNAME/db:${{ env.DOCKER_TAG }} -f db/Dockerfile.prod db
+          docker build -t $DOCKER_USERNAME/db:${{ env.DOCKER_TAG }} -f services/db/Dockerfile.prod services/db
           
           # For prod branch, also tag as latest
           # For dev branch, also tag as development
@@ -553,7 +553,7 @@ jobs:
           
           # Copy all migration files to the pod
           log "Copying migration files to the database pod..."
-          for MIGRATION_FILE in db/rollouts/*.sql; do
+          for MIGRATION_FILE in services/db/rollouts/*.sql; do
             FILENAME=$(basename "$MIGRATION_FILE")
             log "Copying $FILENAME..."
             kubectl cp "$MIGRATION_FILE" "$DB_POD:/tmp/rollouts/$FILENAME" || {
