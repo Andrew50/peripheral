@@ -325,7 +325,7 @@ func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFilin
 
 func fetchCIKFromSEC(ticker string) (string, error) {
 	// SEC company lookup endpoint
-	url := fmt.Sprintf("https://www.sec.gov/files/company_tickers.json")
+	url := "https://www.sec.gov/files/company_tickers.json"
 
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
