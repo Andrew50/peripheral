@@ -718,11 +718,16 @@ jobs:
           
           # Apply Kubernetes configurations, excluding secrets.yaml
           log "Applying Kubernetes configurations..."
+          log "Current directory: $(pwd)"
+          log "Checking if config/prod/config exists: $(ls -la config/prod/config 2>&1 || echo 'Directory not found')"
+          
           if [ "${{ env.TARGET_BRANCH }}" = "dev" ]; then
             # Dev branch uses prod config as well
+            log "Using config/prod/config for dev branch"
             find config/prod/config -type f -name "*.yaml" ! -name "secrets.yaml" -exec kubectl apply -f {} \;
           else
             # Default to prod config for prod branch
+            log "Using config/prod/config for prod branch"
             find config/prod/config -type f -name "*.yaml" ! -name "secrets.yaml" -exec kubectl apply -f {} \;
           fi
           
