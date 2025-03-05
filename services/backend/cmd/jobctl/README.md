@@ -15,8 +15,16 @@ JobCTL is a command-line interface for managing and monitoring backend jobs. It 
 Use the provided `jobctl` script in the backend directory:
 
 ```bash
-./backend/jobctl [command] [arguments]
+./services/backend/jobctl [command] [arguments]
 ```
+
+This script sets the necessary environment variables to connect to the database and Redis on localhost. If your Docker setup uses different port mappings, you may need to modify the script.
+
+By default, it assumes:
+- PostgreSQL is accessible on localhost:5432
+- Redis is accessible on localhost:6379
+
+If your Docker Compose setup uses different port mappings, edit the `services/backend/jobctl` script to match your configuration.
 
 ### From Inside the Container
 
@@ -89,6 +97,23 @@ Show help information:
 ```bash
 jobctl help
 ```
+
+## Troubleshooting
+
+If you encounter connection issues when running outside the container:
+
+1. Verify that your Docker containers are running:
+   ```bash
+   docker ps | grep db
+   docker ps | grep cache
+   ```
+
+2. Check that the ports are correctly mapped in your Docker Compose configuration:
+   ```bash
+   docker-compose ps
+   ```
+
+3. Ensure the environment variables in the `jobctl` script match your Docker setup.
 
 ## Examples
 

@@ -3,6 +3,8 @@ import psycopg2
 from psycopg2.extras import execute_batch
 import time
 import random
+import os
+import requests
 from conn import Conn
 from multiprocessing import Pool, cpu_count
 from datetime import datetime
@@ -43,23 +45,43 @@ def get_sector_info(ticker_symbol, retry_count=0, max_retries=3):
             flush=True,
         )
         
-        # Handle rate limiting with exponential backoff
-        if "Too Many Requests" in error_msg and retry_count < max_retries:
-            retry_count += 1
-            sleep_time = min(INITIAL_SLEEP_TIME * (BACKOFF_FACTOR ** retry_count), MAX_SLEEP_TIME)
-            # Add jitter to avoid synchronized requests
-            sleep_time = sleep_time * (1 + random.uniform(-JITTER, JITTER))
+        # Enhanced error handling with more detailed diagnostics
+        if "Too Many Requests" in error_msg:
+            # Check if it's a Yahoo Finance rate limit or potentially a Polygon issue
+            detailed_error = "Yahoo Finance API rate limit exceeded. "
             
-            print(f"{get_timestamp()} - Rate limited for {ticker_symbol}. Retrying in {sleep_time:.2f}s (attempt {retry_count}/{max_retries})", flush=True)
-            time.sleep(sleep_time)
-            return get_sector_info(ticker_symbol, retry_count, max_retries)
+            # Add diagnostic information
+            if retry_count < max_retries:
+                retry_count += 1
+                sleep_time = min(INITIAL_SLEEP_TIME * (BACKOFF_FACTOR ** retry_count), MAX_SLEEP_TIME)
+                # Add jitter to avoid synchronized requests
+                sleep_time = sleep_time * (1 + random.uniform(-JITTER, JITTER))
+                
+                print(f"{get_timestamp()} - Rate limited for {ticker_symbol}. Retrying in {sleep_time:.2f}s (attempt {retry_count}/{max_retries})", flush=True)
+                time.sleep(sleep_time)
+                return get_sector_info(ticker_symbol, retry_count, max_retries)
+            else:
+                # We've exhausted our retries, provide more detailed error information
+                detailed_error += f"Exhausted {max_retries} retry attempts. Consider reducing batch size or increasing delay between requests."
+                
+                # Check if we can make a simple test request to validate Yahoo Finance is accessible
+                try:
+                    test_response = requests.get("https://query1.finance.yahoo.com/v8/finance/chart/AAPL", timeout=5)
+                    if test_response.status_code != 200:
+                        detailed_error += f" Yahoo Finance API may be experiencing issues (status code: {test_response.status_code})."
+                    else:
+                        detailed_error += " Yahoo Finance API appears to be accessible for basic requests, but sector data may have stricter rate limits."
+                except Exception as req_err:
+                    detailed_error += f" Unable to verify Yahoo Finance API status: {str(req_err)}"
+        else:
+            detailed_error = error_msg
             
         return {
             "ticker": ticker_symbol, 
             "sector": "Unknown", 
             "industry": "Unknown",
             "status": "failed",
-            "error": error_msg
+            "error": detailed_error
         }
 
 
@@ -160,7 +182,7 @@ def update_sectors(conn):
                                 conn.db.commit()
                             else:
                                 batch_failed += 1
-                                print(f"{get_timestamp()} - Failed to update {info['ticker']}: {info.get('error', 'Unknown error')}", flush=True)
+                                print(f"Failed to update {info['ticker']}: {info.get('error', 'Unknown error')}", flush=True)
 
                         except Exception as e:
                             conn.db.rollback()
@@ -185,8 +207,14 @@ def update_sectors(conn):
                     flush=True,
                 )
                 
-                # Sleep between batches to avoid overwhelming the API
-                time.sleep(2)
+                # If all requests in this batch failed due to rate limiting, add a longer pause
+                if batch_failed == len(batch) and all("rate limit" in info.get('error', '').lower() for info in batch_results):
+                    extended_sleep = 60  # 1 minute pause
+                    print(f"{get_timestamp()} - All requests failed due to rate limiting. Pausing for {extended_sleep} seconds before next batch.", flush=True)
+                    time.sleep(extended_sleep)
+                else:
+                    # Regular sleep between batches
+                    time.sleep(2)
 
             end_time = datetime.now()
             duration = end_time - start_time

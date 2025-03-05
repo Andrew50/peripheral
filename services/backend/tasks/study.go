@@ -8,20 +8,20 @@ import (
 	"time"
     "database/sql"
 )
-
+// GetStudiesArgs represents a structure for handling GetStudiesArgs data.
 type GetStudiesArgs struct {
 	Completed bool `json:"completed"`
 }
-
+// GetStudiesResult represents a structure for handling GetStudiesResult data.
 type GetStudiesResult struct {
-	StudyId    int    `json:"studyId"`
-	SecurityId int    `json:"securityId"`
+	StudyID    int    `json:"studyId"`
+	SecurityID int    `json:"securityId"`
 	Ticker     string `json:"ticker"`
 	Timestamp  int64  `json:"timestamp"`
-	SetupId    *int64 `json:"setupId"` // Pointer to handle null values
+	SetupID    *int64 `json:"setupId"` // Pointer to handle null values
 	Completed  bool   `json:"completed"`
 }
-
+// GetStudies performs operations related to GetStudies functionality.
 func GetStudies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetStudiesArgs
 	err := json.Unmarshal(rawArgs, &args)
@@ -43,20 +43,20 @@ func GetStudies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfac
 	var studies []GetStudiesResult
 	for rows.Next() {
 		var study GetStudiesResult
-		var setupId sql.NullInt64 // Handle nullable setupId
+		var setupID sql.NullInt64 // Handle nullable setupId
 		var studyTime time.Time
 
 		// Scan the row data
-		err := rows.Scan(&study.StudyId, &study.SecurityId, &setupId, &study.Ticker, &studyTime, &study.Completed)
+		err := rows.Scan(&study.StudyID, &study.SecurityID, &setupId, &study.Ticker, &studyTime, &study.Completed)
 		if err != nil {
 			return nil, err
 		}
 
 		// Handle nullable setupId
 		if setupId.Valid {
-			study.SetupId = &setupId.Int64
+			study.SetupID = &setupId.Int64
 		} else {
-			study.SetupId = nil
+			study.SetupID = nil
 		}
 
 		study.Timestamp = studyTime.Unix()
@@ -65,29 +65,29 @@ func GetStudies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfac
 
 	return studies, nil
 }
-
+// SetStudySetupArgs represents a structure for handling SetStudySetupArgs data.
 type SetStudySetupArgs struct {
     Id int  `json:"id"`
-    SetupId int `json:"setupId"`
-}
+    SetupID int `json:"setupId"`
+// SetStudySetup performs operations related to SetStudySetup functionality.
 func SetStudySetup(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args SetStudySetupArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
 		return nil, fmt.Errorf("3og9 invalid args: %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE studies Set setupId = $1 where studyId = $2", args.SetupId, args.Id)
+	cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE studies Set setupId = $1 where studyId = $2", args.SetupID, args.Id)
 	if cmdTag.RowsAffected() == 0 {
 		return nil, fmt.Errorf("0n8912")
 	}
 	return nil, err
 }
-
+// SaveStudyArgs represents a structure for handling SaveStudyArgs data.
 type SaveStudyArgs struct {
 	Id    int             `json:"id"`
 	Entry json.RawMessage `json:"entry"`
 }
-
+// SaveStudy performs operations related to SaveStudy functionality.
 func SaveStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args SaveStudyArgs
 	err := json.Unmarshal(rawArgs, &args)
@@ -100,12 +100,12 @@ func SaveStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface
 	}
 	return nil, err
 }
-
+// CompleteStudyArgs represents a structure for handling CompleteStudyArgs data.
 type CompleteStudyArgs struct {
 	Id        int  `json:"id"`
 	Completed bool `json:"completed"`
 }
-
+// CompleteStudy performs operations related to CompleteStudy functionality.
 func CompleteStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args CompleteStudyArgs
 	err := json.Unmarshal(rawArgs, &args)
@@ -118,11 +118,11 @@ func CompleteStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inter
 	}
 	return nil, err
 }
-
+// DeleteStudyArgs represents a structure for handling DeleteStudyArgs data.
 type DeleteStudyArgs struct {
 	Id int `json:"id"`
 }
-
+// DeleteStudy performs operations related to DeleteStudy functionality.
 func DeleteStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteStudyArgs
 	err := json.Unmarshal(rawArgs, &args)
@@ -138,11 +138,11 @@ func DeleteStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	}
 	return nil, err
 }
-
+// GetStudyEntryArgs represents a structure for handling GetStudyEntryArgs data.
 type GetStudyEntryArgs struct {
-	StudyId int `json:"studyId"`
+	StudyID int `json:"studyId"`
 }
-
+// GetStudyEntry performs operations related to GetStudyEntry functionality.
 func GetStudyEntry(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetStudyEntryArgs
 	err := json.Unmarshal(rawArgs, &args)
@@ -150,18 +150,18 @@ func GetStudyEntry(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inter
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
 	var entry json.RawMessage
-	err = conn.DB.QueryRow(context.Background(), "SELECT entry from studies where studyId = $1", args.StudyId).Scan(&entry)
+	err = conn.DB.QueryRow(context.Background(), "SELECT entry from studies where studyId = $1", args.StudyID).Scan(&entry)
 	if err != nil {
 		return nil, err
 	}
 	return entry, nil
 }
-
+// NewStudyArgs represents a structure for handling NewStudyArgs data.
 type NewStudyArgs struct {
-	SecurityId int   `json:"securityId"`
+	SecurityID int   `json:"securityId"`
 	Timestamp  int64 `json:"timestamp"`
 }
-
+// NewStudy performs operations related to NewStudy functionality.
 func NewStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args NewStudyArgs
 	err := json.Unmarshal(rawArgs, &args)
@@ -169,8 +169,8 @@ func NewStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
 	timestamp := time.Unix(args.Timestamp, 0)
-	var studyId int
-	err = conn.DB.QueryRow(context.Background(), "INSERT into studies (userId,securityId, timestamp) values ($1,$2,$3) RETURNING studyId", userId, args.SecurityId, timestamp).Scan(&studyId)
+	var studyID int
+	err = conn.DB.QueryRow(context.Background(), "INSERT into studies (userId,securityId, timestamp) values ($1,$2,$3) RETURNING studyId", userId, args.SecurityID, timestamp).Scan(&studyId)
 	if err != nil {
 		return nil, err
 	}

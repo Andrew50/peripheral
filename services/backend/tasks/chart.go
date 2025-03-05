@@ -13,9 +13,9 @@ import (
 	"github.com/polygon-io/client-go/rest/iter"
 	"github.com/polygon-io/client-go/rest/models"
 )
-
+// GetChartDataArgs represents a structure for handling GetChartDataArgs data.
 type GetChartDataArgs struct {
-	SecurityId    int    `json:"securityId"`
+	SecurityID    int    `json:"securityId"`
 	Timeframe     string `json:"timeframe"`
 	Timestamp     int64  `json:"timestamp"`
 	Direction     string `json:"direction"`
@@ -23,7 +23,7 @@ type GetChartDataArgs struct {
 	ExtendedHours bool   `json:"extendedHours"`
 	IsReplay      bool   `json:"isreplay"`
 }
-
+// GetChartDataResults represents a structure for handling GetChartDataResults data.
 type GetChartDataResults struct {
 	Timestamp float64 `json:"time"`
 	Open      float64 `json:"open"`
@@ -32,14 +32,14 @@ type GetChartDataResults struct {
 	Close     float64 `json:"close"`
 	Volume    float64 `json:"volume"`
 }
-
+// GetChartDataResponse represents a structure for handling GetChartDataResponse data.
 type GetChartDataResponse struct {
 	Bars           []GetChartDataResults `json:"bars"`
 	IsEarliestData bool                  `json:"isEarliestData"`
 }
 
 var debug = false // Flip to `true` to enable verbose debugging output
-
+// MaxDivisorOf30 performs operations related to MaxDivisorOf30 functionality.
 func MaxDivisorOf30(n int) int {
 	for k := n; k >= 1; k-- {
 		if 30%k == 0 && n%k == 0 {
@@ -48,15 +48,15 @@ func MaxDivisorOf30(n int) int {
 	}
 	return 1
 }
-
+// GetChartData performs operations related to GetChartData functionality.
 func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetChartDataArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 	if debug {
-		fmt.Printf("[DEBUG] GetChartData: SecurityId=%d, Timeframe=%s, Direction=%s\n",
-			args.SecurityId, args.Timeframe, args.Direction)
+		fmt.Printf("[DEBUG] GetChartData: SecurityID=%d, Timeframe=%s, Direction=%s\n",
+			args.SecurityID, args.Timeframe, args.Direction)
 	}
 
 	multiplier, timespan, _, _, err := utils.GetTimeFrame(args.Timeframe)
@@ -127,24 +127,24 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
                  FROM securities 
                  WHERE securityid = $1
                  ORDER BY minDate DESC NULLS FIRST`
-		queryParams = []interface{}{args.SecurityId}
+		queryParams = []interface{}{args.SecurityID}
 		polyResultOrder = "desc"
 	case args.Direction == "backward":
 		query = `SELECT ticker, minDate, maxDate
                  FROM securities 
                  WHERE securityid = $1 AND (maxDate > $2 OR maxDate IS NULL)
                  ORDER BY minDate DESC NULLS FIRST LIMIT 1`
-		queryParams = []interface{}{args.SecurityId, inputTimestamp}
+		queryParams = []interface{}{args.SecurityID, inputTimestamp}
 		polyResultOrder = "desc"
 	case args.Direction == "forward":
 		query = `SELECT ticker, minDate, maxDate
                  FROM securities 
                  WHERE securityid = $1 AND (minDate < $2 OR minDate IS NULL)
                  ORDER BY minDate ASC NULLS LAST`
-		queryParams = []interface{}{args.SecurityId, inputTimestamp}
+		queryParams = []interface{}{args.SecurityID, inputTimestamp}
 		polyResultOrder = "asc"
 	default:
-		return nil, fmt.Errorf("Incorrect direction passed")
+		return nil, fmt.Errorf("incorrect direction passed")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
@@ -337,7 +337,7 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 					AND minDate < $2
 					LIMIT 1
 				)
-			`, args.SecurityId, time.Unix(int64(earliestBar.Timestamp), 0))
+			`, args.SecurityID, time.Unix(int64(earliestBar.Timestamp), 0))
 
 			var exists bool
 			err := row.Scan(&exists)
