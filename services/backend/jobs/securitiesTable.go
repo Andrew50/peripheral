@@ -30,6 +30,8 @@ import (
 // logAction logs security-related actions for debugging and auditing purposes.
 // Currently unused but kept for debugging and future use.
 // nolint:unused
+//
+//lint:ignore U1000 kept for debugging and future use
 func logAction(test bool, loop int, ticker string, targetTicker string, figi string, currentDate string, action string, err error) {
 	if test {
 		if err != nil {
@@ -44,6 +46,8 @@ func logAction(test bool, loop int, ticker string, targetTicker string, figi str
 // validateTickerString validates a ticker string format.
 // Currently unused but kept for future input validation.
 // nolint:unused
+//
+//lint:ignore U1000 kept for future use
 func validateTickerString(ticker string) bool {
 	if strings.Contains(ticker, ".") {
 		return false
@@ -59,6 +63,8 @@ func validateTickerString(ticker string) bool {
 // diff compares two sets of tickers and returns the differences.
 // Currently unused but kept for future reconciliation features.
 // nolint:unused
+//
+//lint:ignore U1000 kept for future use
 func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []models.Ticker, []models.Ticker) {
 	additions := []models.Ticker{}
 	removals := []models.Ticker{}
@@ -100,6 +106,8 @@ func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []mode
 // dataExists checks if market data exists for a ticker in a given date range.
 // Currently unused but kept for future data validation features.
 // nolint:unused
+//
+//lint:ignore U1000 kept for future use
 func dataExists(client *polygon.Client, ticker string, fromDate string, toDate string) bool {
 	timespan := models.Timespan("day")
 	fromMillis, err := utils.MillisFromDatetimeString(fromDate)
@@ -124,6 +132,8 @@ func dataExists(client *polygon.Client, ticker string, fromDate string, toDate s
 // toFilteredMap converts a slice of tickers to a filtered map.
 // Currently unused but kept for future filtering features.
 // nolint:unused
+//
+//lint:ignore U1000 kept for future use
 func toFilteredMap(tickers []models.Ticker) map[string]models.Ticker {
 	tickerMap := make(map[string]models.Ticker)
 	for _, sec := range tickers {
@@ -137,6 +147,8 @@ func toFilteredMap(tickers []models.Ticker) map[string]models.Ticker {
 // contains checks if a string slice contains a specific item.
 // Currently unused but kept for future utility use.
 // nolint:unused
+//
+//lint:ignore U1000 kept for future use
 func contains(slice []string, item string) bool {
 	for _, str := range slice {
 		if str == item {
@@ -149,6 +161,8 @@ func contains(slice []string, item string) bool {
 // updateSecurities updates the securities table with new data.
 // Currently unused but kept for future automated updates.
 // nolint:unused
+//
+//lint:ignore U1000 kept for future use
 func updateSecurities(conn *utils.Conn, test bool) error {
 	var startDate time.Time
 	//fmt.Print(dataExists(conn.Polygon,"VBR","2003-09-24","2004-01-29"))
@@ -378,7 +392,11 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 		}
 		for i, sec := range removals {
 
-			cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE securities SET maxDate = $1 where ticker = $2 and maxDate is NULL", yesterdayDateString, sec.Ticker)
+			cmdTag, _ := conn.DB.Exec(context.Background(), "UPDATE securities SET maxDate = $1 where ticker = $2 and maxDate is NULL", yesterdayDateString, sec.Ticker)
+			// Log the number of rows affected if needed
+			if test && cmdTag.RowsAffected() > 0 {
+				log.Printf("Updated %d rows for ticker %s", cmdTag.RowsAffected(), sec.Ticker)
+			}
 			targetTicker := ""
 			if err != nil {
 				fmt.Println("91md")
@@ -618,9 +636,11 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 			return
 		}
 
-		if test {
-			//log.Printf("Successfully updated details for %s", ticker)
-		}
+		// Successfully updated details - no action needed in non-test mode
+		// Uncomment the log line below if you want to enable logging in test mode
+		// if test {
+		//     log.Printf("Successfully updated details for %s", ticker)
+		// }
 	}
 
 	// Process all securities
