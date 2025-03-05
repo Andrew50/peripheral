@@ -5,8 +5,14 @@
 	import List from '$lib/utils/modules/list.svelte';
 	import { UTCTimestampToESTString } from '$lib/core/timestamp';
 	import { activeChartInstance } from '$lib/core/stores';
-	import { addGlobalSECFilingsStream, releaseGlobalSECFilingsStream } from '$lib/utils/stream/interface';
+	import {
+		addGlobalSECFilingsStream,
+		releaseGlobalSECFilingsStream
+	} from '$lib/utils/stream/interface';
 	import { subscribeSECFilings, unsubscribeSECFilings } from '$lib/utils/stream/socket';
+	import type { StreamCallback, StreamData } from '$lib/utils/stream/socket';
+	import type { TradeData, QuoteData, CloseData } from '$lib/core/types';
+	import type { Filing } from '$lib/utils/stream/secfilings';
 
 	// Add tab state
 	let activeTab = 'filings';
@@ -16,7 +22,7 @@
 	let isLoadingFilings = false;
 
 	// Store for global SEC filings
-	let globalFilings = writable<GlobalFiling[]>([]);
+	let globalFilings = writable<Filing[]>([]);
 	let isLoadingGlobalFilings = false;
 
 	// Store for news articles (for future implementation)
@@ -26,24 +32,6 @@
 	// Current ticker being viewed
 	let currentTicker = '';
 	let currentSecurityId: number | null = null;
-
-	// Interface for SEC filings
-	interface Filing {
-		type: string;
-		date: string;
-		url: string;
-		timestamp: number;
-	}
-
-	// Interface for global SEC filings
-	interface GlobalFiling {
-		type: string;
-		date: string;
-		url: string;
-		timestamp: number;
-		ticker: string;
-		channel: string;
-	}
 
 	// Interface for news items (for future implementation)
 	interface NewsItem {
@@ -59,7 +47,7 @@
 		if (chartInstance?.ticker && chartInstance?.securityId) {
 			currentTicker = chartInstance.ticker;
 			currentSecurityId = chartInstance.securityId;
-			
+
 			// Load filings for the new ticker if we're on the filings tab
 			if (activeTab === 'filings') {
 				loadFilings();
@@ -70,23 +58,23 @@
 	// Function to load SEC filings for the current ticker
 	async function loadFilings() {
 		if (!currentSecurityId) return;
-		
+
 		isLoadingFilings = true;
-		
+
 		try {
 			// Get current time for "to" parameter
 			const now = Date.now();
-			
+
 			// Get filings from 2 years ago to now
-			const twoYearsAgo = now - (2 * 365 * 24 * 60 * 60 * 1000);
-			
+			const twoYearsAgo = now - 2 * 365 * 24 * 60 * 60 * 1000;
+
 			const result = await privateRequest<Filing[]>('getEdgarFilings', {
 				securityId: currentSecurityId,
 				from: twoYearsAgo,
 				to: now,
 				limit: 100
 			});
-			
+
 			filings.set(result);
 		} catch (error) {
 			console.error('Failed to load SEC filings:', error);
@@ -97,44 +85,46 @@
 	}
 
 	// Function to handle incoming global SEC filing messages
-	function handleGlobalSECFilingMessage(message: any) {
-		console.log("SEC Filing message received:", message);
-		
+	function handleGlobalSECFilingMessage(message: StreamData) {
+		console.log('SEC Filing message received:', message);
+
 		// Check if the message has a data property that is an array
-		if (message.data && Array.isArray(message.data)) {
-			console.log("Initial SEC filings data:", message.data);
-			globalFilings.set(message.data);
-			isLoadingGlobalFilings = false;
-		} else if (message.data) {
-			// Handle single filing update
-			console.log("New SEC filing:", message.data);
-			globalFilings.update(currentFilings => {
-				// Add the new filing at the beginning of the array
-				const updatedFilings = [message.data, ...currentFilings];
-				// Keep only the most recent 100 filings
-				if (updatedFilings.length > 100) {
-					return updatedFilings.slice(0, 100);
-				}
-				console.log("Updated SEC filings:", updatedFilings);
-				return updatedFilings;
-			});
+		if (typeof message === 'object' && 'data' in message && message.data) {
+			if (Array.isArray(message.data)) {
+				console.log('Initial SEC filings data:', message.data);
+				globalFilings.set(message.data as Filing[]);
+				isLoadingGlobalFilings = false;
+			} else {
+				// Handle single filing update
+				console.log('New SEC filing:', message.data);
+				globalFilings.update((currentFilings) => {
+					// Add the new filing at the beginning of the array
+					const updatedFilings = [message.data as Filing, ...currentFilings];
+					// Keep only the most recent 100 filings
+					if (updatedFilings.length > 100) {
+						return updatedFilings.slice(0, 100);
+					}
+					console.log('Updated SEC filings:', updatedFilings);
+					return updatedFilings;
+				});
+			}
 		} else {
-			console.error("Received unexpected message format:", message);
+			console.error('Received unexpected message format:', message);
 		}
 	}
 
 	// Function to subscribe to global SEC filings
 	function subscribeToGlobalFilings() {
 		isLoadingGlobalFilings = true;
-		
+
 		// First unsubscribe if we're already subscribed
 		if (unsubscribeGlobalFilings) {
 			unsubscribeGlobalFilings();
 		}
-		
+
 		// Clear current filings to show we're refreshing
 		globalFilings.set([]);
-		
+
 		// Use the addGlobalSECFilingsStream function to subscribe
 		unsubscribeGlobalFilings = addGlobalSECFilingsStream(handleGlobalSECFilingMessage);
 	}
@@ -142,7 +132,7 @@
 	// Function to load news (placeholder for future implementation)
 	async function loadNews() {
 		if (!currentTicker) return;
-		
+
 		isLoadingNews = true;
 
 		try {
@@ -171,7 +161,7 @@
 			}
 			unsubscribeSECFilings();
 		}
-		
+
 		activeTab = tab;
 	}
 
@@ -214,10 +204,7 @@
 		>
 			Current Ticker Filings
 		</button>
-		<button
-			class={activeTab === 'news' ? 'active' : ''}
-			on:click={() => (activeTab = 'news')}
-		>
+		<button class={activeTab === 'news' ? 'active' : ''} on:click={() => (activeTab = 'news')}>
 			News
 		</button>
 		<button class:active={activeTab === 'social'} on:click={() => handleTabChange('social')}>
@@ -233,7 +220,11 @@
 		<div class="tab-content">
 			<div class="header-section">
 				<h2>Global SEC Filings</h2>
-				<button class="refresh-button" on:click={subscribeToGlobalFilings} disabled={isLoadingGlobalFilings}>
+				<button
+					class="refresh-button"
+					on:click={subscribeToGlobalFilings}
+					disabled={isLoadingGlobalFilings}
+				>
 					{isLoadingGlobalFilings ? 'Loading...' : 'Refresh'}
 				</button>
 			</div>
@@ -249,16 +240,13 @@
 					columns={['ticker', 'type', 'timestamp', 'url']}
 					displayNames={{
 						ticker: 'Ticker',
-						type: 'Filing Type',
-						timestamp: 'Date',
-						url: 'Link'
+						type: 'Type',
+						timestamp: 'Time',
+						url: 'URL'
 					}}
 					formatters={{
 						timestamp: (value) => UTCTimestampToESTString(value),
-						url: (value) => 'View Filing'
-					}}
-					linkColumns={{
-						url: (item) => item.url
+						url: (value) => value
 					}}
 				/>
 			{/if}
@@ -268,7 +256,32 @@
 	<!-- Current Ticker SEC Filings Tab -->
 	{#if activeTab === 'ticker-filings'}
 		<div class="tab-content">
-			<svelte:component this={import('./tickerfilings.svelte')} />
+			<div class="header-section">
+				<h2>SEC Filings for {currentTicker}</h2>
+			</div>
+
+			{#if isLoadingFilings}
+				<div class="loading-container">
+					<div class="loading-spinner"></div>
+					<span>Loading SEC filings...</span>
+				</div>
+			{:else if !currentTicker}
+				<div class="no-data">Select a ticker to view its SEC filings</div>
+			{:else}
+				<List
+					list={filings}
+					columns={['type', 'timestamp', 'url']}
+					displayNames={{
+						type: 'Type',
+						timestamp: 'Time',
+						url: 'URL'
+					}}
+					formatters={{
+						timestamp: (value) => UTCTimestampToESTString(value),
+						url: (value) => value
+					}}
+				/>
+			{/if}
 		</div>
 	{/if}
 
@@ -276,9 +289,7 @@
 	{#if activeTab === 'news'}
 		<div class="tab-content">
 			<h2>Latest News</h2>
-			<button class="refresh-button" on:click={loadNews} disabled={isLoadingNews}>
-				Refresh
-			</button>
+			<button class="refresh-button" on:click={loadNews} disabled={isLoadingNews}> Refresh </button>
 			<p class="message">News feed will be implemented in a future update.</p>
 		</div>
 	{/if}
