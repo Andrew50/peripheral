@@ -65,6 +65,10 @@
 	let iconsLoadedForTickers = new Set<string>();
 	let isLoadingIcons = false;
 
+	// Replace all instances of the current base64 placeholder with a pure black pixel
+	const BLACK_PIXEL =
+		'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
 	function isFlagged(instance: ExtendedInstance, flagWatch: ExtendedInstance[]) {
 		if (!Array.isArray(flagWatch)) return false;
 		return flagWatch.some((item) => item.ticker === instance.ticker);
@@ -311,12 +315,15 @@
 
 			list.update((items) => {
 				return items.map((item) => {
-					if (!item?.ticker || item.icon) return item; // Skip if no ticker or already has icon
+					if (!item?.ticker) return item; // Skip if no ticker
+					if (item.icon) return item; // Skip if already has icon
 
 					// Look up the icon in our map
 					const iconData = iconMap.get(item.ticker);
 					if (!iconData) {
 						console.log('No icon data found for ticker:', item.ticker);
+						// Add a black box placeholder for missing icons
+						item.icon = BLACK_PIXEL;
 						// Mark as processed even if no icon found to avoid repeated attempts
 						if (item.ticker) iconsLoadedForTickers.add(item.ticker);
 						return item;
@@ -324,6 +331,8 @@
 
 					if (!iconData.length) {
 						console.log('Empty icon for ticker:', item.ticker);
+						// Add a black box placeholder for empty icons
+						item.icon = BLACK_PIXEL;
 						if (item.ticker) iconsLoadedForTickers.add(item.ticker);
 						return item;
 					}
@@ -341,6 +350,8 @@
 						return { ...item, icon: iconUrl };
 					} catch (e) {
 						console.warn('Failed to process icon for ticker:', item.ticker, e);
+						// Add a black box placeholder for failed icons
+						item.icon = BLACK_PIXEL;
 						if (item.ticker) iconsLoadedForTickers.add(item.ticker);
 						return item;
 					}
@@ -492,7 +503,8 @@
 		const img = e.currentTarget as HTMLImageElement;
 		if (img) {
 			console.warn(`Failed to load icon for ${img.alt}`);
-			img.style.display = 'none';
+			// Replace with a black box placeholder instead of hiding
+			img.src = BLACK_PIXEL;
 		}
 	}
 
