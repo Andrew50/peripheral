@@ -23,17 +23,18 @@
 	import { privateRequest } from '$lib/core/backend';
 	import 'quill/dist/quill.snow.css';
 	import type Quill from 'quill';
-	import type { DeltaStatic, EmbedBlot } from 'quill';
+	import type { QuillOptions } from 'quill';
 	export let func: string;
 	export let id: number;
 	export let completed: boolean;
 	export let setupId: number | null | undefined = undefined;
-	let Quill;
-	let editorContainer: HTMLElement | string;
-	let controlsContainer: HTMLElement | string;
+	let Quill: any;
+	let editorContainer: HTMLElement;
+	let controlsContainer: HTMLElement;
 	let editor: Quill | undefined;
 	let lastSaveTimeout: ReturnType<typeof setTimeout> | undefined;
 	let quillWidth = writable(0);
+	let isCompleted = completed;
 
 	function debounceSave(): void {
 		if (lastSaveTimeout) {
@@ -68,16 +69,17 @@
 		}
 	});
 	function insertEmbeddedInstance(instance: Instance): void {
+		if (!editor) return;
 		editor.focus();
 		const range = editor.getSelection();
-		let insertIndex;
-		range;
+		let insertIndex: number;
+
 		if (range === null) {
 			insertIndex = editor.getLength();
 		} else {
 			insertIndex = range.index;
 		}
-		insertIndex;
+
 		editor.insertEmbed(insertIndex, 'embeddedInstance', instance);
 		editor.setSelection(insertIndex + 1, 0);
 		debounceSave();
@@ -95,18 +97,34 @@
 	}
 
 	function embeddedInstanceLeftClick(instance: Instance): void {
-		instance.securityId = parseInt(instance.securityId);
-		instance.timestamp = parseInt(instance.timestamp);
-		queryChart(instance, true);
+		if (!instance.securityId || !instance.timestamp) return;
+		const securityId = parseInt(instance.securityId.toString());
+		const timestamp = parseInt(instance.timestamp.toString());
+		if (isNaN(securityId) || isNaN(timestamp)) return;
+
+		const updatedInstance = {
+			...instance,
+			securityId,
+			timestamp
+		};
+		queryChart(updatedInstance, true);
 	}
 
 	function embeddedInstanceRightClick(instance: Instance, event: MouseEvent): void {
 		event.preventDefault();
-		instance.securityId = parseInt(instance.securityId);
-		instance.timestamp = parseInt(instance.timestamp);
-		queryInstanceRightClick(event, instance, 'embedded').then((res: RightClickResult) => {
+		if (!instance.securityId || !instance.timestamp) return;
+		const securityId = parseInt(instance.securityId.toString());
+		const timestamp = parseInt(instance.timestamp.toString());
+		if (isNaN(securityId) || isNaN(timestamp)) return;
+
+		const updatedInstance = {
+			...instance,
+			securityId,
+			timestamp
+		};
+		queryInstanceRightClick(event, updatedInstance, 'embedded').then((res: RightClickResult) => {
 			if (res === 'edit') {
-				editEmbeddedInstance(instance);
+				editEmbeddedInstance(updatedInstance);
 			}
 		});
 	}
@@ -118,24 +136,33 @@
 			ins
 		).then((updatedInstance: Instance) => {
 			// Find the embedded instance in the editor content
-			const delta = editor?.getContents();
-			completed = false;
-			delta?.ops?.forEach((op) => {
-				if (op.insert && op.insert.embeddedInstance) {
-					const embedded = op.insert.embeddedInstance;
-					if (embedded.ticker === instance.ticker && embedded.timestamp === instance.timestamp) {
-						embedded.ticker = updatedInstance.ticker;
-						embedded.timeframe = updatedInstance.timeframe;
-						embedded.timestamp = updatedInstance.timestamp;
-						embedded.securityId = updatedInstance.securityId;
-						completed = true;
+			if (!editor) return;
+			const delta = editor.getContents();
+			isCompleted = false;
+
+			if (delta && delta.ops) {
+				delta.ops.forEach((op: Record<string, any>) => {
+					if (op.insert && typeof op.insert === 'object' && 'embeddedInstance' in op.insert) {
+						const embedded = op.insert.embeddedInstance;
+						if (embedded.ticker === instance.ticker && embedded.timestamp === instance.timestamp) {
+							embedded.ticker = updatedInstance.ticker;
+							embedded.timeframe = updatedInstance.timeframe;
+							embedded.timestamp = updatedInstance.timestamp;
+							embedded.securityId = updatedInstance.securityId;
+							isCompleted = true;
+						}
 					}
-				}
-			});
-			if (!completed) {
+				});
+			}
+
+			if (!isCompleted) {
 				console.error('failed edit');
 			}
-			editor?.setContents(delta);
+
+			if (editor && delta) {
+				editor.setContents(delta);
+				editor.getContents();
+			}
 			debounceSave();
 		});
 	}
@@ -146,27 +173,21 @@
 			Quill = QuillModule.default;
 			const Block = Quill.import('blots/block');
 			Block.tagName = 'div';
-			Quill.register(Block);
-			editor = new Quill(editorContainer, {
-				theme: 'snow',
-				placeholder: 'Entry ...',
-				modules: {
-					toolbar: false
-				}
-			});
-			editor.on('text-change', () => {
-				debounceSave();
-			});
-			class ChartBlot extends (Quill.import('blots/embed') as typeof EmbedBlot) {
+			Quill.register(Block, true);
+
+			class ChartBlot extends Quill.import('blots/embed') {
+				static blotName = 'embeddedInstance';
+				static tagName = 'button';
+
 				static create(instance: Instance): HTMLElement {
-					let node = super.create();
+					const node = super.create() as HTMLElement;
 					node.setAttribute('type', 'button');
 					node.className = 'embedded-button';
-					node.dataset.securityId = instance.securityId.toString();
-					node.dataset.ticker = instance.ticker;
-					node.dataset.timestamp = instance.timestamp.toString();
-					node.dataset.timeframe = instance.timeframe;
-					node.textContent = `${instance.ticker} ${UTCTimestampToESTString(parseInt(instance.timestamp))}`;
+					if (instance.securityId) node.dataset.securityId = instance.securityId.toString();
+					if (instance.ticker) node.dataset.ticker = instance.ticker;
+					if (instance.timestamp) node.dataset.timestamp = instance.timestamp.toString();
+					if (instance.timeframe) node.dataset.timeframe = instance.timeframe;
+					node.textContent = `${instance.ticker || ''} ${instance.timestamp ? UTCTimestampToESTString(instance.timestamp) : ''}`;
 					node.onclick = () => embeddedInstanceLeftClick(instance);
 					node.oncontextmenu = (event: MouseEvent) => embeddedInstanceRightClick(instance, event);
 					return node;
@@ -176,23 +197,38 @@
 					return {
 						ticker: node.dataset.ticker,
 						timeframe: node.dataset.timeframe,
-						timestamp: parseInt(node.dataset.timestamp),
-						securityId: parseInt(node.dataset.securityId)
-						//                        pm: node.dataset.pm
+						timestamp: node.dataset.timestamp ? parseInt(node.dataset.timestamp) : undefined,
+						securityId: node.dataset.securityId ? parseInt(node.dataset.securityId) : undefined
 					};
 				}
 			}
-			ChartBlot.blotName = 'embeddedInstance';
-			ChartBlot.tagName = 'button';
+
 			Quill.register('formats/embeddedInstance', ChartBlot);
-			privateRequest<JSON>('getStudyEntry', { studyId: id }).then((entry: JSON) => {
-				const delta: DeltaStatic = entry; // as unknown as string;
-				editor?.setContents(delta);
-				editor.getContents();
+
+			editor = new Quill(editorContainer, {
+				theme: 'snow',
+				placeholder: 'Entry ...',
+				modules: {
+					toolbar: false
+				}
+			});
+
+			editor.on('text-change', () => {
+				debounceSave();
+			});
+
+			privateRequest<any>('getStudyEntry', { studyId: id }).then((entry: any) => {
+				if (editor) {
+					editor.setContents(entry);
+					editor.getContents();
+				}
 			});
 		});
 	});
 	onDestroy(() => {
+		if (editor) {
+			editor.getContents();
+		}
 		entryOpen.set(false);
 	});
 </script>
