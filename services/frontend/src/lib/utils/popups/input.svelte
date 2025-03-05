@@ -23,6 +23,7 @@
 	let currentSecurityResultRequest = 0;
 	let loadedSecurityResultRequest = -1;
 	let manualInputType: string = 'auto';
+	let isLoadingSecurities = false;
 
 	type InstanceAttributes = (typeof allKeys)[number];
 	let filterOptions = [];
@@ -67,19 +68,31 @@
 		securities: Instance[];
 	}> {
 		if (inputType === 'ticker') {
-			let isLoadingSecurities = true;
+			isLoadingSecurities = true;
+
 			try {
+				// Add a small delay to avoid too many rapid requests during typing
+				await new Promise((resolve) => setTimeout(resolve, 10));
+
 				const securities = await privateRequest<Instance[]>('getSecuritiesFromTicker', {
 					ticker: inputString
 				});
+
 				if (Array.isArray(securities) && securities.length > 0) {
 					return {
-						//inputValid: securities.some((v) => v.ticker === inputString),
 						inputValid: true,
 						securities: securities
 					};
 				}
 				return { inputValid: false, securities: [] };
+			} catch (error) {
+				console.error('Error fetching securities:', error);
+				// Return empty results but mark as valid if we have some input
+				// This allows the UI to stay responsive even if backend request fails
+				return {
+					inputValid: inputString.length > 0,
+					securities: []
+				};
 			} finally {
 				isLoadingSecurities = false;
 			}
@@ -114,34 +127,18 @@
 		// Only auto-classify if manualInputType is set to 'auto'
 		if (manualInputType === 'auto') {
 			if (inputString !== '') {
-				// Make sure possibleKeys is available and is an array
-				const possibleKeys = Array.isArray(iQ.possibleKeys) ? iQ.possibleKeys : [];
+				// Use our sync detection function for consistency
+				inputType = detectInputTypeSync(inputString, iQ.possibleKeys);
 
-				// Test for ticker - check for uppercase letters
-				if (possibleKeys.includes('ticker') && /^[A-Z]+$/.test(inputString)) {
-					inputType = 'ticker';
-				} else if (possibleKeys.includes('price') && /^(?:\d*\.\d+|\d{3,})$/.test(inputString)) {
-					inputType = 'price';
-				} else if (possibleKeys.includes('timeframe') && /^\d{1,2}[hdwmqs]?$/i.test(inputString)) {
-					inputType = 'timeframe';
-				} else if (possibleKeys.includes('timestamp') && /^[\d-]+$/.test(inputString)) {
-					inputType = 'timestamp';
-				} else if (possibleKeys.includes('ticker')) {
-					// If it's a letter pattern that isn't already matched as something else, default to ticker
-					if (/^[a-zA-Z]+$/.test(inputString)) {
-						inputType = 'ticker';
-						// If the letter is lowercase, convert it to uppercase for ticker input
-						if (inputString !== inputString.toUpperCase()) {
-							inputQuery.update((q) => ({
-								...q,
-								inputString: inputString.toUpperCase()
-							}));
-						}
-					} else {
-						inputType = '';
-					}
-				} else {
-					inputType = '';
+				// If we detect a ticker, but the input is lowercase, convert to uppercase
+				if (inputType === 'ticker' && inputString !== inputString.toUpperCase()) {
+					// Update the input string with uppercase version
+					setTimeout(() => {
+						inputQuery.update((q) => ({
+							...q,
+							inputString: inputString.toUpperCase()
+						}));
+					}, 0);
 				}
 			} else {
 				inputType = '';
@@ -151,24 +148,55 @@
 			inputType = manualInputType;
 		}
 
-		// Update the input type
+		// Update the input type immediately
 		inputQuery.update((v) => ({
 			...v,
-			inputType
+			inputType,
+			// If we're switching to ticker type, initialize securities array if empty
+			securities: inputType === 'ticker' && !v.securities ? [] : v.securities
 		}));
 
-		// Trigger validation
+		// Trigger validation after type is updated
 		currentSecurityResultRequest++;
 		const thisSecurityResultRequest = currentSecurityResultRequest;
-		validateInput(inputString.toUpperCase(), inputType).then((validationResp) => {
-			if (thisSecurityResultRequest === currentSecurityResultRequest) {
-				inputQuery.update((v: InputQuery) => ({
+
+		// Set isLoadingSecurities to true before validation starts
+		if (inputType === 'ticker' && inputString.length > 0) {
+			isLoadingSecurities = true;
+
+			// Extra update to ensure UI shows loading state immediately
+			setTimeout(() => {
+				inputQuery.update((v) => ({
 					...v,
-					...validationResp
+					securities: v.securities || [] // Preserve existing securities if any
 				}));
+			}, 0);
+		}
+
+		// Perform validation asynchronously
+		validateInput(inputString.toUpperCase(), inputType)
+			.then((validationResp) => {
+				if (thisSecurityResultRequest === currentSecurityResultRequest) {
+					// Only update if this is still the current request
+					inputQuery.update((v: InputQuery) => ({
+						...v,
+						...validationResp
+					}));
+					loadedSecurityResultRequest = thisSecurityResultRequest;
+
+					// Reset loading state after validation completes
+					if (inputType === 'ticker') {
+						isLoadingSecurities = false;
+					}
+				}
+			})
+			.catch((error) => {
+				console.error('Validation error:', error);
+				isLoadingSecurities = false;
+
+				// In case of error, still update loadedSecurityResultRequest to prevent waiting forever
 				loadedSecurityResultRequest = thisSecurityResultRequest;
-			}
-		});
+			});
 	}
 
 	// Hold the reject function of the currently active promise (if any)
@@ -267,6 +295,35 @@
 			}
 		});
 	}
+
+	// Add this new helper function above the existing determineInputType function
+	function detectInputTypeSync(
+		inputString: string,
+		possibleKeysArg: InstanceAttributes[] | 'any'
+	): string {
+		// Make sure we have a valid array of possible keys
+		const possibleKeys = Array.isArray(possibleKeysArg) ? possibleKeysArg : [...allKeys];
+
+		if (!inputString || inputString === '') {
+			return '';
+		}
+
+		// Test for ticker - check for uppercase letters
+		if (possibleKeys.includes('ticker') && /^[A-Z]+$/.test(inputString)) {
+			return 'ticker';
+		} else if (possibleKeys.includes('price') && /^(?:\d*\.\d+|\d{3,})$/.test(inputString)) {
+			return 'price';
+		} else if (possibleKeys.includes('timeframe') && /^\d{1,2}[hdwmqs]?$/i.test(inputString)) {
+			return 'timeframe';
+		} else if (possibleKeys.includes('timestamp') && /^[\d-]+$/.test(inputString)) {
+			return 'timestamp';
+		} else if (possibleKeys.includes('ticker') && /^[a-zA-Z]+$/.test(inputString)) {
+			// Default to ticker for any alphabetic input if ticker is possible
+			return 'ticker';
+		}
+
+		return '';
+	}
 </script>
 
 <script lang="ts">
@@ -276,8 +333,6 @@
 	let prevFocusedElement: HTMLElement | null = null;
 	// flag to indicate that an async validation (ticker lookup) is in progress
 	//let secQueryActive = false;
-
-	let isLoadingSecurities = false;
 
 	// Add this reactive statement
 	$: if (
@@ -300,12 +355,28 @@
 
 	async function enterInput(iQ: InputQuery, tickerIndex: number = 0): Promise<InputQuery> {
 		if (iQ.inputType === 'ticker') {
+			// Store the timestamp to preserve it
 			const ts = iQ.instance.timestamp;
-			await waitForSecurityResult();
+
+			// Wait for securities to load if needed
+			if (loadedSecurityResultRequest !== currentSecurityResultRequest) {
+				console.log('Waiting for securities to load before completing input');
+				await waitForSecurityResult();
+			}
+
+			// Get the latest state after waiting
 			iQ = $inputQuery;
+
+			// Check if securities are available
 			if (Array.isArray(iQ.securities) && iQ.securities.length > 0) {
+				// Apply the selected security to the instance
 				iQ.instance = { ...iQ.instance, ...iQ.securities[tickerIndex] };
-				iQ.instance.timestamp = ts;
+				// Restore timestamp if it was previously set
+				if (ts) iQ.instance.timestamp = ts;
+			} else {
+				console.log('No securities available, using input string as ticker');
+				// If no securities, at least set the ticker from input string
+				iQ.instance.ticker = iQ.inputString.toUpperCase();
 			}
 		} else if (iQ.inputType === 'timeframe') {
 			iQ.instance.timeframe = iQ.inputString;
@@ -314,6 +385,7 @@
 		} else if (iQ.inputType === 'price') {
 			iQ.instance.price = parseFloat(iQ.inputString);
 		}
+
 		// Mark as complete but then check if further input is needed.
 		iQ.status = 'complete';
 		if (iQ.requiredKeys === 'any') {
@@ -328,23 +400,47 @@
 				}
 			}
 		}
+
+		// Reset input state
 		iQ.inputString = '';
 		iQ.inputType = '';
 		iQ.inputValid = true;
+
 		// Reset manualInputType to auto after input is entered
 		manualInputType = 'auto';
 		return iQ;
 	}
 
 	async function waitForSecurityResult(): Promise<void> {
+		// Set a maximum wait time to prevent infinite waiting
+		const maxWaitTime = 3000; // Increased to 3 seconds for better reliability
+		const startTime = Date.now();
+
+		// If this is the first request after a page load, add a small initial delay
+		// to allow the backend request to start processing
+		if (loadedSecurityResultRequest === -1) {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+
 		return new Promise((resolve) => {
 			const check = () => {
+				// If securities are already loaded, resolve immediately
 				if (loadedSecurityResultRequest === currentSecurityResultRequest) {
+					isLoadingSecurities = false;
 					resolve();
-				} else {
-					// Check again after 50ms (or adjust as needed)
-					setTimeout(check, 50);
+					return;
 				}
+
+				// If we've waited too long, resolve anyway
+				if (Date.now() - startTime > maxWaitTime) {
+					console.log('Timed out waiting for securities to load');
+					isLoadingSecurities = false;
+					resolve();
+					return;
+				}
+
+				// Check again after 50ms
+				setTimeout(check, 50);
 			};
 			check();
 		});
@@ -487,8 +583,55 @@
 
 							// Process initial input string if present
 							if (v.inputString) {
-								// Ensure the input string is processed after the component is fully initialized
-								setTimeout(() => determineInputType(v.inputString), 10);
+								// Ensure we're starting with auto detection for initial strings
+								manualInputType = 'auto';
+
+								// First, forcibly detect the input type without waiting
+								const initialType = detectInputTypeSync(v.inputString, v.possibleKeys);
+
+								// Update the store synchronously with the detected type
+								inputQuery.update((q) => ({
+									...q,
+									inputType: initialType,
+									// Mark as loading if it's likely a ticker
+									securities: initialType === 'ticker' ? [] : q.securities
+								}));
+
+								// If it looks like a ticker, explicitly set loading state
+								if (initialType === 'ticker') {
+									isLoadingSecurities = true;
+								}
+
+								// Then run the full determination with validation after a short delay
+								setTimeout(() => {
+									determineInputType(v.inputString);
+
+									// For tickers, ensure we make multiple validation attempts
+									if (initialType === 'ticker' || /^[A-Za-z]+$/.test(v.inputString)) {
+										// First retry
+										setTimeout(() => {
+											const currentInput = get(inputQuery).inputString;
+											if (currentInput && currentInput.length > 0) {
+												isLoadingSecurities = true;
+												determineInputType(currentInput);
+
+												// Second retry with longer delay for slow networks
+												setTimeout(() => {
+													const latestInput = get(inputQuery).inputString;
+													if (
+														latestInput &&
+														latestInput.length > 0 &&
+														loadedSecurityResultRequest !== currentSecurityResultRequest
+													) {
+														console.log('Performing final validation attempt');
+														isLoadingSecurities = true;
+														determineInputType(latestInput);
+													}
+												}, 1000); // Increased to 1000ms for better network reliability
+											}
+										}, 250); // Increased for better timing
+									}
+								}, 100); // Increased for better component initialization
 							}
 						}
 
@@ -715,21 +858,10 @@
 						{#if isLoadingSecurities}
 							<div class="loading-container">
 								<div class="loading-spinner"></div>
-								<span class="label">Loading securities...</span>
+								<span class="loading-text">Loading securities...</span>
 							</div>
 						{:else if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
 							<table>
-								<!--<thead>
-                        <tr class="defalt-tr">
-
-                            <th class="defalt-th">Ticker</th>const capitalize = (str, lower = false) =>
-  (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, match => match.toUpperCase());
-;
-                            <th class="defalt-th">Delist Date</th>
-                        </tr>const capitalize = (str, lower = false) =>
-  (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, match => match.toUpperCase());
-;
-                    </thead>-->
 								<tbody>
 									{#each $inputQuery.securities as sec, i}
 										<tr
@@ -752,14 +884,6 @@
 															on:error={() => {}}
 														/>
 													{/if}
-													<!--{#if sec.logo}
-														<img
-															src={sec.logo.startsWith('data:') ? sec.logo : `data:image/svg+xml;base64,${sec.logo}`}
-															alt="Security Image"
-															style="max-width: 100%; max-height: 100%; object-fit: contain;"
-															on:error={() => {}}
-														/>
-													{/if}-->
 												</div>
 											</td>
 											<td class="defalt-td">{sec.ticker}</td>
@@ -773,6 +897,18 @@
 									{/each}
 								</tbody>
 							</table>
+						{:else if $inputQuery.inputString && $inputQuery.inputString.length > 0}
+							<!-- Show initially blank loading state until load state is set -->
+							{#if loadedSecurityResultRequest === -1 || loadedSecurityResultRequest !== currentSecurityResultRequest}
+								<div class="loading-container">
+									<div class="loading-spinner"></div>
+									<span class="loading-text">Loading securities...</span>
+								</div>
+							{:else}
+								<div class="no-results">
+									<span>No matching securities found</span>
+								</div>
+							{/if}
 						{/if}
 					</div>
 				{:else if $inputQuery.inputType === 'timestamp'}
@@ -812,21 +948,9 @@
 							<span class="value">{$inputQuery.instance.extendedHours ? 'True' : 'False'}</span>
 						</div>
 					</div>
-					0
 				{/if}
 			{/if}
 		</div>
-		<!-- TODO!<div class="filters">
-            {#each [...filterOptions.industries, ...filterOptions.sectors] as item}
-				<button
-					class="filter-bubble"
-					class:active={selectedFilter === item}
-					on:click={() => (selectedFilter = item)}
-				>
-                {item}
-				</button>
-			{/each}
-		</div>-->
 		<input
 			autocomplete="off"
 			type="text"
@@ -1128,6 +1252,32 @@
 		margin-bottom: 10px;
 	}
 
+	.loading-text {
+		color: var(--text-secondary);
+		font-size: 14px;
+		text-align: center;
+		display: block;
+	}
+
+	.loading-container {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 30px;
+		height: 200px;
+	}
+
+	.no-results {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		height: 200px;
+		color: var(--text-secondary);
+		font-size: 14px;
+		text-align: center;
+	}
+
 	@keyframes spin {
 		0% {
 			transform: rotate(0deg);
@@ -1149,3 +1299,15 @@
 		font-size: 14px;
 	}
 </style>
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin-left: auto;
+	}
+
+	.field-select span {
+		color: var(--text-secondary);
+		font-size: 14px;
+	}
+</style>
+

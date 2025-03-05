@@ -284,12 +284,12 @@
 							for (const line of res) {
 								//might need to be later
 								addHorizontalLine(
-									line.price, 
-									currentChartInstance.securityId, 
+									line.price,
+									currentChartInstance.securityId,
 									line.id,
-									line.color || '#FFFFFF',  // Use default white if color not provided
-									line.lineWidth || 1       // Use default 1px if lineWidth not provided
-								); 
+									line.color || '#FFFFFF', // Use default white if color not provided
+									line.lineWidth || 1 // Use default 1px if lineWidth not provided
+								);
 							}
 						}
 					});
@@ -766,7 +766,7 @@
 		if (sameBar) {
 			// Use throttled updates
 			const now = Date.now();
-			
+
 			// Initialize pendingBarUpdate if this is the first update in this throttle window
 			if (!pendingBarUpdate) {
 				pendingBarUpdate = {
@@ -777,7 +777,7 @@
 					close: mostRecentBar.close
 				};
 			}
-			
+
 			// Initialize pendingVolumeUpdate
 			if (!pendingVolumeUpdate) {
 				const lastVolume = chartVolumeSeries.data().at(-1);
@@ -789,34 +789,37 @@
 					};
 				}
 			}
-			
+
 			// Update pending data with new trade
-			if (trade.size >= 100 && !trade.conditions?.some((condition) => excludedConditions.has(condition))) {
+			if (
+				trade.size >= 100 &&
+				!trade.conditions?.some((condition) => excludedConditions.has(condition))
+			) {
 				pendingBarUpdate.high = Math.max(pendingBarUpdate.high, trade.price);
 				pendingBarUpdate.low = Math.min(pendingBarUpdate.low, trade.price);
 				pendingBarUpdate.close = trade.price;
-				
 			}
 			if (pendingVolumeUpdate) {
-					pendingVolumeUpdate.value += trade.size;
-					pendingVolumeUpdate.color = pendingBarUpdate.close > pendingBarUpdate.open ? '#089981' : '#ef5350';
-				}
-			
+				pendingVolumeUpdate.value += trade.size;
+				pendingVolumeUpdate.color =
+					pendingBarUpdate.close > pendingBarUpdate.open ? '#089981' : '#ef5350';
+			}
+
 			// Apply updates only if throttle time has passed
 			if (now - lastUpdateTime >= updateThrottleMs) {
 				if (pendingBarUpdate) {
 					chartCandleSeries.update(pendingBarUpdate);
 					pendingBarUpdate = null;
 				}
-				
+
 				if (pendingVolumeUpdate) {
 					chartVolumeSeries.update(pendingVolumeUpdate);
 					pendingVolumeUpdate = null;
 				}
-				
+
 				lastUpdateTime = now;
 			}
-			
+
 			return;
 		}
 
@@ -826,14 +829,14 @@
 			chartCandleSeries.update(pendingBarUpdate);
 			pendingBarUpdate = null;
 		}
-		
+
 		if (pendingVolumeUpdate) {
 			chartVolumeSeries.update(pendingVolumeUpdate);
 			pendingVolumeUpdate = null;
 		}
-		
+
 		lastUpdateTime = Date.now();
-		
+
 		const referenceStartTime = getReferenceStartTimeForDateMilliseconds(
 			trade.timestamp,
 			currentChartInstance.extendedHours
@@ -1114,14 +1117,18 @@
 				event.stopPropagation();
 
 				// Pass the first key as inputString to the query input
-				queryInstanceInput('any', 'any', { ...currentChartInstance, inputString: firstKey }).then(
-					(v: Instance) => {
+				queryInstanceInput('any', 'any', { ...currentChartInstance, inputString: firstKey })
+					.then((v: Instance) => {
 						currentChartInstance = v;
 						queryChart(v, true);
 						// Refocus chart after input closes
 						setTimeout(() => chartContainer.focus(), 0);
-					}
-				);
+					})
+					.catch((error) => {
+						console.error('Input error:', error);
+						// Refocus chart if input fails
+						setTimeout(() => chartContainer.focus(), 0);
+					});
 			} else if (event.key == 'Shift') {
 				shiftDown = true;
 			} else if (event.key == 'Escape') {
@@ -1421,11 +1428,11 @@
 			if (pendingBarUpdate) {
 				chartCandleSeries.update(pendingBarUpdate);
 			}
-			
+
 			if (pendingVolumeUpdate) {
 				chartVolumeSeries.update(pendingVolumeUpdate);
 			}
-			
+
 			// ... any other cleanup code ...
 		};
 	});

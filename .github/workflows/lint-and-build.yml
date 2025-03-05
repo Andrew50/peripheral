@@ -206,6 +206,7 @@ jobs:
         run: |
           cd services/frontend
           # Show all ESLint warnings/errors
+          # Using newer ESLint format without .eslintignore
           npx eslint . --max-warnings=0 --no-error-on-unmatched-pattern --format stylish
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
@@ -213,8 +214,8 @@ jobs:
       - name: Type check
         run: |
           cd services/frontend
-          # Show all warnings and hints
-          npx svelte-check --threshold warning --fail-on-warnings=true --fail-on-hints=true --diagnostic-sources "js,ts,svelte"
+          # Fix: Removed the unsupported --fail-on-hints parameter
+          npx svelte-check --threshold warning --fail-on-warnings=true --diagnostic-sources "js,ts,svelte"
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
