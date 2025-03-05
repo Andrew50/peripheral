@@ -174,6 +174,50 @@
 	let lastUpdateTime = 0;
 	const updateThrottleMs = 100;
 
+	// Add type definitions at the top
+	interface Alert {
+		alertType: string;
+		alertPrice?: number;
+		securityId: string | number;
+		alertId: number;
+	}
+
+	interface Instance {
+		chartId?: string;
+		securityId: string | number;
+		timestamp: number;
+		price: number;
+		ticker?: string;
+		bars?: number;
+		timeframe?: string;
+	}
+
+	interface IPriceLine {
+		price: number;
+		color: string;
+		lineWidth: number;
+		lineStyle: number;
+		axisLabelVisible: boolean;
+		title: string;
+	}
+
+	interface HorizontalLine {
+		id: number;
+		price: number;
+		line: IPriceLine;
+		color: string;
+		lineWidth: number;
+		amount?: number;
+	}
+
+	interface ScreenshotOptions {
+		type: string;
+		url: string;
+		ratio: number;
+	}
+
+	type StreamReleaseFunction = () => void;
+
 	function extendedHours(timestamp: number): boolean {
 		const date = new Date(timestamp);
 		const minutes = date.getHours() * 60 + date.getMinutes();
@@ -1467,6 +1511,22 @@
 	// Handle closing the event popup
 	function closeEventPopup() {
 		selectedEvent = null;
+	}
+
+	function handleShiftOverlayEnd(event: MouseEvent) {
+		shiftOverlay.update((v: ShiftOverlay) => {
+			if (v.isActive) {
+				return {
+					...v,
+					isActive: false,
+					width: 0,
+					height: 0
+				};
+			}
+			return v;
+		});
+		document.removeEventListener('mousemove', shiftOverlayTrack);
+		document.removeEventListener('mouseup', handleShiftOverlayEnd);
 	}
 </script>
 
