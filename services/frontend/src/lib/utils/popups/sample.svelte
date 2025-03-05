@@ -6,16 +6,32 @@
 	import { privateRequest } from '$lib/core/backend';
 	import { setups } from '$lib/core/stores';
 	import { setSample } from '$lib/features/setups/interface';
+	import { tick } from 'svelte';
+
 	interface UserSetupMenu {
 		x: number;
 		y: number;
 		instance: Instance;
-		status: 'active' | 'inactive';
+		status: 'active' | 'inactive' | 'cancelled' | 'complete' | 'shutdown';
 		setup: Setup | null;
+		result?: Setup | 'new';
 	}
 
-	const inactiveUserSetupMenu = { x: 0, y: 0, instance: {}, status: 'inactive' } as UserSetupMenu;
+	interface InputQuery {
+		status: 'active' | 'inactive' | 'cancelled' | 'complete' | 'shutdown';
+		// Add other properties as needed
+	}
+
+	const inactiveUserSetupMenu = {
+		x: 0,
+		y: 0,
+		instance: {},
+		status: 'inactive',
+		setup: null
+	} as UserSetupMenu;
 	let userSetupMenu: Writable<UserSetupMenu> = writable(inactiveUserSetupMenu);
+	let inputQuery: Writable<InputQuery> = writable({ status: 'inactive' });
+
 	export async function querySetup(event: MouseEvent, instance: Instance): Promise<Setup | 'new'> {
 		const menuState: UserSetupMenu = {
 			x: event.clientX,
@@ -26,16 +42,15 @@
 		};
 		userSetupMenu.set(menuState);
 		return new Promise<Setup | 'new'>((resolve, reject) => {
-			const unsubscribe = userSetupMenu.subscribe((iQ: User) => {
+			const unsubscribe = userSetupMenu.subscribe((iQ: UserSetupMenu) => {
 				iQ;
 				if (iQ.status === 'cancelled') {
 					deactivate();
 					tick();
 					reject();
-				} else if (iQ.status === 'complete') {
-					const re = iQ.instance;
+				} else if (iQ.status === 'complete' && iQ.result) {
 					deactivate();
-					resolve(re);
+					resolve(iQ.result);
 				}
 			});
 			function deactivate() {
@@ -89,8 +104,16 @@
 		}
 	}
 
-	function closeMenu(setup: Setup | null = null): void {
-		userSetupMenu.set(inactiveUserSetupMenu);
+	function closeMenu(setupResult?: Setup | 'new'): void {
+		if (setupResult) {
+			userSetupMenu.update((state) => ({
+				...state,
+				status: 'complete',
+				result: setupResult
+			}));
+		} else {
+			userSetupMenu.set(inactiveUserSetupMenu);
+		}
 	}
 
 	function handleMouseDown(event: MouseEvent): void {
