@@ -6,6 +6,8 @@
 	import Trainer from './trainer.svelte';
 	import { onMount } from 'svelte';
 	import type { Subscriber, Updater } from 'svelte/store';
+	import { eventDispatcher } from './interface';
+	import type { SetupEvent } from './interface';
 
 	// Extend the core Setup type to include the 'new' state
 	type SetupId = number | 'new' | null;
@@ -14,10 +16,8 @@
 		activeScreen: boolean | string;
 	}
 
-	type SetupEvent = 'new' | 'edit' | 'delete' | 'train' | 'cancel';
-
 	let selectedSetupId: SetupId = 'new';
-	let trainingSetup: EditableSetup | null = null;
+	let trainingSetup: CoreSetup | null = null;
 	let editedSetup: EditableSetup | null = {
 		setupId: 'new',
 		name: '',
@@ -30,10 +30,9 @@
 		score: 0,
 		activeScreen: false
 	};
-	import { eventDispatcher } from './interface';
 
 	onMount(() => {
-		eventDispatcher.subscribe((v: SetupEvent) => {
+		eventDispatcher.subscribe((v) => {
 			if (v === 'new') {
 				editedSetup = {
 					setupId: 'new',
@@ -63,7 +62,14 @@
 	}
 
 	function train(setup: EditableSetup) {
-		trainingSetup = setup;
+		// Convert EditableSetup to CoreSetup for the Trainer component
+		if (typeof setup.setupId === 'number') {
+			trainingSetup = {
+				...setup,
+				setupId: setup.setupId,
+				activeScreen: typeof setup.activeScreen === 'boolean' ? setup.activeScreen : false
+			};
+		}
 	}
 
 	function createNewSetup() {
@@ -82,11 +88,11 @@
 		selectedSetupId = 'new';
 	}
 	function manualTrain() {
-		if (selectedSetupId === null) return;
+		if (selectedSetupId === null || selectedSetupId === 'new') return;
 		queueRequest('train', { setupId: selectedSetupId });
 	}
 	function deleteSetup() {
-		if (!selectedSetupId) return;
+		if (!selectedSetupId || selectedSetupId === 'new') return;
 
 		privateRequest('deleteSetup', { setupId: selectedSetupId }).then(() => {
 			setups.update((currentSetups) => {
@@ -99,15 +105,13 @@
 		if (!editedSetup) return;
 
 		if (selectedSetupId === 'new') {
-			privateRequest<CoreSetup>('newSetup', editedSetup as Record<string, unknown>).then(
-				(s: CoreSetup) => {
-					setups.update((o: CoreSetup[]) => [...o, s]);
-					selectedSetupId = s.setupId;
-					editedSetup = { ...s, activeScreen: false };
-				}
-			);
+			privateRequest<CoreSetup>('newSetup', { ...editedSetup }).then((s: CoreSetup) => {
+				setups.update((o: CoreSetup[]) => [...o, s]);
+				selectedSetupId = s.setupId;
+				editedSetup = { ...s, activeScreen: false };
+			});
 		} else {
-			privateRequest<void>('setSetup', editedSetup as Record<string, unknown>).then(() => {
+			privateRequest<void>('setSetup', { ...editedSetup }).then(() => {
 				setups.update((currentSetups: CoreSetup[]) =>
 					currentSetups.map((s) => {
 						if (editedSetup && s.setupId === editedSetup.setupId) {
