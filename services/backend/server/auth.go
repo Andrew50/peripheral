@@ -43,11 +43,13 @@ func getEnvOrDefault(key, defaultValue string) string {
 	}
 	return value
 }
+
 // Claims represents a structure for handling Claims data.
 type Claims struct {
 	UserID int `json:"userId"`
 	jwt.RegisteredClaims
 }
+
 // LoginResponse represents a structure for handling LoginResponse data.
 type LoginResponse struct {
 	Token      string          `json:"token"`
@@ -56,12 +58,14 @@ type LoginResponse struct {
 	ProfilePic string          `json:"profilePic"`
 	Username   string          `json:"username"`
 }
+
 // SignupArgs represents a structure for handling SignupArgs data.
 type SignupArgs struct {
 	Email    string `json:"email"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
+
 // Signup performs operations related to Signup functionality.
 func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var a SignupArgs
@@ -101,11 +105,13 @@ func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	result, err := Login(conn, loginArgs)
 	return result, err
 }
+
 // LoginArgs represents a structure for handling LoginArgs data.
 type LoginArgs struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
+
 // Login performs operations related to Login functionality.
 func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var a LoginArgs
@@ -121,7 +127,7 @@ func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	// First check if the user exists and get their auth_type
 	err := conn.DB.QueryRow(context.Background(),
 		"SELECT userId, username, profile_picture, auth_type FROM users WHERE email=$1",
-		a.Email).Scan(&userId, &resp.Username, &profilePicture, &authType)
+		a.Email).Scan(&userID, &resp.Username, &profilePicture, &authType)
 
 	if err != nil {
 		return nil, fmt.Errorf("Invalid Credentials: %v", err)
@@ -136,13 +142,13 @@ func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var passwordMatch bool
 	err = conn.DB.QueryRow(context.Background(),
 		"SELECT (password = $1) FROM users WHERE userId=$2 AND (auth_type='password' OR auth_type='both')",
-		a.Password, userId).Scan(&passwordMatch)
+		a.Password, userID).Scan(&passwordMatch)
 
 	if err != nil || !passwordMatch {
 		return nil, fmt.Errorf("invalid Credentials")
 	}
 
-	token, err := create_token(userId)
+	token, err := createToken(userID)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +173,7 @@ func createToken(userId int) (string, error) {
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(private_key)
+	return token.SignedString(privateKey)
 }
 
 func validateToken(tokenString string) (int, error) {
@@ -176,7 +182,7 @@ func validateToken(tokenString string) (int, error) {
 	// Default profile pic is empty (frontend will generate initial)
 
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		return private_key, nil // Adjust this to match your token's signing method
+		return privateKey, nil // Adjust this to match your token's signing method
 	})
 	if err != nil {
 		return -1, fmt.Errorf("cannot parse token: %w", err)
@@ -186,6 +192,7 @@ func validateToken(tokenString string) (int, error) {
 	}
 	return claims.UserID, nil
 }
+
 // GoogleUser represents a structure for handling GoogleUser data.
 type GoogleUser struct {
 	ID            string `json:"id"`
@@ -194,12 +201,14 @@ type GoogleUser struct {
 	Name          string `json:"name"`
 	Picture       string `json:"picture"`
 }
+
 // GoogleLoginResponse represents a structure for handling GoogleLoginResponse data.
 type GoogleLoginResponse struct {
 	Token      string `json:"token"`
 	ProfilePic string `json:"profilePic"`
 	Username   string `json:"username"`
 }
+
 // GoogleLogin performs operations related to GoogleLogin functionality.
 func GoogleLogin(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var args struct {
@@ -229,6 +238,7 @@ func GoogleLogin(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error)
 	url := googleOauthConfig.AuthCodeURL(state)
 	return map[string]string{"url": url, "state": state}, nil
 }
+
 // GoogleCallback performs operations related to GoogleCallback functionality.
 func GoogleCallback(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var args struct {
@@ -263,14 +273,14 @@ func GoogleCallback(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, err
 
 	err = conn.DB.QueryRow(context.Background(),
 		"SELECT userId, username, auth_type FROM users WHERE email = $1",
-		googleUser.Email).Scan(&userId, &username, &authType)
+		googleUser.Email).Scan(&userID, &username, &authType)
 
 	if err != nil {
 		// User doesn't exist, create new user with auth_type='google'
 		username = googleUser.Name
 		err = conn.DB.QueryRow(context.Background(),
 			"INSERT INTO users (username, password, email, google_id, profile_picture, auth_type) VALUES ($1, $2, $3, $4, $5, $6) RETURNING userId",
-			googleUser.Name, "", googleUser.Email, googleUser.ID, googleUser.Picture, "google").Scan(&userId)
+			googleUser.Name, "", googleUser.Email, googleUser.ID, googleUser.Picture, "google").Scan(&userID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create user: %v", err)
 		}
@@ -279,14 +289,14 @@ func GoogleCallback(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, err
 		// but change auth_type to "both" to preserve password login ability
 		_, err = conn.DB.Exec(context.Background(),
 			"UPDATE users SET google_id = $1, profile_picture = $2, auth_type = $3 WHERE userId = $4",
-			googleUser.ID, googleUser.Picture, "both", userId)
+			googleUser.ID, googleUser.Picture, "both", userID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to update user with Google info: %v", err)
+			return nil, fmt.Errorf("failed to update user: %v", err)
 		}
 	}
 
 	// Create JWT token
-	jwtToken, err := create_token(userId)
+	jwtToken, err := createToken(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create token: %v", err)
 	}
