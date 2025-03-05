@@ -44,6 +44,7 @@
 	export let expandable = false;
 	export let expandedContent: (item: ExtendedInstance) => any = () => null;
 	export let displayNames: { [key: string]: string } = {};
+	export let rowClass: (item: ExtendedInstance) => string = () => '';
 
 	// Add sorting state variables
 	let sortColumn: string | null = null;
