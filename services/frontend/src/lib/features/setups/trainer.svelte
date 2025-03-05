@@ -1,32 +1,52 @@
 <script lang="ts">
-	import type { Setup, Instance } from '$lib/core/types';
+	import type { Setup } from '$lib/core/types';
+	import type { Instance } from '$lib/core/types';
 	import { privateRequest } from '$lib/core/backend';
 	import { onMount } from 'svelte';
 	import { queryChart } from '$lib/features/chart/interface';
 	import { ESTSecondstoUTCSeconds } from '$lib/core/timestamp';
-	interface TrainingInstance extends Instance {
-		sampleId: number;
+
+	interface Setup {
+		setupId: number;
+		name: string;
+		score?: number;
 	}
 
-	export let setup: Setup | null;
-	export let handleExit: Function;
+	export let setup: Setup | null = null;
+	export let handleExit: (
+		event: MouseEvent & { currentTarget: EventTarget & HTMLButtonElement }
+	) => void;
+
+	interface TrainingInstance extends Instance {
+		id: number;
+		sampleId: number;
+		timestamp: number;
+		securityId: number;
+		price: number;
+	}
+
 	let trainingQueue: TrainingInstance[] = [];
-	function showInstance(instance) {
-		instance;
+
+	function showInstance(instance: TrainingInstance) {
+		console.log(instance);
 		instance.timestamp = ESTSecondstoUTCSeconds(instance.timestamp) * 1000;
 		queryChart(instance);
 	}
+
 	function refillQueue() {
-		privateRequest<TrainingInstance[]>('getTrainingQueue', { setupId: setup.setupId }, true).then(
-			(v: TrainingInstance[]) => {
-				trainingQueue = v;
-				showInstance(trainingQueue[0]);
-			}
-		);
+		if (setup?.setupId) {
+			privateRequest<TrainingInstance[]>('getTrainingQueue', { setupId: setup.setupId }, true).then(
+				(v: TrainingInstance[]) => {
+					trainingQueue = v;
+				}
+			);
+		}
 	}
+
 	onMount(() => {
 		refillQueue();
 	});
+
 	function label(c: string) {
 		if (c === 'yes' || c === 'no') {
 			const boolLabel = c === 'yes' ? true : false;
