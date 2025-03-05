@@ -222,6 +222,7 @@ def calculate_active(data):
             if metrics["price"]:
                 # Filter out any NaN values before calculating average
                 valid_prices = [item["value"] for item in metrics["price"] if item["value"] is not None and not np.isnan(item["value"])]
+
                 if valid_prices:
                     avg_price = sum(valid_prices) / len(valid_prices)
                     group_results["sector"]["price"].append((sector, None, avg_price))
