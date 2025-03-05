@@ -27,7 +27,18 @@ spec:
             - /bin/sh
           args:
             - -c
-            - jobctl run ClearWorkerQueue && jobctl run InitAggregates && jobctl run SimpleUpdateSecurities && jobctl run StartAlertLoop && jobctl run StartPolygonWebSocket && jobctl run UpdateMarketMetrics && jobctl run UpdateSectors && jobctl run UpdateSecurityCik && jobctl run UpdateSecurityDetails && sleep infinity
+            - >
+              /app/main &
+              jobctl run ClearWorkerQueue && 
+              jobctl run InitAggregates && 
+              jobctl run SimpleUpdateSecurities && 
+              jobctl run StartAlertLoop && 
+              jobctl run StartPolygonWebSocket && 
+              jobctl run UpdateMarketMetrics && 
+              jobctl run UpdateSectors && 
+              jobctl run UpdateSecurityCik && 
+              jobctl run UpdateSecurityDetails &&
+              wait
           ports:
             - containerPort: 5057
           env:
