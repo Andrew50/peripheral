@@ -1,12 +1,12 @@
-/backend/tmp/
-backend/tmp/main
-backend/app.log
-worker/__pycache__
-worker/core
-db/backups
-worker/venv
-backups/
-context/llm_context.txt
+services/backend/tmp/
+services/backend/tmp/main
+services/backend/app.log
+services/worker/__pycache__
+services/worker/core*
+services/db/backups
+services/worker/venv
+services/backups/
+services/context/llm_context.txt
 
 # Python bytecode files
 __pycache__/
@@ -23,7 +23,10 @@ prod/env/
 .env
 .venv
 
-prod/config/redis-secret.yaml
-prod/config/db-secret.yaml
-prod/config/cloudflare-secret.yaml
-prod/config/polygon-secret.yaml
+services/prod/config/redis-secret.yaml
+services/prod/config/db-secret.yaml
+services/prod/config/cloudflare-secret.yaml
+services/prod/config/polygon-secret.yaml
+
+# Add new paths for secrets
+services/prod/config/secrets/
