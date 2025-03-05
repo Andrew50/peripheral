@@ -25,12 +25,12 @@ class SessionHighlightingPaneRenderer implements ISeriesPrimitivePaneRenderer {
 	}
 	draw(target: CanvasRenderingTarget2D) {
 		const points: SessionHighlightingRendererData[] = this._viewData.data;
-		
+
 		// Skip drawing if no visible points
 		if (points.length === 0) {
 			return;
 		}
-		
+
 		target.useBitmapCoordinateSpace(scope => {
 			const ctx = scope.context;
 			const yTop = 0;
@@ -39,22 +39,22 @@ class SessionHighlightingPaneRenderer implements ISeriesPrimitivePaneRenderer {
 				(scope.horizontalPixelRatio * this._viewData.barWidth) / 2;
 			const cutOff = -1 * (halfWidth + 1);
 			const maxX = scope.bitmapSize.width;
-			
+
 			// Batch consecutive bars with the same color
 			let currentColor = '';
 			let startX = 0;
 			let lastX = 0;
-			
+
 			points.forEach((point, index) => {
 				// Skip transparent points completely
 				if (point.color === 'rgba(0, 0, 0, 0)') return;
-				
+
 				const xScaled = point.x * scope.horizontalPixelRatio;
 				if (xScaled < cutOff) return;
-				
+
 				const x1 = Math.max(0, Math.round(xScaled - halfWidth));
 				const x2 = Math.min(maxX, Math.round(xScaled + halfWidth));
-				
+
 				if (point.color !== currentColor || index === points.length - 1 || (index < points.length - 1 && Math.abs(x1 - lastX) > 1)) {
 					// Draw the previous batch if color changes
 					if (currentColor && startX < lastX) {
@@ -66,7 +66,7 @@ class SessionHighlightingPaneRenderer implements ISeriesPrimitivePaneRenderer {
 					startX = x1;
 				}
 				lastX = x2;
-				
+
 				// Draw the final point if it's the last one
 				if (index === points.length - 1 && currentColor !== 'rgba(0, 0, 0, 0)') {
 					ctx.fillStyle = currentColor;
@@ -137,8 +137,7 @@ export type SessionHighlighter = (date: Time) => string;
 
 export class SessionHighlighting
 	extends PluginBase
-	implements ISeriesPrimitive<Time>
-{
+	implements ISeriesPrimitive<Time> {
 	_paneViews: SessionHighlightingPaneView[];
 	_seriesData: SeriesDataItemTypeMap[SeriesType][] = [];
 	_backgroundColors: BackgroundData[] = [];
@@ -219,19 +218,29 @@ export function createDefaultSessionHighlighter(): SessionHighlighter {
 export function createDetailedSessionHighlighter(): SessionHighlighter {
 	return (timestamp: Time) => {
 		// Convert timestamp to Date without caching
-		const date = new Date(typeof timestamp === 'number' ? timestamp * 1000 : timestamp);
-		
+		const date = new Date(
+			typeof timestamp === 'number'
+				? timestamp * 1000
+				: typeof timestamp === 'string'
+					? timestamp
+					: new Date().setFullYear(
+						(timestamp as any).year,
+						(timestamp as any).month - 1,
+						(timestamp as any).day
+					)
+		);
+
 		// Calculate time in minutes using UTC methods
 		const hours = date.getUTCHours();
 		const timeInMinutes = hours * 60 + date.getUTCMinutes();
-		
+
 		// Pre-market: 4:00 AM - 9:30 AM UTC (240-570 minutes)
 		if (timeInMinutes >= 240 && timeInMinutes < 570) {
-            return 'rgba(92, 80, 59, 0.3)'; // Light orange for post-market
-		} 
+			return 'rgba(92, 80, 59, 0.3)'; // Light orange for post-market
+		}
 		// Post-market: 4:00 PM - 8:00 PM UTC (960-1200 minutes)
 		else if (timeInMinutes >= 960 && timeInMinutes < 1200) {
-            return 'rgba(50, 50, 80, 0.3)'; // Dark blue for pre-market
+			return 'rgba(50, 50, 80, 0.3)'; // Dark blue for pre-market
 		}
 		// Regular market hours or closed
 		else {
