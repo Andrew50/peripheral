@@ -220,6 +220,7 @@
 			};
 
 			// Add global keyboard event listener
+			document.removeEventListener('keydown', keydownHandler); // Remove any existing listener first
 			document.addEventListener('keydown', keydownHandler);
 		}
 		privateRequest<string>('verifyAuth', {}).catch(() => {
