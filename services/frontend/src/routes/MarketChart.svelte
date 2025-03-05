@@ -206,20 +206,11 @@
 		// Initialize data array with empty points, filling from right to left
 		data = Array(DATA_LENGTH)
 			.fill(null)
-			.map((_, index) => {
-				if (index === DATA_LENGTH - 1) {
-					return {
-						price: basePrice,
-						high: basePrice,
-						low: basePrice
-					};
-				}
-				return {
-					price: null,
-					high: null,
-					low: null
-				};
-			});
+			.map(() => ({
+				price: 0,
+				high: 0,
+				low: 0
+			}));
 
 		// Delay the start of animation
 		setTimeout(() => {

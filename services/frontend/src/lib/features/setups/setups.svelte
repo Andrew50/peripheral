@@ -1,23 +1,58 @@
 <script lang="ts">
 	import { queueRequest, privateRequest } from '$lib/core/backend';
-	import type { Setup } from '$lib/core/types';
+	import type { Setup as CoreSetup } from '$lib/core/types';
 	import { setups } from '$lib/core/stores';
 	import '$lib/core/global.css';
 	import Trainer from './trainer.svelte';
 	import { onMount } from 'svelte';
-	let selectedSetupId: number | null | 'new' = null;
-	let trainingSetup: Setup | null = null;
-	let editedSetup: Setup | null = null;
+	import type { Subscriber, Updater } from 'svelte/store';
+
+	// Extend the core Setup type to include the 'new' state
+	type SetupId = number | 'new';
+	interface EditableSetup extends Omit<CoreSetup, 'setupId' | 'activeScreen'> {
+		setupId: SetupId;
+		activeScreen: boolean | string;
+	}
+
+	type SetupEvent = 'new' | 'edit' | 'delete' | 'train';
+
+	let selectedSetupId: SetupId = 'new';
+	let trainingSetup: EditableSetup | null = null;
+	let editedSetup: EditableSetup = {
+		setupId: 'new',
+		name: '',
+		timeframe: '',
+		bars: 0,
+		threshold: 0,
+		dolvol: 0,
+		adr: 0,
+		mcap: 0,
+		score: 0,
+		activeScreen: false
+	};
 	import { eventDispatcher } from './interface';
+
 	onMount(() => {
 		eventDispatcher.subscribe((v: SetupEvent) => {
 			if (v === 'new') {
-				createNewSetup();
+				editedSetup = {
+					setupId: 'new',
+					name: '',
+					timeframe: '',
+					bars: 0,
+					threshold: 0,
+					dolvol: 0,
+					adr: 0,
+					mcap: 0,
+					score: 0,
+					activeScreen: false
+				};
+				selectedSetupId = 'new';
 			}
 		});
 	});
 
-	function editSetup(setup: Setup) {
+	function editSetup(setup: EditableSetup) {
 		selectedSetupId = setup.setupId;
 		editedSetup = { ...setup }; // Create a copy for editing
 	}
@@ -27,7 +62,7 @@
 		eventDispatcher.set('cancel');
 	}
 
-	function train(setup: Setup) {
+	function train(setup: EditableSetup) {
 		trainingSetup = setup;
 	}
 
@@ -41,7 +76,8 @@
 			dolvol: 0,
 			adr: 0,
 			mcap: 0,
-			score: 0
+			score: 0,
+			activeScreen: false
 		};
 		selectedSetupId = 'new';
 	}
@@ -59,26 +95,19 @@
 		});
 	}
 	function saveSetup() {
-		if (!editedSetup?.name || !editedSetup?.bars || !editedSetup?.timeframe) return;
 		if (selectedSetupId === 'new') {
-			privateRequest<Setup>('newSetup', editedSetup).then((s: Setup) => {
-				setups.update((o: Setup[]) => {
-					return [...o, s];
-				});
-				eventDispatcher.set(s.setupId);
+			privateRequest<CoreSetup>('newSetup', editedSetup).then((s: CoreSetup) => {
+				setups.update((o: CoreSetup[]) => [...o, s]);
+				selectedSetupId = s.setupId;
+				editedSetup = { ...s, activeScreen: false };
 			});
 		} else {
-			privateRequest('setSetup', editedSetup).then(() => {
-				setups.update((currentSetups) => {
-					return currentSetups.map((setup) =>
-						setup.setupId === editedSetup!.setupId ? editedSetup! : setup
-					);
-				});
-				selectedSetupId = null;
-				editedSetup = null;
+			privateRequest<void>('setSetup', editedSetup).then(() => {
+				setups.update((currentSetups: CoreSetup[]) =>
+					currentSetups.map((s) => (s.setupId === editedSetup.setupId ? editedSetup : s))
+				);
 			});
 		}
-		selectedSetupId = null;
 	}
 </script>
 
