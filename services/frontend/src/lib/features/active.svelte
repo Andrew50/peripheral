@@ -46,7 +46,7 @@
 	}
 
 	const params = writable<Params>({
-		timeframe: '1 day',
+		timeframe: '1 month',
 		group: 'stock',
 		metric: 'price leader'
 	});
@@ -216,12 +216,12 @@
 	let currentParams: Params;
 	params.subscribe((value) => {
 		currentParams = value;
-		// Force timeframe to '1 day' for gap metrics
+		// Update logic for gap metrics since '1 day' is now disabled
 		if (
 			(value.metric === 'gap leader' || value.metric === 'gap laggard') &&
-			value.timeframe !== '1 day'
+			(value.timeframe === '1 day' || value.timeframe === '1 week')
 		) {
-			currentParams.timeframe = '1 day';
+			currentParams.timeframe = '1 month'; // Changed from '1 day' to '1 month'
 			params.set(currentParams);
 		}
 	});
@@ -315,8 +315,8 @@
 					bind:value={currentParams.timeframe}
 					on:change={() => params.set(currentParams)}
 				>
-					<option value="1 day">1 Day</option>
-					<option value="1 week">1 Week</option>
+					<option value="1 day" disabled>1 Day</option>
+					<option value="1 week" disabled>1 Week</option>
 					<option value="1 month">1 Month</option>
 					<option value="6 month">6 Months</option>
 					<option value="1 year">1 Year</option>
