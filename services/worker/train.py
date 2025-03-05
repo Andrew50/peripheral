@@ -4,7 +4,8 @@ import datetime
 import numpy as np
 import tensorflow as tf
 import keras_cv
-from tensorflow.keras import layers, Sequential
+from tensorflow.keras import layers
+from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import (
     Dense,
     LSTM,
@@ -117,8 +118,6 @@ def train_model(conn, setupID):
     bars = traits[1]
     modelVersion = traits[2] + 1
     addedSamples = traits[3]
-    features = 4
-    # model = create_transformer_model(np.array([bars,features]))
 
     trainingSample, validationSample = getSample(
         conn,

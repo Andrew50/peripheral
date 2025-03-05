@@ -1,18 +1,9 @@
 import numpy as np
 from tensorflow.keras import backend as K
 import tensorflow as tf
-from tensorflow.keras import layers
+from tensorflow.keras import layers, models
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import (
-    Dense,
-    LSTM,
-    Bidirectional,
-    Dropout,
-    Conv1D,
-    Flatten,
-    Lambda,
-    Input,
-)
+from tensorflow.keras.layers import Input
 from tensorflow.keras.optimizers import Adam
 import matplotlib.pyplot as plt
 import mplfinance as mpf

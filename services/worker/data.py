@@ -1,11 +1,15 @@
 # data.py
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from tqdm import tqdm
-import requests, numpy as np, datetime, multiprocessing, sys, time, pandas as pd
+import numpy as np
+import datetime
+import pandas as pd
 import asyncio
 import aiohttp
 import json
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
+import multiprocessing, sys, time
 
 
 def normalize(df: np.ndarray, normType: str) -> np.ndarray:

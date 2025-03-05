@@ -1,9 +1,8 @@
 import yfinance as yf
-from typing import List, Dict, Tuple
+from typing import Dict, Tuple
 import time
 import os
 from multiprocessing import Pool, cpu_count
-from functools import partial
 import random
 
 

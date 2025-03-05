@@ -3,8 +3,8 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import mplfinance as mpf
 import pandas as pd
-from tensorflow.keras import layers, models
-from tensorflow.keras.models import Model
+from tensorflow.keras import layers
+from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.layers import (
     Dense,
     LSTM,
@@ -17,7 +17,6 @@ from tensorflow.keras.layers import (
     Reshape,
 )
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras import backend as K
 
 SPLIT_RATIO = 0.8
