@@ -487,6 +487,7 @@ func monitorTasksAndWait(conn *utils.Conn, taskIDs []string) bool {
 			return false
 		}
 	}
+	return false
 }
 
 // monitorTasks polls the status of tasks and displays their progress
