@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	polygon "github.com/polygon-io/client-go/rest"
 )
+
 // Conn represents a structure for handling Conn data.
 type Conn struct {
 	//Cache *redis.Client
@@ -23,6 +24,7 @@ type Conn struct {
 }
 
 var conn *Conn
+
 // InitConn performs operations related to InitConn functionality.
 func InitConn(inContainer bool) (*Conn, func()) {
 	// Get database connection details from environment variables
@@ -36,8 +38,8 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	redisPort := getEnv("REDIS_PORT", "6379")
 	redisPassword := getEnv("REDIS_PASSWORD", "")
 
-	var dbURL string
-	var cacheURL string
+	var dbUrl string
+	var cacheUrl string
 
 	// URL encode the password to handle special characters
 	encodedPassword := url.QueryEscape(dbPassword)

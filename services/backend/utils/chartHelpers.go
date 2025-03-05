@@ -6,6 +6,29 @@ import (
 
 	"github.com/polygon-io/client-go/rest/models"
 )
+
+// TimespanStringToDuration converts a timespan string to a time.Duration
+func TimespanStringToDuration(timespan string) time.Duration {
+	switch timespan {
+	case "minute":
+		return time.Minute
+	case "hour":
+		return time.Hour
+	case "day":
+		return 24 * time.Hour
+	case "week":
+		return 7 * 24 * time.Hour
+	case "month":
+		return 30 * 24 * time.Hour
+	case "quarter":
+		return 3 * 30 * 24 * time.Hour
+	case "year":
+		return 365 * 24 * time.Hour
+	default:
+		return time.Minute // Default to minute if unknown
+	}
+}
+
 // GetRequestStartEndTime performs operations related to GetRequestStartEndTime functionality.
 func GetRequestStartEndTime(
 	lowerDate time.Time,
@@ -51,6 +74,8 @@ func GetRequestStartEndTime(
 		return badReturn, badReturn, err
 	}
 	return startMillis, endMillis, nil
+}
+
 // GetTimeframeInSeconds performs operations related to GetTimeframeInSeconds functionality.
 func GetTimeframeInSeconds(multiplier int, timeframe string) int64 {
 	if timeframe == "hour" {
@@ -61,6 +86,8 @@ func GetTimeframeInSeconds(multiplier int, timeframe string) int64 {
 		return int64(multiplier)
 	}
 	return 0
+}
+
 // GetReferenceStartTimeForMonths performs operations related to GetReferenceStartTimeForMonths functionality.
 func GetReferenceStartTimeForMonths(timestamp int64, multiplier int, easternLocation *time.Location) int64 {
 	utcTime := time.Unix(0, timestamp*int64(time.Millisecond)).UTC()
@@ -74,6 +101,8 @@ func GetReferenceStartTimeForMonths(timestamp int64, multiplier int, easternLoca
 	candleStartTime := referenceDate.AddDate(0, elapsedTimeInMonths, 0)
 	// Convert the start time to Unix time in milliseconds and return it
 	return candleStartTime.UnixMilli()
+}
+
 // GetReferenceStartTimeForWeeks performs operations related to GetReferenceStartTimeForWeeks functionality.
 func GetReferenceStartTimeForWeeks(timestamp int64, multiplier int, easternLocation *time.Location) int64 {
 	utcTime := time.Unix(0, timestamp*int64(time.Millisecond)).UTC()
@@ -88,6 +117,8 @@ func GetReferenceStartTimeForWeeks(timestamp int64, multiplier int, easternLocat
 	candleStartTime := referenceDate.AddDate(0, 0, numFullBars*multiplier*7)
 	// Convert the start time to Unix time in milliseconds and return it
 	return candleStartTime.UnixMilli()
+}
+
 // GetReferenceStartTimeForDays performs operations related to GetReferenceStartTimeForDays functionality.
 func GetReferenceStartTimeForDays(timestamp int64, multiplier int, easternLocation *time.Location) int64 {
 	utcTime := time.Unix(0, timestamp*int64(time.Millisecond)).UTC()
@@ -102,10 +133,10 @@ func GetReferenceStartTimeForDays(timestamp int64, multiplier int, easternLocati
 	numFullBars := elapsedTimeInDays / multiplier
 	candleStartTime := referenceDate.AddDate(0, 0, numFullBars*multiplier)
 	return candleStartTime.UnixMilli()
+}
 
 // GetReferenceStartTime performs operations related to GetReferenceStartTime functionality.
 func GetReferenceStartTime(timestamp int64, extendedHours bool, easternLocation *time.Location) int64 {
-
 	utcTime := time.Unix(0, timestamp*int64(time.Millisecond)).UTC()
 	nyTime := utcTime.In(easternLocation)
 	year, month, day := nyTime.Date()
@@ -125,5 +156,4 @@ func GetReferenceStartTime(timestamp int64, extendedHours bool, easternLocation 
 	referenceTimestamp := referenceUTC.Unix()*1000 + int64(referenceUTC.Nanosecond())/int64(time.Millisecond)
 
 	return referenceTimestamp
-
 }
