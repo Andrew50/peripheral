@@ -1609,63 +1609,7 @@
 
 	function isChartEventData(data: unknown): data is ChartEventData {
 		if (!data || typeof data !== 'object') return false;
-		const d = data as Partial<ChartEventData>;
-		return typeof d.type === 'string' && typeof d.url === 'string';
-	}
-
-	// Use type guard where data is handled
-	if (isChartEventData(data)) {
-		// Now TypeScript knows data has type and url properties
-		console.log(data.type, data.url);
-		if (typeof data.ratio === 'number') {
-			console.log(data.ratio);
-		}
-		if (typeof data.amount === 'number') {
-			console.log(data.amount);
-		}
-	}
-
-	// Handle bars calculation safely
-	const calculateBars = (instance: Partial<Instance>): number => {
-		return instance.bars || Math.floor(bufferInScreenSizes * barsOnScreen) + 100;
-	};
-
-	interface ChartInstance extends Instance {
-		bars?: number;
-	}
-
-	function ensureNumericId(id: string | number | undefined): number {
-		if (typeof id === 'string') {
-			return parseInt(id, 10) || 0;
-		}
-		return id || 0;
-	}
-
-	function ensureNumericSecurityId(instance: Instance): number {
-		return ensureNumericId(instance.securityId);
-	}
-
-	function createChartInstance(data: Partial<ChartInstance>): ChartInstance {
-		return {
-			ticker: data.ticker || '',
-			timestamp: data.timestamp || 0,
-			timeframe: data.timeframe || '',
-			securityId: ensureNumericSecurityId(data as Instance),
-			price: data.price || 0,
-			bars: data.bars || Math.floor(bufferInScreenSizes * barsOnScreen) + 100
-		};
-	}
-
-	// Use for data type checking
-	interface ChartEventData {
-		type: string;
-		url: string;
-		ratio?: number;
-		amount?: number;
-	}
-
-	function isChartEventData(data: any): data is ChartEventData {
-		return data && typeof data.type === 'string' && typeof data.url === 'string';
+		return typeof (data as any).type === 'string' && typeof (data as any).url === 'string';
 	}
 
 	// Use these functions where needed

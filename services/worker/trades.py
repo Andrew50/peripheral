@@ -124,7 +124,7 @@ def grab_user_trades(
 
             return trades
 
-    except Exception as e:
+    except Exception as _:
         error_info = traceback.format_exc()
         print(f"Error fetching trades: {error_info}")
         return []
@@ -557,7 +557,7 @@ def get_trade_statistics(
                 "ticker_stats": ticker_stats,
             }
 
-    except Exception as e:
+    except Exception as _:
         error_info = traceback.format_exc()
         print(f"Error calculating statistics:\n{error_info}")
         return {"error": str(e), "traceback": error_info}
@@ -628,7 +628,7 @@ def get_ticker_trades(
 
             return {"securityId": security_id, "entries": entries, "exits": exits}
 
-    except Exception as e:
+    except Exception as _:
         error_info = traceback.format_exc()
         print(f"Error getting ticker trades:\n{error_info}")
         return {"error": str(e), "traceback": error_info}
@@ -805,7 +805,7 @@ def get_ticker_performance(
 
             return ticker_stats
 
-    except Exception as e:
+    except Exception as _:
         error_info = traceback.format_exc()
         print(f"Error getting ticker performance:\n{error_info}")
         return []

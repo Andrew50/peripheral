@@ -7,11 +7,6 @@ import asyncio
 import aiohttp
 import json
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from tqdm.auto import tqdm
-import multiprocessing, sys, time
-
-
 def normalize(df: np.ndarray, normType: str) -> np.ndarray:
     if normType == "rolling-log":
         df = np.log(df)
