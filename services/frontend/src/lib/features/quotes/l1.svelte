@@ -47,7 +47,8 @@
 			return;
 		}
 
-		currentSecurityId = inst.securityId;
+		currentSecurityId =
+			typeof inst.securityId === 'string' ? parseInt(inst.securityId, 10) : inst.securityId;
 		release();
 		release = addStream(inst, 'quote', updateStore);
 	});
