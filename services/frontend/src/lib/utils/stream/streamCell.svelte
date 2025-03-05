@@ -26,7 +26,7 @@
 			return;
 		}
 
-		currentSecurityId = instance.securityId ?? null;
+		currentSecurityId = instance.securityId ? Number(instance.securityId) : null;
 
 		// Clean up existing streams
 		releaseClose();
