@@ -198,9 +198,7 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 			return
 		}
 
-		if test {
-			//log.Printf("Successfully updated details for %s", ticker)
-		}
+		// Successfully updated details
 
 		// Increment the security count
 		countMutex.Lock()

@@ -162,20 +162,9 @@ func SendAlertToUser(userID int, alert AlertMessage) {
 }
 func (c *Client) writePump() {
 	defer c.ws.Close()
-	for {
-		select {
-		case message, ok := <-c.send:
-			if !ok {
-				fmt.Println("Channel closed, exiting writePump")
-				return
-			}
-			c.mu.Lock()
-			err := c.ws.WriteMessage(websocket.TextMessage, message)
-			c.mu.Unlock()
-			if err != nil {
-				fmt.Println("WebSocket write error:", err)
-				return
-			}
+	for message := range c.send {
+		if err := c.ws.WriteMessage(websocket.TextMessage, message); err != nil {
+			return
 		}
 	}
 }
