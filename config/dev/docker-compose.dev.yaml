@@ -78,6 +78,7 @@ services:
       - REDIS_HOST=cache
       - TF_MODEL_NAME=1
       - TF_MODEL_VERSION=9
+      - POLYGON_API_KEY=${POLYGON_API_KEY}
     deploy:
       resources:
         limits:
