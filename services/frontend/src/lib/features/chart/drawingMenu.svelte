@@ -10,10 +10,20 @@
 		clientX: number;
 		clientY: number;
 		active: boolean;
-		horizontalLines: { price: number; line: IPriceLine; id: number }[];
+		horizontalLines: { 
+			price: number; 
+			line: IPriceLine; 
+			id: number; 
+			color: string; 
+			lineWidth: number
+		}[];
 		isDragging: boolean;
 		securityId: number;
+		selectedLinePrice: number;
+		selectedLineColor: string;
+		selectedLineWidth: number;
 	}
+	
 	export let drawingMenuProps: Writable<DrawingMenuProps> = writable({
 		chartCandleSeries: null,
 		selectedLine: null,
@@ -24,14 +34,17 @@
 		horizontalLines: [],
 		isDragging: false,
 		selectedLinePrice: 0,
+		selectedLineColor: '#FFFFFF',
+		selectedLineWidth: 1,
 		securityId: -1
 	});
-	export function addHorizontalLine(price: number, securityId: number, id: number = -1) {
+	
+	export function addHorizontalLine(price: number, securityId: number, id: number = -1, color: string = '#FFFFFF', lineWidth: number = 1) {
 		price = parseFloat(price.toFixed(2));
 		const priceLine = get(drawingMenuProps).chartCandleSeries.createPriceLine({
 			price: price,
-			color: 'white',
-			lineWidth: 1,
+			color: color,
+			lineWidth: lineWidth,
 			lineStyle: 0, // Solid line
 			axisLabelVisible: true,
 			title: `Price: ${price}`
@@ -39,16 +52,19 @@
 		get(drawingMenuProps).horizontalLines.push({
 			id,
 			price,
-			line: priceLine
+			line: priceLine,
+			color,
+			lineWidth
 		});
 		if (id == -1) {
-			// only add to baceknd if its being added not from a ticker load but from a new added line
+			// only add to backend if it's being added not from a ticker load but from a new added line
 			privateRequest<number>('setHorizontalLine', {
 				price: price,
-				securityId: securityId
+				securityId: securityId,
+				color: color,
+				lineWidth: lineWidth
 			}).then((res: number) => {
-				get(drawingMenuProps).horizontalLines[get(drawingMenuProps).horizontalLines.length - 1].id =
-					res;
+				get(drawingMenuProps).horizontalLines[get(drawingMenuProps).horizontalLines.length - 1].id = res;
 			});
 		}
 	}
@@ -63,6 +79,21 @@
 	export let drawingMenuProps: Writable<DrawingMenuProps>;
 
 	let menuElement: HTMLDivElement;
+	
+	// Common colors for lines
+	const colorPresets = [
+		'#FFFFFF', // White
+		'#FF0000', // Red
+		'#00FF00', // Green
+		'#0000FF', // Blue
+		'#FFFF00', // Yellow
+		'#FF00FF', // Magenta
+		'#00FFFF', // Cyan
+		'#FFA500'  // Orange
+	];
+	
+	// Line width options
+	const lineWidthOptions = [1, 2, 3, 4, 5];
 
 	function removePriceLine(event: MouseEvent) {
 		event.preventDefault();
@@ -85,12 +116,45 @@
 		privateRequest<void>('deleteHorizontalLine', { id: $drawingMenuProps.selectedLineId }, true);
 	}
 
-	function editHorizontalLinePrice() {
-		('updating price line price');
-
+	function updateHorizontalLine() {
 		if ($drawingMenuProps.selectedLine !== null) {
-			addHorizontalLine($drawingMenuProps.selectedLinePrice, $drawingMenuProps.securityId);
-			deleteHorizontalLine($drawingMenuProps.selectedLine);
+			// Update the existing line with all properties
+			const price = parseFloat($drawingMenuProps.selectedLinePrice.toFixed(2));
+			const color = $drawingMenuProps.selectedLineColor;
+			const lineWidth = $drawingMenuProps.selectedLineWidth;
+			
+			$drawingMenuProps.selectedLine.applyOptions({
+				price,
+				color,
+				lineWidth,
+				title: `Price: ${price}`
+			});
+			
+			// Update the stored properties in horizontalLines array
+			const lineIndex = $drawingMenuProps.horizontalLines.findIndex(
+				(line) => line.line === $drawingMenuProps.selectedLine
+			);
+			
+			if (lineIndex !== -1) {
+				$drawingMenuProps.horizontalLines[lineIndex].price = price;
+				$drawingMenuProps.horizontalLines[lineIndex].color = color;
+				$drawingMenuProps.horizontalLines[lineIndex].lineWidth = lineWidth;
+				
+				// Update in backend
+				privateRequest<void>(
+					'updateHorizontalLine',
+					{
+						id: $drawingMenuProps.horizontalLines[lineIndex].id,
+						price,
+						color,
+						lineWidth,
+						securityId: $drawingMenuProps.securityId
+					},
+					true
+				);
+			}
+			
+			// Keep the menu open
 		}
 	}
 
@@ -166,6 +230,21 @@
 	function handlePriceInput(e) {
 		$drawingMenuProps.selectedLinePrice = parseFloat(e.target.value);
 	}
+	
+	function handleColorChange(e) {
+		$drawingMenuProps.selectedLineColor = e.target.value;
+		updateHorizontalLine();
+	}
+	
+	function handleLineWidthChange(e) {
+		$drawingMenuProps.selectedLineWidth = parseInt(e.target.value);
+		updateHorizontalLine();
+	}
+	
+	function selectColorPreset(color: string) {
+		$drawingMenuProps.selectedLineColor = color;
+		updateHorizontalLine();
+	}
 </script>
 
 {#if $drawingMenuProps.active && !$drawingMenuProps.isDragging}
@@ -177,15 +256,63 @@
 		class="drawing-menu"
 		style={menuStyle}
 	>
-		<button on:click={removePriceLine}>Delete</button>
-		<div>
-			<input
-				value={formattedPrice}
-				on:input={handlePriceInput}
-				on:change={editHorizontalLinePrice}
-				type="number"
-				step="0.01"
+		<button on:click={removePriceLine} class="delete-button">Delete</button>
+		
+		<div class="menu-section">
+			<label for="line-price">Price:</label>
+			<div class="price-input-container">
+				<input
+					id="line-price"
+					value={formattedPrice}
+					on:input={handlePriceInput}
+					on:change={updateHorizontalLine}
+					type="number"
+					step="0.01"
+					class="price-input"
+				/>
+			</div>
+		</div>
+		
+		<div class="menu-section">
+			<label for="line-width">Width:</label>
+			<select 
+				id="line-width" 
+				value={$drawingMenuProps.selectedLineWidth} 
+				on:change={handleLineWidthChange}
+				class="line-width-select"
+			>
+				{#each lineWidthOptions as width}
+					<option value={width}>{width}px</option>
+				{/each}
+			</select>
+		</div>
+		
+		<div class="menu-section">
+			<label for="line-color">Color:</label>
+			<input 
+				id="line-color"
+				type="color" 
+				value={$drawingMenuProps.selectedLineColor} 
+				on:change={handleColorChange}
+				class="color-picker"
 			/>
+		</div>
+		
+		<div class="color-presets">
+			{#each colorPresets as color}
+				<div 
+					class="color-preset" 
+					style="background-color: {color}; border: 2px solid {$drawingMenuProps.selectedLineColor === color ? '#4CAF50' : 'transparent'}" 
+					on:click={() => selectColorPreset(color)} 
+					role="button" 
+					tabindex="0" 
+					on:keydown={(e) => e.key === 'Enter' && selectColorPreset(color)}
+				></div>
+			{/each}
+		</div>
+		
+		<div class="preview-section">
+			<div class="line-preview" style="height: {$drawingMenuProps.selectedLineWidth}px; background-color: {$drawingMenuProps.selectedLineColor};"></div>
 		</div>
 	</div>
 {/if}
@@ -194,9 +321,96 @@
 	.drawing-menu {
 		position: absolute;
 		z-index: 1002;
-		background-color: rgba(0, 0, 0, 0.5);
-		border: 1px solid rgba(255, 255, 255, 0.1);
+		background-color: rgba(20, 20, 20, 0.9);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 6px;
+		padding: 10px;
+		width: 200px;
+		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+	}
+	
+	.menu-section {
+		margin-bottom: 10px;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+	
+	label {
+		font-size: 12px;
+		color: #ccc;
+		margin-right: 8px;
+	}
+	
+	.delete-button {
+		width: 100%;
+		background-color: rgba(220, 53, 69, 0.7);
+		color: white;
+		border: none;
 		border-radius: 4px;
-		padding: 4px;
+		padding: 6px;
+		margin-bottom: 10px;
+		cursor: pointer;
+		transition: background-color 0.2s;
+	}
+	
+	.delete-button:hover {
+		background-color: rgba(220, 53, 69, 1);
+	}
+	
+	.price-input-container {
+		flex: 1;
+	}
+	
+	.price-input, .line-width-select {
+		width: 100%;
+		background-color: rgba(30, 30, 30, 0.7);
+		color: white;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 4px;
+		padding: 5px;
+		font-size: 12px;
+	}
+	
+	.color-picker {
+		width: 30px;
+		height: 30px;
+		border: none;
+		background: none;
+		cursor: pointer;
+	}
+	
+	.color-presets {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 5px;
+		margin-bottom: 10px;
+	}
+	
+	.color-preset {
+		width: 20px;
+		height: 20px;
+		border-radius: 50%;
+		cursor: pointer;
+		transition: transform 0.1s;
+	}
+	
+	.color-preset:hover {
+		transform: scale(1.1);
+	}
+	
+	.preview-section {
+		margin-top: 10px;
+		padding: 8px;
+		background-color: rgba(0, 0, 0, 0.3);
+		border-radius: 4px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.line-preview {
+		width: 100%;
+		min-height: 1px;
 	}
 </style>
