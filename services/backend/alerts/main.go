@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 )
+
 // Alert represents a structure for handling Alert data.
 type Alert struct {
 	AlertID    int
@@ -29,6 +30,7 @@ var (
 	ctx       context.Context
 	cancel    context.CancelFunc
 )
+
 // AddAlert performs operations related to AddAlert functionality.
 func AddAlert(conn *utils.Conn, alert Alert) {
 	if alert.AlertType == "price" {
@@ -41,10 +43,12 @@ func AddAlert(conn *utils.Conn, alert Alert) {
 	}
 	alerts.Store(alert.AlertID, alert)
 }
+
 // RemoveAlert performs operations related to RemoveAlert functionality.
 func RemoveAlert(alertId int) {
 	alerts.Delete(alertId)
 }
+
 // StartAlertLoop performs operations related to StartAlertLoop functionality.
 func StartAlertLoop(conn *utils.Conn) error { //entrypoint
 	err := InitTelegramBot()
@@ -60,6 +64,7 @@ func StartAlertLoop(conn *utils.Conn) error { //entrypoint
 	go alertLoop(ctx, conn)
 	return nil
 }
+
 // StopAlertLoop performs operations related to StopAlertLoop functionality.
 func StopAlertLoop() {
 	if cancel != nil {
@@ -78,17 +83,6 @@ func alertLoop(ctx context.Context, conn *utils.Conn) {
 			processAlerts(conn)
 		}
 	}
-}
-
-func printAlert(alert Alert) {
-	fmt.Printf("AlertID: %d, UserID: %d, AlertType: %s, SetupID: %v, Price: %v, Direction: %v, SecurityID: %v, Ticker: %v\n", alert.AlertID, alert.UserID, alert.AlertType, nilOrValue(alert.SetupID), nilOrValue(alert.Price), nilOrValue(alert.Direction), nilOrValue(alert.SecurityID), nilOrValue(alert.Ticker))
-}
-
-func nilOrValue[T any](ptr *T) any {
-	if ptr == nil {
-		return "nil"
-	}
-	return *ptr
 }
 
 func processAlerts(conn *utils.Conn) {
