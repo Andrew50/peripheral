@@ -37,7 +37,7 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 	// Query active securities (where maxDate is null)
 	fmt.Println("Updating security details")
 	rows, err := conn.DB.Query(context.Background(),
-		`SELECT securityid, ticker 
+		`SELECT securityID, ticker 
 		 FROM securities 
 		 WHERE maxDate IS NULL AND (logo IS NULL OR icon IS NULL)`)
 	if err != nil {
@@ -176,7 +176,7 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 					 THEN CAST(($6::numeric / $12::numeric) AS BIGINT)
 					 ELSE NULL 
 				 END
-			 WHERE securityid = $11`,
+			 WHERE securityID = $11`,
 			utils.NullString(details.Name),
 			utils.NullString(string(details.Market)),
 			utils.NullString(string(details.Locale)),
