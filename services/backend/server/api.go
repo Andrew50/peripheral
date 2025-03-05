@@ -87,7 +87,6 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"getAlertLogs": tasks.GetAlertLogs,
 	"newAlert":     tasks.NewAlert,
 	"deleteAlert":  tasks.DeleteAlert,
-	//"setAlert":tasks.SetAlert,
 
 	// deprecated
 	// "getTradeData":            tasks.GetTradeData,
@@ -107,6 +106,13 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"getSecurityClassifications": tasks.GetSecurityClassifications,
 	"getLatestEdgarFilings":      tasks.GetLatestEdgarFilings,
 	"getChartEvents":             tasks.GetChartEvents,
+
+	// Add the new trade-related functions
+	"grab_user_trades":       tasks.GrabUserTrades,
+	"get_trade_statistics":   tasks.GetTradeStatistics,
+	"get_ticker_performance": tasks.GetTickerPerformance,
+	"delete_all_user_trades": tasks.DeleteAllUserTrades,
+	"handle_trade_upload":    tasks.HandleTradeUpload,
 }
 
 func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
@@ -214,7 +220,34 @@ func privateUploadHandler(conn *utils.Conn) http.HandlerFunc {
 			}
 		}
 
-		// Include userId in the arguments
+		// Handle trade upload directly in Go instead of queueing it
+		if funcName == "handle_trade_upload" {
+			// Create args directly for HandleTradeUpload
+			argsBytes, err := json.Marshal(map[string]interface{}{
+				"file_content": encodedContent,
+				"extra":        additionalArgs,
+			})
+			if err != nil {
+				handleError(w, err, "marshaling arguments")
+				return
+			}
+
+			// Call the Go implementation directly
+			result, err := tasks.HandleTradeUpload(conn, userId, argsBytes)
+			if handleError(w, err, "processing trade upload") {
+				return
+			}
+
+			// Return the result directly
+			w.Header().Set("Content-Type", "application/json")
+			if err := json.NewEncoder(w).Encode(result); err != nil {
+				handleError(w, err, "encoding response")
+				return
+			}
+			return
+		}
+
+		// For other functions, use the queue as before
 		args := map[string]interface{}{
 			"file_content":    encodedContent,
 			"additional_args": additionalArgs,
