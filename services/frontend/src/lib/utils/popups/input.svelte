@@ -272,7 +272,10 @@
 	let isLoadingSecurities = false;
 
 	// Add this reactive statement
-	$: if (manualInputType !== 'auto' && $inputQuery.status === 'active') {
+	$: if (
+		manualInputType !== 'auto' &&
+		($inputQuery.status === 'active' || $inputQuery.status === 'initializing')
+	) {
 		setTimeout(() => {
 			inputQuery.update((v) => ({
 				...v,
@@ -638,16 +641,14 @@
 				<select
 					class="default-select"
 					bind:value={manualInputType}
-					on:click|preventDefault|stopPropagation
-					on:change|preventDefault|stopPropagation={() => {
+					on:click={(e) => e.stopPropagation()}
+					on:change={() => {
 						// Force immediate update when dropdown changes
-						if (manualInputType !== 'auto') {
-							inputQuery.update((v) => ({
-								...v,
-								inputType: manualInputType,
-								inputValid: true
-							}));
-						}
+						inputQuery.update((v) => ({
+							...v,
+							inputType: manualInputType,
+							inputValid: true // Reset validity when manually changing type
+						}));
 					}}
 				>
 					<option value="auto">Auto</option>
