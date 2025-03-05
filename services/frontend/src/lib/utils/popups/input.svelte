@@ -114,19 +114,19 @@
 		// Only auto-classify if manualInputType is set to 'auto'
 		if (manualInputType === 'auto') {
 			if (inputString !== '') {
+				// Make sure possibleKeys is available and is an array
+				const possibleKeys = Array.isArray(iQ.possibleKeys) ? iQ.possibleKeys : [];
+
 				// Test for ticker - check for uppercase letters
-				if (iQ.possibleKeys.includes('ticker') && /^[A-Z]+$/.test(inputString)) {
+				if (possibleKeys.includes('ticker') && /^[A-Z]+$/.test(inputString)) {
 					inputType = 'ticker';
-				} else if (iQ.possibleKeys.includes('price') && /^(?:\d*\.\d+|\d{3,})$/.test(inputString)) {
+				} else if (possibleKeys.includes('price') && /^(?:\d*\.\d+|\d{3,})$/.test(inputString)) {
 					inputType = 'price';
-				} else if (
-					iQ.possibleKeys.includes('timeframe') &&
-					/^\d{1,2}[hdwmqs]?$/i.test(inputString)
-				) {
+				} else if (possibleKeys.includes('timeframe') && /^\d{1,2}[hdwmqs]?$/i.test(inputString)) {
 					inputType = 'timeframe';
-				} else if (iQ.possibleKeys.includes('timestamp') && /^[\d-]+$/.test(inputString)) {
+				} else if (possibleKeys.includes('timestamp') && /^[\d-]+$/.test(inputString)) {
 					inputType = 'timestamp';
-				} else if (iQ.possibleKeys.includes('ticker')) {
+				} else if (possibleKeys.includes('ticker')) {
 					// If it's a letter pattern that isn't already matched as something else, default to ticker
 					if (/^[a-zA-Z]+$/.test(inputString)) {
 						inputType = 'ticker';
@@ -182,7 +182,6 @@
 		instance: Instance = {}
 	): Promise<Instance> {
 		// If an input query is already active, force its cancellation.
-		requiredKeys;
 		if (get(inputQuery).status !== 'inactive') {
 			if (activePromiseReject) {
 				activePromiseReject(new Error('User cancelled input'));
@@ -193,14 +192,23 @@
 			await tick();
 		}
 
-		// Determine possible keys.
-		let possibleKeys: InstanceAttributes[];
+		// Determine possible keys - always use a valid array of keys, never the string 'any'
+		let possibleKeys: InstanceAttributes[] = [];
 		if (optionalKeys === 'any') {
 			possibleKeys = [...allKeys];
+		} else if (Array.isArray(optionalKeys)) {
+			if (Array.isArray(requiredKeys)) {
+				possibleKeys = Array.from(
+					new Set([...requiredKeys, ...optionalKeys])
+				) as InstanceAttributes[];
+			} else {
+				possibleKeys = [...optionalKeys];
+			}
+		} else if (Array.isArray(requiredKeys)) {
+			possibleKeys = [...requiredKeys];
 		} else {
-			possibleKeys = Array.from(
-				new Set([...requiredKeys, ...optionalKeys])
-			) as InstanceAttributes[];
+			// Default to all available keys if neither requiredKeys nor optionalKeys is an array
+			possibleKeys = [...allKeys];
 		}
 		await tick();
 
@@ -291,15 +299,12 @@
 	}
 
 	async function enterInput(iQ: InputQuery, tickerIndex: number = 0): Promise<InputQuery> {
-		iQ;
 		if (iQ.inputType === 'ticker') {
 			const ts = iQ.instance.timestamp;
 			await waitForSecurityResult();
 			iQ = $inputQuery;
-			iQ;
 			if (Array.isArray(iQ.securities) && iQ.securities.length > 0) {
 				iQ.instance = { ...iQ.instance, ...iQ.securities[tickerIndex] };
-				iQ.instance;
 				iQ.instance.timestamp = ts;
 			}
 		} else if (iQ.inputType === 'timeframe') {
@@ -315,8 +320,7 @@
 			if (Object.keys(iQ.instance).length === 0) {
 				iQ.status = 'active';
 			}
-		} else {
-			iQ.requiredKeys;
+		} else if (Array.isArray(iQ.requiredKeys)) {
 			for (const attribute of iQ.requiredKeys) {
 				if (!iQ.instance[attribute]) {
 					iQ.status = 'active';
@@ -624,38 +628,42 @@
 </script>
 
 {#if $inputQuery.status === 'active' || $inputQuery.status === 'initializing'}
-	<div
-		class="popup-container"
-		id="input-window"
-		tabindex="-1"
-		on:click|stopPropagation={() => {
-			// When clicking anywhere inside the popup, refocus the hidden input
-			const hiddenInput = document.getElementById('hidden-input');
-			if (hiddenInput) hiddenInput.focus();
-		}}
-	>
+	<div class="popup-container" id="input-window" tabindex="-1" on:click|stopPropagation>
 		<div class="header">
 			<div class="title">{capitalize($inputQuery.inputType)} Input</div>
-			<div class="field-select">
-				<span class="label">Field:</span>
-				<select
-					class="default-select"
-					bind:value={manualInputType}
-					on:click={(e) => e.stopPropagation()}
-					on:change={() => {
-						// Force immediate update when dropdown changes
+			<div class="field-buttons">
+				<button
+					class="toggle-button {manualInputType === 'auto' && $inputQuery.inputType === ''
+						? 'active'
+						: ''}"
+					on:click|stopPropagation={() => {
+						manualInputType = 'auto';
 						inputQuery.update((v) => ({
 							...v,
-							inputType: manualInputType,
+							inputType: '',
 							inputValid: true // Reset validity when manually changing type
 						}));
 					}}
 				>
-					<option value="auto">Auto</option>
+					Auto
+				</button>
+				{#if Array.isArray($inputQuery.possibleKeys)}
 					{#each $inputQuery.possibleKeys as key}
-						<option value={key}>{capitalize(key)}</option>
+						<button
+							class="toggle-button {manualInputType === key ? 'active' : ''}"
+							on:click|stopPropagation={() => {
+								manualInputType = key;
+								inputQuery.update((v) => ({
+									...v,
+									inputType: manualInputType,
+									inputValid: true // Reset validity when manually changing type
+								}));
+							}}
+						>
+							{capitalize(key)}
+						</button>
 					{/each}
-				</select>
+				{/if}
 			</div>
 			<button class="utility-button" on:click|stopPropagation={closeWindow}>×</button>
 		</div>
@@ -678,22 +686,24 @@
 			{#if $inputQuery.instance && Object.keys($inputQuery.instance).length > 0}
 				{#if $inputQuery.inputType === ''}
 					<div class="span-container">
-						{#each $inputQuery.possibleKeys as key}
-							<div class="span-row">
-								<span
-									class={$inputQuery.requiredKeys !== 'any' &&
-									$inputQuery.requiredKeys.includes(key) &&
-									!$inputQuery.instance[key]
-										? 'red'
-										: ''}
-								>
-									{capitalize(key)}
-								</span>
-								<span class="value">
-									{displayValue($inputQuery, key)}
-								</span>
-							</div>
-						{/each}
+						{#if Array.isArray($inputQuery.possibleKeys)}
+							{#each $inputQuery.possibleKeys as key}
+								<div class="span-row">
+									<span
+										class={Array.isArray($inputQuery.requiredKeys) &&
+										$inputQuery.requiredKeys.includes(key) &&
+										!$inputQuery.instance[key]
+											? 'red'
+											: ''}
+									>
+										{capitalize(key)}
+									</span>
+									<span class="value">
+										{displayValue($inputQuery, key)}
+									</span>
+								</div>
+							{/each}
+						{/if}
 					</div>
 				{:else if $inputQuery.inputType === 'ticker'}
 					<div class="table-container">
@@ -816,7 +826,7 @@
 			autocomplete="off"
 			type="text"
 			id="hidden-input"
-			style="position: absolute; top: 0; left: 0; opacity: 0; pointer-events: none; height: 100%; width: 100%;"
+			style="position: absolute; top: 0; left: 0; opacity: 0; pointer-events: none; height: 100%; width: 100%; z-index: 0;"
 			on:blur={() => {
 				// Refocus if we lose focus but component is still active
 				if (componentActive) {
@@ -842,6 +852,75 @@
 		overflow: hidden;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 	}
+
+	/* Button styles for field selection */
+	.field-buttons {
+		display: flex;
+		gap: 4px;
+		flex-wrap: nowrap;
+		margin-left: auto;
+		max-width: 75%;
+		justify-content: flex-end;
+		overflow-x: auto;
+		white-space: nowrap;
+		padding-left: 10px;
+	}
+
+	.toggle-button {
+		margin-right: 0;
+		padding: 4px 8px;
+		min-width: 60px;
+		height: 26px;
+		font-weight: 500;
+		font-size: 11px;
+		text-transform: uppercase;
+		letter-spacing: 0.3px;
+		transition: all 0.2s ease;
+		border-radius: 4px;
+		position: relative;
+		overflow: hidden;
+		background: transparent;
+		border: 1px solid var(--ui-border);
+		color: var(--text-secondary);
+		cursor: pointer;
+	}
+
+	.toggle-button:after {
+		content: '';
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		width: 0;
+		height: 2px;
+		background: var(--ui-accent, #4a80f0);
+		transition: width 0.2s ease;
+	}
+
+	.toggle-button:hover {
+		background: var(--ui-bg-hover);
+	}
+
+	.toggle-button:hover:after {
+		width: 100%;
+	}
+
+	.toggle-button.active {
+		background: var(--ui-bg-hover);
+		border-bottom: 2px solid var(--ui-accent, #4a80f0);
+		color: var(--text-primary);
+	}
+
+	.toggle-button.active:after {
+		width: 100%;
+	}
+
+	/* Fix for the select dropdown */
+	.default-select {
+		position: relative;
+		z-index: 10;
+		pointer-events: auto !important;
+	}
+
 	.span-container {
 		display: felx;
 		flex-direction: column;
