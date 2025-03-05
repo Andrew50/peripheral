@@ -40,7 +40,8 @@ func GetRequestStartEndTime(
 ) (models.Millis, models.Millis, error) {
 
 	overestimate := 2.0
-	badReturn, err := MillisFromUTCTime(time.Now())
+	// Create a default return value in case of error
+	badReturn, _ := MillisFromUTCTime(time.Now())
 	if direction != "backward" && direction != "forward" {
 		return badReturn, badReturn, fmt.Errorf("invalid direction; must be 'back' or 'forward'")
 	}

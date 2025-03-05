@@ -27,6 +27,8 @@ type QueueArgs struct {
 
 // queueResponse represents the response from a queue operation
 // nolint:unused
+//
+//lint:ignore U1000 kept for future queue response handling
 type queueResponse struct {
 	TaskID string `json:"taskId"`
 }
