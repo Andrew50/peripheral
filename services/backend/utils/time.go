@@ -2,8 +2,8 @@ package utils
 
 import (
 	"fmt"
-	"time"
 	"strconv"
+	"time"
 	"unicode"
 
 	"github.com/polygon-io/client-go/rest/models"
@@ -11,13 +11,14 @@ import (
 
 var easternLocation *time.Location
 
-func init(){
-    var err error
-    easternLocation, err = time.LoadLocation("America/New_York")
-    if err != nil {
-        panic(err)
-    }
+func init() {
+	var err error
+	easternLocation, err = time.LoadLocation("America/New_York")
+	if err != nil {
+		panic(err)
+	}
 }
+
 // StringToTime performs operations related to StringToTime functionality.
 func StringToTime(datetimeStr string) (time.Time, error) {
 	layouts := []string{
@@ -57,9 +58,12 @@ func StringToTime(datetimeStr string) (time.Time, error) {
 	return parsedTime, nil*/
 
 }
+
 // MillisFromUTCTime performs operations related to MillisFromUTCTime functionality.
 func MillisFromUTCTime(timeObj time.Time) (models.Millis, error) {
 	return models.Millis(timeObj), nil
+}
+
 // MillisFromDatetimeString performs operations related to MillisFromDatetimeString functionality.
 func MillisFromDatetimeString(datetime string) (models.Millis, error) {
 	layouts := []string{
@@ -76,10 +80,13 @@ func MillisFromDatetimeString(datetime string) (models.Millis, error) {
 		}
 	}
 	return models.Millis(time.Now()), fmt.Errorf("212k invalid string datetime")
+}
 
 // NanosFromUTCTime performs operations related to NanosFromUTCTime functionality.
 func NanosFromUTCTime(timeObj time.Time) (models.Nanos, error) {
 	return models.Nanos(timeObj), nil
+}
+
 // NanosFromDatetimeString performs operations related to NanosFromDatetimeString functionality.
 func NanosFromDatetimeString(datetime string) (models.Nanos, error) {
 	layouts := []string{
@@ -133,6 +140,8 @@ func GetTimeFrame(timeframeString string) (int, string, string, int, error) {
 	}
 	return 0, "", "", 0, fmt.Errorf("incorrect timeframe passed")
 }
+
+// getStartOfTimeWindow performs operations related to getStartOfTimeWindow functionality.
 func getStartOfTimeWindow(timestamp time.Time, multiplier int, timespan string, extendedHours bool, location *time.Location) (time.Time, error) {
 
 	timestamp = timestamp.In(location)
@@ -160,29 +169,10 @@ func getStartOfTimeWindow(timestamp time.Time, multiplier int, timespan string, 
 	}
 	return time.Time{}, fmt.Errorf("done")
 }
-// TimespanStringToDuration performs operations related to TimespanStringToDuration functionality.
-func TimespanStringToDuration(timespan string) time.Duration {
-	switch timespan {
-	case "second":
-		return time.Second
-	case "minute":
-		return time.Minute
-	case "hour":
-		return time.Hour
-	case "day":
-		return time.Hour * 24
-	case "week":
-		return time.Hour * 24 * 7
-	case "month":
-		return time.Hour * 24 * 30
-	case "year":
-		return time.Hour * 24 * 365
-	default:
-		return time.Minute
-	}
+
 // IsTimestampRegularHours performs operations related to IsTimestampRegularHours functionality.
 func IsTimestampRegularHours(timestamp time.Time) bool {
-    marketOpenTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 9, 30, 0, 0, easternLocation)
-    marketCloseTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 16, 0, 0, 0, easternLocation)
-    return !timestamp.Before(marketOpenTime) && timestamp.Before(marketCloseTime)
+	marketOpenTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 9, 30, 0, 0, easternLocation)
+	marketCloseTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 16, 0, 0, 0, easternLocation)
+	return !timestamp.Before(marketOpenTime) && timestamp.Before(marketCloseTime)
 }
