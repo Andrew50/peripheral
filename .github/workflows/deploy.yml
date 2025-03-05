@@ -719,16 +719,11 @@ jobs:
           # Apply Kubernetes configurations, excluding secrets.yaml
           log "Applying Kubernetes configurations..."
           if [ "${{ env.TARGET_BRANCH }}" = "dev" ]; then
-            # Dev-specific configurations
-            if [ -d "prod/config/dev" ]; then
-              find prod/config/dev -type f -name "*.yaml" ! -name "secrets.yaml" -exec kubectl apply -f {} \;
-            else
-              # Fall back to prod config if no dev config exists
-              find prod/config -type f -name "*.yaml" ! -name "secrets.yaml" -exec kubectl apply -f {} \;
-            fi
+            # Dev branch uses prod config as well
+            find config/prod/config -type f -name "*.yaml" ! -name "secrets.yaml" -exec kubectl apply -f {} \;
           else
             # Default to prod config for prod branch
-            find prod/config -type f -name "*.yaml" ! -name "secrets.yaml" -exec kubectl apply -f {} \;
+            find config/prod/config -type f -name "*.yaml" ! -name "secrets.yaml" -exec kubectl apply -f {} \;
           fi
           
           # Add debugging information about the cluster and deployments
