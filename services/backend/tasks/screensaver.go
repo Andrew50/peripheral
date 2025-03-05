@@ -5,21 +5,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 )
-
+// GetScreensaversResults represents a structure for handling GetScreensaversResults data.
 type GetScreensaversResults struct {
 	Ticker     string `json:"ticker"`
-	SecurityId int    `json:"securityId"`
+	SecurityID int    `json:"securityId"`
 	Timestamp  int64  `json:"timestamp"`
 	Timeframe  string `json:"timeframe"`
 }
-
+// PolygonTicker represents a structure for handling PolygonTicker data.
 type PolygonTicker struct {
 	Ticker string `json:"ticker"`
 }
-
+// PolygonSnapshot represents a structure for handling PolygonSnapshot data.
 type PolygonSnapshot struct {
 	Tickers []PolygonTicker `json:"tickers"`
 }
@@ -37,7 +37,7 @@ func fetchPolygonSnapshot(endpoint string, apiKey string) ([]string, error) {
 	defer resp.Body.Close()
 
 	// Read the response body
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %v", err)
 	}
@@ -56,7 +56,7 @@ func fetchPolygonSnapshot(endpoint string, apiKey string) ([]string, error) {
 
 	return tickers, nil
 }
-
+// GetScreensavers performs operations related to GetScreensavers functionality.
 func GetScreensavers(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	// Define Polygon.io endpoints for gainers and losers
 	gainersEndpoint := "https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/gainers"
@@ -95,7 +95,7 @@ func GetScreensavers(conn *utils.Conn, userId int, rawArgs json.RawMessage) (int
 	var results []GetScreensaversResults
 	for rows.Next() {
 		var result GetScreensaversResults
-		err := rows.Scan(&result.Ticker, &result.SecurityId)
+		err := rows.Scan(&result.Ticker, &result.SecurityID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %v", err)
 		}

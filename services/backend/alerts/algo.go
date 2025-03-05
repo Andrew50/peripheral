@@ -9,7 +9,7 @@ import (
 )
 
 func processAlgoAlert(conn *utils.Conn, alert Alert) error {
-	if alert.AlgoId != nil && *alert.AlgoId == 0 {
+	if alert.AlgoID != nil && *alert.AlgoID == 0 {
 		processTapeBursts(conn, alert)
 	} else {
 		//fmt.Println("Algo alert not found")

@@ -7,6 +7,7 @@
 	import { tick } from 'svelte';
 	import type { Writable } from 'svelte/store';
 	import type { Instance } from '$lib/core/types';
+	import { browser } from '$app/environment';
 
 	/**
 	 * Focus Management Strategy:
@@ -327,7 +328,6 @@
 </script>
 
 <script lang="ts">
-	import { browser } from '$app/environment';
 	import { onDestroy, onMount } from 'svelte';
 	import { ESTStringToUTCTimestamp, UTCTimestampToESTString } from '$lib/core/timestamp';
 	let prevFocusedElement: HTMLElement | null = null;
@@ -450,97 +450,99 @@
 	async function handleKeyDown(event: KeyboardEvent): Promise<void> {
 		// Get current state directly from the store to ensure we have latest state
 		const currentState = get(inputQuery);
-		const hiddenInput = document.getElementById('hidden-input');
+		if (browser) {
+			const hiddenInput = document.getElementById('hidden-input');
 
-		// Make sure we're in active state
-		if (currentState.status !== 'active') {
-			return;
-		}
-
-		// Ignore any keyboard events with Control or Alt modifiers
-		if (event.ctrlKey || event.altKey) {
-			return; // Allow the browser to handle these key combinations
-		}
-
-		// Allow Ctrl+R to reload the page
-		if (event.ctrlKey && event.key === 'r') {
-			return; // Don't prevent default, allow browser to handle the reload
-		}
-
-		// Always prevent default behavior for our captured keys to avoid browser handling
-		if (
-			event.key === 'Enter' ||
-			event.key === 'Tab' ||
-			event.key === 'Escape' ||
-			/^[a-zA-Z0-9]$/.test(event.key) ||
-			/[-:.]/.test(event.key) ||
-			(event.key === ' ' && currentState.inputType === 'timestamp') ||
-			event.key === 'Backspace'
-		) {
-			event.preventDefault();
-		}
-
-		// Stop propagation to prevent double-handling
-		event.stopPropagation();
-
-		let iQ = { ...currentState };
-		if (event.key === 'Escape') {
-			inputQuery.update((q) => ({ ...q, status: 'cancelled' }));
-			return;
-		} else if (event.key === 'Enter') {
-			if (iQ.inputValid) {
-				const updatedQuery = await enterInput(iQ, 0);
-				inputQuery.set(updatedQuery);
-			}
-			return;
-		} else if (event.key === 'Tab') {
-			inputQuery.update((q) => ({
-				...q,
-				instance: { ...q.instance, extendedHours: !q.instance.extendedHours }
-			}));
-			return;
-		}
-
-		// Process input keys
-		if (
-			/^[a-zA-Z0-9]$/.test(event.key) ||
-			/[-:.]/.test(event.key) ||
-			(event.key === ' ' && iQ.inputType === 'timestamp')
-		) {
-			// Transform the key based on input type
-			let key;
-			if (iQ.inputType === 'ticker') {
-				// Always uppercase for tickers
-				key = event.key.toUpperCase();
-			} else if (iQ.inputType === 'timeframe') {
-				// Keep original case for timeframe
-				key = event.key;
-			} else {
-				// Default transformation based on context
-				key = event.key.toUpperCase();
+			// Make sure we're in active state
+			if (currentState.status !== 'active') {
+				return;
 			}
 
-			const newInputString = iQ.inputString + key;
+			// Ignore any keyboard events with Control or Alt modifiers
+			if (event.ctrlKey || event.altKey) {
+				return; // Allow the browser to handle these key combinations
+			}
 
-			// Update inputString immediately
-			inputQuery.update((v) => ({
-				...v,
-				inputString: newInputString
-			}));
+			// Allow Ctrl+R to reload the page
+			if (event.ctrlKey && event.key === 'r') {
+				return; // Don't prevent default, allow browser to handle the reload
+			}
 
-			// Then determine input type
-			determineInputType(newInputString);
-		} else if (event.key === 'Backspace') {
-			const newInputString = iQ.inputString.slice(0, -1);
+			// Always prevent default behavior for our captured keys to avoid browser handling
+			if (
+				event.key === 'Enter' ||
+				event.key === 'Tab' ||
+				event.key === 'Escape' ||
+				/^[a-zA-Z0-9]$/.test(event.key) ||
+				/[-:.]/.test(event.key) ||
+				(event.key === ' ' && currentState.inputType === 'timestamp') ||
+				event.key === 'Backspace'
+			) {
+				event.preventDefault();
+			}
 
-			// Update inputString immediately
-			inputQuery.update((v) => ({
-				...v,
-				inputString: newInputString
-			}));
+			// Stop propagation to prevent double-handling
+			event.stopPropagation();
 
-			// Then determine input type
-			determineInputType(newInputString);
+			let iQ = { ...currentState };
+			if (event.key === 'Escape') {
+				inputQuery.update((q) => ({ ...q, status: 'cancelled' }));
+				return;
+			} else if (event.key === 'Enter') {
+				if (iQ.inputValid) {
+					const updatedQuery = await enterInput(iQ, 0);
+					inputQuery.set(updatedQuery);
+				}
+				return;
+			} else if (event.key === 'Tab') {
+				inputQuery.update((q) => ({
+					...q,
+					instance: { ...q.instance, extendedHours: !q.instance.extendedHours }
+				}));
+				return;
+			}
+
+			// Process input keys
+			if (
+				/^[a-zA-Z0-9]$/.test(event.key) ||
+				/[-:.]/.test(event.key) ||
+				(event.key === ' ' && iQ.inputType === 'timestamp')
+			) {
+				// Transform the key based on input type
+				let key;
+				if (iQ.inputType === 'ticker') {
+					// Always uppercase for tickers
+					key = event.key.toUpperCase();
+				} else if (iQ.inputType === 'timeframe') {
+					// Keep original case for timeframe
+					key = event.key;
+				} else {
+					// Default transformation based on context
+					key = event.key.toUpperCase();
+				}
+
+				const newInputString = iQ.inputString + key;
+
+				// Update inputString immediately
+				inputQuery.update((v) => ({
+					...v,
+					inputString: newInputString
+				}));
+
+				// Then determine input type
+				determineInputType(newInputString);
+			} else if (event.key === 'Backspace') {
+				const newInputString = iQ.inputString.slice(0, -1);
+
+				// Update inputString immediately
+				inputQuery.update((v) => ({
+					...v,
+					inputString: newInputString
+				}));
+
+				// Then determine input type
+				determineInputType(newInputString);
+			}
 		}
 	}
 
@@ -560,7 +562,9 @@
 	};
 
 	onMount(() => {
-		prevFocusedElement = document.activeElement as HTMLElement;
+		if (browser) {
+			prevFocusedElement = document.activeElement as HTMLElement;
+		}
 
 		unsubscribe = inputQuery.subscribe((v: InputQuery) => {
 			if (browser) {
@@ -636,9 +640,11 @@
 						}
 
 						// Add a click handler to the document to detect clicks outside the popup
-						document.body.removeEventListener('mousedown', handleOutsideClick); // Remove any existing listener first
-						document.body.addEventListener('mousedown', handleOutsideClick);
-						document.body.setAttribute('data-input-click-listener', 'true');
+						if (browser) {
+							document.body.removeEventListener('mousedown', handleOutsideClick); // Remove any existing listener first
+							document.body.addEventListener('mousedown', handleOutsideClick);
+							document.body.setAttribute('data-input-click-listener', 'true');
+						}
 					});
 					// Use update() to mark that the UI is now active.
 					inputQuery.update((state) => ({ ...state, status: 'active' }));
@@ -651,11 +657,15 @@
 					}
 
 					// Remove document click handler when component is inactive
-					document.body.removeEventListener('mousedown', handleOutsideClick);
-					document.body.removeAttribute('data-input-click-listener');
+					if (browser) {
+						document.body.removeEventListener('mousedown', handleOutsideClick);
+						document.body.removeAttribute('data-input-click-listener');
+					}
 
 					// Restore focus and then update to inactive.
-					prevFocusedElement?.focus();
+					if (prevFocusedElement && browser) {
+						prevFocusedElement.focus();
+					}
 					inputQuery.update((state) => ({ ...state, status: 'inactive', inputString: '' }));
 				} else if (v.status === 'cancelled') {
 					componentActive = false;
@@ -666,27 +676,31 @@
 					}
 
 					// Remove document click handler
-					document.body.removeEventListener('mousedown', handleOutsideClick);
-					document.body.removeAttribute('data-input-click-listener');
+					if (browser) {
+						document.body.removeEventListener('mousedown', handleOutsideClick);
+						document.body.removeAttribute('data-input-click-listener');
+					}
 				}
 			}
 		});
 
-		type SecurityClassifications = {
-			sectors: string[];
-			industries: string[];
-		};
-		privateRequest<SecurityClassifications>('getSecurityClassifications', {}, false).then(
-			(classifications: SecurityClassifications) => {
-				sectors = classifications.sectors;
-				industries = classifications.industries;
-			}
-		);
+		if (browser) {
+			type SecurityClassifications = {
+				sectors: string[];
+				industries: string[];
+			};
+			privateRequest<SecurityClassifications>('getSecurityClassifications', {}, false).then(
+				(classifications: SecurityClassifications) => {
+					sectors = classifications.sectors;
+					industries = classifications.industries;
+				}
+			);
+		}
 	});
 
 	// Handle clicks outside the input window to cancel it
 	function handleOutsideClick(event: MouseEvent) {
-		if (!componentActive) return;
+		if (!componentActive || !browser) return;
 
 		const inputWindow = document.getElementById('input-window');
 		const target = event.target as Node;
@@ -698,20 +712,25 @@
 	}
 
 	onDestroy(() => {
-		try {
-			// Remove the event listener from the hidden input instead of the document
-			const hiddenInput = document.getElementById('hidden-input');
-			if (hiddenInput) {
-				hiddenInput.removeEventListener('keydown', keydownHandler);
+		if (browser) {
+			try {
+				// Remove the event listener from the hidden input instead of the document
+				const hiddenInput = document.getElementById('hidden-input');
+				if (hiddenInput) {
+					hiddenInput.removeEventListener('keydown', keydownHandler);
+				}
+
+				// Remove document click handler if it exists
+				document.body.removeEventListener('mousedown', handleOutsideClick);
+				document.body.removeAttribute('data-input-click-listener');
+
+				unsubscribe();
+			} catch (error) {
+				console.error('Error removing event listeners:', error);
 			}
-
-			// Remove document click handler if it exists
-			document.body.removeEventListener('mousedown', handleOutsideClick);
-			document.body.removeAttribute('data-input-click-listener');
-
-			unsubscribe();
-		} catch (error) {
-			console.error('Error removing event listeners:', error);
+		} else {
+			// Just unsubscribe from the store when not in browser environment
+			if (unsubscribe) unsubscribe();
 		}
 	});
 	function displayValue(q: InputQuery, key: string): string {
@@ -825,8 +844,10 @@
 				tabindex="-1"
 				on:click|stopPropagation={() => {
 					// Refocus hidden input when clicking the visible input
-					const hiddenInput = document.getElementById('hidden-input');
-					if (hiddenInput) hiddenInput.focus();
+					if (browser) {
+						const hiddenInput = document.getElementById('hidden-input');
+						if (hiddenInput) hiddenInput.focus();
+					}
 				}}
 			/>
 		</div>
@@ -958,7 +979,7 @@
 			style="position: absolute; top: 0; left: 0; opacity: 0; pointer-events: none; height: 100%; width: 100%; z-index: 0;"
 			on:blur={() => {
 				// Refocus if we lose focus but component is still active
-				if (componentActive) {
+				if (componentActive && browser) {
 					setTimeout(() => {
 						const hiddenInput = document.getElementById('hidden-input');
 						if (hiddenInput && componentActive) hiddenInput.focus();

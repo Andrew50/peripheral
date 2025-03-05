@@ -8,24 +8,24 @@ import (
 	"fmt"
 	"time"
 )
-
+// GetSimilarInstancesArgs represents a structure for handling GetSimilarInstancesArgs data.
 type GetSimilarInstancesArgs struct {
 	Ticker     string `json:"ticker"`
-	SecurityId int    `json:"securityId"`
+	SecurityID int    `json:"securityId"`
 	Timestamp  int64  `json:"timestamp"`
 	Timeframe  string `json:"timeframe"`
 }
-
+// GetSimilarInstancesResults represents a structure for handling GetSimilarInstancesResults data.
 type GetSimilarInstancesResults struct {
 	Ticker     string  `json:"ticker"`
-	SecurityId int     `json:"securityId"`
+	SecurityID int     `json:"securityId"`
 	Timestamp  int64   `json:"timestamp"`
 	Timeframe  string  `json:"timeframe"`
 	MarketCap  float64 `json:"marketCap"`
 	Sector     string  `json:"sector"`
 	Industry   string  `json:"industry"`
 }
-
+// GetSimilarInstances performs operations related to GetSimilarInstances functionality.
 func GetSimilarInstances(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetSimilarInstancesArgs
 	err := json.Unmarshal(rawArgs, &args)
@@ -47,7 +47,7 @@ func GetSimilarInstances(conn *utils.Conn, userId int, rawArgs json.RawMessage) 
 			COALESCE(sector, ''), 
 			COALESCE(industry, '')
 		FROM securities 
-		WHERE securityId = $1`, args.SecurityId).Scan(
+		WHERE securityId = $1`, args.SecurityID).Scan(
 		&refSecurity.Ticker,
 		&refSecurity.MarketCap,
 		&refSecurity.Sector,
@@ -183,7 +183,7 @@ func GetSimilarInstances(conn *utils.Conn, userId int, rawArgs json.RawMessage) 
 					ELSE 1
 				 END
 		LIMIT 20;
-	`, refSecurity.Sector, refSecurity.Industry, args.SecurityId, polygonTickers, refSecurity.MarketCap)
+	`, refSecurity.Sector, refSecurity.Industry, args.SecurityID, polygonTickers, refSecurity.MarketCap)
 
 	if err != nil {
 		return nil, fmt.Errorf("1imvd: %v", err)
@@ -200,7 +200,7 @@ func GetSimilarInstances(conn *utils.Conn, userId int, rawArgs json.RawMessage) 
 		var minDate, maxDate sql.NullTime
 		err := rows.Scan(
 			&result.Ticker,
-			&result.SecurityId,
+			&result.SecurityID,
 			&result.MarketCap,
 			&result.Sector,
 			&result.Industry,

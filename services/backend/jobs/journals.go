@@ -34,7 +34,7 @@ func getAllUserIds(conn *utils.Conn) ([]int, error) {
     defer rows.Close()
     var userIds []int
     for rows.Next() {
-        var userId int
+        var userID int
         if err := rows.Scan(&userId); err != nil {
             return nil, err
         }

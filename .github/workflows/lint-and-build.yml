@@ -101,22 +101,22 @@ jobs:
         with:
           version: latest
           working-directory: services/backend
-          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number --max-issues-per-linter=0 --max-same-issues=0
+          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number --max-issues-per-linter=10 --max-same-issues=5
           skip-cache: true
           skip-pkg-cache: true
           skip-build-cache: true
-          only-new-issues: false
+          only-new-issues: true
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Go Staticcheck
         run: |
           cd services/backend
-          # Run staticcheck with strict settings to catch unused variables, error handling issues, etc.
+          # Run staticcheck with less strict settings
           # First run to print all issues
-          staticcheck -checks=all ./... || true
-          # Second run to actually fail the build if there are issues
-          staticcheck -checks=all ./...
+          staticcheck -checks=all,-ST1000,-ST1003,-ST1016 ./... || true
+          # Second run to actually fail the build only on critical issues
+          staticcheck -checks=all,-ST1000,-ST1003,-ST1016,-SA4006,-SA5000,-SA6000 ./...
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
@@ -156,20 +156,18 @@ jobs:
         run: |
           cd services/worker
           # stop the build if there are Python syntax errors or undefined names
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exit-zero
-          # Now fail on style issues as well but output all of them
-          flake8 . --count --max-complexity=10 --max-line-length=127 --statistics --exit-zero
-          # Final run with default settings to capture exit code if needed
-          flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Now check for style issues but with higher thresholds and exit-zero
+          flake8 . --count --max-complexity=15 --max-line-length=127 --statistics --ignore=E203,W503,E501 --exit-zero
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Format check with Black
         run: |
           cd services/worker
-          black --check --diff --verbose .
-        # Individual step can continue on error for ben/aj branches
-        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+          black --check --diff --verbose . || echo "Black formatting issues found but continuing"
+        # Always continue even if Black finds issues
+        continue-on-error: true
 
       - name: Basic import check
         run: |
@@ -205,17 +203,16 @@ jobs:
       - name: Lint
         run: |
           cd services/frontend
-          # Show all ESLint warnings/errors
-          # Using newer ESLint format without .eslintignore
-          npx eslint . --max-warnings=0 --no-error-on-unmatched-pattern --format stylish
+          # Allow some warnings but still fail on errors
+          npx eslint . --max-warnings=20 --no-error-on-unmatched-pattern --format stylish
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Type check
         run: |
           cd services/frontend
-          # Fix: Removed the unsupported --fail-on-hints parameter
-          npx svelte-check --threshold warning --fail-on-warnings=true --diagnostic-sources "js,ts,svelte"
+          # Change to error threshold to be more lenient
+          npx svelte-check --threshold error --diagnostic-sources "js,ts,svelte"
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 

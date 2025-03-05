@@ -9,16 +9,16 @@ import (
 	"sync"
 	"time"
 )
-
+// Alert represents a structure for handling Alert data.
 type Alert struct {
-	AlertId    int
-	UserId     int
+	AlertID    int
+	UserID     int
 	AlertType  string
-	AlgoId     *int
-	SetupId    *int
+	AlgoID     *int
+	SetupID    *int
 	Price      *float64
 	Direction  *bool
-	SecurityId *int
+	SecurityID *int
 	Ticker     *string
 	//Message    *string
 }
@@ -29,23 +29,23 @@ var (
 	ctx       context.Context
 	cancel    context.CancelFunc
 )
-
+// AddAlert performs operations related to AddAlert functionality.
 func AddAlert(conn *utils.Conn, alert Alert) {
 	if alert.AlertType == "price" {
-		ticker, err := utils.GetTicker(conn, *alert.SecurityId, time.Now())
+		ticker, err := utils.GetTicker(conn, *alert.SecurityID, time.Now())
 		if err != nil {
 			fmt.Println("error getting ticker: %w", err)
 			return
 		}
 		alert.Ticker = &ticker
 	}
-	alerts.Store(alert.AlertId, alert)
+	alerts.Store(alert.AlertID, alert)
 }
-
+// RemoveAlert performs operations related to RemoveAlert functionality.
 func RemoveAlert(alertId int) {
 	alerts.Delete(alertId)
 }
-
+// StartAlertLoop performs operations related to StartAlertLoop functionality.
 func StartAlertLoop(conn *utils.Conn) error { //entrypoint
 	err := InitTelegramBot()
 	if err != nil {
@@ -60,7 +60,7 @@ func StartAlertLoop(conn *utils.Conn) error { //entrypoint
 	go alertLoop(ctx, conn)
 	return nil
 }
-
+// StopAlertLoop performs operations related to StopAlertLoop functionality.
 func StopAlertLoop() {
 	if cancel != nil {
 		cancel()
@@ -81,7 +81,7 @@ func alertLoop(ctx context.Context, conn *utils.Conn) {
 }
 
 func printAlert(alert Alert) {
-	fmt.Printf("AlertId: %d, UserId: %d, AlertType: %s, SetupId: %v, Price: %v, Direction: %v, SecurityId: %v, Ticker: %v\n", alert.AlertId, alert.UserId, alert.AlertType, nilOrValue(alert.SetupId), nilOrValue(alert.Price), nilOrValue(alert.Direction), nilOrValue(alert.SecurityId), nilOrValue(alert.Ticker))
+	fmt.Printf("AlertID: %d, UserID: %d, AlertType: %s, SetupID: %v, Price: %v, Direction: %v, SecurityID: %v, Ticker: %v\n", alert.AlertID, alert.UserID, alert.AlertType, nilOrValue(alert.SetupID), nilOrValue(alert.Price), nilOrValue(alert.Direction), nilOrValue(alert.SecurityID), nilOrValue(alert.Ticker))
 }
 
 func nilOrValue[T any](ptr *T) any {
@@ -111,7 +111,7 @@ func processAlerts(conn *utils.Conn) {
 				return
 			}
 			if err != nil {
-				log.Printf("Error processing alert %d: %v", a.AlertId, err)
+				log.Printf("Error processing alert %d: %v", a.AlertID, err)
 				return
 			}
 		}(alert)
@@ -139,19 +139,19 @@ func initAlerts(conn *utils.Conn) error {
 	for rows.Next() {
 		var alert Alert
 		err := rows.Scan(
-			&alert.AlertId,
-			&alert.UserId,
+			&alert.AlertID,
+			&alert.UserID,
 			&alert.AlertType,
-			&alert.SetupId,
+			&alert.SetupID,
 			&alert.Price,
 			&alert.Direction,
-			&alert.SecurityId,
+			&alert.SecurityID,
 		)
 		if err != nil {
 			return fmt.Errorf("scanning alert row: %w", err)
 		}
 		if alert.AlertType == "price" {
-			ticker, err := utils.GetTicker(conn, *alert.SecurityId, time.Now())
+			ticker, err := utils.GetTicker(conn, *alert.SecurityID, time.Now())
 			if err != nil {
 				fmt.Println("error getting ticker: %w", err)
 				return fmt.Errorf("getting ticker: %w", err)
@@ -159,7 +159,7 @@ func initAlerts(conn *utils.Conn) error {
 			alert.Ticker = &ticker
 		}
 
-		alerts.Store(alert.AlertId, alert)
+		alerts.Store(alert.AlertID, alert)
 	}
 
 	if err = rows.Err(); err != nil {
@@ -168,27 +168,27 @@ func initAlerts(conn *utils.Conn) error {
 
 	// Manually create an algo alert for testing
 	algoAlert := Alert{
-		AlertId:    999999, // Use a high number to avoid conflicts
-		UserId:     1,      // Set to an existing user ID
+		AlertID:    999999, // Use a high number to avoid conflicts
+		UserID:     1,      // Set to an existing user ID
 		AlertType:  "algo",
-		SecurityId: nil, // Not needed for algo alerts
+		SecurityID: nil, // Not needed for algo alerts
 		Price:      nil, // Not needed for algo alerts
 		Direction:  nil, // Not needed for algo alerts
-		SetupId:    nil, // Not needed for algo alerts
+		SetupID:    nil, // Not needed for algo alerts
 		Ticker:     nil, // Not needed for algo alerts
 	}
-	alerts.Store(algoAlert.AlertId, algoAlert)
+	alerts.Store(algoAlert.AlertID, algoAlert)
 	fmt.Println("Added manual algo alert for testing")
 
 	// Validate alert securities exist in data map
 	var alertErrors []error
 	alerts.Range(func(key, value interface{}) bool {
 		alert := value.(Alert)
-		if alert.SecurityId != nil {
-			if _, exists := socket.AggData[*alert.SecurityId]; !exists {
+		if alert.SecurityID != nil {
+			if _, exists := socket.AggData[*alert.SecurityID]; !exists {
 				alertErrors = append(alertErrors,
 					fmt.Errorf("alert ID %d references non-existent security ID %d",
-						alert.AlertId, *alert.SecurityId))
+						alert.AlertID, *alert.SecurityID))
 			}
 		}
 		return true

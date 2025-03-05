@@ -9,7 +9,7 @@ import (
 func processPriceAlert(conn *utils.Conn, alert Alert) error {
 	socket.AggDataMutex.RLock()         // Acquire read lock
 	defer socket.AggDataMutex.RUnlock() // Release read lock
-	ds := socket.AggData[*alert.SecurityId]
+	ds := socket.AggData[*alert.SecurityID]
 	if ds == nil {
 		return fmt.Errorf("1-90vj- price alert")
 	}

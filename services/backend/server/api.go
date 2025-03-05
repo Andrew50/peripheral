@@ -110,7 +110,7 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 }
 
 func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
-
+// Request represents a structure for handling Request data.
 type Request struct {
 	Function  string          `json:"func"`
 	Arguments json.RawMessage `json:"args"`
@@ -136,7 +136,7 @@ func handleError(w http.ResponseWriter, err error, context string) bool {
 	return false
 }
 
-func public_handler(conn *utils.Conn) http.HandlerFunc {
+func publicHandler(conn *utils.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		addCORSHeaders(w)
 		if r.Method == "OPTIONS" {
@@ -167,7 +167,7 @@ func public_handler(conn *utils.Conn) http.HandlerFunc {
 	}
 }
 
-func private_upload_handler(conn *utils.Conn) http.HandlerFunc {
+func privateUploadHandler(conn *utils.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		addCORSHeaders(w)
 		if r.Method != "POST" {
@@ -237,7 +237,7 @@ func private_upload_handler(conn *utils.Conn) http.HandlerFunc {
 	}
 }
 
-func private_handler(conn *utils.Conn) http.HandlerFunc {
+func privateHandler(conn *utils.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		addCORSHeaders(w)
 		if r.Method != "POST" {
@@ -271,7 +271,7 @@ func private_handler(conn *utils.Conn) http.HandlerFunc {
 		}
 	}
 }
-
+// QueueRequest represents a structure for handling QueueRequest data.
 type QueueRequest struct {
 	Function  string      `json:"func"`
 	Arguments interface{} `json:"args"`
@@ -324,9 +324,9 @@ func queueHandler(conn *utils.Conn) http.HandlerFunc {
 		}
 	}
 }
-
+// PollRequest represents a structure for handling PollRequest data.
 type PollRequest struct {
-	TaskId string `json:"taskId"`
+	TaskID string `json:"taskId"`
 }
 
 func pollHandler(conn *utils.Conn) http.HandlerFunc {
@@ -344,8 +344,8 @@ func pollHandler(conn *utils.Conn) http.HandlerFunc {
 		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "1m99c") {
 			return
 		}
-		result, err := utils.Poll(conn, req.TaskId)
-		if handleError(w, err, fmt.Sprintf("executing function %s", req.TaskId)) {
+		result, err := utils.Poll(conn, req.TaskID)
+		if handleError(w, err, fmt.Sprintf("executing function %s", req.TaskID)) {
 			return
 		}
 		if err := json.NewEncoder(w).Encode(result); err != nil {
@@ -354,7 +354,7 @@ func pollHandler(conn *utils.Conn) http.HandlerFunc {
 		}
 	}
 }
-
+// WSHandler performs operations related to WSHandler functionality.
 func WSHandler(conn *utils.Conn) http.HandlerFunc {
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -410,7 +410,7 @@ func healthHandler() http.HandlerFunc {
 		}
 	}
 }
-
+// StartServer performs operations related to StartServer functionality.
 func StartServer() {
 	conn, cleanup := utils.InitConn(true)
 	defer cleanup()

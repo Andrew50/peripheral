@@ -12,19 +12,19 @@ import (
 
 	"github.com/polygon-io/client-go/rest/models"
 )
-
+// TickData represents a structure for handling TickData data.
 type TickData interface {
 	GetTimestamp() int64
 	GetPrice() float64
 	GetChannel() string
 	SetChannel(channel string)
 }
-
+// TradeData represents a structure for handling TradeData data.
 type TradeData struct {
 	Price      float64 `json:"price"`
 	Size       int64   `json:"size"`
 	Timestamp  int64   `json:"timestamp"`
-	ExchangeId int32   `json:"exchange"`
+	ExchangeID int32   `json:"exchange"`
 	Conditions []int32 `json:"conditions"`
 	Channel    string  `json:"channel"`
 }
@@ -41,7 +41,7 @@ func (t TradeData) GetChannel() string {
 func (t *TradeData) SetChannel(channel string) {
 	t.Channel = channel
 }
-
+// QuoteData represents a structure for handling QuoteData data.
 type QuoteData struct {
 	BidPrice  float64 `json:"bidPrice"`
 	AskPrice  float64 `json:"askPrice"`
@@ -96,7 +96,7 @@ func aggregateTicks(ticks []TickData, baseDataType string) TickData {
 			Price:      lastTrade.Price,
 			Size:       totalSize,
 			Timestamp:  lastTrade.Timestamp,
-			ExchangeId: lastTrade.ExchangeId,
+			ExchangeID: lastTrade.ExchangeID,
 			Conditions: uniqueConditions,
 			Channel:    lastTrade.Channel,
 		}
@@ -169,7 +169,7 @@ func getTradeData(conn *utils.Conn, securityId int, timestamp int64, lengthOfTim
 				Price:      iter.Item().Price,
 				Size:       int64(iter.Item().Size),
 				Timestamp:  time.Time(iter.Item().ParticipantTimestamp).UnixNano() / 1e6,
-				ExchangeId: int32(iter.Item().Exchange),
+				ExchangeID: int32(iter.Item().Exchange),
 				Conditions: iter.Item().Conditions,
 				Channel:    "",
 			})
@@ -307,7 +307,7 @@ func getPrevCloseData(conn *utils.Conn, securityId int, timestamp int64) ([]Tick
 			Price:      agg.Close,
 			Size:       0,
 			Timestamp:  time.Time(agg.Timestamp).UnixNano() / 1e6,
-			ExchangeId: 0,
+			ExchangeID: 0,
 			Conditions: []int32{},
 			Channel:    "",
 		}

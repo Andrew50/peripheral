@@ -38,19 +38,19 @@ var (
 	aggsInitialized     bool
 	aggsInitializedLock sync.RWMutex
 )
-
+// TimeframeData represents a structure for handling TimeframeData data.
 type TimeframeData struct {
 	Aggs              [][]float64
 	Size              int
 	rolloverTimestamp int64
 	extendedHours     bool
 	Mutex             sync.RWMutex
-}
+// VolBurstData represents a structure for handling VolBurstData data.
 type VolBurstData struct {
 	VolumeThreshold []float64
 	PriceThreshold  []float64
 }
-
+// SecurityData represents a structure for handling SecurityData data.
 type SecurityData struct {
 	SecondDataExtended TimeframeData
 	MinuteDataExtended TimeframeData
@@ -162,7 +162,7 @@ func appendTick(conn *utils.Conn, securityId int, timestamp int64, price float64
 func nextPeriodStart(timestamp int64, tf int) int64 {
 	return timestamp - (timestamp % int64(tf)) + int64(tf)
 }
-
+// GetTimeframeData performs operations related to GetTimeframeData functionality.
 func GetTimeframeData(securityId int, timeframe int, extendedHours bool) ([][]float64, error) {
 	AggDataMutex.RLock() // Acquire read lock
 	sd, exists := AggData[securityId]
@@ -233,7 +233,7 @@ func initAggregatesInternal(conn *utils.Conn) error {
 	defer rows.Close()
 	var securityIds []int
 	for rows.Next() {
-		var securityId int
+		var securityID int
 		if err := rows.Scan(&securityId); err != nil {
 			return fmt.Errorf("scanning security ID: %w", err)
 		}

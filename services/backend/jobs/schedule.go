@@ -525,7 +525,7 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	fmt.Printf("\n=== JOB START: %s ===\n", jobName)
 	fmt.Printf("Time: %s\n", now.Format("2006-01-02 15:04:05"))
 
-	var taskId string
+	var taskID string
 	var err error
 
 	// Check if the job function is a task that should be queued
@@ -568,11 +568,24 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 				// Poll for the result with a timeout
 				maxRetries := 30
 				retryInterval := time.Second * 10
+				taskSucceeded := false
 
 				for i := 0; i < maxRetries; i++ {
 					result, pollErr := utils.Poll(s.Conn, taskId)
 					if pollErr == nil && result != nil {
+						// Try to parse the result to check for errors
+						var resultMap map[string]interface{}
+						if err := json.Unmarshal(result, &resultMap); err == nil {
+							// Check if the result contains an error field
+							if errVal, ok := resultMap["error"]; ok && errVal != nil {
+								fmt.Printf("\n=== JOB VERIFICATION FAILED: %s ===\n", jobName)
+								fmt.Printf("Error: %v\n", errVal)
+								break
+							}
+						}
+
 						// Task completed successfully
+						taskSucceeded = true
 						completionTime := time.Now()
 
 						job.ExecutionMutex.Lock()
@@ -585,6 +598,13 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 						fmt.Printf("\n=== JOB VERIFIED COMPLETION: %s ===\n", jobName)
 						fmt.Printf("Completion Time: %s\n", completionTime.Format("2006-01-02 15:04:05"))
 						break
+					}
+
+					// If we've reached the last retry, log a timeout
+					if i == maxRetries-1 && !taskSucceeded {
+						fmt.Printf("\n=== JOB VERIFICATION TIMEOUT: %s ===\n", jobName)
+						fmt.Printf("Task ID: %s\n", taskId)
+						fmt.Printf("Timed out after %d retries\n", maxRetries)
 					}
 
 					// Wait before retrying

@@ -14,18 +14,18 @@ import (
 
 	"github.com/jackc/pgx/v4"
 )
-
+// GetCurrentTickerArgs represents a structure for handling GetCurrentTickerArgs data.
 type GetCurrentTickerArgs struct {
-	SecurityId int `json:"securityId"`
+	SecurityID int `json:"securityId"`
 }
-
+// GetCurrentTicker performs operations related to GetCurrentTicker functionality.
 func GetCurrentTicker(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetCurrentTickerArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("di1n0fni0: %v", err)
 	}
 	var ticker string
-	err := conn.DB.QueryRow(context.Background(), "SELECT ticker FROM securities WHERE securityid=$1 AND maxDate is NULL", args.SecurityId).Scan(&ticker)
+	err := conn.DB.QueryRow(context.Background(), "SELECT ticker FROM securities WHERE securityid=$1 AND maxDate is NULL", args.SecurityID).Scan(&ticker)
 	if err == pgx.ErrNoRows {
 		return "delisted", nil
 	} else if err != nil {
@@ -33,15 +33,15 @@ func GetCurrentTicker(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 	}
 	return ticker, nil
 }
-
+// GetMarketCapArgs represents a structure for handling GetMarketCapArgs data.
 type GetMarketCapArgs struct {
 	Ticker string `json:"ticker"`
 }
-
+// GetMarketCapResults represents a structure for handling GetMarketCapResults data.
 type GetMarketCapResults struct {
 	MarketCap int64 `json:"marketCap"`
 }
-
+// GetMarketCap performs operations related to GetMarketCap functionality.
 func GetMarketCap(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetMarketCapArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -59,16 +59,16 @@ func GetMarketCap(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 
 	return GetMarketCapResults{MarketCap: int64(details.MarketCap)}, nil
 }
-
+// GetPrevCloseArgs represents a structure for handling GetPrevCloseArgs data.
 type GetPrevCloseArgs struct {
-	SecurityId int `json:"securityId"`
+	SecurityID int `json:"securityId"`
 	Timestamp  int `json:"timestamp"`
 }
-
+// PolygonBar represents a structure for handling PolygonBar data.
 type PolygonBar struct {
 	Close float64 `json:"close"`
 }
-
+// GetPrevClose performs operations related to GetPrevClose functionality.
 func GetPrevClose(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetPrevCloseArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -96,7 +96,7 @@ func GetPrevClose(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 
 		// Query the ticker for the given securityId and date range
 		query := `SELECT ticker FROM securities WHERE securityid=$1 AND (minDate <= $2 AND (maxDate IS NULL or maxDate >= $2))`
-		err := conn.DB.QueryRow(context.Background(), query, args.SecurityId, date).Scan(&ticker)
+		err := conn.DB.QueryRow(context.Background(), query, args.SecurityID, date).Scan(&ticker)
 		if err != nil {
 			return nil, fmt.Errorf("failed to retrieve ticker: %v", err)
 		}
@@ -133,19 +133,19 @@ func GetPrevClose(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	return nil, fmt.Errorf("dn10vn20")
 
 }
-
+// GetSecurityFromTickerArgs represents a structure for handling GetSecurityFromTickerArgs data.
 type GetSecurityFromTickerArgs struct {
 	Ticker string `json:"ticker"`
 }
-
+// GetSecurityFromTickerResults represents a structure for handling GetSecurityFromTickerResults data.
 type GetSecurityFromTickerResults struct {
-	SecurityId int    `json:"securityId"`
+	SecurityID int    `json:"securityId"`
 	Ticker     string `json:"ticker"`
 	Timestamp  int64  `json:"timestamp"`
 	Icon       string `json:"icon"`
 	Name       string `json:"name"`
 }
-
+// GetSecuritiesFromTicker performs operations related to GetSecuritiesFromTicker functionality.
 func GetSecuritiesFromTicker(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetSecurityFromTickerArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -201,7 +201,7 @@ func GetSecuritiesFromTicker(conn *utils.Conn, userId int, rawArgs json.RawMessa
 		var security GetSecurityFromTickerResults
 		var timestamp sql.NullTime
 		var name, icon sql.NullString
-		if err := rows.Scan(&security.SecurityId, &security.Ticker, &name, &icon, &timestamp); err != nil {
+		if err := rows.Scan(&security.SecurityID, &security.Ticker, &name, &icon, &timestamp); err != nil {
 			return nil, err
 		}
 		if timestamp.Valid {
@@ -216,13 +216,13 @@ func GetSecuritiesFromTicker(conn *utils.Conn, userId int, rawArgs json.RawMessa
 	}
 	return securities, nil
 }
-
+// GetTickerDetailsArgs represents a structure for handling GetTickerDetailsArgs data.
 type GetTickerDetailsArgs struct {
-	SecurityId int    `json:"securityId"`
+	SecurityID int    `json:"securityId"`
 	Ticker     string `json:"ticker,omitempty"`
 	Timestamp  int64  `json:"timestamp,omitempty"`
 }
-
+// GetTickerMenuDetailsResults represents a structure for handling GetTickerMenuDetailsResults data.
 type GetTickerMenuDetailsResults struct {
 	Ticker                      string          `json:"ticker"`
 	Name                        sql.NullString  `json:"name"`
@@ -240,7 +240,7 @@ type GetTickerMenuDetailsResults struct {
 	Sector      sql.NullString `json:"sector"`
 	TotalShares sql.NullInt64  `json:"totalShares"`
 }
-
+// GetTickerMenuDetails performs operations related to GetTickerMenuDetails functionality.
 func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetTickerDetailsArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -282,7 +282,7 @@ func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 		))`
 
 	var results GetTickerMenuDetailsResults
-	err := conn.DB.QueryRow(context.Background(), query, args.SecurityId).Scan(
+	err := conn.DB.QueryRow(context.Background(), query, args.SecurityID).Scan(
 		&results.Ticker,
 		&results.Name,
 		&results.Market,
@@ -337,7 +337,7 @@ func GetTickerMenuDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 
 	return response, nil
 }
-
+// TickerDetailsResponse represents a structure for handling TickerDetailsResponse data.
 type TickerDetailsResponse struct {
 	Ticker                      string  `json:"ticker"`
 	Name                        string  `json:"name"`
@@ -353,7 +353,7 @@ type TickerDetailsResponse struct {
 	Industry                    string  `json:"industry"`
 	Sector                      string  `json:"sector"`
 }
-
+// GetTickerDetails performs operations related to GetTickerDetails functionality.
 func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetTickerDetailsArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -364,7 +364,7 @@ func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 	var ticker string
 	var err error
 	if args.Ticker == "" {
-		ticker, err = utils.GetTicker(conn, args.SecurityId, tim)
+		ticker, err = utils.GetTicker(conn, args.SecurityID, tim)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get ticker: %s: %v", args.Ticker, err)
 		}
@@ -380,7 +380,7 @@ func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 
 	var sector, industry string
 	err = conn.DB.QueryRow(context.Background(), `SELECT sector, industry from securities 
-    where securityId = $1 and maxDate is NULL`, args.SecurityId).Scan(&sector, &industry)
+    where securityId = $1 and maxDate is NULL`, args.SecurityID).Scan(&sector, &industry)
 	if err != nil {
 		return nil, fmt.Errorf("01if0d %v", err)
 	}
@@ -482,12 +482,12 @@ func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 
 	return response, nil
 }
-
+// GetSecurityClassificationsResults represents a structure for handling GetSecurityClassificationsResults data.
 type GetSecurityClassificationsResults struct {
 	Sectors    []string `json:"sectors"`
 	Industries []string `json:"industries"`
 }
-
+// GetSecurityClassifications performs operations related to GetSecurityClassifications functionality.
 func GetSecurityClassifications(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	// Query to get unique sectors, excluding NULL values and empty strings
 	sectorQuery := `
@@ -551,16 +551,16 @@ func GetSecurityClassifications(conn *utils.Conn, userId int, rawArgs json.RawMe
 		Industries: industries,
 	}, nil
 }
-
+// GetIconsArgs represents a structure for handling GetIconsArgs data.
 type GetIconsArgs struct {
 	Tickers []string `json:"tickers"`
 }
-
+// GetIconsResults represents a structure for handling GetIconsResults data.
 type GetIconsResults struct {
 	Ticker string `json:"ticker"`
 	Icon   string `json:"icon"`
 }
-
+// GetIcons performs operations related to GetIcons functionality.
 func GetIcons(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetIconsArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {

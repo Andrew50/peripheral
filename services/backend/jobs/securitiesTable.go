@@ -23,7 +23,7 @@ import (
 	polygon "github.com/polygon-io/client-go/rest"
 	"github.com/polygon-io/client-go/rest/models"
 )
-
+// ActiveSecurity represents a structure for handling ActiveSecurity data.
 type ActiveSecurity struct {
 	securityId           int
 	ticker               string
@@ -343,7 +343,7 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 					rows, _ := conn.DB.Query(context.Background(), "SELECT securityId, ticker, figi, mindate, maxdate from securities where figi = $1 or ticker = $2", sec.CompositeFIGI, sec.Ticker)
 					for rows.Next() {
 						var ticker string
-						var secId int
+						var secID int
 						var figi string
 						var minDate sql.NullTime
 						var maxDate sql.NullTime
@@ -632,7 +632,7 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 
 	// Process all securities
 	for rows.Next() {
-		var securityId int
+		var securityID int
 		var ticker string
 		if err := rows.Scan(&securityId, &ticker); err != nil {
 			return fmt.Errorf("failed to scan security row: %v", err)
