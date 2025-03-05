@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"time"
 )
 
@@ -767,26 +768,8 @@ func GetTickerPerformance(conn *utils.Conn, userID int, rawArgs json.RawMessage)
 			t.losing_trades,
 			t.avg_pnl,
 			t.total_pnl,
-			t.last_trade_time,
-			tr.tradeId,
-			tr.entry_times,
-			tr.entry_prices,
-			tr.entry_shares,
-			tr.tradedirection
+			t.last_trade_time
 		FROM ticker_agg t
-		LEFT JOIN LATERAL (
-			SELECT 
-				tradeId, 
-				entry_times, 
-				entry_prices, 
-				entry_shares, 
-				tradedirection
-			FROM trades 
-			WHERE ticker = t.ticker 
-			AND userId = $1
-			ORDER BY entry_times[1] DESC
-			LIMIT 1
-		) tr ON true
 	`
 
 	// Add sorting
@@ -805,26 +788,17 @@ func GetTickerPerformance(conn *utils.Conn, userID int, rawArgs json.RawMessage)
 
 	tickerStats := []TickerStatsResponse{}
 
-	// Track current ticker to combine trade details
-	var currentTicker string
-	var currentStats *TickerStatsResponse
-
 	// Process results
 	for rows.Next() {
 		var (
-			ticker         string
-			securityID     int
-			totalTrades    int
-			winningTrades  int
-			losingTrades   int
-			avgPnL         *float64
-			totalPnL       *float64
-			lastTradeTime  time.Time
-			tradeID        *int
-			entryTimes     []time.Time
-			entryPrices    []float64
-			entryShares    []int64
-			tradeDirection *string
+			ticker        string
+			securityID    int
+			totalTrades   int
+			winningTrades int
+			losingTrades  int
+			avgPnL        *float64
+			totalPnL      *float64
+			lastTradeTime time.Time
 		)
 
 		err := rows.Scan(
@@ -836,11 +810,6 @@ func GetTickerPerformance(conn *utils.Conn, userID int, rawArgs json.RawMessage)
 			&avgPnL,
 			&totalPnL,
 			&lastTradeTime,
-			&tradeID,
-			&entryTimes,
-			&entryPrices,
-			&entryShares,
-			&tradeDirection,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning row: %v", err)
@@ -859,55 +828,129 @@ func GetTickerPerformance(conn *utils.Conn, userID int, rawArgs json.RawMessage)
 
 		// Convert EST time to Unix timestamp in milliseconds
 		timestamp := dbTimeToUTCMillis(lastTradeTime)
+		timestampPtr := &timestamp
 
-		// If we have a new ticker, create a new stats object
-		if ticker != currentTicker {
-			// Append the previous ticker if it exists
-			if currentStats != nil {
-				tickerStats = append(tickerStats, *currentStats)
-			}
-
-			// Create new stats object
-			currentTicker = ticker
-			timestampPtr := &timestamp
-			currentStats = &TickerStatsResponse{
-				Ticker:        ticker,
-				SecurityID:    securityID,
-				TotalTrades:   totalTrades,
-				WinningTrades: winningTrades,
-				LosingTrades:  losingTrades,
-				AvgPnL:        avgPnLValue,
-				TotalPnL:      totalPnLValue,
-				Timestamp:     timestampPtr,
-				Trades:        []TradeActivity{},
-			}
+		// Create stats object
+		tickerStat := TickerStatsResponse{
+			Ticker:        ticker,
+			SecurityID:    securityID,
+			TotalTrades:   totalTrades,
+			WinningTrades: winningTrades,
+			LosingTrades:  losingTrades,
+			AvgPnL:        avgPnLValue,
+			TotalPnL:      totalPnLValue,
+			Timestamp:     timestampPtr,
+			Trades:        []TradeActivity{},
 		}
 
-		// Add trade details if they exist
-		if tradeID != nil && len(entryTimes) > 0 && tradeDirection != nil {
-			// Create combined trades array
-			for i := range entryTimes {
-				// Convert EST time to Unix timestamp in milliseconds
-				entryTimestamp := dbTimeToUTCMillis(entryTimes[i])
+		// Fetch all trade activities for this ticker - both entries and exits
+		tradeActivitiesQuery := `
+			WITH all_trades AS (
+				SELECT tradeId
+				FROM trades 
+				WHERE userId = $1 AND ticker = $2
+				AND status = 'Closed'
+				AND closedPnL IS NOT NULL
+		`
 
-				tradeType := "Buy"
-				if *tradeDirection == "Short" {
-					tradeType = "Short"
+		// Add the same filters as in the main query
+		params := []interface{}{userID, ticker}
+		paramCount := 2
+
+		if args.Date != "" {
+			tradeActivitiesQuery += fmt.Sprintf(" AND DATE(entry_times[1]) = $%d", paramCount+1)
+			params = append(params, args.Date)
+			paramCount++
+		}
+
+		if args.Hour != nil {
+			tradeActivitiesQuery += fmt.Sprintf(" AND EXTRACT(HOUR FROM entry_times[1]) = $%d", paramCount+1)
+			params = append(params, *args.Hour)
+			paramCount++
+		}
+
+		tradeActivitiesQuery += `
+			)
+			SELECT 
+				'entry' as activity_type,
+				t.entry_times as times,
+				t.entry_prices as prices,
+				t.entry_shares as shares,
+				t.tradeDirection
+			FROM trades t
+			JOIN all_trades at ON t.tradeId = at.tradeId
+			UNION ALL
+			SELECT 
+				'exit' as activity_type,
+				t.exit_times as times,
+				t.exit_prices as prices,
+				t.exit_shares as shares,
+				t.tradeDirection
+			FROM trades t
+			JOIN all_trades at ON t.tradeId = at.tradeId
+			WHERE array_length(t.exit_times, 1) > 0
+		`
+
+		execRows, err := conn.DB.Query(context.Background(), tradeActivitiesQuery, params...)
+		if err != nil {
+			return nil, fmt.Errorf("error fetching trade activities: %v", err)
+		}
+
+		for execRows.Next() {
+			var (
+				activityType   string
+				times          []time.Time
+				prices         []float64
+				shares         []int64
+				tradeDirection string
+			)
+
+			err := execRows.Scan(
+				&activityType,
+				&times,
+				&prices,
+				&shares,
+				&tradeDirection,
+			)
+			if err != nil {
+				execRows.Close()
+				return nil, fmt.Errorf("error scanning trade activity: %v", err)
+			}
+
+			// Process each time/price/share entry
+			for i := range times {
+				if i < len(times) && i < len(prices) && i < len(shares) {
+					// Convert EST time to Unix timestamp in milliseconds
+					entryTimestamp := dbTimeToUTCMillis(times[i])
+
+					tradeType := "Buy"
+					if activityType == "entry" && tradeDirection == "Short" {
+						tradeType = "Short"
+					} else if activityType == "exit" && tradeDirection == "Long" {
+						tradeType = "Sell"
+					} else if activityType == "exit" && tradeDirection == "Short" {
+						tradeType = "Buy to Cover"
+					}
+
+					tickerStat.Trades = append(tickerStat.Trades, TradeActivity{
+						Time:   entryTimestamp,
+						Price:  prices[i],
+						Shares: shares[i],
+						Type:   tradeType,
+					})
 				}
-
-				currentStats.Trades = append(currentStats.Trades, TradeActivity{
-					Time:   entryTimestamp,
-					Price:  entryPrices[i],
-					Shares: int64(entryShares[i]),
-					Type:   tradeType,
-				})
 			}
 		}
-	}
+		execRows.Close()
 
-	// Add the last ticker if it exists
-	if currentStats != nil {
-		tickerStats = append(tickerStats, *currentStats)
+		// Sort trades by timestamp (newest first)
+		if len(tickerStat.Trades) > 1 {
+			sort.Slice(tickerStat.Trades, func(i, j int) bool {
+				return tickerStat.Trades[i].Time > tickerStat.Trades[j].Time
+			})
+		}
+
+		tickerStats = append(tickerStats, tickerStat)
 	}
 
 	return tickerStats, nil
