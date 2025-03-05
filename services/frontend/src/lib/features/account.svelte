@@ -78,6 +78,42 @@
 		total_pnl: number;
 	}
 
+	interface TradeStatistics {
+		total_trades: number;
+		winning_trades: number;
+		losing_trades: number;
+		win_rate: number;
+		avg_win: number;
+		avg_loss: number;
+		total_pnl: number;
+		top_trades: Trade[];
+		bottom_trades: Trade[];
+		hourly_stats: {
+			hour: number;
+			hour_display: string;
+			total_trades: number;
+			winning_trades: number;
+			losing_trades: number;
+			win_rate: number;
+			avg_pnl: number;
+			total_pnl: number;
+		}[];
+		ticker_stats: {
+			ticker: string;
+			total_trades: number;
+			winning_trades: number;
+			losing_trades: number;
+			win_rate: number;
+			avg_pnl: number;
+			total_pnl: number;
+		}[];
+	}
+
+	interface ApiResponse {
+		status: string;
+		message: string;
+	}
+
 	async function handleFileUpload() {
 		if (!files || !files[0]) {
 			message = 'Please select a file first';
@@ -133,7 +169,7 @@
 			if (statStartDate) params.start_date = statStartDate;
 			if (statEndDate) params.end_date = statEndDate;
 			if (statTicker) params.ticker = statTicker.toUpperCase();
-			privateRequest<{}>('get_trade_statistics', params).then((result) => {
+			privateRequest<TradeStatistics>('get_trade_statistics', params).then((result) => {
 				console.log(result);
 				statistics.set(result);
 				message = 'Statistics loaded successfully';
@@ -185,10 +221,9 @@
 			try {
 				deletingTrades = true;
 				message = 'Deleting all trades...';
-				
-				privateRequest<{}>('delete_all_user_trades', {}).then((result) => {
 
-					if(result.status === 'success') {
+				privateRequest<ApiResponse>('delete_all_user_trades', {}).then((result) => {
+					if (result.status === 'success') {
 						message = result.message;
 						// Refresh the trades list
 						trades.set([]);
@@ -284,7 +319,7 @@
 				}}
 				expandable={true}
 				expandedContent={(trade) => ({
-					trades: trade.trades.map((t) => ({
+					trades: trade.trades?.map((t) => ({
 						time: UTCTimestampToESTString(t.time),
 						type: t.type,
 						price: `$${t.price.toFixed(2)}`,
@@ -359,7 +394,7 @@
 				}}
 				expandable={true}
 				expandedContent={(ticker) => ({
-					trades: ticker.trades.map((t) => ({
+					trades: ticker.trades?.map((t) => ({
 						time: UTCTimestampToESTString(t.time),
 						type: t.type,
 						price: `$${t.price.toFixed(2)}`,
