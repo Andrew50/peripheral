@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    app: backend
+  annotations:
+    kubernetes.io/description: "Backend deployment - DO NOT SCALE beyond 1 replica"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # Ensures no more than 1 pod exists during updates
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      restartPolicy: Always # Update the restart policy to "Always"
+      containers:
+        - name: backend
+          image: billin19/backend:prod
+          imagePullPolicy: Always
+          command:
+            - /bin/sh
+          args:
+            - -c
+            - jobctl run ClearWorkerQueue && jobctl run InitAggregates && jobctl run SimpleUpdateSecurities && jobctl run StartAlertLoop && jobctl run StartPolygonWebSocket && jobctl run UpdateMarketMetrics && jobctl run UpdateSectors && jobctl run UpdateSecurityCik && jobctl run UpdateSecurityDetails && sleep infinity
+          ports:
+            - containerPort: 5057
+          env:
+            # Database connection
+            - name: DB_HOST
+              value: "db"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              value: "postgres"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_ROOT_PASSWORD
+            - name: DB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_ROOT_PASSWORD
+            # Redis connection
+            - name: REDIS_HOST
+              value: "cache"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: REDIS_PASSWORD
+            # Add Polygon API key
+            - name: POLYGON_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: polygon-secret
+                  key: api-key
+            # Add Google OAuth credentials
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth-secret
+                  key: GOOGLE_CLIENT_ID
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth-secret
+                  key: GOOGLE_CLIENT_SECRET
+            # Add JWT secret
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secret
+                  key: JWT_SECRET
+            # Add Google redirect URL
+            - name: GOOGLE_REDIRECT_URL
+              value: "https://atlantis.trading/auth/google/callback"
+          # Removed health checks as backend is a job runner, not an HTTP server
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2000Mi"
+            limits:
+              cpu: "8000m"
+              memory: "8000Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  labels:
+    app: backend
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 5057
+      targetPort: 5057
+  type: ClusterIP
