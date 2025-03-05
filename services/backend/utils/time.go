@@ -143,6 +143,8 @@ func GetTimeFrame(timeframeString string) (int, string, string, int, error) {
 
 // getStartOfTimeWindow calculates the start of a time window based on the given parameters
 // nolint:unused
+//
+//lint:ignore U1000 kept for future time window calculations
 func getStartOfTimeWindow(timestamp time.Time, multiplier int, timespan string, extendedHours bool, location *time.Location) (time.Time, error) {
 
 	timestamp = timestamp.In(location)

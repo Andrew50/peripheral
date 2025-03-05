@@ -498,7 +498,8 @@ func requestIncompleteBar(
 		timestampStart = currentDayStart + (elapsed/(timeframeInSeconds*1000))*timeframeInSeconds*1000
 	} else {
 		// Daily or above
-		currentDayStart = utils.GetReferenceStartTime(timestampEnd, false, easternLocation)
+		// Calculate the start of the current day but we don't need to store it in a variable
+		timestampStart = utils.GetReferenceStartTime(timestampEnd, false, easternLocation)
 		switch timespan {
 		case "day":
 			timestampStart = utils.GetReferenceStartTimeForDays(timestampEnd, multiplier, easternLocation)

@@ -123,6 +123,9 @@ func NewAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 			INSERT INTO alerts (userId, alertType, price, securityID, active, direction) 
 			VALUES ($1, $2, $3, $4, true, $5) RETURNING alertId`
 		err = conn.DB.QueryRow(context.Background(), insertQuery, userId, args.AlertType, *args.Price, *args.SecurityID, direction).Scan(&alertID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to insert price alert: %w", err)
+		}
 
 	} else if args.AlertType == "setup" {
 		if args.SetupID == nil {
