@@ -145,6 +145,8 @@ func FetchLatestEdgarFilings(conn *Conn) ([]GlobalEDGARFiling, error) {
 	return allFilings, nil
 }
 
+// fetchEdgarFilings fetches SEC filings for a given CIK
+// nolint:unused
 func fetchEdgarFilings(cik string) ([]EDGARFiling, error) {
 	fmt.Printf("Fetching SEC filings for CIK: %s\n", cik)
 
@@ -180,7 +182,8 @@ func fetchEdgarFilings(cik string) ([]EDGARFiling, error) {
 	return allFilings, nil
 }
 
-// fetchEdgarFilingsPage fetches a single page of SEC filings with pagination
+// fetchEdgarFilingsTickerPage fetches a single page of SEC filings with pagination
+// nolint:unused
 func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFiling, error) {
 	url := fmt.Sprintf("https://data.sec.gov/submissions/CIK%s.json", cik)
 
@@ -323,6 +326,8 @@ func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFilin
 	return filings, nil
 }
 
+// fetchCIKFromSEC fetches the CIK for a given ticker from the SEC
+// nolint:unused
 func fetchCIKFromSEC(ticker string) (string, error) {
 	// SEC company lookup endpoint
 	url := "https://www.sec.gov/files/company_tickers.json"
@@ -537,6 +542,8 @@ func parseCompanyName(title string) string {
 	return companyParts[0]
 }
 
+// parseFilingDate parses the filing date from the updated string
+// nolint:unused
 func parseFilingDate(updated string) string {
 	// Convert the ISO 8601 timestamp to the desired format
 	t, err := time.Parse(time.RFC3339, updated)
