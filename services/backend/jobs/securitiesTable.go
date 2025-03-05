@@ -24,30 +24,22 @@ import (
 	"github.com/polygon-io/client-go/rest/models"
 )
 
+// logAction logs actions performed during security updates when in test mode.
+// This function is used internally by updateSecurities for debugging and tracking changes.
 func logAction(test bool, loop int, ticker string, targetTicker string, figi string, currentDate string, action string, err error) {
 	if test {
 		if err != nil {
 			fmt.Printf("loop %-5d | time %s | ticker %-10s | targetTicker %-12s | figi %-20s | date %-10s | action %-20s | error %v\n",
-				loop,                                     // Loop number (5 characters)
-				time.Now().Format("2006-01-02 15:04:05"), // Time
-				ticker,                                   // Ticker (10 characters)
-				targetTicker,                             // Target Ticker (12 characters)
-				figi,                                     // FIGI (20 characters)
-				currentDate,                              // Date (10 characters)
-				action,                                   // Action (20 characters)
-				err)                                      // Error message
+				loop, time.Now().Format("2006-01-02 15:04:05"), ticker, targetTicker, figi, currentDate, action, err)
 		}
 		log.Printf("loop %-5d | ticker %-10s | targetTicker %-12s | figi %-20s | date %-10s | action %-35s | error %v\n",
-			loop,         // Loop number (5 characters)
-			ticker,       // Ticker (10 characters)
-			targetTicker, // Target Ticker (12 characters)
-			figi,         // FIGI (20 characters)
-			currentDate,  // Date (10 characters)
-			action,       // Action (20 characters)
-			err)          // Error message
+			loop, ticker, targetTicker, figi, currentDate, action, err)
 	}
 }
 
+// validateTickerString checks if a ticker symbol is valid.
+// Returns false if the ticker contains a dot or lowercase letters.
+// This is used internally by toFilteredMap to filter out invalid tickers.
 func validateTickerString(ticker string) bool {
 	if strings.Contains(ticker, ".") {
 		return false
@@ -60,6 +52,12 @@ func validateTickerString(ticker string) bool {
 	return true
 }
 
+// diff compares two sets of tickers and returns the differences.
+// Used internally by updateSecurities to track changes in securities.
+// Returns:
+// - additions: new tickers that appeared
+// - removals: tickers that disappeared
+// - figiChanges: tickers whose FIGI changed
 func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []models.Ticker, []models.Ticker) {
 	additions := []models.Ticker{}
 	removals := []models.Ticker{}
@@ -71,21 +69,15 @@ func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []mode
 	// Process additions and figi changes
 	for ticker, sec := range firstSet {
 		if yesterdaySec, found := secondSet[ticker]; !found {
-			// Check if already in the additions set
 			if _, exists := usedTickers[ticker]; !exists {
 				additions = append(additions, sec)
 				usedTickers[ticker] = struct{}{}
-			} else {
-				fmt.Printf("duplicate %s\n", ticker)
 			}
 		} else {
 			if yesterdaySec.CompositeFIGI != sec.CompositeFIGI {
-				// Check if already in the figi changes set
 				if _, exists := usedTickers[ticker]; !exists {
 					figiChanges = append(figiChanges, sec)
 					usedTickers[ticker] = struct{}{}
-				} else {
-					fmt.Printf("duplicate %s\n", ticker)
 				}
 			}
 		}
@@ -94,12 +86,9 @@ func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []mode
 	// Process removals
 	for ticker, sec := range secondSet {
 		if _, found := firstSet[ticker]; !found {
-			// Check if already in the removals set
 			if _, exists := usedTickers[ticker]; !exists {
 				removals = append(removals, sec)
 				usedTickers[ticker] = struct{}{}
-			} else {
-				fmt.Printf("duplicate %s\n", ticker)
 			}
 		}
 	}
@@ -107,6 +96,8 @@ func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []mode
 	return additions, removals, figiChanges
 }
 
+// dataExists checks if market data exists for a ticker in a given date range.
+// Used internally by updateSecurities to verify data availability.
 func dataExists(client *polygon.Client, ticker string, fromDate string, toDate string) bool {
 	timespan := models.Timespan("day")
 	fromMillis, err := utils.MillisFromDatetimeString(fromDate)
@@ -126,16 +117,10 @@ func dataExists(client *polygon.Client, ticker string, fromDate string, toDate s
 	}
 	iter := client.ListAggs(context.Background(), &params)
 	return iter.Next()
-	/*c := 0
-	  for iter.Next(){
-	      if (c > 1){
-	          return true
-	      }
-	      c++
-	  }
-	  return false*/
 }
 
+// toFilteredMap converts a slice of tickers to a map, filtering out invalid tickers.
+// Used internally by updateSecurities to process ticker lists.
 func toFilteredMap(tickers []models.Ticker) map[string]models.Ticker {
 	tickerMap := make(map[string]models.Ticker)
 	for _, sec := range tickers {
@@ -146,6 +131,8 @@ func toFilteredMap(tickers []models.Ticker) map[string]models.Ticker {
 	return tickerMap
 }
 
+// contains checks if a string exists in a slice.
+// Used internally by updateSecurities to check diagnoses.
 func contains(slice []string, item string) bool {
 	for _, str := range slice {
 		if str == item {
@@ -212,9 +199,6 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 		}
 		activeToday := toFilteredMap(polyTickers)
 		additions, removals, figiChanges := diff(activeToday, activeYesterday)
-		if test {
-			//            fmt.Printf("%s: %d additions %d removals\n",currentDateString,len(additions),len(removals))
-		}
 		for i, sec := range figiChanges {
 			cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE securities set figi = $1 where ticker = $2 and maxDate is NULL", sec.CompositeFIGI, sec.Ticker)
 			if err != nil {
@@ -566,7 +550,7 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 		currentPrice, err := utils.GetMostRecentRegularClose(conn.Polygon, ticker, time.Now())
 		if err != nil {
 			fmt.Printf("Failed to get current price for %s: %v", ticker, err)
-			//return
+			return
 		}
 
 		// Update the security record with all details

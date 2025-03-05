@@ -1,9 +1,7 @@
 import numpy as np
 from datetime import timedelta
 import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, LSTM, Bidirectional, Conv1D, Input
-from tensorflow.keras.optimizers import Adam
+
 
 
 def normalize_pattern(pattern):

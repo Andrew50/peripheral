@@ -3,7 +3,6 @@ import pandas as pd
 import io
 from screen import getCurrentSecId
 import traceback
-from datetime import datetime
 import pytz
 from trade_helpers import parse_datetime, process_trades
 
@@ -39,14 +38,10 @@ def grab_user_trades(
             """
             params = [user_id]
 
-            # Modified ticker filter to include options
             if ticker:
                 base_query += " AND (t.ticker = %s OR t.ticker LIKE %s)"
-                params.extend(
-                    [ticker, f"{ticker}%"]
-                )  # Add both exact match and LIKE pattern
+                params.extend([ticker, f"{ticker}%"])
 
-            # Add other existing filters
             if date:
                 base_query += " AND DATE(t.entry_times[1]) = %s"
                 params.append(date)
@@ -55,7 +50,6 @@ def grab_user_trades(
                 base_query += " AND EXTRACT(HOUR FROM t.entry_times[1]) = %s"
                 params.append(hour)
 
-            # Add sorting
             sort_direction = "DESC" if sort.lower() == "desc" else "ASC"
             base_query += f" ORDER BY t.entry_times[1] {sort_direction}"
 
@@ -66,15 +60,11 @@ def grab_user_trades(
             utc = pytz.UTC
 
             for row in cursor.fetchall():
-                # Convert EST timestamp to UTC before getting Unix timestamp
                 est_time = eastern.localize(row[9][0]) if row[9] else None
                 utc_time = est_time.astimezone(utc) if est_time else None
-                timestamp = int(utc_time.timestamp() * 1000) if utc_time else None
 
-                # Create combined trades array sorted by timestamp
                 combined_trades = []
 
-                # Add entries
                 for i in range(len(row[9])) if row[9] else []:
                     combined_trades.append(
                         {
@@ -88,7 +78,6 @@ def grab_user_trades(
                         }
                     )
 
-                # Add exits
                 for i in range(len(row[12])) if row[12] else []:
                     combined_trades.append(
                         {
@@ -106,7 +95,6 @@ def grab_user_trades(
                         }
                     )
 
-                # Sort combined trades by timestamp
                 combined_trades.sort(key=lambda x: x["time"])
 
                 trade = {
@@ -152,22 +140,18 @@ def handle_trade_upload(
     Process uploaded trade file and return parsed trades
     """
     try:
-        # Decode base64 string back to bytes
         file_bytes = base64.b64decode(file_content)
-
-        # Read CSV from bytes using pandas
         df = pd.read_csv(
             io.BytesIO(file_bytes),
             skiprows=3,
             dtype={
                 "Order Time": str,
-                "Trade Description": str,  # Ensure Trade Description is read as string
+                "Trade Description": str,
                 "Status": str,
             },
         )
         df = df.dropna(how="all")
 
-        # Start a single transaction for all trades
         with conn.db.cursor() as cursor:
             for i in range(len(df) - 1, -1, -1):
                 trade = df.iloc[i]
@@ -232,12 +216,10 @@ def handle_trade_upload(
                     ),
                 )
 
-            # Commit the transaction after all trades are processed
             conn.db.commit()
         process_trades(conn, user_id)
         return {"status": "success", "message": "Trades uploaded successfully"}
     except Exception as e:
-        # Rollback on error
         conn.db.rollback()
         error_info = traceback.format_exc()
         print(f"Error processing trade file:\n{error_info}")
