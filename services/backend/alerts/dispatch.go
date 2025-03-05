@@ -12,11 +12,11 @@ import (
 )
 
 const (
-	ChatId = -1002428678944
+	ChatID = -1002428678944
 )
 
 var bot *telebot.Bot
-
+// InitTelegramBot performs operations related to InitTelegramBot functionality.
 func InitTelegramBot() error {
 	botToken := "7500247744:AAGNsmjWYfb97XzppT2E0_8qoArgxLOz7e0"
 	var err error
@@ -30,7 +30,7 @@ func InitTelegramBot() error {
 	}
 	//log.Println("debug: Telegram bot initialized successfully")
 	return err
-}
+// SendTelegramMessage performs operations related to SendTelegramMessage functionality.
 func SendTelegramMessage(msg string, chatID int64) {
 	recipient := telebot.ChatID(chatID)
 	_, err := bot.Send(recipient, msg)
@@ -43,9 +43,9 @@ func writeAlertMessage(alert Alert) string {
 	if alert.AlertType == "algo" {
 		return "Algo alert"
 	}
-	if alert.SecurityId == nil {
-		log.Println("SecurityId is nil")
-		return "SecurityId is missing"
+	if alert.SecurityID == nil {
+		log.Println("SecurityID is nil")
+		return "SecurityID is missing"
 	}
 	if alert.AlertType == "setup" {
 		if alert.Price == nil {
@@ -73,11 +73,11 @@ func dispatchAlert(conn *utils.Conn, alert Alert) error {
 	fmt.Println("dispatching alert", alert)
 	alertMessage := writeAlertMessage(alert)
 	timestamp := time.Now()
-	SendTelegramMessage(alertMessage, ChatId)
-	socket.SendAlertToUser(alert.UserId, socket.AlertMessage{
-		AlertId:    alert.AlertId,
+	SendTelegramMessage(alertMessage, ChatID)
+	socket.SendAlertToUser(alert.UserID, socket.AlertMessage{
+		AlertID:    alert.AlertID,
 		Timestamp:  timestamp.Unix() * 1000,
-		SecurityId: *alert.SecurityId,
+		SecurityID: *alert.SecurityID,
 		Message:    alertMessage,
 		Channel:    "alert",
 		Ticker:     *alert.Ticker,
@@ -89,9 +89,9 @@ func dispatchAlert(conn *utils.Conn, alert Alert) error {
 
 	_, err := conn.DB.Exec(context.Background(),
 		query,
-		alert.AlertId,
+		alert.AlertID,
 		timestamp,
-		*alert.SecurityId,
+		*alert.SecurityID,
 	)
 	if err != nil {
 		log.Printf("Failed to log alert to database: %v", err)
@@ -104,12 +104,12 @@ func dispatchAlert(conn *utils.Conn, alert Alert) error {
         SET active = false
         WHERE alertId = $1
     `
-	_, err = conn.DB.Exec(context.Background(), updateQuery, alert.AlertId)
+	_, err = conn.DB.Exec(context.Background(), updateQuery, alert.AlertID)
 	if err != nil {
-		log.Printf("Failed to disable alert with ID %d: %v", alert.AlertId, err)
+		log.Printf("Failed to disable alert with ID %d: %v", alert.AlertID, err)
 		return fmt.Errorf("failed to disable alert: %v", err)
 	}
-	RemoveAlert(alert.AlertId)
+	RemoveAlert(alert.AlertID)
 
 	return nil
 }
@@ -118,7 +118,7 @@ func dispatchAlert(conn *utils.Conn, alert Alert) error {
 	Message string `json:"message"`
 	ChatID  int64  `json:"chatID"`
 }
-
+// SendMessage performs operations related to SendMessage functionality.
 func SendMessage(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args SendMessageArgs
 	err := json.Unmarshal(rawArgs, &args)

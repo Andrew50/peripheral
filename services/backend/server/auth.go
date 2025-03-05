@@ -19,7 +19,7 @@ import (
 )
 
 // Get JWT secret from environment variable or use a fallback for development
-var private_key = []byte(getEnvOrDefault("JWT_SECRET", "2dde9fg9"))
+var privateKey = []byte(getEnvOrDefault("JWT_SECRET", "2dde9fg9"))
 
 // Get OAuth configuration from environment variables
 var (
@@ -43,12 +43,12 @@ func getEnvOrDefault(key, defaultValue string) string {
 	}
 	return value
 }
-
+// Claims represents a structure for handling Claims data.
 type Claims struct {
 	UserID int `json:"userId"`
 	jwt.RegisteredClaims
 }
-
+// LoginResponse represents a structure for handling LoginResponse data.
 type LoginResponse struct {
 	Token      string          `json:"token"`
 	Settings   string          `json:"settings"`
@@ -56,13 +56,13 @@ type LoginResponse struct {
 	ProfilePic string          `json:"profilePic"`
 	Username   string          `json:"username"`
 }
-
+// SignupArgs represents a structure for handling SignupArgs data.
 type SignupArgs struct {
 	Email    string `json:"email"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
-
+// Signup performs operations related to Signup functionality.
 func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var a SignupArgs
 	if err := json.Unmarshal(rawArgs, &a); err != nil {
@@ -77,7 +77,7 @@ func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	}
 
 	if count > 0 {
-		return nil, fmt.Errorf("Email already registered")
+		return nil, fmt.Errorf("email already registered")
 	}
 
 	// Insert new user with auth_type='password'
@@ -101,12 +101,12 @@ func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	result, err := Login(conn, loginArgs)
 	return result, err
 }
-
+// LoginArgs represents a structure for handling LoginArgs data.
 type LoginArgs struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
-
+// Login performs operations related to Login functionality.
 func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var a LoginArgs
 	if err := json.Unmarshal(rawArgs, &a); err != nil {
@@ -114,7 +114,7 @@ func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	}
 
 	var resp LoginResponse
-	var userId int
+	var userID int
 	var profilePicture sql.NullString
 	var authType string
 
@@ -129,7 +129,7 @@ func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 
 	// Check if this is a Google-only auth user trying to use password login
 	if authType == "google" {
-		return nil, fmt.Errorf("This account uses Google Sign-In. Please login with Google")
+		return nil, fmt.Errorf("this account uses Google Sign-In. Please login with Google")
 	}
 
 	// Now verify the password for password-based or both auth types
@@ -139,7 +139,7 @@ func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		a.Password, userId).Scan(&passwordMatch)
 
 	if err != nil || !passwordMatch {
-		return nil, fmt.Errorf("Invalid Credentials")
+		return nil, fmt.Errorf("invalid Credentials")
 	}
 
 	token, err := create_token(userId)
@@ -158,7 +158,7 @@ func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	return resp, nil
 }
 
-func create_token(userId int) (string, error) {
+func createToken(userId int) (string, error) {
 	expirationTime := time.Now().Add(1 * time.Hour)
 	claims := &Claims{
 		UserID: userId,
@@ -170,7 +170,7 @@ func create_token(userId int) (string, error) {
 	return token.SignedString(private_key)
 }
 
-func validate_token(tokenString string) (int, error) {
+func validateToken(tokenString string) (int, error) {
 	claims := &Claims{} // Initialize an instance of your Claims struct
 
 	// Default profile pic is empty (frontend will generate initial)
@@ -186,7 +186,7 @@ func validate_token(tokenString string) (int, error) {
 	}
 	return claims.UserID, nil
 }
-
+// GoogleUser represents a structure for handling GoogleUser data.
 type GoogleUser struct {
 	ID            string `json:"id"`
 	Email         string `json:"email"`
@@ -194,13 +194,13 @@ type GoogleUser struct {
 	Name          string `json:"name"`
 	Picture       string `json:"picture"`
 }
-
+// GoogleLoginResponse represents a structure for handling GoogleLoginResponse data.
 type GoogleLoginResponse struct {
 	Token      string `json:"token"`
 	ProfilePic string `json:"profilePic"`
 	Username   string `json:"username"`
 }
-
+// GoogleLogin performs operations related to GoogleLogin functionality.
 func GoogleLogin(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var args struct {
 		RedirectOrigin string `json:"redirectOrigin"`
@@ -211,7 +211,7 @@ func GoogleLogin(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error)
 
 	// Validate that we have the required OAuth configuration
 	if googleOauthConfig.ClientID == "" || googleOauthConfig.ClientSecret == "" {
-		return nil, fmt.Errorf("Google OAuth is not configured properly. Missing client ID or secret")
+		return nil, fmt.Errorf("google OAuth is not configured properly. Missing client ID or secret")
 	}
 
 	// Print debug information
@@ -229,7 +229,7 @@ func GoogleLogin(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error)
 	url := googleOauthConfig.AuthCodeURL(state)
 	return map[string]string{"url": url, "state": state}, nil
 }
-
+// GoogleCallback performs operations related to GoogleCallback functionality.
 func GoogleCallback(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var args struct {
 		Code  string `json:"code"`
@@ -257,7 +257,7 @@ func GoogleCallback(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, err
 	}
 
 	// Check if user exists, if not create new user
-	var userId int
+	var userID int
 	var username string
 	var authType string
 
@@ -309,12 +309,12 @@ func generateState() string {
 	return base64.URLEncoding.EncodeToString(b)
 }
 
-// Add this new type for updating profile picture
+// UpdateProfilePictureArgs represents a structure for handling UpdateProfilePictureArgs data.
 type UpdateProfilePictureArgs struct {
 	ProfilePicture string `json:"profilePicture"`
 }
 
-// Add this new function to handle profile picture updates
+// UpdateProfilePicture performs operations related to UpdateProfilePicture functionality.
 func UpdateProfilePicture(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args UpdateProfilePictureArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {

@@ -8,14 +8,14 @@ import (
 	polygon "github.com/polygon-io/client-go/rest"
 	"github.com/polygon-io/client-go/rest/iter"
 	"github.com/polygon-io/client-go/rest/models"
-)
+// GetMarketStatus performs operations related to GetMarketStatus functionality.
 func GetMarketStatus(conn *Conn) (string, error) {
 	getMarketStatusResponse, err := conn.Polygon.GetMarketStatus(context.Background())
 	if err != nil {
 		return "", err
 	}
 	return getMarketStatusResponse.Market, nil
-}
+// ListTickers performs operations related to ListTickers functionality.
 func ListTickers(client *polygon.Client, startTicker string, dateString string, tickerStringCompareType models.Comparator, numTickers int, active bool) (*iter.Iter[models.Ticker], error) {
 	params := models.ListTickersParams{}.
 		WithMarket(models.AssetStocks).
@@ -35,7 +35,7 @@ func ListTickers(client *polygon.Client, startTicker string, dateString string, 
 	}
 	iter := client.ListTickers(context.Background(), params)
 	return iter, nil
-}
+// AllTickers performs operations related to AllTickers functionality.
 func AllTickers(client *polygon.Client, dateString string) ([]models.Ticker, error) {
 	if dateString == "" {
 		dateString = time.Now().Format(time.DateOnly)
@@ -49,7 +49,7 @@ func AllTickers(client *polygon.Client, dateString string) ([]models.Ticker, err
 		tickerList = append(tickerList, iter.Item())
 	}
 	return tickerList, nil
-}
+// AllTickersTickerOnly performs operations related to AllTickersTickerOnly functionality.
 func AllTickersTickerOnly(client *polygon.Client, dateString string) (*[]string, error) {
 	if dateString == "" {
 		dateString = time.Now().Format(time.DateOnly)
@@ -64,7 +64,7 @@ func AllTickersTickerOnly(client *polygon.Client, dateString string) (*[]string,
 	}
 	return &tickerList, nil
 }
-
+// GetTickerDetails performs operations related to GetTickerDetails functionality.
 func GetTickerDetails(client *polygon.Client, ticker string, dateString string) (*models.Ticker, error) {
 	var params *models.GetTickerDetailsParams
 	if dateString != "now" {

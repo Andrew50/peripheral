@@ -12,13 +12,13 @@ import (
 	"time"
 )
 
-// Define a simple table writer interface
+// TableWriter represents a structure for handling TableWriter data.
 type TableWriter struct {
 	headers []string
 	rows    [][]string
 	writer  *os.File
 }
-
+// NewTableWriter performs operations related to NewTableWriter functionality.
 func NewTableWriter(writer *os.File) *TableWriter {
 	return &TableWriter{
 		writer: writer,
@@ -95,7 +95,8 @@ func getJobLastCompletionKey(jobName string) string {
 
 func listJobs() {
 	// Create a new scheduler to get the job list
-	conn, cleanup := utils.InitConn(true)
+	inContainer := os.Getenv("IN_CONTAINER") == "true"
+	conn, cleanup := utils.InitConn(inContainer)
 	defer cleanup()
 
 	scheduler, err := jobs.NewScheduler(conn)
@@ -138,7 +139,8 @@ func formatSchedule(schedule []jobs.TimeOfDay) string {
 
 func getJobStatus(jobName string) {
 	// Create a new scheduler to get the job list
-	conn, cleanup := utils.InitConn(true)
+	inContainer := os.Getenv("IN_CONTAINER") == "true"
+	conn, cleanup := utils.InitConn(inContainer)
 	defer cleanup()
 
 	scheduler, err := jobs.NewScheduler(conn)
@@ -195,7 +197,8 @@ func getJobStatus(jobName string) {
 
 func getAllJobsStatus() {
 	// Create a new scheduler to get the job list
-	conn, cleanup := utils.InitConn(true)
+	inContainer := os.Getenv("IN_CONTAINER") == "true"
+	conn, cleanup := utils.InitConn(inContainer)
 	defer cleanup()
 
 	scheduler, err := jobs.NewScheduler(conn)
@@ -241,7 +244,8 @@ func getAllJobsStatus() {
 
 func runJob(jobName string) {
 	// Create a new scheduler to get the job list
-	conn, cleanup := utils.InitConn(true)
+	inContainer := os.Getenv("IN_CONTAINER") == "true"
+	conn, cleanup := utils.InitConn(inContainer)
 	defer cleanup()
 
 	scheduler, err := jobs.NewScheduler(conn)
@@ -282,6 +286,7 @@ func runJob(jobName string) {
 
 	if err != nil {
 		fmt.Printf("\nJob failed after %v: %v\n", duration, err)
+		return
 	} else {
 		fmt.Printf("\nJob completed successfully in %v\n", duration)
 	}
@@ -332,9 +337,157 @@ func runJob(jobName string) {
 			fmt.Printf("  %d: %s (ID: %s)\n", i+1, taskFuncs[i], id)
 		}
 
-		// Monitor task status
+		// Monitor task status and wait for completion
 		fmt.Println("\nWaiting for worker to process tasks...")
-		monitorTasks(conn, taskIDs)
+		allTasksSucceeded := monitorTasksAndWait(conn, taskIDs)
+
+		// Only update the last completion time if all tasks succeeded
+		if allTasksSucceeded {
+			completionTime := time.Now()
+			// Update last completion time
+			lastCompletionStr := completionTime.Format(time.RFC3339)
+			err = conn.Cache.Set(context.Background(), getJobLastCompletionKey(job.Name), lastCompletionStr, 0).Err()
+			if err != nil {
+				fmt.Printf("Error saving last completion time: %v\n", err)
+			} else {
+				fmt.Printf("\nAll queued tasks completed successfully. Updated last completion time to %s\n",
+					completionTime.Format("2006-01-02 15:04:05"))
+			}
+		} else {
+			fmt.Println("\nNot all tasks completed successfully. Last completion time was not updated.")
+		}
+	} else {
+		// For directly executed jobs with no queued tasks, update completion time immediately
+		completionTime := time.Now()
+		lastCompletionStr := completionTime.Format(time.RFC3339)
+		err = conn.Cache.Set(context.Background(), getJobLastCompletionKey(job.Name), lastCompletionStr, 0).Err()
+		if err != nil {
+			fmt.Printf("Error saving last completion time: %v\n", err)
+		} else {
+			fmt.Printf("Updated last completion time to %s\n", completionTime.Format("2006-01-02 15:04:05"))
+		}
+	}
+}
+
+// monitorTasksAndWait polls the status of tasks, displays their progress, and returns whether all tasks completed successfully
+func monitorTasksAndWait(conn *utils.Conn, taskIDs []string) bool {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	completedTasks := make(map[string]bool)
+	failedTasks := make(map[string]bool)
+	startTime := time.Now()
+	timeout := 5 * time.Minute
+
+	// Store previous statuses to avoid printing duplicates
+	previousStatuses := make(map[string]string)
+
+	// Print header
+	fmt.Println("\n=== TASK MONITORING ===")
+	fmt.Printf("Started at: %s\n", startTime.Format("2006-01-02 15:04:05"))
+	fmt.Printf("Monitoring %d task(s)\n", len(taskIDs))
+	fmt.Println("-------------------------")
+
+	for {
+		select {
+		case <-ticker.C:
+			for _, taskID := range taskIDs {
+				if completedTasks[taskID] || failedTasks[taskID] {
+					continue
+				}
+
+				// Get task status
+				statusJSON, err := conn.Cache.Get(context.Background(), taskID).Result()
+				if err != nil {
+					newStatus := fmt.Sprintf("Error: %v", err)
+					if previousStatuses[taskID] != newStatus {
+						fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
+						previousStatuses[taskID] = newStatus
+					}
+					continue
+				}
+
+				// Parse status
+				var status string
+				var result map[string]interface{}
+
+				// First try to parse as simple string (for "queued" or "running" status)
+				err = json.Unmarshal([]byte(statusJSON), &status)
+				if err == nil {
+					// It's a string status
+					if previousStatuses[taskID] != status {
+						fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, status)
+						previousStatuses[taskID] = status
+					}
+				} else {
+					// Try to parse as result object
+					err = json.Unmarshal([]byte(statusJSON), &result)
+					if err == nil {
+						// Check if it has an error field
+						if errMsg, ok := result["error"]; ok && errMsg != nil {
+							newStatus := fmt.Sprintf("Failed: %v", errMsg)
+							if previousStatuses[taskID] != newStatus {
+								fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
+								previousStatuses[taskID] = newStatus
+							}
+							failedTasks[taskID] = true
+						} else {
+							// Task completed successfully
+							newStatus := "Completed successfully"
+							if previousStatuses[taskID] != newStatus {
+								fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
+								previousStatuses[taskID] = newStatus
+							}
+							completedTasks[taskID] = true
+						}
+					} else {
+						newStatus := fmt.Sprintf("Error parsing status: %v", err)
+						if previousStatuses[taskID] != newStatus {
+							fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
+							previousStatuses[taskID] = newStatus
+						}
+					}
+				}
+			}
+
+			// Check if all tasks are completed or failed
+			if len(completedTasks)+len(failedTasks) == len(taskIDs) {
+				fmt.Printf("\n=== MONITORING COMPLETE ===\n")
+				fmt.Printf("Duration: %v\n", time.Since(startTime).Round(time.Millisecond))
+				fmt.Printf("%d/%d tasks completed successfully.\n", len(completedTasks), len(taskIDs))
+
+				// List failed tasks if any
+				if len(failedTasks) > 0 {
+					fmt.Println("\nFailed tasks:")
+					for _, taskID := range taskIDs {
+						if failedTasks[taskID] {
+							fmt.Printf("  - %s (Status: %s)\n", taskID, previousStatuses[taskID])
+						}
+					}
+				}
+
+				// Return true only if all tasks completed successfully
+				return len(completedTasks) == len(taskIDs)
+			}
+
+			if time.Since(startTime) > timeout {
+				fmt.Printf("\n=== MONITORING TIMEOUT ===\n")
+				fmt.Printf("Timeout after %v waiting for tasks to complete.\n", timeout)
+				fmt.Printf("%d/%d tasks completed successfully.\n", len(completedTasks), len(taskIDs))
+
+				// List incomplete and failed tasks
+				if len(completedTasks) < len(taskIDs) {
+					fmt.Println("\nIncomplete or failed tasks:")
+					for _, taskID := range taskIDs {
+						if !completedTasks[taskID] {
+							fmt.Printf("  - %s (Last status: %s)\n", taskID, previousStatuses[taskID])
+						}
+					}
+				}
+
+				return false
+			}
+		}
 	}
 }
 
@@ -359,7 +512,6 @@ func monitorTasks(conn *utils.Conn, taskIDs []string) {
 	for {
 		select {
 		case <-ticker.C:
-			allCompleted := true
 			for _, taskID := range taskIDs {
 				if completedTasks[taskID] {
 					continue
@@ -390,7 +542,7 @@ func monitorTasks(conn *utils.Conn, taskIDs []string) {
 					}
 
 					if status != "completed" && status != "error" {
-						allCompleted = false
+						continue
 					} else {
 						completedTasks[taskID] = true
 					}
@@ -430,15 +582,15 @@ func monitorTasks(conn *utils.Conn, taskIDs []string) {
 							fmt.Println("======================")
 							completedTasks[taskID] = true
 						} else {
-							allCompleted = false
+							continue
 						}
 					} else {
-						allCompleted = false
+						continue
 					}
 				}
 			}
 
-			if allCompleted {
+			if len(completedTasks) == len(taskIDs) {
 				duration := time.Since(startTime).Round(time.Millisecond)
 				fmt.Printf("\n=== MONITORING COMPLETE ===\n")
 				fmt.Printf("All %d tasks completed in %v\n", len(taskIDs), duration)
@@ -468,8 +620,9 @@ func monitorTasks(conn *utils.Conn, taskIDs []string) {
 }
 
 func getQueueStatus() {
-	// Create connection
-	conn, cleanup := utils.InitConn(true)
+	// Create a connection
+	inContainer := os.Getenv("IN_CONTAINER") == "true"
+	conn, cleanup := utils.InitConn(inContainer)
 	defer cleanup()
 
 	// Get the queue length
@@ -529,7 +682,8 @@ func getQueueStatus() {
 
 func monitorTask(taskID string) {
 	// Create a connection
-	conn, cleanup := utils.InitConn(true)
+	inContainer := os.Getenv("IN_CONTAINER") == "true"
+	conn, cleanup := utils.InitConn(inContainer)
 	defer cleanup()
 
 	// Monitor a single task
@@ -609,6 +763,12 @@ func printUsage() {
 }
 
 func main() {
+	// Check if we're running in a container
+	if os.Getenv("IN_CONTAINER") == "" {
+		// If not explicitly set, default to false when running on host
+		os.Setenv("IN_CONTAINER", "false")
+	}
+
 	if len(os.Args) < 2 {
 		printUsage()
 		return
