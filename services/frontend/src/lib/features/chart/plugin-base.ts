@@ -34,10 +34,16 @@ export abstract class PluginBase implements ISeriesPrimitive<Time> {
 	}
 
 	public get chart(): IChartApi {
+		if (!this._chart) {
+			throw new Error('Chart is not initialized');
+		}
 		return this._chart;
 	}
 
 	public get series(): ISeriesApi<keyof SeriesOptionsMap> {
+		if (!this._series) {
+			throw new Error('Series is not initialized');
+		}
 		return this._series;
 	}
 

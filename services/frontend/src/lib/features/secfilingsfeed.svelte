@@ -2,10 +2,38 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { privateRequest } from '$lib/core/backend';
 	import { subscribeSECFilings, unsubscribeSECFilings } from '$lib/utils/stream/socket';
-	import { addGlobalSECFilingsStream, releaseGlobalSECFilingsStream } from '$lib/utils/stream/interface';
-	import { globalFilings, formatTimestamp, handleSECFilingMessage } from '$lib/utils/stream/secfilings';
+	import {
+		addGlobalSECFilingsStream,
+		releaseGlobalSECFilingsStream
+	} from '$lib/utils/stream/interface';
+	import {
+		globalFilings,
+		formatTimestamp,
+		handleSECFilingMessage,
+		type Filing
+	} from '$lib/utils/stream/secfilings';
 	import { queryChart } from '$lib/features/chart/interface';
 	import List from '$lib/utils/modules/list.svelte';
+	import { writable, type Writable } from 'svelte/store';
+	import type { Instance } from '$lib/core/types';
+
+	// Create a writable store that adapts filings to the expected format
+	const filingsList: Writable<Instance[]> = writable([]);
+
+	// Subscribe to the globalFilings store and transform the data
+	const unsubscribeFilings = globalFilings.subscribe((filings) => {
+		if (filings) {
+			// Convert Filing[] to Instance[]
+			filingsList.set(
+				filings.map((filing) => ({
+					ticker: filing.ticker,
+					timestamp: filing.timestamp,
+					type: filing.type,
+					url: filing.url
+				}))
+			);
+		}
+	});
 
 	// Local component state
 	let isLoadingGlobalFilings = true;
@@ -13,7 +41,7 @@
 	let unsubscribeFn: Function | null = null;
 
 	// Function to handle clicking on a filing
-	function handleFilingClick(filing) {
+	function handleFilingClick(filing: Filing) {
 		// Find the security by ticker and load its chart
 		if (filing.ticker) {
 			queryChart({ ticker: filing.ticker });
@@ -23,20 +51,20 @@
 	function refreshFilings() {
 		isLoadingGlobalFilings = true;
 		privateRequest('getLatestEdgarFilings', {})
-			.then(filings => {
+			.then((filings) => {
 				console.log('Received filings from API:', filings);
 				handleSECFilingMessage(filings);
 				isLoadingGlobalFilings = false;
 			})
-			.catch(error => {
+			.catch((error) => {
 				console.error('Failed to refresh SEC filings:', error);
 				isLoadingGlobalFilings = false;
 			});
 	}
 
 	// Function to handle WebSocket messages for SEC filings
-	function handleSocketMessage(data) {
-		console.log("SEC Filing message received via socket:", data);
+	function handleSocketMessage(data: any) {
+		console.log('SEC Filing message received via socket:', data);
 		handleSECFilingMessage(data);
 		isLoadingGlobalFilings = false;
 	}
@@ -45,67 +73,52 @@
 	onMount(() => {
 		subscribeSECFilings();
 		isSubscribed = true;
-		
+
 		// Store the unsubscribe function for later cleanup
 		unsubscribeFn = addGlobalSECFilingsStream(handleSocketMessage);
 	});
 
 	// Clean up subscription on component destroy
 	onDestroy(() => {
-		if (isSubscribed) {
-			unsubscribeSECFilings();
-			isSubscribed = false;
-		}
-		
 		if (unsubscribeFn) {
 			unsubscribeFn();
-			unsubscribeFn = null;
 		}
+		if (isSubscribed) {
+			unsubscribeSECFilings();
+		}
+		unsubscribeFilings();
 	});
 
 	// Add this function to handle focus
 	function handleTableFocus() {
 		// This is just to ensure the table container gets focus
-		console.log("Table focused");
+		console.log('Table focused');
 	}
 </script>
 
-<div class="filings-container">
-	<div class="header-section">
-		<h2>SEC Filings Feed</h2>
-		<button class="refresh-button" on:click={refreshFilings} disabled={isLoadingGlobalFilings}>
-			{isLoadingGlobalFilings ? 'Loading...' : 'Refresh'}
-		</button>
+<div class="feature-container">
+	<div class="feature-header">
+		<h2>SEC Filings</h2>
+		<div class="feature-controls">
+			<button on:click={refreshFilings} disabled={isLoadingGlobalFilings}>
+				{isLoadingGlobalFilings ? 'Loading...' : 'Refresh'}
+			</button>
+		</div>
 	</div>
 
-	{#if isLoadingGlobalFilings}
-		<div class="loading-container">
-			<div class="loading-spinner"></div>
-			<div>Loading SEC filings...</div>
-		</div>
-	{:else if $globalFilings.length === 0}
-		<div class="no-data">No SEC filings found</div>
-	{:else}
-		<!-- Direct List component like in newsfeed.svelte -->
+	<div class="feature-content">
 		<List
-			list={$globalFilings}
+			list={filingsList}
 			columns={['ticker', 'type', 'timestamp', 'url']}
-			displayNames={{
-				ticker: 'Ticker',
-				type: 'Filing Type',
-				timestamp: 'Date',
-				url: 'Link'
-			}}
 			formatters={{
-				timestamp: (value) => formatTimestamp(value),
-				url: (value) => 'View Filing'
+				timestamp: (value) => formatTimestamp(value)
 			}}
 			linkColumns={{
 				url: (item) => item.url
 			}}
-			onRowClick={handleFilingClick}
+			on:rowClick={(e) => handleFilingClick(e.detail)}
 		/>
-	{/if}
+	</div>
 </div>
 
 <style>
@@ -159,8 +172,12 @@
 	}
 
 	@keyframes spin {
-		0% { transform: rotate(0deg); }
-		100% { transform: rotate(360deg); }
+		0% {
+			transform: rotate(0deg);
+		}
+		100% {
+			transform: rotate(360deg);
+		}
 	}
 
 	.no-data {
@@ -176,4 +193,4 @@
 		overflow-y: auto;
 		min-height: 0;
 	}
-</style> 
+</style>
