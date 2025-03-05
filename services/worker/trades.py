@@ -60,7 +60,6 @@ def grab_user_trades(
             utc = pytz.UTC
 
             for row in cursor.fetchall():
-                est_time = eastern.localize(row[9][0]) if row[9] else None
                 combined_trades = []
 
                 for i in range(len(row[9])) if row[9] else []:
@@ -127,7 +126,7 @@ def grab_user_trades(
 
     except Exception as e:
         error_info = traceback.format_exc()
-        print(f"Error fetching trades: {e}\n{error_info}")
+        print(f"Error fetching trades: {error_info}")
         return []
 
 

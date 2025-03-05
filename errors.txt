@@ -1,18 +1,65 @@
-Run cd services/backend
-Error: alerts/orh.go:8:6: func isORBreakout is unused (U1000)
-Error: alerts/orh.go:45:6: func getOpeningRange is unused (U1000)
-Error: jobs/securitiesTable.go:27:6: func logAction is unused (U1000)
-Error: jobs/securitiesTable.go:51:6: func validateTickerString is unused (U1000)
-Error: jobs/securitiesTable.go:63:6: func diff is unused (U1000)
-Error: jobs/securitiesTable.go:110:6: func dataExists is unused (U1000)
-Error: jobs/securitiesTable.go:139:6: func toFilteredMap is unused (U1000)
-Error: jobs/securitiesTable.go:149:6: func contains is unused (U1000)
-Error: jobs/securitiesTable.go:158:6: func updateSecurities is unused (U1000)
-Error: jobs/securitiesTable.go:178:12: unnecessary use of fmt.Sprintf (S1039)
-Error: jobs/securitiesTable.go:215:3: empty branch (SA9003)
-Error: jobs/securitiesTable.go:395:6: this value of err is never used (SA4006)
-Error: jobs/securitiesTable.go:435:3: this value of yesterdayDateString is never used (SA4006)
-Error: jobs/securitiesTable.go:620:3: empty branch (SA9003)
+./data.py:10:1: F401 'concurrent.futures.ThreadPoolExecutor' imported but unused
+from concurrent.futures import ThreadPoolExecutor, as_completed
+^
+./data.py:10:1: F401 'concurrent.futures.as_completed' imported but unused
+from concurrent.futures import ThreadPoolExecutor, as_completed
+^
+./data.py:11:1: F401 'tqdm.auto.tqdm' imported but unused
+from tqdm.auto import tqdm
+^
+./data.py:12:1: F401 'multiprocessing' imported but unused
+import multiprocessing, sys, time
+^
+./data.py:12:1: F401 'sys' imported but unused
+import multiprocessing, sys, time
+^
+./data.py:12:1: F401 'time' imported but unused
+import multiprocessing, sys, time
+^
+./data.py:139:9: F841 local variable 'pm' is assigned to but never used
+        pm,
+        ^
+./health_check.py:24:13: F841 local variable 'conn' is assigned to but never used
+            conn = Conn(inside_container=True)
+            ^
+./sector.py:6:1: F401 'psycopg2' imported but unused
+import psycopg2
+^
+./sector.py:7:1: F401 'psycopg2.extras.execute_batch' imported but unused
+from psycopg2.extras import execute_batch
+^
+./sector.py:10:1: F401 'os' imported but unused
+import os
+^
+./test/train2.py:17:1: F401 'tensorflow.keras.callbacks.EarlyStopping' imported but unused
+from tensorflow.keras.callbacks import EarlyStopping
+^
+./test/train2.py:131:9: E722 do not use bare 'except'
+        except:
+        ^
+./trades.py:63:17: F841 local variable 'est_time' is assigned to but never used
+                est_time = eastern.localize(row[9][0]) if row[9] else None
+                ^
+./trades.py:809:5: F841 local variable 'e' is assigned to but never used
+    except Exception as e:
+    ^
+./train.py:7:1: F401 'tensorflow.keras.layers' imported but unused
+from tensorflow.keras import layers
+^
+1     E722 do not use bare 'except'
+11    F401 'concurrent.futures.ThreadPoolExecutor' imported but unused
+4     F841 local variable 'pm' is assigned to but never used
+16
+Error: jobs/securitiesTable.go:29:6: func logAction is unused (U1000)
+Error: jobs/securitiesTable.go:43:6: func validateTickerString is unused (U1000)
+Error: jobs/securitiesTable.go:61:6: func diff is unused (U1000)
+Error: jobs/securitiesTable.go:101:6: func dataExists is unused (U1000)
+Error: jobs/securitiesTable.go:124:6: func toFilteredMap is unused (U1000)
+Error: jobs/securitiesTable.go:136:6: func contains is unused (U1000)
+Error: jobs/securitiesTable.go:145:6: func updateSecurities is unused (U1000)
+Error: jobs/securitiesTable.go:383:6: this value of err is never used (SA4006)
+Error: jobs/securitiesTable.go:423:3: this value of yesterdayDateString is never used (SA4006)
+Error: jobs/securitiesTable.go:614:3: empty branch (SA9003)
 Error: socket/aggs.go:539:7: type Period is unused (U1000)
 Error: socket/socket.go:56:2: field accumulatedPauseTime is unused (U1000)
 Error: tasks/alerts.go:125:3: this value of err is never used (SA4006)
@@ -31,18 +78,14 @@ Error: utils/quote.go:43:6: type silentLogger is unused (U1000)
 Error: utils/quote.go:45:24: func (*silentLogger).Printf is unused (U1000)
 Error: utils/quote.go:48:6: func configurePolygonClient is unused (U1000)
 Error: utils/time.go:145:6: func getStartOfTimeWindow is unused (U1000)
-Error: alerts/orh.go:8:6: func isORBreakout is unused (U1000)
-Error: alerts/orh.go:45:6: func getOpeningRange is unused (U1000)
-Error: jobs/securitiesTable.go:27:6: func logAction is unused (U1000)
-Error: jobs/securitiesTable.go:51:6: func validateTickerString is unused (U1000)
-Error: jobs/securitiesTable.go:63:6: func diff is unused (U1000)
-Error: jobs/securitiesTable.go:110:6: func dataExists is unused (U1000)
-Error: jobs/securitiesTable.go:139:6: func toFilteredMap is unused (U1000)
-Error: jobs/securitiesTable.go:149:6: func contains is unused (U1000)
-Error: jobs/securitiesTable.go:158:6: func updateSecurities is unused (U1000)
-Error: jobs/securitiesTable.go:178:12: unnecessary use of fmt.Sprintf (S1039)
-Error: jobs/securitiesTable.go:215:3: empty branch (SA9003)
-Error: jobs/securitiesTable.go:620:3: empty branch (SA9003)
+Error: jobs/securitiesTable.go:29:6: func logAction is unused (U1000)
+Error: jobs/securitiesTable.go:43:6: func validateTickerString is unused (U1000)
+Error: jobs/securitiesTable.go:61:6: func diff is unused (U1000)
+Error: jobs/securitiesTable.go:101:6: func dataExists is unused (U1000)
+Error: jobs/securitiesTable.go:124:6: func toFilteredMap is unused (U1000)
+Error: jobs/securitiesTable.go:136:6: func contains is unused (U1000)
+Error: jobs/securitiesTable.go:145:6: func updateSecurities is unused (U1000)
+Error: jobs/securitiesTable.go:614:3: empty branch (SA9003)
 Error: socket/aggs.go:539:7: type Period is unused (U1000)
 Error: socket/socket.go:56:2: field accumulatedPauseTime is unused (U1000)
 Error: tasks/chart.go:958:6: func max is unused (U1000)
