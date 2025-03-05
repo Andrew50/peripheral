@@ -4,6 +4,10 @@ on:
   pull_request:
     branches: [main, prod]
   
+  # Add push trigger for specific branches
+  push:
+    branches: [ben, aj]
+  
   # Add workflow_run trigger to run after branch-protection workflow
   workflow_run:
     workflows: ["Branch Protection Check"]
@@ -16,13 +20,23 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
+      continue_on_error: ${{ steps.check.outputs.continue_on_error }}
     steps:
       - id: check
         run: |
+          # For pushes to ben or aj branches, run but don't fail on errors
+          if [[ "${{ github.event_name }}" == "push" && ("${{ github.ref }}" == "refs/heads/ben" || "${{ github.ref }}" == "refs/heads/aj") ]]; then
+            echo "Running for push to ben/aj branch - will not fail on errors"
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            echo "continue_on_error=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
           # For direct PRs to main, always run
           if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "main" ]]; then
             echo "Running for PR to main branch"
             echo "should_run=true" >> $GITHUB_OUTPUT
+            echo "continue_on_error=false" >> $GITHUB_OUTPUT
             exit 0
           fi
           
@@ -31,9 +45,11 @@ jobs:
             if [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]]; then
               echo "Branch protection check passed, proceeding with tests"
               echo "should_run=true" >> $GITHUB_OUTPUT
+              echo "continue_on_error=false" >> $GITHUB_OUTPUT
             else
               echo "Branch protection check did not pass, skipping tests"
               echo "should_run=false" >> $GITHUB_OUTPUT
+              echo "continue_on_error=false" >> $GITHUB_OUTPUT
             fi
             exit 0
           fi
@@ -42,17 +58,21 @@ jobs:
           if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "prod" ]]; then
             echo "Skipping direct run for PR to prod - branch protection workflow should run first"
             echo "should_run=false" >> $GITHUB_OUTPUT
+            echo "continue_on_error=false" >> $GITHUB_OUTPUT
             exit 0
           fi
           
           # Default case
           echo "Running tests by default"
           echo "should_run=true" >> $GITHUB_OUTPUT
+          echo "continue_on_error=false" >> $GITHUB_OUTPUT
 
   lint-and-build-backend:
     needs: check-workflow-conditions
     if: needs.check-workflow-conditions.outputs.should_run == 'true'
     runs-on: ubuntu-latest
+    # Set continue-on-error based on the branch condition
+    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     # Add permissions block for annotations
     permissions:
       contents: read
@@ -87,22 +107,30 @@ jobs:
           skip-build-cache: true
           # Fail on any issues
           only-new-issues: false
+        # Individual step can continue on error for ben/aj branches
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Go Staticcheck
         run: |
           cd backend
           # Run staticcheck with strict settings to catch unused variables, error handling issues, etc.
           staticcheck -checks=all ./...
+        # Individual step can continue on error for ben/aj branches
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Go Build
         run: |
           cd backend
           go build -v ./...
+        # Individual step can continue on error for ben/aj branches
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
   lint-and-build-worker:
     needs: check-workflow-conditions
     if: needs.check-workflow-conditions.outputs.should_run == 'true'
     runs-on: ubuntu-latest
+    # Set continue-on-error based on the branch condition
+    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -129,21 +157,29 @@ jobs:
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
           # Now fail on style issues as well
           flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
+        # Individual step can continue on error for ben/aj branches
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Format check with Black
         run: |
           cd worker
           black --check --diff .
+        # Individual step can continue on error for ben/aj branches
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Basic import check
         run: |
           cd worker
           python -m compileall .
+        # Individual step can continue on error for ben/aj branches
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
   lint-and-build-frontend:
     needs: check-workflow-conditions
     if: needs.check-workflow-conditions.outputs.should_run == 'true'
     runs-on: ubuntu-latest
+    # Set continue-on-error based on the branch condition
+    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -167,14 +203,20 @@ jobs:
           cd frontend
           # Fail on any ESLint warnings
           npx eslint . --max-warnings=0
+        # Individual step can continue on error for ben/aj branches
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Type check
         run: |
           cd frontend
           # Fail on warnings and hints
           npx svelte-check --threshold warning --fail-on-warnings=true --fail-on-hints=true
+        # Individual step can continue on error for ben/aj branches
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Build
         run: |
           cd frontend
-          npm run build 
+          npm run build
+        # Individual step can continue on error for ben/aj branches
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }} 
