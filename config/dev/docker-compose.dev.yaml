@@ -1,0 +1,117 @@
+services:
+  backend:
+    build:
+      context: ../../services/backend
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    ports:
+      - "5057:5057"
+    volumes:
+      - ../../services/backend/:/app
+    networks:
+      - compose_network
+    environment:
+      - DB_USER=postgres
+      - DB_PASSWORD=devpassword
+      - DB_HOST=db
+      - POSTGRES_DB=postgres
+  db:
+    build:
+      context: ../../services/db
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5432:5432"
+    networks:
+      - compose_network
+    volumes:
+      - db:/var/lib/postgresql/data
+      - ../../services/db/rollouts:/tmp/rollouts:rw
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=devpassword
+      - POSTGRES_DB=postgres
+
+  frontend:
+    build:
+      context: ../../services/frontend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ../../services/frontend:/app
+      - /app/node_modules
+    environment:
+      - WATCHPACK_POLLING=true #enable polling
+    ports:
+      - "5173:5173"
+    restart: unless-stopped
+
+  tf:
+    build:
+      context: ../../services/tf
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+      - "8500:8500"
+    volumes:
+      - tf:/models
+    networks:
+      - compose_network
+    environment:
+      - MODEL_NAME=1
+      - MODEL_VERSION=9
+
+  worker:
+    build:
+      context: ../../services/worker
+      dockerfile: Dockerfile.dev
+    networks:
+      - compose_network
+    volumes:
+      - ../../services/worker:/app #for hot reload
+      - tf:/models
+    restart: unless-stopped
+    environment:
+      - DB_USER=postgres
+      - DB_PASSWORD=devpassword
+      - DB_HOST=db
+      - REDIS_HOST=cache
+      - TF_MODEL_NAME=1
+      - TF_MODEL_VERSION=9
+      - POLYGON_API_KEY=${POLYGON_API_KEY}
+    deploy:
+      resources:
+        limits:
+          memory: 32g
+          cpus: '4.0'
+            #ulimits:
+            #stack: 65536
+
+  cache:
+    build:
+      context: ../../services/cache
+      dockerfile: Dockerfile
+    ports:
+      - 6379:6379
+    networks:
+      - compose_network
+    hostname: redis
+    volumes:
+      - cache:/data
+    command: redis-server --maxclients 1000 --tcp-keepalive 60 --timeout 300 --appendonly yes --maxmemory 800mb --maxmemory-policy allkeys-lru --io-threads 4
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: '1.0'
+
+volumes:
+  db:
+  cache:
+  tf:
+
+
+networks:
+  compose_network:
+    driver: bridge
