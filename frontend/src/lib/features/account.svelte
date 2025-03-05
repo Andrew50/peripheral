@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { privateFileRequest } from '$lib/core/backend';
+	import { privateFileRequest, privateRequest } from '$lib/core/backend';
 	import { queueRequest } from '$lib/core/backend';
 	import type { Instance } from '$lib/core/types';
 	import List from '$lib/utils/modules/list.svelte';
@@ -115,9 +115,11 @@
 				params.ticker = selectedTicker.toUpperCase();
 			}
 
-			const result = await queueRequest<Trade[]>('grab_user_trades', params);
-			trades.set(result);
-			message = 'Trades loaded successfully';
+			privateRequest<Trade[]>('grab_user_trades', params).then((result) => {
+				console.log(result);
+				trades.set(result);
+				message = 'Trades loaded successfully';
+			});
 		} catch (error) {
 			message = `Error: ${error}`;
 			console.error('Load trades error:', error);
@@ -131,10 +133,11 @@
 			if (statStartDate) params.start_date = statStartDate;
 			if (statEndDate) params.end_date = statEndDate;
 			if (statTicker) params.ticker = statTicker.toUpperCase();
-
-			const result = await queueRequest('get_trade_statistics', params);
-			statistics.set(result);
-			message = 'Statistics loaded successfully';
+			privateRequest<{}>('get_trade_statistics', params).then((result) => {
+				console.log(result);
+				statistics.set(result);
+				message = 'Statistics loaded successfully';
+			});
 		} catch (error) {
 			message = `Error: ${error}`;
 			console.error('Load statistics error:', error);
@@ -158,9 +161,11 @@
 				params.ticker = selectedTicker.toUpperCase();
 			}
 
-			const result = await queueRequest('get_ticker_performance', params);
-			tickerStats.set(result);
-			message = 'Ticker stats loaded successfully';
+			privateRequest<TickerStats[]>('get_ticker_performance', params).then((result) => {
+				console.log(result);
+				tickerStats.set(result);
+				message = 'Ticker stats loaded successfully';
+			});
 		} catch (error) {
 			message = `Error: ${error}`;
 			console.error('Load ticker stats error:', error);
@@ -180,16 +185,17 @@
 			try {
 				deletingTrades = true;
 				message = 'Deleting all trades...';
+				
+				privateRequest<{}>('delete_all_user_trades', {}).then((result) => {
 
-				const result = await queueRequest('delete_all_user_trades', {});
-
-				if (result.status === 'success') {
-					message = result.message;
-					// Refresh the trades list
-					trades.set([]);
-				} else {
-					message = `Error: ${result.message}`;
-				}
+					if(result.status === 'success') {
+						message = result.message;
+						// Refresh the trades list
+						trades.set([]);
+					} else {
+						message = `Error: ${result.message}`;
+					}
+				});
 			} catch (error) {
 				message = `Error: ${error}`;
 				console.error('Delete trades error:', error);
