@@ -1,13 +1,13 @@
 import yfinance as yf
+import requests
+from conn import Conn
+from multiprocessing import Pool, cpu_count
+from datetime import datetime
 import psycopg2
 from psycopg2.extras import execute_batch
 import time
 import random
 import os
-import requests
-from conn import Conn
-from multiprocessing import Pool, cpu_count
-from datetime import datetime
 
 USE_DATABASE = True  # Set to False to print output instead of saving to database
 
