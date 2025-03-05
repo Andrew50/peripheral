@@ -58,6 +58,26 @@ func HandleTradeUpload(conn *utils.Conn, userID int, rawArgs json.RawMessage) (i
 	if err != nil {
 		return nil, fmt.Errorf("error reading CSV data: %v", err)
 	}
+	fmt.Println("debug: records", records)
+	// Add a check to identify and skip the column headers row
+	// Usually column headers contain non-numeric text in fields that should be numeric
+	for i := 0; i < len(records); i++ {
+		if len(records[i]) >= 4 {
+			// Check if this row looks like a header by seeing if the quantity field contains non-numeric text
+			quantity := strings.Trim(records[i][3], "\"")
+			quantity = strings.ReplaceAll(quantity, ",", "")
+			_, err := strconv.ParseFloat(quantity, 64)
+			if err != nil && strings.ToLower(quantity) != "" {
+				// This is likely a header row, remove it
+				if i < len(records)-1 {
+					records = append(records[:i], records[i+1:]...)
+				} else {
+					records = records[:i]
+				}
+				break
+			}
+		}
+	}
 
 	// Use the EXISTING connection instead of creating a new one
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
