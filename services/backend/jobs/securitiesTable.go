@@ -43,6 +43,7 @@ func logAction(test bool, loop int, ticker string, targetTicker string, figi str
 
 // validateTickerString validates a ticker string format.
 // Currently unused but kept for future input validation.
+// nolint:unused
 func validateTickerString(ticker string) bool {
 	if strings.Contains(ticker, ".") {
 		return false
@@ -57,6 +58,7 @@ func validateTickerString(ticker string) bool {
 
 // diff compares two sets of tickers and returns the differences.
 // Currently unused but kept for future reconciliation features.
+// nolint:unused
 func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []models.Ticker, []models.Ticker) {
 	additions := []models.Ticker{}
 	removals := []models.Ticker{}
@@ -97,6 +99,7 @@ func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []mode
 
 // dataExists checks if market data exists for a ticker in a given date range.
 // Currently unused but kept for future data validation features.
+// nolint:unused
 func dataExists(client *polygon.Client, ticker string, fromDate string, toDate string) bool {
 	timespan := models.Timespan("day")
 	fromMillis, err := utils.MillisFromDatetimeString(fromDate)
@@ -120,6 +123,7 @@ func dataExists(client *polygon.Client, ticker string, fromDate string, toDate s
 
 // toFilteredMap converts a slice of tickers to a filtered map.
 // Currently unused but kept for future filtering features.
+// nolint:unused
 func toFilteredMap(tickers []models.Ticker) map[string]models.Ticker {
 	tickerMap := make(map[string]models.Ticker)
 	for _, sec := range tickers {
@@ -132,6 +136,7 @@ func toFilteredMap(tickers []models.Ticker) map[string]models.Ticker {
 
 // contains checks if a string slice contains a specific item.
 // Currently unused but kept for future utility use.
+// nolint:unused
 func contains(slice []string, item string) bool {
 	for _, str := range slice {
 		if str == item {
@@ -143,6 +148,7 @@ func contains(slice []string, item string) bool {
 
 // updateSecurities updates the securities table with new data.
 // Currently unused but kept for future automated updates.
+// nolint:unused
 func updateSecurities(conn *utils.Conn, test bool) error {
 	var startDate time.Time
 	//fmt.Print(dataExists(conn.Polygon,"VBR","2003-09-24","2004-01-29"))
