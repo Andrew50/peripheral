@@ -6,21 +6,21 @@ on:
     branches:
       - dev
       - prod
-  
+
   # Different trigger for pull requests with explicit configuration
   pull_request:
     types: [opened, synchronize, reopened]
     branches:
       - dev
       - prod
-  
+
   # Manual triggering
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Branch to deploy'
+        description: "Branch to deploy"
         required: true
-        default: 'dev'
+        default: "dev"
 
 # Add permissions configuration here
 permissions:
@@ -41,7 +41,7 @@ jobs:
           # The actual dependency is handled by the workflow_run trigger
 
   deploy:
-    runs-on: self-hosted  # Using self-hosted runner instead of ubuntu-latest
+    runs-on: self-hosted # Using self-hosted runner instead of ubuntu-latest
     needs: check-build
     if: github.event_name != 'pull_request' || success()
     # Add job-level permissions to ensure access to secrets
@@ -49,7 +49,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
-    
+
     # Add environment variables for the job
     env:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
@@ -57,7 +57,7 @@ jobs:
       DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
       REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
       POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
-    
+
     steps:
       # Print debugging information before checkout
       - name: Debug Event Information
@@ -95,7 +95,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 1
           lfs: false
-      
+
       # Add diagnostic step to see what's available after checkout
       - name: Show Git Information
         run: |
@@ -104,14 +104,14 @@ jobs:
           echo "Git status: $(git status)"
           echo "Current branch: $(git branch --show-current)"
           git --version
-      
+
       # Verify secrets are available without exposing them
       - name: Verify Docker Credentials
         run: |
           echo "Docker username secret: $(if [ -n "${{ secrets.DOCKER_USERNAME }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
           echo "Docker token secret: $(if [ -n "${{ secrets.DOCKER_TOKEN }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
           echo "DB password secret: $(if [ -n "${{ secrets.DB_ROOT_PASSWORD }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
-      
+
       # Setup and configuration
       - name: Setup deployment
         run: |
@@ -130,11 +130,11 @@ jobs:
           log "Current working directory: $(pwd)"
           log "Current user: $(whoami)"
           log "Current branch: ${{ env.TARGET_BRANCH }}"
-          
+
           # Sanitize branch name for Docker tags (replace / with - and other invalid characters)
           DOCKER_TAG=$(echo "${{ env.TARGET_BRANCH }}" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_.-]/-/g')
           echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
-          
+
           log "Docker tag: ${DOCKER_TAG}"
           log "Files in current directory: $(ls -la)"
           log "Starting deployment process for branch: ${{ env.TARGET_BRANCH }}..."
@@ -147,12 +147,12 @@ jobs:
           log() {
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
           }
-          
+
           # Function to log errors
           error_log() {
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
           }
-          
+
           # Modified check for Docker credentials using env context
           if [ -z "$DOCKER_USERNAME" ]; then
             error_log "DOCKER_USERNAME secret is not available"
@@ -165,21 +165,21 @@ jobs:
             error_log "6. Click 'Add secret'"
             exit 1
           fi
-          
+
           log "Building Docker images with tag: ${{ env.DOCKER_TAG }}..."
           log "Using Docker username: $DOCKER_USERNAME"
-          
-          docker build -t $DOCKER_USERNAME/frontend:${{ env.DOCKER_TAG }} -f frontend/Dockerfile.prod frontend
-          docker build -t $DOCKER_USERNAME/backend:${{ env.DOCKER_TAG }} -f backend/Dockerfile.prod backend
-          docker build -t $DOCKER_USERNAME/worker:${{ env.DOCKER_TAG }} -f worker/Dockerfile.prod worker
-          docker build -t $DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }} -f worker/Dockerfile.healthcheck worker
-          docker build -t $DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }} -f tf/Dockerfile.prod tf
-          docker build -t $DOCKER_USERNAME/nginx:${{ env.DOCKER_TAG }} -f nginx/Dockerfile nginx
-          
+
+          docker build -t $DOCKER_USERNAME/frontend:${{ env.DOCKER_TAG }} -f services/frontend/Dockerfile.prod services/frontend
+          docker build -t $DOCKER_USERNAME/backend:${{ env.DOCKER_TAG }} -f services/backend/Dockerfile.prod services/backend
+          docker build -t $DOCKER_USERNAME/worker:${{ env.DOCKER_TAG }} -f services/worker/Dockerfile.prod services/worker
+          docker build -t $DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }} -f services/worker/Dockerfile.healthcheck services/worker
+          docker build -t $DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }} -f services/tf/Dockerfile.prod services/tf
+          docker build -t $DOCKER_USERNAME/nginx:${{ env.DOCKER_TAG }} -f services/nginx/Dockerfile services/nginx
+
           # Build DB image with cron installed for scheduled backups
           log "Building DB image with secure configuration..."
-          docker build -t $DOCKER_USERNAME/db:${{ env.DOCKER_TAG }} -f db/Dockerfile.prod db
-          
+          docker build -t $DOCKER_USERNAME/db:${{ env.DOCKER_TAG }} -f services/db/Dockerfile.prod services/db
+
           # For prod branch, also tag as latest
           # For dev branch, also tag as development
           if [ "${{ env.TARGET_BRANCH }}" = "prod" ]; then
@@ -209,14 +209,14 @@ jobs:
           log() {
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
           }
-          
+
           # Function to log errors
           error_log() {
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
           }
-          
+
           log "Preparing to push Docker images to registry with tag: ${{ env.DOCKER_TAG }}..."
-          
+
           # Check Docker token and fail if not set
           if [ -z "$DOCKER_TOKEN" ]; then
             error_log "DOCKER_TOKEN secret is not available"
@@ -229,16 +229,16 @@ jobs:
             error_log "6. Click 'Add secret'"
             exit 1
           fi
-          
+
           # Directly use environment variables for Docker login
           log "Logging into Docker Hub using username: $DOCKER_USERNAME..."
           echo "$DOCKER_TOKEN" | docker login -u "$DOCKER_USERNAME" --password-stdin || {
             error_log "Docker login failed. Please check your credentials."
             exit 1
           }
-          
+
           log "Docker login successful, proceeding with image push..."
-          
+
           # Push images with the branch-specific tag
           docker push $DOCKER_USERNAME/frontend:${{ env.DOCKER_TAG }}
           docker push $DOCKER_USERNAME/backend:${{ env.DOCKER_TAG }}
@@ -247,7 +247,7 @@ jobs:
           docker push $DOCKER_USERNAME/tf:${{ env.DOCKER_TAG }}
           docker push $DOCKER_USERNAME/db:${{ env.DOCKER_TAG }}
           docker push $DOCKER_USERNAME/nginx:${{ env.DOCKER_TAG }}
-          
+
           # Push additional tags based on branch
           if [ "${{ env.TARGET_BRANCH }}" = "prod" ]; then
             log "Pushing 'latest' tagged images..."
@@ -276,44 +276,44 @@ jobs:
           log() {
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
           }
-          
+
           # Function to log errors
           error_log() {
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
           }
-          
+
           # Check if DB_ROOT_PASSWORD secret is set
           if [ -z "${{ secrets.DB_ROOT_PASSWORD }}" ]; then
             error_log "DB_ROOT_PASSWORD secret is not available"
             error_log "Please add the DB_ROOT_PASSWORD secret in your GitHub repository"
             exit 1
           fi
-          
+
           # Check if REDIS_PASSWORD secret is set
           if [ -z "${{ secrets.REDIS_PASSWORD }}" ]; then
             error_log "REDIS_PASSWORD secret is not available"
             error_log "Please add the REDIS_PASSWORD secret in your GitHub repository"
             exit 1
           fi
-          
+
           # Check if POLYGON_API_KEY secret is set
           if [ -z "${{ secrets.POLYGON_API_KEY }}" ]; then
             error_log "POLYGON_API_KEY secret is not available"
             error_log "Please add the POLYGON_API_KEY secret in your GitHub repository"
             exit 1
           fi
-          
+
           log "Updating Kubernetes secrets with secure database and Redis passwords..."
-          
+
           # Create a temporary file for the secrets
           TEMP_DIR=$(mktemp -d)
           SECRETS_FILE="$TEMP_DIR/secrets.yaml"
-          
+
           # Store the secrets in variables first
           DB_PASSWORD_B64=$(echo -n "${{ secrets.DB_ROOT_PASSWORD }}" | base64 -w 0)
           REDIS_PASSWORD_B64=$(echo -n "${{ secrets.REDIS_PASSWORD }}" | base64 -w 0)
           POLYGON_API_KEY_B64=$(echo -n "${{ secrets.POLYGON_API_KEY }}" | base64 -w 0)
-          
+
           # Create the secrets YAML with the password from GitHub secrets
           # Standardize on DB_ROOT_PASSWORD as the primary database password key
           cat > "$SECRETS_FILE" << EOF
@@ -341,26 +341,26 @@ jobs:
           data:
             api-key: ${POLYGON_API_KEY_B64}
           EOF
-          
+
           # Apply the secrets to Kubernetes
           kubectl apply -f "$SECRETS_FILE"
-          
+
           # Verify the secrets were created successfully
           if ! kubectl get secret redis-secret &>/dev/null; then
             error_log "Failed to create redis-secret"
             exit 1
           fi
-          
+
           if ! kubectl get secret db-secret &>/dev/null; then
             error_log "Failed to create db-secret"
             exit 1
           fi
-          
+
           if ! kubectl get secret polygon-secret &>/dev/null; then
             error_log "Failed to create polygon-secret"
             exit 1
           fi
-          
+
           # Verify the secrets have the correct keys
           log "Verifying secret keys are properly configured..."
           DB_SECRET_KEYS=$(kubectl get secret db-secret -o jsonpath='{.data}' | jq -r 'keys[]')
@@ -368,25 +368,25 @@ jobs:
             error_log "DB_ROOT_PASSWORD key is missing from db-secret"
             exit 1
           fi
-          
+
           REDIS_SECRET_KEYS=$(kubectl get secret redis-secret -o jsonpath='{.data}' | jq -r 'keys[]')
           if [[ "$REDIS_SECRET_KEYS" != *"REDIS_PASSWORD"* ]]; then
             error_log "REDIS_PASSWORD key is missing from redis-secret"
             exit 1
           fi
-          
+
           log "Secret key verification passed"
-          
+
           # Clean up
           rm -rf "$TEMP_DIR"
-          
+
           log "Kubernetes secrets updated successfully"
-          
+
           # Restart pods to apply the new secrets
           log "Restarting pods to apply the new secrets..."
           kubectl rollout restart deployment/backend
           kubectl rollout restart deployment/worker
-          
+
           # Wait for the restart to begin
           sleep 5
           log "Deployments restarted to pick up new secrets"
@@ -398,25 +398,25 @@ jobs:
           log() {
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
           }
-          
+
           # Function to log errors
           error_log() {
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
           }
-          
+
           log "Running database migrations from rollouts folder..."
-          
+
           # Get the database pod name
           DB_POD=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-          
+
           if [ -z "$DB_POD" ]; then
             error_log "Database pod not found. Make sure the database is deployed and running."
             kubectl get pods
             exit 1
           fi
-          
+
           log "Found database pod: $DB_POD"
-          
+
           # Wait for the database pod to be ready
           log "Waiting for database pod to be ready..."
           kubectl wait --for=condition=ready pod/$DB_POD --timeout=120s || {
@@ -424,7 +424,7 @@ jobs:
             kubectl describe pod/$DB_POD
             exit 1
           }
-          
+
           # Get the database password from the Kubernetes secret
           log "Retrieving database credentials from Kubernetes secret..."
           DB_PASSWORD=$(kubectl get secret db-secret -o jsonpath='{.data.DB_ROOT_PASSWORD}' | base64 --decode)
@@ -433,60 +433,60 @@ jobs:
             log "Warning: Could not retrieve DB_ROOT_PASSWORD from Kubernetes secret, using GitHub secret instead."
             DB_PASSWORD="${{ secrets.DB_ROOT_PASSWORD }}"
           fi
-          
+
           # Get the database name from the pod environment
           DB_NAME=$(kubectl exec $DB_POD -- sh -c 'echo $POSTGRES_DB' 2>/dev/null || echo "postgres")
           log "Using database name: $DB_NAME"
-          
+
           # Scale down services that access the database to prevent conflicts during migration
           log "Entering maintenance mode: Scaling down services that access the database..."
-          
+
           # Save current replica counts to restore later
           WORKER_REPLICAS=$(kubectl get deployment worker -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "1")
           BACKEND_REPLICAS=$(kubectl get deployment backend -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "1")
           TF_REPLICAS=$(kubectl get deployment tf -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "1")
-          
+
           log "Current replica counts - Worker: $WORKER_REPLICAS, Backend: $BACKEND_REPLICAS, TF: $TF_REPLICAS"
-          
+
           # Scale down services
           log "Scaling down worker deployment..."
           kubectl scale deployment worker --replicas=0 || log "Warning: Failed to scale down worker deployment"
-          
+
           log "Scaling down backend deployment..."
           kubectl scale deployment backend --replicas=0 || log "Warning: Failed to scale down backend deployment"
-          
+
           log "Scaling down tf deployment..."
           kubectl scale deployment tf --replicas=0 || log "Warning: Failed to scale down tf deployment"
-          
+
           # Wait for pods to terminate
           log "Waiting for pods to terminate..."
           sleep 10
-          
+
           # Check if all database-accessing pods are terminated
           RUNNING_PODS=$(kubectl get pods -l 'app in (worker,backend,tf)' --field-selector=status.phase=Running 2>/dev/null | wc -l)
           TIMEOUT=60
           ELAPSED=0
-          
+
           while [ $RUNNING_PODS -gt 1 ] && [ $ELAPSED -lt $TIMEOUT ]; do
             log "Waiting for pods to terminate... ($ELAPSED/$TIMEOUT seconds)"
             sleep 5
             ELAPSED=$((ELAPSED + 5))
             RUNNING_PODS=$(kubectl get pods -l 'app in (worker,backend,tf)' --field-selector=status.phase=Running 2>/dev/null | wc -l)
           done
-          
+
           if [ $RUNNING_PODS -gt 1 ]; then
             log "Warning: Some pods are still running after waiting $TIMEOUT seconds. Proceeding anyway."
             kubectl get pods -l 'app in (worker,backend,tf)'
           else
             log "All database-accessing pods have been terminated."
           fi
-          
+
           # Create a temporary directory for migrations on the pod
           kubectl exec $DB_POD -- mkdir -p /tmp/rollouts
-          
+
           # Copy all migration files to the pod
           log "Copying migration files to the database pod..."
-          for MIGRATION_FILE in db/rollouts/*.sql; do
+          for MIGRATION_FILE in services/db/rollouts/*.sql; do
             FILENAME=$(basename "$MIGRATION_FILE")
             log "Copying $FILENAME..."
             kubectl cp "$MIGRATION_FILE" "$DB_POD:/tmp/rollouts/$FILENAME" || {
@@ -494,7 +494,7 @@ jobs:
               exit 1
             }
           done
-          
+
           # Create a migration script that uses the password directly
           log "Creating migration script with secure credentials..."
           cat > migration_runner.sh << 'EOL'
@@ -513,7 +513,7 @@ jobs:
 
           # Replace the placeholder with the actual password
           sed -i "s/\$DB_PASSWORD/$DB_PASSWORD/g" migration_runner.sh
-          
+
           # Copy the migration runner to the pod and make it executable
           log "Copying migration runner script..."
           kubectl cp "migration_runner.sh" "$DB_POD:/tmp/run_migrations.sh" || {
@@ -521,25 +521,25 @@ jobs:
             exit 1
           }
           kubectl exec $DB_POD -- chmod +x /tmp/run_migrations.sh
-          
+
           # Clean up the local temporary file
           rm -f migration_runner.sh
-          
+
           # Add diagnostic information before running migrations
           log "Checking database connectivity from pod..."
           kubectl exec $DB_POD -- sh -c "pg_isready -U postgres" || {
             log "Warning: Database connectivity check failed. This might cause migration issues."
             kubectl exec $DB_POD -- sh -c "env | grep POSTGRES"
           }
-          
+
           # Execute the migration runner with a timeout
           log "Running migrations with a timeout of 300 seconds..."
           timeout 300 kubectl exec $DB_POD -- bash /tmp/run_migrations.sh "$DB_NAME" > migration_output.log 2>&1
           MIGRATION_EXIT_CODE=$?
-          
+
           # Capture the output
           MIGRATION_RESULT=$(cat migration_output.log)
-          
+
           # Check if the execution was successful or timed out
           if [ $MIGRATION_EXIT_CODE -eq 124 ]; then
             error_log "Migration timed out after 300 seconds."
@@ -551,31 +551,31 @@ jobs:
             error_log "$MIGRATION_RESULT"
             exit 1
           fi
-          
+
           log "Database migrations executed successfully:"
           echo "$MIGRATION_RESULT"
-          
+
           # Clean up
           kubectl exec $DB_POD -- rm -rf /tmp/rollouts /tmp/run_migrations.sh
           rm -f migration_output.log
-          
+
           log "Database schema updated successfully"
-          
+
           # Scale services back up
           log "Exiting maintenance mode: Scaling services back up..."
-          
+
           log "Scaling worker deployment back to $WORKER_REPLICAS replicas..."
           kubectl scale deployment worker --replicas=$WORKER_REPLICAS || log "Warning: Failed to scale worker deployment back up"
-          
+
           log "Scaling backend deployment back to $BACKEND_REPLICAS replicas..."
           kubectl scale deployment backend --replicas=$BACKEND_REPLICAS || log "Warning: Failed to scale backend deployment back up"
-          
+
           log "Scaling tf deployment back to $TF_REPLICAS replicas..."
           kubectl scale deployment tf --replicas=$TF_REPLICAS || log "Warning: Failed to scale tf deployment back up"
-          
+
           log "Services scaled back up. Waiting for pods to become ready..."
           sleep 5
-          
+
           # Show the status of the deployments
           kubectl get deployments
 
@@ -586,12 +586,12 @@ jobs:
           log() {
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
           }
-          
+
           # Function to log errors
           error_log() {
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
           }
-          
+
           # Function to check deployment status
           check_deployment_status() {
             local deployment=$1
@@ -602,7 +602,7 @@ jobs:
               return 1  # Failed or still in progress
             fi
           }
-          
+
           # Function to collect debug information for failed deployments
           collect_debug_info() {
             local deployment=$1
@@ -650,7 +650,7 @@ jobs:
               fi
             fi
           }
-          
+
           # Apply Kubernetes configurations, excluding secrets.yaml
           log "Applying Kubernetes configurations..."
           if [ "${{ env.TARGET_BRANCH }}" = "dev" ]; then
@@ -665,19 +665,19 @@ jobs:
             # Default to prod config for prod branch
             find prod/config -type f -name "*.yaml" ! -name "secrets.yaml" -exec kubectl apply -f {} \;
           fi
-          
+
           # Add debugging information about the cluster and deployments
           log "Getting cluster information before deployment..."
           kubectl get nodes
           kubectl get pods -o wide
           kubectl get deployments
-          
+
           # Define the deployments to update
           deployments=("backend" "frontend" "worker" "tf" "nginx")
-          
+
           # Update image tags for all deployments
           log "Updating deployments with images tagged: ${{ env.DOCKER_TAG }}..."
-          
+
           for deployment in "${deployments[@]}"; do
             log "Updating $deployment deployment..."
             kubectl set image deployment/$deployment $deployment=$DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }}
@@ -700,14 +700,14 @@ jobs:
               fi
             fi
           done
-          
+
           # Monitor deployments
           log "Monitoring deployments for successful rollout..."
-          
+
           # Set timeout values for each deployment (in seconds)
           declare -A timeouts
           timeouts=([backend]=300 [frontend]=180 [worker]=300 [tf]=180 [nginx]=180)
-          
+
           # Track start time for each deployment
           declare -A start_times
           declare -A deployment_status
@@ -715,7 +715,7 @@ jobs:
             start_times[$deployment]=$(date +%s)
             deployment_status[$deployment]="pending"
           done
-          
+
           # Continue monitoring until all deployments are completed or timed out
           deployment_failed=false
           while true; do
@@ -759,7 +759,7 @@ jobs:
             # Wait before checking again
             sleep 10
           done
-          
+
           # Check for any failed deployments
           if [ "$deployment_failed" = true ]; then
             error_log "One or more deployments failed. Check the logs for details."
@@ -822,4 +822,4 @@ jobs:
             fi
             
             log "Deployment process completed successfully for branch ${{ env.TARGET_BRANCH }}."
-          fi 
+          fi
