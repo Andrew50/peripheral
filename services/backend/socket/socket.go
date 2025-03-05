@@ -25,6 +25,7 @@ var (
 	lastTimestampUpdate time.Time
 	timestampMutex      sync.RWMutex
 )
+
 // ReplayData represents a structure for handling ReplayData data.
 type ReplayData struct {
 	channelTypes []string
@@ -32,6 +33,8 @@ type ReplayData struct {
 	refilling    bool
 	baseDataType string
 	securityId   int
+}
+
 // Client represents a structure for handling Client data.
 type Client struct {
 	ws                    *websocket.Conn
@@ -74,6 +77,7 @@ func getChannelNameType(timestamp int64) string {
 		return "extended"
 	}
 }
+
 // AlertMessage represents a structure for handling AlertMessage data.
 type AlertMessage struct {
 	AlertID    int    `json:"alertId"`
@@ -139,6 +143,7 @@ func BroadcastGlobalSECFiling(filing utils.GlobalEDGARFiling) {
 
 	broadcastToChannel("sec-filings", string(jsonData))
 }
+
 // SendAlertToUser performs operations related to SendAlertToUser functionality.
 func SendAlertToUser(userID int, alert AlertMessage) {
 	jsonData, err := json.Marshal(alert)
@@ -352,6 +357,7 @@ func (c *Client) close() {
 		fmt.Println("Error closing WebSocket connection:", err)
 	}
 }
+
 // HandleWebSocket performs operations related to HandleWebSocket functionality.
 func HandleWebSocket(conn *utils.Conn, ws *websocket.Conn, userID int) {
 	client := &Client{

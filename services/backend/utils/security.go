@@ -14,6 +14,7 @@ import (
 	"github.com/polygon-io/client-go/rest/iter"
 	"github.com/polygon-io/client-go/rest/models"
 )
+
 // GetTicker performs operations related to GetTicker functionality.
 func GetTicker(conn *Conn, securityId int, timestamp time.Time) (string, error) {
 	var ticker string
@@ -22,6 +23,7 @@ func GetTicker(conn *Conn, securityId int, timestamp time.Time) (string, error) 
 		return "", fmt.Errorf("igw0ngb %v", err)
 	}
 	return ticker, nil
+}
 
 // GetCIKFromTicker performs operations related to GetCIKFromTicker functionality.
 func GetCIKFromTicker(conn *Conn, ticker string, timestamp time.Time) (int64, error) {
@@ -32,6 +34,7 @@ func GetCIKFromTicker(conn *Conn, ticker string, timestamp time.Time) (int64, er
 	}
 	return cik, nil
 }
+
 // GetTickerNews performs operations related to GetTickerNews functionality.
 func GetTickerNews(client *polygon.Client, ticker string, millisTime models.Millis, ord string, limit int, compareType models.Comparator) *iter.Iter[models.TickerNews] {
 	sortOrder := models.Asc
@@ -46,11 +49,13 @@ func GetTickerNews(client *polygon.Client, ticker string, millisTime models.Mill
 		WithPublishedUTC(compareType, millisTime)
 	iter := client.ListTickerNews(context.Background(), params)
 	return iter
+}
 
 // GetLatestTickerNews performs operations related to GetLatestTickerNews functionality.
 func GetLatestTickerNews(client *polygon.Client, ticker string, numResults int) *iter.Iter[models.TickerNews] {
 	return GetTickerNews(client, ticker, models.Millis(time.Now()), "asc", numResults, models.LTE)
 }
+
 // GetPolygonRelatedTickers performs operations related to GetPolygonRelatedTickers functionality.
 func GetPolygonRelatedTickers(client *polygon.Client, ticker string) ([]string, error) {
 	params := &models.GetTickerRelatedCompaniesParams{
@@ -65,6 +70,8 @@ func GetPolygonRelatedTickers(client *polygon.Client, ticker string) ([]string, 
 		relatedTickers = append(relatedTickers, relatedTicker.Ticker)
 	}
 	return relatedTickers, nil
+}
+
 // GetTickerEvents performs operations related to GetTickerEvents functionality.
 func GetTickerEvents(client *polygon.Client, id string) ([]models.TickerEventResult, error) {
 	params := &models.GetTickerEventsParams{
@@ -75,7 +82,6 @@ func GetTickerEvents(client *polygon.Client, id string) ([]models.TickerEventRes
 		return nil, err
 	}
 	return res.Results, nil
-
 }
 
 /*type TickerResponse struct {
@@ -168,6 +174,7 @@ func GetCIK(conn *Conn, ticker string, dateOnly string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("function GetCIK could not find CIK for ticker: {%s} and date: {%s}", ticker, dateOnly)
+}
 // GetTickerFromFIGI performs operations related to GetTickerFromFIGI functionality.
 func GetTickerFromFIGI(conn *Conn, figi string, dateOnly string) (string, error) {
 	// First check securities table
@@ -205,6 +212,7 @@ func GetTickerFromFIGI(conn *Conn, figi string, dateOnly string) (string, error)
 	// }
 
 	return "", fmt.Errorf("function GetTickerFromFIGI could not find ticker for FIGI: {%s}", figi)
+}
 
 // GetFIGI performs operations related to GetFIGI functionality.
 func GetFIGI(conn *Conn, ticker string, dateOnly string) (string, error) {
