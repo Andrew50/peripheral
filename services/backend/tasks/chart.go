@@ -70,7 +70,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	if debug {
 		fmt.Printf("[DEBUG] Parsed timeframe => multiplier=%d, timespan=%s\n", multiplier, timespan)
 	}
-
 	// Determine if we must build a higher TF from a lower TF
 	var queryTimespan string
 	var queryMultiplier int

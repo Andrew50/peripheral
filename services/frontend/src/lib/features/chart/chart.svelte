@@ -298,6 +298,7 @@
 		})
 			.then((response) => {
 				const barDataList = response.bars;
+				console.log(response);
 				blockingChartQueryDispatch = inst;
 				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
 					return;
@@ -1349,8 +1350,13 @@
 			}
 
 			// Type guard to check if bar is CandlestickData
-			const isCandlestick = (data: any): data is CandlestickData<Time> =>
-				'open' in data && 'high' in data && 'low' in data && 'close' in data;
+
+			const isCandlestick = (data: any): data is CandlestickData<Time> => {
+				if (!data) {
+					return false;
+				}
+				return 'open' in data && 'high' in data && 'low' in data && 'close' in data;
+			};
 
 			if (!isCandlestick(bar)) {
 				return; // Skip if the bar is not CandlestickData

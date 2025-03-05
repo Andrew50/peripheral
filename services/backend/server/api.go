@@ -15,6 +15,9 @@ import (
 
 	"regexp"
 
+	"os"
+	"runtime/pprof"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -315,7 +318,6 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 			return
 		}
 
-		//fmt.Println("debug: got private request")
 		token_string := r.Header.Get("Authorization")
 		_, err := validateToken(token_string)
 		if handleError(w, err, "auth") {
@@ -333,7 +335,6 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 			http.Error(w, "Unsupported Media Type", http.StatusUnsupportedMediaType)
 			return
 		}
-
 		// Set security headers
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
@@ -640,6 +641,20 @@ func StartServer() {
 	http.HandleFunc("/private-upload", privateUploadHandler(conn))
 	http.HandleFunc("/health", healthHandler())
 	http.HandleFunc("/backend/health", healthHandler())
+
+	// Add debug endpoint for viewing goroutines (in development only)
+	if os.Getenv("DEBUG_ENABLED") == "true" {
+		http.HandleFunc("/debug/goroutines", func(w http.ResponseWriter, r *http.Request) {
+			// Set security headers
+			w.Header().Set("Content-Type", "text/plain")
+
+			// Get all goroutines
+			pprof.Lookup("goroutine").WriteTo(w, 1)
+		})
+
+		fmt.Println("Debug endpoints enabled at /debug/goroutines")
+	}
+
 	fmt.Println("debug: Server running on port 5057 ----------------------------------------------------------")
 	if err := http.ListenAndServe(":5057", nil); err != nil {
 		log.Fatal(err)
