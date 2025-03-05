@@ -77,7 +77,7 @@ func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var count int
 	err := conn.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM users WHERE email=$1", a.Email).Scan(&count)
 	if err != nil {
-		return nil, fmt.Errorf("Error checking email: %v", err)
+		return nil, fmt.Errorf("error checking email: %v", err)
 	}
 
 	if count > 0 {
@@ -89,7 +89,7 @@ func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		"INSERT INTO users (username, email, password, auth_type) VALUES ($1, $2, $3, $4)",
 		a.Username, a.Email, a.Password, "password")
 	if err != nil {
-		return nil, fmt.Errorf("Error creating user: %v", err)
+		return nil, fmt.Errorf("error creating user: %v", err)
 	}
 
 	// Create modified login args with the email
@@ -98,7 +98,7 @@ func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		"password": a.Password,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("Error preparing login: %v", err)
+		return nil, fmt.Errorf("error preparing login: %v", err)
 	}
 
 	// Log in the new user
@@ -116,7 +116,7 @@ type LoginArgs struct {
 func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var a LoginArgs
 	if err := json.Unmarshal(rawArgs, &a); err != nil {
-		return nil, fmt.Errorf("Login invalid args: %v", err)
+		return nil, fmt.Errorf("login invalid args: %v", err)
 	}
 
 	var resp LoginResponse
@@ -130,7 +130,7 @@ func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		a.Email).Scan(&userID, &resp.Username, &profilePicture, &authType)
 
 	if err != nil {
-		return nil, fmt.Errorf("Invalid Credentials: %v", err)
+		return nil, fmt.Errorf("invalid credentials: %v", err)
 	}
 
 	// Check if this is a Google-only auth user trying to use password login
@@ -145,7 +145,7 @@ func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		a.Password, userID).Scan(&passwordMatch)
 
 	if err != nil || !passwordMatch {
-		return nil, fmt.Errorf("invalid Credentials")
+		return nil, fmt.Errorf("invalid credentials")
 	}
 
 	token, err := createToken(userID)

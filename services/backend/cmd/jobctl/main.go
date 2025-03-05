@@ -18,6 +18,7 @@ type TableWriter struct {
 	rows    [][]string
 	writer  *os.File
 }
+
 // NewTableWriter performs operations related to NewTableWriter functionality.
 func NewTableWriter(writer *os.File) *TableWriter {
 	return &TableWriter{
@@ -388,105 +389,102 @@ func monitorTasksAndWait(conn *utils.Conn, taskIDs []string) bool {
 	fmt.Printf("Monitoring %d task(s)\n", len(taskIDs))
 	fmt.Println("-------------------------")
 
-	for {
-		select {
-		case <-ticker.C:
-			for _, taskID := range taskIDs {
-				if completedTasks[taskID] || failedTasks[taskID] {
-					continue
+	for range ticker.C {
+		for _, taskID := range taskIDs {
+			if completedTasks[taskID] || failedTasks[taskID] {
+				continue
+			}
+
+			// Get task status
+			statusJSON, err := conn.Cache.Get(context.Background(), taskID).Result()
+			if err != nil {
+				newStatus := fmt.Sprintf("Error: %v", err)
+				if previousStatuses[taskID] != newStatus {
+					fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
+					previousStatuses[taskID] = newStatus
 				}
+				continue
+			}
 
-				// Get task status
-				statusJSON, err := conn.Cache.Get(context.Background(), taskID).Result()
-				if err != nil {
-					newStatus := fmt.Sprintf("Error: %v", err)
-					if previousStatuses[taskID] != newStatus {
-						fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
-						previousStatuses[taskID] = newStatus
-					}
-					continue
+			// Parse status
+			var status string
+			var result map[string]interface{}
+
+			// First try to parse as simple string (for "queued" or "running" status)
+			err = json.Unmarshal([]byte(statusJSON), &status)
+			if err == nil {
+				// It's a string status
+				if previousStatuses[taskID] != status {
+					fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, status)
+					previousStatuses[taskID] = status
 				}
-
-				// Parse status
-				var status string
-				var result map[string]interface{}
-
-				// First try to parse as simple string (for "queued" or "running" status)
-				err = json.Unmarshal([]byte(statusJSON), &status)
+			} else {
+				// Try to parse as result object
+				err = json.Unmarshal([]byte(statusJSON), &result)
 				if err == nil {
-					// It's a string status
-					if previousStatuses[taskID] != status {
-						fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, status)
-						previousStatuses[taskID] = status
-					}
-				} else {
-					// Try to parse as result object
-					err = json.Unmarshal([]byte(statusJSON), &result)
-					if err == nil {
-						// Check if it has an error field
-						if errMsg, ok := result["error"]; ok && errMsg != nil {
-							newStatus := fmt.Sprintf("Failed: %v", errMsg)
-							if previousStatuses[taskID] != newStatus {
-								fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
-								previousStatuses[taskID] = newStatus
-							}
-							failedTasks[taskID] = true
-						} else {
-							// Task completed successfully
-							newStatus := "Completed successfully"
-							if previousStatuses[taskID] != newStatus {
-								fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
-								previousStatuses[taskID] = newStatus
-							}
-							completedTasks[taskID] = true
-						}
-					} else {
-						newStatus := fmt.Sprintf("Error parsing status: %v", err)
+					// Check if it has an error field
+					if errMsg, ok := result["error"]; ok && errMsg != nil {
+						newStatus := fmt.Sprintf("Failed: %v", errMsg)
 						if previousStatuses[taskID] != newStatus {
 							fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
 							previousStatuses[taskID] = newStatus
 						}
-					}
-				}
-			}
-
-			// Check if all tasks are completed or failed
-			if len(completedTasks)+len(failedTasks) == len(taskIDs) {
-				fmt.Printf("\n=== MONITORING COMPLETE ===\n")
-				fmt.Printf("Duration: %v\n", time.Since(startTime).Round(time.Millisecond))
-				fmt.Printf("%d/%d tasks completed successfully.\n", len(completedTasks), len(taskIDs))
-
-				// List failed tasks if any
-				if len(failedTasks) > 0 {
-					fmt.Println("\nFailed tasks:")
-					for _, taskID := range taskIDs {
-						if failedTasks[taskID] {
-							fmt.Printf("  - %s (Status: %s)\n", taskID, previousStatuses[taskID])
+						failedTasks[taskID] = true
+					} else {
+						// Task completed successfully
+						newStatus := "Completed successfully"
+						if previousStatuses[taskID] != newStatus {
+							fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
+							previousStatuses[taskID] = newStatus
 						}
+						completedTasks[taskID] = true
+					}
+				} else {
+					newStatus := fmt.Sprintf("Error parsing status: %v", err)
+					if previousStatuses[taskID] != newStatus {
+						fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
+						previousStatuses[taskID] = newStatus
 					}
 				}
-
-				// Return true only if all tasks completed successfully
-				return len(completedTasks) == len(taskIDs)
 			}
+		}
 
-			if time.Since(startTime) > timeout {
-				fmt.Printf("\n=== MONITORING TIMEOUT ===\n")
-				fmt.Printf("Timeout after %v waiting for tasks to complete.\n", timeout)
-				fmt.Printf("%d/%d tasks completed successfully.\n", len(completedTasks), len(taskIDs))
+		// Check if all tasks are completed or failed
+		if len(completedTasks)+len(failedTasks) == len(taskIDs) {
+			fmt.Printf("\n=== MONITORING COMPLETE ===\n")
+			fmt.Printf("Duration: %v\n", time.Since(startTime).Round(time.Millisecond))
+			fmt.Printf("%d/%d tasks completed successfully.\n", len(completedTasks), len(taskIDs))
 
-				// List incomplete and failed tasks
-				if len(completedTasks) < len(taskIDs) {
-					fmt.Println("\nIncomplete or failed tasks:")
-					for _, taskID := range taskIDs {
-						if !completedTasks[taskID] {
-							fmt.Printf("  - %s (Last status: %s)\n", taskID, previousStatuses[taskID])
-						}
+			// List failed tasks if any
+			if len(failedTasks) > 0 {
+				fmt.Println("\nFailed tasks:")
+				for _, taskID := range taskIDs {
+					if failedTasks[taskID] {
+						fmt.Printf("  - %s (Status: %s)\n", taskID, previousStatuses[taskID])
 					}
 				}
-
-				return false
 			}
+
+			// Return true only if all tasks completed successfully
+			return len(completedTasks) == len(taskIDs)
+		}
+
+		if time.Since(startTime) > timeout {
+			fmt.Printf("\n=== MONITORING TIMEOUT ===\n")
+			fmt.Printf("Timeout after %v waiting for tasks to complete.\n", timeout)
+			fmt.Printf("%d/%d tasks completed successfully.\n", len(completedTasks), len(taskIDs))
+
+			// List incomplete and failed tasks
+			if len(completedTasks) < len(taskIDs) {
+				fmt.Println("\nIncomplete or failed tasks:")
+				for _, taskID := range taskIDs {
+					if !completedTasks[taskID] {
+						fmt.Printf("  - %s (Last status: %s)\n", taskID, previousStatuses[taskID])
+					}
+				}
+			}
+
+			return false
 		}
 	}
 }
@@ -509,18 +507,46 @@ func monitorTasks(conn *utils.Conn, taskIDs []string) {
 	fmt.Printf("Monitoring %d task(s)\n", len(taskIDs))
 	fmt.Println("-------------------------")
 
-	for {
-		select {
-		case <-ticker.C:
-			for _, taskID := range taskIDs {
-				if completedTasks[taskID] {
-					continue
+	for range ticker.C {
+		for _, taskID := range taskIDs {
+			if completedTasks[taskID] {
+				continue
+			}
+
+			// Get task status
+			statusJSON, err := conn.Cache.Get(context.Background(), taskID).Result()
+			if err != nil {
+				newStatus := fmt.Sprintf("Error: %v", err)
+				if previousStatuses[taskID] != newStatus {
+					fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
+					previousStatuses[taskID] = newStatus
+				}
+				continue
+			}
+
+			// Parse status
+			var status string
+			var result map[string]interface{}
+
+			// First try to parse as simple string (for "queued" or "running" status)
+			err = json.Unmarshal([]byte(statusJSON), &status)
+			if err == nil {
+				// Simple status
+				if previousStatuses[taskID] != status {
+					fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, status)
+					previousStatuses[taskID] = status
 				}
 
-				// Get task status
-				statusJSON, err := conn.Cache.Get(context.Background(), taskID).Result()
+				if status != "completed" && status != "error" {
+					continue
+				} else {
+					completedTasks[taskID] = true
+				}
+			} else {
+				// Try to parse as response object
+				err = json.Unmarshal([]byte(statusJSON), &result)
 				if err != nil {
-					newStatus := fmt.Sprintf("Error: %v", err)
+					newStatus := fmt.Sprintf("Error parsing status: %v", err)
 					if previousStatuses[taskID] != newStatus {
 						fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
 						previousStatuses[taskID] = newStatus
@@ -528,93 +554,62 @@ func monitorTasks(conn *utils.Conn, taskIDs []string) {
 					continue
 				}
 
-				// Parse status
-				var status string
-				var result map[string]interface{}
-
-				// First try to parse as simple string (for "queued" or "running" status)
-				err = json.Unmarshal([]byte(statusJSON), &status)
-				if err == nil {
-					// Simple status
+				// Check status field
+				if status, ok := result["status"].(string); ok {
 					if previousStatuses[taskID] != status {
 						fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, status)
 						previousStatuses[taskID] = status
 					}
 
-					if status != "completed" && status != "error" {
-						continue
-					} else {
+					if status == "completed" || status == "error" {
+						fmt.Printf("\n=== TASK %s DETAILS ===\n", taskID)
+
+						// If there's a result, print it
+						if result, ok := result["result"]; ok {
+							resultJSON, _ := json.MarshalIndent(result, "", "  ")
+							fmt.Printf("Result:\n%s\n", string(resultJSON))
+						}
+
+						// If there's an error, print it
+						if errMsg, ok := result["error"].(string); ok && errMsg != "" {
+							fmt.Printf("Error: %s\n", errMsg)
+						}
+
+						fmt.Println("======================")
 						completedTasks[taskID] = true
+					} else {
+						continue
 					}
 				} else {
-					// Try to parse as response object
-					err = json.Unmarshal([]byte(statusJSON), &result)
-					if err != nil {
-						newStatus := fmt.Sprintf("Error parsing status: %v", err)
-						if previousStatuses[taskID] != newStatus {
-							fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
-							previousStatuses[taskID] = newStatus
-						}
-						continue
-					}
+					continue
+				}
+			}
+		}
 
-					// Check status field
-					if status, ok := result["status"].(string); ok {
-						if previousStatuses[taskID] != status {
-							fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, status)
-							previousStatuses[taskID] = status
-						}
+		if len(completedTasks) == len(taskIDs) {
+			duration := time.Since(startTime).Round(time.Millisecond)
+			fmt.Printf("\n=== MONITORING COMPLETE ===\n")
+			fmt.Printf("All %d tasks completed in %v\n", len(taskIDs), duration)
+			return
+		}
 
-						if status == "completed" || status == "error" {
-							fmt.Printf("\n=== TASK %s DETAILS ===\n", taskID)
+		// Check for timeout
+		if time.Since(startTime) > timeout {
+			fmt.Printf("\n=== MONITORING TIMEOUT ===\n")
+			fmt.Printf("Timeout after %v waiting for tasks to complete.\n", timeout)
+			fmt.Printf("%d/%d tasks completed.\n", len(completedTasks), len(taskIDs))
 
-							// If there's a result, print it
-							if result, ok := result["result"]; ok {
-								resultJSON, _ := json.MarshalIndent(result, "", "  ")
-								fmt.Printf("Result:\n%s\n", string(resultJSON))
-							}
-
-							// If there's an error, print it
-							if errMsg, ok := result["error"].(string); ok && errMsg != "" {
-								fmt.Printf("Error: %s\n", errMsg)
-							}
-
-							fmt.Println("======================")
-							completedTasks[taskID] = true
-						} else {
-							continue
-						}
-					} else {
-						continue
+			// List incomplete tasks
+			if len(completedTasks) < len(taskIDs) {
+				fmt.Println("\nIncomplete tasks:")
+				for _, taskID := range taskIDs {
+					if !completedTasks[taskID] {
+						fmt.Printf("  - %s (Last status: %s)\n", taskID, previousStatuses[taskID])
 					}
 				}
 			}
 
-			if len(completedTasks) == len(taskIDs) {
-				duration := time.Since(startTime).Round(time.Millisecond)
-				fmt.Printf("\n=== MONITORING COMPLETE ===\n")
-				fmt.Printf("All %d tasks completed in %v\n", len(taskIDs), duration)
-				return
-			}
-
-			// Check for timeout
-			if time.Since(startTime) > timeout {
-				fmt.Printf("\n=== MONITORING TIMEOUT ===\n")
-				fmt.Printf("Timeout after %v waiting for tasks to complete.\n", timeout)
-				fmt.Printf("%d/%d tasks completed.\n", len(completedTasks), len(taskIDs))
-
-				// List incomplete tasks
-				if len(completedTasks) < len(taskIDs) {
-					fmt.Println("\nIncomplete tasks:")
-					for _, taskID := range taskIDs {
-						if !completedTasks[taskID] {
-							fmt.Printf("  - %s (Last status: %s)\n", taskID, previousStatuses[taskID])
-						}
-					}
-				}
-
-				return
-			}
+			return
 		}
 	}
 }
