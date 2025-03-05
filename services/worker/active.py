@@ -1,7 +1,6 @@
 import numpy as np
 import json
-import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from conn import Conn
 from data import getTensor
 
