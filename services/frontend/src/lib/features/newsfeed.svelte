@@ -46,7 +46,7 @@
 	activeChartInstance.subscribe((chartInstance) => {
 		if (chartInstance?.ticker && chartInstance?.securityId) {
 			currentTicker = chartInstance.ticker;
-			currentSecurityId = chartInstance.securityId;
+			currentSecurityId = Number(chartInstance.securityId);
 
 			// Load filings for the new ticker if we're on the filings tab
 			if (activeTab === 'filings') {

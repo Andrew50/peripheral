@@ -213,9 +213,11 @@
 				}
 			});
 
-			editor.on('text-change', () => {
-				debounceSave();
-			});
+			if (editor) {
+				editor.on('text-change', () => {
+					debounceSave();
+				});
+			}
 
 			privateRequest<any>('getStudyEntry', { studyId: id }).then((entry: any) => {
 				if (editor) {

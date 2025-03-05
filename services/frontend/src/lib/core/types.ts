@@ -20,6 +20,7 @@ export interface Instance {
     sector?: string;
     totalShares?: number;
     sortOrder?: number;
+    flagged?: boolean;
 }
 export interface Setup {
     setupId: number;
