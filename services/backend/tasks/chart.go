@@ -13,6 +13,7 @@ import (
 	"github.com/polygon-io/client-go/rest/iter"
 	"github.com/polygon-io/client-go/rest/models"
 )
+
 // GetChartDataArgs represents a structure for handling GetChartDataArgs data.
 type GetChartDataArgs struct {
 	SecurityID    int    `json:"securityId"`
@@ -23,6 +24,7 @@ type GetChartDataArgs struct {
 	ExtendedHours bool   `json:"extendedHours"`
 	IsReplay      bool   `json:"isreplay"`
 }
+
 // GetChartDataResults represents a structure for handling GetChartDataResults data.
 type GetChartDataResults struct {
 	Timestamp float64 `json:"time"`
@@ -32,6 +34,7 @@ type GetChartDataResults struct {
 	Close     float64 `json:"close"`
 	Volume    float64 `json:"volume"`
 }
+
 // GetChartDataResponse represents a structure for handling GetChartDataResponse data.
 type GetChartDataResponse struct {
 	Bars           []GetChartDataResults `json:"bars"`
@@ -48,6 +51,7 @@ func MaxDivisorOf30(n int) int {
 	}
 	return 1
 }
+
 // GetChartData performs operations related to GetChartData functionality.
 func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetChartDataArgs
@@ -953,18 +957,4 @@ func buildHigherTimeframeFromLower(
 	}
 
 	return barDataList, nil
-}
-
-func max(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func min(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
 }

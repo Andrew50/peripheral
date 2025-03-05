@@ -29,7 +29,7 @@ func GetAlgos(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 	}
 	return algos, nil
 }*/
-// SetupResult represents a setup configuration with its evaluation score.
+// A SetupResult represents a setup configuration with its evaluation score.
 type SetupResult struct {
 	SetupID   int     `json:"setupId"`
 	Name      string  `json:"name"`

@@ -27,10 +27,8 @@ import (
 	"github.com/polygon-io/client-go/rest/models"
 )
 
-// logAction logs actions performed during security updates when in test mode.
-// This function is used internally by updateSecurities for debugging and tracking changes.
-//
-//go:used
+// logAction logs security-related actions for debugging and auditing purposes.
+// Currently unused but kept for debugging and future use.
 func logAction(test bool, loop int, ticker string, targetTicker string, figi string, currentDate string, action string, err error) {
 	if test {
 		if err != nil {
@@ -42,11 +40,8 @@ func logAction(test bool, loop int, ticker string, targetTicker string, figi str
 	}
 }
 
-// validateTickerString checks if a ticker symbol is valid.
-// Returns false if the ticker contains a dot or lowercase letters.
-// This is used internally by toFilteredMap to filter out invalid tickers.
-//
-//go:used
+// validateTickerString validates a ticker string format.
+// Currently unused but kept for future input validation.
 func validateTickerString(ticker string) bool {
 	if strings.Contains(ticker, ".") {
 		return false
@@ -60,13 +55,7 @@ func validateTickerString(ticker string) bool {
 }
 
 // diff compares two sets of tickers and returns the differences.
-// Used internally by updateSecurities to track changes in securities.
-// Returns:
-// - additions: new tickers that appeared
-// - removals: tickers that disappeared
-// - figiChanges: tickers whose FIGI changed
-//
-//go:used
+// Currently unused but kept for future reconciliation features.
 func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []models.Ticker, []models.Ticker) {
 	additions := []models.Ticker{}
 	removals := []models.Ticker{}
@@ -106,9 +95,7 @@ func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []mode
 }
 
 // dataExists checks if market data exists for a ticker in a given date range.
-// Used internally by updateSecurities to verify data availability.
-//
-//go:used
+// Currently unused but kept for future data validation features.
 func dataExists(client *polygon.Client, ticker string, fromDate string, toDate string) bool {
 	timespan := models.Timespan("day")
 	fromMillis, err := utils.MillisFromDatetimeString(fromDate)
@@ -130,10 +117,8 @@ func dataExists(client *polygon.Client, ticker string, fromDate string, toDate s
 	return iter.Next()
 }
 
-// toFilteredMap converts a slice of tickers to a map, filtering out invalid tickers.
-// Used internally by updateSecurities to process ticker lists.
-//
-//go:used
+// toFilteredMap converts a slice of tickers to a filtered map.
+// Currently unused but kept for future filtering features.
 func toFilteredMap(tickers []models.Ticker) map[string]models.Ticker {
 	tickerMap := make(map[string]models.Ticker)
 	for _, sec := range tickers {
@@ -144,10 +129,8 @@ func toFilteredMap(tickers []models.Ticker) map[string]models.Ticker {
 	return tickerMap
 }
 
-// contains checks if a string exists in a slice.
-// Used internally by updateSecurities to check diagnoses.
-//
-//go:used
+// contains checks if a string slice contains a specific item.
+// Currently unused but kept for future utility use.
 func contains(slice []string, item string) bool {
 	for _, str := range slice {
 		if str == item {
@@ -157,10 +140,8 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
-// updateSecurities updates the securities table with the latest data.
-// This is the main function that coordinates the update process.
-//
-//go:used
+// updateSecurities updates the securities table with new data.
+// Currently unused but kept for future automated updates.
 func updateSecurities(conn *utils.Conn, test bool) error {
 	var startDate time.Time
 	//fmt.Print(dataExists(conn.Polygon,"VBR","2003-09-24","2004-01-29"))
@@ -433,9 +414,9 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 					rows.Close()
 				}
 				if !ok {
-					logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "remove valid skip", err)
+					logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "remove valid skip", nil)
 				} else {
-					logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "remove invalid skip", err)
+					logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "remove invalid skip", nil)
 				}
 			}
 		}

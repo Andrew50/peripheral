@@ -1,14 +1,20 @@
 <script lang="ts">
 	import List from '$lib/utils/modules/list.svelte';
 	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
-	import { writable } from 'svelte/store';
+	import { writable, type Writable } from 'svelte/store';
 	import { onMount } from 'svelte';
 	import { querySetup } from '$lib/utils/popups/setup.svelte';
 	import { queryAlgo } from '$lib/utils/popups/algo.svelte';
 	import { privateRequest } from '$lib/core/backend';
 	import { activeAlerts, inactiveAlerts, alertLogs } from '$lib/core/stores';
-	import type { Alert, AlertLog } from '$lib/core/types';
+	import type { Alert, AlertLog, Instance } from '$lib/core/types';
 	import { newAlert, newPriceAlert } from './interface';
+
+	// Define ExtendedInstance type that matches the List component's expectations
+	interface ExtendedInstance extends Instance {
+		[key: string]: any; // Allow dynamic property access
+	}
+
 	let selectedAlertType = writable<string>('price');
 
 	// Add state for showing alert type descriptions
@@ -36,16 +42,15 @@
 			const inst = await queryInstanceInput(['ticker', 'price'], ['ticker', 'price'], {
 				ticker: ''
 			});
-			//price?
-			'inst', inst;
-			newPriceAlert(inst);
+			// Call newPriceAlert with the instance
+			await newPriceAlert(inst);
 		} else if (alertType === 'setup') {
 			const setupId = await querySetup(event);
 			newAlert({
 				setupId: setupId,
 				alertType: 'setup',
-				price: null, // No price for setup alerts
-				securityId: null // No securityId for setup alerts
+				price: undefined, // Use undefined instead of null
+				securityId: undefined // Use undefined instead of null
 			});
 		} else if (alertType === 'algo') {
 			const algoId = await queryAlgo(event);
@@ -61,10 +66,20 @@
 	}
 
 	function deleteAlertLog(alertLog: AlertLog) {
-		alertLogs.update((currentLogs) => currentLogs.filter((log) => log !== alertLog));
+		alertLogs.update((currentLogs) =>
+			currentLogs ? currentLogs.filter((log) => log !== alertLog) : []
+		);
 	}
 
-	// Add derived stores for active and inactive alerts
+	// Cast stores to ExtendedInstance[] type
+	$: extendedActiveAlerts = activeAlerts as unknown as Writable<ExtendedInstance[]>;
+	$: extendedInactiveAlerts = inactiveAlerts as unknown as Writable<ExtendedInstance[]>;
+	$: extendedAlertLogs = alertLogs as unknown as Writable<ExtendedInstance[]>;
+
+	// Cast delete handlers to match ExtendedInstance parameter
+	const handleDeleteAlert = (item: ExtendedInstance) => deleteAlert(item as unknown as Alert);
+	const handleDeleteAlertLog = (item: ExtendedInstance) =>
+		deleteAlertLog(item as unknown as AlertLog);
 </script>
 
 <div class="alert-creator">
@@ -104,9 +119,9 @@
 	on:contextmenu={(event) => {
 		event.preventDefault();
 	}}
-	list={activeAlerts}
+	list={extendedActiveAlerts}
 	columns={['Alert Type', 'Ticker', 'Alert Price']}
-	parentDelete={deleteAlert}
+	parentDelete={handleDeleteAlert}
 />
 
 <!-- Inactive Alerts -->
@@ -115,9 +130,9 @@
 	on:contextmenu={(event) => {
 		event.preventDefault();
 	}}
-	list={inactiveAlerts}
+	list={extendedInactiveAlerts}
 	columns={['Alert Type', 'Ticker', 'Alert Price']}
-	parentDelete={deleteAlert}
+	parentDelete={handleDeleteAlert}
 />
 
 <!-- Alert Logs -->
@@ -126,9 +141,9 @@
 	on:contextmenu={(event) => {
 		event.preventDefault();
 	}}
-	list={alertLogs}
+	list={extendedAlertLogs}
 	columns={['Ticker', 'Timestamp', 'Alert Type']}
-	parentDelete={deleteAlertLog}
+	parentDelete={handleDeleteAlertLog}
 />
 
 <style>
