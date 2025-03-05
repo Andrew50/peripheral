@@ -14,7 +14,6 @@ from tensorflow.keras.layers import (
     Input,
 )
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import EarlyStopping
 
 SPLIT_RATIO = 0.8
 TRAINING_CLASS_RATIO = 0.18
