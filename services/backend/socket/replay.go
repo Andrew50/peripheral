@@ -152,81 +152,78 @@ func (c *Client) StartLoop() {
 		defer ticker.Stop()
 		lastSlow := time.Now()
 		lastTimestampUpdate := time.Now()
-		for {
-			select {
-			case <-ticker.C:
-				c.mu.Lock()
-				now := time.Now()
-				if c.replayActive && !c.replayPaused {
-					delta := now.Sub(c.lastTickTime)
-					c.lastTickTime = now
-					c.accumulatedActiveTime += delta
-					simulatedElapsed := time.Duration(float64(c.accumulatedActiveTime) * c.replaySpeed)
-					c.simulatedTime = c.simulatedTimeStart + int64(simulatedElapsed/time.Millisecond)
-					if now.Sub(lastTimestampUpdate) >= TimestampUpdateInterval {
+		for range ticker.C {
+			c.mu.Lock()
+			now := time.Now()
+			if c.replayActive && !c.replayPaused {
+				delta := now.Sub(c.lastTickTime)
+				c.lastTickTime = now
+				c.accumulatedActiveTime += delta
+				simulatedElapsed := time.Duration(float64(c.accumulatedActiveTime) * c.replaySpeed)
+				c.simulatedTime = c.simulatedTimeStart + int64(simulatedElapsed/time.Millisecond)
+				if now.Sub(lastTimestampUpdate) >= TimestampUpdateInterval {
 
-						timestampUpdate := map[string]interface{}{
-							"channel":   "timestamp",
-							"timestamp": c.simulatedTime,
-						}
-						jsonData, err := json.Marshal(timestampUpdate)
-						if err == nil {
-							c.send <- jsonData
-						}
-						lastTimestampUpdate = now
+					timestampUpdate := map[string]interface{}{
+						"channel":   "timestamp",
+						"timestamp": c.simulatedTime,
 					}
-					if !c.isMarketOpen(c.simulatedTime) {
-						c.jumpToNextMarketOpen()
-						c.simulatedTimeStart = c.simulatedTime
-						c.accumulatedActiveTime = 0
+					jsonData, err := json.Marshal(timestampUpdate)
+					if err == nil {
+						c.send <- jsonData
 					}
-					for _, replayData := range c.replayData {
-						ticksToPush := make([]TickData, 0)
-						for e := replayData.data.Front(); e != nil; {
-							tick := e.Value.(TickData)
-							next := e.Next()
-							if c.simulatedTime >= tick.GetTimestamp() {
-								ticksToPush = append(ticksToPush, tick)
-								replayData.data.Remove(e)
-							} else {
-								break
-							}
-							e = next
+					lastTimestampUpdate = now
+				}
+				if !c.isMarketOpen(c.simulatedTime) {
+					c.jumpToNextMarketOpen()
+					c.simulatedTimeStart = c.simulatedTime
+					c.accumulatedActiveTime = 0
+				}
+				for _, replayData := range c.replayData {
+					ticksToPush := make([]TickData, 0)
+					for e := replayData.data.Front(); e != nil; {
+						tick := e.Value.(TickData)
+						next := e.Next()
+						if c.simulatedTime >= tick.GetTimestamp() {
+							ticksToPush = append(ticksToPush, tick)
+							replayData.data.Remove(e)
+						} else {
+							break
 						}
-						if len(ticksToPush) > 0 {
-							for _, channelType := range replayData.channelTypes {
-								switch channelType {
-								case "all", "close":
-									for _, tick := range ticksToPush {
-										select {
-										case c.send <- jsonMarshalTick(tick, replayData.securityId, channelType):
-										default:
-											fmt.Println("Warning: Failed to send data. Channel might be closed.")
-										}
+						e = next
+					}
+					if len(ticksToPush) > 0 {
+						for _, channelType := range replayData.channelTypes {
+							switch channelType {
+							case "all", "close":
+								for _, tick := range ticksToPush {
+									select {
+									case c.send <- jsonMarshalTick(tick, replayData.securityId, channelType):
+									default:
+										fmt.Println("Warning: Failed to send data. Channel might be closed.")
 									}
-								case "slow-regular", "slow-extended":
-									if now.Sub(lastSlow) < SlowUpdateInterval {
-										continue
-									}
-									lastSlow = now
-									fallthrough
-								case "fast-regular", "fast-extended":
-									fallthrough
-								case "quote":
-									c.send <- jsonMarshalTick(aggregateTicks(ticksToPush, replayData.baseDataType), replayData.securityId, channelType)
 								}
+							case "slow-regular", "slow-extended":
+								if now.Sub(lastSlow) < SlowUpdateInterval {
+									continue
+								}
+								lastSlow = now
+								fallthrough
+							case "fast-regular", "fast-extended":
+								fallthrough
+							case "quote":
+								c.send <- jsonMarshalTick(aggregateTicks(ticksToPush, replayData.baseDataType), replayData.securityId, channelType)
 							}
 						}
-						if replayData.data.Back() == nil || c.simulatedTime >= replayData.data.Back().Value.(TickData).GetTimestamp()-c.buffer {
-							if !replayData.refilling {
-								replayData.refilling = true
-								go c.fetchMoreData(replayData)
-							}
+					}
+					if replayData.data.Back() == nil || c.simulatedTime >= replayData.data.Back().Value.(TickData).GetTimestamp()-c.buffer {
+						if !replayData.refilling {
+							replayData.refilling = true
+							go c.fetchMoreData(replayData)
 						}
 					}
 				}
-				c.mu.Unlock()
 			}
+			c.mu.Unlock()
 		}
 	}()
 }

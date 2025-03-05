@@ -24,16 +24,6 @@ import (
 	"github.com/polygon-io/client-go/rest/models"
 )
 
-// ActiveSecurity represents a structure for handling ActiveSecurity data.
-type ActiveSecurity struct {
-	securityId           int
-	ticker               string
-	cik                  string
-	figi                 string
-	tickerActivationDate time.Time
-	falseDelist          bool
-}
-
 func logAction(test bool, loop int, ticker string, targetTicker string, figi string, currentDate string, action string, err error) {
 	if test {
 		if err != nil {
@@ -116,6 +106,7 @@ func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []mode
 
 	return additions, removals, figiChanges
 }
+
 func dataExists(client *polygon.Client, ticker string, fromDate string, toDate string) bool {
 	timespan := models.Timespan("day")
 	fromMillis, err := utils.MillisFromDatetimeString(fromDate)

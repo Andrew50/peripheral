@@ -16,15 +16,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// Convert a UTC time to Eastern time for database storage
-func utcToEasternTime(utcTime time.Time) time.Time {
-	// Create an Eastern timezone location
-	eastern, _ := time.LoadLocation("America/New_York")
-
-	// Convert UTC time to Eastern time zone
-	return utcTime.In(eastern)
-}
-
 // HandleTradeUpload processes an uploaded trade file and inserts the trades into the database
 func HandleTradeUpload(conn *utils.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	// Parse arguments
@@ -629,7 +620,7 @@ func CalculatePnL(entryPrices []float64, entryShares []int, exitPrices []float64
 	return pnlFloat
 }
 
-// Keep the original ProcessTrades function for backward compatibility
+// ProcessTrades processes trade data for a given user
 func ProcessTrades(conn *utils.Conn, userID int) (interface{}, error) {
 	return ProcessTradesWithinConn(conn, userID)
 }

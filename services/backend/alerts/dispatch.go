@@ -67,7 +67,7 @@ func writeAlertMessage(alert Alert) string {
 			return fmt.Sprintf("%s price below %f", *alert.Ticker, *alert.Price)
 		}
 	} else if alert.AlertType == "algo" {
-		//return fmt.Sprintf("%s %s", *alert.Ticker, *alert.AlgoName)
+		return fmt.Sprintf("Algo alert triggered (ID: %d)", *alert.AlgoID)
 	}
 	return ""
 }
