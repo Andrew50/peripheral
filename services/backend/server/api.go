@@ -13,6 +13,8 @@ import (
 	"log"
 	"net/http"
 
+	"regexp"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -149,27 +151,62 @@ func publicHandler(conn *utils.Conn) http.HandlerFunc {
 		if r.Method == "OPTIONS" {
 			return
 		}
-		//fmt.Println("debug: got public request")
-		var req Request
-		err := json.NewDecoder(r.Body).Decode(&req)
-		if handleError(w, err, "decoding request") {
+
+		// Validate content type to prevent content-type sniffing attacks
+		contentType := r.Header.Get("Content-Type")
+		if contentType != "application/json" {
+			http.Error(w, "Unsupported Media Type", http.StatusUnsupportedMediaType)
 			return
 		}
-		fmt.Println(req.Function)
-		if function, ok := publicFunc[req.Function]; ok {
-			result, err := function(conn, req.Arguments)
-			if handleError(w, err, req.Function) {
-				return
-			}
-			if err := json.NewEncoder(w).Encode(result); err != nil {
-				handleError(w, err, "encoding response")
-				return
-			}
+
+		// Set security headers
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'")
+
+		// Read the request body with size limit to prevent DoS attacks
+		bodySize := r.ContentLength
+		if bodySize > 1024*1024 { // 1MB limit
+			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
 			return
-		} else {
-			http.Error(w, fmt.Sprintf("invalid function: %s", req.Function), http.StatusBadRequest)
-			fmt.Printf("invalid function: %s", req.Function)
+		}
+
+		var req Request
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields() // Prevent JSON pollution attacks
+		err := decoder.Decode(&req)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid request format: %v", err), http.StatusBadRequest)
 			return
+		}
+
+		// Validate the function name
+		if _, exists := publicFunc[req.Function]; !exists {
+			http.Error(w, "Unknown function", http.StatusBadRequest)
+			return
+		}
+
+		// Apply JSON sanitization to arguments
+		sanitizedArgs, err := sanitizeJSON(req.Arguments)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid arguments: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		// Execute the requested function with sanitized input
+		result, err := publicFunc[req.Function](conn, sanitizedArgs)
+		if err != nil {
+			// Limit error information in public endpoints
+			log.Printf("public_handler error: %s - %v", req.Function, err)
+			http.Error(w, "Request processing failed", http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		encoder := json.NewEncoder(w)
+		encoder.SetEscapeHTML(true) // Escape HTML in JSON responses
+		if err := encoder.Encode(result); err != nil {
+			http.Error(w, "Error encoding response", http.StatusInternalServerError)
 		}
 	}
 }
@@ -274,12 +311,13 @@ func privateUploadHandler(conn *utils.Conn) http.HandlerFunc {
 func privateHandler(conn *utils.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		addCORSHeaders(w)
-		if r.Method != "POST" {
+		if r.Method == "OPTIONS" {
 			return
 		}
+
 		//fmt.Println("debug: got private request")
 		token_string := r.Header.Get("Authorization")
-		user_id, err := validateToken(token_string)
+		_, err := validateToken(token_string)
 		if handleError(w, err, "auth") {
 			return
 		}
@@ -289,24 +327,164 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 		}
 		//fmt.Printf("debug: %s\n", req.Function)
 
-		if function, ok := privateFunc[req.Function]; ok {
-			result, err := function(conn, user_id, req.Arguments)
-			if handleError(w, err, req.Function) {
-				return
-			}
-			if err := json.NewEncoder(w).Encode(result); err != nil {
-				handleError(w, err, "encoding response")
-				return
-			}
-		} else {
-			http.Error(w, fmt.Sprintf("invalid function: %s", req.Function), http.StatusBadRequest)
-			fmt.Printf("invalid function: %s", req.Function)
+		// Validate content type to prevent content-type sniffing attacks
+		contentType := r.Header.Get("Content-Type")
+		if contentType != "application/json" {
+			http.Error(w, "Unsupported Media Type", http.StatusUnsupportedMediaType)
 			return
+		}
+
+		// Set security headers
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'")
+
+		// Read the request body with size limit to prevent DoS attacks
+		bodySize := r.ContentLength
+		if bodySize > 1024*1024 { // 1MB limit
+			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+
+		// Validate the function name
+		if _, exists := privateFunc[req.Function]; !exists {
+			http.Error(w, "Unknown function", http.StatusBadRequest)
+			return
+		}
+
+		// Apply JSON sanitization to arguments - restrict to allowed patterns for each argument type
+		sanitizedArgs, err := sanitizeJSON(req.Arguments)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid arguments: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		token := r.Header.Get("Authorization")
+		userId, err := validateToken(token)
+		if handleError(w, err, "private_handler: validateToken") {
+			return
+		}
+
+		// Execute the requested function with sanitized input
+		result, err := privateFunc[req.Function](conn, userId, sanitizedArgs)
+		if handleError(w, err, fmt.Sprintf("private_handler: %s", req.Function)) {
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		encoder := json.NewEncoder(w)
+		encoder.SetEscapeHTML(true) // Escape HTML in JSON responses
+		if err := encoder.Encode(result); err != nil {
+			http.Error(w, fmt.Sprintf("Error encoding response: %v", err), http.StatusInternalServerError)
 		}
 	}
 }
 
-// QueueRequest represents a structure for handling QueueRequest data.
+// Helper function to sanitize JSON input and prevent injection attacks
+func sanitizeJSON(input json.RawMessage) (json.RawMessage, error) {
+	// Basic validation to ensure JSON is well-formed
+	var jsonObj interface{}
+	err := json.Unmarshal(input, &jsonObj)
+	if err != nil {
+		return nil, fmt.Errorf("invalid JSON format: %v", err)
+	}
+
+	// Apply recursive sanitization on the object
+	sanitized, err := sanitizeValue(jsonObj)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert back to JSON
+	result, err := json.Marshal(sanitized)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling sanitized JSON: %v", err)
+	}
+
+	return result, nil
+}
+
+// Recursively sanitize values in JSON objects
+func sanitizeValue(val interface{}) (interface{}, error) {
+	switch v := val.(type) {
+	case string:
+		// Prevent common injection patterns in strings
+		if containsInjectionPattern(v) {
+			return nil, fmt.Errorf("potentially malicious input detected")
+		}
+		return v, nil
+	case map[string]interface{}:
+		sanitizedMap := make(map[string]interface{})
+		for k, subVal := range v {
+			// Prevent injection in keys
+			if containsInjectionPattern(k) {
+				return nil, fmt.Errorf("potentially malicious key detected")
+			}
+			sanitizedSubVal, err := sanitizeValue(subVal)
+			if err != nil {
+				return nil, err
+			}
+			sanitizedMap[k] = sanitizedSubVal
+		}
+		return sanitizedMap, nil
+	case []interface{}:
+		sanitizedArr := make([]interface{}, len(v))
+		for i, subVal := range v {
+			sanitizedSubVal, err := sanitizeValue(subVal)
+			if err != nil {
+				return nil, err
+			}
+			sanitizedArr[i] = sanitizedSubVal
+		}
+		return sanitizedArr, nil
+	default:
+		// Numbers, booleans, and null values are safe
+		return v, nil
+	}
+}
+
+// Check for common injection patterns
+func containsInjectionPattern(s string) bool {
+	// Check for SQL injection patterns
+	sqlPatterns := []string{
+		"'--",
+		"OR 1=1",
+		"UNION SELECT",
+		"DROP TABLE",
+		"INSERT INTO",
+		"DELETE FROM",
+		"UPDATE.*SET",
+	}
+
+	// Check for XSS patterns
+	xssPatterns := []string{
+		"<script>",
+		"javascript:",
+		"onerror=",
+		"onload=",
+		"eval\\(",
+	}
+
+	// Check for other common injection patterns
+	otherPatterns := []string{
+		"../",     // Path traversal
+		"://.*/",  // URL injection
+		"\\${.*}", // Template injection
+	}
+
+	patterns := append(sqlPatterns, xssPatterns...)
+	patterns = append(patterns, otherPatterns...)
+
+	for _, pattern := range patterns {
+		matched, _ := regexp.MatchString("(?i)"+pattern, s)
+		if matched {
+			return true
+		}
+	}
+
+	return false
+}
+
 type QueueRequest struct {
 	Function  string      `json:"func"`
 	Arguments interface{} `json:"args"`
