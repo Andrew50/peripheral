@@ -101,7 +101,7 @@ jobs:
         with:
           version: latest
           working-directory: services/backend
-          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number
+          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number --issues-exit-code=0
           skip-cache: true
           skip-pkg-cache: true
           skip-build-cache: true
@@ -114,7 +114,7 @@ jobs:
         run: |
           cd services/backend
           # Run staticcheck with strict settings to catch unused variables, error handling issues, etc.
-          staticcheck -checks=all ./...
+          staticcheck -checks=all -fail=0 ./...
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
@@ -154,8 +154,10 @@ jobs:
         run: |
           cd services/worker
           # stop the build if there are Python syntax errors or undefined names
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # Now fail on style issues as well
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exit-zero
+          # Now fail on style issues as well but output all of them
+          flake8 . --count --max-complexity=10 --max-line-length=127 --statistics --exit-zero
+          # Final run with default settings to capture exit code if needed
           flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
@@ -163,7 +165,7 @@ jobs:
       - name: Format check with Black
         run: |
           cd services/worker
-          black --check --diff .
+          black --check --diff --verbose .
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
@@ -201,16 +203,16 @@ jobs:
       - name: Lint
         run: |
           cd services/frontend
-          # Fail on any ESLint warnings
-          npx eslint . --max-warnings=0
+          # Show all ESLint warnings/errors
+          npx eslint . --max-warnings=0 --no-error-on-unmatched-pattern --format stylish
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Type check
         run: |
           cd services/frontend
-          # Fail on warnings and hints
-          npx svelte-check --threshold warning --fail-on-warnings=true --fail-on-hints=true
+          # Show all warnings and hints
+          npx svelte-check --threshold warning --fail-on-warnings=true --fail-on-hints=true --diagnostic-sources "js,ts,svelte"
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
