@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,14 +37,15 @@ type TimeOfDay struct {
 
 // Job represents a scheduled job
 type Job struct {
-	Name           string
-	Function       JobFunc
-	Schedule       []TimeOfDay
-	LastRun        time.Time // This will be loaded from Redis but kept in memory for quick access
-	RunOnInit      bool
-	ExecutionMutex sync.Mutex
-	IsRunning      bool
-	SkipOnWeekends bool
+	Name               string
+	Function           JobFunc
+	Schedule           []TimeOfDay
+	LastRun            time.Time // This will be loaded from Redis but kept in memory for quick access
+	LastCompletionTime time.Time // Tracks when the job was verified to have completed successfully
+	RunOnInit          bool
+	ExecutionMutex     sync.Mutex
+	IsRunning          bool
+	SkipOnWeekends     bool
 }
 
 // JobScheduler manages and executes jobs
@@ -58,10 +60,16 @@ type JobScheduler struct {
 
 // Redis key prefix for job last run times
 const jobLastRunKeyPrefix = "job:lastrun:"
+const jobLastCompletionKeyPrefix = "job:lastcompletion:"
 
 // getJobLastRunKey returns the Redis key for storing a job's last run time
 func getJobLastRunKey(jobName string) string {
 	return jobLastRunKeyPrefix + jobName
+}
+
+// getJobLastCompletionKey returns the Redis key for storing a job's last completion time
+func getJobLastCompletionKey(jobName string) string {
+	return jobLastCompletionKeyPrefix + jobName
 }
 
 // loadJobLastRunTimes loads the last run times for all jobs from Redis
@@ -83,6 +91,21 @@ func (s *JobScheduler) loadJobLastRunTimes() {
 		} else if err != redis.Nil {
 			fmt.Printf("Error loading last run time for job %s: %v\n", job.Name, err)
 		}
+
+		// Get the last completion time from Redis
+		lastCompletionStr, err := s.Conn.Cache.Get(ctx, getJobLastCompletionKey(job.Name)).Result()
+		if err == nil && lastCompletionStr != "" {
+			// Parse the timestamp
+			lastCompletion, err := time.Parse(time.RFC3339, lastCompletionStr)
+			if err == nil {
+				job.LastCompletionTime = lastCompletion
+				fmt.Printf("Loaded last completion time for job %s: %s\n", job.Name, lastCompletion.Format(time.RFC3339))
+			} else {
+				fmt.Printf("Error parsing last completion time for job %s: %v\n", job.Name, err)
+			}
+		} else if err != redis.Nil {
+			fmt.Printf("Error loading last completion time for job %s: %v\n", job.Name, err)
+		}
 	}
 }
 
@@ -95,6 +118,18 @@ func (s *JobScheduler) saveJobLastRunTime(job *Job) {
 	err := s.Conn.Cache.Set(ctx, getJobLastRunKey(job.Name), lastRunStr, 0).Err()
 	if err != nil {
 		fmt.Printf("Error saving last run time for job %s: %v\n", job.Name, err)
+	}
+}
+
+// saveJobLastCompletionTime saves a job's last completion time to Redis
+func (s *JobScheduler) saveJobLastCompletionTime(job *Job) {
+	ctx := context.Background()
+
+	// Store the last completion time in Redis
+	lastCompletionStr := job.LastCompletionTime.Format(time.RFC3339)
+	err := s.Conn.Cache.Set(ctx, getJobLastCompletionKey(job.Name), lastCompletionStr, 0).Err()
+	if err != nil {
+		fmt.Printf("Error saving last completion time for job %s: %v\n", job.Name, err)
 	}
 }
 
@@ -237,8 +272,50 @@ func NewScheduler(conn *utils.Conn) (*JobScheduler, error) {
 	return scheduler, nil
 }
 
+// clearJobCache clears all job-related Redis cache entries
+func clearJobCache(conn *utils.Conn) {
+	ctx := context.Background()
+
+	// Get all keys with the job last run prefix
+	lastRunKeys, err := conn.Cache.Keys(ctx, jobLastRunKeyPrefix+"*").Result()
+	if err != nil {
+		fmt.Printf("Error getting job last run keys: %v\n", err)
+	} else {
+		// Delete all last run keys
+		if len(lastRunKeys) > 0 {
+			err = conn.Cache.Del(ctx, lastRunKeys...).Err()
+			if err != nil {
+				fmt.Printf("Error deleting job last run keys: %v\n", err)
+			} else {
+				fmt.Printf("Cleared %d job last run entries from Redis\n", len(lastRunKeys))
+			}
+		}
+	}
+
+	// Get all keys with the job last completion prefix
+	lastCompletionKeys, err := conn.Cache.Keys(ctx, jobLastCompletionKeyPrefix+"*").Result()
+	if err != nil {
+		fmt.Printf("Error getting job last completion keys: %v\n", err)
+	} else {
+		// Delete all last completion keys
+		if len(lastCompletionKeys) > 0 {
+			err = conn.Cache.Del(ctx, lastCompletionKeys...).Err()
+			if err != nil {
+				fmt.Printf("Error deleting job last completion keys: %v\n", err)
+			} else {
+				fmt.Printf("Cleared %d job last completion entries from Redis\n", len(lastCompletionKeys))
+			}
+		}
+	}
+
+	fmt.Println("Job cache cleared successfully")
+}
+
 // StartScheduler initializes and starts the job scheduler
 func StartScheduler(conn *utils.Conn) chan struct{} {
+	// Clear job cache on server initialization
+	clearJobCache(conn)
+
 	scheduler, err := NewScheduler(conn)
 	if err != nil {
 		log.Fatalf("Failed to create scheduler: %v", err)
@@ -366,14 +443,21 @@ func (s *JobScheduler) shouldRunJob(job *Job, now time.Time) bool {
 		return false
 	}
 
-	// Check if we've passed a scheduled time since the last run
-	if !job.LastRun.IsZero() {
-		lastRunDate := job.LastRun.In(s.Location)
-		lastRunDay := time.Date(lastRunDate.Year(), lastRunDate.Month(), lastRunDate.Day(), 0, 0, 0, 0, s.Location)
+	// Use LastCompletionTime if available, otherwise fall back to LastRun
+	lastJobTime := job.LastRun
+	if !job.LastCompletionTime.IsZero() {
+		// If we have a completion time, use that instead of last run time
+		lastJobTime = job.LastCompletionTime
+	}
+
+	// Check if we've passed a scheduled time since the last run/completion
+	if !lastJobTime.IsZero() {
+		lastTimeDate := lastJobTime.In(s.Location)
+		lastTimeDay := time.Date(lastTimeDate.Year(), lastTimeDate.Month(), lastTimeDate.Day(), 0, 0, 0, 0, s.Location)
 		todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.Location)
 
 		// If it's a new day and we haven't run yet today, check if we missed any runs
-		if lastRunDay.Before(todayStart) {
+		if lastTimeDay.Before(todayStart) {
 			nowMinutes := currentHour*60 + currentMinute
 			nextMinutes := nextTime.Hour*60 + nextTime.Minute
 
@@ -441,7 +525,23 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	fmt.Printf("\n=== JOB START: %s ===\n", jobName)
 	fmt.Printf("Time: %s\n", now.Format("2006-01-02 15:04:05"))
 
-	err := job.Function(s.Conn)
+	var taskId string
+	var err error
+
+	// Check if the job function is a task that should be queued
+	if strings.HasPrefix(jobName, "queue:") {
+		// Extract the function name from the job name
+		funcName := strings.TrimPrefix(jobName, "queue:")
+		// Queue the job and get a task ID
+		taskId, err = utils.Queue(s.Conn, funcName, nil)
+		if err != nil {
+			fmt.Printf("Error queuing job %s: %v\n", jobName, err)
+		}
+	} else {
+		// Execute the job directly
+		err = job.Function(s.Conn)
+	}
+
 	duration := time.Since(startTime).Round(time.Millisecond)
 
 	// Update job status
@@ -461,6 +561,47 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	} else {
 		fmt.Printf("\n=== JOB COMPLETED: %s ===\n", jobName)
 		fmt.Printf("Duration: %v\n", duration)
+
+		// If we have a task ID, poll for the result to verify completion
+		if taskId != "" {
+			go func() {
+				// Poll for the result with a timeout
+				maxRetries := 30
+				retryInterval := time.Second * 10
+
+				for i := 0; i < maxRetries; i++ {
+					result, pollErr := utils.Poll(s.Conn, taskId)
+					if pollErr == nil && result != nil {
+						// Task completed successfully
+						completionTime := time.Now()
+
+						job.ExecutionMutex.Lock()
+						job.LastCompletionTime = completionTime
+						job.ExecutionMutex.Unlock()
+
+						// Save the completion time to Redis
+						s.saveJobLastCompletionTime(job)
+
+						fmt.Printf("\n=== JOB VERIFIED COMPLETION: %s ===\n", jobName)
+						fmt.Printf("Completion Time: %s\n", completionTime.Format("2006-01-02 15:04:05"))
+						break
+					}
+
+					// Wait before retrying
+					time.Sleep(retryInterval)
+				}
+			}()
+		} else {
+			// For directly executed jobs, update completion time immediately
+			completionTime := time.Now()
+
+			job.ExecutionMutex.Lock()
+			job.LastCompletionTime = completionTime
+			job.ExecutionMutex.Unlock()
+
+			// Save the completion time to Redis
+			s.saveJobLastCompletionTime(job)
+		}
 	}
 
 	// Print queue status

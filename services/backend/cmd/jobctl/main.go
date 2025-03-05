@@ -89,6 +89,10 @@ func getJobLastRunKey(jobName string) string {
 	return "job:lastrun:" + jobName
 }
 
+func getJobLastCompletionKey(jobName string) string {
+	return "job:lastcompletion:" + jobName
+}
+
 func listJobs() {
 	// Create a new scheduler to get the job list
 	conn, cleanup := utils.InitConn(true)
@@ -163,9 +167,15 @@ func getJobStatus(jobName string) {
 		lastRunStr = "Never"
 	}
 
+	// Get last completion time from Redis
+	lastCompletionStr, err := conn.Cache.Get(context.Background(), getJobLastCompletionKey(job.Name)).Result()
+	if err != nil {
+		lastCompletionStr = "Never"
+	}
+
 	// Create a table for output
 	table := NewTableWriter(os.Stdout)
-	table.SetHeader([]string{"Name", "Last Run", "Is Running", "Next Run"})
+	table.SetHeader([]string{"Name", "Last Run", "Last Completion", "Is Running", "Next Run"})
 
 	// Calculate next run time
 	nextRun := "Unknown"
@@ -175,6 +185,7 @@ func getJobStatus(jobName string) {
 	table.Append([]string{
 		job.Name,
 		lastRunStr,
+		lastCompletionStr,
 		fmt.Sprintf("%t", job.IsRunning),
 		nextRun,
 	})
@@ -195,7 +206,7 @@ func getAllJobsStatus() {
 
 	// Create a table for output
 	table := NewTableWriter(os.Stdout)
-	table.SetHeader([]string{"Name", "Last Run", "Is Running"})
+	table.SetHeader([]string{"Name", "Last Run", "Last Completion", "Is Running"})
 
 	// Sort jobs by name for consistent output
 	sortedJobs := make([]*jobs.Job, len(scheduler.Jobs))
@@ -211,9 +222,16 @@ func getAllJobsStatus() {
 			lastRunStr = "Never"
 		}
 
+		// Get last completion time from Redis
+		lastCompletionStr, err := conn.Cache.Get(context.Background(), getJobLastCompletionKey(job.Name)).Result()
+		if err != nil {
+			lastCompletionStr = "Never"
+		}
+
 		table.Append([]string{
 			job.Name,
 			lastRunStr,
+			lastCompletionStr,
 			fmt.Sprintf("%t", job.IsRunning),
 		})
 	}

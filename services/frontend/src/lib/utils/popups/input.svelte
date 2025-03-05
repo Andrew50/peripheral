@@ -1299,15 +1299,3 @@
 		font-size: 14px;
 	}
 </style>
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		margin-left: auto;
-	}
-
-	.field-select span {
-		color: var(--text-secondary);
-		font-size: 14px;
-	}
-</style>
-
