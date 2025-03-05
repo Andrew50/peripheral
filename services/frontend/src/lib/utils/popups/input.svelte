@@ -115,7 +115,7 @@
 		if (manualInputType === 'auto') {
 			if (inputString !== '') {
 				// Test for ticker - check for uppercase letters
-				if (iQ.possibleKeys.includes('ticker') && /^[A-Z]$/.test(inputString)) {
+				if (iQ.possibleKeys.includes('ticker') && /^[A-Z]+$/.test(inputString)) {
 					inputType = 'ticker';
 				} else if (iQ.possibleKeys.includes('price') && /^(?:\d*\.\d+|\d{3,})$/.test(inputString)) {
 					inputType = 'price';
@@ -127,8 +127,8 @@
 				} else if (iQ.possibleKeys.includes('timestamp') && /^[\d-]+$/.test(inputString)) {
 					inputType = 'timestamp';
 				} else if (iQ.possibleKeys.includes('ticker')) {
-					// If it's a letter that isn't already matched as something else, default to ticker
-					if (/^[a-zA-Z]$/.test(inputString)) {
+					// If it's a letter pattern that isn't already matched as something else, default to ticker
+					if (/^[a-zA-Z]+$/.test(inputString)) {
 						inputType = 'ticker';
 						// If the letter is lowercase, convert it to uppercase for ticker input
 						if (inputString !== inputString.toUpperCase()) {
@@ -273,10 +273,13 @@
 
 	// Add this reactive statement
 	$: if (manualInputType !== 'auto' && $inputQuery.status === 'active') {
-		inputQuery.update((v) => ({
-			...v,
-			inputType: manualInputType
-		}));
+		setTimeout(() => {
+			inputQuery.update((v) => ({
+				...v,
+				inputType: manualInputType,
+				inputValid: true // Reset validity when manually changing type
+			}));
+		}, 0);
 	}
 
 	interface ValidateResponse {
@@ -635,8 +638,17 @@
 				<select
 					class="default-select"
 					bind:value={manualInputType}
-					on:click|stopPropagation
-					on:change|stopPropagation
+					on:click|preventDefault|stopPropagation
+					on:change|preventDefault|stopPropagation={() => {
+						// Force immediate update when dropdown changes
+						if (manualInputType !== 'auto') {
+							inputQuery.update((v) => ({
+								...v,
+								inputType: manualInputType,
+								inputValid: true
+							}));
+						}
+					}}
 				>
 					<option value="auto">Auto</option>
 					{#each $inputQuery.possibleKeys as key}
