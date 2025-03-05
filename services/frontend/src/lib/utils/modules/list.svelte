@@ -329,9 +329,15 @@
 					}
 
 					try {
-						const iconUrl = iconData.startsWith('/9j/')
-							? `data:image/jpeg;base64,${iconData}`
-							: `data:image/png;base64,${iconData}`;
+						// Ensure we don't double-prefix the icon data
+						// If the iconData is already a data URL, use it as is
+						// Otherwise, treat it as base64 data and add the appropriate prefix
+						const iconUrl = iconData.startsWith('data:')
+							? iconData
+							: iconData.startsWith('/9j/')
+								? `data:image/jpeg;base64,${iconData}`
+								: `data:image/png;base64,${iconData}`;
+
 						return { ...item, icon: iconUrl };
 					} catch (e) {
 						console.warn('Failed to process icon for ticker:', item.ticker, e);
@@ -485,6 +491,7 @@
 	function handleImageError(e: Event) {
 		const img = e.currentTarget as HTMLImageElement;
 		if (img) {
+			console.warn(`Failed to load icon for ${img.alt}`);
 			img.style.display = 'none';
 		}
 	}
@@ -575,9 +582,7 @@
 									<td class="default-td">
 										{#if watch.icon}
 											<img
-												src={watch.icon.startsWith('data:')
-													? watch.icon
-													: `data:image/jpeg;base64,${watch.icon}`}
+												src={watch.icon}
 												alt={`${watch.ticker} icon`}
 												class="ticker-icon"
 												on:error={handleImageError}
