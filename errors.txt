@@ -696,3 +696,23 @@ Error: Argument of type 'string' is not assignable to parameter of type 'Setup'.
 
 ====================================
 svelte-check found 86 errors and 78 warnings in 27 files
+./trades.py:127:5: F841 local variable '_' is assigned to but never used except Exception as _:
+    ^
+./trades.py:560:5: F841 local variable '_' is assigned to but never used
+    except Exception as _:
+    ^
+./trades.py:563:30: F821 undefined name 'e'
+        return {"error": str(e), "traceback": error_info}
+                             ^
+./trades.py:631:5: F841 local variable '_' is assigned to but never used
+    except Exception as _:
+    ^
+./trades.py:634:30: F821 undefined name 'e'
+        return {"error": str(e), "traceback": error_info}
+                             ^
+./trades.py:808:5: F841 local variable '_' is assigned to but never used
+    except Exception as _:
+    ^
+2     F821 undefined name 'e'
+4     F841 local variable '_' is assigned to but never used
+6
