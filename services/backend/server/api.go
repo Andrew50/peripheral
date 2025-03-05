@@ -317,7 +317,7 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 
 		//fmt.Println("debug: got private request")
 		token_string := r.Header.Get("Authorization")
-		user_id, err := validateToken(token_string)
+		_, err := validateToken(token_string)
 		if handleError(w, err, "auth") {
 			return
 		}
@@ -346,15 +346,6 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 			return
 		}
 
-		var req Request
-		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields() // Prevent JSON pollution attacks
-		err := decoder.Decode(&req)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Invalid request format: %v", err), http.StatusBadRequest)
-			return
-		}
-
 		// Validate the function name
 		if _, exists := privateFunc[req.Function]; !exists {
 			http.Error(w, "Unknown function", http.StatusBadRequest)
@@ -369,8 +360,8 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 		}
 
 		token := r.Header.Get("Authorization")
-		userId, err := validate_token(token)
-		if handleError(w, err, "private_handler: validate_token") {
+		userId, err := validateToken(token)
+		if handleError(w, err, "private_handler: validateToken") {
 			return
 		}
 
