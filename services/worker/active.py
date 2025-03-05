@@ -279,7 +279,7 @@ def calculate_active(data):
                 
                 # Debug: Print the top 5 leaders for price in 1-day timeframe
                 if metric_type == "price" and timeframe == "1 day" and group == "stock" and leaders:
-                    print(f"\nTop 5 price leaders for 1-day timeframe:")
+                    print("\nTop 5 price leaders for 1-day timeframe:")
                     for i, entry in enumerate(leaders[:5]):
                         name, sid, agg_value, market_cap, dollar_volume, adr = entry
                         print(f"  {i+1}. {name}: {agg_value:.2f}%")
