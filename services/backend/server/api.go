@@ -359,8 +359,8 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 			return
 		}
 
-		token := r.Header.Get("Authorization")
-		userId, err := validateToken(token)
+		// Get user ID from token
+		userId, err := validateToken(token_string)
 		if handleError(w, err, "private_handler: validateToken") {
 			return
 		}
