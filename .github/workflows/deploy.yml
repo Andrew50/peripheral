@@ -766,6 +766,17 @@ jobs:
             fi
           done
           
+          # Apply rollout restart to ensure the current version of the image is used
+          log "Applying rollout restart to all deployments to ensure the current version of the image is used..."
+          for deployment in "${deployments[@]}"; do
+            log "Restarting $deployment deployment..."
+            kubectl rollout restart deployment/$deployment
+          done
+          
+          # Wait for image pull to complete before proceeding
+          log "Waiting for image pulls to complete (30 seconds)..."
+          sleep 30
+          
           # Monitor deployments
           log "Monitoring deployments for successful rollout..."
           
@@ -823,6 +834,20 @@ jobs:
             
             # Wait before checking again
             sleep 10
+          done
+          
+          # Verify all pods are using the correct image version
+          log "Verifying all pods are using the correct image version..."
+          for deployment in "${deployments[@]}"; do
+            log "Checking $deployment pods for correct image version..."
+            PODS=$(kubectl get pods -l app=$deployment -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+            for pod in $PODS; do
+              IMAGE=$(kubectl get pod $pod -o jsonpath='{.spec.containers[0].image}' 2>/dev/null)
+              log "Pod $pod is using image: $IMAGE"
+              if [[ "$IMAGE" != *"${{ env.DOCKER_TAG }}"* ]]; then
+                log "WARNING: Pod $pod is not using the expected image tag: ${{ env.DOCKER_TAG }}"
+              fi
+            done
           done
           
           # Check for any failed deployments
