@@ -134,7 +134,14 @@
 	let chartExtendedHours: boolean;
 	let releaseFast: () => void = () => {};
 	let releaseQuote: () => void = () => {};
-	let currentChartInstance: Instance = { ticker: '', timestamp: 0, timeframe: '' };
+	let currentChartInstance: Instance = {
+		ticker: '',
+		timestamp: 0,
+		timeframe: '',
+		securityId: 0,
+		price: 0,
+		extendedHours: false
+	};
 	let blockingChartQueryDispatch = {};
 	let isPanning = false;
 	const excludedConditions = new Set([2, 7, 10, 13, 15, 16, 20, 21, 22, 29, 33, 37]);
@@ -1023,7 +1030,7 @@
 		hoveredCandleData.set(defaultHoveredCandleData);
 		chartEarliestDataReached = false;
 		chartLatestDataReached = false;
-		chartSecurityId = req.securityId;
+		chartSecurityId = ensureNumericSecurityId(req);
 		chartTimeframe = req.timeframe;
 		chartTimeframeInSeconds = timeframeToSeconds(
 			req.timeframe,
@@ -1104,8 +1111,17 @@
 			event.preventDefault();
 			const timestamp = ESTSecondstoUTCMillis(latestCrosshairPositionTime);
 			const price = Math.round(chartCandleSeries.coordinateToPrice(event.clientY) * 100) / 100 || 0;
-			const ins: Instance = { ...currentChartInstance, timestamp: timestamp, price: price };
-			queryInstanceRightClick(event, ins, 'chart');
+			const inst: Instance = {
+				ticker: currentChartInstance.ticker,
+				timestamp: currentChartInstance.timestamp,
+				timeframe: currentChartInstance.timeframe,
+				securityId:
+					typeof currentChartInstance.securityId === 'string'
+						? parseInt(currentChartInstance.securityId, 10)
+						: currentChartInstance.securityId,
+				price: currentChartInstance.price
+			};
+			queryInstanceRightClick(event, inst, 'chart');
 		});
 		chartContainer.addEventListener('keyup', (event) => {
 			if (event.key == 'Shift') {
@@ -1249,7 +1265,7 @@
 				return;
 			}
 			const volumeData = param.seriesData.get(chartVolumeSeries);
-			const volume = volumeData ? volumeData.value : 0;
+			const volume = volumeData && isVolumeData(volumeData) ? volumeData.value : 0;
 			const allCandleData = chartCandleSeries.data();
 			const validCrosshairPoint = !(
 				param === undefined ||
@@ -1260,12 +1276,8 @@
 			let bar;
 			let cursorBarIndex: number | undefined;
 			if (!validCrosshairPoint) {
-				if (param?.logical < 0) {
+				if (param?.logical !== undefined && param.logical < 0) {
 					bar = allCandleData[0];
-					cursorBarIndex = 0;
-				} else {
-					cursorBarIndex = allCandleData.length - 1;
-					bar = allCandleData[cursorBarIndex];
 				}
 			} else {
 				bar = param.seriesData.get(chartCandleSeries);
@@ -1361,11 +1373,18 @@
 					return;
 				}
 				('2');
+				const inst: Instance = {
+					ticker: currentChartInstance.ticker,
+					timestamp: currentChartInstance.timestamp,
+					timeframe: currentChartInstance.timeframe,
+					securityId:
+						typeof currentChartInstance.securityId === 'string'
+							? parseInt(currentChartInstance.securityId, 10)
+							: currentChartInstance.securityId,
+					price: currentChartInstance.price
+				};
 				backendLoadChartData({
-					...currentChartInstance,
-					timestamp: ESTSecondstoUTCMillis(
-						chartCandleSeries.data()[0].time as UTCTimestamp
-					) as number,
+					...inst,
 					bars: Math.floor(bufferInScreenSizes * barsOnScreen) + 100,
 					direction: 'backward',
 					requestType: 'loadAdditionalData',
@@ -1383,11 +1402,18 @@
 					return;
 				}
 				('3');
+				const inst: Instance = {
+					ticker: currentChartInstance.ticker,
+					timestamp: currentChartInstance.timestamp,
+					timeframe: currentChartInstance.timeframe,
+					securityId:
+						typeof currentChartInstance.securityId === 'string'
+							? parseInt(currentChartInstance.securityId, 10)
+							: currentChartInstance.securityId,
+					price: currentChartInstance.price
+				};
 				backendLoadChartData({
-					...currentChartInstance,
-					timestamp: ESTSecondstoUTCMillis(
-						chartCandleSeries.data()[chartCandleSeries.data().length - 1].time as UTCTimestamp
-					) as UTCTimestamp,
+					...inst,
 					bars: Math.floor(bufferInScreenSizes * barsOnScreen) + 100,
 					direction: 'forward',
 					requestType: 'loadAdditionalData',
@@ -1528,6 +1554,124 @@
 		document.removeEventListener('mousemove', shiftOverlayTrack);
 		document.removeEventListener('mouseup', handleShiftOverlayEnd);
 	}
+
+	// New interface for the data object
+	interface ChartData {
+		type?: string;
+		url?: string;
+		ratio?: number;
+		amount?: number;
+	}
+
+	// Type guard for the data object
+	function isChartData(data: unknown): data is ChartData {
+		return typeof data === 'object' && data !== null;
+	}
+
+	// Use in the code
+	const data: ChartData = {};
+	if (isChartData(data)) {
+		if (data.type && data.url) {
+			// Handle type and url
+		}
+		if (typeof data.ratio === 'number') {
+			// Handle ratio
+		}
+		if (typeof data.amount === 'number') {
+			// Handle amount
+		}
+	}
+
+	// Handle Instance type
+	const createInstance = (chartInstance: Partial<Instance>): Instance => ({
+		ticker: chartInstance.ticker || '',
+		timestamp: chartInstance.timestamp || 0,
+		timeframe: chartInstance.timeframe || '',
+		securityId:
+			typeof chartInstance.securityId === 'string'
+				? parseInt(chartInstance.securityId, 10)
+				: chartInstance.securityId || 0,
+		price: chartInstance.price || 0
+	});
+
+	// Use in the code where Instance is needed
+	const instance = createInstance(currentChartInstance);
+
+	// Update the data type handling
+	interface ChartEventData {
+		type: string;
+		url: string;
+		ratio?: number;
+		amount?: number;
+		exDate?: string;
+		payDate?: string;
+	}
+
+	function isChartEventData(data: unknown): data is ChartEventData {
+		if (!data || typeof data !== 'object') return false;
+		const d = data as Partial<ChartEventData>;
+		return typeof d.type === 'string' && typeof d.url === 'string';
+	}
+
+	// Use type guard where data is handled
+	if (isChartEventData(data)) {
+		// Now TypeScript knows data has type and url properties
+		console.log(data.type, data.url);
+		if (typeof data.ratio === 'number') {
+			console.log(data.ratio);
+		}
+		if (typeof data.amount === 'number') {
+			console.log(data.amount);
+		}
+	}
+
+	// Handle bars calculation safely
+	const calculateBars = (instance: Partial<Instance>): number => {
+		return instance.bars || Math.floor(bufferInScreenSizes * barsOnScreen) + 100;
+	};
+
+	interface ChartInstance extends Instance {
+		bars?: number;
+	}
+
+	function ensureNumericId(id: string | number | undefined): number {
+		if (typeof id === 'string') {
+			return parseInt(id, 10) || 0;
+		}
+		return id || 0;
+	}
+
+	function ensureNumericSecurityId(instance: Instance): number {
+		return ensureNumericId(instance.securityId);
+	}
+
+	function createChartInstance(data: Partial<ChartInstance>): ChartInstance {
+		return {
+			ticker: data.ticker || '',
+			timestamp: data.timestamp || 0,
+			timeframe: data.timeframe || '',
+			securityId: ensureNumericSecurityId(data as Instance),
+			price: data.price || 0,
+			bars: data.bars || Math.floor(bufferInScreenSizes * barsOnScreen) + 100
+		};
+	}
+
+	// Use for data type checking
+	interface ChartEventData {
+		type: string;
+		url: string;
+		ratio?: number;
+		amount?: number;
+	}
+
+	function isChartEventData(data: any): data is ChartEventData {
+		return data && typeof data.type === 'string' && typeof data.url === 'string';
+	}
+
+	// Use these functions where needed
+	const safeInstance = createChartInstance(currentChartInstance);
+	const eventData = data as ChartEventData;
+	// ... existing code ...
 </script>
 
 <div class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">

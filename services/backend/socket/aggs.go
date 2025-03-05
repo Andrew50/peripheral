@@ -534,12 +534,6 @@ func initVolBurstData(conn *utils.Conn, securityId int) VolBurstData {
 		dailyBars[dateKey] = append(dailyBars[dateKey], agg)
 	}
 
-	// Predefine the 7 time-of-day "periods"
-	// We'll reuse this for each day
-	type Period struct {
-		Start, End time.Time
-	}
-
 	// We'll accumulate totalVol & totalPct in 7 buckets across all days
 	totalVol := make([]float64, 7)
 	totalPct := make([]float64, 7)
@@ -558,10 +552,9 @@ func initVolBurstData(conn *utils.Conn, securityId int) VolBurstData {
 			continue
 		}
 
-		// We'll do a 2-step approach:
-		//   1) We'll define the 7 time-based sub-periods for *that day*.
-		//   2) We'll compute the total volume / pct range stats for each sub-period via our sliding window.
-
+		// Predefine the 7 time-of-day "periods"
+		// We'll define the 7 time-based sub-periods for *that day*.
+		// We'll compute the total volume / pct range stats for each sub-period via our sliding window.
 		subPeriods := []struct {
 			idx       int
 			startTime time.Time

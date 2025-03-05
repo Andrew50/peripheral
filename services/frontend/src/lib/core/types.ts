@@ -1,7 +1,7 @@
 export interface Instance {
     ticker?: string;
     timestamp?: number;
-    securityId?: number;
+    securityId?: string | number;
     timeframe?: string;
     extendedHours?: boolean;
     price?: number;
@@ -84,9 +84,10 @@ export interface Alert {
     alertType: string;
     setupId?: number;
     algoId?: number;
-    securityId?: number;
+    securityId?: string | number;
     ticker?: string;
     price?: number;
+    alertPrice?: number;
 }
 
 export interface Trade {

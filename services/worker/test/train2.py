@@ -128,8 +128,8 @@ def user_label(data):
         try:
             intLabel = int(label)
             break
-        except:
-
+        except ValueError:
+            print("Please enter a valid number (0 or 1)")
             pass
     plt.close(fig)
 

@@ -20,8 +20,9 @@ def main():
 
     while True:
         try:
-            # Create connection object
+            # Create and test connection object
             conn = Conn(inside_container=True)
+            conn.test_connection()  # Add a method call to actually test the connection
             
             # If successful, reset the check interval
             current_interval = check_interval
