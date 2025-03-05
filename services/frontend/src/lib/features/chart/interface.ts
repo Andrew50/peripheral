@@ -26,8 +26,9 @@ export interface ChartQueryDispatch extends Instance {
 	direction?: 'forward' | 'backward';
 	requestType?: 'loadNewTicker' | 'loadAdditionalData';
 	includeLastBar?: boolean;
-	chartId?: number;
-	timestamp?: number;
+	chartId?: string | number;
+	securityId?: string | number;
+	timestamp?: number | UTCTimestamp;
 }
 
 export interface ChartEventDispatch {
@@ -130,6 +131,11 @@ export interface BarData {
 	low: number;
 	close: number;
 	volume: number;
+}
+
+export interface CustomData<Time extends UTCTimestamp> extends Omit<BarData, 'time'> {
+	value: number;
+	time: Time;
 }
 
 export interface SecurityDateBounds {

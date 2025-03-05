@@ -1,3 +1,6 @@
+//go:build !test
+// +build !test
+
 package jobs
 
 import (
@@ -26,6 +29,8 @@ import (
 
 // logAction logs actions performed during security updates when in test mode.
 // This function is used internally by updateSecurities for debugging and tracking changes.
+//
+//go:used
 func logAction(test bool, loop int, ticker string, targetTicker string, figi string, currentDate string, action string, err error) {
 	if test {
 		if err != nil {
@@ -40,6 +45,8 @@ func logAction(test bool, loop int, ticker string, targetTicker string, figi str
 // validateTickerString checks if a ticker symbol is valid.
 // Returns false if the ticker contains a dot or lowercase letters.
 // This is used internally by toFilteredMap to filter out invalid tickers.
+//
+//go:used
 func validateTickerString(ticker string) bool {
 	if strings.Contains(ticker, ".") {
 		return false
@@ -58,6 +65,8 @@ func validateTickerString(ticker string) bool {
 // - additions: new tickers that appeared
 // - removals: tickers that disappeared
 // - figiChanges: tickers whose FIGI changed
+//
+//go:used
 func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []models.Ticker, []models.Ticker) {
 	additions := []models.Ticker{}
 	removals := []models.Ticker{}
@@ -98,6 +107,8 @@ func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []mode
 
 // dataExists checks if market data exists for a ticker in a given date range.
 // Used internally by updateSecurities to verify data availability.
+//
+//go:used
 func dataExists(client *polygon.Client, ticker string, fromDate string, toDate string) bool {
 	timespan := models.Timespan("day")
 	fromMillis, err := utils.MillisFromDatetimeString(fromDate)
@@ -121,6 +132,8 @@ func dataExists(client *polygon.Client, ticker string, fromDate string, toDate s
 
 // toFilteredMap converts a slice of tickers to a map, filtering out invalid tickers.
 // Used internally by updateSecurities to process ticker lists.
+//
+//go:used
 func toFilteredMap(tickers []models.Ticker) map[string]models.Ticker {
 	tickerMap := make(map[string]models.Ticker)
 	for _, sec := range tickers {
@@ -133,6 +146,8 @@ func toFilteredMap(tickers []models.Ticker) map[string]models.Ticker {
 
 // contains checks if a string exists in a slice.
 // Used internally by updateSecurities to check diagnoses.
+//
+//go:used
 func contains(slice []string, item string) bool {
 	for _, str := range slice {
 		if str == item {
@@ -142,6 +157,10 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
+// updateSecurities updates the securities table with the latest data.
+// This is the main function that coordinates the update process.
+//
+//go:used
 func updateSecurities(conn *utils.Conn, test bool) error {
 	var startDate time.Time
 	//fmt.Print(dataExists(conn.Polygon,"VBR","2003-09-24","2004-01-29"))
