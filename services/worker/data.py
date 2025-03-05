@@ -8,7 +8,7 @@ import aiohttp
 import json
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import multiprocessing, sys, time
 
 
@@ -192,7 +192,7 @@ async def get_instance_data(session, args):
             return None
         try:
             stock_data = await response.json()
-        except:
+        except (json.JSONDecodeError, aiohttp.ClientError):
             return None
         if "results" not in stock_data:
             return None

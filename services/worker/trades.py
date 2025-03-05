@@ -61,8 +61,6 @@ def grab_user_trades(
 
             for row in cursor.fetchall():
                 est_time = eastern.localize(row[9][0]) if row[9] else None
-                utc_time = est_time.astimezone(utc) if est_time else None
-
                 combined_trades = []
 
                 for i in range(len(row[9])) if row[9] else []:
@@ -129,7 +127,7 @@ def grab_user_trades(
 
     except Exception as e:
         error_info = traceback.format_exc()
-        print(f"Error fetching trades:\n{error_info}")
+        print(f"Error fetching trades: {e}\n{error_info}")
         return []
 
 
@@ -282,8 +280,6 @@ def get_trade_statistics(
             avg_win = float(row[3]) if row[3] else 0
             avg_loss = float(row[4]) if row[4] else 0
             total_pnl = float(row[5]) if row[5] else 0
-
-            win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
 
             # Update P/L curve query with modified ticker filter
             pnl_query = """

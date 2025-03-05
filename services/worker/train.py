@@ -198,7 +198,7 @@ def train_model(conn, setupID):
         save(setupID, modelVersion, model)
     size = None
     for val, ident in [[size, "sampleSize"], [score, "score"]]:
-        if val != None:
+        if val is not None:
             with conn.db.cursor() as cursor:
                 query = f"UPDATE setups SET {ident} = %s WHERE setupId = %s;"
                 cursor.execute(query, (val, setupID))
