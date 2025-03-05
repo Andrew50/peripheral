@@ -53,7 +53,7 @@ def getCurrentTickersAndPrice(conn):
 
 
 def getCurrentSecId(conn, ticker):
-    query = f"SELECT securityId from securities where ticker = %s Order by maxdate is null desc,maxdate desc"
+    query = "SELECT securityId from securities where ticker = %s Order by maxdate is null desc,maxdate desc"
     with conn.db.cursor() as cursor:
         cursor.execute(query, (ticker,))
 

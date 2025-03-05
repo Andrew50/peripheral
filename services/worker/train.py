@@ -4,27 +4,19 @@ import datetime
 import numpy as np
 import tensorflow as tf
 import keras_cv
-from tensorflow.keras import Model, layers, Input, Sequential
+from tensorflow.keras import layers, Sequential
 from tensorflow.keras.layers import (
     Dense,
     LSTM,
-    Add,
     LayerNormalization,
-    GlobalAveragePooling1D,
-    MultiHeadAttention,
     Bidirectional,
-    Dropout,
     Conv1D,
-    Flatten,
-    Lambda,
-    BatchNormalization,
+    Input,
 )
-
-from tensorflow.keras.optimizers import Adam, RMSprop
+from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import (
     EarlyStopping,
     ReduceLROnPlateau,
-    LearningRateScheduler,
 )
 from google.protobuf import text_format
 from tensorflow_serving.config import model_server_config_pb2

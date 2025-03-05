@@ -3,20 +3,17 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import mplfinance as mpf
 import pandas as pd
-from tensorflow.keras import layers, models, optimizers
-from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras import layers, models
+from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import (
     Dense,
     LSTM,
     Bidirectional,
     Dropout,
     Conv1D,
-    Flatten,
-    Lambda,
     Input,
 )
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.layers import Bidirectional
 from tensorflow.keras.callbacks import EarlyStopping
 
 SPLIT_RATIO = 0.8

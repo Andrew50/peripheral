@@ -146,13 +146,13 @@ def update_trade(trade_df, trade, open_trade_row):
                     shares = float(trade["Quantity"].replace(",", ""))
                 trade_df.at[open_trade_row.name, f"Entry Shares {i}"] = shares
                 if trade_direction == "Short":
-                    trade_df.at[open_trade_row.name, f"Open Quantity"] = (
-                        float(trade_df.at[open_trade_row.name, f"Open Quantity"])
+                    trade_df.at[open_trade_row.name, "Open Quantity"] = (
+                        float(trade_df.at[open_trade_row.name, "Open Quantity"])
                         - shares
                     )
                 elif trade_direction == "Long":
-                    trade_df.at[open_trade_row.name, f"Open Quantity"] = (
-                        float(trade_df.at[open_trade_row.name, f"Open Quantity"])
+                    trade_df.at[open_trade_row.name, "Open Quantity"] = (
+                        float(trade_df.at[open_trade_row.name, "Open Quantity"])
                         + shares
                     )
                 break
@@ -191,18 +191,18 @@ def update_trade(trade_df, trade, open_trade_row):
                     shares = float(trade["Quantity"].replace(",", ""))
                 trade_df.at[open_trade_row.name, f"Exit Shares {i}"] = shares
                 if trade_direction == "Short":
-                    trade_df.at[open_trade_row.name, f"Open Quantity"] = (
-                        float(trade_df.at[open_trade_row.name, f"Open Quantity"])
+                    trade_df.at[open_trade_row.name, "Open Quantity"] = (
+                        float(trade_df.at[open_trade_row.name, "Open Quantity"])
                         + shares
                     )
                 elif trade_direction == "Long":
-                    trade_df.at[open_trade_row.name, f"Open Quantity"] = (
-                        float(trade_df.at[open_trade_row.name, f"Open Quantity"])
+                    trade_df.at[open_trade_row.name, "Open Quantity"] = (
+                        float(trade_df.at[open_trade_row.name, "Open Quantity"])
                         - shares
                     )
                 break
-    if trade_df.at[open_trade_row.name, f"Open Quantity"] == 0:
-        trade_df.at[open_trade_row.name, f"Status"] = "Closed"
+    if trade_df.at[open_trade_row.name, "Open Quantity"] == 0:
+        trade_df.at[open_trade_row.name, "Status"] = "Closed"
 
 
 def create_trade(trade_df, trade):
