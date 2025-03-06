@@ -132,24 +132,6 @@
 		}, 50);
 	}
 
-	// Add reactive statements to log changes
-	$: {
-		console.log('Instance updated:', {
-			ticker: instance?.ticker,
-			timeframe: instance?.timeframe,
-			timestamp: instance?.timestamp,
-			extendedHours: instance?.extendedHours,
-			fullInstance: instance
-		});
-	}
-
-	// Add reactive statement specifically for ticker changes
-	$: {
-		if (instance?.ticker) {
-			console.log('Ticker changed to:', instance.ticker);
-		}
-	}
-
 	// Watch for content changes that might affect size
 	$: if (hoveredCandleData || instance || width) {
 		debouncedCheckOverflow();

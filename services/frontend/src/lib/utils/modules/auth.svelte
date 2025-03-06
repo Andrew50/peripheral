@@ -86,13 +86,11 @@
 		try {
 			// Get and log the current origin
 			const currentOrigin = window.location.origin;
-			console.log('Current origin for Google login:', currentOrigin);
 
 			// Pass the current origin to the backend
 			const response = await publicRequest<{ url: string; state: string }>('googleLogin', {
 				redirectOrigin: currentOrigin
 			});
-			console.log('Google login redirect URL:', response.url);
 
 			// Store the state in sessionStorage to verify on return
 			if (response.state) {

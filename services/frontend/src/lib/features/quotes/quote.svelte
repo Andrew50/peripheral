@@ -28,10 +28,7 @@
 
 	// Sync instance with activeChartInstance and handle details fetching
 	activeChartInstance.subscribe((chartInstance: Instance | null) => {
-		console.log('Quote component: activeChartInstance update received', chartInstance);
 		if (chartInstance?.ticker) {
-			// Only update if we have a valid ticker
-			console.log('Quote component: Setting new instance with ticker:', chartInstance.ticker);
 			instance.set(chartInstance);
 
 			// Reset logo error state when instance changes
@@ -39,8 +36,6 @@
 
 			// Handle details fetching in the main subscription
 			if (chartInstance.securityId && lastFetchedSecurityId !== chartInstance.securityId) {
-				console.log('Quote component: Fetching details for security ID:', chartInstance.securityId);
-				// Convert securityId to number before assigning to lastFetchedSecurityId
 				lastFetchedSecurityId = Number(chartInstance.securityId);
 				privateRequest<Record<string, any>>(
 					'getTickerMenuDetails',
@@ -48,7 +43,6 @@
 					true
 				)
 					.then((details) => {
-						console.log('Quote component: Received details:', details);
 						if (lastFetchedSecurityId === Number(chartInstance.securityId)) {
 							currentDetails = details;
 							// Update the instance directly instead of activeChartInstance
@@ -56,8 +50,6 @@
 								...inst,
 								...details
 							}));
-						} else {
-							console.log('Quote component: Ignoring stale details response');
 						}
 					})
 					.catch((error) => {
@@ -192,6 +184,11 @@
 	function handleMouseUp() {
 		// This function is now empty as the height-related variables and functions are removed
 	}
+
+	function handleLogoError() {
+		logoLoadError = true;
+		// Remove console.error for failed logo loading
+	}
 </script>
 
 <button
@@ -215,10 +212,7 @@
 					src={$instance?.logo || currentDetails?.logo}
 					alt="{$instance?.name || currentDetails?.name || 'Company'} logo"
 					class="company-logo"
-					on:error={() => {
-						logoLoadError = true;
-						console.error('Failed to load company logo');
-					}}
+					on:error={handleLogoError}
 				/>
 			</div>
 		{:else if $instance?.ticker || currentDetails?.ticker}

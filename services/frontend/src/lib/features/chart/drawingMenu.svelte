@@ -50,7 +50,6 @@
 		price = parseFloat(price.toFixed(2));
 		const chartSeries = get(drawingMenuProps).chartCandleSeries;
 		if (!chartSeries) {
-			console.error('Chart series is not initialized');
 			return;
 		}
 
@@ -91,6 +90,7 @@
 	export let drawingMenuProps: Writable<DrawingMenuProps>;
 
 	let menuElement: HTMLDivElement;
+	let adjustedMenuStyle: string = '';
 
 	// Common colors for lines
 	const colorPresets = [
@@ -236,20 +236,74 @@
 		}
 	}
 
+	// Function to position the menu within chart boundaries
+	function positionMenuWithinChart() {
+		if (!menuElement) return;
+
+		// Get the chart container
+		const chartContainer =
+			menuElement.closest('.chart-wrapper') || document.querySelector('.chart-wrapper');
+		if (!chartContainer) return;
+
+		// Get the dimensions of the chart container
+		const chartRect = chartContainer.getBoundingClientRect();
+
+		// Menu dimensions
+		const menuWidth = menuElement.offsetWidth;
+		const menuHeight = menuElement.offsetHeight;
+
+		// Calculate the proposed position
+		let menuX = $drawingMenuProps.clientX;
+		let menuY = $drawingMenuProps.clientY;
+
+		// Check if menu would overflow right side
+		if (menuX + menuWidth > chartRect.right) {
+			menuX = chartRect.right - menuWidth - 10; // 10px padding
+		}
+
+		// Check if menu would overflow left side
+		if (menuX < chartRect.left) {
+			menuX = chartRect.left + 10; // 10px padding
+		}
+
+		// Check if menu would overflow bottom
+		if (menuY + menuHeight > chartRect.bottom) {
+			menuY = chartRect.bottom - menuHeight - 10; // 10px padding
+		}
+
+		// Check if menu would overflow top
+		if (menuY < chartRect.top) {
+			menuY = chartRect.top + 10; // 10px padding
+		}
+
+		// Update the position
+		adjustedMenuStyle = `
+			left: ${menuX}px; 
+			top: ${menuY}px;
+			pointer-events: ${$drawingMenuProps.isDragging ? 'none' : 'auto'};
+			max-width: ${chartRect.width - 20}px; 
+			max-height: ${chartRect.height - 20}px;
+		`;
+	}
+
 	onMount(() => {
 		document.addEventListener('mousedown', handleClickOutside);
 		document.addEventListener('keydown', handleKeyDown);
+
+		// Position the menu when it becomes active
+		const unsubscribe = drawingMenuProps.subscribe((props) => {
+			if (props.active && !props.isDragging && menuElement) {
+				// Wait for the next tick to ensure menu is rendered
+				setTimeout(positionMenuWithinChart, 0);
+			}
+		});
+
 		return () => {
 			document.removeEventListener('mousedown', handleClickOutside);
 			document.removeEventListener('keydown', handleKeyDown);
+			unsubscribe();
 		};
 	});
-
-	$: menuStyle = `
-		left: ${$drawingMenuProps.clientX}px; 
-		top: ${$drawingMenuProps.clientY}px;
-		pointer-events: ${$drawingMenuProps.isDragging ? 'none' : 'auto'};
-	`;
 
 	// Add this computed property to format the price
 	$: formattedPrice =
@@ -257,6 +311,11 @@
 		$drawingMenuProps.selectedLinePrice !== null
 			? parseFloat($drawingMenuProps.selectedLinePrice.toString()).toFixed(2)
 			: '0.00';
+
+	// Position menu whenever relevant properties change
+	$: if ($drawingMenuProps.active && !$drawingMenuProps.isDragging && menuElement) {
+		positionMenuWithinChart();
+	}
 
 	// Handle input changes
 	function handlePriceInput(e: Event) {
@@ -288,7 +347,7 @@
 		on:mousedown={handleClickOutside}
 		on:keydown={handleKeyDown}
 		class="drawing-menu"
-		style={menuStyle}
+		style={adjustedMenuStyle}
 	>
 		<button on:click={removePriceLine} class="delete-button">Delete</button>
 
@@ -360,13 +419,14 @@
 <style>
 	.drawing-menu {
 		position: absolute;
-		z-index: 1002;
+		z-index: 9000;
 		background-color: rgba(20, 20, 20, 0.9);
 		border: 1px solid rgba(255, 255, 255, 0.2);
 		border-radius: 6px;
 		padding: 10px;
 		width: 200px;
 		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+		overflow: auto; /* Add scrolling if content becomes too large */
 	}
 
 	.menu-section {

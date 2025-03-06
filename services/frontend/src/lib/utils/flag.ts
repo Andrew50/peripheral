@@ -15,11 +15,8 @@ export function flagSecurity(instance: Instance) {
 		const flagInstanceId = (flagInstance as ExtendedInstance).watchlistItemId;
 		privateRequest<void>('deleteWatchlistItem', { watchlistItemId: flagInstanceId }).then(() => {
 			flagWatchlist.update((v: ExtendedInstance[]) => {
-				console.log(v);
-				console.log(flagInstanceId);
 				return v.filter((i: ExtendedInstance) => i.watchlistItemId !== flagInstanceId);
 			});
-			console.log(get(flagWatchlist));
 		});
 	} else {
 		privateRequest<number>('newWatchlistItem', {

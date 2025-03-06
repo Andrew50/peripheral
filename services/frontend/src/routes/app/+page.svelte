@@ -57,7 +57,6 @@
 
 	type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'journal' | 'similar';
 
-	// Initialize all sidebar state variables as closed
 	let lastSidebarMenu: Menu | null = null;
 	let sidebarWidth = 0;
 	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'journal', 'similar'];
@@ -194,7 +193,8 @@
 				const hiddenInput = document.getElementById('hidden-input');
 
 				// Don't interfere with the input component's keyboard events
-				if (inputWindow || hiddenInput === document.activeElement) {
+				//if (inputWindow || hiddenInput === document.activeElement) {
+				if (hiddenInput === document.activeElement) {
 					return;
 				}
 
