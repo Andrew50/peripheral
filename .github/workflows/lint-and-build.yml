@@ -221,4 +221,63 @@ jobs:
           cd services/frontend
           npm run build
         # Individual step can continue on error for ben/aj branches
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+
+  # Add new job to run frontend tests
+  test-frontend:
+    needs: [check-workflow-conditions, lint-and-build-frontend]
+    if: needs.check-workflow-conditions.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    # Set continue-on-error based on the branch condition
+    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          # For workflow_run events, we need to check out the PR that triggered the workflow
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: services/frontend/package.json
+
+      - name: Install dependencies
+        run: |
+          cd services/frontend
+          npm install
+          # Install test runner dependencies
+          npm install --save-dev jest @types/jest ts-jest
+
+      - name: Setup Jest config
+        run: |
+          cd services/frontend
+          # Create Jest config if it doesn't exist
+          if [ ! -f jest.config.js ]; then
+            echo "Creating Jest configuration file..."
+            echo 'module.exports = {' > jest.config.js
+            echo '  transform: {' >> jest.config.js
+            echo '    "^.+\\.svelte$": "svelte-jester",' >> jest.config.js
+            echo '    "^.+\\.ts$": "ts-jest"' >> jest.config.js
+            echo '  },' >> jest.config.js
+            echo '  moduleFileExtensions: ["js", "ts", "svelte"],' >> jest.config.js
+            echo '  testEnvironment: "jsdom",' >> jest.config.js
+            echo '  setupFilesAfterEnv: ["@testing-library/jest-dom/extend-expect"],' >> jest.config.js
+            echo '  testMatch: ["**/*.test.ts", "**/*.test.js"],' >> jest.config.js
+            echo '  moduleNameMapper: {' >> jest.config.js
+            echo '    "^\\$lib/(.*)$": "<rootDir>/src/lib/$1"' >> jest.config.js
+            echo '  }' >> jest.config.js
+            echo '};' >> jest.config.js
+          fi
+          
+          # Install additional dependencies needed for testing Svelte components
+          npm install --save-dev svelte-jester @testing-library/svelte @testing-library/jest-dom jsdom
+
+      - name: Run tests
+        run: |
+          cd services/frontend
+          # Run Jest directly without requiring a package.json script
+          npx jest
+        # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }} 
