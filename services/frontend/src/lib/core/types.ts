@@ -102,3 +102,29 @@ export interface Trade {
     openQuantity?: number;
     closedPnL?: number | null;
 }
+
+export type LogEntry = {
+    timestamp: string;
+    message: string;
+    level: string;
+};
+
+export type TaskState = 'queued' | 'running' | 'completed' | 'failed';
+
+export type Task = {
+    id: string;
+    state: TaskState;
+    function: string;
+    args: any;
+    result?: any;
+    error?: string;
+    logs: LogEntry[];
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type PollResponse = {
+    task: Task;
+    newLogs: boolean;
+    logsLength: number;
+};

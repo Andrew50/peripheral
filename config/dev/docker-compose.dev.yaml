@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile.dev
     restart: unless-stopped
     ports:
-      - "5057:5057"
+      - "5058:5058"
     volumes:
       - ../../services/backend/:/app
     networks:

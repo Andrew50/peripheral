@@ -509,7 +509,13 @@
 					} else if (inst.direction == 'backward') {
 						chartCandleSeries.setData(newCandleData);
 						chartVolumeSeries.setData(newVolumeData);
-						if (arrowSeries && 'trades' in inst && Array.isArray(inst.trades)) {
+						if (
+							arrowSeries &&
+							inst &&
+							typeof inst === 'object' &&
+							'trades' in inst &&
+							Array.isArray(inst.trades)
+						) {
 							const markersByTime = new Map<
 								number,
 								{
@@ -850,10 +856,16 @@
 
 		// Type guard for CandlestickData
 		const isCandlestick = (data: any): data is CandlestickData<Time> =>
-			'open' in data && 'high' in data && 'low' in data && 'close' in data;
+			data &&
+			typeof data === 'object' &&
+			'open' in data &&
+			'high' in data &&
+			'low' in data &&
+			'close' in data;
 
 		// Type guard for HistogramData
-		const isHistogram = (data: any): data is HistogramData<Time> => 'value' in data;
+		const isHistogram = (data: any): data is HistogramData<Time> =>
+			data && typeof data === 'object' && 'value' in data;
 
 		if (!isCandlestick(mostRecentBar)) return;
 
@@ -1350,7 +1362,12 @@
 
 			// Type guard to check if bar is CandlestickData
 			const isCandlestick = (data: any): data is CandlestickData<Time> =>
-				'open' in data && 'high' in data && 'low' in data && 'close' in data;
+				data &&
+				typeof data === 'object' &&
+				'open' in data &&
+				'high' in data &&
+				'low' in data &&
+				'close' in data;
 
 			if (!isCandlestick(bar)) {
 				return; // Skip if the bar is not CandlestickData
@@ -1390,7 +1407,13 @@
 				volume: volume,
 				adr: calculateSingleADR(
 					barsForADR.filter(
-						(candle) => 'open' in candle && 'high' in candle && 'low' in candle && 'close' in candle
+						(candle) =>
+							candle &&
+							typeof candle === 'object' &&
+							'open' in candle &&
+							'high' in candle &&
+							'low' in candle &&
+							'close' in candle
 					) as CandlestickData<Time>[]
 				),
 				chg: chg,
@@ -1405,9 +1428,9 @@
 					// Transform the histogram data to the format expected by calculateRVOL
 					const volumeData = chartVolumeSeries.data().slice(0, cursorBarIndex + 1);
 					barsForRVOL = volumeData
-						.filter((bar) => 'value' in bar) // Filter to ensure only HistogramData is included
+						.filter((bar) => bar && typeof bar === 'object' && 'value' in bar) // Filter to ensure only HistogramData is included
 						.map((bar) => ({
-							time: bar.time as UTCTimestamp,
+							time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
 							value: (bar as HistogramData<Time>).value || 0
 						}));
 				}

@@ -9,10 +9,11 @@ import random
 USE_DATABASE = True  # Set to False to print output instead of saving to database
 
 # Rate limiting parameters
-INITIAL_SLEEP_TIME = 0.5  # Initial sleep time between requests
-MAX_SLEEP_TIME = 30  # Maximum sleep time after backoff
+INITIAL_SLEEP_TIME = 1.0  # Increased from 0.5 to 1.0 seconds
+MAX_SLEEP_TIME = 60  # Increased from 30 to 60 seconds
 BACKOFF_FACTOR = 2  # Exponential backoff multiplier
 JITTER = 0.1  # Random jitter factor to avoid synchronized requests
+BATCH_SIZE = 20  # Reduced batch size from 100 to 20
 
 def get_timestamp():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -101,9 +102,13 @@ def process_ticker_batch(tickers):
         # Dynamic sleep time based on recent success rate
         current_success_rate = success_count / (success_count + failure_count) if (success_count + failure_count) > 0 else 0.5
         # Adjust sleep time - sleep longer if we're getting more failures
-        sleep_time = INITIAL_SLEEP_TIME * (1 + (1 - current_success_rate) * 2)
+        sleep_time = INITIAL_SLEEP_TIME * (1 + (1 - current_success_rate) * 4)  # Increased multiplier from 2 to 4
         sleep_time = sleep_time * (1 + random.uniform(-JITTER, JITTER))  # Add jitter
         
+        # Add additional sleep if we've had consecutive failures
+        if failure_count > 3 and success_count == 0:
+            sleep_time *= 2  # Double sleep time if we have consecutive failures
+            
         time.sleep(sleep_time)
         
     print(f"{get_timestamp()} - Batch completed: {success_count} successful, {failure_count} failed", flush=True)
@@ -131,17 +136,16 @@ def update_sectors(conn):
 
             total_tickers = len(all_tickers)
             stats["total"] = total_tickers
-            print(f"{get_timestamp()} - Processing {total_tickers} securities in batches of 100", flush=True)
+            print(f"{get_timestamp()} - Processing {total_tickers} securities in batches of {BATCH_SIZE}", flush=True)
             
-            # Process in batches of 100
-            batch_size = 100
-            for i in range(0, total_tickers, batch_size):
-                batch = all_tickers[i:i+batch_size]
+            # Process in batches of BATCH_SIZE
+            for i in range(0, total_tickers, BATCH_SIZE):
+                batch = all_tickers[i:i+BATCH_SIZE]
                 batch_start_time = datetime.now()
                 print(f"{get_timestamp()} - Starting update_sectors with {min(cpu_count(), 4)} processes for {len(batch)} securities", flush=True)
                 
                 # Split the batch for parallel processing
-                num_processes = min(cpu_count(), 4)  # Use at most 4 processes to avoid overwhelming the API
+                num_processes = min(cpu_count(), 2)  # Reduced from 4 to 2 processes to reduce API load
                 chunks = [batch[j::num_processes] for j in range(num_processes)]
                 
                 # Process in parallel
@@ -198,20 +202,20 @@ def update_sectors(conn):
                 batch_duration = batch_end_time - batch_start_time
                 
                 print(
-                    f"{get_timestamp()} - Batch {i//batch_size + 1}/{(total_tickers+batch_size-1)//batch_size} completed: "
+                    f"{get_timestamp()} - Batch {i//BATCH_SIZE + 1}/{(total_tickers+BATCH_SIZE-1)//BATCH_SIZE} completed: "
                     f"{batch_updated} updated, {batch_failed} failed, {batch_unchanged} unchanged. "
                     f"Time: {batch_duration}",
                     flush=True,
                 )
                 
                 # If all requests in this batch failed due to rate limiting, add a longer pause
-                if batch_failed == len(batch) and all("rate limit" in info.get('error', '').lower() for info in batch_results):
-                    extended_sleep = 60  # 1 minute pause
+                if batch_failed == len(batch) and any("rate limit" in info.get('error', '').lower() for info in batch_results):
+                    extended_sleep = 120  # Increased from 60 to 120 seconds
                     print(f"{get_timestamp()} - All requests failed due to rate limiting. Pausing for {extended_sleep} seconds before next batch.", flush=True)
                     time.sleep(extended_sleep)
                 else:
-                    # Regular sleep between batches
-                    time.sleep(2)
+                    # Regular sleep between batches - increased from 2 to 5 seconds
+                    time.sleep(5)
 
             end_time = datetime.now()
             duration = end_time - start_time

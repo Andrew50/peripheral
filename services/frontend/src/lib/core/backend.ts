@@ -3,14 +3,14 @@ const pollInterval = 300; // Poll every 100ms
 import { goto } from '$app/navigation';
 
 // Default value for server-side rendering
-base_url = 'http://localhost:5057';
+base_url = 'http://localhost:5058';
 
 if (typeof window !== 'undefined') {
     // For client-side code
     if (window.location.hostname === 'localhost') {
         // In development
         const url = new URL(window.location.origin);
-        url.port = '5057'; // Switch to backend port
+        url.port = '5058'; // Switch to backend port
         base_url = url.toString();
         if (base_url.endsWith('/')) {
             base_url = base_url.substring(0, base_url.length - 1);
