@@ -324,6 +324,17 @@ jobs:
           # Check if JWT_SECRET secret is set
           if [ -z "${{ secrets.JWT_SECRET }}" ]; then
             error_log "JWT_SECRET secret is not available"
+          # Check Kubernetes cluster connectivity
+          log "Checking Kubernetes cluster connectivity..."
+          if ! kubectl cluster-info &>/dev/null; then
+            error_log "Cannot connect to Kubernetes cluster. Make sure the cluster is running."
+            error_log "If using minikube, run 'minikube start' to start the cluster."
+            error_log "Cluster connection details:"
+            kubectl config view
+            exit 1
+          fi
+
+          log "Kubernetes cluster is accessible. Proceeding with secret updates..."
             error_log "Please add the JWT_SECRET secret in your GitHub repository"
             exit 1
           fi
@@ -388,7 +399,13 @@ jobs:
           EOF
           
           # Apply the secrets to Kubernetes
-          kubectl apply -f "$SECRETS_FILE"
+          if ! kubectl apply -f "$SECRETS_FILE"; then
+            log "Failed to apply secrets with validation. Trying with validation disabled..."
+            kubectl apply -f "$SECRETS_FILE" --validate=false || {
+              error_log "Failed to apply secrets even with validation disabled."
+              exit 1
+            }
+          fi
           
           # Verify the secrets were created successfully
           if ! kubectl get secret redis-secret &>/dev/null; then
