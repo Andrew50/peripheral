@@ -649,7 +649,10 @@ func StartServer() {
 			w.Header().Set("Content-Type", "text/plain")
 
 			// Get all goroutines
-			pprof.Lookup("goroutine").WriteTo(w, 1)
+			if err := pprof.Lookup("goroutine").WriteTo(w, 1); err != nil {
+				log.Printf("Error writing goroutine profile: %v", err)
+				http.Error(w, "Failed to generate goroutine profile", http.StatusInternalServerError)
+			}
 		})
 
 		fmt.Println("Debug endpoints enabled at /debug/goroutines")
