@@ -213,11 +213,6 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 	activeYesterday := toFilteredMap(yesterdayPolyTickers)
 	for currentDate := startDate; currentDate.Before(time.Now()); currentDate = currentDate.AddDate(0, 0, 1) {
 		currentDateString := currentDate.Format(dateFormat)
-		yesterdayDateString := currentDate.AddDate(0, 0, -1).Format(dateFormat)
-		if err != nil {
-			log.Printf("Error formatting date: %v", err)
-			return err
-		}
 		polyTickers, err := utils.AllTickers(conn.Polygon, currentDateString)
 		if err != nil {
 			return fmt.Errorf("423n %v", err)
@@ -271,7 +266,7 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 						if !prevListing {
 							logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "ticker change 1", nil)
 							diagnoses = append(diagnoses, "ticker change")
-							if dataExists(conn.Polygon, sec.Ticker, maxDate.Time.Format(dateFormat), yesterdayDateString) {
+							if dataExists(conn.Polygon, sec.Ticker, maxDate.Time.Format(dateFormat), currentDateString) {
 								logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "false delist and ticker change", nil)
 								diagnoses = append(diagnoses, "false delist")
 							}
@@ -283,7 +278,7 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 					targetTicker = sec.Ticker
 					err := conn.DB.QueryRow(context.Background(), "SELECT maxDate from securities where ticker = $1", sec.Ticker).Scan(&maxDate)
 					if err == nil {
-						if dataExists(conn.Polygon, sec.Ticker, maxDate.Time.Format(dateFormat), yesterdayDateString) {
+						if dataExists(conn.Polygon, sec.Ticker, maxDate.Time.Format(dateFormat), currentDateString) {
 							diagnoses = append(diagnoses, "false delist")
 							diagnoses = append(diagnoses, "figi change")
 							logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "false delist and figi change", nil)
@@ -310,7 +305,7 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 				var figiInDB string
 				err := conn.DB.QueryRow(context.Background(), "SELECT figi, maxDate FROM securities where ticker = $1 order by COALESCE(maxDate, '2200-01-01') DESC LIMIT 1", sec.Ticker).Scan(&figiInDB, &maxDate)
 				if err == nil { // ticker exists in db and data exists
-					if dataExists(conn.Polygon, sec.Ticker, maxDate.Time.Format(dateFormat), yesterdayDateString) {
+					if dataExists(conn.Polygon, sec.Ticker, maxDate.Time.Format(dateFormat), currentDateString) {
 						diagnoses = append(diagnoses, "false delist")
 						logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "false delist 2", nil)
 					} else {
@@ -392,7 +387,7 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 		}
 		for i, sec := range removals {
 
-			cmdTag, _ := conn.DB.Exec(context.Background(), "UPDATE securities SET maxDate = $1 where ticker = $2 and maxDate is NULL", yesterdayDateString, sec.Ticker)
+			cmdTag, _ := conn.DB.Exec(context.Background(), "UPDATE securities SET maxDate = $1 where ticker = $2 and maxDate is NULL", currentDateString, sec.Ticker)
 			// Log the number of rows affected if needed
 			if test && cmdTag.RowsAffected() > 0 {
 				log.Printf("Updated %d rows for ticker %s", cmdTag.RowsAffected(), sec.Ticker)
@@ -412,6 +407,7 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 						err = rows.Scan(&targetTicker, &maxDate)
 						if err != nil {
 							fmt.Printf("21j1m %v\n", err)
+							ok = false
 						} else {
 							if targetTicker == sec.Ticker {
 								fmt.Printf("23kniv %s %s %s\n", sec.Ticker, sec.CompositeFIGI, currentDateString)
@@ -445,7 +441,6 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 				}
 			}
 		}
-		yesterdayDateString = currentDateString
 		activeYesterday = activeToday
 	}
 
