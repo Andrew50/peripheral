@@ -225,6 +225,9 @@
 	let lastUpdateTime = 0;
 	const updateThrottleMs = 100;
 
+	let keyBuffer: string[] = []; // This is for catching key presses from the keyboard before the input system is active 
+	let isInputActive = false;    // Track if input window is active/initializing
+
 	// Add type definitions at the top
 	interface Alert {
 		alertType: string;
@@ -1231,24 +1234,71 @@
 					!event.metaKey &&
 					/^[a-zA-Z0-9]$/.test(event.key.toLowerCase()))
 			) {
-				// goes to input popup
-				if ($streamInfo.replayActive) {
-					currentChartInstance.timestamp = 0;
-				}
-
-				// Store the first keystroke in the instance to pass it to the input component
-				// Don't lowercase - pass the original key case to allow input component to handle it
-				const firstKey = event.key === 'Tab' ? '' : event.key;
-
 				// Prevent default and stop propagation immediately
 				event.preventDefault();
 				event.stopPropagation();
+				
+				// Add the keypress to our buffer
+				if (event.key !== 'Tab') {
+					keyBuffer.push(event.key);
+				}
+				
+				// If this is the first key, start the input process
+				if (!isInputActive) {
+					isInputActive = true;
+					
+					// Create the initial instance with the buffer contents so far
+					const initialInputString = keyBuffer.join('');
+					const partialInstance: ChartInstance = {
+						ticker: currentChartInstance.ticker,
+						timestamp: currentChartInstance.timestamp,
+						timeframe: currentChartInstance.timeframe,
+						securityId: ensureNumericSecurityId(currentChartInstance),
+						price: currentChartInstance.price,
+						chartId: currentChartInstance.chartId,
+						extendedHours: currentChartInstance.extendedHours,
+						inputString: initialInputString // Pass the buffer as the initial string
+					};
+					
+					// Initiate the input window with the whole buffer string
+					queryInstanceInput('any', 'any', partialInstance)
+						.then((value: CoreInstance) => {
+							// Handle normal completion
+							isInputActive = false;
+							keyBuffer = []; // Clear buffer
+							
+							const securityId =
+								typeof value.securityId === 'string'
+									? parseInt(value.securityId, 10)
+									: value.securityId || 0;
 
-				// Pass the first key as inputString to the query input
-				handleKeyboardInput(event, chartContainer);
+							const extendedV: ChartInstance = {
+								ticker: value.ticker || '',
+								timestamp: value.timestamp || 0,
+								timeframe: value.timeframe || '',
+								securityId: securityId,
+								price: value.price || 0,
+								chartId: currentChartInstance.chartId,
+								extendedHours: currentChartInstance.extendedHours
+							};
+							currentChartInstance = extendedV;
+							queryChart(extendedV, true);
+							setTimeout(() => chartContainer.focus(), 0);
+						})
+						.catch((error) => {
+							isInputActive = false;
+							keyBuffer = []; // Clear buffer
+							console.error('Input error:', error);
+							setTimeout(() => chartContainer.focus(), 0);
+						});
+				}
 			} else if (event.key == 'Shift') {
 				shiftDown = true;
 			} else if (event.key == 'Escape') {
+				// Clear buffer on escape
+				keyBuffer = [];
+				isInputActive = false;
+				
 				if (get(shiftOverlay).isActive) {
 					shiftOverlay.update((v: ShiftOverlay): ShiftOverlay => {
 						if (v.isActive) {
@@ -1675,16 +1725,18 @@
 		return 0; // Default value if undefined
 	}
 
-	// Update the queryInstanceInput call
-	function handleKeyboardInput(event: KeyboardEvent, chartContainer: HTMLElement) {
+	// Separate function to handle keyboard input
+	function handleKeyboardInput(chartContainer: HTMLElement) {
 		if ($streamInfo.replayActive) {
 			currentChartInstance.timestamp = 0;
 		}
 
-		const firstKey = event.key === 'Tab' ? '' : event.key;
-		event.preventDefault();
-		event.stopPropagation();
-
+		// Make a copy of the current buffer and then clear it
+		const currentBuffer = [...keyBuffer];
+		keyBuffer = [];
+		
+		const inputString = currentBuffer.join('');
+		
 		const inputInstance: ChartInstance = {
 			ticker: currentChartInstance.ticker,
 			timestamp: currentChartInstance.timestamp,
@@ -1692,11 +1744,13 @@
 			securityId: ensureNumericSecurityId(currentChartInstance),
 			price: currentChartInstance.price,
 			chartId: currentChartInstance.chartId,
-			inputString: firstKey
+			inputString: inputString
 		};
 
 		queryInstanceInput('any', 'any', inputInstance)
 			.then((value: CoreInstance) => {
+				isInputActive = false;
+				
 				const securityId =
 					typeof value.securityId === 'string'
 						? parseInt(value.securityId, 10)
@@ -1712,14 +1766,18 @@
 					extendedHours: currentChartInstance.extendedHours
 				};
 				currentChartInstance = extendedV;
+				keyBuffer = []; // Clear buffer
 				queryChart(extendedV, true);
 				setTimeout(() => chartContainer.focus(), 0);
 			})
 			.catch((error) => {
+				isInputActive = false;
+				keyBuffer = []; // Clear buffer
 				console.error('Input error:', error);
 				setTimeout(() => chartContainer.focus(), 0);
 			});
 	}
+
 </script>
 
 <div class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
