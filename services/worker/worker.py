@@ -2,9 +2,11 @@ import json, traceback, datetime, psycopg2, redis
 import random
 import os
 import sys
+import uuid
+import signal
 
 
-from conn import Conn
+from conn import Conn, add_task_log, safe_redis_operation
 from train import train
 from screen import screen
 from trainerQueue import refillTrainerQueue
@@ -17,9 +19,10 @@ from trades import (
     get_ticker_performance,
     delete_all_user_trades,
 )
-from update_sectors import update_sectors
 from active import update_active
+from sector import update_sectors
 import time
+
 
 funcMap = {
     "train": train,
@@ -40,43 +43,13 @@ funcMap = {
 def packageResponse(result, status):
     return json.dumps({"status": status, "result": result})
 
-def add_task_log(data, task_id, message, level="info"):
-    """Add a log entry to a task"""
-    try:
-        # Get the current task
-        task_json = safe_redis_operation(data.cache.get, task_id)
-        if not task_json:
-            print(f"Warning: Could not find task {task_id} to add log", flush=True)
-            return
-        
-        task = json.loads(task_json)
-        
-        # Create a log entry
-        log_entry = {
-            "timestamp": datetime.datetime.now().isoformat(),
-            "message": message,
-            "level": level
-        }
-        
-        # Add the log entry to the task
-        if "logs" not in task:
-            task["logs"] = []
-        
-        task["logs"].append(log_entry)
-        task["updatedAt"] = datetime.datetime.now().isoformat()
-        
-        # Save the updated task
-        safe_redis_operation(data.cache.set, task_id, json.dumps(task))
-    except Exception as e:
-        print(f"Error adding log to task {task_id}: {e}", flush=True)
-
 def update_task_state(data, task_id, state):
     """Update the state of a task"""
     try:
         # Get the current task
         task_json = safe_redis_operation(data.cache.get, task_id)
         if not task_json:
-            print(f"Warning: Could not find task {task_id} to update state", flush=True)
+            add_task_log(data, task_id, f"Warning: Could not find task {task_id} to update state", "warning")
             return
         
         task = json.loads(task_json)
@@ -88,7 +61,7 @@ def update_task_state(data, task_id, state):
         # Save the updated task
         safe_redis_operation(data.cache.set, task_id, json.dumps(task))
     except Exception as e:
-        print(f"Error updating task state for {task_id}: {e}", flush=True)
+        add_task_log(data, task_id, f"Error updating task state for {task_id}: {e}", "error")
 
 def set_task_result(data, task_id, result):
     """Set the result of a completed task"""
@@ -96,7 +69,7 @@ def set_task_result(data, task_id, result):
         # Get the current task
         task_json = safe_redis_operation(data.cache.get, task_id)
         if not task_json:
-            print(f"Warning: Could not find task {task_id} to set result", flush=True)
+            add_task_log(data, task_id, f"Warning: Could not find task {task_id} to set result", "warning")
             return
         
         task = json.loads(task_json)
@@ -109,7 +82,7 @@ def set_task_result(data, task_id, result):
         # Save the updated task
         safe_redis_operation(data.cache.set, task_id, json.dumps(task))
     except Exception as e:
-        print(f"Error setting task result for {task_id}: {e}", flush=True)
+        add_task_log(data, task_id, f"Error setting task result for {task_id}: {e}", "error")
 
 def set_task_error(data, task_id, error_message):
     """Set the error of a failed task"""
@@ -117,7 +90,7 @@ def set_task_error(data, task_id, error_message):
         # Get the current task
         task_json = safe_redis_operation(data.cache.get, task_id)
         if not task_json:
-            print(f"Warning: Could not find task {task_id} to set error", flush=True)
+            add_task_log(data, task_id, f"Warning: Could not find task {task_id} to set error", "warning")
             return
         
         task = json.loads(task_json)
@@ -130,90 +103,7 @@ def set_task_error(data, task_id, error_message):
         # Save the updated task
         safe_redis_operation(data.cache.set, task_id, json.dumps(task))
     except Exception as e:
-        print(f"Error setting task error for {task_id}: {e}", flush=True)
-
-def safe_redis_operation(func, *args, **kwargs):
-    """Execute a Redis operation with retry logic and improved timeout handling"""
-    max_retries = int(os.environ.get("REDIS_RETRY_ATTEMPTS", "5"))
-    base_retry_delay = float(os.environ.get("REDIS_RETRY_DELAY", "1"))
-    max_retry_delay = float(os.environ.get("REDIS_MAX_RETRY_DELAY", "10"))  # Cap the maximum delay
-    
-    for attempt in range(max_retries):
-        try:
-            # Special handling for brpop which needs timeout as a positional argument
-            if func.__name__ == 'brpop' and 'timeout' in kwargs:
-                timeout_val = kwargs.pop('timeout')
-                return func(*args, timeout_val)
-            
-            # For all other Redis operations, don't add a timeout parameter
-            # Redis operations like 'set', 'get', 'ping' don't accept a timeout parameter
-            # They rely on the socket_timeout configured at the connection level
-            return func(*args, **kwargs)
-            
-        except redis.exceptions.TimeoutError as e:
-            # Handle timeout errors specifically - these often indicate network issues
-            if attempt < max_retries - 1:
-                retry_delay = min(base_retry_delay * (2 ** attempt), max_retry_delay)
-                jitter = random.uniform(0, 0.1 * retry_delay)  # 10% jitter
-                total_delay = retry_delay + jitter
-                
-                print(f"Redis operation timed out (attempt {attempt+1}/{max_retries}): {e}. Retrying in {total_delay:.2f}s", flush=True)
-                
-                # For timeout errors, we should try to reset the connection if possible
-                if hasattr(func, '__self__') and hasattr(func.__self__, 'connection_pool'):
-                    try:
-                        # Try to reset the connection pool
-                        print("Attempting to reset Redis connection pool...", flush=True)
-                        func.__self__.connection_pool.reset()
-                    except Exception as reset_error:
-                        print(f"Failed to reset connection pool: {reset_error}", flush=True)
-                
-                # Use shorter sleep intervals with checks to allow for cleaner interruption
-                sleep_interval = 0.5
-                sleep_count = int(total_delay / sleep_interval)
-                
-                for _ in range(sleep_count):
-                    time.sleep(sleep_interval)
-                
-                # Sleep any remaining time
-                remaining_time = total_delay - (sleep_count * sleep_interval)
-                if remaining_time > 0:
-                    time.sleep(remaining_time)
-            else:
-                print(f"Redis operation timed out after {max_retries} attempts: {e}", flush=True)
-                raise
-                
-        except redis.exceptions.ConnectionError as e:
-            if attempt < max_retries - 1:
-                # Calculate delay with exponential backoff and jitter, but cap it
-                retry_delay = min(base_retry_delay * (2 ** attempt), max_retry_delay)
-                jitter = random.uniform(0, 0.1 * retry_delay)  # 10% jitter
-                total_delay = retry_delay + jitter
-                
-                print(f"Redis connection error (attempt {attempt+1}/{max_retries}): {e}. Retrying in {total_delay:.2f}s", flush=True)
-                
-                # Use shorter sleep intervals with checks to allow for cleaner interruption
-                sleep_interval = 0.5
-                sleep_count = int(total_delay / sleep_interval)
-                
-                for _ in range(sleep_count):
-                    time.sleep(sleep_interval)
-                
-                # Sleep any remaining time
-                remaining_time = total_delay - (sleep_count * sleep_interval)
-                if remaining_time > 0:
-                    time.sleep(remaining_time)
-            else:
-                print(f"Redis connection error after {max_retries} attempts: {e}", flush=True)
-                raise
-        except Exception as e:
-            print(f"Unexpected Redis error: {e}", flush=True)
-            if attempt < max_retries - 1:
-                retry_delay = min(base_retry_delay * (2 ** attempt), max_retry_delay)
-                print(f"Retrying in {retry_delay:.2f}s", flush=True)
-                time.sleep(retry_delay)
-            else:
-                raise
+        add_task_log(data, task_id, f"Error setting task error for {task_id}: {e}", "error")
 
 def process_tasks():
     data = None
@@ -260,7 +150,7 @@ def process_tasks():
                             task_data["args"],
                         )
 
-                        print(f"starting {func_ident} {args} {task_id}", flush=True)
+                        add_task_log(data, task_id, f"starting {func_ident} {args} {task_id}")
                         
                         # Create a custom stdout capture class to capture logs
                         class LogCapture:
@@ -303,44 +193,41 @@ def process_tasks():
                             
                             start = datetime.datetime.now()
                             
-                            # Special handling for job functions
-                            if func_ident.startswith("job_"):
-                                # For job functions, just mark them as completed without executing
-                                add_task_log(data, task_id, f"Job function {func_ident} marked as completed")
-                                result = json.dumps({"status": "success", "message": f"Job {func_ident} processed"})
+                            # Execute the function if it exists in the function map
+                            if func_ident in funcMap:
+                                # Inject task context into the conn object
+                                data.task_id = task_id
+                                data.task_data = data
+                                
+                                result = funcMap[func_ident](data, **args if args else {})
                             else:
-                                # For regular worker functions, execute them if they exist in the function map
-                                if func_ident in funcMap:
-                                    result = funcMap[func_ident](data, **args)
-                                else:
-                                    raise KeyError(f"Function '{func_ident}' not found in function map")
+                                raise KeyError(f"Function '{func_ident}' not found in function map")
 
                             # Set task status to completed with result
                             set_task_result(data, task_id, result)
                             add_task_log(data, task_id, f"Task completed in {datetime.datetime.now() - start}")
-                            print(f"finished {func_ident} {args} time: {datetime.datetime.now() - start}", flush=True)
+                            add_task_log(data, task_id, f"finished {func_ident} {args} time: {datetime.datetime.now() - start}")
                             
                             # Ping Redis after task completion to keep connection alive
                             try:
                                 safe_redis_operation(data.cache.ping)
                             except Exception as e:
-                                print(f"Failed to ping Redis after task completion: {e}", flush=True)
+                                add_task_log(data, task_id, f"Failed to ping Redis after task completion: {e}", "warning")
                                 # Try to reset the connection pool
                                 try:
                                     data.cache.connection_pool.reset()
-                                    print("Reset Redis connection pool after failed ping", flush=True)
+                                    add_task_log(data, task_id, "Reset Redis connection pool after failed ping")
                                 except Exception as reset_error:
-                                    print(f"Failed to reset connection pool: {reset_error}", flush=True)
+                                    add_task_log(data, task_id, f"Failed to reset connection pool: {reset_error}", "error")
                         except psycopg2.InterfaceError:
                             exception = traceback.format_exc()
                             set_task_error(data, task_id, exception)
                             add_task_log(data, task_id, f"Database interface error: {exception}", "error")
-                            print(exception, flush=True)
                             # Check and potentially reconnect to the database
                             try:
                                 data.check_connection()
                             except Exception as conn_err:
-                                print(f"Failed to check/reconnect to database: {conn_err}", flush=True)
+                                add_task_log(data, task_id, f"Failed to check/reconnect to database: {conn_err}", "error")
                                 # Force a full reconnection on the next iteration
                                 data = None
                                 break
@@ -348,7 +235,6 @@ def process_tasks():
                             exception = traceback.format_exc()
                             set_task_error(data, task_id, exception)
                             add_task_log(data, task_id, f"Task failed with error: {exception}", "error")
-                            print(exception, flush=True)
                         finally:
                             # Restore original stdout
                             sys.stdout.flush()

@@ -26,13 +26,70 @@
 	function closeNewWatchlistWindow() {
 		showWatchlistInput = false;
 		newWatchlistName = '';
+
+		// Make sure we have a valid previousWatchlistId to fall back to
+		if (previousWatchlistId === undefined || isNaN(previousWatchlistId)) {
+			// If no valid previous ID, try to use the first available watchlist
+			const watchlistsValue = get(watchlists);
+			if (Array.isArray(watchlistsValue) && watchlistsValue.length > 0) {
+				previousWatchlistId = watchlistsValue[0].watchlistId;
+			}
+		}
+
+		// Set the current ID back to the previous one
 		currentWatchlistId = previousWatchlistId;
+
+		// Force a UI refresh by selecting the watchlist
 		tick().then(() => {
+			// Force the select dropdown to reset by accessing the DOM element
+			const selectElement = document.getElementById('watchlists') as HTMLSelectElement;
+			if (selectElement) {
+				selectElement.value = String(previousWatchlistId);
+			}
+
 			selectWatchlist(String(previousWatchlistId));
 		});
 	}
 
 	onMount(() => {
+		// Check if the flag watchlist exists in the loaded watchlists
+		const checkAndCreateFlagWatchlist = () => {
+			const watchlistsValue = get(watchlists);
+
+			// Don't proceed if watchlists isn't properly loaded yet
+			if (!Array.isArray(watchlistsValue)) return;
+
+			const flagWatch = watchlistsValue.find((w) => w.watchlistName.toLowerCase() === 'flag');
+
+			if (!flagWatch) {
+				// Flag watchlist doesn't exist, create it
+				privateRequest<number>('newWatchlist', { watchlistName: 'flag' }).then((newId: number) => {
+					// Update the watchlists store with the new flag watchlist
+					watchlists.update((v: Watchlist[]) => {
+						const w: Watchlist = {
+							watchlistName: 'flag',
+							watchlistId: newId
+						};
+						if (!Array.isArray(v)) {
+							return [w];
+						}
+						return [w, ...v];
+					});
+
+					// Initialize the flagWatchlist store via the backend
+					privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: newId }).then(
+						(items: WatchlistItem[]) => {
+							// The store will be updated by the backend via the global store
+							console.log('Flag watchlist created with ID:', newId);
+						}
+					);
+				});
+			}
+		};
+
+		// Wait a short delay to ensure stores are initialized
+		setTimeout(checkAndCreateFlagWatchlist, 100);
+
 		// Convert flagWatchlistId to string to fix type issue
 		if (flagWatchlistId !== undefined) {
 			selectWatchlist(String(flagWatchlistId));
@@ -114,10 +171,23 @@
 		if (!watchlistIdString) return;
 
 		if (watchlistIdString === 'new') {
-			previousWatchlistId = currentWatchlistId;
+			// Store the current watchlist ID before showing the form
+			if (currentWatchlistId !== undefined && !isNaN(currentWatchlistId)) {
+				previousWatchlistId = currentWatchlistId;
+			} else {
+				// If no valid current ID, try to find a valid one from the watchlists
+				const watchlistsValue = get(watchlists);
+				if (Array.isArray(watchlistsValue) && watchlistsValue.length > 0) {
+					previousWatchlistId = watchlistsValue[0].watchlistId;
+				}
+			}
+
+			// Show the form
 			showWatchlistInput = true;
 			tick().then(() => {
-				newNameInput.focus();
+				if (newNameInput) {
+					newNameInput.focus();
+				}
 			});
 			return;
 		}
@@ -128,6 +198,14 @@
 
 			// Make sure we have the current watchlist ID as a number for comparison
 			const currentWatchlistIdNum = Number(currentWatchlistId);
+
+			// Don't allow deletion of the flag watchlist
+			if (currentWatchlistIdNum === flagWatchlistId) {
+				alert('The flag watchlist cannot be deleted.');
+				// Reset the dropdown
+				selectWatchlist(String(currentWatchlistId));
+				return;
+			}
 
 			// Debug the watchlists and current ID to verify what we're looking for
 			console.log('Current watchlist ID:', currentWatchlistIdNum);
@@ -173,6 +251,13 @@
 		// Ensure id is a number before sending to the backend
 		const watchlistId = typeof id === 'string' ? parseInt(id, 10) : id;
 
+		// Safety check to prevent deleting the flag watchlist
+		if (watchlistId === flagWatchlistId) {
+			console.log('Attempted to delete flag watchlist, operation prevented');
+			alert('The flag watchlist cannot be deleted.');
+			return;
+		}
+
 		privateRequest<void>('deleteWatchlist', { watchlistId }).then(() => {
 			watchlists.update((v: Watchlist[]) => {
 				// After deletion, select another watchlist if available
@@ -186,9 +271,6 @@
 
 				return updatedWatchlists;
 			});
-			if (id === flagWatchlistId) {
-				flagWatchlist.set([]);
-			}
 		});
 	}
 
@@ -201,13 +283,25 @@
 		const target = event.target as HTMLSelectElement;
 		const value = target.value;
 
-		// Handle special values
-		if (value !== 'new' && value !== 'delete') {
-			previousWatchlistId = parseInt(value, 10);
-			currentWatchlistId = parseInt(value, 10);
+		// Always handle new watchlist selection, even if it's already selected
+		if (value === 'new') {
+			// We're trying to open the new watchlist form, save the current selection
+			if (!showWatchlistInput) {
+				previousWatchlistId = currentWatchlistId;
+				selectWatchlist('new');
+			}
+			return;
 		}
 
-		// Always pass the string value to selectWatchlist
+		// For delete and other watchlist IDs
+		if (value === 'delete') {
+			selectWatchlist('delete');
+			return;
+		}
+
+		// For regular watchlist selections
+		previousWatchlistId = parseInt(value, 10);
+		currentWatchlistId = parseInt(value, 10);
 		selectWatchlist(value);
 	}
 </script>
@@ -226,19 +320,29 @@
 					<optgroup label="My Watchlists">
 						{#each $watchlists as watchlist}
 							<option value={watchlist.watchlistId.toString()}>
-								{watchlist.watchlistName}
+								{watchlist.watchlistName === 'flag'
+									? '🚩 Flag (Protected)'
+									: watchlist.watchlistName}
 							</option>
 						{/each}
 					</optgroup>
 					<optgroup label="Actions">
 						<option value="new">+ Create New Watchlist</option>
-						{#if currentWatchlistId}
+						{#if currentWatchlistId && currentWatchlistId !== flagWatchlistId}
 							<option value="delete">- Delete Current Watchlist</option>
 						{/if}
 					</optgroup>
 				</select>
 				{#if !showWatchlistInput}
 					<button class="utility-button" title="Add Symbol" on:click={addInstance}>+</button>
+					<button
+						class="utility-button new-watchlist-button"
+						title="New Watchlist"
+						on:click={() => selectWatchlist('new')}
+					>
+						<span>+</span>
+						<span class="list-icon">📋</span>
+					</button>
 				{/if}
 			</div>
 
@@ -273,8 +377,11 @@
 				<button
 					class="shortcut-button {currentWatchlistId === watchlist.watchlistId ? 'active' : ''}"
 					on:click={() => selectWatchlist(String(watchlist.watchlistId))}
+					title={watchlist.watchlistName}
 				>
-					{getWatchlistInitial(watchlist.watchlistName)}
+					{watchlist.watchlistName.toLowerCase() === 'flag'
+						? '🚩'
+						: getWatchlistInitial(watchlist.watchlistName)}
 				</button>
 			{/each}
 		{/if}
@@ -321,6 +428,21 @@
 		background: var(--ui-bg-hover);
 		transform: translateY(-1px);
 		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	}
+
+	.watchlist-selector .new-watchlist-button {
+		font-size: 14px;
+		position: relative;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+	}
+
+	.watchlist-selector .new-watchlist-button .list-icon {
+		font-size: 12px;
+		position: absolute;
+		right: 4px;
+		bottom: 2px;
 	}
 
 	.new-watchlist-container {

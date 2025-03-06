@@ -509,6 +509,7 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 
 		resp, err := client.Do(req)
 		if err != nil {
+
 			return "", fmt.Errorf("failed to fetch image: %v", err)
 		}
 		defer resp.Body.Close()
