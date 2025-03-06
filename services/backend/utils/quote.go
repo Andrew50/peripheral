@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sync"
 	"time"
 
 	polygon "github.com/polygon-io/client-go/rest"
@@ -13,7 +12,7 @@ import (
 	"github.com/polygon-io/client-go/rest/models"
 )
 
-var stdoutMutex sync.Mutex
+// var stdoutMutex sync.Mutex
 
 // silentLogger implements a logger that discards all messages
 // nolint:unused
