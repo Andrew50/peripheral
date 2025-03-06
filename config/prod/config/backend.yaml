@@ -23,6 +23,22 @@ spec:
         - name: backend
           image: billin19/backend:prod
           imagePullPolicy: Always
+          command:
+            - /bin/sh
+          args:
+            - -c
+            - >
+              /app/main &
+              jobctl run ClearWorkerQueue && 
+              jobctl run InitAggregates && 
+              jobctl run SimpleUpdateSecurities && 
+              jobctl run StartAlertLoop && 
+              jobctl run StartPolygonWebSocket && 
+              jobctl run UpdateMarketMetrics && 
+              jobctl run UpdateSectors && 
+              jobctl run UpdateSecurityCik && 
+              jobctl run UpdateSecurityDetails &&
+              wait
           ports:
             - containerPort: 5057
           env:
@@ -79,23 +95,7 @@ spec:
             # Add Google redirect URL
             - name: GOOGLE_REDIRECT_URL
               value: "https://atlantis.trading/auth/google/callback"
-          # Add health check for the backend
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 5057
-            initialDelaySeconds: 60
-            periodSeconds: 15
-            timeoutSeconds: 10
-            failureThreshold: 3
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 5057
-            initialDelaySeconds: 30
-            periodSeconds: 15
-            timeoutSeconds: 10
-            failureThreshold: 3
+          # Removed health checks as backend is a job runner, not an HTTP server
           resources:
             requests:
               cpu: "1000m"

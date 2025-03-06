@@ -194,7 +194,7 @@
 	</div>
 	<button on:click={saveSetup}>Save</button>
 	<button on:click={cancelEdit}>Cancel</button>
-	<button on:click={manualTrain}>(dev) Manual Train</button>
+	<!-- <button on:click={manualTrain}>(dev) Manual Train</button> -->
 	{#if selectedSetupId !== 'new'}
 		<button on:click={deleteSetup}>Delete</button>
 	{/if}
