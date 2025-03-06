@@ -18,6 +18,7 @@ def grab_user_trades(
     """
     Fetch all trades for a user with optional sorting and filtering
 
+
     Args:
         conn: Database connection
         user_id (int): User ID
