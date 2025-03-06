@@ -1279,7 +1279,7 @@
 								securityId: securityId,
 								price: value.price || 0,
 								chartId: currentChartInstance.chartId,
-								extendedHours: currentChartInstance.extendedHours
+								extendedHours: value.extendedHours
 							};
 							currentChartInstance = extendedV;
 							queryChart(extendedV, true);
@@ -1491,13 +1491,24 @@
 					return;
 				}
 				('2');
-				const inst: CoreInstance = {
+				
+				// Get the earliest timestamp from current data
+				const earliestBar = chartCandleSeries.data()[0];
+				if (!earliestBar) return;
+				
+				// Convert the earliest time from EST seconds to UTC milliseconds for the API request
+				const earliestTimestamp = ESTSecondstoUTCMillis(earliestBar.time as UTCTimestamp);
+				
+				// Make sure to include extendedHours in the request
+				const inst: CoreInstance & { extendedHours?: boolean } = {
 					ticker: currentChartInstance.ticker,
-					timestamp: currentChartInstance.timestamp,
+					timestamp: earliestTimestamp,
 					timeframe: currentChartInstance.timeframe,
 					securityId: currentChartInstance.securityId,
-					price: currentChartInstance.price
+					price: currentChartInstance.price,
+					extendedHours: currentChartInstance.extendedHours
 				};
+				
 				backendLoadChartData({
 					...inst,
 					bars: Math.floor(bufferInScreenSizes * barsOnScreen) + 100,
@@ -1509,7 +1520,7 @@
 				(chartCandleSeries.data().length - logicalRange.to) / barsOnScreen <
 				bufferInScreenSizes
 			) {
-				// forward loa
+				// forward load
 				if (chartLatestDataReached) {
 					return;
 				}
@@ -1517,13 +1528,17 @@
 					return;
 				}
 				('3');
-				const inst: CoreInstance = {
+				
+				// Also fix the forward load to include extendedHours
+				const inst: CoreInstance & { extendedHours?: boolean } = {
 					ticker: currentChartInstance.ticker,
 					timestamp: currentChartInstance.timestamp,
 					timeframe: currentChartInstance.timeframe,
 					securityId: currentChartInstance.securityId,
-					price: currentChartInstance.price
+					price: currentChartInstance.price,
+					extendedHours: currentChartInstance.extendedHours
 				};
+				
 				backendLoadChartData({
 					...inst,
 					bars: Math.floor(bufferInScreenSizes * barsOnScreen) + 100,
@@ -1706,8 +1721,6 @@
 		price: chartInstance.price || 0
 	});
 
-	// Use in the code where Instance is needed
-	const instance = createInstance(currentChartInstance);
 
 	// Handle bars calculation safely
 	const calculateBars = (instance: Partial<ChartInstance>): number => {
@@ -1725,58 +1738,7 @@
 		return 0; // Default value if undefined
 	}
 
-	// Separate function to handle keyboard input
-	function handleKeyboardInput(chartContainer: HTMLElement) {
-		if ($streamInfo.replayActive) {
-			currentChartInstance.timestamp = 0;
-		}
 
-		// Make a copy of the current buffer and then clear it
-		const currentBuffer = [...keyBuffer];
-		keyBuffer = [];
-		
-		const inputString = currentBuffer.join('');
-		
-		const inputInstance: ChartInstance = {
-			ticker: currentChartInstance.ticker,
-			timestamp: currentChartInstance.timestamp,
-			timeframe: currentChartInstance.timeframe,
-			securityId: ensureNumericSecurityId(currentChartInstance),
-			price: currentChartInstance.price,
-			chartId: currentChartInstance.chartId,
-			inputString: inputString
-		};
-
-		queryInstanceInput('any', 'any', inputInstance)
-			.then((value: CoreInstance) => {
-				isInputActive = false;
-				
-				const securityId =
-					typeof value.securityId === 'string'
-						? parseInt(value.securityId, 10)
-						: value.securityId || 0;
-
-				const extendedV: ChartInstance = {
-					ticker: value.ticker || '',
-					timestamp: value.timestamp || 0,
-					timeframe: value.timeframe || '',
-					securityId: securityId,
-					price: value.price || 0,
-					chartId: currentChartInstance.chartId,
-					extendedHours: currentChartInstance.extendedHours
-				};
-				currentChartInstance = extendedV;
-				keyBuffer = []; // Clear buffer
-				queryChart(extendedV, true);
-				setTimeout(() => chartContainer.focus(), 0);
-			})
-			.catch((error) => {
-				isInputActive = false;
-				keyBuffer = []; // Clear buffer
-				console.error('Input error:', error);
-				setTimeout(() => chartContainer.focus(), 0);
-			});
-	}
 
 </script>
 
