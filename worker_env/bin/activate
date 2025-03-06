@@ -1,0 +1,53 @@
+#!/bin/bash
+
+# Store the current PATH to restore it when deactivating
+export OLD_PATH="$PATH"
+
+# Set the VIRTUAL_ENV variable to point to the venv directory
+export VIRTUAL_ENV="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Modify PATH to prioritize the venv's bin directory
+export PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Unset PYTHONHOME to prevent conflicts
+if [ -n "${PYTHONHOME:-}" ] ; then
+    export _OLD_VIRTUAL_PYTHONHOME="${PYTHONHOME:-}"
+    unset PYTHONHOME
+fi
+
+# Change the shell prompt to indicate we're in a virtual environment
+if [ -z "${VIRTUAL_ENV_DISABLE_PROMPT:-}" ] ; then
+    _OLD_VIRTUAL_PS1="${PS1:-}"
+    PS1="(worker_env) ${PS1:-}"
+    export PS1
+fi
+
+# Define a deactivate function to restore the original environment
+deactivate() {
+    # Restore the original PATH
+    export PATH="$OLD_PATH"
+    unset OLD_PATH
+
+    # Restore PYTHONHOME if it was set
+    if [ -n "${_OLD_VIRTUAL_PYTHONHOME:-}" ] ; then
+        export PYTHONHOME="${_OLD_VIRTUAL_PYTHONHOME:-}"
+        unset _OLD_VIRTUAL_PYTHONHOME
+    fi
+
+    # Restore the original prompt
+    if [ -n "${_OLD_VIRTUAL_PS1:-}" ] ; then
+        PS1="${_OLD_VIRTUAL_PS1:-}"
+        export PS1
+        unset _OLD_VIRTUAL_PS1
+    fi
+
+    # Unset VIRTUAL_ENV
+    if [ -n "${VIRTUAL_ENV:-}" ] ; then
+        unset VIRTUAL_ENV
+    fi
+
+    # This should be detected by the caller to restore the previous working directory
+    if [ "$1" != "nondestructive" ] ; then
+        unset -f deactivate
+    fi
+} 
