@@ -54,12 +54,6 @@
 					instanceWithInput
 				).then((updatedInstance) => {
 					queryChart(updatedInstance, true);
-					console.log('Updated instance:', updatedInstance);
-				});
-				console.log('Global keydown event:', {
-					key: event.key,
-					ctrlKey: event.ctrlKey,
-					metaKey: event.metaKey
 				});
 
 				// Only focus if we're not in an input field or similar

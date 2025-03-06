@@ -225,8 +225,8 @@
 	let lastUpdateTime = 0;
 	const updateThrottleMs = 100;
 
-	let keyBuffer: string[] = []; // This is for catching key presses from the keyboard before the input system is active 
-	let isInputActive = false;    // Track if input window is active/initializing
+	let keyBuffer: string[] = []; // This is for catching key presses from the keyboard before the input system is active
+	let isInputActive = false; // Track if input window is active/initializing
 
 	// Add type definitions at the top
 	interface Alert {
@@ -269,7 +269,6 @@
 	}
 
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
-		console.log(inst);
 		eventSeries.setData([]);
 		if (inst.requestType === 'loadNewTicker') {
 			bidLine.setData([]);
@@ -301,7 +300,6 @@
 		})
 			.then((response) => {
 				const barDataList = response.bars;
-				console.log(response);
 				blockingChartQueryDispatch = inst;
 				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
 					return;
@@ -829,6 +827,22 @@
 		});
 	}
 
+	function handleShiftOverlayEnd(event: MouseEvent) {
+		shiftOverlay.update((v: ShiftOverlay): ShiftOverlay => {
+			if (v.isActive) {
+				return {
+					...v,
+					isActive: false,
+					width: 0,
+					height: 0
+				};
+			}
+			return v;
+		});
+		document.removeEventListener('mousemove', shiftOverlayTrack);
+		document.removeEventListener('mouseup', handleShiftOverlayEnd);
+	}
+
 	async function updateLatestChartBar(trade: TradeData) {
 		// Early returns for invalid data
 		if (
@@ -981,7 +995,6 @@
 		try {
 			const timeToRequestForUpdatingAggregate =
 				ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
-			console.log('timeToRequestForUpdatingAggregate:', timeToRequestForUpdatingAggregate);
 			const [barData] = await privateRequest<BarData[]>('getChartData', {
 				securityId: chartSecurityId,
 				timeframe: chartTimeframe,
@@ -1217,7 +1230,10 @@
 			}
 		});
 		chartContainer.addEventListener('keydown', (event) => {
-			setActiveChart(chartId, currentChartInstance);
+			console.log(event);
+			if (chartId !== undefined) {
+				setActiveChart(chartId, currentChartInstance);
+			}
 			if (event.key == 'r' && event.altKey) {
 				// alt + r reset view
 				if (currentChartInstance.timestamp && !$streamInfo.replayActive) {
@@ -1238,7 +1254,9 @@
 				const securityId = currentChartInstance.securityId;
 				addHorizontalLine(roundedPrice, securityId);
 			} else if (event.key == 's' && event.altKey) {
-				handleScreenshot(chartId.toString());
+				if (chartId !== undefined) {
+					handleScreenshot(chartId.toString());
+				}
 			} else if (
 				event.key === 'Tab' ||
 				(!event.ctrlKey &&
@@ -1249,16 +1267,16 @@
 				// Prevent default and stop propagation immediately
 				event.preventDefault();
 				event.stopPropagation();
-				
+
 				// Add the keypress to our buffer
 				if (event.key !== 'Tab') {
 					keyBuffer.push(event.key);
 				}
-				
+
 				// If this is the first key, start the input process
 				if (!isInputActive) {
 					isInputActive = true;
-					
+
 					// Create the initial instance with the buffer contents so far
 					const initialInputString = keyBuffer.join('');
 					const partialInstance: ChartInstance = {
@@ -1271,14 +1289,14 @@
 						extendedHours: currentChartInstance.extendedHours,
 						inputString: initialInputString // Pass the buffer as the initial string
 					};
-					
+
 					// Initiate the input window with the whole buffer string
 					queryInstanceInput('any', 'any', partialInstance)
 						.then((value: CoreInstance) => {
 							// Handle normal completion
 							isInputActive = false;
 							keyBuffer = []; // Clear buffer
-							
+
 							const securityId =
 								typeof value.securityId === 'string'
 									? parseInt(value.securityId, 10)
@@ -1310,7 +1328,7 @@
 				// Clear buffer on escape
 				keyBuffer = [];
 				isInputActive = false;
-				
+
 				if (get(shiftOverlay).isActive) {
 					shiftOverlay.update((v: ShiftOverlay): ShiftOverlay => {
 						if (v.isActive) {
@@ -1509,14 +1527,14 @@
 					return;
 				}
 				('2');
-				
+
 				// Get the earliest timestamp from current data
 				const earliestBar = chartCandleSeries.data()[0];
 				if (!earliestBar) return;
-				
+
 				// Convert the earliest time from EST seconds to UTC milliseconds for the API request
 				const earliestTimestamp = ESTSecondstoUTCMillis(earliestBar.time as UTCTimestamp);
-				
+
 				// Make sure to include extendedHours in the request
 				const inst: CoreInstance & { extendedHours?: boolean } = {
 					ticker: currentChartInstance.ticker,
@@ -1526,7 +1544,7 @@
 					price: currentChartInstance.price,
 					extendedHours: currentChartInstance.extendedHours
 				};
-				
+
 				backendLoadChartData({
 					...inst,
 					bars: Math.floor(bufferInScreenSizes * barsOnScreen) + 100,
@@ -1546,7 +1564,7 @@
 					return;
 				}
 				('3');
-				
+
 				// Also fix the forward load to include extendedHours
 				const inst: CoreInstance & { extendedHours?: boolean } = {
 					ticker: currentChartInstance.ticker,
@@ -1556,7 +1574,7 @@
 					price: currentChartInstance.price,
 					extendedHours: currentChartInstance.extendedHours
 				};
-				
+
 				backendLoadChartData({
 					...inst,
 					bars: Math.floor(bufferInScreenSizes * barsOnScreen) + 100,
@@ -1684,22 +1702,6 @@
 		selectedEvent = null;
 	}
 
-	function handleShiftOverlayEnd(event: MouseEvent) {
-		shiftOverlay.update((v: ShiftOverlay): ShiftOverlay => {
-			if (v.isActive) {
-				return {
-					...v,
-					isActive: false,
-					width: 0,
-					height: 0
-				};
-			}
-			return v;
-		});
-		document.removeEventListener('mousemove', shiftOverlayTrack);
-		document.removeEventListener('mouseup', handleShiftOverlayEnd);
-	}
-
 	// New interface for the data object
 	interface ChartData {
 		type?: string;
@@ -1739,7 +1741,6 @@
 		price: chartInstance.price || 0
 	});
 
-
 	// Handle bars calculation safely
 	const calculateBars = (instance: Partial<ChartInstance>): number => {
 		return instance.bars || Math.floor(bufferInScreenSizes * defaultBarsOnScreen) + 100;
@@ -1755,9 +1756,6 @@
 		}
 		return 0; // Default value if undefined
 	}
-
-
-
 </script>
 
 <div class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
