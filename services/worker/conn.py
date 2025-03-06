@@ -1,5 +1,135 @@
-import time, psycopg2, redis, os, sys, socket
+import time, psycopg2, redis, os, sys, socket, json
 from datetime import datetime, timedelta
+import random
+
+
+# Global task context for logging
+CURRENT_TASK_DATA = None
+CURRENT_TASK_ID = None
+
+
+def set_task_context(task_data, task_id):
+    """Set the current task context for logging"""
+    global CURRENT_TASK_DATA, CURRENT_TASK_ID
+    CURRENT_TASK_DATA = task_data
+    CURRENT_TASK_ID = task_id
+
+
+def get_timestamp():
+    """Get current timestamp in a standard format"""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def log_message(message, level="info"):
+    """Log a message to both stdout and task logs if task context is available"""
+    # Always print to stdout for direct console viewing
+    print(message, flush=True)
+    
+    # If we have a task context, add to task logs
+    if CURRENT_TASK_DATA is not None and CURRENT_TASK_ID is not None:
+        add_task_log(CURRENT_TASK_DATA, CURRENT_TASK_ID, message, level)
+
+
+def add_task_log(data, task_id, message, level="info"):
+    """Add a log entry to a task in Redis"""
+    # Use a function attribute to track missing tasks we've already warned about
+    if not hasattr(add_task_log, 'warned_missing_tasks'):
+        add_task_log.warned_missing_tasks = set()
+        
+    try:
+        # Get the current task
+        task_json = safe_redis_operation(data.cache.get, task_id)
+        if not task_json:
+            # Only print warning if we haven't warned about this task before
+            if task_id not in add_task_log.warned_missing_tasks:
+                print(f"Warning: Could not find task {task_id} to add log", flush=True)
+                add_task_log.warned_missing_tasks.add(task_id)
+            return
+        # If we successfully get the task, remove it from the warned set if it was there
+        if task_id in add_task_log.warned_missing_tasks:
+            add_task_log.warned_missing_tasks.remove(task_id)
+        
+        task = json.loads(task_json)
+        
+        # DEBUG: Print task structure before adding log
+        print(f"DEBUG: Task structure before log: {list(task.keys())}", flush=True)
+        
+        # Create a log entry
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "message": message,
+            "level": level
+        }
+        
+        # Add the log entry to the task
+        if "logs" not in task:
+            task["logs"] = []
+            print(f"DEBUG: Created new logs array for task {task_id}", flush=True)
+        
+        task["logs"].append(log_entry)
+        task["updatedAt"] = datetime.now().isoformat()
+        
+        # DEBUG: Print log entry being added
+        print(f"DEBUG: Adding log to task {task_id}: {log_entry}", flush=True)
+        print(f"DEBUG: Task now has {len(task['logs'])} logs", flush=True)
+        
+        # Save the updated task
+        safe_redis_operation(data.cache.set, task_id, json.dumps(task))
+    except Exception as e:
+        print(f"Error adding log to task {task_id}: {e}", flush=True)
+
+
+def safe_redis_operation(func, *args, **kwargs):
+    """Execute a Redis operation with retry logic for various failures"""
+    max_retries = 5
+    base_retry_delay = 1  # Base delay in seconds
+    backoff_factor = 2    # Exponential backoff factor
+    jitter = 0.2          # Random jitter to avoid thundering herd
+    
+    for attempt in range(max_retries):
+        try:
+            return func(*args, **kwargs)
+        except (redis.TimeoutError, socket.timeout) as e:
+            # Handle timeout errors with exponential backoff
+            retry_delay = base_retry_delay * (backoff_factor ** attempt)
+            jitter_amount = retry_delay * random.uniform(-jitter, jitter)
+            total_delay = retry_delay + jitter_amount
+            
+            if attempt < max_retries - 1:
+                print(f"Redis operation timed out (attempt {attempt+1}/{max_retries}): {e}. Retrying in {total_delay:.2f}s", flush=True)
+                
+                # Try to reset the connection pool if possible
+                try:
+                    if hasattr(func, '__self__') and hasattr(func.__self__, 'connection_pool'):
+                        print("Attempting to reset Redis connection pool...", flush=True)
+                        func.__self__.connection_pool.reset()
+                except Exception as reset_error:
+                    print(f"Failed to reset connection pool: {reset_error}", flush=True)
+                
+                time.sleep(total_delay)
+            else:
+                print(f"Redis operation timed out after {max_retries} attempts: {e}", flush=True)
+                raise
+        except (redis.ConnectionError, redis.exceptions.ConnectionError) as e:
+            # Handle connection errors with exponential backoff
+            retry_delay = base_retry_delay * (backoff_factor ** attempt)
+            jitter_amount = retry_delay * random.uniform(-jitter, jitter)
+            total_delay = retry_delay + jitter_amount
+            
+            if attempt < max_retries - 1:
+                print(f"Redis connection error (attempt {attempt+1}/{max_retries}): {e}. Retrying in {total_delay:.2f}s", flush=True)
+                time.sleep(total_delay)
+            else:
+                print(f"Redis connection error after {max_retries} attempts: {e}", flush=True)
+                raise
+        except Exception as e:
+            # For other errors, just propagate them up
+            print(f"Unexpected Redis error: {e}", flush=True)
+            if attempt < max_retries - 1:
+                print(f"Retrying in {retry_delay:.2f}s", flush=True)
+                time.sleep(retry_delay)
+            else:
+                raise
 
 
 class Conn:
