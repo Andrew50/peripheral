@@ -41,7 +41,6 @@ export const activeChartInstance = writable<Instance | null>(null);
 
 export function setActiveChart(chartId: ChartId, currentChartInstance: Instance) {
 	selectedChartId = chartId;
-	// Create a new instance object to ensure reactivity
 	const updatedInstance = {
 		...currentChartInstance,
 		ticker: currentChartInstance.ticker,
@@ -50,7 +49,6 @@ export function setActiveChart(chartId: ChartId, currentChartInstance: Instance)
 		extendedHours: currentChartInstance.extendedHours ?? false,
 		timestamp: currentChartInstance.timestamp ?? 0
 	};
-	console.log('interface.ts: Setting active chart with instance:', updatedInstance);
 	// Force a new object reference to trigger store updates
 	activeChartInstance.set(updatedInstance);
 }
@@ -82,7 +80,6 @@ export function addHorizontalLine(price: number) {
 }
 
 export function queryChart(newInstance: Instance, includeLast: boolean = true): void {
-	console.log('interface.ts: Query chart called with instance:', newInstance);
 	const queryDispatch: ChartQueryDispatch = {
 		...newInstance,
 		bars: 400,
@@ -98,16 +95,12 @@ export function queryChart(newInstance: Instance, includeLast: boolean = true): 
 
 	// Ensure we have all necessary instance properties
 	if (!newInstance.name && newInstance.securityId) {
-		console.log('interface.ts: Fetching details for security ID:', newInstance.securityId);
-		console.log('interface.ts: Type of securityId:', typeof newInstance.securityId);
-		console.log('interface.ts: Full instance object:', JSON.stringify(newInstance, null, 2));
 		privateRequest<Record<string, any>>(
 			'getTickerMenuDetails',
 			{ securityId: newInstance.securityId },
 			true
 		)
 			.then((details) => {
-				console.log('interface.ts: Received details:', details);
 				const updatedDispatch: ChartQueryDispatch = {
 					...queryDispatch,
 					...details

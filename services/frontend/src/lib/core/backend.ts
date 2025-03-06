@@ -10,36 +10,27 @@ if (typeof window !== 'undefined') {
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
         // In development
         base_url = 'http://localhost:5058'; // Use direct localhost connection
-        console.log('Using development backend URL:', base_url);
     } else {
         // In production always use the current origin
         base_url = window.location.origin;
-        console.log('Using production backend URL:', base_url);
     }
 }
 
-// For debugging
-console.log('Backend base_url set to:', base_url);
-
 export async function publicRequest<T>(func: string, args: Record<string, unknown>): Promise<T> {
-    // Log what's being sent
-    console.log(`Making ${func} request with args:`, args);
-
     const payload = JSON.stringify({
         func: func,
         args: args
     });
-    
+
     try {
         const response = await fetch(`${base_url}/public`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: payload
         });
-        
+
         if (response.ok) {
             const result = (await response.json()) as T;
-            console.log('payload: ', payload, 'result: ', result);
             return result;
         } else {
             const errorMessage = await response.text();
@@ -136,7 +127,7 @@ export async function privateRequest<T>(
     } else if (response.ok) {
         const result = (await response.json()) as T;
         if (verbose) {
-            console.log('payload: ', payload, 'result: ', result);
+            // Removed console.log(payload)
         }
         return result;
     } else {
@@ -186,7 +177,7 @@ export async function queueRequest<T>(
         return Promise.reject(errorMessage);
     }
     if (verbose) {
-        console.log(payload);
+        // Removed console.log(payload)
     }
     const result = await response.json();
     const taskId = result.taskId;
@@ -205,9 +196,7 @@ export async function queueRequest<T>(
                 return;
             }
             const data = await pollResponse.json();
-            console.log(data);
             if (data.status === 'completed') {
-                console.log('Task completed:', data.result);
                 clearInterval(intervalID); // Stop polling
                 resolve(data.result);
             } else if (data.status === 'error') {
