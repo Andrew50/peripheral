@@ -105,9 +105,9 @@ export class ArrowMarkersPaneView
 								const y = priceToCoordinate(entry.price);
 								if (y === null) return;
 								if (entry.isLong) {
-									drawArrowUp(context, x as number, y, 7);
+									drawArrowUp(context, x as number, y, 6);
 								} else {
-									drawArrowDown(context, x as number, y, 7);
+									drawArrowDown(context, x as number, y, 6);
 								}
 							});
 						}
@@ -119,9 +119,9 @@ export class ArrowMarkersPaneView
 								const y = priceToCoordinate(exit.price);
 								if (y === null) return;
 								if (exit.isLong) {
-									drawArrowDown(context, x as number, y, 7);
+									drawArrowDown(context, x as number, y, 6);
 								} else {
-									drawArrowUp(context, x as number, y, 7);
+									drawArrowUp(context, x as number, y, 6);
 								}
 							});
 						}
