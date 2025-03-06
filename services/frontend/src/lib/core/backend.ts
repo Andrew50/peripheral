@@ -7,14 +7,9 @@ base_url = 'http://localhost:5058';
 
 if (typeof window !== 'undefined') {
     // For client-side code
-    if (window.location.hostname === 'localhost') {
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
         // In development
-        const url = new URL(window.location.origin);
-        url.port = '5058'; // Switch to backend port
-        base_url = url.toString();
-        if (base_url.endsWith('/')) {
-            base_url = base_url.substring(0, base_url.length - 1);
-        }
+        base_url = 'http://localhost:5058'; // Use direct localhost connection
         console.log('Using development backend URL:', base_url);
     } else {
         // In production always use the current origin
@@ -34,19 +29,28 @@ export async function publicRequest<T>(func: string, args: Record<string, unknow
         func: func,
         args: args
     });
-    const response = await fetch(`${base_url}/public`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: payload
-    });
-    if (response.ok) {
-        const result = (await response.json()) as T;
-        console.log('payload: ', payload, 'result: ', result);
-        return result;
-    } else {
-        const errorMessage = await response.text();
-        console.error('payload: ', payload, 'error: ', errorMessage);
-        return Promise.reject(errorMessage);
+    
+    try {
+        const response = await fetch(`${base_url}/public`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload
+        });
+        
+        if (response.ok) {
+            const result = (await response.json()) as T;
+            console.log('payload: ', payload, 'result: ', result);
+            return result;
+        } else {
+            const errorMessage = await response.text();
+            console.error('Request failed with status:', response.status, 'Error:', errorMessage);
+            return Promise.reject(`Server error: ${response.status} - ${errorMessage}`);
+        }
+    } catch (error) {
+        console.error('Connection error:', error);
+        // Check if the backend URL is correct
+        console.error('Current backend URL:', base_url);
+        return Promise.reject(`Connection error: Could not connect to backend at ${base_url}. Please check if the backend service is running and accessible.`);
     }
 }
 
