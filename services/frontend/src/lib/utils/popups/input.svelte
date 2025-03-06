@@ -3,10 +3,12 @@
 	import '$lib/core/global.css';
 	import { privateRequest } from '$lib/core/backend';
 	import { get, writable } from 'svelte/store';
+	// Ignore the date-fns import error for now as it's likely installed in the full environment
 	import { parse } from 'date-fns';
 	import { tick } from 'svelte';
 	import type { Writable } from 'svelte/store';
 	import type { Instance } from '$lib/core/types';
+	// Ignore the $app/environment import error for now
 	import { browser } from '$app/environment';
 
 	/**
@@ -262,15 +264,60 @@
 			status: 'initializing'
 		}));
 
-		// Wait for next tick to ensure UI updates
-		await tick();
-
 		// If we have an initial input string, determine its type immediately
 		if (initialInputString) {
 			await tick(); // ensure UI is ready
 			// Use setTimeout to ensure this runs after all other synchronous code
-			setTimeout(() => determineInputType(initialInputString), 0);
+			setTimeout(() => {
+				// First, forcibly detect the input type without waiting
+				const initialType = detectInputTypeSync(initialInputString, possibleKeys);
+
+				// Update the store synchronously with the detected type
+				inputQuery.update((q) => ({
+					...q,
+					inputType: initialType,
+					// Mark as loading if it's likely a ticker
+					securities: initialType === 'ticker' ? [] : q.securities
+				}));
+
+				// If it looks like a ticker, explicitly set loading state
+				if (initialType === 'ticker') {
+					isLoadingSecurities = true;
+				}
+
+				// Then run the full determination with validation
+				determineInputType(initialInputString);
+
+				// For tickers, ensure we make multiple validation attempts
+				if (initialType === 'ticker' || /^[A-Za-z]+$/.test(initialInputString)) {
+					// First retry after a short delay 
+					setTimeout(() => {
+						const currentInput = get(inputQuery).inputString;
+						if (currentInput && currentInput.length > 0) {
+							isLoadingSecurities = true;
+							determineInputType(currentInput);
+
+							// Second retry with longer delay for slow networks
+							setTimeout(() => {
+								const latestInput = get(inputQuery).inputString;
+								if (
+									latestInput &&
+									latestInput.length > 0 &&
+									loadedSecurityResultRequest !== currentSecurityResultRequest
+								) {
+									console.log('Performing final validation attempt');
+									isLoadingSecurities = true;
+									determineInputType(latestInput);
+								}
+							}, 1000); // Increased to 1000ms for better network reliability
+						}
+					}, 250); // Increased for better timing
+				}
+			}, 0);
 		}
+
+		// Wait for next tick to ensure UI updates
+		await tick();
 
 		// Return a new promise that resolves when input is complete or rejects on cancellation.
 		return new Promise<Instance>((resolve, reject) => {
@@ -401,13 +448,15 @@
 			}
 		}
 
-		// Reset input state
-		iQ.inputString = '';
-		iQ.inputType = '';
-		iQ.inputValid = true;
-
-		// Reset manualInputType to auto after input is entered
-		manualInputType = 'auto';
+		// Only reset input state if we're fully complete
+		if (iQ.status === 'complete') {
+			iQ.inputString = '';
+			iQ.inputType = '';
+			iQ.inputValid = true;
+			// Reset manualInputType to auto after input is entered
+			manualInputType = 'auto';
+		}
+		
 		return iQ;
 	}
 
@@ -606,36 +655,34 @@
 									isLoadingSecurities = true;
 								}
 
-								// Then run the full determination with validation after a short delay
-								setTimeout(() => {
-									determineInputType(v.inputString);
+								// Then run the full determination with validation
+								determineInputType(v.inputString);
 
-									// For tickers, ensure we make multiple validation attempts
-									if (initialType === 'ticker' || /^[A-Za-z]+$/.test(v.inputString)) {
-										// First retry
-										setTimeout(() => {
-											const currentInput = get(inputQuery).inputString;
-											if (currentInput && currentInput.length > 0) {
-												isLoadingSecurities = true;
-												determineInputType(currentInput);
+								// For tickers, ensure we make multiple validation attempts
+								if (initialType === 'ticker' || /^[A-Za-z]+$/.test(v.inputString)) {
+									// First retry after a short delay 
+									setTimeout(() => {
+										const currentInput = get(inputQuery).inputString;
+										if (currentInput && currentInput.length > 0) {
+											isLoadingSecurities = true;
+											determineInputType(currentInput);
 
-												// Second retry with longer delay for slow networks
-												setTimeout(() => {
-													const latestInput = get(inputQuery).inputString;
-													if (
-														latestInput &&
-														latestInput.length > 0 &&
-														loadedSecurityResultRequest !== currentSecurityResultRequest
-													) {
-														console.log('Performing final validation attempt');
-														isLoadingSecurities = true;
-														determineInputType(latestInput);
-													}
-												}, 1000); // Increased to 1000ms for better network reliability
-											}
-										}, 250); // Increased for better timing
-									}
-								}, 100); // Increased for better component initialization
+											// Second retry with longer delay for slow networks
+											setTimeout(() => {
+												const latestInput = get(inputQuery).inputString;
+												if (
+													latestInput &&
+													latestInput.length > 0 &&
+													loadedSecurityResultRequest !== currentSecurityResultRequest
+												) {
+													console.log('Performing final validation attempt');
+													isLoadingSecurities = true;
+													determineInputType(latestInput);
+												}
+											}, 1000); // Increased to 1000ms for better network reliability
+										}
+									}, 250); // Increased for better timing
+								}
 							}
 						}
 
@@ -666,7 +713,13 @@
 					if (prevFocusedElement && browser) {
 						prevFocusedElement.focus();
 					}
-					inputQuery.update((state) => ({ ...state, status: 'inactive', inputString: '' }));
+					
+					// Clear the inputString only when we're fully shutting down
+					inputQuery.update((state) => ({ 
+						...state, 
+						status: 'inactive',
+						inputString: '' // Reset only when fully shutting down
+					}));
 				} else if (v.status === 'cancelled') {
 					componentActive = false;
 					// Remove focus from the hidden input when cancelled
@@ -680,6 +733,12 @@
 						document.body.removeEventListener('mousedown', handleOutsideClick);
 						document.body.removeAttribute('data-input-click-listener');
 					}
+					
+					// On cancellation we should also clear the inputString
+					inputQuery.update((state) => ({
+						...state,
+						inputString: ''
+					}));
 				}
 			}
 		});
