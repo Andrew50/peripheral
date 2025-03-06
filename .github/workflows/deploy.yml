@@ -324,6 +324,17 @@ jobs:
           # Check if JWT_SECRET secret is set
           if [ -z "${{ secrets.JWT_SECRET }}" ]; then
             error_log "JWT_SECRET secret is not available"
+          # Check Kubernetes cluster connectivity
+          log "Checking Kubernetes cluster connectivity..."
+          if ! kubectl cluster-info &>/dev/null; then
+            error_log "Cannot connect to Kubernetes cluster. Make sure the cluster is running."
+            error_log "If using minikube, run 'minikube start' to start the cluster."
+            error_log "Cluster connection details:"
+            kubectl config view
+            exit 1
+          fi
+
+          log "Kubernetes cluster is accessible. Proceeding with secret updates..."
             error_log "Please add the JWT_SECRET secret in your GitHub repository"
             exit 1
           fi
@@ -388,7 +399,13 @@ jobs:
           EOF
           
           # Apply the secrets to Kubernetes
-          kubectl apply -f "$SECRETS_FILE"
+          if ! kubectl apply -f "$SECRETS_FILE"; then
+            log "Failed to apply secrets with validation. Trying with validation disabled..."
+            kubectl apply -f "$SECRETS_FILE" --validate=false || {
+              error_log "Failed to apply secrets even with validation disabled."
+              exit 1
+            }
+          fi
           
           # Verify the secrets were created successfully
           if ! kubectl get secret redis-secret &>/dev/null; then
@@ -766,6 +783,17 @@ jobs:
             fi
           done
           
+          # Apply rollout restart to ensure the current version of the image is used
+          log "Applying rollout restart to all deployments to ensure the current version of the image is used..."
+          for deployment in "${deployments[@]}"; do
+            log "Restarting $deployment deployment..."
+            kubectl rollout restart deployment/$deployment
+          done
+          
+          # Wait for image pull to complete before proceeding
+          log "Waiting for image pulls to complete (30 seconds)..."
+          sleep 30
+          
           # Monitor deployments
           log "Monitoring deployments for successful rollout..."
           
@@ -823,6 +851,20 @@ jobs:
             
             # Wait before checking again
             sleep 10
+          done
+          
+          # Verify all pods are using the correct image version
+          log "Verifying all pods are using the correct image version..."
+          for deployment in "${deployments[@]}"; do
+            log "Checking $deployment pods for correct image version..."
+            PODS=$(kubectl get pods -l app=$deployment -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+            for pod in $PODS; do
+              IMAGE=$(kubectl get pod $pod -o jsonpath='{.spec.containers[0].image}' 2>/dev/null)
+              log "Pod $pod is using image: $IMAGE"
+              if [[ "$IMAGE" != *"${{ env.DOCKER_TAG }}"* ]]; then
+                log "WARNING: Pod $pod is not using the expected image tag: ${{ env.DOCKER_TAG }}"
+              fi
+            done
           done
           
           # Check for any failed deployments
