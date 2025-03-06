@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"sync"
 	"time"
 
@@ -15,29 +14,6 @@ import (
 )
 
 var stdoutMutex sync.Mutex
-
-// withSilentOutput temporarily redirects stdout to discard output during the execution of fn
-func withSilentOutput(fn func() error) error {
-	stdoutMutex.Lock()
-	defer stdoutMutex.Unlock()
-
-	// Save the original stdout
-	oldStdout := os.Stdout
-
-	// Create a null file to discard output
-	null, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
-	if err != nil {
-		return err
-	}
-	defer null.Close()
-
-	// Redirect stdout to the null file
-	os.Stdout = null
-	defer func() { os.Stdout = oldStdout }()
-
-	// Execute the function
-	return fn()
-}
 
 // silentLogger implements a logger that discards all messages
 // nolint:unused
@@ -66,12 +42,8 @@ func retryWithBackoff[T any](operation string, ticker string, maxRetries int, sh
 	var result T
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		// Wrap the function call with silent output
-		err := withSilentOutput(func() error {
-			var err error
-			result, err = fn()
-			return err
-		})
+		// Execute the function directly without wrapping it
+		result, err := fn()
 
 		if err == nil {
 			return result, nil
@@ -112,29 +84,23 @@ func GetAggsData(client *polygon.Client, ticker string, multiplier int, timefram
 	var iter *iter.Iter[models.Agg]
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		err := withSilentOutput(func() error {
-			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-			defer cancel()
+		// Execute directly without withSilentOutput
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
 
-			iter = client.ListAggs(ctx, params)
-			if iter.Next() {
-				// Reset the iterator
-				iter = client.ListAggs(context.Background(), params)
-				return nil
-			}
-
-			if err := iter.Err(); err != nil {
-				return err
-			}
-
-			// No error but no data either
-			return nil
-		})
-
-		if err == nil {
+		iter = client.ListAggs(ctx, params)
+		if iter.Next() {
+			// Reset the iterator
+			iter = client.ListAggs(context.Background(), params)
 			return iter, nil
 		}
-		lastErr = err
+
+		if err := iter.Err(); err != nil {
+			lastErr = err
+		} else {
+			// No error but no data either
+			return iter, nil
+		}
 
 		if attempt < maxRetries {
 			backoffTime := time.Duration(attempt*2) * time.Second
@@ -210,16 +176,10 @@ func GetLastQuote(client *polygon.Client, ticker string) (models.LastQuote, erro
 	var result models.LastQuote
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		err := withSilentOutput(func() error {
-			resp, err := client.GetLastQuote(context.Background(), params)
-			if err != nil {
-				return err
-			}
-			result = resp.Results
-			return nil
-		})
-
+		// Execute directly without withSilentOutput
+		resp, err := client.GetLastQuote(context.Background(), params)
 		if err == nil {
+			result = resp.Results
 			return result, nil
 		}
 		lastErr = err
@@ -258,16 +218,10 @@ func GetLastTrade(client *polygon.Client, ticker string) (models.LastTrade, erro
 	var result models.LastTrade
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		err := withSilentOutput(func() error {
-			resp, err := client.GetLastTrade(context.Background(), params)
-			if err != nil {
-				return err
-			}
-			result = resp.Results
-			return nil
-		})
-
+		// Execute directly without withSilentOutput
+		resp, err := client.GetLastTrade(context.Background(), params)
 		if err == nil {
+			result = resp.Results
 			return result, nil
 		}
 		lastErr = err
@@ -297,14 +251,8 @@ func GetTrade(client *polygon.Client, ticker string, nanoTimestamp models.Nanos,
 		WithLimit(numResults).
 		WithSort(models.Timestamp)
 
-	var iter *iter.Iter[models.Trade]
-	err := withSilentOutput(func() error {
-		iter = client.ListTrades(context.Background(), params)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
+	// Execute directly without withSilentOutput
+	iter := client.ListTrades(context.Background(), params)
 	return iter, nil
 }
 
