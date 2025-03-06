@@ -40,7 +40,7 @@ spec:
               jobctl run UpdateSecurityDetails &&
               wait
           ports:
-            - containerPort: 5057
+            - containerPort: 5058
           env:
             # Database connection
             - name: DB_HOST
@@ -114,6 +114,6 @@ spec:
   selector:
     app: backend
   ports:
-    - port: 5057
-      targetPort: 5057
+    - port: 5058
+      targetPort: 5058
   type: ClusterIP
