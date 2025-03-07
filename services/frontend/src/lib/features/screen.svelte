@@ -78,21 +78,21 @@
 	.controls-container {
 		display: flex;
 		justify-content: flex-start;
-		gap: 8px;
-		margin-bottom: 14px;
-		margin-top: 8px;
+		gap: clamp(0.375rem, 1vw, 0.5rem);
+		margin-bottom: clamp(0.75rem, 2vh, 1rem);
+		margin-top: clamp(0.5rem, 1vh, 0.75rem);
 		flex-wrap: wrap;
 		width: 100%;
 	}
 
 	.toggle-button {
 		margin-right: 0;
-		padding: 6px 10px;
-		min-width: 70px;
-		height: 32px;
+		padding: clamp(0.25rem, 0.75vw, 0.375rem) clamp(0.5rem, 1vw, 0.625rem);
+		min-width: clamp(4rem, 10vw, 5rem);
+		height: clamp(2rem, 5vh, 2.5rem);
 		font-weight: 500;
 		transition: all 0.2s ease;
-		border-radius: 6px;
+		border-radius: clamp(4px, 0.5vw, 6px);
 		position: relative;
 		overflow: hidden;
 	}
@@ -123,13 +123,13 @@
 
 	.button-row {
 		display: flex;
-		gap: 10px;
-		margin-bottom: 16px;
+		gap: clamp(0.5rem, 1vw, 0.625rem);
+		margin-bottom: clamp(0.75rem, 2vh, 1rem);
 	}
 
 	button {
-		min-width: 120px;
-		border-radius: 6px;
+		min-width: clamp(7.5rem, 15vw, 9rem);
+		border-radius: clamp(4px, 0.5vw, 6px);
 		font-weight: 500;
 		letter-spacing: 0.3px;
 	}

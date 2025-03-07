@@ -3,10 +3,12 @@
 	import '$lib/core/global.css';
 	import { privateRequest } from '$lib/core/backend';
 	import { get, writable } from 'svelte/store';
+	// Ignore the date-fns import error for now as it's likely installed in the full environment
 	import { parse } from 'date-fns';
 	import { tick } from 'svelte';
 	import type { Writable } from 'svelte/store';
 	import type { Instance } from '$lib/core/types';
+	// Ignore the $app/environment import error for now
 	import { browser } from '$app/environment';
 
 	/**
@@ -178,7 +180,6 @@
 		validateInput(inputString.toUpperCase(), inputType)
 			.then((validationResp) => {
 				if (thisSecurityResultRequest === currentSecurityResultRequest) {
-					// Only update if this is still the current request
 					inputQuery.update((v: InputQuery) => ({
 						...v,
 						...validationResp
@@ -194,9 +195,6 @@
 			.catch((error) => {
 				console.error('Validation error:', error);
 				isLoadingSecurities = false;
-
-				// In case of error, still update loadedSecurityResultRequest to prevent waiting forever
-				loadedSecurityResultRequest = thisSecurityResultRequest;
 			});
 	}
 
@@ -262,15 +260,59 @@
 			status: 'initializing'
 		}));
 
-		// Wait for next tick to ensure UI updates
-		await tick();
-
 		// If we have an initial input string, determine its type immediately
 		if (initialInputString) {
 			await tick(); // ensure UI is ready
 			// Use setTimeout to ensure this runs after all other synchronous code
-			setTimeout(() => determineInputType(initialInputString), 0);
+			setTimeout(() => {
+				// First, forcibly detect the input type without waiting
+				const initialType = detectInputTypeSync(initialInputString, possibleKeys);
+
+				// Update the store synchronously with the detected type
+				inputQuery.update((q) => ({
+					...q,
+					inputType: initialType,
+					// Mark as loading if it's likely a ticker
+					securities: initialType === 'ticker' ? [] : q.securities
+				}));
+
+				// If it looks like a ticker, explicitly set loading state
+				if (initialType === 'ticker') {
+					isLoadingSecurities = true;
+				}
+
+				// Then run the full determination with validation
+				determineInputType(initialInputString);
+
+				// For tickers, ensure we make multiple validation attempts
+				if (initialType === 'ticker' || /^[A-Za-z]+$/.test(initialInputString)) {
+					// First retry after a short delay
+					setTimeout(() => {
+						const currentInput = get(inputQuery).inputString;
+						if (currentInput && currentInput.length > 0) {
+							isLoadingSecurities = true;
+							determineInputType(currentInput);
+
+							// Second retry with longer delay for slow networks
+							setTimeout(() => {
+								const latestInput = get(inputQuery).inputString;
+								if (
+									latestInput &&
+									latestInput.length > 0 &&
+									loadedSecurityResultRequest !== currentSecurityResultRequest
+								) {
+									isLoadingSecurities = true;
+									determineInputType(latestInput);
+								}
+							}, 1000); // Increased to 1000ms for better network reliability
+						}
+					}, 250); // Increased for better timing
+				}
+			}, 0);
 		}
+
+		// Wait for next tick to ensure UI updates
+		await tick();
 
 		// Return a new promise that resolves when input is complete or rejects on cancellation.
 		return new Promise<Instance>((resolve, reject) => {
@@ -360,7 +402,6 @@
 
 			// Wait for securities to load if needed
 			if (loadedSecurityResultRequest !== currentSecurityResultRequest) {
-				console.log('Waiting for securities to load before completing input');
 				await waitForSecurityResult();
 			}
 
@@ -374,7 +415,6 @@
 				// Restore timestamp if it was previously set
 				if (ts) iQ.instance.timestamp = ts;
 			} else {
-				console.log('No securities available, using input string as ticker');
 				// If no securities, at least set the ticker from input string
 				iQ.instance.ticker = iQ.inputString.toUpperCase();
 			}
@@ -401,30 +441,26 @@
 			}
 		}
 
-		// Reset input state
-		iQ.inputString = '';
-		iQ.inputType = '';
-		iQ.inputValid = true;
+		// Only reset input state if we're fully complete
+		if (iQ.status === 'complete') {
+			iQ.inputString = '';
+			iQ.inputType = '';
+			iQ.inputValid = true;
+			// Reset manualInputType to auto after input is entered
+			manualInputType = 'auto';
+		}
 
-		// Reset manualInputType to auto after input is entered
-		manualInputType = 'auto';
 		return iQ;
 	}
 
+	// Function to wait for security results to be loaded
 	async function waitForSecurityResult(): Promise<void> {
-		// Set a maximum wait time to prevent infinite waiting
-		const maxWaitTime = 3000; // Increased to 3 seconds for better reliability
 		const startTime = Date.now();
+		const maxWaitTime = 5000; // Maximum wait time in ms
 
-		// If this is the first request after a page load, add a small initial delay
-		// to allow the backend request to start processing
-		if (loadedSecurityResultRequest === -1) {
-			await new Promise((resolve) => setTimeout(resolve, 100));
-		}
-
-		return new Promise((resolve) => {
+		return new Promise<void>((resolve) => {
 			const check = () => {
-				// If securities are already loaded, resolve immediately
+				// If the loaded request matches the current request, we're done
 				if (loadedSecurityResultRequest === currentSecurityResultRequest) {
 					isLoadingSecurities = false;
 					resolve();
@@ -433,7 +469,6 @@
 
 				// If we've waited too long, resolve anyway
 				if (Date.now() - startTime > maxWaitTime) {
-					console.log('Timed out waiting for securities to load');
 					isLoadingSecurities = false;
 					resolve();
 					return;
@@ -606,36 +641,33 @@
 									isLoadingSecurities = true;
 								}
 
-								// Then run the full determination with validation after a short delay
-								setTimeout(() => {
-									determineInputType(v.inputString);
+								// Then run the full determination with validation
+								determineInputType(v.inputString);
 
-									// For tickers, ensure we make multiple validation attempts
-									if (initialType === 'ticker' || /^[A-Za-z]+$/.test(v.inputString)) {
-										// First retry
-										setTimeout(() => {
-											const currentInput = get(inputQuery).inputString;
-											if (currentInput && currentInput.length > 0) {
-												isLoadingSecurities = true;
-												determineInputType(currentInput);
+								// For tickers, ensure we make multiple validation attempts
+								if (initialType === 'ticker' || /^[A-Za-z]+$/.test(v.inputString)) {
+									// First retry after a short delay
+									setTimeout(() => {
+										const currentInput = get(inputQuery).inputString;
+										if (currentInput && currentInput.length > 0) {
+											isLoadingSecurities = true;
+											determineInputType(currentInput);
 
-												// Second retry with longer delay for slow networks
-												setTimeout(() => {
-													const latestInput = get(inputQuery).inputString;
-													if (
-														latestInput &&
-														latestInput.length > 0 &&
-														loadedSecurityResultRequest !== currentSecurityResultRequest
-													) {
-														console.log('Performing final validation attempt');
-														isLoadingSecurities = true;
-														determineInputType(latestInput);
-													}
-												}, 1000); // Increased to 1000ms for better network reliability
-											}
-										}, 250); // Increased for better timing
-									}
-								}, 100); // Increased for better component initialization
+											// Second retry with longer delay for slow networks
+											setTimeout(() => {
+												const latestInput = get(inputQuery).inputString;
+												if (
+													latestInput &&
+													latestInput.length > 0 &&
+													loadedSecurityResultRequest !== currentSecurityResultRequest
+												) {
+													isLoadingSecurities = true;
+													determineInputType(latestInput);
+												}
+											}, 1000); // Increased to 1000ms for better network reliability
+										}
+									}, 250); // Increased for better timing
+								}
 							}
 						}
 
@@ -666,7 +698,13 @@
 					if (prevFocusedElement && browser) {
 						prevFocusedElement.focus();
 					}
-					inputQuery.update((state) => ({ ...state, status: 'inactive', inputString: '' }));
+
+					// Clear the inputString only when we're fully shutting down
+					inputQuery.update((state) => ({
+						...state,
+						status: 'inactive',
+						inputString: '' // Reset only when fully shutting down
+					}));
 				} else if (v.status === 'cancelled') {
 					componentActive = false;
 					// Remove focus from the hidden input when cancelled
@@ -680,6 +718,12 @@
 						document.body.removeEventListener('mousedown', handleOutsideClick);
 						document.body.removeAttribute('data-input-click-listener');
 					}
+
+					// On cancellation we should also clear the inputString
+					inputQuery.update((state) => ({
+						...state,
+						inputString: ''
+					}));
 				}
 			}
 		});
@@ -852,7 +896,8 @@
 			/>
 		</div>
 		<div class="content-container">
-			{#if $inputQuery.instance && Object.keys($inputQuery.instance).length > 0}
+			<!--{#if $inputQuery.instance && Object.keys($inputQuery.instance).length > 0}-->
+			{#if true}
 				{#if $inputQuery.inputType === ''}
 					<div class="span-container">
 						{#if Array.isArray($inputQuery.possibleKeys)}
@@ -969,6 +1014,8 @@
 							<span class="value">{$inputQuery.instance.extendedHours ? 'True' : 'False'}</span>
 						</div>
 					</div>
+				{:else}
+					'{$inputQuery.inputType}'
 				{/if}
 			{/if}
 		</div>
@@ -1001,6 +1048,11 @@
 		flex-direction: column;
 		overflow: hidden;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+		position: fixed;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		z-index: 10000; /* Ensure this is higher than the drawing menu */
 	}
 
 	/* Button styles for field selection */

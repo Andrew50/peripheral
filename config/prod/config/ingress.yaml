@@ -23,35 +23,49 @@ spec:
               service:
                 name: backend
                 port:
-                  number: 5057
+                  number: 5058
           - pathType: Prefix
             path: "/poll"
             backend:
               service:
                 name: backend
                 port:
-                  number: 5057
+                  number: 5058
           - pathType: Prefix
             path: "/public"
             backend:
               service:
                 name: backend
                 port:
-                  number: 5057
+                  number: 5058
           - pathType: Prefix
             path: "/backend"
             backend:
               service:
                 name: backend
                 port:
-                  number: 5057
+                  number: 5058
           - pathType: Prefix
             path: "/ws"
             backend:
               service:
                 name: backend
                 port:
-                  number: 5057
+                  number: 5058
+          - pathType: Prefix
+            path: "/health"
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - pathType: Prefix
+            path: "/backend/health"
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
           - pathType: Prefix
             path: "/_app"
             backend:
