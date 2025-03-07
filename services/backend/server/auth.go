@@ -7,10 +7,10 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+
 	"fmt"
 	"log"
 	"os"
-
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -85,11 +85,22 @@ func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	}
 
 	// Insert new user with auth_type='password'
-	_, err = conn.DB.Exec(context.Background(),
-		"INSERT INTO users (username, email, password, auth_type) VALUES ($1, $2, $3, $4)",
-		a.Username, a.Email, a.Password, "password")
+	var userID int
+	err = conn.DB.QueryRow(context.Background(),
+		"INSERT INTO users (username, email, password, auth_type) VALUES ($1, $2, $3, $4) RETURNING userId",
+		a.Username, a.Email, a.Password, "password").Scan(&userID)
 	if err != nil {
 		return nil, fmt.Errorf("error creating user: %v", err)
+	}
+
+	// Create a journal entry for the new user using the current timestamp
+	currentTime := time.Now().UTC()
+	_, err = conn.DB.Exec(context.Background(),
+		"INSERT INTO journals (timestamp, userId, entry) VALUES ($1, $2, $3)",
+		currentTime.Unix(), userID, "{}")
+	if err != nil {
+		// Log the error but continue with signup process
+		fmt.Printf("Error creating initial journal for user %d: %v\n", userID, err)
 	}
 
 	// Create modified login args with the email
