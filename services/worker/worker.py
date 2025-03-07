@@ -1,9 +1,5 @@
 import json, traceback, datetime, psycopg2, redis
-import random
-import os
 import sys
-import uuid
-import signal
 
 
 from conn import Conn, add_task_log, safe_redis_operation
