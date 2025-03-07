@@ -393,40 +393,41 @@ func updateSecurities(conn *utils.Conn, test bool) error {
 				log.Printf("Updated %d rows for ticker %s", cmdTag.RowsAffected(), sec.Ticker)
 			}
 			targetTicker := ""
-			if err != nil {
-				fmt.Println("91md")
-				fmt.Println(sec.Ticker, " ", sec.CompositeFIGI, " ", currentDateString)
-				logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "remove 1", err)
-			} else if cmdTag.RowsAffected() == 0 { //this whole thing is just for error checking but if rows affected is zero then it should be a removal of a overdue removal after a ticker change
+			if cmdTag.RowsAffected() == 0 { //this whole thing is just for error checking but if rows affected is zero then it should be a removal of a overdue removal after a ticker change
 				ok := false
 				if sec.CompositeFIGI != "" { //if figi exists
 					rows, err := conn.DB.Query(context.Background(), "SELECT ticker, maxDate FROM securities where figi = $1 order by COALESCE(maxDate, '2200-01-01') DESC", sec.CompositeFIGI) //.Scan(&tickerInDB,&maxDate)
+					if err != nil {
+						fmt.Printf("Query error: %v\n", err)
+						logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "query error", err)
+						continue
+					}
 					var targetTicker string
 					var maxDate sql.NullTime
 					if rows.Next() {
 						err = rows.Scan(&targetTicker, &maxDate)
 						if err != nil {
-							fmt.Printf("21j1m %v\n", err)
-							ok = false
+							fmt.Printf("Query error: %v\n", err)
+							logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "query error", err)
+							continue
+						}
+						if targetTicker == sec.Ticker {
+							fmt.Printf("23kniv %s %s %s\n", sec.Ticker, sec.CompositeFIGI, currentDateString)
 						} else {
-							if targetTicker == sec.Ticker {
-								fmt.Printf("23kniv %s %s %s\n", sec.Ticker, sec.CompositeFIGI, currentDateString)
-							} else {
-								for rows.Next() {
-									var ticker string
-									var date sql.NullTime
-									err = rows.Scan(&ticker, &date)
-									if err != nil {
-										fmt.Printf("02200iv %v\n", err)
+							for rows.Next() {
+								var ticker string
+								var date sql.NullTime
+								err = rows.Scan(&ticker, &date)
+								if err != nil {
+									fmt.Printf("02200iv %v\n", err)
+									break
+								}
+								if ticker == sec.Ticker {
+									if date.Valid {
+										ok = true
 										break
-									}
-									if ticker == sec.Ticker {
-										if date.Valid {
-											ok = true
-											break
-										} else {
-											fmt.Printf("23kn1n9div %s %s %s\n", sec.Ticker, sec.CompositeFIGI, currentDateString)
-										}
+									} else {
+										fmt.Printf("23kn1n9div %s %s %s\n", sec.Ticker, sec.CompositeFIGI, currentDateString)
 									}
 								}
 							}

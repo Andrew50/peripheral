@@ -1,13 +1,10 @@
 import yfinance as yf
 import requests
 from conn import Conn, set_task_context, log_message, get_timestamp, add_task_log
-from multiprocessing import Pool, cpu_count
-from datetime import datetime, timedelta
+from multiprocessing import Pool
+from datetime import datetime
 import time
 import random
-import json
-import sys
-import traceback
 
 USE_DATABASE = True  # Set to False to print output instead of saving to database
 

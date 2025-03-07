@@ -86,7 +86,7 @@ export function handleSECFilingMessage(message: any): void {
         filing.timestamp = Date.now();
       }
 
-      globalFilings.update(filings => {
+      globalFilings.update((filings: Filing[]) => {
         // Add the new filing at the beginning
         return [filing, ...filings];
       });
@@ -104,7 +104,7 @@ export function handleSECFilingMessage(message: any): void {
         message.timestamp = Date.now();
       }
 
-      globalFilings.update(filings => [message, ...filings]);
+      globalFilings.update((filings: Filing[]) => [message, ...filings]);
     }
   }
 }
@@ -135,7 +135,7 @@ export function processSECFilingsMessage(message: any, callback: (filings: any) 
     if (message.channel === 'secfilings' && Array.isArray(message.data)) {
       // Remove console.log for processing SEC filings from channel data
 
-      const formattedFilings = message.data.map(filing => {
+      const formattedFilings = message.data.map((filing: Filing) => {
         // Remove console.log for first filing timestamp
 
         if (!filing.timestamp) {

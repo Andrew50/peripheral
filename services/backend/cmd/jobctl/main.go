@@ -614,7 +614,7 @@ func monitorTasks(conn *utils.Conn, taskIDs []string) {
 						}
 
 						// If no logs found at root level, try within result field
-						if logs == nil || len(logs) == 0 {
+						if len(logs) == 0 {
 							if resultMap, ok := result["result"].(map[string]interface{}); ok {
 								if resultLogs, ok := resultMap["logs"].([]interface{}); ok && len(resultLogs) > 0 {
 									logs = resultLogs
@@ -627,7 +627,7 @@ func monitorTasks(conn *utils.Conn, taskIDs []string) {
 							}
 						}
 
-						if logs != nil && len(logs) > 0 {
+						if len(logs) > 0 {
 							fmt.Println("\n=== TASK LOGS ===")
 							for i, logEntry := range logs {
 								logMap, ok := logEntry.(map[string]interface{})
