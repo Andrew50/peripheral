@@ -15,7 +15,7 @@ COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 WORKDIR /app
 COPY --from=builder /app/main /app/main
 COPY --from=builder /app/jobctl /usr/local/bin/jobctl
-EXPOSE 5057
+EXPOSE 5058
 # Environment variables will be provided by Kubernetes
 ENV IN_CONTAINER=true
 ENTRYPOINT ["/app/main"]

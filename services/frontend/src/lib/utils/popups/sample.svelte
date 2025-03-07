@@ -147,11 +147,11 @@
 
 {#if $userSetupMenu.status === 'active'}
 	<div
-		class="popup-container"
+		class="popup-container responsive-shadow responsive-border"
 		bind:this={menu}
 		style="top: {$userSetupMenu.y}px; left: {$userSetupMenu.x}px;"
 	>
-		<div class="content-container">
+		<div class="content-container content-padding">
 			<table>
 				<thead>
 					<tr class="defalt-tr">
@@ -189,21 +189,21 @@
 
 <style>
 	.popup-container {
-		width: 220px;
+		width: clamp(180px, 30vw, 220px);
 		background: var(--ui-bg-primary);
 		border: 1px solid var(--ui-border);
-		border-radius: 8px;
+		border-radius: clamp(6px, 0.8vw, 8px);
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 		position: fixed;
 		z-index: 1000;
-		padding: 4px;
+		padding: clamp(2px, 0.5vw, 4px);
 	}
 
 	.content-container {
-		padding: 8px;
+		padding: clamp(4px, 1vw, 8px);
 	}
 
 	table {
@@ -221,19 +221,17 @@
 
 	.defalt-th {
 		text-align: left;
-		padding: 8px 12px;
+		padding: clamp(6px, 1vw, 8px) clamp(8px, 1.5vw, 12px);
 		color: var(--text-secondary);
-		font-size: 12px;
 		font-weight: 600;
 		text-transform: uppercase;
 	}
 
 	td {
-		padding: 8px 12px;
+		padding: clamp(6px, 1vw, 8px) clamp(8px, 1.5vw, 12px);
 		color: var(--text-primary);
-		font-size: 14px;
 		cursor: pointer;
-		border-radius: 4px;
+		border-radius: clamp(3px, 0.5vw, 4px);
 		transition: background-color 0.2s ease;
 	}
 
