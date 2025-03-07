@@ -158,11 +158,16 @@ def process_tasks():
                                 self.task_id = task_id
                                 self.data = data
                                 self.buffer = ""
+                                self.in_add_task_log = False
                                 
                             def write(self, message):
                                 # Write to the original stdout
                                 sys.__stdout__.write(message)
                                 sys.__stdout__.flush()
+                                
+                                # Skip logging if we're already inside add_task_log to prevent recursion
+                                if hasattr(self, 'in_add_task_log') and self.in_add_task_log:
+                                    return
                                 
                                 # Buffer the message until we get a newline
                                 self.buffer += message
@@ -171,7 +176,11 @@ def process_tasks():
                                     # Process all complete lines
                                     for line in lines[:-1]:
                                         if line.strip():  # Only log non-empty lines
-                                            add_task_log(self.data, self.task_id, line.strip())
+                                            try:
+                                                self.in_add_task_log = True
+                                                add_task_log(self.data, self.task_id, line.strip())
+                                            finally:
+                                                self.in_add_task_log = False
                                     # Keep any incomplete line in the buffer
                                     self.buffer = lines[-1]
                             
@@ -179,7 +188,11 @@ def process_tasks():
                                 sys.__stdout__.flush()
                                 # If there's anything in the buffer, log it
                                 if self.buffer.strip():
-                                    add_task_log(self.data, self.task_id, self.buffer.strip())
+                                    try:
+                                        self.in_add_task_log = True
+                                        add_task_log(self.data, self.task_id, self.buffer.strip())
+                                    finally:
+                                        self.in_add_task_log = False
                                     self.buffer = ""
                         
                         # Redirect stdout to capture logs

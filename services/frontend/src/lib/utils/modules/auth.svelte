@@ -109,13 +109,13 @@
 <div class="page-wrapper">
 	<Header />
 	<div class="auth-container">
-		<div class="auth-card">
+		<div class="auth-card responsive-shadow responsive-border content-padding">
 			<h1>{loginMenu ? 'Welcome Back' : 'Create Account'}</h1>
-			<p class="subtitle">
+			<p class="subtitle fluid-text">
 				{loginMenu ? 'Sign in to access your account' : 'Start your trading journey today'}
 			</p>
 
-			<button class="gsi-material-button" on:click={handleGoogleLogin}>
+			<button class="gsi-material-button responsive-shadow" on:click={handleGoogleLogin}>
 				<div class="gsi-material-button-state"></div>
 				<div class="gsi-material-button-content-wrapper">
 					<div class="gsi-material-button-icon">
@@ -151,7 +151,7 @@
 			</button>
 
 			<div class="divider">
-				<span>or continue with email</span>
+				<span class="fluid-text">or continue with email</span>
 			</div>
 
 			<form
@@ -174,6 +174,7 @@
 						on:keydown={handleKeydown}
 						autofocus
 						placeholder="your.email@example.com"
+						class="responsive-border"
 					/>
 				</div>
 
@@ -187,6 +188,7 @@
 							required
 							on:keydown={handleKeydown}
 							placeholder="How others will see you"
+							class="responsive-border"
 						/>
 					</div>
 				{/if}
@@ -199,14 +201,15 @@
 						bind:value={password}
 						required
 						on:keydown={handleKeydown}
+						class="responsive-border"
 					/>
 				</div>
 
 				{#if errorMessageText}
-					<p class="error">{errorMessageText}</p>
+					<p class="error fluid-text">{errorMessageText}</p>
 				{/if}
 
-				<button type="submit" class="submit-button" disabled={loading}>
+				<button type="submit" class="submit-button responsive-shadow" disabled={loading}>
 					{#if loading}
 						<span class="loader"></span>
 					{:else}
@@ -217,12 +220,12 @@
 
 			<!-- Only show the toggle when appropriate -->
 			{#if loginMenu}
-				<p class="toggle-auth">
+				<p class="toggle-auth fluid-text">
 					Don't have an account?
 					<a href="/signup">Sign Up</a>
 				</p>
 			{:else}
-				<p class="toggle-auth">
+				<p class="toggle-auth fluid-text">
 					Already have an account?
 					<a href="/login">Sign In</a>
 				</p>
@@ -249,17 +252,15 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: 2rem;
-		padding-top: calc(80px + 2rem);
+		padding: clamp(1rem, 3vw, 2rem);
+		padding-top: calc(80px + clamp(1rem, 3vw, 2rem));
 		box-sizing: border-box;
 	}
 
 	.auth-card {
 		background: rgba(255, 255, 255, 0.05);
-		padding: 2rem;
-		border-radius: 12px;
+		border-radius: clamp(8px, 1vw, 12px);
 		width: 100%;
-		max-width: 400px;
 		backdrop-filter: blur(10px);
 		margin: auto;
 	}
@@ -267,39 +268,35 @@
 	h1 {
 		color: white;
 		text-align: center;
-		margin-bottom: 0.5rem;
+		margin-bottom: clamp(0.25rem, 1vh, 0.5rem);
 	}
 
 	.subtitle {
 		color: #94a3b8;
 		text-align: center;
-		margin-bottom: 2rem;
+		margin-bottom: clamp(1.5rem, 3vh, 2rem);
 	}
 
 	.auth-form {
 		display: flex;
 		flex-direction: column;
-		gap: 1.5rem;
+		gap: clamp(1rem, 2vh, 1.5rem);
 	}
 
 	.form-group {
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
+		gap: clamp(0.25rem, 0.5vh, 0.5rem);
 	}
 
 	label {
 		color: #e2e8f0;
-		font-size: 0.9rem;
 	}
 
 	input {
-		padding: 0.75rem;
-		border-radius: 6px;
 		border: 1px solid rgba(255, 255, 255, 0.1);
 		background: rgba(255, 255, 255, 0.05);
 		color: white;
-		font-size: 1rem;
 	}
 
 	input:focus {
@@ -310,9 +307,9 @@
 	.submit-button {
 		background: #3b82f6;
 		color: white;
-		padding: 1rem;
+		padding: clamp(0.75rem, 1.5vh, 1rem);
 		border: none;
-		border-radius: 6px;
+		border-radius: clamp(4px, 0.5vw, 6px);
 		font-weight: 600;
 		cursor: pointer;
 		transition: all 0.3s ease;
@@ -330,13 +327,12 @@
 	.error {
 		color: #ef4444;
 		text-align: center;
-		font-size: 0.9rem;
 	}
 
 	.toggle-auth {
 		text-align: center;
 		color: #94a3b8;
-		margin-top: 2rem;
+		margin-top: clamp(1.5rem, 3vh, 2rem);
 	}
 
 	.gsi-material-button {
@@ -348,18 +344,17 @@
 		background-image: none;
 		border: 1px solid #747775;
 		-webkit-border-radius: 4px;
-		border-radius: 4px;
+		border-radius: clamp(4px, 0.5vw, 6px);
 		-webkit-box-sizing: border-box;
 		box-sizing: border-box;
 		color: #e3e3e3;
 		cursor: pointer;
 		font-family: 'Roboto', arial, sans-serif;
-		font-size: 14px;
-		height: 40px;
+		height: clamp(36px, 5vh, 40px);
 		letter-spacing: 0.25px;
 		outline: none;
 		overflow: hidden;
-		padding: 0 12px;
+		padding: 0 clamp(8px, 1vw, 12px);
 		position: relative;
 		text-align: center;
 		-webkit-transition:
@@ -379,10 +374,10 @@
 	}
 
 	.gsi-material-button .gsi-material-button-icon {
-		height: 20px;
-		margin-right: 12px;
-		min-width: 20px;
-		width: 20px;
+		height: clamp(16px, 2vw, 20px);
+		margin-right: clamp(8px, 1vw, 12px);
+		min-width: clamp(16px, 2vw, 20px);
+		width: clamp(16px, 2vw, 20px);
 	}
 
 	.gsi-material-button .gsi-material-button-content-wrapper {
@@ -462,7 +457,7 @@
 		display: flex;
 		align-items: center;
 		text-align: center;
-		margin: 1.5rem 0;
+		margin: clamp(1rem, 2vh, 1.5rem) 0;
 	}
 
 	.divider::before,
@@ -473,14 +468,13 @@
 	}
 
 	.divider span {
-		padding: 0 1rem;
+		padding: 0 clamp(0.5rem, 1vw, 1rem);
 		color: #94a3b8;
-		font-size: 0.875rem;
 	}
 
 	.loader {
-		width: 20px;
-		height: 20px;
+		width: clamp(16px, 2vw, 20px);
+		height: clamp(16px, 2vw, 20px);
 		border: 2px solid #ffffff;
 		border-bottom-color: transparent;
 		border-radius: 50%;
