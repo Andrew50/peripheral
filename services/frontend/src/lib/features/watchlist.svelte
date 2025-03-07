@@ -80,7 +80,6 @@
 					privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: newId }).then(
 						(items: WatchlistItem[]) => {
 							// The store will be updated by the backend via the global store
-							console.log('Flag watchlist created with ID:', newId);
 						}
 					);
 				});
@@ -208,15 +207,11 @@
 			}
 
 			// Debug the watchlists and current ID to verify what we're looking for
-			console.log('Current watchlist ID:', currentWatchlistIdNum);
-			console.log('Available watchlists:', watchlistsValue);
 
 			// Find the watchlist by ID, ensuring type consistency
 			const watchlist = Array.isArray(watchlistsValue)
 				? watchlistsValue.find((w) => Number(w.watchlistId) === currentWatchlistIdNum)
 				: null;
-
-			console.log('Found watchlist:', watchlist);
 
 			// Use the actual name or fall back to the ID if name is not available
 			const watchlistName = watchlist?.watchlistName || `Watchlist #${currentWatchlistIdNum}`;
@@ -253,7 +248,6 @@
 
 		// Safety check to prevent deleting the flag watchlist
 		if (watchlistId === flagWatchlistId) {
-			console.log('Attempted to delete flag watchlist, operation prevented');
 			alert('The flag watchlist cannot be deleted.');
 			return;
 		}

@@ -52,7 +52,6 @@
 	let isSorting = false;
 	export let linkColumns: string[] = [];
 	let selectedRowIndex = -1;
-	console.log('list', get(list));
 	let expandedRows = new Set<number>();
 
 	// Add these for similar trades handling
@@ -278,22 +277,18 @@
 			// Get all unique, non-empty tickers from the list
 			const tickers = [...new Set($list.map((item) => item?.ticker).filter(Boolean))];
 			if (tickers.length === 0) {
-				console.log('No tickers to load icons for');
 				return;
 			}
 
 			// Check if we already loaded icons for these tickers
 			const newTickers = tickers.filter((ticker) => ticker && !iconsLoadedForTickers.has(ticker));
 			if (newTickers.length === 0) {
-				console.log('Icons already loaded for all tickers');
 				return;
 			}
 
-			console.log('Loading icons for tickers:', newTickers);
 			const iconsResponse = await privateRequest('getIcons', { tickers: newTickers });
 
 			if (!iconsResponse) {
-				console.warn('No icon response received');
 				return;
 			}
 
@@ -301,8 +296,6 @@
 				console.warn('Invalid icon response format:', iconsResponse);
 				return;
 			}
-
-			console.log('Received icons response:', iconsResponse.length, 'items');
 
 			// Create a map of ticker to icon for faster lookup
 			const iconMap = new Map();
@@ -322,7 +315,6 @@
 					// Look up the icon in our map
 					const iconData = iconMap.get(item.ticker);
 					if (!iconData) {
-						console.log('No icon data found for ticker:', item.ticker);
 						// Add a black box placeholder for missing icons
 						item.icon = BLACK_PIXEL;
 						// Mark as processed even if no icon found to avoid repeated attempts
@@ -331,7 +323,6 @@
 					}
 
 					if (!iconData.length) {
-						console.log('Empty icon for ticker:', item.ticker);
 						// Add a black box placeholder for empty icons
 						item.icon = BLACK_PIXEL;
 						if (item.ticker) iconsLoadedForTickers.add(item.ticker);
@@ -375,7 +366,6 @@
 		index: number,
 		force: number | null = null
 	) {
-		console.log('selected instance: ', instance);
 		const button = force !== null ? force : event.button;
 
 		event.preventDefault();

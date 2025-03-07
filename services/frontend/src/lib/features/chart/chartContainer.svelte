@@ -115,4 +115,16 @@
 		flex: 1;
 		min-height: 0;
 	}
+
+	/* Add responsive focus indicator for accessibility */
+	.chart-container:focus {
+		box-shadow: inset 0 0 0 clamp(1px, 0.2vw, 2px) var(--ui-accent, rgba(59, 130, 246, 0.5));
+	}
+
+	@media (max-width: 768px) {
+		/* Adjust for smaller screens if needed */
+		.chart-container {
+			overflow: hidden;
+		}
+	}
 </style>

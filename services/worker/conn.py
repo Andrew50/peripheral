@@ -42,7 +42,8 @@ def add_task_log(data, task_id, message, level="info"):
         if not task_json:
             # Only print warning if we haven't warned about this task before
             if task_id not in add_task_log.warned_missing_tasks:
-                print(f"Warning: Could not find task {task_id} to add log", flush=True)
+                sys.__stdout__.write(f"Warning: Could not find task {task_id} to add log\n")
+                sys.__stdout__.flush()
                 add_task_log.warned_missing_tasks.add(task_id)
             return
         # If we successfully get the task, remove it from the warned set if it was there
@@ -51,8 +52,9 @@ def add_task_log(data, task_id, message, level="info"):
         
         task = json.loads(task_json)
         
-        # DEBUG: Print task structure before adding log
-        print(f"DEBUG: Task structure before log: {list(task.keys())}", flush=True)
+        # DEBUG: Print task structure before adding log - using sys.__stdout__ directly to avoid recursion
+        sys.__stdout__.write(f"DEBUG: Task structure before log: {list(task.keys())}\n")
+        sys.__stdout__.flush()
         
         # Create a log entry
         log_entry = {
@@ -64,19 +66,22 @@ def add_task_log(data, task_id, message, level="info"):
         # Add the log entry to the task
         if "logs" not in task:
             task["logs"] = []
-            print(f"DEBUG: Created new logs array for task {task_id}", flush=True)
+            sys.__stdout__.write(f"DEBUG: Created new logs array for task {task_id}\n")
+            sys.__stdout__.flush()
         
         task["logs"].append(log_entry)
         task["updatedAt"] = datetime.now().isoformat()
         
-        # DEBUG: Print log entry being added
-        print(f"DEBUG: Adding log to task {task_id}: {log_entry}", flush=True)
-        print(f"DEBUG: Task now has {len(task['logs'])} logs", flush=True)
+        # DEBUG: Print log entry being added - using sys.__stdout__ directly to avoid recursion
+        sys.__stdout__.write(f"DEBUG: Adding log to task {task_id}: {log_entry}\n")
+        sys.__stdout__.write(f"DEBUG: Task now has {len(task['logs'])} logs\n")
+        sys.__stdout__.flush()
         
         # Save the updated task
         safe_redis_operation(data.cache.set, task_id, json.dumps(task))
     except Exception as e:
-        print(f"Error adding log to task {task_id}: {e}", flush=True)
+        sys.__stdout__.write(f"Error adding log to task {task_id}: {e}\n")
+        sys.__stdout__.flush()
 
 
 def safe_redis_operation(func, *args, **kwargs):
@@ -96,19 +101,23 @@ def safe_redis_operation(func, *args, **kwargs):
             total_delay = retry_delay + jitter_amount
             
             if attempt < max_retries - 1:
-                print(f"Redis operation timed out (attempt {attempt+1}/{max_retries}): {e}. Retrying in {total_delay:.2f}s", flush=True)
+                sys.__stdout__.write(f"Redis operation timed out (attempt {attempt+1}/{max_retries}): {e}. Retrying in {total_delay:.2f}s\n")
+                sys.__stdout__.flush()
                 
                 # Try to reset the connection pool if possible
                 try:
                     if hasattr(func, '__self__') and hasattr(func.__self__, 'connection_pool'):
-                        print("Attempting to reset Redis connection pool...", flush=True)
+                        sys.__stdout__.write("Attempting to reset Redis connection pool...\n")
+                        sys.__stdout__.flush()
                         func.__self__.connection_pool.reset()
                 except Exception as reset_error:
-                    print(f"Failed to reset connection pool: {reset_error}", flush=True)
+                    sys.__stdout__.write(f"Failed to reset connection pool: {reset_error}\n")
+                    sys.__stdout__.flush()
                 
                 time.sleep(total_delay)
             else:
-                print(f"Redis operation timed out after {max_retries} attempts: {e}", flush=True)
+                sys.__stdout__.write(f"Redis operation timed out after {max_retries} attempts: {e}\n")
+                sys.__stdout__.flush()
                 raise
         except (redis.ConnectionError, redis.exceptions.ConnectionError) as e:
             # Handle connection errors with exponential backoff
@@ -117,17 +126,21 @@ def safe_redis_operation(func, *args, **kwargs):
             total_delay = retry_delay + jitter_amount
             
             if attempt < max_retries - 1:
-                print(f"Redis connection error (attempt {attempt+1}/{max_retries}): {e}. Retrying in {total_delay:.2f}s", flush=True)
+                sys.__stdout__.write(f"Redis connection error (attempt {attempt+1}/{max_retries}): {e}. Retrying in {total_delay:.2f}s\n")
+                sys.__stdout__.flush()
                 time.sleep(total_delay)
             else:
-                print(f"Redis connection error after {max_retries} attempts: {e}", flush=True)
+                sys.__stdout__.write(f"Redis connection error after {max_retries} attempts: {e}\n")
+                sys.__stdout__.flush()
                 raise
         except Exception as e:
             # For other errors, just propagate them up
-            print(f"Unexpected Redis error: {e}", flush=True)
+            sys.__stdout__.write(f"Unexpected Redis error: {e}\n")
+            sys.__stdout__.flush()
             if attempt < max_retries - 1:
-                print(f"Retrying in {retry_delay:.2f}s", flush=True)
-                time.sleep(retry_delay)
+                sys.__stdout__.write(f"Retrying in {base_retry_delay:.2f}s\n")
+                sys.__stdout__.flush()
+                time.sleep(base_retry_delay)
             else:
                 raise
 

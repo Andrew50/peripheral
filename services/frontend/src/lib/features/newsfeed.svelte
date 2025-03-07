@@ -86,17 +86,13 @@
 
 	// Function to handle incoming global SEC filing messages
 	function handleGlobalSECFilingMessage(message: StreamData) {
-		console.log('SEC Filing message received:', message);
-
 		// Check if the message has a data property that is an array
 		if (typeof message === 'object' && 'data' in message && message.data) {
 			if (Array.isArray(message.data)) {
-				console.log('Initial SEC filings data:', message.data);
 				globalFilings.set(message.data as Filing[]);
 				isLoadingGlobalFilings = false;
 			} else {
 				// Handle single filing update
-				console.log('New SEC filing:', message.data);
 				globalFilings.update((currentFilings) => {
 					// Add the new filing at the beginning of the array
 					const updatedFilings = [message.data as Filing, ...currentFilings];
@@ -104,7 +100,6 @@
 					if (updatedFilings.length > 100) {
 						return updatedFilings.slice(0, 100);
 					}
-					console.log('Updated SEC filings:', updatedFilings);
 					return updatedFilings;
 				});
 			}

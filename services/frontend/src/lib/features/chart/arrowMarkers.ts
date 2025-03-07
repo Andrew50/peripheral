@@ -160,7 +160,6 @@ export class ArrowMarkersPaneView
 		data: PaneRendererCustomData<Time, ArrowMarker>,
 		seriesOptions: CustomSeriesOptions
 	): void {
-		//console.log("ArrowMarkersPaneView update called with data:", data, "and seriesOptions:", seriesOptions);
 		// Use type assertion with unknown as intermediate step
 		this.markers = [...data.bars] as unknown as ArrowMarker[];
 		this.options = seriesOptions;

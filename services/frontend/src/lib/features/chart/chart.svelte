@@ -1230,39 +1230,63 @@
 			}
 		});
 		chartContainer.addEventListener('keydown', (event) => {
-			console.log(event);
 			if (chartId !== undefined) {
 				setActiveChart(chartId, currentChartInstance);
 			}
-			if (event.key == 'r' && event.altKey) {
-				// alt + r reset view
-				if (currentChartInstance.timestamp && !$streamInfo.replayActive) {
-					queryChart({ timestamp: 0 });
-				} else {
-					chart.timeScale().resetTimeScale();
-				}
 
-				// IMPORTANT: Prevent fall-through so Alt+R doesn't open the input window
-				event.stopPropagation();
+			// Handle all Alt key combinations first
+			if (event.altKey) {
+				// Prevent default behavior for all Alt key combinations
 				event.preventDefault();
-				return;
-			} else if (event.key == 'h' && event.altKey) {
-				const price = chartCandleSeries.coordinateToPrice(latestCrosshairPositionY);
-				if (typeof price !== 'number') return;
+				event.stopPropagation();
 
-				const roundedPrice = Math.round(price * 100) / 100;
-				const securityId = currentChartInstance.securityId;
-				addHorizontalLine(roundedPrice, securityId);
-			} else if (event.key == 's' && event.altKey) {
-				if (chartId !== undefined) {
-					handleScreenshot(chartId.toString());
+				// Now handle specific Alt key combinations
+				if (event.key == 'r') {
+					// alt + r reset view
+					if (currentChartInstance.timestamp && !$streamInfo.replayActive) {
+						queryChart({ timestamp: 0 });
+					} else {
+						chart.timeScale().resetTimeScale();
+					}
+					return;
+				} else if (event.key == 'h') {
+					// IMPORTANT: Prevent default and stop propagation FIRST for Alt+H
+					event.stopPropagation();
+					event.preventDefault();
+
+					const price = chartCandleSeries.coordinateToPrice(latestCrosshairPositionY);
+					if (typeof price !== 'number') return;
+
+					const roundedPrice = Math.round(price * 100) / 100;
+					const securityId = currentChartInstance.securityId;
+					addHorizontalLine(roundedPrice, securityId);
+					return;
+				} else if (event.key == 's') {
+					// IMPORTANT: Prevent default and stop propagation FIRST for Alt+S
+					event.stopPropagation();
+					event.preventDefault();
+
+					if (chartId !== undefined) {
+						handleScreenshot(chartId.toString());
+					}
+					return;
+				} else if (event.altKey) {
+					// Block all other Alt key combinations from triggering the input window
+					// This ensures that when Alt is pressed, nothing goes to the input window
+					event.stopPropagation();
+					event.preventDefault();
+					return;
 				}
-			} else if (
+
+				// For any other Alt key combinations, just return
+				// This prevents them from triggering the input window
+				return;
+			}
+
+			// Handle non-Alt key combinations
+			if (
 				event.key === 'Tab' ||
-				(!event.ctrlKey &&
-					!event.altKey &&
-					!event.metaKey &&
-					/^[a-zA-Z0-9]$/.test(event.key.toLowerCase()))
+				(!event.ctrlKey && !event.metaKey && /^[a-zA-Z0-9]$/.test(event.key.toLowerCase()))
 			) {
 				// Prevent default and stop propagation immediately
 				event.preventDefault();

@@ -27,41 +27,41 @@
 	{#if showHero}
 		<div class="hero-container" transition:fade>
 			<Header />
-			<div class="hero-content">
+			<div class="hero-content content-padding">
 				<h1>ATLANTIS</h1>
-				<p class="tagline">Comprehensive Market Analysis Suite</p>
-				<div class="cta-buttons">
-					<a href="/signup" class="cta-button primary">Get Started</a>
-					<a href="/login" class="cta-button secondary">Sign In</a>
+				<p class="tagline fluid-text">Comprehensive Market Analysis Suite</p>
+				<div class="cta-buttons responsive-flex">
+					<a href="/signup" class="cta-button primary responsive-shadow">Get Started</a>
+					<a href="/login" class="cta-button secondary responsive-border">Sign In</a>
 				</div>
-				<div class="features-grid">
-					<div class="feature-card">
+				<div class="features-grid responsive-grid">
+					<div class="feature-card responsive-shadow responsive-border">
 						<div class="feature-header">
 							<span class="feature-icon">📊</span>
 							<h3>Advanced Charting</h3>
 						</div>
-						<p>Real-time data & historical replay with custom indicators</p>
+						<p class="fluid-text">Real-time data & historical replay with custom indicators</p>
 					</div>
-					<div class="feature-card">
+					<div class="feature-card responsive-shadow responsive-border">
 						<div class="feature-header">
 							<span class="feature-icon">🎯</span>
 							<h3>Pattern Recognition</h3>
 						</div>
-						<p>Custom screening patterns with real-time market alerts</p>
+						<p class="fluid-text">Custom screening patterns with real-time market alerts</p>
 					</div>
-					<div class="feature-card">
+					<div class="feature-card responsive-shadow responsive-border">
 						<div class="feature-header">
 							<span class="feature-icon">📈</span>
 							<h3>Trade Analysis</h3>
 						</div>
-						<p>Comprehensive trade journaling and performance metrics</p>
+						<p class="fluid-text">Comprehensive trade journaling and performance metrics</p>
 					</div>
-					<div class="feature-card">
+					<div class="feature-card responsive-shadow responsive-border">
 						<div class="feature-header">
 							<span class="feature-icon">⚡</span>
 							<h3>Market Data</h3>
 						</div>
-						<p>Time & sales, level 2, and full US market coverage</p>
+						<p class="fluid-text">Time & sales, level 2, and full US market coverage</p>
 					</div>
 				</div>
 			</div>
@@ -109,42 +109,45 @@
 	}
 
 	.hero-content {
-		padding-top: 12vh;
+		padding-top: clamp(8vh, 10vh, 12vh);
 		text-align: center;
 		height: calc(100vh - 80px);
 		overflow-y: auto;
-		padding-bottom: 2rem;
+		padding-bottom: clamp(1rem, 2vh, 2rem);
 	}
 
 	h1 {
 		color: #3b82f6;
 		font-family: 'Space Mono', monospace;
-		font-size: 4rem;
-		letter-spacing: 0.5rem;
 		margin-bottom: 0.5rem;
 		text-transform: uppercase;
 	}
 
 	.tagline {
 		color: #94a3b8;
-		font-size: 1.25rem;
-		margin-bottom: 2rem;
+		margin-bottom: clamp(1rem, 3vh, 2rem);
 		font-weight: 300;
 	}
 
 	.cta-buttons {
 		display: flex;
-		gap: 1rem;
+		gap: clamp(0.5rem, 2vw, 1rem);
 		justify-content: center;
-		margin-bottom: 4rem;
+		margin-bottom: clamp(2rem, 5vh, 4rem);
+	}
+
+	@media (max-width: 480px) {
+		.cta-buttons {
+			flex-direction: column;
+			align-items: center;
+		}
 	}
 
 	.cta-button {
-		padding: 1rem 2rem;
-		border-radius: 8px;
 		font-weight: 600;
 		text-decoration: none;
 		transition: all 0.3s ease;
+		min-width: clamp(120px, 20vw, 180px);
 	}
 
 	.primary {
@@ -169,42 +172,26 @@
 	}
 
 	.features-grid {
-		display: grid;
-		gap: 1.5rem;
-		padding: 0 2rem;
-		max-width: 1200px;
+		padding: 0 clamp(1rem, 3vw, 2rem);
+		max-width: min(1200px, 90vw);
 		margin: 0 auto;
-		grid-template-columns: repeat(4, 1fr);
-	}
-
-	@media (max-width: 1200px) {
-		.features-grid {
-			grid-template-columns: repeat(2, 1fr);
-			max-width: 800px;
-		}
-	}
-
-	@media (max-width: 640px) {
-		.features-grid {
-			grid-template-columns: 1fr;
-			max-width: 400px;
-		}
 	}
 
 	.feature-card {
 		background: rgba(30, 41, 59, 0.5);
-		padding: 1.5rem;
-		border-radius: 12px;
+		padding: clamp(1rem, 2vw, 1.5rem);
+		border-radius: clamp(8px, 1vw, 12px);
 		text-align: left;
 		transition: transform 0.3s ease;
 		border: 1px solid rgba(59, 130, 246, 0.1);
+		height: 100%;
 	}
 
 	.feature-header {
 		display: flex;
 		align-items: center;
-		margin-bottom: 0.75rem;
-		gap: 0.75rem;
+		margin-bottom: clamp(0.5rem, 1vh, 0.75rem);
+		gap: clamp(0.5rem, 1vw, 0.75rem);
 	}
 
 	.feature-icon {
@@ -214,13 +201,11 @@
 	.feature-card h3 {
 		color: #e2e8f0;
 		margin: 0;
-		font-size: 1.1rem;
 		font-weight: 500;
 	}
 
 	.feature-card p {
 		color: #94a3b8;
-		font-size: 0.9rem;
 		line-height: 1.4;
 		margin: 0;
 	}
