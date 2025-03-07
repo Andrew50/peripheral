@@ -30,3 +30,4 @@ services/prod/config/polygon-secret.yaml
 
 # Add new paths for secrets
 services/prod/config/secrets/
+jobctl

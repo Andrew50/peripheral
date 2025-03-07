@@ -639,8 +639,9 @@ func StartServer() {
 	http.HandleFunc("/ws", WSHandler(conn))
 	http.HandleFunc("/private-upload", privateUploadHandler(conn))
 	http.HandleFunc("/health", healthHandler())
-	fmt.Println("debug: Server running on port 5057 ----------------------------------------------------------")
-	if err := http.ListenAndServe(":5057", nil); err != nil {
+	http.HandleFunc("/backend/health", healthHandler())
+	fmt.Println("debug: Server running on port 5058 ----------------------------------------------------------")
+	if err := http.ListenAndServe(":5058", nil); err != nil {
 		log.Fatal(err)
 	}
 }
