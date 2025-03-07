@@ -469,7 +469,6 @@
 
 				// If we've waited too long, resolve anyway
 				if (Date.now() - startTime > maxWaitTime) {
-					// Remove console.log for timeout
 					isLoadingSecurities = false;
 					resolve();
 					return;
