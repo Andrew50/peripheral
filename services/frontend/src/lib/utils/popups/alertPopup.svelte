@@ -9,10 +9,14 @@
 
 <div class="alert-container">
 	{#if $alertPopup}
-		<div class="alert-popup" transition:fade on:click={() => dismissAlert($alertPopup.alertId)}>
+		<div
+			class="alert-popup responsive-shadow responsive-border content-padding"
+			transition:fade
+			on:click={() => dismissAlert($alertPopup.alertId)}
+		>
 			<div class="alert-content">
-				<span class="value">{$alertPopup.message}</span>
-				<span class="label">{new Date($alertPopup.timestamp).toLocaleTimeString()}</span>
+				<span class="value fluid-text">{$alertPopup.message}</span>
+				<span class="label fluid-text">{new Date($alertPopup.timestamp).toLocaleTimeString()}</span>
 			</div>
 		</div>
 	{/if}
@@ -21,40 +25,37 @@
 <style>
 	.alert-container {
 		position: fixed;
-		top: 20px;
-		right: 20px;
+		top: clamp(10px, 2vh, 20px);
+		right: clamp(10px, 2vw, 20px);
 		z-index: 1000;
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: clamp(5px, 1vh, 10px);
 	}
 
 	.alert-popup {
-		width: 300px;
+		width: clamp(250px, 30vw, 300px);
 		background: var(--ui-bg-primary);
 		border: 1px solid var(--ui-border);
-		border-radius: 8px;
+		border-radius: clamp(6px, 0.8vw, 8px);
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-		padding: 12px;
 	}
 
 	.alert-content {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: clamp(4px, 0.8vh, 8px);
 	}
 
 	.value {
 		color: var(--text-primary);
-		font-size: 14px;
 		font-weight: 500;
 	}
 
 	.label {
 		color: var(--text-secondary);
-		font-size: 12px;
 	}
 </style>
