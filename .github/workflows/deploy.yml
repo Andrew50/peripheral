@@ -324,22 +324,42 @@ jobs:
           # Check if JWT_SECRET secret is set
           if [ -z "${{ secrets.JWT_SECRET }}" ]; then
             error_log "JWT_SECRET secret is not available"
-          # Check Kubernetes cluster connectivity
-          log "Checking Kubernetes cluster connectivity..."
-          if ! kubectl cluster-info &>/dev/null; then
-            error_log "Cannot connect to Kubernetes cluster. Make sure the cluster is running."
-            error_log "If using minikube, run 'minikube start' to start the cluster."
-            error_log "Cluster connection details:"
-            kubectl config view
-            exit 1
-          fi
-
-          log "Kubernetes cluster is accessible. Proceeding with secret updates..."
             error_log "Please add the JWT_SECRET secret in your GitHub repository"
             exit 1
           fi
           
           log "Updating Kubernetes secrets with secure database and Redis passwords..."
+          
+          # Check Kubernetes cluster connectivity with retry logic
+          log "Checking Kubernetes cluster connectivity..."
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          CONNECTED=false
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$CONNECTED" = false ]; do
+            if kubectl cluster-info &>/dev/null; then
+              log "Kubernetes cluster is accessible."
+              CONNECTED=true
+            else
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                log "Cannot connect to Kubernetes cluster. Retrying in 10 seconds... (Attempt $RETRY_COUNT of $MAX_RETRIES)"
+                sleep 10
+                
+                # If using minikube, try to start it
+                if command -v minikube &>/dev/null; then
+                  log "Attempting to start minikube..."
+                  minikube status &>/dev/null || minikube start
+                fi
+              else
+                error_log "Cannot connect to Kubernetes cluster after $MAX_RETRIES attempts."
+                error_log "If using minikube, run 'minikube start' to start the cluster."
+                error_log "Cluster connection details:"
+                kubectl config view
+                exit 1
+              fi
+            fi
+          done
           
           # Create a temporary file for the secrets
           TEMP_DIR=$(mktemp -d)
@@ -398,66 +418,113 @@ jobs:
             JWT_SECRET: ${JWT_SECRET_B64}
           EOF
           
-          # Apply the secrets to Kubernetes
-          if ! kubectl apply -f "$SECRETS_FILE"; then
-            log "Failed to apply secrets with validation. Trying with validation disabled..."
-            kubectl apply -f "$SECRETS_FILE" --validate=false || {
-              error_log "Failed to apply secrets even with validation disabled."
-              exit 1
-            }
-          fi
+          # Apply the secrets to Kubernetes with retry logic
+          log "Applying secrets to Kubernetes..."
+          MAX_APPLY_RETRIES=3
+          APPLY_RETRY_COUNT=0
+          APPLY_SUCCESS=false
           
-          # Verify the secrets were created successfully
-          if ! kubectl get secret redis-secret &>/dev/null; then
-            error_log "Failed to create redis-secret"
-            exit 1
-          fi
+          while [ $APPLY_RETRY_COUNT -lt $MAX_APPLY_RETRIES ] && [ "$APPLY_SUCCESS" = false ]; do
+            if kubectl apply -f "$SECRETS_FILE"; then
+              log "Secrets applied successfully."
+              APPLY_SUCCESS=true
+            else
+              log "Failed to apply secrets with validation. Trying with validation disabled..."
+              if kubectl apply -f "$SECRETS_FILE" --validate=false; then
+                log "Secrets applied successfully with validation disabled."
+                APPLY_SUCCESS=true
+              else
+                APPLY_RETRY_COUNT=$((APPLY_RETRY_COUNT + 1))
+                if [ $APPLY_RETRY_COUNT -lt $MAX_APPLY_RETRIES ]; then
+                  log "Failed to apply secrets. Retrying in 5 seconds... (Attempt $APPLY_RETRY_COUNT of $MAX_APPLY_RETRIES)"
+                  sleep 5
+                  
+                  # Check cluster connectivity again
+                  if ! kubectl cluster-info &>/dev/null; then
+                    log "Lost connection to Kubernetes cluster. Attempting to reconnect..."
+                    if command -v minikube &>/dev/null; then
+                      minikube status &>/dev/null || minikube start
+                    fi
+                    sleep 5
+                  fi
+                else
+                  error_log "Failed to apply secrets after $MAX_APPLY_RETRIES attempts."
+                  exit 1
+                fi
+              fi
+            fi
+          done
           
-          if ! kubectl get secret db-secret &>/dev/null; then
-            error_log "Failed to create db-secret"
-            exit 1
-          fi
+          # Verify the secrets were created successfully with retry logic
+          log "Verifying secrets were created successfully..."
+          MAX_VERIFY_RETRIES=3
           
-          if ! kubectl get secret polygon-secret &>/dev/null; then
-            error_log "Failed to create polygon-secret"
-            exit 1
-          fi
+          verify_secret() {
+            local secret_name=$1
+            local retry_count=0
+            local verified=false
+            
+            while [ $retry_count -lt $MAX_VERIFY_RETRIES ] && [ "$verified" = false ]; do
+              if kubectl get secret $secret_name &>/dev/null; then
+                log "Secret $secret_name verified."
+                verified=true
+              else
+                retry_count=$((retry_count + 1))
+                if [ $retry_count -lt $MAX_VERIFY_RETRIES ]; then
+                  log "Secret $secret_name not found. Retrying in 3 seconds... (Attempt $retry_count of $MAX_VERIFY_RETRIES)"
+                  sleep 3
+                else
+                  error_log "Failed to verify secret $secret_name after $MAX_VERIFY_RETRIES attempts."
+                  return 1
+                fi
+              fi
+            done
+            
+            return 0
+          }
           
-          if ! kubectl get secret google-oauth-secret &>/dev/null; then
-            error_log "Failed to create google-oauth-secret"
-            exit 1
-          fi
-          
-          if ! kubectl get secret jwt-secret &>/dev/null; then
-            error_log "Failed to create jwt-secret"
-            exit 1
-          fi
+          # Verify each secret
+          verify_secret "redis-secret" || exit 1
+          verify_secret "db-secret" || exit 1
+          verify_secret "polygon-secret" || exit 1
+          verify_secret "google-oauth-secret" || exit 1
+          verify_secret "jwt-secret" || exit 1
           
           # Verify the secrets have the correct keys
           log "Verifying secret keys are properly configured..."
-          DB_SECRET_KEYS=$(kubectl get secret db-secret -o jsonpath='{.data}' | jq -r 'keys[]')
-          if [[ "$DB_SECRET_KEYS" != *"DB_ROOT_PASSWORD"* ]]; then
-            error_log "DB_ROOT_PASSWORD key is missing from db-secret"
-            exit 1
-          fi
           
-          REDIS_SECRET_KEYS=$(kubectl get secret redis-secret -o jsonpath='{.data}' | jq -r 'keys[]')
-          if [[ "$REDIS_SECRET_KEYS" != *"REDIS_PASSWORD"* ]]; then
-            error_log "REDIS_PASSWORD key is missing from redis-secret"
-            exit 1
-          fi
+          verify_secret_key() {
+            local secret_name=$1
+            local key_name=$2
+            local retry_count=0
+            local verified=false
+            
+            while [ $retry_count -lt $MAX_VERIFY_RETRIES ] && [ "$verified" = false ]; do
+              local secret_keys=$(kubectl get secret $secret_name -o jsonpath='{.data}' 2>/dev/null | jq -r 'keys[]' 2>/dev/null)
+              if [[ "$secret_keys" == *"$key_name"* ]]; then
+                log "Key $key_name verified in secret $secret_name."
+                verified=true
+              else
+                retry_count=$((retry_count + 1))
+                if [ $retry_count -lt $MAX_VERIFY_RETRIES ]; then
+                  log "Key $key_name not found in secret $secret_name. Retrying in 3 seconds... (Attempt $retry_count of $MAX_VERIFY_RETRIES)"
+                  sleep 3
+                else
+                  error_log "Key $key_name is missing from secret $secret_name after $MAX_VERIFY_RETRIES attempts."
+                  return 1
+                fi
+              fi
+            done
+            
+            return 0
+          }
           
-          GOOGLE_SECRET_KEYS=$(kubectl get secret google-oauth-secret -o jsonpath='{.data}' | jq -r 'keys[]')
-          if [[ "$GOOGLE_SECRET_KEYS" != *"GOOGLE_CLIENT_ID"* ]] || [[ "$GOOGLE_SECRET_KEYS" != *"GOOGLE_CLIENT_SECRET"* ]]; then
-            error_log "Google OAuth keys are missing from google-oauth-secret"
-            exit 1
-          fi
-          
-          JWT_SECRET_KEYS=$(kubectl get secret jwt-secret -o jsonpath='{.data}' | jq -r 'keys[]')
-          if [[ "$JWT_SECRET_KEYS" != *"JWT_SECRET"* ]]; then
-            error_log "JWT_SECRET key is missing from jwt-secret"
-            exit 1
-          fi
+          # Verify each secret key
+          verify_secret_key "db-secret" "DB_ROOT_PASSWORD" || exit 1
+          verify_secret_key "redis-secret" "REDIS_PASSWORD" || exit 1
+          verify_secret_key "google-oauth-secret" "GOOGLE_CLIENT_ID" || exit 1
+          verify_secret_key "google-oauth-secret" "GOOGLE_CLIENT_SECRET" || exit 1
+          verify_secret_key "jwt-secret" "JWT_SECRET" || exit 1
           
           log "Secret key verification passed"
           
@@ -468,8 +535,8 @@ jobs:
           
           # Restart pods to apply the new secrets
           log "Restarting pods to apply the new secrets..."
-          kubectl rollout restart deployment/backend
-          kubectl rollout restart deployment/worker
+          kubectl rollout restart deployment/backend || log "Warning: Failed to restart backend deployment"
+          kubectl rollout restart deployment/worker || log "Warning: Failed to restart worker deployment"
           
           # Wait for the restart to begin
           sleep 5
@@ -490,24 +557,107 @@ jobs:
           
           log "Running database migrations from rollouts folder..."
           
-          # Get the database pod name
-          DB_POD=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+          # Check Kubernetes cluster connectivity with retry logic
+          log "Checking Kubernetes cluster connectivity..."
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          CONNECTED=false
           
-          if [ -z "$DB_POD" ]; then
-            error_log "Database pod not found. Make sure the database is deployed and running."
-            kubectl get pods
-            exit 1
-          fi
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$CONNECTED" = false ]; do
+            if kubectl cluster-info &>/dev/null; then
+              log "Kubernetes cluster is accessible."
+              CONNECTED=true
+            else
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                log "Cannot connect to Kubernetes cluster. Retrying in 10 seconds... (Attempt $RETRY_COUNT of $MAX_RETRIES)"
+                sleep 10
+                
+                # If using minikube, try to start it
+                if command -v minikube &>/dev/null; then
+                  log "Attempting to start minikube..."
+                  minikube status &>/dev/null || minikube start
+                fi
+              else
+                error_log "Cannot connect to Kubernetes cluster after $MAX_RETRIES attempts."
+                error_log "If using minikube, run 'minikube start' to start the cluster."
+                error_log "Cluster connection details:"
+                kubectl config view
+                exit 1
+              fi
+            fi
+          done
+          
+          # Get the database pod name with retry logic
+          log "Getting database pod name..."
+          MAX_POD_RETRIES=3
+          POD_RETRY_COUNT=0
+          DB_POD=""
+          
+          while [ $POD_RETRY_COUNT -lt $MAX_POD_RETRIES ] && [ -z "$DB_POD" ]; do
+            DB_POD=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+            
+            if [ -z "$DB_POD" ]; then
+              POD_RETRY_COUNT=$((POD_RETRY_COUNT + 1))
+              if [ $POD_RETRY_COUNT -lt $MAX_POD_RETRIES ]; then
+                log "Database pod not found. Retrying in 10 seconds... (Attempt $POD_RETRY_COUNT of $MAX_POD_RETRIES)"
+                sleep 10
+                
+                # Check cluster connectivity again
+                if ! kubectl cluster-info &>/dev/null; then
+                  log "Lost connection to Kubernetes cluster. Attempting to reconnect..."
+                  if command -v minikube &>/dev/null; then
+                    minikube status &>/dev/null || minikube start
+                  fi
+                  sleep 5
+                fi
+              else
+                error_log "Database pod not found after $MAX_POD_RETRIES attempts."
+                error_log "Make sure the database is deployed and running."
+                kubectl get pods
+                exit 1
+              fi
+            fi
+          done
           
           log "Found database pod: $DB_POD"
           
-          # Wait for the database pod to be ready
+          # Wait for the database pod to be ready with retry logic
           log "Waiting for database pod to be ready..."
-          kubectl wait --for=condition=ready pod/$DB_POD --timeout=120s || {
-            error_log "Database pod is not ready after waiting 120 seconds."
-            kubectl describe pod/$DB_POD
-            exit 1
-          }
+          MAX_READY_RETRIES=3
+          READY_RETRY_COUNT=0
+          POD_READY=false
+          
+          while [ $READY_RETRY_COUNT -lt $MAX_READY_RETRIES ] && [ "$POD_READY" = false ]; do
+            if kubectl wait --for=condition=ready pod/$DB_POD --timeout=60s; then
+              log "Database pod is ready."
+              POD_READY=true
+            else
+              READY_RETRY_COUNT=$((READY_RETRY_COUNT + 1))
+              if [ $READY_RETRY_COUNT -lt $MAX_READY_RETRIES ]; then
+                log "Database pod is not ready. Retrying in 10 seconds... (Attempt $READY_RETRY_COUNT of $MAX_READY_RETRIES)"
+                sleep 10
+                
+                # Check if the pod still exists
+                if ! kubectl get pod/$DB_POD &>/dev/null; then
+                  log "Database pod no longer exists. Attempting to find a new pod..."
+                  NEW_DB_POD=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+                  if [ -n "$NEW_DB_POD" ]; then
+                    log "Found new database pod: $NEW_DB_POD"
+                    DB_POD=$NEW_DB_POD
+                  else
+                    error_log "Database pod not found after it disappeared."
+                    kubectl get pods
+                    exit 1
+                  fi
+                fi
+              else
+                error_log "Database pod is not ready after $MAX_READY_RETRIES attempts."
+                kubectl describe pod/$DB_POD
+                exit 1
+              fi
+            fi
+          done
           
           # Get the database password from the Kubernetes secret
           log "Retrieving database credentials from Kubernetes secret..."
@@ -732,6 +882,37 @@ jobs:
               fi
             fi
           }
+          
+          # Check Kubernetes cluster connectivity with retry logic
+          log "Checking Kubernetes cluster connectivity..."
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          CONNECTED=false
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$CONNECTED" = false ]; do
+            if kubectl cluster-info &>/dev/null; then
+              log "Kubernetes cluster is accessible."
+              CONNECTED=true
+            else
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                log "Cannot connect to Kubernetes cluster. Retrying in 10 seconds... (Attempt $RETRY_COUNT of $MAX_RETRIES)"
+                sleep 10
+                
+                # If using minikube, try to start it
+                if command -v minikube &>/dev/null; then
+                  log "Attempting to start minikube..."
+                  minikube status &>/dev/null || minikube start
+                fi
+              else
+                error_log "Cannot connect to Kubernetes cluster after $MAX_RETRIES attempts."
+                error_log "If using minikube, run 'minikube start' to start the cluster."
+                error_log "Cluster connection details:"
+                kubectl config view
+                exit 1
+              fi
+            fi
+          done
           
           # Apply Kubernetes configurations, excluding secrets.yaml
           log "Applying Kubernetes configurations..."
