@@ -1185,7 +1185,7 @@
 
 			const inst: CoreInstance = {
 				ticker: currentChartInstance.ticker,
-				timestamp: currentChartInstance.timestamp,
+				timestamp: timestamp,
 				timeframe: currentChartInstance.timeframe,
 				securityId: currentChartInstance.securityId,
 				price: roundedPrice
