@@ -55,7 +55,6 @@
 
 	function handleDelete(instance: Instance) {
 		// Optional: Implement delete functionality if needed
-		console.log('Delete:', instance);
 	}
 </script>
 
@@ -94,49 +93,49 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: 12px 16px;
+		padding: clamp(0.5rem, 1.5vw, 0.75rem) clamp(0.75rem, 2vw, 1rem);
 		border-bottom: 1px solid var(--ui-border);
 		background: var(--ui-bg-secondary);
 	}
 
 	.header h3 {
 		margin: 0;
-		font-size: 16px;
+		font-size: clamp(0.875rem, 1.25vw, 1rem);
 		font-weight: 600;
 	}
 
 	.content {
 		flex: 1;
 		overflow-y: auto;
-		padding: 16px;
+		padding: clamp(0.75rem, 2vw, 1rem);
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: clamp(0.75rem, 2vh, 1rem);
 	}
 
 	.base-instance {
-		padding: 12px;
+		padding: clamp(0.5rem, 1.5vw, 0.75rem);
 		background: var(--ui-bg-secondary);
-		border-radius: 6px;
+		border-radius: clamp(4px, 0.5vw, 6px);
 		border: 1px solid var(--ui-border);
 	}
 
 	.label {
 		color: var(--text-secondary);
-		font-size: 12px;
+		font-size: clamp(0.75rem, 1vw, 0.875rem);
 		text-transform: uppercase;
 		display: block;
-		margin-bottom: 4px;
+		margin-bottom: clamp(0.25rem, 0.5vh, 0.375rem);
 	}
 
 	.value {
-		font-size: 16px;
+		font-size: clamp(0.875rem, 1.25vw, 1rem);
 		font-weight: 500;
 	}
 
 	.similar-list {
 		background: var(--ui-bg-secondary);
-		border-radius: 6px;
+		border-radius: clamp(4px, 0.5vw, 6px);
 		border: 1px solid var(--ui-border);
 		overflow: hidden;
 	}
@@ -146,10 +145,10 @@
 		background: var(--ui-bg-primary);
 		border: 1px solid var(--ui-border);
 		color: var(--text-primary);
-		padding: 10px 16px;
-		border-radius: 4px;
+		padding: clamp(0.5rem, 1vw, 0.625rem) clamp(0.75rem, 2vw, 1rem);
+		border-radius: clamp(4px, 0.5vw, 6px);
 		cursor: pointer;
-		font-size: 14px;
+		font-size: clamp(0.875rem, 1vw, 1rem);
 		font-weight: 500;
 		transition: all 0.2s ease;
 	}

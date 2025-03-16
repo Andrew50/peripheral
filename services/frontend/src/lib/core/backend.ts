@@ -3,50 +3,45 @@ const pollInterval = 300; // Poll every 100ms
 import { goto } from '$app/navigation';
 
 // Default value for server-side rendering
-base_url = 'http://localhost:5057';
+base_url = 'http://localhost:5058';
 
 if (typeof window !== 'undefined') {
     // For client-side code
-    if (window.location.hostname === 'localhost') {
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
         // In development
-        const url = new URL(window.location.origin);
-        url.port = '5057'; // Switch to backend port
-        base_url = url.toString();
-        if (base_url.endsWith('/')) {
-            base_url = base_url.substring(0, base_url.length - 1);
-        }
-        console.log('Using development backend URL:', base_url);
+        base_url = 'http://localhost:5058'; // Use direct localhost connection
     } else {
         // In production always use the current origin
         base_url = window.location.origin;
-        console.log('Using production backend URL:', base_url);
     }
 }
 
-// For debugging
-console.log('Backend base_url set to:', base_url);
-
 export async function publicRequest<T>(func: string, args: Record<string, unknown>): Promise<T> {
-    // Log what's being sent
-    console.log(`Making ${func} request with args:`, args);
-
     const payload = JSON.stringify({
         func: func,
         args: args
     });
-    const response = await fetch(`${base_url}/public`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: payload
-    });
-    if (response.ok) {
-        const result = (await response.json()) as T;
-        console.log('payload: ', payload, 'result: ', result);
-        return result;
-    } else {
-        const errorMessage = await response.text();
-        console.error('payload: ', payload, 'error: ', errorMessage);
-        return Promise.reject(errorMessage);
+
+    try {
+        const response = await fetch(`${base_url}/public`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload
+        });
+
+        if (response.ok) {
+            const result = (await response.json()) as T;
+            return result;
+        } else {
+            const errorMessage = await response.text();
+            console.error('Request failed with status:', response.status, 'Error:', errorMessage);
+            return Promise.reject(`Server error: ${response.status} - ${errorMessage}`);
+        }
+    } catch (error) {
+        console.error('Connection error:', error);
+        // Check if the backend URL is correct
+        console.error('Current backend URL:', base_url);
+        return Promise.reject(`Connection error: Could not connect to backend at ${base_url}. Please check if the backend service is running and accessible.`);
     }
 }
 
@@ -100,7 +95,6 @@ export async function privateRequest<T>(
 ): Promise<T> {
     // Skip API calls during SSR to prevent crashes
     if (typeof window === 'undefined') {
-        console.log('Skipping API call during SSR for endpoint:', func);
         return {} as T; // Return empty data during SSR
     }
 
@@ -132,7 +126,7 @@ export async function privateRequest<T>(
     } else if (response.ok) {
         const result = (await response.json()) as T;
         if (verbose) {
-            console.log('payload: ', payload, 'result: ', result);
+            // Removed console.log(payload)
         }
         return result;
     } else {
@@ -182,7 +176,7 @@ export async function queueRequest<T>(
         return Promise.reject(errorMessage);
     }
     if (verbose) {
-        console.log(payload);
+        // Removed console.log(payload)
     }
     const result = await response.json();
     const taskId = result.taskId;
@@ -201,9 +195,7 @@ export async function queueRequest<T>(
                 return;
             }
             const data = await pollResponse.json();
-            console.log(data);
             if (data.status === 'completed') {
-                console.log('Task completed:', data.result);
                 clearInterval(intervalID); // Stop polling
                 resolve(data.result);
             } else if (data.status === 'error') {

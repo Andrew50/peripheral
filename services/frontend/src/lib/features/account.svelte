@@ -152,7 +152,6 @@
 			}
 
 			privateRequest<Trade[]>('grab_user_trades', params).then((result) => {
-				console.log(result);
 				trades.set(result);
 				message = 'Trades loaded successfully';
 			});
@@ -170,7 +169,6 @@
 			if (statEndDate) params.end_date = statEndDate;
 			if (statTicker) params.ticker = statTicker.toUpperCase();
 			privateRequest<TradeStatistics>('get_trade_statistics', params).then((result) => {
-				console.log(result);
 				statistics.set(result);
 				message = 'Statistics loaded successfully';
 			});
@@ -198,7 +196,6 @@
 			}
 
 			privateRequest<TickerStats[]>('get_ticker_performance', params).then((result) => {
-				console.log(result);
 				tickerStats.set(result);
 				message = 'Ticker stats loaded successfully';
 			});

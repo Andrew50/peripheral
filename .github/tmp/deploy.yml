@@ -797,7 +797,7 @@ jobs:
               
               # Check backend health endpoint
               log "Checking backend health endpoint..."
-              HEALTH_STATUS=$(kubectl exec $BACKEND_POD -- curl -s http://localhost:5057/health || echo "Failed")
+              HEALTH_STATUS=$(kubectl exec $BACKEND_POD -- curl -s http://localhost:5058/health || echo "Failed")
               log "Backend health status: $HEALTH_STATUS"
               
               # Test database connection

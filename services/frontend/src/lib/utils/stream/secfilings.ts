@@ -16,33 +16,38 @@ export interface Filing {
 // Create a store for the filings
 export const globalFilings = writable<Filing[]>([]);
 
-// Format timestamp to a readable date/time string
-export function formatTimestamp(timestamp: number): string {
-  if (!timestamp) return 'Unknown date';
-
-  console.log('Formatting timestamp:', timestamp, typeof timestamp);
-
+// Format timestamp to a consistent format
+function formatTimestamp(timestamp: number | string): number {
   try {
-    const dt = DateTime.fromMillis(timestamp).setZone('America/New_York');
-    return dt.toFormat('MMM dd, yyyy h:mm a ZZZZ');
+    // Remove console.log for formatting timestamp
+
+    // If timestamp is already a number, return it
+    if (typeof timestamp === 'number') {
+      return timestamp;
+    }
+
+    // If timestamp is a string that can be parsed as a number, convert it
+    if (!isNaN(Number(timestamp))) {
+      return Number(timestamp);
+    }
+
+    // Otherwise, try to parse it as a date string
+    return new Date(timestamp).getTime();
   } catch (e) {
     console.error('Error formatting timestamp:', e, 'for value:', timestamp);
-    return 'Invalid date';
+    return 0;
   }
 }
 
 // Handle incoming SEC filing messages from WebSocket
 export function handleSECFilingMessage(message: any): void {
-  console.log('Received SEC filing message:', JSON.stringify(message, null, 2));
+  // Remove console.log for received SEC filing message
 
   // If the message is already an array, use it directly
   if (Array.isArray(message)) {
-    console.log(`Processing ${message.length} SEC filings from array`);
+    // Remove console.log for processing SEC filings from array
 
-    // Debug the first filing's timestamp
-    if (message.length > 0) {
-      console.log('First filing timestamp:', message[0].timestamp, typeof message[0].timestamp);
-    }
+    // Remove console.log for first filing's timestamp
 
     globalFilings.set(message);
     return;
@@ -52,12 +57,9 @@ export function handleSECFilingMessage(message: any): void {
   if (message && message.channel === 'sec-filings' && message.data) {
     // If data is an array, it's the initial load or a batch update
     if (Array.isArray(message.data)) {
-      console.log(`Processing ${message.data.length} SEC filings from channel data`);
+      // Remove console.log for processing SEC filings from channel data
 
-      // Debug the first filing's timestamp
-      if (message.data.length > 0) {
-        console.log('First filing timestamp:', message.data[0].timestamp, typeof message.data[0].timestamp);
-      }
+      // Remove console.log for first filing's timestamp
 
       // Ensure all filings have a timestamp (use current time as fallback)
       const processedFilings = message.data.map((filing: Filing) => {
@@ -75,7 +77,7 @@ export function handleSECFilingMessage(message: any): void {
     }
     // If it's a single filing, add it to the beginning of the list
     else {
-      console.log('Processing single filing:', message.data);
+      // Remove console.log for processing single filing
 
       // Ensure the filing has a timestamp
       const filing = message.data;
@@ -84,7 +86,7 @@ export function handleSECFilingMessage(message: any): void {
         filing.timestamp = Date.now();
       }
 
-      globalFilings.update(filings => {
+      globalFilings.update((filings: Filing[]) => {
         // Add the new filing at the beginning
         return [filing, ...filings];
       });
@@ -94,7 +96,7 @@ export function handleSECFilingMessage(message: any): void {
 
     // Try to handle the message as a direct filing object
     if (message && message.type && message.url) {
-      console.log('Treating message as direct filing object');
+      // Remove console.log for treating message as direct filing object
 
       // Ensure the filing has a timestamp
       if (!message.timestamp) {
@@ -102,7 +104,89 @@ export function handleSECFilingMessage(message: any): void {
         message.timestamp = Date.now();
       }
 
-      globalFilings.update(filings => [message, ...filings]);
+      globalFilings.update((filings: Filing[]) => [message, ...filings]);
     }
+  }
+}
+
+// Process SEC filings data from the socket
+export function processSECFilingsMessage(message: any, callback: (filings: any) => void): void {
+  try {
+    // Remove console.log for received SEC filing message
+
+    // Handle array of filings
+    if (Array.isArray(message)) {
+      // Remove console.log for processing SEC filings from array
+
+      const formattedFilings = message.map(filing => {
+        // Remove console.log for first filing timestamp
+
+        return {
+          ...filing,
+          timestamp: formatTimestamp(filing.timestamp)
+        };
+      });
+
+      callback(formattedFilings);
+      return;
+    }
+
+    // Handle channel data format
+    if (message.channel === 'secfilings' && Array.isArray(message.data)) {
+      // Remove console.log for processing SEC filings from channel data
+
+      const formattedFilings = message.data.map((filing: Filing) => {
+        // Remove console.log for first filing timestamp
+
+        if (!filing.timestamp) {
+          console.warn('Filing missing timestamp:', filing);
+          filing.timestamp = Date.now();
+        }
+
+        return {
+          ...filing,
+          timestamp: formatTimestamp(filing.timestamp)
+        };
+      });
+
+      callback(formattedFilings);
+      return;
+    }
+
+    // Handle single filing in channel data
+    if (message.channel === 'secfilings' && typeof message.data === 'object' && message.data !== null) {
+      // Remove console.log for processing single filing
+
+      const filing = message.data;
+
+      if (!filing.timestamp) {
+        console.warn('Single filing missing timestamp:', filing);
+        filing.timestamp = Date.now();
+      }
+
+      callback([{
+        ...filing,
+        timestamp: formatTimestamp(filing.timestamp)
+      }]);
+      return;
+    }
+
+    // Handle unexpected format
+    console.warn('Received unexpected SEC filing message format:', message);
+
+    // Try to handle it as a direct filing object
+    // Remove console.log for treating message as direct filing object
+
+    if (!message.timestamp) {
+      console.warn('Direct filing missing timestamp:', message);
+      message.timestamp = Date.now();
+    }
+
+    callback([{
+      ...message,
+      timestamp: formatTimestamp(message.timestamp)
+    }]);
+  } catch (error) {
+    console.error('Error processing SEC filings message:', error);
   }
 } 

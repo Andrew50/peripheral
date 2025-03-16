@@ -131,11 +131,24 @@ func listJobs() {
 }
 
 func formatSchedule(schedule []jobs.TimeOfDay) string {
+	if len(schedule) == 0 {
+		return "Manual only"
+	}
+
 	times := make([]string, len(schedule))
 	for i, t := range schedule {
 		times[i] = fmt.Sprintf("%02d:%02d", t.Hour, t.Minute)
 	}
 	return strings.Join(times, ", ")
+}
+
+// getKeys returns a slice of string keys from a map[string]interface{}
+func getKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 func getJobStatus(jobName string) {
@@ -421,30 +434,37 @@ func monitorTasksAndWait(conn *utils.Conn, taskIDs []string) bool {
 			} else {
 				// Try to parse as result object
 				err = json.Unmarshal([]byte(statusJSON), &result)
-				if err == nil {
-					// Check if it has an error field
-					if errMsg, ok := result["error"]; ok && errMsg != nil {
-						newStatus := fmt.Sprintf("Failed: %v", errMsg)
-						if previousStatuses[taskID] != newStatus {
-							fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
-							previousStatuses[taskID] = newStatus
-						}
-						failedTasks[taskID] = true
-					} else {
-						// Task completed successfully
-						newStatus := "Completed successfully"
-						if previousStatuses[taskID] != newStatus {
-							fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
-							previousStatuses[taskID] = newStatus
-						}
-						completedTasks[taskID] = true
-					}
-				} else {
+				if err != nil {
 					newStatus := fmt.Sprintf("Error parsing status: %v", err)
 					if previousStatuses[taskID] != newStatus {
 						fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
 						previousStatuses[taskID] = newStatus
 					}
+					continue
+				}
+
+				// DEBUG: Print the structure of the result
+				fmt.Printf("\nDEBUG: Task data structure keys: %v\n", getKeys(result))
+				if resultObj, ok := result["result"].(map[string]interface{}); ok {
+					fmt.Printf("DEBUG: Result field keys: %v\n", getKeys(resultObj))
+				}
+
+				// Check if it has an error field
+				if errMsg, ok := result["error"]; ok && errMsg != nil {
+					newStatus := fmt.Sprintf("Failed: %v", errMsg)
+					if previousStatuses[taskID] != newStatus {
+						fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
+						previousStatuses[taskID] = newStatus
+					}
+					failedTasks[taskID] = true
+				} else {
+					// Task completed successfully
+					newStatus := "Completed successfully"
+					if previousStatuses[taskID] != newStatus {
+						fmt.Printf("[%s] Task %s: %s\n", time.Now().Format("15:04:05"), taskID, newStatus)
+						previousStatuses[taskID] = newStatus
+					}
+					completedTasks[taskID] = true
 				}
 			}
 		}
@@ -555,6 +575,12 @@ func monitorTasks(conn *utils.Conn, taskIDs []string) {
 					continue
 				}
 
+				// DEBUG: Print the structure of the result
+				fmt.Printf("\nDEBUG: Task data structure keys: %v\n", getKeys(result))
+				if resultObj, ok := result["result"].(map[string]interface{}); ok {
+					fmt.Printf("DEBUG: Result field keys: %v\n", getKeys(resultObj))
+				}
+
 				// Check status field
 				if status, ok := result["status"].(string); ok {
 					if previousStatuses[taskID] != status {
@@ -574,6 +600,59 @@ func monitorTasks(conn *utils.Conn, taskIDs []string) {
 						// If there's an error, print it
 						if errMsg, ok := result["error"].(string); ok && errMsg != "" {
 							fmt.Printf("Error: %s\n", errMsg)
+						}
+
+						// Display logs if available - check both in result and at root level
+						var logs []interface{}
+
+						// First check if logs are at the root level
+						if rootLogs, ok := result["logs"].([]interface{}); ok && len(rootLogs) > 0 {
+							logs = rootLogs
+							fmt.Printf("\nDEBUG: Found %d logs at root level\n", len(rootLogs))
+						} else {
+							fmt.Printf("\nDEBUG: No logs found at root level\n")
+						}
+
+						// If no logs found at root level, try within result field
+						if len(logs) == 0 {
+							if resultMap, ok := result["result"].(map[string]interface{}); ok {
+								if resultLogs, ok := resultMap["logs"].([]interface{}); ok && len(resultLogs) > 0 {
+									logs = resultLogs
+									fmt.Printf("\nDEBUG: Found %d logs in result field\n", len(resultLogs))
+								} else {
+									fmt.Printf("\nDEBUG: No logs found in result field\n")
+								}
+							} else {
+								fmt.Printf("\nDEBUG: No result field or not a map\n")
+							}
+						}
+
+						if len(logs) > 0 {
+							fmt.Println("\n=== TASK LOGS ===")
+							for i, logEntry := range logs {
+								logMap, ok := logEntry.(map[string]interface{})
+								if !ok {
+									fmt.Printf("DEBUG: Log entry %d is not a map: %v\n", i, logEntry)
+									continue
+								}
+
+								timestamp, _ := logMap["timestamp"].(string)
+								message, _ := logMap["message"].(string)
+								level, _ := logMap["level"].(string)
+
+								fmt.Printf("DEBUG: Log %d - timestamp: %v, message: %v, level: %v\n", i, timestamp != "", message != "", level != "")
+
+								if message != "" {
+									// Format timestamp
+									shortTimestamp := timestamp
+									if len(timestamp) > 19 {
+										shortTimestamp = timestamp[:19] // Get just the YYYY-MM-DDTHH:MM:SS part
+									}
+
+									fmt.Printf("[%s][%s] %s\n", shortTimestamp, level, message)
+								}
+							}
+							fmt.Println("=================")
 						}
 
 						fmt.Println("======================")

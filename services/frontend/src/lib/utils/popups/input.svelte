@@ -180,7 +180,6 @@
 		validateInput(inputString.toUpperCase(), inputType)
 			.then((validationResp) => {
 				if (thisSecurityResultRequest === currentSecurityResultRequest) {
-					// Only update if this is still the current request
 					inputQuery.update((v: InputQuery) => ({
 						...v,
 						...validationResp
@@ -196,9 +195,6 @@
 			.catch((error) => {
 				console.error('Validation error:', error);
 				isLoadingSecurities = false;
-
-				// In case of error, still update loadedSecurityResultRequest to prevent waiting forever
-				loadedSecurityResultRequest = thisSecurityResultRequest;
 			});
 	}
 
@@ -290,7 +286,7 @@
 
 				// For tickers, ensure we make multiple validation attempts
 				if (initialType === 'ticker' || /^[A-Za-z]+$/.test(initialInputString)) {
-					// First retry after a short delay 
+					// First retry after a short delay
 					setTimeout(() => {
 						const currentInput = get(inputQuery).inputString;
 						if (currentInput && currentInput.length > 0) {
@@ -305,7 +301,6 @@
 									latestInput.length > 0 &&
 									loadedSecurityResultRequest !== currentSecurityResultRequest
 								) {
-									console.log('Performing final validation attempt');
 									isLoadingSecurities = true;
 									determineInputType(latestInput);
 								}
@@ -407,7 +402,6 @@
 
 			// Wait for securities to load if needed
 			if (loadedSecurityResultRequest !== currentSecurityResultRequest) {
-				console.log('Waiting for securities to load before completing input');
 				await waitForSecurityResult();
 			}
 
@@ -421,7 +415,6 @@
 				// Restore timestamp if it was previously set
 				if (ts) iQ.instance.timestamp = ts;
 			} else {
-				console.log('No securities available, using input string as ticker');
 				// If no securities, at least set the ticker from input string
 				iQ.instance.ticker = iQ.inputString.toUpperCase();
 			}
@@ -456,24 +449,18 @@
 			// Reset manualInputType to auto after input is entered
 			manualInputType = 'auto';
 		}
-		
+
 		return iQ;
 	}
 
+	// Function to wait for security results to be loaded
 	async function waitForSecurityResult(): Promise<void> {
-		// Set a maximum wait time to prevent infinite waiting
-		const maxWaitTime = 3000; // Increased to 3 seconds for better reliability
 		const startTime = Date.now();
+		const maxWaitTime = 5000; // Maximum wait time in ms
 
-		// If this is the first request after a page load, add a small initial delay
-		// to allow the backend request to start processing
-		if (loadedSecurityResultRequest === -1) {
-			await new Promise((resolve) => setTimeout(resolve, 100));
-		}
-
-		return new Promise((resolve) => {
+		return new Promise<void>((resolve) => {
 			const check = () => {
-				// If securities are already loaded, resolve immediately
+				// If the loaded request matches the current request, we're done
 				if (loadedSecurityResultRequest === currentSecurityResultRequest) {
 					isLoadingSecurities = false;
 					resolve();
@@ -482,7 +469,6 @@
 
 				// If we've waited too long, resolve anyway
 				if (Date.now() - startTime > maxWaitTime) {
-					console.log('Timed out waiting for securities to load');
 					isLoadingSecurities = false;
 					resolve();
 					return;
@@ -660,7 +646,7 @@
 
 								// For tickers, ensure we make multiple validation attempts
 								if (initialType === 'ticker' || /^[A-Za-z]+$/.test(v.inputString)) {
-									// First retry after a short delay 
+									// First retry after a short delay
 									setTimeout(() => {
 										const currentInput = get(inputQuery).inputString;
 										if (currentInput && currentInput.length > 0) {
@@ -675,7 +661,6 @@
 													latestInput.length > 0 &&
 													loadedSecurityResultRequest !== currentSecurityResultRequest
 												) {
-													console.log('Performing final validation attempt');
 													isLoadingSecurities = true;
 													determineInputType(latestInput);
 												}
@@ -713,10 +698,10 @@
 					if (prevFocusedElement && browser) {
 						prevFocusedElement.focus();
 					}
-					
+
 					// Clear the inputString only when we're fully shutting down
-					inputQuery.update((state) => ({ 
-						...state, 
+					inputQuery.update((state) => ({
+						...state,
 						status: 'inactive',
 						inputString: '' // Reset only when fully shutting down
 					}));
@@ -733,7 +718,7 @@
 						document.body.removeEventListener('mousedown', handleOutsideClick);
 						document.body.removeAttribute('data-input-click-listener');
 					}
-					
+
 					// On cancellation we should also clear the inputString
 					inputQuery.update((state) => ({
 						...state,
@@ -911,7 +896,8 @@
 			/>
 		</div>
 		<div class="content-container">
-			{#if $inputQuery.instance && Object.keys($inputQuery.instance).length > 0}
+			<!--{#if $inputQuery.instance && Object.keys($inputQuery.instance).length > 0}-->
+			{#if true}
 				{#if $inputQuery.inputType === ''}
 					<div class="span-container">
 						{#if Array.isArray($inputQuery.possibleKeys)}
@@ -1028,6 +1014,8 @@
 							<span class="value">{$inputQuery.instance.extendedHours ? 'True' : 'False'}</span>
 						</div>
 					</div>
+				{:else}
+					'{$inputQuery.inputType}'
 				{/if}
 			{/if}
 		</div>
@@ -1060,6 +1048,11 @@
 		flex-direction: column;
 		overflow: hidden;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+		position: fixed;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		z-index: 10000; /* Ensure this is higher than the drawing menu */
 	}
 
 	/* Button styles for field selection */

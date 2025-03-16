@@ -225,8 +225,8 @@
 	let lastUpdateTime = 0;
 	const updateThrottleMs = 100;
 
-	let keyBuffer: string[] = []; // This is for catching key presses from the keyboard before the input system is active 
-	let isInputActive = false;    // Track if input window is active/initializing
+	let keyBuffer: string[] = []; // This is for catching key presses from the keyboard before the input system is active
+	let isInputActive = false; // Track if input window is active/initializing
 
 	// Add type definitions at the top
 	interface Alert {
@@ -269,7 +269,6 @@
 	}
 
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
-		console.log(inst);
 		eventSeries.setData([]);
 		if (inst.requestType === 'loadNewTicker') {
 			bidLine.setData([]);
@@ -301,7 +300,6 @@
 		})
 			.then((response) => {
 				const barDataList = response.bars;
-				console.log(response);
 				blockingChartQueryDispatch = inst;
 				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
 					return;
@@ -513,7 +511,13 @@
 					} else if (inst.direction == 'backward') {
 						chartCandleSeries.setData(newCandleData);
 						chartVolumeSeries.setData(newVolumeData);
-						if (arrowSeries && 'trades' in inst && Array.isArray(inst.trades)) {
+						if (
+							arrowSeries &&
+							inst &&
+							typeof inst === 'object' &&
+							'trades' in inst &&
+							Array.isArray(inst.trades)
+						) {
 							const markersByTime = new Map<
 								number,
 								{
@@ -823,6 +827,22 @@
 		});
 	}
 
+	function handleShiftOverlayEnd(event: MouseEvent) {
+		shiftOverlay.update((v: ShiftOverlay): ShiftOverlay => {
+			if (v.isActive) {
+				return {
+					...v,
+					isActive: false,
+					width: 0,
+					height: 0
+				};
+			}
+			return v;
+		});
+		document.removeEventListener('mousemove', shiftOverlayTrack);
+		document.removeEventListener('mouseup', handleShiftOverlayEnd);
+	}
+
 	async function updateLatestChartBar(trade: TradeData) {
 		// Early returns for invalid data
 		if (
@@ -854,10 +874,16 @@
 
 		// Type guard for CandlestickData
 		const isCandlestick = (data: any): data is CandlestickData<Time> =>
-			'open' in data && 'high' in data && 'low' in data && 'close' in data;
+			data &&
+			typeof data === 'object' &&
+			'open' in data &&
+			'high' in data &&
+			'low' in data &&
+			'close' in data;
 
 		// Type guard for HistogramData
-		const isHistogram = (data: any): data is HistogramData<Time> => 'value' in data;
+		const isHistogram = (data: any): data is HistogramData<Time> =>
+			data && typeof data === 'object' && 'value' in data;
 
 		if (!isCandlestick(mostRecentBar)) return;
 
@@ -969,7 +995,6 @@
 		try {
 			const timeToRequestForUpdatingAggregate =
 				ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
-			console.log('timeToRequestForUpdatingAggregate:', timeToRequestForUpdatingAggregate);
 			const [barData] = await privateRequest<BarData[]>('getChartData', {
 				securityId: chartSecurityId,
 				timeframe: chartTimeframe,
@@ -1205,48 +1230,77 @@
 			}
 		});
 		chartContainer.addEventListener('keydown', (event) => {
-			setActiveChart(chartId, currentChartInstance);
-			if (event.key == 'r' && event.altKey) {
-				// alt + r reset view
-				if (currentChartInstance.timestamp && !$streamInfo.replayActive) {
-					queryChart({ timestamp: 0 });
-				} else {
-					chart.timeScale().resetTimeScale();
+			if (chartId !== undefined) {
+				setActiveChart(chartId, currentChartInstance);
+			}
+
+			// Handle all Alt key combinations first
+			if (event.altKey) {
+				// Prevent default behavior for all Alt key combinations
+				event.preventDefault();
+				event.stopPropagation();
+
+				// Now handle specific Alt key combinations
+				if (event.key == 'r') {
+					// alt + r reset view
+					if (currentChartInstance.timestamp && !$streamInfo.replayActive) {
+						queryChart({ timestamp: 0 });
+					} else {
+						chart.timeScale().resetTimeScale();
+					}
+					return;
+				} else if (event.key == 'h') {
+					// IMPORTANT: Prevent default and stop propagation FIRST for Alt+H
+					event.stopPropagation();
+					event.preventDefault();
+
+					const price = chartCandleSeries.coordinateToPrice(latestCrosshairPositionY);
+					if (typeof price !== 'number') return;
+
+					const roundedPrice = Math.round(price * 100) / 100;
+					const securityId = currentChartInstance.securityId;
+					addHorizontalLine(roundedPrice, securityId);
+					return;
+				} else if (event.key == 's') {
+					// IMPORTANT: Prevent default and stop propagation FIRST for Alt+S
+					event.stopPropagation();
+					event.preventDefault();
+
+					if (chartId !== undefined) {
+						handleScreenshot(chartId.toString());
+					}
+					return;
+				} else if (event.altKey) {
+					// Block all other Alt key combinations from triggering the input window
+					// This ensures that when Alt is pressed, nothing goes to the input window
+					event.stopPropagation();
+					event.preventDefault();
+					return;
 				}
 
-				// IMPORTANT: Prevent fall-through so Alt+R doesn't open the input window
-				event.stopPropagation();
-				event.preventDefault();
+				// For any other Alt key combinations, just return
+				// This prevents them from triggering the input window
 				return;
-			} else if (event.key == 'h' && event.altKey) {
-				const price = chartCandleSeries.coordinateToPrice(latestCrosshairPositionY);
-				if (typeof price !== 'number') return;
+			}
 
-				const roundedPrice = Math.round(price * 100) / 100;
-				const securityId = currentChartInstance.securityId;
-				addHorizontalLine(roundedPrice, securityId);
-			} else if (event.key == 's' && event.altKey) {
-				handleScreenshot(chartId.toString());
-			} else if (
+			// Handle non-Alt key combinations
+			if (
 				event.key === 'Tab' ||
-				(!event.ctrlKey &&
-					!event.altKey &&
-					!event.metaKey &&
-					/^[a-zA-Z0-9]$/.test(event.key.toLowerCase()))
+				(!event.ctrlKey && !event.metaKey && /^[a-zA-Z0-9]$/.test(event.key.toLowerCase()))
 			) {
 				// Prevent default and stop propagation immediately
 				event.preventDefault();
 				event.stopPropagation();
-				
+
 				// Add the keypress to our buffer
 				if (event.key !== 'Tab') {
 					keyBuffer.push(event.key);
 				}
-				
+
 				// If this is the first key, start the input process
 				if (!isInputActive) {
 					isInputActive = true;
-					
+
 					// Create the initial instance with the buffer contents so far
 					const initialInputString = keyBuffer.join('');
 					const partialInstance: ChartInstance = {
@@ -1259,14 +1313,14 @@
 						extendedHours: currentChartInstance.extendedHours,
 						inputString: initialInputString // Pass the buffer as the initial string
 					};
-					
+
 					// Initiate the input window with the whole buffer string
 					queryInstanceInput('any', 'any', partialInstance)
 						.then((value: CoreInstance) => {
 							// Handle normal completion
 							isInputActive = false;
 							keyBuffer = []; // Clear buffer
-							
+
 							const securityId =
 								typeof value.securityId === 'string'
 									? parseInt(value.securityId, 10)
@@ -1298,7 +1352,7 @@
 				// Clear buffer on escape
 				keyBuffer = [];
 				isInputActive = false;
-				
+
 				if (get(shiftOverlay).isActive) {
 					shiftOverlay.update((v: ShiftOverlay): ShiftOverlay => {
 						if (v.isActive) {
@@ -1400,13 +1454,13 @@
 			}
 
 			// Type guard to check if bar is CandlestickData
-
-			const isCandlestick = (data: any): data is CandlestickData<Time> => {
-				if (!data) {
-					return false;
-				}
-				return 'open' in data && 'high' in data && 'low' in data && 'close' in data;
-			};
+			const isCandlestick = (data: any): data is CandlestickData<Time> =>
+				data &&
+				typeof data === 'object' &&
+				'open' in data &&
+				'high' in data &&
+				'low' in data &&
+				'close' in data;
 
 			if (!isCandlestick(bar)) {
 				return; // Skip if the bar is not CandlestickData
@@ -1446,7 +1500,13 @@
 				volume: volume,
 				adr: calculateSingleADR(
 					barsForADR.filter(
-						(candle) => 'open' in candle && 'high' in candle && 'low' in candle && 'close' in candle
+						(candle) =>
+							candle &&
+							typeof candle === 'object' &&
+							'open' in candle &&
+							'high' in candle &&
+							'low' in candle &&
+							'close' in candle
 					) as CandlestickData<Time>[]
 				),
 				chg: chg,
@@ -1461,9 +1521,9 @@
 					// Transform the histogram data to the format expected by calculateRVOL
 					const volumeData = chartVolumeSeries.data().slice(0, cursorBarIndex + 1);
 					barsForRVOL = volumeData
-						.filter((bar) => 'value' in bar) // Filter to ensure only HistogramData is included
+						.filter((bar) => bar && typeof bar === 'object' && 'value' in bar) // Filter to ensure only HistogramData is included
 						.map((bar) => ({
-							time: bar.time as UTCTimestamp,
+							time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
 							value: (bar as HistogramData<Time>).value || 0
 						}));
 				}
@@ -1491,14 +1551,14 @@
 					return;
 				}
 				('2');
-				
+
 				// Get the earliest timestamp from current data
 				const earliestBar = chartCandleSeries.data()[0];
 				if (!earliestBar) return;
-				
+
 				// Convert the earliest time from EST seconds to UTC milliseconds for the API request
 				const earliestTimestamp = ESTSecondstoUTCMillis(earliestBar.time as UTCTimestamp);
-				
+
 				// Make sure to include extendedHours in the request
 				const inst: CoreInstance & { extendedHours?: boolean } = {
 					ticker: currentChartInstance.ticker,
@@ -1508,7 +1568,7 @@
 					price: currentChartInstance.price,
 					extendedHours: currentChartInstance.extendedHours
 				};
-				
+
 				backendLoadChartData({
 					...inst,
 					bars: Math.floor(bufferInScreenSizes * barsOnScreen) + 100,
@@ -1528,7 +1588,7 @@
 					return;
 				}
 				('3');
-				
+
 				// Also fix the forward load to include extendedHours
 				const inst: CoreInstance & { extendedHours?: boolean } = {
 					ticker: currentChartInstance.ticker,
@@ -1538,7 +1598,7 @@
 					price: currentChartInstance.price,
 					extendedHours: currentChartInstance.extendedHours
 				};
-				
+
 				backendLoadChartData({
 					...inst,
 					bars: Math.floor(bufferInScreenSizes * barsOnScreen) + 100,
@@ -1666,22 +1726,6 @@
 		selectedEvent = null;
 	}
 
-	function handleShiftOverlayEnd(event: MouseEvent) {
-		shiftOverlay.update((v: ShiftOverlay): ShiftOverlay => {
-			if (v.isActive) {
-				return {
-					...v,
-					isActive: false,
-					width: 0,
-					height: 0
-				};
-			}
-			return v;
-		});
-		document.removeEventListener('mousemove', shiftOverlayTrack);
-		document.removeEventListener('mouseup', handleShiftOverlayEnd);
-	}
-
 	// New interface for the data object
 	interface ChartData {
 		type?: string;
@@ -1721,7 +1765,6 @@
 		price: chartInstance.price || 0
 	});
 
-
 	// Handle bars calculation safely
 	const calculateBars = (instance: Partial<ChartInstance>): number => {
 		return instance.bars || Math.floor(bufferInScreenSizes * defaultBarsOnScreen) + 100;
@@ -1737,9 +1780,6 @@
 		}
 		return 0; // Default value if undefined
 	}
-
-
-
 </script>
 
 <div class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">

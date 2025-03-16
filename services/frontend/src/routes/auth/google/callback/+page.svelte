@@ -16,12 +16,8 @@
 		const code = urlParams.get('code');
 		const state = urlParams.get('state');
 
-		console.log('Received callback with code:', code ? 'present' : 'missing');
-		console.log('Received callback with state:', state);
-
 		// Verify the state parameter matches what we stored
 		const storedState = sessionStorage.getItem('googleAuthState');
-		console.log('Stored state:', storedState);
 
 		if (!code) {
 			console.error('No authorization code received');
@@ -38,23 +34,16 @@
 		}
 
 		try {
-			console.log('Sending callback to backend...');
 			const response = await publicRequest<GoogleCallbackResponse>('googleCallback', {
 				code,
 				state
 			});
-			console.log('Google auth callback response:', response);
 
 			sessionStorage.setItem('authToken', response.token);
 			sessionStorage.setItem('profilePic', response.profilePic || '');
 			sessionStorage.setItem('username', response.username || '');
 
 			// Log what was stored
-			console.log('Stored in sessionStorage:', {
-				token: !!response.token,
-				profilePic: response.profilePic || '[empty]',
-				username: response.username || '[empty]'
-			});
 
 			// Clean up stored state
 			sessionStorage.removeItem('googleAuthState');

@@ -68,7 +68,6 @@ export function startReplay(instance: Instance) {
 			timestamp: timestampToUse
 		};
 		socket.send(JSON.stringify(replayRequest));
-		console.log('replay request sent');
 		streamInfo.update((v) => {
 			return {
 				...v,
@@ -117,13 +116,13 @@ export function stopReplay() {
 			action: 'realtime'
 		};
 		socket.send(JSON.stringify(realtimeRequest));
-		
+
 		// When leaving replay mode, we need to update streamInfo
 		streamInfo.update((v) => {
 			// Calculate current live timestamp using serverTimeOffset
 			// This ensures we immediately show the correct live time
 			const currentLiveTime = Date.now() + (v.serverTimeOffset || 0);
-			
+
 			return {
 				...v,
 				replayActive: false,
@@ -132,7 +131,7 @@ export function stopReplay() {
 				lastUpdateTime: Date.now()
 			};
 		});
-		
+
 		// Notify charts to update
 		chartEventDispatcher.set({ event: 'realtime', chartId: 'all' as unknown as number, data: null });
 	}
