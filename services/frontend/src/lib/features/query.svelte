@@ -46,58 +46,58 @@
 </div>
 
 <style>
-  .query-container {
-    padding: 15px;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-  
-  .query-input-wrapper {
-    position: relative;
-    display: flex;
-    width: 100%;
-    max-width: 800px;
-    margin: 0 auto;
-  }
-  
-  .query-input {
-    flex: 1;
-    padding: 10px 12px;
-    font-size: 16px;
-    background: var(--ui-bg-element, #333);
-    border: 1px solid var(--ui-border, #444);
-    color: var(--text-primary, #fff);
-    border-radius: 4px;
-    min-height: 48px;
-    padding-right: 40px;
-  }
-  
-  .submit-button {
-    position: absolute;
-    right: 5px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    color: var(--text-secondary, #aaa);
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: color 0.2s;
-  }
-  
-  .submit-button:hover {
-    color: var(--text-primary, #fff);
-  }
-  
-  .arrow-icon {
-    width: 20px;
-    height: 20px;
-    fill: currentColor;
-  }
-</style> 
+	.query-container {
+		padding: clamp(0.75rem, 2vw, 1.5rem);
+		height: 100%;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+	}
+
+	.query-input-wrapper {
+		position: relative;
+		display: flex;
+		width: 100%;
+		max-width: min(90vw, 800px);
+		margin: 0 auto;
+	}
+
+	.query-input {
+		flex: 1;
+		padding: clamp(0.5rem, 1vw, 0.75rem) clamp(0.75rem, 1.5vw, 1rem);
+		font-size: clamp(0.875rem, 1vw, 1rem);
+		background: var(--ui-bg-element, #333);
+		border: 1px solid var(--ui-border, #444);
+		color: var(--text-primary, #fff);
+		border-radius: clamp(4px, 0.5vw, 6px);
+		min-height: clamp(36px, 5vh, 48px);
+		padding-right: clamp(2.5rem, 5vw, 3rem);
+	}
+
+	.submit-button {
+		position: absolute;
+		right: clamp(0.25rem, 0.5vw, 0.5rem);
+		top: 50%;
+		transform: translateY(-50%);
+		background: transparent;
+		border: none;
+		cursor: pointer;
+		color: var(--text-secondary, #aaa);
+		width: clamp(2rem, 4vw, 2.25rem);
+		height: clamp(2rem, 4vw, 2.25rem);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: color 0.2s;
+	}
+
+	.submit-button:hover {
+		color: var(--text-primary, #fff);
+	}
+
+	.arrow-icon {
+		width: clamp(1rem, 2vw, 1.25rem);
+		height: clamp(1rem, 2vw, 1.25rem);
+		fill: currentColor;
+	}
+</style>

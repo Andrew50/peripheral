@@ -172,8 +172,6 @@
 						throw new Error('Invalid response format');
 					}
 
-					console.log('[Active] Raw response from getActive:', results);
-
 					// Filter out any results without securityId
 					const validResults = results.filter(
 						(r) => r.securityId || (r.constituents && r.constituents.some((c) => c.securityId))
@@ -181,15 +179,6 @@
 
 					if (validResults.length === 0) {
 						console.warn('No valid results found');
-					} else {
-						console.log(
-							'[Active] Valid results with securityIds:',
-							validResults.map((r) =>
-								r.securityId
-									? `${r.ticker}: ${r.securityId}`
-									: `${r.group}: ${r.constituents?.map((c) => `${c.ticker}: ${c.securityId}`).join(', ')}`
-							)
-						);
 					}
 
 					list.set(validResults);
@@ -228,8 +217,6 @@
 
 	// Add this function to convert ActiveResult to Instance
 	function convertToInstances(items: ActiveResult[]): Instance[] {
-		console.log('[Active] Converting items to instances:', items);
-
 		const instances = items
 			.filter((item) => item.ticker && item.securityId) // Only include items with securityId AND ticker
 			.map((item, index): Instance => {
@@ -251,7 +238,6 @@
 				return instance;
 			});
 
-		console.log('[Active] Converted instances:', instances);
 		return instances;
 	}
 

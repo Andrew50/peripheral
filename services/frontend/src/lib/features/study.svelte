@@ -135,14 +135,14 @@
 
 <style>
 	.study-container {
-		padding: 20px;
+		padding: clamp(1rem, 3vw, 2rem);
 		color: var(--text-primary);
 	}
 
 	.controls-container {
 		display: flex;
-		gap: 10px;
-		margin-bottom: 20px;
+		gap: clamp(0.5rem, 1vw, 1rem);
+		margin-bottom: clamp(1rem, 3vh, 2rem);
 	}
 
 	.controls-container button:hover {
@@ -152,7 +152,7 @@
 	.table-container {
 		background: var(--ui-bg-primary);
 		border: 1px solid var(--ui-border);
-		border-radius: 4px;
+		border-radius: clamp(4px, 0.5vw, 6px);
 		overflow: hidden;
 	}
 
@@ -163,18 +163,18 @@
 
 	th {
 		text-align: left;
-		padding: 12px 16px;
+		padding: clamp(0.5rem, 1.5vw, 0.75rem) clamp(0.75rem, 2vw, 1rem);
 		background: var(--ui-bg-secondary);
 		color: var(--text-secondary);
-		font-size: 12px;
+		font-size: clamp(0.75rem, 1vw, 0.875rem);
 		font-weight: 500;
 		border-bottom: 1px solid var(--ui-border);
 	}
 
 	td {
-		padding: 12px 16px;
+		padding: clamp(0.5rem, 1.5vw, 0.75rem) clamp(0.75rem, 2vw, 1rem);
 		border-bottom: 1px solid var(--ui-border);
-		font-size: 14px;
+		font-size: clamp(0.875rem, 1vw, 1rem);
 	}
 
 	.study-row {
@@ -188,6 +188,6 @@
 
 	.entry-cell {
 		background: var(--ui-bg-secondary);
-		padding: 16px;
+		padding: clamp(0.75rem, 2vw, 1rem);
 	}
 </style>
