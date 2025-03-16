@@ -8,3 +8,4 @@ numpy
 pandas
 keras-cv
 yfinance
+requests

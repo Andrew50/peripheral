@@ -2,6 +2,7 @@
   import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
   import { onMount } from 'svelte';
   import type { Instance } from '$lib/core/types';
+	import { privateRequest } from '$lib/core/backend';
   
   let inputValue = '';
   let queryInput: HTMLInputElement;
@@ -13,24 +14,9 @@
   });
   
   function handleSubmit() {
-    if (inputValue.trim()) {
-      // Create an initial instance with the input string
-      const instanceWithInput = {
-        inputString: inputValue
-      } as any;
-      
-      // Query using the existing input functionality
-      queryInstanceInput(
-        'any',
-        ['ticker', 'timeframe', 'timestamp', 'extendedHours'],
-        instanceWithInput
-      ).then((updatedInstance: Instance) => {
-        console.log('Query submitted:', updatedInstance);
-        inputValue = ''; // Clear input after submission
-      }).catch(err => {
-        console.error('Query error:', err);
-      });
-    }
+    privateRequest('getLLMParsedQuery', { query: inputValue }).then((response) => {
+      console.log(response);
+    });
   }
   
   function handleKeyDown(event: KeyboardEvent) {
@@ -46,7 +32,7 @@
     <input
       type="text"
       class="query-input"
-      placeholder="Enter ticker, timeframe, or timestamp..."
+      placeholder="Enter query..."
       bind:value={inputValue}
       bind:this={queryInput}
       on:keydown={handleKeyDown}
