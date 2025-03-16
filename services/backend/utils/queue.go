@@ -8,17 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Poll performs operations related to Poll functionality.
-func Poll(conn *Conn, taskId string) (json.RawMessage, error) {
-	task := conn.Cache.Get(context.Background(), taskId).Val()
-	if task == "" {
-		return nil, fmt.Errorf("weh3")
-	}
-	result := json.RawMessage([]byte(task)) //its already json and you dont care about its contents utnil frontend so just push the json
-	return result, nil
-}
-
-// QueueArgs represents a structure for handling QueueArgs data.
+// QueueArgs represents the arguments required to enqueue a task
 type QueueArgs struct {
 	ID   string      `json:"id"`
 	Func string      `json:"func"`
@@ -29,34 +19,100 @@ type QueueArgs struct {
 // nolint:unused
 //
 //lint:ignore U1000 kept for future queue response handling
+
 type queueResponse struct {
 	TaskID string `json:"taskId"`
 }
 
-// Queue performs operations related to Queue functionality.
+// Queue adds a function to the Redis processing queue and returns the task ID
 func Queue(conn *Conn, funcName string, arguments interface{}) (string, error) {
-	id := uuid.New().String()
-	taskArgs := QueueArgs{
-		ID:   id,
+	// Create a new task
+	taskID := uuid.New().String()
+	task := NewTask(funcName, arguments)
+	task.ID = taskID
+
+	// Create queue arguments
+	queueArgs := QueueArgs{
+		ID:   taskID,
 		Func: funcName,
 		Args: arguments,
 	}
-	serializedTask, err := json.Marshal(taskArgs)
+
+	// Serialize and add to queue
+	serializedArgs, err := json.Marshal(queueArgs)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("error serializing task arguments: %w", err)
 	}
 
-	if err := conn.Cache.LPush(context.Background(), "queue", serializedTask).Err(); err != nil {
-		return "", err
+	if err := conn.Cache.LPush(context.Background(), "queue", serializedArgs).Err(); err != nil {
+		return "", fmt.Errorf("error adding task to queue: %w", err)
 	}
-	serializedStatus, err := json.Marshal("queued")
+
+	// Store task in Redis
+	if err := SaveTask(conn, task); err != nil {
+		return "", fmt.Errorf("error storing task status: %w", err)
+	}
+
+	return taskID, nil
+}
+
+// Poll retrieves the current status of a task
+func Poll(conn *Conn, taskID string) (json.RawMessage, error) {
+	task, err := GetTask(conn, taskID)
 	if err != nil {
-		return "", fmt.Errorf("error marshaling task status: %w", err)
+		return nil, err
 	}
-	if err := conn.Cache.Set(context.Background(), id, serializedStatus, 0).Err(); err != nil {
-		return "", fmt.Errorf("error setting task status: %w", err)
+
+	// Convert task to JSON
+	serialized, err := json.Marshal(task)
+	if err != nil {
+		return nil, fmt.Errorf("error serializing task: %w", err)
 	}
-	return id, nil
+
+	return serialized, nil
+}
+
+// UpdateTaskStatus updates the status of a task in Redis
+func UpdateTaskStatus(conn *Conn, taskID string, status string, err error) error {
+	// Get task
+	task, getErr := GetTask(conn, taskID)
+	if getErr != nil {
+		return fmt.Errorf("error getting task: %w", getErr)
+	}
+
+	// Update task status
+	UpdateStatus(task, status)
+
+	// Add error message if present
+	if err != nil && status == TaskStateFailed {
+		task.Error = err.Error()
+	}
+
+	// Save updated task
+	if saveErr := SaveTask(conn, task); saveErr != nil {
+		return fmt.Errorf("error saving updated task: %w", saveErr)
+	}
+
+	return nil
+}
+
+// AddTaskLog adds a log message to a task
+func AddTaskLog(conn *Conn, taskID string, message string, level string) error {
+	// Get task
+	task, err := GetTask(conn, taskID)
+	if err != nil {
+		return fmt.Errorf("error getting task: %w", err)
+	}
+
+	// Add log entry
+	AddLogEntry(task, message, level)
+
+	// Save updated task
+	if saveErr := SaveTask(conn, task); saveErr != nil {
+		return fmt.Errorf("error saving updated task: %w", saveErr)
+	}
+
+	return nil
 }
 
 // CheckSampleQueue performs operations related to CheckSampleQueue functionality.
@@ -113,12 +169,11 @@ func checkModel(conn *Conn, setupId int) {
         FROM setups
         WHERE setupId = $1`, setupId).Scan(&untrainedSamples, &sampleSize)
 	if err != nil {
-
 		fmt.Printf("Error retrieving model info: %v\n", err)
 		return
 	}
 
-	// Check if untrained samples exceed 20 or a certain percentage of sampleSize
+	// Check if untrained samples exceed threshold
 	if untrainedSamples > 0 || float64(untrainedSamples)/float64(sampleSize) > 0.05 {
 		trainRunningKey := fmt.Sprintf("%d_train_running", setupId)
 		trainRunning := conn.Cache.Get(context.Background(), trainRunningKey).Val()

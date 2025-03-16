@@ -185,19 +185,19 @@
 {#if ['initializing', 'active'].includes($rightClickQuery.status)}
 	<div
 		bind:this={rightClickMenu}
-		class="popup-container"
+		class="popup-container responsive-shadow responsive-border"
 		style="top: {$rightClickQuery.y}px; left: {$rightClickQuery.x}px;"
 	>
-		<div class="header">
+		<div class="header content-padding">
 			<div class="ticker">{$rightClickQuery.instance.ticker || ''}</div>
-			<div class="timestamp">
+			<div class="timestamp fluid-text">
 				{$rightClickQuery.instance.timestamp
 					? UTCTimestampToESTString($rightClickQuery.instance.timestamp)
 					: ''}
 			</div>
 		</div>
 
-		<div class="section">
+		<div class="section content-padding">
 			<button class="wide-button" on:click={() => startReplay($rightClickQuery.instance)}
 				>Begin Replay</button
 			>
@@ -217,7 +217,7 @@
 			{/if}
 		</div>
 
-		<div class="section">
+		<div class="section content-padding">
 			<button class="wide-button" on:click={() => newStudy(get(rightClickQuery).instance)}>
 				Add to Study
 			</button>
@@ -234,7 +234,7 @@
 		</div>
 
 		{#if $entryOpen}
-			<div class="section">
+			<div class="section content-padding">
 				<button class="wide-button" on:click={() => embedInstance(get(rightClickQuery).instance)}>
 					Embed
 				</button>
@@ -242,11 +242,11 @@
 		{/if}
 
 		{#if $rightClickQuery.source === 'embedded'}
-			<div class="section">
+			<div class="section content-padding">
 				<button class="wide-button" on:click={() => completeRequest('edit')}> Edit </button>
 			</div>
 		{:else if $rightClickQuery.source === 'list'}
-			<div class="section">
+			<div class="section content-padding">
 				<button class="wide-button" on:click={() => flagSecurity($rightClickQuery.instance)}
 					>{$rightClickQuery.instance.flagged ? 'Unflag' : 'Flag'}</button
 				>
@@ -257,39 +257,38 @@
 
 <style>
 	.popup-container {
-		width: 220px;
+		width: clamp(180px, 30vw, 220px);
 		background: var(--ui-bg-primary);
 		border: 1px solid var(--ui-border);
-		border-radius: 8px;
+		border-radius: clamp(6px, 0.8vw, 8px);
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 		position: fixed;
 		z-index: 1000;
-		padding: 4px;
+		padding: clamp(2px, 0.5vw, 4px);
 	}
 
 	.header {
-		padding: 8px 12px;
+		padding: clamp(6px, 1vw, 8px) clamp(8px, 1.5vw, 12px);
 		border-bottom: 1px solid var(--ui-border);
-		margin-bottom: 4px;
+		margin-bottom: clamp(2px, 0.5vw, 4px);
 	}
 
 	.ticker {
-		font-size: 16px;
+		font-size: clamp(14px, 1.5vw, 16px);
 		font-weight: 600;
 		color: var(--text-primary);
 	}
 
 	.timestamp {
-		font-size: 12px;
 		color: var(--text-secondary);
-		margin-top: 2px;
+		margin-top: clamp(1px, 0.3vw, 2px);
 	}
 
 	.section {
-		padding: 4px 0;
+		padding: clamp(2px, 0.5vw, 4px) 0;
 		border-bottom: 1px solid var(--ui-border);
 	}
 
@@ -299,14 +298,13 @@
 
 	.wide-button {
 		width: 100%;
-		padding: 8px 12px;
+		padding: clamp(6px, 1vw, 8px) clamp(8px, 1.5vw, 12px);
 		text-align: left;
 		background: transparent;
 		border: none;
 		color: var(--text-primary);
-		font-size: 14px;
 		cursor: pointer;
-		border-radius: 4px;
+		border-radius: clamp(3px, 0.5vw, 4px);
 		transition: background-color 0.2s ease;
 	}
 
@@ -315,7 +313,7 @@
 	}
 
 	.separator {
-		margin: 4px 8px;
+		margin: clamp(2px, 0.5vw, 4px) clamp(6px, 1vw, 8px);
 		height: 1px;
 		background: var(--ui-border);
 		opacity: 0.6;
