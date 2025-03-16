@@ -51,8 +51,8 @@ type PerplexityResponse struct {
 
 func queryPerplexity(query string) (string, error) {
 	// Create the request payload
-	reqData := PerplexityRequest{
-		Model: "sonar-pro",
+	reqData := PerplexityRequest{ //testing sonar
+		Model: "sonar",
 		Messages: []Message{
 			{
 				Role:    "system",
