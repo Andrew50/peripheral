@@ -10,11 +10,11 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"backend/utils"
 
 )
 
 var ctx = context.Background()
-var apiKey = "AIzaSyCAb92TYPTVTrT5ik0AF44VDa6TIOW8m7s"
 
 // getSystemInstruction reads the content of query.txt to be used as system instruction
 func getSystemInstruction() (string, error) {
@@ -40,8 +40,11 @@ func getSystemInstruction() (string, error) {
 	return instruction, nil
 }
 
-func getGeminiResponse(query string) (string, error) {
-
+func getGeminiResponse(conn *utils.Conn, query string) (string, error) {
+	apiKey, err := conn.GetGeminiKey()
+	if err != nil {
+		return "", fmt.Errorf("error getting gemini key: %w", err)
+	}
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:   apiKey,
 		Backend:  genai.BackendGeminiAPI,

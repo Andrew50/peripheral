@@ -1,5 +1,7 @@
-import time, psycopg2, redis, os, sys, socket
+import time, psycopg2, redis, os, sys, socket, 
 from datetime import datetime, timedelta
+from gemini import GeminiKeyPool
+
 
 
 class Conn:
@@ -33,6 +35,10 @@ class Conn:
                 print("Successfully connected to both database and Redis", flush=True)
                 self.tf = tf_host
                 self.polygon = os.environ.get("POLYGON_API_KEY", "")
+                
+                # Initialize Gemini API key pool
+                self.gemini_pool = GeminiKeyPool()
+                
                 return
                 
             except psycopg2.OperationalError as e:
@@ -162,3 +168,11 @@ class Conn:
             raise
             
         return redis_ok and db_ok
+
+    def get_gemini_key(self):
+        """Get the next available Gemini API key."""
+        try:
+            return self.gemini_pool.get_next_key()
+        except ValueError as e:
+            print(f"Error getting Gemini API key: {e}", flush=True)
+            return None
