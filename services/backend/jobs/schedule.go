@@ -507,7 +507,7 @@ func (s *JobScheduler) getNextScheduledTime(job *Job, now time.Time) *TimeOfDay 
 
 // executeJob runs a job and updates its last run time
 func (s *JobScheduler) executeJob(job *Job, now time.Time) {
-	// Set running flag to prevent concurrent executions
+	// Prevent concurrent execution of the same job
 	job.ExecutionMutex.Lock()
 	if job.IsRunning {
 		job.ExecutionMutex.Unlock()
@@ -516,119 +516,124 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	job.IsRunning = true
 	job.ExecutionMutex.Unlock()
 
-	// Execute the job
+	// Job execution variables
 	jobName := job.Name
 	startTime := time.Now()
-
-	// Clear, visible job start message with timestamp
-	fmt.Printf("\n=== JOB START: %s ===\n", jobName)
-	fmt.Printf("Time: %s\n", now.Format("2006-01-02 15:04:05"))
-
-	// Queue the job if it's not already running
+	isQueued := false
 	var taskID string
 	var err error
 
-	// Check if the job function is a task that should be queued
+	// Log job start
+	fmt.Printf("\n=== JOB START: %s ===\n", jobName)
+	fmt.Printf("Time: %s\n", now.Format("2006-01-02 15:04:05"))
+
+	// Execute job: either queue it or run directly
 	if strings.HasPrefix(jobName, "queue:") {
-		// Extract the function name from the job name
+		// Queue the job for async execution
 		funcName := strings.TrimPrefix(jobName, "queue:")
-		// Queue the job
 		taskID, err = utils.Queue(s.Conn, funcName, nil)
+		isQueued = true
 		if err != nil {
-			log.Printf("Error queueing job %s: %v", job.Name, err)
-			job.ExecutionMutex.Unlock()
-			return
+			log.Printf("Error queueing job %s: %v", jobName, err)
 		}
 	} else {
 		// Execute the job directly
 		err = job.Function(s.Conn)
 	}
 
-	duration := time.Since(startTime).Round(time.Millisecond)
-
 	// Update job status
+	duration := time.Since(startTime).Round(time.Millisecond)
 	job.ExecutionMutex.Lock()
 	job.IsRunning = false
 	job.LastRun = now
 	job.ExecutionMutex.Unlock()
-
-	// Save the last run time to Redis
 	s.saveJobLastRunTime(job)
 
-	// Clear job completion message with duration
+	// Handle completion logging based on execution method and result
 	if err != nil {
+		// Job failed
 		fmt.Printf("\n=== JOB FAILED: %s ===\n", jobName)
 		fmt.Printf("Duration: %v\n", duration)
 		fmt.Printf("Error: %v\n", err)
+	} else if isQueued {
+		// Job was queued
+		fmt.Printf("\n=== JOB QUEUED: %s ===\n", jobName)
+		fmt.Printf("Duration: %v\n", duration)
+		fmt.Printf("Task ID: %s\n", taskID)
+
+		// Monitor queued task for completion
+		if taskID != "" {
+			go s.monitorQueuedTask(job, taskID, startTime)
+		}
 	} else {
+		// Job completed directly
 		fmt.Printf("\n=== JOB COMPLETED: %s ===\n", jobName)
 		fmt.Printf("Duration: %v\n", duration)
 
-		// If we have a task ID, poll for the result to verify completion
-		if taskID != "" {
-			go func() {
-				// Poll for the result with a timeout
-				maxRetries := 30
-				retryInterval := time.Second * 10
-				taskSucceeded := false
-
-				for i := 0; i < maxRetries; i++ {
-					result, pollErr := utils.Poll(s.Conn, taskID)
-					if pollErr == nil && result != nil {
-						// Try to parse the result to check for errors
-						var resultMap map[string]interface{}
-						if err := json.Unmarshal(result, &resultMap); err == nil {
-							// Check if the result contains an error field
-							if errVal, ok := resultMap["error"]; ok && errVal != nil {
-								fmt.Printf("\n=== JOB VERIFICATION FAILED: %s ===\n", jobName)
-								fmt.Printf("Error: %v\n", errVal)
-								break
-							}
-						}
-
-						// Task completed successfully
-						taskSucceeded = true
-						completionTime := time.Now()
-
-						job.ExecutionMutex.Lock()
-						job.LastCompletionTime = completionTime
-						job.ExecutionMutex.Unlock()
-
-						// Save the completion time to Redis
-						s.saveJobLastCompletionTime(job)
-
-						fmt.Printf("\n=== JOB VERIFIED COMPLETION: %s ===\n", jobName)
-						fmt.Printf("Completion Time: %s\n", completionTime.Format("2006-01-02 15:04:05"))
-						fmt.Printf("Task ID: %s\n", taskID)
-						break
-					}
-
-					// If we've reached the last retry, log a timeout
-					if i == maxRetries-1 && !taskSucceeded {
-						fmt.Printf("\n=== JOB VERIFICATION TIMEOUT: %s ===\n", jobName)
-						fmt.Printf("Task ID: %s\n", taskID)
-						fmt.Printf("Timed out after %d retries\n", maxRetries)
-					}
-
-					// Wait before retrying
-					time.Sleep(retryInterval)
-				}
-			}()
-		} else {
-			// For directly executed jobs, update completion time immediately
-			completionTime := time.Now()
-
-			job.ExecutionMutex.Lock()
-			job.LastCompletionTime = completionTime
-			job.ExecutionMutex.Unlock()
-
-			// Save the completion time to Redis
-			s.saveJobLastCompletionTime(job)
-		}
+		// Update completion time
+		completionTime := time.Now()
+		job.ExecutionMutex.Lock()
+		job.LastCompletionTime = completionTime
+		job.ExecutionMutex.Unlock()
+		s.saveJobLastCompletionTime(job)
 	}
 
 	// Print queue status
 	s.printQueueStatus()
+}
+
+// monitorQueuedTask polls a queued task until it completes or times out
+func (s *JobScheduler) monitorQueuedTask(job *Job, taskID string, startTime time.Time) {
+	jobName := job.Name
+	maxRetries := 30
+	retryInterval := time.Second * 10
+	taskSucceeded := false
+
+	for i := 0; i < maxRetries; i++ {
+		result, pollErr := utils.Poll(s.Conn, taskID)
+		if pollErr == nil && result != nil {
+			// Try to parse the result to check for errors
+			var resultMap map[string]interface{}
+			if err := json.Unmarshal(result, &resultMap); err == nil {
+				// Check if the result contains an error field
+				if errVal, ok := resultMap["error"]; ok && errVal != nil {
+					fmt.Printf("\n=== JOB VERIFICATION FAILED: %s ===\n", jobName)
+					fmt.Printf("Error: %v\n", errVal)
+					break
+				}
+
+				// Check if the state is completed
+				if state, ok := resultMap["state"]; ok && state == "completed" {
+					// Task completed successfully
+					taskSucceeded = true
+					completionTime := time.Now()
+
+					job.ExecutionMutex.Lock()
+					job.LastCompletionTime = completionTime
+					job.ExecutionMutex.Unlock()
+
+					// Save the completion time to Redis
+					s.saveJobLastCompletionTime(job)
+
+					fmt.Printf("\n=== JOB COMPLETED: %s ===\n", jobName)
+					fmt.Printf("Actual Completion Time: %s\n", completionTime.Format("2006-01-02 15:04:05"))
+					fmt.Printf("Task ID: %s\n", taskID)
+					fmt.Printf("Total Duration: %v\n", time.Since(startTime).Round(time.Millisecond))
+					break
+				}
+			}
+		}
+
+		// If we've reached the last retry, log a timeout
+		if i == maxRetries-1 && !taskSucceeded {
+			fmt.Printf("\n=== JOB VERIFICATION TIMEOUT: %s ===\n", jobName)
+			fmt.Printf("Task ID: %s\n", taskID)
+			fmt.Printf("Timed out after %d retries\n", maxRetries)
+		}
+
+		// Wait before retrying
+		time.Sleep(retryInterval)
+	}
 }
 
 // printQueueStatus prints the current status of the Redis queue
@@ -676,11 +681,50 @@ func (s *JobScheduler) printQueueStatus() {
 
 func updateSectors(conn *utils.Conn) error {
 	fmt.Println("Starting sector update - organizing securities by sectors...")
-	_, err := utils.Queue(conn, "update_sectors", map[string]interface{}{})
+	taskID, err := utils.Queue(conn, "update_sectors", map[string]interface{}{})
 	if err != nil {
 		return fmt.Errorf("error queueing sector update: %w", err)
 	}
-	return nil
+
+	// Monitor the task until completion
+	fmt.Printf("Sector update task queued with ID: %s. Monitoring for completion...\n", taskID)
+
+	maxRetries := 30
+	retryInterval := time.Second * 10
+
+	for i := 0; i < maxRetries; i++ {
+		result, pollErr := utils.Poll(conn, taskID)
+		if pollErr == nil && result != nil {
+			// Parse the result to check status
+			var resultMap map[string]interface{}
+			if err := json.Unmarshal(result, &resultMap); err == nil {
+				// Check if the result contains an error field
+				if errVal, ok := resultMap["error"]; ok && errVal != nil {
+					return fmt.Errorf("sector update failed: %v", errVal)
+				}
+
+				// Check if state is completed
+				if state, ok := resultMap["state"]; ok {
+					if state == "completed" {
+						fmt.Println("Sector update completed successfully")
+						return nil
+					} else if state == "failed" {
+						return fmt.Errorf("sector update task failed")
+					}
+				}
+			}
+		}
+
+		// If we've reached the last retry, log a timeout
+		if i == maxRetries-1 {
+			return fmt.Errorf("sector update task timed out after %d retries", maxRetries)
+		}
+
+		// Wait before retrying
+		time.Sleep(retryInterval)
+	}
+
+	return fmt.Errorf("sector update task monitoring failed")
 }
 
 func updateMarketMetrics(conn *utils.Conn) error {

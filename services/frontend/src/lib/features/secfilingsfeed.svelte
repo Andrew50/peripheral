@@ -6,12 +6,7 @@
 		addGlobalSECFilingsStream,
 		releaseGlobalSECFilingsStream
 	} from '$lib/utils/stream/interface';
-	import {
-		globalFilings,
-		formatTimestamp,
-		handleSECFilingMessage,
-		type Filing
-	} from '$lib/utils/stream/secfilings';
+	import { globalFilings, handleSECFilingMessage, type Filing } from '$lib/utils/stream/secfilings';
 	import { queryChart } from '$lib/features/chart/interface';
 	import List from '$lib/utils/modules/list.svelte';
 	import { writable, type Writable } from 'svelte/store';
@@ -19,6 +14,20 @@
 
 	// Create a writable store that adapts filings to the expected format
 	const filingsList: Writable<Instance[]> = writable([]);
+
+	// Local formatTimestamp function
+	function formatTimestamp(timestamp: number): string {
+		if (!timestamp) return 'N/A';
+
+		const date = new Date(timestamp);
+		return date.toLocaleString('en-US', {
+			month: 'short',
+			day: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit',
+			hour12: true
+		});
+	}
 
 	// Subscribe to the globalFilings store and transform the data
 	const unsubscribeFilings = globalFilings.subscribe((filings) => {
@@ -52,7 +61,6 @@
 		isLoadingGlobalFilings = true;
 		privateRequest<Filing[]>('getLatestEdgarFilings', {})
 			.then((filings) => {
-				console.log('Received filings from API:', filings);
 				handleSECFilingMessage(filings);
 				isLoadingGlobalFilings = false;
 			})
@@ -64,7 +72,6 @@
 
 	// Function to handle WebSocket messages for SEC filings
 	function handleSocketMessage(data: any) {
-		console.log('SEC Filing message received via socket:', data);
 		handleSECFilingMessage(data);
 		isLoadingGlobalFilings = false;
 	}
@@ -90,10 +97,6 @@
 	});
 
 	// Add this function to handle focus
-	function handleTableFocus() {
-		// This is just to ensure the table container gets focus
-		console.log('Table focused');
-	}
 </script>
 
 <div class="feature-container">
@@ -130,7 +133,7 @@
 		display: flex;
 		flex-direction: column;
 		height: 100%;
-		padding: 20px;
+		padding: clamp(1rem, 3vw, 1.25rem);
 		overflow: hidden; /* Prevent double scrollbars */
 	}
 
@@ -138,21 +141,21 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 20px;
+		margin-bottom: clamp(1rem, 3vh, 1.25rem);
 		flex-shrink: 0; /* Prevent header from shrinking */
 	}
 
 	h2 {
 		margin: 0;
-		font-size: 1.5rem;
+		font-size: clamp(1.25rem, 2.5vw, 1.5rem);
 	}
 
 	.refresh-button {
 		background-color: #333;
 		color: white;
 		border: 1px solid #555;
-		padding: 8px 16px;
-		border-radius: 4px;
+		padding: clamp(0.375rem, 1vw, 0.5rem) clamp(0.75rem, 2vw, 1rem);
+		border-radius: clamp(4px, 0.5vw, 6px);
 		cursor: pointer;
 	}
 
@@ -161,14 +164,14 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		padding: 20px;
-		gap: 10px;
+		padding: clamp(1rem, 3vw, 1.25rem);
+		gap: clamp(0.5rem, 1vh, 0.625rem);
 		flex: 1;
 	}
 
 	.loading-spinner {
-		width: 30px;
-		height: 30px;
+		width: clamp(1.5rem, 3vw, 1.875rem);
+		height: clamp(1.5rem, 3vw, 1.875rem);
 		border: 3px solid #333;
 		border-top: 3px solid #fff;
 		border-radius: 50%;
@@ -187,7 +190,7 @@
 	.no-data {
 		text-align: center;
 		color: #aaa;
-		margin-top: 20px;
+		margin-top: clamp(1rem, 3vh, 1.25rem);
 		flex: 1;
 	}
 
