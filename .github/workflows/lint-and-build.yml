@@ -215,6 +215,13 @@ jobs:
         with:
           cache: 'pip'
       
+      - name: Ensure python command is available
+        run: |
+          if ! command -v python &> /dev/null; then
+            echo "Creating python symlink to python3"
+            sudo ln -sf $(which python3) /usr/local/bin/python
+          fi
+      
       - name: Install dependencies
         run: |
           cd services/worker
