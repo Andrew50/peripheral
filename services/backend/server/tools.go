@@ -2,6 +2,7 @@ package server
 
 import (
 	"backend/utils"
+	"backend/tools"
 	"encoding/json"
 
 	"github.com/google/generative-ai-go/genai"
@@ -79,7 +80,7 @@ var Tools = map[string]Tool{
 				Required: []string{"ticker", "securityId", "timestamp", "timeframe"},
 			},
 		},
-		Function: GetSimilarInstances,
+		Function: tools.GetSimilarInstances,
 	},
 	"getSecuritiesFromTicker": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -96,7 +97,7 @@ var Tools = map[string]Tool{
 				Required: []string{"ticker"},
 			},
 		},
-		Function: GetSecuritiesFromTicker,
+		Function: tools.GetSecuritiesFromTicker,
 	},
 	"getCurrentTicker": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -108,7 +109,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: GetCurrentTicker,
+		Function: tools.GetCurrentTicker,
 	},
 	"getTickerMenuDetails": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -125,7 +126,7 @@ var Tools = map[string]Tool{
 				Required: []string{"ticker"},
 			},
 		},
-		Function: GetTickerMenuDetails,
+		Function: tools.GetTickerMenuDetails,
 	},
 	"getIcons": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -145,7 +146,7 @@ var Tools = map[string]Tool{
 				Required: []string{"tickers"},
 			},
 		},
-		Function: GetIcons,
+		Function: tools.GetIcons,
 	},
 
 	//chart
@@ -176,7 +177,7 @@ var Tools = map[string]Tool{
 				Required: []string{"securityId", "timeframe", "from", "to"},
 			},
 		},
-		Function: GetChartData,
+		Function: tools.GetChartData,
 	},
 	//study
 	"getStudies": {
@@ -189,7 +190,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: GetStudies,
+		Function: tools.GetStudies,
 	},
 
 	"newStudy": {
@@ -202,7 +203,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: NewStudy,
+		Function: tools.NewStudy,
 	},
 	"saveStudy": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -214,7 +215,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: SaveStudy,
+		Function: tools.SaveStudy,
 	},
 	"deleteStudy": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -226,7 +227,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: DeleteStudy,
+		Function: tools.DeleteStudy,
 	},
 	"getStudyEntry": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -238,7 +239,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: GetStudyEntry,
+		Function: tools.GetStudyEntry,
 	},
 	"completeStudy": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -250,7 +251,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: CompleteStudy,
+		Function: tools.CompleteStudy,
 	},
 	"setStudySetup": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -262,7 +263,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: SetStudySetup,
+		Function: tools.SetStudySetup,
 	},
 	//journal
 	"getJournals": {
@@ -275,7 +276,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: GetJournals,
+		Function: tools.GetJournals,
 	},
 	"saveJournal": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -296,7 +297,7 @@ var Tools = map[string]Tool{
 				Required: []string{"id", "entry"},
 			},
 		},
-		Function: SaveJournal,
+		Function: tools.SaveJournal,
 	},
 	"deleteJournal": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -313,7 +314,7 @@ var Tools = map[string]Tool{
 				Required: []string{"id"},
 			},
 		},
-		Function: DeleteJournal,
+		Function: tools.DeleteJournal,
 	},
 	"getJournalEntry": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -330,7 +331,7 @@ var Tools = map[string]Tool{
 				Required: []string{"journalId"},
 			},
 		},
-		Function: GetJournalEntry,
+		Function: tools.GetJournalEntry,
 	},
 	"completeJournal": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -351,7 +352,7 @@ var Tools = map[string]Tool{
 				Required: []string{"id", "completed"},
 			},
 		},
-		Function: CompleteJournal,
+		Function: tools.CompleteJournal,
 	},
 	//screensaver
 	"getScreensavers": {
@@ -364,7 +365,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: GetScreensavers,
+		Function: tools.GetScreensavers,
 	},
 	//watchlist
 	"getWatchlists": {
@@ -377,7 +378,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: GetWatchlists,
+		Function: tools.GetWatchlists,
 	},
 	"deleteWatchlist": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -394,7 +395,7 @@ var Tools = map[string]Tool{
 				Required: []string{"watchlistId"},
 			},
 		},
-		Function: DeleteWatchlist,
+		Function: tools.DeleteWatchlist,
 	},
 	"newWatchlist": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -411,7 +412,7 @@ var Tools = map[string]Tool{
 				Required: []string{"watchlistName"},
 			},
 		},
-		Function: NewWatchlist,
+		Function: tools.NewWatchlist,
 	},
 	"getWatchlistItems": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -428,7 +429,7 @@ var Tools = map[string]Tool{
 				Required: []string{"watchlistId"},
 			},
 		},
-		Function: GetWatchlistItems,
+		Function: tools.GetWatchlistItems,
 	},
 	"deleteWatchlistItem": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -445,7 +446,7 @@ var Tools = map[string]Tool{
 				Required: []string{"watchlistItemId"},
 			},
 		},
-		Function: DeleteWatchlistItem,
+		Function: tools.DeleteWatchlistItem,
 	},
 	"newWatchlistItem": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -466,7 +467,7 @@ var Tools = map[string]Tool{
 				Required: []string{"watchlistId", "securityId"},
 			},
 		},
-		Function: NewWatchlistItem,
+		Function: tools.NewWatchlistItem,
 	},
 	//singles
 	"getPrevClose": {
@@ -484,9 +485,9 @@ var Tools = map[string]Tool{
 				Required: []string{"ticker"},
 			},
 		},
-		Function: GetPrevClose,
+		Function: tools.GetPrevClose,
 	},
-	//"getMarketCap": GetMarketCap,
+	//"getMarketCap": tools.GetMarketCap,
 	//settings
 	"getSettings": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -498,7 +499,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: GetSettings,
+		Function: tools.GetSettings,
 	},
 	"setSettings": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -515,7 +516,7 @@ var Tools = map[string]Tool{
 				Required: []string{"settings"},
 			},
 		},
-		Function: SetSettings,
+		Function: tools.SetSettings,
 	},
 	//profile
 	"updateProfilePicture": {
@@ -546,7 +547,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: GetExchanges,
+		Function: tools.GetExchanges,
 	},
 	//setups
 	"getSetups": {
@@ -559,7 +560,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: GetSetups,
+		Function: tools.GetSetups,
 	},
 	"newSetup": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -600,7 +601,7 @@ var Tools = map[string]Tool{
 				Required: []string{"name", "timeframe"},
 			},
 		},
-		Function: NewSetup,
+		Function: tools.NewSetup,
 	},
 	"setSetup": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -645,7 +646,7 @@ var Tools = map[string]Tool{
 				Required: []string{"setupId", "name", "timeframe"},
 			},
 		},
-		Function: SetSetup,
+		Function: tools.SetSetup,
 	},
 	"deleteSetup": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -662,10 +663,10 @@ var Tools = map[string]Tool{
 				Required: []string{"setupId"},
 			},
 		},
-		Function: DeleteSetup,
+		Function: tools.DeleteSetup,
 	},
 	//algos
-	//"getAlgos": GetAlgos,
+	//"getAlgos": tools.GetAlgos,
 	//samples
 	"labelTrainingQueueInstance": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -677,7 +678,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: LabelTrainingQueueInstance,
+		Function: tools.LabelTrainingQueueInstance,
 	},
 	"getTrainingQueue": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -689,7 +690,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: GetTrainingQueue,
+		Function: tools.GetTrainingQueue,
 	},
 	"setSample": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -701,7 +702,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: SetSample,
+		Function: tools.SetSample,
 	},
 	//telegram
 	//	"sendMessage": telegram.SendMessage,
@@ -716,7 +717,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: GetAlerts,
+		Function: tools.GetAlerts,
 	},
 	"getAlertLogs": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -728,7 +729,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: GetAlertLogs,
+		Function: tools.GetAlertLogs,
 	},
 	"newAlert": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -765,7 +766,7 @@ var Tools = map[string]Tool{
 				Required: []string{"alertType"},
 			},
 		},
-		Function: NewAlert,
+		Function: tools.NewAlert,
 	},
 	"deleteAlert": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -782,16 +783,16 @@ var Tools = map[string]Tool{
 				Required: []string{"alertId"},
 			},
 		},
-		Function: DeleteAlert,
+		Function: tools.DeleteAlert,
 	},
 
 	// deprecated
-	// "getTradeData":            GetTradeData,
+	// "getTradeData":            tools.GetTradeData,
 	//
-	//	"getLastTrade":            GetLastTrade,
+	//	"getLastTrade":            tools.GetLastTrade,
 	//
-	// "getQuoteData":            GetQuoteData,
-	// "getSecurityDateBounds":   GetSecurityDateBounds,
+	// "getQuoteData":            tools.GetQuoteData,
+	// "getSecurityDateBounds":   tools.GetSecurityDateBounds,
 	"setHorizontalLine": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "setHorizontalLine",
@@ -819,7 +820,7 @@ var Tools = map[string]Tool{
 				Required: []string{"securityId", "price"},
 			},
 		},
-		Function: SetHorizontalLine,
+		Function: tools.SetHorizontalLine,
 	},
 	"getHorizontalLines": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -836,7 +837,7 @@ var Tools = map[string]Tool{
 				Required: []string{"securityId"},
 			},
 		},
-		Function: GetHorizontalLines,
+		Function: tools.GetHorizontalLines,
 	},
 	"deleteHorizontalLine": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -853,7 +854,7 @@ var Tools = map[string]Tool{
 				Required: []string{"id"},
 			},
 		},
-		Function: DeleteHorizontalLine,
+		Function: tools.DeleteHorizontalLine,
 	},
 	"updateHorizontalLine": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -886,7 +887,7 @@ var Tools = map[string]Tool{
 				Required: []string{"id", "securityId", "price"},
 			},
 		},
-		Function: UpdateHorizontalLine,
+		Function: tools.UpdateHorizontalLine,
 	},
 	//active
 	"getActive": {
@@ -899,7 +900,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: GetActive,
+		Function: tools.GetActive,
 	},
 	//sector, industry
 	"getSecurityClassifications": {
@@ -912,7 +913,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: GetSecurityClassifications,
+		Function: tools.GetSecurityClassifications,
 	},
 	"getLatestEdgarFilings": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -929,7 +930,7 @@ var Tools = map[string]Tool{
 				Required: []string{"securityId"},
 			},
 		},
-		Function: GetLatestEdgarFilings,
+		Function: tools.GetLatestEdgarFilings,
 	},
 	"getChartEvents": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -958,7 +959,7 @@ var Tools = map[string]Tool{
 				Required: []string{"securityId", "from", "to"},
 			},
 		},
-		Function: GetChartEvents,
+		Function: tools.GetChartEvents,
 	},
 
 	// Add the new trade-related functions
@@ -985,7 +986,7 @@ var Tools = map[string]Tool{
 				Required: []string{},
 			},
 		},
-		Function: GrabUserTrades,
+		Function: tools.GrabUserTrades,
 	},
 	"get_trade_statistics": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -1010,7 +1011,7 @@ var Tools = map[string]Tool{
 				Required: []string{},
 			},
 		},
-		Function: GetTradeStatistics,
+		Function: tools.GetTradeStatistics,
 	},
 	"get_ticker_performance": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -1031,7 +1032,7 @@ var Tools = map[string]Tool{
 				Required: []string{"ticker", "securityId"},
 			},
 		},
-		Function: GetTickerPerformance,
+		Function: tools.GetTickerPerformance,
 	},
 	"delete_all_user_trades": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -1043,7 +1044,7 @@ var Tools = map[string]Tool{
 				Required:   []string{},
 			},
 		},
-		Function: DeleteAllUserTrades,
+		Function: tools.DeleteAllUserTrades,
 	},
 	"handle_trade_upload": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -1064,7 +1065,7 @@ var Tools = map[string]Tool{
 				Required: []string{"csvData", "broker"},
 			},
 		},
-		Function: HandleTradeUpload,
+		Function: tools.HandleTradeUpload,
 	},
 
 	// Notes-related functions
@@ -1102,7 +1103,7 @@ var Tools = map[string]Tool{
 				Required: []string{},
 			},
 		},
-		Function: GetNotes,
+		Function: tools.GetNotes,
 	},
 	"search_notes": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -1123,7 +1124,7 @@ var Tools = map[string]Tool{
 				Required: []string{"query"},
 			},
 		},
-		Function: SearchNotes,
+		Function: tools.SearchNotes,
 	},
 	"get_note": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -1140,7 +1141,7 @@ var Tools = map[string]Tool{
 				Required: []string{"noteId"},
 			},
 		},
-		Function: GetNote,
+		Function: tools.GetNote,
 	},
 	"create_note": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -1180,7 +1181,7 @@ var Tools = map[string]Tool{
 				Required: []string{"title"},
 			},
 		},
-		Function: CreateNote,
+		Function: tools.CreateNote,
 	},
 	"update_note": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -1224,7 +1225,7 @@ var Tools = map[string]Tool{
 				Required: []string{"noteId", "title"},
 			},
 		},
-		Function: UpdateNote,
+		Function: tools.UpdateNote,
 	},
 	"delete_note": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -1241,7 +1242,7 @@ var Tools = map[string]Tool{
 				Required: []string{"noteId"},
 			},
 		},
-		Function: DeleteNote,
+		Function: tools.DeleteNote,
 	},
 	"toggle_note_pin": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -1262,7 +1263,7 @@ var Tools = map[string]Tool{
 				Required: []string{"noteId", "isPinned"},
 			},
 		},
-		Function: ToggleNotePin,
+		Function: tools.ToggleNotePin,
 	},
 	"toggle_note_archive": {
 		FunctionDeclaration: genai.FunctionDeclaration{
@@ -1283,6 +1284,6 @@ var Tools = map[string]Tool{
 				Required: []string{"noteId", "isArchived"},
 			},
 		},
-		Function: ToggleNoteArchive,
+		Function: tools.ToggleNoteArchive,
 	},
 }
