@@ -1,4 +1,4 @@
-import json, traceback, datetime, psycopg2, redis
+import json, traceback, psycopg2, redis
 import sys
 from datetime import datetime as dt
 
