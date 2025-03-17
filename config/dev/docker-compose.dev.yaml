@@ -15,7 +15,7 @@ services:
       - DB_PASSWORD=devpassword
       - DB_HOST=db
       - POSTGRES_DB=postgres
-      - GEMINI_FREE_KEYS=AIzaSyCAb92TYPTVTrT5ik0AF44VDa6TIOW8m7s,AIzaSyC1_mTaTEgNT2g9QYPDq81H8ut6F94cMyM,AIzaSyDCoPcRluPAaFXaB5St2-d8z5jv3nAB0bI
+      - GEMINI_FREE_KEYS=${GEMINI_FREE_KEYS}
     platform: linux/arm64
   db:
     build:
@@ -84,7 +84,7 @@ services:
       - TF_MODEL_NAME=1
       - TF_MODEL_VERSION=9
       - POLYGON_API_KEY=${POLYGON_API_KEY}
-      - GEMINI_FREE_KEYS=AIzaSyCAb92TYPTVTrT5ik0AF44VDa6TIOW8m7s,AIzaSyC1_mTaTEgNT2g9QYPDq81H8ut6F94cMyM,AIzaSyDCoPcRluPAaFXaB5St2-d8z5jv3nAB0bI
+      - GEMINI_FREE_KEYS=${GEMINI_FREE_KEYS}
     deploy:
       resources:
         limits:
