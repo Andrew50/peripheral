@@ -147,11 +147,32 @@ jobs:
           
           # Identify affected packages (directories)
           if [ -n "$CHANGED_GO_FILES" ]; then
-            # Get full paths to affected packages
-            AFFECTED_PACKAGES=$(echo "$CHANGED_GO_FILES" | xargs dirname | sort -u | xargs)
-            echo "Affected packages (full path): $AFFECTED_PACKAGES"
+            # Get all potentially affected package directories
+            ALL_AFFECTED_PACKAGES=$(echo "$CHANGED_GO_FILES" | xargs dirname | sort -u)
+            echo "All potentially affected packages: $ALL_AFFECTED_PACKAGES"
             
-            # Store the full paths for reference in other steps
+            # Filter out directories that don't exist anymore
+            EXISTING_PACKAGES=""
+            cd services/backend
+            for pkg in $ALL_AFFECTED_PACKAGES; do
+              # Convert from full path to relative path
+              pkg_rel=$(echo "$pkg" | sed 's/^services\/backend\///')
+              
+              # Check if the directory still exists
+              if [ -d "$pkg_rel" ]; then
+                echo "Directory exists: $pkg"
+                EXISTING_PACKAGES="$EXISTING_PACKAGES $pkg"
+              else
+                echo "Directory no longer exists (skipping): $pkg"
+              fi
+            done
+            cd - > /dev/null  # Return to previous directory
+            
+            # Store only existing packages as affected packages
+            AFFECTED_PACKAGES=$(echo "$EXISTING_PACKAGES" | xargs)
+            echo "Final affected packages (existing only): $AFFECTED_PACKAGES"
+            
+            # Store the paths for reference in other steps
             echo "affected_packages=$AFFECTED_PACKAGES" >> $GITHUB_OUTPUT
             echo "affected_files=$CHANGED_GO_FILES" >> $GITHUB_OUTPUT
             echo "has_changes=true" >> $GITHUB_OUTPUT
@@ -185,22 +206,39 @@ jobs:
           cd services/backend
           # Ensure Go modules are used
           export GO111MODULE=on
+          
+          # Debug: Show current directory and list contents
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
+          
           # Run staticcheck only on affected packages
           AFFECTED_PACKAGES="${{ steps.changed-files.outputs.affected_packages }}"
           if [ -n "$AFFECTED_PACKAGES" ]; then
-            # Process package paths to be relative to the module
+            # Process package paths to be relative to the module and check if they exist
             MODULE_PACKAGES=""
             for pkg in $AFFECTED_PACKAGES; do
               # Convert from services/backend/foo to ./foo
               pkg_path=$(echo "$pkg" | sed 's/^services\/backend\//\.\//')
-              MODULE_PACKAGES="$MODULE_PACKAGES $pkg_path"
+              
+              # Only add to the list if directory exists
+              if [ -d "$(echo "$pkg_path" | sed 's/^\.\///')" ]; then
+                echo "Package directory exists: $pkg_path"
+                MODULE_PACKAGES="$MODULE_PACKAGES $pkg_path"
+              else
+                echo "WARNING: Package directory does not exist: $pkg_path - skipping"
+              fi
             done
 
-            echo "Running staticcheck on packages: $MODULE_PACKAGES"
-            # First run to print all issues
-            staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016 $MODULE_PACKAGES || true
-            # Second run to actually fail the build only on critical issues
-            staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016,-SA4006,-SA5000,-SA6000 $MODULE_PACKAGES
+            if [ -n "$MODULE_PACKAGES" ]; then
+              echo "Running staticcheck on existing packages: $MODULE_PACKAGES"
+              # First run to print all issues
+              staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016 $MODULE_PACKAGES || true
+              # Second run to actually fail the build only on critical issues
+              staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016,-SA4006,-SA5000,-SA6000 $MODULE_PACKAGES
+            else
+              echo "No valid packages to check with staticcheck"
+            fi
           else
             echo "No affected packages to check"
           fi
@@ -213,15 +251,27 @@ jobs:
           cd services/backend
           # Set environment variable to force Go module mode
           export GO111MODULE=on
+          
+          # Debug: Show current directory and repository structure
+          echo "Current directory: $(pwd)"
+          echo "Repository structure:"
+          find . -type d -not -path "*/\.*" | sort
+          
           # Only build affected packages if we have changes, otherwise do a quick sanity build
           if [ "${{ steps.changed-files.outputs.has_changes }}" == "true" ]; then
             echo "Building affected packages..."
             AFFECTED_PACKAGES="${{ steps.changed-files.outputs.affected_packages }}"
             for pkg in $AFFECTED_PACKAGES; do
-              echo "Building $pkg..."
-              # Build using relative module paths
+              # Convert absolute path to relative module path
               pkg_path=$(echo "$pkg" | sed 's/^services\/backend\///')
-              go build -v -tags=all "./$(echo $pkg_path)"
+              
+              # Only build if directory exists
+              if [ -d "$pkg_path" ]; then
+                echo "Building package: $pkg_path"
+                go build -v -tags=all "./$pkg_path"
+              else
+                echo "WARNING: Package directory does not exist: $pkg_path - skipping build"
+              fi
             done
           else
             echo "No changes detected, performing sanity build..."
