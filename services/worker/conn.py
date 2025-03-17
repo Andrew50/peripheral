@@ -21,9 +21,8 @@ def get_timestamp():
 
 
 def log_message(message, level="info"):
-    """Log a message to both stdout and task logs if task context is available"""
-    # Always print to stdout for direct console viewing
-    print(message, flush=True)
+    """Log a message to task logs if task context is available"""
+    # Don't print to stdout anymore
     
     # If we have a task context, add to task logs
     if CURRENT_TASK_DATA is not None and CURRENT_TASK_ID is not None:
@@ -52,10 +51,6 @@ def add_task_log(data, task_id, message, level="info"):
         
         task = json.loads(task_json)
         
-        # DEBUG: Print task structure before adding log - using sys.__stdout__ directly to avoid recursion
-        sys.__stdout__.write(f"DEBUG: Task structure before log: {list(task.keys())}\n")
-        sys.__stdout__.flush()
-        
         # Create a log entry
         log_entry = {
             "timestamp": datetime.now().isoformat(),
@@ -66,16 +61,9 @@ def add_task_log(data, task_id, message, level="info"):
         # Add the log entry to the task
         if "logs" not in task:
             task["logs"] = []
-            sys.__stdout__.write(f"DEBUG: Created new logs array for task {task_id}\n")
-            sys.__stdout__.flush()
         
         task["logs"].append(log_entry)
         task["updatedAt"] = datetime.now().isoformat()
-        
-        # DEBUG: Print log entry being added - using sys.__stdout__ directly to avoid recursion
-        sys.__stdout__.write(f"DEBUG: Adding log to task {task_id}: {log_entry}\n")
-        sys.__stdout__.write(f"DEBUG: Task now has {len(task['logs'])} logs\n")
-        sys.__stdout__.flush()
         
         # Save the updated task
         safe_redis_operation(data.cache.set, task_id, json.dumps(task))
@@ -335,3 +323,13 @@ class Conn:
         except ValueError as e:
             print(f"Error getting Gemini API key: {e}", flush=True)
             return None
+
+    def test_connection(self):
+        """
+        Test connections to all services and raise an exception if any fail.
+        This method is used by the health check.
+        """
+        if not self.check_connection():
+            raise Exception("Connection check failed")
+        print("Health check passed - all connections are healthy", flush=True)
+        return True
