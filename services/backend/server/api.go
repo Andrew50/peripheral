@@ -180,7 +180,7 @@ func privateUploadHandler(conn *utils.Conn) http.HandlerFunc {
 			}
 
 			// Call the Go implementation directly
-			result, err := tasks.HandleTradeUpload(conn, userId, argsBytes)
+			result, err := tools.HandleTradeUpload(conn, userId, argsBytes)
 			if handleError(w, err, "processing trade upload") {
 				return
 			}
