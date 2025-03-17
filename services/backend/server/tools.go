@@ -13,7 +13,8 @@ type Tool struct {
 	Function func(*utils.Conn, int, json.RawMessage) (interface{}, error)
 }
 
-var privateFunc = map[string]Tool{
+// Tools is a map of function names to Tool objects
+var Tools = map[string]Tool{
 	"verifyAuth": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "verifyAuth",
