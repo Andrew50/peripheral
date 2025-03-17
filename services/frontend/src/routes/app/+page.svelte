@@ -874,12 +874,7 @@
 			>
 				News
 			</button>
-			<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'llm-summary') ? 'active' : ''}"
-				on:click={() => openBottomWindow('llm-summary')}
-			>
-				LLM Summary
-			</button>
+			<button class="toggle-button" on:click={() => goto('/app/notes')}> Notes </button>
 		</div>
 
 		<div class="bottom-bar-right">
