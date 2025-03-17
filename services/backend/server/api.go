@@ -25,6 +25,9 @@ var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, err
 	"googleCallback": GoogleCallback,
 }
 
+// Define privateFunc as an alias to Tools
+var privateFunc = Tools
+
 func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
 
 // Request represents a structure for handling Request data.
@@ -466,11 +469,33 @@ func pollHandler(conn *utils.Conn) http.HandlerFunc {
 		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "1m99c") {
 			return
 		}
-		result, err := utils.Poll(conn, req.TaskID)
-		if handleError(w, err, fmt.Sprintf("executing function %s", req.TaskID)) {
+
+		// Get the task and print its logs
+		task, err := utils.GetTask(conn, req.TaskID)
+		if err != nil {
+			handleError(w, err, fmt.Sprintf("getting task %s", req.TaskID))
 			return
 		}
-		if err := json.NewEncoder(w).Encode(result); err != nil {
+
+		// Print logs to server console
+		if len(task.Logs) > 0 {
+			fmt.Printf("Task %s (%s) logs:\n", req.TaskID, task.Function)
+			for _, logEntry := range task.Logs {
+				fmt.Printf("[%s] %s: %s\n",
+					logEntry.Timestamp.Format("2006-01-02 15:04:05"),
+					logEntry.Level,
+					logEntry.Message)
+			}
+		}
+
+		// Serialize task to JSON
+		result, err := json.Marshal(task)
+		if err != nil {
+			handleError(w, err, fmt.Sprintf("serializing task %s", req.TaskID))
+			return
+		}
+
+		if err := json.NewEncoder(w).Encode(json.RawMessage(result)); err != nil {
 			handleError(w, err, "19inv0id")
 			return
 		}
