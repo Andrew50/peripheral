@@ -147,8 +147,11 @@ jobs:
           
           # Identify affected packages (directories)
           if [ -n "$CHANGED_GO_FILES" ]; then
+            # Get full paths to affected packages
             AFFECTED_PACKAGES=$(echo "$CHANGED_GO_FILES" | xargs dirname | sort -u | xargs)
-            echo "Affected packages: $AFFECTED_PACKAGES"
+            echo "Affected packages (full path): $AFFECTED_PACKAGES"
+            
+            # Store the full paths for reference in other steps
             echo "affected_packages=$AFFECTED_PACKAGES" >> $GITHUB_OUTPUT
             echo "affected_files=$CHANGED_GO_FILES" >> $GITHUB_OUTPUT
             echo "has_changes=true" >> $GITHUB_OUTPUT
@@ -163,11 +166,16 @@ jobs:
         with:
           version: latest
           working-directory: services/backend
-          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number --max-issues-per-linter=10 --max-same-issues=5 --build-tags=all
+          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number --max-issues-per-linter=10 --max-same-issues=5 --build-tags=all --modules-download-mode=readonly
           skip-cache: true
           skip-pkg-cache: true
           skip-build-cache: true
           only-new-issues: true
+          # Force a single output format to avoid the deprecation warning
+          output-format: colored-line-number
+        env:
+          # Ensure Go modules are used
+          GO111MODULE: "on"
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' || needs.check-fallback-runner.outputs.continue_on_error == 'true' }}
 
@@ -175,13 +183,24 @@ jobs:
         if: steps.changed-files.outputs.has_changes == 'true'
         run: |
           cd services/backend
+          # Ensure Go modules are used
+          export GO111MODULE=on
           # Run staticcheck only on affected packages
           AFFECTED_PACKAGES="${{ steps.changed-files.outputs.affected_packages }}"
           if [ -n "$AFFECTED_PACKAGES" ]; then
+            # Process package paths to be relative to the module
+            MODULE_PACKAGES=""
+            for pkg in $AFFECTED_PACKAGES; do
+              # Convert from services/backend/foo to ./foo
+              pkg_path=$(echo "$pkg" | sed 's/^services\/backend\//\.\//')
+              MODULE_PACKAGES="$MODULE_PACKAGES $pkg_path"
+            done
+
+            echo "Running staticcheck on packages: $MODULE_PACKAGES"
             # First run to print all issues
-            staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016 $AFFECTED_PACKAGES || true
+            staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016 $MODULE_PACKAGES || true
             # Second run to actually fail the build only on critical issues
-            staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016,-SA4006,-SA5000,-SA6000 $AFFECTED_PACKAGES
+            staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016,-SA4006,-SA5000,-SA6000 $MODULE_PACKAGES
           else
             echo "No affected packages to check"
           fi
@@ -190,14 +209,19 @@ jobs:
 
       - name: Go Build
         run: |
+          # Ensure we're in the right directory with the go.mod file
           cd services/backend
+          # Set environment variable to force Go module mode
+          export GO111MODULE=on
           # Only build affected packages if we have changes, otherwise do a quick sanity build
           if [ "${{ steps.changed-files.outputs.has_changes }}" == "true" ]; then
             echo "Building affected packages..."
             AFFECTED_PACKAGES="${{ steps.changed-files.outputs.affected_packages }}"
             for pkg in $AFFECTED_PACKAGES; do
               echo "Building $pkg..."
-              go build -v -tags=all $pkg
+              # Build using relative module paths
+              pkg_path=$(echo "$pkg" | sed 's/^services\/backend\///')
+              go build -v -tags=all "./$(echo $pkg_path)"
             done
           else
             echo "No changes detected, performing sanity build..."
