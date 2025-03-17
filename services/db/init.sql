@@ -222,12 +222,12 @@ CREATE TABLE IF NOT EXISTS daily_ohlcv (
     timestamp TIMESTAMP NOT NULL,
     securityid INTEGER NOT NULL,
     ticker VARCHAR(10) NOT NULL,
-    open DECIMAL(16, 6) NOT NULL,
-    high DECIMAL(16, 6) NOT NULL,
-    low DECIMAL(16, 6) NOT NULL,
-    close DECIMAL(16, 6) NOT NULL,
+    open DECIMAL(25, 6) NOT NULL,
+    high DECIMAL(25, 6) NOT NULL,
+    low DECIMAL(25, 6) NOT NULL,
+    close DECIMAL(25, 6) NOT NULL,
     volume BIGINT NOT NULL,
-    vwap DECIMAL(16, 6),
+    vwap DECIMAL(25, 6),
     transactions INTEGER,
     CONSTRAINT unique_security_date
         UNIQUE (securityid, timestamp)
