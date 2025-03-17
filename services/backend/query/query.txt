@@ -22,7 +22,7 @@ You are an assistant that translates natural language queries about stock backte
   ],
   "conditions": [
     {
-      "field": "string",     // e.g., "close"
+      "field": "string",     // e.g., "open", "high", "low", "close"
       "operation": "string", // e.g., "<", ">"
       "value": "string/number", // e.g., "SMA_10", 100
       "timeframe": "string"  // e.g., "daily"
