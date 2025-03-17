@@ -1,4 +1,4 @@
-package tools
+package tasks
 
 import (
 	"backend/utils"
@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 )
-
 // GetScreensaversResults represents a structure for handling GetScreensaversResults data.
 type GetScreensaversResults struct {
 	Ticker     string `json:"ticker"`
@@ -16,12 +15,10 @@ type GetScreensaversResults struct {
 	Timestamp  int64  `json:"timestamp"`
 	Timeframe  string `json:"timeframe"`
 }
-
 // PolygonTicker represents a structure for handling PolygonTicker data.
 type PolygonTicker struct {
 	Ticker string `json:"ticker"`
 }
-
 // PolygonSnapshot represents a structure for handling PolygonSnapshot data.
 type PolygonSnapshot struct {
 	Tickers []PolygonTicker `json:"tickers"`
@@ -59,7 +56,6 @@ func fetchPolygonSnapshot(endpoint string, apiKey string) ([]string, error) {
 
 	return tickers, nil
 }
-
 // GetScreensavers performs operations related to GetScreensavers functionality.
 func GetScreensavers(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	// Define Polygon.io endpoints for gainers and losers
@@ -75,7 +71,7 @@ func GetScreensavers(conn *utils.Conn, userId int, rawArgs json.RawMessage) (int
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch losers: %v", err)
 	}
-	fmt.Println(losers)
+    fmt.Println(losers)
 
 	// Combine gainers and losers
 	tickers := append(gainers, losers...)
@@ -103,7 +99,7 @@ func GetScreensavers(conn *utils.Conn, userId int, rawArgs json.RawMessage) (int
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %v", err)
 		}
-		result.Timestamp = 0 // Set the timestamp to zero
+		result.Timestamp = 0  // Set the timestamp to zero
 		results = append(results, result)
 	}
 
@@ -113,3 +109,4 @@ func GetScreensavers(conn *utils.Conn, userId int, rawArgs json.RawMessage) (int
 
 	return results, nil
 }
+
