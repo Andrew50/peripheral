@@ -240,9 +240,14 @@ jobs:
       - name: Install dependencies
         run: |
           cd services/worker
+          # Create and activate a virtual environment instead of using system Python
+          python -m venv .venv
+          source .venv/bin/activate
           python -m pip install --upgrade pip
           pip install flake8 black pytest
           pip install -r requirements.txt
+          # Add venv to PATH for subsequent steps
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
 
       - name: Identify changed Python files
         id: changed-py-files
@@ -274,6 +279,8 @@ jobs:
         if: steps.changed-py-files.outputs.has_changes == 'true'
         run: |
           cd services/worker
+          # Ensure virtual environment is used
+          source .venv/bin/activate
           
           # Only lint changed files
           CHANGED_FILES="${{ steps.changed-py-files.outputs.changed_files }}"
@@ -293,6 +300,8 @@ jobs:
         if: steps.changed-py-files.outputs.has_changes == 'true'
         run: |
           cd services/worker
+          # Ensure virtual environment is used
+          source .venv/bin/activate
           
           # Only check changed files
           CHANGED_FILES="${{ steps.changed-py-files.outputs.changed_files }}"
@@ -308,6 +317,9 @@ jobs:
       - name: Basic import check
         run: |
           cd services/worker
+          # Ensure virtual environment is used
+          source .venv/bin/activate
+          
           # For changed files only, or a basic check if no changes
           if [ "${{ steps.changed-py-files.outputs.has_changes }}" == "true" ]; then
             echo "Checking imports for changed files..."
