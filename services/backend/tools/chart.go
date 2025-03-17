@@ -568,7 +568,7 @@ func requestIncompleteBar(
 		tradeEnd = secondEnd
 	}
 
-	// ------------------------
+	// ----------------------``--
 	// 3) Concurrently fetch data
 	// ------------------------
 	var wg sync.WaitGroup
