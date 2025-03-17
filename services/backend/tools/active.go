@@ -1,4 +1,4 @@
-package tools
+package tasks
 
 import (
 	"backend/utils"
@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 )
-
 // GetActiveArgs represents a structure for handling GetActiveArgs data.
 type GetActiveArgs struct {
 	Timeframe       string   `json:"timeframe"`
@@ -21,7 +20,6 @@ type GetActiveArgs struct {
 	MinADR          *float64 `json:"minADR,omitempty"`
 	MaxADR          *float64 `json:"maxADR,omitempty"`
 }
-
 // StockResult represents a structure for handling StockResult data.
 type StockResult struct {
 	Ticker       string  `json:"ticker"`
@@ -30,7 +28,6 @@ type StockResult struct {
 	DollarVolume float64 `json:"dollar_volume"`
 	ADR          float64 `json:"adr"`
 }
-
 // GroupConstituent represents a structure for handling GroupConstituent data.
 type GroupConstituent struct {
 	Ticker       string  `json:"ticker"`
@@ -39,7 +36,6 @@ type GroupConstituent struct {
 	DollarVolume float64 `json:"dollar_volume"`
 	ADR          float64 `json:"adr"`
 }
-
 // GroupResult represents a structure for handling GroupResult data.
 type GroupResult struct {
 	Group        string             `json:"group"`
