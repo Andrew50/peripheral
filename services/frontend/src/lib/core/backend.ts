@@ -9,7 +9,7 @@ if (typeof window !== 'undefined') {
     // For client-side code
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
         // In development
-        base_url = 'http://localhost:5058'; // Use direct localhost connection
+        base_url = window.location.origin; // Use the current origin instead of hardcoded localhost:5058
     } else {
         // In production always use the current origin
         base_url = window.location.origin;
