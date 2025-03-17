@@ -22,6 +22,7 @@
 	import Options from '$lib/features/options.svelte';
 	import Settings from '$lib/features/settings.svelte';
 	import Newsfeed from '$lib/features/newsfeed.svelte';
+	import LLMSummary from '$lib/features/llmSummary.svelte';
 
 	// Replay logic
 	import {
@@ -73,7 +74,8 @@
 		| 'setups'
 		| 'settings'
 		| 'newsfeed'
-		| 'query';
+		| 'query'
+		| 'llm-summary';
 	interface BottomWindow {
 		id: number;
 		type: BottomWindowType;
@@ -229,7 +231,12 @@
 		initStores();
 
 		dispatchMenuChange.subscribe((menuName: string) => {
-			toggleMenu(menuName as Menu);
+			if (sidebarMenus.includes(menuName as Menu)) {
+				toggleMenu(menuName as Menu);
+			} else if (menuName === 'llm-summary') {
+				// Open the LLM summary window
+				openBottomWindow('llm-summary');
+			}
 		});
 
 		// Force profile display to update
@@ -743,6 +750,8 @@
 									<Newsfeed />
 								{:else if w.type === 'query'}
 									<Query />
+								{:else if w.type === 'llm-summary'}
+									<LLMSummary />
 								{/if}
 							</div>
 						</div>
@@ -864,6 +873,12 @@
 				on:click={() => openBottomWindow('newsfeed')}
 			>
 				News
+			</button>
+			<button
+				class="toggle-button {bottomWindows.some((w) => w.type === 'llm-summary') ? 'active' : ''}"
+				on:click={() => openBottomWindow('llm-summary')}
+			>
+				LLM Summary
 			</button>
 		</div>
 
