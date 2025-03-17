@@ -1,5 +1,6 @@
 import json, traceback, datetime, psycopg2, redis
 import sys
+from datetime import datetime as dt
 
 
 from conn import Conn, add_task_log, safe_redis_operation
@@ -40,66 +41,63 @@ def packageResponse(result, status):
     return json.dumps({"status": status, "result": result})
 
 def update_task_state(data, task_id, state):
-    """Update the state of a task"""
+    """Update task state in Redis"""
     try:
-        # Get the current task
         task_json = safe_redis_operation(data.cache.get, task_id)
         if not task_json:
-            add_task_log(data, task_id, f"Warning: Could not find task {task_id} to update state", "warning")
-            return
-        
+            return False
+
         task = json.loads(task_json)
-        
-        # Update the state
-        task["state"] = state
-        task["updatedAt"] = datetime.datetime.now().isoformat()
-        
-        # Save the updated task
-        safe_redis_operation(data.cache.set, task_id, json.dumps(task))
+        task["status"] = state
+        task["updatedAt"] = dt.now().isoformat()
+
+        safe_redis_operation(
+            data.cache.set, task_id, json.dumps(task), ex=60 * 60 * 24 * 7
+        )
+        return True
     except Exception as e:
-        add_task_log(data, task_id, f"Error updating task state for {task_id}: {e}", "error")
+        print(f"Error updating task state: {str(e)}")
+        return False
 
 def set_task_result(data, task_id, result):
-    """Set the result of a completed task"""
+    """Set task result in Redis"""
     try:
-        # Get the current task
         task_json = safe_redis_operation(data.cache.get, task_id)
         if not task_json:
-            add_task_log(data, task_id, f"Warning: Could not find task {task_id} to set result", "warning")
-            return
-        
+            return False
+
         task = json.loads(task_json)
-        
-        # Update the task
+        task["status"] = "Completed"
         task["result"] = result
-        task["state"] = "completed"
-        task["updatedAt"] = datetime.datetime.now().isoformat()
-        
-        # Save the updated task
-        safe_redis_operation(data.cache.set, task_id, json.dumps(task))
+        task["updatedAt"] = dt.now().isoformat()
+
+        safe_redis_operation(
+            data.cache.set, task_id, json.dumps(task), ex=60 * 60 * 24 * 7
+        )
+        return True
     except Exception as e:
-        add_task_log(data, task_id, f"Error setting task result for {task_id}: {e}", "error")
+        print(f"Error setting task result: {str(e)}")
+        return False
 
 def set_task_error(data, task_id, error_message):
-    """Set the error of a failed task"""
+    """Set task error in Redis"""
     try:
-        # Get the current task
         task_json = safe_redis_operation(data.cache.get, task_id)
         if not task_json:
-            add_task_log(data, task_id, f"Warning: Could not find task {task_id} to set error", "warning")
-            return
-        
+            return False
+
         task = json.loads(task_json)
-        
-        # Update the task
+        task["status"] = "Failed"
         task["error"] = error_message
-        task["state"] = "failed"
-        task["updatedAt"] = datetime.datetime.now().isoformat()
-        
-        # Save the updated task
-        safe_redis_operation(data.cache.set, task_id, json.dumps(task))
+        task["updatedAt"] = dt.now().isoformat()
+
+        safe_redis_operation(
+            data.cache.set, task_id, json.dumps(task), ex=60 * 60 * 24 * 7
+        )
+        return True
     except Exception as e:
-        add_task_log(data, task_id, f"Error setting task error for {task_id}: {e}", "error")
+        print(f"Error setting task error: {str(e)}")
+        return False
 
 def process_tasks():
     data = None
@@ -200,7 +198,7 @@ def process_tasks():
                             update_task_state(data, task_id, "running")
                             add_task_log(data, task_id, f"Starting task {func_ident}")
                             
-                            start = datetime.datetime.now()
+                            start = dt.now()
                             
                             # Execute the function if it exists in the function map
                             if func_ident in funcMap:
@@ -214,8 +212,8 @@ def process_tasks():
 
                             # Set task status to completed with result
                             set_task_result(data, task_id, result)
-                            add_task_log(data, task_id, f"Task completed in {datetime.datetime.now() - start}")
-                            add_task_log(data, task_id, f"finished {func_ident} {args} time: {datetime.datetime.now() - start}")
+                            add_task_log(data, task_id, f"Task completed in {dt.now() - start}")
+                            add_task_log(data, task_id, f"finished {func_ident} {args} time: {dt.now() - start}")
                             
                             # Ping Redis after task completion to keep connection alive
                             try:
