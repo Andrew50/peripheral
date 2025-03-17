@@ -373,7 +373,7 @@ func GetTickerDetails(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 	}
 	details, err := utils.GetTickerDetails(conn.Polygon, ticker, "now")
 	if err != nil {
-		fmt.Println("failed to get ticker details: %v", err)
+		fmt.Printf("failed to get ticker details: %v\n", err)
 		return nil, nil
 		//return nil, fmt.Errorf("failed to get ticker details: %v", err)
 	}

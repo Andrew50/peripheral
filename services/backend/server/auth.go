@@ -68,52 +68,105 @@ type SignupArgs struct {
 
 // Signup performs operations related to Signup functionality.
 func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
+	fmt.Println("=== SIGNUP ATTEMPT STARTED ===")
+	fmt.Printf("Connection pool stats - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", 
+		conn.DB.Stat().MaxConns(), 
+		conn.DB.Stat().TotalConns(), 
+		conn.DB.Stat().IdleConns(),
+		conn.DB.Stat().AcquiredConns())
+	
 	var a SignupArgs
 	if err := json.Unmarshal(rawArgs, &a); err != nil {
+		fmt.Printf("ERROR: Failed to unmarshal signup args: %v\n", err)
 		return nil, fmt.Errorf("Signup invalid args: %v", err)
 	}
+	
+	fmt.Printf("Attempting to create account for email: %s, username: %s\n", a.Email, a.Username)
 
+	// Create a timeout context to prevent hanging
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	
 	// Check if email already exists
 	var count int
-	err := conn.DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM users WHERE email=$1", a.Email).Scan(&count)
+	fmt.Println("Checking if email exists...")
+	err := conn.DB.QueryRow(ctx, "SELECT COUNT(*) FROM users WHERE email=$1", a.Email).Scan(&count)
 	if err != nil {
+		fmt.Printf("ERROR: Database query failed while checking email: %v\n", err)
+		// Print connection pool stats after error
+		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", 
+			conn.DB.Stat().MaxConns(), 
+			conn.DB.Stat().TotalConns(), 
+			conn.DB.Stat().IdleConns(),
+			conn.DB.Stat().AcquiredConns())
 		return nil, fmt.Errorf("error checking email: %v", err)
 	}
 
 	if count > 0 {
+		fmt.Printf("Email already registered: %s\n", a.Email)
 		return nil, fmt.Errorf("email already registered")
 	}
 
 	// Insert new user with auth_type='password'
 	var userID int
-	err = conn.DB.QueryRow(context.Background(),
+	fmt.Println("Inserting new user record...")
+	err = conn.DB.QueryRow(ctx,
 		"INSERT INTO users (username, email, password, auth_type) VALUES ($1, $2, $3, $4) RETURNING userId",
 		a.Username, a.Email, a.Password, "password").Scan(&userID)
 	if err != nil {
+		fmt.Printf("ERROR: Failed to create user: %v\n", err)
+		// Print connection pool stats after error
+		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", 
+			conn.DB.Stat().MaxConns(), 
+			conn.DB.Stat().TotalConns(), 
+			conn.DB.Stat().IdleConns(),
+			conn.DB.Stat().AcquiredConns())
 		return nil, fmt.Errorf("error creating user: %v", err)
 	}
+	
+	fmt.Printf("User created successfully with ID: %d\n", userID)
 
 	// Create a journal entry for the new user using the current timestamp
 	currentTime := time.Now().UTC()
-	_, err = conn.DB.Exec(context.Background(),
+	fmt.Println("Creating initial journal entry...")
+	_, err = conn.DB.Exec(ctx,
 		"INSERT INTO journals (timestamp, userId, entry) VALUES ($1, $2, $3)",
 		currentTime.Unix(), userID, "{}")
 	if err != nil {
 		// Log the error but continue with signup process
-		fmt.Printf("Error creating initial journal for user %d: %v\n", userID, err)
+		fmt.Printf("WARNING: Error creating initial journal for user %d: %v\n", userID, err)
+	} else {
+		fmt.Println("Journal entry created successfully")
 	}
 
 	// Create modified login args with the email
+	fmt.Println("Preparing login...")
 	loginArgs, err := json.Marshal(map[string]string{
 		"email":    a.Email,
 		"password": a.Password,
 	})
 	if err != nil {
+		fmt.Printf("ERROR: Failed to prepare login: %v\n", err)
 		return nil, fmt.Errorf("error preparing login: %v", err)
 	}
 
 	// Log in the new user
+	fmt.Println("Attempting to log in new user...")
 	result, err := Login(conn, loginArgs)
+	if err != nil {
+		fmt.Printf("ERROR: Login after signup failed: %v\n", err)
+	} else {
+		fmt.Println("Login successful")
+	}
+	
+	// Print final connection pool stats
+	fmt.Printf("Connection pool stats at end of signup - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", 
+		conn.DB.Stat().MaxConns(), 
+		conn.DB.Stat().TotalConns(), 
+		conn.DB.Stat().IdleConns(),
+		conn.DB.Stat().AcquiredConns())
+	fmt.Println("=== SIGNUP ATTEMPT COMPLETED ===")
+	
 	return result, err
 }
 
@@ -125,52 +178,104 @@ type LoginArgs struct {
 
 // Login performs operations related to Login functionality.
 func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
+	fmt.Println("=== LOGIN ATTEMPT STARTED ===")
+	fmt.Printf("Connection pool stats - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", 
+		conn.DB.Stat().MaxConns(), 
+		conn.DB.Stat().TotalConns(), 
+		conn.DB.Stat().IdleConns(),
+		conn.DB.Stat().AcquiredConns())
+	
 	var a LoginArgs
 	if err := json.Unmarshal(rawArgs, &a); err != nil {
+		fmt.Printf("ERROR: Failed to unmarshal login args: %v\n", err)
 		return nil, fmt.Errorf("login invalid args: %v", err)
 	}
+	
+	fmt.Printf("Login attempt for email: %s\n", a.Email)
 
+	// Create a timeout context to prevent hanging
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	
 	var resp LoginResponse
 	var userID int
 	var profilePicture sql.NullString
 	var authType string
 
 	// First check if the user exists and get their auth_type
-	err := conn.DB.QueryRow(context.Background(),
+	fmt.Println("Querying user info...")
+	err := conn.DB.QueryRow(ctx,
 		"SELECT userId, username, profile_picture, auth_type FROM users WHERE email=$1",
 		a.Email).Scan(&userID, &resp.Username, &profilePicture, &authType)
 
 	if err != nil {
+		fmt.Printf("ERROR: User lookup failed: %v\n", err)
+		// Print connection pool stats after error
+		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", 
+			conn.DB.Stat().MaxConns(), 
+			conn.DB.Stat().TotalConns(), 
+			conn.DB.Stat().IdleConns(),
+			conn.DB.Stat().AcquiredConns())
 		return nil, fmt.Errorf("invalid credentials: %v", err)
 	}
+	
+	fmt.Printf("Found user with ID: %d, username: %s, auth_type: %s\n", userID, resp.Username, authType)
 
 	// Check if this is a Google-only auth user trying to use password login
 	if authType == "google" {
+		fmt.Println("ERROR: Google-only user attempting password login")
 		return nil, fmt.Errorf("this account uses Google Sign-In. Please login with Google")
 	}
 
 	// Now verify the password for password-based or both auth types
+	fmt.Println("Verifying password...")
 	var passwordMatch bool
-	err = conn.DB.QueryRow(context.Background(),
+	err = conn.DB.QueryRow(ctx,
 		"SELECT (password = $1) FROM users WHERE userId=$2 AND (auth_type='password' OR auth_type='both')",
 		a.Password, userID).Scan(&passwordMatch)
 
 	if err != nil || !passwordMatch {
+		if err != nil {
+			fmt.Printf("ERROR: Password verification query failed: %v\n", err)
+		} else {
+			fmt.Println("ERROR: Password mismatch")
+		}
+		
+		// Print connection pool stats after error
+		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", 
+			conn.DB.Stat().MaxConns(), 
+			conn.DB.Stat().TotalConns(), 
+			conn.DB.Stat().IdleConns(),
+			conn.DB.Stat().AcquiredConns())
+		
 		return nil, fmt.Errorf("invalid credentials")
 	}
 
+	fmt.Println("Password verified, creating authentication token...")
 	token, err := createToken(userID)
 	if err != nil {
+		fmt.Printf("ERROR: Token creation failed: %v\n", err)
 		return nil, err
 	}
 	resp.Token = token
+	fmt.Println("Token created successfully")
 
 	// Set profile picture if it exists, otherwise empty string
 	if profilePicture.Valid {
 		resp.ProfilePic = profilePicture.String
+		fmt.Println("Using stored profile picture")
 	} else {
 		resp.ProfilePic = ""
+		fmt.Println("No profile picture found")
 	}
+	
+	// Print final connection pool stats
+	fmt.Printf("Connection pool stats at end of login - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", 
+		conn.DB.Stat().MaxConns(), 
+		conn.DB.Stat().TotalConns(), 
+		conn.DB.Stat().IdleConns(),
+		conn.DB.Stat().AcquiredConns())
+	fmt.Println("=== LOGIN ATTEMPT COMPLETED ===")
 
 	return resp, nil
 }
