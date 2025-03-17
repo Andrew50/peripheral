@@ -7,6 +7,7 @@ services/db/backups
 services/worker/venv
 services/backups/
 services/context/llm_context.txt
+services/frontend/package-lock.json
 
 # Python bytecode files
 __pycache__/
