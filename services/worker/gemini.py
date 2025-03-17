@@ -1,7 +1,7 @@
 import requests
 import time
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 
 class GeminiKeyInfo:
