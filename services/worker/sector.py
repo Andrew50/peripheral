@@ -1,6 +1,5 @@
 import yfinance as yf
-import requests
-from conn import Conn, set_task_context, log_message, get_timestamp, add_task_log
+from conn import Conn, set_task_context, log_message, get_timestamp
 from multiprocessing import Pool
 from datetime import datetime
 import time
