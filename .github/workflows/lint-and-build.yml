@@ -199,6 +199,32 @@ jobs:
         run: |
           cd services/frontend
           npm install
+          # Install test runner dependencies with specific versions that support ES modules
+          npm install --save-dev jest@29 @types/jest ts-jest@29 svelte-jester@2 @testing-library/svelte @testing-library/jest-dom jsdom
+          
+          # Create Jest config if it doesn't exist
+          if [ ! -f jest.config.js ]; then
+            echo "Creating Jest configuration file..."
+            echo 'export default {' > jest.config.js
+            echo '  transform: {' >> jest.config.js
+            echo '    "^.+\\.svelte$": "svelte-jester",' >> jest.config.js
+            echo '    "^.+\\.ts$": "ts-jest"' >> jest.config.js
+            echo '  },' >> jest.config.js
+            echo '  moduleFileExtensions: ["js", "ts", "svelte"],' >> jest.config.js
+            echo '  testEnvironment: "jsdom",' >> jest.config.js
+            echo '  setupFilesAfterEnv: ["@testing-library/jest-dom/extend-expect"],' >> jest.config.js
+            echo '  testMatch: ["**/*.test.ts", "**/*.test.js"],' >> jest.config.js
+            echo '  moduleNameMapper: {' >> jest.config.js
+            echo '    "^\\$lib/(.*)$": "<rootDir>/src/lib/$1"' >> jest.config.js
+            echo '  },' >> jest.config.js
+            echo '  extensionsToTreatAsEsm: [".ts", ".svelte"],' >> jest.config.js
+            echo '  globals: {' >> jest.config.js
+            echo '    "ts-jest": {' >> jest.config.js
+            echo '      useESM: true' >> jest.config.js
+            echo '    }' >> jest.config.js
+            echo '  }' >> jest.config.js
+            echo '};' >> jest.config.js
+          fi
 
       - name: Lint
         run: |
@@ -247,16 +273,13 @@ jobs:
         run: |
           cd services/frontend
           npm install
-          # Install test runner dependencies
-          npm install --save-dev jest @types/jest ts-jest
-
-      - name: Setup Jest config
-        run: |
-          cd services/frontend
+          # Install test runner dependencies with specific versions that support ES modules
+          npm install --save-dev jest@29 @types/jest ts-jest@29 svelte-jester@2 @testing-library/svelte @testing-library/jest-dom jsdom
+          
           # Create Jest config if it doesn't exist
           if [ ! -f jest.config.js ]; then
             echo "Creating Jest configuration file..."
-            echo 'module.exports = {' > jest.config.js
+            echo 'export default {' > jest.config.js
             echo '  transform: {' >> jest.config.js
             echo '    "^.+\\.svelte$": "svelte-jester",' >> jest.config.js
             echo '    "^.+\\.ts$": "ts-jest"' >> jest.config.js
@@ -267,17 +290,20 @@ jobs:
             echo '  testMatch: ["**/*.test.ts", "**/*.test.js"],' >> jest.config.js
             echo '  moduleNameMapper: {' >> jest.config.js
             echo '    "^\\$lib/(.*)$": "<rootDir>/src/lib/$1"' >> jest.config.js
+            echo '  },' >> jest.config.js
+            echo '  extensionsToTreatAsEsm: [".ts", ".svelte"],' >> jest.config.js
+            echo '  globals: {' >> jest.config.js
+            echo '    "ts-jest": {' >> jest.config.js
+            echo '      useESM: true' >> jest.config.js
+            echo '    }' >> jest.config.js
             echo '  }' >> jest.config.js
             echo '};' >> jest.config.js
           fi
-          
-          # Install additional dependencies needed for testing Svelte components
-          npm install --save-dev svelte-jester @testing-library/svelte @testing-library/jest-dom jsdom
 
       - name: Run tests
         run: |
           cd services/frontend
-          # Run Jest directly without requiring a package.json script
-          npx jest
+          # Run tests using the npm script that handles ES modules
+          npm test
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }} 
