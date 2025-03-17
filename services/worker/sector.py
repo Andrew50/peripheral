@@ -1,7 +1,7 @@
 import yfinance as yf
 from conn import Conn, set_task_context, log_message, get_timestamp
 from multiprocessing import Pool
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 import random
 

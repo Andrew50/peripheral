@@ -1,6 +1,6 @@
 import os
 import random
-import datetime
+from datetime import datetime, timedelta
 import numpy as np
 import tensorflow as tf
 import keras_cv
@@ -255,15 +255,15 @@ def getSample(
     b = 3  # exclusive interval scaling factor
     # Define the time delta based on the interval unit (days, weeks, months, etc.)
     if "d" in interval:
-        timedelta = datetime.timedelta(days=b * int(interval[:-1]))
+        timedelta = timedelta(days=b * int(interval[:-1]))
     elif "w" in interval:
-        timedelta = datetime.timedelta(weeks=b * int(interval[:-1]))
+        timedelta = timedelta(weeks=b * int(interval[:-1]))
     elif "m" in interval:
-        timedelta = datetime.timedelta(weeks=b * int(interval[:-1]))
+        timedelta = timedelta(weeks=b * int(interval[:-1]))
     elif "h" in interval:
-        timedelta = datetime.timedelta(hours=b * int(interval[:-1]))
+        timedelta = timedelta(hours=b * int(interval[:-1]))
     else:
-        timedelta = datetime.timedelta(minutes=b * int(interval))
+        timedelta = timedelta(minutes=b * int(interval))
 
     with data.db.cursor() as cursor:
         # Select all positive (TRUE label) samples for the given setupId

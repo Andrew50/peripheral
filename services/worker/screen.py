@@ -1,5 +1,5 @@
 import requests
-import datetime
+from datetime import datetime, timedelta
 from data import getTensor
 
 
@@ -7,7 +7,7 @@ def getHistoricalTickers(conn, timestamp):
     if isinstance(
         timestamp, (int, float)
     ):  # Assuming timestamp is a Unix timestamp in seconds
-        timestamp = datetime.datetime.fromtimestamp(timestamp)
+        timestamp = datetime.fromtimestamp(timestamp)
     with conn.db.cursor() as cursor:
         cursor.execute(
             """
