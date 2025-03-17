@@ -30,11 +30,28 @@ var privateFunc = map[string]Tool{
 	"getSimilarInstances": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getSimilarInstances",
-			Description: "",
+			Description: "Retrieves similar securities based on sector, industry, and market cap for a given security",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"ticker": {
+						Type:        genai.TypeString,
+						Description: "The ticker symbol of the security",
+					},
+					"securityId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the security to find similar instances for",
+					},
+					"timestamp": {
+						Type:        genai.TypeInteger,
+						Description: "The timestamp (in milliseconds) to use as reference point",
+					},
+					"timeframe": {
+						Type:        genai.TypeString,
+						Description: "The timeframe to use for the chart data (e.g., '1d', '1h')",
+					},
+				},
+				Required: []string{"ticker", "securityId", "timestamp", "timeframe"},
 			},
 		},
 		Function: tasks.GetSimilarInstances,
@@ -42,11 +59,16 @@ var privateFunc = map[string]Tool{
 	"getSecuritiesFromTicker": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getSecuritiesFromTicker",
-			Description: "",
+			Description: "Retrieves securities information based on a ticker symbol",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"ticker": {
+						Type:        genai.TypeString,
+						Description: "The ticker symbol to search for",
+					},
+				},
+				Required: []string{"ticker"},
 			},
 		},
 		Function: tasks.GetSecuritiesFromTicker,
@@ -54,7 +76,7 @@ var privateFunc = map[string]Tool{
 	"getCurrentTicker": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getCurrentTicker",
-			Description: "",
+			Description: "Retrieves the current ticker information for the user's active session",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -66,11 +88,16 @@ var privateFunc = map[string]Tool{
 	"getTickerMenuDetails": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getTickerMenuDetails",
-			Description: "",
+			Description: "Retrieves detailed information for the ticker menu display",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"ticker": {
+						Type:        genai.TypeString,
+						Description: "The ticker symbol to get details for",
+					},
+				},
+				Required: []string{"ticker"},
 			},
 		},
 		Function: tasks.GetTickerMenuDetails,
@@ -78,11 +105,19 @@ var privateFunc = map[string]Tool{
 	"getIcons": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getIcons",
-			Description: "",
+			Description: "Retrieves icon URLs for securities",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"tickers": {
+						Type:        genai.TypeArray,
+						Description: "List of ticker symbols to get icons for",
+						Items: &genai.Schema{
+							Type: genai.TypeString,
+						},
+					},
+				},
+				Required: []string{"tickers"},
 			},
 		},
 		Function: tasks.GetIcons,
@@ -92,11 +127,28 @@ var privateFunc = map[string]Tool{
 	"getChartData": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getChartData",
-			Description: "",
+			Description: "Retrieves price chart data for a security",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"securityId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the security to get chart data for",
+					},
+					"timeframe": {
+						Type:        genai.TypeString,
+						Description: "The timeframe for the chart data (e.g., '1d', '1h')",
+					},
+					"from": {
+						Type:        genai.TypeInteger,
+						Description: "The start timestamp in milliseconds",
+					},
+					"to": {
+						Type:        genai.TypeInteger,
+						Description: "The end timestamp in milliseconds",
+					},
+				},
+				Required: []string{"securityId", "timeframe", "from", "to"},
 			},
 		},
 		Function: tasks.GetChartData,
@@ -105,7 +157,7 @@ var privateFunc = map[string]Tool{
 	"getStudies": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getStudies",
-			Description: "",
+			Description: "Retrieves all study entries for the current user",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -118,7 +170,7 @@ var privateFunc = map[string]Tool{
 	"newStudy": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "newStudy",
-			Description: "",
+			Description: "Creates a new study entry for the current user",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -130,7 +182,7 @@ var privateFunc = map[string]Tool{
 	"saveStudy": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "saveStudy",
-			Description: "",
+			Description: "Saves content for an existing study entry",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -142,7 +194,7 @@ var privateFunc = map[string]Tool{
 	"deleteStudy": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "deleteStudy",
-			Description: "",
+			Description: "Deletes a study entry for the current user",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -154,7 +206,7 @@ var privateFunc = map[string]Tool{
 	"getStudyEntry": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getStudyEntry",
-			Description: "",
+			Description: "Retrieves the content of a specific study entry",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -166,7 +218,7 @@ var privateFunc = map[string]Tool{
 	"completeStudy": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "completeStudy",
-			Description: "",
+			Description: "Marks a study entry as completed or not completed",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -178,7 +230,7 @@ var privateFunc = map[string]Tool{
 	"setStudySetup": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "setStudySetup",
-			Description: "",
+			Description: "Associates a setup configuration with a study entry",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -191,7 +243,7 @@ var privateFunc = map[string]Tool{
 	"getJournals": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getJournals",
-			Description: "",
+			Description: "Retrieves all journal entries for the current user",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -203,11 +255,20 @@ var privateFunc = map[string]Tool{
 	"saveJournal": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "saveJournal",
-			Description: "",
+			Description: "Saves content for an existing journal entry",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"id": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the journal entry to update",
+					},
+					"entry": {
+						Type:        genai.TypeObject,
+						Description: "The content of the journal entry in JSON format",
+					},
+				},
+				Required: []string{"id", "entry"},
 			},
 		},
 		Function: tasks.SaveJournal,
@@ -215,11 +276,16 @@ var privateFunc = map[string]Tool{
 	"deleteJournal": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "deleteJournal",
-			Description: "",
+			Description: "Deletes a journal entry for the current user",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"id": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the journal entry to delete",
+					},
+				},
+				Required: []string{"id"},
 			},
 		},
 		Function: tasks.DeleteJournal,
@@ -227,11 +293,16 @@ var privateFunc = map[string]Tool{
 	"getJournalEntry": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getJournalEntry",
-			Description: "",
+			Description: "Retrieves the content of a specific journal entry",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"journalId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the journal entry to retrieve",
+					},
+				},
+				Required: []string{"journalId"},
 			},
 		},
 		Function: tasks.GetJournalEntry,
@@ -239,11 +310,20 @@ var privateFunc = map[string]Tool{
 	"completeJournal": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "completeJournal",
-			Description: "",
+			Description: "Marks a journal entry as completed or not completed",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"id": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the journal entry to update",
+					},
+					"completed": {
+						Type:        genai.TypeBoolean,
+						Description: "Whether the journal entry is completed",
+					},
+				},
+				Required: []string{"id", "completed"},
 			},
 		},
 		Function: tasks.CompleteJournal,
@@ -252,7 +332,7 @@ var privateFunc = map[string]Tool{
 	"getScreensavers": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getScreensavers",
-			Description: "",
+			Description: "Retrieves a list of trending securities for the screensaver display",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -265,7 +345,7 @@ var privateFunc = map[string]Tool{
 	"getWatchlists": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getWatchlists",
-			Description: "",
+			Description: "Retrieves all watchlists for the current user",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -277,11 +357,16 @@ var privateFunc = map[string]Tool{
 	"deleteWatchlist": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "deleteWatchlist",
-			Description: "",
+			Description: "Deletes a watchlist for the current user",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"watchlistId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the watchlist to delete",
+					},
+				},
+				Required: []string{"watchlistId"},
 			},
 		},
 		Function: tasks.DeleteWatchlist,
@@ -289,11 +374,16 @@ var privateFunc = map[string]Tool{
 	"newWatchlist": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "newWatchlist",
-			Description: "",
+			Description: "Creates a new watchlist for the current user",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"watchlistName": {
+						Type:        genai.TypeString,
+						Description: "The name of the watchlist to create",
+					},
+				},
+				Required: []string{"watchlistName"},
 			},
 		},
 		Function: tasks.NewWatchlist,
@@ -301,11 +391,16 @@ var privateFunc = map[string]Tool{
 	"getWatchlistItems": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getWatchlistItems",
-			Description: "",
+			Description: "Retrieves all securities in a specific watchlist",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"watchlistId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the watchlist to get items for",
+					},
+				},
+				Required: []string{"watchlistId"},
 			},
 		},
 		Function: tasks.GetWatchlistItems,
@@ -313,11 +408,16 @@ var privateFunc = map[string]Tool{
 	"deleteWatchlistItem": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "deleteWatchlistItem",
-			Description: "",
+			Description: "Removes a security from a watchlist",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"watchlistItemId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the watchlist item to delete",
+					},
+				},
+				Required: []string{"watchlistItemId"},
 			},
 		},
 		Function: tasks.DeleteWatchlistItem,
@@ -325,11 +425,20 @@ var privateFunc = map[string]Tool{
 	"newWatchlistItem": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "newWatchlistItem",
-			Description: "",
+			Description: "Adds a security to a watchlist",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"watchlistId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the watchlist to add the security to",
+					},
+					"securityId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the security to add to the watchlist",
+					},
+				},
+				Required: []string{"watchlistId", "securityId"},
 			},
 		},
 		Function: tasks.NewWatchlistItem,
@@ -338,11 +447,16 @@ var privateFunc = map[string]Tool{
 	"getPrevClose": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getPrevClose",
-			Description: "",
+			Description: "Retrieves the previous closing price for a security",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"ticker": {
+						Type:        genai.TypeString,
+						Description: "The ticker symbol to get the previous close for",
+					},
+				},
+				Required: []string{"ticker"},
 			},
 		},
 		Function: tasks.GetPrevClose,
@@ -352,7 +466,7 @@ var privateFunc = map[string]Tool{
 	"getSettings": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getSettings",
-			Description: "",
+			Description: "Retrieves the user settings for the current user",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -364,11 +478,16 @@ var privateFunc = map[string]Tool{
 	"setSettings": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "setSettings",
-			Description: "",
+			Description: "Updates the user settings for the current user",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"settings": {
+						Type:        genai.TypeObject,
+						Description: "The settings data in JSON format",
+					},
+				},
+				Required: []string{"settings"},
 			},
 		},
 		Function: tasks.SetSettings,
@@ -377,11 +496,16 @@ var privateFunc = map[string]Tool{
 	"updateProfilePicture": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "updateProfilePicture",
-			Description: "",
+			Description: "Updates the profile picture for the current user",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"imageData": {
+						Type:        genai.TypeString,
+						Description: "The base64-encoded image data for the profile picture",
+					},
+				},
+				Required: []string{"imageData"},
 			},
 		},
 		Function: UpdateProfilePicture,
@@ -390,7 +514,7 @@ var privateFunc = map[string]Tool{
 	"getExchanges": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getExchanges",
-			Description: "",
+			Description: "Retrieves a list of stock exchanges and their MIC codes from Polygon.io",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -403,7 +527,7 @@ var privateFunc = map[string]Tool{
 	"getSetups": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getSetups",
-			Description: "",
+			Description: "Retrieves all setup configurations for the current user",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -415,11 +539,40 @@ var privateFunc = map[string]Tool{
 	"newSetup": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "newSetup",
-			Description: "",
+			Description: "Creates a new setup configuration for the current user",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"name": {
+						Type:        genai.TypeString,
+						Description: "The name of the setup",
+					},
+					"timeframe": {
+						Type:        genai.TypeString,
+						Description: "The timeframe for the setup (e.g., '1d', '1h')",
+					},
+					"bars": {
+						Type:        genai.TypeInteger,
+						Description: "The number of bars to consider for the setup",
+					},
+					"threshold": {
+						Type:        genai.TypeInteger,
+						Description: "The threshold value for the setup",
+					},
+					"dolvol": {
+						Type:        genai.TypeNumber,
+						Description: "The dollar volume filter for the setup",
+					},
+					"adr": {
+						Type:        genai.TypeNumber,
+						Description: "The Average Daily Range filter for the setup",
+					},
+					"mcap": {
+						Type:        genai.TypeNumber,
+						Description: "The market capitalization filter for the setup",
+					},
+				},
+				Required: []string{"name", "timeframe"},
 			},
 		},
 		Function: tasks.NewSetup,
@@ -427,11 +580,44 @@ var privateFunc = map[string]Tool{
 	"setSetup": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "setSetup",
-			Description: "",
+			Description: "Updates an existing setup configuration for the current user",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"setupId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the setup to update",
+					},
+					"name": {
+						Type:        genai.TypeString,
+						Description: "The name of the setup",
+					},
+					"timeframe": {
+						Type:        genai.TypeString,
+						Description: "The timeframe for the setup (e.g., '1d', '1h')",
+					},
+					"bars": {
+						Type:        genai.TypeInteger,
+						Description: "The number of bars to consider for the setup",
+					},
+					"threshold": {
+						Type:        genai.TypeInteger,
+						Description: "The threshold value for the setup",
+					},
+					"dolvol": {
+						Type:        genai.TypeNumber,
+						Description: "The dollar volume filter for the setup",
+					},
+					"adr": {
+						Type:        genai.TypeNumber,
+						Description: "The Average Daily Range filter for the setup",
+					},
+					"mcap": {
+						Type:        genai.TypeNumber,
+						Description: "The market capitalization filter for the setup",
+					},
+				},
+				Required: []string{"setupId", "name", "timeframe"},
 			},
 		},
 		Function: tasks.SetSetup,
@@ -439,11 +625,16 @@ var privateFunc = map[string]Tool{
 	"deleteSetup": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "deleteSetup",
-			Description: "",
+			Description: "Deletes a setup configuration for the current user",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"setupId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the setup to delete",
+					},
+				},
+				Required: []string{"setupId"},
 			},
 		},
 		Function: tasks.DeleteSetup,
@@ -454,7 +645,7 @@ var privateFunc = map[string]Tool{
 	"labelTrainingQueueInstance": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "labelTrainingQueueInstance",
-			Description: "",
+			Description: "Labels a training instance in the queue",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -466,7 +657,7 @@ var privateFunc = map[string]Tool{
 	"getTrainingQueue": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getTrainingQueue",
-			Description: "",
+			Description: "Retrieves the current training queue instances",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -478,7 +669,7 @@ var privateFunc = map[string]Tool{
 	"setSample": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "setSample",
-			Description: "",
+			Description: "Sets a sample for training purposes",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -493,7 +684,7 @@ var privateFunc = map[string]Tool{
 	"getAlerts": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getAlerts",
-			Description: "",
+			Description: "Retrieves all alerts for the current user",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -505,7 +696,7 @@ var privateFunc = map[string]Tool{
 	"getAlertLogs": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getAlertLogs",
-			Description: "",
+			Description: "Retrieves the history of triggered alerts for the current user",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -517,11 +708,36 @@ var privateFunc = map[string]Tool{
 	"newAlert": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "newAlert",
-			Description: "",
+			Description: "Creates a new alert for the current user",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"alertType": {
+						Type:        genai.TypeString,
+						Description: "The type of alert (price, setup, or algo)",
+					},
+					"price": {
+						Type:        genai.TypeNumber,
+						Description: "The price threshold for a price alert (required for price alerts)",
+					},
+					"securityId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the security for a price alert (required for price alerts)",
+					},
+					"setupId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the setup for a setup alert (required for setup alerts)",
+					},
+					"ticker": {
+						Type:        genai.TypeString,
+						Description: "The ticker symbol for a price alert",
+					},
+					"algoId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the algorithm for an algo alert (required for algo alerts)",
+					},
+				},
+				Required: []string{"alertType"},
 			},
 		},
 		Function: tasks.NewAlert,
@@ -529,11 +745,16 @@ var privateFunc = map[string]Tool{
 	"deleteAlert": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "deleteAlert",
-			Description: "",
+			Description: "Deletes an alert for the current user",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"alertId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the alert to delete",
+					},
+				},
+				Required: []string{"alertId"},
 			},
 		},
 		Function: tasks.DeleteAlert,
@@ -549,11 +770,28 @@ var privateFunc = map[string]Tool{
 	"setHorizontalLine": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "setHorizontalLine",
-			Description: "",
+			Description: "Creates a new horizontal line on a chart",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"securityId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the security to add the horizontal line to",
+					},
+					"price": {
+						Type:        genai.TypeNumber,
+						Description: "The price level for the horizontal line",
+					},
+					"color": {
+						Type:        genai.TypeString,
+						Description: "The color of the horizontal line (hex format, defaults to #FFFFFF)",
+					},
+					"lineWidth": {
+						Type:        genai.TypeInteger,
+						Description: "The width of the horizontal line in pixels (defaults to 1)",
+					},
+				},
+				Required: []string{"securityId", "price"},
 			},
 		},
 		Function: tasks.SetHorizontalLine,
@@ -561,11 +799,16 @@ var privateFunc = map[string]Tool{
 	"getHorizontalLines": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getHorizontalLines",
-			Description: "",
+			Description: "Retrieves all horizontal lines for a specific security",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"securityId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the security to get horizontal lines for",
+					},
+				},
+				Required: []string{"securityId"},
 			},
 		},
 		Function: tasks.GetHorizontalLines,
@@ -573,11 +816,16 @@ var privateFunc = map[string]Tool{
 	"deleteHorizontalLine": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "deleteHorizontalLine",
-			Description: "",
+			Description: "Deletes a horizontal line from a chart",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"id": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the horizontal line to delete",
+					},
+				},
+				Required: []string{"id"},
 			},
 		},
 		Function: tasks.DeleteHorizontalLine,
@@ -585,11 +833,32 @@ var privateFunc = map[string]Tool{
 	"updateHorizontalLine": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "updateHorizontalLine",
-			Description: "",
+			Description: "Updates an existing horizontal line on a chart",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"id": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the horizontal line to update",
+					},
+					"securityId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the security the horizontal line belongs to",
+					},
+					"price": {
+						Type:        genai.TypeNumber,
+						Description: "The new price level for the horizontal line",
+					},
+					"color": {
+						Type:        genai.TypeString,
+						Description: "The new color of the horizontal line (hex format)",
+					},
+					"lineWidth": {
+						Type:        genai.TypeInteger,
+						Description: "The new width of the horizontal line in pixels",
+					},
+				},
+				Required: []string{"id", "securityId", "price"},
 			},
 		},
 		Function: tasks.UpdateHorizontalLine,
@@ -598,7 +867,7 @@ var privateFunc = map[string]Tool{
 	"getActive": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getActive",
-			Description: "",
+			Description: "Retrieves a list of active securities",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -611,7 +880,7 @@ var privateFunc = map[string]Tool{
 	"getSecurityClassifications": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getSecurityClassifications",
-			Description: "",
+			Description: "Retrieves sector and industry classifications for securities",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -623,11 +892,16 @@ var privateFunc = map[string]Tool{
 	"getLatestEdgarFilings": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getLatestEdgarFilings",
-			Description: "",
+			Description: "Retrieves the latest SEC EDGAR filings for a security",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"securityId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the security to get filings for",
+					},
+				},
+				Required: []string{"securityId"},
 			},
 		},
 		Function: tasks.GetLatestEdgarFilings,
@@ -635,11 +909,28 @@ var privateFunc = map[string]Tool{
 	"getChartEvents": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getChartEvents",
-			Description: "",
+			Description: "Retrieves events (splits, dividends, SEC filings) for a security within a time range",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"securityId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the security to get events for",
+					},
+					"from": {
+						Type:        genai.TypeInteger,
+						Description: "The start timestamp in milliseconds",
+					},
+					"to": {
+						Type:        genai.TypeInteger,
+						Description: "The end timestamp in milliseconds",
+					},
+					"includeSECFilings": {
+						Type:        genai.TypeBoolean,
+						Description: "Whether to include SEC filings in the results",
+					},
+				},
+				Required: []string{"securityId", "from", "to"},
 			},
 		},
 		Function: tasks.GetChartEvents,
@@ -649,11 +940,24 @@ var privateFunc = map[string]Tool{
 	"grab_user_trades": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "grab_user_trades",
-			Description: "",
+			Description: "Retrieves all trades for the current user with optional filtering",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"ticker": {
+						Type:        genai.TypeString,
+						Description: "Optional ticker symbol to filter trades by",
+					},
+					"startDate": {
+						Type:        genai.TypeString,
+						Description: "Optional start date to filter trades (format: YYYY-MM-DD)",
+					},
+					"endDate": {
+						Type:        genai.TypeString,
+						Description: "Optional end date to filter trades (format: YYYY-MM-DD)",
+					},
+				},
+				Required: []string{},
 			},
 		},
 		Function: tasks.GrabUserTrades,
@@ -661,11 +965,24 @@ var privateFunc = map[string]Tool{
 	"get_trade_statistics": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "get_trade_statistics",
-			Description: "",
+			Description: "Retrieves trading performance statistics for the current user",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"startDate": {
+						Type:        genai.TypeString,
+						Description: "Optional start date to filter statistics (format: YYYY-MM-DD)",
+					},
+					"endDate": {
+						Type:        genai.TypeString,
+						Description: "Optional end date to filter statistics (format: YYYY-MM-DD)",
+					},
+					"ticker": {
+						Type:        genai.TypeString,
+						Description: "Optional ticker symbol to filter statistics by",
+					},
+				},
+				Required: []string{},
 			},
 		},
 		Function: tasks.GetTradeStatistics,
@@ -673,11 +990,20 @@ var privateFunc = map[string]Tool{
 	"get_ticker_performance": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "get_ticker_performance",
-			Description: "",
+			Description: "Retrieves detailed performance statistics for a specific ticker",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"ticker": {
+						Type:        genai.TypeString,
+						Description: "The ticker symbol to get performance statistics for",
+					},
+					"securityId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the security to get performance statistics for",
+					},
+				},
+				Required: []string{"ticker", "securityId"},
 			},
 		},
 		Function: tasks.GetTickerPerformance,
@@ -685,7 +1011,7 @@ var privateFunc = map[string]Tool{
 	"delete_all_user_trades": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "delete_all_user_trades",
-			Description: "",
+			Description: "Deletes all trade records for the current user",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
@@ -697,13 +1023,216 @@ var privateFunc = map[string]Tool{
 	"handle_trade_upload": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "handle_trade_upload",
-			Description: "",
+			Description: "Processes and imports trade data from a CSV file",
 			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-				Required:   []string{},
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"csvData": {
+						Type:        genai.TypeString,
+						Description: "The CSV trade data to process and import",
+					},
+					"broker": {
+						Type:        genai.TypeString,
+						Description: "The broker name for the trade data (e.g., 'interactive_brokers', 'td_ameritrade')",
+					},
+				},
+				Required: []string{"csvData", "broker"},
 			},
 		},
 		Function: tasks.HandleTradeUpload,
+	},
+
+	// Notes-related functions
+	"get_notes": {
+		FunctionDeclaration: genai.FunctionDeclaration{
+			Name:        "get_notes",
+			Description: "Retrieves notes for the current user with optional filtering",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"category": {
+						Type:        genai.TypeString,
+						Description: "Optional category to filter notes by",
+					},
+					"tags": {
+						Type:        genai.TypeArray,
+						Description: "Optional array of tags to filter notes by",
+						Items: &genai.Schema{
+							Type: genai.TypeString,
+						},
+					},
+					"isPinned": {
+						Type:        genai.TypeBoolean,
+						Description: "Optional filter for pinned notes",
+					},
+					"isArchived": {
+						Type:        genai.TypeBoolean,
+						Description: "Optional filter for archived notes",
+					},
+				},
+				Required: []string{},
+			},
+		},
+		Function: tasks.GetNotes,
+	},
+	"get_note": {
+		FunctionDeclaration: genai.FunctionDeclaration{
+			Name:        "get_note",
+			Description: "Retrieves a single note by ID",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"noteId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the note to retrieve",
+					},
+				},
+				Required: []string{"noteId"},
+			},
+		},
+		Function: tasks.GetNote,
+	},
+	"create_note": {
+		FunctionDeclaration: genai.FunctionDeclaration{
+			Name:        "create_note",
+			Description: "Creates a new note for the user",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"title": {
+						Type:        genai.TypeString,
+						Description: "The title of the note",
+					},
+					"content": {
+						Type:        genai.TypeString,
+						Description: "The content of the note",
+					},
+					"category": {
+						Type:        genai.TypeString,
+						Description: "Optional category for the note",
+					},
+					"tags": {
+						Type:        genai.TypeArray,
+						Description: "Optional array of tags for the note",
+						Items: &genai.Schema{
+							Type: genai.TypeString,
+						},
+					},
+					"isPinned": {
+						Type:        genai.TypeBoolean,
+						Description: "Whether the note is pinned",
+					},
+					"isArchived": {
+						Type:        genai.TypeBoolean,
+						Description: "Whether the note is archived",
+					},
+				},
+				Required: []string{"title"},
+			},
+		},
+		Function: tasks.CreateNote,
+	},
+	"update_note": {
+		FunctionDeclaration: genai.FunctionDeclaration{
+			Name:        "update_note",
+			Description: "Updates an existing note",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"noteId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the note to update",
+					},
+					"title": {
+						Type:        genai.TypeString,
+						Description: "The updated title of the note",
+					},
+					"content": {
+						Type:        genai.TypeString,
+						Description: "The updated content of the note",
+					},
+					"category": {
+						Type:        genai.TypeString,
+						Description: "The updated category for the note",
+					},
+					"tags": {
+						Type:        genai.TypeArray,
+						Description: "The updated array of tags for the note",
+						Items: &genai.Schema{
+							Type: genai.TypeString,
+						},
+					},
+					"isPinned": {
+						Type:        genai.TypeBoolean,
+						Description: "Whether the note is pinned",
+					},
+					"isArchived": {
+						Type:        genai.TypeBoolean,
+						Description: "Whether the note is archived",
+					},
+				},
+				Required: []string{"noteId", "title"},
+			},
+		},
+		Function: tasks.UpdateNote,
+	},
+	"delete_note": {
+		FunctionDeclaration: genai.FunctionDeclaration{
+			Name:        "delete_note",
+			Description: "Deletes a note",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"noteId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the note to delete",
+					},
+				},
+				Required: []string{"noteId"},
+			},
+		},
+		Function: tasks.DeleteNote,
+	},
+	"toggle_note_pin": {
+		FunctionDeclaration: genai.FunctionDeclaration{
+			Name:        "toggle_note_pin",
+			Description: "Toggles the pinned status of a note",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"noteId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the note to toggle pin status",
+					},
+					"isPinned": {
+						Type:        genai.TypeBoolean,
+						Description: "The new pinned status",
+					},
+				},
+				Required: []string{"noteId", "isPinned"},
+			},
+		},
+		Function: tasks.ToggleNotePin,
+	},
+	"toggle_note_archive": {
+		FunctionDeclaration: genai.FunctionDeclaration{
+			Name:        "toggle_note_archive",
+			Description: "Toggles the archived status of a note",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"noteId": {
+						Type:        genai.TypeInteger,
+						Description: "The ID of the note to toggle archive status",
+					},
+					"isArchived": {
+						Type:        genai.TypeBoolean,
+						Description: "The new archived status",
+					},
+				},
+				Required: []string{"noteId", "isArchived"},
+			},
+		},
+		Function: tasks.ToggleNoteArchive,
 	},
 }
