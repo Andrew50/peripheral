@@ -411,4 +411,27 @@ func GetDailyOpen(client *polygon.Client, ticker string, referenceTime time.Time
 	return GetMostRecentRegularClose(client, ticker, startOfDay.Add(-time.Nanosecond))
 }
 
+func GetDailyOHLCV(client *polygon.Client, date string, ctx context.Context) (*models.GetGroupedDailyAggsResponse, error) {
+
+	on, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing date: %v", err)
+	}
+	params := &models.GetGroupedDailyAggsParams{
+		Date: models.Date(on),
+		MarketType: "stocks",
+		Locale: "us",
+	}
+	res, err := client.GetGroupedDailyAggs(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("error getting grouped daily aggs: %v", err)
+	}
+	return res, nil
+}
+
+
+
+
+
+
 // /quote.go
