@@ -1,6 +1,6 @@
 import os
 import random
-import datetime
+from datetime import timedelta
 import numpy as np
 import tensorflow as tf
 import keras_cv
@@ -255,15 +255,15 @@ def getSample(
     b = 3  # exclusive interval scaling factor
     # Define the time delta based on the interval unit (days, weeks, months, etc.)
     if "d" in interval:
-        timedelta = datetime.timedelta(days=b * int(interval[:-1]))
+        time_delta = timedelta(days=b * int(interval[:-1]))
     elif "w" in interval:
-        timedelta = datetime.timedelta(weeks=b * int(interval[:-1]))
+        time_delta = timedelta(weeks=b * int(interval[:-1]))
     elif "m" in interval:
-        timedelta = datetime.timedelta(weeks=b * int(interval[:-1]))
+        time_delta = timedelta(weeks=b * int(interval[:-1]))
     elif "h" in interval:
-        timedelta = datetime.timedelta(hours=b * int(interval[:-1]))
+        time_delta = timedelta(hours=b * int(interval[:-1]))
     else:
-        timedelta = datetime.timedelta(minutes=b * int(interval))
+        time_delta = timedelta(minutes=b * int(interval))
 
     with data.db.cursor() as cursor:
         # Select all positive (TRUE label) samples for the given setupId
@@ -310,8 +310,8 @@ def getSample(
                 WHERE s.securityId = {securityId}
                 AND s.setupId = {setupID}
                 AND s.label IS FALSE
-                AND s.timestamp >= '{max(minDate, timestamp - timedelta)}'
-                AND (sec.maxDate IS NULL OR s.timestamp < '{min(maxDate or timestamp + timedelta, timestamp + timedelta)}'))
+                AND s.timestamp >= '{max(minDate, timestamp - time_delta)}'
+                AND (sec.maxDate IS NULL OR s.timestamp < '{min(maxDate or timestamp + time_delta, timestamp + time_delta)}'))
                 """
                 )
 
@@ -348,8 +348,8 @@ def getSample(
              WHERE s.securityId = {securityId}
              AND s.setupId = {setupID}
              AND s.label IS FALSE
-             AND s.timestamp >= '{max(minDate, timestamp - timedelta)}'
-             AND (sec.maxDate IS NULL OR s.timestamp < '{min(maxDate or timestamp + timedelta, timestamp + timedelta)}'))
+             AND s.timestamp >= '{max(minDate, timestamp - time_delta)}'
+             AND (sec.maxDate IS NULL OR s.timestamp < '{min(maxDate or timestamp + time_delta, timestamp + time_delta)}'))
             """)
         
         # Combine all queries with UNION
