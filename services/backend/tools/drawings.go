@@ -1,4 +1,4 @@
-package tasks
+package tools
 
 import (
 	"backend/utils"
@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 )
+
 // HorizontalLine represents a structure for handling HorizontalLine data.
 type HorizontalLine struct {
 	Id         int     `json:"id"`
@@ -14,10 +15,12 @@ type HorizontalLine struct {
 	Color      string  `json:"color"`
 	LineWidth  int     `json:"lineWidth"`
 }
+
 // GetHorizontalLinesArgs represents a structure for handling GetHorizontalLinesArgs data.
 type GetHorizontalLinesArgs struct {
 	SecurityID int `json:"securityId"`
 }
+
 // GetHorizontalLines performs operations related to GetHorizontalLines functionality.
 func GetHorizontalLines(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetHorizontalLinesArgs
@@ -45,10 +48,12 @@ func GetHorizontalLines(conn *utils.Conn, userId int, rawArgs json.RawMessage) (
 
 	return lines, nil
 }
+
 // DeleteHorizontalLineArgs represents a structure for handling DeleteHorizontalLineArgs data.
 type DeleteHorizontalLineArgs struct {
 	Id int `json:"id"`
 }
+
 // DeleteHorizontalLine performs operations related to DeleteHorizontalLine functionality.
 func DeleteHorizontalLine(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteHorizontalLineArgs
@@ -64,6 +69,7 @@ func DeleteHorizontalLine(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 	}
 	return nil, nil
 }
+
 // SetHorizontalLine performs operations related to SetHorizontalLine functionality.
 func SetHorizontalLine(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args HorizontalLine // won't have id
@@ -89,6 +95,7 @@ func SetHorizontalLine(conn *utils.Conn, userId int, rawArgs json.RawMessage) (i
 	}
 	return id, nil
 }
+
 // UpdateHorizontalLineArgs represents a structure for handling UpdateHorizontalLineArgs data.
 type UpdateHorizontalLineArgs struct {
 	Id         int     `json:"id"`
@@ -97,6 +104,7 @@ type UpdateHorizontalLineArgs struct {
 	Color      string  `json:"color"`
 	LineWidth  int     `json:"lineWidth"`
 }
+
 // UpdateHorizontalLine performs operations related to UpdateHorizontalLine functionality.
 func UpdateHorizontalLine(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args UpdateHorizontalLineArgs
