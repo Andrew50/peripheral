@@ -148,4 +148,12 @@ export type NoteFilter = {
     tags?: string[];
     isPinned?: boolean;
     isArchived?: boolean;
+    searchQuery?: string;
+};
+
+export type SearchResult = {
+    note: Note;
+    rank: number;
+    titleHighlight: string;
+    contentHighlight: string;
 };

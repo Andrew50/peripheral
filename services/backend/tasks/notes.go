@@ -24,10 +24,11 @@ type Note struct {
 
 // GetNotesArgs represents arguments for retrieving notes
 type GetNotesArgs struct {
-	Category   string   `json:"category,omitempty"`
-	Tags       []string `json:"tags,omitempty"`
-	IsPinned   *bool    `json:"isPinned,omitempty"`
-	IsArchived *bool    `json:"isArchived,omitempty"`
+	Category    string   `json:"category,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+	IsPinned    *bool    `json:"isPinned,omitempty"`
+	IsArchived  *bool    `json:"isArchived,omitempty"`
+	SearchQuery string   `json:"searchQuery,omitempty"`
 }
 
 // GetNotes retrieves notes for the current user with optional filtering
@@ -71,8 +72,18 @@ func GetNotes(conn *utils.Conn, userID int, rawArgs json.RawMessage) (interface{
 		paramCount++
 	}
 
-	// Order by pinned first, then by most recently updated
-	query += " ORDER BY is_pinned DESC, updated_at DESC"
+	// Add full-text search if a search query is provided
+	if args.SearchQuery != "" {
+		query += fmt.Sprintf(" AND search_vector @@ plainto_tsquery('english', $%d)", paramCount)
+		params = append(params, args.SearchQuery)
+		paramCount++
+
+		// Add ranking for search results
+		query += fmt.Sprintf(" ORDER BY ts_rank(search_vector, plainto_tsquery('english', $%d)) DESC", paramCount-1)
+	} else {
+		// Default ordering if no search query
+		query += " ORDER BY is_pinned DESC, updated_at DESC"
+	}
 
 	// Execute the query
 	rows, err := conn.DB.Query(context.Background(), query, params...)
@@ -107,6 +118,101 @@ func GetNotes(conn *utils.Conn, userID int, rawArgs json.RawMessage) (interface{
 	}
 
 	return notes, nil
+}
+
+// SearchNotesArgs represents arguments for searching notes
+type SearchNotesArgs struct {
+	Query      string `json:"query"`
+	IsArchived *bool  `json:"isArchived,omitempty"`
+}
+
+// SearchNotes performs a full-text search on notes
+func SearchNotes(conn *utils.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	var args SearchNotesArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("error parsing args: %v", err)
+	}
+
+	if args.Query == "" {
+		return nil, fmt.Errorf("search query is required")
+	}
+
+	// Build the query with ranking
+	query := `
+		SELECT 
+			noteId, userId, title, content, category, tags, created_at, updated_at, is_pinned, is_archived,
+			ts_rank(search_vector, plainto_tsquery('english', $2)) AS rank,
+			ts_headline('english', title, plainto_tsquery('english', $2), 'StartSel=<mark>, StopSel=</mark>') AS title_highlight,
+			ts_headline('english', content, plainto_tsquery('english', $2), 'StartSel=<mark>, StopSel=</mark>, MaxFragments=3, MaxWords=50, MinWords=15') AS content_highlight
+		FROM notes
+		WHERE userId = $1 AND search_vector @@ plainto_tsquery('english', $2)
+	`
+	params := []interface{}{userID, args.Query}
+	paramCount := 3
+
+	// Add archived filter if provided
+	if args.IsArchived != nil {
+		query += fmt.Sprintf(" AND is_archived = $%d", paramCount)
+		params = append(params, *args.IsArchived)
+		paramCount++
+	}
+
+	// Order by rank
+	query += " ORDER BY rank DESC, is_pinned DESC, updated_at DESC"
+
+	// Execute the query
+	rows, err := conn.DB.Query(context.Background(), query, params...)
+	if err != nil {
+		return nil, fmt.Errorf("error searching notes: %v", err)
+	}
+	defer rows.Close()
+
+	// Define a struct for search results with highlights
+	type SearchResult struct {
+		Note             Note    `json:"note"`
+		Rank             float64 `json:"rank"`
+		TitleHighlight   string  `json:"titleHighlight"`
+		ContentHighlight string  `json:"contentHighlight"`
+	}
+
+	// Process the results
+	var results []SearchResult
+	for rows.Next() {
+		var note Note
+		var rank float64
+		var titleHighlight, contentHighlight string
+
+		if err := rows.Scan(
+			&note.NoteID,
+			&note.UserID,
+			&note.Title,
+			&note.Content,
+			&note.Category,
+			&note.Tags,
+			&note.CreatedAt,
+			&note.UpdatedAt,
+			&note.IsPinned,
+			&note.IsArchived,
+			&rank,
+			&titleHighlight,
+			&contentHighlight,
+		); err != nil {
+			return nil, fmt.Errorf("error scanning search result row: %v", err)
+		}
+
+		results = append(results, SearchResult{
+			Note:             note,
+			Rank:             rank,
+			TitleHighlight:   titleHighlight,
+			ContentHighlight: contentHighlight,
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating search result rows: %v", err)
+	}
+
+	return results, nil
 }
 
 // GetNoteArgs represents arguments for retrieving a single note
