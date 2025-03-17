@@ -6,6 +6,7 @@ import (
 
 	"backend/socket"
 	"backend/utils"
+	"backend/query"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -115,6 +116,10 @@ var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{
 	"get_ticker_performance": tasks.GetTickerPerformance,
 	"delete_all_user_trades": tasks.DeleteAllUserTrades,
 	"handle_trade_upload":    tasks.HandleTradeUpload,
+
+	// LLM TESTING
+	"getStockMovementSummary": tasks.GetStockMovementSummary,
+	"getLLMParsedQuery":       query.GetQuery,
 }
 
 func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }

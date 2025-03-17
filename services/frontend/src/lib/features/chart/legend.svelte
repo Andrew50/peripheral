@@ -17,7 +17,7 @@
 	let showPriceGrid = true;
 	let showMetricsGrid = true;
 	let resizeObserver: ResizeObserver;
-	let checkOverflowTimeout: number;
+	let checkOverflowTimeout: ReturnType<typeof setTimeout> | undefined;
 
 	let isCollapsed = false;
 	let isUpdating = false;
