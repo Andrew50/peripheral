@@ -268,49 +268,65 @@ class Conn:
         self.cache.ping()
 
     def check_connection(self):
-        """Check both database and Redis connections."""
-        redis_ok = False
-        db_ok = False
+        """Check connection to database and Redis cache"""
+        start_time = datetime.now()
+        timeout = timedelta(minutes=1)
         
-        # Check Redis connection
-        try:
-            self.cache.ping()
-            redis_ok = True
-        except (redis.exceptions.ConnectionError, redis.exceptions.ResponseError, redis.exceptions.TimeoutError) as e:
-            print(f"Redis connection error during check: {e}", flush=True)
-            print("Attempting to reconnect to Redis...", flush=True)
-            try:
-                # Use the same host as the initial connection
-                cache_host = os.environ.get("REDIS_HOST", "cache")
-                self._connect_to_redis(cache_host)
-                redis_ok = True
-                print("Successfully reconnected to Redis", flush=True)
-            except Exception as e:
-                print(f"Failed to reconnect to Redis: {e}", flush=True)
-                raise
-        
-        # Check database connection
-        try:
-            with self.db.cursor() as cursor:
-                cursor.execute("SELECT 1")
-            db_ok = True
-        except psycopg2.OperationalError as e:
-            print(f"Database connection error during check: {e}", flush=True)
-            print("Attempting to reconnect to database...", flush=True)
-            try:
-                # Use the same host as the initial connection
-                db_host = os.environ.get("DB_HOST", "db")
-                self._connect_to_db(db_host)
-                db_ok = True
-                print("Successfully reconnected to database", flush=True)
-            except Exception as e:
-                print(f"Failed to reconnect to database: {e}", flush=True)
-                raise
-        except Exception as e:
-            print(f"Unexpected error during connection check: {e}", flush=True)
-            raise
+        while datetime.now() - start_time < timeout:
+            redis_ok = False
+            db_ok = False
             
-        return redis_ok and db_ok
+            # Check Redis connection
+            try:
+                self.cache.ping()
+                redis_ok = True
+            except (redis.exceptions.ConnectionError, redis.exceptions.ResponseError, redis.exceptions.TimeoutError) as e:
+                print(f"Redis connection error during check: {e}", flush=True)
+                print("Attempting to reconnect to Redis...", flush=True)
+                try:
+                    # Use the same host as the initial connection
+                    cache_host = os.environ.get("REDIS_HOST", "cache")
+                    self._connect_to_redis(cache_host)
+                    redis_ok = True
+                    print("Successfully reconnected to Redis", flush=True)
+                except Exception as e:
+                    print(f"Failed to reconnect to Redis: {e}", flush=True)
+                    raise
+            
+            # Check database connection
+            try:
+                with self.db.cursor() as cursor:
+                    cursor.execute("SELECT 1")
+                db_ok = True
+            except psycopg2.OperationalError as e:
+                print(f"Database connection error during check: {e}", flush=True)
+                print("Attempting to reconnect to database...", flush=True)
+                try:
+                    # Use the same host as the initial connection
+                    db_host = os.environ.get("DB_HOST", "db")
+                    self._connect_to_db(db_host)
+                    db_ok = True
+                    print("Successfully reconnected to database", flush=True)
+                except Exception as e:
+                    print(f"Failed to reconnect to database: {e}", flush=True)
+                    raise
+            except Exception as e:
+                print(f"Unexpected error during connection check: {e}", flush=True)
+                raise
+            
+            if redis_ok and db_ok:
+                return True
+            
+            time.sleep(2)  # Short sleep before retry
+        
+        # If we get here, we've timed out
+        error_msg = "Failed to establish connections within 1 minute:\n"
+        if not redis_ok:
+            error_msg += "Redis connection failed\n"
+        if not db_ok:
+            error_msg += "Database connection failed"
+        print(error_msg, flush=True)
+        return False
 
     def get_gemini_key(self):
         """Get the next available Gemini API key."""
