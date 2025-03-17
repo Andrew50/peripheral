@@ -733,12 +733,30 @@
 				sectors: string[];
 				industries: string[];
 			};
-			privateRequest<SecurityClassifications>('getSecurityClassifications', {}, false).then(
-				(classifications: SecurityClassifications) => {
-					sectors = classifications.sectors;
-					industries = classifications.industries;
-				}
-			);
+			privateRequest<SecurityClassifications>('getSecurityClassifications', {}, false)
+				.then((classifications: SecurityClassifications) => {
+					try {
+						if (classifications && classifications.sectors && classifications.industries) {
+							sectors = classifications.sectors;
+							industries = classifications.industries;
+						} else {
+							// Fallback to default values if API fails
+							sectors = ['Technology', 'Healthcare', 'Finance', 'Consumer Discretionary'];
+							industries = ['Software', 'Hardware', 'Pharmaceuticals', 'Banking'];
+						}
+					} catch (err) {
+						console.error('Error processing security classifications:', err);
+						// Fallback to default values
+						sectors = ['Technology', 'Healthcare', 'Finance', 'Consumer Discretionary'];
+						industries = ['Software', 'Hardware', 'Pharmaceuticals', 'Banking'];
+					}
+				})
+				.catch((err) => {
+					console.error('Error fetching security classifications:', err);
+					// Fallback to default values
+					sectors = ['Technology', 'Healthcare', 'Finance', 'Consumer Discretionary'];
+					industries = ['Software', 'Hardware', 'Pharmaceuticals', 'Banking'];
+				});
 		}
 	});
 
