@@ -6,7 +6,6 @@ import (
 
 	"backend/socket"
 	"backend/utils"
-	"backend/query"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -24,102 +23,6 @@ var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, err
 	"login":          Login,
 	"googleLogin":    GoogleLogin,
 	"googleCallback": GoogleCallback,
-}
-
-var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{}, error){
-	"verifyAuth": verifyAuth,
-	//securities
-	"getSimilarInstances":     tasks.GetSimilarInstances,
-	"getSecuritiesFromTicker": tasks.GetSecuritiesFromTicker,
-	"getCurrentTicker":        tasks.GetCurrentTicker,
-	//"getTickerDetails":        tasks.GetTickerDetails,
-	"getTickerMenuDetails": tasks.GetTickerMenuDetails,
-	"getIcons":             tasks.GetIcons,
-
-	//chart
-	"getChartData": tasks.GetChartData,
-	//study
-	"getStudies": tasks.GetStudies,
-
-	"newStudy":      tasks.NewStudy,
-	"saveStudy":     tasks.SaveStudy,
-	"deleteStudy":   tasks.DeleteStudy,
-	"getStudyEntry": tasks.GetStudyEntry,
-	"completeStudy": tasks.CompleteStudy,
-	"setStudySetup": tasks.SetStudySetup,
-	//journal
-	"getJournals":     tasks.GetJournals,
-	"saveJournal":     tasks.SaveJournal,
-	"deleteJournal":   tasks.DeleteJournal,
-	"getJournalEntry": tasks.GetJournalEntry,
-	"completeJournal": tasks.CompleteJournal,
-	//screensaver
-	"getScreensavers": tasks.GetScreensavers,
-	//watchlist
-	"getWatchlists":       tasks.GetWatchlists,
-	"deleteWatchlist":     tasks.DeleteWatchlist,
-	"newWatchlist":        tasks.NewWatchlist,
-	"getWatchlistItems":   tasks.GetWatchlistItems,
-	"deleteWatchlistItem": tasks.DeleteWatchlistItem,
-	"newWatchlistItem":    tasks.NewWatchlistItem,
-	//singles
-	"getPrevClose": tasks.GetPrevClose,
-	//"getMarketCap": tasks.GetMarketCap,
-	//settings
-	"getSettings": tasks.GetSettings,
-	"setSettings": tasks.SetSettings,
-	//profile
-	"updateProfilePicture": UpdateProfilePicture,
-	//exchanges
-	"getExchanges": tasks.GetExchanges,
-	//setups
-	"getSetups":   tasks.GetSetups,
-	"newSetup":    tasks.NewSetup,
-	"setSetup":    tasks.SetSetup,
-	"deleteSetup": tasks.DeleteSetup,
-	//algos
-	//"getAlgos": tasks.GetAlgos,
-	//samples
-	"labelTrainingQueueInstance": tasks.LabelTrainingQueueInstance,
-	"getTrainingQueue":           tasks.GetTrainingQueue,
-	"setSample":                  tasks.SetSample,
-	//telegram
-	//	"sendMessage": telegram.SendMessage,
-	//alerts
-	"getAlerts":    tasks.GetAlerts,
-	"getAlertLogs": tasks.GetAlertLogs,
-	"newAlert":     tasks.NewAlert,
-	"deleteAlert":  tasks.DeleteAlert,
-
-	// deprecated
-	// "getTradeData":            tasks.GetTradeData,
-	//
-	//	"getLastTrade":            tasks.GetLastTrade,
-	//
-	// "getQuoteData":            tasks.GetQuoteData,
-	// "getSecurityDateBounds":   tasks.GetSecurityDateBounds,
-	"setHorizontalLine":    tasks.SetHorizontalLine,
-	"getHorizontalLines":   tasks.GetHorizontalLines,
-	"deleteHorizontalLine": tasks.DeleteHorizontalLine,
-	"updateHorizontalLine": tasks.UpdateHorizontalLine,
-	//active
-
-	"getActive": tasks.GetActive,
-	//sector, industry
-	"getSecurityClassifications": tasks.GetSecurityClassifications,
-	"getLatestEdgarFilings":      tasks.GetLatestEdgarFilings,
-	"getChartEvents":             tasks.GetChartEvents,
-
-	// Add the new trade-related functions
-	"grab_user_trades":       tasks.GrabUserTrades,
-	"get_trade_statistics":   tasks.GetTradeStatistics,
-	"get_ticker_performance": tasks.GetTickerPerformance,
-	"delete_all_user_trades": tasks.DeleteAllUserTrades,
-	"handle_trade_upload":    tasks.HandleTradeUpload,
-
-	// LLM TESTING
-	"getStockMovementSummary": tasks.GetStockMovementSummary,
-	"getLLMParsedQuery":       query.GetQuery,
 }
 
 func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
@@ -371,7 +274,7 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 		}
 
 		// Execute the requested function with sanitized input
-		result, err := privateFunc[req.Function](conn, userId, sanitizedArgs)
+		result, err := privateFunc[req.Function].Function(conn, userId, sanitizedArgs)
 		if handleError(w, err, fmt.Sprintf("private_handler: %s", req.Function)) {
 			return
 		}

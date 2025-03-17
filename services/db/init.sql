@@ -197,6 +197,24 @@ CREATE TABLE trade_executions (
     direction VARCHAR(10) NOT NULL,
     tradeId INT REFERENCES trades(tradeId)
 );
+CREATE TABLE notes (
+    noteId SERIAL PRIMARY KEY,
+    userId INT REFERENCES users(userId) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    content TEXT,
+    category VARCHAR(100),
+    tags TEXT[] DEFAULT ARRAY[]::TEXT[],
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    is_pinned BOOLEAN DEFAULT FALSE,
+    is_archived BOOLEAN DEFAULT FALSE
+);
+CREATE INDEX idx_notes_userId ON notes(userId);
+CREATE INDEX idx_notes_category ON notes(category);
+CREATE INDEX idx_notes_created_at ON notes(created_at);
+CREATE INDEX idx_notes_is_pinned ON notes(is_pinned);
+CREATE INDEX idx_notes_is_archived ON notes(is_archived);
+CREATE INDEX idx_notes_tags ON notes USING GIN(tags);
 CREATE INDEX idxUserIdSecurityIdPrice on horizontal_lines(userId, securityId, price);
 
 -- Create the daily OHLCV table for storing time-series market data
