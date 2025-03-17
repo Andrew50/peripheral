@@ -1,4 +1,4 @@
-package tools
+package tasks
 
 import (
 	"backend/utils"
@@ -10,11 +10,10 @@ import (
 
 // GetJournalsResult represents a structure for handling GetJournalsResult data.
 type GetJournalsResult struct {
-	JournalID int   `json:"journalId"`
-	Timestamp int64 `json:"timestamp"`
-	Completed bool  `json:"completed"`
+	JournalID    int    `json:"journalId"`
+	Timestamp  int64  `json:"timestamp"`
+	Completed  bool   `json:"completed"`
 }
-
 // GetJournals performs operations related to GetJournals functionality.
 func GetJournals(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(), "SELECT journalId, timestamp, completed from journals where userId = $1 order by timestamp desc", userId)
@@ -26,22 +25,20 @@ func GetJournals(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	for rows.Next() {
 		var journal GetJournalsResult
 		var journalTime time.Time
-		err := rows.Scan(&journal.JournalID, &journalTime, &journal.Completed)
+		err := rows.Scan(&journal.JournalID,  &journalTime, &journal.Completed)
 		if err != nil {
-			return nil, fmt.Errorf("19nv %v", err)
+			return nil, fmt.Errorf("19nv %v",err)
 		}
 		journal.Timestamp = journalTime.Unix() * 1000
 		journals = append(journals, journal)
 	}
 	return journals, nil
 }
-
 // SaveJournalArgs represents a structure for handling SaveJournalArgs data.
 type SaveJournalArgs struct {
 	Id    int             `json:"id"`
 	Entry json.RawMessage `json:"entry"`
 }
-
 // SaveJournal performs operations related to SaveJournal functionality.
 func SaveJournal(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args SaveJournalArgs
@@ -55,13 +52,11 @@ func SaveJournal(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	}
 	return nil, err
 }
-
 // CompleteJournalArgs represents a structure for handling CompleteJournalArgs data.
 type CompleteJournalArgs struct {
 	Id        int  `json:"id"`
 	Completed bool `json:"completed"`
 }
-
 // CompleteJournal performs operations related to CompleteJournal functionality.
 func CompleteJournal(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args CompleteJournalArgs
@@ -75,12 +70,10 @@ func CompleteJournal(conn *utils.Conn, userId int, rawArgs json.RawMessage) (int
 	}
 	return nil, err
 }
-
 // DeleteJournalArgs represents a structure for handling DeleteJournalArgs data.
 type DeleteJournalArgs struct {
 	Id int `json:"id"`
 }
-
 // DeleteJournal performs operations related to DeleteJournal functionality.
 func DeleteJournal(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteJournalArgs
@@ -97,12 +90,10 @@ func DeleteJournal(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inter
 	}
 	return nil, err
 }
-
 // GetJournalEntryArgs represents a structure for handling GetJournalEntryArgs data.
 type GetJournalEntryArgs struct {
 	JournalID int `json:"journalId"`
 }
-
 // GetJournalEntry performs operations related to GetJournalEntry functionality.
 func GetJournalEntry(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetJournalEntryArgs
@@ -117,3 +108,4 @@ func GetJournalEntry(conn *utils.Conn, userId int, rawArgs json.RawMessage) (int
 	}
 	return entry, nil
 }
+
