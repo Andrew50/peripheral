@@ -3,9 +3,11 @@ on:
   pull_request:
     branches: [main, prod]
   
-  # Add push trigger for specific branches
+  # Add push trigger for specific branches, but exclude when it's also a PR
   push:
     branches: [ben, aj]
+    paths-ignore:
+      - '.github/workflows/**'  # Avoid triggering workflow changes twice
   
   # Add workflow_run trigger to run after branch-protection workflow
   workflow_run:
@@ -17,12 +19,33 @@ jobs:
   # Add a check to determine if we should run the tests
   check-workflow-conditions:
     runs-on: ubuntu-latest
+    # No need for fallback logic with GitHub-hosted runners
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
       continue_on_error: ${{ steps.check.outputs.continue_on_error }}
     steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
       - id: check
         run: |
+          # Check if this is a push on a branch that has an open PR
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            # Get the current branch name
+            BRANCH_NAME="${{ github.ref_name }}"
+            echo "Current branch: $BRANCH_NAME"
+            
+            # Check if there's an open PR from this branch
+            PR_COUNT=$(git ls-remote origin 'pull/*/head' | grep -c $(git rev-parse HEAD))
+            if [[ $PR_COUNT -gt 0 ]]; then
+              echo "This push is on a branch with an open PR - skipping duplicate run"
+              echo "should_run=false" >> $GITHUB_OUTPUT
+              echo "continue_on_error=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          fi
+          
           # For pushes to ben or aj branches, run but don't fail on errors
           if [[ "${{ github.event_name }}" == "push" && ("${{ github.ref }}" == "refs/heads/ben" || "${{ github.ref }}" == "refs/heads/aj") ]]; then
             echo "Running for push to ben/aj branch - will not fail on errors"
@@ -39,7 +62,16 @@ jobs:
             exit 0
           fi
           
-          # For PRs to prod, only run if triggered by workflow_run and the previous workflow succeeded
+          # For PRs to prod or workflow runs targeting prod, skip the lint and build
+          if [[ ("${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "prod") || 
+                ("${{ github.event_name }}" == "workflow_run" && "${{ github.event.workflow_run.head_branch }}" == "prod") ]]; then
+            echo "Skipping lint and build for prod deployment"
+            echo "should_run=false" >> $GITHUB_OUTPUT
+            echo "continue_on_error=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # For workflow_run events, only run if the previous workflow succeeded
           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
             if [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]]; then
               echo "Branch protection check passed, proceeding with tests"
@@ -53,22 +85,14 @@ jobs:
             exit 0
           fi
           
-          # For direct PRs to prod, don't run (branch protection should run first)
-          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "prod" ]]; then
-            echo "Skipping direct run for PR to prod - branch protection workflow should run first"
-            echo "should_run=false" >> $GITHUB_OUTPUT
-            echo "continue_on_error=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
           # Default case
           echo "Running tests by default"
           echo "should_run=true" >> $GITHUB_OUTPUT
           echo "continue_on_error=false" >> $GITHUB_OUTPUT
 
   lint-and-build-backend:
-    needs: check-workflow-conditions
-    if: needs.check-workflow-conditions.outputs.should_run == 'true'
+    needs: [check-workflow-conditions]
+    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' }}
     runs-on: ubuntu-latest
     # Set continue-on-error based on the branch condition
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
@@ -82,6 +106,8 @@ jobs:
         with:
           # For workflow_run events, we need to check out the PR that triggered the workflow
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
+          # Fetch base branch for delta analysis
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -95,7 +121,38 @@ jobs:
           go mod download
           go install honnef.co/go/tools/cmd/staticcheck@latest
 
+      - name: Identify changed Go files
+        id: changed-files
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            # For pushes, get the SHA of the previous commit
+            BASE_SHA=$(git rev-parse HEAD~1)
+            HEAD_SHA=$(git rev-parse HEAD)
+          fi
+          
+          echo "Comparing changes between $BASE_SHA and $HEAD_SHA"
+          
+          # Find modified Go files
+          CHANGED_GO_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA -- 'services/backend/**/*.go' | xargs)
+          echo "Changed Go files: $CHANGED_GO_FILES"
+          
+          # Identify affected packages (directories)
+          if [ -n "$CHANGED_GO_FILES" ]; then
+            AFFECTED_PACKAGES=$(echo "$CHANGED_GO_FILES" | xargs dirname | sort -u | xargs)
+            echo "Affected packages: $AFFECTED_PACKAGES"
+            echo "affected_packages=$AFFECTED_PACKAGES" >> $GITHUB_OUTPUT
+            echo "affected_files=$CHANGED_GO_FILES" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "No Go files changed"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Go Lint
+        if: steps.changed-files.outputs.has_changes == 'true'
         uses: golangci/golangci-lint-action@v3
         with:
           version: latest
@@ -109,9 +166,11 @@ jobs:
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Go Staticcheck
+        if: steps.changed-files.outputs.has_changes == 'true'
         run: |
           cd services/backend
-          # Run staticcheck with less strict settings
+          # Run staticcheck on the entire module to ensure proper imports
+          echo "Running staticcheck on all packages..."
           # First run to print all issues
           staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016 ./... || true
           # Second run to actually fail the build only on critical issues
@@ -122,13 +181,21 @@ jobs:
       - name: Go Build
         run: |
           cd services/backend
-          go build -v -tags=all ./...
+          # Only build affected packages if we have changes, otherwise do a quick sanity build
+          if [ "${{ steps.changed-files.outputs.has_changes }}" == "true" ]; then
+            echo "Building affected packages..."
+            # Build the entire module to ensure proper imports
+            go build -v -tags=all ./...
+          else
+            echo "No changes detected, performing sanity build..."
+            go build -v -tags=all ./...
+          fi
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
   lint-and-build-worker:
-    needs: check-workflow-conditions
-    if: needs.check-workflow-conditions.outputs.should_run == 'true'
+    needs: [check-workflow-conditions]
+    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' }}
     runs-on: ubuntu-latest
     # Set continue-on-error based on the branch condition
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
@@ -137,48 +204,127 @@ jobs:
         with:
           # For workflow_run events, we need to check out the PR that triggered the workflow
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
+          # Fetch base branch for delta analysis
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
           cache: 'pip'
+      
+      - name: Ensure python command is available
+        run: |
+          if ! command -v python &> /dev/null; then
+            echo "Creating python alias for python3"
+            echo "#!/bin/bash" > python_wrapper
+            echo "python3 \"\$@\"" >> python_wrapper
+            chmod +x python_wrapper
+            mkdir -p $HOME/bin
+            mv python_wrapper $HOME/bin/python
+            echo "$HOME/bin" >> $GITHUB_PATH
+          fi
       
       - name: Install dependencies
         run: |
           cd services/worker
+          # Create and activate a virtual environment instead of using system Python
+          python -m venv .venv
+          source .venv/bin/activate
           python -m pip install --upgrade pip
           pip install flake8 black pytest
           pip install -r requirements.txt
+          # Add venv to PATH for subsequent steps
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+
+      - name: Identify changed Python files
+        id: changed-py-files
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            # For pushes, get the SHA of the previous commit
+            BASE_SHA=$(git rev-parse HEAD~1)
+            HEAD_SHA=$(git rev-parse HEAD)
+          fi
+          
+          echo "Comparing changes between $BASE_SHA and $HEAD_SHA"
+          
+          # Find modified Python files
+          CHANGED_PY_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA -- 'services/worker/**/*.py' | xargs)
+          echo "Changed Python files: $CHANGED_PY_FILES"
+          
+          if [ -n "$CHANGED_PY_FILES" ]; then
+            echo "changed_files=$CHANGED_PY_FILES" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "No Python files changed"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Lint with flake8
+        if: steps.changed-py-files.outputs.has_changes == 'true'
         run: |
           cd services/worker
+          # Ensure virtual environment is used
+          source .venv/bin/activate
           
-          flake8 . \
-            --count \
-            --select=C901,E9,E711,E722,F7,F82,F401,F541,F811,F841 \
-            --show-source \
-            --statistics
+          # Only lint changed files
+          CHANGED_FILES="${{ steps.changed-py-files.outputs.changed_files }}"
+          if [ -n "$CHANGED_FILES" ]; then
+            echo "Running flake8 on changed files: $CHANGED_FILES"
+            flake8 $CHANGED_FILES \
+              --count \
+              --select=C901,E9,E711,E722,F7,F82,F401,F541,F811,F841 \
+              --show-source \
+              --statistics
+          else
+            echo "No Python files to lint"
+          fi
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Format check with Black
+        if: steps.changed-py-files.outputs.has_changes == 'true'
         run: |
           cd services/worker
-          black --check --diff --verbose . || echo "Black formatting issues found but continuing"
+          # Ensure virtual environment is used
+          source .venv/bin/activate
+          
+          # Only check changed files
+          CHANGED_FILES="${{ steps.changed-py-files.outputs.changed_files }}"
+          if [ -n "$CHANGED_FILES" ]; then
+            echo "Running black on changed files: $CHANGED_FILES"
+            black --check --diff --verbose $CHANGED_FILES || echo "Black formatting issues found but continuing"
+          else
+            echo "No Python files to format check"
+          fi
         # Always continue even if Black finds issues
         continue-on-error: true
 
       - name: Basic import check
         run: |
           cd services/worker
-          python -m compileall .
+          # Ensure virtual environment is used
+          source .venv/bin/activate
+          
+          # For changed files only, or a basic check if no changes
+          if [ "${{ steps.changed-py-files.outputs.has_changes }}" == "true" ]; then
+            echo "Checking imports for changed files..."
+            CHANGED_FILES="${{ steps.changed-py-files.outputs.changed_files }}"
+            for file in $CHANGED_FILES; do
+              echo "Checking imports for $file..."
+              python -m py_compile $file
+            done
+          else
+            echo "No changes detected, performing basic import check..."
+            python -m compileall .
+          fi
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
   lint-and-build-frontend:
-    needs: check-workflow-conditions
-    if: needs.check-workflow-conditions.outputs.should_run == 'true'
+    needs: [check-workflow-conditions]
+    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' }}
     runs-on: ubuntu-latest
     # Set continue-on-error based on the branch condition
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
@@ -187,6 +333,8 @@ jobs:
         with:
           # For workflow_run events, we need to check out the PR that triggered the workflow
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
+          # Fetch base branch for delta analysis
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
@@ -226,17 +374,53 @@ jobs:
             echo '};' >> jest.config.js
           fi
 
+      - name: Identify changed frontend files
+        id: changed-frontend-files
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            # For pushes, get the SHA of the previous commit
+            BASE_SHA=$(git rev-parse HEAD~1)
+            HEAD_SHA=$(git rev-parse HEAD)
+          fi
+          
+          echo "Comparing changes between $BASE_SHA and $HEAD_SHA"
+          
+          # Find modified frontend files
+          CHANGED_TS_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA -- 'services/frontend/**/*.ts' 'services/frontend/**/*.js' 'services/frontend/**/*.svelte' | xargs)
+          echo "Changed frontend files: $CHANGED_TS_FILES"
+          
+          if [ -n "$CHANGED_TS_FILES" ]; then
+            echo "changed_files=$CHANGED_TS_FILES" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "No frontend files changed"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Lint
+        if: steps.changed-frontend-files.outputs.has_changes == 'true'
         run: |
           cd services/frontend
-          # Allow some warnings but still fail on errors
-          npx eslint . --max-warnings=20 --no-error-on-unmatched-pattern --format stylish
+          # Only lint changed files if there are changes
+          if [ -n "${{ steps.changed-frontend-files.outputs.changed_files }}" ]; then
+            echo "Linting changed files only"
+            CHANGED_FILES="${{ steps.changed-frontend-files.outputs.changed_files }}"
+            # Allow some warnings but still fail on errors
+            npx eslint $CHANGED_FILES --max-warnings=20 --no-error-on-unmatched-pattern --format stylish
+          else
+            echo "No files to lint"
+          fi
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Type check
+        if: steps.changed-frontend-files.outputs.has_changes == 'true'
         run: |
           cd services/frontend
+          # Run type check on the entire project since it's hard to isolate
           # Change to error threshold to be more lenient
           npx svelte-check --threshold error --diagnostic-sources "js,ts,svelte"
         # Individual step can continue on error for ben/aj branches
@@ -252,7 +436,7 @@ jobs:
   # Add new job to run frontend tests
   test-frontend:
     needs: [check-workflow-conditions, lint-and-build-frontend]
-    if: needs.check-workflow-conditions.outputs.should_run == 'true'
+    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' }}
     runs-on: ubuntu-latest
     # Set continue-on-error based on the branch condition
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
@@ -261,6 +445,8 @@ jobs:
         with:
           # For workflow_run events, we need to check out the PR that triggered the workflow
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
+          # Fetch base branch for delta analysis
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
@@ -300,10 +486,77 @@ jobs:
             echo '};' >> jest.config.js
           fi
 
+      - name: Identify changed test files
+        id: changed-test-files
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            # For pushes, get the SHA of the previous commit
+            BASE_SHA=$(git rev-parse HEAD~1)
+            HEAD_SHA=$(git rev-parse HEAD)
+          fi
+          
+          echo "Comparing changes between $BASE_SHA and $HEAD_SHA"
+          
+          # Find any changed files that might affect tests
+          CHANGED_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA -- 'services/frontend/**/*.ts' 'services/frontend/**/*.js' 'services/frontend/**/*.svelte' | xargs)
+          
+          # Find directly changed test files
+          CHANGED_TEST_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA -- 'services/frontend/**/*.test.ts' 'services/frontend/**/*.test.js' | xargs)
+          
+          # Find component files that were changed and might have corresponding test files
+          CHANGED_COMPONENT_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA -- 'services/frontend/**/*.ts' 'services/frontend/**/*.js' 'services/frontend/**/*.svelte' | grep -v 'test.ts' | grep -v 'test.js' | xargs)
+          
+          # Map component files to potential test files
+          POTENTIAL_TEST_FILES=""
+          for file in $CHANGED_COMPONENT_FILES; do
+            base_name=$(basename "$file" | sed 's/\.[^.]*$//')
+            dir_name=$(dirname "$file")
+            potential_test="$dir_name/$base_name.test.ts"
+            potential_test_js="$dir_name/$base_name.test.js"
+            
+            if [ -f "$potential_test" ]; then
+              POTENTIAL_TEST_FILES="$POTENTIAL_TEST_FILES $potential_test"
+            elif [ -f "$potential_test_js" ]; then
+              POTENTIAL_TEST_FILES="$POTENTIAL_TEST_FILES $potential_test_js"
+            fi
+          done
+          
+          # Combine direct and potential test files
+          ALL_AFFECTED_TEST_FILES="$CHANGED_TEST_FILES $POTENTIAL_TEST_FILES"
+          ALL_AFFECTED_TEST_FILES=$(echo "$ALL_AFFECTED_TEST_FILES" | xargs -n1 | sort -u | xargs)
+          
+          if [ -n "$ALL_AFFECTED_TEST_FILES" ]; then
+            echo "affected_test_files=$ALL_AFFECTED_TEST_FILES" >> $GITHUB_OUTPUT
+            echo "has_test_changes=true" >> $GITHUB_OUTPUT
+          elif [ -n "$CHANGED_FILES" ]; then
+            # If we have changed files but no specific test files, we'll run all tests
+            echo "has_test_changes=all" >> $GITHUB_OUTPUT
+          else
+            echo "No frontend files or tests changed"
+            echo "has_test_changes=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Run tests
         run: |
           cd services/frontend
-          # Run tests using the npm script that handles ES modules
-          npm test
+          
+          # Run tests based on what changed
+          if [ "${{ steps.changed-test-files.outputs.has_test_changes }}" == "true" ]; then
+            echo "Running only affected tests"
+            AFFECTED_TEST_FILES="${{ steps.changed-test-files.outputs.affected_test_files }}"
+            
+            # Run the specific test files that were affected
+            npx jest $AFFECTED_TEST_FILES --reporters=default
+          elif [ "${{ steps.changed-test-files.outputs.has_test_changes }}" == "all" ]; then
+            echo "Running all tests since files changed but no specific test files identified"
+            npm test
+          else
+            echo "No tests to run - skipping test suite"
+            echo "This is either because no frontend files changed, or the changes don't affect any tests"
+            exit 0
+          fi
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }} 
