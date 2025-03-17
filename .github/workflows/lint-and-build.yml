@@ -169,16 +169,12 @@ jobs:
         if: steps.changed-files.outputs.has_changes == 'true'
         run: |
           cd services/backend
-          # Run staticcheck only on affected packages
-          AFFECTED_PACKAGES="${{ steps.changed-files.outputs.affected_packages }}"
-          if [ -n "$AFFECTED_PACKAGES" ]; then
-            # First run to print all issues
-            staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016 $AFFECTED_PACKAGES || true
-            # Second run to actually fail the build only on critical issues
-            staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016,-SA4006,-SA5000,-SA6000 $AFFECTED_PACKAGES
-          else
-            echo "No affected packages to check"
-          fi
+          # Run staticcheck on the entire module to ensure proper imports
+          echo "Running staticcheck on all packages..."
+          # First run to print all issues
+          staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016 ./... || true
+          # Second run to actually fail the build only on critical issues
+          staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016,-SA4006,-SA5000,-SA6000 ./...
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
@@ -188,11 +184,8 @@ jobs:
           # Only build affected packages if we have changes, otherwise do a quick sanity build
           if [ "${{ steps.changed-files.outputs.has_changes }}" == "true" ]; then
             echo "Building affected packages..."
-            AFFECTED_PACKAGES="${{ steps.changed-files.outputs.affected_packages }}"
-            for pkg in $AFFECTED_PACKAGES; do
-              echo "Building $pkg..."
-              go build -v -tags=all $pkg
-            done
+            # Build the entire module to ensure proper imports
+            go build -v -tags=all ./...
           else
             echo "No changes detected, performing sanity build..."
             go build -v -tags=all ./...
