@@ -218,8 +218,13 @@ jobs:
       - name: Ensure python command is available
         run: |
           if ! command -v python &> /dev/null; then
-            echo "Creating python symlink to python3"
-            sudo ln -sf $(which python3) /usr/local/bin/python
+            echo "Creating python alias for python3"
+            echo "#!/bin/bash" > python_wrapper
+            echo "python3 \"\$@\"" >> python_wrapper
+            chmod +x python_wrapper
+            mkdir -p $HOME/bin
+            mv python_wrapper $HOME/bin/python
+            echo "$HOME/bin" >> $GITHUB_PATH
           fi
       
       - name: Install dependencies
