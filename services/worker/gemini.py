@@ -1,5 +1,4 @@
 import requests
-import json
 import time
 import threading
 import datetime
@@ -156,8 +155,10 @@ def gemini_query(conn, query, system_instruction, model_name="gemini-2.0-flash-0
 
     # If you want to work with the JSON response
     if response.status_code == 200:
-        result = response.json()
-        # Process the result as needed
+        # Process the response as needed
         # For example, if you want to extract the generated text:
         # generated_text = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
         # print(generated_text)
+        return response.text
+    
+    return None
