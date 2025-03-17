@@ -1,8 +1,8 @@
 package server
 
 import (
-	"backend/tasks"
 	"backend/utils"
+	"backend/tools"
 	"encoding/json"
 
 	"github.com/google/generative-ai-go/genai"
