@@ -59,9 +59,25 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	var dbConn *pgxpool.Pool
 	var err error
 	for {
-		dbConn, err = pgxpool.Connect(context.Background(), dbUrl)
+		// Create a connection pool configuration
+		poolConfig, err := pgxpool.ParseConfig(dbUrl)
 		if err != nil {
-			//if strings.Contains(err.Error(), "the database system is starting up") {
+			log.Printf("Unable to parse pool config: %v\n", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		
+		// Configure connection pool with better defaults
+		poolConfig.MaxConns = 20                            // Set max connections to 20 (default is 4)
+		poolConfig.MinConns = 5                             // Keep at least 5 connections in the pool
+		poolConfig.MaxConnLifetime = 1 * time.Hour          // Maximum lifetime of a connection
+		poolConfig.MaxConnIdleTime = 30 * time.Minute       // Maximum idle time for a connection
+		poolConfig.HealthCheckPeriod = 1 * time.Minute      // How often to check connection health
+		poolConfig.ConnConfig.ConnectTimeout = 5 * time.Second  // Connection timeout
+
+		// Create the connection pool with our custom configuration
+		dbConn, err = pgxpool.ConnectConfig(context.Background(), poolConfig)
+		if err != nil {
 			log.Printf("waiting for db %v\n", err)
 			time.Sleep(5 * time.Second)
 		} else {
