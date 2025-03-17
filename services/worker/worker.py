@@ -7,15 +7,15 @@ from conn import Conn, add_task_log, safe_redis_operation
 from train import train
 from screen import screen
 from trainerQueue import refillTrainerQueue
-from trade_analysis import find_similar_trades
-from trades import (
-    handle_trade_upload,
-    grab_user_trades,
-    get_trade_statistics,
-    get_ticker_trades,
-    get_ticker_performance,
-    delete_all_user_trades,
-)
+#from trade_analysis import find_similar_trades
+#from trades import (
+#    handle_trade_upload,
+#    grab_user_trades,
+#    get_trade_statistics,
+#    get_ticker_trades,
+#    get_ticker_performance,
+#    delete_all_user_trades,
+#)
 from active import update_active
 from sector import update_sectors
 import time
@@ -25,15 +25,15 @@ funcMap = {
     "train": train,
     "screen": screen,
     "refillTrainerQueue": refillTrainerQueue,
-    "handle_trade_upload": handle_trade_upload,
-    "grab_user_trades": grab_user_trades,
+    #"handle_trade_upload": handle_trade_upload,
+    #"grab_user_trades": grab_user_trades,
     "update_sectors": update_sectors,
     "update_active": update_active,
-    "get_trade_statistics": get_trade_statistics,
-    "get_ticker_trades": get_ticker_trades,
-    "get_ticker_performance": get_ticker_performance,
-    "find_similar_trades": find_similar_trades,
-    "delete_all_user_trades": delete_all_user_trades,
+    #"get_trade_statistics": get_trade_statistics,
+    #"get_ticker_trades": get_ticker_trades,
+    #"get_ticker_performance": get_ticker_performance,
+    #"find_similar_trades": find_similar_trades,
+    #"delete_all_user_trades": delete_all_user_trades,
 }
 
 
@@ -155,9 +155,8 @@ def process_tasks():
                                 self.in_add_task_log = False
                                 
                             def write(self, message):
-                                # Write to the original stdout
-                                sys.__stdout__.write(message)
-                                sys.__stdout__.flush()
+                                # Don't write to stdout anymore
+                                # Only log to Redis for the frontend to fetch
                                 
                                 # Skip logging if we're already inside add_task_log to prevent recursion
                                 if hasattr(self, 'in_add_task_log') and self.in_add_task_log:
@@ -179,7 +178,6 @@ def process_tasks():
                                     self.buffer = lines[-1]
                             
                             def flush(self):
-                                sys.__stdout__.flush()
                                 # If there's anything in the buffer, log it
                                 if self.buffer.strip():
                                     try:
