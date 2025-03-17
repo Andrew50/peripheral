@@ -1,4 +1,4 @@
-import time, psycopg2, redis, os, sys, socket, json, 
+import time, psycopg2, redis, os, sys, socket, json
 from datetime import datetime, timedelta
 import random
 

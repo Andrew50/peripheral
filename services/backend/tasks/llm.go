@@ -4,9 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
-	
 )
 
 const perplexityURL = "https://api.perplexity.ai/chat/completions"
@@ -19,15 +18,15 @@ type Message struct {
 
 // PerplexityRequest represents the request structure for Perplexity API
 type PerplexityRequest struct {
-	Model                  string      `json:"model"`
-	Messages               []Message   `json:"messages"`
-	MaxTokens              int         `json:"max_tokens"`
-	Temperature            float64     `json:"temperature"`
-	TopP                   float64     `json:"top_p"`
-	TopK                   int         `json:"top_k"`
-	Stream                 bool        `json:"stream"`
-	PresencePenalty        float64     `json:"presence_penalty"`
-	FrequencyPenalty       float64     `json:"frequency_penalty"`
+	Model            string    `json:"model"`
+	Messages         []Message `json:"messages"`
+	MaxTokens        int       `json:"max_tokens"`
+	Temperature      float64   `json:"temperature"`
+	TopP             float64   `json:"top_p"`
+	TopK             int       `json:"top_k"`
+	Stream           bool      `json:"stream"`
+	PresencePenalty  float64   `json:"presence_penalty"`
+	FrequencyPenalty float64   `json:"frequency_penalty"`
 }
 
 // PerplexityResponse represents the response structure from Perplexity API
@@ -37,9 +36,9 @@ type PerplexityResponse struct {
 	Created int    `json:"created"`
 	Model   string `json:"model"`
 	Choices []struct {
-		Index        int `json:"index"`
+		Index        int     `json:"index"`
 		Message      Message `json:"message"`
-		FinishReason string `json:"finish_reason"`
+		FinishReason string  `json:"finish_reason"`
 	} `json:"choices"`
 	Usage struct {
 		PromptTokens     int `json:"prompt_tokens"`
@@ -47,7 +46,6 @@ type PerplexityResponse struct {
 		TotalTokens      int `json:"total_tokens"`
 	} `json:"usage"`
 }
-
 
 func queryPerplexity(query string) (string, error) {
 	// Create the request payload
@@ -63,13 +61,13 @@ func queryPerplexity(query string) (string, error) {
 				Content: query,
 			},
 		},
-		MaxTokens:              300,
-		Temperature:            0.2,
-		TopP:                   0.9,
-		TopK:                   0,
-		Stream:                 false,
-		PresencePenalty:        0,
-		FrequencyPenalty:       1,
+		MaxTokens:        300,
+		Temperature:      0.2,
+		TopP:             0.9,
+		TopK:             0,
+		Stream:           false,
+		PresencePenalty:  0,
+		FrequencyPenalty: 1,
 	}
 
 	// Marshal the request data to JSON
@@ -77,7 +75,7 @@ func queryPerplexity(query string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error marshaling JSON: %w", err)
 	}
-	
+
 	// Print the JSON payload for debugging
 	fmt.Printf("\n\n\nRequest payload: %s\n\n\n", string(jsonData))
 
@@ -100,7 +98,7 @@ func queryPerplexity(query string) (string, error) {
 	defer resp.Body.Close()
 
 	// Read the response
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("error reading response: %w", err)
 	}
@@ -119,4 +117,3 @@ func queryPerplexity(query string) (string, error) {
 	// Return the content from the first choice
 	return perplexityResponse.Choices[0].Message.Content, nil
 }
-
