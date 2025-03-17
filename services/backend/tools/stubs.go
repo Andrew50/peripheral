@@ -1,5 +1,5 @@
-// Package tasks provides task-related functionality
-package tasks
+// Package tools provides task-related functionality
+package tools
 
 // DEPRECATED: This file is no longer needed as all functions have been moved to tasks.go.
 // This file is kept for historical reference but contains no active code.

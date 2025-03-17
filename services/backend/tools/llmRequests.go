@@ -1,4 +1,4 @@
-package tasks 
+package tools
 
 import (
 	"encoding/json"
@@ -8,12 +8,10 @@ import (
 	"backend/utils"
 )
 
-
-
 // StockMovementSummaryRequest represents the request for a stock movement summary
 type StockMovementSummaryRequest struct {
-	Ticker    string `json:"ticker"`
-	Timestamp int64  `json:"timestamp"`
+	Ticker    string  `json:"ticker"`
+	Timestamp int64   `json:"timestamp"`
 	Price     float64 `json:"price"`
 }
 
@@ -33,8 +31,8 @@ func GetStockMovementSummary(conn *utils.Conn, userID int, args json.RawMessage)
 	date := time.Unix(request.Timestamp/1000, 0).Format("January 2, 2006")
 
 	// Create the query for Perplexity
-	query := fmt.Sprintf("What factors or news caused %s stock to move on %s? The price was $%.2f. Please provide a concise summary of the main reasons.", 
-		request.Ticker, 
+	query := fmt.Sprintf("What factors or news caused %s stock to move on %s? The price was $%.2f. Please provide a concise summary of the main reasons.",
+		request.Ticker,
 		date,
 		request.Price)
 
@@ -48,4 +46,3 @@ func GetStockMovementSummary(conn *utils.Conn, userID int, args json.RawMessage)
 		Summary: summary,
 	}, nil
 }
-
