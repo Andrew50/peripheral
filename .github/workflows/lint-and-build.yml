@@ -18,26 +18,32 @@ on:
 jobs:
   # Add a check to determine if we should run the tests
   check-workflow-conditions:
-    runs-on: self-hosted
-    # Fallback to GitHub-hosted runner if self-hosted is unavailable
-    continue-on-error: true
+    runs-on: ubuntu-latest
+    # No need for fallback logic with GitHub-hosted runners
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
       continue_on_error: ${{ steps.check.outputs.continue_on_error }}
-      runner_type: ${{ steps.check-runner.outputs.runner_type }}
     steps:
-      - id: check-runner
-        run: |
-          echo "runner_type=self-hosted" >> $GITHUB_OUTPUT
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
       
       - id: check
         run: |
-          # Skip if this is both a PR and a push
-          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == *"refs/pull/"* ]]; then
-            echo "This is both a PR and a push event - skipping duplicate run"
-            echo "should_run=false" >> $GITHUB_OUTPUT
-            echo "continue_on_error=false" >> $GITHUB_OUTPUT
-            exit 0
+          # Check if this is a push on a branch that has an open PR
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            # Get the current branch name
+            BRANCH_NAME="${{ github.ref_name }}"
+            echo "Current branch: $BRANCH_NAME"
+            
+            # Check if there's an open PR from this branch
+            PR_COUNT=$(git ls-remote origin 'pull/*/head' | grep -c $(git rev-parse HEAD))
+            if [[ $PR_COUNT -gt 0 ]]; then
+              echo "This push is on a branch with an open PR - skipping duplicate run"
+              echo "should_run=false" >> $GITHUB_OUTPUT
+              echo "continue_on_error=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
           fi
           
           # For pushes to ben or aj branches, run but don't fail on errors
@@ -56,7 +62,16 @@ jobs:
             exit 0
           fi
           
-          # For PRs to prod, only run if triggered by workflow_run and the previous workflow succeeded
+          # For PRs to prod or workflow runs targeting prod, skip the lint and build
+          if [[ ("${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "prod") || 
+                ("${{ github.event_name }}" == "workflow_run" && "${{ github.event.workflow_run.head_branch }}" == "prod") ]]; then
+            echo "Skipping lint and build for prod deployment"
+            echo "should_run=false" >> $GITHUB_OUTPUT
+            echo "continue_on_error=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # For workflow_run events, only run if the previous workflow succeeded
           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
             if [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]]; then
               echo "Branch protection check passed, proceeding with tests"
@@ -70,38 +85,17 @@ jobs:
             exit 0
           fi
           
-          # For direct PRs to prod, don't run (branch protection should run first)
-          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "prod" ]]; then
-            echo "Skipping direct run for PR to prod - branch protection workflow should run first"
-            echo "should_run=false" >> $GITHUB_OUTPUT
-            echo "continue_on_error=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
           # Default case
           echo "Running tests by default"
           echo "should_run=true" >> $GITHUB_OUTPUT
           echo "continue_on_error=false" >> $GITHUB_OUTPUT
 
-  # Fallback runner check if self-hosted fails
-  check-fallback-runner:
-    runs-on: ubuntu-latest
-    needs: [check-workflow-conditions]
-    if: ${{ failure() && needs.check-workflow-conditions.result == 'failure' }}
-    outputs:
-      runner_type: 'ubuntu-latest'
-      should_run: true
-      continue_on_error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/ben' || github.ref == 'refs/heads/aj') }}
-    steps:
-      - name: Set fallback runner
-        run: echo "Using fallback GitHub-hosted runner as self-hosted runner is unavailable"
-
   lint-and-build-backend:
-    needs: [check-workflow-conditions, check-fallback-runner]
-    if: ${{ always() && (needs.check-workflow-conditions.outputs.should_run == 'true' || needs.check-fallback-runner.outputs.should_run == 'true') }}
-    runs-on: ${{ needs.check-fallback-runner.result == 'success' && 'ubuntu-latest' || 'self-hosted' }}
+    needs: [check-workflow-conditions]
+    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' }}
+    runs-on: ubuntu-latest
     # Set continue-on-error based on the branch condition
-    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' || needs.check-fallback-runner.outputs.continue_on_error == 'true' }}
+    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     # Add permissions block for annotations
     permissions:
       contents: read
@@ -187,7 +181,7 @@ jobs:
         with:
           version: latest
           working-directory: services/backend
-          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number --max-issues-per-linter=10 --max-same-issues=5 --build-tags=all --modules-download-mode=readonly
+          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number --max-issues-per-linter=10 --max-same-issues=5 --build-tags=all
           skip-cache: true
           skip-pkg-cache: true
           skip-build-cache: true
@@ -198,7 +192,7 @@ jobs:
           # Ensure Go modules are used
           GO111MODULE: "on"
         # Individual step can continue on error for ben/aj branches
-        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' || needs.check-fallback-runner.outputs.continue_on_error == 'true' }}
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Go Staticcheck
         if: steps.changed-files.outputs.has_changes == 'true'
@@ -243,7 +237,7 @@ jobs:
             echo "No affected packages to check"
           fi
         # Individual step can continue on error for ben/aj branches
-        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' || needs.check-fallback-runner.outputs.continue_on_error == 'true' }}
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Go Build
         run: |
@@ -278,14 +272,14 @@ jobs:
             go build -v -tags=all ./...
           fi
         # Individual step can continue on error for ben/aj branches
-        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' || needs.check-fallback-runner.outputs.continue_on_error == 'true' }}
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
   lint-and-build-worker:
-    needs: [check-workflow-conditions, check-fallback-runner]
-    if: ${{ always() && (needs.check-workflow-conditions.outputs.should_run == 'true' || needs.check-fallback-runner.outputs.should_run == 'true') }}
-    runs-on: ${{ needs.check-fallback-runner.result == 'success' && 'ubuntu-latest' || 'self-hosted' }}
+    needs: [check-workflow-conditions]
+    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' }}
+    runs-on: ubuntu-latest
     # Set continue-on-error based on the branch condition
-    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' || needs.check-fallback-runner.outputs.continue_on_error == 'true' }}
+    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -368,7 +362,7 @@ jobs:
           else
             echo "No Python files to lint"
           fi
-        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' || needs.check-fallback-runner.outputs.continue_on_error == 'true' }}
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Format check with Black
         if: steps.changed-py-files.outputs.has_changes == 'true'
@@ -407,14 +401,14 @@ jobs:
             python -m compileall .
           fi
         # Individual step can continue on error for ben/aj branches
-        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' || needs.check-fallback-runner.outputs.continue_on_error == 'true' }}
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
   lint-and-build-frontend:
-    needs: [check-workflow-conditions, check-fallback-runner]
-    if: ${{ always() && (needs.check-workflow-conditions.outputs.should_run == 'true' || needs.check-fallback-runner.outputs.should_run == 'true') }}
-    runs-on: ${{ needs.check-fallback-runner.result == 'success' && 'ubuntu-latest' || 'self-hosted' }}
+    needs: [check-workflow-conditions]
+    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' }}
+    runs-on: ubuntu-latest
     # Set continue-on-error based on the branch condition
-    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' || needs.check-fallback-runner.outputs.continue_on_error == 'true' }}
+    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -501,7 +495,7 @@ jobs:
             echo "No files to lint"
           fi
         # Individual step can continue on error for ben/aj branches
-        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' || needs.check-fallback-runner.outputs.continue_on_error == 'true' }}
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Type check
         if: steps.changed-frontend-files.outputs.has_changes == 'true'
@@ -511,22 +505,22 @@ jobs:
           # Change to error threshold to be more lenient
           npx svelte-check --threshold error --diagnostic-sources "js,ts,svelte"
         # Individual step can continue on error for ben/aj branches
-        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' || needs.check-fallback-runner.outputs.continue_on_error == 'true' }}
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Build
         run: |
           cd services/frontend
           npm run build
         # Individual step can continue on error for ben/aj branches
-        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' || needs.check-fallback-runner.outputs.continue_on_error == 'true' }}
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
   # Add new job to run frontend tests
   test-frontend:
-    needs: [check-workflow-conditions, check-fallback-runner, lint-and-build-frontend]
-    if: ${{ always() && (needs.check-workflow-conditions.outputs.should_run == 'true' || needs.check-fallback-runner.outputs.should_run == 'true') }}
-    runs-on: ${{ needs.check-fallback-runner.result == 'success' && 'ubuntu-latest' || 'self-hosted' }}
+    needs: [check-workflow-conditions, lint-and-build-frontend]
+    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' }}
+    runs-on: ubuntu-latest
     # Set continue-on-error based on the branch condition
-    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' || needs.check-fallback-runner.outputs.continue_on_error == 'true' }}
+    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -646,4 +640,4 @@ jobs:
             exit 0
           fi
         # Individual step can continue on error for ben/aj branches
-        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' || needs.check-fallback-runner.outputs.continue_on_error == 'true' }} 
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }} 
