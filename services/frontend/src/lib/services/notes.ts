@@ -1,11 +1,21 @@
 import { privateRequest } from '$lib/core/backend';
-import type { Note, NoteFilter } from '$lib/core/types';
+import type { Note, NoteFilter, SearchResult } from '$lib/core/types';
 
 /**
  * Fetches all notes for the current user with optional filtering
  */
 export async function getNotes(filter?: NoteFilter): Promise<Note[]> {
     return privateRequest<Note[]>('get_notes', filter || {});
+}
+
+/**
+ * Performs a full-text search on notes
+ */
+export async function searchNotes(query: string, isArchived?: boolean): Promise<SearchResult[]> {
+    return privateRequest<SearchResult[]>('search_notes', {
+        query,
+        ...(isArchived !== undefined ? { isArchived } : {})
+    });
 }
 
 /**

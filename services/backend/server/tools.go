@@ -1069,11 +1069,36 @@ var privateFunc = map[string]Tool{
 						Type:        genai.TypeBoolean,
 						Description: "Optional filter for archived notes",
 					},
+					"searchQuery": {
+						Type:        genai.TypeString,
+						Description: "Optional text search query to filter notes by content",
+					},
 				},
 				Required: []string{},
 			},
 		},
 		Function: tasks.GetNotes,
+	},
+	"search_notes": {
+		FunctionDeclaration: genai.FunctionDeclaration{
+			Name:        "search_notes",
+			Description: "Performs a full-text search on notes with highlighted results",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"query": {
+						Type:        genai.TypeString,
+						Description: "The search query to find relevant notes",
+					},
+					"isArchived": {
+						Type:        genai.TypeBoolean,
+						Description: "Optional filter for archived notes",
+					},
+				},
+				Required: []string{"query"},
+			},
+		},
+		Function: tasks.SearchNotes,
 	},
 	"get_note": {
 		FunctionDeclaration: genai.FunctionDeclaration{
