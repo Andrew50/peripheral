@@ -1,4 +1,4 @@
-package tasks
+package tools
 
 import (
 	"backend/utils"
@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 )
+
 // GetSimilarInstancesArgs represents a structure for handling GetSimilarInstancesArgs data.
 type GetSimilarInstancesArgs struct {
 	Ticker     string `json:"ticker"`
@@ -15,6 +16,7 @@ type GetSimilarInstancesArgs struct {
 	Timestamp  int64  `json:"timestamp"`
 	Timeframe  string `json:"timeframe"`
 }
+
 // GetSimilarInstancesResults represents a structure for handling GetSimilarInstancesResults data.
 type GetSimilarInstancesResults struct {
 	Ticker     string  `json:"ticker"`
@@ -25,6 +27,7 @@ type GetSimilarInstancesResults struct {
 	Sector     string  `json:"sector"`
 	Industry   string  `json:"industry"`
 }
+
 // GetSimilarInstances performs operations related to GetSimilarInstances functionality.
 func GetSimilarInstances(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetSimilarInstancesArgs
