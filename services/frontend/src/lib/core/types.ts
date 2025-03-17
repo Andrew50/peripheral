@@ -128,3 +128,24 @@ export type PollResponse = {
     newLogs: boolean;
     logsLength: number;
 };
+
+// Note-related types
+export type Note = {
+    noteId: number;
+    userId: number;
+    title: string;
+    content: string;
+    category: string;
+    tags: string[];
+    createdAt: string;
+    updatedAt: string;
+    isPinned: boolean;
+    isArchived: boolean;
+};
+
+export type NoteFilter = {
+    category?: string;
+    tags?: string[];
+    isPinned?: boolean;
+    isArchived?: boolean;
+};
