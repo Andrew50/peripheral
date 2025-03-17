@@ -13,7 +13,7 @@ type Tool struct {
 	Function func(*utils.Conn, int, json.RawMessage) (interface{}, error)
 }
 
-// RegisterQueryTools allows the query package to register its tools without creating an import cycle
+// RegisterQueryTool allows the query package to register its tools without creating an import cycle
 func RegisterQueryTool(getQueryFunc func(*utils.Conn, int, json.RawMessage) (interface{}, error)) {
 	Tools["getQuery"] = Tool{
 		FunctionDeclaration: genai.FunctionDeclaration{
