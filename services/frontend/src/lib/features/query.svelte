@@ -14,7 +14,7 @@
   });
   
   function handleSubmit() {
-    privateRequest('getLLMParsedQuery', { query: inputValue }).then((response) => {
+    privateRequest('getQuery', { query: inputValue }).then((response) => {
       console.log(response);
     });
   }

@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+func init() {
+	// Register the GetQuery function with the server package
+	server.RegisterQueryTool(GetQuery)
+}
+
 type Query struct {
 	Query string `json:"query"`
 }

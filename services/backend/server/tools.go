@@ -13,6 +13,32 @@ type Tool struct {
 	Function func(*utils.Conn, int, json.RawMessage) (interface{}, error)
 }
 
+// RegisterQueryTools allows the query package to register its tools without creating an import cycle
+func RegisterQueryTool(getQueryFunc func(*utils.Conn, int, json.RawMessage) (interface{}, error)) {
+	Tools["getQuery"] = Tool{
+		FunctionDeclaration: genai.FunctionDeclaration{
+			Name:        "getQuery",
+			Description: "Makes a gemini query to get a response",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"query": {
+						Type: genai.TypeString,
+						Description: "The query input to send to gemini",
+					},
+				},
+				Required: []string{"query"},
+			},
+		},
+		Function: getQueryFunc,
+	}
+}
+
+// GetTools returns a copy of the Tools map to avoid import cycles
+func GetTools() map[string]Tool {
+	return Tools
+}
+
 // Tools is a map of function names to Tool objects
 var Tools = map[string]Tool{
 	"verifyAuth": {
@@ -27,7 +53,6 @@ var Tools = map[string]Tool{
 		},
 		Function: verifyAuth,
 	},
-	//securities
 	"getSimilarInstances": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "getSimilarInstances",
