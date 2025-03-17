@@ -163,7 +163,7 @@ jobs:
         with:
           version: latest
           working-directory: services/backend
-          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number --max-issues-per-linter=10 --max-same-issues=5 --build-tags=all --new-from-rev=${{ github.event.pull_request.base.sha || 'HEAD~1' }}
+          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number --max-issues-per-linter=10 --max-same-issues=5 --build-tags=all
           skip-cache: true
           skip-pkg-cache: true
           skip-build-cache: true
