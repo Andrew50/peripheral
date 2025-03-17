@@ -1,4 +1,5 @@
-FROM postgres:16
+FROM timescale/timescaledb-ha:pg17
+USER root
 # Password will be provided via environment variables
 RUN apt-get update && apt-get install -y cron
 EXPOSE 5432

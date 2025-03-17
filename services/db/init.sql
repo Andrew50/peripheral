@@ -1,4 +1,5 @@
 --init.sql
+CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE TABLE users (
     userId SERIAL PRIMARY KEY,
@@ -215,6 +216,31 @@ CREATE INDEX idx_notes_is_pinned ON notes(is_pinned);
 CREATE INDEX idx_notes_is_archived ON notes(is_archived);
 CREATE INDEX idx_notes_tags ON notes USING GIN(tags);
 CREATE INDEX idxUserIdSecurityIdPrice on horizontal_lines(userId, securityId, price);
+
+-- Create the daily OHLCV table for storing time-series market data
+CREATE TABLE IF NOT EXISTS daily_ohlcv (
+    timestamp TIMESTAMP NOT NULL,
+    securityid INTEGER NOT NULL,
+    ticker VARCHAR(10) NOT NULL,
+    open DECIMAL(16, 6) NOT NULL,
+    high DECIMAL(16, 6) NOT NULL,
+    low DECIMAL(16, 6) NOT NULL,
+    close DECIMAL(16, 6) NOT NULL,
+    volume BIGINT NOT NULL,
+    vwap DECIMAL(16, 6),
+    transactions INTEGER,
+    CONSTRAINT unique_security_date
+        UNIQUE (securityid, timestamp)
+);
+
+-- Convert to TimescaleDB hypertable
+SELECT create_hypertable('daily_ohlcv', 'timestamp');
+
+-- Create indexes for efficient querying
+CREATE INDEX IF NOT EXISTS idx_daily_ohlcv_security_id ON daily_ohlcv(securityid);
+CREATE INDEX IF NOT EXISTS idx_daily_ohlcv_ticker ON daily_ohlcv(ticker);
+CREATE INDEX IF NOT EXISTS idx_daily_ohlcv_timestamp_desc ON daily_ohlcv(timestamp DESC);
+
 COPY securities(securityid, ticker, figi, minDate, maxDate)
 FROM '/docker-entrypoint-initdb.d/securities.csv' DELIMITER ',' CSV HEADER;
 INSERT INTO users (userId, username, password, auth_type)

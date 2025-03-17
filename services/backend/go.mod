@@ -1,6 +1,8 @@
 module backend
 
-go 1.22.2
+go 1.23
+
+toolchain go1.24.1
 
 require (
 	github.com/go-redis/redis/v8 v8.11.5
@@ -67,5 +69,6 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240617180043-68d350f18fd4 // indirect
 	google.golang.org/grpc v1.64.1 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
+	google.golang.org/genai v0.5.0 // indirect
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637 // indirect
 )
