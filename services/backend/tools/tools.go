@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/google/generative-ai-go/genai"
+	"google.golang.org/genai"
 )
 
 type Tool struct {
@@ -103,9 +103,14 @@ func initTools() {
 				Name:        "getCurrentTicker",
 				Description: "Retrieves the current ticker information for the user's active session",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: GetCurrentTicker,
@@ -184,9 +189,14 @@ func initTools() {
 				Name:        "getStudies",
 				Description: "Retrieves all study entries for the current user",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: GetStudies,
@@ -197,9 +207,14 @@ func initTools() {
 				Name:        "newStudy",
 				Description: "Creates a new study entry for the current user",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: NewStudy,
@@ -209,9 +224,14 @@ func initTools() {
 				Name:        "saveStudy",
 				Description: "Saves content for an existing study entry",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: SaveStudy,
@@ -221,9 +241,14 @@ func initTools() {
 				Name:        "deleteStudy",
 				Description: "Deletes a study entry for the current user",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: DeleteStudy,
@@ -233,9 +258,14 @@ func initTools() {
 				Name:        "getStudyEntry",
 				Description: "Retrieves the content of a specific study entry",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: GetStudyEntry,
@@ -245,9 +275,14 @@ func initTools() {
 				Name:        "completeStudy",
 				Description: "Marks a study entry as completed or not completed",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: CompleteStudy,
@@ -257,9 +292,14 @@ func initTools() {
 				Name:        "setStudySetup",
 				Description: "Associates a setup configuration with a study entry",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: SetStudySetup,
@@ -270,9 +310,14 @@ func initTools() {
 				Name:        "getJournals",
 				Description: "Retrieves all journal entries for the current user",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: GetJournals,
@@ -291,6 +336,20 @@ func initTools() {
 						"entry": {
 							Type:        genai.TypeObject,
 							Description: "The content of the journal entry in JSON format",
+							Properties: map[string]*genai.Schema{
+								"title": {
+									Type:        genai.TypeString,
+									Description: "The title of the journal entry",
+								},
+								"content": {
+									Type:        genai.TypeString,
+									Description: "The content of the journal entry",
+								},
+								"date": {
+									Type:        genai.TypeString,
+									Description: "The date of the journal entry",
+								},
+							},
 						},
 					},
 					Required: []string{"id", "entry"},
@@ -359,9 +418,14 @@ func initTools() {
 				Name:        "getScreensavers",
 				Description: "Retrieves a list of trending securities for the screensaver display",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: GetScreensavers,
@@ -372,9 +436,14 @@ func initTools() {
 				Name:        "getWatchlists",
 				Description: "Retrieves all watchlists for the current user",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: GetWatchlists,
@@ -493,9 +562,14 @@ func initTools() {
 				Name:        "getSettings",
 				Description: "Retrieves the user settings for the current user",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: GetSettings,
@@ -510,6 +584,16 @@ func initTools() {
 						"settings": {
 							Type:        genai.TypeObject,
 							Description: "The settings data in JSON format",
+							Properties: map[string]*genai.Schema{
+								"theme": {
+									Type:        genai.TypeString,
+									Description: "Theme preference (e.g., 'light', 'dark')",
+								},
+								"notifications": {
+									Type:        genai.TypeBoolean,
+									Description: "Whether notifications are enabled",
+								},
+							},
 						},
 					},
 					Required: []string{"settings"},
@@ -541,9 +625,14 @@ func initTools() {
 				Name:        "getExchanges",
 				Description: "Retrieves a list of stock exchanges and their MIC codes from Polygon.io",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: GetExchanges,
@@ -554,9 +643,14 @@ func initTools() {
 				Name:        "getSetups",
 				Description: "Retrieves all setup configurations for the current user",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: GetSetups,
@@ -672,9 +766,14 @@ func initTools() {
 				Name:        "labelTrainingQueueInstance",
 				Description: "Labels a training instance in the queue",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: LabelTrainingQueueInstance,
@@ -684,9 +783,14 @@ func initTools() {
 				Name:        "getTrainingQueue",
 				Description: "Retrieves the current training queue instances",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: GetTrainingQueue,
@@ -696,9 +800,14 @@ func initTools() {
 				Name:        "setSample",
 				Description: "Sets a sample for training purposes",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: SetSample,
@@ -711,9 +820,14 @@ func initTools() {
 				Name:        "getAlerts",
 				Description: "Retrieves all alerts for the current user",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: GetAlerts,
@@ -723,9 +837,14 @@ func initTools() {
 				Name:        "getAlertLogs",
 				Description: "Retrieves the history of triggered alerts for the current user",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: GetAlertLogs,
@@ -894,9 +1013,14 @@ func initTools() {
 				Name:        "getActive",
 				Description: "Retrieves a list of active securities",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: GetActive,
@@ -907,9 +1031,14 @@ func initTools() {
 				Name:        "getSecurityClassifications",
 				Description: "Retrieves sector and industry classifications for securities",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: GetSecurityClassifications,
@@ -1038,9 +1167,14 @@ func initTools() {
 				Name:        "delete_all_user_trades",
 				Description: "Deletes all trade records for the current user",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function: DeleteAllUserTrades,
@@ -1291,6 +1425,12 @@ func initTools() {
 				Description: "Verifies the authentication status of the user",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
 				},
 			},
 			Function: func(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) { return nil, nil },
