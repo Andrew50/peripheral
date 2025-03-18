@@ -186,8 +186,6 @@ jobs:
           skip-pkg-cache: true
           skip-build-cache: true
           only-new-issues: true
-          # Force a single output format to avoid the deprecation warning
-          output-format: colored-line-number
         env:
           # Ensure Go modules are used
           GO111MODULE: "on"
