@@ -1,7 +1,6 @@
-package query
+package tools
 
 import (
-	"backend/server"
 	"backend/utils"
 	"context"
 	"encoding/json"
@@ -128,7 +127,7 @@ func getGeminiFunctionResponse(conn *utils.Conn, query string) ([]FunctionCall, 
 	}
 
 	// Get tools from server through the GetTools function
-	tools := server.GetTools()
+	tools := GetTools()
 	
 	// Create Gemini tools from function declarations
 	var geminiTools []*genai.Tool

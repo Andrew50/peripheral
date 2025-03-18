@@ -1,17 +1,11 @@
-package query
+package tools
 
 import (
-	"backend/server"
 	"backend/utils"
 	"encoding/json"
 	"fmt"
 
 )
-
-func init() {
-	// Register the GetQuery function with the server package
-	server.RegisterQueryTool(GetQuery)
-}
 
 type Query struct {
 	Query string `json:"query"`
@@ -115,7 +109,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 	var results []ExecuteResult
 	for _, fc := range functionCalls {
 		// Check if the function exists in Tools map
-		tool, exists := server.Tools[fc.Name]
+		tool, exists := Tools[fc.Name]
 		if !exists {
 			results = append(results, ExecuteResult{
 				FunctionName: fc.Name,
