@@ -1,7 +1,6 @@
-package query
+package tools
 
 import (
-	"backend/tasks"
 	"backend/utils"
 	"context"
 	"encoding/json"
@@ -86,13 +85,19 @@ func getGeminiResponse(conn *utils.Conn, query string) (string, error) {
 	return text, nil
 }
 
+// FunctionCall represents a function to be called with its arguments
+type FunctionCall struct {
+	Name string          `json:"name"`
+	Args json.RawMessage `json:"args,omitempty"`
+}
+
 // FunctionResponse represents the response from the LLM with function calls
 type FunctionResponse struct {
-	FunctionCalls []tasks.FunctionCall `json:"function_calls"`
+	FunctionCalls []FunctionCall `json:"function_calls"`
 }
 
 // getGeminiFunctionResponse uses the Google Function API to return an ordered list of functions to execute
-func getGeminiFunctionResponse(conn *utils.Conn, query string) ([]tasks.FunctionCall, error) {
+func getGeminiFunctionResponse(conn *utils.Conn, query string) ([]FunctionCall, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
 		return nil, fmt.Errorf("error getting gemini key: %w", err)
@@ -121,12 +126,21 @@ func getGeminiFunctionResponse(conn *utils.Conn, query string) ([]tasks.Function
 		},
 	}
 
-	// We need to get tool definitions from somewhere else to avoid circular dependency
-	// For now, we'll use a temporary empty list
+	// Get tools directly from the Tools map instead of calling GetTools()
+	// This breaks the initialization cycle
 	var geminiTools []*genai.Tool
-
-	// TODO: Create a way to register tools without circular dependencies
-	// This is a temporary implementation until we find a better solution
+	for _, tool := range Tools {
+		// Convert the FunctionDeclaration to a Tool
+		geminiTools = append(geminiTools, &genai.Tool{
+			FunctionDeclarations: []*genai.FunctionDeclaration{
+				{
+					Name:        tool.FunctionDeclaration.Name,
+					Description: tool.FunctionDeclaration.Description,
+					Parameters:  tool.FunctionDeclaration.Parameters,
+				},
+			},
+		})
+	}
 
 	// Set the tools for the model
 	model.Tools = geminiTools
@@ -138,7 +152,7 @@ func getGeminiFunctionResponse(conn *utils.Conn, query string) ([]tasks.Function
 	}
 
 	// Extract function calls from response
-	var functionCalls []tasks.FunctionCall
+	var functionCalls []FunctionCall
 
 	// Process the response to extract function calls
 	for _, candidate := range resp.Candidates {
@@ -155,7 +169,7 @@ func getGeminiFunctionResponse(conn *utils.Conn, query string) ([]tasks.Function
 					return nil, fmt.Errorf("error marshaling function args: %w", err)
 				}
 
-				functionCalls = append(functionCalls, tasks.FunctionCall{
+				functionCalls = append(functionCalls, FunctionCall{
 					Name: fc.Name,
 					Args: args,
 				})
