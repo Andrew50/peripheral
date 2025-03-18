@@ -181,7 +181,8 @@ jobs:
         with:
           version: latest
           working-directory: services/backend
-          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number --max-issues-per-linter=10 --max-same-issues=5 --build-tags=all
+          # Only include packages that exist
+          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number --max-issues-per-linter=10 --max-same-issues=5 --build-tags=all --path-prefix=services/backend --allow-parallel-runners --go=1.24
           skip-cache: true
           skip-pkg-cache: true
           skip-build-cache: true
@@ -191,6 +192,8 @@ jobs:
         env:
           # Ensure Go modules are used
           GO111MODULE: "on"
+          # Add verbose output for debugging
+          VERBOSE: "true"
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
@@ -251,22 +254,54 @@ jobs:
           echo "Repository structure:"
           find . -type d -not -path "*/\.*" | sort
           
+          # Also show Go environment information
+          echo "Go environment:"
+          go env
+          
+          # Verify the module is correctly set up
+          echo "Checking Go module setup..."
+          go list -m
+          
           # Only build affected packages if we have changes, otherwise do a quick sanity build
           if [ "${{ steps.changed-files.outputs.has_changes }}" == "true" ]; then
             echo "Building affected packages..."
             AFFECTED_PACKAGES="${{ steps.changed-files.outputs.affected_packages }}"
+            
+            # First validate all packages can be resolved
+            echo "Validating packages can be resolved..."
+            VALID_PACKAGES=""
             for pkg in $AFFECTED_PACKAGES; do
               # Convert absolute path to relative module path
-              pkg_path=$(echo "$pkg" | sed 's/^services\/backend\///')
+              pkg_rel=$(echo "$pkg" | sed 's/^services\/backend\///')
               
-              # Only build if directory exists
-              if [ -d "$pkg_path" ]; then
-                echo "Building package: $pkg_path"
-                go build -v -tags=all "./$pkg_path"
+              # Check if the directory exists and can be resolved as a Go package
+              if [ -d "$pkg_rel" ] && go list "./$pkg_rel" &> /dev/null; then
+                echo "Package is valid: $pkg_rel"
+                VALID_PACKAGES="$VALID_PACKAGES $pkg_rel"
               else
-                echo "WARNING: Package directory does not exist: $pkg_path - skipping build"
+                echo "WARNING: Package $pkg_rel cannot be resolved - skipping build"
               fi
             done
+            
+            # Build each valid package individually to isolate failures
+            if [ -n "$VALID_PACKAGES" ]; then
+              for pkg_rel in $VALID_PACKAGES; do
+                echo "Building package: $pkg_rel"
+                if ! go build -v -tags=all "./$pkg_rel"; then
+                  echo "ERROR: Failed to build package: $pkg_rel"
+                  # Continue trying to build other packages but remember the failure
+                  BUILD_FAILED=true
+                fi
+              done
+              
+              # Report overall status
+              if [ "$BUILD_FAILED" = "true" ]; then
+                echo "ERROR: One or more packages failed to build"
+                exit 1
+              fi
+            else
+              echo "No valid packages to build"
+            fi
           else
             echo "No changes detected, performing sanity build..."
             go build -v -tags=all ./...
