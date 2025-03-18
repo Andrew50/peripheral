@@ -94,8 +94,13 @@ type FunctionResponse struct {
 	FunctionCalls []FunctionCall `json:"function_calls"`
 }
 
+type GeminiFunctionResponse struct {
+	FunctionCalls []FunctionCall `json:"function_calls"`
+	Text          string         `json:"text"`
+}
+
 // getGeminiFunctionResponse uses the Google Function API to return an ordered list of functions to execute
-func getGeminiFunctionResponse(conn *utils.Conn, query string) ([]FunctionCall, error) {
+func getGeminiFunctionResponse(conn *utils.Conn, query string) (*GeminiFunctionResponse, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
 		return nil, fmt.Errorf("error getting gemini key: %w", err)
@@ -140,7 +145,21 @@ func getGeminiFunctionResponse(conn *utils.Conn, query string) ([]FunctionCall, 
 	if err != nil {
 		return nil, fmt.Errorf("error generating content: %w", err)
 	}
-	fmt.Println(result.Candidates[0].Content.Parts[0].Text)
+	
+	// Extract the clean text response for display
+	responseText := ""
+	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
+		for _, part := range result.Candidates[0].Content.Parts {
+			if part.Text != "" {
+				responseText = part.Text
+				break
+			}
+		}
+	}
+	
+	// Print the response for debugging
+	fmt.Println("Gemini response:", responseText)
+	
 	// Extract function calls from response
 	var functionCalls []FunctionCall
 
@@ -167,5 +186,8 @@ func getGeminiFunctionResponse(conn *utils.Conn, query string) ([]FunctionCall, 
 		}
 	}
 
-	return functionCalls, nil
+	return &GeminiFunctionResponse{
+		FunctionCalls: functionCalls,
+		Text:          responseText,
+	}, nil
 }
