@@ -93,7 +93,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 	if err != nil {
 		return nil, fmt.Errorf("error getting function calls: %w", err)
 	}
-
+	
 	// If no function calls were returned, fall back to the text response
 	if len(functionCalls) == 0 {
 		textResponse, err := getGeminiResponse(conn, query.Query)
