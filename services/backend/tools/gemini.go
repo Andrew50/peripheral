@@ -11,8 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/generative-ai-go/genai"
-	"google.golang.org/api/option"
+	"google.golang.org/genai"
 )
 
 var ctx = context.Background()
@@ -49,41 +48,38 @@ func getGeminiResponse(conn *utils.Conn, query string) (string, error) {
 	}
 
 	// Create a new client using the API key
-	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey: apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
 	if err != nil {
 		return "", fmt.Errorf("error creating gemini client: %w", err)
 	}
-	defer client.Close()
-
 	// Get the system instruction
 	systemInstruction, err := getSystemInstruction()
 	if err != nil {
 		return "", fmt.Errorf("error getting system instruction: %w", err)
 	}
 
-	// Create a model instance
-	model := client.GenerativeModel("gemini-2.0-flash-001")
-
-	// Set the system instruction
-	model.SystemInstruction = &genai.Content{
-		Parts: []genai.Part{
-			genai.Text(systemInstruction),
+	config := &genai.GenerateContentConfig{
+		SystemInstruction: &genai.Content{
+			Parts: []*genai.Part{
+				{Text: systemInstruction},
+			},
 		},
 	}
-
-	// Generate content
-	resp, err := model.GenerateContent(ctx, genai.Text(query))
+	result, err := client.Models.GenerateContent(ctx, "gemini-2.0-flash-001", genai.Text(query), config)
 	if err != nil {
 		return "", fmt.Errorf("error generating content: %w", err)
 	}
 
 	// Extract the response text
-	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+	if len(result.Candidates) == 0 || len(result.Candidates[0].Content.Parts) == 0 {
 		return "", fmt.Errorf("no response from Gemini")
 	}
 
 	// Get the text from the response
-	text := fmt.Sprintf("%v", resp.Candidates[0].Content.Parts[0])
+	text := fmt.Sprintf("%v", result.Candidates[0].Content.Parts[0])
 	return text, nil
 }
 
@@ -106,30 +102,19 @@ func getGeminiFunctionResponse(conn *utils.Conn, query string) ([]FunctionCall, 
 	}
 
 	// Create a new client using the API key
-	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey: apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("error creating gemini client: %w", err)
 	}
-	defer client.Close()
-
 	// Get the system instruction
 	systemInstruction, err := getSystemInstruction()
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}
-
-	// Create a model instance
-	model := client.GenerativeModel("gemini-2.0-flash-001")
-
-	// Set the system instruction
-	model.SystemInstruction = &genai.Content{
-		Parts: []genai.Part{
-			genai.Text(systemInstruction),
-		},
-	}
-
-	// Get tools directly from the Tools map instead of calling GetTools()
-	// This breaks the initialization cycle
+	systemInstruction = "You are a helpful assistant that can execute functions."
 	var geminiTools []*genai.Tool
 	for _, tool := range Tools {
 		// Convert the FunctionDeclaration to a Tool
@@ -143,28 +128,31 @@ func getGeminiFunctionResponse(conn *utils.Conn, query string) ([]FunctionCall, 
 			},
 		})
 	}
-
-	// Set the tools for the model
-	model.Tools = geminiTools
-
-	// Generate content with function calling
-	resp, err := model.GenerateContent(ctx, genai.Text(query))
-	if err != nil {
-		return nil, fmt.Errorf("error generating content with function calling: %w", err)
+	config := &genai.GenerateContentConfig{
+		Tools: geminiTools,
+		SystemInstruction: &genai.Content{
+			Parts: []*genai.Part{
+				{Text: systemInstruction},
+			},
+		},
 	}
-
+	result, err := client.Models.GenerateContent(ctx, "gemini-2.0-flash-001", genai.Text(query), config)
+	if err != nil {
+		return nil, fmt.Errorf("error generating content: %w", err)
+	}
+	fmt.Println(result.Candidates[0].Content.Parts[0].Text)
 	// Extract function calls from response
 	var functionCalls []FunctionCall
 
 	// Process the response to extract function calls
-	for _, candidate := range resp.Candidates {
+	for _, candidate := range result.Candidates {
 		if candidate.Content == nil {
 			continue
 		}
 
 		for _, part := range candidate.Content.Parts {
 			// Check if the part is a FunctionCall
-			if fc, ok := part.(genai.FunctionCall); ok {
+			if fc := part.FunctionCall; fc != nil {
 				// Convert arguments to JSON
 				args, err := json.Marshal(fc.Args)
 				if err != nil {
