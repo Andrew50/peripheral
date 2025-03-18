@@ -25,7 +25,7 @@ var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, err
 }
 
 // Define privateFunc as an alias to Tools
-var privateFunc = Tools
+var privateFunc = tools.GetTools()
 
 func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
 
@@ -61,7 +61,7 @@ func publicHandler(conn *utils.Conn) http.HandlerFunc {
 		if r.Method == "OPTIONS" {
 			return
 		}
-
+		fmt.Println("debug: got public request")
 		// Validate content type to prevent content-type sniffing attacks
 		contentType := r.Header.Get("Content-Type")
 		if contentType != "application/json" {
