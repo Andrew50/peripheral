@@ -119,7 +119,7 @@ func getGeminiFunctionResponse(conn *utils.Conn, query string) (*GeminiFunctionR
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}
-	systemInstruction = "You are a helpful assistant that can execute functions."
+	systemInstruction = "You are a helpful assistant that can execute functions. If you need more information before executing a function, call the function that would give you the value and then recall getQuery with the new information and original query."
 	var geminiTools []*genai.Tool
 	for _, tool := range Tools {
 		// Convert the FunctionDeclaration to a Tool

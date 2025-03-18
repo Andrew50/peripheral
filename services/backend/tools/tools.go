@@ -84,7 +84,7 @@ func initTools() {
 		"getSecuritiesFromTicker": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getSecuritiesFromTicker",
-				Description: "Retrieves securities information based on a ticker symbol. You can use this to get the security ID of a ticker symbol.",
+				Description: "Retrieves securities information based on a ticker symbol. Get the security ID of a ticker symbol.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
