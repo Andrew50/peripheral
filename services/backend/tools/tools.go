@@ -1285,5 +1285,15 @@ func initTools() {
 			},
 			Function: ToggleNoteArchive,
 		},
+		"verifyAuth": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "verifyAuth",
+				Description: "Verifies the authentication status of the user",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+				},
+			},
+			Function: func(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) { return nil, nil },
+		},
 	}
 }
