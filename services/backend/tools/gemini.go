@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -18,14 +19,15 @@ var ctx = context.Background()
 
 // getSystemInstruction reads the content of query.txt to be used as system instruction
 func getSystemInstruction() (string, error) {
-	// Get the current file's directory
-	currentDir, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("error getting current directory: %w", err)
+	// Get the directory of the current file (gemini.go)
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", fmt.Errorf("error getting current file path")
 	}
+	currentDir := filepath.Dir(filename)
 
 	// Construct path to query.txt
-	queryFilePath := filepath.Join(currentDir, "query", "query.txt")
+	queryFilePath := filepath.Join(currentDir, "query.txt")
 
 	// Read the content of query.txt
 	content, err := os.ReadFile(queryFilePath)
