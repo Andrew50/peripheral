@@ -1,8 +1,10 @@
 package tasks
 
 import (
+	"backend/tools"
 	"backend/utils"
 	"encoding/json"
+	"fmt"
 )
 
 // Stub functions to fix linter errors
@@ -240,7 +242,7 @@ func GetActive(conn *utils.Conn, userID int, rawArgs json.RawMessage) (interface
 
 // GetSecurityClassifications retrieves security classifications
 func GetSecurityClassifications(conn *utils.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
-	return nil, nil
+	return tools.GetSecurityClassifications(conn, userID, rawArgs)
 }
 
 // GetLatestEdgarFilings retrieves the latest Edgar filings
@@ -276,4 +278,25 @@ func DeleteAllUserTrades(conn *utils.Conn, userID int, rawArgs json.RawMessage) 
 // HandleTradeUpload handles trade upload
 func HandleTradeUpload(conn *utils.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	return nil, nil
+}
+
+// GetQuery processes a natural language query and returns the result
+func GetQuery(conn *utils.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	// Simple implementation that returns the query as a response
+	var queryParams struct {
+		Query string `json:"query"`
+	}
+
+	if err := json.Unmarshal(rawArgs, &queryParams); err != nil {
+		return nil, fmt.Errorf("error parsing query parameters: %w", err)
+	}
+
+	// Just echo back the query for now
+	response := struct {
+		Result string `json:"result"`
+	}{
+		Result: "Echo: " + queryParams.Query,
+	}
+
+	return response, nil
 }

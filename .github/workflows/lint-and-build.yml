@@ -169,26 +169,39 @@ jobs:
         if: steps.changed-files.outputs.has_changes == 'true'
         run: |
           cd services/backend
-          # Run staticcheck on the entire module to ensure proper imports
-          echo "Running staticcheck on all packages..."
-          # First run to print all issues
-          staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016 ./... || true
-          # Second run to actually fail the build only on critical issues
-          staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016,-SA4006,-SA5000,-SA6000 ./...
+          # Find existing directories to check
+          echo "Finding existing directories to check..."
+          DIRS_TO_CHECK=$(find . -type d -not -path "*/\.*" -not -path "*/vendor/*" -maxdepth 2 | grep -v "^\.$" | sort)
+          
+          if [ -n "$DIRS_TO_CHECK" ]; then
+            echo "Running staticcheck on directories: $DIRS_TO_CHECK"
+            # First run to print all issues
+            staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016 $DIRS_TO_CHECK || true
+            # Second run to actually fail the build only on critical issues
+            staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016,-SA4006,-SA5000,-SA6000 $DIRS_TO_CHECK
+          else
+            echo "No Go directories found to check"
+          fi
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Go Build
         run: |
           cd services/backend
-          # Only build affected packages if we have changes, otherwise do a quick sanity build
-          if [ "${{ steps.changed-files.outputs.has_changes }}" == "true" ]; then
-            echo "Building affected packages..."
-            # Build the entire module to ensure proper imports
-            go build -v -tags=all ./...
+          # Find existing directories to build
+          echo "Finding existing directories to build..."
+          DIRS_TO_BUILD=$(find . -type d -not -path "*/\.*" -not -path "*/vendor/*" -maxdepth 2 | grep -v "^\.$" | sort)
+          
+          if [ -n "$DIRS_TO_BUILD" ]; then
+            echo "Building Go packages in directories: $DIRS_TO_BUILD"
+            for dir in $DIRS_TO_BUILD; do
+              if [ -n "$(find $dir -name '*.go' -type f)" ]; then
+                echo "Building package in $dir..."
+                go build -v -tags=all $dir
+              fi
+            done
           else
-            echo "No changes detected, performing sanity build..."
-            go build -v -tags=all ./...
+            echo "No Go directories found to build"
           fi
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}

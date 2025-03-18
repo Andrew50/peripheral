@@ -23,7 +23,7 @@ func RegisterQueryTool(getQueryFunc func(*utils.Conn, int, json.RawMessage) (int
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
 					"query": {
-						Type: genai.TypeString,
+						Type:        genai.TypeString,
 						Description: "The query input to send to gemini",
 					},
 				},
@@ -41,6 +41,23 @@ func GetTools() map[string]Tool {
 
 // Tools is a map of function names to Tool objects
 var Tools = map[string]Tool{
+	"getQuery": {
+		FunctionDeclaration: genai.FunctionDeclaration{
+			Name:        "getQuery",
+			Description: "Makes a gemini query to get a response",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"query": {
+						Type:        genai.TypeString,
+						Description: "The query input to send to gemini",
+					},
+				},
+				Required: []string{"query"},
+			},
+		},
+		Function: tasks.GetQuery,
+	},
 	"verifyAuth": {
 		FunctionDeclaration: genai.FunctionDeclaration{
 			Name:        "verifyAuth",
