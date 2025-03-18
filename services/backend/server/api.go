@@ -27,7 +27,6 @@ var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, err
 // Define privateFunc as an alias to Tools
 var privateFunc = tools.GetTools()
 
-
 // Request represents a structure for handling Request data.
 type Request struct {
 	Function  string          `json:"func"`
