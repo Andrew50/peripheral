@@ -1,4 +1,4 @@
-package tools
+package tasks
 
 import (
 	"backend/utils"
@@ -6,6 +6,7 @@ import (
 	"fmt"
 )
 
+// Query represents a user query
 type Query struct {
 	Query string `json:"query"`
 }
@@ -76,7 +77,14 @@ type ExecuteResult struct {
 	Error        string      `json:"error,omitempty"`
 }
 
-// GetQuery processes a natural language query and returns the result
+// FunctionCall represents a function call from the LLM
+type FunctionCall struct {
+	Name string          `json:"name"`
+	Args json.RawMessage `json:"args"`
+}
+
+// GetQuery is a placeholder that will be implemented with the actual query logic
+// This function signature matches what's expected in server/tools.go
 func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
 	var query Query
 	if err := json.Unmarshal(args, &query); err != nil {
@@ -88,64 +96,10 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		return nil, fmt.Errorf("query cannot be empty")
 	}
 
-	// Get function calls from the LLM
-	functionCalls, err := getGeminiFunctionResponse(conn, query.Query)
-	if err != nil {
-		return nil, fmt.Errorf("error getting function calls: %w", err)
-	}
-
-	// If no function calls were returned, fall back to the text response
-	if len(functionCalls) == 0 {
-		textResponse, err := getGeminiResponse(conn, query.Query)
-		if err != nil {
-			return nil, fmt.Errorf("error getting text response: %w", err)
-		}
-		return map[string]interface{}{
-			"type": "text",
-			"text": textResponse,
-		}, nil
-	}
-
-	// Execute the functions in order and collect results
-	var results []ExecuteResult
-	for _, fc := range functionCalls {
-		// Check if the function exists in Tools map
-		tool, exists := Tools[fc.Name]
-		if !exists {
-			results = append(results, ExecuteResult{
-				FunctionName: fc.Name,
-				Error:        fmt.Sprintf("function '%s' not found", fc.Name),
-			})
-			continue
-		}
-
-		// Execute the function
-		result, err := tool.Function(conn, userID, fc.Args)
-		if err != nil {
-			results = append(results, ExecuteResult{
-				FunctionName: fc.Name,
-				Error:        err.Error(),
-			})
-		} else {
-			results = append(results, ExecuteResult{
-				FunctionName: fc.Name,
-				Result:       result,
-			})
-		}
-	}
-
+	// This is a temporary implementation until we resolve the import cycle
+	// Later, we'll move the actual implementation here
 	return map[string]interface{}{
-		"type":    "function_calls",
-		"results": results,
+		"type": "text",
+		"text": "Query processing is temporarily unavailable. Please try again later.",
 	}, nil
-}
-
-// GetLLMParsedQuery is kept for backward compatibility
-func GetLLMParsedQuery(conn *utils.Conn, query Query) (string, error) {
-	llmResponse, err := getGeminiResponse(conn, query.Query)
-	if err != nil {
-		return "", fmt.Errorf("error getting gemini response: %w", err)
-	}
-
-	return llmResponse, nil
 }
