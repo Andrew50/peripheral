@@ -126,12 +126,10 @@ func getGeminiFunctionResponse(conn *utils.Conn, query string) ([]FunctionCall, 
 		},
 	}
 
-	// Get tools from server through the GetTools function
-	tools := GetTools()
-	
-	// Create Gemini tools from function declarations
+	// Get tools directly from the Tools map instead of calling GetTools()
+	// This breaks the initialization cycle
 	var geminiTools []*genai.Tool
-	for _, tool := range tools {
+	for _, tool := range Tools {
 		// Convert the FunctionDeclaration to a Tool
 		geminiTools = append(geminiTools, &genai.Tool{
 			FunctionDeclarations: []*genai.FunctionDeclaration{
