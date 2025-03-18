@@ -38,7 +38,7 @@ func initTools() {
 		"getQuery": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getQuery",
-				Description: "Makes a gemini query to get a response",
+				Description: "Makes a gemini query to get a response. You can use this to make recursive queries, based on the results of functions that you initially call.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -84,7 +84,7 @@ func initTools() {
 		"getSecuritiesFromTicker": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getSecuritiesFromTicker",
-				Description: "Retrieves securities information based on a ticker symbol",
+				Description: "Retrieves securities information based on a ticker symbol. You can use this to get the security ID of a ticker symbol.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
