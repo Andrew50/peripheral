@@ -201,15 +201,29 @@ jobs:
           DIRS_TO_CHECK=$(find . -type d -not -path "*/\.*" -not -path "*/vendor/*" -maxdepth 2 | grep -v "^\.$" | sort)
           
           if [ -n "$DIRS_TO_CHECK" ]; then
-            echo "Running staticcheck on directories: $DIRS_TO_CHECK"
-            
-            # Find directories that actually contain Go files
+            # Find directories that actually contain Go files directly, not just in subdirectories
             DIRS_WITH_GO_FILES=""
             for dir in $DIRS_TO_CHECK; do
-              if [ -n "$(find "$dir" -name "*.go" -type f 2>/dev/null)" ]; then
+              # Check if the directory itself (not subdirectories) contains Go files
+              if [ -n "$(find "$dir" -maxdepth 1 -name "*.go" -type f 2>/dev/null)" ]; then
                 DIRS_WITH_GO_FILES="$DIRS_WITH_GO_FILES $dir"
+              elif [[ "$dir" != "./cmd" ]]; then
+                # For all other directories except ./cmd, include them if they have Go files anywhere
+                if [ -n "$(find "$dir" -name "*.go" -type f 2>/dev/null)" ]; then
+                  DIRS_WITH_GO_FILES="$DIRS_WITH_GO_FILES $dir"
+                fi
               fi
             done
+            
+            # Also explicitly add the cmd subdirectories that have Go files
+            for subdir in ./cmd/*; do
+              if [ -d "$subdir" ] && [ -n "$(find "$subdir" -name "*.go" -type f 2>/dev/null)" ]; then
+                DIRS_WITH_GO_FILES="$DIRS_WITH_GO_FILES $subdir"
+              fi
+            done
+            
+            # Clean up the directory list
+            DIRS_WITH_GO_FILES=$(echo "$DIRS_WITH_GO_FILES" | xargs -n1 | sort -u | xargs)
             
             if [ -n "$DIRS_WITH_GO_FILES" ]; then
               echo "Running staticcheck on directories with Go files: $DIRS_WITH_GO_FILES"
@@ -235,13 +249,29 @@ jobs:
           DIRS_TO_BUILD=$(find . -type d -not -path "*/\.*" -not -path "*/vendor/*" -maxdepth 2 | grep -v "^\.$" | sort)
           
           if [ -n "$DIRS_TO_BUILD" ]; then
-            # Filter for directories that actually contain Go files
+            # Find directories that actually contain Go files directly, not just in subdirectories
             DIRS_WITH_GO_FILES=""
             for dir in $DIRS_TO_BUILD; do
-              if [ -n "$(find "$dir" -name "*.go" -type f 2>/dev/null)" ]; then
+              # Check if the directory itself (not subdirectories) contains Go files
+              if [ -n "$(find "$dir" -maxdepth 1 -name "*.go" -type f 2>/dev/null)" ]; then
                 DIRS_WITH_GO_FILES="$DIRS_WITH_GO_FILES $dir"
+              elif [[ "$dir" != "./cmd" ]]; then
+                # For all other directories except ./cmd, include them if they have Go files anywhere
+                if [ -n "$(find "$dir" -name "*.go" -type f 2>/dev/null)" ]; then
+                  DIRS_WITH_GO_FILES="$DIRS_WITH_GO_FILES $dir"
+                fi
               fi
             done
+            
+            # Also explicitly add the cmd subdirectories that have Go files
+            for subdir in ./cmd/*; do
+              if [ -d "$subdir" ] && [ -n "$(find "$subdir" -name "*.go" -type f 2>/dev/null)" ]; then
+                DIRS_WITH_GO_FILES="$DIRS_WITH_GO_FILES $subdir"
+              fi
+            done
+            
+            # Clean up the directory list
+            DIRS_WITH_GO_FILES=$(echo "$DIRS_WITH_GO_FILES" | xargs -n1 | sort -u | xargs)
             
             if [ -n "$DIRS_WITH_GO_FILES" ]; then
               echo "Building Go packages in directories with Go files: $DIRS_WITH_GO_FILES"
