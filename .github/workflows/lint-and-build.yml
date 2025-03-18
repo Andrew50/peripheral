@@ -141,8 +141,32 @@ jobs:
           
           # Identify affected packages (directories)
           if [ -n "$CHANGED_GO_FILES" ]; then
-            AFFECTED_PACKAGES=$(echo "$CHANGED_GO_FILES" | xargs dirname | sort -u | xargs)
-            echo "Affected packages: $AFFECTED_PACKAGES"
+            # Get all potentially affected package directories
+            ALL_AFFECTED_PACKAGES=$(echo "$CHANGED_GO_FILES" | xargs dirname | sort -u)
+            echo "All potentially affected packages: $ALL_AFFECTED_PACKAGES"
+            
+            # Filter out directories that don't exist anymore
+            EXISTING_PACKAGES=""
+            cd services/backend
+            for pkg in $ALL_AFFECTED_PACKAGES; do
+              # Convert from full path to relative path
+              pkg_rel=$(echo "$pkg" | sed 's/^services\/backend\///')
+              
+              # Check if the directory still exists
+              if [ -d "$pkg_rel" ]; then
+                echo "Directory exists: $pkg"
+                EXISTING_PACKAGES="$EXISTING_PACKAGES $pkg"
+              else
+                echo "Directory no longer exists (skipping): $pkg"
+              fi
+            done
+            cd - > /dev/null  # Return to previous directory
+            
+            # Store only existing packages as affected packages
+            AFFECTED_PACKAGES=$(echo "$EXISTING_PACKAGES" | xargs)
+            echo "Final affected packages (existing only): $AFFECTED_PACKAGES"
+            
+            # Store the paths for reference in other steps
             echo "affected_packages=$AFFECTED_PACKAGES" >> $GITHUB_OUTPUT
             echo "affected_files=$CHANGED_GO_FILES" >> $GITHUB_OUTPUT
             echo "has_changes=true" >> $GITHUB_OUTPUT
@@ -162,6 +186,11 @@ jobs:
           skip-pkg-cache: true
           skip-build-cache: true
           only-new-issues: true
+          # Force a single output format to avoid the deprecation warning
+          output-format: colored-line-number
+        env:
+          # Ensure Go modules are used
+          GO111MODULE: "on"
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
@@ -187,6 +216,7 @@ jobs:
 
       - name: Go Build
         run: |
+          # Ensure we're in the right directory with the go.mod file
           cd services/backend
           # Find existing directories to build
           echo "Finding existing directories to build..."
