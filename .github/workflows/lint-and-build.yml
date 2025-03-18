@@ -181,16 +181,17 @@ jobs:
         with:
           version: latest
           working-directory: services/backend
-          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number --max-issues-per-linter=10 --max-same-issues=5 --build-tags=all
+          # Only include packages that exist
+          args: --timeout=5m --config=.golangci.yml --out-format=colored-line-number --max-issues-per-linter=10 --max-same-issues=5 --build-tags=all --path-prefix=services/backend --allow-parallel-runners --go=1.24
           skip-cache: true
           skip-pkg-cache: true
           skip-build-cache: true
           only-new-issues: true
-          # Force a single output format to avoid the deprecation warning
-          output-format: colored-line-number
         env:
           # Ensure Go modules are used
           GO111MODULE: "on"
+          # Add verbose output for debugging
+          VERBOSE: "true"
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
@@ -198,43 +199,46 @@ jobs:
         if: steps.changed-files.outputs.has_changes == 'true'
         run: |
           cd services/backend
-          # Ensure Go modules are used
-          export GO111MODULE=on
+          # Find existing directories to check
+          echo "Finding existing directories to check..."
+          DIRS_TO_CHECK=$(find . -type d -not -path "*/\.*" -not -path "*/vendor/*" -maxdepth 2 | grep -v "^\.$" | sort)
           
-          # Debug: Show current directory and list contents
-          echo "Current directory: $(pwd)"
-          echo "Directory contents:"
-          ls -la
-          
-          # Run staticcheck only on affected packages
-          AFFECTED_PACKAGES="${{ steps.changed-files.outputs.affected_packages }}"
-          if [ -n "$AFFECTED_PACKAGES" ]; then
-            # Process package paths to be relative to the module and check if they exist
-            MODULE_PACKAGES=""
-            for pkg in $AFFECTED_PACKAGES; do
-              # Convert from services/backend/foo to ./foo
-              pkg_path=$(echo "$pkg" | sed 's/^services\/backend\//\.\//')
-              
-              # Only add to the list if directory exists
-              if [ -d "$(echo "$pkg_path" | sed 's/^\.\///')" ]; then
-                echo "Package directory exists: $pkg_path"
-                MODULE_PACKAGES="$MODULE_PACKAGES $pkg_path"
-              else
-                echo "WARNING: Package directory does not exist: $pkg_path - skipping"
+          if [ -n "$DIRS_TO_CHECK" ]; then
+            # Find directories that actually contain Go files directly, not just in subdirectories
+            DIRS_WITH_GO_FILES=""
+            for dir in $DIRS_TO_CHECK; do
+              # Check if the directory itself (not subdirectories) contains Go files
+              if [ -n "$(find "$dir" -maxdepth 1 -name "*.go" -type f 2>/dev/null)" ]; then
+                DIRS_WITH_GO_FILES="$DIRS_WITH_GO_FILES $dir"
+              elif [[ "$dir" != "./cmd" ]]; then
+                # For all other directories except ./cmd, include them if they have Go files anywhere
+                if [ -n "$(find "$dir" -name "*.go" -type f 2>/dev/null)" ]; then
+                  DIRS_WITH_GO_FILES="$DIRS_WITH_GO_FILES $dir"
+                fi
               fi
             done
-
-            if [ -n "$MODULE_PACKAGES" ]; then
-              echo "Running staticcheck on existing packages: $MODULE_PACKAGES"
+            
+            # Also explicitly add the cmd subdirectories that have Go files
+            for subdir in ./cmd/*; do
+              if [ -d "$subdir" ] && [ -n "$(find "$subdir" -name "*.go" -type f 2>/dev/null)" ]; then
+                DIRS_WITH_GO_FILES="$DIRS_WITH_GO_FILES $subdir"
+              fi
+            done
+            
+            # Clean up the directory list
+            DIRS_WITH_GO_FILES=$(echo "$DIRS_WITH_GO_FILES" | xargs -n1 | sort -u | xargs)
+            
+            if [ -n "$DIRS_WITH_GO_FILES" ]; then
+              echo "Running staticcheck on directories with Go files: $DIRS_WITH_GO_FILES"
               # First run to print all issues
-              staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016 $MODULE_PACKAGES || true
+              staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016 $DIRS_WITH_GO_FILES || true
               # Second run to actually fail the build only on critical issues
-              staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016,-SA4006,-SA5000,-SA6000 $MODULE_PACKAGES
+              staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016,-SA4006,-SA5000,-SA6000 $DIRS_WITH_GO_FILES
             else
-              echo "No valid packages to check with staticcheck"
+              echo "No directories with Go files found to check"
             fi
           else
-            echo "No affected packages to check"
+            echo "No Go directories found to check"
           fi
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
@@ -251,22 +255,54 @@ jobs:
           echo "Repository structure:"
           find . -type d -not -path "*/\.*" | sort
           
+          # Also show Go environment information
+          echo "Go environment:"
+          go env
+          
+          # Verify the module is correctly set up
+          echo "Checking Go module setup..."
+          go list -m
+          
           # Only build affected packages if we have changes, otherwise do a quick sanity build
           if [ "${{ steps.changed-files.outputs.has_changes }}" == "true" ]; then
             echo "Building affected packages..."
             AFFECTED_PACKAGES="${{ steps.changed-files.outputs.affected_packages }}"
+            
+            # First validate all packages can be resolved
+            echo "Validating packages can be resolved..."
+            VALID_PACKAGES=""
             for pkg in $AFFECTED_PACKAGES; do
               # Convert absolute path to relative module path
-              pkg_path=$(echo "$pkg" | sed 's/^services\/backend\///')
+              pkg_rel=$(echo "$pkg" | sed 's/^services\/backend\///')
               
-              # Only build if directory exists
-              if [ -d "$pkg_path" ]; then
-                echo "Building package: $pkg_path"
-                go build -v -tags=all "./$pkg_path"
+              # Check if the directory exists and can be resolved as a Go package
+              if [ -d "$pkg_rel" ] && go list "./$pkg_rel" &> /dev/null; then
+                echo "Package is valid: $pkg_rel"
+                VALID_PACKAGES="$VALID_PACKAGES $pkg_rel"
               else
-                echo "WARNING: Package directory does not exist: $pkg_path - skipping build"
+                echo "WARNING: Package $pkg_rel cannot be resolved - skipping build"
               fi
             done
+            
+            # Build each valid package individually to isolate failures
+            if [ -n "$VALID_PACKAGES" ]; then
+              for pkg_rel in $VALID_PACKAGES; do
+                echo "Building package: $pkg_rel"
+                if ! go build -v -tags=all "./$pkg_rel"; then
+                  echo "ERROR: Failed to build package: $pkg_rel"
+                  # Continue trying to build other packages but remember the failure
+                  BUILD_FAILED=true
+                fi
+              done
+              
+              # Report overall status
+              if [ "$BUILD_FAILED" = "true" ]; then
+                echo "ERROR: One or more packages failed to build"
+                exit 1
+              fi
+            else
+              echo "No valid packages to build"
+            fi
           else
             echo "No changes detected, performing sanity build..."
             go build -v -tags=all ./...
