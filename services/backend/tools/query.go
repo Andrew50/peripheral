@@ -89,13 +89,25 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 	}
 
 	// Get function calls from the LLM
-	functionCalls, err := getGeminiFunctionResponse(conn, query.Query)
+	geminiFuncResponse, err := getGeminiFunctionResponse(conn, query.Query)
 	if err != nil {
 		return nil, fmt.Errorf("error getting function calls: %w", err)
 	}
 	
+	functionCalls := geminiFuncResponse.FunctionCalls
+	responseText := geminiFuncResponse.Text
+
 	// If no function calls were returned, fall back to the text response
 	if len(functionCalls) == 0 {
+		// If we already have a text response, use it
+		if responseText != "" {
+			return map[string]interface{}{
+				"type": "text",
+				"text": responseText,
+			}, nil
+		}
+		
+		// Otherwise, get a direct text response
 		textResponse, err := getGeminiResponse(conn, query.Query)
 		if err != nil {
 			return nil, fmt.Errorf("error getting text response: %w", err)
@@ -134,9 +146,11 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		}
 	}
 
+	// Return both the function call results and the text response
 	return map[string]interface{}{
 		"type":    "function_calls",
 		"results": results,
+		"text":    responseText,
 	}, nil
 }
 
