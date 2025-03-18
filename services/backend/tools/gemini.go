@@ -1,13 +1,13 @@
-package query
+package tools
 
 import (
-	"backend/server"
 	"backend/utils"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -19,14 +19,15 @@ var ctx = context.Background()
 
 // getSystemInstruction reads the content of query.txt to be used as system instruction
 func getSystemInstruction() (string, error) {
-	// Get the current file's directory
-	currentDir, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("error getting current directory: %w", err)
+	// Get the directory of the current file (gemini.go)
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", fmt.Errorf("error getting current file path")
 	}
+	currentDir := filepath.Dir(filename)
 
 	// Construct path to query.txt
-	queryFilePath := filepath.Join(currentDir, "query", "query.txt")
+	queryFilePath := filepath.Join(currentDir, "query.txt")
 
 	// Read the content of query.txt
 	content, err := os.ReadFile(queryFilePath)
@@ -127,12 +128,10 @@ func getGeminiFunctionResponse(conn *utils.Conn, query string) ([]FunctionCall, 
 		},
 	}
 
-	// Get tools from server through the GetTools function
-	tools := server.GetTools()
-	
-	// Create Gemini tools from function declarations
+	// Get tools directly from the Tools map instead of calling GetTools()
+	// This breaks the initialization cycle
 	var geminiTools []*genai.Tool
-	for _, tool := range tools {
+	for _, tool := range Tools {
 		// Convert the FunctionDeclaration to a Tool
 		geminiTools = append(geminiTools, &genai.Tool{
 			FunctionDeclarations: []*genai.FunctionDeclaration{

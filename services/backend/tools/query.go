@@ -1,79 +1,74 @@
-package query
+package tools
 
 import (
-	"backend/server"
 	"backend/utils"
 	"encoding/json"
 	"fmt"
-
 )
-
-func init() {
-	// Register the GetQuery function with the server package
-	server.RegisterQueryTool(GetQuery)
-}
 
 type Query struct {
 	Query string `json:"query"`
 }
+
 // ParsedQuery represents the structured JSON output from the LLM
 type ParsedQuery struct {
-    Timeframes []string   `json:"timeframes"`
-    Stocks     Stocks     `json:"stocks"`
-    Indicators []Indicator `json:"indicators"`
-    Conditions []Condition `json:"conditions"`
-    Sequence   Sequence   `json:"sequence"`
-    DateRange  DateRange  `json:"date_range"`
+	Timeframes []string    `json:"timeframes"`
+	Stocks     Stocks      `json:"stocks"`
+	Indicators []Indicator `json:"indicators"`
+	Conditions []Condition `json:"conditions"`
+	Sequence   Sequence    `json:"sequence"`
+	DateRange  DateRange   `json:"date_range"`
 }
 
 type Stocks struct {
-    Universe string            `json:"universe"`
-    Include  []string          `json:"include"`
-    Exclude  []string          `json:"exclude"`
-    Filters  map[string]Filter `json:"filters"`
+	Universe string            `json:"universe"`
+	Include  []string          `json:"include"`
+	Exclude  []string          `json:"exclude"`
+	Filters  map[string]Filter `json:"filters"`
 }
 
 type Filter struct {
-    Operator string  `json:"operator"`
-    Value    float64 `json:"value"`
+	Operator string  `json:"operator"`
+	Value    float64 `json:"value"`
 }
 
 type Indicator struct {
-    Type      string `json:"type"`
-    Period    int    `json:"period"`
-    Timeframe string `json:"timeframe"`
+	Type      string `json:"type"`
+	Period    int    `json:"period"`
+	Timeframe string `json:"timeframe"`
 }
 
 type Condition struct {
-    LHS       FieldWithOffset `json:"lhs"`
-    Operation string          `json:"operation"`
-    RHS       RHS             `json:"rhs"`
-    Timeframe string          `json:"timeframe"`
+	LHS       FieldWithOffset `json:"lhs"`
+	Operation string          `json:"operation"`
+	RHS       RHS             `json:"rhs"`
+	Timeframe string          `json:"timeframe"`
 }
 
 type FieldWithOffset struct {
-    Field  string `json:"field"`
-    Offset int    `json:"offset"`
+	Field  string `json:"field"`
+	Offset int    `json:"offset"`
 }
 
 type RHS struct {
-    Field     string  `json:"field,omitempty"`
-    Offset    int     `json:"offset,omitempty"`
-    Indicator string  `json:"indicator,omitempty"`
-    Period    int     `json:"period,omitempty"`
-    Value     float64 `json:"value,omitempty"`
+	Field     string  `json:"field,omitempty"`
+	Offset    int     `json:"offset,omitempty"`
+	Indicator string  `json:"indicator,omitempty"`
+	Period    int     `json:"period,omitempty"`
+	Value     float64 `json:"value,omitempty"`
 }
 
 type Sequence struct {
-    Condition string `json:"condition"`
-    Timeframe string `json:"timeframe"`
-    Window    int    `json:"window"`
+	Condition string `json:"condition"`
+	Timeframe string `json:"timeframe"`
+	Window    int    `json:"window"`
 }
 
 type DateRange struct {
-    Start string `json:"start"`
-    End   string `json:"end"`
+	Start string `json:"start"`
+	End   string `json:"end"`
 }
+
 // ExecuteResult represents the result of executing a function
 type ExecuteResult struct {
 	FunctionName string      `json:"function_name"`
@@ -115,7 +110,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 	var results []ExecuteResult
 	for _, fc := range functionCalls {
 		// Check if the function exists in Tools map
-		tool, exists := server.Tools[fc.Name]
+		tool, exists := Tools[fc.Name]
 		if !exists {
 			results = append(results, ExecuteResult{
 				FunctionName: fc.Name,
@@ -154,4 +149,3 @@ func GetLLMParsedQuery(conn *utils.Conn, query Query) (string, error) {
 
 	return llmResponse, nil
 }
-
