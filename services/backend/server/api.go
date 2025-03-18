@@ -27,7 +27,6 @@ var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, err
 // Define privateFunc as an alias to Tools
 var privateFunc = tools.GetTools()
 
-func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
 
 // Request represents a structure for handling Request data.
 type Request struct {
