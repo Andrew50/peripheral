@@ -25,9 +25,7 @@ var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, err
 }
 
 // Define privateFunc as an alias to Tools
-var privateFunc = Tools
-
-func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
+var privateFunc = tools.GetTools()
 
 // Request represents a structure for handling Request data.
 type Request struct {
@@ -61,7 +59,7 @@ func publicHandler(conn *utils.Conn) http.HandlerFunc {
 		if r.Method == "OPTIONS" {
 			return
 		}
-
+		fmt.Println("debug: got public request")
 		// Validate content type to prevent content-type sniffing attacks
 		contentType := r.Header.Get("Content-Type")
 		if contentType != "application/json" {
