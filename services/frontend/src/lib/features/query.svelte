@@ -15,6 +15,16 @@
 		type: 'text' | 'function_calls' | string;
 		text?: string;
 		results?: FunctionResult[];
+		history?: any;
+	};
+
+	// Conversation history type
+	type ConversationData = {
+		query: string;
+		response_text: string;
+		function_calls?: any[];
+		tool_results?: FunctionResult[];
+		timestamp: string | Date;
 	};
 
 	// Message type for chat history
@@ -36,10 +46,48 @@
 	// Chat history
 	let messages: Message[] = [];
 
+	// Load any existing conversation history from the server
+	async function loadConversationHistory() {
+		try {
+			isLoading = true;
+			const response = await privateRequest('getUserConversation', {});
+
+			// Check if we have a valid conversation history
+			const conversation = response as ConversationData;
+			if (conversation && conversation.query && conversation.response_text) {
+				// Add user message from history
+				messages.push({
+					id: generateId(),
+					content: conversation.query,
+					sender: 'user',
+					timestamp: new Date(conversation.timestamp)
+				});
+
+				// Add assistant response from history
+				messages.push({
+					id: generateId(),
+					content: conversation.response_text,
+					sender: 'assistant',
+					timestamp: new Date(conversation.timestamp),
+					responseType: conversation.function_calls?.length ? 'function_calls' : 'text',
+					functionResults: conversation.tool_results || []
+				});
+
+				scrollToBottom();
+			}
+		} catch (error) {
+			console.error('Error loading conversation history:', error);
+			// If we can't load history, just continue with empty messages
+		} finally {
+			isLoading = false;
+		}
+	}
+
 	onMount(() => {
 		if (queryInput) {
 			setTimeout(() => queryInput.focus(), 100);
 		}
+		loadConversationHistory();
 	});
 
 	// Generate unique IDs for messages
@@ -85,6 +133,7 @@
 
 		privateRequest('getQuery', { query: queryText })
 			.then((response) => {
+				console.log('response', response);
 				// Type assertion to handle the unknown response type
 				const typedResponse = response as QueryResponse;
 				console.log(typedResponse);

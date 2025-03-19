@@ -14,6 +14,7 @@
 	let password = '';
 	let errorMessage = writable('');
 	let loading = false;
+	let guestLoading = false;
 
 	// Update error message display
 	let errorMessageText = '';
@@ -104,6 +105,27 @@
 			errorMessage.set('Failed to initialize Google login');
 		}
 	}
+
+	async function handleGuestLogin() {
+		guestLoading = true;
+		try {
+			const r = await publicRequest<Login>('guestLogin', {});
+			if (browser) {
+				sessionStorage.setItem('authToken', r.token);
+				sessionStorage.setItem('profilePic', r.profilePic || '');
+				sessionStorage.setItem('username', r.username || 'Guest');
+			}
+			goto('/app');
+		} catch (error) {
+			if (error instanceof Error) {
+				errorMessage.set(error.message);
+			} else {
+				errorMessage.set('Guest login failed. Please try again.');
+			}
+		} finally {
+			guestLoading = false;
+		}
+	}
 </script>
 
 <div class="page-wrapper">
@@ -148,6 +170,18 @@
 					<span class="gsi-material-button-contents">Sign in with Google</span>
 					<span style="display: none;">Sign in with Google</span>
 				</div>
+			</button>
+
+			<button
+				class="guest-button responsive-shadow"
+				on:click={handleGuestLogin}
+				disabled={guestLoading}
+			>
+				{#if guestLoading}
+					<span class="loader"></span>
+				{:else}
+					Continue as Guest
+				{/if}
 			</button>
 
 			<div class="divider">
@@ -371,6 +405,51 @@
 		max-width: 400px;
 		min-width: min-content;
 		border-color: #8e918f;
+		margin-bottom: 10px;
+	}
+
+	.guest-button {
+		-moz-user-select: none;
+		-webkit-user-select: none;
+		-ms-user-select: none;
+		-webkit-appearance: none;
+		background-color: #333a45;
+		border: 1px solid #4c5361;
+		border-radius: clamp(4px, 0.5vw, 6px);
+		box-sizing: border-box;
+		color: #e3e3e3;
+		cursor: pointer;
+		font-family: 'Roboto', arial, sans-serif;
+		font-weight: 500;
+		height: clamp(36px, 5vh, 40px);
+		letter-spacing: 0.25px;
+		outline: none;
+		overflow: hidden;
+		padding: 0 clamp(8px, 1vw, 12px);
+		position: relative;
+		text-align: center;
+		transition:
+			background-color 0.218s,
+			border-color 0.218s,
+			box-shadow 0.218s;
+		vertical-align: middle;
+		white-space: nowrap;
+		width: 100%;
+		max-width: 400px;
+		min-width: min-content;
+		margin-top: 10px;
+	}
+
+	.guest-button:hover:not(:disabled) {
+		background-color: #3f4652;
+		box-shadow:
+			0 1px 2px 0 rgba(60, 64, 67, 0.3),
+			0 1px 3px 1px rgba(60, 64, 67, 0.15);
+	}
+
+	.guest-button:disabled {
+		opacity: 0.7;
+		cursor: not-allowed;
 	}
 
 	.gsi-material-button .gsi-material-button-icon {

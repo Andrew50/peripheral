@@ -812,9 +812,6 @@ func initTools() {
 			},
 			Function: SetSample,
 		},
-		//telegram
-		//	"sendMessage": telegram.SendMessage,
-		//alerts
 		"getAlerts": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getAlerts",
@@ -903,14 +900,6 @@ func initTools() {
 			},
 			Function: DeleteAlert,
 		},
-
-		// deprecated
-		// "getTradeData":            GetTradeData,
-		//
-		//	"getLastTrade":            GetLastTrade,
-		//
-		// "getQuoteData":            GetQuoteData,
-		// "getSecurityDateBounds":   GetSecurityDateBounds,
 		"setHorizontalLine": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "setHorizontalLine",
@@ -1007,7 +996,6 @@ func initTools() {
 			},
 			Function: UpdateHorizontalLine,
 		},
-		//active
 		"getActive": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getActive",
@@ -1025,7 +1013,6 @@ func initTools() {
 			},
 			Function: GetActive,
 		},
-		//sector, industry
 		"getSecurityClassifications": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getSecurityClassifications",
@@ -1089,8 +1076,6 @@ func initTools() {
 			},
 			Function: GetChartEvents,
 		},
-
-		// Add the new trade-related functions
 		"grab_user_trades": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "grab_user_trades",
@@ -1200,8 +1185,6 @@ func initTools() {
 			},
 			Function: HandleTradeUpload,
 		},
-
-		// Notes-related functions
 		"get_notes": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "get_notes",
@@ -1435,10 +1418,10 @@ func initTools() {
 			},
 			Function: func(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) { return nil, nil },
 		},
-		"getUserConversations": {
+		"getUserConversation": {
 			FunctionDeclaration: genai.FunctionDeclaration{
-				Name:        "getUserConversations",
-				Description: "Retrieves a list of recent conversations for the current user",
+				Name:        "getUserConversation",
+				Description: "Retrieves the conversation history for the current user",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -1450,7 +1433,38 @@ func initTools() {
 					Required: []string{},
 				},
 			},
-			Function: GetUserConversations,
+			Function: GetUserConversation,
+		},
+		"getSecurityPriceChartV2": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "getSecurityPriceChartV2",
+				Description: "Retrieves price chart data for a ticker symbol with date options",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"ticker": {
+							Type:        genai.TypeString,
+							Description: "The ticker symbol to get data for",
+						},
+						"start_date": {
+							Type:        genai.TypeString,
+							Description: "The start date in YYYY-MM-DD format",
+						},
+						"end_date": {
+							Type:        genai.TypeString,
+							Description: "The end date in YYYY-MM-DD format",
+						},
+					},
+					Required: []string{"ticker"},
+				},
+			},
+			Function: GetSecurityPriceChartV2,
 		},
 	}
+}
+
+// GetSecurityPriceChartV2 retrieves price chart data for a ticker symbol with date options
+func GetSecurityPriceChartV2(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
+	// This is a stub implementation - should be replaced with actual implementation
+	return nil, nil
 }
