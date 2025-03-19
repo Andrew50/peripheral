@@ -53,7 +53,7 @@ services:
   tf:
     build:
       context: ../../services/tf
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     restart: unless-stopped
     platform: ${PLATFORM:-linux/amd64}
     ports:

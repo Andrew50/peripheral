@@ -8,6 +8,7 @@ services/worker/venv
 services/backups/
 services/context/llm_context.txt
 services/frontend/package-lock.json
+.github/tmp
 
 # Python bytecode files
 __pycache__/
