@@ -166,7 +166,9 @@ func simpleUpdateSecurities(conn *utils.Conn) error {
 						sec.Ticker, sec.CompositeFIGI,
 					)
 					if err != nil {
-						return fmt.Errorf("failed to reactivate ticker %s with alternative approach: %w", sec.Ticker, err)
+						// Log error but continue with other tickers
+						fmt.Printf("Warning: Failed to reactivate ticker %s with alternative approach: %v\n", sec.Ticker, err)
+						continue
 					}
 				} else {
 					// If it exists but was delisted and no duplicate exists, update the existing row
@@ -180,7 +182,9 @@ func simpleUpdateSecurities(conn *utils.Conn) error {
 						sec.Ticker, sec.CompositeFIGI,
 					)
 					if err != nil {
-						return fmt.Errorf("failed to reactivate ticker %s: %w", sec.Ticker, err)
+						// Log error but continue with other tickers
+						fmt.Printf("Warning: Failed to reactivate ticker %s: %v\n", sec.Ticker, err)
+						continue
 					}
 				}
 			} else {
@@ -191,7 +195,9 @@ func simpleUpdateSecurities(conn *utils.Conn) error {
 					sec.Ticker, sec.CompositeFIGI,
 				)
 				if err != nil {
-					return fmt.Errorf("failed to insert new ticker %s: %w", sec.Ticker, err)
+					// Log error but continue with other tickers
+					fmt.Printf("Warning: Failed to insert new ticker %s: %v\n", sec.Ticker, err)
+					continue
 				}
 			}
 		}
