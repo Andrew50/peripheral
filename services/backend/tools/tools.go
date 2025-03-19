@@ -22,12 +22,12 @@ var toolsMutex sync.Mutex
 func GetTools() map[string]Tool {
 	toolsMutex.Lock()
 	defer toolsMutex.Unlock()
-	
+
 	if !toolsInitialized {
 		initTools()
 		toolsInitialized = true
 	}
-	
+
 	return Tools
 }
 
@@ -1434,6 +1434,23 @@ func initTools() {
 				},
 			},
 			Function: func(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) { return nil, nil },
+		},
+		"getUserConversations": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "getUserConversations",
+				Description: "Retrieves a list of recent conversations for the current user",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy Gemini API requirements",
+						},
+					},
+					Required: []string{},
+				},
+			},
+			Function: GetUserConversations,
 		},
 	}
 }
