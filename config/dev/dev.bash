@@ -48,9 +48,17 @@ if [ "$DB_READY" != "true" ]; then
   exit 1
 fi
 
-# Wait a bit more to ensure the database is fully initialized
-log "Waiting a few more seconds for database initialization..."
-sleep 5
+# Wait longer to ensure the database is fully initialized and stable
+log "Waiting for database to fully initialize and stabilize..."
+sleep 15
+
+# Check if the database is still running before proceeding
+if ! docker exec dev-db-1 pg_isready -U postgres; then
+  error_log "Database was ready but is no longer responding. It may have crashed."
+  log "Checking database logs for errors..."
+  docker logs dev-db-1 | tail -n 30
+  exit 1
+fi
 
 # Check if the schema_versions table exists
 log "Checking if schema_versions table exists..."

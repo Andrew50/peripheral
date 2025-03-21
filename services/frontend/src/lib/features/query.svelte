@@ -20,10 +20,14 @@
 
 	// Conversation history type
 	type ConversationData = {
-		query: string;
-		response_text: string;
-		function_calls?: any[];
-		tool_results?: FunctionResult[];
+		messages: Array<{
+			query: string;
+			response_text: string;
+			function_calls?: any[];
+			tool_results?: FunctionResult[];
+			timestamp: string | Date;
+			expires_at?: string | Date; // When this message expires
+		}>;
 		timestamp: string | Date;
 	};
 
@@ -33,6 +37,7 @@
 		content: string;
 		sender: 'user' | 'assistant';
 		timestamp: Date;
+		expiresAt?: Date; // When this message expires
 		functionResults?: FunctionResult[];
 		responseType?: string;
 		isLoading?: boolean;
@@ -54,23 +59,28 @@
 
 			// Check if we have a valid conversation history
 			const conversation = response as ConversationData;
-			if (conversation && conversation.query && conversation.response_text) {
-				// Add user message from history
-				messages.push({
-					id: generateId(),
-					content: conversation.query,
-					sender: 'user',
-					timestamp: new Date(conversation.timestamp)
-				});
+			if (conversation && conversation.messages && conversation.messages.length > 0) {
+				// Process each message in the conversation history
+				conversation.messages.forEach((msg) => {
+					// Add user message
+					messages.push({
+						id: generateId(),
+						content: msg.query,
+						sender: 'user',
+						timestamp: new Date(msg.timestamp),
+						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined
+					});
 
-				// Add assistant response from history
-				messages.push({
-					id: generateId(),
-					content: conversation.response_text,
-					sender: 'assistant',
-					timestamp: new Date(conversation.timestamp),
-					responseType: conversation.function_calls?.length ? 'function_calls' : 'text',
-					functionResults: conversation.tool_results || []
+					// Add assistant response
+					messages.push({
+						id: generateId(),
+						content: msg.response_text,
+						sender: 'assistant',
+						timestamp: new Date(msg.timestamp),
+						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
+						responseType: msg.function_calls?.length ? 'function_calls' : 'text',
+						functionResults: msg.tool_results || []
+					});
 				});
 
 				scrollToBottom();
@@ -141,11 +151,26 @@
 				// Remove loading message and add actual response
 				messages = messages.filter((m) => m.id !== loadingMessage.id);
 
+				// Check if the response includes expiration information
+				let expiresAt: Date | undefined = undefined;
+				if (
+					typedResponse.history &&
+					typedResponse.history.messages &&
+					typedResponse.history.messages.length > 0
+				) {
+					const lastMessage =
+						typedResponse.history.messages[typedResponse.history.messages.length - 1];
+					if (lastMessage.expires_at) {
+						expiresAt = new Date(lastMessage.expires_at);
+					}
+				}
+
 				const assistantMessage: Message = {
 					id: generateId(),
 					content: typedResponse.text || 'Function calls executed successfully.',
 					sender: 'assistant',
 					timestamp: new Date(),
+					expiresAt: expiresAt,
 					responseType: typedResponse.type,
 					functionResults:
 						typedResponse.type === 'function_calls' ? typedResponse.results || [] : undefined
@@ -183,6 +208,36 @@
 	function formatTimestamp(date: Date): string {
 		return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 	}
+
+	// Function to determine if a message is near expiration (less than 6 hours)
+	function isNearExpiration(message: Message): boolean {
+		if (!message.expiresAt) return false;
+		const now = new Date();
+		const sixHoursMs = 6 * 60 * 60 * 1000;
+		return message.expiresAt.getTime() - now.getTime() < sixHoursMs;
+	}
+
+	// Function to format expiration time
+	function formatExpiration(expiresAt: Date): string {
+		const now = new Date();
+		const diff = expiresAt.getTime() - now.getTime();
+
+		// Less than an hour
+		if (diff < 60 * 60 * 1000) {
+			const mins = Math.max(1, Math.floor(diff / (60 * 1000)));
+			return `Expires in ${mins} minute${mins !== 1 ? 's' : ''}`;
+		}
+
+		// Hours
+		if (diff < 24 * 60 * 60 * 1000) {
+			const hours = Math.floor(diff / (60 * 60 * 1000));
+			return `Expires in ${hours} hour${hours !== 1 ? 's' : ''}`;
+		}
+
+		// Days
+		const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+		return `Expires in ${days} day${days !== 1 ? 's' : ''}`;
+	}
 </script>
 
 <div class="chat-container">
@@ -202,7 +257,11 @@
 		{:else}
 			{#each messages as message (message.id)}
 				<div class="message-wrapper {message.sender}">
-					<div class="message {message.sender} {message.responseType === 'error' ? 'error' : ''}">
+					<div
+						class="message {message.sender} {message.responseType === 'error'
+							? 'error'
+							: ''} {isNearExpiration(message) ? 'expiring' : ''}"
+					>
 						{#if message.isLoading}
 							<div class="typing-indicator">
 								<span></span>
@@ -250,8 +309,15 @@
 								</div>
 							{/if}
 
-							<div class="message-timestamp">
-								{formatTimestamp(message.timestamp)}
+							<div class="message-footer">
+								<div class="message-timestamp">
+									{formatTimestamp(message.timestamp)}
+								</div>
+								{#if message.expiresAt}
+									<div class="message-expiration {isNearExpiration(message) ? 'expiring' : ''}">
+										{formatExpiration(message.expiresAt)}
+									</div>
+								{/if}
 							</div>
 						{/if}
 					</div>
@@ -365,11 +431,23 @@
 		line-height: 1.5;
 	}
 
-	.message-timestamp {
+	.message-footer {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-top: 0.5rem;
 		font-size: 0.7rem;
 		opacity: 0.7;
-		text-align: right;
-		margin-top: 0.25rem;
+	}
+
+	.message-expiration {
+		font-style: italic;
+	}
+
+	.message-expiration.expiring {
+		color: orange;
+		font-weight: 500;
+		opacity: 1;
 	}
 
 	.function-tools {
@@ -517,5 +595,9 @@
 		40% {
 			transform: translateY(-0.5rem);
 		}
+	}
+
+	.message.expiring {
+		border-color: rgba(255, 165, 0, 0.7); /* Orange border for expiring messages */
 	}
 </style>

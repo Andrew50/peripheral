@@ -135,12 +135,13 @@
 
 	function updateChartWidth() {
 		if (browser) {
-			const sidebarWidth = $menuWidth;
-			const maxSidebarWidth = Math.min(500, window.innerWidth - 60);
+			const rightSidebarWidth = $menuWidth;
+			const maxRightSidebarWidth = Math.min(500, window.innerWidth - 60);
+			const maxLeftSidebarWidth = Math.min(500, window.innerWidth - 60);
 
-			// Only reduce chart width if sidebar width is within bounds
-			if (sidebarWidth <= maxSidebarWidth) {
-				chartWidth = window.innerWidth - sidebarWidth - 60;
+			// Only reduce chart width if sidebar widths are within bounds
+			if (rightSidebarWidth <= maxRightSidebarWidth && leftMenuWidth <= maxLeftSidebarWidth) {
+				chartWidth = window.innerWidth - rightSidebarWidth - leftMenuWidth - 60;
 			}
 		}
 	}
@@ -281,6 +282,7 @@
 			// Remove global keyboard event listener using the stored handler
 			document.removeEventListener('keydown', keydownHandler);
 			stopSidebarResize();
+			stopLeftResize();
 
 			// Clean up all activity listeners
 			const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
@@ -700,6 +702,71 @@
 			startResize(new MouseEvent('mousedown'));
 		}
 	}
+
+	// Add left sidebar state variables next to the other state variables
+	let leftMenuWidth = 0;
+	let leftResizing = false;
+
+	function handleKeyboardLeftResize(e: KeyboardEvent) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			startLeftResize(new MouseEvent('mousedown'));
+		}
+	}
+
+	// Left sidebar resizing
+	function startLeftResize(event: MouseEvent | TouchEvent) {
+		event.preventDefault();
+		leftResizing = true;
+		document.addEventListener('mousemove', resizeLeft);
+		document.addEventListener('mouseup', stopLeftResize);
+		document.addEventListener('touchmove', resizeLeft);
+		document.addEventListener('touchend', stopLeftResize);
+		document.body.style.cursor = 'ew-resize';
+	}
+
+	function resizeLeft(event: MouseEvent | TouchEvent) {
+		if (!leftResizing) return;
+
+		let clientX = 0;
+		if (event instanceof MouseEvent) {
+			clientX = event.clientX;
+		} else {
+			clientX = event.touches[0].clientX;
+		}
+
+		// Calculate width from left edge of window
+		let newWidth = clientX;
+		const maxLeftSidebarWidth = Math.min(500, window.innerWidth - 60);
+
+		// Manage resize
+		if (newWidth < minWidth) {
+			leftMenuWidth = 0;
+		} else {
+			leftMenuWidth = Math.min(newWidth, maxLeftSidebarWidth);
+		}
+
+		updateChartWidth();
+	}
+
+	function stopLeftResize() {
+		leftResizing = false;
+		document.removeEventListener('mousemove', resizeLeft);
+		document.removeEventListener('mouseup', stopLeftResize);
+		document.removeEventListener('touchmove', resizeLeft);
+		document.removeEventListener('touchend', stopLeftResize);
+		document.body.style.cursor = 'default';
+	}
+
+	// Toggle left pane for Query
+	function toggleLeftPane() {
+		if (leftMenuWidth > 0) {
+			leftMenuWidth = 0;
+		} else {
+			leftMenuWidth = 300;
+		}
+		updateChartWidth();
+	}
 </script>
 
 <div
@@ -719,6 +786,26 @@
 	<!-- Main area wrapper -->
 	<div class="app-container">
 		<div class="content-wrapper">
+			<!-- Left sidebar for Query -->
+			{#if leftMenuWidth > 0}
+				<div class="left-sidebar" style="width: {leftMenuWidth}px;">
+					<div class="sidebar-content">
+						<div class="main-sidebar-content">
+							<Query />
+						</div>
+					</div>
+					<div
+						class="resize-handle right"
+						role="separator"
+						aria-orientation="vertical"
+						on:mousedown={startLeftResize}
+						on:touchstart={startLeftResize}
+						on:keydown={handleKeyboardLeftResize}
+						tabindex="0"
+					/>
+				</div>
+			{/if}
+
 			<!-- Main content area -->
 			<div class="main-content">
 				<!-- Chart area -->
@@ -748,8 +835,6 @@
 									<Settings />
 								{:else if w.type === 'newsfeed'}
 									<Newsfeed />
-								{:else if w.type === 'query'}
-									<Query />
 								{:else if w.type === 'llm-summary'}
 									<LLMSummary />
 								{/if}
@@ -833,16 +918,17 @@
 	<div class="bottom-bar">
 		<div class="bottom-bar-left">
 			<button
+				class="toggle-button {leftMenuWidth > 0 ? 'active' : ''}"
+				on:click={toggleLeftPane}
+				title="AI Query"
+			>
+				<i class="fas fa-robot"></i>
+			</button>
+			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'screener') ? 'active' : ''}"
 				on:click={() => openBottomWindow('screener')}
 			>
 				Screener
-			</button>
-			<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'query') ? 'active' : ''}"
-				on:click={() => openBottomWindow('query')}
-			>
-				Query
 			</button>
 			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'active') ? 'active' : ''}"
@@ -1370,5 +1456,23 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+	}
+
+	/* Add styles for left sidebar */
+	.left-sidebar {
+		height: 100%;
+		background-color: var(--ui-bg-primary);
+		display: flex;
+		flex-direction: column;
+		position: relative;
+		flex-shrink: 0;
+		border-right: 1px solid var(--ui-border);
+		max-width: min(500px, calc(100vw - 60px));
+	}
+
+	/* Add right position for left sidebar handle */
+	.resize-handle.right {
+		left: auto;
+		right: -4px;
 	}
 </style>

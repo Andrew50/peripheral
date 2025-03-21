@@ -16,7 +16,6 @@ import (
 	polygon "github.com/polygon-io/client-go/rest"
 )
 
-
 // Conn represents a structure for handling Conn data.
 type Conn struct {
 	//Cache *redis.Client
@@ -66,14 +65,14 @@ func InitConn(inContainer bool) (*Conn, func()) {
 			time.Sleep(5 * time.Second)
 			continue
 		}
-		
+
 		// Configure connection pool with better defaults
-		poolConfig.MaxConns = 20                            // Set max connections to 20 (default is 4)
-		poolConfig.MinConns = 5                             // Keep at least 5 connections in the pool
-		poolConfig.MaxConnLifetime = 1 * time.Hour          // Maximum lifetime of a connection
-		poolConfig.MaxConnIdleTime = 30 * time.Minute       // Maximum idle time for a connection
-		poolConfig.HealthCheckPeriod = 1 * time.Minute      // How often to check connection health
-		poolConfig.ConnConfig.ConnectTimeout = 5 * time.Second  // Connection timeout
+		poolConfig.MaxConns = 20                               // Set max connections to 20 (default is 4)
+		poolConfig.MinConns = 3                                // Keep at least 5 connections in the pool
+		poolConfig.MaxConnLifetime = 1 * time.Hour             // Maximum lifetime of a connection
+		poolConfig.MaxConnIdleTime = 30 * time.Minute          // Maximum idle time for a connection
+		poolConfig.HealthCheckPeriod = 1 * time.Minute         // How often to check connection health
+		poolConfig.ConnConfig.ConnectTimeout = 5 * time.Second // Connection timeout
 
 		// Create the connection pool with our custom configuration
 		dbConn, err = pgxpool.ConnectConfig(context.Background(), poolConfig)
@@ -143,9 +142,9 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	geminiPool := initGeminiKeyPool()
 
 	conn = &Conn{
-		DB:         dbConn, 
-		Cache:      cache, 
-		Polygon:    polygonClient, 
+		DB:         dbConn,
+		Cache:      cache,
+		Polygon:    polygonClient,
 		PolygonKey: polygonKey,
 		GeminiPool: geminiPool,
 	}
@@ -177,10 +176,11 @@ type GeminiKeyInfo struct {
 
 // GeminiKeyPool manages a pool of Gemini API keys
 type GeminiKeyPool struct {
-	Keys       []*GeminiKeyInfo
-	Mutex      sync.RWMutex
+	Keys        []*GeminiKeyInfo
+	Mutex       sync.RWMutex
 	LastUsedIdx int
 }
+
 // initGeminiKeyPool initializes the Gemini API key pool
 func initGeminiKeyPool() *GeminiKeyPool {
 	pool := &GeminiKeyPool{
@@ -192,12 +192,11 @@ func initGeminiKeyPool() *GeminiKeyPool {
 	// Format expected: GEMINI_FREE_KEYS=key1,key2,key3 and GEMINI_PAID_KEY=paidkey
 	freeKeysStr := getEnv("GEMINI_FREE_KEYS", "")
 	paidKey := getEnv("GEMINI_PAID_KEY", "")
-	
+
 	// Default rate limit for free keys (Gemini typically allows 60 requests per minute for free tier)
 	freeRateLimit := 15
 	// Paid key has a higher limit, though it varies by plan
 	paidRateLimit := 1000
-
 
 	// Parse and add free keys
 	if freeKeysStr != "" {
@@ -272,7 +271,7 @@ func (p *GeminiKeyPool) GetNextKey() (string, error) {
 		// Round-robin selection, starting after the last used index
 		idx := (p.LastUsedIdx + 1 + i) % len(p.Keys)
 		keyInfo := p.Keys[idx]
-		
+
 		// Skip paid keys in the first pass
 		if keyInfo.IsPaid {
 			continue
@@ -293,7 +292,7 @@ func (p *GeminiKeyPool) GetNextKey() (string, error) {
 	for i := 0; i < len(p.Keys); i++ {
 		idx := (p.LastUsedIdx + 1 + i) % len(p.Keys)
 		keyInfo := p.Keys[idx]
-		
+
 		// Now only consider paid keys
 		if !keyInfo.IsPaid {
 			continue
@@ -317,4 +316,28 @@ func (p *GeminiKeyPool) GetNextKey() (string, error) {
 // GetGeminiKey is a convenience method on Conn to get the next available Gemini API key
 func (c *Conn) GetGeminiKey() (string, error) {
 	return c.GeminiPool.GetNextKey()
+}
+
+// TestRedisConnectivity tests the Redis connection and returns success status and error message
+func (c *Conn) TestRedisConnectivity(ctx context.Context, userID int) (bool, string) {
+	testKey := fmt.Sprintf("redis_test_key:%d", userID)
+	testValue := fmt.Sprintf("test_value_%d_%d", userID, time.Now().Unix())
+
+	// Try to write to Redis
+	err := c.Cache.Set(ctx, testKey, testValue, 5*time.Minute).Err()
+	if err != nil {
+		return false, fmt.Sprintf("Redis write test failed: %v", err)
+	}
+
+	// Try to read from Redis
+	val, err := c.Cache.Get(ctx, testKey).Result()
+	if err != nil {
+		return false, fmt.Sprintf("Redis read test failed: %v", err)
+	}
+
+	if val != testValue {
+		return false, fmt.Sprintf("Redis read test returned unexpected value: %s", val)
+	}
+
+	return true, "Redis connection test successful"
 }
