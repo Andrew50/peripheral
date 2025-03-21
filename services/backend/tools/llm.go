@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 const perplexityURL = "https://api.perplexity.ai/chat/completions"
@@ -47,21 +48,29 @@ type PerplexityResponse struct {
 	} `json:"usage"`
 }
 
-func queryPerplexity(query string) (string, error) {
+// QueryPerplexityWithDate queries the Perplexity API for analysis of a stock's performance on a specific date.
+// It takes a ticker symbol, timestamp, and price as input and returns an analysis of the stock's performance.
+func QueryPerplexityWithDate(ticker string, timestamp int64, price float64) (string, error) {
+	// Convert timestamp to a readable date format
+	date := time.Unix(timestamp/1000, 0).Format("January 2, 2006")
+
+	// Format the query with the provided information including the formatted date
+	query := fmt.Sprintf("Provide a comprehensive analysis of %s stock performance on %s with price $%.2f. Include likely causes for price movements, relevant news, market trends, and technical analysis.", ticker, date, price)
+
 	// Create the request payload
-	reqData := PerplexityRequest{ //testing sonar
+	reqData := PerplexityRequest{
 		Model: "sonar",
 		Messages: []Message{
 			{
 				Role:    "system",
-				Content: "You are a financial analyst expert. Provide concise, well-structured summaries of stock movements. Focus on the most likely causes including news, events, earnings, analyst ratings, broader market trends, or sector-specific factors. Use bullet points for clarity when appropriate. Limit your response to 290 tokens.",
+				Content: "You are a financial analyst expert. Provide comprehensive, well-structured analysis of stock movements. Your analysis should include the following sections: 1) Summary of Price Movement, 2) Key News and Events, 3) Market Context, 4) Technical Analysis, and 5) Outlook. Focus on the specific date provided and explain why the stock moved on that day. Use bullet points where appropriate for clarity. Limit your response to 500 tokens.",
 			},
 			{
 				Role:    "user",
 				Content: query,
 			},
 		},
-		MaxTokens:        300,
+		MaxTokens:        500,
 		Temperature:      0.2,
 		TopP:             0.9,
 		TopK:             0,
