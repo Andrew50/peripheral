@@ -3,8 +3,6 @@ package tools
 import (
 	"backend/utils"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -367,12 +365,6 @@ func buildConversationContext(messages []ChatMessage, currentQuery string) strin
 	context.WriteString(currentQuery)
 
 	return context.String()
-}
-
-// generateHashFromString creates a SHA-256 hash from a string
-func generateHashFromString(input string) string {
-	hash := sha256.Sum256([]byte(input))
-	return hex.EncodeToString(hash[:])
 }
 
 // saveConversationToCache saves the conversation data to Redis
