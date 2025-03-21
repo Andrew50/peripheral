@@ -918,11 +918,11 @@
 	<div class="bottom-bar">
 		<div class="bottom-bar-left">
 			<button
-				class="toggle-button {leftMenuWidth > 0 ? 'active' : ''}"
+				class="toggle-button query-feature {leftMenuWidth > 0 ? 'active' : ''}"
 				on:click={toggleLeftPane}
 				title="AI Query"
 			>
-				<i class="fas fa-robot"></i>
+				<img src="query.png" alt="AI Query" class="menu-icon" />
 			</button>
 			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'screener') ? 'active' : ''}"
@@ -1474,5 +1474,25 @@
 	.resize-handle.right {
 		left: auto;
 		right: -4px;
+	}
+
+	/* Query feature button styling */
+	.query-feature {
+		background-color: rgba(0, 123, 255, 0.2);
+		border: 1px solid rgba(0, 123, 255, 0.5) !important;
+		position: relative;
+	}
+
+	.query-feature:not(.active):hover {
+		background-color: rgba(0, 123, 255, 0.4);
+	}
+
+	.query-feature.active {
+		background-color: rgba(0, 123, 255, 0.6);
+		border-color: rgba(0, 123, 255, 0.9) !important;
+	}
+
+	.query-feature .menu-icon {
+		filter: drop-shadow(0 0 2px rgba(0, 123, 255, 0.8));
 	}
 </style>
