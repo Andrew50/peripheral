@@ -1,19 +1,16 @@
-package tools 
+package tools
 
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"backend/utils"
 )
 
-
-
 // StockMovementSummaryRequest represents the request for a stock movement summary
 type StockMovementSummaryRequest struct {
-	Ticker    string `json:"ticker"`
-	Timestamp int64  `json:"timestamp"`
+	Ticker    string  `json:"ticker"`
+	Timestamp int64   `json:"timestamp"`
 	Price     float64 `json:"price"`
 }
 
@@ -29,17 +26,8 @@ func GetStockMovementSummary(conn *utils.Conn, userID int, args json.RawMessage)
 		return nil, fmt.Errorf("error parsing request: %w", err)
 	}
 
-	// Convert timestamp to a readable date format
-	date := time.Unix(request.Timestamp/1000, 0).Format("January 2, 2006")
-
-	// Create the query for Perplexity
-	query := fmt.Sprintf("What factors or news caused %s stock to move on %s? The price was $%.2f. Please provide a concise summary of the main reasons.", 
-		request.Ticker, 
-		date,
-		request.Price)
-
-	// Get summary from Perplexity
-	summary, err := queryPerplexity(query)
+	// Get summary from Perplexity using our enhanced function
+	summary, err := QueryPerplexityWithDate(request.Ticker, request.Timestamp, request.Price)
 	if err != nil {
 		return nil, fmt.Errorf("error querying Perplexity: %w", err)
 	}
@@ -48,4 +36,3 @@ func GetStockMovementSummary(conn *utils.Conn, userID int, args json.RawMessage)
 		Summary: summary,
 	}, nil
 }
-

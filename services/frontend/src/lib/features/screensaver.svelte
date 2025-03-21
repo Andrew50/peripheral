@@ -161,7 +161,7 @@
 </script>
 
 {#if active}
-	<!-- Simple screensaver indicator in the corner -->
+	<!-- Fullscreen overlay to capture clicks anywhere -->
 	<div
 		class="screensaver-container"
 		on:click={handleClick}
@@ -173,7 +173,7 @@
 			<div class="screensaver-content">
 				<div class="screensaver-title">
 					Screensaver Active
-					<span class="click-hint">(Click to exit)</span>
+					<span class="click-hint">(Click anywhere to exit)</span>
 				</div>
 			</div>
 		</div>
@@ -182,12 +182,12 @@
 
 <style>
 	.screensaver-container {
-		position: absolute;
+		position: fixed;
 		top: 0;
 		left: 0;
 		right: 0;
 		bottom: 0;
-		z-index: 100;
+		z-index: 1000;
 		pointer-events: auto;
 		cursor: pointer;
 		/* Make the container transparent so it doesn't block the chart */
@@ -209,6 +209,7 @@
 		max-width: 200px;
 		border: 1px solid var(--c3);
 		animation: pulse 2s infinite alternate;
+		pointer-events: none;
 	}
 
 	@keyframes pulse {
