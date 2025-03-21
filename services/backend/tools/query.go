@@ -532,7 +532,9 @@ func GetUserConversation(conn *utils.Conn, userID int, args json.RawMessage) (in
 
 	// Log the conversation data for debugging
 	fmt.Printf("Retrieved conversation: %+v\n", conversation)
-	fmt.Printf("Number of messages: %d\n", len(conversation.Messages))
+	if conversation != nil {
+		fmt.Printf("Number of messages: %d\n", len(conversation.Messages))
+	}
 
 	// Ensure we're returning valid data
 	if conversation == nil || len(conversation.Messages) == 0 {
@@ -661,7 +663,6 @@ func getGeminiFunctionResponse(ctx context.Context, conn *utils.Conn, query stri
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}
-	systemInstruction = "You are a helpful assistant that can execute functions."
 
 	var geminiTools []*genai.Tool
 	for _, tool := range Tools {
