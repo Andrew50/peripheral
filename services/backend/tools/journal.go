@@ -49,9 +49,9 @@ func SaveJournal(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if err != nil {
 		return nil, fmt.Errorf("3og9 invalid args: %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE journals Set entry = $1 where journalId = $2", args.Entry, args.Id)
+	cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE journals SET entry = $1 WHERE journalId = $2 AND userId = $3", args.Entry, args.Id, userId)
 	if cmdTag.RowsAffected() == 0 {
-		return nil, fmt.Errorf("0n8912")
+		return nil, fmt.Errorf("journal not found or you don't have permission to update it")
 	}
 	return nil, err
 }
@@ -69,9 +69,9 @@ func CompleteJournal(conn *utils.Conn, userId int, rawArgs json.RawMessage) (int
 	if err != nil {
 		return nil, fmt.Errorf("215d invalid args: %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE journals Set completed = $1 where journalId = $2", args.Completed, args.Id)
+	cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE journals SET completed = $1 WHERE journalId = $2 AND userId = $3", args.Completed, args.Id, userId)
 	if cmdTag.RowsAffected() == 0 {
-		return nil, fmt.Errorf("0n8912")
+		return nil, fmt.Errorf("journal not found or you don't have permission to update it")
 	}
 	return nil, err
 }
@@ -88,12 +88,12 @@ func DeleteJournal(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inter
 	if err != nil {
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), "DELETE FROM journals where journalId = $1", args.Id)
+	cmdTag, err := conn.DB.Exec(context.Background(), "DELETE FROM journals WHERE journalId = $1 AND userId = $2", args.Id, userId)
 	if err != nil {
 		return nil, err
 	}
 	if cmdTag.RowsAffected() == 0 {
-		return nil, fmt.Errorf("ssd7g3")
+		return nil, fmt.Errorf("journal not found or you don't have permission to delete it")
 	}
 	return nil, err
 }
@@ -111,7 +111,7 @@ func GetJournalEntry(conn *utils.Conn, userId int, rawArgs json.RawMessage) (int
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
 	var entry json.RawMessage
-	err = conn.DB.QueryRow(context.Background(), "SELECT entry from journals where journalId = $1", args.JournalID).Scan(&entry)
+	err = conn.DB.QueryRow(context.Background(), "SELECT entry from journals where journalId = $1 AND userId = $2", args.JournalID, userId).Scan(&entry)
 	if err != nil {
 		return nil, err
 	}

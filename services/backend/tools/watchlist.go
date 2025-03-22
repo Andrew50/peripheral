@@ -65,12 +65,12 @@ func DeleteWatchlist(conn *utils.Conn, userId int, rawArgs json.RawMessage) (int
 	if err != nil {
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), "DELETE FROM watchlists where watchlistId = $1", args.Id)
+	cmdTag, err := conn.DB.Exec(context.Background(), "DELETE FROM watchlists WHERE watchlistId = $1 AND userId = $2", args.Id, userId)
 	if err != nil {
 		return nil, err
 	}
 	if cmdTag.RowsAffected() == 0 {
-		return nil, fmt.Errorf("ssd7g3")
+		return nil, fmt.Errorf("watchlist not found or you don't have permission to delete it")
 	}
 	return nil, err
 }
@@ -129,12 +129,16 @@ func DeleteWatchlistItem(conn *utils.Conn, userId int, rawArgs json.RawMessage) 
 	if err != nil {
 		return nil, fmt.Errorf("m0ivn0d %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), "DELETE FROM watchlistItems WHERE watchlistItemId = $1", args.WatchlistItemID)
+	cmdTag, err := conn.DB.Exec(context.Background(), `
+		DELETE FROM watchlistItems 
+		WHERE watchlistItemId = $1 
+		AND watchlistId IN (SELECT watchlistId FROM watchlists WHERE userId = $2)`,
+		args.WatchlistItemID, userId)
 	if err != nil {
 		return nil, fmt.Errorf("niv02 %v", err)
 	}
 	if cmdTag.RowsAffected() == 0 {
-		return nil, fmt.Errorf("mvo2")
+		return nil, fmt.Errorf("watchlist item not found or you don't have permission to delete it")
 	}
 	return nil, nil
 }
