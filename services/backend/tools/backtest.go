@@ -1,7 +1,12 @@
 package tools 
 
-
-
+import (
+    "context"
+    "fmt"
+    "backend/utils"
+    "time"
+)
+/*
 sqlQuery, err := jsonQueryToSQL(llmResponse)
     if err != nil {
         return nil, fmt.Errorf("error converting JSON to SQL: %w", err)
@@ -49,11 +54,11 @@ func jsonQueryToSQL(jsonStr string) (string, error) {
     }
 
     // Handle sequence
-    /*if pq.Sequence.Condition == "dropped 5%" && pq.Sequence.Window > 0 {
+    if pq.Sequence.Condition == "dropped 5%" && pq.Sequence.Window > 0 {
         window := pq.Sequence.Window
         seqSQL := fmt.Sprintf("(LEAD(close, %d) OVER (PARTITION BY ticker ORDER BY timestamp) / close - 1) < -0.05", window)
         whereClauses = append(whereClauses, seqSQL)
-    }*/
+    }
 
     // Handle date range
     dateRange := pq.DateRange
@@ -70,8 +75,7 @@ func jsonQueryToSQL(jsonStr string) (string, error) {
     }
     sqlQuery := fmt.Sprintf("%s %s %s ORDER BY timestamp DESC", selectClause, fromClause, whereClause)
     return sqlQuery, nil
-}
-
+} */
 // Helper functions
 func conditionToSQL(cond Condition) string {
     lhsSQL := fieldWithOffsetSQL(cond.LHS)
