@@ -31,7 +31,7 @@ permissions:
 jobs:
   # Add a dependency on the lint-and-build workflow
   check-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # Using GitHub-hosted runner
     if: github.event_name == 'pull_request'
     steps:
       - name: Check if lint-and-build workflow passed
@@ -41,18 +41,18 @@ jobs:
           # The actual dependency is handled by the workflow_run trigger
 
   deploy:
-    runs-on: self-hosted  # Using self-hosted runner instead of ubuntu-latest
-    needs: check-build
-    # Skip deployment if merging from prod to main or if the PR base is main and head is prod
+    runs-on: self-hosted  # Keep deployment on self-hosted runner
+    needs: [check-build]
     if: >-
       (github.event_name != 'pull_request' || success()) && 
       !(github.event_name == 'pull_request' && github.base_ref == 'main' && github.head_ref == 'prod') && 
-      !(github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.before != '0000000000000000000000000000000000000000' && contains(github.event.commits[0].message, 'Merge pull request') && contains(github.event.commits[0].message, 'from prod'))
+      !(github.event_name == 'push' && github.ref == 'refs/heads/main' && 
+        github.event.before != '0000000000000000000000000000000000000000' && 
+        github.event.commits != null && 
+        github.event.commits[0] != null && 
+        contains(github.event.commits[0].message || '', 'Merge pull request') && 
+        contains(github.event.commits[0].message || '', 'from prod'))
     # Add job-level permissions to ensure access to secrets
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
     
     # Add environment variables for the job
     env:
