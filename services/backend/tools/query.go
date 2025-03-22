@@ -569,7 +569,7 @@ func getSystemInstruction() (string, error) {
 	currentDir := filepath.Dir(filename)
 
 	// Construct path to query.txt
-	queryFilePath := filepath.Join(currentDir, "query.txt")
+	queryFilePath := filepath.Join(currentDir, "defaultSystemPrompt.txt")
 
 	// Read the content of query.txt
 	content, err := os.ReadFile(queryFilePath)
