@@ -2,9 +2,8 @@ package server
 
 import (
 	"backend/jobs"
-	"backend/tasks"
-
 	"backend/socket"
+	"backend/tools"
 	"backend/utils"
 	"encoding/base64"
 	"encoding/json"
@@ -23,101 +22,11 @@ var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, err
 	"login":          Login,
 	"googleLogin":    GoogleLogin,
 	"googleCallback": GoogleCallback,
+	"guestLogin":     GuestLogin,
 }
 
-var privateFunc = map[string]func(*utils.Conn, int, json.RawMessage) (interface{}, error){
-	"verifyAuth": verifyAuth,
-	//securities
-	"getSimilarInstances":     tasks.GetSimilarInstances,
-	"getSecuritiesFromTicker": tasks.GetSecuritiesFromTicker,
-	"getCurrentTicker":        tasks.GetCurrentTicker,
-	//"getTickerDetails":        tasks.GetTickerDetails,
-	"getTickerMenuDetails": tasks.GetTickerMenuDetails,
-	"getIcons":             tasks.GetIcons,
-
-	//chart
-	"getChartData": tasks.GetChartData,
-	//study
-	"getStudies": tasks.GetStudies,
-
-	"newStudy":      tasks.NewStudy,
-	"saveStudy":     tasks.SaveStudy,
-	"deleteStudy":   tasks.DeleteStudy,
-	"getStudyEntry": tasks.GetStudyEntry,
-	"completeStudy": tasks.CompleteStudy,
-	"setStudySetup": tasks.SetStudySetup,
-	//journal
-	"getJournals":     tasks.GetJournals,
-	"saveJournal":     tasks.SaveJournal,
-	"deleteJournal":   tasks.DeleteJournal,
-	"getJournalEntry": tasks.GetJournalEntry,
-	"completeJournal": tasks.CompleteJournal,
-	//screensaver
-	"getScreensavers": tasks.GetScreensavers,
-	//watchlist
-	"getWatchlists":       tasks.GetWatchlists,
-	"deleteWatchlist":     tasks.DeleteWatchlist,
-	"newWatchlist":        tasks.NewWatchlist,
-	"getWatchlistItems":   tasks.GetWatchlistItems,
-	"deleteWatchlistItem": tasks.DeleteWatchlistItem,
-	"newWatchlistItem":    tasks.NewWatchlistItem,
-	//singles
-	"getPrevClose": tasks.GetPrevClose,
-	//"getMarketCap": tasks.GetMarketCap,
-	//settings
-	"getSettings": tasks.GetSettings,
-	"setSettings": tasks.SetSettings,
-	//profile
-	"updateProfilePicture": UpdateProfilePicture,
-	//exchanges
-	"getExchanges": tasks.GetExchanges,
-	//setups
-	"getSetups":   tasks.GetSetups,
-	"newSetup":    tasks.NewSetup,
-	"setSetup":    tasks.SetSetup,
-	"deleteSetup": tasks.DeleteSetup,
-	//algos
-	//"getAlgos": tasks.GetAlgos,
-	//samples
-	"labelTrainingQueueInstance": tasks.LabelTrainingQueueInstance,
-	"getTrainingQueue":           tasks.GetTrainingQueue,
-	"setSample":                  tasks.SetSample,
-	//telegram
-	//	"sendMessage": telegram.SendMessage,
-	//alerts
-	"getAlerts":    tasks.GetAlerts,
-	"getAlertLogs": tasks.GetAlertLogs,
-	"newAlert":     tasks.NewAlert,
-	"deleteAlert":  tasks.DeleteAlert,
-
-	// deprecated
-	// "getTradeData":            tasks.GetTradeData,
-	//
-	//	"getLastTrade":            tasks.GetLastTrade,
-	//
-	// "getQuoteData":            tasks.GetQuoteData,
-	// "getSecurityDateBounds":   tasks.GetSecurityDateBounds,
-	"setHorizontalLine":    tasks.SetHorizontalLine,
-	"getHorizontalLines":   tasks.GetHorizontalLines,
-	"deleteHorizontalLine": tasks.DeleteHorizontalLine,
-	"updateHorizontalLine": tasks.UpdateHorizontalLine,
-	//active
-
-	"getActive": tasks.GetActive,
-	//sector, industry
-	"getSecurityClassifications": tasks.GetSecurityClassifications,
-	"getLatestEdgarFilings":      tasks.GetLatestEdgarFilings,
-	"getChartEvents":             tasks.GetChartEvents,
-
-	// Add the new trade-related functions
-	"grab_user_trades":       tasks.GrabUserTrades,
-	"get_trade_statistics":   tasks.GetTradeStatistics,
-	"get_ticker_performance": tasks.GetTickerPerformance,
-	"delete_all_user_trades": tasks.DeleteAllUserTrades,
-	"handle_trade_upload":    tasks.HandleTradeUpload,
-}
-
-func verifyAuth(_ *utils.Conn, _ int, _ json.RawMessage) (interface{}, error) { return nil, nil }
+// Define privateFunc as an alias to Tools
+var privateFunc = tools.GetTools()
 
 // Request represents a structure for handling Request data.
 type Request struct {
@@ -151,7 +60,7 @@ func publicHandler(conn *utils.Conn) http.HandlerFunc {
 		if r.Method == "OPTIONS" {
 			return
 		}
-
+		fmt.Println("debug: got public request")
 		// Validate content type to prevent content-type sniffing attacks
 		contentType := r.Header.Get("Content-Type")
 		if contentType != "application/json" {
@@ -271,7 +180,7 @@ func privateUploadHandler(conn *utils.Conn) http.HandlerFunc {
 			}
 
 			// Call the Go implementation directly
-			result, err := tasks.HandleTradeUpload(conn, userId, argsBytes)
+			result, err := tools.HandleTradeUpload(conn, userId, argsBytes)
 			if handleError(w, err, "processing trade upload") {
 				return
 			}
@@ -366,7 +275,7 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 		}
 
 		// Execute the requested function with sanitized input
-		result, err := privateFunc[req.Function](conn, userId, sanitizedArgs)
+		result, err := privateFunc[req.Function].Function(conn, userId, sanitizedArgs)
 		if handleError(w, err, fmt.Sprintf("private_handler: %s", req.Function)) {
 			return
 		}
@@ -558,11 +467,33 @@ func pollHandler(conn *utils.Conn) http.HandlerFunc {
 		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "1m99c") {
 			return
 		}
-		result, err := utils.Poll(conn, req.TaskID)
-		if handleError(w, err, fmt.Sprintf("executing function %s", req.TaskID)) {
+
+		// Get the task and print its logs
+		task, err := utils.GetTask(conn, req.TaskID)
+		if err != nil {
+			handleError(w, err, fmt.Sprintf("getting task %s", req.TaskID))
 			return
 		}
-		if err := json.NewEncoder(w).Encode(result); err != nil {
+
+		// Print logs to server console
+		if len(task.Logs) > 0 {
+			fmt.Printf("Task %s (%s) logs:\n", req.TaskID, task.Function)
+			for _, logEntry := range task.Logs {
+				fmt.Printf("[%s] %s: %s\n",
+					logEntry.Timestamp.Format("2006-01-02 15:04:05"),
+					logEntry.Level,
+					logEntry.Message)
+			}
+		}
+
+		// Serialize task to JSON
+		result, err := json.Marshal(task)
+		if err != nil {
+			handleError(w, err, fmt.Sprintf("serializing task %s", req.TaskID))
+			return
+		}
+
+		if err := json.NewEncoder(w).Encode(json.RawMessage(result)); err != nil {
 			handleError(w, err, "19inv0id")
 			return
 		}
@@ -639,7 +570,7 @@ func StartServer() {
 	http.HandleFunc("/ws", WSHandler(conn))
 	http.HandleFunc("/private-upload", privateUploadHandler(conn))
 	http.HandleFunc("/health", healthHandler())
-	http.HandleFunc("/backend/health", healthHandler())
+	//http.HandleFunc("/backend/health", healthHandler())
 	fmt.Println("debug: Server running on port 5058 ----------------------------------------------------------")
 	if err := http.ListenAndServe(":5058", nil); err != nil {
 		log.Fatal(err)

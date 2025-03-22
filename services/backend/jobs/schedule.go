@@ -171,6 +171,13 @@ var (
 			SkipOnWeekends: true,
 		},
 		{
+			Name:           "UpdateDailyOHLCV",
+			Function:       UpdateDailyOHLCV,
+			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM
+			RunOnInit:      true,
+			SkipOnWeekends: true,
+		},
+		{
 			Name:           "InitAggregates",
 			Function:       initAggregates,
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 56}}, // Run before market open

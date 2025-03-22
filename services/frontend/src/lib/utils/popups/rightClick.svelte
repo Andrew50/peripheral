@@ -14,6 +14,7 @@
 	import { querySetup } from '$lib/utils/popups/setup.svelte';
 	import { startReplay } from '$lib/utils/stream/interface';
 	import { addHorizontalLine } from '$lib/features/chart/drawingMenu.svelte';
+	import { getLLMSummary } from '$lib/features/summary.svelte';
 	interface RightClickQuery {
 		x?: number;
 		y?: number;
@@ -119,6 +120,12 @@
 	});
 	function handleClick(event: MouseEvent): void {
 		//if (rightClickMenu && !rightClickMenu.contains(event.target as Node)) {
+		console.log(
+			'Right-click action:',
+			get(rightClickQuery).result,
+			'Instance:',
+			get(rightClickQuery).instance
+		);
 		closeRightClickMenu();
 		//}
 	}
@@ -223,6 +230,9 @@
 				on:click={(event) => querySimilarInstances($rightClickQuery.instance)}
 			>
 				Similar Instances
+			</button>
+			<button class="wide-button" on:click={() => getLLMSummary($rightClickQuery.instance)}>
+				Get LLM Summary for {$rightClickQuery.instance.ticker}
 			</button>
 		</div>
 

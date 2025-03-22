@@ -1,7 +1,7 @@
 # data.py
 
 import numpy as np
-import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 import asyncio
 import aiohttp
@@ -152,7 +152,7 @@ async def get_instance_data(session, args):
         args["label"],
     ]
     if dt == 0:
-        end_time = datetime.datetime.now()  # - datetime.timedelta(days=1)
+        end_time = datetime.now()  # - timedelta(days=1)
     else:
         end_time = dt
     multiplier, timespan = get_timeframe(tf)
@@ -164,15 +164,15 @@ async def get_instance_data(session, args):
         bars += 1  # normalizaton will steal a bar
 
     if timespan == "minute":
-        start_time = end_time - datetime.timedelta(minutes=bars * multiplier * 2)
+        start_time = end_time - timedelta(minutes=bars * multiplier * 2)
     elif timespan == "hour":
-        start_time = end_time - datetime.timedelta(hours=bars * multiplier * 2)
+        start_time = end_time - timedelta(hours=bars * multiplier * 2)
     elif timespan == "day":
-        start_time = end_time - datetime.timedelta(days=bars * multiplier * 2)
+        start_time = end_time - timedelta(days=bars * multiplier * 2)
     elif timespan == "week":
-        start_time = end_time - datetime.timedelta(days=bars * multiplier * 7 * 2)
+        start_time = end_time - timedelta(days=bars * multiplier * 7 * 2)
     else:
-        start_time = end_time - datetime.timedelta(days=bars * multiplier * 7 * 2)
+        start_time = end_time - timedelta(days=bars * multiplier * 7 * 2)
     base_url = "https://api.polygon.io/v2/aggs/ticker/{ticker}/range/{multiplier}/{timespan}/{start}/{end}"
     url = base_url.format(
         ticker=ticker,

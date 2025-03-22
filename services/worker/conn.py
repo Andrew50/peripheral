@@ -21,9 +21,8 @@ def get_timestamp():
 
 
 def log_message(message, level="info"):
-    """Log a message to both stdout and task logs if task context is available"""
-    # Always print to stdout for direct console viewing
-    print(message, flush=True)
+    """Log a message to task logs if task context is available"""
+    # Don't print to stdout anymore
     
     # If we have a task context, add to task logs
     if CURRENT_TASK_DATA is not None and CURRENT_TASK_ID is not None:
@@ -52,10 +51,6 @@ def add_task_log(data, task_id, message, level="info"):
         
         task = json.loads(task_json)
         
-        # DEBUG: Print task structure before adding log - using sys.__stdout__ directly to avoid recursion
-        sys.__stdout__.write(f"DEBUG: Task structure before log: {list(task.keys())}\n")
-        sys.__stdout__.flush()
-        
         # Create a log entry
         log_entry = {
             "timestamp": datetime.now().isoformat(),
@@ -66,16 +61,9 @@ def add_task_log(data, task_id, message, level="info"):
         # Add the log entry to the task
         if "logs" not in task:
             task["logs"] = []
-            sys.__stdout__.write(f"DEBUG: Created new logs array for task {task_id}\n")
-            sys.__stdout__.flush()
         
         task["logs"].append(log_entry)
         task["updatedAt"] = datetime.now().isoformat()
-        
-        # DEBUG: Print log entry being added - using sys.__stdout__ directly to avoid recursion
-        sys.__stdout__.write(f"DEBUG: Adding log to task {task_id}: {log_entry}\n")
-        sys.__stdout__.write(f"DEBUG: Task now has {len(task['logs'])} logs\n")
-        sys.__stdout__.flush()
         
         # Save the updated task
         safe_redis_operation(data.cache.set, task_id, json.dumps(task))
@@ -143,6 +131,8 @@ def safe_redis_operation(func, *args, **kwargs):
                 time.sleep(base_retry_delay)
             else:
                 raise
+from gemini import GeminiKeyPool
+
 
 
 class Conn:
@@ -176,6 +166,10 @@ class Conn:
                 print("Successfully connected to both database and Redis", flush=True)
                 self.tf = tf_host
                 self.polygon = os.environ.get("POLYGON_API_KEY", "")
+                
+                # Initialize Gemini API key pool
+                self.gemini_pool = GeminiKeyPool()
+                
                 return
                 
             except psycopg2.OperationalError as e:
@@ -262,46 +256,80 @@ class Conn:
         self.cache.ping()
 
     def check_connection(self):
-        """Check both database and Redis connections."""
-        redis_ok = False
-        db_ok = False
+        """Check connection to database and Redis cache"""
+        start_time = datetime.now()
+        timeout = timedelta(minutes=1)
         
-        # Check Redis connection
-        try:
-            self.cache.ping()
-            redis_ok = True
-        except (redis.exceptions.ConnectionError, redis.exceptions.ResponseError, redis.exceptions.TimeoutError) as e:
-            print(f"Redis connection error during check: {e}", flush=True)
-            print("Attempting to reconnect to Redis...", flush=True)
-            try:
-                # Use the same host as the initial connection
-                cache_host = os.environ.get("REDIS_HOST", "cache")
-                self._connect_to_redis(cache_host)
-                redis_ok = True
-                print("Successfully reconnected to Redis", flush=True)
-            except Exception as e:
-                print(f"Failed to reconnect to Redis: {e}", flush=True)
-                raise
-        
-        # Check database connection
-        try:
-            with self.db.cursor() as cursor:
-                cursor.execute("SELECT 1")
-            db_ok = True
-        except psycopg2.OperationalError as e:
-            print(f"Database connection error during check: {e}", flush=True)
-            print("Attempting to reconnect to database...", flush=True)
-            try:
-                # Use the same host as the initial connection
-                db_host = os.environ.get("DB_HOST", "db")
-                self._connect_to_db(db_host)
-                db_ok = True
-                print("Successfully reconnected to database", flush=True)
-            except Exception as e:
-                print(f"Failed to reconnect to database: {e}", flush=True)
-                raise
-        except Exception as e:
-            print(f"Unexpected error during connection check: {e}", flush=True)
-            raise
+        while datetime.now() - start_time < timeout:
+            redis_ok = False
+            db_ok = False
             
-        return redis_ok and db_ok
+            # Check Redis connection
+            try:
+                self.cache.ping()
+                redis_ok = True
+            except (redis.exceptions.ConnectionError, redis.exceptions.ResponseError, redis.exceptions.TimeoutError) as e:
+                print(f"Redis connection error during check: {e}", flush=True)
+                print("Attempting to reconnect to Redis...", flush=True)
+                try:
+                    # Use the same host as the initial connection
+                    cache_host = os.environ.get("REDIS_HOST", "cache")
+                    self._connect_to_redis(cache_host)
+                    redis_ok = True
+                    print("Successfully reconnected to Redis", flush=True)
+                except Exception as e:
+                    print(f"Failed to reconnect to Redis: {e}", flush=True)
+                    raise
+            
+            # Check database connection
+            try:
+                with self.db.cursor() as cursor:
+                    cursor.execute("SELECT 1")
+                db_ok = True
+            except psycopg2.OperationalError as e:
+                print(f"Database connection error during check: {e}", flush=True)
+                print("Attempting to reconnect to database...", flush=True)
+                try:
+                    # Use the same host as the initial connection
+                    db_host = os.environ.get("DB_HOST", "db")
+                    self._connect_to_db(db_host)
+                    db_ok = True
+                    print("Successfully reconnected to database", flush=True)
+                except Exception as e:
+                    print(f"Failed to reconnect to database: {e}", flush=True)
+                    raise
+            except Exception as e:
+                print(f"Unexpected error during connection check: {e}", flush=True)
+                raise
+            
+            if redis_ok and db_ok:
+                return True
+            
+            time.sleep(2)  # Short sleep before retry
+        
+        # If we get here, we've timed out
+        error_msg = "Failed to establish connections within 1 minute:\n"
+        if not redis_ok:
+            error_msg += "Redis connection failed\n"
+        if not db_ok:
+            error_msg += "Database connection failed"
+        print(error_msg, flush=True)
+        return False
+
+    def get_gemini_key(self):
+        """Get the next available Gemini API key."""
+        try:
+            return self.gemini_pool.get_next_key()
+        except ValueError as e:
+            print(f"Error getting Gemini API key: {e}", flush=True)
+            return None
+
+    def test_connection(self):
+        """
+        Test connections to all services and raise an exception if any fail.
+        This method is used by the health check.
+        """
+        if not self.check_connection():
+            raise Exception("Connection check failed")
+        print("Health check passed - all connections are healthy", flush=True)
+        return True

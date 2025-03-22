@@ -7,6 +7,8 @@ services/db/backups
 services/worker/venv
 services/backups/
 services/context/llm_context.txt
+services/frontend/package-lock.json
+.github/tmp
 
 # Python bytecode files
 __pycache__/
@@ -31,3 +33,4 @@ services/prod/config/polygon-secret.yaml
 # Add new paths for secrets
 services/prod/config/secrets/
 jobctl
+services/backend/backend

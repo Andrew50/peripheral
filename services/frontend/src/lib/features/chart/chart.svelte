@@ -1190,7 +1190,14 @@
 				}
 			},
 			timeScale: {
-				timeVisible: true
+				timeVisible: true,
+				borderColor: 'black'
+			},
+			rightPriceScale: {
+				borderColor: 'black'
+			},
+			leftPriceScale: {
+				borderColor: 'black'
 			}
 		};
 		const chartContainer = document.getElementById(`chart_container-${chartId}`);
@@ -1210,7 +1217,7 @@
 
 			const inst: CoreInstance = {
 				ticker: currentChartInstance.ticker,
-				timestamp: currentChartInstance.timestamp,
+				timestamp: timestamp,
 				timeframe: currentChartInstance.timeframe,
 				securityId: currentChartInstance.securityId,
 				price: roundedPrice

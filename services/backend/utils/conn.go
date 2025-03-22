@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -21,6 +23,7 @@ type Conn struct {
 	Polygon    *polygon.Client
 	Cache      *redis.Client
 	PolygonKey string
+	GeminiPool *GeminiKeyPool
 }
 
 var conn *Conn
@@ -55,9 +58,25 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	var dbConn *pgxpool.Pool
 	var err error
 	for {
-		dbConn, err = pgxpool.Connect(context.Background(), dbUrl)
+		// Create a connection pool configuration
+		poolConfig, err := pgxpool.ParseConfig(dbUrl)
 		if err != nil {
-			//if strings.Contains(err.Error(), "the database system is starting up") {
+			log.Printf("Unable to parse pool config: %v\n", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		// Configure connection pool with better defaults
+		poolConfig.MaxConns = 20                               // Set max connections to 20 (default is 4)
+		poolConfig.MinConns = 3                                // Keep at least 5 connections in the pool
+		poolConfig.MaxConnLifetime = 1 * time.Hour             // Maximum lifetime of a connection
+		poolConfig.MaxConnIdleTime = 30 * time.Minute          // Maximum idle time for a connection
+		poolConfig.HealthCheckPeriod = 1 * time.Minute         // How often to check connection health
+		poolConfig.ConnConfig.ConnectTimeout = 5 * time.Second // Connection timeout
+
+		// Create the connection pool with our custom configuration
+		dbConn, err = pgxpool.ConnectConfig(context.Background(), poolConfig)
+		if err != nil {
 			log.Printf("waiting for db %v\n", err)
 			time.Sleep(5 * time.Second)
 		} else {
@@ -119,7 +138,16 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	// Create Polygon client with custom HTTP client
 	polygonClient := polygon.NewWithClient(polygonKey, httpClient)
 
-	conn = &Conn{DB: dbConn, Cache: cache, Polygon: polygonClient, PolygonKey: polygonKey}
+	// Initialize Gemini API key pool
+	geminiPool := initGeminiKeyPool()
+
+	conn = &Conn{
+		DB:         dbConn,
+		Cache:      cache,
+		Polygon:    polygonClient,
+		PolygonKey: polygonKey,
+		GeminiPool: geminiPool,
+	}
 
 	cleanup := func() {
 		conn.DB.Close()
@@ -134,4 +162,182 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// GeminiKeyInfo represents information about a Gemini API key
+type GeminiKeyInfo struct {
+	Key            string
+	IsPaid         bool
+	RequestCount   int
+	LastReset      time.Time
+	RateLimitTotal int // Total requests allowed per minute
+	Mutex          sync.Mutex
+}
+
+// GeminiKeyPool manages a pool of Gemini API keys
+type GeminiKeyPool struct {
+	Keys        []*GeminiKeyInfo
+	Mutex       sync.RWMutex
+	LastUsedIdx int
+}
+
+// initGeminiKeyPool initializes the Gemini API key pool
+func initGeminiKeyPool() *GeminiKeyPool {
+	pool := &GeminiKeyPool{
+		Keys:        make([]*GeminiKeyInfo, 0),
+		LastUsedIdx: -1,
+	}
+
+	// Get keys from environment variables
+	// Format expected: GEMINI_FREE_KEYS=key1,key2,key3 and GEMINI_PAID_KEY=paidkey
+	freeKeysStr := getEnv("GEMINI_FREE_KEYS", "")
+	paidKey := getEnv("GEMINI_PAID_KEY", "")
+
+	// Default rate limit for free keys (Gemini typically allows 60 requests per minute for free tier)
+	freeRateLimit := 15
+	// Paid key has a higher limit, though it varies by plan
+	paidRateLimit := 1000
+
+	// Parse and add free keys
+	if freeKeysStr != "" {
+		// Split the comma-separated string
+		freeKeys := strings.Split(freeKeysStr, ",")
+		for _, key := range freeKeys {
+			key = strings.TrimSpace(key)
+			if key != "" {
+				pool.Keys = append(pool.Keys, &GeminiKeyInfo{
+					Key:            key,
+					IsPaid:         false,
+					RequestCount:   0,
+					LastReset:      time.Now(),
+					RateLimitTotal: freeRateLimit,
+				})
+			}
+		}
+	}
+
+	// Add paid key if provided
+	if paidKey != "" {
+		pool.Keys = append(pool.Keys, &GeminiKeyInfo{
+			Key:            paidKey,
+			IsPaid:         true,
+			RequestCount:   0,
+			LastReset:      time.Now(),
+			RateLimitTotal: paidRateLimit,
+		})
+	}
+
+	// Start a goroutine to reset request counts every minute
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			pool.resetCounts()
+		}
+	}()
+
+	return pool
+}
+
+// resetCounts resets the request counts for all keys in the pool
+func (p *GeminiKeyPool) resetCounts() {
+	p.Mutex.Lock()
+	defer p.Mutex.Unlock()
+
+	now := time.Now()
+	for _, keyInfo := range p.Keys {
+		keyInfo.Mutex.Lock()
+		// Only reset if a minute has passed since the last reset
+		if now.Sub(keyInfo.LastReset) >= time.Minute {
+			keyInfo.RequestCount = 0
+			keyInfo.LastReset = now
+		}
+		keyInfo.Mutex.Unlock()
+	}
+}
+
+// GetNextKey returns the next available API key based on the rotation strategy
+func (p *GeminiKeyPool) GetNextKey() (string, error) {
+	p.Mutex.Lock()
+	defer p.Mutex.Unlock()
+
+	if len(p.Keys) == 0 {
+		return "", fmt.Errorf("no API keys available in the pool")
+	}
+
+	// First try to find a non-paid key under the rate limit
+	for i := 0; i < len(p.Keys); i++ {
+		// Round-robin selection, starting after the last used index
+		idx := (p.LastUsedIdx + 1 + i) % len(p.Keys)
+		keyInfo := p.Keys[idx]
+
+		// Skip paid keys in the first pass
+		if keyInfo.IsPaid {
+			continue
+		}
+
+		keyInfo.Mutex.Lock()
+		// Check if this key is under its rate limit
+		if keyInfo.RequestCount < keyInfo.RateLimitTotal {
+			keyInfo.RequestCount++
+			p.LastUsedIdx = idx
+			keyInfo.Mutex.Unlock()
+			return keyInfo.Key, nil
+		}
+		keyInfo.Mutex.Unlock()
+	}
+
+	// If all free keys are at their limit, try the paid key
+	for i := 0; i < len(p.Keys); i++ {
+		idx := (p.LastUsedIdx + 1 + i) % len(p.Keys)
+		keyInfo := p.Keys[idx]
+
+		// Now only consider paid keys
+		if !keyInfo.IsPaid {
+			continue
+		}
+
+		keyInfo.Mutex.Lock()
+		// Check if this paid key is under its rate limit
+		if keyInfo.RequestCount < keyInfo.RateLimitTotal {
+			keyInfo.RequestCount++
+			p.LastUsedIdx = idx
+			keyInfo.Mutex.Unlock()
+			return keyInfo.Key, nil
+		}
+		keyInfo.Mutex.Unlock()
+	}
+
+	// If we get here, all keys (including paid ones) are at their rate limit
+	return "", fmt.Errorf("all API keys have reached their rate limits")
+}
+
+// GetGeminiKey is a convenience method on Conn to get the next available Gemini API key
+func (c *Conn) GetGeminiKey() (string, error) {
+	return c.GeminiPool.GetNextKey()
+}
+
+// TestRedisConnectivity tests the Redis connection and returns success status and error message
+func (c *Conn) TestRedisConnectivity(ctx context.Context, userID int) (bool, string) {
+	testKey := fmt.Sprintf("redis_test_key:%d", userID)
+	testValue := fmt.Sprintf("test_value_%d_%d", userID, time.Now().Unix())
+
+	// Try to write to Redis
+	err := c.Cache.Set(ctx, testKey, testValue, 5*time.Minute).Err()
+	if err != nil {
+		return false, fmt.Sprintf("Redis write test failed: %v", err)
+	}
+
+	// Try to read from Redis
+	val, err := c.Cache.Get(ctx, testKey).Result()
+	if err != nil {
+		return false, fmt.Sprintf("Redis read test failed: %v", err)
+	}
+
+	if val != testValue {
+		return false, fmt.Sprintf("Redis read test returned unexpected value: %s", val)
+	}
+
+	return true, "Redis connection test successful"
 }
