@@ -237,17 +237,18 @@ type GetTickerDetailsArgs struct {
 
 // GetTickerMenuDetailsResults represents a structure for handling GetTickerMenuDetailsResults data.
 type GetTickerMenuDetailsResults struct {
-	Ticker                      string          `json:"ticker"`
-	Name                        sql.NullString  `json:"name"`
-	Market                      sql.NullString  `json:"market"`
-	Locale                      sql.NullString  `json:"locale"`
-	PrimaryExchange             sql.NullString  `json:"primary_exchange"`
-	Active                      string          `json:"active"`
-	MarketCap                   sql.NullFloat64 `json:"market_cap"`
-	Description                 sql.NullString  `json:"description"`
-	Logo                        sql.NullString  `json:"logo"`
-	Icon                        sql.NullString  `json:"icon"`
-	ShareClassSharesOutstanding sql.NullInt64   `json:"share_class_shares_outstanding"`
+	Ticker          string          `json:"ticker"`
+	Name            sql.NullString  `json:"name"`
+	Market          sql.NullString  `json:"market"`
+	Locale          sql.NullString  `json:"locale"`
+	PrimaryExchange sql.NullString  `json:"primary_exchange"`
+	Active          string          `json:"active"`
+	MarketCap       sql.NullFloat64 `json:"market_cap"`
+	Description     sql.NullString  `json:"description"`
+	Logo            sql.NullString  `json:"logo"`
+	Icon            sql.NullString  `json:"icon"`
+
+	ShareClassSharesOutstanding sql.NullInt64 `json:"share_class_shares_outstanding"`
 
 	Industry    sql.NullString `json:"industry"`
 	Sector      sql.NullString `json:"sector"`
