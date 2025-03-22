@@ -12,17 +12,15 @@ import (
 )
 
 const (
-	AggsLength = 100
+	AggsLength = 200
 	OHLCV      = 5
 	Second     = 1
 	Minute     = 60
 	Hour       = 3600
 	Day        = 86400
 
-	concurrency = 30
-)
+	concurrency = 10
 
-const (
 	secondAggs = true
 	minuteAggs = false
 	hourAggs   = false

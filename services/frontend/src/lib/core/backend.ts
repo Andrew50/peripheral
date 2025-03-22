@@ -8,8 +8,8 @@ base_url = 'http://localhost:5058';
 if (typeof window !== 'undefined') {
     // For client-side code
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        // In development
-        base_url = 'http://localhost:5058'; // Use direct localhost connection
+        // In development, always use the backend server URL
+        base_url = 'http://localhost:5058';
     } else {
         // In production always use the current origin
         base_url = window.location.origin;
