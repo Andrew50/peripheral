@@ -69,24 +69,24 @@ type SignupArgs struct {
 // Signup performs operations related to Signup functionality.
 func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	fmt.Println("=== SIGNUP ATTEMPT STARTED ===")
-	fmt.Printf("Connection pool stats - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", 
-		conn.DB.Stat().MaxConns(), 
-		conn.DB.Stat().TotalConns(), 
+	fmt.Printf("Connection pool stats - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
+		conn.DB.Stat().MaxConns(),
+		conn.DB.Stat().TotalConns(),
 		conn.DB.Stat().IdleConns(),
 		conn.DB.Stat().AcquiredConns())
-	
+
 	var a SignupArgs
 	if err := json.Unmarshal(rawArgs, &a); err != nil {
 		fmt.Printf("ERROR: Failed to unmarshal signup args: %v\n", err)
 		return nil, fmt.Errorf("Signup invalid args: %v", err)
 	}
-	
+
 	fmt.Printf("Attempting to create account for email: %s, username: %s\n", a.Email, a.Username)
 
 	// Create a timeout context to prevent hanging
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	
+
 	// Check if email already exists
 	var count int
 	fmt.Println("Checking if email exists...")
@@ -94,9 +94,9 @@ func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	if err != nil {
 		fmt.Printf("ERROR: Database query failed while checking email: %v\n", err)
 		// Print connection pool stats after error
-		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", 
-			conn.DB.Stat().MaxConns(), 
-			conn.DB.Stat().TotalConns(), 
+		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
+			conn.DB.Stat().MaxConns(),
+			conn.DB.Stat().TotalConns(),
 			conn.DB.Stat().IdleConns(),
 			conn.DB.Stat().AcquiredConns())
 		return nil, fmt.Errorf("error checking email: %v", err)
@@ -116,14 +116,14 @@ func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	if err != nil {
 		fmt.Printf("ERROR: Failed to create user: %v\n", err)
 		// Print connection pool stats after error
-		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", 
-			conn.DB.Stat().MaxConns(), 
-			conn.DB.Stat().TotalConns(), 
+		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
+			conn.DB.Stat().MaxConns(),
+			conn.DB.Stat().TotalConns(),
 			conn.DB.Stat().IdleConns(),
 			conn.DB.Stat().AcquiredConns())
 		return nil, fmt.Errorf("error creating user: %v", err)
 	}
-	
+
 	fmt.Printf("User created successfully with ID: %d\n", userID)
 
 	// Create a journal entry for the new user using the current timestamp
@@ -158,15 +158,15 @@ func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	} else {
 		fmt.Println("Login successful")
 	}
-	
+
 	// Print final connection pool stats
-	fmt.Printf("Connection pool stats at end of signup - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", 
-		conn.DB.Stat().MaxConns(), 
-		conn.DB.Stat().TotalConns(), 
+	fmt.Printf("Connection pool stats at end of signup - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
+		conn.DB.Stat().MaxConns(),
+		conn.DB.Stat().TotalConns(),
 		conn.DB.Stat().IdleConns(),
 		conn.DB.Stat().AcquiredConns())
 	fmt.Println("=== SIGNUP ATTEMPT COMPLETED ===")
-	
+
 	return result, err
 }
 
@@ -179,24 +179,24 @@ type LoginArgs struct {
 // Login performs operations related to Login functionality.
 func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	fmt.Println("=== LOGIN ATTEMPT STARTED ===")
-	fmt.Printf("Connection pool stats - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", 
-		conn.DB.Stat().MaxConns(), 
-		conn.DB.Stat().TotalConns(), 
+	fmt.Printf("Connection pool stats - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
+		conn.DB.Stat().MaxConns(),
+		conn.DB.Stat().TotalConns(),
 		conn.DB.Stat().IdleConns(),
 		conn.DB.Stat().AcquiredConns())
-	
+
 	var a LoginArgs
 	if err := json.Unmarshal(rawArgs, &a); err != nil {
 		fmt.Printf("ERROR: Failed to unmarshal login args: %v\n", err)
 		return nil, fmt.Errorf("login invalid args: %v", err)
 	}
-	
+
 	fmt.Printf("Login attempt for email: %s\n", a.Email)
 
 	// Create a timeout context to prevent hanging
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	
+
 	var resp LoginResponse
 	var userID int
 	var profilePicture sql.NullString
@@ -211,14 +211,14 @@ func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	if err != nil {
 		fmt.Printf("ERROR: User lookup failed: %v\n", err)
 		// Print connection pool stats after error
-		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", 
-			conn.DB.Stat().MaxConns(), 
-			conn.DB.Stat().TotalConns(), 
+		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
+			conn.DB.Stat().MaxConns(),
+			conn.DB.Stat().TotalConns(),
 			conn.DB.Stat().IdleConns(),
 			conn.DB.Stat().AcquiredConns())
 		return nil, fmt.Errorf("invalid credentials: %v", err)
 	}
-	
+
 	fmt.Printf("Found user with ID: %d, username: %s, auth_type: %s\n", userID, resp.Username, authType)
 
 	// Check if this is a Google-only auth user trying to use password login
@@ -240,14 +240,14 @@ func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		} else {
 			fmt.Println("ERROR: Password mismatch")
 		}
-		
+
 		// Print connection pool stats after error
-		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", 
-			conn.DB.Stat().MaxConns(), 
-			conn.DB.Stat().TotalConns(), 
+		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
+			conn.DB.Stat().MaxConns(),
+			conn.DB.Stat().TotalConns(),
 			conn.DB.Stat().IdleConns(),
 			conn.DB.Stat().AcquiredConns())
-		
+
 		return nil, fmt.Errorf("invalid credentials")
 	}
 
@@ -268,15 +268,87 @@ func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		resp.ProfilePic = ""
 		fmt.Println("No profile picture found")
 	}
-	
+
 	// Print final connection pool stats
-	fmt.Printf("Connection pool stats at end of login - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", 
-		conn.DB.Stat().MaxConns(), 
-		conn.DB.Stat().TotalConns(), 
+	fmt.Printf("Connection pool stats at end of login - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
+		conn.DB.Stat().MaxConns(),
+		conn.DB.Stat().TotalConns(),
 		conn.DB.Stat().IdleConns(),
 		conn.DB.Stat().AcquiredConns())
 	fmt.Println("=== LOGIN ATTEMPT COMPLETED ===")
 
+	return resp, nil
+}
+
+// GuestLogin performs a login for a guest user without requiring credentials
+func GuestLogin(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
+	fmt.Println("=== GUEST LOGIN ATTEMPT STARTED ===")
+
+	// Create a timeout context to prevent hanging
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var resp LoginResponse
+	var userID int
+
+	// Check if a guest user already exists
+	var count int
+	err := conn.DB.QueryRow(ctx, "SELECT COUNT(*) FROM users WHERE email='guest@atlantis.local'").Scan(&count)
+
+	if err != nil {
+		fmt.Printf("ERROR: Failed to check for existing guest user: %v\n", err)
+		return nil, fmt.Errorf("guest login failed: %v", err)
+	}
+
+	if count == 0 {
+		// No guest user exists, create one
+		fmt.Println("Creating new guest user...")
+		err = conn.DB.QueryRow(ctx,
+			"INSERT INTO users (username, email, password, auth_type) VALUES ($1, $2, $3, $4) RETURNING userId",
+			"Guest", "guest@atlantis.local", "guest-password", "guest").Scan(&userID)
+
+		if err != nil {
+			fmt.Printf("ERROR: Failed to create guest user: %v\n", err)
+			return nil, fmt.Errorf("failed to create guest account: %v", err)
+		}
+
+		// Set username for response
+		resp.Username = "Guest"
+
+		// Create initial journal entry for guest user
+		currentTime := time.Now().UTC()
+		_, err = conn.DB.Exec(ctx,
+			"INSERT INTO journals (timestamp, userId, entry) VALUES ($1, $2, $3)",
+			currentTime.Unix(), userID, "{}")
+
+		if err != nil {
+			// Just log the error but continue
+			fmt.Printf("WARNING: Error creating initial journal for guest user: %v\n", err)
+		}
+	} else {
+		// Guest user exists, get the user ID
+		fmt.Println("Using existing guest user...")
+		err = conn.DB.QueryRow(ctx,
+			"SELECT userId, username FROM users WHERE email='guest@atlantis.local'").Scan(&userID, &resp.Username)
+
+		if err != nil {
+			fmt.Printf("ERROR: Failed to get existing guest user: %v\n", err)
+			return nil, fmt.Errorf("guest login failed: %v", err)
+		}
+	}
+
+	// Create authentication token for guest user
+	fmt.Printf("Creating token for guest user ID: %d\n", userID)
+	token, err := createToken(userID)
+	if err != nil {
+		fmt.Printf("ERROR: Token creation failed: %v\n", err)
+		return nil, err
+	}
+
+	resp.Token = token
+	resp.ProfilePic = "" // Guest users don't have a profile picture
+
+	fmt.Println("=== GUEST LOGIN COMPLETED ===")
 	return resp, nil
 }
 
