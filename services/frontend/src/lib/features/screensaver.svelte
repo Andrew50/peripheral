@@ -12,16 +12,14 @@
 
 	export let active = false;
 
-	const tfs = ['1w', '1d', '1h', '1'];
 	let instances: Instance[] = [];
+	let currentSettings = get(settings);
 
 	let loopActive = false;
 	let securityIndex = 0;
 	let tfIndex = 0;
-	let speed = 5; //seconds
 
-	// Inactivity timer settings
-	const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
+	// Inactivity timer
 	let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
 
 	function startInactivityTimer() {
@@ -33,10 +31,13 @@
 			clearTimeout(inactivityTimer);
 		}
 
-		// Set new timer
-		inactivityTimer = setTimeout(() => {
-			startScreensaver();
-		}, INACTIVITY_TIMEOUT);
+		// Set new timer using the configured timeout value (convert seconds to milliseconds)
+		inactivityTimer = setTimeout(
+			() => {
+				startScreensaver();
+			},
+			get(settings).screensaverTimeout * 1000
+		);
 	}
 
 	function resetInactivityTimer() {
@@ -49,17 +50,58 @@
 
 		if (!active) {
 			active = true;
+			// Update current settings
+			currentSettings = get(settings);
+
 			if (instances.length > 0) {
 				loopActive = true;
 				loop();
 			} else {
-				// Load instances if not already loaded
-				privateRequest<Instance[]>('getScreensavers', {}).then((v: Instance[]) => {
-					instances = v;
-					loopActive = true;
-					loop();
-				});
+				// Load instances based on data source
+				loadInstances();
 			}
+		}
+	}
+
+	function loadInstances() {
+		const dataSource = currentSettings.screensaverDataSource;
+
+		if (dataSource === 'gainers-losers') {
+			// Use the existing getScreensavers endpoint
+			privateRequest<Instance[]>('getScreensavers', {}).then((v: Instance[]) => {
+				instances = v;
+				loopActive = true;
+				loop();
+			});
+		} else if (dataSource === 'watchlist' && currentSettings.screensaverWatchlistId) {
+			// Load from specified watchlist
+			privateRequest<Instance[]>('getWatchlistItems', {
+				watchlistId: currentSettings.screensaverWatchlistId
+			}).then((v: Instance[]) => {
+				instances = v;
+				loopActive = true;
+				loop();
+			});
+		} else if (
+			dataSource === 'user-defined' &&
+			currentSettings.screensaverTickers &&
+			currentSettings.screensaverTickers.length > 0
+		) {
+			// Load from user-defined tickers
+			privateRequest<Instance[]>('getInstancesByTickers', {
+				tickers: currentSettings.screensaverTickers
+			}).then((v: Instance[]) => {
+				instances = v;
+				loopActive = true;
+				loop();
+			});
+		} else {
+			// Fallback to gainers-losers if configuration is invalid
+			privateRequest<Instance[]>('getScreensavers', {}).then((v: Instance[]) => {
+				instances = v;
+				loopActive = true;
+				loop();
+			});
 		}
 	}
 
@@ -73,20 +115,33 @@
 		if (!active || instances.length === 0) return;
 
 		const instance = instances[securityIndex];
-		instance.timeframe = tfs[tfIndex];
+		const timeframes = currentSettings.screensaverTimeframes;
+
+		// Skip if we don't have valid timeframes
+		if (!timeframes || timeframes.length === 0) {
+			securityIndex = (securityIndex + 1) % instances.length;
+			setTimeout(() => {
+				loop();
+			}, currentSettings.screensaverSpeed * 1000);
+			return;
+		}
+
+		instance.timeframe = timeframes[tfIndex];
 		queryChart(instance);
+
 		tfIndex++;
-		if (tfIndex >= tfs.length) {
+		if (tfIndex >= timeframes.length) {
 			tfIndex = 0;
 			securityIndex++;
 			if (securityIndex >= instances.length) {
 				securityIndex = 0;
 			}
 		}
+
 		if (loopActive) {
 			setTimeout(() => {
 				loop();
-			}, speed * 1000);
+			}, currentSettings.screensaverSpeed * 1000);
 		}
 	}
 
@@ -103,24 +158,11 @@
 	let unsubscribe: () => void;
 
 	onMount(() => {
-		// Load instances on mount
-		privateRequest<Instance[]>('getScreensavers', {}).then((v: Instance[]) => {
-			instances = v;
-			if (active) {
-				loopActive = true;
-				loop();
-			}
-		});
-
-		// Set up activity listeners
-		window.addEventListener('mousemove', handleUserActivity);
-		window.addEventListener('mousedown', handleUserActivity);
-		window.addEventListener('keypress', handleUserActivity);
-		window.addEventListener('touchstart', handleUserActivity);
-		window.addEventListener('scroll', handleUserActivity);
-
 		// Subscribe to settings changes
 		unsubscribe = settings.subscribe((newSettings) => {
+			// Update our local copy of the settings
+			currentSettings = newSettings;
+
 			// If screensaver setting is disabled and screensaver is active, stop it
 			if (!newSettings.enableScreensaver && active) {
 				stopScreensaver();
@@ -132,8 +174,20 @@
 			}
 		});
 
+		// Load instances on mount if screensaver active
+		if (active) {
+			loadInstances();
+		}
+
+		// Set up activity listeners
+		window.addEventListener('mousemove', handleUserActivity);
+		window.addEventListener('mousedown', handleUserActivity);
+		window.addEventListener('keypress', handleUserActivity);
+		window.addEventListener('touchstart', handleUserActivity);
+		window.addEventListener('scroll', handleUserActivity);
+
 		// Start the inactivity timer if screensaver is enabled
-		if (get(settings).enableScreensaver) {
+		if (currentSettings.enableScreensaver) {
 			startInactivityTimer();
 		}
 	});

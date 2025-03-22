@@ -6,10 +6,13 @@
 	import '$lib/core/global.css';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
+	import { onMount } from 'svelte';
 
 	let errorMessage: string = '';
 	let tempSettings: Settings = { ...get(settings) }; // Create a local copy to work with
-	let activeTab: 'chart' | 'format' | 'account' = 'chart';
+	let activeTab: 'chart' | 'format' | 'account' | 'screensaver' = 'chart';
+	let watchlists = [];
+	let customTickers = ''; // For managing comma-separated list of tickers
 
 	// Add profile picture state
 	let profilePic = browser ? sessionStorage.getItem('profilePic') || '' : '';
@@ -19,7 +22,38 @@
 	let previewUrl = '';
 	let uploadStatus = '';
 
+	// Initialize timeframes as a comma-separated string for editing
+	let timeframesString = tempSettings.screensaverTimeframes?.join(',') || '1w,1d,1h,1';
+
+	onMount(() => {
+		// Load watchlists for the screensaver settings
+		privateRequest('getWatchlists', {}).then((response) => {
+			watchlists = response || [];
+		});
+
+		// Initialize custom tickers string if available
+		if (tempSettings.screensaverTickers && tempSettings.screensaverTickers.length > 0) {
+			customTickers = tempSettings.screensaverTickers.join(',');
+		}
+	});
+
 	function updateLayout() {
+		// Update timeframes array from the comma-separated string
+		if (timeframesString) {
+			tempSettings.screensaverTimeframes = timeframesString
+				.split(',')
+				.map((tf) => tf.trim())
+				.filter((tf) => tf.length > 0);
+		}
+
+		// Update custom tickers if user-defined is selected
+		if (tempSettings.screensaverDataSource === 'user-defined' && customTickers) {
+			tempSettings.screensaverTickers = customTickers
+				.split(',')
+				.map((ticker) => ticker.trim().toUpperCase())
+				.filter((ticker) => ticker.length > 0);
+		}
+
 		if (tempSettings.chartRows > 0 && tempSettings.chartColumns > 0) {
 			privateRequest<void>('setSettings', { settings: tempSettings }).then(() => {
 				settings.set(tempSettings); // Update the store with new settings
@@ -151,6 +185,12 @@
 		>
 			Format
 		</button>
+		<button
+			class="tab-button {activeTab === 'screensaver' ? 'active' : ''}"
+			on:click={() => (activeTab = 'screensaver')}
+		>
+			Screensaver
+		</button>
 	</div>
 
 	<div class="settings-content">
@@ -271,6 +311,113 @@
 							</select>
 						</div>
 					</div>
+				</div>
+			</div>
+		{:else if activeTab === 'screensaver'}
+			<div class="settings-section">
+				<h3>Screensaver Settings</h3>
+
+				<div class="setting-item">
+					<label for="enableScreensaver">Enable Screensaver</label>
+					<div class="toggle-container">
+						<select
+							id="enableScreensaver"
+							bind:value={tempSettings.enableScreensaver}
+							on:keypress={handleKeyPress}
+						>
+							<option value={true}>Yes</option>
+							<option value={false}>No</option>
+						</select>
+					</div>
+				</div>
+
+				<div class="settings-grid">
+					<div class="setting-item">
+						<label for="screensaverTimeout">Inactivity Timeout (seconds)</label>
+						<input
+							type="number"
+							id="screensaverTimeout"
+							bind:value={tempSettings.screensaverTimeout}
+							min="30"
+							on:keypress={handleKeyPress}
+						/>
+					</div>
+
+					<div class="setting-item">
+						<label for="screensaverSpeed">Cycle Speed (seconds)</label>
+						<input
+							type="number"
+							id="screensaverSpeed"
+							bind:value={tempSettings.screensaverSpeed}
+							min="1"
+							on:keypress={handleKeyPress}
+						/>
+					</div>
+				</div>
+
+				<div class="setting-item wide">
+					<label for="screensaverTimeframes">Timeframes (comma-separated)</label>
+					<input
+						type="text"
+						id="screensaverTimeframes"
+						bind:value={timeframesString}
+						placeholder="1w,1d,1h,1"
+						on:keypress={handleKeyPress}
+					/>
+				</div>
+
+				<h3>Data Source</h3>
+				<div class="setting-item">
+					<label for="screensaverDataSource">Chart Data Source</label>
+					<div class="toggle-container">
+						<select
+							id="screensaverDataSource"
+							bind:value={tempSettings.screensaverDataSource}
+							on:keypress={handleKeyPress}
+						>
+							<option value="gainers-losers">Gainers & Losers</option>
+							<option value="watchlist">Watchlist</option>
+							<option value="user-defined">Custom Tickers</option>
+						</select>
+					</div>
+				</div>
+
+				{#if tempSettings.screensaverDataSource === 'watchlist'}
+					<div class="setting-item">
+						<label for="screensaverWatchlistId">Select Watchlist</label>
+						<div class="toggle-container">
+							<select
+								id="screensaverWatchlistId"
+								bind:value={tempSettings.screensaverWatchlistId}
+								on:keypress={handleKeyPress}
+							>
+								{#each watchlists as watchlist}
+									<option value={watchlist.watchlistId}>{watchlist.watchlistName}</option>
+								{/each}
+							</select>
+						</div>
+					</div>
+				{:else if tempSettings.screensaverDataSource === 'user-defined'}
+					<div class="setting-item wide">
+						<label for="customTickers">Custom Tickers (comma-separated)</label>
+						<input
+							type="text"
+							id="customTickers"
+							bind:value={customTickers}
+							placeholder="AAPL,MSFT,GOOGL,AMZN"
+							on:keypress={handleKeyPress}
+						/>
+					</div>
+				{/if}
+
+				<div class="info-message screensaver-info">
+					{#if tempSettings.enableScreensaver}
+						The screensaver will activate after {tempSettings.screensaverTimeout} seconds of inactivity,
+						cycling through charts every {tempSettings.screensaverSpeed} seconds.
+					{:else}
+						The screensaver is currently disabled. Enable it to display trending charts during idle
+						periods.
+					{/if}
 				</div>
 			</div>
 		{:else if activeTab === 'account'}
@@ -443,6 +590,16 @@
 		background-color: var(--c2);
 		border-radius: 4px;
 		border: 1px solid var(--c3);
+		margin-bottom: 10px;
+	}
+
+	.setting-item.wide {
+		grid-column: 1 / -1;
+	}
+
+	.setting-item.wide input {
+		width: 60%;
+		max-width: 400px;
 	}
 
 	label {
@@ -462,6 +619,21 @@
 	}
 
 	input[type='number']:focus {
+		outline: none;
+		border-color: #3b82f6;
+	}
+
+	input[type='text'] {
+		padding: 6px 8px;
+		background-color: var(--c1);
+		border: 1px solid var(--c4);
+		border-radius: 4px;
+		color: var(--f1);
+		font-size: 14px;
+		min-width: 200px;
+	}
+
+	input[type='text']:focus {
 		outline: none;
 		border-color: #3b82f6;
 	}
@@ -490,6 +662,10 @@
 		font-size: 14px;
 		text-align: center;
 		border: 1px solid var(--c3);
+	}
+
+	.screensaver-info {
+		margin-top: 16px;
 	}
 
 	.account-actions {
