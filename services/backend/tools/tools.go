@@ -430,6 +430,26 @@ func initTools() {
 			},
 			Function: GetScreensavers,
 		},
+		"getInstancesByTickers": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "getInstancesByTickers",
+				Description: "Retrieves security instances for a list of ticker symbols",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"tickers": {
+							Type:        genai.TypeArray,
+							Description: "Array of ticker symbols to retrieve",
+							Items: &genai.Schema{
+								Type: genai.TypeString,
+							},
+						},
+					},
+					Required: []string{"tickers"},
+				},
+			},
+			Function: GetInstancesByTickers,
+		},
 		//watchlist
 		"getWatchlists": {
 			FunctionDeclaration: genai.FunctionDeclaration{
