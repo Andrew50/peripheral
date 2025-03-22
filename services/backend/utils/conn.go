@@ -19,11 +19,12 @@ import (
 // Conn represents a structure for handling Conn data.
 type Conn struct {
 	//Cache *redis.Client
-	DB         *pgxpool.Pool
-	Polygon    *polygon.Client
-	Cache      *redis.Client
-	PolygonKey string
-	GeminiPool *GeminiKeyPool
+	DB            *pgxpool.Pool
+	Polygon       *polygon.Client
+	Cache         *redis.Client
+	PolygonKey    string
+	GeminiPool    *GeminiKeyPool
+	PerplexityKey string
 }
 
 var conn *Conn
@@ -40,6 +41,10 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	redisHost := getEnv("REDIS_HOST", "cache")
 	redisPort := getEnv("REDIS_PORT", "6379")
 	redisPassword := getEnv("REDIS_PASSWORD", "")
+
+	// Get API keys from environment variables
+	polygonKey := getEnv("POLYGON_API_KEY", "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm")
+	perplexityKey := getEnv("PERPLEXITY_API_KEY", "")
 
 	var dbUrl string
 	var cacheUrl string
@@ -118,8 +123,6 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		}
 	}
 
-	polygonKey := getEnv("POLYGON_API_KEY", "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm")
-
 	// Configure the HTTP client with better timeout settings
 	httpClient := &http.Client{
 		Timeout: 120 * time.Second,
@@ -142,11 +145,12 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	geminiPool := initGeminiKeyPool()
 
 	conn = &Conn{
-		DB:         dbConn,
-		Cache:      cache,
-		Polygon:    polygonClient,
-		PolygonKey: polygonKey,
-		GeminiPool: geminiPool,
+		DB:            dbConn,
+		Cache:         cache,
+		Polygon:       polygonClient,
+		PolygonKey:    polygonKey,
+		GeminiPool:    geminiPool,
+		PerplexityKey: perplexityKey,
 	}
 
 	cleanup := func() {

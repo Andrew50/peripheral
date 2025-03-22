@@ -94,10 +94,23 @@ func GetWatchlistItems(conn *utils.Conn, userId int, rawArgs json.RawMessage) (i
 	if err != nil {
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
+
+	// First verify that the watchlist belongs to the user
+	var watchlistExists bool
+	err = conn.DB.QueryRow(context.Background(),
+		`SELECT EXISTS(SELECT 1 FROM watchlists WHERE watchlistId = $1 AND userId = $2)`,
+		args.WatchlistID, userId).Scan(&watchlistExists)
+	if err != nil {
+		return nil, fmt.Errorf("error verifying watchlist ownership: %v", err)
+	}
+	if !watchlistExists {
+		return nil, fmt.Errorf("watchlist not found or you don't have permission to access it")
+	}
+
 	rows, err := conn.DB.Query(context.Background(),
 		`SELECT w.securityId, s.ticker, w.watchlistItemId from watchlistItems as w
-    JOIN securities as s ON s.securityId = w.securityId
-    where w.watchlistId = $1`, args.WatchlistID)
+		JOIN securities as s ON s.securityId = w.securityId
+		WHERE w.watchlistId = $1`, args.WatchlistID)
 	if err != nil {
 		return nil, fmt.Errorf("sovn %v", err)
 	}
@@ -156,8 +169,23 @@ func NewWatchlistItem(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 	if err != nil {
 		return nil, fmt.Errorf("m0ivn0d %v", err)
 	}
+
+	// Verify that the watchlist belongs to the user
+	var watchlistExists bool
+	err = conn.DB.QueryRow(context.Background(),
+		`SELECT EXISTS(SELECT 1 FROM watchlists WHERE watchlistId = $1 AND userId = $2)`,
+		args.WatchlistID, userId).Scan(&watchlistExists)
+	if err != nil {
+		return nil, fmt.Errorf("error verifying watchlist ownership: %v", err)
+	}
+	if !watchlistExists {
+		return nil, fmt.Errorf("watchlist not found or you don't have permission to modify it")
+	}
+
 	var watchlistID int
-	err = conn.DB.QueryRow(context.Background(), "INSERT into watchlistItems (securityId,watchlistId) values ($1,$2) RETURNING watchlistItemId", args.SecurityID, args.WatchlistID).Scan(&watchlistID)
+	err = conn.DB.QueryRow(context.Background(),
+		"INSERT into watchlistItems (securityId,watchlistId) values ($1,$2) RETURNING watchlistItemId",
+		args.SecurityID, args.WatchlistID).Scan(&watchlistID)
 	if err != nil {
 		return nil, err
 	}
