@@ -1190,7 +1190,14 @@
 				}
 			},
 			timeScale: {
-				timeVisible: true
+				timeVisible: true,
+				borderColor: 'black'
+			},
+			rightPriceScale: {
+				borderColor: 'black'
+			},
+			leftPriceScale: {
+				borderColor: 'black'
 			}
 		};
 		const chartContainer = document.getElementById(`chart_container-${chartId}`);

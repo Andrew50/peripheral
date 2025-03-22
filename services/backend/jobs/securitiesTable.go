@@ -484,7 +484,7 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 	defer rateLimiter.Stop()
 
 	// Create a worker pool with semaphore to limit concurrent requests
-	maxWorkers := 15
+	maxWorkers := 5
 
 	sem := make(chan struct{}, maxWorkers)
 	errChan := make(chan error, maxWorkers)
