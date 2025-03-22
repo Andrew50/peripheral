@@ -1,6 +1,7 @@
 FROM timescale/timescaledb:latest-pg16
 # Password will be provided via environment variables
-RUN apk update && apk add --no-cache cron
+RUN apk update && apk add --no-cache cronie && \
+    mkdir -p /var/log && touch /var/log/cron.log
 EXPOSE 5432
 COPY init.sql /docker-entrypoint-initdb.d/init.sql
 COPY securities.csv /docker-entrypoint-initdb.d/securities.csv
@@ -8,10 +9,6 @@ COPY samples.csv /docker-entrypoint-initdb.d/samples.csv
 COPY backup.sh /usr/local/bin/backup.sh
 COPY start.sh /usr/local/bin/start.sh
 COPY prod.conf /etc/postgresql/postgresql.conf
-
-# Install cron
-RUN apk update && apk add --no-cache cron && \
-    mkdir -p /var/log && touch /var/log/cron.log
 
 RUN chmod +x /usr/local/bin/backup.sh /usr/local/bin/start.sh
 #midnight every day
