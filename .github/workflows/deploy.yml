@@ -61,6 +61,7 @@ jobs:
       DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
       REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
       POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+      GEMINI_FREE_KEYS: ${{ secrets.GEMINI_FREE_KEYS }}
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
@@ -311,6 +312,13 @@ jobs:
             exit 1
           fi
           
+          # Check if GEMINI_FREE_KEYS secret is set
+          if [ -z "${{ secrets.GEMINI_FREE_KEYS }}" ]; then
+            error_log "GEMINI_FREE_KEYS secret is not available"
+            error_log "Please add the GEMINI_FREE_KEYS secret in your GitHub repository"
+            exit 1
+          fi
+          
           # Check if GOOGLE_CLIENT_ID secret is set
           if [ -z "${{ secrets.GOOGLE_CLIENT_ID }}" ]; then
             error_log "GOOGLE_CLIENT_ID secret is not available"
@@ -373,6 +381,7 @@ jobs:
           DB_PASSWORD_B64=$(echo -n "${{ secrets.DB_ROOT_PASSWORD }}" | base64 -w 0)
           REDIS_PASSWORD_B64=$(echo -n "${{ secrets.REDIS_PASSWORD }}" | base64 -w 0)
           POLYGON_API_KEY_B64=$(echo -n "${{ secrets.POLYGON_API_KEY }}" | base64 -w 0)
+          GEMINI_FREE_KEYS_B64=$(echo -n "${{ secrets.GEMINI_FREE_KEYS }}" | base64 -w 0)
           GOOGLE_CLIENT_ID_B64=$(echo -n "${{ secrets.GOOGLE_CLIENT_ID }}" | base64 -w 0)
           GOOGLE_CLIENT_SECRET_B64=$(echo -n "${{ secrets.GOOGLE_CLIENT_SECRET }}" | base64 -w 0)
           JWT_SECRET_B64=$(echo -n "${{ secrets.JWT_SECRET }}" | base64 -w 0)
@@ -403,6 +412,14 @@ jobs:
           type: Opaque
           data:
             api-key: ${POLYGON_API_KEY_B64}
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: gemini-secret
+          type: Opaque
+          data:
+            GEMINI_FREE_KEYS: ${GEMINI_FREE_KEYS_B64}
           ---
           apiVersion: v1
           kind: Secret
@@ -491,6 +508,7 @@ jobs:
           verify_secret "redis-secret" || exit 1
           verify_secret "db-secret" || exit 1
           verify_secret "polygon-secret" || exit 1
+          verify_secret "gemini-secret" || exit 1
           verify_secret "google-oauth-secret" || exit 1
           verify_secret "jwt-secret" || exit 1
           
@@ -526,6 +544,7 @@ jobs:
           # Verify each secret key
           verify_secret_key "db-secret" "DB_ROOT_PASSWORD" || exit 1
           verify_secret_key "redis-secret" "REDIS_PASSWORD" || exit 1
+          verify_secret_key "gemini-secret" "GEMINI_FREE_KEYS" || exit 1
           verify_secret_key "google-oauth-secret" "GOOGLE_CLIENT_ID" || exit 1
           verify_secret_key "google-oauth-secret" "GOOGLE_CLIENT_SECRET" || exit 1
           verify_secret_key "jwt-secret" "JWT_SECRET" || exit 1
