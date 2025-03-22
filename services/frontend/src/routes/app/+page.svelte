@@ -1360,11 +1360,13 @@
 	}
 
 	.settings-modal {
-		width: 50%;
-		height: 50%;
+		width: 85%;
+		height: 90%;
+		min-width: 800px;
+		min-height: 600px;
 		background-color: var(--c1);
 		border-radius: 8px;
-		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
@@ -1372,7 +1374,7 @@
 
 	.settings-header {
 		background-color: var(--c2);
-		padding: 12px 16px;
+		padding: 16px 24px;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
@@ -1382,16 +1384,17 @@
 	.settings-header h2 {
 		margin: 0;
 		color: var(--f1);
-		font-size: 1.2em;
+		font-size: 1.25rem;
+		font-weight: 600;
 	}
 
 	.settings-header .close-btn {
 		background: none;
 		border: none;
 		color: var(--f1);
-		font-size: 1.5em;
+		font-size: 1.75rem;
 		cursor: pointer;
-		padding: 0 4px;
+		padding: 0 8px;
 		line-height: 1;
 	}
 
@@ -1401,8 +1404,7 @@
 
 	.settings-content {
 		flex: 1;
-		overflow-y: auto;
-		padding: 16px;
+		overflow: hidden;
 	}
 
 	/* Prevent text-selection while dragging */

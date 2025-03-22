@@ -7,11 +7,12 @@
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
+	import { colorSchemes, applyColorScheme } from '$lib/core/styles/colorSchemes';
 
 	let errorMessage: string = '';
 	let tempSettings: Settings = { ...get(settings) }; // Create a local copy to work with
-	let activeTab: 'chart' | 'format' | 'account' | 'screensaver' = 'chart';
-	let watchlists = [];
+	let activeTab: 'chart' | 'format' | 'account' | 'screensaver' | 'appearance' = 'chart';
+	let watchlists: Array<{ watchlistId: string; watchlistName: string }> = [];
 	let customTickers = ''; // For managing comma-separated list of tickers
 
 	// Add profile picture state
@@ -27,13 +28,23 @@
 
 	onMount(() => {
 		// Load watchlists for the screensaver settings
-		privateRequest('getWatchlists', {}).then((response) => {
-			watchlists = response || [];
-		});
+		privateRequest<Array<{ watchlistId: string; watchlistName: string }>>('getWatchlists', {}).then(
+			(response) => {
+				watchlists = response || [];
+			}
+		);
 
 		// Initialize custom tickers string if available
 		if (tempSettings.screensaverTickers && tempSettings.screensaverTickers.length > 0) {
 			customTickers = tempSettings.screensaverTickers.join(',');
+		}
+
+		// Apply the current color scheme if one is set
+		if (tempSettings.colorScheme && browser) {
+			const scheme = colorSchemes[tempSettings.colorScheme];
+			if (scheme) {
+				applyColorScheme(scheme);
+			}
 		}
 	});
 
@@ -57,6 +68,15 @@
 		if (tempSettings.chartRows > 0 && tempSettings.chartColumns > 0) {
 			privateRequest<void>('setSettings', { settings: tempSettings }).then(() => {
 				settings.set(tempSettings); // Update the store with new settings
+
+				// Apply color scheme if changed
+				if (browser && tempSettings.colorScheme) {
+					const scheme = colorSchemes[tempSettings.colorScheme];
+					if (scheme) {
+						applyColorScheme(scheme);
+					}
+				}
+
 				errorMessage = '';
 			});
 		} else {
@@ -190,6 +210,12 @@
 			on:click={() => (activeTab = 'screensaver')}
 		>
 			Screensaver
+		</button>
+		<button
+			class="tab-button {activeTab === 'appearance' ? 'active' : ''}"
+			on:click={() => (activeTab = 'appearance')}
+		>
+			Appearance
 		</button>
 	</div>
 
@@ -420,6 +446,90 @@
 					{/if}
 				</div>
 			</div>
+		{:else if activeTab === 'appearance'}
+			<div class="settings-section">
+				<h3>Color Scheme</h3>
+				<div class="setting-item wide">
+					<label for="colorScheme">Choose a color scheme</label>
+					<div class="toggle-container">
+						<select
+							id="colorScheme"
+							bind:value={tempSettings.colorScheme}
+							on:keypress={handleKeyPress}
+						>
+							<option value="default">Default</option>
+							<option value="dark-blue">Dark Blue</option>
+							<option value="midnight">Midnight</option>
+							<option value="forest">Forest</option>
+							<option value="sunset">Sunset</option>
+						</select>
+					</div>
+				</div>
+
+				<!-- Color scheme preview -->
+				<div class="color-scheme-preview">
+					<h4>Preview</h4>
+					<div
+						class="color-preview-container"
+						style="background-color: {colorSchemes[tempSettings.colorScheme].c2};"
+					>
+						<div
+							class="preview-header"
+							style="background-color: {colorSchemes[tempSettings.colorScheme]
+								.c1}; border-bottom: 1px solid {colorSchemes[tempSettings.colorScheme].c3};"
+						>
+							<div
+								class="preview-title"
+								style="color: {colorSchemes[tempSettings.colorScheme].f1};"
+							>
+								Chart Window
+							</div>
+						</div>
+						<div class="preview-content">
+							<div
+								class="preview-section"
+								style="background-color: {colorSchemes[tempSettings.colorScheme]
+									.c2}; border: 1px solid {colorSchemes[tempSettings.colorScheme].c4};"
+							>
+								<div
+									class="preview-text"
+									style="color: {colorSchemes[tempSettings.colorScheme].f1};"
+								>
+									Primary Text
+								</div>
+								<div
+									class="preview-text"
+									style="color: {colorSchemes[tempSettings.colorScheme].f2};"
+								>
+									Secondary Text
+								</div>
+							</div>
+							<div class="preview-buttons">
+								<button
+									class="preview-button"
+									style="background-color: {colorSchemes[tempSettings.colorScheme]
+										.c3}; color: white;"
+								>
+									Action Button
+								</button>
+								<div class="preview-indicators">
+									<span style="color: {colorSchemes[tempSettings.colorScheme].colorUp};"
+										>▲ +2.45%</span
+									>
+									<span style="color: {colorSchemes[tempSettings.colorScheme].colorDown};"
+										>▼ -1.23%</span
+									>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="info-message">
+					Color scheme changes will be applied immediately but must be saved using the "Apply
+					Changes" button to persist across sessions.
+				</div>
+			</div>
 		{:else if activeTab === 'account'}
 			<div class="settings-section">
 				<h3>Account Information</h3>
@@ -509,30 +619,45 @@
 		display: flex;
 		flex-direction: column;
 		height: 100%;
+		width: 100%;
+		max-width: 95vw;
+		max-height: 92vh;
 		color: var(--f1);
 		background-color: var(--c1);
-		border-radius: 4px;
+		border-radius: 8px;
 		overflow: hidden;
+		box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+		margin: 0 auto;
+		position: relative;
+		min-width: 800px;
+		min-height: 600px;
 	}
 
 	.settings-tabs {
 		display: flex;
 		background-color: var(--c2);
 		border-bottom: 1px solid var(--c3);
+		height: 56px;
+		min-height: 56px;
 	}
 
 	.tab-button {
-		padding: 10px 16px;
+		padding: 0 20px;
 		background: transparent;
 		border: none;
 		color: var(--f2);
-		font-size: 14px;
+		font-size: 0.9375rem;
 		cursor: pointer;
-		transition:
-			background-color 0.2s,
-			color 0.2s;
+		transition: all 0.2s ease;
+		position: relative;
 		text-align: center;
+		height: 100%;
 		flex: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-weight: 500;
+		letter-spacing: 0.2px;
 	}
 
 	.tab-button:hover {
@@ -541,44 +666,75 @@
 	}
 
 	.tab-button.active {
-		background-color: var(--c3);
 		color: var(--f1);
-		font-weight: 500;
+		font-weight: 600;
+	}
+
+	.tab-button.active::after {
+		content: '';
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		width: 100%;
+		height: 3px;
+		background-color: var(--c3);
 	}
 
 	.settings-content {
 		flex: 1;
-		padding: 16px;
+		padding: 1.75rem 2rem;
 		overflow-y: auto;
+		overflow-x: hidden;
 	}
 
 	.settings-section {
-		margin-bottom: 20px;
-		border-bottom: 1px solid var(--c3);
-		padding-bottom: 16px;
+		margin-bottom: 2rem;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+		padding-bottom: 1.75rem;
 	}
 
 	.settings-section:last-child {
 		border-bottom: none;
 		margin-bottom: 0;
+		padding-bottom: 0;
 	}
 
 	h3 {
-		margin: 0 0 12px 0;
-		font-size: 16px;
-		font-weight: 500;
+		margin: 0 0 1.25rem 0;
+		font-size: 1.125rem;
+		font-weight: 600;
 		color: var(--f1);
+		position: relative;
+		padding-bottom: 0.5rem;
+	}
+
+	h3::after {
+		content: '';
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		width: 40px;
+		height: 2px;
+		background-color: var(--c3);
 	}
 
 	.settings-grid {
 		display: grid;
 		grid-template-columns: 1fr;
-		gap: 10px;
+		gap: 0.875rem;
 	}
 
 	@media (min-width: 600px) {
 		.settings-grid {
 			grid-template-columns: 1fr 1fr;
+			gap: 1.25rem;
+		}
+	}
+
+	@media (min-width: 1200px) {
+		.settings-grid {
+			grid-template-columns: 1fr 1fr 1fr;
+			gap: 1.5rem;
 		}
 	}
 
@@ -586,11 +742,15 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: 8px 12px;
-		background-color: var(--c2);
-		border-radius: 4px;
-		border: 1px solid var(--c3);
-		margin-bottom: 10px;
+		padding: 1rem 1.25rem;
+		background-color: rgba(255, 255, 255, 0.03);
+		border-radius: 6px;
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		transition: border-color 0.2s ease;
+	}
+
+	.setting-item:hover {
+		border-color: rgba(255, 255, 255, 0.12);
 	}
 
 	.setting-item.wide {
@@ -598,141 +758,179 @@
 	}
 
 	.setting-item.wide input {
-		width: 60%;
-		max-width: 400px;
+		width: 70%;
+		max-width: 500px;
 	}
 
 	label {
-		font-size: 14px;
+		font-size: 0.9375rem;
 		color: var(--f2);
+		margin-right: 1rem;
+		font-weight: 500;
 	}
 
 	input[type='number'] {
-		width: 80px;
-		padding: 6px 8px;
-		background-color: var(--c1);
-		border: 1px solid var(--c4);
+		width: 90px;
+		padding: 0.625rem;
+		background-color: rgba(0, 0, 0, 0.2);
+		border: 1px solid rgba(255, 255, 255, 0.1);
 		border-radius: 4px;
 		color: var(--f1);
-		font-size: 14px;
+		font-size: 0.9375rem;
 		text-align: center;
+		transition: all 0.2s ease;
 	}
 
 	input[type='number']:focus {
 		outline: none;
-		border-color: #3b82f6;
+		border-color: var(--c3);
+		box-shadow: 0 0 0 1px var(--c3);
 	}
 
 	input[type='text'] {
-		padding: 6px 8px;
-		background-color: var(--c1);
-		border: 1px solid var(--c4);
+		padding: 0.625rem 0.875rem;
+		background-color: rgba(0, 0, 0, 0.2);
+		border: 1px solid rgba(255, 255, 255, 0.1);
 		border-radius: 4px;
 		color: var(--f1);
-		font-size: 14px;
-		min-width: 200px;
+		font-size: 0.9375rem;
+		min-width: 250px;
+		transition: all 0.2s ease;
 	}
 
 	input[type='text']:focus {
 		outline: none;
-		border-color: #3b82f6;
+		border-color: var(--c3);
+		box-shadow: 0 0 0 1px var(--c3);
 	}
 
 	.toggle-container select {
-		padding: 6px 8px;
-		background-color: var(--c1);
-		border: 1px solid var(--c4);
+		padding: 0.625rem 0.875rem;
+		background-color: rgba(0, 0, 0, 0.2);
+		border: 1px solid rgba(255, 255, 255, 0.1);
 		border-radius: 4px;
 		color: var(--f1);
-		font-size: 14px;
-		min-width: 80px;
+		font-size: 0.9375rem;
+		min-width: 120px;
 		cursor: pointer;
+		transition: all 0.2s ease;
+		appearance: none;
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='6' fill='none'%3E%3Cpath fill='%23999' d='M0 0h12L6 6 0 0z'/%3E%3C/svg%3E");
+		background-repeat: no-repeat;
+		background-position: right 12px center;
+		padding-right: 36px;
 	}
 
 	.toggle-container select:focus {
 		outline: none;
-		border-color: #3b82f6;
+		border-color: var(--c3);
+		box-shadow: 0 0 0 1px var(--c3);
 	}
 
 	.info-message {
-		padding: 12px;
-		background-color: var(--c2);
-		border-radius: 4px;
+		padding: 1.25rem;
+		background-color: rgba(59, 130, 246, 0.05);
+		border-radius: 6px;
 		color: var(--f2);
-		font-size: 14px;
+		font-size: 0.9375rem;
 		text-align: center;
-		border: 1px solid var(--c3);
+		border: 1px solid rgba(59, 130, 246, 0.1);
+		margin-top: 1.5rem;
 	}
 
 	.screensaver-info {
-		margin-top: 16px;
+		margin-top: 1.5rem;
 	}
 
 	.account-actions {
-		margin-top: 20px;
+		margin-top: 2rem;
 		display: flex;
 		justify-content: center;
 	}
 
 	.error-message {
-		margin: 16px 0;
-		padding: 10px;
-		background-color: rgba(239, 68, 68, 0.2);
+		margin: 1.25rem 0;
+		padding: 1rem 1.25rem;
+		background-color: rgba(239, 68, 68, 0.1);
 		color: #ef4444;
-		border-radius: 4px;
-		font-size: 14px;
+		border-radius: 6px;
+		font-size: 0.9375rem;
 		text-align: center;
+		border: 1px solid rgba(239, 68, 68, 0.2);
 	}
 
 	.settings-actions {
-		margin-top: 20px;
+		margin-top: 2rem;
 		display: flex;
 		justify-content: flex-end;
+		position: sticky;
+		bottom: 0;
+		background-color: var(--c1);
+		padding: 1.25rem 0 0 0;
+		border-top: 1px solid rgba(255, 255, 255, 0.05);
 	}
 
 	.apply-button {
-		padding: 8px 16px;
-		background-color: #3b82f6;
+		padding: 0.75rem 1.5rem;
+		background-color: var(--c3);
 		color: white;
 		border: none;
 		border-radius: 4px;
-		font-size: 14px;
+		font-size: 0.9375rem;
+		font-weight: 500;
 		cursor: pointer;
 		transition: background-color 0.2s;
+		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
 	}
 
 	.apply-button:hover {
-		background-color: #2563eb;
+		background-color: var(--c3-hover);
 	}
 
 	.logout-button {
-		padding: 8px 16px;
-		background-color: rgba(239, 68, 68, 0.15);
+		padding: 0.75rem 1.5rem;
+		background-color: rgba(239, 68, 68, 0.1);
 		color: #ef4444;
 		border: 1px solid rgba(239, 68, 68, 0.3);
 		border-radius: 4px;
-		font-size: 14px;
+		font-size: 0.9375rem;
+		font-weight: 500;
 		cursor: pointer;
-		transition: background-color 0.2s;
+		transition: all 0.2s;
 	}
 
 	.logout-button:hover {
-		background-color: rgba(239, 68, 68, 0.25);
+		background-color: rgba(239, 68, 68, 0.2);
 	}
 
 	/* Profile section styles */
 	.profile-section {
 		display: flex;
 		flex-direction: column;
-		gap: 20px;
-		margin-bottom: 20px;
+		gap: 1.5rem;
+		margin-bottom: 1.5rem;
+	}
+
+	@media (min-width: 768px) {
+		.profile-section {
+			flex-direction: row;
+			align-items: flex-start;
+		}
+
+		.profile-picture-container {
+			flex: 0 0 auto;
+		}
+
+		.profile-upload-section {
+			flex: 1;
+		}
 	}
 
 	.profile-picture-container {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 10px;
+		gap: 0.875rem;
 	}
 
 	.profile-picture {
@@ -745,6 +943,7 @@
 		align-items: center;
 		justify-content: center;
 		border: 2px solid var(--c3);
+		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 	}
 
 	.profile-image {
@@ -754,34 +953,35 @@
 	}
 
 	.profile-placeholder {
-		font-size: 48px;
+		font-size: 2.5rem;
 		color: var(--f2);
 		font-weight: bold;
 	}
 
 	.username-display {
-		font-size: 16px;
-		font-weight: 500;
+		font-size: 1.125rem;
+		font-weight: 600;
 		color: var(--f1);
 	}
 
 	.profile-upload-section {
-		background-color: var(--c2);
-		border-radius: 4px;
-		padding: 16px;
-		border: 1px solid var(--c3);
+		background-color: rgba(0, 0, 0, 0.1);
+		border-radius: 6px;
+		padding: 1.5rem;
+		border: 1px solid rgba(255, 255, 255, 0.08);
 	}
 
 	.profile-upload-section h4 {
-		margin: 0 0 12px 0;
-		font-size: 14px;
-		color: var(--f2);
+		margin: 0 0 1.25rem 0;
+		font-size: 1rem;
+		font-weight: 600;
+		color: var(--f1);
 	}
 
 	.file-upload {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: 1.25rem;
 	}
 
 	.file-upload input[type='file'] {
@@ -790,29 +990,31 @@
 
 	.file-upload-label {
 		background-color: var(--c3);
-		color: var(--f1);
-		padding: 8px 12px;
+		color: white;
+		padding: 0.75rem 1.25rem;
 		border-radius: 4px;
 		cursor: pointer;
 		text-align: center;
-		font-size: 14px;
+		font-size: 0.9375rem;
+		font-weight: 500;
 		transition: background-color 0.2s;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 	}
 
 	.file-upload-label:hover {
-		background-color: var(--c4);
+		background-color: var(--c3-hover);
 	}
 
 	.preview-container {
 		width: 100%;
-		height: 120px;
+		height: 140px;
 		display: flex;
 		justify-content: center;
 		align-items: center;
 		overflow: hidden;
-		border-radius: 4px;
-		background-color: var(--c1);
-		border: 1px solid var(--c3);
+		border-radius: 6px;
+		background-color: rgba(0, 0, 0, 0.2);
+		border: 1px solid rgba(255, 255, 255, 0.1);
 	}
 
 	.preview-image {
@@ -823,51 +1025,127 @@
 
 	.upload-actions {
 		display: flex;
-		gap: 10px;
+		gap: 1rem;
 	}
 
 	.upload-button,
 	.reset-button {
-		padding: 8px 12px;
+		padding: 0.75rem 1.25rem;
 		border-radius: 4px;
-		font-size: 14px;
+		font-size: 0.9375rem;
+		font-weight: 500;
 		cursor: pointer;
 		flex: 1;
-		transition: background-color 0.2s;
+		transition: all 0.2s;
 	}
 
 	.upload-button {
-		background-color: #3b82f6;
+		background-color: var(--c3);
 		color: white;
 		border: none;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 	}
 
 	.upload-button:hover:not(:disabled) {
-		background-color: #2563eb;
+		background-color: var(--c3-hover);
 	}
 
 	.upload-button:disabled {
-		background-color: #93c5fd;
+		background-color: rgba(59, 130, 246, 0.3);
 		cursor: not-allowed;
+		box-shadow: none;
 	}
 
 	.reset-button {
-		background-color: var(--c3);
+		background-color: rgba(0, 0, 0, 0.2);
 		color: var(--f1);
-		border: 1px solid var(--c4);
+		border: 1px solid rgba(255, 255, 255, 0.1);
 	}
 
 	.reset-button:hover {
-		background-color: var(--c4);
+		background-color: rgba(0, 0, 0, 0.3);
 	}
 
 	.upload-status {
-		padding: 8px;
+		padding: 0.875rem;
 		text-align: center;
-		font-size: 14px;
+		font-size: 0.9375rem;
 		color: var(--f2);
-		background-color: var(--c1);
+		background-color: rgba(0, 0, 0, 0.1);
 		border-radius: 4px;
-		border: 1px solid var(--c3);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+	}
+
+	/* Color scheme preview styles */
+	.color-scheme-preview {
+		margin-top: 1.75rem;
+		margin-bottom: 1.75rem;
+	}
+
+	.color-scheme-preview h4 {
+		margin: 0 0 1rem 0;
+		font-size: 1rem;
+		font-weight: 600;
+		color: var(--f1);
+	}
+
+	.color-preview-container {
+		border-radius: 8px;
+		overflow: hidden;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+		border: 1px solid rgba(255, 255, 255, 0.1);
+	}
+
+	.preview-header {
+		padding: 0.875rem 1.25rem;
+		display: flex;
+		align-items: center;
+	}
+
+	.preview-title {
+		font-size: 1rem;
+		font-weight: 600;
+	}
+
+	.preview-content {
+		padding: 1.5rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1.25rem;
+	}
+
+	.preview-section {
+		padding: 1.25rem;
+		border-radius: 8px;
+	}
+
+	.preview-text {
+		margin-bottom: 1rem;
+		font-size: 0.9375rem;
+	}
+
+	.preview-buttons {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.preview-button {
+		padding: 0.625rem 1.25rem;
+		border: none;
+		border-radius: 4px;
+		font-size: 0.875rem;
+		font-weight: 500;
+		cursor: pointer;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+	}
+
+	.preview-indicators {
+		display: flex;
+		gap: 1.25rem;
+		font-size: 0.875rem;
+		font-weight: 600;
 	}
 </style>

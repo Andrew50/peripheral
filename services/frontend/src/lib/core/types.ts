@@ -72,6 +72,7 @@ export interface Settings {
     screensaverDataSource: 'gainers-losers' | 'watchlist' | 'user-defined';
     screensaverWatchlistId?: number;
     screensaverTickers?: string[];
+    colorScheme: 'default' | 'dark-blue' | 'midnight' | 'forest' | 'sunset';
 }
 export interface StreamInfo {
     status: 'replay' | 'realtime' | 'paused';
