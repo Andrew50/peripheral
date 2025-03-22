@@ -95,8 +95,7 @@ func QueryPerplexityWithDate(ticker string, timestamp int64, price float64) (str
 	}
 
 	// Add headers
-	// In a real application, this should be stored in environment variables or a secure config
-	req.Header.Add("Authorization", "Bearer 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")
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", conn.PerplexityKey))
 	req.Header.Add("Content-Type", "application/json")
 
 	// Send the request

@@ -57,6 +57,7 @@ jobs:
       DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
       REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
       POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+      PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
 
     steps:
       # Print debugging information before checkout
@@ -313,6 +314,7 @@ jobs:
           DB_PASSWORD_B64=$(echo -n "${{ secrets.DB_ROOT_PASSWORD }}" | base64 -w 0)
           REDIS_PASSWORD_B64=$(echo -n "${{ secrets.REDIS_PASSWORD }}" | base64 -w 0)
           POLYGON_API_KEY_B64=$(echo -n "${{ secrets.POLYGON_API_KEY }}" | base64 -w 0)
+          PERPLEXITY_API_KEY_B64=$(echo -n "${{ secrets.PERPLEXITY_API_KEY }}" | base64 -w 0)
 
           # Create the secrets YAML with the password from GitHub secrets
           # Standardize on DB_ROOT_PASSWORD as the primary database password key
@@ -340,6 +342,14 @@ jobs:
           type: Opaque
           data:
             api-key: ${POLYGON_API_KEY_B64}
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: perplexity-secret
+          type: Opaque
+          data:
+            api-key: ${PERPLEXITY_API_KEY_B64}
           EOF
 
           # Apply the secrets to Kubernetes
@@ -358,6 +368,11 @@ jobs:
 
           if ! kubectl get secret polygon-secret &>/dev/null; then
             error_log "Failed to create polygon-secret"
+            exit 1
+          fi
+
+          if ! kubectl get secret perplexity-secret &>/dev/null; then
+            error_log "Failed to create perplexity-secret"
             exit 1
           fi
 
