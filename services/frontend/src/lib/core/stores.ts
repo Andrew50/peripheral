@@ -87,7 +87,8 @@ export const defaultSettings: Settings = {
     screensaverTimeout: 5 * 60, // 5 minutes in seconds
     screensaverDataSource: 'gainers-losers',
     screensaverWatchlistId: undefined,
-    screensaverTickers: []
+    screensaverTickers: [],
+    colorScheme: 'default'
 };
 export const settings: Writable<Settings> = writable(defaultSettings);
 export function initStores() {
