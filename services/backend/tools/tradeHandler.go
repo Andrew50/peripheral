@@ -138,7 +138,7 @@ func HandleTradeUpload(conn *utils.Conn, userID int, rawArgs json.RawMessage) (i
 		}
 
 		// Get security ID for ticker
-		securityID, err := GetSecurityIDFromTicker(conn, symbol)
+		securityID, err := GetSecurityIDFromTickerTrades(conn, symbol)
 		if err != nil {
 			return nil, fmt.Errorf("error getting security ID for ticker '%s': %v", symbol, err)
 		}
@@ -283,7 +283,7 @@ func ParseDateTime(datetimeStr string) (time.Time, string, error) {
 }
 
 // GetSecurityIDFromTicker retrieves the security ID for a given ticker
-func GetSecurityIDFromTicker(conn *utils.Conn, ticker string) (int, error) {
+func GetSecurityIDFromTickerTrades(conn *utils.Conn, ticker string) (int, error) {
 	// For options tickers (like COIN250307P185), extract the base ticker (COIN)
 	baseTicker := ticker
 
