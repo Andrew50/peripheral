@@ -678,3 +678,22 @@ func GetLatestEdgarFilings(conn *utils.Conn, userId int, rawArgs json.RawMessage
 
 	return filings, nil
 }
+
+
+type GetCurrentSecurityIDArgs struct {
+	Ticker string `json:"ticker"`
+}
+
+// GetSecurityID performs operations related to GetSecurityID functionality.
+func GetCurrentSecurityID(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetCurrentSecurityIDArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+	var securityID int
+	err := conn.DB.QueryRow(context.Background(), "SELECT securityId from securities where ticker = $1 and maxDate is NULL", args.Ticker).Scan(&securityID)
+	if err != nil {
+		return 0, fmt.Errorf("43333ngb %v %v %v", err, args.Ticker)
+	}
+	return securityID, nil
+}
