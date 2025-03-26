@@ -11,6 +11,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 
 	"regexp"
 
@@ -95,15 +97,8 @@ func publicHandler(conn *utils.Conn) http.HandlerFunc {
 			return
 		}
 
-		// Apply JSON sanitization to arguments
-		sanitizedArgs, err := sanitizeJSON(req.Arguments)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Invalid arguments: %v", err), http.StatusBadRequest)
-			return
-		}
-
 		// Execute the requested function with sanitized input
-		result, err := publicFunc[req.Function](conn, sanitizedArgs)
+		result, err := publicFunc[req.Function](conn, req.Arguments)
 		if err != nil {
 			// Limit error information in public endpoints
 			log.Printf("public_handler error: %s - %v", req.Function, err)
@@ -261,13 +256,6 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 			return
 		}
 
-		// Apply JSON sanitization to arguments - restrict to allowed patterns for each argument type
-		sanitizedArgs, err := sanitizeJSON(req.Arguments)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Invalid arguments: %v", err), http.StatusBadRequest)
-			return
-		}
-
 		// Get user ID from token
 		userId, err := validateToken(token_string)
 		if handleError(w, err, "private_handler: validateToken") {
@@ -275,7 +263,7 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 		}
 
 		// Execute the requested function with sanitized input
-		result, err := privateFunc[req.Function].Function(conn, userId, sanitizedArgs)
+		result, err := privateFunc[req.Function].Function(conn, userId, req.Arguments)
 		if handleError(w, err, fmt.Sprintf("private_handler: %s", req.Function)) {
 			return
 		}
@@ -374,15 +362,8 @@ func containsInjectionPattern(s string) bool {
 		"eval\\(",
 	}
 
-	// Check for other common injection patterns
-	otherPatterns := []string{
-		"../",     // Path traversal
-		"://.*/",  // URL injection
-		"\\${.*}", // Template injection
-	}
 
 	patterns := append(sqlPatterns, xssPatterns...)
-	patterns = append(patterns, otherPatterns...)
 
 	for _, pattern := range patterns {
 		matched, _ := regexp.MatchString("(?i)"+pattern, s)
@@ -559,6 +540,12 @@ func healthHandler() http.HandlerFunc {
 
 // StartServer performs operations related to StartServer functionality.
 func StartServer() {
+	// Load environment variables from config/dev/.env
+	loadEnvFile("config/dev/.env")
+	
+	// Reload OAuth config to use the newly loaded env vars
+	ReloadOAuthConfig()
+	
 	conn, cleanup := utils.InitConn(true)
 	defer cleanup()
 	stopScheduler := jobs.StartScheduler(conn)
@@ -575,4 +562,50 @@ func StartServer() {
 	if err := http.ListenAndServe(":5058", nil); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// loadEnvFile loads environment variables from a .env file
+func loadEnvFile(filePath string) {
+	fmt.Printf("Attempting to load environment variables from: %s\n", filePath)
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		fmt.Printf("WARNING: Could not read env file %s: %v\n", filePath, err)
+		return
+	}
+	fmt.Printf("Successfully read %d bytes from .env file\n", len(data))
+
+	lines := strings.Split(string(data), "\n")
+	fmt.Printf("Found %d lines in the .env file\n", len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		
+		// Set environment variable
+		os.Setenv(key, value)
+		
+		// Safely print the value (masked for secrets)
+		if strings.Contains(key, "SECRET") || strings.Contains(key, "KEY") {
+			if len(value) > 8 {
+				fmt.Printf("Set environment variable: %s=%s...\n", key, value[:4])
+			} else {
+				fmt.Printf("Set environment variable: %s=****\n", key)
+			}
+		} else {
+			fmt.Printf("Set environment variable: %s=%s\n", key, value)
+		}
+	}
+	
+	// Verify the environment variables were set
+	fmt.Printf("After loading .env - GOOGLE_CLIENT_ID: %s\n", maskString(os.Getenv("GOOGLE_CLIENT_ID")))
+	fmt.Printf("After loading .env - GOOGLE_CLIENT_SECRET: %s\n", maskString(os.Getenv("GOOGLE_CLIENT_SECRET")))
 }
