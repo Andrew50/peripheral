@@ -24,6 +24,7 @@ func GetSecurityID(conn *Conn, ticker string, timestamp time.Time) (int, error) 
 	}
 	return securityID, nil
 }
+
 // GetTicker performs operations related to GetTicker functionality.
 func GetTicker(conn *Conn, securityId int, timestamp time.Time) (string, error) {
 	var ticker string

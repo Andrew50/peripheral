@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sort"
 	"time"
 
 	"google.golang.org/genai"
@@ -203,15 +204,22 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 	} else {
 		prompt = query.Query
 	}
-
-	geminiFuncResponse, err := getGeminiFunctionResponse(ctx, conn, prompt)
+	// This first passes the query to a thinking model 
+	geminiThinkingResponse, err := getGeminiFunctionThinking(ctx, conn, prompt)
+	//geminiFuncResponse, err := getGeminiFunctionResponse(ctx, conn, prompt)
 	if err != nil {
-		return nil, fmt.Errorf("error getting function calls: %w", err)
+		return nil, fmt.Errorf("error getting thinking response: %w", err)
 	}
 
-	functionCalls := geminiFuncResponse.FunctionCalls
-	responseText := geminiFuncResponse.Text
-
+	responseText := geminiThinkingResponse.Text
+	fmt.Printf("\n\nThinking response: %s\n\n", responseText)
+	prompt = responseText
+	geminiResponse, err := getGeminiFunctionResponse(ctx, conn, prompt)
+	if err != nil {
+		return nil, fmt.Errorf("error getting function calls: %w",err)
+	}
+	functionCalls := geminiResponse.FunctionCalls 
+	responseText = geminiResponse.Text
 	// Process function calls to add default date ranges if needed
 	for i, fc := range functionCalls {
 		// Check if this is a function that might need date ranges
@@ -548,17 +556,6 @@ func GetUserConversation(conn *utils.Conn, userID int, args json.RawMessage) (in
 	return conversation, nil
 }
 
-// GetLLMParsedQuery is kept for backward compatibility
-func GetLLMParsedQuery(conn *utils.Conn, query Query) (string, error) {
-	ctx := context.Background()
-	llmResponse, err := getGeminiResponse(ctx, conn, query.Query)
-	if err != nil {
-		return "", fmt.Errorf("error getting gemini response: %w", err)
-	}
-
-	return llmResponse, nil
-}
-
 // getSystemInstruction reads the content of query.txt to be used as system instruction
 func getSystemInstruction() (string, error) {
 	// Get the directory of the current file (gemini.go)
@@ -569,7 +566,7 @@ func getSystemInstruction() (string, error) {
 	currentDir := filepath.Dir(filename)
 
 	// Construct path to query.txt
-	queryFilePath := filepath.Join(currentDir, "query.txt")
+	queryFilePath := filepath.Join(currentDir, "defaultSystemPrompt.txt")
 
 	// Read the content of query.txt
 	content, err := os.ReadFile(queryFilePath)
@@ -603,6 +600,7 @@ func getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (str
 	if err != nil {
 		return "", fmt.Errorf("error getting system instruction: %w", err)
 	}
+	systemInstruction = "You are a helpful assistant that can answer questions and run functions"
 
 	config := &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{
@@ -660,10 +658,11 @@ func getGeminiFunctionResponse(ctx context.Context, conn *utils.Conn, query stri
 
 	// Get the system instruction
 	systemInstruction, err := getSystemInstruction()
+	fmt.Println("systemInstruction:", systemInstruction)
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}
-
+	systemInstruction = "You are a helpful assistant that can answer questions and run functions"
 	var geminiTools []*genai.Tool
 	for _, tool := range Tools {
 		// Convert the FunctionDeclaration to a Tool
@@ -686,14 +685,14 @@ func getGeminiFunctionResponse(ctx context.Context, conn *utils.Conn, query stri
 			},
 		},
 	}
-
+	fmt.Printf("\n\n\nconversation history %s\n\n\n", query)
 	// Check if query has conversation history format ("User: ... Assistant: ...")
 	// If it does, use that directly as the prompt
 	if strings.Contains(query, "User:") && strings.Contains(query, "Assistant:") {
 		// Use the formatted query directly since it already contains the conversation history
 		result, err := client.Models.GenerateContent(
 			ctx,
-			"gemini-2.0-flash-001",
+			"gemini-2.0-flash",
 			genai.Text(query),
 			config,
 		)
@@ -792,4 +791,113 @@ func getGeminiFunctionResponse(ctx context.Context, conn *utils.Conn, query stri
 		FunctionCalls: functionCalls,
 		Text:          responseText,
 	}, nil
+}
+
+func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, query string) (*GeminiFunctionResponse, error) {
+	apiKey, err := conn.GetGeminiKey()
+	if err != nil {
+		return nil, fmt.Errorf("error getting gemini key: %w", err)
+	}
+
+	// Create a new client using the API key
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error creating gemini client: %w", err)
+	}
+
+	// Get the system instruction
+	baseSystemInstruction, err := getSystemInstruction()
+	if err != nil {
+		return nil, fmt.Errorf("error getting system instruction: %w", err)
+	}
+
+	// Enhance the system instruction with tool descriptions
+	enhancedSystemInstruction := enhanceSystemPromptWithTools(baseSystemInstruction)
+	fmt.Println("Enhanced system instruction created with tool descriptions\n\n")
+	fmt.Println(enhancedSystemInstruction)
+	config := &genai.GenerateContentConfig{
+		SystemInstruction: &genai.Content{
+			Parts: []*genai.Part{
+				{Text: enhancedSystemInstruction},
+			},
+		},
+	}
+	
+	result, err := client.Models.GenerateContent(
+		ctx,
+		"gemini-2.0-flash-thinking-exp-01-21",
+		genai.Text(query),
+		config,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error generating content with thinking model: %w", err)
+	}
+	
+	// Extract the clean text response for display
+	responseText := ""
+	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
+		for _, part := range result.Candidates[0].Content.Parts {
+			if part.Text != "" {
+				responseText = part.Text
+				break
+			}
+		}
+	}
+	response := &GeminiFunctionResponse {
+		FunctionCalls: []FunctionCall{},
+		Text: responseText,
+	}
+	return response, nil
+}
+
+// enhanceSystemPromptWithTools adds a formatted list of available tools to the system prompt
+func enhanceSystemPromptWithTools(basePrompt string) string {
+	var toolsDescription strings.Builder
+	
+	// Start with the base prompt
+	toolsDescription.WriteString(basePrompt)
+	toolsDescription.WriteString("\n\nHere are the functions you can use:\n\n")
+	
+	// Sort tool names for consistent output
+	var toolNames []string
+	for name := range Tools {
+		toolNames = append(toolNames, name)
+	}
+	sort.Strings(toolNames)
+	
+	// Add each tool's description and parameters
+	for _, name := range toolNames {
+		tool := Tools[name]
+		
+		// Add function name and description
+		toolsDescription.WriteString(fmt.Sprintf("- %s: %s\n", name, tool.FunctionDeclaration.Description))
+		
+		// Add parameters if they exist
+		if tool.FunctionDeclaration.Parameters != nil && len(tool.FunctionDeclaration.Parameters.Properties) > 0 {
+			toolsDescription.WriteString("  Parameters:\n")
+			
+			// Get required parameters
+			required := make(map[string]bool)
+			for _, req := range tool.FunctionDeclaration.Parameters.Required {
+				required[req] = true
+			}
+			
+			// Add each parameter with its description
+			for paramName, paramSchema := range tool.FunctionDeclaration.Parameters.Properties {
+				isReq := ""
+				if required[paramName] {
+					isReq = " (required)"
+				}
+				toolsDescription.WriteString(fmt.Sprintf("  - %s: %s%s\n", paramName, paramSchema.Description, isReq))
+			}
+		}
+		
+		// Add spacing between functions
+		toolsDescription.WriteString("\n")
+	}
+	
+	return toolsDescription.String()
 }

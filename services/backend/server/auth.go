@@ -87,18 +87,28 @@ func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// Start a transaction for the signup process
+	tx, err := conn.DB.Begin(ctx)
+	if err != nil {
+		fmt.Printf("ERROR: Failed to start transaction: %v\n", err)
+		return nil, fmt.Errorf("error starting transaction: %v", err)
+	}
+	
+	// Ensure transaction is either committed or rolled back
+	var txClosed bool
+	defer func() {
+		if !txClosed && tx != nil {
+			fmt.Println("Rolling back transaction due to error or incomplete process")
+			_ = tx.Rollback(context.Background())
+		}
+	}()
+
 	// Check if email already exists
 	var count int
 	fmt.Println("Checking if email exists...")
-	err := conn.DB.QueryRow(ctx, "SELECT COUNT(*) FROM users WHERE email=$1", a.Email).Scan(&count)
+	err = tx.QueryRow(ctx, "SELECT COUNT(*) FROM users WHERE email=$1", a.Email).Scan(&count)
 	if err != nil {
 		fmt.Printf("ERROR: Database query failed while checking email: %v\n", err)
-		// Print connection pool stats after error
-		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
-			conn.DB.Stat().MaxConns(),
-			conn.DB.Stat().TotalConns(),
-			conn.DB.Stat().IdleConns(),
-			conn.DB.Stat().AcquiredConns())
 		return nil, fmt.Errorf("error checking email: %v", err)
 	}
 
@@ -110,17 +120,11 @@ func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	// Insert new user with auth_type='password'
 	var userID int
 	fmt.Println("Inserting new user record...")
-	err = conn.DB.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		"INSERT INTO users (username, email, password, auth_type) VALUES ($1, $2, $3, $4) RETURNING userId",
 		a.Username, a.Email, a.Password, "password").Scan(&userID)
 	if err != nil {
 		fmt.Printf("ERROR: Failed to create user: %v\n", err)
-		// Print connection pool stats after error
-		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
-			conn.DB.Stat().MaxConns(),
-			conn.DB.Stat().TotalConns(),
-			conn.DB.Stat().IdleConns(),
-			conn.DB.Stat().AcquiredConns())
 		return nil, fmt.Errorf("error creating user: %v", err)
 	}
 
@@ -129,15 +133,22 @@ func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	// Create a journal entry for the new user using the current timestamp
 	currentTime := time.Now().UTC()
 	fmt.Println("Creating initial journal entry...")
-	_, err = conn.DB.Exec(ctx,
+	_, err = tx.Exec(ctx,
 		"INSERT INTO journals (timestamp, userId, entry) VALUES ($1, $2, $3)",
-		currentTime.Unix(), userID, "{}")
+		currentTime, userID, "{}")
 	if err != nil {
-		// Log the error but continue with signup process
-		fmt.Printf("WARNING: Error creating initial journal for user %d: %v\n", userID, err)
-	} else {
-		fmt.Println("Journal entry created successfully")
+		fmt.Printf("ERROR: Failed to create initial journal: %v\n", err)
+		return nil, fmt.Errorf("error creating initial journal: %v", err)
 	}
+	fmt.Println("Journal entry created successfully")
+
+	// Commit the transaction
+	if err := tx.Commit(ctx); err != nil {
+		fmt.Printf("ERROR: Failed to commit transaction: %v\n", err)
+		return nil, fmt.Errorf("error committing signup transaction: %v", err)
+	}
+	txClosed = true
+	fmt.Println("Signup transaction committed successfully")
 
 	// Create modified login args with the email
 	fmt.Println("Preparing login...")
