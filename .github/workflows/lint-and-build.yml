@@ -46,7 +46,9 @@ jobs:
             echo "Current branch: $BRANCH_NAME"
             
             # Check if there's an open PR from this branch
-            PR_COUNT=$(git ls-remote origin 'pull/*/head' | grep -c $(git rev-parse HEAD))
+            # Fix: Store the HEAD commit hash in a variable first to avoid nested command substitution
+            CURRENT_COMMIT=$(git rev-parse HEAD)
+            PR_COUNT=$(git ls-remote origin 'pull/*/head' | grep -c "$CURRENT_COMMIT")
             if [[ $PR_COUNT -gt 0 ]]; then
               echo "This push is on a branch with an open PR - skipping duplicate run"
               echo "should_run=false" >> $GITHUB_OUTPUT
