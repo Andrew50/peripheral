@@ -162,8 +162,10 @@ CREATE TABLE horizontal_lines (
     securityId int,
     --references securities(securityId),
     price float not null,
-    color varchar(20) DEFAULT '#FFFFFF', -- Default to white
-    line_width int DEFAULT 1, -- Default to 1px
+    color varchar(20) DEFAULT '#FFFFFF',
+    -- Default to white
+    line_width int DEFAULT 1,
+    -- Default to 1px
     unique (userId, securityId, price)
 );
 CREATE TABLE trades (
@@ -203,7 +205,7 @@ CREATE TABLE notes (
     title VARCHAR(255) NOT NULL,
     content TEXT,
     category VARCHAR(100),
-    tags TEXT[] DEFAULT ARRAY[]::TEXT[],
+    tags TEXT [] DEFAULT ARRAY []::TEXT [],
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
     is_pinned BOOLEAN DEFAULT FALSE,
@@ -216,7 +218,6 @@ CREATE INDEX idx_notes_is_pinned ON notes(is_pinned);
 CREATE INDEX idx_notes_is_archived ON notes(is_archived);
 CREATE INDEX idx_notes_tags ON notes USING GIN(tags);
 CREATE INDEX idxUserIdSecurityIdPrice on horizontal_lines(userId, securityId, price);
-
 -- Create the daily OHLCV table for storing time-series market data
 CREATE TABLE IF NOT EXISTS daily_ohlcv (
     timestamp TIMESTAMP NOT NULL,
@@ -229,18 +230,14 @@ CREATE TABLE IF NOT EXISTS daily_ohlcv (
     volume BIGINT NOT NULL,
     vwap DECIMAL(25, 6),
     transactions INTEGER,
-    CONSTRAINT unique_security_date
-        UNIQUE (securityid, timestamp)
+    CONSTRAINT unique_security_date UNIQUE (securityid, timestamp)
 );
-
 -- Convert to TimescaleDB hypertable
 SELECT create_hypertable('daily_ohlcv', 'timestamp');
-
 -- Create indexes for efficient querying
 CREATE INDEX IF NOT EXISTS idx_daily_ohlcv_security_id ON daily_ohlcv(securityid);
 CREATE INDEX IF NOT EXISTS idx_daily_ohlcv_ticker ON daily_ohlcv(ticker);
 CREATE INDEX IF NOT EXISTS idx_daily_ohlcv_timestamp_desc ON daily_ohlcv(timestamp DESC);
-
 COPY securities(securityid, ticker, figi, minDate, maxDate)
 FROM '/docker-entrypoint-initdb.d/securities.csv' DELIMITER ',' CSV HEADER;
 INSERT INTO users (userId, username, password, auth_type)
@@ -289,3 +286,10 @@ WHERE (
     );
 CREATE UNIQUE INDEX idx_users_email ON users(email)
 WHERE email IS NOT NULL;
+-- Create schema_versions table to track migrations
+CREATE TABLE IF NOT EXISTS schema_versions (
+    version VARCHAR(50) PRIMARY KEY,
+    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    description TEXT
+);
+-- Schema versions will be populated by the migration script
