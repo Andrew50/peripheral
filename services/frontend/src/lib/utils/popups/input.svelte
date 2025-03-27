@@ -426,6 +426,9 @@
 			iQ.instance.price = parseFloat(iQ.inputString);
 		}
 
+		// Always clear the input string when a field is entered successfully
+		iQ.inputString = '';
+
 		// Mark as complete but then check if further input is needed.
 		iQ.status = 'complete';
 		if (iQ.requiredKeys === 'any') {
@@ -441,9 +444,8 @@
 			}
 		}
 
-		// Only reset input state if we're fully complete
+		// Only reset input type and validity if we're fully complete
 		if (iQ.status === 'complete') {
-			iQ.inputString = '';
 			iQ.inputType = '';
 			iQ.inputValid = true;
 			// Reset manualInputType to auto after input is entered
