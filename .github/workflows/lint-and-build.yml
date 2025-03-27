@@ -150,10 +150,8 @@ jobs:
   lint-and-build-backend:
     needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' }}
-    # Use a specialized Go container instead of ubuntu
+    # Use ubuntu runner directly instead of a container
     runs-on: ubuntu-latest
-    container:
-      image: golang:1.24-alpine
     # Set continue-on-error based on the branch condition
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     # Add permissions block for annotations
@@ -169,28 +167,14 @@ jobs:
           # Fetch base branch for delta analysis
           fetch-depth: 0
       
-      # Install necessary dependencies for alpine
-      - name: Install dependencies
-        run: |
-          apk add --no-cache git bash
-
-      # Improved caching for Go modules
-      - name: Cache Go modules
-        uses: actions/cache@v3
+      # Set up Go instead of using a container
+      - name: Set up Go
+        uses: actions/setup-go@v4
         with:
-          path: |
-            ~/.cache/go-build
-            /go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('services/backend/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          go-version: '1.24'
+          cache: true
+          cache-dependency-path: services/backend/go.sum
       
-      - name: Install dependencies
-        run: |
-          cd services/backend
-          go mod download
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-
       - name: Identify changed Go files
         id: changed-files
         run: |
@@ -248,6 +232,13 @@ jobs:
             echo "No Go files changed"
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Install dependencies
+        if: steps.changed-files.outputs.has_changes == 'true'
+        run: |
+          cd services/backend
+          go mod download
+          go install honnef.co/go/tools/cmd/staticcheck@latest
 
       - name: Go Lint
         if: steps.changed-files.outputs.has_changes == 'true'
@@ -527,10 +518,8 @@ jobs:
   lint-and-build-frontend:
     needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' }}
-    # Use a specialized Node.js container
+    # Use ubuntu runner directly instead of a container
     runs-on: ubuntu-latest
-    container:
-      image: node:18-alpine
     # Set continue-on-error based on the branch condition
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     outputs:
@@ -543,10 +532,12 @@ jobs:
           # Fetch base branch for delta analysis
           fetch-depth: 0
 
-      # Install git for using git diff
-      - name: Install dependencies
-        run: |
-          apk add --no-cache git bash
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: services/frontend/package.json
 
       - name: Check for frontend changes
         id: check-frontend-changes
@@ -567,14 +558,6 @@ jobs:
           fi
           
           echo "has_changes=true" >> $GITHUB_OUTPUT
-
-      - name: Set up Node.js
-        if: steps.check-frontend-changes.outputs.has_changes == 'true'
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: services/frontend/package.json
 
       - name: Install dependencies
         if: steps.check-frontend-changes.outputs.has_changes == 'true'
@@ -732,10 +715,8 @@ jobs:
   test-frontend:
     needs: [check-workflow-conditions, lint-and-build-frontend]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.lint-and-build-frontend.outputs.has_changes == 'true' }}
-    # Use a specialized Node.js container
+    # Use ubuntu runner directly instead of a container
     runs-on: ubuntu-latest
-    container:
-      image: node:18-alpine
     # Set continue-on-error based on the branch condition
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     steps:
@@ -745,11 +726,6 @@ jobs:
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
           # Fetch base branch for delta analysis
           fetch-depth: 0
-
-      # Install git for diffing
-      - name: Install dependencies
-        run: |
-          apk add --no-cache git bash
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
