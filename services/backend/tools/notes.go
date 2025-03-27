@@ -1,3 +1,4 @@
+// 'dont use this file'
 package tools
 
 import (
