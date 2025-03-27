@@ -476,6 +476,7 @@ jobs:
                 NEW_DB_POD=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
                 if [ -n "$NEW_DB_POD" ]; then
                   echo "DB pod appeared: $NEW_DB_POD"
+                  DB_POD=$NEW_DB_POD  # Set DB_POD for use in subsequent steps
                   break
                 fi
                 echo "Still waiting for DB pod... (attempt $i of 24)"
@@ -491,26 +492,34 @@ jobs:
               echo "DB deployment doesn't exist yet. This is likely the first deployment."
               echo "Will proceed to K8s deployment step which should create the database resources"
               echo "Database migration step completed with warnings"
-              exit 0
+              exit 0  # Exit here, don't continue to steps that depend on DB_POD
             fi
-          else
-            echo "Found database pod: $DB_POD"
-            
-            # Restart the database pod to trigger migrations
-            echo "Restarting database pod to apply migrations..."
-            kubectl delete pod $DB_POD -n "$K8S_NAMESPACE" || {
-              echo "ERROR: Failed to delete database pod $DB_POD"
-              kubectl describe pod $DB_POD -n "$K8S_NAMESPACE"
-              exit 1
-            }
           fi
+          
+          # Only continue with the migration steps if we have a database pod
+          if [ -z "$DB_POD" ]; then
+            echo "No database pod available for migration steps. Skipping remaining migration tasks."
+            echo "Database migration step completed with warnings"
+            exit 0
+          fi
+          
+          # We have a valid DB_POD at this point
+          echo "Found database pod: $DB_POD"
+          
+          # Restart the database pod to trigger migrations
+          echo "Restarting database pod to apply migrations..."
+          kubectl delete pod $DB_POD -n "$K8S_NAMESPACE" || {
+            echo "ERROR: Failed to delete database pod $DB_POD"
+            kubectl describe pod $DB_POD -n "$K8S_NAMESPACE"
+            exit 1
+          }
           
           # Wait with better diagnostics
           echo "Waiting for new database pod to be created..."
           for i in {1..12}; do
             sleep 5
             NEW_DB_POD=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-            if [ -n "$NEW_DB_POD" ] && { [ -z "$DB_POD" ] || [ "$NEW_DB_POD" != "$DB_POD" ]; }; then
+            if [ -n "$NEW_DB_POD" ] && [ "$NEW_DB_POD" != "$DB_POD" ]; then
               echo "New database pod created: $NEW_DB_POD"
               break
             elif [ -n "$NEW_DB_POD" ] && [ "$NEW_DB_POD" = "$DB_POD" ]; then
