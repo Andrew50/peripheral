@@ -217,17 +217,11 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 			return
 		}
 
-		//fmt.Println("debug: got private request")
 		token_string := r.Header.Get("Authorization")
 		_, err := validateToken(token_string)
 		if handleError(w, err, "auth") {
 			return
 		}
-		var req Request
-		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "decoding request") {
-			return
-		}
-		//fmt.Printf("debug: %s\n", req.Function)
 
 		// Validate content type to prevent content-type sniffing attacks
 		contentType := r.Header.Get("Content-Type")
@@ -247,6 +241,19 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
 			return
 		}
+
+		var req Request
+		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "decoding request") {
+			return
+		}
+
+		// Sanitize the JSON input to prevent injection attacks
+		sanitizedArgs, err := sanitizeJSON(req.Arguments)
+		if err != nil {
+			handleError(w, err, "sanitizing input")
+			return
+		}
+		req.Arguments = sanitizedArgs
 
 		// Validate the function name
 		if _, exists := privateFunc[req.Function]; !exists {
