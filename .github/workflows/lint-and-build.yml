@@ -342,15 +342,17 @@ jobs:
             
             # Build each valid package individually to isolate failures
             if [ -n "$VALID_PACKAGES" ]; then
-              # Use multiple workers for faster parallel builds
+              # Use multiple workers for faster parallel builds but process each package separately
               echo "Building packages with multiple workers..."
-              echo "$VALID_PACKAGES" | xargs -n1 -P4 -I{} bash -c 'echo "Building package: {}" && go build -v -tags=all "./{}" || exit 255'
               
-              # Check if any build failed
-              if [ $? -ne 0 ]; then
-                echo "ERROR: One or more packages failed to build"
-                exit 1
-              fi
+              # Fix: process each package separately rather than treating them as one argument
+              for pkg in $VALID_PACKAGES; do
+                echo "Building package: $pkg"
+                go build -v -tags=all "./$pkg" || {
+                  echo "ERROR: Package $pkg failed to build"
+                  exit 1
+                }
+              done
             else
               echo "No valid packages to build"
             fi
