@@ -8,11 +8,8 @@ COPY securities.csv /docker-entrypoint-initdb.d/securities.csv
 COPY samples.csv /docker-entrypoint-initdb.d/samples.csv
 COPY dev.conf /etc/postgresql/postgresql.conf
 # Copy the migrations script
-COPY run_migrations.sh /app/run_migrations.sh
-RUN chmod +x /app/run_migrations.sh
-# Copy the watch script
-COPY watch_rollouts.sh /app/watch_rollouts.sh
-RUN chmod +x /app/watch_rollouts.sh
+COPY migrate.sh /app/migrate.sh
+RUN chmod +x /app/migrate.sh
 # Create a startup script that runs both PostgreSQL and the watcher
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh

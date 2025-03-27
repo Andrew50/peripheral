@@ -362,7 +362,6 @@ func containsInjectionPattern(s string) bool {
 		"eval\\(",
 	}
 
-
 	patterns := append(sqlPatterns, xssPatterns...)
 
 	for _, pattern := range patterns {
@@ -542,10 +541,7 @@ func healthHandler() http.HandlerFunc {
 func StartServer() {
 	// Load environment variables from config/dev/.env
 	loadEnvFile("config/dev/.env")
-	
-	// Reload OAuth config to use the newly loaded env vars
-	ReloadOAuthConfig()
-	
+
 	conn, cleanup := utils.InitConn(true)
 	defer cleanup()
 	stopScheduler := jobs.StartScheduler(conn)
@@ -589,10 +585,10 @@ func loadEnvFile(filePath string) {
 
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
-		
+
 		// Set environment variable
 		os.Setenv(key, value)
-		
+
 		// Safely print the value (masked for secrets)
 		if strings.Contains(key, "SECRET") || strings.Contains(key, "KEY") {
 			if len(value) > 8 {
@@ -604,8 +600,5 @@ func loadEnvFile(filePath string) {
 			fmt.Printf("Set environment variable: %s=%s\n", key, value)
 		}
 	}
-	
-	// Verify the environment variables were set
-	fmt.Printf("After loading .env - GOOGLE_CLIENT_ID: %s\n", maskString(os.Getenv("GOOGLE_CLIENT_ID")))
-	fmt.Printf("After loading .env - GOOGLE_CLIENT_SECRET: %s\n", maskString(os.Getenv("GOOGLE_CLIENT_SECRET")))
+
 }
