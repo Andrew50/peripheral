@@ -12,6 +12,3 @@ ADD COLUMN cik VARCHAR(10);
 CREATE INDEX idx_securities_cik ON securities(cik);
 END IF;
 END $$;
--- Update schema_versions table
-INSERT INTO schema_versions (version, description)
-VALUES ('003', 'Add CIK column to securities table') ON CONFLICT (version) DO NOTHING;

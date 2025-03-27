@@ -2,7 +2,7 @@
 set -e
 
 DB_NAME="${1:-postgres}"
-MIGRATIONS_DIR="/tmp/rollouts"
+MIGRATIONS_DIR="/migrations"
 
 # Function to log messages with timestamps
 log() {
@@ -14,18 +14,25 @@ error_log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] MIGRATION ERROR: $1" >&2
 }
 
-# Ensure migrations directory exists
-if [ ! -d "$MIGRATIONS_DIR" ]; then
-  log "Creating migrations directory: $MIGRATIONS_DIR"
-  mkdir -p "$MIGRATIONS_DIR"
-  chmod 777 "$MIGRATIONS_DIR"
-fi
+# Function to extract numeric version from filename
+extract_version() {
+  local filename="$1"
+  # Remove the .sql extension
+  local version_str=$(echo "$filename" | sed 's/\.sql$//')
+  # If it's a purely numeric filename, return as is
+  if [[ "$version_str" =~ ^[0-9]+$ ]]; then
+    echo "$version_str"
+  else
+    # Otherwise, use the full filename without extension as the version
+    echo "$version_str"
+  fi
+}
 
 # Ensure the schema_versions table exists
 log "Ensuring schema_versions table exists..."
 PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d "$DB_NAME" -c "
 CREATE TABLE IF NOT EXISTS schema_versions (
-    version VARCHAR(50) PRIMARY KEY,
+    version NUMERIC PRIMARY KEY,
     applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     description TEXT
 );" || {
@@ -35,7 +42,7 @@ CREATE TABLE IF NOT EXISTS schema_versions (
 
 # Get list of migration files sorted by version
 log "Looking for migration files in $MIGRATIONS_DIR"
-MIGRATION_FILES=$(find "$MIGRATIONS_DIR" -name "*.sql" | sort)
+MIGRATION_FILES=$(find "$MIGRATIONS_DIR" -name "*.sql" | sort -V)
 
 if [ -z "$MIGRATION_FILES" ]; then
   log "No migration files found"
@@ -62,18 +69,18 @@ if [ "$SCHEMA_VERSION_COUNT" -eq "0" ]; then
   # Mark all migrations as applied
   for MIGRATION_FILE in $MIGRATION_FILES; do
     FILENAME=$(basename "$MIGRATION_FILE")
-    VERSION="${FILENAME%.sql}"
+    VERSION=$(extract_version "$FILENAME")
     
     # Extract description from the migration file
     DESCRIPTION=$(grep -A 1 "^-- Description:" "$MIGRATION_FILE" | tail -n 1 | sed 's/^-- //')
     if [ -z "$DESCRIPTION" ]; then
-      DESCRIPTION="$VERSION migration"
+      DESCRIPTION="Migration $VERSION"
     fi
     
-    log "Marking migration as applied: $VERSION"
+    log "Marking migration as applied: $VERSION (from $FILENAME)"
     PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d "$DB_NAME" -c "
       INSERT INTO schema_versions (version, description)
-      VALUES ('$VERSION', '$DESCRIPTION')
+      VALUES ($VERSION, '$DESCRIPTION')
       ON CONFLICT (version) DO NOTHING;
     " || {
       error_log "Failed to mark migration as applied: $VERSION"
@@ -87,22 +94,22 @@ fi
 # Process each migration file (only those that haven't been applied)
 for MIGRATION_FILE in $MIGRATION_FILES; do
   FILENAME=$(basename "$MIGRATION_FILE")
-  VERSION="${FILENAME%.sql}"
+  VERSION=$(extract_version "$FILENAME")
   
-  log "Checking migration: $VERSION"
+  log "Checking migration: $VERSION (from $FILENAME)"
   
   # Check if this migration has already been applied
   APPLIED=$(PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d "$DB_NAME" -t -c "
-    SELECT COUNT(*) FROM schema_versions WHERE version = '$VERSION';
+    SELECT COUNT(*) FROM schema_versions WHERE version = $VERSION;
   ")
   
   if [ "$(echo $APPLIED | tr -d ' ')" -eq "0" ]; then
-    log "Applying migration: $VERSION"
+    log "Applying migration: $VERSION (from $FILENAME)"
     
     # Extract description from the migration file
     DESCRIPTION=$(grep -A 1 "^-- Description:" "$MIGRATION_FILE" | tail -n 1 | sed 's/^-- //')
     if [ -z "$DESCRIPTION" ]; then
-      DESCRIPTION="$VERSION migration"
+      DESCRIPTION="Migration $VERSION"
     fi
     
     log "Migration description: $DESCRIPTION"
@@ -114,7 +121,7 @@ for MIGRATION_FILE in $MIGRATION_FILES; do
       # Record the migration in schema_versions
       PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d "$DB_NAME" -c "
         INSERT INTO schema_versions (version, description)
-        VALUES ('$VERSION', '$DESCRIPTION')
+        VALUES ($VERSION, '$DESCRIPTION')
         ON CONFLICT (version) DO NOTHING;
       " || {
         error_log "Failed to record migration in schema_versions table"

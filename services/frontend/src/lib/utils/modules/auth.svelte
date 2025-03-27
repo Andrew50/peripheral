@@ -1,6 +1,6 @@
 <!-- account.svelte -->
 <script lang="ts">
-	import { publicRequest } from '$lib/core/backend';
+	import { publicRequest, privateRequest, base_url } from '$lib/core/backend';
 	import '$lib/core/global.css';
 	import { browser } from '$app/environment';
 
@@ -60,6 +60,13 @@
 
 			const r = await publicRequest<Login>('login', { email: email, password: password });
 			if (browser) {
+				// Remove any existing guest session cleanup event listener
+				window.removeEventListener('beforeunload', cleanupGuestAccount);
+
+				// Clear any guest session flags
+				sessionStorage.removeItem('isGuestSession');
+
+				// Set the regular session data
 				sessionStorage.setItem('authToken', r.token);
 				sessionStorage.setItem('profilePic', r.profilePic);
 				sessionStorage.setItem('username', r.username);
@@ -79,6 +86,13 @@
 	async function signUp(email: string, username: string, password: string) {
 		loading = true;
 		try {
+			// If this was a guest account, remove guest session cleanup
+			if (browser) {
+				window.removeEventListener('beforeunload', cleanupGuestAccount);
+				sessionStorage.removeItem('isGuestSession');
+				sessionStorage.removeItem('userId');
+			}
+
 			await publicRequest('signup', { email: email, username: username, password: password });
 			await signIn(email, password);
 		} catch (error) {
@@ -124,6 +138,11 @@
 				sessionStorage.setItem('authToken', r.token);
 				sessionStorage.setItem('profilePic', r.profilePic || '');
 				sessionStorage.setItem('username', r.username);
+				// Mark this as a guest session to handle cleanup on page close
+				sessionStorage.setItem('isGuestSession', 'true');
+
+				// Set up event listener for page unload to delete the guest account
+				window.addEventListener('beforeunload', cleanupGuestAccount);
 			}
 			goto('/app');
 		} catch (error) {
@@ -134,6 +153,37 @@
 			}
 		} finally {
 			guestLoading = false;
+		}
+	}
+
+	// Function to clean up guest account when page is closed
+	async function cleanupGuestAccount() {
+		try {
+			// Check if this is a guest session
+			const isGuest = sessionStorage.getItem('isGuestSession') === 'true';
+
+			if (isGuest) {
+				try {
+					// Use privateRequest with the keepalive option for page unload events
+					// This ensures the request completes even when the page is unloading
+					privateRequest(
+						'deleteAccount',
+						{ confirmation: 'DELETE' },
+						false, // verbose
+						true // keepalive
+					);
+				} catch (e) {
+					console.error('Error sending account deletion request:', e);
+				}
+
+				// Clear session storage
+				sessionStorage.removeItem('authToken');
+				sessionStorage.removeItem('profilePic');
+				sessionStorage.removeItem('username');
+				sessionStorage.removeItem('isGuestSession');
+			}
+		} catch (error) {
+			console.error('Error cleaning up guest account:', error);
 		}
 	}
 </script>

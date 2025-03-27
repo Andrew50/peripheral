@@ -14,10 +14,10 @@ error_log() {
 # Make the script executable
 chmod +x ./dev.bash
 
-# Ensure rollouts directory exists
-log "Ensuring rollouts directory exists..."
-mkdir -p ../../services/db/rollouts
-chmod 777 ../../services/db/rollouts
+# Ensure migrations directory exists
+log "Ensuring migrations directory exists..."
+mkdir -p ../../services/db/migrations
+chmod 777 ../../services/db/migrations
 
 # Start Docker Compose
 log "Starting Docker Compose environment..."
@@ -82,19 +82,19 @@ else
   "
 fi
 
-# Ensure all rollout files are copied to the container
-log "Copying rollout files to the database container..."
-for ROLLOUT_FILE in ../../services/db/rollouts/*.sql; do
-  if [ -f "$ROLLOUT_FILE" ]; then
-    FILENAME=$(basename "$ROLLOUT_FILE")
+# Ensure all migration files are copied to the container
+log "Copying migration files to the database container..."
+for MIGRATION_FILE in ../../services/db/migrations/*.sql; do
+  if [ -f "$MIGRATION_FILE" ]; then
+    FILENAME=$(basename "$MIGRATION_FILE")
     log "Copying $FILENAME to container..."
-    docker cp "$ROLLOUT_FILE" dev-db-1:/tmp/rollouts/
+    docker cp "$MIGRATION_FILE" dev-db-1:/tmp/migrations/
   fi
 done
 
 # Trigger migrations manually to ensure they run
 log "Triggering migrations manually..."
-docker exec dev-db-1 bash -c "/app/run_migrations.sh postgres"
+docker exec dev-db-1 bash -c "/app/migrate.sh postgres"
 
 # Wait for migrations to complete
 log "Waiting for migrations to complete..."

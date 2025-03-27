@@ -12,9 +12,3 @@ ALTER TABLE securities
 ALTER COLUMN cik TYPE BIGINT USING cik::BIGINT;
 END IF;
 END $$;
--- Update schema_versions table
-INSERT INTO schema_versions (version, description)
-VALUES (
-        '007',
-        'Fix CIK column type to handle large values'
-    ) ON CONFLICT (version) DO NOTHING;

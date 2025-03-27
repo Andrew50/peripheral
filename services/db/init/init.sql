@@ -1,4 +1,17 @@
---init.sql
+-- Create schema_versions table to track migrations
+CREATE TABLE IF NOT EXISTS schema_versions (
+    version NUMERIC PRIMARY KEY,
+    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    description TEXT
+);
+-- Insert hardcoded entry for migrations up to version 10, when adding migrations 
+-- to the init.sql file, update the version number here
+INSERT INTO schema_versions (version, description)
+VALUES (
+        11,
+        'Initial schema version - all migrations up to 11 included in init.sql'
+    ) ON CONFLICT (version) DO NOTHING;
+-- Schema versions will be populated by the migration script--init.sql
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE TABLE users (
@@ -34,6 +47,7 @@ CREATE TABLE securities (
     minDate timestamp,
     maxDate timestamp,
     cik bigint,
+    total_shares bigint,
     unique (ticker, minDate),
     unique (ticker, maxDate),
     unique (securityid, minDate),
@@ -293,10 +307,3 @@ WHERE (
     );
 CREATE UNIQUE INDEX idx_users_email ON users(email)
 WHERE email IS NOT NULL;
--- Create schema_versions table to track migrations
-CREATE TABLE IF NOT EXISTS schema_versions (
-    version VARCHAR(50) PRIMARY KEY,
-    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    description TEXT
-);
--- Schema versions will be populated by the migration script

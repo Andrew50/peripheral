@@ -27,7 +27,6 @@ services:
       - compose_network
     volumes:
       - db:/var/lib/postgresql/data
-      - ../../services/db/rollouts:/tmp/rollouts:rw
     restart: unless-stopped
     environment:
       - POSTGRES_USER=postgres
