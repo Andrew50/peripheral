@@ -23,6 +23,11 @@
 	let previewUrl = '';
 	let uploadStatus = '';
 
+	// Delete account variables
+	let showDeleteConfirmation = false;
+	let deleteConfirmationText = '';
+	let deletingAccount = false;
+
 	// Function to determine if the current user is a guest
 	const isGuestAccount = (): boolean => {
 		return username === 'Guest';
@@ -191,6 +196,38 @@
 			uploadedImage = null;
 			previewUrl = '';
 			uploadStatus = 'Reset to default avatar';
+		}
+	}
+
+	// Function to handle account deletion
+	async function handleDeleteAccount() {
+		if (deleteConfirmationText !== 'DELETE') {
+			return;
+		}
+
+		deletingAccount = true;
+
+		try {
+			// Call the deleteAccount API
+			await privateRequest('deleteAccount', {
+				confirmation: 'DELETE'
+			});
+
+			// If successful, logout and return to login page
+			if (browser) {
+				sessionStorage.removeItem('authToken');
+				sessionStorage.removeItem('profilePic');
+				sessionStorage.removeItem('username');
+				sessionStorage.removeItem('isGuestSession');
+			}
+
+			// Redirect to login page
+			goto('/login');
+		} catch (error) {
+			console.error('Error deleting account:', error);
+			errorMessage = 'Failed to delete account. Please try again.';
+			showDeleteConfirmation = false;
+			deletingAccount = false;
 		}
 	}
 </script>
@@ -642,6 +679,25 @@
 					<div class="account-actions">
 						<button class="logout-button" on:click={handleLogout}>Logout</button>
 					</div>
+
+					<div class="danger-zone">
+						<h3>Danger Zone</h3>
+						<div class="delete-account-section">
+							<div class="warning-message">
+								<p>
+									Permanently delete your account and all associated data. This action cannot be
+									undone.
+								</p>
+							</div>
+
+							<button
+								class="delete-account-button"
+								on:click={() => (showDeleteConfirmation = true)}
+							>
+								Delete Account
+							</button>
+						</div>
+					</div>
 				</div>
 			{/if}
 
@@ -652,6 +708,45 @@
 			<div class="settings-actions">
 				<button class="apply-button" on:click={updateLayout}>Apply Changes</button>
 			</div>
+
+			{#if showDeleteConfirmation}
+				<div class="confirmation-modal-overlay">
+					<div class="confirmation-modal">
+						<h3>Delete Account</h3>
+						<p>
+							This will permanently delete your account and all associated data. This action cannot
+							be undone.
+						</p>
+						<p class="confirmation-instruction">
+							Type <strong>DELETE</strong> to confirm.
+						</p>
+
+						<input
+							type="text"
+							bind:value={deleteConfirmationText}
+							placeholder="Type DELETE to confirm"
+							class="confirmation-input"
+						/>
+
+						<div class="confirmation-actions">
+							<button class="cancel-button" on:click={() => (showDeleteConfirmation = false)}>
+								Cancel
+							</button>
+							<button
+								class="confirm-delete-button"
+								disabled={deleteConfirmationText !== 'DELETE'}
+								on:click={handleDeleteAccount}
+							>
+								{#if deletingAccount}
+									<span class="loader"></span>
+								{:else}
+									Delete My Account
+								{/if}
+							</button>
+						</div>
+					</div>
+				</div>
+			{/if}
 		</div>
 	{/if}
 </div>
@@ -1274,5 +1369,146 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 1.5rem;
+	}
+
+	.danger-zone {
+		margin-top: 2rem;
+		padding: 1.5rem;
+		background-color: rgba(239, 68, 68, 0.05);
+		border-radius: 6px;
+		text-align: center;
+		border: 1px solid rgba(239, 68, 68, 0.1);
+	}
+
+	.delete-account-section {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.warning-message {
+		color: var(--f2);
+		font-size: 0.9375rem;
+	}
+
+	.delete-account-button {
+		padding: 0.75rem 1.5rem;
+		background-color: rgba(239, 68, 68, 0.1);
+		color: #ef4444;
+		border: 1px solid rgba(239, 68, 68, 0.3);
+		border-radius: 4px;
+		font-size: 0.9375rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.delete-account-button:hover {
+		background-color: rgba(239, 68, 68, 0.2);
+	}
+
+	.confirmation-modal-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		background-color: rgba(0, 0, 0, 0.5);
+		display: flex;
+		justify-content: center;
+		align-items: center;
+	}
+
+	.confirmation-modal {
+		background-color: var(--c1);
+		padding: 2rem;
+		border-radius: 8px;
+		width: 100%;
+		max-width: 400px;
+	}
+
+	.confirmation-modal h3 {
+		margin-top: 0;
+		margin-bottom: 1rem;
+		font-size: 1.5rem;
+		font-weight: 600;
+		color: var(--f1);
+	}
+
+	.confirmation-instruction {
+		margin-bottom: 1.5rem;
+		font-size: 0.9375rem;
+		color: var(--f2);
+	}
+
+	.confirmation-input {
+		width: 100%;
+		padding: 0.75rem;
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		border-radius: 4px;
+		color: var(--f1);
+		font-size: 0.9375rem;
+	}
+
+	.confirmation-actions {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+
+	.cancel-button {
+		padding: 0.75rem 1.5rem;
+		background-color: rgba(255, 255, 255, 0.1);
+		color: var(--f1);
+		border: none;
+		border-radius: 4px;
+		font-size: 0.9375rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.2s;
+	}
+
+	.cancel-button:hover {
+		background-color: rgba(255, 255, 255, 0.2);
+	}
+
+	.confirm-delete-button {
+		padding: 0.75rem 1.5rem;
+		background-color: var(--c3);
+		color: white;
+		border: none;
+		border-radius: 4px;
+		font-size: 0.9375rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.2s;
+	}
+
+	.confirm-delete-button:hover {
+		background-color: var(--c3-hover);
+	}
+
+	.confirm-delete-button:disabled {
+		background-color: rgba(59, 130, 246, 0.3);
+		cursor: not-allowed;
+	}
+
+	.loader {
+		border: 4px solid rgba(255, 255, 255, 0.3);
+		border-top: 4px solid var(--c3);
+		border-radius: 50%;
+		width: 24px;
+		height: 24px;
+		animation: spin 1s linear infinite;
+	}
+
+	@keyframes spin {
+		0% {
+			transform: rotate(0deg);
+		}
+		100% {
+			transform: rotate(360deg);
+		}
 	}
 </style>

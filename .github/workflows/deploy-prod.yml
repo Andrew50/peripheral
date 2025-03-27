@@ -1,0 +1,549 @@
+name: Deploy to Kubernetes
+
+on:
+  # Deploy when pushing to stable branches
+  push:
+    branches:
+      - dev
+      - prod
+  
+  # Different trigger for pull requests with explicit configuration
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - dev
+      - prod
+  
+  # Manual triggering
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: true
+        default: 'dev'
+
+# Add permissions configuration here
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+# Add concurrency control to queue deployments instead of running in parallel
+concurrency:
+  group: kubernetes-deployment
+  cancel-in-progress: false  # Queue deployments instead of canceling
+
+jobs:
+  # Add a dependency on the lint-and-build workflow
+  check-build:
+    runs-on: ubuntu-latest  # Using GitHub-hosted runner
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Check if lint-and-build workflow passed
+        run: echo "This job ensures the lint-and-build workflow has passed before deployment"
+
+  deploy:
+    runs-on: self-hosted  # Keep deployment on self-hosted runner
+    needs: [check-build]
+    if: >-
+      (github.event_name != 'pull_request' || success()) && 
+      !(github.event_name == 'pull_request' && github.base_ref == 'main' && github.head_ref == 'prod') && 
+      !(github.event_name == 'push' && github.ref == 'refs/heads/main' && 
+        github.event.before != '0000000000000000000000000000000000000000' && 
+        github.event.commits != null && 
+        github.event.commits[0] != null && 
+        contains(github.event.commits[0].message || '', 'Merge pull request') && 
+        contains(github.event.commits[0].message || '', 'from prod'))
+    # Add job-level permissions to ensure access to secrets
+    
+    # Add environment variables for the job
+    env:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+      DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
+      REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+      POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+      GEMINI_FREE_KEYS: ${{ secrets.GEMINI_FREE_KEYS }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      GOOGLE_REDIRECT_URL: "https://atlantis.trading/auth/google/callback"
+      K8S_CONTEXT: "prod-cluster"
+      K8S_NAMESPACE: "default"
+    
+    steps:
+      # Print debugging information before checkout
+      - name: Debug Event Information
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+          echo "GitHub ref: ${{ github.ref }}"
+          echo "Target branch: ${{ github.base_ref || github.ref_name }}"
+
+      # Determine which branch to checkout based on event type
+      - name: Set checkout target
+        id: set-target
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "CHECKOUT_REF=${{ github.head_ref }}" >> $GITHUB_ENV
+            echo "TARGET_BRANCH=${{ github.base_ref }}" >> $GITHUB_ENV
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.branch }}" ]; then
+            echo "CHECKOUT_REF=${{ github.event.inputs.branch }}" >> $GITHUB_ENV
+            echo "TARGET_BRANCH=${{ github.event.inputs.branch }}" >> $GITHUB_ENV
+          else
+            echo "CHECKOUT_REF=${{ github.ref_name }}" >> $GITHUB_ENV
+            echo "TARGET_BRANCH=${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
+          lfs: false
+      
+      # Add diagnostic step to see what's available after checkout
+      - name: Show Git Information
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Directory contents: $(ls -la)"
+          echo "Git status: $(git status)"
+          echo "Current branch: $(git branch --show-current)"
+          git --version
+      
+      # Verify secrets are available without exposing them
+      - name: Verify Docker Credentials
+        run: |
+          echo "Docker username secret: $(if [ -n "${{ secrets.DOCKER_USERNAME }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
+          echo "Docker token secret: $(if [ -n "${{ secrets.DOCKER_TOKEN }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
+          echo "DB password secret: $(if [ -n "${{ secrets.DB_ROOT_PASSWORD }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
+          echo "Polygon API key: $(if [ -n "${{ secrets.POLYGON_API_KEY }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
+          echo "Gemini keys: $(if [ -n "${{ secrets.GEMINI_FREE_KEYS }}" ]; then echo "is set"; else echo "is NOT set"; fi)"
+          echo "Google OAuth credentials: $(if [ -n "${{ secrets.GOOGLE_CLIENT_ID }}" ] && [ -n "${{ secrets.GOOGLE_CLIENT_SECRET }}" ]; then echo "are set"; else echo "are NOT set"; fi)"
+      
+      # Setup and configuration
+      - name: Setup deployment
+        run: |
+          # Sanitize branch name for Docker tags (replace / with - and other invalid characters)
+          DOCKER_TAG=$(echo "${{ env.TARGET_BRANCH }}" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_.-]/-/g')
+          echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
+          echo "Using Docker tag: ${DOCKER_TAG}"
+
+      # Build Docker images
+      - name: Build Docker Images
+        run: |
+          # Helper function to check required secrets
+          check_secret() {
+            if [ -z "${!1}" ]; then
+              echo "ERROR: $1 secret is not available"
+              exit 1
+            fi
+          }
+          
+          # Check required secrets
+          check_secret "DOCKER_USERNAME"
+          
+          # Define services to build
+          services=("frontend" "backend" "worker" "worker-healthcheck" "tf" "nginx" "db")
+          
+          # Build all images
+          echo "Building Docker images with tag: ${{ env.DOCKER_TAG }}..."
+          for service in "${services[@]}"; do
+            dockerfile="services/${service}/Dockerfile.prod"
+            # Special case for nginx and worker-healthcheck
+            if [ "$service" = "nginx" ]; then
+              dockerfile="services/nginx/Dockerfile"
+            elif [ "$service" = "worker-healthcheck" ]; then
+              dockerfile="services/worker/Dockerfile.healthcheck"
+              docker build -t $DOCKER_USERNAME/$service:${{ env.DOCKER_TAG }} -f $dockerfile services/worker
+              continue
+            fi
+            
+            docker build -t $DOCKER_USERNAME/$service:${{ env.DOCKER_TAG }} -f $dockerfile services/$service
+          done
+          
+          # Tag images appropriately for environment
+          if [ "${{ env.TARGET_BRANCH }}" = "prod" ]; then
+            echo "Tagging images as 'latest' for production..."
+            for service in "${services[@]}"; do
+              docker tag $DOCKER_USERNAME/$service:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/$service:latest
+            done
+          elif [ "${{ env.TARGET_BRANCH }}" = "dev" ]; then
+            echo "Tagging images as 'development'..."
+            for service in "${services[@]}"; do
+              docker tag $DOCKER_USERNAME/$service:${{ env.DOCKER_TAG }} $DOCKER_USERNAME/$service:development
+            done
+          fi
+
+      # Push Docker images
+      - name: Login to Docker Hub and Push Images
+        run: |
+          # Check required secrets
+          if [ -z "$DOCKER_TOKEN" ]; then
+            echo "ERROR: DOCKER_TOKEN secret is not available"
+            exit 1
+          fi
+          
+          # Login to Docker Hub
+          echo "$DOCKER_TOKEN" | docker login -u "$DOCKER_USERNAME" --password-stdin || {
+            echo "ERROR: Docker login failed. Please check your credentials."
+            exit 1
+          }
+          
+          # Define services to push
+          services=("frontend" "backend" "worker" "worker-healthcheck" "tf" "db" "nginx")
+          
+          # Push branch-specific tags
+          echo "Pushing images with tag: ${{ env.DOCKER_TAG }}..."
+          for service in "${services[@]}"; do
+            docker push $DOCKER_USERNAME/$service:${{ env.DOCKER_TAG }}
+          done
+          
+          # Push environment-specific tags
+          if [ "${{ env.TARGET_BRANCH }}" = "prod" ]; then
+            echo "Pushing 'latest' tagged images..."
+            for service in "${services[@]}"; do
+              docker push $DOCKER_USERNAME/$service:latest
+            done
+          elif [ "${{ env.TARGET_BRANCH }}" = "dev" ]; then
+            echo "Pushing 'development' tagged images..."
+            for service in "${services[@]}"; do
+              docker push $DOCKER_USERNAME/$service:development
+            done
+          fi
+
+      # Setup Kubernetes context
+      - name: Setup Kubernetes Context
+        run: |
+          # Helper function for retrying commands
+          kubectl_with_retry() {
+            cmd=$1
+            max_retries=${2:-3}
+            retry_count=0
+            
+            while [ $retry_count -lt $max_retries ]; do
+              if eval "$cmd"; then
+                return 0
+              else
+                retry_count=$((retry_count + 1))
+                if [ $retry_count -lt $max_retries ]; then
+                  echo "Command failed, retrying in 5 seconds... (Attempt $retry_count of $max_retries)"
+                  sleep 5
+                fi
+              fi
+            done
+            
+            echo "ERROR: Command failed after $max_retries attempts: $cmd"
+            return 1
+          }
+          
+          # Switch to production Kubernetes context
+          echo "Switching to production Kubernetes context ($K8S_CONTEXT)..."
+          kubectl_with_retry "kubectl config use-context $K8S_CONTEXT" || exit 1
+          
+          # Verify correct context is active
+          CURRENT_CONTEXT=$(kubectl config current-context)
+          if [ "$CURRENT_CONTEXT" != "$K8S_CONTEXT" ]; then
+            echo "ERROR: Wrong Kubernetes context! Expected $K8S_CONTEXT but got $CURRENT_CONTEXT"
+            exit 1
+          fi
+          
+          echo "Confirmed correct Kubernetes context: $CURRENT_CONTEXT"
+          
+          # Set Kubernetes namespace for all commands
+          kubectl_with_retry "kubectl config set-context --current --namespace=$K8S_NAMESPACE" || exit 1
+          echo "Set Kubernetes namespace to: $K8S_NAMESPACE"
+          
+          # Verify cluster connectivity
+          kubectl_with_retry "kubectl cluster-info" || exit 1
+
+      # Update Kubernetes secrets
+      - name: Update Kubernetes Secrets
+        run: |
+          # Helper function to check required secrets
+          check_secret() {
+            if [ -z "${!1}" ]; then
+              echo "ERROR: $1 secret is not available"
+              exit 1
+            fi
+          }
+          
+          # Check required secrets
+          required_secrets=("DB_ROOT_PASSWORD" "REDIS_PASSWORD" "POLYGON_API_KEY" "GEMINI_FREE_KEYS" 
+                          "GOOGLE_CLIENT_ID" "GOOGLE_CLIENT_SECRET" "JWT_SECRET")
+          for secret in "${required_secrets[@]}"; do
+            check_secret "$secret"
+          done
+          
+          # Retry function for kubernetes operations
+          kubectl_with_retry() {
+            cmd=$1
+            max_retries=${2:-3}
+            retry_count=0
+            
+            while [ $retry_count -lt $max_retries ]; do
+              if eval "$cmd"; then
+                return 0
+              else
+                retry_count=$((retry_count + 1))
+                if [ $retry_count -lt $max_retries ]; then
+                  echo "Command failed, retrying in 5 seconds... (Attempt $retry_count of $max_retries)"
+                  sleep 5
+                fi
+              fi
+            done
+            
+            echo "ERROR: Command failed after $max_retries attempts: $cmd"
+            return 1
+          }
+          
+          # Create temporary file for secrets
+          TEMP_DIR=$(mktemp -d)
+          SECRETS_FILE="$TEMP_DIR/secrets.yaml"
+          
+          # Encode secrets
+          DB_PASSWORD_B64=$(echo -n "${{ secrets.DB_ROOT_PASSWORD }}" | base64 -w 0)
+          REDIS_PASSWORD_B64=$(echo -n "${{ secrets.REDIS_PASSWORD }}" | base64 -w 0)
+          POLYGON_API_KEY_B64=$(echo -n "${{ secrets.POLYGON_API_KEY }}" | base64 -w 0)
+          GEMINI_FREE_KEYS_B64=$(echo -n "${{ secrets.GEMINI_FREE_KEYS }}" | base64 -w 0)
+          GOOGLE_CLIENT_ID_B64=$(echo -n "${{ secrets.GOOGLE_CLIENT_ID }}" | base64 -w 0)
+          GOOGLE_CLIENT_SECRET_B64=$(echo -n "${{ secrets.GOOGLE_CLIENT_SECRET }}" | base64 -w 0)
+          JWT_SECRET_B64=$(echo -n "${{ secrets.JWT_SECRET }}" | base64 -w 0)
+          
+          # Create secrets YAML
+          cat > "$SECRETS_FILE" << EOF
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: redis-secret
+            namespace: $K8S_NAMESPACE
+          type: Opaque
+          data:
+            REDIS_PASSWORD: ${REDIS_PASSWORD_B64}
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: db-secret
+            namespace: $K8S_NAMESPACE
+          type: Opaque
+          data:
+            DB_ROOT_PASSWORD: ${DB_PASSWORD_B64}
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: polygon-secret
+            namespace: $K8S_NAMESPACE
+          type: Opaque
+          data:
+            api-key: ${POLYGON_API_KEY_B64}
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: gemini-secret
+            namespace: $K8S_NAMESPACE
+          type: Opaque
+          data:
+            GEMINI_FREE_KEYS: ${GEMINI_FREE_KEYS_B64}
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: google-oauth-secret
+            namespace: $K8S_NAMESPACE
+          type: Opaque
+          data:
+            GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID_B64}
+            GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET_B64}
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: jwt-secret
+            namespace: $K8S_NAMESPACE
+          type: Opaque
+          data:
+            JWT_SECRET: ${JWT_SECRET_B64}
+          EOF
+          
+          # Apply secrets to Kubernetes
+          echo "Applying secrets to Kubernetes..."
+          kubectl_with_retry "kubectl apply -f \"$SECRETS_FILE\"" || kubectl_with_retry "kubectl apply -f \"$SECRETS_FILE\" --validate=false"
+          
+          # Clean up
+          rm -rf "$TEMP_DIR"
+          
+          # Restart pods to apply the new secrets
+          kubectl rollout restart deployment/backend deployment/worker
+
+      # Run database migrations
+      - name: Deploy Database Migrations
+        run: |
+          # Verify cluster connectivity
+          if ! kubectl cluster-info &>/dev/null; then
+            echo "ERROR: Cannot connect to Kubernetes cluster."
+            exit 1
+          fi
+          
+          # Verify correct context
+          CURRENT_CONTEXT=$(kubectl config current-context)
+          if [ "$CURRENT_CONTEXT" != "$K8S_CONTEXT" ]; then
+            echo "ERROR: Wrong Kubernetes context! Expected $K8S_CONTEXT but got $CURRENT_CONTEXT"
+            exit 1
+          fi
+          
+          # Get database pod
+          DB_POD=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+          if [ -z "$DB_POD" ]; then
+            echo "ERROR: Database pod not found."
+            kubectl get pods
+            exit 1
+          fi
+          
+          echo "Found database pod: $DB_POD"
+          
+          # Save current replica counts
+          WORKER_REPLICAS=$(kubectl get deployment worker -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "1")
+          BACKEND_REPLICAS=$(kubectl get deployment backend -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "1")
+          TF_REPLICAS=$(kubectl get deployment tf -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "1")
+          
+          # Scale down services
+          echo "Entering maintenance mode: Scaling down services that access the database..."
+          kubectl scale deployment worker backend tf --replicas=0
+          
+          # Wait for pods to terminate
+          sleep 10
+          
+          # Restart the database pod to trigger migrations
+          echo "Restarting database pod to apply migrations..."
+          kubectl delete pod $DB_POD
+          
+          # Wait for the new pod to be ready
+          sleep 10
+          NEW_DB_POD=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+          
+          # Wait for the pod to be ready
+          kubectl wait --for=condition=ready pod/$NEW_DB_POD --timeout=120s || {
+            echo "ERROR: Database pod did not become ready in time"
+            kubectl describe pod/$NEW_DB_POD
+            exit 1
+          }
+          
+          # Check migration logs
+          echo "Migration logs:"
+          kubectl logs $NEW_DB_POD | grep -A 5 "MIGRATION" || echo "Migration log not found"
+          
+          # Scale services back up
+          echo "Exiting maintenance mode: Scaling services back up..."
+          kubectl scale deployment worker --replicas=$WORKER_REPLICAS
+          kubectl scale deployment backend --replicas=$BACKEND_REPLICAS
+          kubectl scale deployment tf --replicas=$TF_REPLICAS
+
+      # Deploy to Kubernetes
+      - name: Deploy to Kubernetes
+        run: |
+          # Helper functions
+          kubectl_with_retry() {
+            cmd=$1
+            max_retries=${2:-3}
+            retry_count=0
+            
+            while [ $retry_count -lt $max_retries ]; do
+              if eval "$cmd"; then
+                return 0
+              else
+                retry_count=$((retry_count + 1))
+                if [ $retry_count -lt $max_retries ]; then
+                  echo "Retrying in 5 seconds... (Attempt $retry_count of $max_retries)"
+                  sleep 5
+                fi
+              fi
+            done
+            
+            echo "ERROR: Command failed after $max_retries attempts: $cmd"
+            return 1
+          }
+          
+          # Verify cluster connectivity and context
+          kubectl_with_retry "kubectl cluster-info" || exit 1
+          
+          # Verify correct context
+          CURRENT_CONTEXT=$(kubectl config current-context)
+          if [ "$CURRENT_CONTEXT" != "$K8S_CONTEXT" ]; then
+            echo "ERROR: Wrong Kubernetes context! Expected $K8S_CONTEXT but got $CURRENT_CONTEXT"
+            exit 1
+          fi
+          
+          # Apply Kubernetes configurations, excluding secrets.yaml
+          echo "Applying Kubernetes configurations..."
+          find config/prod/config -type f -name "*.yaml" ! -name "secrets.yaml" -exec kubectl apply -f {} \;
+          
+          # Define the deployments to update
+          deployments=("backend" "frontend" "worker" "tf" "nginx")
+          
+          # Update image tags for all deployments
+          echo "Updating deployments with images tagged: ${{ env.DOCKER_TAG }}..."
+          
+          for deployment in "${deployments[@]}"; do
+            echo "Updating $deployment deployment..."
+            kubectl set image deployment/$deployment $deployment=$DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }}
+            
+            # Special handling for worker deployment healthcheck container
+            if [ "$deployment" = "worker" ]; then
+              CONTAINERS=$(kubectl get deployment/worker -o jsonpath='{.spec.template.spec.containers[*].name}' 2>/dev/null)
+              if [[ $CONTAINERS == *"db-healthcheck"* ]]; then
+                kubectl set image deployment/worker db-healthcheck=$DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }}
+              elif [[ $CONTAINERS == *"worker-healthcheck"* ]]; then
+                kubectl set image deployment/worker worker-healthcheck=$DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }}
+              fi
+            fi
+          done
+          
+          # Apply rollout restart to ensure the current version of the image is used
+          echo "Restarting deployments..."
+          kubectl rollout restart deployment $(printf "%s " "${deployments[@]}")
+          
+          # Wait for image pull
+          echo "Waiting for image pulls to complete..."
+          sleep 30
+          
+          # Monitor deployments
+          echo "Monitoring deployments for successful rollout..."
+          
+          # Set timeout values for each deployment (in seconds)
+          declare -A timeouts
+          timeouts=([backend]=300 [frontend]=180 [worker]=300 [tf]=180 [nginx]=180)
+          
+          # Track deployment status
+          for deployment in "${deployments[@]}"; do
+            echo "Waiting for $deployment deployment..."
+            if ! kubectl rollout status deployment/$deployment --timeout=${timeouts[$deployment]}s; then
+              echo "ERROR: $deployment deployment failed or timed out."
+              kubectl describe deployment $deployment
+              kubectl get pods -l app=$deployment
+              kubectl logs -l app=$deployment --tail=50 || true
+              exit 1
+            fi
+            echo "$deployment deployment succeeded."
+          done
+          
+          echo "Deployment completed successfully for branch ${{ env.TARGET_BRANCH }}."
+      
+      # Cleanup after deployment
+      - name: Cleanup
+        if: always()  # Run cleanup even if previous steps failed
+        run: |
+          echo "Cleaning up resources after deployment..."
+          
+          # Clean up Docker images to free space
+          echo "Cleaning up unused Docker images..."
+          # Remove images older than 24 hours that aren't tagged as latest, development, or stage
+          docker image prune -af --filter "until=24h" --filter "label!=stage" --filter "label!=latest" --filter "label!=development"
+          
+          # Clean up system resources
+          echo "Cleaning up system resources..."
+          docker system prune -f --volumes
+          
+          echo "Cleanup completed." 
