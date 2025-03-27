@@ -679,7 +679,6 @@ func GetLatestEdgarFilings(conn *utils.Conn, userId int, rawArgs json.RawMessage
 	return filings, nil
 }
 
-
 type GetCurrentSecurityIDArgs struct {
 	Ticker string `json:"ticker"`
 }
