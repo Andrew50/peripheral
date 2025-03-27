@@ -365,8 +365,19 @@ jobs:
           # Clean up
           rm -rf "$TEMP_DIR"
           
-          # Restart pods to apply the new secrets
-          kubectl rollout restart deployment/backend deployment/worker
+          # Check if deployments exist and restart them if they do
+          echo "Checking and restarting deployments if they exist..."
+          if kubectl get deployment backend &>/dev/null; then
+            kubectl rollout restart deployment/backend
+          else
+            echo "Note: backend deployment not found - skipping restart"
+          fi
+          
+          if kubectl get deployment worker &>/dev/null; then
+            kubectl rollout restart deployment/worker
+          else
+            echo "Note: worker deployment not found - skipping restart"
+          fi
 
       # Run database migrations
       - name: Deploy Database Migrations
