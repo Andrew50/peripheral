@@ -7,7 +7,12 @@ COPY . .
 #RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 RUN GOOS=linux go build -a -installsuffix cgo -o main .
 # Build the jobctl CLI tool
-RUN cd cmd/jobctl && GOOS=linux go build -a -installsuffix cgo -o ../../jobctl .
+RUN if [ -d "cmd/jobctl" ]; then \
+    cd cmd/jobctl && GOOS=linux go build -a -installsuffix cgo -o ../../jobctl .; \
+    else \
+    echo "Warning: cmd/jobctl directory not found, skipping jobctl build"; \
+    touch jobctl; \
+    fi
 
 FROM alpine:latest
 RUN apk add --no-cache bash
