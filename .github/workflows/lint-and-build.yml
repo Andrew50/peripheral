@@ -21,6 +21,10 @@ jobs:
     # Use a lightweight container instead of full ubuntu
     runs-on: ubuntu-latest
     # Use ubuntu runner directly instead of Alpine container for better Git support
+    # Add permissions for GitHub token
+    permissions:
+      actions: read
+      contents: read
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
       continue_on_error: ${{ steps.check.outputs.continue_on_error }}
