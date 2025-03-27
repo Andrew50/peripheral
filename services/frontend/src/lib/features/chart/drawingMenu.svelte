@@ -120,10 +120,22 @@
 			return;
 		}
 
+		// Find the line ID before removing it
+		const lineIndex = $drawingMenuProps.horizontalLines.findIndex(
+			(line) => line.line === $drawingMenuProps.selectedLine
+		);
+
+		// If the line has an ID, delete it from the server
+		if (lineIndex >= 0 && $drawingMenuProps.horizontalLines[lineIndex].id > 0) {
+			privateRequest('deleteHorizontalLine', {
+				id: $drawingMenuProps.horizontalLines[lineIndex].id
+			});
+		}
+
 		// Remove the line from the chart
 		$drawingMenuProps.chartCandleSeries.removePriceLine($drawingMenuProps.selectedLine);
 
-		// Find and remove the line from our array
+		// Remove the line from our array
 		$drawingMenuProps.horizontalLines = $drawingMenuProps.horizontalLines.filter(
 			(l) => l.line !== $drawingMenuProps.selectedLine
 		);
@@ -131,17 +143,6 @@
 		// Close the menu
 		$drawingMenuProps.active = false;
 		$drawingMenuProps.selectedLine = null;
-
-		// If the line has an ID, delete it from the server
-		const lineIndex = $drawingMenuProps.horizontalLines.findIndex(
-			(line) => line.line === $drawingMenuProps.selectedLine
-		);
-
-		if (lineIndex >= 0 && $drawingMenuProps.horizontalLines[lineIndex].id > 0) {
-			privateRequest('deleteHorizontalLine', {
-				id: $drawingMenuProps.horizontalLines[lineIndex].id.toString()
-			});
-		}
 	}
 
 	function updateHorizontalLine() {
