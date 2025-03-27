@@ -23,6 +23,11 @@
 	let previewUrl = '';
 	let uploadStatus = '';
 
+	// Function to determine if the current user is a guest
+	const isGuestAccount = (): boolean => {
+		return username === 'Guest';
+	};
+
 	// Initialize timeframes as a comma-separated string for editing
 	let timeframesString = tempSettings.screensaverTimeframes?.join(',') || '1w,1d,1h,1';
 
@@ -97,6 +102,11 @@
 			sessionStorage.removeItem('username');
 		}
 		goto('/');
+	}
+
+	// Function to navigate to the signup page
+	function goToSignup() {
+		goto('/signup');
 	}
 
 	// Generate initial avatar SVG from username
@@ -186,110 +196,193 @@
 </script>
 
 <div class="settings-panel">
-	<div class="settings-tabs">
-		<button
-			class="tab-button {activeTab === 'account' ? 'active' : ''}"
-			on:click={() => (activeTab = 'account')}
-		>
-			Account
-		</button>
-		<button
-			class="tab-button {activeTab === 'chart' ? 'active' : ''}"
-			on:click={() => (activeTab = 'chart')}
-		>
-			Chart
-		</button>
-		<button
-			class="tab-button {activeTab === 'format' ? 'active' : ''}"
-			on:click={() => (activeTab = 'format')}
-		>
-			Format
-		</button>
-		<button
-			class="tab-button {activeTab === 'screensaver' ? 'active' : ''}"
-			on:click={() => (activeTab = 'screensaver')}
-		>
-			Screensaver
-		</button>
-		<button
-			class="tab-button {activeTab === 'appearance' ? 'active' : ''}"
-			on:click={() => (activeTab = 'appearance')}
-		>
-			Appearance
-		</button>
-	</div>
-
-	<div class="settings-content">
-		{#if activeTab === 'chart'}
-			<div class="settings-section">
-				<h3>Chart Layout</h3>
-				<div class="settings-grid">
-					<div class="setting-item">
-						<label for="chartRows">Chart Rows</label>
-						<input
-							type="number"
-							id="chartRows"
-							bind:value={tempSettings.chartRows}
-							min="1"
-							on:keypress={handleKeyPress}
-						/>
+	{#if isGuestAccount()}
+		<!-- Simplified view for guest users -->
+		<div class="settings-header">
+			<h2>Settings</h2>
+		</div>
+		<div class="settings-content guest-only-content">
+			<div class="profile-section guest-profile">
+				<div class="profile-picture-container">
+					<div class="profile-picture">
+						<img src={generateInitialAvatar(username)} alt="Profile" class="profile-image" />
 					</div>
-
-					<div class="setting-item">
-						<label for="chartColumns">Chart Columns</label>
-						<input
-							type="number"
-							id="chartColumns"
-							bind:value={tempSettings.chartColumns}
-							min="1"
-							on:keypress={handleKeyPress}
-						/>
+					<div class="username-display">
+						{username}
 					</div>
+				</div>
+
+				<div class="guest-account-notice">
+					<p>
+						You're currently using a guest account. Create your own account to save your preferences
+						and data.
+					</p>
+					<button class="create-account-button" on:click={goToSignup}> Create Your Account </button>
 				</div>
 			</div>
 
-			<div class="settings-section">
-				<h3>Technical Indicators</h3>
-				<div class="settings-grid">
-					<div class="setting-item">
-						<label for="adrPeriod">Average Range Period</label>
-						<input
-							type="number"
-							id="adrPeriod"
-							bind:value={tempSettings.adrPeriod}
-							min="1"
-							on:keypress={handleKeyPress}
-						/>
-					</div>
-				</div>
+			<div class="account-actions">
+				<button class="logout-button" on:click={handleLogout}>Logout</button>
 			</div>
-		{:else if activeTab === 'format'}
-			<div class="settings-section">
-				<h3>Display Options</h3>
-				<div class="settings-grid">
-					<div class="setting-item">
-						<label for="dolvol">Show Dollar Volume</label>
-						<div class="toggle-container">
-							<select id="dolvol" bind:value={tempSettings.dolvol} on:keypress={handleKeyPress}>
-								<option value={true}>Yes</option>
-								<option value={false}>No</option>
-							</select>
-						</div>
-					</div>
+		</div>
+	{:else}
+		<!-- Full settings panel for registered users -->
+		<div class="settings-tabs">
+			<button
+				class="tab-button {activeTab === 'account' ? 'active' : ''}"
+				on:click={() => (activeTab = 'account')}
+			>
+				Account
+			</button>
+			<button
+				class="tab-button {activeTab === 'chart' ? 'active' : ''}"
+				on:click={() => (activeTab = 'chart')}
+			>
+				Chart
+			</button>
+			<button
+				class="tab-button {activeTab === 'format' ? 'active' : ''}"
+				on:click={() => (activeTab = 'format')}
+			>
+				Format
+			</button>
+			<button
+				class="tab-button {activeTab === 'screensaver' ? 'active' : ''}"
+				on:click={() => (activeTab = 'screensaver')}
+			>
+				Screensaver
+			</button>
+			<button
+				class="tab-button {activeTab === 'appearance' ? 'active' : ''}"
+				on:click={() => (activeTab = 'appearance')}
+			>
+				Appearance
+			</button>
+		</div>
 
-					<div class="setting-item">
-						<label for="showFilings">Show SEC Filings</label>
-						<div class="toggle-container">
-							<select
-								id="showFilings"
-								bind:value={tempSettings.showFilings}
+		<div class="settings-content">
+			{#if activeTab === 'chart'}
+				<div class="settings-section">
+					<h3>Chart Layout</h3>
+					<div class="settings-grid">
+						<div class="setting-item">
+							<label for="chartRows">Chart Rows</label>
+							<input
+								type="number"
+								id="chartRows"
+								bind:value={tempSettings.chartRows}
+								min="1"
 								on:keypress={handleKeyPress}
-							>
-								<option value={true}>Yes</option>
-								<option value={false}>No</option>
-							</select>
+							/>
+						</div>
+
+						<div class="setting-item">
+							<label for="chartColumns">Chart Columns</label>
+							<input
+								type="number"
+								id="chartColumns"
+								bind:value={tempSettings.chartColumns}
+								min="1"
+								on:keypress={handleKeyPress}
+							/>
 						</div>
 					</div>
+				</div>
+
+				<div class="settings-section">
+					<h3>Technical Indicators</h3>
+					<div class="settings-grid">
+						<div class="setting-item">
+							<label for="adrPeriod">Average Range Period</label>
+							<input
+								type="number"
+								id="adrPeriod"
+								bind:value={tempSettings.adrPeriod}
+								min="1"
+								on:keypress={handleKeyPress}
+							/>
+						</div>
+					</div>
+				</div>
+			{:else if activeTab === 'format'}
+				<div class="settings-section">
+					<h3>Display Options</h3>
+					<div class="settings-grid">
+						<div class="setting-item">
+							<label for="dolvol">Show Dollar Volume</label>
+							<div class="toggle-container">
+								<select id="dolvol" bind:value={tempSettings.dolvol} on:keypress={handleKeyPress}>
+									<option value={true}>Yes</option>
+									<option value={false}>No</option>
+								</select>
+							</div>
+						</div>
+
+						<div class="setting-item">
+							<label for="showFilings">Show SEC Filings</label>
+							<div class="toggle-container">
+								<select
+									id="showFilings"
+									bind:value={tempSettings.showFilings}
+									on:keypress={handleKeyPress}
+								>
+									<option value={true}>Yes</option>
+									<option value={false}>No</option>
+								</select>
+							</div>
+						</div>
+
+						<div class="setting-item">
+							<label for="enableScreensaver">Enable Screensaver</label>
+							<div class="toggle-container">
+								<select
+									id="enableScreensaver"
+									bind:value={tempSettings.enableScreensaver}
+									on:keypress={handleKeyPress}
+								>
+									<option value={true}>Yes</option>
+									<option value={false}>No</option>
+								</select>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="settings-section">
+					<h3>Time & Sales</h3>
+					<div class="settings-grid">
+						<div class="setting-item">
+							<label for="filterTaS">Show trades less than 100 shares</label>
+							<div class="toggle-container">
+								<select
+									id="filterTaS"
+									bind:value={tempSettings.filterTaS}
+									on:keypress={handleKeyPress}
+								>
+									<option value={true}>Yes</option>
+									<option value={false}>No</option>
+								</select>
+							</div>
+						</div>
+
+						<div class="setting-item">
+							<label for="divideTaS">Divide Time and Sales by 100</label>
+							<div class="toggle-container">
+								<select
+									id="divideTaS"
+									bind:value={tempSettings.divideTaS}
+									on:keypress={handleKeyPress}
+								>
+									<option value={true}>Yes</option>
+									<option value={false}>No</option>
+								</select>
+							</div>
+						</div>
+					</div>
+				</div>
+			{:else if activeTab === 'screensaver'}
+				<div class="settings-section">
+					<h3>Screensaver Settings</h3>
 
 					<div class="setting-item">
 						<label for="enableScreensaver">Enable Screensaver</label>
@@ -304,314 +397,263 @@
 							</select>
 						</div>
 					</div>
-				</div>
-			</div>
 
-			<div class="settings-section">
-				<h3>Time & Sales</h3>
-				<div class="settings-grid">
-					<div class="setting-item">
-						<label for="filterTaS">Show trades less than 100 shares</label>
-						<div class="toggle-container">
-							<select
-								id="filterTaS"
-								bind:value={tempSettings.filterTaS}
+					<div class="settings-grid">
+						<div class="setting-item">
+							<label for="screensaverTimeout">Inactivity Timeout (seconds)</label>
+							<input
+								type="number"
+								id="screensaverTimeout"
+								bind:value={tempSettings.screensaverTimeout}
+								min="30"
 								on:keypress={handleKeyPress}
-							>
-								<option value={true}>Yes</option>
-								<option value={false}>No</option>
-							</select>
+							/>
+						</div>
+
+						<div class="setting-item">
+							<label for="screensaverSpeed">Cycle Speed (seconds)</label>
+							<input
+								type="number"
+								id="screensaverSpeed"
+								bind:value={tempSettings.screensaverSpeed}
+								min="1"
+								on:keypress={handleKeyPress}
+							/>
 						</div>
 					</div>
 
-					<div class="setting-item">
-						<label for="divideTaS">Divide Time and Sales by 100</label>
-						<div class="toggle-container">
-							<select
-								id="divideTaS"
-								bind:value={tempSettings.divideTaS}
-								on:keypress={handleKeyPress}
-							>
-								<option value={true}>Yes</option>
-								<option value={false}>No</option>
-							</select>
-						</div>
-					</div>
-				</div>
-			</div>
-		{:else if activeTab === 'screensaver'}
-			<div class="settings-section">
-				<h3>Screensaver Settings</h3>
-
-				<div class="setting-item">
-					<label for="enableScreensaver">Enable Screensaver</label>
-					<div class="toggle-container">
-						<select
-							id="enableScreensaver"
-							bind:value={tempSettings.enableScreensaver}
-							on:keypress={handleKeyPress}
-						>
-							<option value={true}>Yes</option>
-							<option value={false}>No</option>
-						</select>
-					</div>
-				</div>
-
-				<div class="settings-grid">
-					<div class="setting-item">
-						<label for="screensaverTimeout">Inactivity Timeout (seconds)</label>
-						<input
-							type="number"
-							id="screensaverTimeout"
-							bind:value={tempSettings.screensaverTimeout}
-							min="30"
-							on:keypress={handleKeyPress}
-						/>
-					</div>
-
-					<div class="setting-item">
-						<label for="screensaverSpeed">Cycle Speed (seconds)</label>
-						<input
-							type="number"
-							id="screensaverSpeed"
-							bind:value={tempSettings.screensaverSpeed}
-							min="1"
-							on:keypress={handleKeyPress}
-						/>
-					</div>
-				</div>
-
-				<div class="setting-item wide">
-					<label for="screensaverTimeframes">Timeframes (comma-separated)</label>
-					<input
-						type="text"
-						id="screensaverTimeframes"
-						bind:value={timeframesString}
-						placeholder="1w,1d,1h,1"
-						on:keypress={handleKeyPress}
-					/>
-				</div>
-
-				<h3>Data Source</h3>
-				<div class="setting-item">
-					<label for="screensaverDataSource">Chart Data Source</label>
-					<div class="toggle-container">
-						<select
-							id="screensaverDataSource"
-							bind:value={tempSettings.screensaverDataSource}
-							on:keypress={handleKeyPress}
-						>
-							<option value="gainers-losers">Gainers & Losers</option>
-							<option value="watchlist">Watchlist</option>
-							<option value="user-defined">Custom Tickers</option>
-						</select>
-					</div>
-				</div>
-
-				{#if tempSettings.screensaverDataSource === 'watchlist'}
-					<div class="setting-item">
-						<label for="screensaverWatchlistId">Select Watchlist</label>
-						<div class="toggle-container">
-							<select
-								id="screensaverWatchlistId"
-								bind:value={tempSettings.screensaverWatchlistId}
-								on:keypress={handleKeyPress}
-							>
-								{#each watchlists as watchlist}
-									<option value={watchlist.watchlistId}>{watchlist.watchlistName}</option>
-								{/each}
-							</select>
-						</div>
-					</div>
-				{:else if tempSettings.screensaverDataSource === 'user-defined'}
 					<div class="setting-item wide">
-						<label for="customTickers">Custom Tickers (comma-separated)</label>
+						<label for="screensaverTimeframes">Timeframes (comma-separated)</label>
 						<input
 							type="text"
-							id="customTickers"
-							bind:value={customTickers}
-							placeholder="AAPL,MSFT,GOOGL,AMZN"
+							id="screensaverTimeframes"
+							bind:value={timeframesString}
+							placeholder="1w,1d,1h,1"
 							on:keypress={handleKeyPress}
 						/>
 					</div>
-				{/if}
 
-				<div class="info-message screensaver-info">
-					{#if tempSettings.enableScreensaver}
-						The screensaver will activate after {tempSettings.screensaverTimeout} seconds of inactivity,
-						cycling through charts every {tempSettings.screensaverSpeed} seconds.
-					{:else}
-						The screensaver is currently disabled. Enable it to display trending charts during idle
-						periods.
-					{/if}
-				</div>
-			</div>
-		{:else if activeTab === 'appearance'}
-			<div class="settings-section">
-				<h3>Color Scheme</h3>
-				<div class="setting-item wide">
-					<label for="colorScheme">Choose a color scheme</label>
-					<div class="toggle-container">
-						<select
-							id="colorScheme"
-							bind:value={tempSettings.colorScheme}
-							on:keypress={handleKeyPress}
-						>
-							<option value="default">Default</option>
-							<option value="dark-blue">Dark Blue</option>
-							<option value="midnight">Midnight</option>
-							<option value="forest">Forest</option>
-							<option value="sunset">Sunset</option>
-						</select>
-					</div>
-				</div>
-
-				<!-- Color scheme preview -->
-				<div class="color-scheme-preview">
-					<h4>Preview</h4>
-					<div
-						class="color-preview-container"
-						style="background-color: {colorSchemes[tempSettings.colorScheme].c2};"
-					>
-						<div
-							class="preview-header"
-							style="background-color: {colorSchemes[tempSettings.colorScheme]
-								.c1}; border-bottom: 1px solid {colorSchemes[tempSettings.colorScheme].c3};"
-						>
-							<div
-								class="preview-title"
-								style="color: {colorSchemes[tempSettings.colorScheme].f1};"
+					<h3>Data Source</h3>
+					<div class="setting-item">
+						<label for="screensaverDataSource">Chart Data Source</label>
+						<div class="toggle-container">
+							<select
+								id="screensaverDataSource"
+								bind:value={tempSettings.screensaverDataSource}
+								on:keypress={handleKeyPress}
 							>
-								Chart Window
+								<option value="gainers-losers">Gainers & Losers</option>
+								<option value="watchlist">Watchlist</option>
+								<option value="user-defined">Custom Tickers</option>
+							</select>
+						</div>
+					</div>
+
+					{#if tempSettings.screensaverDataSource === 'watchlist'}
+						<div class="setting-item">
+							<label for="screensaverWatchlistId">Select Watchlist</label>
+							<div class="toggle-container">
+								<select
+									id="screensaverWatchlistId"
+									bind:value={tempSettings.screensaverWatchlistId}
+									on:keypress={handleKeyPress}
+								>
+									{#each watchlists as watchlist}
+										<option value={watchlist.watchlistId}>{watchlist.watchlistName}</option>
+									{/each}
+								</select>
 							</div>
 						</div>
-						<div class="preview-content">
+					{:else if tempSettings.screensaverDataSource === 'user-defined'}
+						<div class="setting-item wide">
+							<label for="customTickers">Custom Tickers (comma-separated)</label>
+							<input
+								type="text"
+								id="customTickers"
+								bind:value={customTickers}
+								placeholder="AAPL,MSFT,GOOGL,AMZN"
+								on:keypress={handleKeyPress}
+							/>
+						</div>
+					{/if}
+
+					<div class="info-message screensaver-info">
+						{#if tempSettings.enableScreensaver}
+							The screensaver will activate after {tempSettings.screensaverTimeout} seconds of inactivity,
+							cycling through charts every {tempSettings.screensaverSpeed} seconds.
+						{:else}
+							The screensaver is currently disabled. Enable it to display trending charts during
+							idle periods.
+						{/if}
+					</div>
+				</div>
+			{:else if activeTab === 'appearance'}
+				<div class="settings-section">
+					<h3>Color Scheme</h3>
+					<div class="setting-item wide">
+						<label for="colorScheme">Choose a color scheme</label>
+						<div class="toggle-container">
+							<select
+								id="colorScheme"
+								bind:value={tempSettings.colorScheme}
+								on:keypress={handleKeyPress}
+							>
+								<option value="default">Default</option>
+								<option value="dark-blue">Dark Blue</option>
+								<option value="midnight">Midnight</option>
+								<option value="forest">Forest</option>
+								<option value="sunset">Sunset</option>
+							</select>
+						</div>
+					</div>
+
+					<!-- Color scheme preview -->
+					<div class="color-scheme-preview">
+						<h4>Preview</h4>
+						<div
+							class="color-preview-container"
+							style="background-color: {colorSchemes[tempSettings.colorScheme].c2};"
+						>
 							<div
-								class="preview-section"
+								class="preview-header"
 								style="background-color: {colorSchemes[tempSettings.colorScheme]
-									.c2}; border: 1px solid {colorSchemes[tempSettings.colorScheme].c4};"
+									.c1}; border-bottom: 1px solid {colorSchemes[tempSettings.colorScheme].c3};"
 							>
 								<div
-									class="preview-text"
+									class="preview-title"
 									style="color: {colorSchemes[tempSettings.colorScheme].f1};"
 								>
-									Primary Text
+									Chart Window
 								</div>
+							</div>
+							<div class="preview-content">
 								<div
-									class="preview-text"
-									style="color: {colorSchemes[tempSettings.colorScheme].f2};"
-								>
-									Secondary Text
-								</div>
-							</div>
-							<div class="preview-buttons">
-								<button
-									class="preview-button"
+									class="preview-section"
 									style="background-color: {colorSchemes[tempSettings.colorScheme]
-										.c3}; color: white;"
+										.c2}; border: 1px solid {colorSchemes[tempSettings.colorScheme].c4};"
 								>
-									Action Button
-								</button>
-								<div class="preview-indicators">
-									<span style="color: {colorSchemes[tempSettings.colorScheme].colorUp};"
-										>▲ +2.45%</span
+									<div
+										class="preview-text"
+										style="color: {colorSchemes[tempSettings.colorScheme].f1};"
 									>
-									<span style="color: {colorSchemes[tempSettings.colorScheme].colorDown};"
-										>▼ -1.23%</span
+										Primary Text
+									</div>
+									<div
+										class="preview-text"
+										style="color: {colorSchemes[tempSettings.colorScheme].f2};"
 									>
+										Secondary Text
+									</div>
+								</div>
+								<div class="preview-buttons">
+									<button
+										class="preview-button"
+										style="background-color: {colorSchemes[tempSettings.colorScheme]
+											.c3}; color: white;"
+									>
+										Action Button
+									</button>
+									<div class="preview-indicators">
+										<span style="color: {colorSchemes[tempSettings.colorScheme].colorUp};"
+											>▲ +2.45%</span
+										>
+										<span style="color: {colorSchemes[tempSettings.colorScheme].colorDown};"
+											>▼ -1.23%</span
+										>
+									</div>
 								</div>
 							</div>
 						</div>
 					</div>
-				</div>
 
-				<div class="info-message">
-					Color scheme changes will be applied immediately but must be saved using the "Apply
-					Changes" button to persist across sessions.
+					<div class="info-message">
+						Color scheme changes will be applied immediately but must be saved using the "Apply
+						Changes" button to persist across sessions.
+					</div>
 				</div>
-			</div>
-		{:else if activeTab === 'account'}
-			<div class="settings-section">
-				<h3>Account Information</h3>
+			{:else if activeTab === 'account'}
+				<div class="settings-section">
+					<h3>Account Information</h3>
 
-				<div class="profile-section">
-					<div class="profile-picture-container">
-						<div class="profile-picture">
-							{#if profilePic}
-								<img
-									src={profilePic}
-									alt="Profile"
-									class="profile-image"
-									on:error={() => {
-										profilePic = generateInitialAvatar(username);
-									}}
+					<div class="profile-section">
+						<div class="profile-picture-container">
+							<div class="profile-picture">
+								{#if profilePic}
+									<img
+										src={profilePic}
+										alt="Profile"
+										class="profile-image"
+										on:error={() => {
+											profilePic = generateInitialAvatar(username);
+										}}
+									/>
+								{:else if username}
+									<img src={generateInitialAvatar(username)} alt="Profile" class="profile-image" />
+								{:else}
+									<div class="profile-placeholder">?</div>
+								{/if}
+							</div>
+							<div class="username-display">
+								{username || 'User'}
+							</div>
+						</div>
+
+						<div class="profile-upload-section">
+							<h4>Update Profile Picture</h4>
+
+							<div class="file-upload">
+								<label for="profile-pic-upload" class="file-upload-label"> Choose Image </label>
+								<input
+									type="file"
+									id="profile-pic-upload"
+									accept="image/*"
+									on:change={handleFileSelect}
 								/>
-							{:else if username}
-								<img src={generateInitialAvatar(username)} alt="Profile" class="profile-image" />
-							{:else}
-								<div class="profile-placeholder">?</div>
-							{/if}
-						</div>
-						<div class="username-display">
-							{username || 'User'}
-						</div>
-					</div>
 
-					<div class="profile-upload-section">
-						<h4>Update Profile Picture</h4>
+								{#if previewUrl}
+									<div class="preview-container">
+										<img src={previewUrl} alt="Preview" class="preview-image" />
+									</div>
+								{/if}
 
-						<div class="file-upload">
-							<label for="profile-pic-upload" class="file-upload-label"> Choose Image </label>
-							<input
-								type="file"
-								id="profile-pic-upload"
-								accept="image/*"
-								on:change={handleFileSelect}
-							/>
+								<div class="upload-actions">
+									<button
+										class="upload-button"
+										on:click={updateProfilePicture}
+										disabled={!uploadedImage}
+									>
+										Upload
+									</button>
 
-							{#if previewUrl}
-								<div class="preview-container">
-									<img src={previewUrl} alt="Preview" class="preview-image" />
+									<button class="reset-button" on:click={resetToDefaultAvatar}>
+										Reset to Default
+									</button>
 								</div>
-							{/if}
 
-							<div class="upload-actions">
-								<button
-									class="upload-button"
-									on:click={updateProfilePicture}
-									disabled={!uploadedImage}
-								>
-									Upload
-								</button>
-
-								<button class="reset-button" on:click={resetToDefaultAvatar}>
-									Reset to Default
-								</button>
+								{#if uploadStatus}
+									<div class="upload-status">
+										{uploadStatus}
+									</div>
+								{/if}
 							</div>
-
-							{#if uploadStatus}
-								<div class="upload-status">
-									{uploadStatus}
-								</div>
-							{/if}
 						</div>
 					</div>
-				</div>
 
-				<div class="account-actions">
-					<button class="logout-button" on:click={handleLogout}>Logout</button>
+					<div class="account-actions">
+						<button class="logout-button" on:click={handleLogout}>Logout</button>
+					</div>
 				</div>
+			{/if}
+
+			{#if errorMessage}
+				<div class="error-message">{errorMessage}</div>
+			{/if}
+
+			<div class="settings-actions">
+				<button class="apply-button" on:click={updateLayout}>Apply Changes</button>
 			</div>
-		{/if}
-
-		{#if errorMessage}
-			<div class="error-message">{errorMessage}</div>
-		{/if}
-
-		<div class="settings-actions">
-			<button class="apply-button" on:click={updateLayout}>Apply Changes</button>
 		</div>
-	</div>
+	{/if}
 </div>
 
 <style>
@@ -1147,5 +1189,90 @@
 		gap: 1.25rem;
 		font-size: 0.875rem;
 		font-weight: 600;
+	}
+
+	.guest-account-notice {
+		background-color: rgba(59, 130, 246, 0.05);
+		border-radius: 6px;
+		padding: 1.25rem;
+		margin-bottom: 1.5rem;
+		text-align: center;
+		border: 1px solid rgba(59, 130, 246, 0.1);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.guest-account-notice p {
+		color: var(--f2);
+		margin: 0;
+		font-size: 0.9375rem;
+	}
+
+	.create-account-button {
+		padding: 0.75rem 1.5rem;
+		background-color: var(--c3);
+		color: white;
+		border: none;
+		border-radius: 4px;
+		font-size: 0.9375rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.2s;
+		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+		width: fit-content;
+	}
+
+	.create-account-button:hover {
+		background-color: var(--c3-hover);
+	}
+
+	/* Guest mode styles */
+	.settings-header {
+		padding: 1.5rem 2rem;
+		border-bottom: 1px solid var(--c3);
+		background-color: var(--c2);
+	}
+
+	.settings-header h2 {
+		margin: 0;
+		font-size: 1.5rem;
+		font-weight: 600;
+		color: var(--f1);
+	}
+
+	.guest-only-content {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 2rem;
+		height: 100%;
+	}
+
+	.guest-profile {
+		width: 100%;
+		max-width: 500px;
+		margin: 0 auto;
+		padding: 2rem;
+		background-color: rgba(255, 255, 255, 0.03);
+		border-radius: 8px;
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		text-align: center;
+	}
+
+	.guest-account-notice {
+		width: 100%;
+		margin-top: 2rem;
+		padding: 1.5rem;
+		background-color: rgba(59, 130, 246, 0.05);
+		border-radius: 6px;
+		text-align: center;
+		border: 1px solid rgba(59, 130, 246, 0.1);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1.5rem;
 	}
 </style>

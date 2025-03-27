@@ -93,7 +93,7 @@ func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		fmt.Printf("ERROR: Failed to start transaction: %v\n", err)
 		return nil, fmt.Errorf("error starting transaction: %v", err)
 	}
-	
+
 	// Ensure transaction is either committed or rolled back
 	var txClosed bool
 	defer func() {
@@ -302,48 +302,39 @@ func GuestLogin(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) 
 	var resp LoginResponse
 	var userID int
 
-	// Check if a guest user already exists
-	var count int
-	err := conn.DB.QueryRow(ctx, "SELECT COUNT(*) FROM users WHERE email='guest@atlantis.local'").Scan(&count)
+	// Get the guest user with ID 0
+	fmt.Println("Getting guest user with ID 0...")
+	err := conn.DB.QueryRow(ctx,
+		"SELECT userId, username FROM users WHERE userId = 0").Scan(&userID, &resp.Username)
 
 	if err != nil {
-		fmt.Printf("ERROR: Failed to check for existing guest user: %v\n", err)
-		return nil, fmt.Errorf("guest login failed: %v", err)
-	}
+		fmt.Printf("ERROR: Failed to get guest user: %v\n", err)
 
-	if count == 0 {
-		// No guest user exists, create one
-		fmt.Println("Creating new guest user...")
-		err = conn.DB.QueryRow(ctx,
-			"INSERT INTO users (username, email, password, auth_type) VALUES ($1, $2, $3, $4) RETURNING userId",
-			"Guest", "guest@atlantis.local", "guest-password", "guest").Scan(&userID)
+		// If for some reason the guest user doesn't exist, try to create it
+		if err == sql.ErrNoRows {
+			fmt.Println("Guest user not found, creating new guest user...")
+			err = conn.DB.QueryRow(ctx,
+				"INSERT INTO users (userId, username, email, password, auth_type) VALUES (0, $1, $2, $3, $4) RETURNING userId",
+				"Guest", "guest@atlantis.local", "guest-password", "guest").Scan(&userID)
 
-		if err != nil {
-			fmt.Printf("ERROR: Failed to create guest user: %v\n", err)
-			return nil, fmt.Errorf("failed to create guest account: %v", err)
-		}
+			if err != nil {
+				fmt.Printf("ERROR: Failed to create guest user: %v\n", err)
+				return nil, fmt.Errorf("failed to create guest account: %v", err)
+			}
 
-		// Set username for response
-		resp.Username = "Guest"
+			resp.Username = "Guest"
 
-		// Create initial journal entry for guest user
-		currentTime := time.Now().UTC()
-		_, err = conn.DB.Exec(ctx,
-			"INSERT INTO journals (timestamp, userId, entry) VALUES ($1, $2, $3)",
-			currentTime.Unix(), userID, "{}")
+			// Create initial journal entry for guest user
+			currentTime := time.Now().UTC()
+			_, err = conn.DB.Exec(ctx,
+				"INSERT INTO journals (timestamp, userId, entry) VALUES ($1, $2, $3)",
+				currentTime.Unix(), userID, "{}")
 
-		if err != nil {
-			// Just log the error but continue
-			fmt.Printf("WARNING: Error creating initial journal for guest user: %v\n", err)
-		}
-	} else {
-		// Guest user exists, get the user ID
-		fmt.Println("Using existing guest user...")
-		err = conn.DB.QueryRow(ctx,
-			"SELECT userId, username FROM users WHERE email='guest@atlantis.local'").Scan(&userID, &resp.Username)
-
-		if err != nil {
-			fmt.Printf("ERROR: Failed to get existing guest user: %v\n", err)
+			if err != nil {
+				// Just log the error but continue
+				fmt.Printf("WARNING: Error creating initial journal for guest user: %v\n", err)
+			}
+		} else {
 			return nil, fmt.Errorf("guest login failed: %v", err)
 		}
 	}
