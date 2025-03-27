@@ -1,11 +1,12 @@
-package tools 
+package tools
 
 import (
-    "context"
-    "fmt"
-    "backend/utils"
-    "time"
+	"backend/utils"
+	"context"
+	"fmt"
+	"time"
 )
+
 /*
 sqlQuery, err := jsonQueryToSQL(llmResponse)
     if err != nil {
@@ -78,103 +79,99 @@ func jsonQueryToSQL(jsonStr string) (string, error) {
 } */
 // Helper functions
 func conditionToSQL(cond Condition) string {
-    lhsSQL := fieldWithOffsetSQL(cond.LHS)
-    var rhsSQL string
-    
-    if cond.RHS.Field != "" {
-        rhsSQL = fieldWithOffsetSQL(FieldWithOffset{Field: cond.RHS.Field, Offset: cond.RHS.Offset})
-    } else if cond.RHS.Indicator != "" {
-        rhsSQL = indicatorWithOffsetSQL(cond.RHS.Indicator, cond.RHS.Period, cond.RHS.Offset)
-    } else {
-        rhsSQL = fmt.Sprintf("%v", cond.RHS.Value)
-    }
-    
-    return fmt.Sprintf("%s %s %s", lhsSQL, cond.Operation, rhsSQL)
+	lhsSQL := fieldWithOffsetSQL(cond.LHS)
+	var rhsSQL string
+
+	if cond.RHS.Field != "" {
+		rhsSQL = fieldWithOffsetSQL(FieldWithOffset{Field: cond.RHS.Field, Offset: cond.RHS.Offset})
+	} else if cond.RHS.Indicator != "" {
+		rhsSQL = indicatorWithOffsetSQL(cond.RHS.Indicator, cond.RHS.Period, cond.RHS.Offset)
+	} else {
+		rhsSQL = fmt.Sprintf("%v", cond.RHS.Value)
+	}
+
+	return fmt.Sprintf("%s %s %s", lhsSQL, cond.Operation, rhsSQL)
 }
 
 func fieldWithOffsetSQL(f FieldWithOffset) string {
-    if f.Offset == 0 {
-        return f.Field
-    }
-    lag := -f.Offset // Negative offset means past data
-    return fmt.Sprintf("LAG(%s, %d) OVER (PARTITION BY ticker ORDER BY timestamp)", f.Field, lag)
+	if f.Offset == 0 {
+		return f.Field
+	}
+	lag := -f.Offset // Negative offset means past data
+	return fmt.Sprintf("LAG(%s, %d) OVER (PARTITION BY ticker ORDER BY timestamp)", f.Field, lag)
 }
 
 func indicatorWithOffsetSQL(ind string, period int, offset int) string {
-    if ind == "SMA" {
-        smaSQL := fmt.Sprintf("AVG(close) OVER (PARTITION BY ticker ORDER BY timestamp ROWS BETWEEN %d PRECEDING AND CURRENT ROW)", period-1)
-        if offset == 0 {
-            return smaSQL
-        }
-        lag := -offset
-        return fmt.Sprintf("LAG(%s, %d) OVER (PARTITION BY ticker ORDER BY timestamp)", smaSQL, lag)
-    }
-    return "" // Add support for other indicators here
+	if ind == "SMA" {
+		smaSQL := fmt.Sprintf("AVG(close) OVER (PARTITION BY ticker ORDER BY timestamp ROWS BETWEEN %d PRECEDING AND CURRENT ROW)", period-1)
+		if offset == 0 {
+			return smaSQL
+		}
+		lag := -offset
+		return fmt.Sprintf("LAG(%s, %d) OVER (PARTITION BY ticker ORDER BY timestamp)", smaSQL, lag)
+	}
+	return "" // Add support for other indicators here
 }
 
 // executeQuery executes the SQL query and returns the results
 func executeQuery(conn *utils.Conn, sqlQuery string) ([]map[string]interface{}, error) {
-    ctx := context.Background()
-    
-    // Execute the query
-    rows, err := conn.DB.Query(ctx, sqlQuery)
-    if err != nil {
-        return nil, fmt.Errorf("error executing SQL query: %w", err)
-    }
-    defer rows.Close()
+	ctx := context.Background()
 
-    // Get column names
-    fieldDescriptions := rows.FieldDescriptions()
-    columnNames := make([]string, len(fieldDescriptions))
-    for i, fd := range fieldDescriptions {
-        columnNames[i] = string(fd.Name)
-    }
+	// Execute the query
+	rows, err := conn.DB.Query(ctx, sqlQuery)
+	if err != nil {
+		return nil, fmt.Errorf("error executing SQL query: %w", err)
+	}
+	defer rows.Close()
 
-    // Store results
-    results := []map[string]interface{}{}
+	// Get column names
+	fieldDescriptions := rows.FieldDescriptions()
+	columnNames := make([]string, len(fieldDescriptions))
+	for i, fd := range fieldDescriptions {
+		columnNames[i] = string(fd.Name)
+	}
 
-    // Iterate through the rows
-    for rows.Next() {
-        // Create a slice of interface{} to hold the values
-        values := make([]interface{}, len(columnNames))
-        valuePtrs := make([]interface{}, len(columnNames))
-        
-        // Create a pointer to each value
-        for i := range values {
-            valuePtrs[i] = &values[i]
-        }
+	// Store results
+	results := []map[string]interface{}{}
 
-        // Scan the row into the interface{} slice
-        if err := rows.Scan(valuePtrs...); err != nil {
-            return nil, fmt.Errorf("error scanning row: %w", err)
-        }
+	// Iterate through the rows
+	for rows.Next() {
+		// Create a slice of interface{} to hold the values
+		values := make([]interface{}, len(columnNames))
+		valuePtrs := make([]interface{}, len(columnNames))
 
-        // Create a map for this row's data
-        rowData := make(map[string]interface{})
-        
-        // Store each column value in the map
-        for i, col := range columnNames {
-            val := values[i]
-            
-            // Convert time.Time values to strings for JSON compatibility
-            if timeVal, ok := val.(time.Time); ok {
-                rowData[col] = timeVal.Format(time.RFC3339)
-            } else {
-                rowData[col] = val
-            }
-        }
-        
-        results = append(results, rowData)
-    }
+		// Create a pointer to each value
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
 
-    // Check for errors from iterating over rows
-    if err := rows.Err(); err != nil {
-        return nil, fmt.Errorf("error iterating over rows: %w", err)
-    }
+		// Scan the row into the interface{} slice
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
 
-    return results, nil
+		// Create a map for this row's data
+		rowData := make(map[string]interface{})
+
+		// Store each column value in the map
+		for i, col := range columnNames {
+			val := values[i]
+
+			// Convert time.Time values to strings for JSON compatibility
+			if timeVal, ok := val.(time.Time); ok {
+				rowData[col] = timeVal.Format(time.RFC3339)
+			} else {
+				rowData[col] = val
+			}
+		}
+
+		results = append(results, rowData)
+	}
+
+	// Check for errors from iterating over rows
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over rows: %w", err)
+	}
+
+	return results, nil
 }
-
-
-
-
