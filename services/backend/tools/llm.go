@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"backend/utils"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -50,7 +51,7 @@ type PerplexityResponse struct {
 
 // QueryPerplexityWithDate queries the Perplexity API for analysis of a stock's performance on a specific date.
 // It takes a ticker symbol, timestamp, and price as input and returns an analysis of the stock's performance.
-func QueryPerplexityWithDate(ticker string, timestamp int64, price float64) (string, error) {
+func QueryPerplexityWithDate(conn *utils.Conn, ticker string, timestamp int64, price float64) (string, error) {
 	// Convert timestamp to a readable date format
 	date := time.Unix(timestamp/1000, 0).Format("January 2, 2006")
 
