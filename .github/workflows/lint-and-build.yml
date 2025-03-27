@@ -606,7 +606,8 @@ jobs:
             echo 'export default {' > jest.config.js
             echo '  transform: {' >> jest.config.js
             echo '    "^.+\\.svelte$": "svelte-jester",' >> jest.config.js
-            echo '    "^.+\\.ts$": "ts-jest"' >> jest.config.js
+            echo '    "^.+\\.ts$": "ts-jest",' >> jest.config.js
+            echo '    "^.+\\.js$": "ts-jest"' >> jest.config.js
             echo '  },' >> jest.config.js
             echo '  moduleFileExtensions: ["js", "ts", "svelte"],' >> jest.config.js
             echo '  testEnvironment: "jsdom",' >> jest.config.js
@@ -622,6 +623,35 @@ jobs:
             echo '    }' >> jest.config.js
             echo '  }' >> jest.config.js
             echo '};' >> jest.config.js
+          fi
+
+      - name: Setup Jest configuration
+        run: |
+          cd services/frontend
+          
+          # Check if jest.setup.js exists and create it if it doesn't
+          if [ -f "jest.setup.js" ]; then
+            # Check if jest.setup.js uses import statements
+            if grep -q "import" jest.setup.js; then
+              echo "jest.setup.js uses ES modules, updating jest config..."
+              # Modify the existing jest.config.js to use the setup file properly
+              if [ -f "jest.config.js" ]; then
+                # Ensure setupFilesAfterEnv includes the setup file
+                sed -i 's/setupFilesAfterEnv: \[\(".*"\)\]/setupFilesAfterEnv: \[\1, "<rootDir>\/jest.setup.js"\]/g' jest.config.js
+                # Add the setup file to the list of files treated as ESM
+                sed -i 's/extensionsToTreatAsEsm: \[\(".*"\)/extensionsToTreatAsEsm: \[\1, "jest.setup.js"/g' jest.config.js
+              fi
+            fi
+          else
+            # Create a basic setup file with CommonJS syntax
+            echo 'require("@testing-library/jest-dom");' > jest.setup.js
+          fi
+          
+          # Create a package.json type setting for jest.setup.js if it uses imports
+          if grep -q "import" jest.setup.js 2>/dev/null; then
+            echo '{
+              "type": "module"
+            }' > jest.setup.package.json
           fi
 
       - name: Identify changed frontend files
@@ -768,53 +798,33 @@ jobs:
         run: |
           mkdir -p ~/.npm
 
-      - name: Install dependencies
+      - name: Setup Jest configuration
         run: |
           cd services/frontend
           
-          # Check for package manager lock files and use appropriate one
-          if [ -f "pnpm-lock.yaml" ]; then
-            echo "Using pnpm package manager"
-            npm install -g pnpm
-            pnpm install --no-frozen-lockfile
-          elif [ -f "yarn.lock" ]; then
-            echo "Using yarn package manager"
-            npm install -g yarn
-            yarn install
+          # Check if jest.setup.js exists and create it if it doesn't
+          if [ -f "jest.setup.js" ]; then
+            # Check if jest.setup.js uses import statements
+            if grep -q "import" jest.setup.js; then
+              echo "jest.setup.js uses ES modules, updating jest config..."
+              # Modify the existing jest.config.js to use the setup file properly
+              if [ -f "jest.config.js" ]; then
+                # Ensure setupFilesAfterEnv includes the setup file
+                sed -i 's/setupFilesAfterEnv: \[\(".*"\)\]/setupFilesAfterEnv: \[\1, "<rootDir>\/jest.setup.js"\]/g' jest.config.js
+                # Add the setup file to the list of files treated as ESM
+                sed -i 's/extensionsToTreatAsEsm: \[\(".*"\)/extensionsToTreatAsEsm: \[\1, "jest.setup.js"/g' jest.config.js
+              fi
+            fi
           else
-            echo "Using npm package manager"
-            npm install
+            # Create a basic setup file with CommonJS syntax
+            echo 'require("@testing-library/jest-dom");' > jest.setup.js
           fi
           
-          # Install test dependencies
-          if [ -f "pnpm-lock.yaml" ]; then
-            pnpm add --save-dev jest@29 @types/jest ts-jest@29 svelte-jester@2 @testing-library/svelte @testing-library/jest-dom jsdom
-          else
-            npm install --save-dev jest@29 @types/jest ts-jest@29 svelte-jester@2 @testing-library/svelte @testing-library/jest-dom jsdom
-          fi
-          
-          # Create Jest config if it doesn't exist
-          if [ ! -f jest.config.js ]; then
-            echo "Creating Jest configuration file..."
-            echo 'export default {' > jest.config.js
-            echo '  transform: {' >> jest.config.js
-            echo '    "^.+\\.svelte$": "svelte-jester",' >> jest.config.js
-            echo '    "^.+\\.ts$": "ts-jest"' >> jest.config.js
-            echo '  },' >> jest.config.js
-            echo '  moduleFileExtensions: ["js", "ts", "svelte"],' >> jest.config.js
-            echo '  testEnvironment: "jsdom",' >> jest.config.js
-            echo '  setupFilesAfterEnv: ["@testing-library/jest-dom/extend-expect"],' >> jest.config.js
-            echo '  testMatch: ["**/*.test.ts", "**/*.test.js"],' >> jest.config.js
-            echo '  moduleNameMapper: {' >> jest.config.js
-            echo '    "^\\$lib/(.*)$": "<rootDir>/src/lib/$1"' >> jest.config.js
-            echo '  },' >> jest.config.js
-            echo '  extensionsToTreatAsEsm: [".ts", ".svelte"],' >> jest.config.js
-            echo '  globals: {' >> jest.config.js
-            echo '    "ts-jest": {' >> jest.config.js
-            echo '      useESM: true' >> jest.config.js
-            echo '    }' >> jest.config.js
-            echo '  }' >> jest.config.js
-            echo '};' >> jest.config.js
+          # Create a package.json type setting for jest.setup.js if it uses imports
+          if grep -q "import" jest.setup.js 2>/dev/null; then
+            echo '{
+              "type": "module"
+            }' > jest.setup.package.json
           fi
 
       - name: Identify changed test files
