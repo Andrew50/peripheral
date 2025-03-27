@@ -960,7 +960,6 @@
 			>
 				News
 			</button>
-			<button class="toggle-button" on:click={() => goto('/app/notes')}> Notes </button>
 		</div>
 
 		<div class="bottom-bar-right">
