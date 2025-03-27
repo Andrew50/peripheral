@@ -20,9 +20,7 @@ jobs:
   check-workflow-conditions:
     # Use a lightweight container instead of full ubuntu
     runs-on: ubuntu-latest
-    container:
-      image: alpine:3.18
-    # No need for fallback logic with GitHub-hosted runners
+    # Use ubuntu runner directly instead of Alpine container for better Git support
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
       continue_on_error: ${{ steps.check.outputs.continue_on_error }}
@@ -31,11 +29,6 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      
-      # Install minimal git and bash for the script
-      - name: Install dependencies
-        run: |
-          apk add --no-cache git bash
       
       - id: check
         run: |
@@ -46,14 +39,20 @@ jobs:
             echo "Current branch: $BRANCH_NAME"
             
             # Check if there's an open PR from this branch
-            # Fix: Store the HEAD commit hash in a variable first to avoid nested command substitution
-            CURRENT_COMMIT=$(git rev-parse HEAD)
-            PR_COUNT=$(git ls-remote origin 'pull/*/head' | grep -c "$CURRENT_COMMIT")
-            if [[ $PR_COUNT -gt 0 ]]; then
-              echo "This push is on a branch with an open PR - skipping duplicate run"
-              echo "should_run=false" >> $GITHUB_OUTPUT
-              echo "continue_on_error=false" >> $GITHUB_OUTPUT
-              exit 0
+            # Verify we're in a git repository first
+            if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+              # Fix: Store the HEAD commit hash in a variable first to avoid nested command substitution
+              CURRENT_COMMIT=$(git rev-parse HEAD)
+              echo "Current commit: $CURRENT_COMMIT"
+              PR_COUNT=$(git ls-remote origin 'pull/*/head' | grep -c "$CURRENT_COMMIT" || echo "0")
+              if [[ $PR_COUNT -gt 0 ]]; then
+                echo "This push is on a branch with an open PR - skipping duplicate run"
+                echo "should_run=false" >> $GITHUB_OUTPUT
+                echo "continue_on_error=false" >> $GITHUB_OUTPUT
+                exit 0
+              fi
+            else
+              echo "Warning: Not in a Git repository, skipping PR check"
             fi
           fi
           
