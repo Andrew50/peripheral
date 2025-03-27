@@ -683,7 +683,7 @@ type GetCurrentSecurityIDArgs struct {
 	Ticker string `json:"ticker"`
 }
 
-// GetSecurityID performs operations related to GetSecurityID functionality.
+// GetCurrentSecurityID performs operations related to GetSecurityID functionality.
 func GetCurrentSecurityID(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetCurrentSecurityIDArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -692,7 +692,7 @@ func GetCurrentSecurityID(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 	var securityID int
 	err := conn.DB.QueryRow(context.Background(), "SELECT securityId from securities where ticker = $1 and maxDate is NULL", args.Ticker).Scan(&securityID)
 	if err != nil {
-		return 0, fmt.Errorf("43333ngb %v %v %v", err, args.Ticker)
+		return 0, fmt.Errorf("43333ngb %v", err)
 	}
 	return securityID, nil
 }
