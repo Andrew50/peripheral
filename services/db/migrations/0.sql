@@ -5,9 +5,3 @@ CREATE TABLE IF NOT EXISTS schema_versions (
     applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     description TEXT
 );
--- Insert a record for this migration
-INSERT INTO schema_versions (version, description)
-VALUES (
-        '000_create_schema_versions',
-        'Creates schema_versions table'
-    ) ON CONFLICT (version) DO NOTHING;
