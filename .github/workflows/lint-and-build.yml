@@ -28,6 +28,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      pull-requests: read  # Add permission to read PRs
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
       continue_on_error: ${{ steps.check.outputs.continue_on_error }}
@@ -38,6 +39,8 @@ jobs:
           fetch-depth: 0
       
       - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}  # Add the GitHub token
         run: |
           # Check if this is a push on a branch that has an open PR
           if [[ "${{ github.event_name }}" == "push" ]]; then
