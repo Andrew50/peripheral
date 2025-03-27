@@ -372,7 +372,6 @@ func fetchEdgarFilings(cik string) ([]utils.EDGARFiling, error) {
 	}
 
 	url := fmt.Sprintf("https://data.sec.gov/submissions/CIK%s.json", paddedCik)
-	fmt.Printf("Making SEC API request to: %s\n", url)
 
 	// Create HTTP client with reasonable timeout
 	client := &http.Client{
