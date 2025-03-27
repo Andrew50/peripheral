@@ -42,7 +42,7 @@ jobs:
       - name: Check if lint-and-build workflow passed
         run: echo "This job ensures the lint-and-build workflow has passed before deployment"
 
-  deploy:
+  deploy-prod:
     runs-on: self-hosted  # Keep deployment on self-hosted runner
     needs: [check-build]
     if: >-
