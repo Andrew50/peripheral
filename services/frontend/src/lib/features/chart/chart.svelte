@@ -271,6 +271,10 @@
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
 		eventSeries.setData([]);
 		if (inst.requestType === 'loadNewTicker') {
+			// Clear pending updates when loading a new ticker
+			pendingBarUpdate = null;
+			pendingVolumeUpdate = null;
+			
 			bidLine.setData([]);
 			askLine.setData([]);
 			arrowSeries.setData([]);
@@ -1081,6 +1085,11 @@
 	}
 
 	function change(newReq: ChartQueryDispatch) {
+		// Reset pending updates when changing charts
+		pendingBarUpdate = null;
+		pendingVolumeUpdate = null;
+		lastUpdateTime = 0;
+		
 		const securityId =
 			typeof newReq.securityId === 'string'
 				? parseInt(newReq.securityId, 10)
