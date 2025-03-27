@@ -240,8 +240,15 @@ CREATE INDEX IF NOT EXISTS idx_daily_ohlcv_ticker ON daily_ohlcv(ticker);
 CREATE INDEX IF NOT EXISTS idx_daily_ohlcv_timestamp_desc ON daily_ohlcv(timestamp DESC);
 COPY securities(securityid, ticker, figi, minDate, maxDate)
 FROM '/docker-entrypoint-initdb.d/securities.csv' DELIMITER ',' CSV HEADER;
-INSERT INTO users (userId, username, password, auth_type)
-VALUES (0, 'user', 'pass', 'password');
+-- Create the guest account with user ID 0
+INSERT INTO users (userId, username, password, email, auth_type)
+VALUES (
+        0,
+        'Guest',
+        'guest-password',
+        'guest@atlantis.local',
+        'guest'
+    );
 Insert into setups (
         setupid,
         userid,
