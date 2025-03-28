@@ -3,6 +3,24 @@
 	import { onMount } from 'svelte';
 	import type { Instance } from '$lib/core/types';
 	import { privateRequest } from '$lib/core/backend';
+	import { marked } from 'marked'; // Import the markdown parser
+
+	// Set default options for the markdown parser (optional)
+	marked.setOptions({
+		breaks: true, // Adds support for GitHub-flavored markdown line breaks
+		gfm: true,    // GitHub-flavored markdown
+		sanitize: false // HTML sanitization is handled by Svelte
+	});
+
+	// Function to parse markdown content
+	function parseMarkdown(content: string): string {
+		try {
+			return marked.parse(content);
+		} catch (error) {
+			console.error('Error parsing markdown:', error);
+			return content; // Fallback to plain text if parsing fails
+		}
+	}
 
 	// Define types for our response data
 	type FunctionResult = {
@@ -270,7 +288,7 @@
 							</div>
 						{:else}
 							<div class="message-content">
-								<p>{message.content}</p>
+								<p>{@html parseMarkdown(message.content)}</p>
 							</div>
 
 							{#if message.functionResults && message.functionResults.length > 0}
@@ -599,5 +617,55 @@
 
 	.message.expiring {
 		border-color: rgba(255, 165, 0, 0.7); /* Orange border for expiring messages */
+	}
+
+	/* Add styles for markdown elements */
+	.message-content :global(p) {
+		margin: 0 0 0.5rem 0;
+	}
+	
+	.message-content :global(p:last-child) {
+		margin-bottom: 0;
+	}
+	
+	.message-content :global(pre) {
+		background: rgba(0, 0, 0, 0.2);
+		padding: 0.5rem;
+		border-radius: 0.25rem;
+		overflow-x: auto;
+		margin: 0.5rem 0;
+	}
+	
+	.message-content :global(code) {
+		font-family: monospace;
+		background: rgba(0, 0, 0, 0.2);
+		padding: 0.1rem 0.25rem;
+		border-radius: 0.25rem;
+	}
+	
+	.message-content :global(ul), .message-content :global(ol) {
+		margin: 0.5rem 0;
+		padding-left: 1.5rem;
+	}
+	
+	.message-content :global(blockquote) {
+		margin: 0.5rem 0;
+		padding-left: 0.75rem;
+		border-left: 3px solid var(--text-secondary, #aaa);
+		color: var(--text-secondary, #aaa);
+	}
+	
+	.message-content :global(a) {
+		color: var(--accent-color, #3a8bf7);
+		text-decoration: none;
+	}
+	
+	.message-content :global(a:hover) {
+		text-decoration: underline;
+	}
+	
+	.message-content :global(img) {
+		max-width: 100%;
+		border-radius: 0.25rem;
 	}
 </style>
