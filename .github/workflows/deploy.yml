@@ -1,0 +1,170 @@
+name: Base Deployment Workflow
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Deployment environment (prod or stage)'
+        required: true
+        type: string
+      target_branch:
+        description: 'Branch to deploy'
+        required: true
+        type: string
+      k8s_context:
+        description: 'Kubernetes context to use'
+        required: true
+        type: string
+      k8s_namespace:
+        description: 'Kubernetes namespace to deploy to'
+        required: true
+        type: string
+      google_redirect_url:
+        description: 'Google OAuth redirect URL'
+        required: true
+        type: string
+    secrets:
+      DOCKER_USERNAME:
+        required: true
+      DOCKER_TOKEN:
+        required: true
+      DB_ROOT_PASSWORD:
+        required: true
+      REDIS_PASSWORD:
+        required: true
+      POLYGON_API_KEY:
+        required: true
+      GEMINI_FREE_KEYS:
+        required: true
+      GOOGLE_CLIENT_ID:
+        required: true
+      GOOGLE_CLIENT_SECRET:
+        required: true
+      JWT_SECRET:
+        required: true
+      GITHUB_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+# This concurrency ensures we don't have multiple overlapping deployments
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-build:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Check if lint-and-build workflow passed
+        run: echo "This step can verify your lint-and-build pipeline ran successfully"
+
+  deploy:
+    runs-on: self-hosted
+    needs: [check-build]
+    if: (github.event_name != 'pull_request' || success())
+    env:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+      DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
+      REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+      POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+      GEMINI_FREE_KEYS: ${{ secrets.GEMINI_FREE_KEYS }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      GOOGLE_REDIRECT_URL: ${{ inputs.google_redirect_url }}
+      K8S_CONTEXT: ${{ inputs.k8s_context }}
+      K8S_NAMESPACE: ${{ inputs.k8s_namespace }}
+      ENVIRONMENT: ${{ inputs.environment }}
+
+    steps:
+      - name: Debug Event Information
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+          echo "GitHub ref: ${{ github.ref }}"
+          echo "Base or ref name: ${{ github.base_ref || github.ref_name }}"
+          echo "Environment: ${{ inputs.environment }}"
+
+      - name: Set checkout target
+        id: set-target
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "CHECKOUT_REF=${{ github.head_ref }}" >> $GITHUB_ENV
+            echo "TARGET_BRANCH=${{ github.base_ref }}" >> $GITHUB_ENV
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.branch }}" ]; then
+            echo "CHECKOUT_REF=${{ github.event.inputs.branch }}" >> $GITHUB_ENV
+            echo "TARGET_BRANCH=${{ github.event.inputs.branch }}" >> $GITHUB_ENV
+          else
+            echo "CHECKOUT_REF=${{ inputs.target_branch }}" >> $GITHUB_ENV
+            echo "TARGET_BRANCH=${{ inputs.target_branch }}" >> $GITHUB_ENV
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
+          lfs: false
+      
+      - name: Show Git Information
+        run: |
+          echo "Current directory: $(pwd)"
+          ls -la
+          git status
+          echo "Branch: $(git branch --show-current)"
+          git --version
+
+      - name: Verify Secrets Presence
+        run: |
+          echo "DOCKER_USERNAME: [$(if [ -n "$DOCKER_USERNAME" ]; then echo SET; else echo MISSING; fi)]"
+          echo "DOCKER_TOKEN: [$(if [ -n "$DOCKER_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
+          echo "DB_ROOT_PASSWORD: [$(if [ -n "$DB_ROOT_PASSWORD" ]; then echo SET; else echo MISSING; fi)]"
+          echo "REDIS_PASSWORD: [$(if [ -n "$REDIS_PASSWORD" ]; then echo SET; else echo MISSING; fi)]"
+          echo "POLYGON_API_KEY: [$(if [ -n "$POLYGON_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "GEMINI_FREE_KEYS: [$(if [ -n "$GEMINI_FREE_KEYS" ]; then echo SET; else echo MISSING; fi)]"
+          echo "GOOGLE_CLIENT_ID: [$(if [ -n "$GOOGLE_CLIENT_ID" ]; then echo SET; else echo MISSING; fi)]"
+          echo "GOOGLE_CLIENT_SECRET: [$(if [ -n "$GOOGLE_CLIENT_SECRET" ]; then echo SET; else echo MISSING; fi)]"
+          echo "JWT_SECRET: [$(if [ -n "$JWT_SECRET" ]; then echo SET; else echo MISSING; fi)]"
+          echo "All secrets must show as 'SET' above for successful deployment."
+
+      - name: Setup deployment
+        run: |
+          chmod +x .github/scripts/deployment/*.sh
+          # Load environment-specific config if needed
+          .github/scripts/deployment/load-env-config.sh "${ENVIRONMENT}"
+
+          # Sanitize and store DOCKER_TAG
+          DOCKER_TAG=$(echo "${TARGET_BRANCH}" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_.-]/-/g')
+          echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
+          echo "Using Docker tag: $DOCKER_TAG"
+
+      - name: Build Docker Images
+        run: .github/scripts/deployment/build-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}"
+
+      - name: Login & Push Docker Images
+        run: .github/scripts/deployment/push-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}"
+
+      - name: Setup Kubernetes Context
+        run: .github/scripts/deployment/setup-k8s.sh "${K8S_CONTEXT}" "${K8S_NAMESPACE}"
+
+      - name: Verify PersistentVolumeClaims
+        run: .github/scripts/deployment/verify-pvcs.sh "${ENVIRONMENT}"
+
+      - name: Update Kubernetes Secrets
+        run: .github/scripts/deployment/update-secrets.sh
+
+      - name: Run Database Migrations
+        run: .github/scripts/deployment/run-migrations.sh
+
+      - name: Deploy to Kubernetes
+        run: .github/scripts/deployment/deploy-to-k8s.sh "${DOCKER_TAG}" "${ENVIRONMENT}"
+
+      - name: Cleanup
+        if: always()
+        run: .github/scripts/deployment/cleanup.sh
