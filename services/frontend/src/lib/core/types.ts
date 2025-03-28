@@ -66,6 +66,13 @@ export interface Settings {
     filterTaS: boolean;
     showFilings: boolean;
     enableScreensaver: boolean;
+    screensaverTimeframes: string[];
+    screensaverSpeed: number;
+    screensaverTimeout: number;
+    screensaverDataSource: 'gainers-losers' | 'watchlist' | 'user-defined';
+    screensaverWatchlistId?: number;
+    screensaverTickers?: string[];
+    colorScheme: 'default' | 'dark-blue' | 'midnight' | 'forest' | 'sunset';
 }
 export interface StreamInfo {
     status: 'replay' | 'realtime' | 'paused';
