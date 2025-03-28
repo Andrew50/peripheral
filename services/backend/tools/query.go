@@ -99,6 +99,8 @@ type ChatMessage struct {
 
 // inferDateRange determines appropriate date ranges when not explicitly provided
 // Marked with underscore prefix as currently unused but may be needed in future
+//
+//nolint:unused // Preserved for future use
 func _inferDateRange(queryText string) DateRange {
 	now := time.Now()
 
@@ -143,6 +145,8 @@ func _inferDateRange(queryText string) DateRange {
 
 // containsAny checks if the text contains any of the provided phrases
 // Marked with underscore prefix as currently unused but may be needed in future
+//
+//nolint:unused // Preserved for future use
 func _containsAny(text string, phrases []string) bool {
 	lowerText := strings.ToLower(text)
 	for _, phrase := range phrases {
@@ -484,6 +488,8 @@ func GetUserConversation(conn *utils.Conn, userID int, args json.RawMessage) (in
 }
 
 // getGeminiResponse is marked with underscore prefix as currently unused but may be needed in future
+//
+//nolint:unused // Preserved for future use
 func _getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (string, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {

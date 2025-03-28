@@ -411,7 +411,7 @@ jobs:
           
           # Verify cluster connectivity with improved error handling
           log "Checking Kubernetes cluster connectivity..."
-          if ! kubectl cluster-info; then
+          if ! kubectl_with_retry "kubectl cluster-info"; then
             log "ERROR: Cannot connect to Kubernetes cluster."
             log "Current kubectl context: $(kubectl config current-context || echo 'NONE')"
             exit 1
@@ -753,142 +753,324 @@ jobs:
       # Deploy to Kubernetes
       - name: Deploy to Kubernetes
         run: |
-          kubectl_with_retry "kubectl cluster-info" || {
-            echo "WARNING: Cluster connectivity issues detected, but continuing anyway"
-          }
-          
-          # Verify correct context
-          CURRENT_CONTEXT=$(kubectl config current-context)
-          if [ "$CURRENT_CONTEXT" != "$K8S_CONTEXT" ]; then
-            echo "ERROR: Wrong Kubernetes context! Expected $K8S_CONTEXT but got $CURRENT_CONTEXT"
-            exit 1
-          fi
-          
-          # Create namespace if it doesn't exist
-          if ! kubectl get namespace "$K8S_NAMESPACE" &>/dev/null; then
-            echo "Creating namespace $K8S_NAMESPACE..."
-            kubectl create namespace "$K8S_NAMESPACE"
-          fi
-          
           # Log function for better visibility
           log() {
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
           }
           
+          # Helper function for retrying commands
+          kubectl_with_retry() {
+            cmd=$1
+            max_retries=${2:-3}
+            retry_count=0
+            
+            while [ $retry_count -lt $max_retries ]; do
+              if eval "$cmd"; then
+                return 0
+              else
+                retry_count=$((retry_count + 1))
+                if [ $retry_count -lt $max_retries ]; then
+                  log "Command failed, retrying in 5 seconds... (Attempt $retry_count of $max_retries)"
+                  sleep 5
+                fi
+              fi
+            done
+            
+            log "ERROR: Command failed after $max_retries attempts: $cmd"
+            return 1
+          }
+          
+          # Verify cluster connectivity with better error handling
+          log "Checking Kubernetes cluster connectivity..."
+          if ! kubectl_with_retry "kubectl cluster-info"; then
+            log "ERROR: Cannot connect to Kubernetes cluster."
+            log "Current kubectl context: $(kubectl config current-context || echo 'NONE')"
+            exit 1
+          fi
+          
+          # Verify correct context
+          CURRENT_CONTEXT=$(kubectl config current-context)
+          log "Current Kubernetes context: $CURRENT_CONTEXT"
+          if [ "$CURRENT_CONTEXT" != "$K8S_CONTEXT" ]; then
+            log "ERROR: Wrong Kubernetes context! Expected $K8S_CONTEXT but got $CURRENT_CONTEXT"
+            exit 1
+          fi
+          
+          # Create namespace if it doesn't exist
+          if ! kubectl get namespace "$K8S_NAMESPACE" &>/dev/null; then
+            log "Creating namespace $K8S_NAMESPACE..."
+            kubectl_with_retry "kubectl create namespace \"$K8S_NAMESPACE\""
+          fi
+          
           # Clear any conflicting configurations first 
           log "Checking for conflicting deployments..."
-          CONFLICTING_DEPLOYMENTS=$(kubectl get deployments -o jsonpath='{.items[?(@.metadata.annotations.deployment\.kubernetes\.io/revision)].metadata.name}' 2>/dev/null || echo "")
+          CONFLICTING_DEPLOYMENTS=$(kubectl get deployments -o jsonpath='{.items[?(@.metadata.annotations.deployment\.kubernetes\.io/revision)].metadata.name}' -n "$K8S_NAMESPACE" 2>/dev/null || echo "")
           if [ -n "$CONFLICTING_DEPLOYMENTS" ]; then
             log "Found potential conflicting deployments, resolving conflicts..."
             for deployment in $CONFLICTING_DEPLOYMENTS; do
-              kubectl rollout restart deployment/$deployment 2>/dev/null || true
+              log "Rolling back $deployment to clean state..."
+              kubectl_with_retry "kubectl rollout undo deployment/$deployment -n \"$K8S_NAMESPACE\"" || true
+              sleep 2
+              kubectl_with_retry "kubectl rollout restart deployment/$deployment -n \"$K8S_NAMESPACE\"" || true
             done
             sleep 5
           fi
           
-          # Apply Kubernetes configurations efficiently
-          log "Applying Kubernetes configurations..."
+          # Check for stuck PVCs and PVs from previous runs before proceeding
+          log "Checking for stuck PersistentVolumeClaims..."
+          STUCK_PVCS=$(kubectl get pvc -n "$K8S_NAMESPACE" -o jsonpath='{.items[?(@.status.phase=="Pending")].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$STUCK_PVCS" ]; then
+            log "Found stuck PVCs: $STUCK_PVCS"
+            log "Will attempt to clean them up..."
+            for pvc in $STUCK_PVCS; do
+              log "Deleting stuck PVC: $pvc"
+              kubectl delete pvc "$pvc" -n "$K8S_NAMESPACE" --force --grace-period=0 || log "Warning: Could not delete PVC $pvc"
+            done
+          fi
           
-          # First, apply infrastructure components that others depend on (PVs, PVCs, ConfigMaps, etc.)
-          log "Applying persistent volumes and claims first..."
-          find config/prod/config -type f -name "*.yaml" | xargs grep -l "kind: PersistentVolume" 2>/dev/null | while read pvfile; do
-            log "Applying PV file: $pvfile"
-            kubectl apply -f "$pvfile" --validate=false -n "$K8S_NAMESPACE" || log "Warning: Failed to apply $pvfile"
-          done
+          # Check for orphaned PVs
+          log "Checking for orphaned PersistentVolumes..."
+          ORPHANED_PVS=$(kubectl get pv -o jsonpath='{.items[?(@.status.phase=="Released")].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$ORPHANED_PVS" ]; then
+            log "Found orphaned PVs: $ORPHANED_PVS"
+            log "Will attempt to clean them up..."
+            for pv in $ORPHANED_PVS; do
+              log "Deleting orphaned PV: $pv"
+              kubectl delete pv "$pv" --force --grace-period=0 || log "Warning: Could not delete PV $pv"
+            done
+          fi
           
-          sleep 5
+          # First, find all PV yaml files
+          log "Finding all PersistentVolume yaml files..."
+          PV_FILES=$(find config -type f -name "*.yaml" | xargs grep -l "kind: PersistentVolume" 2>/dev/null || echo "")
           
-          log "Applying persistent volume claims..."
-          find config/prod/config -type f -name "*.yaml" | xargs grep -l "kind: PersistentVolumeClaim" 2>/dev/null | while read pvcfile; do
-            log "Applying PVC file: $pvcfile"
-            kubectl apply -f "$pvcfile" --validate=false -n "$K8S_NAMESPACE" || log "Warning: Failed to apply $pvcfile"
-          done
+          if [ -z "$PV_FILES" ]; then
+            log "No PersistentVolume files found. Looking in different locations..."
+            # Try alternative paths where PV files might be located
+            PV_FILES=$(find . -type f -name "*.yaml" | xargs grep -l "kind: PersistentVolume" 2>/dev/null || echo "")
+          fi
           
-          # Wait for PVCs to be bound
+          # Apply PVs first
+          if [ -n "$PV_FILES" ]; then
+            log "Applying PersistentVolumes first..."
+            for pv_file in $PV_FILES; do
+              log "Applying PV file: $pv_file"
+              kubectl_with_retry "kubectl apply -f \"$pv_file\" --validate=false" || log "Warning: Failed to apply PV file $pv_file"
+            done
+            
+            # Wait a moment for PVs to be registered in the system
+            log "Waiting for PVs to be registered (10 seconds)..."
+            sleep 10
+            
+            # List available PVs
+            kubectl get pv
+          else
+            log "WARNING: No PersistentVolume yaml files found. This may cause PVC binding issues."
+          fi
+          
+          # Find all PVC yaml files
+          log "Finding all PersistentVolumeClaim yaml files..."
+          PVC_FILES=$(find config -type f -name "*.yaml" | xargs grep -l "kind: PersistentVolumeClaim" 2>/dev/null || echo "")
+          
+          if [ -z "$PVC_FILES" ]; then
+            log "No PersistentVolumeClaim files found. Looking in different locations..."
+            # Try alternative paths where PVC files might be located
+            PVC_FILES=$(find . -type f -name "*.yaml" | xargs grep -l "kind: PersistentVolumeClaim" 2>/dev/null || echo "")
+          fi
+          
+          # Apply PVCs
+          if [ -n "$PVC_FILES" ]; then
+            log "Applying PersistentVolumeClaims..."
+            for pvc_file in $PVC_FILES; do
+              log "Applying PVC file: $pvc_file"
+              kubectl_with_retry "kubectl apply -f \"$pvc_file\" --validate=false" || log "Warning: Failed to apply PVC file $pvc_file"
+            done
+          else
+            log "WARNING: No PersistentVolumeClaim yaml files found. This may cause deployment issues."
+          fi
+          
+          # Wait for PVCs to be bound with more aggressive checking
           log "Waiting for PVCs to be bound..."
           
           # Get all PVC names
           PVC_NAMES=$(kubectl get pvc -n "$K8S_NAMESPACE" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
           
           if [ -n "$PVC_NAMES" ]; then
-            # Check each PVC status
-            for pvc in $PVC_NAMES; do
-              log "Checking status of PVC: $pvc"
+            # Create a flag to track if all PVCs are bound
+            all_pvcs_bound=false
+            max_attempts=30
+            attempt=1
+            
+            while [ "$all_pvcs_bound" = "false" ] && [ $attempt -le $max_attempts ]; do
+              log "PVC binding check attempt $attempt of $max_attempts..."
+              all_pvcs_bound=true
               
-              # Wait for the PVC to be bound with a timeout
-              if ! kubectl wait --for=condition=Bound pvc/$pvc --timeout=30s -n "$K8S_NAMESPACE" 2>/dev/null; then
-                log "WARNING: PVC $pvc not bound after 30 seconds"
+              for pvc in $PVC_NAMES; do
+                pvc_status=$(kubectl get pvc "$pvc" -n "$K8S_NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
                 
-                # Get details for debugging
-                kubectl describe pvc/$pvc -n "$K8S_NAMESPACE"
-              else
-                log "PVC $pvc is bound"
+                if [ "$pvc_status" != "Bound" ]; then
+                  log "PVC $pvc is not bound yet (status: $pvc_status)"
+                  all_pvcs_bound=false
+                  
+                  # If we're on later attempts, try to diagnose and fix issues
+                  if [ $attempt -gt 10 ]; then
+                    log "Trying to diagnose issues with PVC $pvc..."
+                    kubectl describe pvc "$pvc" -n "$K8S_NAMESPACE"
+                    
+                    # Check for PV that should bind to this PVC
+                    log "Looking for matching PersistentVolumes..."
+                    pvc_storage_class=$(kubectl get pvc "$pvc" -n "$K8S_NAMESPACE" -o jsonpath='{.spec.storageClassName}' 2>/dev/null || echo "")
+                    pvc_size=$(kubectl get pvc "$pvc" -n "$K8S_NAMESPACE" -o jsonpath='{.spec.resources.requests.storage}' 2>/dev/null || echo "")
+                    
+                    log "PVC $pvc requests storageClass: ${pvc_storage_class:-'(default)'}, size: ${pvc_size:-'(unknown)'}"
+                    
+                    # Find available PVs that could match
+                    matching_pvs=$(kubectl get pv -o json | jq -r '.items[] | select(.status.phase == "Available") | .metadata.name' 2>/dev/null || echo "")
+                    log "Available PVs: ${matching_pvs:-'(none)'}"
+                    
+                    # If this is the last attempt, try recreating the PVC
+                    if [ $attempt -eq $max_attempts ]; then
+                      log "Last attempt, trying to recreate PVC $pvc..."
+                      pvc_yaml=$(kubectl get pvc "$pvc" -n "$K8S_NAMESPACE" -o yaml)
+                      kubectl delete pvc "$pvc" -n "$K8S_NAMESPACE" --force --grace-period=0
+                      sleep 5
+                      echo "$pvc_yaml" | kubectl apply -f - --validate=false || log "Failed to recreate PVC $pvc"
+                    fi
+                  fi
+                else
+                  log "PVC $pvc is bound"
+                fi
+              done
+              
+              # If not all PVCs are bound, wait before the next check
+              if [ "$all_pvcs_bound" = "false" ]; then
+                log "Not all PVCs are bound yet, waiting 10 seconds..."
+                kubectl get pvc -n "$K8S_NAMESPACE"
+                kubectl get pv
+                sleep 10
+                attempt=$((attempt + 1))
               fi
             done
+            
+            if [ "$all_pvcs_bound" = "false" ]; then
+              log "WARNING: Not all PVCs could be bound after $max_attempts attempts."
+              log "Will continue with deployment anyway, but some pods may not start correctly."
+            else
+              log "All PVCs are bound successfully!"
+            fi
+          else
+            log "No PVCs found in namespace $K8S_NAMESPACE."
           fi
           
+          # Apply ConfigMaps and Secrets
           log "Applying ConfigMaps and Secrets..."
-          find config/prod/config -type f -name "*.yaml" | xargs grep -l "kind: ConfigMap" 2>/dev/null | while read cmfile; do
-            log "Applying ConfigMap file: $cmfile"
-            kubectl apply -f "$cmfile" --validate=false -n "$K8S_NAMESPACE" || log "Warning: Failed to apply $cmfile"
+          find config -type f -name "*.yaml" | xargs grep -l "kind: ConfigMap\|kind: Secret" 2>/dev/null | while read config_file; do
+            log "Applying ConfigMap/Secret file: $config_file"
+            kubectl_with_retry "kubectl apply -f \"$config_file\" --validate=false -n \"$K8S_NAMESPACE\"" || log "Warning: Failed to apply $config_file"
           done
           
-          # Apply Services and other non-Deployment resources
-          log "Applying Services and other resources..."
-          find config/prod/config -type f -name "*.yaml" | grep -v "deployment" | xargs grep -l "kind: Service" 2>/dev/null | while read svcfile; do
-            log "Applying Service file: $svcfile"
-            kubectl apply -f "$svcfile" --validate=false -n "$K8S_NAMESPACE" || log "Warning: Failed to apply $svcfile"
+          # Apply Services before Deployments
+          log "Applying Services and other non-Deployment resources..."
+          find config -type f -name "*.yaml" | grep -v "deployment" | xargs grep -l "kind: Service" 2>/dev/null | while read svc_file; do
+            log "Applying Service file: $svc_file"
+            kubectl_with_retry "kubectl apply -f \"$svc_file\" --validate=false -n \"$K8S_NAMESPACE\"" || log "Warning: Failed to apply $svc_file"
           done
           
-          # Apply the rest of the configurations excluding secrets.yaml
+          # Apply all other configurations excluding previously applied resources
           log "Applying remaining Kubernetes configurations..."
-          find config/prod/config -type f -name "*.yaml" ! -name "secrets.yaml" | while read config_file; do
-            if ! grep -q "kind: PersistentVolume\|kind: PersistentVolumeClaim\|kind: ConfigMap\|kind: Service" "$config_file" 2>/dev/null; then
+          find config -type f -name "*.yaml" | while read config_file; do
+            if ! grep -q "kind: PersistentVolume\|kind: PersistentVolumeClaim\|kind: ConfigMap\|kind: Secret\|kind: Service" "$config_file" 2>/dev/null; then
               log "Applying config file: $config_file"
-              kubectl apply -f "$config_file" --validate=false -n "$K8S_NAMESPACE" || log "Warning: Failed to apply $config_file"
+              kubectl_with_retry "kubectl apply -f \"$config_file\" --validate=false -n \"$K8S_NAMESPACE\"" || log "Warning: Failed to apply $config_file"
             fi
           done
           
-          # Give some time for resources to be created
-          log "Waiting for resources to initialize (30 seconds)..."
-          sleep 30
-          
           # Define deployments in order of dependency
-          log "Preparing deployment updates..."
+          log "Setting up deployment updates..."
           infra_components=("db" "cache")
-          deployments=("tf" "backend" "worker" "frontend" "nginx")
+          app_deployments=("tf" "backend" "worker" "frontend" "nginx")
+          ALL_DEPLOYMENTS=("${infra_components[@]}" "${app_deployments[@]}")
+          
+          # Log deployments that will be handled
+          log "Planning to update these deployments: ${ALL_DEPLOYMENTS[*]}"
           
           # Image tag to use
           log "Using image tag: ${{ env.DOCKER_TAG }}"
           
-          # First, update infrastructure components in parallel
+          # Check for missing deployments and apply any deployment files not already applied
+          log "Checking for missing deployments..."
+          for deployment in "${ALL_DEPLOYMENTS[@]}"; do
+            if ! kubectl get deployment "$deployment" -n "$K8S_NAMESPACE" &>/dev/null; then
+              log "Deployment $deployment does not exist, looking for deployment file..."
+              deployment_files=$(find config -type f -name "*${deployment}*deployment*.yaml" 2>/dev/null || echo "")
+              
+              if [ -n "$deployment_files" ]; then
+                for deployment_file in $deployment_files; do
+                  log "Applying missing deployment file: $deployment_file"
+                  kubectl_with_retry "kubectl apply -f \"$deployment_file\" --validate=false -n \"$K8S_NAMESPACE\"" || log "Warning: Failed to apply $deployment_file"
+                done
+              else
+                log "No deployment file found for $deployment"
+              fi
+            fi
+          done
+          
+          # First, update infrastructure components in parallel with timeouts
           log "Updating infrastructure components..."
           for deployment in "${infra_components[@]}"; do
             {
-              log "Setting $deployment image to $DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }}"
-              kubectl set image deployment/$deployment $deployment=$DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }} -n "$K8S_NAMESPACE" 2>/dev/null || {
-                log "Note: $deployment deployment doesn't exist yet - will be created in deployment step"
-              }
+              if kubectl get deployment "$deployment" -n "$K8S_NAMESPACE" &>/dev/null; then
+                log "Setting $deployment image to $DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }}"
+                if timeout 30s kubectl set image deployment/$deployment $deployment=$DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }} -n "$K8S_NAMESPACE" 2>/dev/null; then
+                  log "Successfully updated $deployment image"
+                else
+                  log "Warning: Failed to update $deployment image, will try with rollout restart"
+                fi
+              else
+                log "Note: $deployment deployment doesn't exist yet - looking for deployment file"
+                deployment_files=$(find config -type f -name "*${deployment}*deployment*.yaml" 2>/dev/null || echo "")
+                
+                if [ -n "$deployment_files" ]; then
+                  for deployment_file in $deployment_files; do
+                    log "Applying missing deployment file: $deployment_file"
+                    kubectl_with_retry "kubectl apply -f \"$deployment_file\" --validate=false -n \"$K8S_NAMESPACE\"" || log "Warning: Failed to apply $deployment_file"
+                  done
+                fi
+              fi
             } &
           done
           wait
           
-          # Update image tags for all application deployments in parallel
+          # Update app deployments in parallel with timeouts
           log "Updating application deployments in parallel..."
-          for deployment in "${deployments[@]}"; do
+          for deployment in "${app_deployments[@]}"; do
             {
-              log "Setting $deployment image to $DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }}"
-              kubectl set image deployment/$deployment $deployment=$DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }} -n "$K8S_NAMESPACE" 2>/dev/null || {
-                log "Note: $deployment deployment doesn't exist yet - will be created in deployment step"
-              }
-              
-              # Special handling for worker deployment healthcheck container
-              if [ "$deployment" = "worker" ]; then
-                CONTAINERS=$(kubectl get deployment/worker -o jsonpath='{.spec.template.spec.containers[*].name}' -n "$K8S_NAMESPACE" 2>/dev/null || echo "")
-                if [[ $CONTAINERS == *"db-healthcheck"* ]]; then
-                  kubectl set image deployment/worker db-healthcheck=$DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }} -n "$K8S_NAMESPACE"
-                elif [[ $CONTAINERS == *"worker-healthcheck"* ]]; then
-                  kubectl set image deployment/worker worker-healthcheck=$DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }} -n "$K8S_NAMESPACE"
+              if kubectl get deployment "$deployment" -n "$K8S_NAMESPACE" &>/dev/null; then
+                log "Setting $deployment image to $DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }}"
+                if timeout 30s kubectl set image deployment/$deployment $deployment=$DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }} -n "$K8S_NAMESPACE" 2>/dev/null; then
+                  log "Successfully updated $deployment image"
+                  
+                  # Special handling for worker deployment healthcheck container
+                  if [ "$deployment" = "worker" ]; then
+                    CONTAINERS=$(kubectl get deployment/worker -o jsonpath='{.spec.template.spec.containers[*].name}' -n "$K8S_NAMESPACE" 2>/dev/null || echo "")
+                    if [[ $CONTAINERS == *"db-healthcheck"* ]]; then
+                      kubectl set image deployment/worker db-healthcheck=$DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }} -n "$K8S_NAMESPACE"
+                    elif [[ $CONTAINERS == *"worker-healthcheck"* ]]; then
+                      kubectl set image deployment/worker worker-healthcheck=$DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }} -n "$K8S_NAMESPACE"
+                    fi
+                  fi
+                else
+                  log "Warning: Failed to update $deployment image, will try with rollout restart"
+                fi
+              else
+                log "Note: $deployment deployment doesn't exist yet - looking for deployment file"
+                deployment_files=$(find config -type f -name "*${deployment}*deployment*.yaml" 2>/dev/null || echo "")
+                
+                if [ -n "$deployment_files" ]; then
+                  for deployment_file in $deployment_files; do
+                    log "Applying missing deployment file: $deployment_file"
+                    kubectl_with_retry "kubectl apply -f \"$deployment_file\" --validate=false -n \"$K8S_NAMESPACE\"" || log "Warning: Failed to apply $deployment_file"
+                  done
                 fi
               fi
             } &
@@ -898,158 +1080,140 @@ jobs:
           # Apply rollout restart to all deployments in parallel
           log "Restarting all deployments in parallel for faster rollout..."
           
-          # Restart infrastructure first
+          # Make sure PVs and PVCs are correctly bound before proceeding
+          log "Final check of PVC binding status before restarting deployments..."
+          UNBOUND_PVCS=$(kubectl get pvc -n "$K8S_NAMESPACE" -o jsonpath='{.items[?(@.status.phase!="Bound")].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$UNBOUND_PVCS" ]; then
+            log "WARNING: There are still unbound PVCs: $UNBOUND_PVCS"
+            log "Displaying PV and PVC status:"
+            kubectl get pv
+            kubectl get pvc -n "$K8S_NAMESPACE"
+            log "This may cause issues with the deployment."
+          else
+            log "All PVCs appear to be bound correctly!"
+          fi
+          
+          # Restart infrastructure first with forced deletion if they're stuck in Pending
+          log "Restarting infrastructure components..."
           for deployment in "${infra_components[@]}"; do
-            if kubectl get deployment/$deployment -n "$K8S_NAMESPACE" &>/dev/null; then
-              log "Restarting $deployment..."
-              kubectl rollout restart deployment/$deployment -n "$K8S_NAMESPACE" &
-            else
-              log "Deployment $deployment doesn't exist yet - skipping restart"
-            fi
+            {
+              if kubectl get deployment "$deployment" -n "$K8S_NAMESPACE" &>/dev/null; then
+                # Check if there are stuck pods
+                STUCK_PODS=$(kubectl get pods -l app="$deployment" -n "$K8S_NAMESPACE" | grep -E "Pending|Error|CrashLoopBackOff" || echo "")
+                if [ -n "$STUCK_PODS" ]; then
+                  log "Found stuck pods for $deployment, forcing deletion..."
+                  kubectl delete pods -l app="$deployment" -n "$K8S_NAMESPACE" --force --grace-period=0 || true
+                  sleep 5
+                fi
+                
+                log "Restarting $deployment..."
+                kubectl_with_retry "kubectl rollout restart deployment/$deployment -n \"$K8S_NAMESPACE\"" || log "Warning: Failed to restart $deployment"
+              else
+                log "Deployment $deployment doesn't exist yet - skipping restart"
+              fi
+            } &
           done
           wait
           
-          # Brief wait for infrastructure to initialize
-          log "Waiting for infrastructure components to initialize (15 seconds)..."
-          sleep 15
-          
-          # Restart all deployments in parallel
-          for deployment in "${deployments[@]}"; do
-            if kubectl get deployment/$deployment -n "$K8S_NAMESPACE" &>/dev/null; then
-              log "Restarting $deployment..."
-              kubectl rollout restart deployment/$deployment -n "$K8S_NAMESPACE" &
-            else
-              log "Deployment $deployment doesn't exist yet - skipping restart"
-            fi
-          done
-          wait
-          
-          # Wait for image pull - shorter time since we're doing things in parallel
-          log "Waiting for image pulls to complete (30 seconds)..."
+          # Brief wait for infrastructure components to be recreated after restart
+          log "Waiting for infrastructure components to initialize (30 seconds)..."
           sleep 30
           
-          # Monitor deployments with shorter, realistic timeouts
-          log "Monitoring deployments for successful rollout..."
+          # Force recreate any stuck pending pods
+          log "Checking for stuck pods before application restart..."
+          STUCK_PODS=$(kubectl get pods -n "$K8S_NAMESPACE" | grep -E "Pending|Error|CrashLoopBackOff" || echo "")
+          if [ -n "$STUCK_PODS" ]; then
+            log "Found stuck pods, attempting to force delete:"
+            echo "$STUCK_PODS"
+            kubectl get pods -n "$K8S_NAMESPACE" | grep -E "Pending|Error|CrashLoopBackOff" | awk '{print $1}' | xargs -r kubectl delete pod -n "$K8S_NAMESPACE" --force --grace-period=0 || true
+            sleep 10
+          fi
           
-          # Set timeout values for each deployment (in seconds) - increased for first deployment
-          declare -A timeouts
-          timeouts=([backend]=300 [frontend]=180 [worker]=300 [tf]=180 [nginx]=180 [db]=300 [cache]=180)
-          
-          # First check if deployments exist before monitoring
-          log "Checking which deployments exist to monitor..."
-          EXISTING_INFRA=()
-          for deployment in "${infra_components[@]}"; do
-            if kubectl get deployment/$deployment -n "$K8S_NAMESPACE" &>/dev/null; then
-              EXISTING_INFRA+=("$deployment")
-            else
-              log "Deployment $deployment doesn't exist yet - skipping monitoring"
-            fi
+          # Restart all application deployments in parallel
+          log "Restarting application deployments..."
+          for deployment in "${app_deployments[@]}"; do
+            {
+              if kubectl get deployment "$deployment" -n "$K8S_NAMESPACE" &>/dev/null; then
+                log "Restarting $deployment..."
+                kubectl_with_retry "kubectl rollout restart deployment/$deployment -n \"$K8S_NAMESPACE\"" || log "Warning: Failed to restart $deployment"
+              else
+                log "Deployment $deployment doesn't exist yet - skipping restart"
+              fi
+            } &
           done
+          wait
           
-          EXISTING_DEPLOYMENTS=()
-          for deployment in "${deployments[@]}"; do
-            if kubectl get deployment/$deployment -n "$K8S_NAMESPACE" &>/dev/null; then
-              EXISTING_DEPLOYMENTS+=("$deployment")
-            else
-              log "Deployment $deployment doesn't exist yet - skipping monitoring"
-            fi
-          done
+          # Monitor deployment status
+          log "Waiting for deployments to restart..."
+          sleep 30
           
-          # Monitor infrastructure components first if they exist
-          if [ ${#EXISTING_INFRA[@]} -gt 0 ]; then
-            log "Monitoring infrastructure deployments in parallel..."
-            pids=()
-            for deployment in "${EXISTING_INFRA[@]}"; do
+          # Set up monitoring for all deployments
+          pids=()
+          deployment_failures=()
+          
+          log "Monitoring deployment status..."
+          for deployment in "${ALL_DEPLOYMENTS[@]}"; do
+            if kubectl get deployment "$deployment" -n "$K8S_NAMESPACE" &>/dev/null; then
               {
-                log "Waiting for $deployment deployment..."
-                timeout=${timeouts[$deployment]:-300}
-                
-                if ! timeout $timeout kubectl rollout status deployment/$deployment -n "$K8S_NAMESPACE"; then
-                  log "WARNING: $deployment deployment failed or timed out."
-                  log "This might be expected during first deployment."
-                  kubectl describe deployment/$deployment -n "$K8S_NAMESPACE"
-                  kubectl get pods -l app=$deployment -n "$K8S_NAMESPACE"
+                log "Monitoring $deployment deployment..."
+                if ! timeout 300s kubectl rollout status deployment/"$deployment" -n "$K8S_NAMESPACE"; then
+                  log "WARNING: $deployment rollout did not complete in time"
+                  # Save to track deployment failures
+                  echo "$deployment" > "/tmp/deployment_failures_$deployment"
+                  deployment_failures+=("$deployment")
                 else
-                  log "$deployment deployment rolled out successfully."
+                  log "$deployment rollout completed successfully"
                 fi
               } &
               pids+=($!)
-            done
-            
-            # Wait for all infrastructure monitors to complete
-            for pid in "${pids[@]}"; do
-              wait $pid || true
-            done
-          fi
+            fi
+          done
           
-          # Monitor application deployments in parallel with improved error handling
-          if [ ${#EXISTING_DEPLOYMENTS[@]} -gt 0 ]; then
-            log "Monitoring application deployments in parallel..."
-            pids=()
-            for deployment in "${EXISTING_DEPLOYMENTS[@]}"; do
-              {
-                log "Waiting for $deployment deployment..."
-                timeout=${timeouts[$deployment]:-300}
-                
-                # Wait for rollout to complete with timeout
-                if ! timeout $timeout kubectl rollout status deployment/$deployment -n "$K8S_NAMESPACE"; then
-                  log "WARNING: $deployment deployment failed or timed out after ${timeout}s."
-                  log "This might be expected during first deployment."
-                  log "Deployment details:"
-                  kubectl describe deployment/$deployment -n "$K8S_NAMESPACE"
-                  log "Pod status:"
-                  kubectl get pods -l app=$deployment -n "$K8S_NAMESPACE"
-                  log "Pod logs (if available):"
-                  kubectl logs -l app=$deployment --tail=20 -n "$K8S_NAMESPACE" || echo "No logs available"
-                  
-                  # Try to diagnose common issues
-                  log "Recent events for $deployment:"
-                  kubectl get events -n "$K8S_NAMESPACE" --sort-by='.lastTimestamp' | grep $deployment | tail -5 || echo "No events found"
-                  
-                  # Don't fail for first deployment - but create a marker file
-                  echo "$deployment" > "/tmp/deployment_warnings_$deployment"
-                else
-                  log "$deployment deployment succeeded."
-                fi
-              } &
-              pids+=($!)
-            done
-            
-            # Wait for all application monitors to complete
-            for pid in "${pids[@]}"; do
-              wait $pid || true
-            done
-          fi
+          # Wait for all monitoring to complete
+          for pid in "${pids[@]}"; do
+            wait $pid || true
+          done
           
-          # Check if this appears to be a first-time deployment
-          log "Checking if this appears to be a first-time deployment..."
-          DB_RUNNING=$(kubectl get pods -l app=db -n "$K8S_NAMESPACE" | grep "Running" | wc -l)
-          WARNING_FILES=$(ls /tmp/deployment_warnings_* 2>/dev/null || echo "")
-          
-          if [ "$DB_RUNNING" -eq 0 ] || [ -n "$WARNING_FILES" ]; then
-            log "This appears to be a first-time deployment or database is not yet running."
-            log "Some deployment warnings are expected - this is not a failure condition."
+          # Check for any deployment failures
+          FAILURE_FILES=$(ls /tmp/deployment_failures_* 2>/dev/null || echo "")
+          if [ -n "$FAILURE_FILES" ]; then
+            log "Some deployments failed. See details above."
             
-            # Clean up any warning files
-            for file in $WARNING_FILES; do
+            # Try to salvage the deployment by retrying failed deployments
+            log "Attempting to salvage deployment by retrying failed deployments..."
+            for file in $FAILURE_FILES; do
               deployment=$(cat "$file")
-              log "Deployment warning for: $deployment"
+              log "Retrying $deployment deployment..."
+              kubectl_with_retry "kubectl rollout restart deployment/$deployment -n \"$K8S_NAMESPACE\"" || log "Warning: Failed to restart $deployment again"
               rm "$file"
             done
             
-            # Don't fail the workflow for first deployment
-            log "This is likely a first deployment. Marking as success with warnings."
-            log "Please manually verify once all pods are running."
+            # Check pod status for failures
+            log "Checking pod status to diagnose failures..."
+            kubectl get pods -n "$K8S_NAMESPACE"
+            
+            # Try to get logs from failed pods
+            FAILED_PODS=$(kubectl get pods -n "$K8S_NAMESPACE" | grep -v "Running\|Completed" | tail -n +2 | awk '{print $1}')
+            for pod in $FAILED_PODS; do
+              log "Details for failed pod $pod:"
+              kubectl describe pod "$pod" -n "$K8S_NAMESPACE" | grep -A 10 "Events:"
+            done
+            
+            # Don't fail the workflow, but warn that there were issues
+            log "WARNING: There were deployment issues that were attempted to be resolved."
+            log "Check the application status manually to ensure it's functioning correctly."
           else
             log "All deployments completed successfully!"
           fi
           
-          # Final status report
-          log "===== DEPLOYMENT STATUS REPORT ====="
+          # Final status check
+          log "Final deployment status:"
           kubectl get deployments -n "$K8S_NAMESPACE"
           kubectl get pods -n "$K8S_NAMESPACE"
+          kubectl get pvc -n "$K8S_NAMESPACE"
+          kubectl get pv
           
-          log "Deployment completed for branch ${{ env.TARGET_BRANCH }}."
+          log "Deployment process completed for branch ${{ env.TARGET_BRANCH }}."
       
       # Cleanup after deployment
       - name: Cleanup
