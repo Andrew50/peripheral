@@ -913,7 +913,6 @@ jobs:
         with:
           # For workflow_run events, we need to check out the PR that triggered the workflow
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
-          # Fetch base branch for delta analysis
           fetch-depth: 0
 
       - name: Set up Node.js
@@ -922,140 +921,60 @@ jobs:
           node-version: '18'
           cache: 'npm'
           cache-dependency-path: services/frontend/package.json
-          
-      # Ensure npm cache directory exists
-      - name: Setup npm cache directory
-        run: |
-          mkdir -p ~/.npm
 
-      - name: Setup Jest configuration
+      - name: Install dependencies
+        run: |
+          cd services/frontend
+          npm ci
+
+      - name: Create simplified Jest configuration
         run: |
           cd services/frontend
           
-          # Check if jest.setup.js exists and create it if it doesn't
+          # First, delete existing Jest setup file
           if [ -f "jest.setup.js" ]; then
-            # Check if jest.setup.js uses import statements
-            if grep -q "import" jest.setup.js; then
-              echo "jest.setup.js uses ES modules, updating jest config..."
-              # Modify the existing jest.config.js to use the setup file properly
-              if [ -f "jest.config.js" ]; then
-                # Update setupFilesAfterEnv to include the setup file if not already included
-                if ! grep -q "jest.setup.js" jest.config.js; then
-                  sed -i 's/setupFilesAfterEnv: \[\([^]]*\)\]/setupFilesAfterEnv: \[\1, "<rootDir>\/jest.setup.js"\]/g' jest.config.js
-                fi
-                # Add the setup file to the list of files treated as ESM if not already included
-                if ! grep -q "jest.setup.js" jest.config.js | grep -q "extensionsToTreatAsEsm"; then
-                  sed -i 's/extensionsToTreatAsEsm: \[\([^]]*\)\]/extensionsToTreatAsEsm: \[\1, "jest.setup.js"\]/g' jest.config.js
-                fi
-              fi
-            fi
-          else
-            # Create a basic setup file with CommonJS syntax for compatibility
-            echo "// Jest setup file" > jest.setup.js
-            echo 'require("@testing-library/jest-dom");' >> jest.setup.js
+            rm jest.setup.js
           fi
           
-          # Create a Jest transformer for the setup file if it uses ES modules
-          if grep -q "import" jest.setup.js 2>/dev/null; then
-            echo "module.exports = { process: () => ({ code: 'module.exports = {};' }) };" > setupFileTransformer.js
-            # Add the transformer to jest.config.js
-            sed -i 's/"transform": {/"transform": {\n    "jest\\.setup\\.js": "<rootDir>\/setupFileTransformer.js",/g' jest.config.js
-          fi
-
-      - name: Identify changed test files
-        id: changed-test-files
-        run: |
-          # Use the last successful SHA from the check-workflow-conditions job
-          BASE_SHA="${{ needs.check-workflow-conditions.outputs.last_success_sha }}"
-          HEAD_SHA=$(git rev-parse HEAD)
+          # Create a simplified Jest setup file (using CJS format for maximum compatibility)
+          echo "// Jest setup file - CommonJS format" > jest.setup.cjs
+          echo "require('@testing-library/jest-dom');" >> jest.setup.cjs
           
-          echo "Comparing changes between $BASE_SHA and $HEAD_SHA"
+          # Create a simplified Jest config file (using CJS format for maximum compatibility)
+          echo "/** @type {import('jest').Config} */" > jest.config.cjs
+          echo "module.exports = {" >> jest.config.cjs
+          echo "  preset: 'ts-jest/presets/js-with-ts-esm'," >> jest.config.cjs
+          echo "  testEnvironment: 'jsdom'," >> jest.config.cjs
+          echo "  setupFilesAfterEnv: ['<rootDir>/jest.setup.cjs']," >> jest.config.cjs
+          echo "  transform: {" >> jest.config.cjs
+          echo "    '^.+\\.svelte$': 'svelte-jester'," >> jest.config.cjs
+          echo "    '^.+\\.(ts|js)$': ['ts-jest', { useESM: true }]" >> jest.config.cjs
+          echo "  }," >> jest.config.cjs
+          echo "  moduleNameMapper: {" >> jest.config.cjs
+          echo "    '^\\$lib/(.*)$': '<rootDir>/src/lib/$1'" >> jest.config.cjs
+          echo "  }," >> jest.config.cjs
+          echo "  extensionsToTreatAsEsm: ['.ts', '.svelte']," >> jest.config.cjs
+          echo "  moduleFileExtensions: ['js', 'ts', 'svelte']" >> jest.config.cjs
+          echo "};" >> jest.config.cjs
           
-          # Find any changed files that might affect tests
-          CHANGED_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA -- 'services/frontend/**/*.ts' 'services/frontend/**/*.js' 'services/frontend/**/*.svelte' | xargs)
-          
-          # Find directly changed test files
-          CHANGED_TEST_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA -- 'services/frontend/**/*.test.ts' 'services/frontend/**/*.test.js' | xargs)
-          
-          # Find component files that were changed and might have corresponding test files
-          CHANGED_COMPONENT_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA -- 'services/frontend/**/*.ts' 'services/frontend/**/*.js' 'services/frontend/**/*.svelte' | grep -v 'test.ts' | grep -v 'test.js' | xargs)
-          
-          # Map component files to potential test files
-          POTENTIAL_TEST_FILES=""
-          for file in $CHANGED_COMPONENT_FILES; do
-            base_name=$(basename "$file" | sed 's/\.[^.]*$//')
-            dir_name=$(dirname "$file")
-            potential_test="$dir_name/$base_name.test.ts"
-            potential_test_js="$dir_name/$base_name.test.js"
-            
-            if [ -f "$potential_test" ]; then
-              POTENTIAL_TEST_FILES="$POTENTIAL_TEST_FILES $potential_test"
-            elif [ -f "$potential_test_js" ]; then
-              POTENTIAL_TEST_FILES="$POTENTIAL_TEST_FILES $potential_test_js"
-            fi
-          done
-          
-          # Combine direct and potential test files
-          ALL_AFFECTED_TEST_FILES="$CHANGED_TEST_FILES $POTENTIAL_TEST_FILES"
-          ALL_AFFECTED_TEST_FILES=$(echo "$ALL_AFFECTED_TEST_FILES" | xargs -n1 | sort -u | xargs)
-          
-          if [ -n "$ALL_AFFECTED_TEST_FILES" ]; then
-            echo "affected_test_files=$ALL_AFFECTED_TEST_FILES" >> $GITHUB_OUTPUT
-            echo "has_test_changes=true" >> $GITHUB_OUTPUT
-          elif [ -n "$CHANGED_FILES" ]; then
-            # If we have changed files but no specific test files, we'll run all tests
-            echo "has_test_changes=all" >> $GITHUB_OUTPUT
-          else
-            echo "No frontend files or tests changed"
-            echo "has_test_changes=false" >> $GITHUB_OUTPUT
+          # Delete old Jest config if it exists
+          if [ -f "jest.config.js" ]; then
+            rm jest.config.js
           fi
 
       - name: Run tests
         run: |
           cd services/frontend
           
-          # Debug information
-          echo "Checking Jest configuration"
-          if [ -f "jest.config.js" ]; then
-            echo "Jest config exists:"
-            cat jest.config.js
-          else
-            echo "No jest.config.js file found"
+          # Ensure jest-environment-jsdom is installed
+          if ! grep -q "jest-environment-jsdom" package.json; then
+            npm install --save-dev jest-environment-jsdom
           fi
           
-          if [ -f "jest.setup.js" ]; then
-            echo "Jest setup file exists:"
-            cat jest.setup.js
-          else
-            echo "No jest.setup.js file found"
-          fi
-          
-          # Run tests based on what changed
-          if [ "${{ steps.changed-test-files.outputs.has_test_changes }}" == "true" ]; then
-            echo "Running only affected tests"
-            AFFECTED_TEST_FILES="${{ steps.changed-test-files.outputs.affected_test_files }}"
-            
-            # Run the specific test files that were affected with limited workers for faster execution
-            NODE_OPTIONS=--no-warnings npx jest $AFFECTED_TEST_FILES --reporters=default --maxWorkers=4 --no-cache || {
-              # If tests fail with ESM errors, try with a simplified setup
-              echo "Tests failed. Attempting with simplified configuration..."
-              echo "module.exports = { testEnvironment: 'jsdom' };" > jest.config.js
-              NODE_OPTIONS=--no-warnings npx jest $AFFECTED_TEST_FILES --maxWorkers=4 --no-cache
-            }
-          elif [ "${{ steps.changed-test-files.outputs.has_test_changes }}" == "all" ]; then
-            echo "Running all tests since files changed but no specific test files identified"
-            # Run all tests with limited workers for faster execution
-            NODE_OPTIONS=--no-warnings npx jest --maxWorkers=4 --no-cache || {
-              # If tests fail with ESM errors, try with a simplified setup
-              echo "Tests failed. Attempting with simplified configuration..."
-              echo "module.exports = { testEnvironment: 'jsdom' };" > jest.config.js
-              NODE_OPTIONS=--no-warnings npx jest --maxWorkers=4 --no-cache
-            }
-          else
-            echo "No tests to run - skipping test suite"
-            echo "This is either because no frontend files changed, or the changes don't affect any tests"
-            exit 0
-          fi
+          # Run tests with a simple configuration
+          echo "Running all tests with simplified configuration"
+          NODE_OPTIONS="--no-warnings --experimental-vm-modules" npx jest --config=jest.config.cjs
+        
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
         
@@ -1064,12 +983,4 @@ jobs:
         if: success() || needs.check-workflow-conditions.outputs.continue_on_error == 'true'
         run: |
           echo "### Frontend Test Results ✅" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ steps.changed-test-files.outputs.has_test_changes }}" == "true" ]; then
-            echo "✅ Successfully ran tests for the following files:" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "${{ steps.changed-test-files.outputs.affected_test_files }}" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ steps.changed-test-files.outputs.has_test_changes }}" == "all" ]; then
-            echo "✅ Successfully ran all tests" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "➡️ No test files affected by changes. Skipped tests." >> $GITHUB_STEP_SUMMARY 
+          echo "✅ Ran frontend tests with simplified configuration" >> $GITHUB_STEP_SUMMARY 
