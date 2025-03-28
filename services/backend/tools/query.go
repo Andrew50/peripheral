@@ -201,7 +201,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		prompt = query.Query
 	}
 
-	// This first passes the query to a thinking model 
+	// This first passes the query to a thinking model
 	geminiThinkingResponse, err := getGeminiFunctionThinking(ctx, conn, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("error getting thinking response: %w", err)
@@ -216,7 +216,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 	// Find the JSON block in the response
 	jsonStartIdx := strings.Index(responseText, "{")
 	jsonEndIdx := strings.LastIndex(responseText, "}")
-	
+
 	// If no valid JSON is found, just return the text response
 	if jsonStartIdx == -1 || jsonEndIdx == -1 || jsonEndIdx <= jsonStartIdx {
 		return map[string]interface{}{
@@ -224,12 +224,12 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			"text": responseText,
 		}, nil
 	}
-	
+
 	jsonBlock := responseText[jsonStartIdx : jsonEndIdx+1]
 	if err := json.Unmarshal([]byte(jsonBlock), &thinkingResp); err != nil {
 
 	}
-	
+
 	if len(thinkingResp.Rounds) == 0 {
 		return map[string]interface{}{
 			"type": "text",
@@ -239,7 +239,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 	// Try to process the thinking response as rounds
 	thinkingResults, err := processThinkingResponse(ctx, conn, userID, thinkingResp)
 	if err == nil && len(thinkingResults) > 0 {
-		
+
 		// Create new message with the round results and formatted response
 		newMessage := ChatMessage{
 			Query:         query.Query,
@@ -249,14 +249,14 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			Timestamp:     time.Now(),
 			ExpiresAt:     time.Now().Add(24 * time.Hour),
 		}
-		
+
 		// Add new message to conversation history
 		conversationData.Messages = append(conversationData.Messages, newMessage)
 		conversationData.Timestamp = time.Now()
 		if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
 			fmt.Printf("Error saving updated conversation: %v\n", err)
 		}
-		
+
 		return map[string]interface{}{
 			"type":    "function_calls",
 			"results": thinkingResults,
@@ -264,7 +264,12 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			"history": conversationData,
 		}, nil
 	}
-	
+
+	// Return the text response as fallback when no function calls are processed
+	return map[string]interface{}{
+		"type": "text",
+		"text": responseText,
+	}, nil
 }
 
 // buildConversationContext formats the conversation history for Gemini
@@ -475,7 +480,6 @@ func GetUserConversation(conn *utils.Conn, userID int, args json.RawMessage) (in
 	return conversation, nil
 }
 
-
 func getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (string, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
@@ -536,7 +540,6 @@ type GeminiFunctionResponse struct {
 	Text          string         `json:"text"`
 }
 
-
 func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, query string) (*GeminiFunctionResponse, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
@@ -567,7 +570,7 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, query stri
 			},
 		},
 	}
-	
+
 	result, err := client.Models.GenerateContent(
 		ctx,
 		"gemini-2.0-flash-thinking-exp-01-21",
@@ -577,7 +580,7 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, query stri
 	if err != nil {
 		return nil, fmt.Errorf("error generating content with thinking model: %w", err)
 	}
-	
+
 	// Extract the clean text response for display
 	responseText := ""
 	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
@@ -588,9 +591,9 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, query stri
 			}
 		}
 	}
-	response := &GeminiFunctionResponse {
+	response := &GeminiFunctionResponse{
 		FunctionCalls: []FunctionCall{},
-		Text: responseText,
+		Text:          responseText,
 	}
 	return response, nil
 }
@@ -754,32 +757,31 @@ type RoundResult struct {
 // processThinkingResponse attempts to parse and execute the thinking model's rounds
 func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, thinkingResp ThinkingResponse) ([]ExecuteResult, error) {
 
-	
 	// Store all results from all rounds
 	var allResults []ExecuteResult
 	var previousRoundResults []ExecuteResult
-	
+
 	// Process each round sequentially, sending each to Gemini
 	for _, round := range thinkingResp.Rounds {
-		
+
 		// Create a prompt for Gemini that includes:
 		// 1. The current round's function calls
 		// 2. The results from the previous round (if any)
-		
+
 		// First, convert the round to JSON
 		roundJSON, err := json.Marshal(round)
 		if err != nil {
 			fmt.Printf("Error marshaling round to JSON: %v\n", err)
 			continue
 		}
-		
+
 		// Create a prompt that includes the round and previous results
 		var prompt strings.Builder
 		prompt.WriteString("Process this round of function calls:\n\n")
 		prompt.WriteString("```json\n")
 		prompt.WriteString(string(roundJSON))
 		prompt.WriteString("\n```\n\n")
-		
+
 		// Include previous round results if available
 		if len(previousRoundResults) > 0 {
 			prompt.WriteString("Results from the previous round:\n\n")
@@ -787,9 +789,8 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 			prompt.WriteString("```json\n")
 			prompt.WriteString(string(resultsJSON))
 			prompt.WriteString("\n```\n\n")
-			
-		
-		} 
+
+		}
 		prompt.WriteString("Please process this round of function calls.\n")
 		// Send to Gemini for processing
 		fmt.Printf("Sending round to Gemini for processing:\n%s\n", prompt.String())
@@ -798,21 +799,21 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 			fmt.Printf("Error processing round with Gemini: %v\n", err)
 			continue
 		}
-		
+
 		// Execute the functions returned by Gemini
 		roundResults, err := executeGeminiFunctions(ctx, conn, userID, processedRound)
 		if err != nil {
 			fmt.Printf("Error executing functions: %v\n", err)
 			continue
 		}
-		
+
 		// Add this round's results to the combined results
 		allResults = append(allResults, roundResults...)
-		
+
 		// Store results for the next round
 		previousRoundResults = roundResults
 	}
-	
+
 	return allResults, nil
 }
 
@@ -823,7 +824,7 @@ func processRoundWithGemini(ctx context.Context, conn *utils.Conn, prompt string
 	if err != nil {
 		return nil, fmt.Errorf("error getting function response from Gemini: %w", err)
 	}
-	
+
 	// Return the function calls from the response
 	return response.FunctionCalls, nil
 }
@@ -831,10 +832,10 @@ func processRoundWithGemini(ctx context.Context, conn *utils.Conn, prompt string
 // executeGeminiFunctions executes the function calls returned by Gemini
 func executeGeminiFunctions(ctx context.Context, conn *utils.Conn, userID int, functionCalls []FunctionCall) ([]ExecuteResult, error) {
 	var results []ExecuteResult
-	
+
 	for _, fc := range functionCalls {
 		fmt.Printf("Executing function %s with args: %s\n", fc.Name, string(fc.Args))
-		
+
 		// Check if the function exists in Tools map
 		tool, exists := Tools[fc.Name]
 		if !exists {
@@ -844,7 +845,7 @@ func executeGeminiFunctions(ctx context.Context, conn *utils.Conn, userID int, f
 			})
 			continue
 		}
-		
+
 		// Execute the function
 		result, err := tool.Function(conn, userID, fc.Args)
 		if err != nil {
@@ -861,7 +862,6 @@ func executeGeminiFunctions(ctx context.Context, conn *utils.Conn, userID int, f
 			})
 		}
 	}
-	
+
 	return results, nil
 }
-

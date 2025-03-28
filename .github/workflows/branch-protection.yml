@@ -6,6 +6,11 @@ on:
       - prod
     types: [opened, synchronize, reopened]
 
+# Add concurrency to cancel in-progress jobs when a new commit is pushed
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check-source-branch:
     name: Verify Source Branch

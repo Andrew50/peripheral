@@ -26,10 +26,10 @@ permissions:
   packages: write
   id-token: write
 
-# Add concurrency control to queue deployments instead of running in parallel
+# Update concurrency control to cancel in-progress jobs
 concurrency:
-  group: kubernetes-deployment
-  cancel-in-progress: false  # Queue deployments instead of canceling
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # Add a dependency on the lint-and-build workflow
