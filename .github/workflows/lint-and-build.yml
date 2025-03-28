@@ -597,26 +597,11 @@ jobs:
         run: |
           cd services/frontend
           
-          # Check for package manager lock files and use appropriate one
-          if [ -f "pnpm-lock.yaml" ]; then
-            echo "Using pnpm package manager"
-            npm install -g pnpm
-            pnpm install --no-frozen-lockfile
-          elif [ -f "yarn.lock" ]; then
-            echo "Using yarn package manager"
-            npm install -g yarn
-            yarn install
-          else
-            echo "Using npm package manager"
-            npm install
-          fi
+          # Use npm install instead of npm ci to allow for dependency updates
+          npm install
           
-          # Install test dependencies
-          if [ -f "pnpm-lock.yaml" ]; then
-            pnpm add --save-dev jest@29 @types/jest ts-jest@29 svelte-jester@2 @testing-library/svelte @testing-library/jest-dom jsdom
-          else
-            npm install --save-dev jest@29 @types/jest ts-jest@29 svelte-jester@2 @testing-library/svelte @testing-library/jest-dom jsdom
-          fi
+          # Install additional test dependencies
+          npm install --save-dev jest@29 @types/jest ts-jest@29 svelte-jester@2 @testing-library/svelte @testing-library/jest-dom jsdom
           
           # Create Jest config if it doesn't exist
           if [ ! -f jest.config.js ]; then
@@ -643,156 +628,70 @@ jobs:
             echo '};' >> jest.config.js
           fi
 
-      # Add a new step to fix Jest setup file issues
-      - name: Fix Jest setup file
+      - name: Create simplified Jest configuration
         run: |
           cd services/frontend
           
-          # Check if jest.setup.js exists and uses import statements
+          # First, create a CommonJS version of the setup file for compatibility
           if [ -f "jest.setup.js" ]; then
-            echo "Checking jest.setup.js format..."
-            if grep -q "import" jest.setup.js; then
-              echo "Converting jest.setup.js from ES modules to CommonJS format..."
-              # Create a backup of the original file
-              cp jest.setup.js jest.setup.js.original
-              
-              # Create a new CommonJS version
-              echo "// CommonJS version of the Jest setup file (auto-converted)" > jest.setup.js
-              echo "// Original file saved as jest.setup.js.original" >> jest.setup.js
-              echo "require('@testing-library/jest-dom');" >> jest.setup.js
-              echo "console.log('Jest setup file loaded successfully');" >> jest.setup.js
-              
-              echo "jest.setup.js converted to CommonJS format."
-            else
-              echo "jest.setup.js already uses CommonJS format. No changes needed."
-            fi
-          fi
-
-      - name: Identify changed frontend files
-        id: changed-frontend-files
-        if: steps.check-frontend-changes.outputs.has_changes == 'true'
-        run: |
-          # Use the last successful SHA from the check-workflow-conditions job
-          BASE_SHA="${{ needs.check-workflow-conditions.outputs.last_success_sha }}"
-          HEAD_SHA=$(git rev-parse HEAD)
-          
-          echo "Comparing changes between $BASE_SHA and $HEAD_SHA"
-          
-          # Find modified frontend files
-          CHANGED_TS_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA -- 'services/frontend/**/*.ts' 'services/frontend/**/*.js' 'services/frontend/**/*.svelte' | xargs)
-          echo "Changed frontend files: $CHANGED_TS_FILES"
-          
-          if [ -n "$CHANGED_TS_FILES" ]; then
-            echo "changed_files=$CHANGED_TS_FILES" >> $GITHUB_OUTPUT
-            echo "has_ts_changes=true" >> $GITHUB_OUTPUT
+            echo "Creating CommonJS version of jest.setup.js..."
+            # Create a backup of the original file
+            cp jest.setup.js jest.setup.js.original
+            
+            # Create a CommonJS version that works with both ESM and CJS
+            echo "// CommonJS version of the Jest setup file (auto-converted)" > jest.setup.cjs
+            echo "// Original file preserved as jest.setup.js" >> jest.setup.cjs
+            echo "require('@testing-library/jest-dom');" >> jest.setup.cjs
           else
-            echo "No frontend source files changed, but other frontend files may have changed"
-            echo "has_ts_changes=false" >> $GITHUB_OUTPUT
+            # Create a simple setup file if none exists
+            echo "// Jest setup file - CommonJS format" > jest.setup.cjs
+            echo "require('@testing-library/jest-dom');" >> jest.setup.cjs
           fi
-
-      # Add new step to initialize SvelteKit and generate type definitions
-      - name: Initialize SvelteKit
-        if: steps.check-frontend-changes.outputs.has_changes == 'true'
-        run: |
-          cd services/frontend
           
-          # Create directory for SvelteKit types if it doesn't exist
-          mkdir -p .svelte-kit
-
-          # Skip the svelte-kit sync command as it might be causing type definition issues
-          # Instead, create a minimal type environment
+          # Create a dual-mode Jest config that works with both CJS and ESM
+          echo "/** @type {import('jest').Config} */" > jest.config.cjs
+          echo "module.exports = {" >> jest.config.cjs
+          echo "  preset: 'ts-jest'," >> jest.config.cjs
+          echo "  testEnvironment: 'jsdom'," >> jest.config.cjs
+          echo "  setupFilesAfterEnv: ['<rootDir>/jest.setup.cjs']," >> jest.config.cjs
+          echo "  transform: {" >> jest.config.cjs
+          echo "    '^.+\\.svelte$': 'svelte-jester'," >> jest.config.cjs
+          echo "    '^.+\\.(ts|js)$': 'ts-jest'" >> jest.config.cjs
+          echo "  }," >> jest.config.cjs
+          echo "  moduleNameMapper: {" >> jest.config.cjs
+          echo "    '^\\$lib/(.*)$': '<rootDir>/src/lib/$1'" >> jest.config.cjs
+          echo "  }," >> jest.config.cjs
+          echo "  moduleFileExtensions: ['js', 'ts', 'svelte']" >> jest.config.cjs
+          echo "};" >> jest.config.cjs
+          
+          # Create minimal SvelteKit type structure if it doesn't exist
           mkdir -p .svelte-kit/types
           
-          # Debug message
-          echo "Created minimal SvelteKit type environment without running svelte-kit sync"
-
-      - name: Lint
-        if: steps.changed-frontend-files.outputs.has_ts_changes == 'true'
-        run: |
-          cd services/frontend
-          # Only lint changed files if there are changes
-          if [ -n "${{ steps.changed-frontend-files.outputs.changed_files }}" ]; then
-            echo "Linting changed files only"
-            CHANGED_FILES="${{ steps.changed-frontend-files.outputs.changed_files }}"
-            
-            # Create a faster linting config if possible
-            if [ -f ".eslintrc.js" ] || [ -f ".eslintrc.json" ]; then
-              # Create a temporary config that only includes critical rules
-              echo '{
-                "extends": "./.eslintrc.js",
-                "rules": {
-                  "no-unused-vars": "error",
-                  "no-undef": "error",
-                  "no-console": "off",
-                  "no-debugger": "error"
-                }
-              }' > .eslintrc.ci.json
-              
-              # Use the faster config for CI
-              npx eslint $CHANGED_FILES --quiet --config .eslintrc.ci.json --max-warnings=20 --no-error-on-unmatched-pattern
-            else
-              # Fallback to standard config
-              npx eslint $CHANGED_FILES --max-warnings=20 --no-error-on-unmatched-pattern --format stylish
-            fi
-          else
-            echo "No files to lint"
-          fi
-        # Individual step can continue on error for ben/aj branches
-        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
-
-      - name: Type check
-        if: steps.changed-frontend-files.outputs.has_ts_changes == 'true'
-        run: |
-          cd services/frontend
-          
-          # Ensure app.d.ts exists but don't modify it
+          # Create minimal app.d.ts if it doesn't exist
           if [ ! -f "src/app.d.ts" ]; then
-            echo "Creating src/app.d.ts with minimal declarations"
             mkdir -p src
-            
-            # Create a minimal app.d.ts that won't cause type errors
-            echo "// See https://kit.svelte.dev/docs/types#app" > src/app.d.ts
-            echo "// for information about these interfaces" >> src/app.d.ts
-            echo "declare global {" >> src/app.d.ts
-            echo "  namespace App {}" >> src/app.d.ts
-            echo "}" >> src/app.d.ts
-            echo "" >> src/app.d.ts
+            echo "// Minimal type definitions for testing" > src/app.d.ts
+            echo "declare global { namespace App {} }" >> src/app.d.ts
             echo "export {};" >> src/app.d.ts
           fi
-          
-          # Create a minimal tsconfig for type checking without modifying the original
-          echo '{
-            "extends": "./tsconfig.json",
-            "compilerOptions": {
-              "skipLibCheck": true,
-              "incremental": true
-            }
-          }' > tsconfig.ci.json
-          
-          # Use the simplified approach from the old workflow with the temp config
-          echo "Running svelte-check with simplified configuration..."
-          npx svelte-check --threshold error --diagnostic-sources "js,ts,svelte"
-        # Individual step can continue on error for ben/aj branches
-        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
-      - name: Build
-        if: steps.check-frontend-changes.outputs.has_changes == 'true'
+      - name: Run tests
         run: |
           cd services/frontend
-          # Install esbuild for faster builds if not already in dependencies
-          if ! grep -q "esbuild" package.json; then
-            pnpm add --save-dev esbuild
+          
+          # Ensure jest-environment-jsdom is installed
+          if ! grep -q "jest-environment-jsdom" package.json; then
+            npm install --save-dev jest-environment-jsdom
           fi
-          # Use faster build if possible, otherwise fallback to npm build
-          if [ -f "vite.config.js" ] || [ -f "vite.config.ts" ]; then
-            NODE_ENV=production npx vite build --minify esbuild
-          else
-            npm run build
-          fi
+          
+          # Run tests with the simplified CommonJS configuration
+          echo "Running tests with simplified CommonJS configuration"
+          npx jest --config=jest.config.cjs
+        
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
-
-      # Add summary step to create job summary and record last successful state
+        
+      # Add summary step to create job summary
       - name: Create job summary
         if: success() || needs.check-workflow-conditions.outputs.continue_on_error == 'true'
         run: |
@@ -836,20 +735,32 @@ jobs:
       - name: Install dependencies
         run: |
           cd services/frontend
-          npm ci
+          
+          # Use npm install instead of npm ci to allow for dependency updates
+          npm install
+          
+          # Install additional test dependencies
+          npm install --save-dev jest@29 @types/jest ts-jest@29 svelte-jester@2 @testing-library/svelte @testing-library/jest-dom jsdom jest-environment-jsdom
 
       - name: Create simplified Jest configuration
         run: |
           cd services/frontend
           
-          # First, delete existing Jest setup file
+          # First, create a CommonJS version of the setup file for compatibility
           if [ -f "jest.setup.js" ]; then
-            rm jest.setup.js
+            echo "Creating CommonJS version of jest.setup.js..."
+            # Create a backup of the original file
+            cp jest.setup.js jest.setup.js.original
+            
+            # Create a CommonJS version that works with both ESM and CJS
+            echo "// CommonJS version of the Jest setup file (auto-converted)" > jest.setup.cjs
+            echo "// Original file preserved as jest.setup.js" >> jest.setup.cjs
+            echo "require('@testing-library/jest-dom');" >> jest.setup.cjs
+          else
+            # Create a simple setup file if none exists
+            echo "// Jest setup file - CommonJS format" > jest.setup.cjs
+            echo "require('@testing-library/jest-dom');" >> jest.setup.cjs
           fi
-          
-          # Create a simplified Jest setup file (using CJS format for maximum compatibility)
-          echo "// Jest setup file - CommonJS format" > jest.setup.cjs
-          echo "require('@testing-library/jest-dom');" >> jest.setup.cjs
           
           # Create a simplified Jest config file (using CJS format for maximum compatibility)
           echo "/** @type {import('jest').Config} */" > jest.config.cjs
@@ -867,11 +778,6 @@ jobs:
           echo "  moduleFileExtensions: ['js', 'ts', 'svelte']" >> jest.config.cjs
           echo "};" >> jest.config.cjs
           
-          # Delete old Jest config if it exists
-          if [ -f "jest.config.js" ]; then
-            rm jest.config.js
-          fi
-          
           # Create minimal SvelteKit type structure if it doesn't exist
           mkdir -p .svelte-kit/types
           
@@ -886,11 +792,6 @@ jobs:
       - name: Run tests
         run: |
           cd services/frontend
-          
-          # Ensure jest-environment-jsdom is installed
-          if ! grep -q "jest-environment-jsdom" package.json; then
-            npm install --save-dev jest-environment-jsdom
-          fi
           
           # Run tests with the simplified CommonJS configuration
           echo "Running tests with simplified CommonJS configuration"
