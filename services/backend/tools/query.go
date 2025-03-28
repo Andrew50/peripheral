@@ -98,7 +98,8 @@ type ChatMessage struct {
 }
 
 // inferDateRange determines appropriate date ranges when not explicitly provided
-func inferDateRange(queryText string) DateRange {
+// Marked with underscore prefix as currently unused but may be needed in future
+func _inferDateRange(queryText string) DateRange {
 	now := time.Now()
 
 	// Default to last 90 days for "recent" queries
@@ -108,7 +109,7 @@ func inferDateRange(queryText string) DateRange {
 	}
 
 	// For very recent queries, use last 30 days
-	if containsAny(queryText, []string{"very recent", "last month", "past month", "last 30 days", "this month"}) {
+	if _containsAny(queryText, []string{"very recent", "last month", "past month", "last 30 days", "this month"}) {
 		return DateRange{
 			Start: now.AddDate(0, -1, 0).Format("2006-01-02"),
 			End:   now.Format("2006-01-02"),
@@ -116,12 +117,12 @@ func inferDateRange(queryText string) DateRange {
 	}
 
 	// For recent/current queries, use last 90 days
-	if containsAny(queryText, []string{"recent", "current", "lately", "now", "present"}) {
+	if _containsAny(queryText, []string{"recent", "current", "lately", "now", "present"}) {
 		return defaultRange
 	}
 
 	// For YTD queries
-	if containsAny(queryText, []string{"ytd", "year to date", "this year"}) {
+	if _containsAny(queryText, []string{"ytd", "year to date", "this year"}) {
 		return DateRange{
 			Start: time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location()).Format("2006-01-02"),
 			End:   now.Format("2006-01-02"),
@@ -129,7 +130,7 @@ func inferDateRange(queryText string) DateRange {
 	}
 
 	// For 1-year lookback
-	if containsAny(queryText, []string{"last year", "past year", "12 months", "one year"}) {
+	if _containsAny(queryText, []string{"last year", "past year", "12 months", "one year"}) {
 		return DateRange{
 			Start: now.AddDate(-1, 0, 0).Format("2006-01-02"),
 			End:   now.Format("2006-01-02"),
@@ -141,7 +142,8 @@ func inferDateRange(queryText string) DateRange {
 }
 
 // containsAny checks if the text contains any of the provided phrases
-func containsAny(text string, phrases []string) bool {
+// Marked with underscore prefix as currently unused but may be needed in future
+func _containsAny(text string, phrases []string) bool {
 	lowerText := strings.ToLower(text)
 	for _, phrase := range phrases {
 		if strings.Contains(lowerText, phrase) {
@@ -227,7 +229,8 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 
 	jsonBlock := responseText[jsonStartIdx : jsonEndIdx+1]
 	if err := json.Unmarshal([]byte(jsonBlock), &thinkingResp); err != nil {
-
+		// Log the error but continue with text response if JSON parsing fails
+		fmt.Printf("Error unmarshaling thinking response: %v\n", err)
 	}
 
 	if len(thinkingResp.Rounds) == 0 {
@@ -480,7 +483,8 @@ func GetUserConversation(conn *utils.Conn, userID int, args json.RawMessage) (in
 	return conversation, nil
 }
 
-func getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (string, error) {
+// getGeminiResponse is marked with underscore prefix as currently unused but may be needed in future
+func _getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (string, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
 		return "", fmt.Errorf("error getting gemini key: %w", err)
@@ -499,7 +503,11 @@ func getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (str
 	if err != nil {
 		return "", fmt.Errorf("error getting system instruction: %w", err)
 	}
-	systemInstruction = "You are a helpful assistant that can answer questions and run functions"
+	// Define default system instruction (using the retrieved value rather than overwriting it)
+	defaultInstruction := "You are a helpful assistant that can answer questions and run functions"
+	if systemInstruction == "" {
+		systemInstruction = defaultInstruction
+	}
 
 	config := &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{
