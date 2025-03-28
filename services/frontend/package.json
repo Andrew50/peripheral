@@ -48,6 +48,7 @@
 		"html2canvas": "^1.4.1",
 		"lightweight-charts": "^4.2.0",
 		"luxon": "^3.5.0",
+		"marked": "^15.0.7",
 		"quill": "^2.0.2"
 	}
 }

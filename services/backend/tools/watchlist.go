@@ -65,12 +65,12 @@ func DeleteWatchlist(conn *utils.Conn, userId int, rawArgs json.RawMessage) (int
 	if err != nil {
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), "DELETE FROM watchlists where watchlistId = $1", args.Id)
+	cmdTag, err := conn.DB.Exec(context.Background(), "DELETE FROM watchlists WHERE watchlistId = $1 AND userId = $2", args.Id, userId)
 	if err != nil {
 		return nil, err
 	}
 	if cmdTag.RowsAffected() == 0 {
-		return nil, fmt.Errorf("ssd7g3")
+		return nil, fmt.Errorf("watchlist not found or you don't have permission to delete it")
 	}
 	return nil, err
 }
@@ -94,10 +94,23 @@ func GetWatchlistItems(conn *utils.Conn, userId int, rawArgs json.RawMessage) (i
 	if err != nil {
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
+
+	// First verify that the watchlist belongs to the user
+	var watchlistExists bool
+	err = conn.DB.QueryRow(context.Background(),
+		`SELECT EXISTS(SELECT 1 FROM watchlists WHERE watchlistId = $1 AND userId = $2)`,
+		args.WatchlistID, userId).Scan(&watchlistExists)
+	if err != nil {
+		return nil, fmt.Errorf("error verifying watchlist ownership: %v", err)
+	}
+	if !watchlistExists {
+		return nil, fmt.Errorf("watchlist not found or you don't have permission to access it")
+	}
+
 	rows, err := conn.DB.Query(context.Background(),
 		`SELECT w.securityId, s.ticker, w.watchlistItemId from watchlistItems as w
-    JOIN securities as s ON s.securityId = w.securityId
-    where w.watchlistId = $1`, args.WatchlistID)
+		JOIN securities as s ON s.securityId = w.securityId
+		WHERE w.watchlistId = $1`, args.WatchlistID)
 	if err != nil {
 		return nil, fmt.Errorf("sovn %v", err)
 	}
@@ -129,12 +142,16 @@ func DeleteWatchlistItem(conn *utils.Conn, userId int, rawArgs json.RawMessage) 
 	if err != nil {
 		return nil, fmt.Errorf("m0ivn0d %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), "DELETE FROM watchlistItems WHERE watchlistItemId = $1", args.WatchlistItemID)
+	cmdTag, err := conn.DB.Exec(context.Background(), `
+		DELETE FROM watchlistItems 
+		WHERE watchlistItemId = $1 
+		AND watchlistId IN (SELECT watchlistId FROM watchlists WHERE userId = $2)`,
+		args.WatchlistItemID, userId)
 	if err != nil {
 		return nil, fmt.Errorf("niv02 %v", err)
 	}
 	if cmdTag.RowsAffected() == 0 {
-		return nil, fmt.Errorf("mvo2")
+		return nil, fmt.Errorf("watchlist item not found or you don't have permission to delete it")
 	}
 	return nil, nil
 }
@@ -152,8 +169,23 @@ func NewWatchlistItem(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 	if err != nil {
 		return nil, fmt.Errorf("m0ivn0d %v", err)
 	}
+
+	// Verify that the watchlist belongs to the user
+	var watchlistExists bool
+	err = conn.DB.QueryRow(context.Background(),
+		`SELECT EXISTS(SELECT 1 FROM watchlists WHERE watchlistId = $1 AND userId = $2)`,
+		args.WatchlistID, userId).Scan(&watchlistExists)
+	if err != nil {
+		return nil, fmt.Errorf("error verifying watchlist ownership: %v", err)
+	}
+	if !watchlistExists {
+		return nil, fmt.Errorf("watchlist not found or you don't have permission to modify it")
+	}
+
 	var watchlistID int
-	err = conn.DB.QueryRow(context.Background(), "INSERT into watchlistItems (securityId,watchlistId) values ($1,$2) RETURNING watchlistItemId", args.SecurityID, args.WatchlistID).Scan(&watchlistID)
+	err = conn.DB.QueryRow(context.Background(),
+		"INSERT into watchlistItems (securityId,watchlistId) values ($1,$2) RETURNING watchlistItemId",
+		args.SecurityID, args.WatchlistID).Scan(&watchlistID)
 	if err != nil {
 		return nil, err
 	}

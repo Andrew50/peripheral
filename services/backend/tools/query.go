@@ -5,11 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
-	"sort"
 	"time"
 
 	"google.golang.org/genai"
@@ -102,7 +98,10 @@ type ChatMessage struct {
 }
 
 // inferDateRange determines appropriate date ranges when not explicitly provided
-func inferDateRange(queryText string) DateRange {
+// Marked with underscore prefix as currently unused but may be needed in future
+//
+//nolint:unused // Preserved for future use
+func _inferDateRange(queryText string) DateRange {
 	now := time.Now()
 
 	// Default to last 90 days for "recent" queries
@@ -112,7 +111,7 @@ func inferDateRange(queryText string) DateRange {
 	}
 
 	// For very recent queries, use last 30 days
-	if containsAny(queryText, []string{"very recent", "last month", "past month", "last 30 days", "this month"}) {
+	if _containsAny(queryText, []string{"very recent", "last month", "past month", "last 30 days", "this month"}) {
 		return DateRange{
 			Start: now.AddDate(0, -1, 0).Format("2006-01-02"),
 			End:   now.Format("2006-01-02"),
@@ -120,12 +119,12 @@ func inferDateRange(queryText string) DateRange {
 	}
 
 	// For recent/current queries, use last 90 days
-	if containsAny(queryText, []string{"recent", "current", "lately", "now", "present"}) {
+	if _containsAny(queryText, []string{"recent", "current", "lately", "now", "present"}) {
 		return defaultRange
 	}
 
 	// For YTD queries
-	if containsAny(queryText, []string{"ytd", "year to date", "this year"}) {
+	if _containsAny(queryText, []string{"ytd", "year to date", "this year"}) {
 		return DateRange{
 			Start: time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location()).Format("2006-01-02"),
 			End:   now.Format("2006-01-02"),
@@ -133,7 +132,7 @@ func inferDateRange(queryText string) DateRange {
 	}
 
 	// For 1-year lookback
-	if containsAny(queryText, []string{"last year", "past year", "12 months", "one year"}) {
+	if _containsAny(queryText, []string{"last year", "past year", "12 months", "one year"}) {
 		return DateRange{
 			Start: now.AddDate(-1, 0, 0).Format("2006-01-02"),
 			End:   now.Format("2006-01-02"),
@@ -145,7 +144,10 @@ func inferDateRange(queryText string) DateRange {
 }
 
 // containsAny checks if the text contains any of the provided phrases
-func containsAny(text string, phrases []string) bool {
+// Marked with underscore prefix as currently unused but may be needed in future
+//
+//nolint:unused // Preserved for future use
+func _containsAny(text string, phrases []string) bool {
 	lowerText := strings.ToLower(text)
 	for _, phrase := range phrases {
 		if strings.Contains(lowerText, phrase) {
@@ -204,147 +206,76 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 	} else {
 		prompt = query.Query
 	}
-	// This first passes the query to a thinking model 
+
+	// This first passes the query to a thinking model
 	geminiThinkingResponse, err := getGeminiFunctionThinking(ctx, conn, prompt)
-	//geminiFuncResponse, err := getGeminiFunctionResponse(ctx, conn, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("error getting thinking response: %w", err)
 	}
 
 	responseText := geminiThinkingResponse.Text
-	fmt.Printf("\n\nThinking response: %s\n\n", responseText)
-	prompt = responseText
-	geminiResponse, err := getGeminiFunctionResponse(ctx, conn, prompt)
-	if err != nil {
-		return nil, fmt.Errorf("error getting function calls: %w",err)
-	}
-	functionCalls := geminiResponse.FunctionCalls 
-	responseText = geminiResponse.Text
-	// Process function calls to add default date ranges if needed
-	for i, fc := range functionCalls {
-		// Check if this is a function that might need date ranges
-		if fc.Name == "getStockData" || fc.Name == "getChartData" || strings.Contains(fc.Name, "Price") {
-			var args map[string]interface{}
-			if err := json.Unmarshal(fc.Args, &args); err == nil {
-				// Check if date range is missing or incomplete
-				_, hasStart := args["start_date"]
-				_, hasEnd := args["end_date"]
+	fmt.Printf("\n\n\nThinking Response: %v\n\n\n", responseText)
 
-				if !hasStart || !hasEnd {
-					// Infer appropriate date range
-					dateRange := inferDateRange(query.Query)
+	// Try to parse the thinking response as JSON
+	var thinkingResp ThinkingResponse
 
-					// Add the inferred dates to the args
-					if !hasStart {
-						args["start_date"] = dateRange.Start
-					}
-					if !hasEnd {
-						args["end_date"] = dateRange.End
-					}
+	// Find the JSON block in the response
+	jsonStartIdx := strings.Index(responseText, "{")
+	jsonEndIdx := strings.LastIndex(responseText, "}")
 
-					// Update the function call with the new args
-					updatedArgs, _ := json.Marshal(args)
-					functionCalls[i].Args = updatedArgs
-				}
-			}
-		}
-	}
-
-	// Create new message
-	newMessage := ChatMessage{
-		Query:         query.Query,
-		ResponseText:  responseText,
-		FunctionCalls: functionCalls,
-		ToolResults:   []ExecuteResult{},
-		Timestamp:     time.Now(),
-		ExpiresAt:     time.Now().Add(24 * time.Hour), // Message expires after 24 hours
-	}
-
-	// If no function calls were returned, fall back to the text response
-	if len(functionCalls) == 0 {
-		// If we already have a text response, use it
-		if responseText != "" {
-			result := map[string]interface{}{
-				"type": "text",
-				"text": responseText,
-			}
-
-			// Add new message to conversation history
-			conversationData.Messages = append(conversationData.Messages, newMessage)
-			conversationData.Timestamp = time.Now()
-			if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-				fmt.Printf("Error saving updated conversation: %v\n", err)
-			}
-
-			return result, nil
-		}
-
-		// Otherwise, get a direct text response
-		textResponse, err := getGeminiResponse(ctx, conn, prompt)
-		if err != nil {
-			return nil, fmt.Errorf("error getting text response: %w", err)
-		}
-
-		result := map[string]interface{}{
+	// If no valid JSON is found, just return the text response
+	if jsonStartIdx == -1 || jsonEndIdx == -1 || jsonEndIdx <= jsonStartIdx {
+		return map[string]interface{}{
 			"type": "text",
-			"text": textResponse,
+			"text": responseText,
+		}, nil
+	}
+
+	jsonBlock := responseText[jsonStartIdx : jsonEndIdx+1]
+	if err := json.Unmarshal([]byte(jsonBlock), &thinkingResp); err != nil {
+		// Log the error but continue with text response if JSON parsing fails
+		fmt.Printf("Error unmarshaling thinking response: %v\n", err)
+	}
+
+	if len(thinkingResp.Rounds) == 0 {
+		return map[string]interface{}{
+			"type": "text",
+			"text": responseText,
+		}, nil
+	}
+	// Try to process the thinking response as rounds
+	thinkingResults, err := processThinkingResponse(ctx, conn, userID, thinkingResp)
+	if err == nil && len(thinkingResults) > 0 {
+
+		// Create new message with the round results and formatted response
+		newMessage := ChatMessage{
+			Query:         query.Query,
+			ResponseText:  "Successfully processed the following function calls:\n\n",
+			FunctionCalls: []FunctionCall{}, // We don't store these as regular function calls
+			ToolResults:   thinkingResults,
+			Timestamp:     time.Now(),
+			ExpiresAt:     time.Now().Add(24 * time.Hour),
 		}
 
-		// Update message and add to conversation history
-		newMessage.ResponseText = textResponse
+		// Add new message to conversation history
 		conversationData.Messages = append(conversationData.Messages, newMessage)
 		conversationData.Timestamp = time.Now()
 		if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-			fmt.Printf("Error saving updated conversation with text response: %v\n", err)
+			fmt.Printf("Error saving updated conversation: %v\n", err)
 		}
 
-		return result, nil
+		return map[string]interface{}{
+			"type":    "function_calls",
+			"results": thinkingResults,
+			"text":    "Successfully processed the following function calls:\n\n",
+			"history": conversationData,
+		}, nil
 	}
 
-	// Execute the functions in order and collect results
-
-	var results []ExecuteResult
-
-	for _, fc := range functionCalls {
-		// Check if the function exists in Tools map
-		tool, exists := Tools[fc.Name]
-		if !exists {
-			results = append(results, ExecuteResult{
-				FunctionName: fc.Name,
-				Error:        fmt.Sprintf("function '%s' not found", fc.Name),
-			})
-			continue
-		}
-
-		// Execute the function
-		result, err := tool.Function(conn, userID, fc.Args)
-		if err != nil {
-			results = append(results, ExecuteResult{
-				FunctionName: fc.Name,
-				Error:        err.Error(),
-			})
-		} else {
-			results = append(results, ExecuteResult{
-				FunctionName: fc.Name,
-				Result:       result,
-			})
-		}
-	}
-
-	// Update message with tool results and add to conversation
-	newMessage.ToolResults = results
-	conversationData.Messages = append(conversationData.Messages, newMessage)
-	conversationData.Timestamp = time.Now()
-	if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-		fmt.Printf("Error saving conversation with function calls: %v\n", err)
-	}
-
-	// Return both the function call results and the text response
+	// Return the text response as fallback when no function calls are processed
 	return map[string]interface{}{
-		"type":    "function_calls",
-		"results": results,
-		"text":    responseText,
-		"history": conversationData,
+		"type": "text",
+		"text": responseText,
 	}, nil
 }
 
@@ -556,32 +487,10 @@ func GetUserConversation(conn *utils.Conn, userID int, args json.RawMessage) (in
 	return conversation, nil
 }
 
-// getSystemInstruction reads the content of query.txt to be used as system instruction
-func getSystemInstruction() (string, error) {
-	// Get the directory of the current file (gemini.go)
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", fmt.Errorf("error getting current file path")
-	}
-	currentDir := filepath.Dir(filename)
-
-	// Construct path to query.txt
-	queryFilePath := filepath.Join(currentDir, "defaultSystemPrompt.txt")
-
-	// Read the content of query.txt
-	content, err := os.ReadFile(queryFilePath)
-	if err != nil {
-		return "", fmt.Errorf("error reading query.txt: %w", err)
-	}
-
-	// Replace the {{CURRENT_TIME}} placeholder with the actual current time
-	currentTime := time.Now().Format(time.RFC3339)
-	instruction := strings.Replace(string(content), "{{CURRENT_TIME}}", currentTime, -1)
-
-	return instruction, nil
-}
-
-func getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (string, error) {
+// getGeminiResponse is marked with underscore prefix as currently unused but may be needed in future
+//
+//nolint:unused // Preserved for future use
+func _getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (string, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
 		return "", fmt.Errorf("error getting gemini key: %w", err)
@@ -600,7 +509,11 @@ func getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (str
 	if err != nil {
 		return "", fmt.Errorf("error getting system instruction: %w", err)
 	}
-	systemInstruction = "You are a helpful assistant that can answer questions and run functions"
+	// Define default system instruction (using the retrieved value rather than overwriting it)
+	defaultInstruction := "You are a helpful assistant that can answer questions and run functions"
+	if systemInstruction == "" {
+		systemInstruction = defaultInstruction
+	}
 
 	config := &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{
@@ -626,8 +539,9 @@ func getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (str
 
 // FunctionCall represents a function to be called with its arguments
 type FunctionCall struct {
-	Name string          `json:"name"`
-	Args json.RawMessage `json:"args,omitempty"`
+	Name   string          `json:"name"`
+	CallID string          `json:"call_id,omitempty"`
+	Args   json.RawMessage `json:"args,omitempty"`
 }
 
 // FunctionResponse represents the response from the LLM with function calls
@@ -638,6 +552,64 @@ type FunctionResponse struct {
 type GeminiFunctionResponse struct {
 	FunctionCalls []FunctionCall `json:"function_calls"`
 	Text          string         `json:"text"`
+}
+
+func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, query string) (*GeminiFunctionResponse, error) {
+	apiKey, err := conn.GetGeminiKey()
+	if err != nil {
+		return nil, fmt.Errorf("error getting gemini key: %w", err)
+	}
+
+	// Create a new client using the API key
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error creating gemini client: %w", err)
+	}
+
+	// Get the system instruction
+	baseSystemInstruction, err := getSystemInstruction()
+	if err != nil {
+		return nil, fmt.Errorf("error getting system instruction: %w", err)
+	}
+
+	// Enhance the system instruction with tool descriptions
+	enhancedSystemInstruction := enhanceSystemPromptWithTools(baseSystemInstruction)
+	config := &genai.GenerateContentConfig{
+		SystemInstruction: &genai.Content{
+			Parts: []*genai.Part{
+				{Text: enhancedSystemInstruction},
+			},
+		},
+	}
+
+	result, err := client.Models.GenerateContent(
+		ctx,
+		"gemini-2.0-flash-thinking-exp-01-21",
+		genai.Text(query),
+		config,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error generating content with thinking model: %w", err)
+	}
+
+	// Extract the clean text response for display
+	responseText := ""
+	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
+		for _, part := range result.Candidates[0].Content.Parts {
+			if part.Text != "" {
+				responseText = part.Text
+				break
+			}
+		}
+	}
+	response := &GeminiFunctionResponse{
+		FunctionCalls: []FunctionCall{},
+		Text:          responseText,
+	}
+	return response, nil
 }
 
 // getGeminiFunctionResponse uses the Google Function API to return an ordered list of functions to execute
@@ -656,13 +628,7 @@ func getGeminiFunctionResponse(ctx context.Context, conn *utils.Conn, query stri
 		return nil, fmt.Errorf("error creating gemini client: %w", err)
 	}
 
-	// Get the system instruction
-	systemInstruction, err := getSystemInstruction()
-	fmt.Println("systemInstruction:", systemInstruction)
-	if err != nil {
-		return nil, fmt.Errorf("error getting system instruction: %w", err)
-	}
-	systemInstruction = "You are a helpful assistant that can answer questions and run functions"
+	systemInstruction := "You are a helpful assistant that can answer questions and run functions"
 	var geminiTools []*genai.Tool
 	for _, tool := range Tools {
 		// Convert the FunctionDeclaration to a Tool
@@ -685,7 +651,6 @@ func getGeminiFunctionResponse(ctx context.Context, conn *utils.Conn, query stri
 			},
 		},
 	}
-	fmt.Printf("\n\n\nconversation history %s\n\n\n", query)
 	// Check if query has conversation history format ("User: ... Assistant: ...")
 	// If it does, use that directly as the prompt
 	if strings.Contains(query, "User:") && strings.Contains(query, "Assistant:") {
@@ -793,111 +758,124 @@ func getGeminiFunctionResponse(ctx context.Context, conn *utils.Conn, query stri
 	}, nil
 }
 
-func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, query string) (*GeminiFunctionResponse, error) {
-	apiKey, err := conn.GetGeminiKey()
-	if err != nil {
-		return nil, fmt.Errorf("error getting gemini key: %w", err)
-	}
-
-	// Create a new client using the API key
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error creating gemini client: %w", err)
-	}
-
-	// Get the system instruction
-	baseSystemInstruction, err := getSystemInstruction()
-	if err != nil {
-		return nil, fmt.Errorf("error getting system instruction: %w", err)
-	}
-
-	// Enhance the system instruction with tool descriptions
-	enhancedSystemInstruction := enhanceSystemPromptWithTools(baseSystemInstruction)
-	fmt.Println("Enhanced system instruction created with tool descriptions\n\n")
-	fmt.Println(enhancedSystemInstruction)
-	config := &genai.GenerateContentConfig{
-		SystemInstruction: &genai.Content{
-			Parts: []*genai.Part{
-				{Text: enhancedSystemInstruction},
-			},
-		},
-	}
-	
-	result, err := client.Models.GenerateContent(
-		ctx,
-		"gemini-2.0-flash-thinking-exp-01-21",
-		genai.Text(query),
-		config,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("error generating content with thinking model: %w", err)
-	}
-	
-	// Extract the clean text response for display
-	responseText := ""
-	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
-		for _, part := range result.Candidates[0].Content.Parts {
-			if part.Text != "" {
-				responseText = part.Text
-				break
-			}
-		}
-	}
-	response := &GeminiFunctionResponse {
-		FunctionCalls: []FunctionCall{},
-		Text: responseText,
-	}
-	return response, nil
+// ThinkingResponse represents the JSON output from the thinking model with rounds
+type ThinkingResponse struct {
+	Rounds [][]FunctionCall `json:"rounds"`
 }
 
-// enhanceSystemPromptWithTools adds a formatted list of available tools to the system prompt
-func enhanceSystemPromptWithTools(basePrompt string) string {
-	var toolsDescription strings.Builder
-	
-	// Start with the base prompt
-	toolsDescription.WriteString(basePrompt)
-	toolsDescription.WriteString("\n\nHere are the functions you can use:\n\n")
-	
-	// Sort tool names for consistent output
-	var toolNames []string
-	for name := range Tools {
-		toolNames = append(toolNames, name)
-	}
-	sort.Strings(toolNames)
-	
-	// Add each tool's description and parameters
-	for _, name := range toolNames {
-		tool := Tools[name]
-		
-		// Add function name and description
-		toolsDescription.WriteString(fmt.Sprintf("- %s: %s\n", name, tool.FunctionDeclaration.Description))
-		
-		// Add parameters if they exist
-		if tool.FunctionDeclaration.Parameters != nil && len(tool.FunctionDeclaration.Parameters.Properties) > 0 {
-			toolsDescription.WriteString("  Parameters:\n")
-			
-			// Get required parameters
-			required := make(map[string]bool)
-			for _, req := range tool.FunctionDeclaration.Parameters.Required {
-				required[req] = true
-			}
-			
-			// Add each parameter with its description
-			for paramName, paramSchema := range tool.FunctionDeclaration.Parameters.Properties {
-				isReq := ""
-				if required[paramName] {
-					isReq = " (required)"
-				}
-				toolsDescription.WriteString(fmt.Sprintf("  - %s: %s%s\n", paramName, paramSchema.Description, isReq))
-			}
+// RoundResult stores the results of a round's function calls
+type RoundResult struct {
+	Results map[string]interface{} `json:"results"`
+}
+
+// processThinkingResponse attempts to parse and execute the thinking model's rounds
+func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, thinkingResp ThinkingResponse) ([]ExecuteResult, error) {
+
+	// Store all results from all rounds
+	var allResults []ExecuteResult
+	var previousRoundResults []ExecuteResult
+
+	// Process each round sequentially, sending each to Gemini
+	for _, round := range thinkingResp.Rounds {
+
+		// Create a prompt for Gemini that includes:
+		// 1. The current round's function calls
+		// 2. The results from the previous round (if any)
+
+		// First, convert the round to JSON
+		roundJSON, err := json.Marshal(round)
+		if err != nil {
+			fmt.Printf("Error marshaling round to JSON: %v\n", err)
+			continue
 		}
-		
-		// Add spacing between functions
-		toolsDescription.WriteString("\n")
+
+		// Create a prompt that includes the round and previous results
+		var prompt strings.Builder
+		prompt.WriteString("Process this round of function calls:\n\n")
+		prompt.WriteString("```json\n")
+		prompt.WriteString(string(roundJSON))
+		prompt.WriteString("\n```\n\n")
+
+		// Include previous round results if available
+		if len(previousRoundResults) > 0 {
+			prompt.WriteString("Results from the previous round:\n\n")
+			resultsJSON, _ := json.Marshal(previousRoundResults)
+			prompt.WriteString("```json\n")
+			prompt.WriteString(string(resultsJSON))
+			prompt.WriteString("\n```\n\n")
+
+		}
+		prompt.WriteString("Please process this round of function calls.\n")
+		// Send to Gemini for processing
+		fmt.Printf("Sending round to Gemini for processing:\n%s\n", prompt.String())
+		processedRound, err := processRoundWithGemini(ctx, conn, prompt.String())
+		if err != nil {
+			fmt.Printf("Error processing round with Gemini: %v\n", err)
+			continue
+		}
+
+		// Execute the functions returned by Gemini
+		roundResults, err := executeGeminiFunctions(ctx, conn, userID, processedRound)
+		if err != nil {
+			fmt.Printf("Error executing functions: %v\n", err)
+			continue
+		}
+
+		// Add this round's results to the combined results
+		allResults = append(allResults, roundResults...)
+
+		// Store results for the next round
+		previousRoundResults = roundResults
 	}
-	
-	return toolsDescription.String()
+
+	return allResults, nil
+}
+
+// processRoundWithGemini sends a round to Gemini for processing and gets back the functions to execute
+func processRoundWithGemini(ctx context.Context, conn *utils.Conn, prompt string) ([]FunctionCall, error) {
+	// Get a response from Gemini with the processed functions
+	response, err := getGeminiFunctionResponse(ctx, conn, prompt)
+	if err != nil {
+		return nil, fmt.Errorf("error getting function response from Gemini: %w", err)
+	}
+
+	// Return the function calls from the response
+	return response.FunctionCalls, nil
+}
+
+// executeGeminiFunctions executes the function calls returned by Gemini
+func executeGeminiFunctions(ctx context.Context, conn *utils.Conn, userID int, functionCalls []FunctionCall) ([]ExecuteResult, error) {
+	var results []ExecuteResult
+
+	for _, fc := range functionCalls {
+		fmt.Printf("Executing function %s with args: %s\n", fc.Name, string(fc.Args))
+
+		// Check if the function exists in Tools map
+		tool, exists := Tools[fc.Name]
+		if !exists {
+			results = append(results, ExecuteResult{
+				FunctionName: fc.Name,
+				Error:        fmt.Sprintf("function '%s' not found", fc.Name),
+			})
+			continue
+		}
+
+		// Execute the function
+		result, err := tool.Function(conn, userID, fc.Args)
+		if err != nil {
+			fmt.Printf("Function %s execution error: %v\n", fc.Name, err)
+			results = append(results, ExecuteResult{
+				FunctionName: fc.Name,
+				Error:        err.Error(),
+			})
+		} else {
+			fmt.Printf("Function %s executed successfully\n", fc.Name)
+			results = append(results, ExecuteResult{
+				FunctionName: fc.Name,
+				Result:       result,
+			})
+		}
+	}
+
+	return results, nil
 }
