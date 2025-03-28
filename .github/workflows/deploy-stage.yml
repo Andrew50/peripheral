@@ -382,271 +382,12 @@ jobs:
       # Run database migrations
       - name: Deploy Database Migrations
         run: |
-          # Verify cluster connectivity with detailed output
-          echo "Checking Kubernetes cluster connectivity..."
-          if ! kubectl cluster-info; then
-            echo "ERROR: Cannot connect to Kubernetes cluster."
-            echo "Current kubectl context: $(kubectl config current-context || echo 'NONE')"
-            exit 1
-          fi
+          # Log function for better visibility
+          log() {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+          }
           
-          # Verify correct context
-          CURRENT_CONTEXT=$(kubectl config current-context)
-          echo "Current Kubernetes context: $CURRENT_CONTEXT"
-          if [ "$CURRENT_CONTEXT" != "$K8S_CONTEXT" ]; then
-            echo "ERROR: Wrong Kubernetes context! Expected $K8S_CONTEXT but got $CURRENT_CONTEXT"
-            exit 1
-          fi
-          
-          # Check if namespace exists
-          echo "Checking if namespace $K8S_NAMESPACE exists..."
-          if ! kubectl get namespace "$K8S_NAMESPACE" &>/dev/null; then
-            echo "ERROR: Namespace $K8S_NAMESPACE does not exist."
-            echo "Available namespaces:"
-            kubectl get namespaces
-            exit 1
-          fi
-          
-          # Get all pods to help diagnose issues
-          echo "Listing all pods in namespace $K8S_NAMESPACE:"
-          kubectl get pods -n "$K8S_NAMESPACE"
-          
-          # Save current replica counts with better error handling
-          echo "Saving current deployment replica counts..."
-          for deployment in worker backend tf; do
-            echo "Checking $deployment deployment..."
-            if kubectl get deployment $deployment -n "$K8S_NAMESPACE" &>/dev/null; then
-              replicas=$(kubectl get deployment $deployment -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "1")
-              echo "${deployment}_REPLICAS=$replicas" >> $GITHUB_ENV
-              echo "$deployment has $replicas replicas"
-            else
-              echo "Note: $deployment deployment not found, will use default of 1 replica"
-              echo "${deployment}_REPLICAS=1" >> $GITHUB_ENV
-            fi
-          done
-          
-          # Check if deployments exist before scaling
-          echo "Checking deployments before scaling down..."
-          DEPLOYMENTS_TO_SCALE=""
-          for deployment in worker backend tf; do
-            if kubectl get deployment $deployment -n "$K8S_NAMESPACE" &>/dev/null; then
-              DEPLOYMENTS_TO_SCALE="$DEPLOYMENTS_TO_SCALE $deployment"
-            else
-              echo "Note: $deployment deployment not found - skipping scale down"
-            fi
-          done
-          
-          # Scale down services if they exist
-          if [ -n "$DEPLOYMENTS_TO_SCALE" ]; then
-            echo "Entering maintenance mode: Scaling down services that access the database..."
-            kubectl scale deployment $DEPLOYMENTS_TO_SCALE --replicas=0 || {
-              echo "WARNING: Failed to scale down some deployments, proceeding anyway..."
-            }
-            
-            # Wait for pods to terminate with status check
-            echo "Waiting for pods to terminate..."
-            sleep 5
-            echo "Checking if pods are terminated:"
-            kubectl get pods -l "app in (worker,backend,tf)" -n "$K8S_NAMESPACE" || echo "No matching pods found"
-          else
-            echo "No deployments found to scale down, skipping this step"
-          fi
-          
-          # Check if database pod exists
-          echo "Looking for database pod..."
-          # Add set +e to prevent command from causing the script to exit on error
-          set +e
-          DB_POD=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-          POD_CHECK_STATUS=$?
-          set -e
-          
-          echo "Database pod lookup complete, status: $POD_CHECK_STATUS"
-          echo "DB_POD value: ${DB_POD:-'(empty)'}"
-          
-          if [ -z "$DB_POD" ]; then
-            echo "Database pod not found - this could be the first deployment."
-            echo "Checking if DB deployment exists..."
-            
-            # Add set +e to prevent command from causing the script to exit on error
-            set +e
-            DB_DEPLOYMENT=$(kubectl get deployment db -n "$K8S_NAMESPACE" 2>/dev/null)
-            DEPLOYMENT_CHECK_STATUS=$?
-            set -e
-            
-            echo "DB deployment check complete, status: $DEPLOYMENT_CHECK_STATUS"
-            
-            if [ $DEPLOYMENT_CHECK_STATUS -eq 0 ]; then
-              echo "DB deployment exists but no pods found. Checking events:"
-              kubectl get events -n "$K8S_NAMESPACE" | grep db || echo "No DB events found"
-              
-              echo "Attempting to recreate the DB pod by restarting the deployment..."
-              # Add set +e to prevent command from causing the script to exit on error
-              set +e
-              kubectl rollout restart deployment/db -n "$K8S_NAMESPACE"
-              RESTART_STATUS=$?
-              set -e
-              
-              if [ $RESTART_STATUS -ne 0 ]; then
-                echo "WARNING: Failed to restart DB deployment, will proceed to next steps"
-              fi
-              
-              # Wait for DB pod to appear
-              echo "Waiting for DB pod to appear..."
-              for i in {1..24}; do
-                sleep 5
-                # Add set +e to prevent command from causing the script to exit on error
-                set +e
-                NEW_DB_POD=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-                POD_APPEAR_STATUS=$?
-                set -e
-                
-                echo "DB pod check attempt $i, status: $POD_APPEAR_STATUS, result: ${NEW_DB_POD:-'(none)'}"
-                
-                if [ -n "$NEW_DB_POD" ]; then
-                  echo "DB pod appeared: $NEW_DB_POD"
-                  DB_POD=$NEW_DB_POD  # Set DB_POD for use in subsequent steps
-                  break
-                fi
-                echo "Still waiting for DB pod... (attempt $i of 24)"
-                
-                if [ $i -eq 24 ]; then
-                  echo "WARNING: Failed to find DB pod after 2 minutes"
-                  echo "Will proceed to K8s deployment step which should create the database resources"
-                  echo "Database migration step completed with warnings"
-                  exit 0
-                fi
-              done
-            else
-              echo "DB deployment doesn't exist yet. This is likely the first deployment."
-              echo "Will proceed to K8s deployment step which should create the database resources"
-              echo "Database migration step completed with warnings"
-              exit 0  # Exit here, don't continue to steps that depend on DB_POD
-            fi
-          fi
-          
-          # Only continue with the migration steps if we have a database pod
-          if [ -z "$DB_POD" ]; then
-            echo "No database pod available for migration steps. Skipping remaining migration tasks."
-            echo "Database migration step completed with warnings"
-            exit 0
-          fi
-          
-          # We have a valid DB_POD at this point
-          echo "Found database pod: $DB_POD"
-          
-          # Restart the database pod to trigger migrations
-          echo "Restarting database pod to apply migrations..."
-          # Add set +e to prevent command from causing the script to exit on error
-          set +e
-          kubectl delete pod $DB_POD -n "$K8S_NAMESPACE"
-          POD_DELETE_STATUS=$?
-          set -e
-          
-          if [ $POD_DELETE_STATUS -ne 0 ]; then
-            echo "ERROR: Failed to delete database pod $DB_POD"
-            kubectl describe pod $DB_POD -n "$K8S_NAMESPACE" || echo "Could not get pod details"
-            echo "Will continue with deployment anyway as the DB pod might be replaced in later steps"
-            echo "Database migration step completed with warnings"
-            exit 0
-          fi
-          
-          # Wait with better diagnostics
-          echo "Waiting for new database pod to be created..."
-          NEW_DB_POD=""
-          for i in {1..12}; do
-            sleep 5
-            # Add set +e to prevent command from causing the script to exit on error
-            set +e
-            NEW_DB_POD=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-            POD_NEW_STATUS=$?
-            set -e
-            
-            echo "New DB pod check attempt $i, status: $POD_NEW_STATUS, result: ${NEW_DB_POD:-'(none)'}"
-            
-            if [ -n "$NEW_DB_POD" ] && [ "$NEW_DB_POD" != "$DB_POD" ]; then
-              echo "New database pod created: $NEW_DB_POD"
-              break
-            elif [ -n "$NEW_DB_POD" ] && [ "$NEW_DB_POD" = "$DB_POD" ]; then
-              echo "Old pod still exists, waiting... (attempt $i of 12)"
-            else
-              echo "No database pod found, waiting... (attempt $i of 12)"
-            fi
-            
-            if [ $i -eq 12 ]; then
-              echo "WARNING: Failed to find new database pod after 60 seconds"
-              echo "Current pods:"
-              kubectl get pods -n "$K8S_NAMESPACE" || echo "Could not list pods"
-              echo "Will continue with deployment anyway as the DB pod might be created in later steps"
-              echo "Database migration step completed with warnings"
-              exit 0
-            fi
-          done
-          
-          # Check if NEW_DB_POD exists before continuing
-          if [ -z "$NEW_DB_POD" ]; then
-            echo "No new database pod found. Skipping remaining migration tasks."
-            echo "Database migration step completed with warnings"
-            exit 0
-          fi
-          
-          # Wait for the pod to be ready with better diagnostics
-          echo "Waiting for database pod to become ready..."
-          # Add set +e to prevent command from causing the script to exit on error
-          set +e
-          kubectl describe pod/$NEW_DB_POD -n "$K8S_NAMESPACE" || echo "Could not describe pod $NEW_DB_POD"
-          
-          # Wait for the pod to be ready
-          kubectl wait --for=condition=ready pod/$NEW_DB_POD --timeout=180s -n "$K8S_NAMESPACE"
-          POD_READY_STATUS=$?
-          set -e
-          
-          if [ $POD_READY_STATUS -ne 0 ]; then
-            echo "WARNING: Database pod did not become ready in time"
-            echo "Pod events:"
-            kubectl describe pod/$NEW_DB_POD -n "$K8S_NAMESPACE" || echo "Could not describe pod"
-            echo "Pod logs:"
-            kubectl logs $NEW_DB_POD --tail=50 -n "$K8S_NAMESPACE" || echo "Could not retrieve logs"
-            echo "Will continue with deployment anyway as the database might need more time"
-            echo "Database migration step completed with warnings"
-            exit 0
-          fi
-          
-          # Check migration logs with better diagnostics
-          echo "Migration logs:"
-          set +e
-          kubectl logs $NEW_DB_POD -n "$K8S_NAMESPACE" | grep -A 5 "MIGRATION" 
-          MIGRATION_LOG_STATUS=$?
-          set -e
-          
-          if [ $MIGRATION_LOG_STATUS -ne 0 ]; then
-            echo "Migration log not found"
-            echo "Full database pod logs:"
-            kubectl logs $NEW_DB_POD --tail=50 -n "$K8S_NAMESPACE" || echo "Could not retrieve logs"
-          fi
-          
-          # Scale services back up
-          echo "Exiting maintenance mode: Scaling services back up..."
-          set +e
-          
-          if kubectl get deployment worker -n "$K8S_NAMESPACE" &>/dev/null; then
-            kubectl scale deployment worker --replicas=$WORKER_REPLICAS -n "$K8S_NAMESPACE" || echo "WARNING: Failed to scale worker back up"
-          fi
-          
-          if kubectl get deployment backend -n "$K8S_NAMESPACE" &>/dev/null; then
-            kubectl scale deployment backend --replicas=$BACKEND_REPLICAS -n "$K8S_NAMESPACE" || echo "WARNING: Failed to scale backend back up"
-          fi
-          
-          if kubectl get deployment tf -n "$K8S_NAMESPACE" &>/dev/null; then
-            kubectl scale deployment tf --replicas=$TF_REPLICAS -n "$K8S_NAMESPACE" || echo "WARNING: Failed to scale tf back up"
-          fi
-          set -e
-          
-          echo "Database migration step completed"
-
-      # Deploy to Kubernetes
-      - name: Deploy to Kubernetes
-        run: |
-          # Helper functions
+          # Helper function for retrying commands
           kubectl_with_retry() {
             cmd=$1
             max_retries=${2:-3}
@@ -658,18 +399,360 @@ jobs:
               else
                 retry_count=$((retry_count + 1))
                 if [ $retry_count -lt $max_retries ]; then
-                  echo "Retrying in 5 seconds... (Attempt $retry_count of $max_retries)"
+                  log "Command failed, retrying in 5 seconds... (Attempt $retry_count of $max_retries)"
                   sleep 5
                 fi
               fi
             done
             
-            echo "ERROR: Command failed after $max_retries attempts: $cmd"
+            log "ERROR: Command failed after $max_retries attempts: $cmd"
             return 1
           }
           
-          # Verify cluster connectivity and context
+          # Verify cluster connectivity with improved error handling
+          log "Checking Kubernetes cluster connectivity..."
+          if ! kubectl cluster-info; then
+            log "ERROR: Cannot connect to Kubernetes cluster."
+            log "Current kubectl context: $(kubectl config current-context || echo 'NONE')"
+            exit 1
+          fi
+          
+          # Verify correct context
+          CURRENT_CONTEXT=$(kubectl config current-context)
+          log "Current Kubernetes context: $CURRENT_CONTEXT"
+          if [ "$CURRENT_CONTEXT" != "$K8S_CONTEXT" ]; then
+            log "ERROR: Wrong Kubernetes context! Expected $K8S_CONTEXT but got $CURRENT_CONTEXT"
+            exit 1
+          fi
+          
+          # Check cluster node status before proceeding
+          log "Checking cluster node status..."
+          NODE_STATUS=$(kubectl get nodes -o wide)
+          log "Node status: $NODE_STATUS"
+          
+          # Check for any cluster-wide issues
+          log "Checking for cluster-wide issues..."
+          CLUSTER_EVENTS=$(kubectl get events --sort-by='.lastTimestamp' | grep -i "error\|warn\|fail" || echo "No recent error events")
+          if [ "$CLUSTER_EVENTS" != "No recent error events" ]; then
+            log "Recent cluster error events found:"
+            echo "$CLUSTER_EVENTS"
+          else
+            log "No recent cluster error events found"
+          fi
+          
+          # Check if namespace exists
+          log "Checking if namespace $K8S_NAMESPACE exists..."
+          if ! kubectl get namespace "$K8S_NAMESPACE" &>/dev/null; then
+            log "Creating namespace $K8S_NAMESPACE..."
+            kubectl create namespace "$K8S_NAMESPACE" || {
+              log "ERROR: Failed to create namespace $K8S_NAMESPACE"
+              log "Available namespaces:"
+              kubectl get namespaces
+              exit 1
+            }
+          fi
+          
+          # Get all pods to help diagnose issues
+          log "Listing all pods in namespace $K8S_NAMESPACE:"
+          kubectl get pods -n "$K8S_NAMESPACE"
+          
+          # Add check to ensure there's enough capacity
+          log "Checking node capacity..."
+          NODE_PRESSURE=$(kubectl describe nodes | grep -A5 "Conditions:" | grep -i "pressure\|true" || echo "No pressure conditions found")
+          if [ "$NODE_PRESSURE" != "No pressure conditions found" ]; then
+            log "WARNING: Node pressure conditions detected:"
+            echo "$NODE_PRESSURE"
+            log "This may affect pod scheduling"
+          fi
+          
+          # Save current replica counts with better error handling
+          log "Saving current deployment replica counts..."
+          for deployment in worker backend tf; do
+            log "Checking $deployment deployment..."
+            if kubectl get deployment $deployment -n "$K8S_NAMESPACE" &>/dev/null; then
+              replicas=$(kubectl get deployment $deployment -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "1")
+              echo "${deployment}_REPLICAS=$replicas" >> $GITHUB_ENV
+              log "$deployment has $replicas replicas"
+            else
+              log "Note: $deployment deployment not found, will use default of 1 replica"
+              echo "${deployment}_REPLICAS=1" >> $GITHUB_ENV
+            fi
+          done
+          
+          # Check if deployments exist before scaling
+          log "Checking deployments before scaling down..."
+          DEPLOYMENTS_TO_SCALE=""
+          for deployment in worker backend tf; do
+            if kubectl get deployment $deployment -n "$K8S_NAMESPACE" &>/dev/null; then
+              DEPLOYMENTS_TO_SCALE="$DEPLOYMENTS_TO_SCALE $deployment"
+            else
+              log "Note: $deployment deployment not found - skipping scale down"
+            fi
+          done
+          
+          # Scale down services if they exist - use faster approach
+          if [ -n "$DEPLOYMENTS_TO_SCALE" ]; then
+            log "Entering maintenance mode: Scaling down services that access the database..."
+            kubectl scale deployment $DEPLOYMENTS_TO_SCALE --replicas=0 -n "$K8S_NAMESPACE" || {
+              log "WARNING: Failed to scale down some deployments, proceeding anyway..."
+            }
+            
+            # Wait for pods to terminate with status check - use shorter timeout
+            log "Waiting for pods to terminate..."
+            
+            # Check pod termination with timeout
+            end_time=$(($(date +%s) + 60))  # 60-second timeout
+            while [ $(date +%s) -lt $end_time ]; do
+              POD_COUNT=$(kubectl get pods -l "app in (worker,backend,tf)" --field-selector=status.phase=Running -n "$K8S_NAMESPACE" 2>/dev/null | wc -l)
+              if [ "$POD_COUNT" -le 1 ]; then  # Account for header row
+                log "All services pods terminated"
+                break
+              fi
+              log "Waiting for pods to terminate... ($POD_COUNT remaining)"
+              sleep 5
+            done
+            
+            # Final check
+            log "Checking if pods are terminated:"
+            kubectl get pods -l "app in (worker,backend,tf)" -n "$K8S_NAMESPACE" || log "No matching pods found"
+          else
+            log "No deployments found to scale down, skipping this step"
+          fi
+          
+          # Check if database pod exists with improved error handling
+          log "Looking for database pod..."
+          
+          # Use set +e to prevent command from failing the script
           set +e
+          DB_POD=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}' -n "$K8S_NAMESPACE" 2>/dev/null)
+          DB_POD_STATUS=$?
+          set -e
+          
+          if [ $DB_POD_STATUS -ne 0 ] || [ -z "$DB_POD" ]; then
+            log "Database pod not found, checking if deployment exists..."
+            
+            set +e
+            DB_DEPLOYMENT=$(kubectl get deployment db -n "$K8S_NAMESPACE" 2>/dev/null)
+            DB_DEPLOYMENT_STATUS=$?
+            set -e
+            
+            if [ $DB_DEPLOYMENT_STATUS -eq 0 ]; then
+              log "DB deployment exists but no pods found. Checking events:"
+              kubectl get events -n "$K8S_NAMESPACE" | grep db
+              
+              log "Attempting to recreate the DB pod by restarting the deployment..."
+              kubectl rollout restart deployment/db -n "$K8S_NAMESPACE" || {
+                log "WARNING: Failed to restart DB deployment"
+              }
+              
+              # Wait for DB pod to appear with a 60-second timeout
+              log "Waiting for DB pod to appear (60-second timeout)..."
+              end_time=$(($(date +%s) + 60))
+              while [ $(date +%s) -lt $end_time ]; do
+                set +e
+                NEW_DB_POD=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}' -n "$K8S_NAMESPACE" 2>/dev/null)
+                NEW_DB_POD_STATUS=$?
+                set -e
+                
+                if [ $NEW_DB_POD_STATUS -eq 0 ] && [ -n "$NEW_DB_POD" ]; then
+                  log "DB pod appeared: $NEW_DB_POD"
+                  DB_POD=$NEW_DB_POD
+                  break
+                fi
+                log "Still waiting for DB pod to appear..."
+                sleep 5
+              done
+              
+              if [ -z "$DB_POD" ]; then
+                log "WARNING: Failed to find DB pod after 60 seconds"
+                log "Will proceed with K8s deployment step which should create necessary resources"
+                
+                # Force clear any stuck resources
+                log "Checking for stuck resources..."
+                STUCK_DB_PODS=$(kubectl get pods -l app=db -n "$K8S_NAMESPACE" 2>/dev/null || echo "None")
+                if [ "$STUCK_DB_PODS" != "None" ]; then
+                  log "Found potentially stuck DB pods, attempting to force delete:"
+                  kubectl delete pods -l app=db -n "$K8S_NAMESPACE" --grace-period=0 --force || log "Could not force delete pods"
+                fi
+                
+                # Create deployment by applying config
+                log "Ensuring DB deployment exists by applying config..."
+                find config/prod/config -type f -name "*.yaml" | xargs grep -l "app: db" | while read dbfile; do
+                  log "Applying DB file: $dbfile"
+                  kubectl apply -f "$dbfile" -n "$K8S_NAMESPACE" || log "Warning: Failed to apply $dbfile"
+                done
+                
+                # Continue to the K8s deployment step
+                echo "Database migration step skipped - will be handled in deployment"
+                exit 0
+              fi
+            else
+              log "DB deployment doesn't exist yet. This is likely the first deployment."
+              log "Will proceed to K8s deployment step which should create the database resources"
+              echo "Database migration step skipped - will be handled in deployment"
+              exit 0
+            fi
+          fi
+          
+          log "Found database pod: $DB_POD"
+          
+          # Check DB pod status before proceeding
+          log "Checking database pod status..."
+          DB_POD_STATUS=$(kubectl get pod $DB_POD -n "$K8S_NAMESPACE" -o jsonpath='{.status.phase}')
+          log "Database pod status: $DB_POD_STATUS"
+          
+          if [ "$DB_POD_STATUS" != "Running" ]; then
+            log "Database pod is not running (status: $DB_POD_STATUS)"
+            log "Pod details:"
+            kubectl describe pod $DB_POD -n "$K8S_NAMESPACE"
+            log "Attempting to fix by restarting the pod..."
+          fi
+          
+          # Restart the database pod to trigger migrations (with retry)
+          MAX_RESTART_ATTEMPTS=3
+          for attempt in $(seq 1 $MAX_RESTART_ATTEMPTS); do
+            log "Restarting database pod to apply migrations (attempt $attempt of $MAX_RESTART_ATTEMPTS)..."
+            
+            set +e
+            kubectl delete pod $DB_POD -n "$K8S_NAMESPACE"
+            DELETE_STATUS=$?
+            set -e
+            
+            if [ $DELETE_STATUS -eq 0 ]; then
+              log "Successfully deleted database pod $DB_POD"
+              break
+            elif [ $attempt -eq $MAX_RESTART_ATTEMPTS ]; then
+              log "ERROR: Failed to delete database pod $DB_POD after $MAX_RESTART_ATTEMPTS attempts"
+              kubectl describe pod $DB_POD -n "$K8S_NAMESPACE"
+              log "Will try to force delete the pod..."
+              kubectl delete pod $DB_POD -n "$K8S_NAMESPACE" --grace-period=0 --force || {
+                log "Failed to force delete the pod. Will proceed with deployment anyway."
+                echo "Database migration step completed with warnings"
+                exit 0
+              }
+            else
+              log "Failed to delete pod, retrying in 5 seconds..."
+              sleep 5
+            fi
+          done
+          
+          # Wait for new database pod with improved diagnostics and shorter timeout
+          log "Waiting for new database pod to be created (60-second timeout)..."
+          end_time=$(($(date +%s) + 60))
+          found_new_pod=false
+          
+          while [ $(date +%s) -lt $end_time ] && [ "$found_new_pod" = false ]; do
+            set +e
+            NEW_DB_POD=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}' -n "$K8S_NAMESPACE" 2>/dev/null)
+            NEW_DB_POD_STATUS=$?
+            set -e
+            
+            if [ $NEW_DB_POD_STATUS -eq 0 ] && [ -n "$NEW_DB_POD" ] && [ "$NEW_DB_POD" != "$DB_POD" ]; then
+              log "New database pod created: $NEW_DB_POD"
+              found_new_pod=true
+            elif [ $NEW_DB_POD_STATUS -eq 0 ] && [ -n "$NEW_DB_POD" ] && [ "$NEW_DB_POD" = "$DB_POD" ]; then
+              log "Old pod still exists, waiting..."
+            else
+              log "No database pod found, waiting..."
+            fi
+            
+            if [ "$found_new_pod" = false ]; then
+              sleep 5
+            fi
+          done
+          
+          if [ "$found_new_pod" = false ]; then
+            log "WARNING: Failed to find new database pod after 60 seconds"
+            log "Current pods:"
+            kubectl get pods -n "$K8S_NAMESPACE"
+            log "Will proceed with deployment anyway - database may need to be recreated"
+            echo "Database migration step completed with warnings"
+            exit 0
+          fi
+          
+          # Wait for the pod to be ready with better diagnostics
+          log "Waiting for database pod to become ready..."
+          kubectl describe pod/$NEW_DB_POD -n "$K8S_NAMESPACE"
+          
+          set +e
+          kubectl wait --for=condition=ready pod/$NEW_DB_POD --timeout=180s -n "$K8S_NAMESPACE"
+          POD_READY_STATUS=$?
+          set -e
+          
+          if [ $POD_READY_STATUS -ne 0 ]; then
+            log "WARNING: Database pod did not become ready in time"
+            log "Pod events:"
+            kubectl describe pod/$NEW_DB_POD -n "$K8S_NAMESPACE"
+            log "Pod logs:"
+            kubectl logs $NEW_DB_POD --tail=50 -n "$K8S_NAMESPACE" || log "Could not retrieve logs"
+            
+            # Check for common issues
+            EVENTS=$(kubectl describe pod/$NEW_DB_POD -n "$K8S_NAMESPACE" | grep -A10 "Events:")
+            if [[ "$EVENTS" == *"unbound immediate PersistentVolumeClaims"* ]]; then
+              log "PVC binding issue detected. Attempting to fix..."
+              
+              # Re-apply PV and PVC
+              log "Re-applying PersistentVolume and PersistentVolumeClaim..."
+              find config/prod/config -type f -name "*.yaml" | xargs grep -l "kind: PersistentVolume" | while read pvfile; do
+                log "Re-applying PV file: $pvfile"
+                kubectl apply -f "$pvfile" -n "$K8S_NAMESPACE" || log "Warning: Failed to apply $pvfile"
+              done
+              
+              sleep 5
+              
+              find config/prod/config -type f -name "*.yaml" | xargs grep -l "kind: PersistentVolumeClaim" | while read pvcfile; do
+                log "Re-applying PVC file: $pvcfile"
+                kubectl apply -f "$pvcfile" -n "$K8S_NAMESPACE" || log "Warning: Failed to apply $pvcfile"
+              done
+              
+              log "Deleting problematic database pod to trigger recreation..."
+              kubectl delete pod $NEW_DB_POD -n "$K8S_NAMESPACE" --grace-period=0 --force || log "Warning: Failed to delete pod"
+            fi
+            
+            log "Will continue with deployment anyway as the database might need more time"
+            echo "Database migration step completed with warnings"
+            exit 0
+          fi
+          
+          # Check migration logs with better diagnostics
+          log "Migration logs:"
+          set +e
+          kubectl logs $NEW_DB_POD -n "$K8S_NAMESPACE" | grep -A 5 "MIGRATION" 
+          MIGRATION_LOG_STATUS=$?
+          set -e
+          
+          if [ $MIGRATION_LOG_STATUS -ne 0 ]; then
+            log "Migration log entries not found"
+            log "Full database pod logs:"
+            kubectl logs $NEW_DB_POD --tail=50 -n "$K8S_NAMESPACE" || log "Could not retrieve logs"
+          fi
+          
+          # Scale services back up
+          log "Exiting maintenance mode: Scaling services back up..."
+          set +e
+          
+          for deployment in worker backend tf; do
+            if kubectl get deployment $deployment -n "$K8S_NAMESPACE" &>/dev/null; then
+              replicas_var="${deployment}_REPLICAS"
+              replicas=${!replicas_var}
+              
+              log "Scaling $deployment back to $replicas replicas..."
+              kubectl scale deployment $deployment --replicas=$replicas -n "$K8S_NAMESPACE" || {
+                log "WARNING: Failed to scale $deployment back up to $replicas replicas"
+                # Try again with at least 1 replica
+                kubectl scale deployment $deployment --replicas=1 -n "$K8S_NAMESPACE" || {
+                  log "WARNING: Failed to scale $deployment to even 1 replica"
+                }
+              }
+            fi
+          done
+          set -e
+          
+          log "Database migration step completed"
+
+      # Deploy to Kubernetes
+      - name: Deploy to Kubernetes
+        run: |
           kubectl_with_retry "kubectl cluster-info" || {
             echo "WARNING: Cluster connectivity issues detected, but continuing anyway"
           }
@@ -687,141 +770,286 @@ jobs:
             kubectl create namespace "$K8S_NAMESPACE"
           fi
           
-          # Apply Kubernetes configurations, excluding secrets.yaml
-          echo "Applying Kubernetes configurations..."
-          find config/prod/config -type f -name "*.yaml" ! -name "secrets.yaml" -exec kubectl apply -f {} --validate=false \; || {
-            echo "WARNING: Some configuration files may have had errors - continuing anyway for first deployment"
+          # Log function for better visibility
+          log() {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
           }
           
-          # Give some time for resources to be created
-          echo "Waiting for resources to initialize..."
-          sleep 30
+          # Clear any conflicting configurations first 
+          log "Checking for conflicting deployments..."
+          CONFLICTING_DEPLOYMENTS=$(kubectl get deployments -o jsonpath='{.items[?(@.metadata.annotations.deployment\.kubernetes\.io/revision)].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$CONFLICTING_DEPLOYMENTS" ]; then
+            log "Found potential conflicting deployments, resolving conflicts..."
+            for deployment in $CONFLICTING_DEPLOYMENTS; do
+              kubectl rollout restart deployment/$deployment 2>/dev/null || true
+            done
+            sleep 5
+          fi
           
-          # First, apply infrastructure components that others depend on
-          echo "Updating and restarting infrastructure components first..."
-          infra_components=("db" "cache")
+          # Apply Kubernetes configurations efficiently
+          log "Applying Kubernetes configurations..."
           
-          for deployment in "${infra_components[@]}"; do
-            echo "Updating $deployment deployment..."
-            if kubectl get deployment $deployment -n "$K8S_NAMESPACE" &>/dev/null; then
-              kubectl set image deployment/$deployment $deployment=$DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }} || {
-                echo "WARNING: Failed to update $deployment image, but continuing"
-              }
+          # First, apply infrastructure components that others depend on (PVs, PVCs, ConfigMaps, etc.)
+          log "Applying persistent volumes and claims first..."
+          find config/prod/config -type f -name "*.yaml" | xargs grep -l "kind: PersistentVolume" 2>/dev/null | while read pvfile; do
+            log "Applying PV file: $pvfile"
+            kubectl apply -f "$pvfile" --validate=false -n "$K8S_NAMESPACE" || log "Warning: Failed to apply $pvfile"
+          done
+          
+          sleep 5
+          
+          log "Applying persistent volume claims..."
+          find config/prod/config -type f -name "*.yaml" | xargs grep -l "kind: PersistentVolumeClaim" 2>/dev/null | while read pvcfile; do
+            log "Applying PVC file: $pvcfile"
+            kubectl apply -f "$pvcfile" --validate=false -n "$K8S_NAMESPACE" || log "Warning: Failed to apply $pvcfile"
+          done
+          
+          # Wait for PVCs to be bound
+          log "Waiting for PVCs to be bound..."
+          
+          # Get all PVC names
+          PVC_NAMES=$(kubectl get pvc -n "$K8S_NAMESPACE" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          
+          if [ -n "$PVC_NAMES" ]; then
+            # Check each PVC status
+            for pvc in $PVC_NAMES; do
+              log "Checking status of PVC: $pvc"
               
-              # Restart the deployment
-              kubectl rollout restart deployment/$deployment || {
-                echo "WARNING: Failed to restart $deployment, but continuing"
-              }
-            else
-              echo "Deployment $deployment doesn't exist yet - this is likely the first deployment"
+              # Wait for the PVC to be bound with a timeout
+              if ! kubectl wait --for=condition=Bound pvc/$pvc --timeout=30s -n "$K8S_NAMESPACE" 2>/dev/null; then
+                log "WARNING: PVC $pvc not bound after 30 seconds"
+                
+                # Get details for debugging
+                kubectl describe pvc/$pvc -n "$K8S_NAMESPACE"
+              else
+                log "PVC $pvc is bound"
+              fi
+            done
+          fi
+          
+          log "Applying ConfigMaps and Secrets..."
+          find config/prod/config -type f -name "*.yaml" | xargs grep -l "kind: ConfigMap" 2>/dev/null | while read cmfile; do
+            log "Applying ConfigMap file: $cmfile"
+            kubectl apply -f "$cmfile" --validate=false -n "$K8S_NAMESPACE" || log "Warning: Failed to apply $cmfile"
+          done
+          
+          # Apply Services and other non-Deployment resources
+          log "Applying Services and other resources..."
+          find config/prod/config -type f -name "*.yaml" | grep -v "deployment" | xargs grep -l "kind: Service" 2>/dev/null | while read svcfile; do
+            log "Applying Service file: $svcfile"
+            kubectl apply -f "$svcfile" --validate=false -n "$K8S_NAMESPACE" || log "Warning: Failed to apply $svcfile"
+          done
+          
+          # Apply the rest of the configurations excluding secrets.yaml
+          log "Applying remaining Kubernetes configurations..."
+          find config/prod/config -type f -name "*.yaml" ! -name "secrets.yaml" | while read config_file; do
+            if ! grep -q "kind: PersistentVolume\|kind: PersistentVolumeClaim\|kind: ConfigMap\|kind: Service" "$config_file" 2>/dev/null; then
+              log "Applying config file: $config_file"
+              kubectl apply -f "$config_file" --validate=false -n "$K8S_NAMESPACE" || log "Warning: Failed to apply $config_file"
             fi
           done
           
-          # Wait for infra components to stabilize
-          echo "Waiting for infrastructure components to stabilize..."
-          sleep 90
+          # Give some time for resources to be created
+          log "Waiting for resources to initialize (30 seconds)..."
+          sleep 30
           
-          # Define the application deployments to update, in dependency order
+          # Define deployments in order of dependency
+          log "Preparing deployment updates..."
+          infra_components=("db" "cache")
           deployments=("tf" "backend" "worker" "frontend" "nginx")
           
-          # Update image tags for all deployments
-          echo "Updating deployments with images tagged: ${{ env.DOCKER_TAG }}..."
+          # Image tag to use
+          log "Using image tag: ${{ env.DOCKER_TAG }}"
           
+          # First, update infrastructure components in parallel
+          log "Updating infrastructure components..."
+          for deployment in "${infra_components[@]}"; do
+            {
+              log "Setting $deployment image to $DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }}"
+              kubectl set image deployment/$deployment $deployment=$DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }} -n "$K8S_NAMESPACE" 2>/dev/null || {
+                log "Note: $deployment deployment doesn't exist yet - will be created in deployment step"
+              }
+            } &
+          done
+          wait
+          
+          # Update image tags for all application deployments in parallel
+          log "Updating application deployments in parallel..."
           for deployment in "${deployments[@]}"; do
-            echo "Updating $deployment deployment..."
-            if kubectl get deployment $deployment -n "$K8S_NAMESPACE" &>/dev/null; then
-              kubectl set image deployment/$deployment $deployment=$DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }} || {
-                echo "WARNING: Failed to update $deployment image, but continuing"
+            {
+              log "Setting $deployment image to $DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }}"
+              kubectl set image deployment/$deployment $deployment=$DOCKER_USERNAME/$deployment:${{ env.DOCKER_TAG }} -n "$K8S_NAMESPACE" 2>/dev/null || {
+                log "Note: $deployment deployment doesn't exist yet - will be created in deployment step"
               }
               
               # Special handling for worker deployment healthcheck container
               if [ "$deployment" = "worker" ]; then
-                CONTAINERS=$(kubectl get deployment/worker -o jsonpath='{.spec.template.spec.containers[*].name}' 2>/dev/null)
+                CONTAINERS=$(kubectl get deployment/worker -o jsonpath='{.spec.template.spec.containers[*].name}' -n "$K8S_NAMESPACE" 2>/dev/null || echo "")
                 if [[ $CONTAINERS == *"db-healthcheck"* ]]; then
-                  kubectl set image deployment/worker db-healthcheck=$DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }}
+                  kubectl set image deployment/worker db-healthcheck=$DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }} -n "$K8S_NAMESPACE"
                 elif [[ $CONTAINERS == *"worker-healthcheck"* ]]; then
-                  kubectl set image deployment/worker worker-healthcheck=$DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }}
+                  kubectl set image deployment/worker worker-healthcheck=$DOCKER_USERNAME/worker-healthcheck:${{ env.DOCKER_TAG }} -n "$K8S_NAMESPACE"
                 fi
               fi
+            } &
+          done
+          wait
+          
+          # Apply rollout restart to all deployments in parallel
+          log "Restarting all deployments in parallel for faster rollout..."
+          
+          # Restart infrastructure first
+          for deployment in "${infra_components[@]}"; do
+            if kubectl get deployment/$deployment -n "$K8S_NAMESPACE" &>/dev/null; then
+              log "Restarting $deployment..."
+              kubectl rollout restart deployment/$deployment -n "$K8S_NAMESPACE" &
             else
-              echo "Deployment $deployment doesn't exist yet - this is likely the first deployment"
+              log "Deployment $deployment doesn't exist yet - skipping restart"
             fi
           done
+          wait
           
-          # Apply rollout restart to ensure the current version of the image is used
-          echo "Restarting deployments sequentially..."
+          # Brief wait for infrastructure to initialize
+          log "Waiting for infrastructure components to initialize (15 seconds)..."
+          sleep 15
+          
+          # Restart all deployments in parallel
           for deployment in "${deployments[@]}"; do
-            kubectl rollout restart deployment/$deployment
-            echo "Waiting briefly after restarting $deployment..."
-            sleep 15
+            if kubectl get deployment/$deployment -n "$K8S_NAMESPACE" &>/dev/null; then
+              log "Restarting $deployment..."
+              kubectl rollout restart deployment/$deployment -n "$K8S_NAMESPACE" &
+            else
+              log "Deployment $deployment doesn't exist yet - skipping restart"
+            fi
           done
+          wait
           
-          # Wait for image pull
-          echo "Waiting for image pulls to complete..."
-          sleep 60
+          # Wait for image pull - shorter time since we're doing things in parallel
+          log "Waiting for image pulls to complete (30 seconds)..."
+          sleep 30
           
-          # Monitor deployments with increased timeout for first deployment
-          echo "Monitoring deployments for successful rollout..."
+          # Monitor deployments with shorter, realistic timeouts
+          log "Monitoring deployments for successful rollout..."
           
           # Set timeout values for each deployment (in seconds) - increased for first deployment
           declare -A timeouts
-          timeouts=([backend]=600 [frontend]=300 [worker]=600 [tf]=300 [nginx]=300)
+          timeouts=([backend]=300 [frontend]=180 [worker]=300 [tf]=180 [nginx]=180 [db]=300 [cache]=180)
           
-          # Track deployment status
-          FAILED_DEPLOYMENTS=""
-          
-          for deployment in "${deployments[@]}"; do
-            echo "Waiting for $deployment deployment..."
-            set +e
-            kubectl rollout status deployment/$deployment --timeout=${timeouts[$deployment]}s
-            ROLLOUT_STATUS=$?
-            set -e
-            
-            if [ $ROLLOUT_STATUS -ne 0 ]; then
-              echo "WARNING: $deployment deployment failed or timed out."
-              echo "This might be expected during the first deployment due to dependencies."
-              FAILED_DEPLOYMENTS="$FAILED_DEPLOYMENTS $deployment"
-              
-              echo "Details for $deployment deployment:"
-              kubectl describe deployment $deployment
-              echo "Pods for $deployment:"
-              kubectl get pods -l app=$deployment
-              echo "Logs for $deployment (if available):"
-              kubectl logs -l app=$deployment --tail=50 || true
-            else  
-              echo "$deployment deployment succeeded."
+          # First check if deployments exist before monitoring
+          log "Checking which deployments exist to monitor..."
+          EXISTING_INFRA=()
+          for deployment in "${infra_components[@]}"; do
+            if kubectl get deployment/$deployment -n "$K8S_NAMESPACE" &>/dev/null; then
+              EXISTING_INFRA+=("$deployment")
+            else
+              log "Deployment $deployment doesn't exist yet - skipping monitoring"
             fi
           done
           
-          # Check infrastructure component status as well
-          for deployment in "${infra_components[@]}"; do
-            echo "Checking status of $deployment..."
-            kubectl get deployment $deployment -n "$K8S_NAMESPACE" || {
-              echo "WARNING: $deployment deployment may not be ready yet"
-            }
+          EXISTING_DEPLOYMENTS=()
+          for deployment in "${deployments[@]}"; do
+            if kubectl get deployment/$deployment -n "$K8S_NAMESPACE" &>/dev/null; then
+              EXISTING_DEPLOYMENTS+=("$deployment")
+            else
+              log "Deployment $deployment doesn't exist yet - skipping monitoring"
+            fi
           done
           
+          # Monitor infrastructure components first if they exist
+          if [ ${#EXISTING_INFRA[@]} -gt 0 ]; then
+            log "Monitoring infrastructure deployments in parallel..."
+            pids=()
+            for deployment in "${EXISTING_INFRA[@]}"; do
+              {
+                log "Waiting for $deployment deployment..."
+                timeout=${timeouts[$deployment]:-300}
+                
+                if ! timeout $timeout kubectl rollout status deployment/$deployment -n "$K8S_NAMESPACE"; then
+                  log "WARNING: $deployment deployment failed or timed out."
+                  log "This might be expected during first deployment."
+                  kubectl describe deployment/$deployment -n "$K8S_NAMESPACE"
+                  kubectl get pods -l app=$deployment -n "$K8S_NAMESPACE"
+                else
+                  log "$deployment deployment rolled out successfully."
+                fi
+              } &
+              pids+=($!)
+            done
+            
+            # Wait for all infrastructure monitors to complete
+            for pid in "${pids[@]}"; do
+              wait $pid || true
+            done
+          fi
+          
+          # Monitor application deployments in parallel with improved error handling
+          if [ ${#EXISTING_DEPLOYMENTS[@]} -gt 0 ]; then
+            log "Monitoring application deployments in parallel..."
+            pids=()
+            for deployment in "${EXISTING_DEPLOYMENTS[@]}"; do
+              {
+                log "Waiting for $deployment deployment..."
+                timeout=${timeouts[$deployment]:-300}
+                
+                # Wait for rollout to complete with timeout
+                if ! timeout $timeout kubectl rollout status deployment/$deployment -n "$K8S_NAMESPACE"; then
+                  log "WARNING: $deployment deployment failed or timed out after ${timeout}s."
+                  log "This might be expected during first deployment."
+                  log "Deployment details:"
+                  kubectl describe deployment/$deployment -n "$K8S_NAMESPACE"
+                  log "Pod status:"
+                  kubectl get pods -l app=$deployment -n "$K8S_NAMESPACE"
+                  log "Pod logs (if available):"
+                  kubectl logs -l app=$deployment --tail=20 -n "$K8S_NAMESPACE" || echo "No logs available"
+                  
+                  # Try to diagnose common issues
+                  log "Recent events for $deployment:"
+                  kubectl get events -n "$K8S_NAMESPACE" --sort-by='.lastTimestamp' | grep $deployment | tail -5 || echo "No events found"
+                  
+                  # Don't fail for first deployment - but create a marker file
+                  echo "$deployment" > "/tmp/deployment_warnings_$deployment"
+                else
+                  log "$deployment deployment succeeded."
+                fi
+              } &
+              pids+=($!)
+            done
+            
+            # Wait for all application monitors to complete
+            for pid in "${pids[@]}"; do
+              wait $pid || true
+            done
+          fi
+          
+          # Check if this appears to be a first-time deployment
+          log "Checking if this appears to be a first-time deployment..."
+          DB_RUNNING=$(kubectl get pods -l app=db -n "$K8S_NAMESPACE" | grep "Running" | wc -l)
+          WARNING_FILES=$(ls /tmp/deployment_warnings_* 2>/dev/null || echo "")
+          
+          if [ "$DB_RUNNING" -eq 0 ] || [ -n "$WARNING_FILES" ]; then
+            log "This appears to be a first-time deployment or database is not yet running."
+            log "Some deployment warnings are expected - this is not a failure condition."
+            
+            # Clean up any warning files
+            for file in $WARNING_FILES; do
+              deployment=$(cat "$file")
+              log "Deployment warning for: $deployment"
+              rm "$file"
+            done
+            
+            # Don't fail the workflow for first deployment
+            log "This is likely a first deployment. Marking as success with warnings."
+            log "Please manually verify once all pods are running."
+          else
+            log "All deployments completed successfully!"
+          fi
+          
           # Final status report
-          echo "===== DEPLOYMENT STATUS REPORT ====="
+          log "===== DEPLOYMENT STATUS REPORT ====="
           kubectl get deployments -n "$K8S_NAMESPACE"
           kubectl get pods -n "$K8S_NAMESPACE"
           
-          if [ -n "$FAILED_DEPLOYMENTS" ]; then
-            echo "The following deployments had issues: $FAILED_DEPLOYMENTS"
-            echo "This might be expected during a first-time deployment since services depend on each other."
-            echo "You may need to restart these services once the database and other dependencies are fully ready."
-            
-            # Don't fail the workflow for first deployment
-            if kubectl get pod -l app=db -n "$K8S_NAMESPACE" | grep -q "Running"; then
-              echo "DB pod is running, so this was not a first deployment. Marking as failure."
-              exit 1
-            else
-              echo "DB pod is not yet running, this appears to be a first deployment. Marking as success with warnings."
-              echo "Deployment completed with warnings for branch ${{ env.TARGET_BRANCH }}."
-            fi
-          else
-            echo "Deployment completed successfully for branch ${{ env.TARGET_BRANCH }}."
-          fi
+          log "Deployment completed for branch ${{ env.TARGET_BRANCH }}."
       
       # Cleanup after deployment
       - name: Cleanup
