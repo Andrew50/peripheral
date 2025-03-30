@@ -79,6 +79,7 @@ type ExecuteResult struct {
 	FunctionName string      `json:"function_name"`
 	Result       interface{} `json:"result"`
 	Error        string      `json:"error,omitempty"`
+	Args         interface{} `json:"args,omitempty"`
 }
 
 // ConversationData represents the data structure for storing conversation context
@@ -264,7 +265,8 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			"history": conversationData,
 		}, nil
 	}
-	
+
+	return nil, fmt.Errorf("error getting gemini function response: %w", err)
 }
 
 // buildConversationContext formats the conversation history for Gemini
@@ -757,14 +759,14 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 	
 	// Store all results from all rounds
 	var allResults []ExecuteResult
-	var previousRoundResults []ExecuteResult
+	var allPreviousRoundResults []ExecuteResult
 	
 	// Process each round sequentially, sending each to Gemini
 	for _, round := range thinkingResp.Rounds {
 		
 		// Create a prompt for Gemini that includes:
 		// 1. The current round's function calls
-		// 2. The results from the previous round (if any)
+		// 2. The results from ALL previous rounds (not just the last one)
 		
 		// First, convert the round to JSON
 		roundJSON, err := json.Marshal(round)
@@ -780,16 +782,15 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 		prompt.WriteString(string(roundJSON))
 		prompt.WriteString("\n```\n\n")
 		
-		// Include previous round results if available
-		if len(previousRoundResults) > 0 {
-			prompt.WriteString("Results from the previous round:\n\n")
-			resultsJSON, _ := json.Marshal(previousRoundResults)
+		// Include ALL previous round results if available
+		if len(allPreviousRoundResults) > 0 {
+			prompt.WriteString("Results from all previous rounds:\n\n")
+			resultsJSON, _ := json.Marshal(allPreviousRoundResults)
 			prompt.WriteString("```json\n")
 			prompt.WriteString(string(resultsJSON))
 			prompt.WriteString("\n```\n\n")
-			
+		}
 		
-		} 
 		prompt.WriteString("Please process this round of function calls.\n")
 		// Send to Gemini for processing
 		fmt.Printf("Sending round to Gemini for processing:\n%s\n", prompt.String())
@@ -809,8 +810,8 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 		// Add this round's results to the combined results
 		allResults = append(allResults, roundResults...)
 		
-		// Store results for the next round
-		previousRoundResults = roundResults
+		// Accumulate results for the next round
+		allPreviousRoundResults = append(allPreviousRoundResults, roundResults...)
 	}
 	
 	return allResults, nil
@@ -835,12 +836,19 @@ func executeGeminiFunctions(ctx context.Context, conn *utils.Conn, userID int, f
 	for _, fc := range functionCalls {
 		fmt.Printf("Executing function %s with args: %s\n", fc.Name, string(fc.Args))
 		
+		// Parse arguments into a map for storage
+		var args interface{}
+		if err := json.Unmarshal(fc.Args, &args); err != nil {
+			fmt.Printf("Warning: Could not parse args for storage: %v\n", err)
+		}
+		
 		// Check if the function exists in Tools map
 		tool, exists := Tools[fc.Name]
 		if !exists {
 			results = append(results, ExecuteResult{
 				FunctionName: fc.Name,
 				Error:        fmt.Sprintf("function '%s' not found", fc.Name),
+				Args:         args,
 			})
 			continue
 		}
@@ -852,12 +860,14 @@ func executeGeminiFunctions(ctx context.Context, conn *utils.Conn, userID int, f
 			results = append(results, ExecuteResult{
 				FunctionName: fc.Name,
 				Error:        err.Error(),
+				Args:         args,
 			})
 		} else {
 			fmt.Printf("Function %s executed successfully\n", fc.Name)
 			results = append(results, ExecuteResult{
 				FunctionName: fc.Name,
 				Result:       result,
+				Args:         args,
 			})
 		}
 	}
