@@ -1051,16 +1051,16 @@ func initTools() {
 		"getLatestEdgarFilings": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getLatestEdgarFilings",
-				Description: "Retrieves the latest SEC EDGAR filings for a security",
+				Description: "Retrieves the latest SEC EDGAR filings across all securities",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the security to get filings for",
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter; no parameter needed.",
 						},
 					},
-					Required: []string{"securityId"},
+					Required: []string{},
 				},
 			},
 			Function: GetLatestEdgarFilings,
@@ -1453,36 +1453,24 @@ func initTools() {
 			},
 			Function: GetUserConversation,
 		},
-		"getSecurityPriceChartV2": {
+		"getTickerDailySnapshot": {
 			FunctionDeclaration: genai.FunctionDeclaration{
-				Name:        "getSecurityPriceChartV2",
-				Description: "Retrieves price chart data for a ticker symbol with date options",
+				Name:        "getTickerDailySnapshot",
+				Description: "Retrieves daily data for a ticker symbol, today's change, volume, vwap, OHLC, last price, last bid/ask, etc.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "The ticker symbol to get data for",
-						},
-						"start_date": {
-							Type:        genai.TypeString,
-							Description: "The start date in YYYY-MM-DD format",
-						},
-						"end_date": {
-							Type:        genai.TypeString,
-							Description: "The end date in YYYY-MM-DD format",
+						"securityId": {
+							Type:        genai.TypeInteger,
+							Description: "The securityID of the ticker to get daily snapshot data for",
 						},
 					},
-					Required: []string{"ticker"},
+					Required: []string{"securityId"},
 				},
 			},
-			Function: GetSecurityPriceChartV2,
+			Function: GetTickerDailySnapshot,
 		},
+		
+		
 	}
-}
-
-// GetSecurityPriceChartV2 retrieves price chart data for a ticker symbol with date options
-func GetSecurityPriceChartV2(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
-	// This is a stub implementation - should be replaced with actual implementation
-	return nil, nil
 }

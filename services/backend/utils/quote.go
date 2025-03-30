@@ -429,8 +429,18 @@ func GetDailyOHLCV(client *polygon.Client, date string, ctx context.Context) (*m
 	return res, nil
 }
 
-
-
+func GetPolygonTickerSnapshot(client *polygon.Client, ticker string, ctx context.Context) (*models.GetTickerSnapshotResponse, error) {
+	params := models.GetTickerSnapshotParams{
+		Ticker: ticker,
+		Locale: "us", 
+		MarketType: "stocks",
+	}
+	res, err := client.GetTickerSnapshot(ctx, &params) 
+	if err != nil {
+		return nil, fmt.Errorf("error getting ticker snapshot: %v", err)
+	}
+	return res, nil
+}
 
 
 
