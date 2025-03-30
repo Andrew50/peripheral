@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -542,4 +543,278 @@ func parseEdgarFilingsResponse(body []byte, cik string) ([]utils.EDGARFiling, er
 	}
 
 	return filings, nil
+}
+
+// GetLatestFilingTextArgs represents arguments for retrieving text from the latest 10-K or 10-Q SEC filing
+type GetLatestFilingTextArgs struct {
+	SecurityID int    `json:"securityId"`
+	Quarter    string `json:"quarter,omitempty"` // Optional: Q1, Q2, Q3, Q4, K (for 10-K)
+	Year       int    `json:"year,omitempty"`    // Optional: specific year to look for
+}
+
+// FilingTextResponse represents the structure returned by GetLatestFilingText
+type FilingTextResponse struct {
+	Type      string `json:"type"`      // 10-K or 10-Q
+	URL       string `json:"url"`       // URL of the filing
+	Date      string `json:"date"`      // Date of the filing
+	Text      string `json:"text"`      // Extracted text content
+	Timestamp int64  `json:"timestamp"` // Timestamp of the filing
+	Quarter   string `json:"quarter"`   // Quarter of the filing (Q1, Q2, Q3, Q4, or "Annual" for 10-K)
+	Year      int    `json:"year"`      // Year of the filing
+}
+
+// getFilingQuarter extracts the quarter and year from a filing
+func getFilingQuarter(filing utils.EDGARFiling) (string, int) {
+	// Get year from the filing date
+	year := filing.Date.Year()
+	
+	// For 10-K, return "Annual" as the quarter
+	if filing.Type == "10-K" {
+		return "Q4", year // Treat 10-K as Q4 filing
+	}
+	
+	// For 10-Q, determine which quarter based on the month
+	month := filing.Date.Month()
+	var quarter string
+	
+	// SEC filing deadlines typically mean Q1 is filed in April/May, Q2 in July/August, Q3 in October/November
+	// This is an approximation - we're determining the quarter based on when it was filed
+	switch {
+	case month >= 1 && month <= 4:
+		quarter = "Q4" // Previous year's Q4 might be filed in early months
+		if month <= 2 {
+			year-- // Adjust year for Q4 filings in January/February
+		}
+	case month >= 4 && month <= 6:
+		quarter = "Q1"
+	case month >= 7 && month <= 9:
+		quarter = "Q2"
+	case month >= 10:
+		quarter = "Q3"
+	}
+	
+	return quarter, year
+}
+
+// GetLatestFilingText fetches the latest 10-K or 10-Q filing for a security and extracts the text content
+func GetLatestFilingText(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetLatestFilingTextArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+
+	// Get the current time
+	now := time.Now()
+
+	// Get ticker for the security
+	ticker, err := utils.GetTicker(conn, args.SecurityID, now)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ticker: %v", err)
+	}
+
+	// Get CIK from ticker
+	cik, err := utils.GetCIKFromTicker(conn, ticker, now)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get CIK for %s: %v", ticker, err)
+	}
+	cikStr := fmt.Sprintf("%d", cik)
+
+	// Fetch EDGAR filings
+	filings, err := fetchEdgarFilings(cikStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch EDGAR filings: %v", err)
+	}
+
+	// Filter filings to find the specified quarter/year or the latest
+	var targetFiling *utils.EDGARFiling
+	
+	// If quarter is specified, filter by quarter and year
+	if args.Quarter != "" {
+		// Normalize the quarter input
+		targetQuarter := strings.ToUpper(args.Quarter)
+		// Convert "K" to "Q4" for consistency in filtering
+		if targetQuarter == "K" || targetQuarter == "ANNUAL" {
+			targetQuarter = "Q4"
+		}
+		
+		// Filter filings based on quarter and year
+		var matchingFilings []utils.EDGARFiling
+		for _, filing := range filings {
+			// Skip non 10-K/10-Q filings
+			if filing.Type != "10-K" && filing.Type != "10-Q" {
+				continue
+			}
+			
+			quarter, year := getFilingQuarter(filing)
+			
+			// If year is specified, must match
+			if args.Year > 0 && year != args.Year {
+				continue
+			}
+			
+			// Check quarter match (either filing type can match the requested quarter)
+			if targetQuarter == quarter {
+				matchingFilings = append(matchingFilings, filing)
+			}
+		}
+		
+		// Find the latest matching filing
+		for i, filing := range matchingFilings {
+			if i == 0 || filing.Timestamp > targetFiling.Timestamp {
+				targetFiling = &matchingFilings[i]
+			}
+		}
+		
+		// If no matching filing found
+		if targetFiling == nil {
+			if args.Year > 0 {
+				return nil, fmt.Errorf("no filing found for %s in quarter %s, year %d", ticker, args.Quarter, args.Year)
+			}
+			return nil, fmt.Errorf("no filing found for %s in quarter %s", ticker, args.Quarter)
+		}
+	} else {
+		// No quarter specified, find the latest 10-K or 10-Q
+		for _, filing := range filings {
+			// Check if this is a 10-K or 10-Q filing
+			if filing.Type == "10-K" || filing.Type == "10-Q" {
+				if targetFiling == nil || filing.Timestamp > targetFiling.Timestamp {
+					targetFiling = &filing
+				}
+			}
+		}
+		
+		if targetFiling == nil {
+			return nil, fmt.Errorf("no 10-K or 10-Q filings found for %s", ticker)
+		}
+	}
+
+	// Fetch the text content of the filing
+	text, err := fetchFilingText(targetFiling.URL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch filing text: %v", err)
+	}
+	
+	// Determine quarter and year for the response
+	quarter, year := getFilingQuarter(*targetFiling)
+	
+	// For response, return "Annual" for 10-K reports to make it more user-friendly
+	displayQuarter := quarter
+	if targetFiling.Type == "10-K" {
+		displayQuarter = "Annual"
+	}
+	
+	// Create response
+	response := FilingTextResponse{
+		Type:      targetFiling.Type,
+		URL:       targetFiling.URL,
+		Date:      targetFiling.Date.Format("2006-01-02"),
+		Text:      text,
+		Timestamp: targetFiling.Timestamp,
+		Quarter:   displayQuarter,
+		Year:      year,
+	}
+
+	return response, nil
+}
+
+// fetchFilingText fetches the text content of an SEC filing from its URL
+func fetchFilingText(url string) (string, error) {
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	// Make HTTP request
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+
+	// SEC requires a User-Agent header
+	req.Header.Set("User-Agent", "atlantis admin@atlantis.trading")
+
+	// Send request with retries for rate limiting
+	var resp *http.Response
+	maxRetries := 5
+	retryDelay := 1 * time.Second
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		resp, err = client.Do(req)
+		if err != nil {
+			return "", err
+		}
+
+		// Check for rate limiting (429)
+		if resp.StatusCode == 429 {
+			resp.Body.Close()
+
+			// Exponential backoff
+			waitTime := retryDelay * time.Duration(1<<attempt)
+			time.Sleep(waitTime)
+			continue
+		}
+
+		// Check for other non-success status codes
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return "", fmt.Errorf("SEC API returned status %d: %s", resp.StatusCode, string(body[:100])) // Show first 100 chars
+		}
+
+		// Success
+		break
+	}
+
+	// Check if all retries failed
+	if resp.StatusCode == 429 {
+		return "", fmt.Errorf("SEC API rate limit exceeded after %d retries", maxRetries)
+	}
+
+	defer resp.Body.Close()
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	// Extract text content from HTML
+	text := extractTextFromHTML(string(body))
+	return text, nil
+}
+
+// extractTextFromHTML extracts readable text content from HTML
+func extractTextFromHTML(html string) string {
+	// Remove HTML tags
+	textContent := removeHTMLTags(html)
+	
+	// Remove extra whitespace and normalize
+	textContent = normalizeWhitespace(textContent)
+	
+	return textContent
+}
+
+// removeHTMLTags removes HTML tags from a string
+func removeHTMLTags(html string) string {
+	// Define a simple regex to remove HTML tags
+	tagRegex := regexp.MustCompile("<[^>]*>")
+	text := tagRegex.ReplaceAllString(html, " ")
+	
+	// Also remove JavaScript and CSS
+	scriptRegex := regexp.MustCompile("(?s)<script.*?</script>")
+	text = scriptRegex.ReplaceAllString(text, "")
+	
+	styleRegex := regexp.MustCompile("(?s)<style.*?</style>")
+	text = styleRegex.ReplaceAllString(text, "")
+	
+	return text
+}
+
+// normalizeWhitespace replaces sequences of whitespace characters with a single space
+func normalizeWhitespace(text string) string {
+	// Replace newlines, tabs, multiple spaces with a single space
+	wsRegex := regexp.MustCompile(`\s+`)
+	text = wsRegex.ReplaceAllString(text, " ")
+	
+	return strings.TrimSpace(text)
 }
