@@ -238,8 +238,46 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		}, nil
 	}
 	// Try to process the thinking response as rounds
-	thinkingResults, err := processThinkingResponse(ctx, conn, userID, thinkingResp)
+	thinkingResults, err := processThinkingResponse(ctx, conn, userID, thinkingResp, query.Query)
 	if err == nil && len(thinkingResults) > 0 {
+		
+		// Check if the result is a text response
+		if len(thinkingResults) == 1 && thinkingResults[0].FunctionName == "text" {
+			// Create new message with the text response
+			var textResponse string
+			
+			// Convert the result to a string without the Go representation formatting
+			switch v := thinkingResults[0].Result.(type) {
+			case string:
+				textResponse = v
+			default:
+				// If not a string, format it but cleanly
+				textResponse = fmt.Sprintf("%v", thinkingResults[0].Result)
+			}
+			
+			newMessage := ChatMessage{
+				Query:         query.Query,
+				ResponseText:  textResponse,
+				FunctionCalls: []FunctionCall{},
+				ToolResults:   thinkingResults,
+				Timestamp:     time.Now(),
+				ExpiresAt:     time.Now().Add(24 * time.Hour),
+			}
+			
+			// Add new message to conversation history
+			conversationData.Messages = append(conversationData.Messages, newMessage)
+			conversationData.Timestamp = time.Now()
+			if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
+				fmt.Printf("Error saving updated conversation: %v\n", err)
+			}
+			
+			// Return directly as a text response
+			return map[string]interface{}{
+				"type": "text",
+				"text": textResponse,
+				"history": conversationData,
+			}, nil
+		}
 		
 		// Create new message with the round results and formatted response
 		newMessage := ChatMessage{
@@ -497,7 +535,7 @@ func getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (str
 	if err != nil {
 		return "", fmt.Errorf("error getting system instruction: %w", err)
 	}
-	systemInstruction = "You are a helpful assistant that can answer questions and run functions"
+	systemInstruction = "You are a helpful assistant that can answer questions"
 
 	config := &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{
@@ -746,6 +784,7 @@ func getGeminiFunctionResponse(ctx context.Context, conn *utils.Conn, query stri
 // ThinkingResponse represents the JSON output from the thinking model with rounds
 type ThinkingResponse struct {
 	Rounds [][]FunctionCall `json:"rounds"`
+	RequiresFinalResponse bool `json:"requires_final_response"`
 }
 
 // RoundResult stores the results of a round's function calls
@@ -754,9 +793,8 @@ type RoundResult struct {
 }
 
 // processThinkingResponse attempts to parse and execute the thinking model's rounds
-func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, thinkingResp ThinkingResponse) ([]ExecuteResult, error) {
+func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, thinkingResp ThinkingResponse, originalQuery string) ([]ExecuteResult, error) {
 
-	
 	// Store all results from all rounds
 	var allResults []ExecuteResult
 	var allPreviousRoundResults []ExecuteResult
@@ -812,6 +850,31 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 		
 		// Accumulate results for the next round
 		allPreviousRoundResults = append(allPreviousRoundResults, roundResults...)
+	}
+	if thinkingResp.RequiresFinalResponse {
+		var prompt strings.Builder 
+		prompt.WriteString("Here is the original query: ")
+		prompt.WriteString(originalQuery)
+		prompt.WriteString("\n\nHere are the results from the function calls: ")
+		resultsJSON, _ := json.Marshal(allResults)
+		prompt.WriteString(string(resultsJSON))
+
+		prompt.WriteString("\n\nPlease provide a final response to the original query based on the results from the function calls.")
+		processedText, err := getGeminiResponse(ctx, conn, prompt.String())
+		if err != nil {
+			fmt.Printf("Error processing round with Gemini: %v\n", err)
+			return nil, fmt.Errorf("error processing round with Gemini: %w", err)
+		}
+		
+		// Clean up the text response to ensure it's just plain text
+		processedText = strings.TrimSpace(processedText)
+		
+		var finalResponse []ExecuteResult 
+		finalResponse = append(finalResponse, ExecuteResult{
+			FunctionName: "text",
+			Result:       processedText,
+		})
+		return finalResponse, nil
 	}
 	
 	return allResults, nil
