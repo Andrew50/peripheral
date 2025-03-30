@@ -38,13 +38,13 @@ func initTools() {
 		"getQuery": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getQuery",
-				Description: "Makes a gemini query to get a response. You can use this to make recursive queries, based on the results of functions that you initially call.",
+				Description: "n/a",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"query": {
 							Type:        genai.TypeString,
-							Description: "The query input to send to gemini",
+							Description: "n/a",
 						},
 					},
 					Required: []string{"query"},
@@ -1086,13 +1086,38 @@ func initTools() {
 						},
 						"includeSECFilings": {
 							Type:        genai.TypeBoolean,
-							Description: "Whether to include SEC filings in the results",
+							Description: "Whether to include SEC filings in the result",
 						},
 					},
 					Required: []string{"securityId", "from", "to"},
 				},
 			},
 			Function: GetChartEvents,
+		},
+		"getLatestFilingText": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "getLatestFilingText",
+				Description: "Retrieves the text content of the latest 10-K or 10-Q SEC filing for a security",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"securityId": {
+							Type:        genai.TypeInteger,
+							Description: "The ID of the security to get the filing for",
+						},
+						"quarter": {
+							Type:        genai.TypeString,
+							Description: "Optional: The specific quarter to retrieve (Q1, Q2, Q3, Q4). If not specified, returns the latest filing.",
+						},
+						"year": {
+							Type:        genai.TypeInteger,
+							Description: "Optional: The specific year to retrieve the filing from. Used in conjunction with quarter parameter.",
+						},
+					},
+					Required: []string{"securityId"},
+				},
+			},
+			Function: GetLatestFilingText,
 		},
 		"grab_user_trades": {
 			FunctionDeclaration: genai.FunctionDeclaration{
