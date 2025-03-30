@@ -697,3 +697,56 @@ func GetCurrentSecurityID(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 	}
 	return securityID, nil
 }
+
+type GetTickerDailySnapshotArgs struct {
+	SecurityID int `json:"securityId"`
+}
+type GetTickerDailySnapshotResults struct {
+	LastBid float64 `json:"lastBid"`
+	LastAsk float64 `json:"lastAsk"`
+	LastTradePrice float64 `json:"lastTradePrice"`
+	TodayChange float64 `json:"todayChange"`
+	TodayChangePercent float64 `json:"todayChangePercent"` 
+	Timestamp int64 `json:"timestamp"` 
+	Volume float64 `json:"volume"` 
+	Vwap float64 `json:"vwap"`  
+	TodayOpen float64 `json:"todayOpen"`
+	TodayHigh float64 `json:"todayHigh"`
+	TodayLow float64 `json:"todayLow"`
+	TodayClose float64 `json:"todayClose"`
+}
+func GetTickerDailySnapshot(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetTickerDailySnapshotArgs
+
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+	ticker, err := utils.GetTicker(conn, args.SecurityID, time.Now())
+
+	if err != nil {
+		return nil, fmt.Errorf("error getting ticker: %v", err)
+	}
+	
+	res, err := utils.GetPolygonTickerSnapshot(conn.Polygon, ticker, context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("error getting ticker snapshot: %v", err)
+	}
+	snapshot := res.Snapshot
+	var results GetTickerDailySnapshotResults
+	results.LastBid = snapshot.LastQuote.BidPrice 
+	results.LastAsk = snapshot.LastQuote.AskPrice 
+	results.LastTradePrice = snapshot.LastTrade.Price 
+	currPrice := snapshot.Day.Close 
+	lastClose := snapshot.PrevDay.Close 
+	results.TodayChange = currPrice - lastClose 
+	results.TodayChangePercent = ((currPrice - lastClose) / lastClose) * 100 
+	results.Timestamp = int64(time.Time(snapshot.Updated).Unix())
+	results.Volume = snapshot.Day.Volume 
+	results.Vwap = snapshot.Day.VolumeWeightedAverage
+	results.TodayOpen = snapshot.Day.Open 
+	results.TodayHigh = snapshot.Day.High 
+	results.TodayLow = snapshot.Day.Low 
+	results.TodayClose = snapshot.Day.Close 
+
+	return results, nil
+}
