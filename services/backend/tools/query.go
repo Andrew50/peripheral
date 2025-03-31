@@ -798,7 +798,6 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 
 		// Add this round's results to the combined results
 		allResults = append(allResults, roundResults...)
-
 		// Accumulate results for the next round
 		allPreviousRoundResults = append(allPreviousRoundResults, roundResults...)
 	}
@@ -808,9 +807,11 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 		prompt.WriteString(originalQuery)
 		prompt.WriteString("\n\nHere are the results from the function calls: ")
 		resultsJSON, _ := json.Marshal(allResults)
+		fmt.Printf("\n\n\nAll results: %v\n", allResults)
 		prompt.WriteString(string(resultsJSON))
 
 		prompt.WriteString("\n\nPlease provide a final response to the original query based on the results from the function calls.")
+		fmt.Println(prompt.String())
 		processedText, err := getGeminiResponse(ctx, conn, prompt.String())
 		if err != nil {
 			fmt.Printf("Error processing round with Gemini: %v\n", err)
