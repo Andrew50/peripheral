@@ -83,16 +83,15 @@ func initTools() {
 		},
 		"getCurrentSecurityID": {
 			FunctionDeclaration: genai.FunctionDeclaration{
-				Name: "getCurrentSecurityID",
+				Name:        "getCurrentSecurityID",
 				Description: "Retrieves the current security ID of a ticker symbol.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"ticker": {
-							Type: genai.TypeString,
+							Type:        genai.TypeString,
 							Description: "The ticker symbol to search for, e.g. NVDA, AAPL, etc",
 						},
-
 					},
 					Required: []string{"ticker"},
 				},
@@ -1478,6 +1477,23 @@ func initTools() {
 			},
 			Function: GetUserConversation,
 		},
+		"clearConversationHistory": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "clearConversationHistory",
+				Description: "Deletes the entire conversation history for the current user.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter, no input needed.",
+						},
+					},
+					Required: []string{},
+				},
+			},
+			Function: ClearConversationHistory,
+		},
 		"getTickerDailySnapshot": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getTickerDailySnapshot",
@@ -1495,7 +1511,5 @@ func initTools() {
 			},
 			Function: GetTickerDailySnapshot,
 		},
-		
-		
 	}
 }

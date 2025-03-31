@@ -53,7 +53,7 @@
 	type Message = {
 		id: string;
 		content: string;
-		sender: 'user' | 'assistant';
+		sender: 'user' | 'assistant' | 'system';
 		timestamp: Date;
 		expiresAt?: Date; // When this message expires
 		functionResults?: FunctionResult[];
@@ -256,9 +256,66 @@
 		const days = Math.floor(diff / (24 * 60 * 60 * 1000));
 		return `Expires in ${days} day${days !== 1 ? 's' : ''}`;
 	}
+
+	// Function to clear conversation history
+	async function clearConversation() {
+		try {
+			isLoading = true;
+			const response = await privateRequest('clearConversationHistory', {});
+			
+			// Clear local messages
+			messages = [];
+			
+			// Optional: Show a temporary system message that history was cleared
+			const systemMessage: Message = {
+				id: generateId(),
+				content: "Conversation history has been cleared.",
+				sender: 'assistant',
+				timestamp: new Date(),
+				responseType: 'system'
+			};
+			
+			messages = [systemMessage];
+			
+			// Remove the system message after a few seconds
+			setTimeout(() => {
+				if (messages.length === 1 && messages[0].id === systemMessage.id) {
+					messages = [];
+				}
+			}, 3000);
+			
+		} catch (error) {
+			console.error('Error clearing conversation history:', error);
+			
+			// Show error message
+			const errorMessage: Message = {
+				id: generateId(),
+				content: `Error: Failed to clear conversation history`,
+				sender: 'assistant',
+				timestamp: new Date(),
+				responseType: 'error'
+			};
+			
+			messages = [...messages, errorMessage];
+		} finally {
+			isLoading = false;
+		}
+	}
 </script>
 
 <div class="chat-container">
+	<div class="chat-header">
+		<h3>Chat</h3>
+		{#if messages.length > 0}
+			<button class="clear-button" on:click={clearConversation} disabled={isLoading}>
+				<svg viewBox="0 0 24 24" width="16" height="16">
+					<path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z" fill="currentColor" />
+				</svg>
+				Clear History
+			</button>
+		{/if}
+	</div>
+
 	<div class="chat-messages" bind:this={messagesContainer}>
 		{#if messages.length === 0}
 			<div class="empty-chat">
@@ -374,6 +431,50 @@
 		overflow: hidden;
 	}
 
+	.chat-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 0.75rem 1.5rem;
+		border-bottom: 1px solid var(--ui-border, #444);
+		background: var(--ui-bg-element-darker, #2a2a2a);
+	}
+
+	.chat-header h3 {
+		margin: 0;
+		font-size: 1rem;
+		font-weight: 500;
+		color: var(--text-primary, #fff);
+	}
+
+	.clear-button {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		background: rgba(244, 67, 54, 0.1);
+		color: var(--error-color, #f44336);
+		border: 1px solid var(--error-color, #f44336);
+		border-radius: 0.25rem;
+		font-size: 0.75rem;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.clear-button:hover:not(:disabled) {
+		background: rgba(244, 67, 54, 0.2);
+	}
+
+	.clear-button:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.clear-button svg {
+		width: 1rem;
+		height: 1rem;
+	}
+
 	.chat-messages {
 		flex: 1;
 		overflow-y: auto;
@@ -419,6 +520,7 @@
 		padding: 0.75rem 1rem;
 		border-radius: 1rem;
 		position: relative;
+		font-size: 0.875rem;
 	}
 
 	.message.user {
@@ -447,6 +549,7 @@
 		margin: 0;
 		white-space: pre-wrap;
 		line-height: 1.5;
+		font-size: 0.875rem;
 	}
 
 	.message-footer {
@@ -454,7 +557,7 @@
 		justify-content: space-between;
 		align-items: center;
 		margin-top: 0.5rem;
-		font-size: 0.7rem;
+		font-size: 0.65rem;
 		opacity: 0.7;
 	}
 
@@ -499,7 +602,7 @@
 
 	.function-name {
 		font-weight: 500;
-		font-size: 0.875rem;
+		font-size: 0.8rem;
 		color: var(--accent-color, #3a8bf7);
 	}
 
@@ -509,12 +612,12 @@
 		gap: 0.5rem;
 		padding: 0.75rem;
 		color: var(--error-color, #f44336);
-		font-size: 0.875rem;
+		font-size: 0.8rem;
 	}
 
 	.function-result-data {
 		padding: 0.75rem;
-		font-size: 0.8125rem;
+		font-size: 0.75rem;
 		overflow-x: auto;
 	}
 
@@ -622,6 +725,7 @@
 	/* Add styles for markdown elements */
 	.message-content :global(p) {
 		margin: 0 0 0.5rem 0;
+		font-size: 0.875rem;
 	}
 	
 	.message-content :global(p:last-child) {
@@ -634,6 +738,7 @@
 		border-radius: 0.25rem;
 		overflow-x: auto;
 		margin: 0.5rem 0;
+		font-size: 0.8rem;
 	}
 	
 	.message-content :global(code) {
@@ -641,6 +746,7 @@
 		background: rgba(0, 0, 0, 0.2);
 		padding: 0.1rem 0.25rem;
 		border-radius: 0.25rem;
+		font-size: 0.8rem;
 	}
 	
 	.message-content :global(ul), .message-content :global(ol) {
@@ -667,5 +773,13 @@
 	.message-content :global(img) {
 		max-width: 100%;
 		border-radius: 0.25rem;
+	}
+
+	/* Add style for system messages */
+	.message.system {
+		background: var(--ui-bg-element, #333);
+		border: 1px dashed var(--ui-border, #444);
+		color: var(--text-secondary, #aaa);
+		font-style: italic;
 	}
 </style>
