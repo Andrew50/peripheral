@@ -98,49 +98,6 @@ type ChatMessage struct {
 	ExpiresAt     time.Time       `json:"expires_at"` // When this message should expire
 }
 
-// inferDateRange determines appropriate date ranges when not explicitly provided
-func inferDateRange(queryText string) DateRange {
-	now := time.Now()
-
-	// Default to last 90 days for "recent" queries
-	defaultRange := DateRange{
-		Start: now.AddDate(0, -3, 0).Format("2006-01-02"),
-		End:   now.Format("2006-01-02"),
-	}
-
-	// For very recent queries, use last 30 days
-	if containsAny(queryText, []string{"very recent", "last month", "past month", "last 30 days", "this month"}) {
-		return DateRange{
-			Start: now.AddDate(0, -1, 0).Format("2006-01-02"),
-			End:   now.Format("2006-01-02"),
-		}
-	}
-
-	// For recent/current queries, use last 90 days
-	if containsAny(queryText, []string{"recent", "current", "lately", "now", "present"}) {
-		return defaultRange
-	}
-
-	// For YTD queries
-	if containsAny(queryText, []string{"ytd", "year to date", "this year"}) {
-		return DateRange{
-			Start: time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location()).Format("2006-01-02"),
-			End:   now.Format("2006-01-02"),
-		}
-	}
-
-	// For 1-year lookback
-	if containsAny(queryText, []string{"last year", "past year", "12 months", "one year"}) {
-		return DateRange{
-			Start: now.AddDate(-1, 0, 0).Format("2006-01-02"),
-			End:   now.Format("2006-01-02"),
-		}
-	}
-
-	// Default to 90 days if no time context is found
-	return defaultRange
-}
-
 // containsAny checks if the text contains any of the provided phrases
 func containsAny(text string, phrases []string) bool {
 	lowerText := strings.ToLower(text)
@@ -202,7 +159,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		prompt = query.Query
 	}
 
-	// This first passes the query to a thinking model 
+	// This first passes the query to a thinking model
 	geminiThinkingResponse, err := getGeminiFunctionThinking(ctx, conn, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("error getting thinking response: %w", err)
@@ -217,7 +174,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 	// Find the JSON block in the response
 	jsonStartIdx := strings.Index(responseText, "{")
 	jsonEndIdx := strings.LastIndex(responseText, "}")
-	
+
 	// If no valid JSON is found, just return the text response
 	if jsonStartIdx == -1 || jsonEndIdx == -1 || jsonEndIdx <= jsonStartIdx {
 		return map[string]interface{}{
@@ -225,12 +182,12 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			"text": responseText,
 		}, nil
 	}
-	
+
 	jsonBlock := responseText[jsonStartIdx : jsonEndIdx+1]
 	if err := json.Unmarshal([]byte(jsonBlock), &thinkingResp); err != nil {
 
 	}
-	
+
 	if len(thinkingResp.Rounds) == 0 {
 		return map[string]interface{}{
 			"type": "text",
@@ -240,21 +197,21 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 	// Try to process the thinking response as rounds
 	thinkingResults, err := processThinkingResponse(ctx, conn, userID, thinkingResp, query.Query)
 	if err == nil && len(thinkingResults) > 0 {
-		
+
 		// Check if the result is a text response
 		if len(thinkingResults) == 1 && thinkingResults[0].FunctionName == "text" {
 			// Create new message with the text response
 			var textResponse string
-			
+
 			// Convert the result to a string without the Go representation formatting
 			switch v := thinkingResults[0].Result.(type) {
 			case string:
 				textResponse = v
 			default:
-				// If not a string, format it but cleanly
-				textResponse = fmt.Sprintf("%v", thinkingResults[0].Result)
+				rawBytes, _ := json.MarshalIndent(v, "", "  ")
+				textResponse = string(rawBytes)
 			}
-			
+			fmt.Printf("Text response: %v\n", textResponse)
 			newMessage := ChatMessage{
 				Query:         query.Query,
 				ResponseText:  textResponse,
@@ -263,22 +220,22 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 				Timestamp:     time.Now(),
 				ExpiresAt:     time.Now().Add(24 * time.Hour),
 			}
-			
+
 			// Add new message to conversation history
 			conversationData.Messages = append(conversationData.Messages, newMessage)
 			conversationData.Timestamp = time.Now()
 			if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
 				fmt.Printf("Error saving updated conversation: %v\n", err)
 			}
-			
+
 			// Return directly as a text response
 			return map[string]interface{}{
-				"type": "text",
-				"text": textResponse,
+				"type":    "text",
+				"text":    textResponse,
 				"history": conversationData,
 			}, nil
 		}
-		
+
 		// Create new message with the round results and formatted response
 		newMessage := ChatMessage{
 			Query:         query.Query,
@@ -288,14 +245,14 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			Timestamp:     time.Now(),
 			ExpiresAt:     time.Now().Add(24 * time.Hour),
 		}
-		
+
 		// Add new message to conversation history
 		conversationData.Messages = append(conversationData.Messages, newMessage)
 		conversationData.Timestamp = time.Now()
 		if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
 			fmt.Printf("Error saving updated conversation: %v\n", err)
 		}
-		
+
 		return map[string]interface{}{
 			"type":    "function_calls",
 			"results": thinkingResults,
@@ -515,7 +472,6 @@ func GetUserConversation(conn *utils.Conn, userID int, args json.RawMessage) (in
 	return conversation, nil
 }
 
-
 func getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (string, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
@@ -576,7 +532,6 @@ type GeminiFunctionResponse struct {
 	Text          string         `json:"text"`
 }
 
-
 func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, query string) (*GeminiFunctionResponse, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
@@ -607,7 +562,7 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, query stri
 			},
 		},
 	}
-	
+
 	result, err := client.Models.GenerateContent(
 		ctx,
 		"gemini-2.0-flash-thinking-exp-01-21",
@@ -617,7 +572,7 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, query stri
 	if err != nil {
 		return nil, fmt.Errorf("error generating content with thinking model: %w", err)
 	}
-	
+
 	// Extract the clean text response for display
 	responseText := ""
 	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
@@ -628,9 +583,9 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, query stri
 			}
 		}
 	}
-	response := &GeminiFunctionResponse {
+	response := &GeminiFunctionResponse{
 		FunctionCalls: []FunctionCall{},
-		Text: responseText,
+		Text:          responseText,
 	}
 	return response, nil
 }
@@ -783,8 +738,8 @@ func getGeminiFunctionResponse(ctx context.Context, conn *utils.Conn, query stri
 
 // ThinkingResponse represents the JSON output from the thinking model with rounds
 type ThinkingResponse struct {
-	Rounds [][]FunctionCall `json:"rounds"`
-	RequiresFinalResponse bool `json:"requires_final_response"`
+	Rounds                [][]FunctionCall `json:"rounds"`
+	RequiresFinalResponse bool             `json:"requires_final_response"`
 }
 
 // RoundResult stores the results of a round's function calls
@@ -798,28 +753,28 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 	// Store all results from all rounds
 	var allResults []ExecuteResult
 	var allPreviousRoundResults []ExecuteResult
-	
+
 	// Process each round sequentially, sending each to Gemini
 	for _, round := range thinkingResp.Rounds {
-		
+
 		// Create a prompt for Gemini that includes:
 		// 1. The current round's function calls
 		// 2. The results from ALL previous rounds (not just the last one)
-		
+
 		// First, convert the round to JSON
 		roundJSON, err := json.Marshal(round)
 		if err != nil {
 			fmt.Printf("Error marshaling round to JSON: %v\n", err)
 			continue
 		}
-		
+
 		// Create a prompt that includes the round and previous results
 		var prompt strings.Builder
 		prompt.WriteString("Process this round of function calls:\n\n")
 		prompt.WriteString("```json\n")
 		prompt.WriteString(string(roundJSON))
 		prompt.WriteString("\n```\n\n")
-		
+
 		// Include ALL previous round results if available
 		if len(allPreviousRoundResults) > 0 {
 			prompt.WriteString("Results from all previous rounds:\n\n")
@@ -828,7 +783,7 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 			prompt.WriteString(string(resultsJSON))
 			prompt.WriteString("\n```\n\n")
 		}
-		
+
 		prompt.WriteString("Please process this round of function calls.\n")
 		// Send to Gemini for processing
 		fmt.Printf("Sending round to Gemini for processing:\n%s\n", prompt.String())
@@ -837,22 +792,22 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 			fmt.Printf("Error processing round with Gemini: %v\n", err)
 			continue
 		}
-		
+
 		// Execute the functions returned by Gemini
 		roundResults, err := executeGeminiFunctions(ctx, conn, userID, processedRound)
 		if err != nil {
 			fmt.Printf("Error executing functions: %v\n", err)
 			continue
 		}
-		
+
 		// Add this round's results to the combined results
 		allResults = append(allResults, roundResults...)
-		
+
 		// Accumulate results for the next round
 		allPreviousRoundResults = append(allPreviousRoundResults, roundResults...)
 	}
 	if thinkingResp.RequiresFinalResponse {
-		var prompt strings.Builder 
+		var prompt strings.Builder
 		prompt.WriteString("Here is the original query: ")
 		prompt.WriteString(originalQuery)
 		prompt.WriteString("\n\nHere are the results from the function calls: ")
@@ -865,18 +820,18 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 			fmt.Printf("Error processing round with Gemini: %v\n", err)
 			return nil, fmt.Errorf("error processing round with Gemini: %w", err)
 		}
-		
+
 		// Clean up the text response to ensure it's just plain text
 		processedText = strings.TrimSpace(processedText)
-		
-		var finalResponse []ExecuteResult 
+
+		var finalResponse []ExecuteResult
 		finalResponse = append(finalResponse, ExecuteResult{
 			FunctionName: "text",
 			Result:       processedText,
 		})
 		return finalResponse, nil
 	}
-	
+
 	return allResults, nil
 }
 
@@ -887,7 +842,7 @@ func processRoundWithGemini(ctx context.Context, conn *utils.Conn, prompt string
 	if err != nil {
 		return nil, fmt.Errorf("error getting function response from Gemini: %w", err)
 	}
-	
+
 	// Return the function calls from the response
 	return response.FunctionCalls, nil
 }
@@ -895,16 +850,16 @@ func processRoundWithGemini(ctx context.Context, conn *utils.Conn, prompt string
 // executeGeminiFunctions executes the function calls returned by Gemini
 func executeGeminiFunctions(ctx context.Context, conn *utils.Conn, userID int, functionCalls []FunctionCall) ([]ExecuteResult, error) {
 	var results []ExecuteResult
-	
+
 	for _, fc := range functionCalls {
 		fmt.Printf("Executing function %s with args: %s\n", fc.Name, string(fc.Args))
-		
+
 		// Parse arguments into a map for storage
 		var args interface{}
 		if err := json.Unmarshal(fc.Args, &args); err != nil {
 			fmt.Printf("Warning: Could not parse args for storage: %v\n", err)
 		}
-		
+
 		// Check if the function exists in Tools map
 		tool, exists := Tools[fc.Name]
 		if !exists {
@@ -915,7 +870,7 @@ func executeGeminiFunctions(ctx context.Context, conn *utils.Conn, userID int, f
 			})
 			continue
 		}
-		
+
 		// Execute the function
 		result, err := tool.Function(conn, userID, fc.Args)
 		if err != nil {
@@ -934,7 +889,23 @@ func executeGeminiFunctions(ctx context.Context, conn *utils.Conn, userID int, f
 			})
 		}
 	}
-	
+
 	return results, nil
 }
 
+// ClearConversationHistory deletes the conversation for a user
+func ClearConversationHistory(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
+	ctx := context.Background()
+	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
+	fmt.Printf("Attempting to delete conversation for key: %s\n", conversationKey)
+
+	// Delete the key from Redis
+	err := conn.Cache.Del(ctx, conversationKey).Err()
+	if err != nil {
+		fmt.Printf("Failed to delete conversation from Redis: %v\n", err)
+		return nil, fmt.Errorf("failed to clear conversation history: %w", err)
+	}
+
+	fmt.Printf("Successfully deleted conversation for key: %s\n", conversationKey)
+	return map[string]string{"message": "Conversation history cleared successfully"}, nil
+}
