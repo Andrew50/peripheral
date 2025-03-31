@@ -888,20 +888,3 @@ func executeGeminiFunctions(ctx context.Context, conn *utils.Conn, userID int, f
 
 	return results, nil
 }
-
-// ClearConversationHistory deletes the conversation for a user
-func ClearConversationHistory(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
-	ctx := context.Background()
-	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
-	fmt.Printf("Attempting to delete conversation for key: %s\n", conversationKey)
-
-	// Delete the key from Redis
-	err := conn.Cache.Del(ctx, conversationKey).Err()
-	if err != nil {
-		fmt.Printf("Failed to delete conversation from Redis: %v\n", err)
-		return nil, fmt.Errorf("failed to clear conversation history: %w", err)
-	}
-
-	fmt.Printf("Successfully deleted conversation for key: %s\n", conversationKey)
-	return map[string]string{"message": "Conversation history cleared successfully"}, nil
-}
