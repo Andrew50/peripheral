@@ -486,12 +486,8 @@ func getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (str
 	if err != nil {
 		return "", fmt.Errorf("error creating gemini client: %w", err)
 	}
-	// Get the system instruction
-	systemInstruction, err := getSystemInstruction()
-	if err != nil {
-		return "", fmt.Errorf("error getting system instruction: %w", err)
-	}
-	systemInstruction = "You are a helpful assistant that can answer questions"
+
+	systemInstruction := "You are a helpful assistant that can answer questions"
 
 	config := &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{
@@ -511,7 +507,7 @@ func getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (str
 	}
 
 	// Get the text from the response
-	text := fmt.Sprintf("%v", result.Candidates[0].Content.Parts[0])
+	text := fmt.Sprintf("%v", result.Candidates[0].Content.Parts[0].Text)
 	return text, nil
 }
 
