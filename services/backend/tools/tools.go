@@ -1497,7 +1497,7 @@ func initTools() {
 		"getTickerDailySnapshot": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getTickerDailySnapshot",
-				Description: "Retrieves daily data for a ticker symbol, today's change (absolute and percentage), volume, vwap, OHLC, last price, last bid/ask, etc.",
+				Description: "Retrieves the most recent daily data for a ticker symbol, today's change (absolute and percentage), volume, vwap, OHLC, last price, last bid/ask, etc.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -1510,6 +1510,23 @@ func initTools() {
 				},
 			},
 			Function: GetTickerDailySnapshot,
+		},
+		"getAllTickerSnapshots": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "getAllTickerSnapshots",
+				Description: "Retrieves the most recent daily data for all stocks, today's change (absolute and percentage), volume, vwap, OHLC, last price, last bid/ask, etc",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"na": {
+							Type:        genai.TypeString,
+							Description: "No params needed",
+						},
+					},
+					Required: []string{},
+				},
+			},
+			Function: GetAllTickerSnapshots,
 		},
 	}
 }
