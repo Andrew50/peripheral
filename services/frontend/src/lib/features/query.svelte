@@ -513,6 +513,9 @@
 
 	.message-wrapper.assistant {
 		align-items: flex-start;
+		width: 100%;
+		border-bottom: 1px solid var(--ui-border, #333);
+		padding-bottom: 0.75rem;
 	}
 
 	.message {
@@ -530,10 +533,13 @@
 	}
 
 	.message.assistant {
-		background: var(--ui-bg-element, #333);
-		border: 1px solid var(--ui-border, #444);
+		background: transparent;
+		border: none;
 		color: var(--text-primary, #fff);
-		border-bottom-left-radius: 0.25rem;
+		max-width: 100%;
+		width: 100%;
+		padding: 0.5rem 0;
+		border-radius: 0;
 	}
 
 	.message.error {

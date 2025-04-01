@@ -187,8 +187,22 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 	if err := json.Unmarshal([]byte(jsonBlock), &thinkingResp); err != nil {
 
 	}
-
 	if len(thinkingResp.Rounds) == 0 {
+		newMessage := ChatMessage{
+			Query:         query.Query,
+			ResponseText:  responseText,
+			FunctionCalls: []FunctionCall{},
+			ToolResults:   []ExecuteResult{},
+			Timestamp:     time.Now(),
+			ExpiresAt:     time.Now().Add(24 * time.Hour),
+		}
+
+		// Add new message to conversation history
+		conversationData.Messages = append(conversationData.Messages, newMessage)
+		conversationData.Timestamp = time.Now()
+		if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
+			fmt.Printf("Error saving updated conversation: %v\n", err)
+		}
 		return map[string]interface{}{
 			"type": "text",
 			"text": responseText,
@@ -216,7 +230,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 				Query:         query.Query,
 				ResponseText:  textResponse,
 				FunctionCalls: []FunctionCall{},
-				ToolResults:   thinkingResults,
+				ToolResults:   []ExecuteResult{},
 				Timestamp:     time.Now(),
 				ExpiresAt:     time.Now().Add(24 * time.Hour),
 			}
