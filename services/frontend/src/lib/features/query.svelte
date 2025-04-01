@@ -8,14 +8,15 @@
 	// Set default options for the markdown parser (optional)
 	marked.setOptions({
 		breaks: true, // Adds support for GitHub-flavored markdown line breaks
-		gfm: true,    // GitHub-flavored markdown
-		sanitize: false // HTML sanitization is handled by Svelte
+		gfm: true     // GitHub-flavored markdown
 	});
 
 	// Function to parse markdown content
 	function parseMarkdown(content: string): string {
 		try {
-			return marked.parse(content);
+			// Handle the Promise case by converting immediately to string
+			const parsed = marked.parse(content);
+			return typeof parsed === 'string' ? parsed : String(parsed);
 		} catch (error) {
 			console.error('Error parsing markdown:', error);
 			return content; // Fallback to plain text if parsing fails
@@ -29,9 +30,22 @@
 		error?: string;
 	};
 
+	// Define the ContentChunk and TableData types to match the backend
+	type TableData = {
+		caption?: string;
+		headers: string[];
+		rows: any[][];
+	};
+
+	type ContentChunk = {
+		type: 'text' | 'table';
+		content: string | TableData;
+	};
+
 	type QueryResponse = {
-		type: 'text' | 'function_calls' | string;
+		response_type: 'text' | 'mixed_content' | 'function_calls';
 		text?: string;
+		content_chunks?: ContentChunk[];
 		results?: FunctionResult[];
 		history?: any;
 	};
@@ -57,6 +71,7 @@
 		timestamp: Date;
 		expiresAt?: Date; // When this message expires
 		functionResults?: FunctionResult[];
+		contentChunks?: ContentChunk[]; // Add support for content chunks
 		responseType?: string;
 		isLoading?: boolean;
 	};
@@ -162,26 +177,16 @@
 		privateRequest('getQuery', { query: queryText })
 			.then((response) => {
 				console.log('response', response);
-				// Type assertion to handle the unknown response type
-				const typedResponse = response as QueryResponse;
-				console.log(typedResponse);
+				// Type assertion to handle the response type
+				const typedResponse = response as unknown as QueryResponse;
+				console.log('Response:', typedResponse);
 
-				// Remove loading message and add actual response
+				// Remove loading message
 				messages = messages.filter((m) => m.id !== loadingMessage.id);
 
-				// Check if the response includes expiration information
-				let expiresAt: Date | undefined = undefined;
-				if (
-					typedResponse.history &&
-					typedResponse.history.messages &&
-					typedResponse.history.messages.length > 0
-				) {
-					const lastMessage =
-						typedResponse.history.messages[typedResponse.history.messages.length - 1];
-					if (lastMessage.expires_at) {
-						expiresAt = new Date(lastMessage.expires_at);
-					}
-				}
+				// Set expiration time
+				const expiresAt = new Date();
+				expiresAt.setHours(expiresAt.getHours() + 24); // 24 hour expiration
 
 				const assistantMessage: Message = {
 					id: generateId(),
@@ -189,9 +194,10 @@
 					sender: 'assistant',
 					timestamp: new Date(),
 					expiresAt: expiresAt,
-					responseType: typedResponse.type,
+					responseType: typedResponse.response_type,
+					contentChunks: typedResponse.content_chunks, // Always include content chunks if they exist
 					functionResults:
-						typedResponse.type === 'function_calls' ? typedResponse.results || [] : undefined
+						typedResponse.response_type === 'function_calls' ? typedResponse.results || [] : undefined
 				};
 
 				messages = [...messages, assistantMessage];
@@ -301,6 +307,22 @@
 			isLoading = false;
 		}
 	}
+
+	// Function to safely access table data properties
+	function isTableData(content: any): content is TableData {
+		return typeof content === 'object' && 
+			content !== null && 
+			Array.isArray(content.headers) && 
+			Array.isArray(content.rows);
+	}
+	
+	// Function to get table data safely
+	function getTableData(content: any): TableData | null {
+		if (isTableData(content)) {
+			return content;
+		}
+		return null;
+	}
 </script>
 
 <div class="chat-container">
@@ -345,7 +367,50 @@
 							</div>
 						{:else}
 							<div class="message-content">
-								<p>{@html parseMarkdown(message.content)}</p>
+								{#if message.contentChunks && message.contentChunks.length > 0}
+									<div class="content-chunks">
+										{#each message.contentChunks as chunk}
+											{#if chunk.type === 'text'}
+												<div class="chunk-text">
+													{@html parseMarkdown(typeof chunk.content === 'string' ? chunk.content : String(chunk.content))}
+												</div>
+											{:else if chunk.type === 'table'}
+												{#if isTableData(chunk.content)}
+													{@const tableData = getTableData(chunk.content)}
+													{#if tableData}
+														<div class="chunk-table">
+															{#if tableData.caption}
+																<div class="table-caption">{tableData.caption}</div>
+															{/if}
+															<table>
+																<thead>
+																	<tr>
+																		{#each tableData.headers as header}
+																			<th>{header}</th>
+																		{/each}
+																	</tr>
+																</thead>
+																<tbody>
+																	{#each tableData.rows as row}
+																		<tr>
+																			{#each row as cell}
+																				<td>{cell}</td>
+																			{/each}
+																		</tr>
+																	{/each}
+																</tbody>
+															</table>
+														</div>
+													{/if}
+												{:else}
+													<div class="chunk-error">Invalid table data format</div>
+												{/if}
+											{/if}
+										{/each}
+									</div>
+								{:else}
+									<p>{@html parseMarkdown(message.content)}</p>
+								{/if}
 							</div>
 
 							{#if message.functionResults && message.functionResults.length > 0}
@@ -787,5 +852,54 @@
 		border: 1px dashed var(--ui-border, #444);
 		color: var(--text-secondary, #aaa);
 		font-style: italic;
+	}
+
+	/* Add styles for content chunks */
+	.content-chunks {
+		margin-top: 1rem;
+	}
+	
+	.chunk-text {
+		margin-bottom: 1rem;
+	}
+	
+	.chunk-table {
+		margin-bottom: 1rem;
+		overflow-x: auto;
+	}
+	
+	.table-caption {
+		font-weight: bold;
+		margin-bottom: 0.5rem;
+	}
+	
+	.content-chunks table {
+		width: 100%;
+		border-collapse: collapse;
+		margin-bottom: 1rem;
+		background: rgba(0, 0, 0, 0.2);
+		font-size: 0.8rem;
+	}
+	
+	.content-chunks th {
+		background: rgba(0, 0, 0, 0.3);
+		padding: 0.5rem;
+		text-align: left;
+		border: 1px solid var(--ui-border, #444);
+	}
+	
+	.content-chunks td {
+		padding: 0.5rem;
+		border: 1px solid var(--ui-border, #444);
+	}
+	
+	.chunk-error {
+		background: rgba(244, 67, 54, 0.1);
+		color: var(--error-color, #f44336);
+		padding: 0.5rem;
+		border-radius: 0.25rem;
+		border: 1px solid var(--error-color, #f44336);
+		margin-bottom: 1rem;
+		font-size: 0.8rem;
 	}
 </style>
