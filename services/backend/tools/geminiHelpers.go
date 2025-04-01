@@ -14,7 +14,7 @@ import (
 )
 
 // getSystemInstruction reads the content of query.txt to be used as system instruction
-func getSystemInstruction() (string, error) {
+func getSystemInstruction(systemPrompt string) (string, error) {
 	// Get the directory of the current file (gemini.go)
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
@@ -22,8 +22,9 @@ func getSystemInstruction() (string, error) {
 	}
 	currentDir := filepath.Dir(filename)
 
+	systemPrompt = systemPrompt + ".txt"
 	// Construct path to query.txt
-	queryFilePath := filepath.Join(currentDir, "defaultSystemPrompt.txt")
+	queryFilePath := filepath.Join(currentDir, systemPrompt)
 
 	// Read the content of query.txt
 	content, err := os.ReadFile(queryFilePath)

@@ -1,11 +1,5 @@
-package tools 
+package tools
 
-import (
-    "context"
-    "fmt"
-    "backend/utils"
-    "time"
-)
 /*
 sqlQuery, err := jsonQueryToSQL(llmResponse)
     if err != nil {
@@ -77,10 +71,12 @@ func jsonQueryToSQL(jsonStr string) (string, error) {
     return sqlQuery, nil
 } */
 // Helper functions
+
+/*
 func conditionToSQL(cond Condition) string {
     lhsSQL := fieldWithOffsetSQL(cond.LHS)
     var rhsSQL string
-    
+
     if cond.RHS.Field != "" {
         rhsSQL = fieldWithOffsetSQL(FieldWithOffset{Field: cond.RHS.Field, Offset: cond.RHS.Offset})
     } else if cond.RHS.Indicator != "" {
@@ -88,7 +84,7 @@ func conditionToSQL(cond Condition) string {
     } else {
         rhsSQL = fmt.Sprintf("%v", cond.RHS.Value)
     }
-    
+
     return fmt.Sprintf("%s %s %s", lhsSQL, cond.Operation, rhsSQL)
 }
 
@@ -115,7 +111,7 @@ func indicatorWithOffsetSQL(ind string, period int, offset int) string {
 // executeQuery executes the SQL query and returns the results
 func executeQuery(conn *utils.Conn, sqlQuery string) ([]map[string]interface{}, error) {
     ctx := context.Background()
-    
+
     // Execute the query
     rows, err := conn.DB.Query(ctx, sqlQuery)
     if err != nil {
@@ -138,7 +134,7 @@ func executeQuery(conn *utils.Conn, sqlQuery string) ([]map[string]interface{}, 
         // Create a slice of interface{} to hold the values
         values := make([]interface{}, len(columnNames))
         valuePtrs := make([]interface{}, len(columnNames))
-        
+
         // Create a pointer to each value
         for i := range values {
             valuePtrs[i] = &values[i]
@@ -151,11 +147,11 @@ func executeQuery(conn *utils.Conn, sqlQuery string) ([]map[string]interface{}, 
 
         // Create a map for this row's data
         rowData := make(map[string]interface{})
-        
+
         // Store each column value in the map
         for i, col := range columnNames {
             val := values[i]
-            
+
             // Convert time.Time values to strings for JSON compatibility
             if timeVal, ok := val.(time.Time); ok {
                 rowData[col] = timeVal.Format(time.RFC3339)
@@ -163,7 +159,7 @@ func executeQuery(conn *utils.Conn, sqlQuery string) ([]map[string]interface{}, 
                 rowData[col] = val
             }
         }
-        
+
         results = append(results, rowData)
     }
 
@@ -178,3 +174,4 @@ func executeQuery(conn *utils.Conn, sqlQuery string) ([]map[string]interface{}, 
 
 
 
+*/
