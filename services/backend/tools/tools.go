@@ -1047,6 +1047,7 @@ func initTools() {
 			},
 			Function: GetSecurityClassifications,
 		},
+		// chart events / SEC filings
 		"getLatestEdgarFilings": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getLatestEdgarFilings",
@@ -1118,6 +1119,7 @@ func initTools() {
 			},
 			Function: GetLatestFilingText,
 		},
+		// Account / User Trades
 		"grab_user_trades": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "grab_user_trades",
@@ -1227,6 +1229,7 @@ func initTools() {
 			},
 			Function: HandleTradeUpload,
 		},
+		// Notes
 		"get_notes": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "get_notes",
