@@ -3,41 +3,48 @@ set -e
 
 # Function to log messages with timestamps
 log() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] STARTUP: $1"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] START-SCRIPT: $1"
 }
 
-# Function to log errors
-error_log() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] STARTUP ERROR: $1" >&2
+# Function to handle errors
+error() {
+    log "ERROR: $1"
+    exit 1
 }
 
-# Ensure rollouts directory exists and has proper permissions
-log "Ensuring rollouts directory exists with proper permissions"
-mkdir -p /tmp/rollouts
-chmod 777 /tmp/rollouts
+# Ensure proper data directory
+export PGDATA=/var/lib/postgresql/data
 
-# Start PostgreSQL using the official entrypoint
-log "Starting PostgreSQL..."
-docker-entrypoint.sh postgres -c config_file=/etc/postgresql/postgresql.conf &
-PG_PID=$!
+# Ensure rollouts directory exists with proper permissions
+log "Setting up rollouts directory"
+mkdir -p /tmp/rollouts || error "Failed to create rollouts directory"
+chmod 777 /tmp/rollouts || error "Failed to set permissions on rollouts directory"
 
-# Wait for PostgreSQL to start
-log "Waiting for PostgreSQL to start..."
-until pg_isready -U postgres -h localhost; do
-  echo "PostgreSQL is unavailable - sleeping"
-  sleep 1
-done
-log "PostgreSQL is up and running"
-
-# Start the rollouts watcher in the background
-log "Starting rollouts watcher..."
+# Start the watcher in the background
+log "Starting rollouts watcher"
 /app/watch_rollouts.sh &
 WATCHER_PID=$!
 
-log "Both PostgreSQL and rollouts watcher are running"
+# Trap signals to properly shutdown the watcher
+trap 'log "Received shutdown signal"; kill -TERM $WATCHER_PID; wait $WATCHER_PID' TERM INT
 
-# Trap SIGTERM and SIGINT to properly shutdown both processes
-trap 'log "Received shutdown signal"; kill -TERM $PG_PID $WATCHER_PID; wait $PG_PID; wait $WATCHER_PID' TERM INT
-
-# Wait for PostgreSQL to exit
-wait $PG_PID
+# Check if database already exists
+if [ -f "$PGDATA/PG_VERSION" ]; then
+    log "Database already initialized, skipping initialization"
+    
+    # Set environment variables to skip initialization
+    export POSTGRES_INITDB_SKIP=true
+    export POSTGRES_INITDB_SKIP_PGDATA=true
+    
+    # Ensure permissions are correct
+    chown -R postgres:postgres "$PGDATA" || error "Failed to set ownership of data directory"
+    chmod 700 "$PGDATA" || error "Failed to set permissions on data directory"
+    
+    # Start PostgreSQL directly
+    log "Starting PostgreSQL with existing data directory"
+    exec gosu postgres postgres -c config_file=/etc/postgresql/postgresql.conf
+else
+    log "No existing database found, initializing new database"
+    # Run the normal entrypoint script to handle initialization
+    exec /usr/local/bin/docker-entrypoint.sh postgres -c config_file=/etc/postgresql/postgresql.conf
+fi
