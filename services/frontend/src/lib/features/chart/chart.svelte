@@ -94,6 +94,7 @@
 		timeframe: string;
 		securityId: number;
 		price: number;
+		trades?: any[]; // Add optional trades property
 	}
 
 	let bidLine: any;
@@ -269,6 +270,7 @@
 	}
 
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
+		console.log('backendLoadChartData', inst);
 		eventSeries.setData([]);
 		if (inst.requestType === 'loadNewTicker') {
 			// Clear pending updates when loading a new ticker
@@ -565,6 +567,8 @@
 							}));
 							// Sort markers by timestamp (time) in ascending order
 							markers.sort((a, b) => a.time - b.time);
+							
+
 							arrowSeries.setData(markers);
 						}
 					}
@@ -1150,6 +1154,11 @@
 			} else {
 				chart.applyOptions({ timeScale: { timeVisible: true } });
 			}
+		}
+
+		// Preserve trades data if it exists in newReq
+		if ('trades' in newReq && Array.isArray(newReq.trades)) {
+			updatedReq.trades = newReq.trades;
 		}
 
 		backendLoadChartData(updatedReq);
