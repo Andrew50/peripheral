@@ -1065,6 +1065,31 @@ func initTools() {
 			},
 			Function: GetLatestEdgarFilings,
 		},
+		"getStockEdgarFilings": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "getStockEdgarFilings",
+				Description: "Retrieves all SEC filings for a security within a time range. Returns a list of the filing type and URLs to the filings.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"start": {
+							Type:        genai.TypeInteger,
+							Description: "The start timestamp in milliseconds",
+						},
+						"end": {
+							Type:        genai.TypeInteger,
+							Description: "The end timestamp in milliseconds",
+						},
+						"securityId": {
+							Type:        genai.TypeInteger,
+							Description: "The ID of the security to get filings for",
+						},
+					},
+					Required: []string{"start", "end", "securityId"},
+				},
+			},
+			Function: GetStockEdgarFilings,
+		},
 		"getChartEvents": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getChartEvents",
@@ -1094,9 +1119,9 @@ func initTools() {
 			},
 			Function: GetChartEvents,
 		},
-		"getLatestFilingText": {
+		"getEarningsText": {
 			FunctionDeclaration: genai.FunctionDeclaration{
-				Name:        "getLatestFilingText",
+				Name:        "getEarningsText",
 				Description: "Retrieves the text content of the latest 10-K or 10-Q SEC filing for a security",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
@@ -1117,7 +1142,24 @@ func initTools() {
 					Required: []string{"securityId"},
 				},
 			},
-			Function: GetLatestFilingText,
+			Function: GetEarningsText,
+		},
+		"getFilingText": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "getFilingText",
+				Description: "Retrieves the text content of a SEC filing",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"url": {
+							Type:        genai.TypeString,
+							Description: "The URL of the SEC filing to retrieve",
+						},
+					},
+					Required: []string{"url"},
+				},
+			},
+			Function: GetFilingText,
 		},
 		// Account / User Trades
 		"grab_user_trades": {

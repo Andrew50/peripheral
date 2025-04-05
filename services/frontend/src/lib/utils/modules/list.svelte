@@ -370,7 +370,6 @@
 
 		event.preventDefault();
 		event.stopPropagation();
-
 		if (button === 0) {
 			selectedRowIndex = index;
 			queryChart(instance);
