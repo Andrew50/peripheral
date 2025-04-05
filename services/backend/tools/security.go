@@ -665,20 +665,6 @@ func GetIcons(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 	return results, nil
 }
 
-// GetLatestEdgarFilings returns the most recent SEC filings across all companies
-func GetLatestEdgarFilings(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	// Get the latest filings from the cache
-	filings := utils.GetLatestEdgarFilings()
-
-	// Apply a limit to avoid sending too much data
-	limit := 100
-	if len(filings) > limit {
-		filings = filings[:limit]
-	}
-
-	return filings, nil
-}
-
 type GetCurrentSecurityIDArgs struct {
 	Ticker string `json:"ticker"`
 }
