@@ -183,15 +183,15 @@ func GetChartEvents(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inte
 		go func() {
 			defer wg.Done()
 			options := EdgarFilingOptions{
-				Start:      args.From / 1000,
-				End:        args.To / 1000,
+				Start:      args.From,
+				End:        args.To,
 				SecurityID: args.SecurityID,
 			}
 			optionsJSON, err := json.Marshal(options)
 			if err != nil {
 				return
 			}
-
+			fmt.Println("optionsJSON", string(optionsJSON))
 			res, err := GetStockEdgarFilings(conn, userId, optionsJSON)
 			if err != nil {
 				// Log the error but don't fail the entire request
