@@ -182,11 +182,9 @@ func GetChartEvents(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inte
 	if args.IncludeSECFilings {
 		go func() {
 			defer wg.Done()
-			from := time.Unix(args.From/1000, 0)
-			to := time.Unix(args.To/1000, 0)
 			options := EdgarFilingOptions{
-				Start:      &from,
-				End:        &to,
+				Start:      args.From / 1000,
+				End:        args.To / 1000,
 				SecurityID: args.SecurityID,
 			}
 			optionsJSON, err := json.Marshal(options)
