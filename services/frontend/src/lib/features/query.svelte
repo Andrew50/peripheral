@@ -394,7 +394,7 @@
 																	{#each tableData.rows as row}
 																		<tr>
 																			{#each row as cell}
-																				<td>{cell}</td>
+																			<td>{@html parseMarkdown(typeof cell === 'string' ? cell : String(cell))}</td>
 																			{/each}
 																		</tr>
 																	{/each}
