@@ -118,16 +118,16 @@ func initTools() {
 		"getCurrentTicker": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getCurrentTicker",
-				Description: "Retrieves the current ticker information for the user's active session",
+				Description: "Gets the current ticker fo a securityID",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
+						"securityId": {
+							Type:        genai.TypeInteger,
+							Description: "The securityID of the security to get the current ticker for",
 						},
 					},
-					Required: []string{},
+					Required: []string{"securityId"},
 				},
 			},
 			Function: GetCurrentTicker,
@@ -502,7 +502,7 @@ func initTools() {
 		"getWatchlistItems": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getWatchlistItems",
-				Description: "Retrieves all securities in a specific watchlist",
+				Description: "Retrieves the securityID's of the securities in a specific watchlist",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
