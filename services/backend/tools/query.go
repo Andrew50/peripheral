@@ -54,9 +54,17 @@ type QueryResponse struct {
 	History       *ConversationData `json:"history,omitempty"`
 }
 
+// ThinkingResponse represents the JSON output from the thinking model with rounds
+type ThinkingResponse struct {
+	Rounds                  [][]FunctionCall `json:"rounds"`
+	RequiresFurtherPlanning bool             `json:"requires_further_planning"`
+	RequiresFinalResponse   bool             `json:"requires_final_response"`
+	ContentChunks           []ContentChunk   `json:"content_chunks,omitempty"`
+	PlanningContext         json.RawMessage  `json:"planning_context,omitempty"`
+}
+
 // GetQuery processes a natural language query and returns the result
 func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
-	fmt.Println("GetQuery", args)
 
 	// Use the standardized Redis connectivity test
 	ctx := context.Background()
@@ -71,9 +79,9 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 	if err := json.Unmarshal(args, &query); err != nil {
 		return nil, fmt.Errorf("error parsing request: %w", err)
 	}
-
+	userQuery := query.Query
 	// If the query is empty, return an error
-	if query.Query == "" {
+	if userQuery == "" {
 		return nil, fmt.Errorf("query cannot be empty")
 	}
 
@@ -96,140 +104,67 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 	}
 
 	// Get function calls from the LLM with context from previous messages
-	var prompt string
+	var conversationHistory string
+	var allResults []ExecuteResult
+	var allThinkingResults []ThinkingResponse
 	if len(conversationData.Messages) > 0 {
 		// Build context from previous messages for Gemini
-		prompt = buildConversationContext(conversationData.Messages, query.Query)
+		conversationHistory = buildConversationContext(conversationData.Messages)
 	} else {
-		prompt = query.Query
+		conversationHistory = ""
 	}
-
-	// This first passes the query to a thinking model
-	geminiThinkingResponse, err := getGeminiFunctionThinking(ctx, conn, prompt)
-	if err != nil {
-		return nil, fmt.Errorf("error getting thinking response: %w", err)
-	}
-
-	responseText := geminiThinkingResponse.Text
-	fmt.Printf("\n\n\nThinking Response: %v\n\n\n", responseText)
-
-	// Try to parse the thinking response as JSON
-	var thinkingResp ThinkingResponse
-
-	// Find the JSON block in the response
-	jsonStartIdx := strings.Index(responseText, "{")
-	jsonEndIdx := strings.LastIndex(responseText, "}")
-
-	// If no valid JSON is found, just return the text response
-	if jsonStartIdx == -1 || jsonEndIdx == -1 || jsonEndIdx <= jsonStartIdx {
-		return QueryResponse{
-			Type:    "text",
-			Text:    responseText,
-			History: conversationData,
-		}, nil
-	}
-
-	jsonBlock := responseText[jsonStartIdx : jsonEndIdx+1]
-	if err := json.Unmarshal([]byte(jsonBlock), &thinkingResp); err != nil {
-
-	}
-	if len(thinkingResp.Rounds) == 0 && len(thinkingResp.ContentChunks) == 0 {
-		newMessage := ChatMessage{
-			Query:         query.Query,
-			ResponseText:  responseText,
-			FunctionCalls: []FunctionCall{},
-			ToolResults:   []ExecuteResult{},
-			Timestamp:     time.Now(),
-			ExpiresAt:     time.Now().Add(24 * time.Hour),
+	maxTurns := 5
+	numTurns := 0
+	for numTurns < maxTurns {
+		var prompt strings.Builder
+		if conversationHistory != "" {
+			prompt.WriteString("Conversation History:\n")
+			prompt.WriteString(conversationHistory)
+			prompt.WriteString("\n\n")
+		}
+		prompt.WriteString("User Query:\n")
+		prompt.WriteString(userQuery)
+		prompt.WriteString("\n\n")
+		if len(allThinkingResults) > 0 {
+			prompt.WriteString("Results from all previous rounds:\n\n")
+			resultsJSON, _ := json.Marshal(allResults)
+			prompt.WriteString("```json\n")
+			prompt.WriteString(string(resultsJSON))
+			prompt.WriteString("\n```\n\n")
 		}
 
-		// Add new message to conversation history
-		conversationData.Messages = append(conversationData.Messages, newMessage)
-		conversationData.Timestamp = time.Now()
-		if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-			fmt.Printf("Error saving updated conversation: %v\n", err)
+		// This first passes the query to a thinking model
+		geminiThinkingResponse, err := getGeminiFunctionThinking(ctx, conn, prompt.String())
+		if err != nil {
+			return nil, fmt.Errorf("error getting thinking response: %w", err)
 		}
 
-		return QueryResponse{
-			Type:    "text",
-			Text:    responseText,
-			History: conversationData,
-		}, nil
-	}
+		responseText := geminiThinkingResponse.Text
+		fmt.Printf("\n\n\nThinking Response: %v\n\n\n", responseText)
+		// Try to parse the thinking response as JSON
+		var thinkingResp ThinkingResponse
 
-	// If we have content chunks directly in the response, return them
-	if len(thinkingResp.ContentChunks) > 0 {
+		// Find the JSON block in the response
+		jsonStartIdx := strings.Index(responseText, "{")
+		jsonEndIdx := strings.LastIndex(responseText, "}")
 
-		newMessage := ChatMessage{
-			Query:         query.Query,
-			ContentChunks: thinkingResp.ContentChunks,
-			FunctionCalls: []FunctionCall{},
-			ToolResults:   []ExecuteResult{},
-			Timestamp:     time.Now(),
-			ExpiresAt:     time.Now().Add(24 * time.Hour),
-		}
-
-		// Add new message to conversation history
-		conversationData.Messages = append(conversationData.Messages, newMessage)
-		conversationData.Timestamp = time.Now()
-		if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-			fmt.Printf("Error saving updated conversation: %v\n", err)
-		}
-
-		// Return both the original ContentChunks for the frontend to render
-		// and the text version for systems that can't handle structured content
-		return QueryResponse{
-			Type:          "mixed_content",
-			ContentChunks: thinkingResp.ContentChunks,
-			History:       conversationData,
-		}, nil
-	}
-
-	// Try to process the thinking response as rounds
-	thinkingResults, err := processThinkingResponse(ctx, conn, userID, thinkingResp, query.Query)
-	if err == nil && len(thinkingResults) > 0 {
-
-		// Check if the result is a content_chunks response
-		if len(thinkingResults) == 1 && thinkingResults[0].FunctionName == "content_chunks_response" {
-			// Create new message with the content chunks response
-			newMessage := ChatMessage{
-				Query:         query.Query,
-				ContentChunks: thinkingResults[0].Result.([]ContentChunk),
-				FunctionCalls: []FunctionCall{},
-				ToolResults:   []ExecuteResult{},
-				Timestamp:     time.Now(),
-				ExpiresAt:     time.Now().Add(24 * time.Hour),
-			}
-			conversationData.Messages = append(conversationData.Messages, newMessage)
-			conversationData.Timestamp = time.Now()
-			if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-				fmt.Printf("Error saving updated conversation: %v\n", err)
-			}
-
+		// If no valid JSON is found, just return the text response
+		if jsonStartIdx == -1 || jsonEndIdx == -1 || jsonEndIdx <= jsonStartIdx {
 			return QueryResponse{
-				Type:          "mixed_content",
-				ContentChunks: newMessage.ContentChunks,
-				History:       conversationData,
+				Type:    "text",
+				Text:    responseText,
+				History: conversationData,
 			}, nil
 		}
 
-		// Check if the result is a text response
-		if len(thinkingResults) == 1 && thinkingResults[0].FunctionName == "text" {
-			// Create new message with the text response
-			var textResponse string
+		jsonBlock := responseText[jsonStartIdx : jsonEndIdx+1]
+		if err := json.Unmarshal([]byte(jsonBlock), &thinkingResp); err != nil {
 
-			// Convert the result to a string without the Go representation formatting
-			switch v := thinkingResults[0].Result.(type) {
-			case string:
-				textResponse = v
-			default:
-				rawBytes, _ := json.MarshalIndent(v, "", "  ")
-				textResponse = string(rawBytes)
-			}
-			fmt.Printf("Text response: %v\n", textResponse)
+		}
+		if len(thinkingResp.Rounds) == 0 && len(thinkingResp.ContentChunks) == 0 {
 			newMessage := ChatMessage{
 				Query:         query.Query,
-				ResponseText:  textResponse,
+				ResponseText:  responseText,
 				FunctionCalls: []FunctionCall{},
 				ToolResults:   []ExecuteResult{},
 				Timestamp:     time.Now(),
@@ -242,44 +177,103 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
 				fmt.Printf("Error saving updated conversation: %v\n", err)
 			}
-			// Return directly as a text response
+
 			return QueryResponse{
 				Type:    "text",
-				Text:    textResponse,
+				Text:    responseText,
 				History: conversationData,
 			}, nil
 		}
 
-		// Create new message with the round results and formatted response
-		newMessage := ChatMessage{
-			Query:         query.Query,
-			ResponseText:  "Successfully processed the following function calls:\n\n",
-			FunctionCalls: []FunctionCall{}, // We don't store these as regular function calls
-			ToolResults:   thinkingResults,
-			Timestamp:     time.Now(),
-			ExpiresAt:     time.Now().Add(24 * time.Hour),
+		// If we have content chunks directly in the response, return them
+		if len(thinkingResp.ContentChunks) > 0 {
+
+			newMessage := ChatMessage{
+				Query:         query.Query,
+				ContentChunks: thinkingResp.ContentChunks,
+				FunctionCalls: []FunctionCall{},
+				ToolResults:   []ExecuteResult{},
+				Timestamp:     time.Now(),
+				ExpiresAt:     time.Now().Add(24 * time.Hour),
+			}
+
+			// Add new message to conversation history
+			conversationData.Messages = append(conversationData.Messages, newMessage)
+			conversationData.Timestamp = time.Now()
+			if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
+				fmt.Printf("Error saving updated conversation: %v\n", err)
+			}
+
+			// Return both the original ContentChunks for the frontend to render
+			// and the text version for systems that can't handle structured content
+			return QueryResponse{
+				Type:          "mixed_content",
+				ContentChunks: thinkingResp.ContentChunks,
+				History:       conversationData,
+			}, nil
 		}
 
-		// Add new message to conversation history
-		conversationData.Messages = append(conversationData.Messages, newMessage)
-		conversationData.Timestamp = time.Now()
-		if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-			fmt.Printf("Error saving updated conversation: %v\n", err)
+		// Try to process the thinking response as rounds
+		contentChunks, thinkingResults, err := processThinkingResponse(ctx, conn, userID, thinkingResp, query.Query)
+		if err == nil && len(thinkingResults) > 0 {
+			if len(contentChunks) > 0 {
+				// Create new message with the content chunks response
+				newMessage := ChatMessage{
+					Query:         query.Query,
+					ContentChunks: contentChunks,
+					FunctionCalls: []FunctionCall{},
+					ToolResults:   []ExecuteResult{},
+					Timestamp:     time.Now(),
+					ExpiresAt:     time.Now().Add(24 * time.Hour),
+				}
+				conversationData.Messages = append(conversationData.Messages, newMessage)
+				conversationData.Timestamp = time.Now()
+				if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
+					fmt.Printf("Error saving updated conversation: %v\n", err)
+				}
+
+				return QueryResponse{
+					Type:          "mixed_content",
+					ContentChunks: newMessage.ContentChunks,
+					History:       conversationData,
+				}, nil
+			}
+			if !thinkingResp.RequiresFurtherPlanning {
+				// Create new message with the round results and formatted response
+				newMessage := ChatMessage{
+					Query:         query.Query,
+					ResponseText:  "Successfully processed the following function calls:\n\n",
+					FunctionCalls: []FunctionCall{}, // We don't store these as regular function calls
+					ToolResults:   thinkingResults,
+					Timestamp:     time.Now(),
+					ExpiresAt:     time.Now().Add(24 * time.Hour),
+				}
+
+				// Add new message to conversation history
+				conversationData.Messages = append(conversationData.Messages, newMessage)
+				conversationData.Timestamp = time.Now()
+				if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
+					fmt.Printf("Error saving updated conversation: %v\n", err)
+				}
+
+				return QueryResponse{
+					Type:    "function_calls",
+					Results: thinkingResults,
+					Text:    "Successfully processed the following function calls:\n\n",
+					History: conversationData,
+				}, nil
+			}
+			allResults = append(allResults, thinkingResults...)
+			allThinkingResults = append(allThinkingResults, thinkingResp)
 		}
 
-		return QueryResponse{
-			Type:    "function_calls",
-			Results: thinkingResults,
-			Text:    "Successfully processed the following function calls:\n\n",
-			History: conversationData,
-		}, nil
+		numTurns++
 	}
-
 	return nil, fmt.Errorf("error getting gemini function response: %w", err)
 }
 
 // buildConversationContext formats the conversation history for Gemini
-func buildConversationContext(messages []ChatMessage, currentQuery string) string {
+func buildConversationContext(messages []ChatMessage) string {
 	var context strings.Builder
 
 	// Include up to last 10 messages for context
@@ -318,10 +312,6 @@ func buildConversationContext(messages []ChatMessage, currentQuery string) strin
 		}
 		context.WriteString("\n\n")
 	}
-
-	// Add current query
-	context.WriteString("User: ")
-	context.WriteString(currentQuery)
 
 	return context.String()
 }
@@ -770,30 +760,17 @@ func getGeminiFunctionResponse(ctx context.Context, conn *utils.Conn, query stri
 	}, nil
 }
 
-// ThinkingResponse represents the JSON output from the thinking model with rounds
-type ThinkingResponse struct {
-	Rounds                [][]FunctionCall `json:"rounds"`
-	RequiresFinalResponse bool             `json:"requires_final_response"`
-	ContentChunks         []ContentChunk   `json:"content_chunks,omitempty"`
-}
-
 // RoundResult stores the results of a round's function calls
 type RoundResult struct {
 	Results map[string]interface{} `json:"results"`
 }
 
 // processThinkingResponse attempts to parse and execute the thinking model's rounds
-func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, thinkingResp ThinkingResponse, originalQuery string) ([]ExecuteResult, error) {
+func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, thinkingResp ThinkingResponse, originalQuery string) ([]ContentChunk, []ExecuteResult, error) {
 
 	// Check if this is a content_chunks response instead of rounds
 	if len(thinkingResp.Rounds) == 0 && len(thinkingResp.ContentChunks) > 0 {
-		// For content chunks, just return a special result that indicates this is content chunks
-		// The contentChunks themselves will be passed directly in the QueryResponse
-		result := ExecuteResult{
-			FunctionName: "content_chunks",
-			Result:       thinkingResp.ContentChunks,
-		}
-		return []ExecuteResult{result}, nil
+		return thinkingResp.ContentChunks, []ExecuteResult{}, nil
 	}
 
 	// Store all results from all rounds
@@ -852,6 +829,9 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 		// Accumulate results for the next round
 		allPreviousRoundResults = append(allPreviousRoundResults, roundResults...)
 	}
+	if thinkingResp.RequiresFurtherPlanning {
+		return []ContentChunk{}, allResults, nil
+	}
 	if thinkingResp.RequiresFinalResponse {
 		var prompt strings.Builder
 		prompt.WriteString("Here is the original query: ")
@@ -866,7 +846,7 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 		processedText, err := getGeminiResponse(ctx, conn, prompt.String())
 		if err != nil {
 			fmt.Printf("Error processing round with Gemini: %v\n", err)
-			return nil, fmt.Errorf("error processing round with Gemini: %w", err)
+			return nil, nil, fmt.Errorf("error processing round with Gemini: %w", err)
 		}
 
 		// Clean up the text response to ensure it's just plain text
@@ -877,12 +857,8 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 			ContentChunks []ContentChunk `json:"content_chunks"`
 		}
 		if err := json.Unmarshal([]byte(processedText), &contentChunksResponse); err == nil && len(contentChunksResponse.ContentChunks) > 0 {
-			// Successfully parsed the entire response as content chunks
-			result := ExecuteResult{
-				FunctionName: "content_chunks_response",
-				Result:       contentChunksResponse.ContentChunks,
-			}
-			return []ExecuteResult{result}, nil
+
+			return contentChunksResponse.ContentChunks, allResults, nil
 		}
 
 		// If that fails, try to find a JSON block within the response
@@ -894,25 +870,17 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 			err := json.Unmarshal([]byte(jsonBlock), &contentChunksResponse)
 
 			if err == nil && len(contentChunksResponse.ContentChunks) > 0 {
-				// Return content chunks if parsing was successful
-				result := ExecuteResult{
-					FunctionName: "content_chunks_response",
-					Result:       contentChunksResponse.ContentChunks,
-				}
-				return []ExecuteResult{result}, nil
+				return contentChunksResponse.ContentChunks, allResults, nil
 			}
 		}
 
-		// Fall back to plain text response if JSON extraction failed
-		var finalResponse []ExecuteResult
-		finalResponse = append(finalResponse, ExecuteResult{
-			FunctionName: "text",
-			Result:       processedText,
-		})
-		return finalResponse, nil
+		var textResponse ContentChunk
+		textResponse.Type = "text"
+		textResponse.Content = processedText
+		return []ContentChunk{textResponse}, allResults, nil
 	}
 
-	return allResults, nil
+	return []ContentChunk{}, allResults, nil
 }
 
 // processRoundWithGemini sends a round to Gemini for processing and gets back the functions to execute

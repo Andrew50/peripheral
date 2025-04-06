@@ -28,9 +28,9 @@ func GetLatestEdgarFilings(conn *utils.Conn, userId int, rawArgs json.RawMessage
 
 // EdgarFilingOptions represents optional parameters for fetching EDGAR filings
 type EdgarFilingOptions struct {
-	Start      *time.Time `json:"start,omitempty"`
-	End        *time.Time `json:"end,omitempty"`
-	SecurityID int        `json:"securityId"`
+	Start      int64 `json:"start,omitempty"`
+	End        int64 `json:"end,omitempty"`
+	SecurityID int   `json:"securityId"`
 }
 
 // getStockEdgarFilings retrieves SEC filings for a security with optional filters
@@ -41,18 +41,16 @@ func GetStockEdgarFilings(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 	}
 
 	// Get ticker for the security
-	now := time.Now()
-	if args.End != nil {
-		now = *args.End
-	}
+	start := time.UnixMilli(args.Start)
+	end := time.UnixMilli(args.End)
 
-	ticker, err := utils.GetTicker(conn, args.SecurityID, now)
+	ticker, err := utils.GetTicker(conn, args.SecurityID, end)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ticker: %v", err)
 	}
 
 	// Fetch CIK from SEC
-	cik, err := utils.GetCIKFromTicker(conn, ticker, now)
+	cik, err := utils.GetCIKFromTicker(conn, ticker, end)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get CIK for %s: %v", ticker, err)
 	}
@@ -67,16 +65,8 @@ func GetStockEdgarFilings(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 	for _, filing := range filings {
 		filingTime := time.UnixMilli(filing.Timestamp)
 
-		// Apply date filters if provided
-		if args.Start != nil {
-			if filingTime.Before(*args.Start) {
-				continue
-			}
-		}
-		if args.End != nil {
-			if filingTime.After(*args.End) {
-				continue
-			}
+		if filingTime.Before(start) || filingTime.After(end) {
+			continue
 		}
 
 		filteredFilings = append(filteredFilings, filing)

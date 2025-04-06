@@ -687,6 +687,7 @@ type GetTickerDailySnapshotArgs struct {
 	SecurityID int `json:"securityId"`
 }
 type GetTickerDailySnapshotResults struct {
+	Ticker             string  `json:"ticker"`
 	LastBid            float64 `json:"lastBid,omitempty"`
 	LastAsk            float64 `json:"lastAsk,omitempty"`
 	LastTradePrice     float64 `json:"lastTradePrice"`
@@ -733,7 +734,7 @@ func GetTickerDailySnapshot(conn *utils.Conn, userId int, rawArgs json.RawMessag
 	results.TodayHigh = snapshot.Day.High
 	results.TodayLow = snapshot.Day.Low
 	results.TodayClose = snapshot.Day.Close
-
+	results.Ticker = ticker
 	return results, nil
 }
 
