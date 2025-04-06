@@ -140,7 +140,6 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		}
 
 		responseText := geminiThinkingResponse.Text
-		fmt.Printf("\n\n\nThinking Response: %v\n\n\n", responseText)
 		// Try to parse the thinking response as JSON
 		var thinkingResp ThinkingResponse
 

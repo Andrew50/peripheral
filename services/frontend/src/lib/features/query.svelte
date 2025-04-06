@@ -11,12 +11,31 @@
 		gfm: true     // GitHub-flavored markdown
 	});
 
-	// Function to parse markdown content
+	// Configure marked to make links open in a new tab
+	const renderer = new marked.Renderer();
+	
+	
+	marked.setOptions({
+		renderer,
+		breaks: true,
+		gfm: true
+	});
+
+	// Function to parse markdown content and make links open in new tabs
 	function parseMarkdown(content: string): string {
 		try {
 			// Handle the Promise case by converting immediately to string
 			const parsed = marked.parse(content);
-			return typeof parsed === 'string' ? parsed : String(parsed);
+			const parsedString = typeof parsed === 'string' ? parsed : String(parsed);
+			
+			// Add target="_blank" and rel="noopener noreferrer" to all links
+			// This is a simple regex that modifies <a> tags to open in new tabs
+			const withExternalLinks = parsedString.replace(
+				/<a\s+(?:[^>]*?\s+)?href="([^"]*)"(?:\s+[^>]*?)?>/g,
+				'<a href="$1" target="_blank" rel="noopener noreferrer">'
+			);
+			
+			return withExternalLinks;
 		} catch (error) {
 			console.error('Error parsing markdown:', error);
 			return content; // Fallback to plain text if parsing fails
@@ -54,6 +73,7 @@
 	type ConversationData = {
 		messages: Array<{
 			query: string;
+			content_chunks?: ContentChunk[];
 			response_text: string;
 			function_calls?: any[];
 			tool_results?: FunctionResult[];
@@ -107,8 +127,8 @@
 					// Add assistant response
 					messages.push({
 						id: generateId(),
-						content: msg.response_text,
 						sender: 'assistant',
+						contentChunks: msg.content_chunks || [],
 						timestamp: new Date(msg.timestamp),
 						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
 						responseType: msg.function_calls?.length ? 'function_calls' : 'text',
