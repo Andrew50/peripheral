@@ -21,7 +21,6 @@
 	let container: HTMLDivElement;
 	let newNameInput: HTMLInputElement;
 	let showWatchlistInput = false;
-	let confirmingDelete = false;
 
 	function closeNewWatchlistWindow() {
 		showWatchlistInput = false;
