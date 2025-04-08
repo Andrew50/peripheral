@@ -1169,6 +1169,7 @@
 	}
 
 	.menu-icon {
+		filter: brightness(0) invert(1);
 		width: 24px;
 		height: 24px;
 		object-fit: contain;
