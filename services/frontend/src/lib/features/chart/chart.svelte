@@ -1101,10 +1101,9 @@
 
 		const chartId =
 			typeof newReq.chartId === 'string' ? parseInt(newReq.chartId, 10) : newReq.chartId;
-
 		const updatedReq: ChartInstance = {
 			ticker: newReq.ticker || currentChartInstance.ticker,
-			timestamp: newReq.timestamp ?? currentChartInstance.timestamp,
+			timestamp: newReq.timestamp || 0,
 			timeframe: newReq.timeframe || currentChartInstance.timeframe,
 			securityId: securityId,
 			price: newReq.price ?? currentChartInstance.price,

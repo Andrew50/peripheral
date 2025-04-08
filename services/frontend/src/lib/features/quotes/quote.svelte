@@ -424,6 +424,9 @@
 		display: flex;
 		justify-content: center;
 		margin-bottom: 15px;
+		background: white;
+		padding: 8px;
+		border-radius: 8px;
 	}
 
 	.stream-cells {

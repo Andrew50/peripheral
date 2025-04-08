@@ -22,8 +22,22 @@
 	// Function to parse markdown content and make links open in new tabs
 	function parseMarkdown(content: string): string {
 		try {
+			// Format ISO 8601 timestamps like 2025-04-08T21:36:28Z to a more readable format
+			const isoTimestampRegex = /\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z)\b/g;
+			const contentWithFormattedDates = content.replace(isoTimestampRegex, (match) => {
+				try {
+					const date = new Date(match);
+					if (!isNaN(date.getTime())) {
+						return date.toLocaleString();
+					}
+					return match;
+				} catch (e) {
+					return match;
+				}
+			});
+			
 			// Handle the Promise case by converting immediately to string
-			const parsed = marked.parse(content);
+			const parsed = marked.parse(contentWithFormattedDates);
 			const parsedString = typeof parsed === 'string' ? parsed : String(parsed);
 			
 			// Add target="_blank" and rel="noopener noreferrer" to all links
