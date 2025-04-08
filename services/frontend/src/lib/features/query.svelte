@@ -541,7 +541,17 @@
 			placeholder="Type a message..."
 			bind:value={inputValue}
 			bind:this={queryInput}
-			on:keydown={handleKeyDown}
+			on:keydown={(event) => {
+				// Prevent space key events from propagating to parent elements
+				if (event.key === ' ' || event.code === 'Space') {
+					event.stopPropagation();
+				}
+				// Original handler
+				if (event.key === 'Enter') {
+					event.preventDefault();
+					handleSubmit();
+				}
+			}}
 		/>
 		<button
 			class="send-button"

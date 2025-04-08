@@ -1105,7 +1105,7 @@
 		const updatedReq: ChartInstance = {
 			ticker: newReq.ticker || currentChartInstance.ticker,
 			timestamp: newReq.timestamp ?? currentChartInstance.timestamp,
-			timeframe: newReq.timeframe || '1d',
+			timeframe: newReq.timeframe || currentChartInstance.timeframe,
 			securityId: securityId,
 			price: newReq.price ?? currentChartInstance.price,
 			chartId: chartId,
@@ -1113,7 +1113,7 @@
 			direction: newReq.direction,
 			requestType: newReq.requestType,
 			includeLastBar: newReq.includeLastBar,
-			extendedHours: newReq.extendedHours
+			extendedHours: newReq.extendedHours ?? currentChartInstance.extendedHours
 		};
 
 		// Update currentChartInstance
