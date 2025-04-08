@@ -1,7 +1,5 @@
 <script lang="ts">
-	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
 	import { onMount } from 'svelte';
-	import type { Instance } from '$lib/core/types';
 	import { privateRequest } from '$lib/core/backend';
 	import { marked } from 'marked'; // Import the markdown parser
 
@@ -94,6 +92,12 @@
 		contentChunks?: ContentChunk[]; // Add support for content chunks
 		responseType?: string;
 		isLoading?: boolean;
+		suggestedQueries?: string[]; // Add suggested queries property
+	};
+
+	// Type for suggested queries response
+	type SuggestedQueriesResponse = {
+		suggestions: string[];
 	};
 
 	let inputValue = '';
@@ -128,6 +132,7 @@
 					messages.push({
 						id: generateId(),
 						sender: 'assistant',
+						content: msg.response_text,
 						contentChunks: msg.content_chunks || [],
 						timestamp: new Date(msg.timestamp),
 						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
@@ -165,6 +170,33 @@
 				messagesContainer.scrollTop = messagesContainer.scrollHeight;
 			}
 		}, 100);
+	}
+
+	// Function to fetch suggested queries
+	async function fetchSuggestedQueries() {
+		try {
+			const response = await privateRequest('getSuggestedQueries', {});
+			const queriesResponse = response as SuggestedQueriesResponse;
+			
+			if (queriesResponse && queriesResponse.suggestions && queriesResponse.suggestions.length > 0) {
+				// Find the last assistant message and add suggested queries to it
+				for (let i = messages.length - 1; i >= 0; i--) {
+					if (messages[i].sender === 'assistant' && !messages[i].isLoading) {
+						messages[i].suggestedQueries = queriesResponse.suggestions;
+						messages = [...messages]; // Force UI update
+						break;
+					}
+				}
+			}
+		} catch (error) {
+			console.error('Error fetching suggested queries:', error);
+		}
+	}
+
+	// Function to handle clicking on a suggested query
+	function handleSuggestedQueryClick(query: string) {
+		inputValue = query;
+		handleSubmit();
 	}
 
 	function handleSubmit() {
@@ -222,6 +254,9 @@
 
 				messages = [...messages, assistantMessage];
 				scrollToBottom();
+				
+				// Fetch suggested queries after response
+				fetchSuggestedQueries();
 			})
 			.catch((error) => {
 				console.error('Error fetching response:', error);
@@ -465,6 +500,19 @@
 												</div>
 											{/if}
 										</div>
+									{/each}
+								</div>
+							{/if}
+
+							{#if message.suggestedQueries && message.suggestedQueries.length > 0}
+								<div class="suggested-queries">
+									{#each message.suggestedQueries as query}
+										<button 
+											class="suggested-query-btn" 
+											on:click={() => handleSuggestedQueryClick(query)}
+										>
+											{query}
+										</button>
 									{/each}
 								</div>
 							{/if}
@@ -716,6 +764,34 @@
 		margin: 0;
 		font-family: monospace;
 		white-space: pre-wrap;
+	}
+
+	/* Suggested queries styling */
+	.suggested-queries {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin: 0.75rem 0;
+	}
+
+	.suggested-query-btn {
+		padding: 0.4rem 0.8rem;
+		background: var(--ui-bg-element-darker, #2a2a2a);
+		border: 1px solid var(--ui-border, #444);
+		border-radius: 1rem;
+		color: var(--accent-color, #3a8bf7);
+		font-size: 0.75rem;
+		cursor: pointer;
+		transition: all 0.2s;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 100%;
+	}
+
+	.suggested-query-btn:hover {
+		background: rgba(58, 139, 247, 0.1);
+		border-color: var(--accent-color, #3a8bf7);
 	}
 
 	.chat-input-wrapper {

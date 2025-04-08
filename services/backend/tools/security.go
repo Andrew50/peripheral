@@ -738,21 +738,11 @@ func GetTickerDailySnapshot(conn *utils.Conn, userId int, rawArgs json.RawMessag
 	return results, nil
 }
 
-type GetAllTickerSnapshotsArgs struct {
-	Sort  string `json:"sort"`
-	Order string `json:"order"`
-	Limit int    `json:"limit"`
-}
-
 type GetAllTickerSnapshotResults struct {
 	Tickers []GetTickerDailySnapshotResults `json:"tickers"`
 }
 
 func GetAllTickerSnapshots(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var args GetAllTickerSnapshotsArgs
-	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		return nil, fmt.Errorf("invalid args: %v", err)
-	}
 	res, err := utils.GetPolygonAllTickerSnapshots(conn.Polygon, context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("error getting all ticker snapshots: %v", err)
@@ -774,4 +764,13 @@ func GetAllTickerSnapshots(conn *utils.Conn, userId int, rawArgs json.RawMessage
 		results.Tickers = append(results.Tickers, ticker)
 	}
 	return results, nil
+}
+
+type GetFilteredTickerSnapshotArgs struct {
+	SecurityID int `json:"securityId"`
+	Start      int `json:"start"`
+	End        int `json:"end"`
+}
+type GetFilteredTickerSnapshotResults struct {
+	Snapshots []GetTickerDailySnapshotResults `json:"snapshots"`
 }
