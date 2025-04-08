@@ -135,7 +135,7 @@ func initTools() {
 		"getTickerMenuDetails": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getTickerMenuDetails",
-				Description: "Retrieves detailed information for the ticker menu display",
+				Description: "Retrieves ticker menu information for a security; ticker, name, market, primary exchange, etc",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -1572,6 +1572,23 @@ func initTools() {
 				},
 			},
 			Function: GetAllTickerSnapshots,
+		},
+		"getSuggestedQueries": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "getSuggestedQueries",
+				Description: "DO NOT use this function. Internal function only.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"a": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy requirements",
+						},
+					},
+					Required: []string{},
+				},
+			},
+			Function: GetSuggestedQueries,
 		},
 	}
 }

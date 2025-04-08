@@ -134,7 +134,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		}
 
 		// This first passes the query to a thinking model
-		geminiThinkingResponse, err := getGeminiFunctionThinking(ctx, conn, prompt.String())
+		geminiThinkingResponse, err := getGeminiFunctionThinking(ctx, conn, "defaultSystemPrompt", prompt.String())
 		if err != nil {
 			return nil, fmt.Errorf("error getting thinking response: %w", err)
 		}
@@ -142,7 +142,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		responseText := geminiThinkingResponse.Text
 		// Try to parse the thinking response as JSON
 		var thinkingResp ThinkingResponse
-
+		fmt.Println("thinking response ", thinkingResp)
 		// Find the JSON block in the response
 		jsonStartIdx := strings.Index(responseText, "{")
 		jsonEndIdx := strings.LastIndex(responseText, "}")
@@ -555,7 +555,7 @@ type GeminiFunctionResponse struct {
 	Text          string         `json:"text"`
 }
 
-func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, query string) (*GeminiFunctionResponse, error) {
+func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemPrompt string, query string) (*GeminiFunctionResponse, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
 		return nil, fmt.Errorf("error getting gemini key: %w", err)
@@ -571,7 +571,7 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, query stri
 	}
 
 	// Get the system instruction
-	baseSystemInstruction, err := getSystemInstruction("defaultSystemPrompt")
+	baseSystemInstruction, err := getSystemInstruction(systemPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}
@@ -938,4 +938,46 @@ func executeGeminiFunctions(ctx context.Context, conn *utils.Conn, userID int, f
 	}
 
 	return results, nil
+}
+
+type GetSuggestedQueriesResponse struct {
+	Suggestions []string `json:"suggestions"`
+}
+
+func GetSuggestedQueries(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
+
+	// Use the standardized Redis connectivity test
+	ctx := context.Background()
+	success, message := conn.TestRedisConnectivity(ctx, userID)
+	if !success {
+		fmt.Printf("WARNING: %s\n", message)
+	} else {
+		fmt.Println(message)
+	}
+	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
+	conversationData, err := getConversationFromCache(ctx, conn, userID, conversationKey)
+	if err != nil || conversationData == nil {
+		return GetSuggestedQueriesResponse{}, nil
+	}
+	var conversationHistory string
+	if len(conversationData.Messages) > 0 {
+		conversationHistory = buildConversationContext(conversationData.Messages)
+	}
+
+	geminiRes, err := getGeminiFunctionThinking(ctx, conn, "suggestedQueriesPrompt", conversationHistory)
+	if err != nil {
+		return nil, fmt.Errorf("error getting suggested queries from Gemini: %w", err)
+	}
+	jsonStartIdx := strings.Index(geminiRes.Text, "{")
+	jsonEndIdx := strings.LastIndex(geminiRes.Text, "}")
+	if jsonStartIdx == -1 || jsonEndIdx == -1 {
+		return GetSuggestedQueriesResponse{}, nil
+	}
+	jsonBlock := geminiRes.Text[jsonStartIdx : jsonEndIdx+1]
+	var response GetSuggestedQueriesResponse
+	if err := json.Unmarshal([]byte(jsonBlock), &response); err != nil {
+		return GetSuggestedQueriesResponse{}, fmt.Errorf("error unmarshalling suggested queries: %w", err)
+	}
+	return response, nil
+
 }
