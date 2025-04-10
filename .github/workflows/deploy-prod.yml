@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   deploy-prod:
-    uses: ./.github/workflows/deploy-base.yml
+    uses: ./.github/workflows/deploy.yml
     with:
       environment: 'prod'
       target_branch: ${{ github.event.inputs.branch || github.ref_name }}
