@@ -82,9 +82,9 @@ func SetStudySetup(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inter
 	if err != nil {
 		return nil, fmt.Errorf("3og9 invalid args: %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE studies Set setupId = $1 where studyId = $2", args.SetupID, args.Id)
+	cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE studies SET setupId = $1 WHERE studyId = $2 AND userId = $3", args.SetupID, args.Id, userId)
 	if cmdTag.RowsAffected() == 0 {
-		return nil, fmt.Errorf("0n8912")
+		return nil, fmt.Errorf("study not found or you don't have permission to update it")
 	}
 	return nil, err
 }
@@ -102,9 +102,9 @@ func SaveStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface
 	if err != nil {
 		return nil, fmt.Errorf("3og9 invalid args: %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE studies Set entry = $1 where studyId = $2", args.Entry, args.Id)
+	cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE studies SET entry = $1 WHERE studyId = $2 AND userId = $3", args.Entry, args.Id, userId)
 	if cmdTag.RowsAffected() == 0 {
-		return nil, fmt.Errorf("0n8912")
+		return nil, fmt.Errorf("study not found or you don't have permission to update it")
 	}
 	return nil, err
 }
@@ -122,9 +122,9 @@ func CompleteStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inter
 	if err != nil {
 		return nil, fmt.Errorf("215d invalid args: %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE studies Set completed = $1 where studyId = $2", args.Completed, args.Id)
+	cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE studies SET completed = $1 WHERE studyId = $2 AND userId = $3", args.Completed, args.Id, userId)
 	if cmdTag.RowsAffected() == 0 {
-		return nil, fmt.Errorf("0n8912")
+		return nil, fmt.Errorf("study not found or you don't have permission to update it")
 	}
 	return nil, err
 }
@@ -141,12 +141,12 @@ func DeleteStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if err != nil {
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), "DELETE FROM studies where studyId = $1", args.Id)
+	cmdTag, err := conn.DB.Exec(context.Background(), "DELETE FROM studies where studyId = $1 AND userId = $2", args.Id, userId)
 	if err != nil {
 		return nil, err
 	}
 	if cmdTag.RowsAffected() == 0 {
-		return nil, fmt.Errorf("ssd7g3")
+		return nil, fmt.Errorf("study not found or you don't have permission to delete it")
 	}
 	return nil, err
 }
@@ -164,7 +164,7 @@ func GetStudyEntry(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inter
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
 	var entry json.RawMessage
-	err = conn.DB.QueryRow(context.Background(), "SELECT entry from studies where studyId = $1", args.StudyID).Scan(&entry)
+	err = conn.DB.QueryRow(context.Background(), "SELECT entry from studies where studyId = $1 AND userId = $2", args.StudyID, userId).Scan(&entry)
 	if err != nil {
 		return nil, err
 	}

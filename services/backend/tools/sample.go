@@ -25,8 +25,9 @@ func LabelTrainingQueueInstance(conn *utils.Conn, userId int, rawArgs json.RawMe
 		UPDATE samples
 		SET label = $1
 		WHERE sampleId = $2
+		AND setupId IN (SELECT setupId FROM setups WHERE userId = $3)
 		RETURNING setupId`,
-		args.Label, args.SampleID).Scan(&setupID)
+		args.Label, args.SampleID, userId).Scan(&setupID)
 	if err != nil {
 		return nil, fmt.Errorf("error updating and retrieving setupId: %v", err)
 	}
@@ -52,6 +53,18 @@ func GetTrainingQueue(conn *utils.Conn, userId int, rawArgs json.RawMessage) (in
 	var args GetTrainingQueueArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error parsing args: %v", err)
+	}
+
+	// Verify that the setup belongs to the user
+	var setupExists bool
+	err := conn.DB.QueryRow(context.Background(), `
+		SELECT EXISTS(SELECT 1 FROM setups WHERE setupId = $1 AND userId = $2)`,
+		args.SetupID, userId).Scan(&setupExists)
+	if err != nil {
+		return nil, fmt.Errorf("error verifying setup ownership: %v", err)
+	}
+	if !setupExists {
+		return nil, fmt.Errorf("setup not found or you don't have permission to access it")
 	}
 
 	utils.CheckSampleQueue(conn, args.SetupID, false)
@@ -100,9 +113,21 @@ func SetSample(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface
 		return nil, fmt.Errorf("error parsing args: %v", err)
 	}
 
-	_, err := conn.DB.Exec(context.Background(), `
-		INSERT INTO samples (securityId, timestamp, setupId,label)
-		VALUES ($1, to_timestamp($2), $3,true)`,
+	// Verify that the setup belongs to the user
+	var setupExists bool
+	err := conn.DB.QueryRow(context.Background(), `
+		SELECT EXISTS(SELECT 1 FROM setups WHERE setupId = $1 AND userId = $2)`,
+		args.SetupID, userId).Scan(&setupExists)
+	if err != nil {
+		return nil, fmt.Errorf("error verifying setup ownership: %v", err)
+	}
+	if !setupExists {
+		return nil, fmt.Errorf("setup not found or you don't have permission to modify it")
+	}
+
+	_, err = conn.DB.Exec(context.Background(), `
+		INSERT INTO samples (securityId, timestamp, setupId, label)
+		VALUES ($1, to_timestamp($2), $3, true)`,
 		args.SecurityID, args.Timestamp/1000, args.SetupID) // Convert timestamp from milliseconds to seconds
 	if err != nil {
 		return nil, fmt.Errorf("error inserting sample: %v", err)

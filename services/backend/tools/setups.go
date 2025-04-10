@@ -117,13 +117,20 @@ func DeleteSetup(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, err
 	}
-	_, err := conn.DB.Exec(context.Background(), `
+	result, err := conn.DB.Exec(context.Background(), `
 		DELETE FROM setups 
-		WHERE setupId = $1`, args.SetupID)
+		WHERE setupId = $1 AND userId = $2`, args.SetupID, userId)
 
 	if err != nil {
 		return nil, fmt.Errorf("error deleting setup: %v", err)
 	}
+
+	// Check if any rows were affected
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		return nil, fmt.Errorf("setup not found or you don't have permission to delete it")
+	}
+
 	return nil, nil
 }
 
@@ -151,13 +158,12 @@ func SetSetup(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 	cmdTag, err := conn.DB.Exec(context.Background(), `
 		UPDATE setups 
 		SET name = $1, timeframe = $2, bars = $3, threshold = $4, dolvol = $5, adr = $6, mcap = $7 
-		WHERE setupId = $8`,
-		args.Name, args.Timeframe, args.Bars, args.Threshold, args.Dolvol, args.Adr, args.Mcap, args.SetupID)
+		WHERE setupId = $8 AND userId = $9`,
+		args.Name, args.Timeframe, args.Bars, args.Threshold, args.Dolvol, args.Adr, args.Mcap, args.SetupID, userId)
 	if err != nil {
 		return nil, fmt.Errorf("error updating setup: %v", err)
 	} else if cmdTag.RowsAffected() != 1 {
-		return nil, fmt.Errorf("dkn0w")
-
+		return nil, fmt.Errorf("setup not found or you don't have permission to update it")
 	}
 	return SetupResult{
 		SetupID:   args.SetupID,
