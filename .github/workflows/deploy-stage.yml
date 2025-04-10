@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   deploy-stage:
-    uses: ./.github/workflows/deploy-base.yml
+    uses: ./.github/workflows/deploy.yml
     with:
       environment: 'stage'
       target_branch: ${{ github.event.inputs.branch || github.ref_name }}
