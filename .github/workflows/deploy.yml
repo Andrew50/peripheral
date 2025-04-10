@@ -49,10 +49,6 @@ permissions:
   packages: write
   id-token: write
 
-# This concurrency ensures we don't have multiple overlapping deployments
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
 
 jobs:
   deploy:
