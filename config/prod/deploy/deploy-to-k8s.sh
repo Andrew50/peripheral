@@ -7,11 +7,12 @@ ENVIRONMENT="${2:-}"
 echo "Deploying to Kubernetes with tag: $DOCKER_TAG, environment: $ENVIRONMENT"
 
 # 1. Apply all YAML files in config/<ENVIRONMENT>. This might include Deployments, Services, etc.
-if [[ -d "config/$ENVIRONMENT" ]]; then
+if [[ -d "config/prod" ]]; then
   echo "Applying config in config/$ENVIRONMENT..."
   kubectl apply -f "config/$ENVIRONMENT" --recursive --validate=false
 else
-  echo "No environment directory found at config/$ENVIRONMENT. Skipping apply."
+  echo "No environment directory found at config/prod. Skipping apply."
+  exit 1
 fi
 
 # 2. Update relevant Deployments with the new image tag
