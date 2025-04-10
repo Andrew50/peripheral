@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: worker
-          image: billin19/worker:prod
+          image: ${DOCKER_USERNAME}/worker:${DOCKER_TAG}
           imagePullPolicy: Always
           command:
             - /bin/sh
@@ -90,7 +90,7 @@ spec:
             name: worker-conn-patch
       initContainers:
         - name: wait-for-db
-          image: billin19/worker:prod
+          image: ${DOCKER_USERNAME}/worker:${DOCKER_TAG}
           imagePullPolicy: IfNotPresent
           command:
             - /bin/sh

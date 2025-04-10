@@ -121,40 +121,31 @@ jobs:
           echo "JWT_SECRET: [$(if [ -n "$JWT_SECRET" ]; then echo SET; else echo MISSING; fi)]"
           echo "All secrets must show as 'SET' above for successful deployment."
 
-      - name: Setup deployment
+      - name: Setup For Deployment
         run: |
           chmod +x config/prod/deploy/*.sh
           DOCKER_TAG=$(echo "${TARGET_BRANCH}" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_.-]/-/g')
           echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
           echo "Using Docker tag: $DOCKER_TAG"
+          SERVICES=("backend" "frontend" "db" "cache" "worker" "nginx")
+          MINIKUBE_PROFILE="minikube-${ENVIRONMENT}"
+          echo "MINIKUBE_PROFILE=${MINIKUBE_PROFILE}" >> $GITHUB_ENV
+          echo "Using Minikube profile: ${MINIKUBE_PROFILE}"
 
       - name: Build Docker Images
-        run: config/prod/deploy/build-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}"
+        run: config/prod/deploy/build-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}" "${SERVICES}"
 
       - name: Login & Push Docker Images
-        run: config/prod/deploy/push-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}"
-
-      - name: Determine Minikube Profile Name
-        id: set-profile
-        run: |
-          PROFILE_NAME="minikube-${ENVIRONMENT}"
-          echo "PROFILE_NAME=${PROFILE_NAME}" >> $GITHUB_ENV
-          echo "Using Minikube profile: ${PROFILE_NAME}"
+        run: config/prod/deploy/push-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}" "${SERVICES}"
 
       - name: Setup Kubernetes Context
-        run: config/prod/deploy/setup-k8s.sh "${K8S_CONTEXT}" "${K8S_NAMESPACE}" "${PROFILE_NAME}"
-
-      - name: Verify PersistentVolumeClaims
-        run: config/prod/deploy/verify-pvcs.sh "${ENVIRONMENT}"
+        run: config/prod/deploy/setup-k8s.sh "${K8S_CONTEXT}" "${K8S_NAMESPACE}" "${MINIKUBE_PROFILE}"
 
       - name: Update Kubernetes Secrets
-        run: config/prod/deploy/update-secrets.sh
-
-      - name: Run Database Migrations
-        run: config/prod/deploy/run-migrations.sh
+        run: config/prod/deploy/update-secrets.sh "${DOCKER_TAG}" "${K8S_NAMESPACE}"
 
       - name: Deploy to Kubernetes
-        run: config/prod/deploy/deploy-to-k8s.sh "${DOCKER_TAG}" "${ENVIRONMENT}"
+        run: config/prod/deploy/deploy-to-k8s.sh "${DOCKER_TAG}" "${K8S_NAMESPACE}"
 
       - name: Cleanup
         if: always()

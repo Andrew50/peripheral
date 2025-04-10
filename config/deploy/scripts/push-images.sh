@@ -3,11 +3,13 @@ set -Eeuo pipefail
 
 DOCKER_TAG="${1:-}"
 TARGET_BRANCH="${2:-}"
+SERVICES="${3:-}"
 
 : "${DOCKER_USERNAME:?DOCKER_USERNAME is required}"
 : "${DOCKER_TOKEN:?DOCKER_TOKEN is required}"
+: "${SERVICES:?SERVICES is required}"
 
-SERVICES=( "frontend" "backend" "worker" "worker-healthcheck" "tf" "nginx" "db" )
+read -r -a SERVICES <<< "$SERVICES"
 
 echo "Logging into Docker Hub..."
 echo "$DOCKER_TOKEN" | docker login -u "$DOCKER_USERNAME" --password-stdin

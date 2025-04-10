@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: billin19/frontend:prod
+          image: ${DOCKER_USERNAME}/frontend:${DOCKER_TAG}
           imagePullPolicy: Always
           ports:
             - containerPort: 3000

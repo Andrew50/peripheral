@@ -3,12 +3,13 @@ set -Eeuo pipefail
 
 echo "Performing cleanup..."
 
-# Remove dangling/unused images older than 24h (adjust filters as you see fit)
 echo "Pruning old Docker images..."
-docker image prune -af --filter "until=24h"
+docker image prune -af
 
-# Prune system
 echo "Pruning Docker system volumes..."
 docker system prune -af --volumes
+
+echo "Removing Temporary config files..."
+rm -rf config/deploy/tmp
 
 echo "Cleanup complete."
