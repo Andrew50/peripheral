@@ -101,7 +101,7 @@ type ChatMessage struct {
 // Marked with underscore prefix as currently unused but may be needed in future
 //
 //nolint:unused // Preserved for future use
-func _inferDateRange(queryText string) DateRange {
+/*func _inferDateRange(queryText string) DateRange {
 	now := time.Now()
 
 	// Default to last 90 days for "recent" queries
@@ -141,13 +141,13 @@ func _inferDateRange(queryText string) DateRange {
 
 	// Default to 90 days if no time context is found
 	return defaultRange
-}
+}*/
 
 // containsAny checks if the text contains any of the provided phrases
 // Marked with underscore prefix as currently unused but may be needed in future
 //
 //nolint:unused // Preserved for future use
-func _containsAny(text string, phrases []string) bool {
+/*func _containsAny(text string, phrases []string) bool {
 	lowerText := strings.ToLower(text)
 	for _, phrase := range phrases {
 		if strings.Contains(lowerText, phrase) {
@@ -155,7 +155,7 @@ func _containsAny(text string, phrases []string) bool {
 		}
 	}
 	return false
-}
+}*/
 
 // GetQuery processes a natural language query and returns the result
 func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
@@ -490,7 +490,7 @@ func GetUserConversation(conn *utils.Conn, userID int, args json.RawMessage) (in
 // getGeminiResponse is marked with underscore prefix as currently unused but may be needed in future
 //
 //nolint:unused // Preserved for future use
-func _getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (string, error) {
+/*func _getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (string, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
 		return "", fmt.Errorf("error getting gemini key: %w", err)
@@ -535,7 +535,7 @@ func _getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (st
 	// Get the text from the response
 	text := fmt.Sprintf("%v", result.Candidates[0].Content.Parts[0])
 	return text, nil
-}
+}*/
 
 // FunctionCall represents a function to be called with its arguments
 type FunctionCall struct {
