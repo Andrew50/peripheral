@@ -7,12 +7,34 @@ K8S_NAMESPACE="${2:-}"
 # Check if minikube is installed
 echo "Checking minikube status..."
 if ! minikube status &> /dev/null; then
-    echo "Minikube is not running. Starting minikube..."
-    minikube start
-    echo "Minikube started successfully."
+    echo "Minikube is not running. Starting minikube with 16 CPUs and 64GB RAM..."
+    # Start minikube with more verbose output
+    minikube start --cpus=16 --memory=65536 --v=1 # Memory in MB (64GB = 65536MB)
+    
+    # Check if minikube started successfully
+    if minikube status &> /dev/null; then
+        echo "Minikube started successfully with increased resources."
+    else
+        echo "ERROR: Failed to start minikube. Please check logs above."
+        exit 1
+    fi
 else
     echo "Minikube is already running."
+    # Check if we need to update the resource allocation
+    CURRENT_CPU=$(minikube config view | grep -i cpus | awk '{print $3}' 2>/dev/null || echo "unknown")
+    CURRENT_MEM=$(minikube config view | grep -i memory | awk '{print $3}' 2>/dev/null || echo "unknown")
+    
+    if [[ "$CURRENT_CPU" != "16" || "$CURRENT_MEM" != "65536" ]]; then
+        echo "WARNING: Minikube is running with different resource settings."
+        echo "Current settings: CPUs=$CURRENT_CPU, Memory=$CURRENT_MEM"
+        echo "Desired settings: CPUs=16, Memory=65536MB"
+        echo "Note: You cannot change memory/CPU for an existing minikube cluster. To apply these settings, run 'minikube delete' first."
+    fi
 fi
+
+# Ensure minikube is the current context
+echo "Setting kubectl to use minikube context..."
+minikube update-context
 
 echo "Switching to Kubernetes context: $K8S_CONTEXT"
 kubectl config use-context "$K8S_CONTEXT"
