@@ -27,6 +27,11 @@ type PolygonSnapshot struct {
 	Tickers []PolygonTicker `json:"tickers"`
 }
 
+// GetInstancesByTickersArgs represents the arguments for the GetInstancesByTickers function
+type GetInstancesByTickersArgs struct {
+	Tickers []string `json:"tickers"`
+}
+
 // Fetch the snapshot from Polygon.io, attaching the API key
 func fetchPolygonSnapshot(endpoint string, apiKey string) ([]string, error) {
 	// Append the API key to the endpoint
@@ -58,6 +63,48 @@ func fetchPolygonSnapshot(endpoint string, apiKey string) ([]string, error) {
 	}
 
 	return tickers, nil
+}
+
+// GetInstancesByTickers retrieves security instances for a list of tickers
+func GetInstancesByTickers(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetInstancesByTickersArgs
+	err := json.Unmarshal(rawArgs, &args)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal arguments: %v", err)
+	}
+
+	if len(args.Tickers) == 0 {
+		return []GetScreensaversResults{}, nil
+	}
+
+	// Query the database to get securityId for the provided tickers
+	query := `
+		SELECT ticker, securityId
+		FROM securities
+		WHERE ticker = ANY($1) AND maxDate IS NULL`
+
+	rows, err := conn.DB.Query(context.Background(), query, args.Tickers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute query: %v", err)
+	}
+	defer rows.Close()
+
+	var results []GetScreensaversResults
+	for rows.Next() {
+		var result GetScreensaversResults
+		err := rows.Scan(&result.Ticker, &result.SecurityID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan row: %v", err)
+		}
+		result.Timestamp = 0 // Set the timestamp to zero
+		results = append(results, result)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over rows: %v", err)
+	}
+
+	return results, nil
 }
 
 // GetScreensavers performs operations related to GetScreensavers functionality.
