@@ -1,46 +1,63 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-K8S_CONTEXT="${1:-}"
-K8S_NAMESPACE="${2:-}"
+# Parameters:
+# $1: K8S_CONTEXT - The Kubernetes context to use (default: minikube)
+# $2: K8S_NAMESPACE - The namespace to use (default: default)
+# $3: PROFILE_NAME - The minikube profile name (default: minikube)
 
-# Check if minikube is installed
-echo "Checking minikube status..."
-if ! minikube status &> /dev/null; then
-    echo "Minikube is not running. Starting minikube with 16 CPUs and 64GB RAM..."
-    # Start minikube with more verbose output
-    minikube start --cpus=16 --memory=65536 --v=1 # Memory in MB (64GB = 65536MB)
+K8S_CONTEXT="${1:-minikube}"
+K8S_NAMESPACE="${2:-default}"
+PROFILE_NAME="${3:-minikube}"  # Add profile parameter for multiple clusters
+
+# Check if the specified minikube profile is running
+echo "Checking minikube status for profile: $PROFILE_NAME..."
+if ! minikube status -p "$PROFILE_NAME" &> /dev/null; then
+    echo "Minikube profile '$PROFILE_NAME' is not running. Starting with 16 CPUs and 64GB RAM..."
+    
+    # Calculate resources based on available system resources and profile
+    # For multiple profiles, we might want to allocate fewer resources per profile
+    if [[ "$PROFILE_NAME" != "minikube" ]]; then
+        # For secondary profiles, use fewer resources
+        CPU_COUNT=8
+        MEM_SIZE=32768  # 32GB
+    else
+        # For primary profile, use full resources
+        CPU_COUNT=16
+        MEM_SIZE=65536  # 64GB
+    fi
+    
+    # Start minikube with the specified profile
+    minikube start -p "$PROFILE_NAME" --cpus="$CPU_COUNT" --memory="$MEM_SIZE" --v=1
     
     # Check if minikube started successfully
-    if minikube status &> /dev/null; then
-        echo "Minikube started successfully with increased resources."
+    if minikube status -p "$PROFILE_NAME" &> /dev/null; then
+        echo "Minikube profile '$PROFILE_NAME' started successfully with CPU=$CPU_COUNT, Memory=${MEM_SIZE}MB."
     else
-        echo "ERROR: Failed to start minikube. Please check logs above."
+        echo "ERROR: Failed to start minikube profile '$PROFILE_NAME'. Please check logs above."
         exit 1
     fi
 else
-    echo "Minikube is already running."
-    # Check if we need to update the resource allocation
-    CURRENT_CPU=$(minikube config view | grep -i cpus | awk '{print $3}' 2>/dev/null || echo "unknown")
-    CURRENT_MEM=$(minikube config view | grep -i memory | awk '{print $3}' 2>/dev/null || echo "unknown")
+    echo "Minikube profile '$PROFILE_NAME' is already running."
+    # Check current resource allocation
+    CURRENT_CPU=$(minikube config view -p "$PROFILE_NAME" | grep -i cpus | awk '{print $3}' 2>/dev/null || echo "unknown")
+    CURRENT_MEM=$(minikube config view -p "$PROFILE_NAME" | grep -i memory | awk '{print $3}' 2>/dev/null || echo "unknown")
     
-    if [[ "$CURRENT_CPU" != "16" || "$CURRENT_MEM" != "65536" ]]; then
-        echo "WARNING: Minikube is running with different resource settings."
-        echo "Current settings: CPUs=$CURRENT_CPU, Memory=$CURRENT_MEM"
-        echo "Desired settings: CPUs=16, Memory=65536MB"
-        echo "Note: You cannot change memory/CPU for an existing minikube cluster. To apply these settings, run 'minikube delete' first."
-    fi
+    echo "Current settings for profile '$PROFILE_NAME': CPUs=$CURRENT_CPU, Memory=$CURRENT_MEM"
 fi
 
-# Ensure minikube is the current context
-echo "Setting kubectl to use minikube context..."
-minikube update-context
+# Ensure the correct minikube profile is the current context
+echo "Setting kubectl to use minikube profile '$PROFILE_NAME' context..."
+minikube update-context -p "$PROFILE_NAME"
 
-# Check if we're using minikube or a specific context
-if [[ "$K8S_CONTEXT" == "minikube" || -z "$K8S_CONTEXT" ]]; then
-  echo "Using minikube as the Kubernetes context"
-  kubectl config use-context minikube
-  CURRENT_CONTEXT="minikube"
+# The context name for a minikube profile is usually "profile_name"
+EXPECTED_CONTEXT="$PROFILE_NAME"
+
+# Check if we're using the minikube profile or a specific context
+if [[ "$K8S_CONTEXT" == "$EXPECTED_CONTEXT" || -z "$K8S_CONTEXT" ]]; then
+  echo "Using minikube profile '$PROFILE_NAME' as the Kubernetes context"
+  kubectl config use-context "$EXPECTED_CONTEXT"
+  CURRENT_CONTEXT="$EXPECTED_CONTEXT"
 else
   echo "Switching to Kubernetes context: $K8S_CONTEXT"
   if kubectl config get-contexts "$K8S_CONTEXT" &>/dev/null; then
@@ -71,6 +88,51 @@ else
 fi
 
 echo "Verifying cluster connectivity..."
-kubectl cluster-info #dont retry, already has retry built in
+echo "Current kubectl configuration:"
+kubectl config view --minify
+
+# Ensure kubectl is properly configured with the correct context
+echo "Current kubectl context: $(kubectl config current-context)"
+
+# Check if kubectl can reach the Kubernetes API server
+echo "Testing connection to Kubernetes API server..."
+if ! kubectl get nodes &>/dev/null; then
+  echo "WARNING: Cannot connect to Kubernetes API server. Trying to fix connection..."
+  
+  # Try to get minikube IP
+  MINIKUBE_IP=$(minikube ip 2>/dev/null)
+  if [[ -n "$MINIKUBE_IP" ]]; then
+    echo "Minikube IP: $MINIKUBE_IP"
+    echo "Testing network connectivity to minikube IP..."
+    ping -c 2 "$MINIKUBE_IP" || echo "Cannot ping minikube IP"
+  fi
+  
+  # Try to update the minikube context again
+  echo "Updating minikube context..."
+  minikube update-context
+  
+  # Wait a moment for connections to stabilize
+  sleep 5
+fi
+
+# Now try cluster-info with explicit output redirection to capture any errors
+echo "Running kubectl cluster-info..."
+if ! kubectl cluster-info > >(tee /tmp/cluster-info-out.log) 2> >(tee /tmp/cluster-info-err.log >&2); then
+  echo "ERROR: kubectl cluster-info failed. See error output above."
+  echo "Contents of /tmp/cluster-info-err.log:"
+  cat /tmp/cluster-info-err.log
+  
+  # Try one more time with a different approach
+  echo "Trying alternative approach to verify cluster..."
+  if kubectl version --short; then
+    echo "kubectl version succeeded, continuing despite cluster-info failure."
+  else
+    echo "ERROR: Both kubectl cluster-info and kubectl version failed."
+    echo "Please check your Kubernetes configuration and network connectivity."
+    exit 1
+  fi
+else
+  echo "Cluster info command succeeded."
+fi
 
 echo "Kubernetes setup complete. Current context: $CURRENT_CONTEXT, namespace: $K8S_NAMESPACE"
