@@ -36,19 +36,41 @@ fi
 echo "Setting kubectl to use minikube context..."
 minikube update-context
 
-echo "Switching to Kubernetes context: $K8S_CONTEXT"
-kubectl config use-context "$K8S_CONTEXT"
-
-CURRENT_CONTEXT=$(kubectl config current-context)
-if [[ "$CURRENT_CONTEXT" != "$K8S_CONTEXT" ]]; then
-  echo "ERROR: Wrong context! Expected '$K8S_CONTEXT' but got '$CURRENT_CONTEXT'"
-  exit 1
+# Check if we're using minikube or a specific context
+if [[ "$K8S_CONTEXT" == "minikube" || -z "$K8S_CONTEXT" ]]; then
+  echo "Using minikube as the Kubernetes context"
+  kubectl config use-context minikube
+  CURRENT_CONTEXT="minikube"
+else
+  echo "Switching to Kubernetes context: $K8S_CONTEXT"
+  if kubectl config get-contexts "$K8S_CONTEXT" &>/dev/null; then
+    kubectl config use-context "$K8S_CONTEXT"
+    CURRENT_CONTEXT=$(kubectl config current-context)
+    if [[ "$CURRENT_CONTEXT" != "$K8S_CONTEXT" ]]; then
+      echo "ERROR: Wrong context! Expected '$K8S_CONTEXT' but got '$CURRENT_CONTEXT'"
+      exit 1
+    fi
+  else
+    echo "WARNING: Context '$K8S_CONTEXT' not found. Using current context instead."
+    CURRENT_CONTEXT=$(kubectl config current-context)
+    echo "Current context: $CURRENT_CONTEXT"
+  fi
 fi
 
-echo "Setting namespace to: $K8S_NAMESPACE"
-kubectl config set-context --current --namespace="$K8S_NAMESPACE"
+# Set namespace if provided
+if [[ -n "$K8S_NAMESPACE" ]]; then
+  echo "Setting namespace to: $K8S_NAMESPACE"
+  kubectl config set-context --current --namespace="$K8S_NAMESPACE"
+else
+  echo "No namespace specified, using default namespace"
+  K8S_NAMESPACE=$(kubectl config view --minify --output 'jsonpath={..namespace}')
+  if [[ -z "$K8S_NAMESPACE" ]]; then
+    K8S_NAMESPACE="default"
+  fi
+  echo "Current namespace: $K8S_NAMESPACE"
+fi
 
 echo "Verifying cluster connectivity..."
-kubectl cluster-info
+kubectl cluster-info #dont retry, already has retry built in
 
 echo "Kubernetes setup complete. Current context: $CURRENT_CONTEXT, namespace: $K8S_NAMESPACE"
