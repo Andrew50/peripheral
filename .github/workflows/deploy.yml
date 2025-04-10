@@ -138,7 +138,7 @@ jobs:
         run: config/deploy/scripts/build-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}" "${SERVICES}"
 
       - name: Login & Push Docker Images
-        run: config/deploy/scripts/push-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}" "${SERVICES}"
+        run: config/deploy/scripts/push-images.sh "${DOCKER_TAG}" "${DOCKER_TAG}" "${SERVICES}"
 
       - name: Setup Kubernetes Context
         run: config/deploy/scripts/setup-k8s.sh "${K8S_CONTEXT}" "${K8S_NAMESPACE}" "${MINIKUBE_PROFILE}"
