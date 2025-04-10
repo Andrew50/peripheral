@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+K8S_NAMESPACE="${1:-}"
+
 # Require these secrets:
 : "${DB_ROOT_PASSWORD:?Missing DB_ROOT_PASSWORD}"
 : "${REDIS_PASSWORD:?Missing REDIS_PASSWORD}"
@@ -10,7 +12,7 @@ set -Eeuo pipefail
 : "${GOOGLE_CLIENT_SECRET:?Missing GOOGLE_CLIENT_SECRET}"
 : "${JWT_SECRET:?Missing JWT_SECRET}"
 
-echo "Updating Kubernetes Secrets..."
+echo "Updating Kubernetes Secrets in namespace: ${K8S_NAMESPACE}..."
 
 # Encode secrets
 DB_B64=$(echo -n "$DB_ROOT_PASSWORD" | base64 -w 0)
@@ -73,17 +75,17 @@ data:
   JWT_SECRET: $JWT_B64
 EOF
 
-echo "Applying secrets..."
-kubectl apply -f "$TMP_DIR/secrets.yaml" --validate=false
+echo "Applying secrets to namespace ${K8S_NAMESPACE}..."
+kubectl apply -f "$TMP_DIR/secrets.yaml" --validate=false --namespace=${K8S_NAMESPACE}
 
 rm -rf "$TMP_DIR"
 
 # (Optional) rollout restart to pick up new secrets in certain deployments
-if kubectl get deployment backend &>/dev/null; then
-  kubectl rollout restart deployment/backend
+if kubectl get deployment backend --namespace=${K8S_NAMESPACE} &>/dev/null; then
+  kubectl rollout restart deployment/backend --namespace=${K8S_NAMESPACE}
 fi
-if kubectl get deployment worker &>/dev/null; then
-  kubectl rollout restart deployment/worker 
+if kubectl get deployment worker --namespace=${K8S_NAMESPACE} &>/dev/null; then
+  kubectl rollout restart deployment/worker --namespace=${K8S_NAMESPACE}
 fi
 
-echo "Secrets updated."
+echo "Secrets updated in namespace ${K8S_NAMESPACE}."

@@ -21,7 +21,7 @@ spec:
       restartPolicy: Always # Update the restart policy to "Always"
       containers:
         - name: backend
-          image: billin19/backend:prod
+          image: ${DOCKER_USERNAME}/backend:${DOCKER_TAG}
           imagePullPolicy: Always
           command:
             - /bin/sh
