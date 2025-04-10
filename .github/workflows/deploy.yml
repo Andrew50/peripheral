@@ -138,8 +138,15 @@ jobs:
       - name: Login & Push Docker Images
         run: config/prod/deploy/push-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}"
 
+      - name: Determine Minikube Profile Name
+        id: set-profile
+        run: |
+          PROFILE_NAME="minikube-${ENVIRONMENT}"
+          echo "PROFILE_NAME=${PROFILE_NAME}" >> $GITHUB_ENV
+          echo "Using Minikube profile: ${PROFILE_NAME}"
+
       - name: Setup Kubernetes Context
-        run: config/prod/deploy/setup-k8s.sh "${K8S_CONTEXT}" "${K8S_NAMESPACE}"
+        run: config/prod/deploy/setup-k8s.sh "${K8S_CONTEXT}" "${K8S_NAMESPACE}" "${PROFILE_NAME}"
 
       - name: Verify PersistentVolumeClaims
         run: config/prod/deploy/verify-pvcs.sh "${ENVIRONMENT}"
