@@ -56,17 +56,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check-build:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - name: Check if lint-and-build workflow passed
-        run: echo "This step can verify your lint-and-build pipeline ran successfully"
-
   deploy:
     runs-on: self-hosted
-    needs: [check-build]
-    if: (github.event_name != 'pull_request' || success())
+    # Removed the needs: [check-build] dependency
+    if: (github.event_name != 'pull_request' || success()) # Keep the success() check logic if needed, or adjust as necessary
     env:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
