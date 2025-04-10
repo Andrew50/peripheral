@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 #apiVersion: batch/v1
 #kind: CronJob
 #metadata:
@@ -21,6 +22,33 @@
 #                  memory: 10000Mi
 #          restartPolicy: OnFailure
 # ---
+=======
+# Jobs configuration - uncomment when needed
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: jobs
+spec:
+  schedule: "0 22 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: jobs
+              image: billin19/jobs:latest
+              command: ["python", "Database.py"]
+              resources:
+                requests:
+                  cpu: 2000m
+                  memory: 5000Mi
+                limits:
+                  cpu: 4000m
+                  memory: 10000Mi
+          restartPolicy: OnFailure
+---
+# One-time job - uncomment when needed
+>>>>>>> Snippet
 # apiVersion: batch/v1
 # kind: Job
 # metadata:
