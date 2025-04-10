@@ -3,23 +3,21 @@ set -Eeuo pipefail
 
 DOCKER_TAG="${1:-}"
 TARGET_BRANCH="${2:-}"
+DOCKER_USERNAME="${3:-}"
 
 # Make sure required variables are set in the environment
-: "${DOCKER_USERNAME:?DOCKER_USERNAME is required}"
+#: "${DOCKER_USERNAME:?DOCKER_USERNAME is required}"
 
 # The services to build
 SERVICES=( "frontend" "backend" "worker" "worker-healthcheck" "tf" "nginx" "db" )
 
-echo "Building Docker images with tag: ${DOCKER_TAG} from branch: ${TARGET_BRANCH}"
+#echo "Building Docker images with tag: ${DOCKER_TAG} from branch: ${TARGET_BRANCH}"
 
 build_service() {
   local service="$1"
   local dockerfile="services/${service}/Dockerfile.prod"
 
-  # Special handling for certain services
-  if [[ "$service" == "nginx" ]]; then
-    dockerfile="services/nginx/Dockerfile"
-  elif [[ "$service" == "worker-healthcheck" ]]; then
+  if [[ "$service" == "worker-healthcheck" ]]; then
     dockerfile="services/worker/Dockerfile.healthcheck"
     echo "Building $service from $dockerfile..."
     docker build -t "$DOCKER_USERNAME/$service:${DOCKER_TAG}" -f "$dockerfile" "services/worker"
@@ -30,22 +28,17 @@ build_service() {
   docker build -t "$DOCKER_USERNAME/$service:${DOCKER_TAG}" -f "$dockerfile" "services/$service"
 }
 
-# Build in parallel with concurrency=3
 pids=()
 MAX_CONCURRENT_BUILDS=3
 
 for srv in "${SERVICES[@]}"; do
-  # If we already have $MAX_CONCURRENT_BUILDS processes, wait for one to finish
   if [[ ${#pids[@]} -ge $MAX_CONCURRENT_BUILDS ]]; then
     wait -n
-    # Clean up finished PID from array (this is optional in bash 5.0+; wait -n will handle it)
   fi
-
   build_service "$srv" &
   pids+=( $! )
 done
 
-# Wait for all to finish
 wait
 
 echo "All images built successfully."

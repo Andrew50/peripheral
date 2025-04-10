@@ -1,28 +1,3 @@
-# apiVersion: v1
-# kind: PersistentVolume
-# metadata:
-#   name: worker-pv
-# spec:
-#   capacity:
-#     storage: 10Gi
-#   accessModes:
-#     - ReadWriteMany
-#   hostPath:
-#     path: /mnt/disks/ssd2
-
-# ---
-# apiVersion: v1
-# kind: PersistentVolumeClaim
-# metadata:
-#   name: worker-pvc
-# spec:
-#   accessModes:
-#     - ReadWriteMany
-#   resources:
-#     requests:
-#       storage: 100Gi
-
-# ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -41,6 +16,10 @@ spec:
         - name: worker
           image: billin19/worker:prod
           imagePullPolicy: Always
+          command:
+            - /bin/sh
+            - -c
+            - cp /conn-patch/conn.py /app/conn.py && python3 /app/worker.py
           env:
             - name: REDIS_HOST
               value: cache
@@ -84,24 +63,9 @@ spec:
           livenessProbe:
             exec:
               command:
-                - /bin/sh
-                - -c
-                - |
-                  python3 -c '
-                  import os, time, socket, redis
-                  host=os.environ["REDIS_HOST"]
-                  port=int(os.environ["REDIS_PORT"])
-                  password=os.environ["REDIS_PASSWORD"]
-                  r = redis.Redis(
-                      host=host,
-                      port=port,
-                      password=password,
-                      socket_timeout=5,
-                      socket_connect_timeout=5,
-                      health_check_interval=5
-                  )
-                  r.ping()
-                  '
+                - python3
+                - /app/health_check.py
+                - --check-once
             failureThreshold: 5
             initialDelaySeconds: 60
             periodSeconds: 30
@@ -109,83 +73,63 @@ spec:
           readinessProbe:
             exec:
               command:
-                - /bin/sh
-                - -c
-                - |
-                  python3 -c '
-                  import os, time, socket, redis, psycopg2
-                  # Check Redis connection
-                  host=os.environ["REDIS_HOST"]
-                  port=int(os.environ["REDIS_PORT"])
-                  password=os.environ["REDIS_PASSWORD"]
-                  r = redis.Redis(
-                      host=host,
-                      port=port,
-                      password=password,
-                      socket_timeout=5,
-                      socket_connect_timeout=5,
-                      health_check_interval=5
-                  )
-                  r.ping()
-                  print("Redis connection successful")
-                  # Check DB connection
-                  conn = psycopg2.connect(
-                      host=os.environ.get("DB_HOST"),
-                      port=int(os.environ.get("DB_PORT")),
-                      user=os.environ.get("DB_USER"),
-                      password=os.environ.get("DB_PASSWORD")
-                  )
-                  conn.close()
-                  print("Database connection successful")
-                  '
+                - python3
+                - /app/health_check.py
+                - --check-once
             failureThreshold: 3
             initialDelaySeconds: 30
             periodSeconds: 20
             timeoutSeconds: 10
 
-        # Health check sidecar container - temporarily commented out until image is available
-        # - name: db-healthcheck
-        #   image: billin19/worker-healthcheck:prod
-        #   imagePullPolicy: Always
-        #   env:
-        #     - name: REDIS_HOST
-        #       value: "cache"
-        #     - name: REDIS_PORT
-        #       value: "6379"
-        #     - name: REDIS_PASSWORD
-        #       valueFrom:
-        #         secretKeyRef:
-        #           name: redis-secret
-        #           key: redis-password
-        #     - name: DB_PASSWORD
-        #       valueFrom:
-        #         secretKeyRef:
-        #           name: db-secret
-        #           key: db-password
-        #     - name: DB_HOST
-        #       value: "db"
-        #     - name: DB_PORT
-        #       value: "5432"
-        #     - name: DB_USER
-        #       value: "postgres"
-        #     - name: HEALTHCHECK_INTERVAL
-        #       value: "30"
-        #     - name: HEALTHCHECK_MAX_INTERVAL
-        #       value: "300"
-        #   resources:
-        #     requests:
-        #       cpu: 50m
-        #       memory: 64Mi
-        #     limits:
-        #       cpu: 100m
-        #       memory: 128Mi
-      #     volumeMounts:
-      #       - name: worker-volume
-      #         mountPath: /app/models
-      # volumes:
-      #   - name: worker-volume
-      #     persistentVolumeClaim:
-      #       claimName: worker-pvc
+          volumeMounts:
+            - name: conn-patch
+              mountPath: /conn-patch
+      volumes:
+        - name: conn-patch
+          configMap:
+            name: worker-conn-patch
+      initContainers:
+        - name: wait-for-db
+          image: billin19/worker:prod
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Waiting for database and Redis to be ready..."; if [ -f "/app/db_check.py" ]; then
+                python3 /app/db_check.py
+              else
+                echo "db_check.py not found, using inline script";
+                until python3 -c "import psycopg2, os; psycopg2.connect(host=os.environ.get('DB_HOST'), port=int(os.environ.get('DB_PORT')), user=os.environ.get('DB_USER'), password=os.environ.get('DB_PASSWORD'))"; do
+                  echo "Database not ready yet, retrying in 5 seconds...";
+                  sleep 5;
+                done;
+                echo "Database is ready.";
+                echo "Checking Redis connection...";
+                python3 -c "import redis, os; host=os.environ.get('REDIS_HOST'); port=int(os.environ.get('REDIS_PORT')); password=os.environ.get('REDIS_PASSWORD'); r = redis.Redis(host=host, port=port, password=password); r.ping(); print('Redis connection successful.');"
+              fi
+          env:
+            - name: REDIS_HOST
+              value: cache
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: REDIS_PASSWORD
+                  name: redis-secret
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: DB_ROOT_PASSWORD
+                  name: db-secret
+            - name: DB_HOST
+              value: db
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              value: postgres
+
 ---
 apiVersion: autoscaling/v1
 kind: HorizontalPodAutoscaler
