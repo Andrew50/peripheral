@@ -98,7 +98,7 @@ echo "Current kubectl context: $(kubectl config current-context)"
 
 # Check if kubectl can reach the Kubernetes API server
 echo "Testing connection to Kubernetes API server..."
-if ! kubectl get nodes &>/dev/null; then
+if ! kubectl get nodes --namespace="$K8S_NAMESPACE" &>/dev/null; then
   echo "WARNING: Cannot connect to Kubernetes API server. Trying to fix connection..."
   
   # Try to get minikube IP
@@ -119,14 +119,14 @@ fi
 
 # Now try cluster-info with explicit output redirection to capture any errors
 echo "Running kubectl cluster-info..."
-if ! kubectl cluster-info > >(tee /tmp/cluster-info-out.log) 2> >(tee /tmp/cluster-info-err.log >&2); then
+if ! kubectl cluster-info --namespace="$K8S_NAMESPACE" > >(tee /tmp/cluster-info-out.log) 2> >(tee /tmp/cluster-info-err.log >&2); then
   echo "ERROR: kubectl cluster-info failed. See error output above."
   echo "Contents of /tmp/cluster-info-err.log:"
   cat /tmp/cluster-info-err.log
   
   # Try one more time with a different approach
   echo "Trying alternative approach to verify cluster..."
-  if kubectl version --short; then
+  if kubectl version --short --namespace="$K8S_NAMESPACE"; then
     echo "kubectl version succeeded, continuing despite cluster-info failure."
   else
     echo "ERROR: Both kubectl cluster-info and kubectl version failed."
