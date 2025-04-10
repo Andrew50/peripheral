@@ -123,7 +123,7 @@ jobs:
 
       - name: Setup For Deployment
         run: |
-          chmod +x config/prod/deploy/*.sh
+          chmod +x config/deploy/scripts/*.sh
           DOCKER_TAG=$(echo "${TARGET_BRANCH}" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_.-]/-/g')
           echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
           echo "Using Docker tag: $DOCKER_TAG"
