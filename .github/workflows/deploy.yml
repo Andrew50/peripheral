@@ -123,9 +123,9 @@ jobs:
 
       - name: Setup deployment
         run: |
-          chmod +x .github/scripts/deployment/*.sh
+          chmod +x config/prod/deploy/*.sh
           # Load environment-specific config if needed
-          .github/scripts/deployment/load-env-config.sh "${ENVIRONMENT}"
+          config/prod/deploy/load-env-config.sh "${ENVIRONMENT}"
 
           # Sanitize and store DOCKER_TAG
           DOCKER_TAG=$(echo "${TARGET_BRANCH}" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_.-]/-/g')
@@ -133,26 +133,26 @@ jobs:
           echo "Using Docker tag: $DOCKER_TAG"
 
       - name: Build Docker Images
-        run: .github/scripts/deployment/build-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}"
+        run: config/prod/deploy/build-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}"
 
       - name: Login & Push Docker Images
-        run: .github/scripts/deployment/push-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}"
+        run: config/prod/deploy/push-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}"
 
       - name: Setup Kubernetes Context
-        run: .github/scripts/deployment/setup-k8s.sh "${K8S_CONTEXT}" "${K8S_NAMESPACE}"
+        run: config/prod/deploy/setup-k8s.sh "${K8S_CONTEXT}" "${K8S_NAMESPACE}"
 
       - name: Verify PersistentVolumeClaims
-        run: .github/scripts/deployment/verify-pvcs.sh "${ENVIRONMENT}"
+        run: config/prod/deploy/verify-pvcs.sh "${ENVIRONMENT}"
 
       - name: Update Kubernetes Secrets
-        run: .github/scripts/deployment/update-secrets.sh
+        run: config/prod/deploy/update-secrets.sh
 
       - name: Run Database Migrations
-        run: .github/scripts/deployment/run-migrations.sh
+        run: config/prod/deploy/run-migrations.sh
 
       - name: Deploy to Kubernetes
-        run: .github/scripts/deployment/deploy-to-k8s.sh "${DOCKER_TAG}" "${ENVIRONMENT}"
+        run: config/prod/deploy/deploy-to-k8s.sh "${DOCKER_TAG}" "${ENVIRONMENT}"
 
       - name: Cleanup
         if: always()
-        run: .github/scripts/deployment/cleanup.sh
+        run: config/prod/deploy/cleanup.sh
