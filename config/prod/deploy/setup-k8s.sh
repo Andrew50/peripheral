@@ -10,27 +10,21 @@ K8S_CONTEXT="${1:-minikube}"
 K8S_NAMESPACE="${2:-default}"
 PROFILE_NAME="${3:-minikube}"  # Add profile parameter for multiple clusters
 
-# Check if the specified minikube profile is running
 echo "Checking minikube status for profile: $PROFILE_NAME..."
 if ! minikube status -p "$PROFILE_NAME" &> /dev/null; then
     echo "Minikube profile '$PROFILE_NAME' is not running. Starting with 16 CPUs and 64GB RAM..."
     
-    # Calculate resources based on available system resources and profile
-    # For multiple profiles, we might want to allocate fewer resources per profile
-    if [[ "$PROFILE_NAME" != "minikube" ]]; then
-        # For secondary profiles, use fewer resources
+
+    if [[ "$PROFILE_NAME" != "minikube" ]]; then #less resources for stage
         CPU_COUNT=8
         MEM_SIZE=32768  # 32GB
     else
-        # For primary profile, use full resources
         CPU_COUNT=16
         MEM_SIZE=65536  # 64GB
     fi
     
-    # Start minikube with the specified profile
     minikube start -p "$PROFILE_NAME" --cpus="$CPU_COUNT" --memory="$MEM_SIZE" --v=1
     
-    # Check if minikube started successfully
     if minikube status -p "$PROFILE_NAME" &> /dev/null; then
         echo "Minikube profile '$PROFILE_NAME' started successfully with CPU=$CPU_COUNT, Memory=${MEM_SIZE}MB."
     else
@@ -39,18 +33,15 @@ if ! minikube status -p "$PROFILE_NAME" &> /dev/null; then
     fi
 else
     echo "Minikube profile '$PROFILE_NAME' is already running."
-    # Check current resource allocation
     CURRENT_CPU=$(minikube config view -p "$PROFILE_NAME" | grep -i cpus | awk '{print $3}' 2>/dev/null || echo "unknown")
     CURRENT_MEM=$(minikube config view -p "$PROFILE_NAME" | grep -i memory | awk '{print $3}' 2>/dev/null || echo "unknown")
     
     echo "Current settings for profile '$PROFILE_NAME': CPUs=$CURRENT_CPU, Memory=$CURRENT_MEM"
 fi
 
-# Ensure the correct minikube profile is the current context
 echo "Setting kubectl to use minikube profile '$PROFILE_NAME' context..."
 minikube update-context -p "$PROFILE_NAME"
 
-# The context name for a minikube profile is usually "profile_name"
 EXPECTED_CONTEXT="$PROFILE_NAME"
 
 # Check if we're using the minikube profile or a specific context
