@@ -23,7 +23,11 @@ spec:
           command:
             - /bin/sh
             - -c
+<<<<<<< HEAD
             - redis-server /etc/redis/redis.conf --requirepass "$(REDIS_PASSWORD)"
+=======
+            - redis-server /etc/redis/redis.conf --requirepass "${REDIS_PASSWORD}"
+>>>>>>> Snippet
           ports:
             - containerPort: 6379
           resources:
