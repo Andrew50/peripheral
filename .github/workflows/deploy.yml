@@ -133,20 +133,20 @@ jobs:
           echo "Using Minikube profile: ${MINIKUBE_PROFILE}"
 
       - name: Build Docker Images
-        run: config/prod/deploy/build-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}" "${SERVICES}"
+        run: config/deploy/scripts/build-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}" "${SERVICES}"
 
       - name: Login & Push Docker Images
-        run: config/prod/deploy/push-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}" "${SERVICES}"
+        run: config/deploy/scripts/push-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}" "${SERVICES}"
 
       - name: Setup Kubernetes Context
-        run: config/prod/deploy/setup-k8s.sh "${K8S_CONTEXT}" "${K8S_NAMESPACE}" "${MINIKUBE_PROFILE}"
+        run: config/deploy/scripts/setup-k8s.sh "${K8S_CONTEXT}" "${K8S_NAMESPACE}" "${MINIKUBE_PROFILE}"
 
       - name: Update Kubernetes Secrets
-        run: config/prod/deploy/update-secrets.sh "${DOCKER_TAG}" "${K8S_NAMESPACE}"
+        run: config/deploy/scripts/update-secrets.sh "${DOCKER_TAG}" "${K8S_NAMESPACE}"
 
       - name: Deploy to Kubernetes
-        run: config/prod/deploy/deploy-to-k8s.sh "${DOCKER_TAG}" "${K8S_NAMESPACE}"
+        run: config/deploy/scripts/deploy-to-k8s.sh "${DOCKER_TAG}" "${K8S_NAMESPACE}"
 
       - name: Cleanup
         if: always()
-        run: config/prod/deploy/cleanup.sh
+        run: config/deploy/scripts/cleanup.sh
