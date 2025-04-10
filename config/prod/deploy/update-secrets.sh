@@ -83,7 +83,7 @@ if kubectl get deployment backend &>/dev/null; then
   kubectl rollout restart deployment/backend
 fi
 if kubectl get deployment worker &>/dev/null; then
-  kubectl rollout restart deployment/worker
+  kubectl rollout restart deployment/worker 
 fi
 
 echo "Secrets updated."
