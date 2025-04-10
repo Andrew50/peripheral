@@ -3,12 +3,7 @@ set -Eeuo pipefail
 
 # Assign arguments to variables
 DOCKER_TAG="${1:-}"
-<<<<<<< HEAD
 DOCKER_USERNAME="${2:-}"
-SERVICES="${2:-}" # Services passed as a single space-separated string
-=======
-TARGET_BRANCH="${2:-}"
-TARGET_BRANCH="${2:-}"
 SERVICES="${3:-}" # Services passed as a single space-separated string
 
 # --- Argument Validation ---
@@ -17,22 +12,6 @@ if [[ -z "$DOCKER_TAG" ]]; then
   exit 1
 fi
 
-<<<<<<< HEAD
-if [[ -z "$DOCKER_USERNAME" ]]; then
-  echo "Error: DOCKER_USERNAME (argument 3) is required." >&2
-  exit 1
-fi
-
-if [[ -z "$SERVICES" ]]; then
-  echo "Error: List of services (argument 4, space-separated) is required." >&2
-=======
-if [[ -z "$TARGET_BRANCH" ]]; then
-  echo "Error: TARGET_BRANCH (argument 2) is required." >&2
-  exit 1
-fi
-
-if [[ -z "$SERVICES" ]]; then
-  echo "Error: List of services (argument 3, space-separated) is required." >&2
 if [[ -z "$TARGET_BRANCH" ]]; then
   echo "Error: TARGET_BRANCH (argument 2) is required." >&2
   exit 1
