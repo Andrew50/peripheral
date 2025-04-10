@@ -65,9 +65,20 @@ else
   fi
 fi
 
-# Set namespace if provided
+# Set namespace if provided and create it if it doesn't exist
 if [[ -n "$K8S_NAMESPACE" ]]; then
   echo "Setting namespace to: $K8S_NAMESPACE"
+  
+  # Check if namespace exists, create it if it doesn't
+  if ! kubectl get namespace "$K8S_NAMESPACE" &>/dev/null; then
+    echo "Namespace '$K8S_NAMESPACE' does not exist. Creating it..."
+    kubectl create namespace "$K8S_NAMESPACE"
+    echo "Namespace '$K8S_NAMESPACE' created successfully."
+  else
+    echo "Namespace '$K8S_NAMESPACE' already exists."
+  fi
+  
+  # Set the namespace in the current context
   kubectl config set-context --current --namespace="$K8S_NAMESPACE"
 else
   echo "No namespace specified, using default namespace"
