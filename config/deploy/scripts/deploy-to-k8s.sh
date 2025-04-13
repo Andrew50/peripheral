@@ -3,16 +3,6 @@ set -Eeuo pipefail
 
 # Input validation
 if [[ -z "${1:-}" ]]; then echo "Error: DOCKER_TAG (arg 1) is required."; exit 1; fi
-<<<<<<< HEAD
-if [[ -z "${3:-}" ]]; then echo "Error: K8S_NAMESPACE (arg 3) is required."; exit 1; fi
-if [[ -z "${4:-}" ]]; then echo "Error: SERVICES (arg 4) is required (space-separated list)."; exit 1; fi
-if [[ -z "${DOCKER_USERNAME:-}" ]]; then echo "Error: DOCKER_USERNAME environment variable is not set."; exit 1; fi
-
-DOCKER_TAG="$1"
-K8S_NAMESPACE="$2"
-# Convert the space-separated string of services into a bash array
-read -r -a SERVICES_ARRAY <<< "$4"
-=======
 if [[ -z "${2:-}" ]]; then echo "Error: K8S_NAMESPACE (arg 2) is required."; exit 1; fi
 if [[ -z "${3:-}" ]]; then echo "Error: SERVICES (arg 3) is required (space-separated list)."; exit 1; fi
 if [[ -z "${DOCKER_USERNAME:-}" ]]; then echo "Error: DOCKER_USERNAME environment variable is not set."; exit 1; fi
@@ -21,7 +11,6 @@ DOCKER_TAG="$1"
 K8S_NAMESPACE="$2"
 # Convert the space-separated string of services into a bash array
 read -r -a SERVICES_ARRAY <<< "$3"
->>>>>>> Snippet
 
 SOURCE_DIR="config/prod"
 TMP_DIR="config/deploy/tmp"
