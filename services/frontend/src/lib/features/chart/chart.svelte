@@ -262,10 +262,6 @@
 
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
 		eventSeries.setData([]);
-		if (inst.direction === 'forward') {
-			console.log("forward",inst.timestamp);
-			return;
-		}
 		if (inst.requestType === 'loadNewTicker') {
 			// Clear pending updates when loading a new ticker
 			pendingBarUpdate = null;
