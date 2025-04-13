@@ -19,6 +19,7 @@ fi
 
 if [[ -z "$SERVICES" ]]; then
   echo "Error: List of services (argument 3, space-separated) is required." >&2
+  echo "${SERVICES}"
   exit 1
 fi
 
