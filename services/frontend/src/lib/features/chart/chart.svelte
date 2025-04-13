@@ -187,7 +187,6 @@
 		price: 0,
 		extendedHours: false
 	};
-	let blockingChartQueryDispatch = {};
 	let isPanning = false;
 	const excludedConditions = new Set([2, 7, 10, 13, 15, 16, 20, 21, 22, 29, 33, 37]);
 	let mouseDownStartX = 0;
@@ -255,14 +254,6 @@
 		amount?: number;
 	}
 
-	interface ScreenshotOptions {
-		type: string;
-		url: string;
-		ratio: number;
-	}
-
-	type StreamReleaseFunction = () => void;
-
 	function extendedHours(timestamp: number): boolean {
 		const date = new Date(timestamp);
 		const minutes = date.getHours() * 60 + date.getMinutes();
@@ -270,8 +261,11 @@
 	}
 
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
-		console.log('backendLoadChartData', inst);
 		eventSeries.setData([]);
+		if (inst.direction === 'forward') {
+			console.log("forward",inst.timestamp);
+			return;
+		}
 		if (inst.requestType === 'loadNewTicker') {
 			// Clear pending updates when loading a new ticker
 			pendingBarUpdate = null;
@@ -284,6 +278,7 @@
 		if (isLoadingChartData || !inst.ticker || !inst.timeframe || !inst.securityId) {
 			return;
 		}
+		console.log('backendLoadChartData', inst);
 		isLoadingChartData = true;
 		lastChartQueryDispatchTime = Date.now();
 		if (
@@ -306,7 +301,6 @@
 		})
 			.then((response) => {
 				const barDataList = response.bars;
-				blockingChartQueryDispatch = inst;
 				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
 					return;
 				}
@@ -354,14 +348,6 @@
 					}
 					releaseFast();
 					releaseQuote();
-					/*privateRequest<number>('getMarketCap', { ticker: inst.ticker }).then(
-						(res: { marketCap: number }) => {
-							hoveredCandleData.update((v: typeof defaultHoveredCandleData) => {
-								v.mcap = res.marketCap;
-								return v;
-							});
-						}
-					);*/
 					drawingMenuProps.update((v) => ({
 						...v,
 						chartCandleSeries: chartCandleSeries,
@@ -395,7 +381,7 @@
 					if (inst.direction == 'backward') {
 						chartEarliestDataReached = response.isEarliestData;
 					} else if (inst.direction == 'forward') {
-						('chartLatestDataReached');
+						console.log('chartLatestDataReached');
 						chartLatestDataReached = true;
 					}
 				}
@@ -420,7 +406,7 @@
 								if (!events || events.length === 0) {
 									// Clear any existing events data
 									eventSeries.setData([]);
-									return; // Exit early
+									return;
 								}
 
 								const eventsByTime = new Map<
@@ -623,7 +609,6 @@
 						!chartLatestDataReached &&
 						!$streamInfo.replayActive
 					) {
-						('1');
 						backendLoadChartData({
 							...currentChartInstance,
 							timestamp: ESTSecondstoUTCMillis(
@@ -823,7 +808,7 @@
 
 	function shiftOverlayTrack(event: MouseEvent): void {
 		shiftOverlay.update((v: ShiftOverlay): ShiftOverlay => {
-			const god = {
+			const overlay = {
 				...v,
 				width: Math.abs(event.clientX - v.startX),
 				height: Math.abs(event.clientY - v.startY),
@@ -831,7 +816,7 @@
 				y: Math.min(event.clientY, v.startY),
 				currentPrice: chartCandleSeries.coordinateToPrice(event.clientY) || 0
 			};
-			return god;
+			return overlay;
 		});
 	}
 
@@ -852,6 +837,7 @@
 	}
 
 	async function updateLatestChartBar(trade: TradeData) {
+		console.log('updateLatestChartBar',trade);
 		// Early returns for invalid data
 		if (
 			!trade?.price ||
@@ -1537,6 +1523,7 @@
 				chgprct: chgprct,
 				rvol: 0
 			});
+			/*
 			if (currentChartInstance.timeframe && /^\d+$/.test(currentChartInstance.timeframe)) {
 				let barsForRVOL;
 				if (cursorBarIndex !== undefined && cursorBarIndex >= 1000) {
@@ -1560,7 +1547,7 @@
 						});
 					});
 				}
-			}
+			}*/
 			latestCrosshairPositionTime = bar.time as number;
 			latestCrosshairPositionY = param.point.y as number; //inccorect
 		});
@@ -1611,7 +1598,6 @@
 				if ($streamInfo.replayActive) {
 					return;
 				}
-				('3');
 
 				// Also fix the forward load to include extendedHours
 				const inst: CoreInstance & { extendedHours?: boolean } = {
@@ -1776,23 +1762,6 @@
 			// Handle amount
 		}
 	}
-
-	// Handle Instance type
-	const createInstance = (chartInstance: Partial<CoreInstance>): CoreInstance => ({
-		ticker: chartInstance.ticker || '',
-		timestamp: chartInstance.timestamp || 0,
-		timeframe: chartInstance.timeframe || '',
-		securityId:
-			typeof chartInstance.securityId === 'string'
-				? parseInt(chartInstance.securityId, 10)
-				: chartInstance.securityId || 0,
-		price: chartInstance.price || 0
-	});
-
-	// Handle bars calculation safely
-	const calculateBars = (instance: Partial<ChartInstance>): number => {
-		return instance.bars || Math.floor(bufferInScreenSizes * defaultBarsOnScreen) + 100;
-	};
 
 	function ensureNumericSecurityId(instance: ExtendedInstance | CoreInstance): number {
 		const securityId = instance.securityId;
