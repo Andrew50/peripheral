@@ -1271,6 +1271,44 @@ func initTools() {
 			},
 			Function: HandleTradeUpload,
 		},
+		"get_daily_trade_stats": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "get_daily_trade_stats",
+				Description: "Retrieves daily trading statistics for the current user",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"year": {
+							Type:        genai.TypeInteger,
+							Description: "The year to get daily stats for",
+						},
+						"month": {
+							Type:        genai.TypeInteger,
+							Description: "The month to get daily stats for",
+						},
+					},
+					Required: []string{"year", "month"},
+				},
+			},
+			Function: GetDailyTradeStats,
+		},
+		"run_backtest": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "run_backtest",
+				Description: "Runs a backtest based on a natural language query about stock conditions, patterns, and indicators",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"query": {
+							Type:        genai.TypeString,
+							Description: "Natural language query describing the backtest criteria (e.g., 'Find stocks where the price crossed above the 50-day moving average')",
+						},
+					},
+					Required: []string{"query"},
+				},
+			},
+			Function: RunBacktest,
+		},
 		// Notes
 		"get_notes": {
 			FunctionDeclaration: genai.FunctionDeclaration{
