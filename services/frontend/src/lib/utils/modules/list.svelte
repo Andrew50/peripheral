@@ -399,10 +399,6 @@
 			expandedRows.delete(index);
 		} else {
 			expandedRows.add(index);
-			const content = expandedContent($list[index]);
-			if (content?.tradeId) {
-				loadSimilarTrades(content.tradeId);
-			}
 		}
 		expandedRows = expandedRows;
 	}
@@ -435,35 +431,9 @@
 		return rawValue?.toString() ?? 'N/A';
 	}
 
+
 	function getAllOrders(trade: ExtendedInstance): Trade[] {
 		return trade.trades || [];
-	}
-
-	async function loadSimilarTrades(tradeId: number) {
-		if (!tradeId) return;
-
-		loadingMap.set(tradeId, true);
-		errorMap.delete(tradeId);
-		similarTradesMap = similarTradesMap;
-
-		try {
-			const result = await queueRequest<ApiResponse>('find_similar_trades', { trade_id: tradeId });
-
-			if (result && typeof result === 'object' && 'status' in result) {
-				if (result.status === 'success' && result.similar_trades) {
-					similarTradesMap.set(tradeId, result.similar_trades);
-				} else if (result.message) {
-					errorMap.set(tradeId, result.message);
-				}
-			}
-		} catch (e) {
-			const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred';
-			console.error('Error loading similar trades:', errorMessage);
-			errorMap.set(tradeId, `Error loading similar trades: ${errorMessage}`);
-		} finally {
-			loadingMap.delete(tradeId);
-			similarTradesMap = similarTradesMap;
-		}
 	}
 
 	// Modify the reactive statement to only load icons for new tickers
@@ -482,9 +452,6 @@
 		expandedRows.forEach((index) => {
 			if ($list[index]) {
 				const content = expandedContent($list[index]);
-				if (content?.tradeId) {
-					loadSimilarTrades(content.tradeId);
-				}
 			}
 		});
 	}
@@ -611,6 +578,14 @@
 											event.stopPropagation();
 										}}>{UTCTimestampToESTString(watch[col.toLowerCase()])}</td
 									>
+								{:else if col === 'Trade Duration'}
+									<td
+										class="default-td"
+										on:contextmenu={(event) => {
+											event.preventDefault();
+											event.stopPropagation();
+										}}>{formatDuration(watch.tradeDurationMillis)}</td
+									>
 								{:else}
 									<td
 										class="default-td"
@@ -660,49 +635,7 @@
 											</tbody>
 										</table>
 
-										{#if expandedContent}
-											{@const content = expandedContent(watch)}
-											{@const tradeId = content?.tradeId}
-											{#if tradeId}
-												<h4>Similar Trades</h4>
-												{#if loadingMap.get(tradeId)}
-													<div class="loading">Loading similar trades...</div>
-												{:else if errorMap.get(tradeId)}
-													<div class="error">{errorMap.get(tradeId)}</div>
-												{:else if similarTradesMap.get(tradeId)}
-													<table>
-														<thead>
-															<tr class="defalt-tr">
-																<th class="defalt-th">Date</th>
-																<th class="defalt-th">Ticker</th>
-																<th class="defalt-th">Direction</th>
-																<th class="defalt-th">P/L</th>
-																<th class="defalt-th">Similarity</th>
-															</tr>
-														</thead>
-														<tbody>
-															{#each similarTradesMap.get(tradeId) || [] as similarTrade}
-																<tr class="defalt-tr">
-																	<td class="defalt-td">
-																		{UTCTimestampToESTString(similarTrade.entry_time)}
-																	</td>
-																	<td class="defalt-td">{similarTrade.ticker}</td>
-																	<td class="defalt-td">{similarTrade.direction}</td>
-																	<td class={similarTrade.pnl >= 0 ? 'positive' : 'negative'}>
-																		${similarTrade.pnl.toFixed(2)}
-																	</td>
-																	<td class="defalt-td">
-																		{(similarTrade.similarity_score * 100).toFixed(1)}%
-																	</td>
-																</tr>
-															{/each}
-														</tbody>
-													</table>
-												{:else}
-													<div class="no-results">No similar trades found</div>
-												{/if}
-											{/if}
-										{/if}
+										
 									</div>
 								</td>
 							</tr>

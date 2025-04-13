@@ -5,8 +5,7 @@
 	import List from '$lib/utils/modules/list.svelte';
 	import { writable } from 'svelte/store';
 	import { UTCTimestampToESTString } from '$lib/core/timestamp';
-	import { onMount } from 'svelte';
-
+	import TradeCalendar from '$lib/components/TradeCalendar.svelte';
 	// Add tab state
 	let activeTab = 'trades';
 
@@ -177,7 +176,28 @@
 			console.error('Load statistics error:', error);
 		}
 	}
+	export function formatDuration(ms: number | null | undefined): string {
+		if (ms === null || ms === undefined || ms <= 0) {
+			return 'N/A';
+		}
 
+		const seconds = Math.floor(ms / 1000);
+		const minutes = Math.floor(seconds / 60);
+		const hours = Math.floor(minutes / 60);
+		const days = Math.floor(hours / 24);
+
+		const remainingHours = hours % 24;
+		const remainingMinutes = minutes % 60;
+		const remainingSeconds = seconds % 60;
+
+		let result = '';
+		if (days > 0) result += `${days} days `;
+		if (remainingHours > 0) result += `${remainingHours} hrs `;
+		if (remainingMinutes > 0) result += `${remainingMinutes} min `;
+		if (remainingSeconds > 0 || result === '') result += `${remainingSeconds} sec`;
+
+		return result.trim();
+	}
 	// Add pullTickers function
 	async function pullTickers() {
 		try {
@@ -250,6 +270,9 @@
 		<button class:active={activeTab === 'statistics'} on:click={() => (activeTab = 'statistics')}>
 			Statistics
 		</button>
+		<button class:active={activeTab === 'calendar'} on:click={() => (activeTab = 'calendar')}>
+			Calendar
+		</button>
 		<button class:active={activeTab === 'other'} on:click={() => (activeTab = 'other')}>
 			Other
 		</button>
@@ -301,18 +324,20 @@
 					event.preventDefault();
 				}}
 				list={trades}
-				columns={['timestamp', 'Ticker', 'trade_direction', 'status', 'openQuantity', 'closedPnL']}
+				columns={['timestamp', 'Ticker', 'trade_direction', 'status', 'openQuantity', 'closedPnL', 'tradeDurationMillis']}
 				displayNames={{
 					timestamp: 'Time',
 					Ticker: 'Ticker',
 					trade_direction: 'Direction',
 					status: 'Status',
 					openQuantity: 'Quantity',
-					closedPnL: 'P/L'
+					closedPnL: 'P/L',
+					tradeDurationMillis: 'Trade Duration'
 				}}
 				formatters={{
 					timestamp: (value) => (value ? UTCTimestampToESTString(value) : 'N/A'),
-					closedPnL: (value) => (value !== null ? `$${value.toFixed(2)}` : 'N/A')
+					closedPnL: (value) => (value !== null ? `$${value.toFixed(2)}` : 'N/A'),
+					tradeDurationMillis: (value) => (value !== null ? formatDuration(value) : 'N/A')
 				}}
 				expandable={true}
 				expandedContent={(trade) => ({
@@ -569,6 +594,13 @@
 			{:else}
 				<p>Loading statistics...</p>
 			{/if}
+		</div>
+	{/if}
+
+	<!-- Calendar Tab -->
+	{#if activeTab === 'calendar'}
+		<div class="calendar-tab-wrapper">
+			<TradeCalendar />
 		</div>
 	{/if}
 
@@ -923,5 +955,11 @@
 	.delete-button:disabled {
 		background-color: #9e9e9e;
 		cursor: not-allowed;
+	}
+
+	.calendar-tab-wrapper {
+		display: flex;
+		justify-content: center;
+		width: 100%;
 	}
 </style>
