@@ -12,9 +12,9 @@ set -Eeuo pipefail
 : "${GOOGLE_CLIENT_ID:?Missing GOOGLE_CLIENT_ID}"
 : "${GOOGLE_CLIENT_SECRET:?Missing GOOGLE_CLIENT_SECRET}"
 : "${JWT_SECRET:?Missing JWT_SECRET}"
+: "${CLOUDFLARE_TUNNEL_TOKEN:?Missing CLOUDFLARE_TUNNEL_TOKEN}"
 
 echo "Updating Kubernetes Secrets in namespace: ${K8S_NAMESPACE}..."
-
 # Encode secrets
 DB_B64=$(echo -n "$DB_ROOT_PASSWORD" | base64 -w 0)
 REDIS_B64=$(echo -n "$REDIS_PASSWORD" | base64 -w 0)
@@ -22,6 +22,8 @@ POLYGON_B64=$(echo -n "$POLYGON_API_KEY" | base64 -w 0)
 GEMINI_B64=$(echo -n "$GEMINI_FREE_KEYS" | base64 -w 0)
 GOOGLE_ID_B64=$(echo -n "$GOOGLE_CLIENT_ID" | base64 -w 0)
 GOOGLE_SECRET_B64=$(echo -n "$GOOGLE_CLIENT_SECRET" | base64 -w 0)
+JWT_B64=$(echo -n "$JWT_SECRET" | base64 -w 0)
+CLOUDFLARE_TOKEN_B64=$(echo -n "$CLOUDFLARE_TUNNEL_TOKEN" | base64 -w 0)
 JWT_B64=$(echo -n "$JWT_SECRET" | base64 -w 0)
 
 TMP_DIR="$(mktemp -d)"
@@ -74,6 +76,14 @@ metadata:
 type: Opaque
 data:
   JWT_SECRET: $JWT_B64
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudflare-secret
+type: Opaque
+data:
+  CLOUDFLARE_TUNNEL_TOKEN: $CLOUDFLARE_TOKEN_B64
 EOF
 
 echo "Applying secrets to namespace ${K8S_NAMESPACE}..."
