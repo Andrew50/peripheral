@@ -12,17 +12,18 @@ import (
 
 // TradeResponse represents a trade with all its details
 type TradeResponse struct {
-	TradeID        int             `json:"tradeId"`
-	Ticker         string          `json:"ticker"`
-	SecurityID     int             `json:"securityId"`
-	TradeStart     *int64          `json:"tradeStart"`
-	Timestamp      *int64          `json:"timestamp"`
-	TradeDirection string          `json:"trade_direction"`
-	Date           string          `json:"date"`
-	Status         string          `json:"status"`
-	OpenQuantity   int64           `json:"openQuantity"`
-	ClosedPnL      *float64        `json:"closedPnL"`
-	Trades         []TradeActivity `json:"trades"`
+	TradeID             int             `json:"tradeId"`
+	Ticker              string          `json:"ticker"`
+	SecurityID          int             `json:"securityId"`
+	TradeStart          *int64          `json:"tradeStart"`
+	Timestamp           *int64          `json:"timestamp"`
+	TradeDirection      string          `json:"trade_direction"`
+	Date                string          `json:"date"`
+	Status              string          `json:"status"`
+	OpenQuantity        int64           `json:"openQuantity"`
+	ClosedPnL           *float64        `json:"closedPnL"`
+	Trades              []TradeActivity `json:"trades"`
+	TradeDurationMillis *int64          `json:"tradeDurationMillis,omitempty"`
 }
 
 // TradeActivity represents a single trade activity (entry or exit)
@@ -90,6 +91,27 @@ type TickerStatistics struct {
 	WinRate       float64 `json:"win_rate"`
 	AvgPnL        float64 `json:"avg_pnl"`
 	TotalPnL      float64 `json:"total_pnl"`
+}
+
+// DailyTradeStat represents stats for a single day
+type DailyTradeStat struct {
+	Date       string  `json:"date"` // YYYY-MM-DD
+	TotalPnL   float64 `json:"total_pnl"`
+	TradeCount int     `json:"trade_count"`
+}
+
+// WeeklyStat represents stats for a single week
+type WeeklyStat struct {
+	WeekStartDate string  `json:"week_start_date"` // YYYY-MM-DD of the Sunday
+	TotalPnL      float64 `json:"total_pnl"`
+	TradeCount    int     `json:"trade_count"`
+}
+
+// MonthlyTradeStatsResponse represents the response for daily stats
+type MonthlyTradeStatsResponse struct {
+	DailyStats  []DailyTradeStat `json:"daily_stats"`
+	MonthlyPnL  float64          `json:"monthly_pnl"`
+	WeeklyStats []WeeklyStat     `json:"weekly_stats"`
 }
 
 // Convert database timestamp (Eastern time) to UTC millisecond timestamp
@@ -257,6 +279,14 @@ func GrabUserTrades(conn *utils.Conn, userID int, rawArgs json.RawMessage) (inte
 			tradeStart = &startTimestamp
 		}
 
+		// Calculate trade duration
+		var tradeDurationMillis *int64
+		if len(entryTimes) > 0 && len(exitTimes) > 0 {
+			duration := exitTimes[0].Sub(entryTimes[0])
+			millis := duration.Milliseconds()
+			tradeDurationMillis = &millis
+		}
+
 		if len(exitTimes) > 0 {
 			endTimestamp := dbTimeToUTCMillis(exitTimes[len(exitTimes)-1])
 			timestamp = &endTimestamp
@@ -265,17 +295,18 @@ func GrabUserTrades(conn *utils.Conn, userID int, rawArgs json.RawMessage) (inte
 		}
 
 		trade := TradeResponse{
-			TradeID:        tradeID,
-			Ticker:         ticker,
-			SecurityID:     securityID,
-			TradeStart:     tradeStart,
-			Timestamp:      timestamp,
-			TradeDirection: tradeDirection,
-			Date:           date.Format("2006-01-02"),
-			Status:         status,
-			OpenQuantity:   int64(openQuantity),
-			ClosedPnL:      closedPnL,
-			Trades:         combinedTrades,
+			TradeID:             tradeID,
+			Ticker:              ticker,
+			SecurityID:          securityID,
+			TradeStart:          tradeStart,
+			Timestamp:           timestamp,
+			TradeDirection:      tradeDirection,
+			Date:                date.Format("2006-01-02"),
+			Status:              status,
+			OpenQuantity:        int64(openQuantity),
+			ClosedPnL:           closedPnL,
+			Trades:              combinedTrades,
+			TradeDurationMillis: tradeDurationMillis,
 		}
 
 		trades = append(trades, trade)
@@ -954,6 +985,102 @@ func GetTickerPerformance(conn *utils.Conn, userID int, rawArgs json.RawMessage)
 	}
 
 	return tickerStats, nil
+}
+
+// GetDailyTradeStats fetches daily P/L and trade counts for a given month and calculates weekly totals
+func GetDailyTradeStats(conn *utils.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	var args struct {
+		Year  int `json:"year"`
+		Month int `json:"month"`
+	}
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("error parsing arguments: %v", err)
+	}
+
+	if args.Year == 0 || args.Month == 0 || args.Month < 1 || args.Month > 12 {
+		return nil, fmt.Errorf("invalid year or month provided")
+	}
+
+	ctx := context.Background()
+
+	// Query for daily aggregated stats
+	query := `
+		SELECT
+			to_char(date, 'YYYY-MM-DD') as trade_date,
+			COALESCE(SUM(closedPnL), 0) as daily_pnl,
+			COUNT(*) as trade_count
+		FROM trades
+		WHERE userId = $1
+		  AND status = 'Closed'
+		  AND closedPnL IS NOT NULL
+		  AND EXTRACT(YEAR FROM date) = $2
+		  AND EXTRACT(MONTH FROM date) = $3
+		GROUP BY date
+		ORDER BY date;
+	`
+
+	rows, err := conn.DB.Query(ctx, query, userID, args.Year, args.Month)
+	if err != nil {
+		return nil, fmt.Errorf("database query error for daily stats: %v", err)
+	}
+	defer rows.Close()
+
+	dailyStats := []DailyTradeStat{}
+	var totalMonthlyPnL float64
+	weeklyAggregates := make(map[string]*WeeklyStat) // Map to store weekly aggregates
+
+	for rows.Next() {
+		var stat DailyTradeStat
+		if err := rows.Scan(&stat.Date, &stat.TotalPnL, &stat.TradeCount); err != nil {
+			return nil, fmt.Errorf("error scanning daily stat row: %v", err)
+		}
+		dailyStats = append(dailyStats, stat)
+		totalMonthlyPnL += stat.TotalPnL
+
+		// Calculate week start date (Sunday)
+		tradeDate, _ := time.Parse("2006-01-02", stat.Date)
+		weekday := int(tradeDate.Weekday())                // Sunday = 0, Saturday = 6
+		weekStartDate := tradeDate.AddDate(0, 0, -weekday) // Subtract days to get to Sunday
+		weekStartDateStr := weekStartDate.Format("2006-01-02")
+
+		// Aggregate weekly stats
+		if weekStat, ok := weeklyAggregates[weekStartDateStr]; ok {
+			weekStat.TotalPnL += stat.TotalPnL
+			weekStat.TradeCount += stat.TradeCount
+		} else {
+			weeklyAggregates[weekStartDateStr] = &WeeklyStat{
+				WeekStartDate: weekStartDateStr,
+				TotalPnL:      stat.TotalPnL,
+				TradeCount:    stat.TradeCount,
+			}
+		}
+	}
+	if rows.Err() != nil {
+		return nil, fmt.Errorf("error iterating daily stat rows: %v", rows.Err())
+	}
+
+	// Convert map to slice and round PnL
+	weeklyStatsSlice := []WeeklyStat{}
+	for _, ws := range weeklyAggregates {
+		ws.TotalPnL = math.Round(ws.TotalPnL*100) / 100 // Round weekly PnL
+		weeklyStatsSlice = append(weeklyStatsSlice, *ws)
+	}
+
+	// Sort weekly stats by date
+	sort.Slice(weeklyStatsSlice, func(i, j int) bool {
+		return weeklyStatsSlice[i].WeekStartDate < weeklyStatsSlice[j].WeekStartDate
+	})
+
+	// Round monthly PnL
+	totalMonthlyPnL = math.Round(totalMonthlyPnL*100) / 100
+
+	response := MonthlyTradeStatsResponse{
+		DailyStats:  dailyStats,
+		MonthlyPnL:  totalMonthlyPnL,
+		WeeklyStats: weeklyStatsSlice, // Assign calculated weekly stats
+	}
+
+	return response, nil
 }
 
 // DeleteAllUserTrades deletes all trades for a user

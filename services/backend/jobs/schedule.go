@@ -170,13 +170,13 @@ var (
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 		},
-		/*{
+		{
 			Name:           "UpdateDailyOHLCV",
 			Function:       UpdateDailyOHLCV,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
-		},*/
+		},
 		{
 			Name:           "InitAggregates",
 			Function:       initAggregates,
