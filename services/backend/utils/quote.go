@@ -418,9 +418,9 @@ func GetDailyOHLCV(client *polygon.Client, date string, ctx context.Context) (*m
 		return nil, fmt.Errorf("error parsing date: %v", err)
 	}
 	params := &models.GetGroupedDailyAggsParams{
-		Date: models.Date(on),
+		Date:       models.Date(on),
 		MarketType: "stocks",
-		Locale: "us",
+		Locale:     "us",
 	}
 	res, err := client.GetGroupedDailyAggs(ctx, params)
 	if err != nil {
@@ -429,9 +429,28 @@ func GetDailyOHLCV(client *polygon.Client, date string, ctx context.Context) (*m
 	return res, nil
 }
 
-
-
-
-
+func GetPolygonTickerSnapshot(client *polygon.Client, ticker string, ctx context.Context) (*models.GetTickerSnapshotResponse, error) {
+	params := models.GetTickerSnapshotParams{
+		Ticker:     ticker,
+		Locale:     "us",
+		MarketType: "stocks",
+	}
+	res, err := client.GetTickerSnapshot(ctx, &params)
+	if err != nil {
+		return nil, fmt.Errorf("error getting ticker snapshot: %v", err)
+	}
+	return res, nil
+}
+func GetPolygonAllTickerSnapshots(client *polygon.Client, ctx context.Context) (*models.GetAllTickersSnapshotResponse, error) {
+	params := models.GetAllTickersSnapshotParams{
+		Locale:     "us",
+		MarketType: "stocks",
+	}
+	res, err := client.GetAllTickersSnapshot(ctx, &params)
+	if err != nil {
+		return nil, fmt.Errorf("error getting all ticker snapshots: %v", err)
+	}
+	return res, nil
+}
 
 // /quote.go
