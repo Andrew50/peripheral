@@ -49,13 +49,13 @@
 			customTickers = tempSettings.screensaverTickers.join(',');
 		}
 
-		// Apply the current color scheme if one is set
-		if (tempSettings.colorScheme && browser) {
-			const scheme = colorSchemes[tempSettings.colorScheme];
-			if (scheme) {
-				applyColorScheme(scheme);
-			}
-		}
+		// Apply the current color scheme on mount using the store value
+		// if ($settings.colorScheme && browser) {
+		// 	const scheme = colorSchemes[$settings.colorScheme];
+		// 	if (scheme) {
+		// 		applyColorScheme(scheme);
+		// 	}
+		// }
 	});
 
 	function updateLayout() {
@@ -79,13 +79,13 @@
 			privateRequest<void>('setSettings', { settings: tempSettings }).then(() => {
 				settings.set(tempSettings); // Update the store with new settings
 
-				// Apply color scheme if changed
-				if (browser && tempSettings.colorScheme) {
-					const scheme = colorSchemes[tempSettings.colorScheme];
-					if (scheme) {
-						applyColorScheme(scheme);
-					}
-				}
+				// Apply color scheme if changed - REMOVED FROM HERE, handled by reactive statement
+				// if (browser && tempSettings.colorScheme) {
+				// 	const scheme = colorSchemes[tempSettings.colorScheme];
+				// 	if (scheme) {
+				// 		applyColorScheme(scheme);
+				// 	}
+				// }
 
 				errorMessage = '';
 			});
