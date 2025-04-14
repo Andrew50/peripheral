@@ -8,26 +8,23 @@ ENV PGDATA /var/lib/postgresql/data
 
 # Create an SQL init directory that will be processed after PostgreSQL initializes
 EXPOSE 5432
-COPY init.sql /docker-entrypoint-initdb.d/init.sql
-COPY securities.csv /docker-entrypoint-initdb.d/securities.csv
-COPY samples.csv /docker-entrypoint-initdb.d/samples.csv
+COPY init/init.sql /docker-entrypoint-initdb.d/init.sql
+COPY init/securities.csv /docker-entrypoint-initdb.d/securities.csv
+COPY init/samples.csv /docker-entrypoint-initdb.d/samples.csv
+COPY config/dev.conf /etc/postgresql/postgresql.conf
 
-# Copy the PostgreSQL configuration
-COPY dev.conf /etc/postgresql/postgresql.conf
+# Create migrations directory and copy migrations
+RUN mkdir -p /migrations
+COPY migrations/*.sql /migrations/
 
 # Copy the migrations script
-COPY run_migrations.sh /app/run_migrations.sh
-RUN chmod +x /app/run_migrations.sh
-
-# Copy the watch script
-COPY watch_rollouts.sh /app/watch_rollouts.sh
-RUN chmod +x /app/watch_rollouts.sh
-
-# Create rollouts directory with proper permissions
-RUN mkdir -p /tmp/rollouts && chmod 777 /tmp/rollouts
-
-# Copy our custom entrypoint script
-COPY start.sh /app/start.sh
+COPY scripts/migrate.sh /app/migrate.sh
+RUN chmod +x /app/migrate.sh
+# Copy migration runner for development
+COPY scripts/migrate.sh /app/migrate.sh
+RUN chmod +x /app/migrate.sh
+# Create a startup script that runs both PostgreSQL and the watcher
+COPY scripts/start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
 # Start PostgreSQL using our custom entrypoint

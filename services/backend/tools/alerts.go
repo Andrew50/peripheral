@@ -57,15 +57,22 @@ type GetAlertLogsResult struct {
 
 // GetAlertLogs performs operations related to GetAlertLogs functionality.
 func GetAlertLogs(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	rows, err := conn.DB.Query(context.Background(), `
+	// Use a CTE to first get all alerts belonging to the user
+	query := `
+		WITH user_alerts AS (
+			SELECT alertId 
+			FROM alerts 
+			WHERE userId = $1
+		)
 		SELECT al.alertLogId, al.alertId, al.timestamp, al.securityId, s.ticker
 		FROM alertLogs al
-		JOIN alerts a ON a.alertId = al.alertId 
+		JOIN user_alerts ua ON ua.alertId = al.alertId 
 		LEFT JOIN securities s ON al.securityID = s.securityID
-		WHERE a.userId = $1
-		ORDER BY al.timestamp DESC`, userId)
+		ORDER BY al.timestamp DESC`
+
+	rows, err := conn.DB.Query(context.Background(), query, userId)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error fetching alert logs: %v", err)
 	}
 	defer rows.Close()
 
@@ -80,6 +87,11 @@ func GetAlertLogs(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		log.Timestamp = logTime.Unix() * 1000
 		logs = append(logs, log)
 	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating alert logs: %v", err)
+	}
+
 	return logs, nil
 }
 
