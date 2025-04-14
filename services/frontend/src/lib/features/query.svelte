@@ -601,7 +601,7 @@
 		<input
 			type="text"
 			class="chat-input"
-			placeholder="Type a message..."
+			placeholder="Ask about anything..."
 			bind:value={inputValue}
 			bind:this={queryInput}
 			on:keydown={(event) => {
@@ -888,7 +888,7 @@
 		background: var(--ui-bg-element, #333);
 		border: 1px solid var(--ui-border, #444);
 		color: var(--text-primary, #fff);
-		border-radius: 1.5rem;
+		border-radius: 0.25rem;
 		min-height: clamp(36px, 5vh, 48px);
 		padding-right: clamp(3rem, 5vw, 3.5rem);
 	}
@@ -1101,5 +1101,31 @@
 		background: var(--ui-bg-element, #333);
 		border-color: var(--ui-accent, #3a8bf7);
 		color: var(--text-primary, #fff);
+	}
+
+	/* Custom Scrollbar Styles */
+	.chat-messages::-webkit-scrollbar {
+		width: 8px; /* Width of the scrollbar */
+	}
+
+	.chat-messages::-webkit-scrollbar-track {
+		background: var(--ui-bg-element, #333); /* Track color, matching element background */
+		border-radius: 4px;
+	}
+
+	.chat-messages::-webkit-scrollbar-thumb {
+		background-color: var(--ui-border-darker, #555); /* Thumb color */
+		border-radius: 4px;
+		border: 2px solid var(--ui-bg-element, #333); /* Creates padding around thumb */
+	}
+
+	.chat-messages::-webkit-scrollbar-thumb:hover {
+		background-color: var(--ui-accent, #3a8bf7); /* Thumb color on hover */
+	}
+
+	/* Firefox scrollbar styles */
+	.chat-messages {
+		scrollbar-width: thin; /* "auto" or "thin" */
+		scrollbar-color: var(--ui-border-darker, #555) var(--ui-bg-element, #333); /* thumb track */
 	}
 </style>
