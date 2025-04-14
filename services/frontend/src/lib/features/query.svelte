@@ -2,6 +2,8 @@
 	import { onMount } from 'svelte';
 	import { privateRequest } from '$lib/core/backend';
 	import { marked } from 'marked'; // Import the markdown parser
+	import { queryChart } from '$lib/features/chart/interface'; // Import queryChart
+	import type { Instance } from '$lib/core/types';
 
 	// Set default options for the markdown parser (optional)
 	marked.setOptions({
@@ -24,7 +26,7 @@
 		try {
 			// Format ISO 8601 timestamps like 2025-04-08T21:36:28Z to a more readable format
 			const isoTimestampRegex = /\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z)\b/g;
-			const contentWithFormattedDates = content.replace(isoTimestampRegex, (match) => {
+			let processedContent = content.replace(isoTimestampRegex, (match) => {
 				try {
 					const date = new Date(match);
 					if (!isNaN(date.getTime())) {
@@ -35,18 +37,31 @@
 					return match;
 				}
 			});
-			
+
 			// Handle the Promise case by converting immediately to string
-			const parsed = marked.parse(contentWithFormattedDates);
+			const parsed = marked.parse(processedContent);
 			const parsedString = typeof parsed === 'string' ? parsed : String(parsed);
-			
-			// Add target="_blank" and rel="noopener noreferrer" to all links
-			// This is a simple regex that modifies <a> tags to open in new tabs
-			const withExternalLinks = parsedString.replace(
+
+			// Regex to find $$$TICKER-securityID$$$ patterns
+			// It captures TICKER (group 1) and securityID (group 2)
+			const tickerRegex = /\$\$\$([A-Z]{1,5})-(\w+)\$\$\$/g;
+
+			// Replace ticker patterns with buttons
+			const contentWithTickerButtons = parsedString.replace(
+				tickerRegex,
+				(match, ticker, securityId) => {
+					// Use securityId in data attribute, but display only ticker
+					return `<button class="ticker-button" data-ticker="${ticker}" data-security-id="${securityId}">${ticker}</button>`;
+				}
+			);
+
+			// Add target="_blank" and rel="noopener noreferrer" to all standard links
+			// Ensure this doesn't interfere with the buttons (it shouldn't as buttons aren't <a> tags)
+			const withExternalLinks = contentWithTickerButtons.replace(
 				/<a\s+(?:[^>]*?\s+)?href="([^"]*)"(?:\s+[^>]*?)?>/g,
 				'<a href="$1" target="_blank" rel="noopener noreferrer">'
 			);
-			
+
 			return withExternalLinks;
 		} catch (error) {
 			console.error('Error parsing markdown:', error);
@@ -170,6 +185,18 @@
 			setTimeout(() => queryInput.focus(), 100);
 		}
 		loadConversationHistory();
+
+		// Add delegated event listener for ticker buttons
+		if (messagesContainer) {
+			messagesContainer.addEventListener('click', handleTickerButtonClick);
+		}
+
+		// Cleanup listener on component destroy
+		return () => {
+			if (messagesContainer) {
+				messagesContainer.removeEventListener('click', handleTickerButtonClick);
+			}
+		};
 	});
 
 	// Generate unique IDs for messages
@@ -391,6 +418,28 @@
 			return content;
 		}
 		return null;
+	}
+
+	// Function to handle clicks on ticker buttons
+	function handleTickerButtonClick(event: MouseEvent) {
+		const target = event.target as HTMLElement;
+		if (target && target.classList.contains('ticker-button')) {
+			const ticker = target.dataset.ticker;
+			const securityIdStr = target.dataset.securityId;
+
+			if (ticker && securityIdStr) {
+				const securityId = parseInt(securityIdStr, 10);
+				if (isNaN(securityId)) {
+					return; // Don't proceed if securityId is invalid
+				}
+
+				// Call queryChart, inlining the Instance-like object
+				queryChart({
+					ticker: ticker,
+					securityId: securityId
+				} as Instance);
+			} 
+		}
 	}
 </script>
 
@@ -1021,5 +1070,29 @@
 		border: 1px solid var(--error-color, #f44336);
 		margin-bottom: 1rem;
 		font-size: 0.8rem;
+	}
+
+	/* Style for the ticker buttons */
+	.message-content :global(.ticker-button) {
+		background: var(--ui-bg-element-darker, #2a2a2a);
+		border: 1px solid var(--ui-border, #444);
+		color: var(--text-primary, #fff);
+		padding: 0.2rem 0.6rem;
+		border-radius: 0.25rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		margin: 0 0.2rem;
+		vertical-align: middle;
+		line-height: 1;
+		text-decoration: none;
+		display: inline-block;
+	}
+
+	.message-content :global(.ticker-button:hover) {
+		background: var(--ui-bg-element, #333);
+		border-color: var(--ui-accent, #3a8bf7);
+		color: var(--text-primary, #fff);
 	}
 </style>

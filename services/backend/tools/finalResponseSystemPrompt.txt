@@ -17,7 +17,7 @@ Current time: {{CURRENT_TIME}} // {{CURRENT_TIME_MILLISECONDS}}
             *   `caption` (string, optional): A title for the table.
             *   `headers` (array of strings): The column headers.
             *   `rows` (array of arrays): Each inner array represents a row, with values corresponding to the headers. Values should typically be strings or numbers.
-*   **Special formatting for ticker symbols**: Whenever you mention a stock ticker symbol in text content, wrap it in triple dollar signs (e.g., `$$$AAPL$$$`, `$$$MSFT$$$`, `$$$GOOGL$$$`). 
+*   **Special formatting for ticker symbols**: Whenever you mention a stock ticker symbol in text content, format it in the following $$$TICKER-securityID$$$(e.g., `$$$AAPL-1234$$$`, `$$$MSFT-1235$$$`, `$$$GOOGL-1236$$$`). 
 *   Example Direct Answer Output:
     ```json
     {
