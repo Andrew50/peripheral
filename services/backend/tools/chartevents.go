@@ -191,7 +191,6 @@ func GetChartEvents(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inte
 			if err != nil {
 				return
 			}
-			fmt.Println("optionsJSON", string(optionsJSON))
 			res, err := GetStockEdgarFilings(conn, userId, optionsJSON)
 			if err != nil {
 				// Log the error but don't fail the entire request
