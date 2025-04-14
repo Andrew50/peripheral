@@ -24,7 +24,7 @@ spec:
             - /bin/sh
             - -c
             # Use environment variable substitution for the password
-            - redis-server /etc/redis/redis.conf --requirepass "${REDIS_PASSWORD}"
+            - redis-server /etc/redis/redis.conf --requirepass "$(REDIS_PASSWORD)"
           ports:
             - containerPort: 6379
           resources:
@@ -51,7 +51,7 @@ spec:
               command:
                 - sh
                 - -c
-                - redis-cli -a $REDIS_PASSWORD ping
+                - redis-cli -a "$(REDIS_PASSWORD)" ping
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
@@ -61,7 +61,7 @@ spec:
               command:
                 - sh
                 - -c
-                - redis-cli -a $REDIS_PASSWORD ping
+                - redis-cli -a "$(REDIS_PASSWORD)" ping
             initialDelaySeconds: 15
             periodSeconds: 5
             timeoutSeconds: 5

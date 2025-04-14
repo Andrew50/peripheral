@@ -143,6 +143,12 @@ jobs:
           MINIKUBE_PROFILE="minikube-${ENVIRONMENT}"
           echo "MINIKUBE_PROFILE=${MINIKUBE_PROFILE}" >> $GITHUB_ENV
           echo "Using Minikube profile: ${MINIKUBE_PROFILE}"
+          SOURCE_DIR="config/deploy/k8s"
+          echo "CONFIG_DIR=${CONFIG_DIR}" >> $GITHUB_ENV
+          echo "Using Config Directory: ${CONFIG_DIR}"
+          TMP_DIR="config/deploy/tmp"
+          echo "TMP_DIR=${TMP_DIR}" >> $GITHUB_ENV
+          echo "Using Config Directory: ${TMP_DIR}"
 
       - name: Build Docker Images
         run: |
@@ -158,10 +164,10 @@ jobs:
         run: config/deploy/scripts/push-images.sh
 
       - name: Setup Kubernetes Context
-        run: config/deploy/scripts/setup-k8s.sh
+        run: config/deploy/scripts/setup-cluster.sh
 
       - name: Update Kubernetes Secrets
-        run: config/deploy/scripts/update-secrets.sh
+        run: config/deploy/scripts/setup-configs.sh
 
       - name: Deploy to Kubernetes
         run: config/deploy/scripts/deploy-to-k8s.sh

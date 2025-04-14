@@ -10,8 +10,8 @@ set -Eeuo pipefail
 # Convert the space-separated string of services into a bash array
 read -r -a SERVICES_ARRAY <<< "$SERVICES"
 
-SOURCE_DIR="config/deploy/k8s"
-TMP_DIR="config/deploy/tmp"
+#SOURCE_DIR="config/deploy/k8s"
+#TMP_DIR="config/deploy/tmp"
 
 echo "Deploying to Kubernetes with tag: $DOCKER_TAG, namespace: $K8S_NAMESPACE"
 echo "Source directory: $SOURCE_DIR"
@@ -19,58 +19,6 @@ echo "Temporary directory: $TMP_DIR"
 echo "Target services: ${SERVICES_ARRAY[@]}"
 echo "Using Docker user: $DOCKER_USERNAME"
 
-# 1. Check if source directory exists
-if [[ ! -d "$SOURCE_DIR" ]]; then
-  echo "Error: Source directory '$SOURCE_DIR' not found."
-  exit 1
-fi
-
-# 2. Prepare temporary directory
-echo "Preparing temporary directory: $TMP_DIR"
-rm -rf "$TMP_DIR"
-mkdir -p "$TMP_DIR"
-# Copy contents of source dir to temp dir
-cp -r "$SOURCE_DIR"/* "$TMP_DIR/"
-
-# Remove the secrets template file from the temp directory as it's handled separately
-echo "Removing secrets template from temporary directory..."
-rm -f "$TMP_DIR/secrets.yaml"
-
-# 3. Update image tags in temporary YAML files
-echo "Updating image tags in temporary files..."
-for dep in "${SERVICES_ARRAY[@]}"; do
-  echo "Processing service: $dep"
-  # Find all yaml files in the temp directory
-  find "$TMP_DIR" -type f \( -name "*.yaml" -o -name "*.yml" \) -print0 | while IFS= read -r -d $'\0' file; do
-    # Use sed to replace the image tag.
-    # This assumes the image format is '<some-path>/<service-name>:<some-tag>'
-    # and replaces it with '$DOCKER_USERNAME/$dep:$DOCKER_TAG'.
-    # It targets lines starting with optional spaces followed by 'image:',
-    # containing '/<service-name>:' later in the line.
-    # Note: This sed command is based on common conventions but might be fragile
-    # if YAML structure or image naming deviates significantly.
-    sed -i -E "s|^( *)image:.*[/]${dep}:.*$|\1image: ${DOCKER_USERNAME}/${dep}:${DOCKER_TAG}|g" "$file"
-  done
-done
-echo "Image tag update complete."
-
-# 3.5 Substitute environment variables in specific files (e.g., Ingress host)
-echo "Substituting environment variables in configuration files..."
-# Substitute INGRESS_HOST in ingress.yaml or ingress.yml
-INGRESS_YAML_FILE="${TMP_DIR}/ingress.yaml"
-INGRESS_YML_FILE="${TMP_DIR}/ingress.yml"
-
-if [[ -f "$INGRESS_YAML_FILE" ]]; then
-    echo "Substituting INGRESS_HOST in $INGRESS_YAML_FILE..."
-    # Use a different delimiter for sed to avoid issues if INGRESS_HOST contains slashes
-    sed -i "s|\${INGRESS_HOST}|${INGRESS_HOST}|g" "$INGRESS_YAML_FILE"
-elif [[ -f "$INGRESS_YML_FILE" ]]; then
-    echo "Substituting INGRESS_HOST in $INGRESS_YML_FILE..."
-    sed -i "s|\${INGRESS_HOST}|${INGRESS_HOST}|g" "$INGRESS_YML_FILE"
-else
-    echo "Warning: Neither ingress.yaml nor ingress.yml found in $TMP_DIR. Skipping INGRESS_HOST substitution."
-fi
-# Add other substitutions here if needed in the future
 
 # 4. Apply all YAML files from the temporary directory
 echo "Applying configurations from $TMP_DIR to namespace ${K8S_NAMESPACE}..."
