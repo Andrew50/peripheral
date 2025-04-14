@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Parameters:
-# $1: K8S_CONTEXT - The Kubernetes context to use (default: minikube)
-# $2: K8S_NAMESPACE - The namespace to use (default: default)
-# $3: PROFILE_NAME - The minikube profile name (default: minikube)
+# --- Environment Variable Sourcing (with defaults) ---
+# K8S_CONTEXT: The Kubernetes context to use (default: minikube)
+# K8S_NAMESPACE: The namespace to use (default: default)
+# PROFILE_NAME: The minikube profile name (default: minikube)
 
-K8S_CONTEXT="${1:-minikube}"
-K8S_NAMESPACE="${2:-default}"
-PROFILE_NAME="${3:-minikube}"  # Add profile parameter for multiple clusters
+K8S_CONTEXT="${K8S_CONTEXT:-minikube}"
+K8S_NAMESPACE="${K8S_NAMESPACE:-default}"
+PROFILE_NAME="${PROFILE_NAME:-minikube}"
 
 echo "Checking minikube status for profile: $PROFILE_NAME..."
 if ! minikube status -p "$PROFILE_NAME" &> /dev/null; then

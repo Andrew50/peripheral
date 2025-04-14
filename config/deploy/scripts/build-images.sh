@@ -1,42 +1,24 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Assign arguments to variables
-DOCKER_TAG="${1:-}"
-DOCKER_USERNAME="${2:-}"
-SERVICES="${3:-}" # Services passed as a single space-separated string
+# --- Environment Variable Validation ---
+: "${DOCKER_TAG:?Error: DOCKER_TAG environment variable is required.}"
+: "${TARGET_BRANCH:?Error: TARGET_BRANCH environment variable is required.}"
+: "${SERVICES:?Error: SERVICES environment variable (space-separated list) is required.}"
+: "${DOCKER_USERNAME:?Error: DOCKER_USERNAME environment variable is required.}"
 
-# --- Argument Validation ---
-if [[ -z "$DOCKER_TAG" ]]; then
-  echo "Error: DOCKER_TAG (argument 1) is required." >&2
-  exit 1
-fi
 
-if [[ -z "$TARGET_BRANCH" ]]; then
-  echo "Error: TARGET_BRANCH (argument 2) is required." >&2
-  exit 1
-fi
 
-if [[ -z "$SERVICES" ]]; then
-  echo "Error: List of services (argument 3, space-separated) is required." >&2
-  echo "${SERVICES}"
-  exit 1
-fi
-
-# Use DOCKER_USERNAME from environment variable
-if [[ -z "${DOCKER_USERNAME:-}" ]]; then
-  echo "Error: DOCKER_USERNAME environment variable is required." >&2
-  exit 1
-fi
-
-# Convert the space-separated string into a bash array and verify
-read -r -a SERVICES <<< "$SERVICES"
-if [[ ${#SERVICES[@]} -eq 0 ]]; then
-    echo "Error: Failed to parse services list from argument 4." >&2
+# Convert the space-separated SERVICES env var into a bash array
+# Note: We rename the array to avoid conflict with the env var name
+read -r -a SERVICES_ARRAY <<< "$SERVICES"
+if [[ ${#SERVICES_ARRAY[@]} -eq 0 ]]; then
+    echo "Error: Failed to parse services list from SERVICES environment variable." >&2
     exit 1
 fi
 
-#standard build func
+MAX_CONCURRENT_BUILDS=3
+
 build_service() {
   local service="$1"
   local dockerfile="services/${service}/Dockerfile.prod"
@@ -48,7 +30,8 @@ build_service() {
 pids=()
 MAX_CONCURRENT_BUILDS=3
 
-for srv in "${SERVICES[@]}"; do
+# Iterate over the SERVICES_ARRAY
+for srv in "${SERVICES_ARRAY[@]}"; do
   if [[ ${#pids[@]} -ge $MAX_CONCURRENT_BUILDS ]]; then
     wait -n
   fi

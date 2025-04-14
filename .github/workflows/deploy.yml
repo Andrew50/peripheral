@@ -68,7 +68,7 @@ jobs:
       GOOGLE_REDIRECT_URL: ${{ inputs.google_redirect_url }}
       K8S_CONTEXT: ${{ inputs.k8s_context }}
       K8S_NAMESPACE: ${{ inputs.k8s_namespace }}
-      EN/VIRONMENT: ${{ inputs.environment }}
+      ENVIRONMENT: ${{ inputs.environment }}
 
     steps:
       - name: Debug Event Information
@@ -135,19 +135,25 @@ jobs:
           echo "Using Minikube profile: ${MINIKUBE_PROFILE}"
 
       - name: Build Docker Images
-        run: config/deploy/scripts/build-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}" "${SERVICES}"
+        env:
+          # Explicitly pass variables needed by the script
+          DOCKER_TAG: ${{ env.DOCKER_TAG }}
+          TARGET_BRANCH: ${{ env.TARGET_BRANCH }}
+          SERVICES: ${{ env.SERVICES }}
+          # DOCKER_USERNAME is already available via the job's env block
+        run: config/deploy/scripts/build-images.sh
 
       - name: Login & Push Docker Images
-        run: config/deploy/scripts/push-images.sh "${DOCKER_TAG}" "${DOCKER_TAG}" "${SERVICES}"
+        run: config/deploy/scripts/push-images.sh
 
       - name: Setup Kubernetes Context
-        run: config/deploy/scripts/setup-k8s.sh "${K8S_CONTEXT}" "${K8S_NAMESPACE}" "${MINIKUBE_PROFILE}"
+        run: config/deploy/scripts/setup-k8s.sh
 
       - name: Update Kubernetes Secrets
-        run: config/deploy/scripts/update-secrets.sh "${DOCKER_TAG}" "${K8S_NAMESPACE}"
+        run: config/deploy/scripts/update-secrets.sh
 
       - name: Deploy to Kubernetes
-        run: config/deploy/scripts/deploy-to-k8s.sh "${DOCKER_TAG}" "${K8S_NAMESPACE}" "${SERVICES}"
+        run: config/deploy/scripts/deploy-to-k8s.sh
 
       - name: Cleanup
         if: always()
