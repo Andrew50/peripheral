@@ -536,7 +536,7 @@ func getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (str
 	// Get the text from the response
 	text := fmt.Sprintf("%v", result.Candidates[0].Content.Parts[0].Text)
 	return text, nil
-}*/
+}
 
 // FunctionCall represents a function to be called with its arguments
 type FunctionCall struct {
@@ -586,7 +586,6 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemProm
 		},
 	}
 
-
 	result, err := client.Models.GenerateContent(
 		ctx,
 		"gemini-2.0-flash-thinking-exp-01-21",
@@ -596,7 +595,6 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemProm
 	if err != nil {
 		return nil, fmt.Errorf("error generating content with thinking model: %w", err)
 	}
-
 
 	// Extract the clean text response for display
 	responseText := ""
@@ -609,9 +607,7 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemProm
 		}
 	}
 	response := &GeminiFunctionResponse{
-	response := &GeminiFunctionResponse{
 		FunctionCalls: []FunctionCall{},
-		Text:          responseText,
 		Text:          responseText,
 	}
 	return response, nil
@@ -783,7 +779,6 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 	// Process each round sequentially, sending each to Gemini
 	for _, round := range thinkingResp.Rounds {
 
-
 		// Create a prompt for Gemini that includes:
 		// 1. The current round's function calls
 		// 2. The results from ALL previous rounds (not just the last one)
@@ -794,7 +789,6 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 			fmt.Printf("Error marshaling round to JSON: %v\n", err)
 			continue
 		}
-
 
 		// Create a prompt that includes the round and previous results
 		var prompt strings.Builder
@@ -822,14 +816,12 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 			continue
 		}
 
-
 		// Execute the functions returned by Gemini
 		roundResults, err := executeGeminiFunctions(ctx, conn, userID, processedRound)
 		if err != nil {
 			fmt.Printf("Error executing functions: %v\n", err)
 			continue
 		}
-
 
 		// Add this round's results to the combined results
 		allResults = append(allResults, roundResults...)
@@ -898,7 +890,6 @@ func processRoundWithGemini(ctx context.Context, conn *utils.Conn, prompt string
 		return nil, fmt.Errorf("error getting function response from Gemini: %w", err)
 	}
 
-
 	// Return the function calls from the response
 	return response.FunctionCalls, nil
 }
@@ -906,7 +897,6 @@ func processRoundWithGemini(ctx context.Context, conn *utils.Conn, prompt string
 // executeGeminiFunctions executes the function calls returned by Gemini
 func executeGeminiFunctions(ctx context.Context, conn *utils.Conn, userID int, functionCalls []FunctionCall) ([]ExecuteResult, error) {
 	var results []ExecuteResult
-
 
 	for _, fc := range functionCalls {
 		fmt.Printf("Executing function %s with args: %s\n", fc.Name, string(fc.Args))
@@ -928,7 +918,6 @@ func executeGeminiFunctions(ctx context.Context, conn *utils.Conn, userID int, f
 			continue
 		}
 
-
 		// Execute the function
 		result, err := tool.Function(conn, userID, fc.Args)
 		if err != nil {
@@ -947,7 +936,6 @@ func executeGeminiFunctions(ctx context.Context, conn *utils.Conn, userID int, f
 			})
 		}
 	}
-
 
 	return results, nil
 }
