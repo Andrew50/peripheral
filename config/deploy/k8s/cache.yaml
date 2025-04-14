@@ -23,30 +23,20 @@ spec:
           command:
             - /bin/sh
             - -c
-<<<<<<< HEAD
-            - redis-server /etc/redis/redis.conf --requirepass "$(REDIS_PASSWORD)"
-=======
+            # Use environment variable substitution for the password
             - redis-server /etc/redis/redis.conf --requirepass "${REDIS_PASSWORD}"
->>>>>>> Snippet
           ports:
             - containerPort: 6379
           resources:
             requests:
               cpu: 1000m
               memory: 5000Mi
-<<<<<<< HEAD
             limits:
               cpu: 2000m
               memory: 30000Mi
           env:
+            # Define environment variables, sourcing password from secret
             - name: REDIS_PASSWORD
-=======
-            - name: REDIS_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: redis-secret
-                  key: REDIS_PASSWORD
->>>>>>> Snippet
               valueFrom:
                 secretKeyRef:
                   name: redis-secret
