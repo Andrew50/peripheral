@@ -448,7 +448,7 @@ func buildSimpleConditionForCTE(condition struct {
 		rhs = fmt.Sprintf("%v", condition.RHS.Value)
 	}
 	if condition.RHS.Multiplier != 0 {
-		rhs = fmt.Sprintf("%s * $%d", rhs, condition.RHS.Multiplier)
+		rhs = fmt.Sprintf("%s * %f", rhs, condition.RHS.Multiplier)
 	}
 
 	return fmt.Sprintf("%s %s %s", lhs, mapOperator(condition.Operation), rhs)

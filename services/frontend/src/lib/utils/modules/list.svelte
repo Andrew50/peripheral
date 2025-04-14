@@ -12,8 +12,7 @@
 	import { newAlert } from '$lib/features/alerts/interface';
 	import { queueRequest, privateRequest } from '$lib/core/backend';
 	import type { Trade } from '$lib/core/types';
-	import { flip } from 'svelte/animate';
-	import { fade, fly } from 'svelte/transition';
+	import { fade,  } from 'svelte/transition';
 
 	type StreamCellType = 'price' | 'change' | 'change %' | 'change % extended' | 'market cap';
 
@@ -29,13 +28,6 @@
 		trades?: Trade[];
 		[key: string]: any; // Allow dynamic property access
 	}
-
-	interface ApiResponse {
-		status: string;
-		similar_trades?: SimilarTrade[];
-		message?: string;
-	}
-
 	let longPressTimer: ReturnType<typeof setTimeout>;
 	export let list: Writable<ExtendedInstance[]> = writable([]);
 	export let columns: Array<string>;
@@ -53,11 +45,6 @@
 	export let linkColumns: string[] = [];
 	let selectedRowIndex = -1;
 	let expandedRows = new Set<number>();
-
-	// Add these for similar trades handling
-	let similarTradesMap = new Map<number, SimilarTrade[]>();
-	let loadingMap = new Map<number, boolean>();
-	let errorMap = new Map<number, string>();
 
 	let isLoading = true;
 	let loadError: string | null = null;
@@ -670,7 +657,6 @@
 <style>
 	.selected {
 		outline: 2px solid var(--ui-accent);
-		outline-offset: -2px;
 	}
 
 	tr {
@@ -762,7 +748,6 @@
 	}
 
 	tr {
-		background-color: var(--ui-bg-primary);
 		transition: background-color 0.2s;
 	}
 
@@ -855,6 +840,8 @@
 		max-width: 24px;
 		padding: 0;
 		text-align: center;
+		background-color: var(--ui-bg-primary);
+		vertical-align: middle;
 	}
 
 	th:last-child {
@@ -863,7 +850,7 @@
 		width: 24px;
 		max-width: 24px;
 		padding: 0;
-		background-color: var(--ui-bg-element);
+		transition: opacity 0.2s ease;
 	}
 
 	.delete-button {
@@ -876,10 +863,6 @@
 	}
 
 	tr:hover td {
-		background-color: var(--ui-bg-hover);
-	}
-
-	tr:hover td:last-child {
 		background-color: var(--ui-bg-hover);
 	}
 
