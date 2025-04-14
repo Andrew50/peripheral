@@ -33,7 +33,7 @@ type EdgarFilingOptions struct {
 	SecurityID int   `json:"securityId"`
 }
 
-// getStockEdgarFilings retrieves SEC filings for a security with optional filters
+// GetStockEdgarFilings retrieves SEC filings for a security with optional filters
 func GetStockEdgarFilings(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args EdgarFilingOptions
 	if err := json.Unmarshal(rawArgs, &args); err != nil {

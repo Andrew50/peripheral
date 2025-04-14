@@ -157,9 +157,8 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		}
 
 		jsonBlock := responseText[jsonStartIdx : jsonEndIdx+1]
-		if err := json.Unmarshal([]byte(jsonBlock), &thinkingResp); err != nil {
+		_ = json.Unmarshal([]byte(jsonBlock), &thinkingResp) // Ignore error for now, as the block was empty
 
-		}
 		if len(thinkingResp.Rounds) == 0 && len(thinkingResp.ContentChunks) == 0 {
 			newMessage := ChatMessage{
 				Query:         query.Query,
