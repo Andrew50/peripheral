@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-K8S_NAMESPACE="${1:-}"
+# --- Environment Variable Validation ---
+: "${K8S_NAMESPACE:?Error: K8S_NAMESPACE environment variable is required.}"
 
 # Require these secrets:
 : "${DB_ROOT_PASSWORD:?Missing DB_ROOT_PASSWORD}"
