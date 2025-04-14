@@ -54,6 +54,24 @@ for dep in "${SERVICES_ARRAY[@]}"; do
 done
 echo "Image tag update complete."
 
+# 3.5 Substitute environment variables in specific files (e.g., Ingress host)
+echo "Substituting environment variables in configuration files..."
+# Substitute INGRESS_HOST in ingress.yaml or ingress.yml
+INGRESS_YAML_FILE="${TMP_DIR}/ingress.yaml"
+INGRESS_YML_FILE="${TMP_DIR}/ingress.yml"
+
+if [[ -f "$INGRESS_YAML_FILE" ]]; then
+    echo "Substituting INGRESS_HOST in $INGRESS_YAML_FILE..."
+    # Use a different delimiter for sed to avoid issues if INGRESS_HOST contains slashes
+    sed -i "s|\${INGRESS_HOST}|${INGRESS_HOST}|g" "$INGRESS_YAML_FILE"
+elif [[ -f "$INGRESS_YML_FILE" ]]; then
+    echo "Substituting INGRESS_HOST in $INGRESS_YML_FILE..."
+    sed -i "s|\${INGRESS_HOST}|${INGRESS_HOST}|g" "$INGRESS_YML_FILE"
+else
+    echo "Warning: Neither ingress.yaml nor ingress.yml found in $TMP_DIR. Skipping INGRESS_HOST substitution."
+fi
+# Add other substitutions here if needed in the future
+
 # 4. Apply all YAML files from the temporary directory
 echo "Applying configurations from $TMP_DIR to namespace ${K8S_NAMESPACE}..."
 if ! kubectl apply -f "$TMP_DIR" --recursive --validate=false --namespace="${K8S_NAMESPACE}"; then

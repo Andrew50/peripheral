@@ -1,15 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# --- Environment Variable Sourcing (with defaults) ---
-# K8S_CONTEXT: The Kubernetes context to use (default: minikube)
-# K8S_NAMESPACE: The namespace to use (default: default)
-# MINIKUBE_PROFILE: The minikube profile name (default: minikube)
-
-#K8S_CONTEXT="${K8S_CONTEXT:-minikube}"
-#K8S_NAMESPACE="${K8S_NAMESPACE:-default}"
-#MINIKUBE_PROFILE="${MINIKUBE_PROFILE:-minikube}"
-
 : "${K8S_CONTEXT:?Missing K8S_CONTEXT}"
 : "${K8S_NAMESPACE:?Missing K8S_NAMESPACE}"
 : "${MINIKUBE_PROFILE:?Missing MINIKUBE_PROFILE}"
