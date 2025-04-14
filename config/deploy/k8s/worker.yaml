@@ -77,13 +77,6 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 20
 
-          volumeMounts:
-            - name: conn-patch
-              mountPath: /conn-patch
-      volumes:
-        - name: conn-patch
-          configMap:
-            name: worker-conn-patch
       initContainers:
         - name: wait-for-db
           image: ${DOCKER_USERNAME}/worker:${DOCKER_TAG}
