@@ -75,15 +75,28 @@ if [[ "$PVC_COUNT" -gt 0 ]]; then
   PVC_NAMES=$(kubectl get pvc --namespace="${K8S_NAMESPACE}" -o jsonpath='{.items[*].metadata.name}')
   
   # Wait for PVCs to bind
-  echo "Waiting up to 60s for PVCs to become Bound..."
+  echo "Waiting up to 120s for PVCs to become Bound..."
   for pvc in $PVC_NAMES; do
     echo "Waiting for PVC: $pvc"
-    if ! kubectl wait --for=condition=Bound pvc/"$pvc" --namespace="${K8S_NAMESPACE}" --timeout=60s; then
-      echo "WARNING: PVC $pvc not bound within 60s. Checking status..."
+    bound=false
+    for i in {1..24}; do # Check every 5 seconds for 120 seconds (24 * 5 = 120)
+      status=$(kubectl get pvc "$pvc" --namespace="${K8S_NAMESPACE}" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Error")
+      if [[ "$status" == "Bound" ]]; then
+        echo "PVC $pvc is Bound."
+        bound=true
+        break
+      elif [[ "$status" == "Error" ]]; then
+         echo "Error getting status for PVC $pvc. Retrying..."
+      else
+        echo "PVC $pvc status is $status. Waiting... ($i/24)"
+      fi
+      sleep 5
+    done
+
+    if [[ "$bound" != true ]]; then
+      echo "WARNING: PVC $pvc did not become Bound within 120s. Checking final status..."
       kubectl describe pvc "$pvc" --namespace="${K8S_NAMESPACE}"
       # Continue despite warning - don't fail the deployment
-    else
-      echo "PVC $pvc successfully bound"
     fi
   done
 else
