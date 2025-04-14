@@ -3,81 +3,112 @@ kind: Ingress
 metadata:
   name: app-ingress
   annotations:
+    # Use NGINX as the Ingress controller
     kubernetes.io/ingress.class: "nginx"
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+
+    # Match the nginx.conf timeouts:
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/send-timeout: "600"
+
+    # Increase body size to accommodate uploads
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
-    # nginx.ingress.kubernetes.io/use-regex: "true" # Not needed for pathType: Prefix
-    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+
+    # Enable WebSocket support (e.g., for /ws path)
     nginx.ingress.kubernetes.io/enable-websocket: "true"
+    # Ensure HTTP/1.1 for WebSocket upgrades
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+
+    # Optional: replicate buffer-related settings
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "256k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
+    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "512k"
+
+    # Turn off forced SSL redirect if you only want HTTP
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+
+    # Insert server-wide directives
+    nginx.ingress.kubernetes.io/server-snippet: |
+      # Match the nginx.conf log directives
+      error_log /var/log/nginx/error.log warn;
+      access_log off;
+
+    # Insert per-location directives; these appear in every location block
+    # for this Ingress but we narrow them with 'location' statements:
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      # ---------------------------------------------
+      # Static asset caching: 1 year
+      # (The block below matches typical image/font/JS/CSS extensions)
+      location ~* \.(css|js|woff|woff2|ttf|svg|eot|otf|png|jpg|jpeg|gif|ico)$ {
+        add_header Cache-Control "public, max-age=31536000";
+        expires 1y;
+      }
+
+      # Serve JS modules with the correct MIME type
+      location ~* \._app/immutable/.*\.js$ {
+        add_header Content-Type application/javascript;
+      }
+
+      # Extend read/write timeouts for WebSockets
+      # (Only triggered if path begins with /ws)
+      if ($request_uri ~ ^/ws) {
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+      }
 spec:
   ingressClassName: nginx
   rules:
-    - host: ${INGRESS_HOST}
+    - host: "${INGRESS_HOST}"  # Replace with your domain or remove if using a hostless Ingress
       http:
         paths:
-          - pathType: Prefix
-            path: "/private"
+          # Backend paths
+          - path: /private
+            pathType: Prefix
             backend:
               service:
                 name: backend
                 port:
                   number: 5058
-          - pathType: Prefix
-            path: "/poll"
+
+          - path: /poll
+            pathType: Prefix
             backend:
               service:
                 name: backend
                 port:
                   number: 5058
-          - pathType: Prefix
-            path: "/public"
+
+          - path: /public
+            pathType: Prefix
             backend:
               service:
                 name: backend
                 port:
                   number: 5058
-#          - pathType: Prefix
-#            path: "/backend"
-#            backend:
-#              service:
-#                name: backend
-#                port:
-#                  number: 5058
-          - pathType: Prefix
-            path: "/ws"
+
+          - path: /queue
+            pathType: Prefix
             backend:
               service:
                 name: backend
                 port:
                   number: 5058
-#          - pathType: Prefix
-#            path: "/health"
-#            backend:
-#              service:
-#                name: backend
-#                port:
-#                  number: 5058
-          - pathType: Prefix
-            path: "/queue"
+
+          - path: /ws
+            pathType: Prefix
             backend:
               service:
                 name: backend
                 port:
                   number: 5058
-#          - pathType: Prefix
-#            path: "/_app"
-#            backend:
-#              service:
-#                name: frontend
-#                port:
-#                  number: 80
-          - pathType: Prefix
-            path: "/"
+
+          # Frontend (everything else)
+          - path: /
+            pathType: Prefix
             backend:
               service:
                 name: frontend
                 port:
                   number: 80
+
