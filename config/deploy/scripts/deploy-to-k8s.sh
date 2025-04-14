@@ -123,7 +123,7 @@ for dep in "${SERVICES_ARRAY[@]}"; do
   for attempt in $(seq 1 $MAX_ATTEMPTS); do
     echo "Attempt $attempt/$MAX_ATTEMPTS for deployment: $dep"
     
-    if kubectl rollout status "deployment/${dep}" --namespace="${K8S_NAMESPACE}" --timeout="${TIMEOUT_PER_ATTEMPT}" &>/dev/null; then
+    if kubectl rollout status "deployment/${dep}" --namespace="${K8S_NAMESPACE}" --timeout="${TIMEOUT_PER_ATTEMPT}"; then
       echo "Deployment ${dep} successfully rolled out on attempt $attempt."
       success=true
       break
