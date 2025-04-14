@@ -6,30 +6,17 @@ RUN go mod download
 COPY . .
 #RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 RUN GOOS=linux go build -a -installsuffix cgo -o main .
-# Build the jobctl CLI tool from the './jobs' directory (consistent with Dockerfile.dev)
-# Ensure the source directory exists and build the binary.
-# Output to /app/jobctl_bin to avoid conflicts. Fail build if source dir doesn't exist or build fails.
-RUN if [ ! -d "jobs" ]; then \
-      echo "Error: Source directory jobs not found." >&2; \
-      exit 1; \
-    fi && \
-    echo "Building jobctl from jobs..." && \
-    cd jobs && \
-    GOOS=linux go build -a -installsuffix cgo -o /app/jobctl_bin . && \
-    echo "jobctl build successful." && \
-    # Go back to the previous directory in case subsequent RUN commands expect to be in /app
-    cd ..
+# Build the jobctl CLI tool - simplified to match dev approach
+RUN go build -o /app/jobctl ./jobs
 
 FROM alpine:latest
 RUN apk add --no-cache bash
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 WORKDIR /app
 COPY --from=builder /app/main /app/main
-# Copy the compiled jobctl binary from the distinct builder path
-COPY --from=builder /app/jobctl_bin /usr/local/bin/jobctl
-# Ensure the copied binary is executable
+COPY --from=builder /app/jobctl /usr/local/bin/jobctl
 RUN chmod +x /usr/local/bin/jobctl
 EXPOSE 5058
-# Environment variables will be provided by Kubernetes
 ENV IN_CONTAINER=true
 ENTRYPOINT ["/app/main"]
+RUN chmod +x /usr/local/bin/jobctl
