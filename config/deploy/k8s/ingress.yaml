@@ -1,143 +1,3 @@
-## ConfigMap for Nginx Controller
-#apiVersion: v1
-#kind: ConfigMap
-#metadata:
-#  name: ingress-nginx-controller
-#data:
-#  use-forwarded-headers: "true"
-#  compute-full-forwarded-for: "true"
-#  enable-real-ip: "true"
-#  proxy-real-ip-cidr: "0.0.0.0/0"
-#  # The actual nginx.conf is now stored in a separate file
-#  # and mounted via the Nginx Dockerfile
-#---
-## Nginx Deployment
-#apiVersion: apps/v1
-#kind: Deployment
-#metadata:
-#  name: nginx
-#  labels:
-#    app: nginx
-#spec:
-#  replicas: 1
-#  selector:
-#    matchLabels:
-#      app: nginx
-#  template:
-#    metadata:
-#      labels:
-#        app: nginx
-#    spec:
-#      containers:
-#        - name: nginx
-#          image: ${DOCKER_USERNAME}/nginx:${DOCKER_TAG}
-#          ports:
-#            - containerPort: 80
-#          resources:
-#            limits:
-#              cpu: "0.5"
-#              memory: "512Mi"
-#            requests:
-#              cpu: "0.2"
-#              memory: "256Mi"
-#---
-## Nginx Service
-#apiVersion: v1
-#kind: Service
-#metadata:
-#  name: nginx
-#spec:
-#  selector:
-#    app: nginx
-#  ports:
-#    - port: 80
-#      targetPort: 80
-#  type: ClusterIP
-#---
-## RBAC Configuration for Nginx Ingress Controller
-#apiVersion: rbac.authorization.k8s.io/v1
-#kind: ClusterRole
-#metadata:
-#  name: ingress-nginx-ingress-nginx
-#rules:
-#  - apiGroups:
-#      - ""
-#    resources:
-#      - configmaps
-#      - endpoints
-#      - nodes
-#      - pods
-#      - secrets
-#      - services
-#    verbs:
-#      - list
-#      - watch
-#      - get
-#      - create
-#      - update
-#      - patch
-#  - apiGroups:
-#      - ""
-#    resources:
-#      - nodes
-#    verbs:
-#      - get
-#  - apiGroups:
-#      - ""
-#    resources:
-#      - services
-#    verbs:
-#      - get
-#      - list
-#      - watch
-#  - apiGroups:
-#      - "extensions"
-#      - "networking.k8s.io"
-#    resources:
-#      - ingresses
-#      - ingressclasses
-#    verbs:
-#      - get
-#      - list
-#      - watch
-#  - apiGroups:
-#      - ""
-#    resources:
-#      - events
-#    verbs:
-#      - create
-#      - patch
-#  - apiGroups:
-#      - "extensions"
-#      - "networking.k8s.io"
-#    resources:
-#      - ingresses/status
-#    verbs:
-#      - update
-#  - apiGroups:
-#      - "networking.k8s.io"
-#    resources:
-#      - ingressclasses
-#    verbs:
-#      - get
-#      - list
-#      - watch
-#---
-#apiVersion: rbac.authorization.k8s.io/v1
-#kind: ClusterRoleBinding
-#metadata:
-#  name: ingress-nginx-ingress-nginx
-#roleRef:
-#  apiGroup: rbac.authorization.k8s.io
-#  kind: ClusterRole
-#  name: ingress-nginx-ingress-nginx
-#subjects:
-#  - kind: ServiceAccount
-#    name: ingress-nginx
-#    namespace: ingress-nginx
-
-# Ingress Configuration
----
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -149,8 +9,9 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/use-regex: "true"
+    # nginx.ingress.kubernetes.io/use-regex: "true" # Not needed for pathType: Prefix
     nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    nginx.ingress.kubernetes.io/enable-websocket: "true"
 spec:
   ingressClassName: nginx
   rules:
@@ -178,13 +39,13 @@ spec:
                 name: backend
                 port:
                   number: 5058
-          - pathType: Prefix
-            path: "/backend"
-            backend:
-              service:
-                name: backend
-                port:
-                  number: 5058
+#          - pathType: Prefix
+#            path: "/backend"
+#            backend:
+#              service:
+#                name: backend
+#                port:
+#                  number: 5058
           - pathType: Prefix
             path: "/ws"
             backend:
@@ -192,27 +53,27 @@ spec:
                 name: backend
                 port:
                   number: 5058
+#          - pathType: Prefix
+#            path: "/health"
+#            backend:
+#              service:
+#                name: backend
+#                port:
+#                  number: 5058
           - pathType: Prefix
-            path: "/health"
+            path: "/queue"
             backend:
               service:
                 name: backend
                 port:
                   number: 5058
-          - pathType: Prefix
-            path: "/backend/health"
-            backend:
-              service:
-                name: backend
-                port:
-                  number: 5058
-          - pathType: Prefix
-            path: "/_app"
-            backend:
-              service:
-                name: frontend
-                port:
-                  number: 80
+#          - pathType: Prefix
+#            path: "/_app"
+#            backend:
+#              service:
+#                name: frontend
+#                port:
+#                  number: 80
           - pathType: Prefix
             path: "/"
             backend:
