@@ -1,22 +1,24 @@
-FROM timescale/timescaledb:latest-pg16
+FROM timescale/timescaledb-ha:pg17
+USER root
 # Password will be provided via environment variables
-RUN apk update && apk add --no-cache cronie && \
-    mkdir -p /var/log && touch /var/log/cron.log
+RUN apt-get update && apt-get install -y cron
 EXPOSE 5432
 COPY init/init.sql /docker-entrypoint-initdb.d/init.sql
 COPY init/securities.csv /docker-entrypoint-initdb.d/securities.csv
 COPY init/samples.csv /docker-entrypoint-initdb.d/samples.csv
+COPY config/dev.conf /etc/postgresql/postgresql.conf
 
 # Create migrations directory and copy migrations
 RUN mkdir -p /migrations
 COPY migrations/*.sql /migrations/
 
-COPY scripts/backup.sh /usr/local/bin/backup.sh
-COPY scripts/start.sh /usr/local/bin/start.sh
-COPY scripts/migrate.sh /usr/local/bin/migrate.sh
-COPY config/prod.conf /etc/postgresql/postgresql.conf
-
-RUN chmod +x /usr/local/bin/backup.sh /usr/local/bin/start.sh /usr/local/bin/migrate.sh
-#midnight every day
-RUN (echo "0 0 * * * /usr/local/bin/backup.sh >> /var/log/cron.log 2>&1") | crontab -
-ENTRYPOINT ["/usr/local/bin/start.sh"]
+# Copy the migrations script
+COPY scripts/migrate.sh /app/migrate.sh
+RUN chmod +x /app/migrate.sh
+# Copy migration runner for development
+COPY scripts/migrate.sh /app/migrate.sh
+RUN chmod +x /app/migrate.sh
+# Create a startup script that runs both PostgreSQL and the watcher
+COPY scripts/start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+CMD ["/app/start.sh"]

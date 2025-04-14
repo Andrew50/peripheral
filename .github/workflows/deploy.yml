@@ -23,6 +23,10 @@ on:
         description: 'Google OAuth redirect URL'
         required: true
         type: string
+      ingress_host:
+        description: 'Site Domain'
+        required: true
+        type: string
     secrets:
       DOCKER_USERNAME:
         required: true
@@ -42,18 +46,15 @@ on:
         required: true
       JWT_SECRET:
         required: true
-      GITHUB_TOKEN:
+      CLOUDFLARE_TUNNEL_TOKEN:
         required: true
+
 
 permissions:
   contents: read
   packages: write
   id-token: write
 
-# This concurrency ensures we don't have multiple overlapping deployments
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
 
 jobs:
   deploy:
@@ -70,10 +71,12 @@ jobs:
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
       GOOGLE_REDIRECT_URL: ${{ inputs.google_redirect_url }}
       K8S_CONTEXT: ${{ inputs.k8s_context }}
       K8S_NAMESPACE: ${{ inputs.k8s_namespace }}
       ENVIRONMENT: ${{ inputs.environment }}
+      INGRESS_HOST: ${{ inputs.ingress_host }}
 
     steps:
       - name: Debug Event Information
@@ -101,7 +104,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           ref: ${{ env.CHECKOUT_REF }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ github.token }}
           fetch-depth: 1
           lfs: false
       
@@ -124,40 +127,44 @@ jobs:
           echo "GOOGLE_CLIENT_ID: [$(if [ -n "$GOOGLE_CLIENT_ID" ]; then echo SET; else echo MISSING; fi)]"
           echo "GOOGLE_CLIENT_SECRET: [$(if [ -n "$GOOGLE_CLIENT_SECRET" ]; then echo SET; else echo MISSING; fi)]"
           echo "JWT_SECRET: [$(if [ -n "$JWT_SECRET" ]; then echo SET; else echo MISSING; fi)]"
-          echo "All secrets must show as 'SET' above for successful deployment."
+          echo "CLOUDFLARE_TUNNEL_TOKEN: [$(if [ -n "$CLOUDFLARE_TUNNEL_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
+          echo "GOOGLE_REDIRECT_URL: [$(if [ -n "$GOOGLE_REDIRECT_URL" ]; then echo SET; else echo MISSING; fi)]"
+          echo "All secrets and inputs must show as 'SET' above for successful deployment."
 
-      - name: Setup deployment
+      - name: Setup For Deployment
         run: |
-          chmod +x .github/scripts/deployment/*.sh
-          # Load environment-specific config if needed
-          .github/scripts/deployment/load-env-config.sh "${ENVIRONMENT}"
-
-          # Sanitize and store DOCKER_TAG
+          chmod +x config/deploy/scripts/*.sh
           DOCKER_TAG=$(echo "${TARGET_BRANCH}" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_.-]/-/g')
           echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
           echo "Using Docker tag: $DOCKER_TAG"
+          SERVICES="backend frontend db cache worker tf"
+          echo "SERVICES=${SERVICES}" >> $GITHUB_ENV
+          echo "Using services: ${SERVICES}"
+          MINIKUBE_PROFILE="minikube-${ENVIRONMENT}"
+          echo "MINIKUBE_PROFILE=${MINIKUBE_PROFILE}" >> $GITHUB_ENV
+          echo "Using Minikube profile: ${MINIKUBE_PROFILE}"
+          CONFIG_DIR="config/deploy/k8s"
+          echo "CONFIG_DIR=${CONFIG_DIR}" >> $GITHUB_ENV
+          echo "Using Config Directory: ${CONFIG_DIR}"
+          TMP_DIR="config/deploy/tmp"
+          echo "TMP_DIR=${TMP_DIR}" >> $GITHUB_ENV
+          echo "Using Temp Directory: ${TMP_DIR}"
 
       - name: Build Docker Images
-        run: .github/scripts/deployment/build-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}"
+        run: config/deploy/scripts/build-images.sh
 
       - name: Login & Push Docker Images
-        run: .github/scripts/deployment/push-images.sh "${DOCKER_TAG}" "${TARGET_BRANCH}"
+        run: config/deploy/scripts/push-images.sh
 
       - name: Setup Kubernetes Context
-        run: .github/scripts/deployment/setup-k8s.sh "${K8S_CONTEXT}" "${K8S_NAMESPACE}"
-
-      - name: Verify PersistentVolumeClaims
-        run: .github/scripts/deployment/verify-pvcs.sh "${ENVIRONMENT}"
+        run: config/deploy/scripts/setup-cluster.sh
 
       - name: Update Kubernetes Secrets
-        run: .github/scripts/deployment/update-secrets.sh
-
-      - name: Run Database Migrations
-        run: .github/scripts/deployment/run-migrations.sh
+        run: config/deploy/scripts/setup-configs.sh
 
       - name: Deploy to Kubernetes
-        run: .github/scripts/deployment/deploy-to-k8s.sh "${DOCKER_TAG}" "${ENVIRONMENT}"
+        run: config/deploy/scripts/deploy-to-k8s.sh
 
       - name: Cleanup
         if: always()
-        run: .github/scripts/deployment/cleanup.sh
+        run: config/deploy/scripts/cleanup.sh

@@ -333,3 +333,12 @@ class Conn:
             raise Exception("Connection check failed")
         print("Health check passed - all connections are healthy", flush=True)
         return True
+
+if __name__ == "__main__":
+    conn_instance = Conn()
+    if conn_instance.check_connection():
+        print("Connection check successful.", flush=True)
+        sys.exit(0)
+    else:
+        print("Connection check failed after timeout.", flush=True)
+        sys.exit(1) # Exit with non-zero status code to indicate failure
