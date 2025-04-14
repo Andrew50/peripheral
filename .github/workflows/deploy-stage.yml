@@ -28,6 +28,7 @@ jobs:
       k8s_context: 'stage-cluster'
       k8s_namespace: 'stage'
       google_redirect_url: 'https://stage.atlantis.trading/auth/google/callback'
+      ingress_host: 'https://stage.atlantis.trading'
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
