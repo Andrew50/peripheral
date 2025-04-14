@@ -17,9 +17,8 @@ spec:
           image: ${DOCKER_USERNAME}/worker:${DOCKER_TAG}
           imagePullPolicy: Always
           command:
-            - /bin/sh
-            - -c
-            - cp /conn-patch/conn.py /app/conn.py && python3 /app/worker.py
+            - python3
+            - /app/worker.py
           env:
             - name: REDIS_HOST
               value: cache
@@ -96,18 +95,61 @@ spec:
             - /bin/sh
             - -c
             - |
-              echo "Waiting for database and Redis to be ready..."; if [ -f "/app/db_check.py" ]; then
+              echo "Starting dependency checks (DB & Redis)..."
+              # Check if the dedicated check script exists
+              if [ -f "/app/db_check.py" ]; then
+                echo "Found /app/db_check.py, executing it..."
                 python3 /app/db_check.py
+                check_result=$?
+                if [ $check_result -eq 0 ]; then
+                  echo "db_check.py completed successfully."
+                else
+                  echo "db_check.py failed with exit code $check_result."
+                  exit $check_result
+                fi
               else
-                echo "db_check.py not found, using inline script";
-                until python3 -c "import psycopg2, os; psycopg2.connect(host=os.environ.get('DB_HOST'), port=int(os.environ.get('DB_PORT')), user=os.environ.get('DB_USER'), password=os.environ.get('DB_PASSWORD'))"; do
-                  echo "Database not ready yet, retrying in 5 seconds...";
-                  sleep 5;
-                done;
-                echo "Database is ready.";
-                echo "Checking Redis connection...";
-                python3 -c "import redis, os; host=os.environ.get('REDIS_HOST'); port=int(os.environ.get('REDIS_PORT')); password=os.environ.get('REDIS_PASSWORD'); r = redis.Redis(host=host, port=port, password=password); r.ping(); print('Redis connection successful.');"
+                # Fallback to inline checks if the script is not present
+                echo "/app/db_check.py not found. Performing inline checks..."
+
+                # Check Database (PostgreSQL)
+                echo "Waiting for Database (Host: $DB_HOST, Port: $DB_PORT)..."
+                until python3 -c "import sys, os, psycopg2; \
+                  print(f'Attempting DB connection to {os.environ.get(\"DB_HOST\")}:{os.environ.get(\"DB_PORT\")}...'); \
+                  sys.stdout.flush(); \
+                  conn = psycopg2.connect( \
+                    host=os.environ.get('DB_HOST'), \
+                    port=int(os.environ.get('DB_PORT')), \
+                    user=os.environ.get('DB_USER'), \
+                    password=os.environ.get('DB_PASSWORD'), \
+                    connect_timeout=5 \
+                  ); \
+                  conn.close(); \
+                  print('DB connection successful.')"; do
+                  echo "Database not ready yet, retrying in 5 seconds..."
+                  sleep 5
+                done
+                echo "Database is ready."
+
+                # Check Redis
+                echo "Waiting for Redis (Host: $REDIS_HOST, Port: $REDIS_PORT)..."
+                until python3 -c "import sys, os, redis; \
+                  print(f'Attempting Redis connection to {os.environ.get(\"REDIS_HOST\")}:{os.environ.get(\"REDIS_PORT\")}...'); \
+                  sys.stdout.flush(); \
+                  r = redis.Redis( \
+                    host=os.environ.get('REDIS_HOST'), \
+                    port=int(os.environ.get('REDIS_PORT')), \
+                    password=os.environ.get('REDIS_PASSWORD'), \
+                    socket_connect_timeout=5, \
+                    socket_timeout=5 \
+                  ); \
+                  r.ping(); \
+                  print('Redis connection successful.')"; do
+                  echo "Redis not ready yet, retrying in 5 seconds..."
+                  sleep 5
+                done
+                echo "Redis is ready."
               fi
+              echo "Dependency checks complete."
           env:
             - name: REDIS_HOST
               value: cache
