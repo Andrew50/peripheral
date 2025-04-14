@@ -63,8 +63,7 @@ spec:
             exec:
               command:
                 - python3
-                - /app/health_check.py
-                - --check-once
+                - /app/conn.py
             failureThreshold: 5
             initialDelaySeconds: 60
             periodSeconds: 30
@@ -73,12 +72,10 @@ spec:
             exec:
               command:
                 - python3
-                - /app/health_check.py
-                - --check-once
+                - /app/conn.py
             failureThreshold: 3
             initialDelaySeconds: 30
             periodSeconds: 20
-            timeoutSeconds: 10
 
           volumeMounts:
             - name: conn-patch
