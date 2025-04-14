@@ -200,12 +200,6 @@
 	on:touchstart={handleClick}
 >
 	<div class="content">
-		<div class="ticker-container">
-			<div class="ticker-display">
-				<span class="ticker">{$instance.ticker || '--'}</span>
-			</div>
-		</div>
-
 		{#if ($instance?.logo || currentDetails?.logo) && !logoLoadError}
 			<div class="logo-container">
 				<img
@@ -222,6 +216,12 @@
 				</div>
 			</div>
 		{/if}
+		<div class="ticker-container">
+			<div class="ticker-display">
+				<span class="ticker">{$instance.ticker || '--'}</span>
+			</div>
+		</div>
+
 
 		<div class="stream-cells">
 			<div class="stream-cell-container">
@@ -424,6 +424,9 @@
 		display: flex;
 		justify-content: center;
 		margin-bottom: 15px;
+		background: white;
+		padding: 8px;
+		border-radius: 8px;
 	}
 
 	.stream-cells {

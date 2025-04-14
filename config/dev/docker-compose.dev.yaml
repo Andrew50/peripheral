@@ -16,6 +16,12 @@ services:
       - DB_HOST=db
       - POSTGRES_DB=postgres
       - GEMINI_FREE_KEYS=${GEMINI_FREE_KEYS}
+      - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REFRESH_TOKEN=${GOOGLE_REFRESH_TOKEN}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
     platform: ${PLATFORM:-linux/amd64}
   db:
     build:

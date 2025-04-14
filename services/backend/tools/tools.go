@@ -41,13 +41,13 @@ func initTools() {
 		"getQuery": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getQuery",
-				Description: "Makes a gemini query to get a response. You can use this to make recursive queries, based on the results of functions that you initially call.",
+				Description: "n/a",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"query": {
 							Type:        genai.TypeString,
-							Description: "The query input to send to gemini",
+							Description: "n/a",
 						},
 					},
 					Required: []string{"query"},
@@ -121,16 +121,16 @@ func initTools() {
 		"getCurrentTicker": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getCurrentTicker",
-				Description: "Retrieves the current ticker information for the user's active session",
+				Description: "Gets the current ticker fo a securityID",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
+						"securityId": {
+							Type:        genai.TypeInteger,
+							Description: "The securityID of the security to get the current ticker for",
 						},
 					},
-					Required: []string{},
+					Required: []string{"securityId"},
 				},
 			},
 			Function: GetCurrentTicker,
@@ -138,7 +138,7 @@ func initTools() {
 		"getTickerMenuDetails": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getTickerMenuDetails",
-				Description: "Retrieves detailed information for the ticker menu display",
+				Description: "Retrieves ticker menu information for a security; ticker, name, market, primary exchange, etc",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -525,7 +525,7 @@ func initTools() {
 		"getWatchlistItems": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getWatchlistItems",
-				Description: "Retrieves all securities in a specific watchlist",
+				Description: "Retrieves the securityID's of the securities in a specific watchlist",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -1070,22 +1070,48 @@ func initTools() {
 			},
 			Function: GetSecurityClassifications,
 		},
+		// chart events / SEC filings
 		"getLatestEdgarFilings": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getLatestEdgarFilings",
-				Description: "Retrieves the latest SEC EDGAR filings for a security",
+				Description: "Retrieves the latest SEC EDGAR filings across all securities",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
+						"dummy": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter; no parameter needed.",
+						},
+					},
+					Required: []string{},
+				},
+			},
+			Function: GetLatestEdgarFilings,
+		},
+		"getStockEdgarFilings": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "getStockEdgarFilings",
+				Description: "Retrieves all SEC filings for a security within a time range. Returns a list of the filing type and URLs to the filings.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"start": {
+							Type:        genai.TypeInteger,
+							Description: "The start timestamp in milliseconds",
+						},
+						"end": {
+							Type:        genai.TypeInteger,
+							Description: "The end timestamp in milliseconds",
+						},
 						"securityId": {
 							Type:        genai.TypeInteger,
 							Description: "The ID of the security to get filings for",
 						},
 					},
-					Required: []string{"securityId"},
+					Required: []string{"start", "end", "securityId"},
 				},
 			},
-			Function: GetLatestEdgarFilings,
+			Function: GetStockEdgarFilings,
 		},
 		"getChartEvents": {
 			FunctionDeclaration: genai.FunctionDeclaration{
@@ -1108,7 +1134,7 @@ func initTools() {
 						},
 						"includeSECFilings": {
 							Type:        genai.TypeBoolean,
-							Description: "Whether to include SEC filings in the results",
+							Description: "Whether to include SEC filings in the result",
 						},
 					},
 					Required: []string{"securityId", "from", "to"},
@@ -1116,6 +1142,49 @@ func initTools() {
 			},
 			Function: GetChartEvents,
 		},
+		"getEarningsText": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "getEarningsText",
+				Description: "Retrieves the text content of the latest 10-K or 10-Q SEC filing for a security",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"securityId": {
+							Type:        genai.TypeInteger,
+							Description: "The ID of the security to get the filing for",
+						},
+						"quarter": {
+							Type:        genai.TypeString,
+							Description: "Optional: The specific quarter to retrieve (Q1, Q2, Q3, Q4). If not specified, returns the latest filing.",
+						},
+						"year": {
+							Type:        genai.TypeInteger,
+							Description: "Optional: The specific year to retrieve the filing from. Used in conjunction with quarter parameter.",
+						},
+					},
+					Required: []string{"securityId"},
+				},
+			},
+			Function: GetEarningsText,
+		},
+		"getFilingText": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "getFilingText",
+				Description: "Retrieves the text content of a SEC filing",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"url": {
+							Type:        genai.TypeString,
+							Description: "The URL of the SEC filing to retrieve",
+						},
+					},
+					Required: []string{"url"},
+				},
+			},
+			Function: GetFilingText,
+		},
+		// Account / User Trades
 		"grab_user_trades": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "grab_user_trades",
@@ -1225,6 +1294,45 @@ func initTools() {
 			},
 			Function: HandleTradeUpload,
 		},
+		"get_daily_trade_stats": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "get_daily_trade_stats",
+				Description: "Retrieves daily trading statistics for the current user",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"year": {
+							Type:        genai.TypeInteger,
+							Description: "The year to get daily stats for",
+						},
+						"month": {
+							Type:        genai.TypeInteger,
+							Description: "The month to get daily stats for",
+						},
+					},
+					Required: []string{"year", "month"},
+				},
+			},
+			Function: GetDailyTradeStats,
+		},
+		"run_backtest": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "run_backtest",
+				Description: "Runs a backtest based on a natural language query about stock conditions, patterns, and indicators",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"query": {
+							Type:        genai.TypeString,
+							Description: "Natural language query describing the backtest criteria (e.g., 'Find stocks where the price crossed above the 50-day moving average')",
+						},
+					},
+					Required: []string{"query"},
+				},
+			},
+			Function: RunBacktest,
+		},
+		// Notes
 		"get_notes": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "get_notes",
@@ -1475,55 +1583,75 @@ func initTools() {
 			},
 			Function: GetUserConversation,
 		},
-		"getSecurityPriceChartV2": {
+		"clearConversationHistory": {
 			FunctionDeclaration: genai.FunctionDeclaration{
-				Name:        "getSecurityPriceChartV2",
-				Description: "Retrieves price chart data for a ticker symbol with date options",
+				Name:        "clearConversationHistory",
+				Description: "Deletes the entire conversation history for the current user.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"ticker": {
+						"dummy": {
 							Type:        genai.TypeString,
-							Description: "The ticker symbol to get data for",
-						},
-						"start_date": {
-							Type:        genai.TypeString,
-							Description: "The start date in YYYY-MM-DD format",
-						},
-						"end_date": {
-							Type:        genai.TypeString,
-							Description: "The end date in YYYY-MM-DD format",
+							Description: "Dummy parameter, no input needed.",
 						},
 					},
-					Required: []string{"ticker"},
+					Required: []string{},
 				},
 			},
-			Function: GetSecurityPriceChartV2,
+			Function: ClearConversationHistory,
 		},
-		"deleteAccount": {
+		"getTickerDailySnapshot": {
 			FunctionDeclaration: genai.FunctionDeclaration{
-				Name:        "deleteAccount",
-				Description: "Delete a user account and all associated data",
+				Name:        "getTickerDailySnapshot",
+				Description: "Retrieves the most recent daily data for a ticker symbol, today's change (absolute and percentage), volume, vwap, OHLC, last price, last bid/ask, etc.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"confirmation": {
-							Type:        genai.TypeString,
-							Description: "Confirmation text that must match 'DELETE' to proceed with account deletion",
+						"securityId": {
+							Type:        genai.TypeInteger,
+							Description: "The securityID of the ticker to get daily snapshot data for",
 						},
 					},
-					Required: []string{"confirmation"},
+					Required: []string{"securityId"},
 				},
 			},
-			Function: DeleteAccount,
+			Function: GetTickerDailySnapshot,
+		},
+		"getAllTickerSnapshots": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "getAllTickerSnapshots",
+				Description: "Retrieves the most recent daily data for all stocks, today's change (absolute and percentage), volume, vwap, OHLC, last price, last bid/ask, etc",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"na": {
+							Type:        genai.TypeString,
+							Description: "No params needed",
+						},
+					},
+					Required: []string{},
+				},
+			},
+			Function: GetAllTickerSnapshots,
+		},
+		"getSuggestedQueries": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "getSuggestedQueries",
+				Description: "DO NOT use this function. Internal function only.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"a": {
+							Type:        genai.TypeString,
+							Description: "Dummy parameter to satisfy requirements",
+						},
+					},
+					Required: []string{},
+				},
+			},
+			Function: GetSuggestedQueries,
 		},
 	}
-}
-
-// GetSecurityPriceChartV2 retrieves price chart data for a ticker symbol with date options
-func GetSecurityPriceChartV2(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
-	// This is a stub implementation - should be replaced with actual implementation
-	return nil, nil
 }
 
 // DeleteAccount deletes a user account and all associated data

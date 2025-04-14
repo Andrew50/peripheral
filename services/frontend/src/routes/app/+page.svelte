@@ -43,9 +43,11 @@
 		streamInfo,
 		formatTimestamp,
 		dispatchMenuChange,
-		menuWidth
+		menuWidth,
+		settings
 	} from '$lib/core/stores';
 	import { writable, type Writable } from 'svelte/store';
+	import { colorSchemes, applyColorScheme } from '$lib/core/styles/colorSchemes';
 
 	// Import Instance from types
 	import type { Instance } from '$lib/core/types';
@@ -117,6 +119,14 @@
 	let screensaverActive = false;
 	let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
 	const INACTIVITY_TIMEOUT = 5 * 1000; // 5 seconds in milliseconds
+
+	// Apply color scheme reactively based on the store
+	$: if ($settings.colorScheme && browser) {
+		const scheme = colorSchemes[$settings.colorScheme];
+		if (scheme) {
+			applyColorScheme(scheme);
+		}
+	}
 
 	// Add a reactive statement to handle window events
 	$: if (draggingWindowId !== null) {
@@ -1168,6 +1178,7 @@
 	}
 
 	.menu-icon {
+		filter: brightness(0) invert(1);
 		width: 24px;
 		height: 24px;
 		object-fit: contain;
