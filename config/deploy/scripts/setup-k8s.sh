@@ -4,18 +4,21 @@ set -Eeuo pipefail
 # --- Environment Variable Sourcing (with defaults) ---
 # K8S_CONTEXT: The Kubernetes context to use (default: minikube)
 # K8S_NAMESPACE: The namespace to use (default: default)
-# PROFILE_NAME: The minikube profile name (default: minikube)
+# MINIKUBE_PROFILE: The minikube profile name (default: minikube)
 
-K8S_CONTEXT="${K8S_CONTEXT:-minikube}"
-K8S_NAMESPACE="${K8S_NAMESPACE:-default}"
-PROFILE_NAME="${PROFILE_NAME:-minikube}"
+#K8S_CONTEXT="${K8S_CONTEXT:-minikube}"
+#K8S_NAMESPACE="${K8S_NAMESPACE:-default}"
+#MINIKUBE_PROFILE="${MINIKUBE_PROFILE:-minikube}"
 
-echo "Checking minikube status for profile: $PROFILE_NAME..."
-if ! minikube status -p "$PROFILE_NAME" &> /dev/null; then
-    echo "Minikube profile '$PROFILE_NAME' is not running. Starting with 16 CPUs and 64GB RAM..."
+: "${K8S_CONTEXT:?Missing K8S_CONTEXT}"
+: "${K8S_NAMESPACE:?Missing K8S_NAMESPACE}"
+: "${MINIKUBE_PROFILE:?Missing MINIKUBE_PROFILE}"
+echo "Checking minikube status for profile: $MINIKUBE_PROFILE..."
+if ! minikube status -p "$MINIKUBE_PROFILE" &> /dev/null; then
+    echo "Minikube profile '$MINIKUBE_PROFILE' is not running. Starting with 16 CPUs and 64GB RAM..."
     
 
-    if [[ "$PROFILE_NAME" != "minikube" ]]; then #less resources for stage
+    if [[ "$MINIKUBE_PROFILE" != "minikube" ]]; then #less resources for stage
         CPU_COUNT=8
         MEM_SIZE=32768  # 32GB
     else
@@ -23,34 +26,34 @@ if ! minikube status -p "$PROFILE_NAME" &> /dev/null; then
         MEM_SIZE=65536  # 64GB
     fi
     
-    minikube start -p "$PROFILE_NAME" --cpus="$CPU_COUNT" --memory="$MEM_SIZE" --v=1
+    minikube start -p "$MINIKUBE_PROFILE" --cpus="$CPU_COUNT" --memory="$MEM_SIZE" --v=1
     
-    if minikube status -p "$PROFILE_NAME" &> /dev/null; then
-        echo "Minikube profile '$PROFILE_NAME' started successfully with CPU=$CPU_COUNT, Memory=${MEM_SIZE}MB."
+    if minikube status -p "$MINIKUBE_PROFILE" &> /dev/null; then
+        echo "Minikube profile '$MINIKUBE_PROFILE' started successfully with CPU=$CPU_COUNT, Memory=${MEM_SIZE}MB."
     else
-        echo "ERROR: Failed to start minikube profile '$PROFILE_NAME'. Please check logs above."
+        echo "ERROR: Failed to start minikube profile '$MINIKUBE_PROFILE'. Please check logs above."
         exit 1
     fi
 else
-    echo "Minikube profile '$PROFILE_NAME' is already running."
-    CURRENT_CPU=$(minikube config view -p "$PROFILE_NAME" | grep -i cpus | awk '{print $3}' 2>/dev/null || echo "unknown")
-    CURRENT_MEM=$(minikube config view -p "$PROFILE_NAME" | grep -i memory | awk '{print $3}' 2>/dev/null || echo "unknown")
+    echo "Minikube profile '$MINIKUBE_PROFILE' is already running."
+    CURRENT_CPU=$(minikube config view -p "$MINIKUBE_PROFILE" | grep -i cpus | awk '{print $3}' 2>/dev/null || echo "unknown")
+    CURRENT_MEM=$(minikube config view -p "$MINIKUBE_PROFILE" | grep -i memory | awk '{print $3}' 2>/dev/null || echo "unknown")
     
-    echo "Current settings for profile '$PROFILE_NAME': CPUs=$CURRENT_CPU, Memory=$CURRENT_MEM"
+    echo "Current settings for profile '$MINIKUBE_PROFILE': CPUs=$CURRENT_CPU, Memory=$CURRENT_MEM"
 fi
 
-echo "Setting kubectl to use minikube profile '$PROFILE_NAME' context..."
-minikube update-context -p "$PROFILE_NAME"
+echo "Setting kubectl to use minikube profile '$MINIKUBE_PROFILE' context..."
+minikube update-context -p "$MINIKUBE_PROFILE"
 
-echo "Enabling ingress addon for profile '$PROFILE_NAME'..."
-minikube addons enable ingress -p "$PROFILE_NAME"
+echo "Enabling ingress addon for profile '$MINIKUBE_PROFILE'..."
+minikube addons enable ingress -p "$MINIKUBE_PROFILE"
 echo "Ingress addon enabled."
 
-EXPECTED_CONTEXT="$PROFILE_NAME"
+EXPECTED_CONTEXT="$MINIKUBE_PROFILE"
 
 # Check if we're using the minikube profile or a specific context
 if [[ "$K8S_CONTEXT" == "$EXPECTED_CONTEXT" || -z "$K8S_CONTEXT" ]]; then
-  echo "Using minikube profile '$PROFILE_NAME' as the Kubernetes context"
+  echo "Using minikube profile '$MINIKUBE_PROFILE' as the Kubernetes context"
   kubectl config use-context "$EXPECTED_CONTEXT"
   CURRENT_CONTEXT="$EXPECTED_CONTEXT"
 else
