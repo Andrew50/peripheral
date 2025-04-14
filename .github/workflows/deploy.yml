@@ -143,12 +143,12 @@ jobs:
           MINIKUBE_PROFILE="minikube-${ENVIRONMENT}"
           echo "MINIKUBE_PROFILE=${MINIKUBE_PROFILE}" >> $GITHUB_ENV
           echo "Using Minikube profile: ${MINIKUBE_PROFILE}"
-          SOURCE_DIR="config/deploy/k8s"
+          CONFIG_DIR="config/deploy/k8s"
           echo "CONFIG_DIR=${CONFIG_DIR}" >> $GITHUB_ENV
           echo "Using Config Directory: ${CONFIG_DIR}"
           TMP_DIR="config/deploy/tmp"
           echo "TMP_DIR=${TMP_DIR}" >> $GITHUB_ENV
-          echo "Using Config Directory: ${TMP_DIR}"
+          echo "Using Temp Directory: ${TMP_DIR}"
 
       - name: Build Docker Images
         run: |
