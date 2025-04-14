@@ -10,7 +10,7 @@ set -Eeuo pipefail
 # Convert the space-separated string of services into a bash array
 read -r -a SERVICES_ARRAY <<< "$SERVICES"
 
-SOURCE_DIR="config/prod"
+SOURCE_DIR="config/deploy/k8s"
 TMP_DIR="config/deploy/tmp"
 
 echo "Deploying to Kubernetes with tag: $DOCKER_TAG, namespace: $K8S_NAMESPACE"
