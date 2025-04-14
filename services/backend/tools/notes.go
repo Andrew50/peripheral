@@ -1,3 +1,4 @@
+// 'dont use this file'
 package tools
 
 import (
@@ -137,7 +138,7 @@ func SearchNotes(conn *utils.Conn, userID int, rawArgs json.RawMessage) (interfa
 		return nil, fmt.Errorf("search query is required")
 	}
 
-	// Build the query with ranking
+	// Build the query with ranking and ensure userId filtering
 	query := `
 		SELECT 
 			noteId, userId, title, content, category, tags, created_at, updated_at, is_pinned, is_archived,
@@ -145,71 +146,70 @@ func SearchNotes(conn *utils.Conn, userID int, rawArgs json.RawMessage) (interfa
 			ts_headline('english', title, plainto_tsquery('english', $2), 'StartSel=<mark>, StopSel=</mark>') AS title_highlight,
 			ts_headline('english', content, plainto_tsquery('english', $2), 'StartSel=<mark>, StopSel=</mark>, MaxFragments=3, MaxWords=50, MinWords=15') AS content_highlight
 		FROM notes
-		WHERE userId = $1 AND search_vector @@ plainto_tsquery('english', $2)
+		WHERE userId = $1 
+		AND search_vector @@ plainto_tsquery('english', $2)
 	`
 	params := []interface{}{userID, args.Query}
-	paramCount := 3
 
-	// Add archived filter if provided
+	// Add archived filter if specified
 	if args.IsArchived != nil {
-		query += fmt.Sprintf(" AND is_archived = $%d", paramCount)
+		query += " AND is_archived = $3"
 		params = append(params, *args.IsArchived)
-		paramCount++
 	}
 
-	// Order by rank
-	query += " ORDER BY rank DESC, is_pinned DESC, updated_at DESC"
+	// Add ranking order
+	query += " ORDER BY rank DESC, updated_at DESC"
 
-	// Execute the query
+	// Execute search query
 	rows, err := conn.DB.Query(context.Background(), query, params...)
 	if err != nil {
-		return nil, fmt.Errorf("error searching notes: %v", err)
+		return nil, fmt.Errorf("error executing search: %v", err)
 	}
 	defer rows.Close()
 
-	// Define a struct for search results with highlights
-	type SearchResult struct {
-		Note             Note    `json:"note"`
+	// Process results
+	var results []struct {
+		Note
 		Rank             float64 `json:"rank"`
 		TitleHighlight   string  `json:"titleHighlight"`
 		ContentHighlight string  `json:"contentHighlight"`
 	}
 
-	// Process the results
-	var results []SearchResult
 	for rows.Next() {
-		var note Note
-		var rank float64
-		var titleHighlight, contentHighlight string
-
+		var result struct {
+			Note
+			Rank             float64 `json:"rank"`
+			TitleHighlight   string  `json:"titleHighlight"`
+			ContentHighlight string  `json:"contentHighlight"`
+		}
 		if err := rows.Scan(
-			&note.NoteID,
-			&note.UserID,
-			&note.Title,
-			&note.Content,
-			&note.Category,
-			&note.Tags,
-			&note.CreatedAt,
-			&note.UpdatedAt,
-			&note.IsPinned,
-			&note.IsArchived,
-			&rank,
-			&titleHighlight,
-			&contentHighlight,
+			&result.NoteID,
+			&result.UserID,
+			&result.Title,
+			&result.Content,
+			&result.Category,
+			&result.Tags,
+			&result.CreatedAt,
+			&result.UpdatedAt,
+			&result.IsPinned,
+			&result.IsArchived,
+			&result.Rank,
+			&result.TitleHighlight,
+			&result.ContentHighlight,
 		); err != nil {
-			return nil, fmt.Errorf("error scanning search result row: %v", err)
+			return nil, fmt.Errorf("error scanning search result: %v", err)
 		}
 
-		results = append(results, SearchResult{
-			Note:             note,
-			Rank:             rank,
-			TitleHighlight:   titleHighlight,
-			ContentHighlight: contentHighlight,
-		})
+		// Double check that we only return notes belonging to the user
+		if result.UserID != userID {
+			continue
+		}
+
+		results = append(results, result)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating search result rows: %v", err)
+		return nil, fmt.Errorf("error iterating search results: %v", err)
 	}
 
 	return results, nil
