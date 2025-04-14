@@ -26,7 +26,7 @@ jobs:
       environment: 'prod'
       target_branch: ${{ github.event.inputs.branch || github.ref_name }}
       k8s_context: 'prod-cluster'
-      k8s_namespace: 'default'
+      k8s_namespace: 'prod'
       google_redirect_url: 'https://atlantis.trading/auth/google/callback'
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
