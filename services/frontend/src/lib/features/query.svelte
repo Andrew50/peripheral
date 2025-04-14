@@ -848,23 +848,30 @@
 	}
 
 	.suggested-query-btn {
-		padding: 0.4rem 0.8rem;
+		/* Match the ticker button styles */
 		background: var(--ui-bg-element-darker, #2a2a2a);
 		border: 1px solid var(--ui-border, #444);
-		border-radius: 1rem;
-		color: var(--accent-color, #3a8bf7);
-		font-size: 0.75rem;
+		color: var(--text-primary, #fff); /* Use primary text color */
+		padding: 0.4rem 1rem; /* Match padding */
+		border-radius: 0.25rem; /* Match border-radius */
+		font-size: 0.75rem; /* Match font-size */
+		font-weight: 500;
 		cursor: pointer;
-		transition: all 0.2s;
+		transition: all 0.2s ease;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		max-width: 100%;
+		line-height: 1; /* Ensure consistent height */
+		text-decoration: none; /* Remove default button underline */
+		display: inline-block; /* Ensure proper alignment */
 	}
 
 	.suggested-query-btn:hover {
-		background: rgba(58, 139, 247, 0.1);
-		border-color: var(--accent-color, #3a8bf7);
+		/* Match the ticker button hover styles */
+		background: var(--ui-bg-element, #333);
+		border-color: var(--ui-accent, #3a8bf7);
+		color: var(--text-primary, #fff);
 	}
 
 	.chat-input-wrapper {
@@ -1077,7 +1084,7 @@
 		background: var(--ui-bg-element-darker, #2a2a2a);
 		border: 1px solid var(--ui-border, #444);
 		color: var(--text-primary, #fff);
-		padding: 0.2rem 0.6rem;
+		padding: 0.4rem 1rem;
 		border-radius: 0.25rem;
 		font-size: 0.75rem;
 		font-weight: 500;
