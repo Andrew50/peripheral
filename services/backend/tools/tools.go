@@ -2,8 +2,11 @@ package tools
 
 import (
 	"backend/utils"
+	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
+	"time"
 
 	"google.golang.org/genai"
 )
@@ -84,11 +87,13 @@ func initTools() {
 		"getCurrentSecurityID": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getCurrentSecurityID",
+				Name:        "getCurrentSecurityID",
 				Description: "Retrieves the current security ID of a ticker symbol.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"ticker": {
+							Type:        genai.TypeString,
 							Type:        genai.TypeString,
 							Description: "The ticker symbol to search for, e.g. NVDA, AAPL, etc",
 						},
@@ -446,6 +451,26 @@ func initTools() {
 				},
 			},
 			Function: GetScreensavers,
+		},
+		"getInstancesByTickers": {
+			FunctionDeclaration: genai.FunctionDeclaration{
+				Name:        "getInstancesByTickers",
+				Description: "Retrieves security instances for a list of ticker symbols",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"tickers": {
+							Type:        genai.TypeArray,
+							Description: "Array of ticker symbols to retrieve",
+							Items: &genai.Schema{
+								Type: genai.TypeString,
+							},
+						},
+					},
+					Required: []string{"tickers"},
+				},
+			},
+			Function: GetInstancesByTickers,
 		},
 		//watchlist
 		"getWatchlists": {
@@ -1629,4 +1654,94 @@ func initTools() {
 			Function: GetSuggestedQueries,
 		},
 	}
+}
+
+// DeleteAccount deletes a user account and all associated data
+func DeleteAccount(conn *utils.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	fmt.Println("=== DELETE ACCOUNT ATTEMPT STARTED ===")
+
+	// Parse arguments to get confirmation
+	var args struct {
+		Confirmation string `json:"confirmation"`
+	}
+
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		fmt.Printf("ERROR: Failed to unmarshal delete account args: %v\n", err)
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+
+	// Verify confirmation
+	if args.Confirmation != "DELETE" {
+		return nil, fmt.Errorf("confirmation text must be 'DELETE' to proceed with account deletion")
+	}
+
+	// Create a timeout context to prevent hanging
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Start a transaction
+	tx, err := conn.DB.Begin(ctx)
+	if err != nil {
+		fmt.Printf("ERROR: Failed to start transaction: %v\n", err)
+		return nil, fmt.Errorf("error starting transaction: %v", err)
+	}
+
+	// Ensure transaction is either committed or rolled back
+	var txClosed bool
+	defer func() {
+		if !txClosed && tx != nil {
+			fmt.Println("Rolling back transaction due to error or incomplete process")
+			_ = tx.Rollback(context.Background())
+		}
+	}()
+
+	// Get auth type for logging purposes
+	var authType string
+	err = tx.QueryRow(ctx, "SELECT auth_type FROM users WHERE userId = $1", userID).Scan(&authType)
+	if err != nil {
+		fmt.Printf("ERROR: Failed to get user account type: %v\n", err)
+		return nil, fmt.Errorf("failed to get user account: %v", err)
+	}
+
+	fmt.Printf("Deleting account with ID: %d, type: %s\n", userID, authType)
+
+	// Delete watchlists
+	_, err = tx.Exec(ctx, "DELETE FROM watchlists WHERE userId = $1", userID)
+	if err != nil {
+		fmt.Printf("ERROR: Failed to delete watchlists: %v\n", err)
+		// Continue despite error
+	}
+
+	// Delete setups
+	_, err = tx.Exec(ctx, "DELETE FROM setups WHERE userId = $1", userID)
+	if err != nil {
+		fmt.Printf("ERROR: Failed to delete setups: %v\n", err)
+		// Continue despite error
+	}
+
+	// Delete journal entries
+	_, err = tx.Exec(ctx, "DELETE FROM journals WHERE userId = $1", userID)
+	if err != nil {
+		fmt.Printf("ERROR: Failed to delete journal entries: %v\n", err)
+		// Continue despite error
+	}
+
+	// Delete the user
+	_, err = tx.Exec(ctx, "DELETE FROM users WHERE userId = $1", userID)
+	if err != nil {
+		fmt.Printf("ERROR: Failed to delete user: %v\n", err)
+		return nil, fmt.Errorf("failed to delete user: %v", err)
+	}
+
+	// Commit the transaction
+	if err := tx.Commit(ctx); err != nil {
+		fmt.Printf("ERROR: Failed to commit transaction: %v\n", err)
+		return nil, fmt.Errorf("error committing transaction: %v", err)
+	}
+	txClosed = true
+
+	fmt.Printf("Successfully deleted account with ID: %d\n", userID)
+	fmt.Println("=== DELETE ACCOUNT COMPLETED ===")
+
+	return map[string]string{"status": "success"}, nil
 }

@@ -27,7 +27,7 @@ func GetStockMovementSummary(conn *utils.Conn, userID int, args json.RawMessage)
 	}
 
 	// Get summary from Perplexity using our enhanced function
-	summary, err := QueryPerplexityWithDate(request.Ticker, request.Timestamp, request.Price)
+	summary, err := QueryPerplexityWithDate(conn, request.Ticker, request.Timestamp, request.Price)
 	if err != nil {
 		return nil, fmt.Errorf("error querying Perplexity: %w", err)
 	}
