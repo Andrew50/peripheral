@@ -23,7 +23,7 @@ spec:
             - --url
             - http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
             - --token
-            - $(CLOUDFLARE_TUNNEL_TOKEN)
+            - "$(CLOUDFLARE_TUNNEL_TOKEN)"
           env:
             - name: CLOUDFLARE_TUNNEL_TOKEN
               valueFrom:
