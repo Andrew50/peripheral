@@ -154,7 +154,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: atlantis.trading
+    - host: ${INGRESS_HOST}
       http:
         paths:
           - pathType: Prefix
