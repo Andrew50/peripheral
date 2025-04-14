@@ -330,60 +330,6 @@ func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFilin
 	return filings, nil
 }
 
-// fetchCIKFromSEC fetches the CIK for a given ticker from the SEC
-// nolint:unused
-//
-//lint:ignore U1000 kept for future SEC CIK lookup
-func fetchCIKFromSEC(ticker string) (string, error) {
-	// SEC company lookup endpoint
-	url := "https://www.sec.gov/files/company_tickers.json"
-
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return "", err
-	}
-
-	// SEC requires a User-Agent header
-	req.Header.Set("User-Agent", "atlantis admin@atlantis.trading")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("SEC API returned status: %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	// The SEC returns a map of numbered entries
-	var result map[string]struct {
-		CIK    int64  `json:"cik_str"`
-		Ticker string `json:"ticker"`
-		Name   string `json:"title"`
-	}
-
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", err
-	}
-
-	// Find matching ticker (case insensitive)
-	upperTicker := strings.ToUpper(ticker)
-	for _, company := range result {
-		if strings.ToUpper(company.Ticker) == upperTicker {
-			return fmt.Sprintf("%010d", company.CIK), nil
-		}
-	}
-
-	return "", fmt.Errorf("no CIK found for ticker %s", ticker)
-}
-
 func fetchEdgarFilingsPage(page int, perPage int) ([]GlobalEDGARFiling, error) {
 	// Assuming the SEC API supports a page parameter
 	url := fmt.Sprintf("https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&owner=include&count=%d&start=%d&output=atom",
