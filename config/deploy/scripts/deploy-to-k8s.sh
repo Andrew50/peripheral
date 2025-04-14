@@ -6,15 +6,14 @@ set -Eeuo pipefail
 : "${K8S_NAMESPACE:?Error: K8S_NAMESPACE environment variable is required.}"
 : "${SERVICES:?Error: SERVICES environment variable (space-separated list) is required.}"
 : "${DOCKER_USERNAME:?Error: DOCKER_USERNAME environment variable is required.}"
+: "${TMP_DIR:?Error: TMP_DIR not set}"
+
 
 # Convert the space-separated string of services into a bash array
 read -r -a SERVICES_ARRAY <<< "$SERVICES"
 
-#SOURCE_DIR="config/deploy/k8s"
-#TMP_DIR="config/deploy/tmp"
 
 echo "Deploying to Kubernetes with tag: $DOCKER_TAG, namespace: $K8S_NAMESPACE"
-echo "Source directory: $SOURCE_DIR"
 echo "Temporary directory: $TMP_DIR"
 echo "Target services: ${SERVICES_ARRAY[@]}"
 echo "Using Docker user: $DOCKER_USERNAME"
