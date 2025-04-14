@@ -26,8 +26,9 @@ jobs:
       environment: 'prod'
       target_branch: ${{ github.event.inputs.branch || github.ref_name }}
       k8s_context: 'prod-cluster'
-      k8s_namespace: 'default'
+      k8s_namespace: 'prod'
       google_redirect_url: 'https://atlantis.trading/auth/google/callback'
+      ingress_host: 'atlantis.trading'
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
@@ -38,3 +39,4 @@ jobs:
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
