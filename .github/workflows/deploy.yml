@@ -151,14 +151,7 @@ jobs:
           echo "Using Temp Directory: ${TMP_DIR}"
 
       - name: Build Docker Images
-        run: |
-          echo "--- Debugging environment variables before build ---"
-          echo "SERVICES: [$SERVICES]"
-          echo "DOCKER_TAG: [$DOCKER_TAG]"
-          echo "TARGET_BRANCH: [$TARGET_BRANCH]"
-          echo "DOCKER_USERNAME: [$DOCKER_USERNAME]"
-          echo "--- End Debugging ---"
-          config/deploy/scripts/build-images.sh
+        run: config/deploy/scripts/build-images.sh
 
       - name: Login & Push Docker Images
         run: config/deploy/scripts/push-images.sh
