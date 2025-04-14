@@ -7,7 +7,7 @@ COPY . .
 # Build the main application
 RUN GOOS=linux go build -a -installsuffix cgo -o main .
 # Build the jobctl CLI tool exactly as in dev
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /usr/local/bin/jobctl ./jobs
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /usr/local/bin/jobctl ./cmd/jobctl
 # Verify the binary is executable and is actually a binary
 RUN chmod +x /usr/local/bin/jobctl && file /usr/local/bin/jobctl
 
