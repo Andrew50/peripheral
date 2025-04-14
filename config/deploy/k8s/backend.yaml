@@ -151,4 +151,4 @@ spec:
       - operator: In
         scopeName: PodSelector
         values:
-          - backend
+          averageUtilization: 80
