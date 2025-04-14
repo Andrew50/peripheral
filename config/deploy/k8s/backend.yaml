@@ -74,7 +74,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: polygon-secret
-                  key: api-key2-5
+                  key: api-key
             # Add Google OAuth credentials
             - name: GOOGLE_CLIENT_ID
               valueFrom:
