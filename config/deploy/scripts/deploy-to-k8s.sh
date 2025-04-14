@@ -107,17 +107,92 @@ fi
 echo "Waiting for deployments to complete..."
 for dep in "${SERVICES_ARRAY[@]}"; do
   echo "Checking rollout status for deployment: $dep in namespace ${K8S_NAMESPACE}"
-  if ! kubectl rollout status "deployment/${dep}" --namespace="${K8S_NAMESPACE}" --timeout=5m; then
-    echo "Error: Deployment rollout failed for service: $dep"
+  
+  # First, check if the deployment exists
+  if ! kubectl get deployment "${dep}" --namespace="${K8S_NAMESPACE}" &>/dev/null; then
+    echo "Warning: Deployment ${dep} not found in namespace ${K8S_NAMESPACE}. Skipping rollout check."
+    continue
+  fi
+  
+  # Set maximum attempts and timeout per attempt
+  MAX_ATTEMPTS=12  # Total of 12 attempts
+  TIMEOUT_PER_ATTEMPT="1m"  # 1 minute per attempt (total 12 minutes max)
+  
+  # Try rollout status with multiple short attempts
+  success=false
+  for attempt in $(seq 1 $MAX_ATTEMPTS); do
+    echo "Attempt $attempt/$MAX_ATTEMPTS for deployment: $dep"
+    
+    if kubectl rollout status "deployment/${dep}" --namespace="${K8S_NAMESPACE}" --timeout="${TIMEOUT_PER_ATTEMPT}" &>/dev/null; then
+      echo "Deployment ${dep} successfully rolled out on attempt $attempt."
+      success=true
+      break
+    else
+      echo "Rollout not complete after attempt $attempt. Checking deployment status..."
+      
+      # Show deployment status after each attempt
+      echo "Current deployment status for ${dep}:"
+      kubectl get deployment "${dep}" --namespace="${K8S_NAMESPACE}" -o wide
+      
+      # Show pod status
+      echo "Current pod status for ${dep}:"
+      POD_SELECTOR=$(kubectl get deployment "${dep}" --namespace="${K8S_NAMESPACE}" -o jsonpath='{.spec.selector.matchLabels}' | tr -d '{}' | sed 's/:/=/g')
+      kubectl get pods --namespace="${K8S_NAMESPACE}" -l "${POD_SELECTOR}" -o wide
+      
+      # If this is the last attempt, we'll do more detailed diagnostics
+      if [[ $attempt -eq $MAX_ATTEMPTS ]]; then
+        break
+      fi
+      
+      echo "Waiting before next attempt..."
+      sleep 10
+    fi
+  done
+  
+  # If all attempts failed, gather detailed diagnostics
+  if [[ "$success" != true ]]; then
+    echo "Error: Deployment rollout failed for service: $dep after $MAX_ATTEMPTS attempts"
+    
     # Get more diagnostic information
-    echo "Deployment status:"
+    echo "Detailed deployment status:"
     kubectl describe deployment "${dep}" --namespace="${K8S_NAMESPACE}"
-    echo "Recent pod events:"
+    
+    # Get detailed pod information
+    echo "Detailed pod status for deployment ${dep}:"
     POD_SELECTOR=$(kubectl get deployment "${dep}" --namespace="${K8S_NAMESPACE}" -o jsonpath='{.spec.selector.matchLabels}' | tr -d '{}' | sed 's/:/=/g')
-    kubectl get events --namespace="${K8S_NAMESPACE}" --field-selector="involvedObject.kind=Pod" | grep "$POD_SELECTOR" | tail -10
+    kubectl get pods --namespace="${K8S_NAMESPACE}" -l "${POD_SELECTOR}" -o wide
+    
+    # Get logs from failing pods
+    echo "Checking logs from failing pods:"
+    FAILING_PODS=$(kubectl get pods --namespace="${K8S_NAMESPACE}" -l "${POD_SELECTOR}" -o jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}')
+    if [[ -n "$FAILING_PODS" ]]; then
+      for pod in $FAILING_PODS; do
+        echo "=== Logs for pod $pod ==="
+        # Check if the pod has init containers
+        INIT_CONTAINERS=$(kubectl get pod "$pod" --namespace="${K8S_NAMESPACE}" -o jsonpath='{.spec.initContainers[*].name}' 2>/dev/null)
+        if [[ -n "$INIT_CONTAINERS" ]]; then
+          for init_container in $INIT_CONTAINERS; do
+            echo "--- Init container $init_container logs ---"
+            kubectl logs "$pod" --namespace="${K8S_NAMESPACE}" -c "$init_container" --previous 2>/dev/null || kubectl logs "$pod" --namespace="${K8S_NAMESPACE}" -c "$init_container"
+          done
+        fi
+        
+        # Get logs from the main container
+        echo "--- Main container logs ---"
+        kubectl logs "$pod" --namespace="${K8S_NAMESPACE}" --previous 2>/dev/null || kubectl logs "$pod" --namespace="${K8S_NAMESPACE}"
+      done
+    else
+      echo "No failing pods found, checking events instead"
+    fi
+    
+    echo "Recent pod events:"
+    kubectl get events --namespace="${K8S_NAMESPACE}" --field-selector="involvedObject.kind=Pod" | grep -i "${dep}" | tail -20
+    
+    # Fail the deployment process for all services consistently
+    echo "ERROR: Deployment ${dep} failed to roll out after $MAX_ATTEMPTS attempts."
+    echo "You can check its status later with: kubectl rollout status deployment/${dep} -n ${K8S_NAMESPACE}"
     exit 1
   fi
-  echo "Deployment ${dep} successfully rolled out."
 done
 
 # 7. Verify services are accessible
