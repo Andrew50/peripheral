@@ -583,6 +583,7 @@ func buildStockFilter(stocks struct {
 	}
 }
 
+/*
 func buildTimeOfDayCondition(timeOfDay struct {
 	Constraint string `json:"constraint"`
 	StartTime  string `json:"start_time"`
@@ -601,7 +602,7 @@ func buildTimeOfDayCondition(timeOfDay struct {
 		return ""
 	}
 }
-
+*/ // End temporary comment
 func mapOperator(op string) string {
 	switch op {
 	case "==":
