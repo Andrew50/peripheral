@@ -12,8 +12,7 @@
 	import { newAlert } from '$lib/features/alerts/interface';
 	import { queueRequest, privateRequest } from '$lib/core/backend';
 	import type { Trade } from '$lib/core/types';
-	import { flip } from 'svelte/animate';
-	import { fade, fly } from 'svelte/transition';
+	import { fade,  } from 'svelte/transition';
 
 	type StreamCellType = 'price' | 'change' | 'change %' | 'change % extended' | 'market cap';
 
@@ -29,13 +28,6 @@
 		trades?: Trade[];
 		[key: string]: any; // Allow dynamic property access
 	}
-
-	interface ApiResponse {
-		status: string;
-		similar_trades?: SimilarTrade[];
-		message?: string;
-	}
-
 	let longPressTimer: ReturnType<typeof setTimeout>;
 	export let list: Writable<ExtendedInstance[]> = writable([]);
 	export let columns: Array<string>;
@@ -53,11 +45,6 @@
 	export let linkColumns: string[] = [];
 	let selectedRowIndex = -1;
 	let expandedRows = new Set<number>();
-
-	// Add these for similar trades handling
-	let similarTradesMap = new Map<number, SimilarTrade[]>();
-	let loadingMap = new Map<number, boolean>();
-	let errorMap = new Map<number, string>();
 
 	let isLoading = true;
 	let loadError: string | null = null;
@@ -370,7 +357,6 @@
 
 		event.preventDefault();
 		event.stopPropagation();
-
 		if (button === 0) {
 			selectedRowIndex = index;
 			queryChart(instance);
@@ -400,10 +386,6 @@
 			expandedRows.delete(index);
 		} else {
 			expandedRows.add(index);
-			const content = expandedContent($list[index]);
-			if (content?.tradeId) {
-				loadSimilarTrades(content.tradeId);
-			}
 		}
 		expandedRows = expandedRows;
 	}
@@ -436,35 +418,9 @@
 		return rawValue?.toString() ?? 'N/A';
 	}
 
+
 	function getAllOrders(trade: ExtendedInstance): Trade[] {
 		return trade.trades || [];
-	}
-
-	async function loadSimilarTrades(tradeId: number) {
-		if (!tradeId) return;
-
-		loadingMap.set(tradeId, true);
-		errorMap.delete(tradeId);
-		similarTradesMap = similarTradesMap;
-
-		try {
-			const result = await queueRequest<ApiResponse>('find_similar_trades', { trade_id: tradeId });
-
-			if (result && typeof result === 'object' && 'status' in result) {
-				if (result.status === 'success' && result.similar_trades) {
-					similarTradesMap.set(tradeId, result.similar_trades);
-				} else if (result.message) {
-					errorMap.set(tradeId, result.message);
-				}
-			}
-		} catch (e) {
-			const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred';
-			console.error('Error loading similar trades:', errorMessage);
-			errorMap.set(tradeId, `Error loading similar trades: ${errorMessage}`);
-		} finally {
-			loadingMap.delete(tradeId);
-			similarTradesMap = similarTradesMap;
-		}
 	}
 
 	// Modify the reactive statement to only load icons for new tickers
@@ -483,9 +439,6 @@
 		expandedRows.forEach((index) => {
 			if ($list[index]) {
 				const content = expandedContent($list[index]);
-				if (content?.tradeId) {
-					loadSimilarTrades(content.tradeId);
-				}
 			}
 		});
 	}
@@ -512,6 +465,26 @@
 			default:
 				return 'price'; // Fallback to price
 		}
+	}
+
+	// Fix for linter error: Define formatDuration
+	function formatDuration(millis: number | null | undefined): string {
+		if (millis === null || millis === undefined || isNaN(millis) || millis < 0) {
+			return 'N/A';
+		}
+		let seconds = Math.floor(millis / 1000);
+		let minutes = Math.floor(seconds / 60);
+		let hours = Math.floor(minutes / 60);
+
+		seconds = seconds % 60;
+		minutes = minutes % 60;
+
+		let parts: string[] = [];
+		if (hours > 0) parts.push(`${hours}h`);
+		if (minutes > 0) parts.push(`${minutes}m`);
+		if (seconds > 0 || parts.length === 0) parts.push(`${seconds}s`); // Show 0s if duration is less than 1s
+
+		return parts.join(' ');
 	}
 </script>
 
@@ -612,6 +585,14 @@
 											event.stopPropagation();
 										}}>{UTCTimestampToESTString(watch[col.toLowerCase()])}</td
 									>
+								{:else if col === 'Trade Duration'}
+									<td
+										class="default-td"
+										on:contextmenu={(event) => {
+											event.preventDefault();
+											event.stopPropagation();
+										}}>{formatDuration(watch.tradeDurationMillis)}</td
+									>
 								{:else}
 									<td
 										class="default-td"
@@ -661,49 +642,7 @@
 											</tbody>
 										</table>
 
-										{#if expandedContent}
-											{@const content = expandedContent(watch)}
-											{@const tradeId = content?.tradeId}
-											{#if tradeId}
-												<h4>Similar Trades</h4>
-												{#if loadingMap.get(tradeId)}
-													<div class="loading">Loading similar trades...</div>
-												{:else if errorMap.get(tradeId)}
-													<div class="error">{errorMap.get(tradeId)}</div>
-												{:else if similarTradesMap.get(tradeId)}
-													<table>
-														<thead>
-															<tr class="defalt-tr">
-																<th class="defalt-th">Date</th>
-																<th class="defalt-th">Ticker</th>
-																<th class="defalt-th">Direction</th>
-																<th class="defalt-th">P/L</th>
-																<th class="defalt-th">Similarity</th>
-															</tr>
-														</thead>
-														<tbody>
-															{#each similarTradesMap.get(tradeId) || [] as similarTrade}
-																<tr class="defalt-tr">
-																	<td class="defalt-td">
-																		{UTCTimestampToESTString(similarTrade.entry_time)}
-																	</td>
-																	<td class="defalt-td">{similarTrade.ticker}</td>
-																	<td class="defalt-td">{similarTrade.direction}</td>
-																	<td class={similarTrade.pnl >= 0 ? 'positive' : 'negative'}>
-																		${similarTrade.pnl.toFixed(2)}
-																	</td>
-																	<td class="defalt-td">
-																		{(similarTrade.similarity_score * 100).toFixed(1)}%
-																	</td>
-																</tr>
-															{/each}
-														</tbody>
-													</table>
-												{:else}
-													<div class="no-results">No similar trades found</div>
-												{/if}
-											{/if}
-										{/if}
+										
 									</div>
 								</td>
 							</tr>
@@ -718,7 +657,6 @@
 <style>
 	.selected {
 		outline: 2px solid var(--ui-accent);
-		outline-offset: -2px;
 	}
 
 	tr {
@@ -751,6 +689,9 @@
 		background-color: var(--ui-bg-element);
 		font-weight: bold;
 		color: var(--text-secondary);
+		position: sticky;
+		top: 0;
+		z-index: 1;
 	}
 
 	/* Sorting styles */
@@ -807,7 +748,6 @@
 	}
 
 	tr {
-		background-color: var(--ui-bg-primary);
 		transition: background-color 0.2s;
 	}
 
@@ -900,6 +840,8 @@
 		max-width: 24px;
 		padding: 0;
 		text-align: center;
+		background-color: var(--ui-bg-primary);
+		vertical-align: middle;
 	}
 
 	th:last-child {
@@ -908,7 +850,7 @@
 		width: 24px;
 		max-width: 24px;
 		padding: 0;
-		background-color: var(--ui-bg-element);
+		transition: opacity 0.2s ease;
 	}
 
 	.delete-button {
@@ -921,10 +863,6 @@
 	}
 
 	tr:hover td {
-		background-color: var(--ui-bg-hover);
-	}
-
-	tr:hover td:last-child {
 		background-color: var(--ui-bg-hover);
 	}
 
