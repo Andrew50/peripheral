@@ -42,6 +42,10 @@ fi
 echo "Setting kubectl to use minikube profile '$PROFILE_NAME' context..."
 minikube update-context -p "$PROFILE_NAME"
 
+echo "Enabling ingress addon for profile '$PROFILE_NAME'..."
+minikube addons enable ingress -p "$PROFILE_NAME"
+echo "Ingress addon enabled."
+
 EXPECTED_CONTEXT="$PROFILE_NAME"
 
 # Check if we're using the minikube profile or a specific context
