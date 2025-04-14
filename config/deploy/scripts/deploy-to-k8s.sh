@@ -136,8 +136,8 @@ for dep in "${SERVICES_ARRAY[@]}"; do
       
       # Show pod status
       echo "Current pod status for ${dep}:"
-      POD_SELECTOR=$(kubectl get deployment "${dep}" --namespace="${K8S_NAMESPACE}" -o jsonpath='{.spec.selector.matchLabels}' | tr -d '{}' | sed 's/:/=/g')
-      kubectl get pods --namespace="${K8S_NAMESPACE}" -l "${POD_SELECTOR}" -o wide
+      POD_SELECTOR=$(kubectl get deployment "${dep}" --namespace="${K8S_NAMESPACE}" -o jsonpath='{.spec.selector.matchLabels.app}')
+      kubectl get pods --namespace="${K8S_NAMESPACE}" -l "app=${POD_SELECTOR}" -o wide
       
       # If this is the last attempt, we'll do more detailed diagnostics
       if [[ $attempt -eq $MAX_ATTEMPTS ]]; then
@@ -159,12 +159,12 @@ for dep in "${SERVICES_ARRAY[@]}"; do
     
     # Get detailed pod information
     echo "Detailed pod status for deployment ${dep}:"
-    POD_SELECTOR=$(kubectl get deployment "${dep}" --namespace="${K8S_NAMESPACE}" -o jsonpath='{.spec.selector.matchLabels}' | tr -d '{}' | sed 's/:/=/g')
-    kubectl get pods --namespace="${K8S_NAMESPACE}" -l "${POD_SELECTOR}" -o wide
+    POD_SELECTOR=$(kubectl get deployment "${dep}" --namespace="${K8S_NAMESPACE}" -o jsonpath='{.spec.selector.matchLabels.app}')
+    kubectl get pods --namespace="${K8S_NAMESPACE}" -l "app=${POD_SELECTOR}" -o wide
     
     # Get logs from failing pods
     echo "Checking logs from failing pods:"
-    FAILING_PODS=$(kubectl get pods --namespace="${K8S_NAMESPACE}" -l "${POD_SELECTOR}" -o jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}')
+    FAILING_PODS=$(kubectl get pods --namespace="${K8S_NAMESPACE}" -l "app=${POD_SELECTOR}" -o jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}')
     if [[ -n "$FAILING_PODS" ]]; then
       for pod in $FAILING_PODS; do
         echo "=== Logs for pod $pod ==="
