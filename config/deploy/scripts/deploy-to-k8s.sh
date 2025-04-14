@@ -32,6 +32,10 @@ mkdir -p "$TMP_DIR"
 # Copy contents of source dir to temp dir
 cp -r "$SOURCE_DIR"/* "$TMP_DIR/"
 
+# Remove the secrets template file from the temp directory as it's handled separately
+echo "Removing secrets template from temporary directory..."
+rm -f "$TMP_DIR/secrets.yaml"
+
 # 3. Update image tags in temporary YAML files
 echo "Updating image tags in temporary files..."
 for dep in "${SERVICES_ARRAY[@]}"; do
