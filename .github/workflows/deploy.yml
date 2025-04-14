@@ -135,13 +135,14 @@ jobs:
           echo "Using Minikube profile: ${MINIKUBE_PROFILE}"
 
       - name: Build Docker Images
-        env:
-          # Explicitly pass variables needed by the script
-          DOCKER_TAG: ${{ env.DOCKER_TAG }}
-          TARGET_BRANCH: ${{ env.TARGET_BRANCH }}
-          SERVICES: ${{ env.SERVICES }}
-          # DOCKER_USERNAME is already available via the job's env block
-        run: config/deploy/scripts/build-images.sh
+        run: |
+          echo "--- Debugging environment variables before build ---"
+          echo "SERVICES: [$SERVICES]"
+          echo "DOCKER_TAG: [$DOCKER_TAG]"
+          echo "TARGET_BRANCH: [$TARGET_BRANCH]"
+          echo "DOCKER_USERNAME: [$DOCKER_USERNAME]"
+          echo "--- End Debugging ---"
+          config/deploy/scripts/build-images.sh
 
       - name: Login & Push Docker Images
         run: config/deploy/scripts/push-images.sh
