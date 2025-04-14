@@ -19,8 +19,17 @@ echo "Pushing Docker images with tag: $DOCKER_TAG"
 push_image() {
   local service="$1"
   local tag="$2"
-  echo "Pushing $service:$tag"
-  docker push "$DOCKER_USERNAME/$service:$tag"
+  local full_image_name="$DOCKER_USERNAME/$service:$tag"
+  
+  # Check if the image exists locally
+  if ! docker image inspect "$full_image_name" &>/dev/null; then
+    echo "Error: Image $full_image_name does not exist locally."
+    echo "Make sure you've built the image before pushing."
+    return 1
+  fi
+  
+  echo "Pushing $full_image_name"
+  docker push "$full_image_name"
 }
 
 pids=()
