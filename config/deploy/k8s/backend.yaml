@@ -137,18 +137,3 @@ spec:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 80
----
-apiVersion: v1
-kind: ResourceQuota
-metadata:
-  name: backend-quota
-spec:
-  hard:
-    pods: "1"
-  scopeSelector:
-    matchExpressions:
-      - operator: In
-        scopeName: PodSelector
-        values:
-          averageUtilization: 80
