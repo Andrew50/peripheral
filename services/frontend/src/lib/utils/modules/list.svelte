@@ -479,6 +479,26 @@
 				return 'price'; // Fallback to price
 		}
 	}
+
+	// Fix for linter error: Define formatDuration
+	function formatDuration(millis: number | null | undefined): string {
+		if (millis === null || millis === undefined || isNaN(millis) || millis < 0) {
+			return 'N/A';
+		}
+		let seconds = Math.floor(millis / 1000);
+		let minutes = Math.floor(seconds / 60);
+		let hours = Math.floor(minutes / 60);
+
+		seconds = seconds % 60;
+		minutes = minutes % 60;
+
+		let parts: string[] = [];
+		if (hours > 0) parts.push(`${hours}h`);
+		if (minutes > 0) parts.push(`${minutes}m`);
+		if (seconds > 0 || parts.length === 0) parts.push(`${seconds}s`); // Show 0s if duration is less than 1s
+
+		return parts.join(' ');
+	}
 </script>
 
 <div class="table-container">
@@ -683,6 +703,9 @@
 		background-color: var(--ui-bg-element);
 		font-weight: bold;
 		color: var(--text-secondary);
+		position: sticky;
+		top: 0;
+		z-index: 1;
 	}
 
 	/* Sorting styles */
