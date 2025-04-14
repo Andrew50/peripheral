@@ -87,13 +87,11 @@ func initTools() {
 		"getCurrentSecurityID": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "getCurrentSecurityID",
-				Name:        "getCurrentSecurityID",
 				Description: "Retrieves the current security ID of a ticker symbol.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"ticker": {
-							Type:        genai.TypeString,
 							Type:        genai.TypeString,
 							Description: "The ticker symbol to search for, e.g. NVDA, AAPL, etc",
 						},
