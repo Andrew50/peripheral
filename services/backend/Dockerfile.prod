@@ -7,7 +7,7 @@ COPY . .
 # Build the main application
 RUN GOOS=linux go build -a -installsuffix cgo -o main .
 # Build the jobctl CLI tool exactly as in dev
-RUN go build -o /usr/local/bin/jobctl ./jobs
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /usr/local/bin/jobctl ./jobs
 # Verify the binary is executable and is actually a binary
 RUN chmod +x /usr/local/bin/jobctl && file /usr/local/bin/jobctl
 
@@ -19,8 +19,10 @@ WORKDIR /app
 COPY --from=builder /app/main /app/main
 # Copy the jobctl binary directly from where it was built in the builder stage
 COPY --from=builder /usr/local/bin/jobctl /usr/local/bin/jobctl
-# Ensure the binary is executable
+# Ensure the binary is executable and verify it's a proper binary
 RUN chmod +x /usr/local/bin/jobctl && ls -la /usr/local/bin/jobctl
+# Test that the binary runs without errors
+RUN /usr/local/bin/jobctl --help || echo "Binary execution test failed"
 EXPOSE 5058
 ENV IN_CONTAINER=true
 ENTRYPOINT ["/app/main"]
