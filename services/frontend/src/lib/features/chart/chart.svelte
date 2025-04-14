@@ -833,7 +833,7 @@
 	}
 
 	async function updateLatestChartBar(trade: TradeData) {
-		console.log('updateLatestChartBar',trade);
+
 		// Early returns for invalid data
 		if (
 			!trade?.price ||
@@ -841,22 +841,16 @@
 			!trade?.timestamp ||
 			!chartCandleSeries?.data()?.length ||
 			isLoadingChartData
-		) {
-			return;
-		}
+		) { return; }
 		// Check excluded conditions early
-		if (trade.conditions?.some((condition) => excludedConditions.has(condition))) {
-			return;
-		}
+		if (trade.conditions?.some((condition) => excludedConditions.has(condition))) { return; }
 
 		// Check extended hours early
 		const isExtendedHours = extendedHours(trade.timestamp);
 		if (
 			isExtendedHours &&
 			(!currentChartInstance.extendedHours || /^[dwm]/.test(currentChartInstance.timeframe || ''))
-		) {
-			return;
-		}
+		) { return; }
 
 		const dolvol = get(settings).dolvol;
 		const mostRecentBar = chartCandleSeries.data().at(-1);
@@ -1004,11 +998,6 @@
 			);
 
 			if (barIndex !== -1) {
-				// Create safe mutable copies for data updates
-				function createMutableCopy<T>(data: readonly T[]): T[] {
-					return [...data];
-				}
-
 				// Update bar data with safe copies
 				const updatedCandle = {
 					time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
@@ -1017,20 +1006,16 @@
 					low: barData.low,
 					close: barData.close
 				};
+				console.log('updatedCandle', updatedCandle);
+				chartCandleSeries.update(updatedCandle);
 
-				// Create a new mutable copy of the data array before updating it
-				const updatedCandleData = createMutableCopy(allCandleData);
-				updatedCandleData[barIndex] = updatedCandle;
-				chartCandleSeries.setData(updatedCandleData);
-
-				// Create a new mutable copy of the volume data array before updating it
-				const updatedVolumeData = createMutableCopy(chartVolumeSeries.data());
-				updatedVolumeData[barIndex] = {
+				// Create a new mutable copy of the volume data array before updating it	
+				const updatedVolumeBar = {
 					time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
 					value: barData.volume * (dolvol ? barData.close : 1),
 					color: barData.close > barData.open ? '#089981' : '#ef5350'
 				};
-				chartVolumeSeries.setData([...updatedVolumeData] as Array<HistogramData<Time>>);
+				chartVolumeSeries.update(updatedVolumeBar);
 			}
 		} catch (error) {
 			console.error('Error fetching historical data:', error);

@@ -139,7 +139,10 @@ func SendEmail(to, subject, body string) error {
 	}
 
 	// Close the connection
-	client.Quit()
+	err = client.Quit()
+	if err != nil {
+		return fmt.Errorf("error closing connection: %v", err)
+	}
 
 	return nil
 }
