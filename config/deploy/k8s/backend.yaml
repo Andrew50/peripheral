@@ -137,3 +137,4 @@ spec:
         name: cpu
         target:
           type: Utilization
+          averageUtilization: 80 #requried even though min = max = 1
