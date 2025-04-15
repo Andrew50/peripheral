@@ -40,6 +40,38 @@ echo "Enabling ingress addon for profile '$MINIKUBE_PROFILE'..."
 minikube addons enable ingress -p "$MINIKUBE_PROFILE"
 echo "Ingress addon enabled."
 
+echo "Waiting for ingress-nginx admission configuration jobs to complete..."
+# Wait up to 2 minutes for the admission create job
+if ! kubectl wait --namespace ingress-nginx \
+  --for=condition=complete job \
+  --selector=app.kubernetes.io/component=admission-webhook \
+  --timeout=120s; then
+  echo "ERROR: Ingress Nginx admission jobs did not complete in time."
+  echo "Checking job status:"
+  kubectl get jobs --namespace ingress-nginx --selector=app.kubernetes.io/component=admission-webhook -o wide
+  echo "Checking pod status for jobs:"
+  kubectl get pods --namespace ingress-nginx --selector=app.kubernetes.io/component=admission-webhook -o wide
+  exit 1
+fi
+echo "Ingress Nginx admission jobs completed."
+
+
+echo "Waiting for ingress-nginx controller deployment to be ready..."
+# Wait up to 2 minutes for the deployment to become available in the ingress-nginx namespace
+if ! kubectl wait --namespace ingress-nginx \
+  --for=condition=available deployment \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=120s; then
+  echo "ERROR: Ingress Nginx controller deployment did not become ready in time."
+  echo "Describing deployment:"
+  kubectl describe deployment --namespace ingress-nginx --selector=app.kubernetes.io/component=controller
+  echo "Checking pods:"
+  kubectl get pods --namespace ingress-nginx --selector=app.kubernetes.io/component=controller -o wide
+  exit 1
+fi
+echo "Ingress Nginx controller deployment is ready."
+
+
 EXPECTED_CONTEXT="$MINIKUBE_PROFILE"
 
 # Check if we're using the minikube profile or a specific context
