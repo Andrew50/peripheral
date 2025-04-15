@@ -1,0 +1,578 @@
+I am using a minikube cluster wiht ingress enabled with pods and services for frontend, backend, cloudflared, and ingress. When I run the cluster and go to my website domain at the root path the content shows sveltekit html elemnts tellingme that my site is partially loading, however I get 404 not found on many items, see the attache frontend chrome logs. analyze my k8s config files and determine how to modify them to allow for a working  website. I have also attached an older nginx.conf file that worked when used with an nginx container outside of k8s, use this as a possible inspiration for how specific routes need to be handled. <cloudflared.yaml> apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudflared
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+    spec:
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:latest
+          imagePullPolicy: Always
+          command:
+            - cloudflared
+            - tunnel
+            - run
+            - --url
+            - http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+            - --token
+            - "$(CLOUDFLARE_TUNNEL_TOKEN)"
+          env:
+            - name: CLOUDFLARE_TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflare-secret
+                  key: CLOUDFLARE_TUNNEL_TOKEN
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      restartPolicy: Always
+</cloudflared.yaml> <ingress.yaml>apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+
+    # Timeouts
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/send-timeout: "600"
+
+    # Increase body size
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+
+    # Buffers
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "256k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
+    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "512k"
+
+    # WebSockets
+    nginx.ingress.kubernetes.io/enable-websocket: "true"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+
+    # SSL redirect off (since Cloudflare is terminating SSL)
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: stage.atlantis.trading
+      http:
+        paths:
+          - path: /private
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /poll
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /public
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /queue
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+
+
+ </ingress.yaml> <frontend.yaml>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: billin19/frontend:aj-stage
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          env:
+            - name: PUBLIC_BASE_URL
+              value: ""
+            - name: PUBLIC_RELATIVE_PATHS
+              value: "false"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  selector:
+    app: frontend
+  ports:
+    - port: 80
+      targetPort: 3000
+  type: ClusterIP
+</frontend.yaml> <nginx.conf (old)> events {}
+
+http {
+    error_log /var/log/nginx/error.log warn; #reduce error log verbosity
+    access_log off;
+
+    # Add MIME types for CSS and JS
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    # Enable gzip compression for better performance
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+    
+    # Increase timeouts to prevent 502/503 errors
+    proxy_connect_timeout 600s;
+    proxy_send_timeout 600s;
+    proxy_read_timeout 600s;
+    send_timeout 600s;
+    keepalive_timeout 300s;
+    client_header_timeout 300s;
+    client_body_timeout 300s;
+
+    server {
+        listen 80;
+        server_name _;  # Handle any server name
+
+        # Increase buffer size for large headers
+        large_client_header_buffers 4 32k;
+
+        location ~ ^/(private|public|queue|poll) {
+            proxy_pass http://backend:5058;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # Add buffer settings to handle larger requests
+            proxy_buffer_size 256k;
+            proxy_buffers 8 256k;
+            proxy_busy_buffers_size 512k;
+
+            # Add specific timeouts for API endpoints
+            proxy_connect_timeout 600s;
+            proxy_send_timeout 600s;
+            proxy_read_timeout 600s;
+        }
+        
+        location /ws {
+            proxy_pass http://backend:5058; # Assuming WebSocket server is on backend
+            proxy_http_version 1.1;         # WebSockets require HTTP 1.1
+            proxy_set_header Upgrade $http_upgrade; # Upgrade to WebSocket
+            proxy_set_header Connection "Upgrade";  # Connection type
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            # Increase timeouts for WebSocket connections
+            proxy_read_timeout 86400s;
+            proxy_send_timeout 86400s;
+            proxy_connect_timeout 600s;
+        }
+
+        # Add explicit handling for static assets
+        location ~* \.(css|js|woff|woff2|ttf|svg|eot|otf|png|jpg|jpeg|gif|ico)$ {
+            proxy_pass http://frontend:3000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_cache_bypass $http_pragma;
+            proxy_cache_bypass $http_cache_control;
+            add_header Cache-Control "public, max-age=31536000";
+            expires 1y;
+        }
+
+        # Ensure JavaScript modules are served with the correct MIME type
+        location ~* \._app/immutable/.*\.js$ {
+            proxy_pass http://frontend:3000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            add_header Content-Type application/javascript;
+        }
+
+        location / {
+            proxy_pass http://frontend:3000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+}
+</nginx.conf (old)> <frontend chrome logs> /_app/immutable/assets/global.trMus3KR.css:1 
+            
+            
+           GET https://stage.atlantis.trading/_app/immutable/assets/global.trMus3KR.css net::ERR_ABORTED 404 (Not Found)Understand this errorAI
+/_app/immutable/entry/start.C6oRmZyj.js:1 
+            
+            
+           GET https://stage.atlantis.trading/_app/immutable/entry/start.C6oRmZyj.js net::ERR_ABORTED 404 (Not Found)Understand this errorAI
+/_app/immutable/chunks/entry.DWR9UfN-.js:1 
+            
+            
+           GET https://stage.atlantis.trading/_app/immutable/chunks/entry.DWR9UfN-.js net::ERR_ABORTED 404 (Not Found)Understand this errorAI
+/_app/immutable/entry/app.Dwehyxfq.js:1 
+            
+            
+           GET https://stage.atlantis.trading/_app/immutable/entry/app.Dwehyxfq.js net::ERR_ABORTED 404 (Not Found)Understand this errorAI
+/_app/immutable/chunks/header.Dci2-6FG.js:1 
+            
+            
+           GET https://stage.atlantis.trading/_app/immutable/chunks/header.Dci2-6FG.js net::ERR_ABORTED 404 (Not Found)Understand this errorAI
+stage.atlantis.trading/:1 Uncaught (in promise) TypeError: Failed to fetch dynamically imported module: https://stage.atlantis.trading/_app/immutable/entry/start.C6oRmZyj.js</frontend chrome logs> <svelte.config.js> /*import adapter from '@sveltejs/adapter-auto';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+// @type {import('@sveltejs/kit').Config}
+const config = {
+	// Consult https://kit.svelte.dev/docs/integrations#preprocessors
+	// for more information about preprocessors
+	preprocess: vitePreprocess(),
+
+	kit: {
+		// adapter-auto only supports some environments, see https://kit.svelte.dev/docs/adapter-auto for a list.
+		// If your environment is not supported, or you settled on a specific environment, switch out the adapter.
+		// See https://kit.svelte.dev/docs/adapters for more information about adapters.
+		adapter: adapter()
+	}
+};*/
+import adapter from '@sveltejs/adapter-node';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+
+export default {
+	preprocess: vitePreprocess(),
+	kit: {
+		adapter: adapter({
+			// Ensure proper MIME types for JavaScript files
+			precompress: true
+		}),
+		// Fix paths configuration to handle the domain correctly
+		paths: {
+			base: '',
+			// Remove assets setting as it's causing issues
+			relative: false
+		},
+		alias: {
+			$lib: 'src/lib'
+		}
+	}
+};
+
+/*import adapter from '@sveltejs/adapter-node'; // For production
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+
+// @type {import('@sveltejs/kit').Config}
+const config = {
+	preprocess: vitePreprocess(),
+
+	kit: {
+		adapter: adapter(), // Only used in production builds
+		vite: {
+			// Only applied in development
+			server: {
+				watch: {
+					usePolling: true, // Enable polling if using Docker
+				},
+				hmr: {
+					// Configure hot module reloading
+					clientPort: process.env.HMR_HOST || 5173,
+				},
+			},
+		},
+	}
+};
+
+export default config;
+*/
+</svelte.config.js> <frontend/Dockerfile># Build stage
+FROM node:18-alpine AS builder
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy the rest of the code
+COPY . .
+
+# Build the application
+RUN npm run build
+
+# Production stage
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Copy build output from builder stage
+COPY --from=builder /app/build /app/build
+
+# Copy package files
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/package-lock.json ./
+
+# Install production dependencies after ensuring lock file is in sync
+RUN npm install && npm ci --omit=dev
+
+# Expose the port
+EXPOSE 3000
+
+# Start the application
+CMD ["node", "build"]
+ </frontend/Dockerfile> <deploy-to-k8s.sh> #!/usr/bin/env bash
+set -Eeuo pipefail
+
+# --- Environment Variable Validation ---
+: "${DOCKER_TAG:?Error: DOCKER_TAG environment variable is required.}"
+: "${K8S_NAMESPACE:?Error: K8S_NAMESPACE environment variable is required.}"
+: "${SERVICES:?Error: SERVICES environment variable (space-separated list) is required.}"
+: "${DOCKER_USERNAME:?Error: DOCKER_USERNAME environment variable is required.}"
+: "${TMP_DIR:?Error: TMP_DIR not set}"
+
+
+# Convert the space-separated string of services into a bash array
+read -r -a SERVICES_ARRAY <<< "$SERVICES"
+
+
+echo "Deploying to Kubernetes with tag: $DOCKER_TAG, namespace: $K8S_NAMESPACE"
+echo "Temporary directory: $TMP_DIR"
+echo "Target services: ${SERVICES_ARRAY[@]}"
+echo "Using Docker user: $DOCKER_USERNAME"
+
+
+# 4. Apply all YAML files from the temporary directory
+echo "Applying configurations from $TMP_DIR to namespace ${K8S_NAMESPACE}..."
+if ! kubectl apply -f "$TMP_DIR" --recursive --validate=false --namespace="${K8S_NAMESPACE}"; then
+  echo "Error: kubectl apply failed."
+  # Consider whether to exit here or allow potential cleanup steps later
+  exit 1
+fi
+
+# 5. Verify PVCs are correctly bound
+echo "Verifying PersistentVolumeClaims in namespace ${K8S_NAMESPACE}..."
+
+# Check if any PVCs exist in the namespace
+PVC_COUNT=$(kubectl get pvc --namespace="${K8S_NAMESPACE}" -o name 2>/dev/null | wc -l)
+
+if [[ "$PVC_COUNT" -gt 0 ]]; then
+  echo "Found ${PVC_COUNT} PVCs in namespace ${K8S_NAMESPACE}. Verifying binding status..."
+  
+  # Get all PVC names
+  PVC_NAMES=$(kubectl get pvc --namespace="${K8S_NAMESPACE}" -o jsonpath='{.items[*].metadata.name}')
+  
+  # Wait for PVCs to bind
+  echo "Waiting up to 120s for PVCs to become Bound..."
+  for pvc in $PVC_NAMES; do
+    echo "Waiting for PVC: $pvc"
+    bound=false
+    for i in {1..24}; do # Check every 5 seconds for 120 seconds (24 * 5 = 120)
+      status=$(kubectl get pvc "$pvc" --namespace="${K8S_NAMESPACE}" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Error")
+      if [[ "$status" == "Bound" ]]; then
+        echo "PVC $pvc is Bound."
+        bound=true
+        break
+      elif [[ "$status" == "Error" ]]; then
+         echo "Error getting status for PVC $pvc. Retrying..."
+      else
+        echo "PVC $pvc status is $status. Waiting... ($i/24)"
+      fi
+      sleep 5
+    done
+
+    if [[ "$bound" != true ]]; then
+      echo "WARNING: PVC $pvc did not become Bound within 120s. Checking final status..."
+      kubectl describe pvc "$pvc" --namespace="${K8S_NAMESPACE}"
+      # Continue despite warning - don't fail the deployment
+    fi
+  done
+else
+  echo "No PVCs found in namespace ${K8S_NAMESPACE}. Skipping PVC verification."
+fi
+
+# 6. Wait for deployments to complete
+echo "Waiting for deployments to complete..."
+for dep in "${SERVICES_ARRAY[@]}"; do
+  echo "Checking rollout status for deployment: $dep in namespace ${K8S_NAMESPACE}"
+  
+  # First, check if the deployment exists
+  if ! kubectl get deployment "${dep}" --namespace="${K8S_NAMESPACE}" &>/dev/null; then
+    echo "Warning: Deployment ${dep} not found in namespace ${K8S_NAMESPACE}. Skipping rollout check."
+    continue
+  fi
+  
+  # Set maximum attempts and timeout per attempt
+  MAX_ATTEMPTS=12  # Total of 12 attempts
+  TIMEOUT_PER_ATTEMPT="1m"  # 1 minute per attempt (total 12 minutes max)
+  
+  # Try rollout status with multiple short attempts
+  success=false
+  for attempt in $(seq 1 $MAX_ATTEMPTS); do
+    echo "Attempt $attempt/$MAX_ATTEMPTS for deployment: $dep"
+    
+    if kubectl rollout status "deployment/${dep}" --namespace="${K8S_NAMESPACE}" --timeout="${TIMEOUT_PER_ATTEMPT}"; then
+      echo "Deployment ${dep} successfully rolled out on attempt $attempt."
+      success=true
+      break
+    else
+      echo "Rollout not complete after attempt $attempt. Checking deployment status..."
+      
+      # Show deployment status after each attempt
+      echo "Current deployment status for ${dep}:"
+      kubectl get deployment "${dep}" --namespace="${K8S_NAMESPACE}" -o wide
+      
+      # Show pod status
+      echo "Current pod status for ${dep}:"
+      POD_SELECTOR=$(kubectl get deployment "${dep}" --namespace="${K8S_NAMESPACE}" -o jsonpath='{.spec.selector.matchLabels.app}')
+      kubectl get pods --namespace="${K8S_NAMESPACE}" -l "app=${POD_SELECTOR}" -o wide
+      
+      # If this is the last attempt, we'll do more detailed diagnostics
+      if [[ $attempt -eq $MAX_ATTEMPTS ]]; then
+        break
+      fi
+      
+      echo "Waiting before next attempt..."
+      sleep 10
+    fi
+  done
+  
+  # If all attempts failed, gather detailed diagnostics
+  if [[ "$success" != true ]]; then
+    echo "Error: Deployment rollout failed for service: $dep after $MAX_ATTEMPTS attempts"
+    
+    # Get more diagnostic information
+    echo "Detailed deployment status:"
+    kubectl describe deployment "${dep}" --namespace="${K8S_NAMESPACE}"
+    
+    # Get detailed pod information
+    echo "Detailed pod status for deployment ${dep}:"
+    POD_SELECTOR=$(kubectl get deployment "${dep}" --namespace="${K8S_NAMESPACE}" -o jsonpath='{.spec.selector.matchLabels.app}')
+    kubectl get pods --namespace="${K8S_NAMESPACE}" -l "app=${POD_SELECTOR}" -o wide
+    
+    # Get logs from failing pods
+    echo "Checking logs from failing pods:"
+    FAILING_PODS=$(kubectl get pods --namespace="${K8S_NAMESPACE}" -l "app=${POD_SELECTOR}" -o jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}')
+    if [[ -n "$FAILING_PODS" ]]; then
+      for pod in $FAILING_PODS; do
+        echo "=== Logs for pod $pod ==="
+        # Check if the pod has init containers
+        INIT_CONTAINERS=$(kubectl get pod "$pod" --namespace="${K8S_NAMESPACE}" -o jsonpath='{.spec.initContainers[*].name}' 2>/dev/null)
+        if [[ -n "$INIT_CONTAINERS" ]]; then
+          for init_container in $INIT_CONTAINERS; do
+            echo "--- Init container $init_container logs ---"
+            kubectl logs "$pod" --namespace="${K8S_NAMESPACE}" -c "$init_container" --previous 2>/dev/null || kubectl logs "$pod" --namespace="${K8S_NAMESPACE}" -c "$init_container"
+          done
+        fi
+        
+        # Get logs from the main container
+        echo "--- Main container logs ---"
+        kubectl logs "$pod" --namespace="${K8S_NAMESPACE}" --previous 2>/dev/null || kubectl logs "$pod" --namespace="${K8S_NAMESPACE}"
+      done
+    else
+      echo "No failing pods found, checking events instead"
+    fi
+    
+    echo "Recent pod events:"
+    kubectl get events --namespace="${K8S_NAMESPACE}" --field-selector="involvedObject.kind=Pod" | grep -i "${dep}" | tail -20
+    
+    # Fail the deployment process for all services consistently
+    echo "ERROR: Deployment ${dep} failed to roll out after $MAX_ATTEMPTS attempts."
+    echo "You can check its status later with: kubectl rollout status deployment/${dep} -n ${K8S_NAMESPACE}"
+    exit 1
+  fi
+done
+
+# 7. Verify services are accessible
+echo "Verifying services are accessible..."
+for dep in "${SERVICES_ARRAY[@]}"; do
+  # Check if a service exists for this deployment
+  if kubectl get service "${dep}" --namespace="${K8S_NAMESPACE}" &>/dev/null; then
+    echo "Service ${dep} exists. Checking endpoints..."
+    ENDPOINTS=$(kubectl get endpoints "${dep}" --namespace="${K8S_NAMESPACE}" -o jsonpath='{.subsets[*].addresses}')
+    if [[ -z "$ENDPOINTS" ]]; then
+      echo "WARNING: Service ${dep} has no endpoints. Pods may not be ready or labeled correctly."
+      kubectl describe service "${dep}" --namespace="${K8S_NAMESPACE}"
+      kubectl describe endpoints "${dep}" --namespace="${K8S_NAMESPACE}"
+    else
+      echo "Service ${dep} has active endpoints."
+    fi
+  else
+    echo "No service found for ${dep}. Skipping service verification."
+  fi
+done
+
+# 8. Check for any pods in error state
+echo "Checking for pods in error state..."
+ERROR_PODS=$(kubectl get pods --namespace="${K8S_NAMESPACE}" --field-selector="status.phase!=Running,status.phase!=Succeeded" -o name)
+if [[ -n "$ERROR_PODS" ]]; then
+  echo "WARNING: Found pods not in Running/Succeeded state:"
+  echo "$ERROR_PODS"
+  for pod in $ERROR_PODS; do
+    echo "Details for $pod:"
+    kubectl describe "$pod" --namespace="${K8S_NAMESPACE}"
+  done
+  # Don't fail deployment, just warn
+else
+  echo "All pods are in Running or Succeeded state."
+fi
+
+# The temporary directory cleanup is handled by a subsequent script.
+
+echo "Deploy-to-K8s script complete. All deployments successful in namespace ${K8S_NAMESPACE}."
+</deploy-to-k8s.sh>
