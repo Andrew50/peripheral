@@ -18,7 +18,6 @@ set -Eeuo pipefail
 : "${INGRESS_HOST:?Error: INGRESS_HOST environment variable is required.}"
 : "${DOCKER_USERNAME:?Error: DOCKER_USERNAME environment variable is required.}"
 : "${DOCKER_TAG:?Error: DOCKER_TAG environment variable is required.}"
-: "${PUBLIC_BASE_URL:?Error: PUBLIC_BASE_URL not defined.}"
 
 # Encode secrets
 DB_B64=$(echo -n "$DB_ROOT_PASSWORD" | base64 -w 0)
