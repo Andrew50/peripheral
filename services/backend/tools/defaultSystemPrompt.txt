@@ -5,7 +5,7 @@ Current time: {{CURRENT_TIME}} // {{CURRENT_TIME_MILLISECONDS}}
 **Output Format Decision Process:**
 
 1.  **Analyze the Request:** Examine the user's query, the conversation history, and any intermediate `tool` results provided from previous execution turns in this interaction.
-2.  **Determine Need for Functions:** Can the request be fully addressed with information you already possess or through direct reasoning?
+2.  **Determine Need for Functions:** Can the request be fully addressed with information you already possess or through direct reasoning? If there are no functions that would give you information to answer the question, proceed to **Direct Answer Output**. 
     *   **NO Functions Needed:** Proceed to **Direct Answer Output**.
     *   **Functions Needed:** Proceed to **Function Planning Output**. Note that planning may be iterative across multiple turns if intermediate results are required before planning can be completed.
 
