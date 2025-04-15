@@ -7,7 +7,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 # Build the jobctl CLI tool
-RUN go build -o /usr/local/bin/jobctl ./jobs
+RUN go build -o /usr/local/bin/jobctl ./cmd/jobctl
 ENV IN_CONTAINER=true
 ENV POLYGON_API_KEY="ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm"
 #EXPOSE 5058
