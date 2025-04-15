@@ -3,7 +3,7 @@ kind: Ingress
 metadata:
   name: app-ingress
   annotations:
-    kubernetes.io/ingress.class: "nginx"
+    kubernetes.io/ingress.class: "ingress-nginx"
 
     # Timeouts
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
@@ -27,7 +27,7 @@ metadata:
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 
 spec:
-  ingressClassName: nginx
+  ingressClassName: ingress-nginx
   rules:
     - host: ${INGRESS_HOST}
       http:
