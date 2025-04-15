@@ -20,7 +20,7 @@ spec:
             - containerPort: 3000
           env:
             - name: PUBLIC_BASE_URL
-              value: ""
+              value: ${PUBLIC_BASE_URL}
             - name: PUBLIC_RELATIVE_PATHS
               value: "false"
           resources:
