@@ -40,20 +40,20 @@ echo "Enabling ingress addon for profile '$MINIKUBE_PROFILE'..."
 minikube addons enable ingress -p "$MINIKUBE_PROFILE"
 echo "Ingress addon enabled."
 
-echo "Waiting for ingress-nginx admission webhook deployment to be ready..."
+echo "Waiting for ingress-nginx controller deployment to be ready..."
 # Wait up to 2 minutes for the deployment to become available in the ingress-nginx namespace
 if ! kubectl wait --namespace ingress-nginx \
   --for=condition=available deployment \
-  --selector=app.kubernetes.io/component=admission-webhook \
+  --selector=app.kubernetes.io/component=controller \
   --timeout=120s; then
-  echo "ERROR: Ingress Nginx admission webhook deployment did not become ready in time."
+  echo "ERROR: Ingress Nginx controller deployment did not become ready in time."
   echo "Describing deployment:"
-  kubectl describe deployment --namespace ingress-nginx --selector=app.kubernetes.io/component=admission-webhook
+  kubectl describe deployment --namespace ingress-nginx --selector=app.kubernetes.io/component=controller
   echo "Checking pods:"
-  kubectl get pods --namespace ingress-nginx --selector=app.kubernetes.io/component=admission-webhook -o wide
+  kubectl get pods --namespace ingress-nginx --selector=app.kubernetes.io/component=controller -o wide
   exit 1
 fi
-echo "Ingress Nginx admission webhook is ready."
+echo "Ingress Nginx controller deployment is ready."
 
 
 EXPECTED_CONTEXT="$MINIKUBE_PROFILE"
