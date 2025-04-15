@@ -94,3 +94,11 @@ func GetTickerDetails(client *polygon.Client, ticker string, dateString string) 
 	}
 	return &res.Results, nil
 }
+
+func GetTickerDetailsMarketCapShareOut(client *polygon.Client, ticker string, dateString string) (float64, int64, error) {
+	tickerDetails, err := GetTickerDetails(client, ticker, dateString)
+	if err != nil {
+		return 0, 0, err
+	}
+	return tickerDetails.MarketCap, tickerDetails.ShareClassSharesOutstanding, nil
+}
