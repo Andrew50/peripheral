@@ -29,7 +29,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: stage.atlantis.trading
+    - host: ${INGRESS_HOST}
       http:
         paths:
           - path: /private
