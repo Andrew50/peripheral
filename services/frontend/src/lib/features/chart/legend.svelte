@@ -191,7 +191,12 @@
 				on:error={() => {}}
 			/>
 		{/if}
-		<span class="symbol">{instance?.ticker || 'NaN'}</span>
+		<span class="symbol">
+			<svg class="search-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+				<path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L21.5,20L20,21.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z" />
+			</svg>
+			{instance?.ticker || 'NaN'}
+		</span>
 		<span class="metadata">
 			<span class="timeframe">{instance?.timeframe || '1d'}</span>
 			{#if !isOverflowing}
@@ -344,6 +349,9 @@
 		background: var(--ui-bg-element);
 		border-radius: 4px;
 		border: 1px solid var(--ui-border);
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
 	}
 
 	.metadata {
@@ -492,5 +500,14 @@
 
 	.collapsed .arrow-icon {
 		transform: rotate(180deg);
+	}
+
+	.search-icon {
+		opacity: 0.6;
+		transition: opacity 0.2s ease;
+	}
+
+	.symbol:hover .search-icon {
+		opacity: 1;
 	}
 </style>
