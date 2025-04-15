@@ -29,7 +29,7 @@ jobs:
       k8s_namespace: 'prod'
       google_redirect_url: 'https://atlantis.trading/auth/google/callback'
       ingress_host: 'atlantis.trading'
-      public_base_url: 'https://atlantis.trading'
+      #      public_base_url: 'https://atlantis.trading'
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
