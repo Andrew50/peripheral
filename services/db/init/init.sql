@@ -244,6 +244,8 @@ CREATE TABLE IF NOT EXISTS daily_ohlcv (
     volume BIGINT NOT NULL,
     vwap DECIMAL(25, 6),
     transactions INTEGER,
+    market_cap DECIMAL(25, 6),
+    share_class_shares_outstanding BIGINT,
     CONSTRAINT unique_security_date UNIQUE (securityid, timestamp)
 );
 -- Convert to TimescaleDB hypertable
