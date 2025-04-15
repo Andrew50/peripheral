@@ -1318,13 +1318,13 @@ func initTools() {
 		"run_backtest": {
 			FunctionDeclaration: genai.FunctionDeclaration{
 				Name:        "run_backtest",
-				Description: "Runs a backtest based on a natural language query about stock conditions, patterns, and indicators",
+				Description: "Runs a backtest based on a natural language query about stock conditions, patterns, and indicators IF YOU CALL THIS TOOL, USE THE USER'S ORIGINAL QUERY. DO NOT GENERATE A NEW QUERY.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"query": {
 							Type:        genai.TypeString,
-							Description: "Natural language query describing the backtest criteria (e.g., 'Find stocks where the price crossed above the 50-day moving average')",
+							Description: "Natural language query describing the backtest criteria  IF YOU CALL THIS TOOL, USE THE USER'S ORIGINAL QUERY. DO NOT GENERATE A NEW QUERY.",
 						},
 					},
 					Required: []string{"query"},

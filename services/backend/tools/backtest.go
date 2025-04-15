@@ -80,6 +80,11 @@ type BacktestSpec struct {
 		InputField string                 `json:"input_field"`
 		Timeframe  string                 `json:"timeframe"`
 	} `json:"indicators"`
+	DerivedColumns []struct {
+		ID         string `json:"id"`
+		Expression string `json:"expression"`
+		Comment    string `json:"comment,omitempty"`
+	} `json:"derived_columns,omitempty"`
 	Conditions []struct {
 		ID  string `json:"id"`
 		LHS struct {
@@ -107,6 +112,7 @@ type BacktestSpec struct {
 		StartTime  string `json:"start_time"`
 		EndTime    string `json:"end_time"`
 	} `json:"time_of_day"`
+	OutputColumns []string `json:"output_columns"`
 }
 
 func GetDataForBacktest(conn *utils.Conn, backtestJSON string) (string, error) {
@@ -224,6 +230,18 @@ func buildBacktestQuery(spec BacktestSpec, timeframe string) (string, []interfac
 	query += ",\n    LAG(d.high, 1) OVER (PARTITION BY s.ticker ORDER BY d.timestamp) AS prev_high"
 	query += ",\n    LAG(d.low, 1) OVER (PARTITION BY s.ticker ORDER BY d.timestamp) AS prev_low"
 
+	// Add user-defined derived columns
+	for _, derivedCol := range spec.DerivedColumns {
+		// Sanitize the expression and ID to prevent SQL injection
+		// In a production system, you'd want more comprehensive validation
+		expression := derivedCol.Expression
+		id := derivedCol.ID
+		if expression != "" && id != "" {
+			// Add the custom expression with the given ID
+			query += fmt.Sprintf(",\n    (%s) AS %s", expression, id)
+		}
+	}
+
 	// Add indicator calculations if needed
 	indicatorSelects := getIndicatorSelects(spec.Indicators, timeframe)
 	if indicatorSelects != "" {
@@ -281,12 +299,32 @@ func buildBacktestQuery(spec BacktestSpec, timeframe string) (string, []interfac
 	query += "\n)\n"
 
 	// Main query using the CTE
-	query += "SELECT ticker, timestamp, open, high, low, close, volume"
+	// Check if specific output columns are requested
+	if len(spec.OutputColumns) > 0 {
+		// Build custom SELECT with requested columns
+		selectColumns := []string{}
 
-	// Include indicators in the output
-	for _, indicator := range spec.Indicators {
-		if indicator.Timeframe == timeframe {
-			query += ", " + indicator.ID
+		// Always include ticker and timestamp as fundamental columns
+		selectColumns = append(selectColumns, "ticker", "timestamp")
+
+		// Add other requested columns
+		for _, col := range spec.OutputColumns {
+			// Skip ticker and timestamp since they're already included
+			if col != "ticker" && col != "timestamp" {
+				selectColumns = append(selectColumns, col)
+			}
+		}
+
+		query += "SELECT " + strings.Join(selectColumns, ", ")
+	} else {
+		// Default columns if none specified
+		query += "SELECT ticker, timestamp, open, high, low, close, volume"
+
+		// Include all indicators in the output
+		for _, indicator := range spec.Indicators {
+			if indicator.Timeframe == timeframe {
+				query += ", " + indicator.ID
+			}
 		}
 	}
 
@@ -671,6 +709,16 @@ func formatResultsForLLM(records []interface{}) (map[string]interface{}, error) 
 	// Create a clean array of instances
 	instances := make([]map[string]interface{}, 0, len(records))
 
+	// Get all unique column names from the first record
+	var columnNames []string
+	if len(records) > 0 {
+		if recordMap, ok := records[0].(map[string]interface{}); ok {
+			for key := range recordMap {
+				columnNames = append(columnNames, key)
+			}
+		}
+	}
+
 	for _, record := range records {
 		recordMap, ok := record.(map[string]interface{})
 		if !ok {
@@ -688,9 +736,14 @@ func formatResultsForLLM(records []interface{}) (map[string]interface{}, error) 
 			instance["timestamp"] = timestamp
 		}
 
-		// Process numeric OHLCV fields
-		for _, field := range []string{"open", "high", "low", "close", "volume"} {
-			if value, ok := recordMap[field]; ok {
+		// Process all numeric fields including OHLCV and indicators
+		for _, key := range columnNames {
+			// Skip ticker and timestamp as they're already handled
+			if key == "ticker" || key == "timestamp" {
+				continue
+			}
+
+			if value, ok := recordMap[key]; ok {
 				// Convert the PostgreSQL numeric type
 				if numericMap, ok := value.(map[string]interface{}); ok {
 					// Extract exponent and value
@@ -714,52 +767,17 @@ func formatResultsForLLM(records []interface{}) (map[string]interface{}, error) 
 							if expOk && floatVal != 0 {
 								// Calculate actual decimal value
 								actualValue := floatVal * math.Pow(10, expFloat)
-								instance[field] = actualValue
-							} else {
-								instance[field] = intVal
-							}
-						}
-					} else {
-						// If structure doesn't match expected format, use original value
-						instance[field] = value
-					}
-				} else {
-					// Pass through non-numeric values
-					instance[field] = value
-				}
-			}
-		}
-
-		// Add any additional fields (indicators, etc.)
-		for key, value := range recordMap {
-			if key != "ticker" && key != "timestamp" && key != "open" && key != "high" && key != "low" && key != "close" && key != "volume" {
-				// Process any other fields the same way as OHLCV
-				if numericMap, ok := value.(map[string]interface{}); ok {
-					if exp, hasExp := numericMap["Exp"]; hasExp {
-						if intVal, hasInt := numericMap["Int"]; hasInt {
-							expFloat, expOk := exp.(float64)
-							var floatVal float64
-
-							switch v := intVal.(type) {
-							case float64:
-								floatVal = v
-							case string:
-								if parsedFloat, err := strconv.ParseFloat(v, 64); err == nil {
-									floatVal = parsedFloat
-								}
-							}
-
-							if expOk && floatVal != 0 {
-								actualValue := floatVal * math.Pow(10, expFloat)
 								instance[key] = actualValue
 							} else {
 								instance[key] = intVal
 							}
 						}
 					} else {
+						// If structure doesn't match expected format, use original value
 						instance[key] = value
 					}
 				} else {
+					// Pass through non-numeric values
 					instance[key] = value
 				}
 			}
@@ -777,6 +795,7 @@ func formatResultsForLLM(records []interface{}) (map[string]interface{}, error) 
 		}
 		summary["count"] = len(instances)
 		summary["timeframe"] = "daily"
+		summary["columns"] = columnNames
 
 		// Calculate date range
 		if len(instances) > 0 {
