@@ -40,6 +40,22 @@ echo "Enabling ingress addon for profile '$MINIKUBE_PROFILE'..."
 minikube addons enable ingress -p "$MINIKUBE_PROFILE"
 echo "Ingress addon enabled."
 
+echo "Waiting for ingress-nginx admission configuration jobs to complete..."
+# Wait up to 2 minutes for the admission create job
+if ! kubectl wait --namespace ingress-nginx \
+  --for=condition=complete job \
+  --selector=app.kubernetes.io/component=admission-webhook \
+  --timeout=120s; then
+  echo "ERROR: Ingress Nginx admission jobs did not complete in time."
+  echo "Checking job status:"
+  kubectl get jobs --namespace ingress-nginx --selector=app.kubernetes.io/component=admission-webhook -o wide
+  echo "Checking pod status for jobs:"
+  kubectl get pods --namespace ingress-nginx --selector=app.kubernetes.io/component=admission-webhook -o wide
+  exit 1
+fi
+echo "Ingress Nginx admission jobs completed."
+
+
 echo "Waiting for ingress-nginx controller deployment to be ready..."
 # Wait up to 2 minutes for the deployment to become available in the ingress-nginx namespace
 if ! kubectl wait --namespace ingress-nginx \
