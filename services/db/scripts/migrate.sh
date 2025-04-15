@@ -98,39 +98,40 @@ for MIGRATION_FILE in $MIGRATION_FILES; do
   
   log "Checking migration: $VERSION (from $FILENAME)"
   
-  # Check if this migration has already been applied
-  APPLIED=$(PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d "$DB_NAME" -t -c "
-    SELECT COUNT(*) FROM schema_versions WHERE version = $VERSION;
-  ")
+  # Check if the migration has already been applied
+  APPLIED_COUNT=$($PSQL -t -c "
+  SELECT COUNT(*) FROM schema_versions WHERE version = '$VERSION';
+  " | tr -d ' ')
+
+  if [ "$APPLIED_COUNT" != "0" ]; then
+    echo "Migration $VERSION already applied, skipping"
+    continue
+  fi
   
-  if [ "$(echo $APPLIED | tr -d ' ')" -eq "0" ]; then
-    log "Applying migration: $VERSION (from $FILENAME)"
+  log "Applying migration: $VERSION (from $FILENAME)"
+  
+  # Extract description from the migration file
+  DESCRIPTION=$(grep -A 1 "^-- Description:" "$MIGRATION_FILE" | tail -n 1 | sed 's/^-- //')
+  if [ -z "$DESCRIPTION" ]; then
+    DESCRIPTION="Migration $VERSION"
+  fi
+  
+  log "Migration description: $DESCRIPTION"
+  
+  # Apply the migration
+  if PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d "$DB_NAME" -f "$MIGRATION_FILE"; then
+    log "Successfully applied migration: $VERSION"
     
-    # Extract description from the migration file
-    DESCRIPTION=$(grep -A 1 "^-- Description:" "$MIGRATION_FILE" | tail -n 1 | sed 's/^-- //')
-    if [ -z "$DESCRIPTION" ]; then
-      DESCRIPTION="Migration $VERSION"
-    fi
-    
-    log "Migration description: $DESCRIPTION"
-    
-    # Apply the migration
-    if PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d "$DB_NAME" -f "$MIGRATION_FILE"; then
-      log "Successfully applied migration: $VERSION"
-      
-      # Record the migration in schema_versions
-      PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d "$DB_NAME" -c "
-        INSERT INTO schema_versions (version, description)
-        VALUES ($VERSION, '$DESCRIPTION')
-        ON CONFLICT (version) DO NOTHING;
-      " || {
-        error_log "Failed to record migration in schema_versions table"
-      }
-    else
-      error_log "Failed to apply migration: $VERSION"
-    fi
+    # Record the migration in schema_versions
+    PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d "$DB_NAME" -c "
+      INSERT INTO schema_versions (version, description)
+      VALUES ('$VERSION', '$DESCRIPTION')
+      ON CONFLICT (version) DO NOTHING;
+    " || {
+      error_log "Failed to record migration in schema_versions table"
+    }
   else
-    log "Migration already applied: $VERSION"
+    error_log "Failed to apply migration: $VERSION"
   fi
 done
 
