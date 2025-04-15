@@ -72,6 +72,7 @@ You are an expert assistant specializing in translating natural language queries
   }
 }
 
+
 **Instructions & Guidelines:**
 
 1.  **Strict Schema Adherence:** Generate JSON that strictly follows the schema above. Do not add extra fields.
