@@ -134,6 +134,12 @@
 	let isLoading = false;
 	let messagesContainer: HTMLDivElement;
 
+	// Backtest mode state
+	let isBacktestMode = false;
+
+	// State for table expansion
+	let tableExpansionStates: { [key: string]: boolean } = {};
+
 	// Chat history
 	let messages: Message[] = [];
 
@@ -240,6 +246,11 @@
 		handleSubmit();
 	}
 
+	// Function to toggle backtest mode
+	function toggleBacktestMode() {
+		isBacktestMode = !isBacktestMode;
+	}
+
 	function handleSubmit() {
 		if (!inputValue.trim()) return;
 
@@ -267,7 +278,10 @@
 		const queryText = inputValue;
 		inputValue = '';
 
-		privateRequest('getQuery', { query: queryText })
+		// Prepend if backtest mode is active
+		const finalQuery = isBacktestMode ? `[RUN BACKTEST] ${queryText}` : queryText;
+
+		privateRequest('getQuery', { query: finalQuery })
 			.then((response) => {
 				console.log('response', response);
 				// Type assertion to handle the response type
@@ -441,6 +455,15 @@
 			} 
 		}
 	}
+
+	// Function to toggle table expansion state
+	function toggleTableExpansion(tableKey: string) {
+		if (!(tableKey in tableExpansionStates)) {
+			tableExpansionStates[tableKey] = false; // Default to collapsed if not set
+		}
+		tableExpansionStates[tableKey] = !tableExpansionStates[tableKey];
+		tableExpansionStates = tableExpansionStates; // Trigger reactivity
+	}
 </script>
 
 <div class="chat-container">
@@ -487,7 +510,7 @@
 							<div class="message-content">
 								{#if message.contentChunks && message.contentChunks.length > 0}
 									<div class="content-chunks">
-										{#each message.contentChunks as chunk}
+										{#each message.contentChunks as chunk, index}
 											{#if chunk.type === 'text'}
 												<div class="chunk-text">
 													{@html parseMarkdown(typeof chunk.content === 'string' ? chunk.content : String(chunk.content))}
@@ -495,30 +518,45 @@
 											{:else if chunk.type === 'table'}
 												{#if isTableData(chunk.content)}
 													{@const tableData = getTableData(chunk.content)}
+													{@const tableKey = message.id + '-' + index}
+													{@const isLongTable = tableData && tableData.rows.length > 5}
+													{@const isExpanded = tableExpansionStates[tableKey] === true}
+
 													{#if tableData}
-														<div class="chunk-table">
+														<div class="chunk-table-wrapper">
 															{#if tableData.caption}
 																<div class="table-caption">{tableData.caption}</div>
 															{/if}
-															<table>
-																<thead>
-																	<tr>
-																		{#each tableData.headers as header}
-																			<th>{header}</th>
-																		{/each}
-																	</tr>
-																</thead>
-																<tbody>
-																	{#each tableData.rows as row}
+															<div class="chunk-table {isExpanded ? 'expanded' : ''}">
+																<table>
+																	<thead>
 																		<tr>
-																			{#each row as cell}
-																			<td>{@html parseMarkdown(typeof cell === 'string' ? cell : String(cell))}</td>
+																			{#each tableData.headers as header}
+																				<th>{header}</th>
 																			{/each}
 																		</tr>
-																	{/each}
-																</tbody>
-															</table>
+																	</thead>
+																	<tbody>
+																		{#each tableData.rows as row, rowIndex}
+																			{#if rowIndex < 5 || isExpanded}
+																			<tr>
+																				{#each row as cell}
+																				<td>{@html parseMarkdown(typeof cell === 'string' ? cell : String(cell))}</td>
+																				{/each}
+																			</tr>
+																			{/if}
+																		{/each}
+																	</tbody>
+																</table>
+															</div>
+															{#if isLongTable}
+																<button class="table-toggle-btn" on:click={() => toggleTableExpansion(tableKey)}>
+																	{isExpanded ? 'Show less' : `Show more (${tableData.rows.length} rows)`}
+																</button>
+															{/if}
 														</div>
+													{:else}
+														<div class="chunk-error">Invalid table data structure</div>
 													{/if}
 												{:else}
 													<div class="chunk-error">Invalid table data format</div>
@@ -598,34 +636,48 @@
 	</div>
 
 	<div class="chat-input-wrapper">
-		<input
-			type="text"
-			class="chat-input"
-			placeholder="Ask about anything..."
-			bind:value={inputValue}
-			bind:this={queryInput}
-			on:keydown={(event) => {
-				// Prevent space key events from propagating to parent elements
-				if (event.key === ' ' || event.code === 'Space') {
-					event.stopPropagation();
-				}
-				// Original handler
-				if (event.key === 'Enter') {
-					event.preventDefault();
-					handleSubmit();
-				}
-			}}
-		/>
-		<button
-			class="send-button"
-			on:click={handleSubmit}
-			aria-label="Send message"
-			disabled={!inputValue.trim() || isLoading}
-		>
-			<svg viewBox="0 0 24 24" class="send-icon">
-				<path d="M2,21L23,12L2,3V10L17,12L2,14V21Z" />
-			</svg>
-		</button>
+		<div class="input-actions">
+			<button
+				class="action-toggle-button {isBacktestMode ? 'active' : ''}"
+				on:click={toggleBacktestMode}
+				aria-label="Toggle Backtest Mode"
+				title="Toggle Backtest Mode"
+			>
+				<!-- You could add an icon here later -->
+				Backtest
+			</button>
+			<!-- Add other action buttons like Search here if needed -->
+		</div>
+		<div class="input-field-container">
+			<input
+				type="text"
+				class="chat-input"
+				placeholder="Ask about anything..."
+				bind:value={inputValue}
+				bind:this={queryInput}
+				on:keydown={(event) => {
+					// Prevent space key events from propagating to parent elements
+					if (event.key === ' ' || event.code === 'Space') {
+						event.stopPropagation();
+					}
+					// Original handler
+					if (event.key === 'Enter') {
+						event.preventDefault();
+						handleSubmit();
+					}
+				}}
+			/>
+			<button
+				class="send-button"
+				on:click={handleSubmit}
+				aria-label="Send message"
+				disabled={!inputValue.trim() || isLoading}
+			>
+				<svg viewBox="0 0 24 24" class="send-icon">
+					<path d="M2,21L23,12L2,3V10L17,12L2,14V21Z" />
+				</svg>
+			</button>
+		</div>
 	</div>
 </div>
 
@@ -876,9 +928,46 @@
 
 	.chat-input-wrapper {
 		display: flex;
-		padding: clamp(0.75rem, 2vw, 1.5rem);
+		flex-direction: column; /* Stack actions and input vertically */
+		padding: clamp(0.5rem, 1.5vw, 1rem) clamp(0.75rem, 2vw, 1.5rem);
 		background: var(--ui-bg-element-darker, #2a2a2a);
 		border-top: 1px solid var(--ui-border, #444);
+		gap: 0.5rem; /* Gap between actions and input field */
+	}
+
+	.input-actions {
+		display: flex;
+		gap: 0.5rem;
+		align-items: center;
+	}
+
+	.action-toggle-button {
+		padding: 0.4rem 0.8rem;
+		font-size: 0.75rem;
+		border-radius: 1rem; /* More rounded */
+		border: 1px solid var(--ui-border, #444);
+		background: var(--ui-bg-element, #333);
+		color: var(--text-secondary, #aaa);
+		cursor: pointer;
+		transition: all 0.2s ease;
+		font-weight: 500;
+	}
+
+	.action-toggle-button:hover {
+		border-color: var(--text-secondary, #aaa);
+		color: var(--text-primary, #fff);
+	}
+
+	.action-toggle-button.active {
+		background: var(--accent-color, #3a8bf7);
+		border-color: var(--accent-color, #3a8bf7);
+		color: white;
+	}
+
+	.input-field-container {
+		position: relative; /* Needed for absolute positioning of send button */
+		display: flex; /* Keep input and send button together */
+		width: 100%;
 	}
 
 	.chat-input {
@@ -895,9 +984,8 @@
 
 	.send-button {
 		position: absolute;
-		right: clamp(1.25rem, 3vw, 2rem);
-		transform: translateY(-50%);
-		top: 50%;
+		right: 0.75rem;
+		bottom: 0.6rem;
 		background: transparent;
 		border: none;
 		cursor: pointer;
@@ -1043,10 +1131,15 @@
 		margin-bottom: 1rem;
 		overflow-x: auto;
 	}
-	
+
+	.chunk-table.expanded {
+		/* No height constraints when expanded */
+	}
+
 	.table-caption {
 		font-weight: bold;
 		margin-bottom: 0.5rem;
+		font-size: 0.8rem;
 	}
 	
 	.content-chunks table {
@@ -1127,5 +1220,23 @@
 	.chat-messages {
 		scrollbar-width: thin; /* "auto" or "thin" */
 		scrollbar-color: var(--ui-border-darker, #555) var(--ui-bg-element, #333); /* thumb track */
+	}
+
+	.table-toggle-btn {
+		background: var(--ui-bg-element, #333);
+		border: 1px solid var(--ui-border, #444);
+		color: var(--text-secondary, #aaa);
+		padding: 0.3rem 0.8rem;
+		font-size: 0.7rem;
+		border-radius: 0.25rem;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		margin-top: -0.5rem; /* Pull up slightly below table */
+		display: inline-block;
+	}
+
+	.table-toggle-btn:hover {
+		border-color: var(--accent-color, #3a8bf7);
+		color: var(--text-primary, #fff);
 	}
 </style>
