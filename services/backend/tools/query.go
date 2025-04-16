@@ -630,7 +630,7 @@ func getGeminiFunctionResponse(ctx context.Context, conn *utils.Conn, query stri
 
 	systemInstruction := "You are a helpful assistant that can answer questions and run functions"
 	var geminiTools []*genai.Tool
-	for _, tool := range Tools {
+	for _, tool := range GetTools(false) {
 		// Convert the FunctionDeclaration to a Tool
 		geminiTools = append(geminiTools, &genai.Tool{
 			FunctionDeclarations: []*genai.FunctionDeclaration{
@@ -906,8 +906,8 @@ func executeGeminiFunctions(ctx context.Context, conn *utils.Conn, userID int, f
 			fmt.Printf("Warning: Could not parse args for storage: %v\n", err)
 		}
 
-		// Check if the function exists in Tools map
-		tool, exists := Tools[fc.Name]
+		// Check if the function exists in Tpols map
+		tool, exists := GetTools(false)[fc.Name]
 		if !exists {
 			results = append(results, ExecuteResult{
 				FunctionName: fc.Name,

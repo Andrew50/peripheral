@@ -12,8 +12,10 @@ import (
 )
 
 type Tool struct {
-	genai.FunctionDeclaration
-	Function func(*utils.Conn, int, json.RawMessage) (interface{}, error)
+	FunctionDeclaration *genai.FunctionDeclaration
+	Function            func(*utils.Conn, int, json.RawMessage) (interface{}, error)
+	Query               bool
+	Api                 bool
 }
 
 // Tools is a map of function names to Tool objects
@@ -22,7 +24,7 @@ var toolsInitialized bool
 var toolsMutex sync.Mutex
 
 // GetTools returns a copy of the Tools map to avoid import cycles
-func GetTools() map[string]Tool {
+func GetTools(api bool) map[string]Tool {
 	toolsMutex.Lock()
 	defer toolsMutex.Unlock()
 
@@ -31,7 +33,16 @@ func GetTools() map[string]Tool {
 		toolsInitialized = true
 	}
 
-	return Tools
+	filteredTools := make(map[string]Tool)
+	for name, tool := range Tools {
+		if api && tool.Api {
+			filteredTools[name] = tool
+		} else if !api && tool.Query {
+			filteredTools[name] = tool
+		}
+	}
+
+	return filteredTools
 }
 
 // Initialize all tools
@@ -39,24 +50,13 @@ func initTools() {
 	// Initialize the Tools map
 	Tools = map[string]Tool{
 		"getQuery": {
-			FunctionDeclaration: genai.FunctionDeclaration{
-				Name:        "getQuery",
-				Description: "n/a",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"query": {
-							Type:        genai.TypeString,
-							Description: "n/a",
-						},
-					},
-					Required: []string{"query"},
-				},
-			},
-			Function: GetQuery,
+			FunctionDeclaration: nil,
+            Function: GetQuery,
+            Query: false,
+            Api: true,
 		},
 		"getSimilarInstances": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getSimilarInstances",
 				Description: "Retrieves similar securities based on sector, industry, and market cap for a given security",
 				Parameters: &genai.Schema{
@@ -83,9 +83,11 @@ func initTools() {
 				},
 			},
 			Function: GetSimilarInstances,
+            Query: true,
+            Api: true,
 		},
 		"getCurrentSecurityID": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getCurrentSecurityID",
 				Description: "Retrieves the current security ID of a ticker symbol.",
 				Parameters: &genai.Schema{
@@ -100,9 +102,11 @@ func initTools() {
 				},
 			},
 			Function: GetCurrentSecurityID,
+            Query: true,
+            Api: true,
 		},
 		"getSecuritiesFromTicker": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getSecuritiesFromTicker",
 				Description: "Retrieves securities information based on a ticker symbol.",
 				Parameters: &genai.Schema{
@@ -117,11 +121,13 @@ func initTools() {
 				},
 			},
 			Function: GetSecuritiesFromTicker,
+            Query: true,
+            Api: true,
 		},
 		"getCurrentTicker": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getCurrentTicker",
-				Description: "Gets the current ticker fo a securityID",
+				Description: "Gets the current ticker for a securityID",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -134,9 +140,11 @@ func initTools() {
 				},
 			},
 			Function: GetCurrentTicker,
+            Query: true,
+            Api: true,
 		},
 		"getTickerMenuDetails": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getTickerMenuDetails",
 				Description: "Retrieves ticker menu information for a security; ticker, name, market, primary exchange, etc",
 				Parameters: &genai.Schema{
@@ -151,9 +159,11 @@ func initTools() {
 				},
 			},
 			Function: GetTickerMenuDetails,
+            Query: true,
+            Api: true,
 		},
 		"getIcons": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getIcons",
 				Description: "Retrieves icon URLs for securities",
 				Parameters: &genai.Schema{
@@ -171,11 +181,13 @@ func initTools() {
 				},
 			},
 			Function: GetIcons,
+            Query: true,
+            Api: true,
 		},
 
 		//chart
 		"getChartData": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getChartData",
 				Description: "Retrieves price chart data for a security",
 				Parameters: &genai.Schema{
@@ -202,10 +214,12 @@ func initTools() {
 				},
 			},
 			Function: GetChartData,
+            Query: true,
+            Api: true,
 		},
 		//study
 		"getStudies": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStudies",
 				Description: "Retrieves all study entries for the current user",
 				Parameters: &genai.Schema{
@@ -220,10 +234,12 @@ func initTools() {
 				},
 			},
 			Function: GetStudies,
+            Query: false,
+            Api: true,
 		},
 
 		"newStudy": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "newStudy",
 				Description: "Creates a new study entry for the current user",
 				Parameters: &genai.Schema{
@@ -238,9 +254,11 @@ func initTools() {
 				},
 			},
 			Function: NewStudy,
+            Query: false,
+            Api: true,
 		},
 		"saveStudy": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "saveStudy",
 				Description: "Saves content for an existing study entry",
 				Parameters: &genai.Schema{
@@ -255,9 +273,11 @@ func initTools() {
 				},
 			},
 			Function: SaveStudy,
+            Query: false,
+            Api: true,
 		},
 		"deleteStudy": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "deleteStudy",
 				Description: "Deletes a study entry for the current user",
 				Parameters: &genai.Schema{
@@ -272,9 +292,11 @@ func initTools() {
 				},
 			},
 			Function: DeleteStudy,
+            Query: false,
+            Api: true,
 		},
 		"getStudyEntry": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStudyEntry",
 				Description: "Retrieves the content of a specific study entry",
 				Parameters: &genai.Schema{
@@ -289,9 +311,11 @@ func initTools() {
 				},
 			},
 			Function: GetStudyEntry,
+            Query: false,
+            Api: true,
 		},
 		"completeStudy": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "completeStudy",
 				Description: "Marks a study entry as completed or not completed",
 				Parameters: &genai.Schema{
@@ -306,9 +330,11 @@ func initTools() {
 				},
 			},
 			Function: CompleteStudy,
+            Query: false,
+            Api: true,
 		},
 		"setStudySetup": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "setStudySetup",
 				Description: "Associates a setup configuration with a study entry",
 				Parameters: &genai.Schema{
@@ -323,10 +349,12 @@ func initTools() {
 				},
 			},
 			Function: SetStudySetup,
+            Query: false,
+            Api: true,
 		},
 		//journal
 		"getJournals": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getJournals",
 				Description: "Retrieves all journal entries for the current user",
 				Parameters: &genai.Schema{
@@ -341,9 +369,11 @@ func initTools() {
 				},
 			},
 			Function: GetJournals,
+            Query: false,
+            Api: true,
 		},
 		"saveJournal": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "saveJournal",
 				Description: "Saves content for an existing journal entry",
 				Parameters: &genai.Schema{
@@ -376,9 +406,11 @@ func initTools() {
 				},
 			},
 			Function: SaveJournal,
+            Query: true,
+            Api: true,
 		},
 		"deleteJournal": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "deleteJournal",
 				Description: "Deletes a journal entry for the current user",
 				Parameters: &genai.Schema{
@@ -393,9 +425,11 @@ func initTools() {
 				},
 			},
 			Function: DeleteJournal,
+            Query: true,
+            Api: true,
 		},
 		"getJournalEntry": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getJournalEntry",
 				Description: "Retrieves the content of a specific journal entry",
 				Parameters: &genai.Schema{
@@ -410,9 +444,11 @@ func initTools() {
 				},
 			},
 			Function: GetJournalEntry,
+            Query: true,
+            Api: true,
 		},
 		"completeJournal": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "completeJournal",
 				Description: "Marks a journal entry as completed or not completed",
 				Parameters: &genai.Schema{
@@ -431,10 +467,12 @@ func initTools() {
 				},
 			},
 			Function: CompleteJournal,
+            Query: true,
+            Api: true,
 		},
 		//screensaver
 		"getScreensavers": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getScreensavers",
 				Description: "Retrieves a list of trending securities for the screensaver display",
 				Parameters: &genai.Schema{
@@ -449,9 +487,11 @@ func initTools() {
 				},
 			},
 			Function: GetScreensavers,
+            Query: false,
+            Api: true,
 		},
 		"getInstancesByTickers": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getInstancesByTickers",
 				Description: "Retrieves security instances for a list of ticker symbols",
 				Parameters: &genai.Schema{
@@ -469,10 +509,12 @@ func initTools() {
 				},
 			},
 			Function: GetInstancesByTickers,
+            Query: true,
+            Api: true,
 		},
 		//watchlist
 		"getWatchlists": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getWatchlists",
 				Description: "Retrieves all watchlists for the current user",
 				Parameters: &genai.Schema{
@@ -487,9 +529,11 @@ func initTools() {
 				},
 			},
 			Function: GetWatchlists,
+            Query: false,
+            Api: true,
 		},
 		"deleteWatchlist": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "deleteWatchlist",
 				Description: "Deletes a watchlist for the current user",
 				Parameters: &genai.Schema{
@@ -504,9 +548,11 @@ func initTools() {
 				},
 			},
 			Function: DeleteWatchlist,
+            Query: true,
+            Api: true,
 		},
 		"newWatchlist": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "newWatchlist",
 				Description: "Creates a new watchlist for the current user",
 				Parameters: &genai.Schema{
@@ -521,9 +567,11 @@ func initTools() {
 				},
 			},
 			Function: NewWatchlist,
+            Query: true,
+            Api: true,
 		},
 		"getWatchlistItems": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getWatchlistItems",
 				Description: "Retrieves the securityID's of the securities in a specific watchlist",
 				Parameters: &genai.Schema{
@@ -538,9 +586,11 @@ func initTools() {
 				},
 			},
 			Function: GetWatchlistItems,
+            Query: true,
+            Api: true,
 		},
 		"deleteWatchlistItem": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "deleteWatchlistItem",
 				Description: "Removes a security from a watchlist",
 				Parameters: &genai.Schema{
@@ -555,9 +605,11 @@ func initTools() {
 				},
 			},
 			Function: DeleteWatchlistItem,
+            Query: true,
+            Api: true,
 		},
 		"newWatchlistItem": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "newWatchlistItem",
 				Description: "Adds a security to a watchlist",
 				Parameters: &genai.Schema{
@@ -576,10 +628,12 @@ func initTools() {
 				},
 			},
 			Function: NewWatchlistItem,
+            Query: true,
+            Api: true,
 		},
 		//singles
 		"getPrevClose": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getPrevClose",
 				Description: "Retrieves the previous closing price for a security",
 				Parameters: &genai.Schema{
@@ -594,11 +648,13 @@ func initTools() {
 				},
 			},
 			Function: GetPrevClose,
+            Query: true,
+            Api: true,
 		},
 		//"getMarketCap": GetMarketCap,
 		//settings
 		"getSettings": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getSettings",
 				Description: "Retrieves the user settings for the current user",
 				Parameters: &genai.Schema{
@@ -613,9 +669,11 @@ func initTools() {
 				},
 			},
 			Function: GetSettings,
+            Query: false,
+            Api: true,
 		},
 		"setSettings": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "setSettings",
 				Description: "Updates the user settings for the current user",
 				Parameters: &genai.Schema{
@@ -640,10 +698,12 @@ func initTools() {
 				},
 			},
 			Function: SetSettings,
+            Query: true,
+            Api: true,
 		},
 		//profile
 		"updateProfilePicture": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "updateProfilePicture",
 				Description: "Updates the profile picture for the current user",
 				Parameters: &genai.Schema{
@@ -658,10 +718,12 @@ func initTools() {
 				},
 			},
 			Function: UpdateProfilePicture,
+            Query: true,
+            Api: true,
 		},
 		//exchanges
 		"getExchanges": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getExchanges",
 				Description: "Retrieves a list of stock exchanges and their MIC codes from Polygon.io",
 				Parameters: &genai.Schema{
@@ -676,10 +738,12 @@ func initTools() {
 				},
 			},
 			Function: GetExchanges,
+            Query: false,
+            Api: true,
 		},
 		//setups
 		"getSetups": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getSetups",
 				Description: "Retrieves all setup configurations for the current user",
 				Parameters: &genai.Schema{
@@ -694,9 +758,11 @@ func initTools() {
 				},
 			},
 			Function: GetSetups,
+            Query: false,
+            Api: true,
 		},
 		"newSetup": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "newSetup",
 				Description: "Creates a new setup configuration for the current user",
 				Parameters: &genai.Schema{
@@ -735,9 +801,11 @@ func initTools() {
 				},
 			},
 			Function: NewSetup,
+            Query: true,
+            Api: true,
 		},
 		"setSetup": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "setSetup",
 				Description: "Updates an existing setup configuration for the current user",
 				Parameters: &genai.Schema{
@@ -780,9 +848,11 @@ func initTools() {
 				},
 			},
 			Function: SetSetup,
+            Query: true,
+            Api: true,
 		},
 		"deleteSetup": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "deleteSetup",
 				Description: "Deletes a setup configuration for the current user",
 				Parameters: &genai.Schema{
@@ -797,12 +867,14 @@ func initTools() {
 				},
 			},
 			Function: DeleteSetup,
+            Query: true,
+            Api: true,
 		},
 		//algos
 		//"getAlgos": GetAlgos,
 		//samples
 		"labelTrainingQueueInstance": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "labelTrainingQueueInstance",
 				Description: "Labels a training instance in the queue",
 				Parameters: &genai.Schema{
@@ -817,9 +889,11 @@ func initTools() {
 				},
 			},
 			Function: LabelTrainingQueueInstance,
+            Query: false,
+            Api: true,
 		},
 		"getTrainingQueue": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getTrainingQueue",
 				Description: "Retrieves the current training queue instances",
 				Parameters: &genai.Schema{
@@ -834,9 +908,11 @@ func initTools() {
 				},
 			},
 			Function: GetTrainingQueue,
+            Query: false,
+            Api: true,
 		},
 		"setSample": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "setSample",
 				Description: "Sets a sample for training purposes",
 				Parameters: &genai.Schema{
@@ -851,9 +927,11 @@ func initTools() {
 				},
 			},
 			Function: SetSample,
+            Query: false,
+            Api: true,
 		},
 		"getAlerts": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getAlerts",
 				Description: "Retrieves all alerts for the current user",
 				Parameters: &genai.Schema{
@@ -868,9 +946,11 @@ func initTools() {
 				},
 			},
 			Function: GetAlerts,
+            Query: false,
+            Api: true,
 		},
 		"getAlertLogs": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getAlertLogs",
 				Description: "Retrieves the history of triggered alerts for the current user",
 				Parameters: &genai.Schema{
@@ -885,9 +965,11 @@ func initTools() {
 				},
 			},
 			Function: GetAlertLogs,
+            Query: false,
+            Api: true,
 		},
 		"newAlert": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "newAlert",
 				Description: "Creates a new alert for the current user",
 				Parameters: &genai.Schema{
@@ -922,9 +1004,11 @@ func initTools() {
 				},
 			},
 			Function: NewAlert,
+            Query: true,
+            Api: true,
 		},
 		"deleteAlert": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "deleteAlert",
 				Description: "Deletes an alert for the current user",
 				Parameters: &genai.Schema{
@@ -939,9 +1023,11 @@ func initTools() {
 				},
 			},
 			Function: DeleteAlert,
+            Query: true,
+            Api: true,
 		},
 		"setHorizontalLine": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "setHorizontalLine",
 				Description: "Creates a new horizontal line on a chart",
 				Parameters: &genai.Schema{
@@ -968,9 +1054,11 @@ func initTools() {
 				},
 			},
 			Function: SetHorizontalLine,
+            Query: true,
+            Api: true,
 		},
 		"getHorizontalLines": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getHorizontalLines",
 				Description: "Retrieves all horizontal lines for a specific security",
 				Parameters: &genai.Schema{
@@ -985,9 +1073,11 @@ func initTools() {
 				},
 			},
 			Function: GetHorizontalLines,
+            Query: true,
+            Api: true,
 		},
 		"deleteHorizontalLine": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "deleteHorizontalLine",
 				Description: "Deletes a horizontal line from a chart",
 				Parameters: &genai.Schema{
@@ -1002,9 +1092,11 @@ func initTools() {
 				},
 			},
 			Function: DeleteHorizontalLine,
+            Query: true,
+            Api: true,
 		},
 		"updateHorizontalLine": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "updateHorizontalLine",
 				Description: "Updates an existing horizontal line on a chart",
 				Parameters: &genai.Schema{
@@ -1035,9 +1127,11 @@ func initTools() {
 				},
 			},
 			Function: UpdateHorizontalLine,
+            Query: true,
+            Api: true,
 		},
 		"getActive": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getActive",
 				Description: "Retrieves a list of active securities",
 				Parameters: &genai.Schema{
@@ -1052,9 +1146,11 @@ func initTools() {
 				},
 			},
 			Function: GetActive,
+            Query: false,
+            Api: true,
 		},
 		"getSecurityClassifications": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getSecurityClassifications",
 				Description: "Retrieves sector and industry classifications for securities",
 				Parameters: &genai.Schema{
@@ -1069,10 +1165,12 @@ func initTools() {
 				},
 			},
 			Function: GetSecurityClassifications,
+            Query: false,
+            Api: true,
 		},
 		// chart events / SEC filings
 		"getLatestEdgarFilings": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getLatestEdgarFilings",
 				Description: "Retrieves the latest SEC EDGAR filings across all securities",
 				Parameters: &genai.Schema{
@@ -1087,9 +1185,11 @@ func initTools() {
 				},
 			},
 			Function: GetLatestEdgarFilings,
+            Query: false,
+            Api: true,
 		},
 		"getStockEdgarFilings": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStockEdgarFilings",
 				Description: "Retrieves all SEC filings for a security within a time range. Returns a list of the filing type and URLs to the filings.",
 				Parameters: &genai.Schema{
@@ -1112,9 +1212,11 @@ func initTools() {
 				},
 			},
 			Function: GetStockEdgarFilings,
+            Query: true,
+            Api: true,
 		},
 		"getChartEvents": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getChartEvents",
 				Description: "Retrieves events (splits, dividends, SEC filings) for a security within a time range",
 				Parameters: &genai.Schema{
@@ -1141,9 +1243,11 @@ func initTools() {
 				},
 			},
 			Function: GetChartEvents,
+            Query: true,
+            Api: true,
 		},
 		"getEarningsText": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getEarningsText",
 				Description: "Retrieves the text content of the latest 10-K or 10-Q SEC filing for a security",
 				Parameters: &genai.Schema{
@@ -1166,9 +1270,11 @@ func initTools() {
 				},
 			},
 			Function: GetEarningsText,
+            Query: true,
+            Api: true,
 		},
 		"getFilingText": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getFilingText",
 				Description: "Retrieves the text content of a SEC filing",
 				Parameters: &genai.Schema{
@@ -1183,10 +1289,12 @@ func initTools() {
 				},
 			},
 			Function: GetFilingText,
+            Query: true,
+            Api: true,
 		},
 		// Account / User Trades
 		"grab_user_trades": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "grab_user_trades",
 				Description: "Retrieves all trades for the current user with optional filtering",
 				Parameters: &genai.Schema{
@@ -1209,9 +1317,11 @@ func initTools() {
 				},
 			},
 			Function: GrabUserTrades,
+            Query: true,
+            Api: true,
 		},
 		"get_trade_statistics": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "get_trade_statistics",
 				Description: "Retrieves trading performance statistics for the current user",
 				Parameters: &genai.Schema{
@@ -1234,9 +1344,11 @@ func initTools() {
 				},
 			},
 			Function: GetTradeStatistics,
+            Query: true,
+            Api: true,
 		},
 		"get_ticker_performance": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "get_ticker_performance",
 				Description: "Retrieves detailed performance statistics for a specific ticker",
 				Parameters: &genai.Schema{
@@ -1255,9 +1367,11 @@ func initTools() {
 				},
 			},
 			Function: GetTickerPerformance,
+            Query: true,
+            Api: true,
 		},
 		"delete_all_user_trades": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "delete_all_user_trades",
 				Description: "Deletes all trade records for the current user",
 				Parameters: &genai.Schema{
@@ -1272,9 +1386,11 @@ func initTools() {
 				},
 			},
 			Function: DeleteAllUserTrades,
+            Query: false,
+            Api: true,
 		},
 		"handle_trade_upload": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "handle_trade_upload",
 				Description: "Processes and imports trade data from a CSV file",
 				Parameters: &genai.Schema{
@@ -1293,9 +1409,11 @@ func initTools() {
 				},
 			},
 			Function: HandleTradeUpload,
+            Query: true,
+            Api: true,
 		},
 		"get_daily_trade_stats": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "get_daily_trade_stats",
 				Description: "Retrieves daily trading statistics for the current user",
 				Parameters: &genai.Schema{
@@ -1314,9 +1432,11 @@ func initTools() {
 				},
 			},
 			Function: GetDailyTradeStats,
+            Query: true,
+            Api: true,
 		},
 		"run_backtest": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "run_backtest",
 				Description: "Runs a backtest based on a natural language query about stock conditions, patterns, and indicators IF YOU CALL THIS TOOL, USE THE USER'S ORIGINAL QUERY. DO NOT GENERATE A NEW QUERY.",
 				Parameters: &genai.Schema{
@@ -1331,10 +1451,12 @@ func initTools() {
 				},
 			},
 			Function: RunBacktest,
+            Query: true,
+            Api: true,
 		},
 		// Notes
 		"get_notes": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "get_notes",
 				Description: "Retrieves notes for the current user with optional filtering",
 				Parameters: &genai.Schema{
@@ -1368,9 +1490,11 @@ func initTools() {
 				},
 			},
 			Function: GetNotes,
+            Query: true,
+            Api: true,
 		},
 		"search_notes": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "search_notes",
 				Description: "Performs a full-text search on notes with highlighted results",
 				Parameters: &genai.Schema{
@@ -1389,9 +1513,11 @@ func initTools() {
 				},
 			},
 			Function: SearchNotes,
+            Query: true,
+            Api: true,
 		},
 		"get_note": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "get_note",
 				Description: "Retrieves a single note by ID",
 				Parameters: &genai.Schema{
@@ -1406,9 +1532,11 @@ func initTools() {
 				},
 			},
 			Function: GetNote,
+            Query: true,
+            Api: true,
 		},
 		"create_note": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "create_note",
 				Description: "Creates a new note for the user",
 				Parameters: &genai.Schema{
@@ -1446,9 +1574,11 @@ func initTools() {
 				},
 			},
 			Function: CreateNote,
+            Query: true,
+            Api: true,
 		},
 		"update_note": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "update_note",
 				Description: "Updates an existing note",
 				Parameters: &genai.Schema{
@@ -1490,9 +1620,11 @@ func initTools() {
 				},
 			},
 			Function: UpdateNote,
+            Query: true,
+            Api: true,
 		},
 		"delete_note": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "delete_note",
 				Description: "Deletes a note",
 				Parameters: &genai.Schema{
@@ -1507,9 +1639,11 @@ func initTools() {
 				},
 			},
 			Function: DeleteNote,
+            Query: true,
+            Api: true,
 		},
 		"toggle_note_pin": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "toggle_note_pin",
 				Description: "Toggles the pinned status of a note",
 				Parameters: &genai.Schema{
@@ -1528,9 +1662,11 @@ func initTools() {
 				},
 			},
 			Function: ToggleNotePin,
+            Query: true,
+            Api: true,
 		},
 		"toggle_note_archive": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "toggle_note_archive",
 				Description: "Toggles the archived status of a note",
 				Parameters: &genai.Schema{
@@ -1549,9 +1685,11 @@ func initTools() {
 				},
 			},
 			Function: ToggleNoteArchive,
+            Query: true,
+            Api: true,
 		},
 		"verifyAuth": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "verifyAuth",
 				Description: "Verifies the authentication status of the user",
 				Parameters: &genai.Schema{
@@ -1562,12 +1700,15 @@ func initTools() {
 							Description: "Dummy parameter to satisfy Gemini API requirements",
 						},
 					},
+                    Required: []string{}, // Added Required field
 				},
 			},
 			Function: func(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) { return nil, nil },
+            Query: false,
+            Api: true,
 		},
 		"getUserConversation": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getUserConversation",
 				Description: "Retrieves the conversation history for the current user",
 				Parameters: &genai.Schema{
@@ -1582,9 +1723,11 @@ func initTools() {
 				},
 			},
 			Function: GetUserConversation,
+            Query: false,
+            Api: true,
 		},
 		"clearConversationHistory": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "clearConversationHistory",
 				Description: "Deletes the entire conversation history for the current user.",
 				Parameters: &genai.Schema{
@@ -1599,9 +1742,11 @@ func initTools() {
 				},
 			},
 			Function: ClearConversationHistory,
+            Query: false,
+            Api: true,
 		},
 		"getTickerDailySnapshot": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getTickerDailySnapshot",
 				Description: "Retrieves the most recent daily data for a ticker symbol, today's change (absolute and percentage), volume, vwap, OHLC, last price, last bid/ask, etc.",
 				Parameters: &genai.Schema{
@@ -1616,9 +1761,11 @@ func initTools() {
 				},
 			},
 			Function: GetTickerDailySnapshot,
+            Query: true,
+            Api: false,
 		},
 		"getAllTickerSnapshots": {
-			FunctionDeclaration: genai.FunctionDeclaration{
+			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getAllTickerSnapshots",
 				Description: "Retrieves the most recent daily data for all stocks, today's change (absolute and percentage), volume, vwap, OHLC, last price, last bid/ask, etc",
 				Parameters: &genai.Schema{
@@ -1633,23 +1780,14 @@ func initTools() {
 				},
 			},
 			Function: GetAllTickerSnapshots,
+            Query: true,
+            Api: false,
 		},
 		"getSuggestedQueries": {
-			FunctionDeclaration: genai.FunctionDeclaration{
-				Name:        "getSuggestedQueries",
-				Description: "DO NOT use this function. Internal function only.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"a": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: GetSuggestedQueries,
+			FunctionDeclaration: nil,
+            Function: GetSuggestedQueries,
+            Query: false,
+            Api: true,
 		},
 	}
 }

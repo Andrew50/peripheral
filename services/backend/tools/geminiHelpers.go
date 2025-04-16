@@ -51,14 +51,14 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 
 	// Sort tool names for consistent output
 	var toolNames []string
-	for name := range Tools {
+	for name := range GetTools(false) {
 		toolNames = append(toolNames, name)
 	}
 	sort.Strings(toolNames)
 
 	// Add each tool's description and parameters
 	for _, name := range toolNames {
-		tool := Tools[name]
+		tool := GetTools(false)[name]
 
 		// Add function name and description
 		toolsDescription.WriteString(fmt.Sprintf("- %s: %s\n", name, tool.FunctionDeclaration.Description))
