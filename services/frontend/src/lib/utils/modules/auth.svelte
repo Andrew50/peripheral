@@ -128,7 +128,7 @@
 		}
 	}
 
-	async function handleGuestLogin() {
+	/*async function handleGuestLogin() {
 		guestLoading = true;
 		try {
 			// Use the dedicated guestLogin endpoint instead of the regular login
@@ -154,7 +154,7 @@
 		} finally {
 			guestLoading = false;
 		}
-	}
+	}*/
 
 	// Function to clean up guest account when page is closed
 	async function cleanupGuestAccount() {
@@ -233,7 +233,7 @@
 					</div>
 				</button>
 
-				<button
+				<!--<button
 					class="guest-button responsive-shadow"
 					on:click={handleGuestLogin}
 					disabled={guestLoading}
@@ -243,7 +243,7 @@
 					{:else}
 						Continue as Guest
 					{/if}
-				</button>
+				</button>-->
 			</div>
 
 			<div class="divider">
