@@ -51,7 +51,23 @@
 				tickerRegex,
 				(match, ticker, securityId, timestampMs) => {
 					// Use all captured groups in data attributes
-					return `<button class="ticker-button" data-ticker="${ticker}" data-security-id="${securityId}" data-timestamp-ms="${timestampMs}">${ticker}</button>`;
+					let buttonText = ticker;
+					// Check if timestamp is not 0
+					if (timestampMs && timestampMs !== '0') {
+						try {
+							const date = new Date(parseInt(timestampMs, 10));
+							// Format date as YYYY-MM-DD
+							const year = date.getFullYear();
+							const month = (date.getMonth() + 1).toString().padStart(2, '0'); // Months are 0-indexed
+							const day = date.getDate().toString().padStart(2, '0');
+							buttonText += ` (${year}-${month}-${day})`; // Append formatted date
+						} catch (e) {
+							console.error('Error parsing timestamp for button text:', e);
+							// Keep original ticker text if date parsing fails
+						}
+					}
+					// Return the button HTML with potentially updated text
+					return `<button class="ticker-button" data-ticker="${ticker}" data-security-id="${securityId}" data-timestamp-ms="${timestampMs}">${buttonText}</button>`;
 				}
 			);
 
