@@ -318,7 +318,7 @@ func buildBacktestQuery(spec BacktestSpec, timeframe string) (string, []interfac
 		query += "SELECT " + strings.Join(selectColumns, ", ")
 	} else {
 		// Default columns if none specified
-		query += "SELECT ticker, timestamp, open, high, low, close, volume"
+		query += "SELECT ticker, securityid, timestamp, open, high, low, close, volume"
 
 		// Include all indicators in the output
 		for _, indicator := range spec.Indicators {
