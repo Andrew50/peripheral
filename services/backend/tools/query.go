@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -764,11 +766,19 @@ type RoundResult struct {
 }
 
 // processThinkingResponse attempts to parse and execute the thinking model's rounds
+// and injects security IDs into the final response chunks if needed.
 func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, thinkingResp ThinkingResponse, originalQuery string) ([]ContentChunk, []ExecuteResult, error) {
 
 	// Check if this is a content_chunks response instead of rounds
+	// Inject security IDs directly if content_chunks are provided in the thinking response
 	if len(thinkingResp.Rounds) == 0 && len(thinkingResp.ContentChunks) > 0 {
-		return thinkingResp.ContentChunks, []ExecuteResult{}, nil
+		finalChunksWithIds, err := injectSecurityIdsIntoChunks(ctx, conn, thinkingResp.ContentChunks)
+		if err != nil {
+			// Log the error but return the original chunks
+			fmt.Printf("Warning: Failed to inject security IDs into initial content chunks: %v\n", err)
+			return thinkingResp.ContentChunks, []ExecuteResult{}, nil
+		}
+		return finalChunksWithIds, []ExecuteResult{}, nil
 	}
 
 	// Store all results from all rounds
@@ -875,10 +885,75 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 		var textResponse ContentChunk
 		textResponse.Type = "text"
 		textResponse.Content = processedText
-		return []ContentChunk{textResponse}, allResults, nil
+
+		finalChunks := []ContentChunk{textResponse}
+
+		// Inject security IDs into the final text chunks
+		finalChunksWithIds, err := injectSecurityIdsIntoChunks(ctx, conn, finalChunks)
+		if err != nil {
+			// Log the error but return the original chunks
+			fmt.Printf("Warning: Failed to inject security IDs: %v\n", err)
+			return finalChunks, allResults, nil
+		}
+		return finalChunksWithIds, allResults, nil
 	}
 
+	// If no final response is needed, just return the accumulated results
 	return []ContentChunk{}, allResults, nil
+}
+
+// injectSecurityIdsIntoChunks processes content chunks to replace placeholders.
+func injectSecurityIdsIntoChunks(ctx context.Context, conn *utils.Conn, chunks []ContentChunk) ([]ContentChunk, error) {
+	// Regex to find $$$TICKER-TIMESTAMPINMS$$$
+	// Captures TICKER (group 1) and TIMESTAMPINMS (group 2)
+	tickerTimestampRegex := regexp.MustCompile(`\$\$\$([A-Z]{1,5})-(\d+)\$\$\$`)
+
+	processedChunks := make([]ContentChunk, len(chunks))
+	copy(processedChunks, chunks) // Start with a copy
+
+	for i, chunk := range processedChunks {
+		if chunk.Type == "text" {
+			if textContent, ok := chunk.Content.(string); ok {
+				updatedContent := tickerTimestampRegex.ReplaceAllStringFunc(textContent, func(match string) string {
+					submatches := tickerTimestampRegex.FindStringSubmatch(match)
+					if len(submatches) != 3 {
+						return match // Should not happen with valid regex, but return original if it does
+					}
+					ticker := submatches[1]
+					timestampStr := submatches[2] // Keep timestamp as string
+
+					// Convert timestamp string (milliseconds) to time.Time
+					timestampMs, err := strconv.ParseInt(timestampStr, 10, 64)
+					if err != nil {
+						fmt.Printf("Error parsing timestamp string '%s': %v. Skipping replacement.\n", timestampStr, err)
+						return match
+					}
+
+					var timestamp time.Time
+					if timestampMs == 0 {
+						// Use current time if timestamp is 0 (represents latest/present)
+						timestamp = time.Now()
+					} else {
+						timestamp = time.UnixMilli(timestampMs)
+					}
+
+					// Get security ID using the function from utils package
+					securityId, err := utils.GetSecurityID(conn, ticker, timestamp)
+					if err != nil {
+						fmt.Printf("Error getting security ID for %s at %v: %v. Skipping replacement.\n", ticker, timestamp, err)
+						return match // Return original match if ID lookup fails
+					}
+
+					// Format the replacement string: $$$TICKER-securityId-TIMESTAMPINMS$$$
+					return fmt.Sprintf("$$$%s-%d-%s$$$", ticker, securityId, timestampStr)
+				})
+				processedChunks[i].Content = updatedContent
+			}
+		}
+		// Future: Could add handling for tables if tickers might appear there
+	}
+
+	return processedChunks, nil
 }
 
 // processRoundWithGemini sends a round to Gemini for processing and gets back the functions to execute
