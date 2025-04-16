@@ -8,6 +8,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"google.golang.org/genai"
 )
@@ -205,7 +206,6 @@ func executeBacktestQuery(conn *utils.Conn, spec BacktestSpec, timeframe string)
 		for i, col := range columns {
 			row[col] = *(values[i].(*interface{}))
 		}
-		fmt.Println("Row Result: ", row)
 		results = append(results, row)
 	}
 
@@ -318,7 +318,7 @@ func buildBacktestQuery(spec BacktestSpec, timeframe string) (string, []interfac
 		query += "SELECT " + strings.Join(selectColumns, ", ")
 	} else {
 		// Default columns if none specified
-		query += "SELECT ticker, timestamp, open, high, low, close, volume"
+		query += "SELECT ticker, securityid, timestamp, open, high, low, close, volume"
 
 		// Include all indicators in the output
 		for _, indicator := range spec.Indicators {
@@ -698,7 +698,6 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if err != nil {
 		return nil, fmt.Errorf("error formatting results for LLM: %v", err)
 	}
-	fmt.Println("Formatted results: ", formattedResults)
 	return formattedResults, nil
 }
 
@@ -732,8 +731,34 @@ func formatResultsForLLM(records []interface{}) (map[string]interface{}, error) 
 		if ticker, ok := recordMap["ticker"]; ok {
 			instance["ticker"] = ticker
 		}
-		if timestamp, ok := recordMap["timestamp"]; ok {
-			instance["timestamp"] = timestamp
+		if timestampValue, ok := recordMap["timestamp"]; ok {
+			// Attempt to convert the timestamp to Unix milliseconds
+			var timestampMs int64
+			switch t := timestampValue.(type) {
+			case time.Time:
+				timestampMs = t.UnixMilli()
+			case string:
+				// Attempt to parse the string (assuming RFC3339 format)
+				parsedTime, err := time.Parse(time.RFC3339, t)
+				if err == nil {
+					timestampMs = parsedTime.UnixMilli()
+				} else {
+					fmt.Printf("Warning: Could not parse timestamp string '%s': %v\n", t, err)
+					// Fallback: Store the original string if parsing fails
+					instance["timestamp"] = timestampValue
+					continue // Skip assigning milliseconds if parsing failed
+				}
+			default:
+				fmt.Printf("Warning: Unhandled timestamp type: %T\n", timestampValue)
+				// Fallback: Store the original value if type is unexpected
+				instance["timestamp"] = timestampValue
+				continue // Skip assigning milliseconds if type is unknown
+			}
+			// Assign the timestamp in milliseconds
+			instance["timestamp"] = timestampMs
+		} else {
+			// Handle case where timestamp is missing if necessary
+			instance["timestamp"] = nil // Or some default value
 		}
 
 		// Process all numeric fields including OHLCV and indicators
@@ -797,14 +822,26 @@ func formatResultsForLLM(records []interface{}) (map[string]interface{}, error) 
 		summary["timeframe"] = "daily"
 		summary["columns"] = columnNames
 
-		// Calculate date range
+		// Calculate date range using the converted millisecond timestamps
 		if len(instances) > 0 {
-			if firstDate, ok := instances[0]["timestamp"].(string); ok {
-				if lastDate, ok := instances[len(instances)-1]["timestamp"].(string); ok {
-					summary["date_range"] = map[string]string{
-						"start": firstDate,
-						"end":   lastDate,
-					}
+			var startTimeMs, endTimeMs int64
+			var startTimeStr, endTimeStr string
+
+			if firstTimestamp, ok := instances[0]["timestamp"].(int64); ok {
+				startTimeMs = firstTimestamp
+				startTimeStr = time.UnixMilli(startTimeMs).Format(time.RFC3339)
+			}
+			if lastTimestamp, ok := instances[len(instances)-1]["timestamp"].(int64); ok {
+				endTimeMs = lastTimestamp
+				endTimeStr = time.UnixMilli(endTimeMs).Format(time.RFC3339)
+			}
+
+			if startTimeStr != "" && endTimeStr != "" {
+				summary["date_range"] = map[string]interface{}{
+					"start_ms": startTimeMs,
+					"end_ms":   endTimeMs,
+					"start":    startTimeStr, // Keep original string format for summary readability if desired
+					"end":      endTimeStr,
 				}
 			}
 		}
