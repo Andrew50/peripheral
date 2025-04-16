@@ -16,6 +16,7 @@
 		getReferenceStartTimeForDateMilliseconds,
 		timeframeToSeconds
 	} from '$lib/core/timestamp';
+	import { getExchangeName } from '$lib/core/exchanges';
 
 	let instance: Writable<Instance> = writable({});
 	let container: HTMLButtonElement;
@@ -200,49 +201,52 @@
 	on:touchstart={handleClick}
 >
 	<div class="content">
-		{#if ($instance?.logo || currentDetails?.logo) && !logoLoadError}
-			<div class="logo-container">
-				<img
-					src={$instance?.logo || currentDetails?.logo}
-					alt="{$instance?.name || currentDetails?.name || 'Company'} logo"
-					class="company-logo"
-					on:error={handleLogoError}
-				/>
-			</div>
-		{:else if $instance?.ticker || currentDetails?.ticker}
-			<div class="logo-container fallback-logo">
-				<div class="ticker-logo">
-					{($instance?.ticker || currentDetails?.ticker || '').charAt(0)}
+		<!-- Header Section -->
+		<div class="quote-header">
+			{#if ($instance?.logo || currentDetails?.logo) && !logoLoadError}
+				<div class="logo-container">
+					<img
+						src={$instance?.logo || currentDetails?.logo}
+						alt="{$instance?.name || currentDetails?.name || 'Company'} logo"
+						class="company-logo"
+						on:error={handleLogoError}
+					/>
 				</div>
-			</div>
-		{/if}
-		<div class="ticker-container">
-			<div class="ticker-display">
-				<span class="ticker">{$instance.ticker || '--'}</span>
+			{:else if $instance?.ticker || currentDetails?.ticker}
+				<div class="logo-container fallback-logo">
+					<div class="ticker-logo">
+						{($instance?.ticker || currentDetails?.ticker || '').charAt(0)}
+					</div>
+				</div>
+			{/if}
+			<div class="ticker">{$instance.ticker || '--'}</div>
+			<div class="company-info">
+				<div class="name">{$instance?.name || currentDetails?.name || 'N/A'}</div>
 			</div>
 		</div>
 
-
-		<div class="stream-cells">
-			<div class="stream-cell-container">
+		<!-- Key Metrics Section -->
+		<div class="quote-key-metrics">
+			<div class="metric-item">
 				<span class="label">Price</span>
 				<StreamCell instance={$instance} type="price" />
 			</div>
-			<div class="stream-cell-container">
+			<div class="metric-item">
 				<span class="label">Chg %</span>
 				<StreamCell instance={$instance} type="change %" />
 			</div>
-			<div class="stream-cell-container">
+			<div class="metric-item">
 				<span class="label">Chg $</span>
 				<StreamCell instance={$instance} type="change" />
 			</div>
-			<div class="stream-cell-container">
+			<div class="metric-item">
 				<span class="label">Ext %</span>
 				<StreamCell instance={$instance} type="change % extended" />
 			</div>
 		</div>
 
-		<div class="quotes-section">
+		<!-- Market Data Section -->
+		<div class="quote-market-data">
 			<L1 {instance} />
 			<button class="time-sales-button" on:click|stopPropagation={toggleTimeAndSales}>
 				{showTimeAndSales ? 'Hide Time & Sales' : 'Show Time & Sales'}
@@ -250,63 +254,66 @@
 			{#if showTimeAndSales}
 				<TimeAndSales {instance} />
 			{/if}
-			<div class="countdown-section">
+		</div>
+
+		<!-- Details Section -->
+		<div class="quote-details">
+			<div class="detail-item">
+				<span class="label">Active:</span>
+				<span class="value">{$instance?.active || currentDetails?.active || 'N/A'}</span>
+			</div>
+			<div class="detail-item">
+				<span class="label">Market Cap:</span>
+				<span class="value">
+					{#if $instance?.totalShares || currentDetails?.totalShares}
+						<StreamCell instance={$instance} type="market cap" />
+					{:else}
+						N/A
+					{/if}
+				</span>
+			</div>
+			<div class="detail-item">
+				<span class="label">Sector:</span>
+				<span class="value">{$instance?.sector || currentDetails?.sector || 'N/A'}</span>
+			</div>
+			<div class="detail-item">
+				<span class="label">Industry:</span>
+				<span class="value">{$instance?.industry || currentDetails?.industry || 'N/A'}</span>
+			</div>
+			<div class="detail-item">
+				<span class="label">Exchange:</span>
+				<span class="value"
+					>{ getExchangeName($instance?.primary_exchange || currentDetails?.primary_exchange) }</span
+				>
+			</div>
+			<div class="detail-item">
+				<span class="label">Market:</span>
+				<span class="value">{$instance?.market || currentDetails?.market || 'N/A'}</span>
+			</div>
+			<div class="detail-item">
+				<span class="label">Shares Out:</span>
+				<span class="value">
+					{#if $instance?.share_class_shares_outstanding || currentDetails?.share_class_shares_outstanding}
+						{(
+							($instance?.share_class_shares_outstanding ||
+								currentDetails?.share_class_shares_outstanding) / 1e6
+						).toFixed(2)}M
+					{:else}
+						N/A
+					{/if}
+				</span>
+			</div>
+		</div>
+
+		<!-- Countdown Section -->
+		<div class="countdown-section">
 				<div class="countdown-container">
 					<span class="countdown-label">Next Bar Close:</span>
 					<span class="countdown-value">{$countdown}</span>
 				</div>
 			</div>
-		</div>
 
-		<div class="info-row">
-			<span class="label">Name:</span>
-			<span class="value">{$instance?.name || currentDetails?.name || 'N/A'}</span>
-		</div>
-		<div class="info-row">
-			<span class="label">Active:</span>
-			<span class="value">{$instance?.active || currentDetails?.active || 'N/A'}</span>
-		</div>
-		<div class="info-row">
-			<span class="label">Market Cap:</span>
-			<span class="value">
-				{#if $instance?.totalShares || currentDetails?.totalShares}
-					<StreamCell instance={$instance} type="market cap" />
-				{:else}
-					N/A
-				{/if}
-			</span>
-		</div>
-		<div class="info-row">
-			<span class="label">Sector:</span>
-			<span class="value">{$instance?.sector || currentDetails?.sector || 'N/A'}</span>
-		</div>
-		<div class="info-row">
-			<span class="label">Industry:</span>
-			<span class="value">{$instance?.industry || currentDetails?.industry || 'N/A'}</span>
-		</div>
-		<div class="info-row">
-			<span class="label">Exchange:</span>
-			<span class="value"
-				>{$instance?.primary_exchange || currentDetails?.primary_exchange || 'N/A'}</span
-			>
-		</div>
-		<div class="info-row">
-			<span class="label">Market:</span>
-			<span class="value">{$instance?.market || currentDetails?.market || 'N/A'}</span>
-		</div>
-		<div class="info-row">
-			<span class="label">Shares Out:</span>
-			<span class="value">
-				{#if $instance?.share_class_shares_outstanding || currentDetails?.share_class_shares_outstanding}
-					{(
-						($instance?.share_class_shares_outstanding ||
-							currentDetails?.share_class_shares_outstanding) / 1e6
-					).toFixed(2)}M
-				{:else}
-					N/A
-				{/if}
-			</span>
-		</div>
+		<!-- Description Section -->
 		{#if $activeChartInstance?.description}
 			<div class="description">
 				<span class="label">Description:</span>
@@ -319,10 +326,7 @@
 <style>
 	.ticker-info-container {
 		background: var(--ui-bg-primary);
-		backdrop-filter: var(--backdrop-blur);
 		border-top: 1px solid var(--ui-border);
-		overflow: hidden;
-		will-change: height;
 		font-family: var(--font-primary);
 		height: 100%;
 		width: 100%;
@@ -331,127 +335,138 @@
 		text-align: left;
 		border: none;
 		cursor: pointer;
-		display: block;
-	}
-
-	.ticker-info-container.expanded {
-		transition: none;
-	}
-
-	.ticker-info-container:not(.expanded) {
-		transition: height 0.2s ease;
+		display: flex; /* Changed to flex */
+		flex-direction: column; /* Stack content vertically */
 	}
 
 	.content {
-		padding: 15px;
+		padding: 12px; /* Slightly reduced padding */
 		overflow-y: auto;
-		scrollbar-width: none;
+		scrollbar-width: thin; /* Use thin scrollbar */
+		scrollbar-color: var(--ui-border) transparent; /* Style scrollbar */
 		-ms-overflow-style: none;
-		height: 100%;
+		flex-grow: 1; /* Allow content to fill available space */
 		color: var(--text-primary);
 	}
 
 	.content::-webkit-scrollbar {
-		display: none;
+		width: 5px; /* Use thin scrollbar */
+	}
+	.content::-webkit-scrollbar-thumb {
+		background-color: var(--ui-border);
+		border-radius: 3px;
+	}
+	.content::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	/* Header */
+	.quote-header {
+		display: flex;
+		align-items: center;
+		justify-content: flex-start;
+		gap: 10px;
+		margin-bottom: 15px;
+		padding-bottom: 10px;
+		border-bottom: 1px solid var(--ui-border);
+	}
+
+	.logo-container {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: white;
+		padding: 5px;
+		border-radius: 6px;
+		width: 40px;
+		height: 40px;
 	}
 
 	.company-logo {
-		max-height: 40px;
-		max-width: 200px;
+		max-height: 100%;
+		max-width: 100%;
 		object-fit: contain;
+		display: block;
 	}
 
 	.fallback-logo {
-		display: flex;
-		justify-content: center;
-		align-items: center;
+		background: var(--ui-bg-secondary);
+		color: var(--text-primary);
 	}
 
 	.ticker-logo {
-		width: 40px;
-		height: 40px;
+		width: 100%;
+		height: 100%;
 		border-radius: 50%;
-		background: var(--ui-bg-secondary);
-		color: var(--text-primary);
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-size: 20px;
+		font-size: 18px;
 		font-weight: bold;
 		text-transform: uppercase;
 	}
 
-	.ticker-display {
-		font-family: var(--font-primary);
-		font-size: 28px;
-		font-weight: 600;
-		color: var(--text-primary);
-		background: var(--ui-bg-secondary);
-		width: 100%;
-		height: 50px;
-		text-align: center;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: 6px;
-	}
-
 	.ticker {
-		letter-spacing: 0.5px;
+		font-size: 1.6em;
+		font-weight: 700;
+		color: var(--text-primary);
 		text-transform: uppercase;
+		line-height: 1.1;
+		flex-shrink: 0;
 	}
 
-	.ticker-container {
-		margin-bottom: 15px;
-		padding: 0 15%; /* Add padding on sides to make ticker display narrower */
-	}
-
-	.description {
-		margin-top: 15px;
-		padding-top: 10px;
-		border-top: 1px solid var(--ui-border);
-	}
-
-	.stream-cell-container {
-		margin: 0;
-		padding: 0;
-		background: none;
-		font-weight: 500;
-		color: var(--text-secondary);
-	}
-
-	.logo-container {
+	.company-info {
 		display: flex;
-		justify-content: center;
-		margin-bottom: 15px;
-		background: white;
-		padding: 8px;
-		border-radius: 8px;
+		flex-direction: column;
+		min-width: 0;
+		flex-grow: 1;
 	}
 
-	.stream-cells {
-		display: grid;
-		grid-template-columns: repeat(4, 1fr);
-		gap: 8px;
-		margin: 15px 0;
-	}
-
-	.stream-cell-container {
-		margin: 0;
-		padding: 0;
-		background: none;
-		font-weight: 500;
+	.name {
+		font-size: 0.95em;
 		color: var(--text-secondary);
-		overflow: hidden;
-	}
-
-	.stream-cell-container .label {
-		font-size: 0.85em;
-		display: block;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		margin-bottom: 2px;
+		line-height: 1.2;
+	}
+
+	/* Key Metrics */
+	.quote-key-metrics {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+		gap: 10px;
+		margin-bottom: 15px;
+	}
+
+	.metric-item {
+		background: var(--ui-bg-secondary);
+		padding: 8px;
+		border-radius: 4px;
+		text-align: center;
+		border: 1px solid var(--ui-border);
+	}
+
+	.metric-item .label {
+		font-size: 0.75em;
+		color: var(--text-secondary);
+		display: block;
+		margin-bottom: 4px;
+		text-transform: uppercase;
+	}
+
+	.metric-item :global(.value) {
+		font-size: 1.1em;
+		font-weight: 500;
+		display: block;
+	}
+
+	/* Market Data */
+	.quote-market-data {
+		margin-bottom: 15px;
+		padding-top: 10px;
+		border-top: 1px solid var(--ui-border);
 	}
 
 	.time-sales-button {
@@ -459,8 +474,8 @@
 		color: var(--text-primary);
 		border: 1px solid var(--ui-border);
 		border-radius: 6px;
-		padding: 8px 12px;
-		font-size: 0.9em;
+		padding: 6px 10px;
+		font-size: 0.8em;
 		cursor: pointer;
 		transition: all 0.2s ease;
 		margin: 10px 0;
@@ -473,21 +488,39 @@
 
 	.time-sales-button:hover {
 		background: var(--ui-bg-hover);
-		transform: translateY(-1px);
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 	}
 
-	.time-sales-button:active {
-		transform: translateY(0);
-		box-shadow: none;
-	}
-
-	.quotes-section {
-		margin-top: 15px;
+	/* Details */
+	.quote-details {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+		gap: 8px 15px;
+		margin-bottom: 15px;
+		padding-top: 10px;
 		border-top: 1px solid var(--ui-border);
-		padding-top: 15px;
 	}
 
+	.detail-item {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		font-size: 0.9em;
+		padding: 4px 0;
+	}
+
+	.detail-item .label {
+		color: var(--text-secondary);
+		margin-right: 8px;
+		white-space: nowrap;
+	}
+
+	.detail-item .value {
+		color: var(--text-primary);
+		text-align: right;
+		font-weight: 500;
+	}
+
+	/* Countdown */
 	.countdown-section {
 		margin-top: 10px;
 		padding-top: 10px;
@@ -506,19 +539,46 @@
 
 	.countdown-label {
 		color: var(--text-secondary);
-		font-size: 0.9em;
+		font-size: 0.85em;
 		font-weight: 500;
 	}
 
 	.countdown-value {
 		font-family: var(--font-primary);
 		font-weight: 600;
-		font-size: 0.9em;
+		font-size: 0.85em;
 		color: var(--text-primary);
 		padding: 4px 8px;
 		background: var(--ui-bg-primary);
 		border-radius: 4px;
-		min-width: 80px;
+		min-width: 70px;
 		text-align: center;
+	}
+
+	/* Description */
+	.description {
+		margin-top: 15px;
+		padding-top: 10px;
+		border-top: 1px solid var(--ui-border);
+	}
+
+	.description .label {
+		display: block;
+		color: var(--text-secondary);
+		font-size: 0.9em;
+		margin-bottom: 5px;
+		font-weight: 500;
+	}
+
+	.description-text {
+		font-size: 0.85em;
+		line-height: 1.5;
+		color: var(--text-secondary);
+	}
+
+	/* Remove old styles no longer needed */
+	.ticker-display, .ticker-container, .stream-cells, .stream-cell-container, .info-row, .quotes-section {
+		/* These selectors are replaced or styles are handled by new structure */
+		/* Add display: none; if needed, but removing them is cleaner */
 	}
 </style>
