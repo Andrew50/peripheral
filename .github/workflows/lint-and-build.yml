@@ -131,13 +131,14 @@ jobs:
           
           # Try to get the last successful run
           echo "Getting last successful workflow run SHA..."
-          WORKFLOW_ID=$(echo "${{ github.workflow }}" | tr -d '\"')
+          # Use the workflow filename instead of the display name
+          WORKFLOW_FILENAME="lint-and-build.yml"
           BRANCH_NAME="${{ github.ref_name }}"
           
           # Get the run ID of the last successful run of this workflow on this branch
           LAST_RUN_ID=$(gh api \
             -H "Accept: application/vnd.github+json" \
-            "/repos/${{ github.repository }}/actions/workflows/$WORKFLOW_ID/runs?branch=$BRANCH_NAME&status=success&per_page=1" \
+            "/repos/${{ github.repository }}/actions/workflows/$WORKFLOW_FILENAME/runs?branch=$BRANCH_NAME&status=success&per_page=1" \
             --jq '.workflow_runs[0].id')
           
           if [ -n "$LAST_RUN_ID" ] && [ "$LAST_RUN_ID" != "null" ]; then
