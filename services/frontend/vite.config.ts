@@ -7,7 +7,14 @@ export default defineConfig({
 		fs: {
 			// Allow serving files from the entire project
 			allow: ['..']
-		}
+		},
+        watch: {
+            ignored: ['**/node_modules/**', '**/.git/**', '**/.svelte-kit/**'],
+            usePolling: true,
+            interval: 500
+        }
+    
+
 	},
 	build: {
 		// Ensure proper MIME types for JavaScript modules
