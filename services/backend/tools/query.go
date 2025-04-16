@@ -906,7 +906,7 @@ func executeGeminiFunctions(ctx context.Context, conn *utils.Conn, userID int, f
 			fmt.Printf("Warning: Could not parse args for storage: %v\n", err)
 		}
 
-		// Check if the function exists in Tools map
+		// Check if the function exists in Tpols map
 		tool, exists := GetTools(false)[fc.Name]
 		if !exists {
 			results = append(results, ExecuteResult{
