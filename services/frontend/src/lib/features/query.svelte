@@ -42,16 +42,32 @@
 			const parsed = marked.parse(processedContent);
 			const parsedString = typeof parsed === 'string' ? parsed : String(parsed);
 
-			// Regex to find $$$TICKER-securityID$$$ patterns
-			// It captures TICKER (group 1) and securityID (group 2)
-			const tickerRegex = /\$\$\$([A-Z]{1,5})-(\w+)\$\$\$/g;
+			// Regex to find $$$TICKER-securityId-TIMESTAMPINMS$$$ patterns
+			// Captures TICKER (1), securityId (2), TIMESTAMPINMS (3)
+			const tickerRegex = /\$\$\$([A-Z]{1,5})-(\d+)-(\d+)\$\$\$/g;
 
-			// Replace ticker patterns with buttons
+			// Replace ticker patterns with buttons including all data attributes
 			const contentWithTickerButtons = parsedString.replace(
 				tickerRegex,
-				(match, ticker, securityId) => {
-					// Use securityId in data attribute, but display only ticker
-					return `<button class="ticker-button" data-ticker="${ticker}" data-security-id="${securityId}">${ticker}</button>`;
+				(match, ticker, securityId, timestampMs) => {
+					// Use all captured groups in data attributes
+					let buttonText = ticker;
+					// Check if timestamp is not 0
+					if (timestampMs && timestampMs !== '0') {
+						try {
+							const date = new Date(parseInt(timestampMs, 10));
+							// Format date as YYYY-MM-DD
+							const year = date.getFullYear();
+							const month = (date.getMonth() + 1).toString().padStart(2, '0'); // Months are 0-indexed
+							const day = date.getDate().toString().padStart(2, '0');
+							buttonText += ` (${year}-${month}-${day})`; // Append formatted date
+						} catch (e) {
+							console.error('Error parsing timestamp for button text:', e);
+							// Keep original ticker text if date parsing fails
+						}
+					}
+					// Return the button HTML with potentially updated text
+					return `<button class="ticker-button" data-ticker="${ticker}" data-security-id="${securityId}" data-timestamp-ms="${timestampMs}">${buttonText}</button>`;
 				}
 			);
 
@@ -440,19 +456,29 @@
 		if (target && target.classList.contains('ticker-button')) {
 			const ticker = target.dataset.ticker;
 			const securityIdStr = target.dataset.securityId;
+			const timestampMsStr = target.dataset.timestampMs; // Get the timestamp
 
-			if (ticker && securityIdStr) {
+			if (ticker && securityIdStr && timestampMsStr) {
 				const securityId = parseInt(securityIdStr, 10);
-				if (isNaN(securityId)) {
-					return; // Don't proceed if securityId is invalid
+				const timestampMs = parseInt(timestampMsStr, 10); // Parse the timestamp
+
+				if (isNaN(securityId) || isNaN(timestampMs)) {
+					console.error('Invalid securityId or timestampMs on ticker button');
+					return; // Don't proceed if ID or timestamp is invalid
 				}
 
-				// Call queryChart, inlining the Instance-like object
+				// Call queryChart (or similar), passing ticker, securityId, and timestamp
+				// NOTE: You might need to adjust queryChart or the receiving function
+				// to accept and use the timestamp.
+				console.log(`Querying chart for ${ticker} (ID: ${securityId}) at timestamp ${timestampMs}`);
 				queryChart({
 					ticker: ticker,
-					securityId: securityId
+					securityId: securityId,
+					timestamp: timestampMs // Pass timestamp as number (milliseconds)
 				} as Instance);
-			} 
+			} else {
+				console.error('Missing data attributes on ticker button');
+			}
 		}
 	}
 
