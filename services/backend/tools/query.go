@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -61,6 +63,44 @@ type ThinkingResponse struct {
 	RequiresFinalResponse   bool             `json:"requires_final_response"`
 	ContentChunks           []ContentChunk   `json:"content_chunks,omitempty"`
 	PlanningContext         json.RawMessage  `json:"planning_context,omitempty"`
+}
+
+// replaceTickerPlaceholder is a helper function used by ReplaceAllStringFunc.
+// It takes a matched placeholder string (e.g., "$$$TICKER-TIMESTAMP$$$"),
+// looks up the security ID, and returns the replacement string
+// (e.g., "$$$TICKER-ID-TIMESTAMP$$$") or the original match on error.
+func replaceTickerPlaceholder(conn *utils.Conn, match string) string {
+	// Use the same regex to extract parts from the *specific match*
+	tickerTimestampRegex := regexp.MustCompile(`\$\$\$([A-Z]{1,5})-(\d+)\$\$\$`)
+	submatches := tickerTimestampRegex.FindStringSubmatch(match)
+	if len(submatches) != 3 {
+		fmt.Printf("    [Helper] Error: Regex did not find 3 submatches in '%s'.\n", match)
+		return match // Should not happen if called by ReplaceAllStringFunc, but safety first
+	}
+	ticker := submatches[1]
+	timestampStr := submatches[2]
+
+	timestampMs, err := strconv.ParseInt(timestampStr, 10, 64)
+	if err != nil {
+		fmt.Printf("    [Helper] Error parsing timestamp string '%s': %v. Skipping replacement.\n", timestampStr, err)
+		return match
+	}
+
+	var timestamp time.Time
+	if timestampMs == 0 {
+		timestamp = time.Now()
+	} else {
+		timestamp = time.UnixMilli(timestampMs)
+	}
+
+	securityId, err := utils.GetSecurityID(conn, ticker, timestamp)
+	if err != nil {
+		fmt.Printf("    [Helper] Error getting security ID for %s at %v: %v. Skipping replacement.\n", ticker, timestamp, err)
+		return match
+	}
+
+	replacement := fmt.Sprintf("$$$%s-%d-%s$$$", ticker, securityId, timestampStr)
+	return replacement
 }
 
 // GetQuery processes a natural language query and returns the result
@@ -764,23 +804,22 @@ type RoundResult struct {
 }
 
 // processThinkingResponse attempts to parse and execute the thinking model's rounds
+// and modifies the final response string *before* parsing into chunks.
 func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, thinkingResp ThinkingResponse, originalQuery string) ([]ContentChunk, []ExecuteResult, error) {
 
-	// Check if this is a content_chunks response instead of rounds
+	// Check if this is an immediate content_chunks response (no rounds executed)
 	if len(thinkingResp.Rounds) == 0 && len(thinkingResp.ContentChunks) > 0 {
+		fmt.Println("Processing initial ContentChunks from ThinkingResponse (no rounds)")
+		// Even though we inject later, we *could* inject here too if needed
+		// For now, return as is, assuming injection happens after final response gen
 		return thinkingResp.ContentChunks, []ExecuteResult{}, nil
 	}
 
-	// Store all results from all rounds
+	// --- Round Execution Logic ---
 	var allResults []ExecuteResult
 	var allPreviousRoundResults []ExecuteResult
-
-	// Process each round sequentially, sending each to Gemini
 	for _, round := range thinkingResp.Rounds {
-
-		// Create a prompt for Gemini that includes:
-		// 1. The current round's function calls
-		// 2. The results from ALL previous rounds (not just the last one)
+		// ... (existing round processing logic: build prompt, call Gemini, execute functions) ...
 
 		// First, convert the round to JSON
 		roundJSON, err := json.Marshal(round)
@@ -828,56 +867,62 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 		allPreviousRoundResults = append(allPreviousRoundResults, roundResults...)
 	}
 	if thinkingResp.RequiresFurtherPlanning {
-		return []ContentChunk{}, allResults, nil
+		return []ContentChunk{}, allResults, nil // Return intermediate results
 	}
+
 	if thinkingResp.RequiresFinalResponse {
-		var prompt strings.Builder
-		prompt.WriteString("Here is the original query: ")
-		prompt.WriteString(originalQuery)
-		prompt.WriteString("\n\nHere are the results from the function calls: ")
+		// 1. Generate the final response text using accumulated results
+		var finalPrompt strings.Builder
+		finalPrompt.WriteString("Here is the original query: ")
+		finalPrompt.WriteString(originalQuery)
+		finalPrompt.WriteString("\n\nHere are the results from the function calls: ")
 		resultsJSON, _ := json.Marshal(allResults)
-		fmt.Printf("\n\n\nAll results: %v\n", allResults)
-		prompt.WriteString(string(resultsJSON))
+		finalPrompt.WriteString(string(resultsJSON))
+		finalPrompt.WriteString("\n\nPlease provide a final response to the original query based on the results from the function calls.")
 
-		prompt.WriteString("\n\nPlease provide a final response to the original query based on the results from the function calls.")
-		fmt.Println(prompt.String())
-		processedText, err := getGeminiResponse(ctx, conn, prompt.String())
+		processedText, err := getGeminiResponse(ctx, conn, finalPrompt.String())
 		if err != nil {
-			fmt.Printf("Error processing round with Gemini: %v\n", err)
-			return nil, nil, fmt.Errorf("error processing round with Gemini: %w", err)
+			return nil, nil, fmt.Errorf("error getting final gemini response: %w", err)
 		}
-
-		// Clean up the text response to ensure it's just plain text
 		processedText = strings.TrimSpace(processedText)
+		fmt.Printf("Raw final response text from Gemini:\n%s\n", processedText)
 
-		// Try to parse the entire response as content chunks first
+		// 2. Inject security IDs directly into the raw response string
+		tickerTimestampRegex := regexp.MustCompile(`\$\$\$([A-Z]{1,5})-(\d+)\$\$\$`)
+		fmt.Println("--- Running security ID injection on raw text ---")
+		processedTextWithIds := tickerTimestampRegex.ReplaceAllStringFunc(processedText, func(match string) string {
+			return replaceTickerPlaceholder(conn, match)
+		})
+		fmt.Printf("--- Finished security ID injection. Result:\n%s\n", processedTextWithIds)
+
+		// 3. Parse the modified text into ContentChunks
 		var contentChunksResponse struct {
 			ContentChunks []ContentChunk `json:"content_chunks"`
 		}
-		if err := json.Unmarshal([]byte(processedText), &contentChunksResponse); err == nil && len(contentChunksResponse.ContentChunks) > 0 {
 
+		// Try parsing the entire modified string as JSON
+		if err := json.Unmarshal([]byte(processedTextWithIds), &contentChunksResponse); err == nil && len(contentChunksResponse.ContentChunks) > 0 {
+			fmt.Println("Successfully parsed injected text as full ContentChunks JSON.")
 			return contentChunksResponse.ContentChunks, allResults, nil
 		}
 
-		// If that fails, try to find a JSON block within the response
-		jsonStartIdx := strings.Index(processedText, "{")
-		jsonEndIdx := strings.LastIndex(processedText, "}")
-
+		// Try finding a JSON block within the modified string
+		jsonStartIdx := strings.Index(processedTextWithIds, "{")
+		jsonEndIdx := strings.LastIndex(processedTextWithIds, "}")
 		if jsonStartIdx != -1 && jsonEndIdx != -1 && jsonEndIdx > jsonStartIdx {
-			jsonBlock := processedText[jsonStartIdx : jsonEndIdx+1]
-			err := json.Unmarshal([]byte(jsonBlock), &contentChunksResponse)
-
-			if err == nil && len(contentChunksResponse.ContentChunks) > 0 {
+			jsonBlock := processedTextWithIds[jsonStartIdx : jsonEndIdx+1]
+			if err := json.Unmarshal([]byte(jsonBlock), &contentChunksResponse); err == nil && len(contentChunksResponse.ContentChunks) > 0 {
+				fmt.Println("Successfully parsed injected text from JSON block.")
 				return contentChunksResponse.ContentChunks, allResults, nil
 			}
 		}
 
-		var textResponse ContentChunk
-		textResponse.Type = "text"
-		textResponse.Content = processedText
-		return []ContentChunk{textResponse}, allResults, nil
+		// Fallback: Treat the modified string as a single text chunk
+		fmt.Println("Could not parse injected text as JSON, falling back to single text chunk.")
+		return []ContentChunk{{Type: "text", Content: processedTextWithIds}}, allResults, nil
 	}
 
+	// If no final response is needed
 	return []ContentChunk{}, allResults, nil
 }
 
