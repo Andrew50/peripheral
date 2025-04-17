@@ -42,14 +42,14 @@ type FunctionCall struct {
 
 type ExecuteResult struct {
     FunctionName string      `json:"function_name"`
-    Result       interface{} `json:"result,omitempty"`
+    Result       any `json:"result,omitempty"`
     Error        string      `json:"error,omitempty"`
-    Args         interface{} `json:"args,omitempty"`
+    Args         any `json:"args,omitempty"`
 }
 
 type ContentChunk struct {
     Type    string      `json:"type"`
-    Content interface{} `json:"content"`
+    Content any `json:"content"`
 }
 
 type ChatMessage struct {
@@ -104,7 +104,7 @@ func NewAgent(ctx context.Context, conn *utils.Conn, userID int) (*Agent, error)
 }
 
 // Public entry point, mirrors signature of the former GetQuery.
-func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
+func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (any, error) {
     var q struct{ Query string `json:"query"` }
     if err := json.Unmarshal(args, &q); err != nil {
         return nil, err
@@ -140,19 +140,23 @@ func (a *Agent) loop() error {
 
     for round := 0; round < a.MaxRounds; round++ {
         // PLAN
+        fmt.Println("planning")
         calls, err := a.plan()
         if err != nil {
             return err
         }
-        if len(calls) == 0 {
+        // EXECUTE
+        var results []ExecuteResult
+        if len(calls) != 0 {
+            fmt.Println("executing")
+            results = a.execute(calls)
+            allResults = append(allResults, results...)
             break
         }
 
-        // EXECUTE
-        results := a.execute(calls)
-        allResults = append(allResults, results...)
 
         // REFLECT — decide to stop or continue
+        fmt.Println("reflecting")
         done, reflectText, err := a.reflect(results)
         if err != nil {
             return err
@@ -165,6 +169,10 @@ func (a *Agent) loop() error {
                 Results:       allResults,
                 History:       a.History,
             }
+            
+            // Log the entire conversation history when loop completes
+            logConversationHistory(a.History)
+            
             return nil
         }
     }
@@ -175,7 +183,39 @@ func (a *Agent) loop() error {
         Text:    "Reached maximum reasoning rounds without completion.",
         History: a.History,
     }
+    
+    // Log the entire conversation history when loop completes (even on max rounds)
+    logConversationHistory(a.History)
+    
     return nil
+}
+
+// logConversationHistory logs the entire conversation history for debugging
+func logConversationHistory(history *ConversationData) {
+    fmt.Println("\n==== CONVERSATION HISTORY LOG ====")
+    fmt.Printf("Total messages: %d\n", len(history.Messages))
+    
+    for i, msg := range history.Messages {
+        fmt.Printf("\n--- Message %d ---\n", i+1)
+        fmt.Printf("Role: %s\n", msg.Role)
+        fmt.Printf("Timestamp: %s\n", msg.Timestamp.Format(time.RFC3339))
+        
+        if len(msg.ContentChunks) > 0 {
+            fmt.Printf("Content Type: %s\n", msg.ContentChunks[0].Type)
+            
+            switch content := msg.ContentChunks[0].Content.(type) {
+            case string:
+                fmt.Printf("Content: %s\n", content)
+            default:
+                jsonContent, _ := json.MarshalIndent(content, "", "  ")
+                fmt.Printf("Content (JSON):\n%s\n", string(jsonContent))
+            }
+        } else {
+            fmt.Println("No content chunks")
+        }
+    }
+    
+    fmt.Println("\n==== END CONVERSATION HISTORY LOG ====")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -295,8 +335,8 @@ func (a *Agent) reflect(results []ExecuteResult) (bool, string, error) {
 
     a.appendAssistant(text)
 
-    lower := strings.ToLower(text)
-    done := strings.Contains(lower, "no more rounds") || strings.HasPrefix(lower, "done")
+    //lower := strings.ToLower(text)
+    done := strings.Contains(text, "ANSWER")// || strings.HasPrefix(lower, "done")
     return done, text, nil
 }
 
@@ -502,7 +542,7 @@ func getSystemInstruction(systemPrompt string) (string, error) {
 	// Read the content of query.txt
 	content, err := os.ReadFile(queryFilePath)
 	if err != nil {
-		return "", fmt.Errorf("error reading query.txt: %w", err)
+		return "", fmt.Errorf("error reading %s: %w",queryFilePath, err)
 	}
 
 	// Replace the {{CURRENT_TIME}} placeholder with the actual current time
@@ -513,7 +553,7 @@ func getSystemInstruction(systemPrompt string) (string, error) {
 
 	return instruction, nil
 }
-func GetUserConversation(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
+func GetUserConversation(conn *utils.Conn, userID int, args json.RawMessage) (any, error) {
 	ctx := context.Background()
 
 	// Test Redis connectivity before attempting to retrieve conversation
@@ -586,7 +626,7 @@ func GetSuggestedQueries(conn *utils.Conn, userID int, args json.RawMessage) (an
     return out, nil
 }
 
-func ClearConversationHistory(conn *utils.Conn, userID int, _ json.RawMessage) (interface{}, error) {
+func ClearConversationHistory(conn *utils.Conn, userID int, _ json.RawMessage) (any, error) {
     ctx := context.Background()
     key := fmt.Sprintf("user:%d:conversation", userID)
     if err := conn.Cache.Del(ctx, key).Err(); err != nil {
