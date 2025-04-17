@@ -250,7 +250,15 @@ func (a *Agent) plan() (string, error) {
 	resp, err := a.callGemini(model, mustSystemPrompt("plan"), prompt, false)
 	if err != nil { return "", err }
 
-	return strings.TrimSpace(resp.Text), nil
+    out := strings.TrimSpace(resp.Text)
+    a.History.Messages = append(a.History.Messages, ChatMessage{
+        Role: "assistant",
+        ContentChunks: []ContentChunk{{Type: "text", Content: out}},
+        Timestamp: time.Now(),
+        ExpiresAt: time.Now().Add(24 * time.Hour),
+    })
+	return out, nil
+
 }
 // ───────────────────────────────────────────
 // 3️⃣  EXECUTE STAGE  (Gemini‑Flash 2‑0)
@@ -258,10 +266,7 @@ func (a *Agent) plan() (string, error) {
 func (a *Agent) executeStage(guide string) ([]ExecuteResult, string, error) {
     const model = "gemini-2.0-flash-001"
 
-    prompt := buildHistoryPrompt(a.History) +
-        "\nAssistant GUIDE:\n" + guide +
-        "\n\nAssistant: Decide which, if any, tools to call next. " +
-        "Return function calls or answer directly."
+    prompt := buildHistoryPrompt(a.History)
 
     fmt.Println("execute stage hit")
     resp, err := a.callGemini(model, mustSystemPrompt("execute"), prompt, true)
