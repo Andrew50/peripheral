@@ -4,251 +4,209 @@ import (
 	"backend/alerts"
 	"backend/utils"
 	"context"
+    "database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
 )
 
-// Alert represents a structure for handling Alert data.
+/*
+   ────────────────────────────────────────────────────────────────────────────────
+   Data Models
+   ────────────────────────────────────────────────────────────────────────────────
+*/
+
+// Alert mirrors the alerts table after the schema change.
+// All alerts are “price” alerts, each with a single optional trigger timestamp.
 type Alert struct {
-	AlertID    int      `json:"alertId"`
-	AlertType  string   `json:"alertType"`
-	Price      *float64 `json:"alertPrice,omitempty"` // Use pointers to handle nullable fields
-	SecurityID *int     `json:"securityId,omitempty"` // Use pointers for nullable fields
-	SetupID    *int     `json:"setupId,omitempty"`    // Field for setupId if alert type is 'setup'
-	Ticker     *string  `json:"ticker,omitempty"`
-	Active     bool     `json:"active"`
-	AlgoID     *int     `json:"algoId,omitempty"`
+	AlertID            int      `json:"alertId"`
+	AlertType          string   `json:"alertType"`            // Always "price"
+	Price              *float64 `json:"alertPrice,omitempty"` // Pointer -> nullable
+	SecurityID         *int     `json:"securityId,omitempty"` // Pointer -> nullable
+	Ticker             *string  `json:"ticker,omitempty"`
+	Active             bool     `json:"active"`
+	Direction          *bool    `json:"direction,omitempty"`          // true = above, false = below
+	TriggeredTimestamp *int64   `json:"triggeredTimestamp,omitempty"` // ms since epoch, nil until fired
 }
 
-// GetAlerts performs operations related to GetAlerts functionality.
+// GetAlertLogsResult now derives directly from the alerts table.  When an alert
+// fires, its triggeredTimestamp is set; that single record substitutes for the
+// old alertLogs table.
+type GetAlertLogsResult struct {
+	AlertLogID int     `json:"alertLogId"` // identical to alertId (kept to preserve signature)
+	AlertID    int     `json:"alertId"`
+	Timestamp  int64   `json:"timestamp"`  // ms since epoch
+	SecurityID int     `json:"securityId"`
+	Ticker     *string `json:"ticker,omitempty"`
+}
+
+/*
+   ────────────────────────────────────────────────────────────────────────────────
+   Fetch all current alerts
+   ────────────────────────────────────────────────────────────────────────────────
+*/
+
 func GetAlerts(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(), `
-		SELECT a.alertId, a.alertType, a.price, a.securityID, a.setupId, s.ticker, a.active
+		SELECT a.alertId,
+		       'price' AS alertType,
+		       a.price,
+		       a.securityId,
+		       s.ticker,
+		       a.active,
+		       a.direction,
+		       a.triggeredTimestamp
 		FROM alerts a
-		LEFT JOIN securities s ON a.securityID = s.securityID
-		WHERE a.userId = $1`, userId)
+		LEFT JOIN securities s USING (securityId)
+		WHERE a.userId = $1
+		ORDER BY a.alertId`, userId)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("querying alerts: %w", err)
 	}
 	defer rows.Close()
 
-	var alerts []Alert
+	var results []Alert
 	for rows.Next() {
-		var alert Alert
-		err := rows.Scan(&alert.AlertID, &alert.AlertType, &alert.Price, &alert.SecurityID, &alert.SetupID, &alert.Ticker, &alert.Active)
-		if err != nil {
-			return nil, fmt.Errorf("error scanning alert: %v", err)
+		var r Alert
+		var triggered sql.NullTime
+		if err := rows.Scan(&r.AlertID, &r.AlertType, &r.Price, &r.SecurityID,
+			&r.Ticker, &r.Active, &r.Direction, &triggered); err != nil {
+			return nil, fmt.Errorf("scanning alert: %w", err)
 		}
-		alerts = append(alerts, alert)
+		if triggered.Valid {
+			ms := triggered.Time.UnixMilli()
+			r.TriggeredTimestamp = &ms
+		}
+		results = append(results, r)
 	}
-
-	return alerts, nil
+	return results, rows.Err()
 }
 
-// GetAlertLogsResult represents a structure for handling GetAlertLogsResult data.
-type GetAlertLogsResult struct {
-	AlertLogID int     `json:"alertLogId"`
-	AlertID    int     `json:"alertId"`
-	Timestamp  int64   `json:"timestamp"`
-	SecurityID int     `json:"securityId"`
-	Ticker     *string `json:"ticker,omitempty"` // Ticker from the securities table
-}
+/*
+   ────────────────────────────────────────────────────────────────────────────────
+   “Logs” = alerts that have a non‑NULL triggeredTimestamp
+   ────────────────────────────────────────────────────────────────────────────────
+*/
 
-// GetAlertLogs performs operations related to GetAlertLogs functionality.
 func GetAlertLogs(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	// Use a CTE to first get all alerts belonging to the user
-	query := `
-		WITH user_alerts AS (
-			SELECT alertId 
-			FROM alerts 
-			WHERE userId = $1
-		)
-		SELECT al.alertLogId, al.alertId, al.timestamp, al.securityId, s.ticker
-		FROM alertLogs al
-		JOIN user_alerts ua ON ua.alertId = al.alertId 
-		LEFT JOIN securities s ON al.securityID = s.securityID
-		ORDER BY al.timestamp DESC`
-
-	rows, err := conn.DB.Query(context.Background(), query, userId)
+	rows, err := conn.DB.Query(context.Background(), `
+		SELECT a.alertId,
+		       a.alertId AS alertLogId,
+		       a.triggeredTimestamp,
+		       a.securityId,
+		       s.ticker
+		FROM alerts a
+		LEFT JOIN securities s USING (securityId)
+		WHERE a.userId = $1
+		  AND a.triggeredTimestamp IS NOT NULL
+		ORDER BY a.triggeredTimestamp DESC`, userId)
 	if err != nil {
-		return nil, fmt.Errorf("error fetching alert logs: %v", err)
+		return nil, fmt.Errorf("querying fired alerts: %w", err)
 	}
 	defer rows.Close()
 
 	var logs []GetAlertLogsResult
 	for rows.Next() {
-		var log GetAlertLogsResult
-		var logTime time.Time
-		err := rows.Scan(&log.AlertLogID, &log.AlertID, &logTime, &log.SecurityID, &log.Ticker)
-		if err != nil {
-			return nil, fmt.Errorf("error scanning alert log: %v", err)
+		var (
+			l      GetAlertLogsResult
+			fired  time.Time
+		)
+		if err := rows.Scan(&l.AlertID, &l.AlertLogID, &fired, &l.SecurityID, &l.Ticker); err != nil {
+			return nil, fmt.Errorf("scanning alert log: %w", err)
 		}
-		log.Timestamp = logTime.Unix() * 1000
-		logs = append(logs, log)
+		l.Timestamp = fired.UnixMilli()
+		logs = append(logs, l)
 	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating alert logs: %v", err)
-	}
-
-	return logs, nil
+	return logs, rows.Err()
 }
 
-// NewAlertArgs represents a structure for handling NewAlertArgs data.
+/*
+   ────────────────────────────────────────────────────────────────────────────────
+   New Alert
+   ────────────────────────────────────────────────────────────────────────────────
+*/
+
 type NewAlertArgs struct {
-	AlertType  string   `json:"alertType"`
-	Price      *float64 `json:"price,omitempty"` // Using pointers to handle nullable fields
+	// AlertType kept for backward compatibility but ignored (always “price”).
+	AlertType  string   `json:"alertType,omitempty"`
+	Price      *float64 `json:"price,omitempty"`
 	SecurityID *int     `json:"securityId,omitempty"`
-	SetupID    *int     `json:"setupId,omitempty"`
 	Ticker     *string  `json:"ticker,omitempty"`
-	AlgoID     *int     `json:"algoId,omitempty"`
 }
 
-// NewAlert performs operations related to NewAlert functionality.
 func NewAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args NewAlertArgs
-	var err error
-	err = json.Unmarshal(rawArgs, &args)
-	if err != nil {
-		return nil, fmt.Errorf("invalid args: %v", err)
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %w", err)
 	}
+	if args.Price == nil || args.SecurityID == nil || args.Ticker == nil {
+		return nil, fmt.Errorf("price, securityId and ticker are required")
+	}
+
+	// Determine direction relative to the last trade
+	lastTrade, err := utils.GetLastTrade(conn.Polygon, *args.Ticker)
+	if err != nil {
+		return nil, fmt.Errorf("fetching last trade: %w", err)
+	}
+	dir := *args.Price > lastTrade.Price // true = wait for price to rise up to alert
 
 	var alertID int
-	var insertQuery string
-	var direction *bool = nil
-
-	if args.AlertType == "price" {
-		if args.Price == nil || args.SecurityID == nil {
-			return nil, fmt.Errorf("price and securityId are required for 'price' type alerts")
-		}
-
-		lastTrade, err := utils.GetLastTrade(conn.Polygon, *args.Ticker)
-		if err != nil {
-			return nil, fmt.Errorf("error fetching last trade: %v", err)
-		}
-		currentPrice := lastTrade.Price
-		directionValue := *args.Price > currentPrice
-		direction = &directionValue
-
-		insertQuery = `
-			INSERT INTO alerts (userId, alertType, price, securityID, active, direction) 
-			VALUES ($1, $2, $3, $4, true, $5) RETURNING alertId`
-		err = conn.DB.QueryRow(context.Background(), insertQuery, userId, args.AlertType, *args.Price, *args.SecurityID, direction).Scan(&alertID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to insert price alert: %w", err)
-		}
-
-	} else if args.AlertType == "setup" {
-		if args.SetupID == nil {
-			return nil, fmt.Errorf("setupId is required for 'setup' type alerts")
-		}
-		insertQuery = `
-			INSERT INTO alerts (userId, alertType, setupId, active) 
-			VALUES ($1, $2, $3, true) RETURNING alertId`
-		err = conn.DB.QueryRow(context.Background(), insertQuery, userId, args.AlertType, *args.SetupID).Scan(&alertID)
-
-	} else if args.AlertType == "algo" {
-		if args.AlgoID == nil {
-			return nil, fmt.Errorf("algoId is required for 'algo' type alerts")
-		}
-		insertQuery = `
-			INSERT INTO alerts (userId, alertType, algoId, active) 
-			VALUES ($1, $2, $3, true) RETURNING alertId`
-		err = conn.DB.QueryRow(context.Background(), insertQuery, userId, args.AlertType, *args.AlgoID).Scan(&alertID)
-	} else {
-		return nil, fmt.Errorf("invalid alertType: %s", args.AlertType)
+	if err := conn.DB.QueryRow(context.Background(), `
+		INSERT INTO alerts (userId, active, price, direction, securityId)
+		VALUES ($1, true, $2, $3, $4)
+		RETURNING alertId`,
+		userId, *args.Price, dir, *args.SecurityID).Scan(&alertID); err != nil {
+		return nil, fmt.Errorf("inserting alert: %w", err)
 	}
-	if err != nil {
-		return nil, fmt.Errorf("error creating new alert: %v", err)
-	}
+
 	newAlert := Alert{
-		AlertID:    alertID,
-		AlertType:  args.AlertType,
-		Price:      args.Price,      // If setup type, price will be null
-		SecurityID: args.SecurityID, // If setup type, securityId will be null
-		SetupID:    args.SetupID,    // If price type, setupId will be null
-		AlgoID:     args.AlgoID,     // If algo type, algoId will be null
-		Active:     true,            // Set to true by default
+		AlertID:   alertID,
+		AlertType: "price",
+		Price:     args.Price,
+		SecurityID: args.SecurityID,
+		Ticker:    args.Ticker,
+		Active:    true,
+		Direction: &dir,
 	}
-	// Convert tasks.Alert to alerts.Alert
-	alertToAdd := alerts.Alert{
-		AlertID:    newAlert.AlertID,
-		AlertType:  newAlert.AlertType,
-		Price:      newAlert.Price,
+	// Keep in‑memory scheduler/store up‑to‑date
+	alerts.AddAlert(conn, alerts.Alert{
+		AlertID:   newAlert.AlertID,
+		AlertType: newAlert.AlertType,
+		Price:     newAlert.Price,
 		SecurityID: newAlert.SecurityID,
-		SetupID:    newAlert.SetupID,
-		AlgoID:     newAlert.AlgoID,
-		Direction:  direction,
-	}
-	alerts.AddAlert(conn, alertToAdd)
+		Direction:  newAlert.Direction,
+	})
 
 	return newAlert, nil
 }
 
-// DeleteAlertArgs represents a structure for handling DeleteAlertArgs data.
+/*
+   ────────────────────────────────────────────────────────────────────────────────
+   Delete Alert
+   ────────────────────────────────────────────────────────────────────────────────
+*/
+
 type DeleteAlertArgs struct {
 	AlertID int `json:"alertId"`
 }
 
-// DeleteAlert performs operations related to DeleteAlert functionality.
 func DeleteAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteAlertArgs
-	err := json.Unmarshal(rawArgs, &args)
-	if err != nil {
-		return nil, fmt.Errorf("invalid args: %v", err)
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %w", err)
 	}
 
-	cmdTag, err := conn.DB.Exec(context.Background(), `
-		DELETE FROM alerts WHERE alertId = $1 AND userId = $2`, args.AlertID, userId)
-	if cmdTag.RowsAffected() == 0 {
+	tag, err := conn.DB.Exec(context.Background(),
+		`DELETE FROM alerts WHERE alertId = $1 AND userId = $2`,
+		args.AlertID, userId)
+	if err != nil {
+		return nil, fmt.Errorf("deleting alert: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
 		return nil, fmt.Errorf("alert not found or permission denied")
 	}
+
 	alerts.RemoveAlert(args.AlertID)
-
-	return nil, err
-}
-
-/*type SetAlertArgs struct {
-	AlertID    int     `json:"alertId"`
-	AlertType  string  `json:"alertType"`
-	Price      *float64 `json:"price,omitempty"`
-	SecurityID *int     `json:"securityId,omitempty"`
-	SetupID    *int     `json:"setupId,omitempty"`
-}
-// SetAlert performs operations related to SetAlert functionality.
-func SetAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var args SetAlertArgs
-	err := json.Unmarshal(rawArgs, &args)
-	if err != nil {
-		return nil, fmt.Errorf("invalid args: %v", err)
-	}
-
-	// Update the alert based on type
-	if args.AlertType == "price" {
-		if args.Price == nil || args.SecurityID == nil {
-			return nil, fmt.Errorf("price and securityId are required for 'price' type alerts")
-		}
-		_, err = conn.DB.Exec(context.Background(), `
-			UPDATE alerts
-			SET alertType = $1, price = $2, securityID = $3, setupId = NULL
-			WHERE alertId = $4 AND userId = $5`, args.AlertType, *args.Price, *args.SecurityID, args.AlertID, userId)
-	} else if args.AlertType == "setup" {
-		if args.SetupID == nil {
-			return nil, fmt.Errorf("setupId is required for 'setup' type alerts")
-		}
-		_, err = conn.DB.Exec(context.Background(), `
-			UPDATE alerts
-			SET alertType = $1, setupId = $2, price = NULL, securityID = NULL
-			WHERE alertId = $3 AND userId = $4`, args.AlertType, *args.SetupID, args.AlertID, userId)
-	} else {
-		return nil, fmt.Errorf("invalid alertType: %s", args.AlertType)
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("error updating alert: %v", err)
-	}
-
 	return nil, nil
 }
-*/
+
