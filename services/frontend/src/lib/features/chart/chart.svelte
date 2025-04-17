@@ -1590,7 +1590,6 @@
 				if (chartEarliestDataReached) {
 					return;
 				}
-				('2');
 
 				// Get the earliest timestamp from current data
 				const earliestBar = chartCandleSeries.data()[0];
@@ -1628,10 +1627,16 @@
 					return;
 				}
 
+				const lastBar = chartCandleSeries.data().at(-1);
+				if (!lastBar) return; // Exit if no data exists
+
+				// Convert the last bar's time from EST seconds to UTC milliseconds for the API request
+				const requestTimestamp = ESTSecondstoUTCMillis(lastBar.time as UTCTimestamp);
+
 				// Also fix the forward load to include extendedHours
 				const inst: CoreInstance & { extendedHours?: boolean } = {
 					ticker: currentChartInstance.ticker,
-					timestamp: currentChartInstance.timestamp,
+					timestamp: requestTimestamp, // Correct: Use the last loaded bar's timestamp
 					timeframe: currentChartInstance.timeframe,
 					securityId: currentChartInstance.securityId,
 					price: currentChartInstance.price,
