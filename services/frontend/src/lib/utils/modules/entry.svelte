@@ -1,10 +1,10 @@
 <script lang="ts" context="module">
 	import '$lib/core/global.css';
-	import type { Instance, Setup } from '$lib/core/types';
+	import type { Instance, Strategy } from '$lib/core/types';
 	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
 	import { queryInstanceRightClick } from '$lib/utils/popups/rightClick.svelte';
 	import { queryChart } from '$lib/features/chart/interface';
-	import { querySetup } from '$lib/utils/popups/setup.svelte';
+	import { queryStrategy } from '$lib/utils/popups/strategiesPopup.svelte';
 	import { menuWidth, entryOpen, dispatchMenuChange } from '$lib/core/stores';
 	import type { RightClickResult } from '$lib/utils/popups/rightClick.svelte';
 	import { writable } from 'svelte/store';
@@ -27,7 +27,7 @@
 	export let func: string;
 	export let id: number;
 	export let completed: boolean;
-	export let setupId: number | null | undefined = undefined;
+	export let strategyId: number | null | undefined = undefined;
 	let Quill: any;
 	let editorContainer: HTMLElement;
 	let controlsContainer: HTMLElement;
@@ -51,10 +51,10 @@
 	function del(): void {
 		privateRequest<void>(`delete${func}`, { id: id });
 	}
-	function changeSetup(event: MouseEvent) {
-		querySetup(event).then((i: number | null) => {
+	function changeStrategy(event: MouseEvent) {
+		queryStrategy(event).then((i: number | null) => {
 			if (i !== null) {
-				privateRequest<null>('setStudySetup', { id: id, setupId: i });
+				privateRequest<null>('setStudyStrategy', { id: id, strategyId: i });
 			}
 		});
 	}
@@ -242,13 +242,13 @@
 	<button on:click={inputAndEmbedInstance}> Insert </button>
 	<button on:click={complete}> {completed ? 'Complete' : 'Uncomplete'} </button>
 	<!--<button on:click={save} class="action-btn"> Save </button>-->
-	{#if setupId !== undefined}
+	{#if strategyId !== undefined}
 		<button
 			on:click={(event) => {
-				changeSetup(event);
+				changeStrategy(event);
 			}}
 		>
-			Change Setup
+			Change Strategy
 		</button>
 	{/if}
 	<button on:click={del}> Delete </button>
