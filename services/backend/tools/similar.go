@@ -11,18 +11,18 @@ import (
 
 // GetSimilarInstancesArgs represents a structure for handling GetSimilarInstancesArgs data.
 type GetSimilarInstancesArgs struct {
-	Ticker     string `json:"ticker"`
+	//Ticker     string `json:"ticker"`
 	SecurityID int    `json:"securityId"`
-	Timestamp  int64  `json:"timestamp"`
-	Timeframe  string `json:"timeframe"`
+	//Timestamp  int64  `json:"timestamp"`
+	//Timeframe  string `json:"timeframe"`
 }
 
 // GetSimilarInstancesResults represents a structure for handling GetSimilarInstancesResults data.
 type GetSimilarInstancesResults struct {
 	Ticker     string  `json:"ticker"`
 	SecurityID int     `json:"securityId"`
-	Timestamp  int64   `json:"timestamp"`
-	Timeframe  string  `json:"timeframe"`
+	//Timestamp  int64   `json:"timestamp"`
+	//Timeframe  string  `json:"timeframe"`
 	MarketCap  float64 `json:"marketCap"`
 	Sector     string  `json:"sector"`
 	Industry   string  `json:"industry"`
@@ -100,8 +100,8 @@ func GetSimilarInstances(conn *utils.Conn, userId int, rawArgs json.RawMessage) 
 	fmt.Printf("Polygon related tickers: %v\n", polygonTickers)
 
 	// Get securities in same sector/industry
-	timestamp := time.Unix(args.Timestamp, 0)
-	fmt.Printf("Searching for securities at timestamp: %v\n", timestamp)
+	//timestamp := time.Unix(args.Timestamp, 0)
+	//fmt.Printf("Searching for securities at timestamp: %v\n", timestamp)
 
 	// Modified query with debug CTEs
 	rows, err := conn.DB.Query(context.Background(), `
@@ -235,15 +235,17 @@ func GetSimilarInstances(conn *utils.Conn, userId int, rawArgs json.RawMessage) 
 		fmt.Printf("Found similar security: %+v (score: %d, date range: %v to %v)\n",
 			result, similarityScore, minDateStr, maxDateStr)
 
-		result.Timestamp = args.Timestamp
-		result.Timeframe = args.Timeframe
+		//result.Timestamp = args.Timestamp
+		//result.Timeframe = args.Timeframe
 		results = append(results, result)
 	}
 
 	fmt.Printf("Total results found: %d\n", len(results))
 	if len(results) == 0 {
-		fmt.Printf("No results found for sector: '%s', industry: '%s', timestamp: %v\n",
-			refSecurity.Sector, refSecurity.Industry, timestamp)
+		//fmt.Printf("No results found for sector: '%s', industry: '%s', timestamp: %v\n",
+			//refSecurity.Sector, refSecurity.Industry, timestamp)
+		fmt.Printf("No results found for sector: '%s', industry: '%s'\n",
+			refSecurity.Sector, refSecurity.Industry)
 	}
 
 	return results, nil

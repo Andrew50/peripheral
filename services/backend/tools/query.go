@@ -4,31 +4,19 @@ import (
 	"backend/utils"
 	"context"
 	"encoding/json"
-	"fmt"
-	"strings"
+	//"fmt"
+	//"strings"
 	"time"
+    "backend/agent"
 
-	"google.golang.org/genai"
+	//"google.golang.org/genai"
 )
-
-type Query struct {
-	Query string `json:"query"`
+// FunctionCall represents a function to be called with its arguments
+type FunctionCall struct {
+	Name   string          `json:"name"`
+	CallID string          `json:"call_id,omitempty"`
+	Args   json.RawMessage `json:"args,omitempty"`
 }
-
-// ExecuteResult represents the result of executing a function
-type ExecuteResult struct {
-	FunctionName string      `json:"function_name"`
-	Result       interface{} `json:"result"`
-	Error        string      `json:"error,omitempty"`
-	Args         interface{} `json:"args,omitempty"`
-}
-
-// ConversationData represents the data structure for storing conversation context
-type ConversationData struct {
-	Messages  []ChatMessage `json:"messages"`
-	Timestamp time.Time     `json:"timestamp"`
-}
-
 // ChatMessage represents a single message in the conversation
 type ChatMessage struct {
 	Query         string          `json:"query"`
@@ -45,7 +33,22 @@ type ContentChunk struct {
 	Type    string      `json:"type"`    // "text" or "table" (or others later, e.g., "image")
 	Content interface{} `json:"content"` // string for "text", TableData for "table"
 }
+type ExecuteResult struct {
+	FunctionName string      `json:"function_name"`
+	Result       interface{} `json:"result"`
+	Error        string      `json:"error,omitempty"`
+	Args         interface{} `json:"args,omitempty"`
+}
 
+// ConversationData represents the data structure for storing conversation context
+type ConversationData struct {
+	Messages  []ChatMessage `json:"messages"`
+	Timestamp time.Time     `json:"timestamp"`
+}
+
+type Query struct {
+	Query string `json:"query"`
+}
 type QueryResponse struct {
 	Type          string            `json:"type"` //"mixed_content", "function_calls", "simple_text"
 	ContentChunks []ContentChunk    `json:"content_chunks,omitempty"`
@@ -53,6 +56,41 @@ type QueryResponse struct {
 	Results       []ExecuteResult   `json:"results,omitempty"`
 	History       *ConversationData `json:"history,omitempty"`
 }
+
+
+func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
+    var req Query
+    if err := json.Unmarshal(args, &req); err != nil {
+        return nil, err
+    }
+
+    runner, err := agent.NewRunner(conn, userID)
+    if err != nil {
+        return nil, err
+    }
+    answer, err := runner.Run(context.Background(), req.Query)
+    if err != nil {
+        return nil, err
+    }
+    return QueryResponse{Type: "text", Text: answer}, nil
+}
+
+/*
+// ExecuteResult represents the result of executing a function
+type ExecuteResult struct {
+	FunctionName string      `json:"function_name"`
+	Result       interface{} `json:"result"`
+	Error        string      `json:"error,omitempty"`
+	Args         interface{} `json:"args,omitempty"`
+}
+
+// ConversationData represents the data structure for storing conversation context
+type ConversationData struct {
+	Messages  []ChatMessage `json:"messages"`
+	Timestamp time.Time     `json:"timestamp"`
+}
+
+
 
 // ThinkingResponse represents the JSON output from the thinking model with rounds
 type ThinkingResponse struct {
@@ -62,7 +100,6 @@ type ThinkingResponse struct {
 	ContentChunks           []ContentChunk   `json:"content_chunks,omitempty"`
 	PlanningContext         json.RawMessage  `json:"planning_context,omitempty"`
 }
-
 // GetQuery processes a natural language query and returns the result
 func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
 
@@ -537,12 +574,6 @@ func getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (str
 	return text, nil
 }
 
-// FunctionCall represents a function to be called with its arguments
-type FunctionCall struct {
-	Name   string          `json:"name"`
-	CallID string          `json:"call_id,omitempty"`
-	Args   json.RawMessage `json:"args,omitempty"`
-}
 
 // FunctionResponse represents the response from the LLM with function calls
 type FunctionResponse struct {
@@ -979,4 +1010,4 @@ func GetSuggestedQueries(conn *utils.Conn, userID int, args json.RawMessage) (in
 	}
 	return response, nil
 
-}
+}*/

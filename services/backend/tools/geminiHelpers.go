@@ -1,5 +1,5 @@
 package tools
-
+/*
 import (
 	"backend/utils"
 	"context"
@@ -105,4 +105,4 @@ func ClearConversationHistory(conn *utils.Conn, userID int, args json.RawMessage
 
 	fmt.Printf("Successfully deleted conversation for key: %s\n", conversationKey)
 	return map[string]string{"message": "Conversation history cleared successfully"}, nil
-}
+}*/
