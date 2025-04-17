@@ -11,12 +11,12 @@
 	import { queryInstanceRightClick } from '$lib/utils/popups/rightClick.svelte';
 	import type { Instance } from '$lib/core/types';
 	import { UTCTimestampToESTString } from '$lib/core/timestamp';
-	import { setups } from '$lib/core/stores';
+	import { strategies } from '$lib/core/stores';
 	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
 	interface Study extends Instance {
 		studyId: number;
 		completed: boolean;
-		setupId?: number;
+		strategyId?: number;
 	}
 	let studies: Writable<Study[]> = writable([]);
 	export function newStudy(v: Instance): void {
@@ -75,10 +75,10 @@
 	onMount(() => {
 		loadStudies();
 	});
-	function getSetupNameById(setupId: number) {
-		setupId;
-		const setup = $setups.find((s) => s.setupId === setupId);
-		return setup ? setup.name : null; // Return setupName if found, otherwise return null
+	function getStrategyNameById(strategyId: number) {
+		strategyId;
+		const strategy = $strategies.find((s) => s.strategyId === strategyId);
+		return strategy ? strategy.name : null; // Return strategyName if found, otherwise return null
 	}
 </script>
 
@@ -95,7 +95,7 @@
 			<thead>
 				<tr class="defalt-tr">
 					<th class="defalt-th">Ticker</th>
-					<th class="defalt-th">Setup</th>
+					<th class="defalt-th">Strategy</th>
 					<th class="defalt-th">Date</th>
 				</tr>
 			</thead>
@@ -108,7 +108,7 @@
 							on:click={() => selectStudy(study)}
 						>
 							<td class="defalt-td">{study.ticker || 'N/A'}</td>
-							<td class="defalt-td">{study.setupId ? getSetupNameById(study.setupId) : 'N/A'}</td>
+							<td class="defalt-td">{study.strategyId ? getStrategyNameById(study.strategyId) : 'N/A'}</td>
 							<td class="defalt-td"
 								>{study.timestamp ? UTCTimestampToESTString(study.timestamp) : 'N/A'}</td
 							>
@@ -119,7 +119,7 @@
 								<td colspan="3" class="entry-cell">
 									<Entry
 										completed={study.completed}
-										setupId={study.setupId}
+										strategyId={study.strategyId}
 										func="Study"
 										id={study.studyId}
 									/>
