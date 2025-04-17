@@ -1,498 +1,518 @@
 package tools
 
-import (
-	"backend/utils"
-	"context"
-	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
-	"sort"
-	"strings"
-	"time"
-	"regexp"
-	"strconv"
+// MRKL‑style agent with full Plan → Execute → Reflect loop **and** the
+// compatibility features from the original `GetQuery` implementation:
+//
+//   •  Returns a `QueryResponse` struct so existing HTTP handlers remain intact.
+//   •  Persists / restores conversation history in Redis through
+//      `utils.Conn` (same helpers that existed before).
+//   •  Re‑implements security‑ID injection so patterns like
+//      `$$$AAPL-0$$$` become `$$$AAPL-12345-0$$$`.
+//
+// The code is written as a single Go file for clarity, but nothing prevents
+// you from splitting it into smaller files.
 
-	"google.golang.org/genai"
+import (
+    "backend/utils"
+    "runtime"
+    "path/filepath"
+    "os"
+    "context"
+    "encoding/json"
+    "errors"
+    "fmt"
+    "regexp"
+    "sort"
+    "strconv"
+    "strings"
+    "time"
+    "bytes"
+
+    "google.golang.org/genai"
 )
 
-type Query struct {
-	Query string `json:"query"`
+// ─────────────────────────────────────────────────────────────────────────────
+//  Shared models (identical to the original prototype where possible)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type FunctionCall struct {
+    Name string          `json:"name"`
+    Args json.RawMessage `json:"args,omitempty"`
 }
 
-// ExecuteResult represents the result of executing a function
 type ExecuteResult struct {
-	FunctionName string      `json:"function_name"`
-	Result       interface{} `json:"result"`
-	Error        string      `json:"error,omitempty"`
-	Args         interface{} `json:"args,omitempty"`
+    FunctionName string      `json:"function_name"`
+    Result       interface{} `json:"result,omitempty"`
+    Error        string      `json:"error,omitempty"`
+    Args         interface{} `json:"args,omitempty"`
 }
 
-// ConversationData represents the data structure for storing conversation context
-type ConversationData struct {
-	Messages  []ChatMessage `json:"messages"`
-	Timestamp time.Time     `json:"timestamp"`
-}
-
-// ChatMessage represents a single message in the conversation
-type ChatMessage struct {
-	Query         string          `json:"query"`
-	ContentChunks []ContentChunk  `json:"content_chunks,omitempty"`
-	ResponseText  string          `json:"response_text,omitempty"`
-	FunctionCalls []FunctionCall  `json:"function_calls"`
-	ToolResults   []ExecuteResult `json:"tool_results"`
-	Timestamp     time.Time       `json:"timestamp"`
-	ExpiresAt     time.Time       `json:"expires_at"` // When this message should expire
-}
-
-// ContentChunk represents a piece of content in the response sequence
 type ContentChunk struct {
-	Type    string      `json:"type"`    // "text" or "table" (or others later, e.g., "image")
-	Content interface{} `json:"content"` // string for "text", TableData for "table"
+    Type    string      `json:"type"`
+    Content interface{} `json:"content"`
 }
 
+type ChatMessage struct {
+    Role          string          `json:"role"` // "user", "assistant", "tool"
+    ContentChunks []ContentChunk  `json:"content_chunks,omitempty"`
+    Timestamp     time.Time       `json:"timestamp"`
+    ExpiresAt     time.Time       `json:"expires_at"`
+}
+
+type ConversationData struct {
+    Messages  []ChatMessage `json:"messages"`
+    Timestamp time.Time     `json:"timestamp"`
+}
+
+// The response type expected by the existing REST layer.
 type QueryResponse struct {
-	Type          string            `json:"type"` //"mixed_content", "function_calls", "simple_text"
-	ContentChunks []ContentChunk    `json:"content_chunks,omitempty"`
-	Text          string            `json:"text,omitempty"`
-	Results       []ExecuteResult   `json:"results,omitempty"`
-	History       *ConversationData `json:"history,omitempty"`
+    Type          string            `json:"type"` // text | mixed_content | function_calls
+    ContentChunks []ContentChunk    `json:"content_chunks,omitempty"`
+    Text          string            `json:"text,omitempty"`
+    Results       []ExecuteResult   `json:"results,omitempty"`
+    History       *ConversationData `json:"history,omitempty"`
 }
 
-// ThinkingResponse represents the JSON output from the thinking model with rounds
-type ThinkingResponse struct {
-	Rounds                  [][]FunctionCall `json:"rounds"`
-	RequiresFurtherPlanning bool             `json:"requires_further_planning"`
-	RequiresFinalResponse   bool             `json:"requires_final_response"`
-	ContentChunks           []ContentChunk   `json:"content_chunks,omitempty"`
-	PlanningContext         json.RawMessage  `json:"planning_context,omitempty"`
+// ─────────────────────────────────────────────────────────────────────────────
+//  Agent                                                                     
+// ─────────────────────────────────────────────────────────────────────────────
+
+type Agent struct {
+    Conn          *utils.Conn
+    UserID        int
+    Ctx           context.Context
+    History       *ConversationData
+    RedisKey      string
+    MaxRounds     int
+    finalResponse *QueryResponse // built when loop finishes
 }
 
-// replaceTickerPlaceholder is a helper function used by ReplaceAllStringFunc.
-// It takes a matched placeholder string (e.g., "$$$TICKER-TIMESTAMP$$$"),
-// looks up the security ID, and returns the replacement string
-// (e.g., "$$$TICKER-ID-TIMESTAMP$$$") or the original match on error.
-func replaceTickerPlaceholder(conn *utils.Conn, match string) string {
-	// Use the same regex to extract parts from the *specific match*
-	tickerTimestampRegex := regexp.MustCompile(`\$\$\$([A-Z]{1,5})-(\d+)\$\$\$`)
-	submatches := tickerTimestampRegex.FindStringSubmatch(match)
-	if len(submatches) != 3 {
-		fmt.Printf("    [Helper] Error: Regex did not find 3 submatches in '%s'.\n", match)
-		return match // Should not happen if called by ReplaceAllStringFunc, but safety first
-	}
-	ticker := submatches[1]
-	timestampStr := submatches[2]
-
-	timestampMs, err := strconv.ParseInt(timestampStr, 10, 64)
-	if err != nil {
-		fmt.Printf("    [Helper] Error parsing timestamp string '%s': %v. Skipping replacement.\n", timestampStr, err)
-		return match
-	}
-
-	var timestamp time.Time
-	if timestampMs == 0 {
-		timestamp = time.Now()
-	} else {
-		timestamp = time.UnixMilli(timestampMs)
-	}
-
-	securityId, err := utils.GetSecurityID(conn, ticker, timestamp)
-	if err != nil {
-		fmt.Printf("    [Helper] Error getting security ID for %s at %v: %v. Skipping replacement.\n", ticker, timestamp, err)
-		return match
-	}
-
-	replacement := fmt.Sprintf("$$$%s-%d-%s$$$", ticker, securityId, timestampStr)
-	return replacement
+func NewAgent(ctx context.Context, conn *utils.Conn, userID int) (*Agent, error) {
+    key := fmt.Sprintf("user:%d:conversation", userID)
+    hist, _ := getConversationFromCache(ctx, conn, userID, key) // ignore err → new conv
+    if hist == nil {
+        hist = &ConversationData{Timestamp: time.Now()}
+    }
+    return &Agent{
+        Conn:      conn,
+        UserID:    userID,
+        Ctx:       ctx,
+        History:   hist,
+        RedisKey:  key,
+        MaxRounds: 8,
+    }, nil
 }
 
-// GetQuery processes a natural language query and returns the result
+// Public entry point, mirrors signature of the former GetQuery.
 func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
+    var q struct{ Query string `json:"query"` }
+    if err := json.Unmarshal(args, &q); err != nil {
+        return nil, err
+    }
+    if strings.TrimSpace(q.Query) == "" {
+        return nil, errors.New("query cannot be empty")
+    }
 
-	// Use the standardized Redis connectivity test
-	ctx := context.Background()
-	success, message := conn.TestRedisConnectivity(ctx, userID)
-	if !success {
-		fmt.Printf("WARNING: %s\n", message)
-	} else {
-		fmt.Println(message)
-	}
+    ctx := context.Background()
+    ag, err := NewAgent(ctx, conn, userID)
+    if err != nil {
+        return nil, err
+    }
 
-	var query Query
-	if err := json.Unmarshal(args, &query); err != nil {
-		return nil, fmt.Errorf("error parsing request: %w", err)
-	}
-	userQuery := query.Query
-	// If the query is empty, return an error
-	if userQuery == "" {
-		return nil, fmt.Errorf("query cannot be empty")
-	}
+    ag.appendUser(q.Query)
 
-	// Check for existing conversation history
-	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
-	conversationData, err := getConversationFromCache(ctx, conn, userID, conversationKey)
+    if err := ag.loop(); err != nil {
+        return nil, err
+    }
 
-	// If we have existing conversation data, append the new message
-	fmt.Println("Accessing conversation for key:", conversationKey)
+    // Persist conversation for future requests.
+    _ = saveConversationToCache(ctx, conn, userID, ag.RedisKey, ag.History)
 
-	// If no conversation exists, create a new one
-	if err != nil || conversationData == nil {
-		fmt.Printf("Creating new conversation. Error: %v\n", err)
-		conversationData = &ConversationData{
-			Messages:  []ChatMessage{},
-			Timestamp: time.Now(),
-		}
-	} else {
-		fmt.Printf("Found existing conversation with %d messages\n", len(conversationData.Messages))
-	}
-
-	// Get function calls from the LLM with context from previous messages
-	var conversationHistory string
-	var allResults []ExecuteResult
-	var allThinkingResults []ThinkingResponse
-	if len(conversationData.Messages) > 0 {
-		// Build context from previous messages for Gemini
-		conversationHistory = buildConversationContext(conversationData.Messages)
-	} else {
-		conversationHistory = ""
-	}
-	maxTurns := 5
-	numTurns := 0
-	for numTurns < maxTurns {
-		var prompt strings.Builder
-		if conversationHistory != "" {
-			prompt.WriteString("Conversation History:\n")
-			prompt.WriteString(conversationHistory)
-			prompt.WriteString("\n\n")
-		}
-		prompt.WriteString("User Query:\n")
-		prompt.WriteString(userQuery)
-		prompt.WriteString("\n\n")
-		if len(allThinkingResults) > 0 {
-			prompt.WriteString("Results from all previous rounds:\n\n")
-			resultsJSON, _ := json.Marshal(allResults)
-			prompt.WriteString("```json\n")
-			prompt.WriteString(string(resultsJSON))
-			prompt.WriteString("\n```\n\n")
-		}
-
-		// This first passes the query to a thinking model
-		geminiThinkingResponse, err := getGeminiFunctionThinking(ctx, conn, "defaultSystemPrompt", prompt.String())
-		if err != nil {
-			return nil, fmt.Errorf("error getting thinking response: %w", err)
-		}
-
-		responseText := geminiThinkingResponse.Text
-		// Try to parse the thinking response as JSON
-		var thinkingResp ThinkingResponse
-		fmt.Println("thinking response ", thinkingResp)
-		// Find the JSON block in the response
-		jsonStartIdx := strings.Index(responseText, "{")
-		jsonEndIdx := strings.LastIndex(responseText, "}")
-
-		// If no valid JSON is found, just return the text response
-		if jsonStartIdx == -1 || jsonEndIdx == -1 || jsonEndIdx <= jsonStartIdx {
-			return QueryResponse{
-				Type:    "text",
-				Text:    responseText,
-				History: conversationData,
-			}, nil
-		}
-
-		jsonBlock := responseText[jsonStartIdx : jsonEndIdx+1]
-		_ = json.Unmarshal([]byte(jsonBlock), &thinkingResp) // Ignore error for now, as the block was empty
-
-		if len(thinkingResp.Rounds) == 0 && len(thinkingResp.ContentChunks) == 0 {
-			newMessage := ChatMessage{
-				Query:         query.Query,
-				ResponseText:  responseText,
-				FunctionCalls: []FunctionCall{},
-				ToolResults:   []ExecuteResult{},
-				Timestamp:     time.Now(),
-				ExpiresAt:     time.Now().Add(24 * time.Hour),
-			}
-
-			// Add new message to conversation history
-			conversationData.Messages = append(conversationData.Messages, newMessage)
-			conversationData.Timestamp = time.Now()
-			if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-				fmt.Printf("Error saving updated conversation: %v\n", err)
-			}
-
-			return QueryResponse{
-				Type:    "text",
-				Text:    responseText,
-				History: conversationData,
-			}, nil
-		}
-
-		// If we have content chunks directly in the response, return them
-		if len(thinkingResp.ContentChunks) > 0 {
-
-			newMessage := ChatMessage{
-				Query:         query.Query,
-				ContentChunks: thinkingResp.ContentChunks,
-				FunctionCalls: []FunctionCall{},
-				ToolResults:   []ExecuteResult{},
-				Timestamp:     time.Now(),
-				ExpiresAt:     time.Now().Add(24 * time.Hour),
-			}
-
-			// Add new message to conversation history
-			conversationData.Messages = append(conversationData.Messages, newMessage)
-			conversationData.Timestamp = time.Now()
-			if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-				fmt.Printf("Error saving updated conversation: %v\n", err)
-			}
-
-			// Return both the original ContentChunks for the frontend to render
-			// and the text version for systems that can't handle structured content
-			return QueryResponse{
-				Type:          "mixed_content",
-				ContentChunks: thinkingResp.ContentChunks,
-				History:       conversationData,
-			}, nil
-		}
-
-		// Try to process the thinking response as rounds
-		contentChunks, thinkingResults, err := processThinkingResponse(ctx, conn, userID, thinkingResp, query.Query)
-		if err == nil && len(thinkingResults) > 0 {
-			if len(contentChunks) > 0 {
-				// Create new message with the content chunks response
-				newMessage := ChatMessage{
-					Query:         query.Query,
-					ContentChunks: contentChunks,
-					FunctionCalls: []FunctionCall{},
-					ToolResults:   []ExecuteResult{},
-					Timestamp:     time.Now(),
-					ExpiresAt:     time.Now().Add(24 * time.Hour),
-				}
-				conversationData.Messages = append(conversationData.Messages, newMessage)
-				conversationData.Timestamp = time.Now()
-				if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-					fmt.Printf("Error saving updated conversation: %v\n", err)
-				}
-
-				return QueryResponse{
-					Type:          "mixed_content",
-					ContentChunks: newMessage.ContentChunks,
-					History:       conversationData,
-				}, nil
-			}
-			if !thinkingResp.RequiresFurtherPlanning {
-				// Create new message with the round results and formatted response
-				newMessage := ChatMessage{
-					Query:         query.Query,
-					ResponseText:  "Successfully processed the following function calls:\n\n",
-					FunctionCalls: []FunctionCall{}, // We don't store these as regular function calls
-					ToolResults:   thinkingResults,
-					Timestamp:     time.Now(),
-					ExpiresAt:     time.Now().Add(24 * time.Hour),
-				}
-
-				// Add new message to conversation history
-				conversationData.Messages = append(conversationData.Messages, newMessage)
-				conversationData.Timestamp = time.Now()
-				if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-					fmt.Printf("Error saving updated conversation: %v\n", err)
-				}
-
-				return QueryResponse{
-					Type:    "function_calls",
-					Results: thinkingResults,
-					Text:    "Successfully processed the following function calls:\n\n",
-					History: conversationData,
-				}, nil
-			}
-			allResults = append(allResults, thinkingResults...)
-			allThinkingResults = append(allThinkingResults, thinkingResp)
-		}
-
-		numTurns++
-	}
-	return nil, fmt.Errorf("error getting gemini function response: %w", err)
+    return ag.finalResponse, nil
 }
 
-// buildConversationContext formats the conversation history for Gemini
-func buildConversationContext(messages []ChatMessage) string {
-	var context strings.Builder
+// ─────────────────────────────────────────────────────────────────────────────
+//  The Plan → Execute → Reflect loop
+// ─────────────────────────────────────────────────────────────────────────────
 
-	// Include up to last 10 messages for context
-	startIdx := 0
-	if len(messages) > 10 {
-		startIdx = len(messages) - 10
-	}
+func (a *Agent) loop() error {
+    var allResults []ExecuteResult
 
-	for i := startIdx; i < len(messages); i++ {
-		context.WriteString("User: ")
-		context.WriteString(messages[i].Query)
-		context.WriteString("\n")
+    for round := 0; round < a.MaxRounds; round++ {
+        // PLAN
+        calls, err := a.plan()
+        if err != nil {
+            return err
+        }
+        if len(calls) == 0 {
+            break
+        }
 
-		context.WriteString("Assistant: ")
-		if len(messages[i].ContentChunks) > 0 {
-			for _, chunk := range messages[i].ContentChunks {
-				// Safely handle different content types
-				switch v := chunk.Content.(type) {
-				case string:
-					context.WriteString(v)
-				case map[string]interface{}:
-					// For table data or other structured content, convert to a simple text representation
-					jsonData, err := json.Marshal(v)
-					if err == nil {
-						context.WriteString(fmt.Sprintf("[Table data: %s]", string(jsonData)))
-					} else {
-						context.WriteString("[Table data]")
-					}
-				default:
-					// Handle any other type by converting to string
-					context.WriteString(fmt.Sprintf("%v", v))
-				}
-			}
-		} else {
-			context.WriteString(messages[i].ResponseText)
-		}
-		context.WriteString("\n\n")
-	}
+        // EXECUTE
+        results := a.execute(calls)
+        allResults = append(allResults, results...)
 
-	return context.String()
+        // REFLECT — decide to stop or continue
+        done, reflectText, err := a.reflect(results)
+        if err != nil {
+            return err
+        }
+        if done {
+            // Build the final QueryResponse matching old behaviour.
+            a.finalResponse = &QueryResponse{
+                Type:          "function_calls",
+                Text:          reflectText,
+                Results:       allResults,
+                History:       a.History,
+            }
+            return nil
+        }
+    }
+
+    // Fallback text if max rounds hit.
+    a.finalResponse = &QueryResponse{
+        Type:    "text",
+        Text:    "Reached maximum reasoning rounds without completion.",
+        History: a.History,
+    }
+    return nil
 }
 
-// saveConversationToCache saves the conversation data to Redis
-func saveConversationToCache(ctx context.Context, conn *utils.Conn, userID int, cacheKey string, data *ConversationData) error {
-	if data == nil {
-		return fmt.Errorf("cannot save nil conversation data")
-	}
+// ─────────────────────────────────────────────────────────────────────────────
+//  Stage helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
-	// Test Redis connectivity before saving
-	success, message := conn.TestRedisConnectivity(ctx, userID)
-	if !success {
-		fmt.Printf("WARNING: %s\n", message)
-		return fmt.Errorf("redis connectivity test failed: %s", message)
-	}
+// buildToolPlaintext turns the current registry into a human‑readable
+// definition block the model can see **inside** the conversation.
+func buildToolPlaintext() string {
+    tools := GetTools(false)
 
-	// Filter out expired messages
-	now := time.Now()
-	var validMessages []ChatMessage
-	for _, msg := range data.Messages {
-		if msg.ExpiresAt.After(now) {
-			validMessages = append(validMessages, msg)
-		} else {
-			fmt.Printf("Removing expired message from %s\n", msg.Timestamp.Format(time.RFC3339))
-		}
-	}
+    // Keep alphabetical order so the prompt is stable.
+    names := make([]string, 0, len(tools))
+    for n := range tools { names = append(names, n) }
+    sort.Strings(names)
 
-	// Update the data with only valid messages
-	data.Messages = validMessages
+    var b bytes.Buffer
 
-	if len(data.Messages) == 0 {
-		fmt.Println("Warning: Saving empty conversation data to cache (all messages expired)")
-	}
 
-	// Print details about what we're saving
-	fmt.Printf("Saving conversation with %d valid messages to key: %s\n", len(data.Messages), cacheKey)
-
-	// Serialize the conversation data
-	serialized, err := json.Marshal(data)
-	if err != nil {
-		fmt.Printf("Failed to serialize conversation data: %v\n", err)
-		return fmt.Errorf("failed to serialize conversation data: %w", err)
-	}
-
-	// Save to Redis without an expiration - we'll handle expiration at the message level
-	err = conn.Cache.Set(ctx, cacheKey, serialized, 0).Err()
-	if err != nil {
-		fmt.Printf("Failed to save conversation to Redis: %v\n", err)
-		return fmt.Errorf("failed to save conversation to cache: %w", err)
-	}
-
-	// Verify the data was saved correctly
-	verification, err := conn.Cache.Get(ctx, cacheKey).Result()
-	if err != nil {
-		fmt.Printf("Failed to verify saved conversation: %v\n", err)
-		return fmt.Errorf("failed to verify saved conversation: %w", err)
-	}
-
-	var verifiedData ConversationData
-	if err := json.Unmarshal([]byte(verification), &verifiedData); err != nil {
-		fmt.Printf("Failed to parse verified conversation: %v\n", err)
-		return fmt.Errorf("failed to parse verified conversation: %w", err)
-	}
-
-	fmt.Printf("Successfully saved and verified conversation to Redis. Verified %d messages.\n",
-		len(verifiedData.Messages))
-
-	return nil
+    for _, n := range names {
+        t := tools[n]
+        decl := t.FunctionDeclaration
+        b.WriteString("— ")
+        b.WriteString(decl.Name)
+        if decl.Description != "" {
+            b.WriteString(": ")
+            b.WriteString(decl.Description)
+        }
+        if decl.Parameters != nil {
+            // Pretty‑print the JSON schema for arguments.
+            argBytes, _ := json.MarshalIndent(decl.Parameters, "  ", "  ")
+            b.WriteString("\n  args schema:\n  ")
+            b.Write(argBytes)
+        }
+        b.WriteByte('\n')
+    }
+    return b.String()
 }
 
-// SetMessageExpiration allows setting a custom expiration time for a message
-func SetMessageExpiration(message *ChatMessage, duration time.Duration) {
-	message.ExpiresAt = time.Now().Add(duration)
+func (a *Agent) plan() ([]FunctionCall, error) {
+    const model = "gemini-2.0-flash-thinking-exp-01-21"
+
+    // Put the whole history *after* the tool list so the model sees definitions first.
+    prompt := buildToolPlaintext() + "\n\n" +
+        buildHistoryPrompt(a.History) + "\nUser: "
+
+    // ⚠️  NO function‑call metadata – the model rejects it.  We therefore
+    //     pass withTools=false.
+    resp, err := a.callGemini(model, mustSystemPrompt("plan"), prompt, false)
+    if err != nil {
+        return nil, err
+    }
+
+    // If function‑calling were somehow enabled we still honour it,
+    // otherwise fall back to the JSON list in `resp.Text`.
+    if len(resp.FunctionCalls) > 0 {
+        return resp.FunctionCalls, nil
+    }
+
+    // Parse a JSON array inside the assistant text.
+    start, end := strings.Index(resp.Text, "["), strings.LastIndex(resp.Text, "]")
+    if start == -1 || end == -1 || end <= start {
+        return nil, fmt.Errorf("plan: no function calls returned")
+    }
+
+    var rawCalls []struct {
+        Name string          `json:"name"`
+        Args json.RawMessage `json:"args"`
+    }
+    if err := json.Unmarshal([]byte(resp.Text[start:end+1]), &rawCalls); err != nil {
+        return nil, fmt.Errorf("plan: cannot parse JSON tool list: %w", err)
+    }
+
+    out := make([]FunctionCall, len(rawCalls))
+    for i, c := range rawCalls {
+        out[i] = FunctionCall{Name: c.Name, Args: c.Args}
+    }
+    return out, nil
 }
 
-// getConversationFromCache retrieves conversation data from Redis
-func getConversationFromCache(ctx context.Context, conn *utils.Conn, userID int, cacheKey string) (*ConversationData, error) {
-	// Get the conversation data from Redis
-	cachedValue, err := conn.Cache.Get(ctx, cacheKey).Result()
-	if err != nil {
-		return nil, fmt.Errorf("conversation not found in cache: %w", err)
-	}
-
-	// Deserialize the conversation data
-	var conversationData ConversationData
-	err = json.Unmarshal([]byte(cachedValue), &conversationData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to deserialize conversation data: %w", err)
-	}
-
-	// Filter out expired messages
-	now := time.Now()
-	originalCount := len(conversationData.Messages)
-	var validMessages []ChatMessage
-
-	for _, msg := range conversationData.Messages {
-		if msg.ExpiresAt.After(now) {
-			validMessages = append(validMessages, msg)
-		} else {
-			fmt.Printf("Filtering out expired message from %s during retrieval\n",
-				msg.Timestamp.Format(time.RFC3339))
-		}
-	}
-
-	// Update with only valid messages
-	conversationData.Messages = validMessages
-
-	// If we filtered out messages, update the cache
-	if len(validMessages) < originalCount {
-		fmt.Printf("Removed %d expired messages from conversation\n",
-			originalCount-len(validMessages))
-
-		// Save the updated conversation back to cache if we have at least one valid message
-		if len(validMessages) > 0 {
-			go func() {
-				// Create a new context for the goroutine
-				bgCtx := context.Background()
-				if err := saveConversationToCache(bgCtx, conn, userID, cacheKey, &conversationData); err != nil {
-					fmt.Printf("Failed to update cache after filtering expired messages: %v\n", err)
-				}
-			}()
-		} else if originalCount > 0 {
-			// All messages expired, so we should delete the conversation entirely
-			go func() {
-				bgCtx := context.Background()
-				if err := conn.Cache.Del(bgCtx, cacheKey).Err(); err != nil {
-					fmt.Printf("Failed to delete empty conversation after all messages expired: %v\n", err)
-				} else {
-					fmt.Printf("Deleted conversation %s as all messages expired\n", cacheKey)
-				}
-			}()
-		}
-	}
-
-	return &conversationData, nil
+func (a *Agent) execute(calls []FunctionCall) []ExecuteResult {
+    tools := GetTools(false)
+    var results []ExecuteResult
+    for _, c := range calls {
+        tool, ok := tools[c.Name]
+        if !ok {
+            results = append(results, ExecuteResult{FunctionName: c.Name, Error: "tool not found", Args: c.Args})
+            continue
+        }
+        res, err := tool.Function(a.Conn, a.UserID, c.Args)
+        if err != nil {
+            results = append(results, ExecuteResult{FunctionName: c.Name, Error: err.Error(), Args: c.Args})
+        } else {
+            results = append(results, ExecuteResult{FunctionName: c.Name, Result: res, Args: c.Args})
+        }
+    }
+    // Add a tool message to history (JSON chunk)
+    a.History.Messages = append(a.History.Messages, ChatMessage{
+        Role:          "tool",
+        ContentChunks: []ContentChunk{{Type: "json", Content: results}},
+        Timestamp:     time.Now(),
+        ExpiresAt:     time.Now().Add(24 * time.Hour),
+    })
+    return results
 }
 
-// GetUserConversation retrieves the conversation for a user
+func (a *Agent) reflect(results []ExecuteResult) (bool, string, error) {
+    payload, _ := json.Marshal(results)
+    prompt := buildHistoryPrompt(a.History) + "\nTool results:\n```json\n" + string(payload) + "\n```"
+    resp, err := a.callGemini("gemini-2.0-flash-001", mustSystemPrompt("reflect"), prompt, true)
+    if err != nil {
+        return false, "", err
+    }
+
+    text := strings.TrimSpace(resp.Text)
+    text = injectSecurityIDs(a.Conn, text)
+
+    a.appendAssistant(text)
+
+    lower := strings.ToLower(text)
+    done := strings.Contains(lower, "no more rounds") || strings.HasPrefix(lower, "done")
+    return done, text, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  History helpers & utilities
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (a *Agent) appendUser(q string) {
+    a.History.Messages = append(a.History.Messages, ChatMessage{
+        Role:          "user",
+        ContentChunks: []ContentChunk{{Type: "text", Content: q}},
+        Timestamp:     time.Now(),
+        ExpiresAt:     time.Now().Add(24 * time.Hour),
+    })
+}
+
+func (a *Agent) appendAssistant(t string) {
+    a.History.Messages = append(a.History.Messages, ChatMessage{
+        Role:          "assistant",
+        ContentChunks: []ContentChunk{{Type: "text", Content: t}},
+        Timestamp:     time.Now(),
+        ExpiresAt:     time.Now().Add(24 * time.Hour),
+    })
+}
+
+func buildHistoryPrompt(c *ConversationData) string {
+    var sb strings.Builder
+    for _, m := range c.Messages {
+        if m.Role == "user" {
+            sb.WriteString("User: ")
+        } else if m.Role == "assistant" {
+            sb.WriteString("Assistant: ")
+        } else { // tool
+            sb.WriteString("Tool: ")
+        }
+        if len(m.ContentChunks) > 0 {
+            switch v := m.ContentChunks[0].Content.(type) {
+            case string:
+                sb.WriteString(v)
+            default:
+                b, _ := json.Marshal(v)
+                sb.WriteString(string(b))
+            }
+        }
+        sb.WriteString("\n")
+    }
+    return sb.String()
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Gemini wrapper
+// ─────────────────────────────────────────────────────────────────────────────
+
+type GeminiFunctionResponse struct {
+    FunctionCalls []FunctionCall
+    Text          string
+}
+
+func (a *Agent) callGemini(model, systemPrompt, prompt string, withTools bool) (*GeminiFunctionResponse, error) {
+    apiKey, err := a.Conn.GetGeminiKey()
+    if err != nil {
+        return nil, err
+    }
+    client, err := genai.NewClient(a.Ctx, &genai.ClientConfig{APIKey: apiKey, Backend: genai.BackendGeminiAPI})
+    if err != nil {
+        return nil, err
+    }
+
+    cfg := &genai.GenerateContentConfig{SystemInstruction: &genai.Content{Parts: []*genai.Part{{Text: systemPrompt}}}}
+    if withTools {
+        cfg.Tools = convertTools()
+    }
+
+    res, err := client.Models.GenerateContent(a.Ctx, model, genai.Text(prompt), cfg)
+    if err != nil {
+        return nil, err
+    }
+
+    out := &GeminiFunctionResponse{}
+    if len(res.Candidates) > 0 && res.Candidates[0].Content != nil {
+        for _, p := range res.Candidates[0].Content.Parts {
+            if p.Text != "" {
+                out.Text = p.Text
+            }
+            if fc := p.FunctionCall; fc != nil {
+                args, _ := json.Marshal(fc.Args)
+                out.FunctionCalls = append(out.FunctionCalls, FunctionCall{fc.Name, args})
+            }
+        }
+    }
+    return out, nil
+}
+
+func convertTools() []*genai.Tool {
+    ts := GetTools(false)
+    names := make([]string, 0, len(ts))
+    for n := range ts {
+        names = append(names, n)
+    }
+    sort.Strings(names)
+
+    var out []*genai.Tool
+    for _, n := range names {
+        t := ts[n]
+        out = append(out, &genai.Tool{FunctionDeclarations: []*genai.FunctionDeclaration{t.FunctionDeclaration}})
+    }
+    return out
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Security‑ID injection (restored)
+// ─────────────────────────────────────────────────────────────────────────────
+
+var tickerPlaceholder = regexp.MustCompile(`\$\$\$([A-Z]{1,5})-(\d+)\$\$\$`)
+
+func injectSecurityIDs(conn *utils.Conn, text string) string {
+    return tickerPlaceholder.ReplaceAllStringFunc(text, func(m string) string {
+        sub := tickerPlaceholder.FindStringSubmatch(m)
+        if len(sub) != 3 {
+            return m
+        }
+        ticker, tsStr := sub[1], sub[2]
+        ts, err := strconv.ParseInt(tsStr, 10, 64)
+        if err != nil {
+            return m
+        }
+        var t time.Time
+        if ts == 0 {
+            t = time.Now()
+        } else {
+            t = time.UnixMilli(ts)
+        }
+        id, err := utils.GetSecurityID(conn, ticker, t)
+        if err != nil {
+            return m
+        }
+        return fmt.Sprintf("$$$%s-%d-%s$$$", ticker, id, tsStr)
+    })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Redis conversation persistence (reused from original)
+// ─────────────────────────────────────────────────────────────────────────────
+
+func saveConversationToCache(ctx context.Context, conn *utils.Conn, userID int, key string, data *ConversationData) error {
+    if data == nil {
+        return errors.New("nil conversation")
+    }
+
+    now := time.Now()
+    var keep []ChatMessage
+    for _, m := range data.Messages {
+        if m.ExpiresAt.After(now) {
+            keep = append(keep, m)
+        }
+    }
+    data.Messages = keep
+    data.Timestamp = now
+
+    b, _ := json.Marshal(data)
+    return conn.Cache.Set(ctx, key, b, 0).Err()
+}
+
+func getConversationFromCache(ctx context.Context, conn *utils.Conn, userID int, key string) (*ConversationData, error) {
+    val, err := conn.Cache.Get(ctx, key).Result()
+    if err != nil {
+        return nil, err
+    }
+    var c ConversationData
+    if err := json.Unmarshal([]byte(val), &c); err != nil {
+        return nil, err
+    }
+    return &c, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Prompt loader (unchanged)
+// ─────────────────────────────────────────────────────────────────────────────
+
+func mustSystemPrompt(name string) string {
+    p, err := getSystemInstruction(name)
+    if err != nil {
+        panic(err)
+    }
+    return p
+}
+type GetSuggestedQueriesResponse struct {
+    Suggestions []string `json:"suggestions"`
+}
+
+func getSystemInstruction(systemPrompt string) (string, error) {
+	// Get the directory of the current file (gemini.go)
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", fmt.Errorf("error getting current file path")
+	}
+	currentDir := filepath.Dir(filename)
+
+	systemPrompt = "prompts/" + systemPrompt + ".txt"
+	// Construct path to query.txt
+	queryFilePath := filepath.Join(currentDir, systemPrompt)
+
+	// Read the content of query.txt
+	content, err := os.ReadFile(queryFilePath)
+	if err != nil {
+		return "", fmt.Errorf("error reading query.txt: %w", err)
+	}
+
+	// Replace the {{CURRENT_TIME}} placeholder with the actual current time
+	currentTime := time.Now().Format(time.RFC3339)
+	currentTimeMilliseconds := time.Now().UnixMilli()
+	instruction := strings.Replace(string(content), "{{CURRENT_TIME}}", currentTime, -1)
+	instruction = strings.Replace(instruction, "{{CURRENT_TIME_MILLISECONDS}}", fmt.Sprintf("%d", currentTimeMilliseconds), -1)
+
+	return instruction, nil
+}
 func GetUserConversation(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
 	ctx := context.Background()
 
@@ -539,587 +559,39 @@ func GetUserConversation(conn *utils.Conn, userID int, args json.RawMessage) (in
 	return conversation, nil
 }
 
-func getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (string, error) {
-	apiKey, err := conn.GetGeminiKey()
-	if err != nil {
-		return "", fmt.Errorf("error getting gemini key: %w", err)
-	}
+func GetSuggestedQueries(conn *utils.Conn, userID int, args json.RawMessage) (any, error) {
+    ctx := context.Background()
+    success, msg := conn.TestRedisConnectivity(ctx, userID)
+    if !success { fmt.Println("WARNING:", msg) }
 
-	// Create a new client using the API key
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return "", fmt.Errorf("error creating gemini client: %w", err)
-	}
+    key := fmt.Sprintf("user:%d:conversation", userID)
+    conv, _ := getConversationFromCache(ctx, conn, userID, key)
+    if conv == nil { return GetSuggestedQueriesResponse{}, nil }
 
-	systemInstruction, err := getSystemInstruction("finalResponseSystemPrompt")
-	if err != nil {
-		return "", fmt.Errorf("error getting system instruction: %w", err)
-	}
+    // Create a temporary agent to use its callGemini method
+    agent, err := NewAgent(ctx, conn, userID)
+    if err != nil {
+        return nil, fmt.Errorf("failed to create agent: %w", err)
+    }
 
-	config := &genai.GenerateContentConfig{
-		SystemInstruction: &genai.Content{
-			Parts: []*genai.Part{
-				{Text: systemInstruction},
-			},
-		},
-	}
-	result, err := client.Models.GenerateContent(ctx, "gemini-2.0-flash-001", genai.Text(query), config)
-	if err != nil {
-		return "", fmt.Errorf("error generating content: %w", err)
-	}
+    hist := buildHistoryPrompt(conv)
+    res, err := agent.callGemini("gemini-2.0-flash-001", mustSystemPrompt("suggestedQueries"), hist, false)
+    if err != nil { return nil, err }
 
-	// Extract the response text
-	if len(result.Candidates) == 0 || len(result.Candidates[0].Content.Parts) == 0 {
-		return "", fmt.Errorf("no response from Gemini")
-	}
+    start, end := strings.Index(res.Text, "{"), strings.LastIndex(res.Text, "}")
+    if start == -1 || end == -1 { return GetSuggestedQueriesResponse{}, nil }
 
-	// Get the text from the response
-	text := fmt.Sprintf("%v", result.Candidates[0].Content.Parts[0].Text)
-	return text, nil
+    var out GetSuggestedQueriesResponse
+    _ = json.Unmarshal([]byte(res.Text[start:end+1]), &out) // ignore err → empty
+    return out, nil
 }
 
-// FunctionCall represents a function to be called with its arguments
-type FunctionCall struct {
-	Name   string          `json:"name"`
-	CallID string          `json:"call_id,omitempty"`
-	Args   json.RawMessage `json:"args,omitempty"`
+func ClearConversationHistory(conn *utils.Conn, userID int, _ json.RawMessage) (interface{}, error) {
+    ctx := context.Background()
+    key := fmt.Sprintf("user:%d:conversation", userID)
+    if err := conn.Cache.Del(ctx, key).Err(); err != nil {
+        return nil, fmt.Errorf("failed to clear conversation history: %w", err)
+    }
+    return map[string]string{"message": "Conversation history cleared successfully"}, nil
 }
 
-// FunctionResponse represents the response from the LLM with function calls
-type FunctionResponse struct {
-	FunctionCalls []FunctionCall `json:"function_calls"`
-}
-
-type GeminiFunctionResponse struct {
-	FunctionCalls []FunctionCall `json:"function_calls"`
-	Text          string         `json:"text"`
-}
-
-func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemPrompt string, query string) (*GeminiFunctionResponse, error) {
-	apiKey, err := conn.GetGeminiKey()
-	if err != nil {
-		return nil, fmt.Errorf("error getting gemini key: %w", err)
-	}
-
-	// Create a new client using the API key
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error creating gemini client: %w", err)
-	}
-
-	// Get the system instruction
-	baseSystemInstruction, err := getSystemInstruction(systemPrompt)
-	if err != nil {
-		return nil, fmt.Errorf("error getting system instruction: %w", err)
-	}
-
-	// Enhance the system instruction with tool descriptions
-	enhancedSystemInstruction := enhanceSystemPromptWithTools(baseSystemInstruction)
-	config := &genai.GenerateContentConfig{
-		SystemInstruction: &genai.Content{
-			Parts: []*genai.Part{
-				{Text: enhancedSystemInstruction},
-			},
-		},
-	}
-
-	result, err := client.Models.GenerateContent(
-		ctx,
-		"gemini-2.0-flash-thinking-exp-01-21",
-		genai.Text(query),
-		config,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("error generating content with thinking model: %w", err)
-	}
-
-	// Extract the clean text response for display
-	responseText := ""
-	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
-		for _, part := range result.Candidates[0].Content.Parts {
-			if part.Text != "" {
-				responseText = part.Text
-				break
-			}
-		}
-	}
-	response := &GeminiFunctionResponse{
-		FunctionCalls: []FunctionCall{},
-		Text:          responseText,
-	}
-	return response, nil
-}
-
-// getGeminiFunctionResponse uses the Google Function API to return an ordered list of functions to execute
-func getGeminiFunctionResponse(ctx context.Context, conn *utils.Conn, query string) (*GeminiFunctionResponse, error) {
-	apiKey, err := conn.GetGeminiKey()
-	if err != nil {
-		return nil, fmt.Errorf("error getting gemini key: %w", err)
-	}
-
-	// Create a new client using the API key
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error creating gemini client: %w", err)
-	}
-
-	systemInstruction := "You are a helpful assistant that can answer questions and run functions"
-	var geminiTools []*genai.Tool
-	for _, tool := range GetTools(false) {
-		// Convert the FunctionDeclaration to a Tool
-		geminiTools = append(geminiTools, &genai.Tool{
-			FunctionDeclarations: []*genai.FunctionDeclaration{
-				{
-					Name:        tool.FunctionDeclaration.Name,
-					Description: tool.FunctionDeclaration.Description,
-					Parameters:  tool.FunctionDeclaration.Parameters,
-				},
-			},
-		})
-	}
-
-	config := &genai.GenerateContentConfig{
-		Tools: geminiTools,
-		SystemInstruction: &genai.Content{
-			Parts: []*genai.Part{
-				{Text: systemInstruction},
-			},
-		},
-	}
-	// Check if query has conversation history format ("User: ... Assistant: ...")
-	// If it does, use that directly as the prompt
-	if strings.Contains(query, "User:") && strings.Contains(query, "Assistant:") {
-		// Use the formatted query directly since it already contains the conversation history
-		result, err := client.Models.GenerateContent(
-			ctx,
-			"gemini-2.0-flash",
-			genai.Text(query),
-			config,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("error generating content with history: %w", err)
-		}
-
-		// Process the result similarly to the single-query case
-		responseText := ""
-		if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
-			for _, part := range result.Candidates[0].Content.Parts {
-				if part.Text != "" {
-					responseText = part.Text
-					break
-				}
-			}
-		}
-
-		// Extract function calls
-		var functionCalls []FunctionCall
-		for _, candidate := range result.Candidates {
-			if candidate.Content == nil {
-				continue
-			}
-
-			for _, part := range candidate.Content.Parts {
-				// Check if the part is a FunctionCall
-				if fc := part.FunctionCall; fc != nil {
-					// Convert arguments to JSON
-					args, err := json.Marshal(fc.Args)
-					if err != nil {
-						return nil, fmt.Errorf("error marshaling function args: %w", err)
-					}
-
-					functionCalls = append(functionCalls, FunctionCall{
-						Name: fc.Name,
-						Args: args,
-					})
-				}
-			}
-		}
-
-		return &GeminiFunctionResponse{
-			FunctionCalls: functionCalls,
-			Text:          responseText,
-		}, nil
-	}
-
-	// Fall back to the original implementation for simple queries
-	result, err := client.Models.GenerateContent(ctx, "gemini-2.0-flash-001", genai.Text(query), config)
-	if err != nil {
-		return nil, fmt.Errorf("error generating content: %w", err)
-	}
-
-	// Extract the clean text response for display
-	responseText := ""
-	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
-		for _, part := range result.Candidates[0].Content.Parts {
-			if part.Text != "" {
-				responseText = part.Text
-				break
-			}
-		}
-	}
-
-	// Print the response for debugging
-	fmt.Println("Gemini response:", responseText)
-
-	// Extract function calls from response
-	var functionCalls []FunctionCall
-
-	// Process the response to extract function calls
-	for _, candidate := range result.Candidates {
-		if candidate.Content == nil {
-			continue
-		}
-
-		for _, part := range candidate.Content.Parts {
-			// Check if the part is a FunctionCall
-			if fc := part.FunctionCall; fc != nil {
-				// Convert arguments to JSON
-				args, err := json.Marshal(fc.Args)
-				if err != nil {
-					return nil, fmt.Errorf("error marshaling function args: %w", err)
-				}
-
-				functionCalls = append(functionCalls, FunctionCall{
-					Name: fc.Name,
-					Args: args,
-				})
-			}
-		}
-	}
-
-	return &GeminiFunctionResponse{
-		FunctionCalls: functionCalls,
-		Text:          responseText,
-	}, nil
-}
-
-// RoundResult stores the results of a round's function calls
-type RoundResult struct {
-	Results map[string]interface{} `json:"results"`
-}
-
-// processThinkingResponse attempts to parse and execute the thinking model's rounds
-// and modifies the final response string *before* parsing into chunks.
-func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, thinkingResp ThinkingResponse, originalQuery string) ([]ContentChunk, []ExecuteResult, error) {
-
-	// Check if this is an immediate content_chunks response (no rounds executed)
-	if len(thinkingResp.Rounds) == 0 && len(thinkingResp.ContentChunks) > 0 {
-		fmt.Println("Processing initial ContentChunks from ThinkingResponse (no rounds)")
-		// Even though we inject later, we *could* inject here too if needed
-		// For now, return as is, assuming injection happens after final response gen
-		return thinkingResp.ContentChunks, []ExecuteResult{}, nil
-	}
-
-	// --- Round Execution Logic ---
-	var allResults []ExecuteResult
-	var allPreviousRoundResults []ExecuteResult
-	for _, round := range thinkingResp.Rounds {
-		// ... (existing round processing logic: build prompt, call Gemini, execute functions) ...
-
-		// First, convert the round to JSON
-		roundJSON, err := json.Marshal(round)
-		if err != nil {
-			fmt.Printf("Error marshaling round to JSON: %v\n", err)
-			continue
-		}
-
-		// Create a prompt that includes the round and previous results
-		var prompt strings.Builder
-		prompt.WriteString("Process this round of function calls:\n\n")
-		prompt.WriteString("```json\n")
-		prompt.WriteString(string(roundJSON))
-		prompt.WriteString("\n```\n\n")
-
-		// Include ALL previous round results if available
-		if len(allPreviousRoundResults) > 0 {
-			prompt.WriteString("Results from all previous rounds:\n\n")
-			resultsJSON, _ := json.Marshal(allPreviousRoundResults)
-			prompt.WriteString("```json\n")
-			prompt.WriteString(string(resultsJSON))
-			prompt.WriteString("\n```\n\n")
-		}
-
-		prompt.WriteString("Please process this round of function calls.\n")
-		// Send to Gemini for processing
-		fmt.Printf("Sending round to Gemini for processing:\n%s\n", prompt.String())
-		processedRound, err := processRoundWithGemini(ctx, conn, prompt.String())
-		if err != nil {
-			fmt.Printf("Error processing round with Gemini: %v\n", err)
-
-			continue
-		}
-
-		// Execute the functions returned by Gemini
-		roundResults, err := executeGeminiFunctions(ctx, conn, userID, processedRound)
-		if err != nil {
-			fmt.Printf("Error executing functions: %v\n", err)
-			continue
-		}
-
-		// Add this round's results to the combined results
-		allResults = append(allResults, roundResults...)
-		// Accumulate results for the next round
-		allPreviousRoundResults = append(allPreviousRoundResults, roundResults...)
-	}
-	if thinkingResp.RequiresFurtherPlanning {
-		return []ContentChunk{}, allResults, nil // Return intermediate results
-	}
-
-	if thinkingResp.RequiresFinalResponse {
-		// 1. Generate the final response text using accumulated results
-		var finalPrompt strings.Builder
-		finalPrompt.WriteString("Here is the original query: ")
-		finalPrompt.WriteString(originalQuery)
-		finalPrompt.WriteString("\n\nHere are the results from the function calls: ")
-		resultsJSON, _ := json.Marshal(allResults)
-		finalPrompt.WriteString(string(resultsJSON))
-		finalPrompt.WriteString("\n\nPlease provide a final response to the original query based on the results from the function calls.")
-
-		processedText, err := getGeminiResponse(ctx, conn, finalPrompt.String())
-		if err != nil {
-			return nil, nil, fmt.Errorf("error getting final gemini response: %w", err)
-		}
-		processedText = strings.TrimSpace(processedText)
-		fmt.Printf("Raw final response text from Gemini:\n%s\n", processedText)
-
-		// 2. Inject security IDs directly into the raw response string
-		tickerTimestampRegex := regexp.MustCompile(`\$\$\$([A-Z]{1,5})-(\d+)\$\$\$`)
-		fmt.Println("--- Running security ID injection on raw text ---")
-		processedTextWithIds := tickerTimestampRegex.ReplaceAllStringFunc(processedText, func(match string) string {
-			return replaceTickerPlaceholder(conn, match)
-		})
-		fmt.Printf("--- Finished security ID injection. Result:\n%s\n", processedTextWithIds)
-
-		// 3. Parse the modified text into ContentChunks
-		var contentChunksResponse struct {
-			ContentChunks []ContentChunk `json:"content_chunks"`
-		}
-
-		// Try parsing the entire modified string as JSON
-		if err := json.Unmarshal([]byte(processedTextWithIds), &contentChunksResponse); err == nil && len(contentChunksResponse.ContentChunks) > 0 {
-			fmt.Println("Successfully parsed injected text as full ContentChunks JSON.")
-			return contentChunksResponse.ContentChunks, allResults, nil
-		}
-
-		// Try finding a JSON block within the modified string
-		jsonStartIdx := strings.Index(processedTextWithIds, "{")
-		jsonEndIdx := strings.LastIndex(processedTextWithIds, "}")
-		if jsonStartIdx != -1 && jsonEndIdx != -1 && jsonEndIdx > jsonStartIdx {
-			jsonBlock := processedTextWithIds[jsonStartIdx : jsonEndIdx+1]
-			if err := json.Unmarshal([]byte(jsonBlock), &contentChunksResponse); err == nil && len(contentChunksResponse.ContentChunks) > 0 {
-				fmt.Println("Successfully parsed injected text from JSON block.")
-				return contentChunksResponse.ContentChunks, allResults, nil
-			}
-		}
-
-		// Fallback: Treat the modified string as a single text chunk
-		fmt.Println("Could not parse injected text as JSON, falling back to single text chunk.")
-		return []ContentChunk{{Type: "text", Content: processedTextWithIds}}, allResults, nil
-	}
-
-	// If no final response is needed
-	return []ContentChunk{}, allResults, nil
-}
-
-// processRoundWithGemini sends a round to Gemini for processing and gets back the functions to execute
-func processRoundWithGemini(ctx context.Context, conn *utils.Conn, prompt string) ([]FunctionCall, error) {
-	// Get a response from Gemini with the processed functions
-	response, err := getGeminiFunctionResponse(ctx, conn, prompt)
-	if err != nil {
-		return nil, fmt.Errorf("error getting function response from Gemini: %w", err)
-	}
-
-	// Return the function calls from the response
-	return response.FunctionCalls, nil
-}
-
-// executeGeminiFunctions executes the function calls returned by Gemini
-func executeGeminiFunctions(ctx context.Context, conn *utils.Conn, userID int, functionCalls []FunctionCall) ([]ExecuteResult, error) {
-	var results []ExecuteResult
-
-	for _, fc := range functionCalls {
-		fmt.Printf("Executing function %s with args: %s\n", fc.Name, string(fc.Args))
-
-		// Parse arguments into a map for storage
-		var args interface{}
-		if err := json.Unmarshal(fc.Args, &args); err != nil {
-			fmt.Printf("Warning: Could not parse args for storage: %v\n", err)
-		}
-
-		// Check if the function exists in Tpols map
-		tool, exists := GetTools(false)[fc.Name]
-		if !exists {
-			results = append(results, ExecuteResult{
-				FunctionName: fc.Name,
-				Error:        fmt.Sprintf("function '%s' not found", fc.Name),
-				Args:         args,
-			})
-			continue
-		}
-
-		// Execute the function
-		result, err := tool.Function(conn, userID, fc.Args)
-		if err != nil {
-			fmt.Printf("Function %s execution error: %v\n", fc.Name, err)
-			results = append(results, ExecuteResult{
-				FunctionName: fc.Name,
-				Error:        err.Error(),
-				Args:         args,
-			})
-		} else {
-			fmt.Printf("Function %s executed successfully\n", fc.Name)
-			results = append(results, ExecuteResult{
-				FunctionName: fc.Name,
-				Result:       result,
-				Args:         args,
-			})
-		}
-	}
-
-	return results, nil
-}
-
-type GetSuggestedQueriesResponse struct {
-	Suggestions []string `json:"suggestions"`
-}
-
-func GetSuggestedQueries(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
-
-	// Use the standardized Redis connectivity test
-	ctx := context.Background()
-	success, message := conn.TestRedisConnectivity(ctx, userID)
-	if !success {
-		fmt.Printf("WARNING: %s\n", message)
-	} else {
-		fmt.Println(message)
-	}
-	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
-	conversationData, err := getConversationFromCache(ctx, conn, userID, conversationKey)
-	if err != nil || conversationData == nil {
-		return GetSuggestedQueriesResponse{}, nil
-	}
-	var conversationHistory string
-	if len(conversationData.Messages) > 0 {
-		conversationHistory = buildConversationContext(conversationData.Messages)
-	}
-
-	geminiRes, err := getGeminiFunctionThinking(ctx, conn, "suggestedQueriesPrompt", conversationHistory)
-	if err != nil {
-		return nil, fmt.Errorf("error getting suggested queries from Gemini: %w", err)
-	}
-	jsonStartIdx := strings.Index(geminiRes.Text, "{")
-	jsonEndIdx := strings.LastIndex(geminiRes.Text, "}")
-	if jsonStartIdx == -1 || jsonEndIdx == -1 {
-		return GetSuggestedQueriesResponse{}, nil
-	}
-	jsonBlock := geminiRes.Text[jsonStartIdx : jsonEndIdx+1]
-	var response GetSuggestedQueriesResponse
-	if err := json.Unmarshal([]byte(jsonBlock), &response); err != nil {
-		return GetSuggestedQueriesResponse{}, fmt.Errorf("error unmarshalling suggested queries: %w", err)
-	}
-	return response, nil
-
-}
-
-// getSystemInstruction reads the content of query.txt to be used as system instruction
-func getSystemInstruction(systemPrompt string) (string, error) {
-	// Get the directory of the current file (gemini.go)
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", fmt.Errorf("error getting current file path")
-	}
-	currentDir := filepath.Dir(filename)
-
-	systemPrompt = "prompts/" + systemPrompt + ".txt"
-	// Construct path to query.txt
-	queryFilePath := filepath.Join(currentDir, systemPrompt)
-
-	// Read the content of query.txt
-	content, err := os.ReadFile(queryFilePath)
-	if err != nil {
-		return "", fmt.Errorf("error reading query.txt: %w", err)
-	}
-
-	// Replace the {{CURRENT_TIME}} placeholder with the actual current time
-	currentTime := time.Now().Format(time.RFC3339)
-	currentTimeMilliseconds := time.Now().UnixMilli()
-	instruction := strings.Replace(string(content), "{{CURRENT_TIME}}", currentTime, -1)
-	instruction = strings.Replace(instruction, "{{CURRENT_TIME_MILLISECONDS}}", fmt.Sprintf("%d", currentTimeMilliseconds), -1)
-
-	return instruction, nil
-}
-
-// enhanceSystemPromptWithTools adds a formatted list of available tools to the system prompt
-func enhanceSystemPromptWithTools(basePrompt string) string {
-	var toolsDescription strings.Builder
-
-	// Start with the base prompt
-	toolsDescription.WriteString(basePrompt)
-	toolsDescription.WriteString("\n\nHere are the functions you can use:\n\n")
-
-	// Sort tool names for consistent output
-	var toolNames []string
-	for name := range GetTools(false) {
-		toolNames = append(toolNames, name)
-	}
-	sort.Strings(toolNames)
-
-	// Add each tool's description and parameters
-	for _, name := range toolNames {
-		tool := GetTools(false)[name]
-
-		// Add function name and description
-		toolsDescription.WriteString(fmt.Sprintf("- %s: %s\n", name, tool.FunctionDeclaration.Description))
-
-		// Add parameters if they exist
-		if tool.FunctionDeclaration.Parameters != nil && len(tool.FunctionDeclaration.Parameters.Properties) > 0 {
-			toolsDescription.WriteString("  Parameters:\n")
-
-			// Get required parameters
-			required := make(map[string]bool)
-			for _, req := range tool.FunctionDeclaration.Parameters.Required {
-				required[req] = true
-			}
-
-			// Add each parameter with its description
-			for paramName, paramSchema := range tool.FunctionDeclaration.Parameters.Properties {
-				isReq := ""
-				if required[paramName] {
-					isReq = " (required)"
-				}
-				toolsDescription.WriteString(fmt.Sprintf("  - %s: %s%s\n", paramName, paramSchema.Description, isReq))
-			}
-		}
-
-		// Add spacing between functions
-		toolsDescription.WriteString("\n")
-	}
-
-	return toolsDescription.String()
-}
-
-// ClearConversationHistory deletes the conversation for a user
-func ClearConversationHistory(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
-	ctx := context.Background()
-	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
-	fmt.Printf("Attempting to delete conversation for key: %s\n", conversationKey)
-
-	// Delete the key from Redis
-	err := conn.Cache.Del(ctx, conversationKey).Err()
-	if err != nil {
-		fmt.Printf("Failed to delete conversation from Redis: %v\n", err)
-		return nil, fmt.Errorf("failed to clear conversation history: %w", err)
-	}
-
-	fmt.Printf("Successfully deleted conversation for key: %s\n", conversationKey)
-	return map[string]string{"message": "Conversation history cleared successfully"}, nil
-}
