@@ -146,8 +146,8 @@
 	function updateChartWidth() {
 		if (browser) {
 			const rightSidebarWidth = $menuWidth;
-			const maxRightSidebarWidth = Math.min(500, window.innerWidth - 60);
-			const maxLeftSidebarWidth = Math.min(500, window.innerWidth - 60);
+			const maxRightSidebarWidth = Math.min(800, window.innerWidth - 60);
+			const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 60);
 
 			// Only reduce chart width if sidebar widths are within bounds
 			if (rightSidebarWidth <= maxRightSidebarWidth && leftMenuWidth <= maxLeftSidebarWidth) {
@@ -350,7 +350,7 @@
 
 		// Calculate width from right edge of window, excluding the sidebar buttons width
 		let newWidth = window.innerWidth - clientX - 60; // 60px is the width of sidebar buttons
-		const maxSidebarWidth = Math.min(500, window.innerWidth - 60);
+		const maxSidebarWidth = Math.min(800, window.innerWidth - 60);
 
 		// Store state before closing
 		if (newWidth < minWidth && lastSidebarMenu !== null) {
@@ -747,7 +747,7 @@
 
 		// Calculate width from left edge of window
 		let newWidth = clientX;
-		const maxLeftSidebarWidth = Math.min(500, window.innerWidth - 60);
+		const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 60);
 
 		// Manage resize
 		if (newWidth < minWidth) {
@@ -1135,7 +1135,7 @@
 		position: relative;
 		flex-shrink: 0;
 		border-left: 1px solid var(--ui-border);
-		max-width: min(500px, calc(100vw - 60px)); /* Reduce max width to 500px */
+		max-width: min(800px, calc(100vw - 60px)); /* Reduce max width to 500px */
 	}
 
 	.sidebar-buttons {
@@ -1149,7 +1149,8 @@
 		background-color: var(--c2);
 		z-index: 2;
 		flex-shrink: 0;
-		border-left: 1px solid var(--c4);
+		border-right: 1px solid var(--ui-border);
+		max-width: min(800px, calc(100vw - 60px));
 	}
 
 	.resize-handle {
@@ -1479,7 +1480,7 @@
 		position: relative;
 		flex-shrink: 0;
 		border-right: 1px solid var(--ui-border);
-		max-width: min(500px, calc(100vw - 60px));
+		max-width: min(800px, calc(100vw - 60px));
 	}
 
 	/* Add right position for left sidebar handle */
