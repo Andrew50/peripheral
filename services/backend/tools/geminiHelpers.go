@@ -14,32 +14,6 @@ import (
 )
 
 // getSystemInstruction reads the content of query.txt to be used as system instruction
-func getSystemInstruction(systemPrompt string) (string, error) {
-	// Get the directory of the current file (gemini.go)
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", fmt.Errorf("error getting current file path")
-	}
-	currentDir := filepath.Dir(filename)
-
-	systemPrompt = systemPrompt + ".txt"
-	// Construct path to query.txt
-	queryFilePath := filepath.Join(currentDir, systemPrompt)
-
-	// Read the content of query.txt
-	content, err := os.ReadFile(queryFilePath)
-	if err != nil {
-		return "", fmt.Errorf("error reading query.txt: %w", err)
-	}
-
-	// Replace the {{CURRENT_TIME}} placeholder with the actual current time
-	currentTime := time.Now().Format(time.RFC3339)
-	currentTimeMilliseconds := time.Now().UnixMilli()
-	instruction := strings.Replace(string(content), "{{CURRENT_TIME}}", currentTime, -1)
-	instruction = strings.Replace(instruction, "{{CURRENT_TIME_MILLISECONDS}}", fmt.Sprintf("%d", currentTimeMilliseconds), -1)
-
-	return instruction, nil
-}
 
 // enhanceSystemPromptWithTools adds a formatted list of available tools to the system prompt
 func enhanceSystemPromptWithTools(basePrompt string) string {
@@ -91,18 +65,4 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 }
 
 // ClearConversationHistory deletes the conversation for a user
-func ClearConversationHistory(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
-	ctx := context.Background()
-	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
-	fmt.Printf("Attempting to delete conversation for key: %s\n", conversationKey)
-
-	// Delete the key from Redis
-	err := conn.Cache.Del(ctx, conversationKey).Err()
-	if err != nil {
-		fmt.Printf("Failed to delete conversation from Redis: %v\n", err)
-		return nil, fmt.Errorf("failed to clear conversation history: %w", err)
-	}
-
-	fmt.Printf("Successfully deleted conversation for key: %s\n", conversationKey)
-	return map[string]string{"message": "Conversation history cleared successfully"}, nil
-}*/
+*/

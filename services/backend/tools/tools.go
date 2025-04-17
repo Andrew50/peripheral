@@ -4,1770 +4,535 @@ import (
 	"backend/utils"
 	"encoding/json"
 	"sync"
-	"google.golang.org/genai"
+
+	"github.com/tmc/langchaingo/llms"
 )
 
-type Tool struct {
-	FunctionDeclaration *genai.FunctionDeclaration
-	Function            func(*utils.Conn, int, json.RawMessage) (interface{}, error)
-	Query               bool
-	Api                 bool
-}
-
-// Tools is a map of function names to Tool objects
-var Tools = map[string]Tool{}
-var toolsInitialized bool
-var toolsMutex sync.Mutex
-
-// GetTools returns a copy of the Tools map to avoid import cycles
-func GetTools(api bool) map[string]Tool {
-	toolsMutex.Lock()
-	defer toolsMutex.Unlock()
-
-	if !toolsInitialized {
-		initTools()
-		toolsInitialized = true
-	}
-
-	filteredTools := make(map[string]Tool)
-	for name, tool := range Tools {
-		if api && tool.Api {
-			filteredTools[name] = tool
-		} else if !api && tool.Query {
-			filteredTools[name] = tool
-		}
-	}
-
-	return filteredTools
-}
-
-
 /*
-///////
-
-prompt guidlines
-
-#use following terminology:#
-
-security ID - security id
-security ticker symbol - ticker
-
-
-///////
+   ──────────────────────────────────────────────────────────────────────────
+   Type definition
+   ──────────────────────────────────────────────────────────────────────────
 */
 
-// Initialize all tools
+// LangChain-ready wrapper around a business-logic handler.
+type Tool struct {
+	Definition *llms.FunctionDefinition                                     // nil == not LLM-callable
+	Handler    func(*utils.Conn, int, json.RawMessage) (interface{}, error) // required
+	IsQuery    bool                                                         // exposed in chat mode
+	IsAPI      bool                                                         // exposed on HTTP API
+}
+
+/*
+   ──────────────────────────────────────────────────────────────────────────
+   Global container
+   ──────────────────────────────────────────────────────────────────────────
+*/
+
+var (
+	toolsMu       sync.Mutex
+	toolsInitOnce bool
+	registry      = map[string]Tool{}
+)
+
+// Public accessor (returns copy).
+func GetTools(api bool) map[string]Tool {
+	toolsMu.Lock()
+	defer toolsMu.Unlock()
+
+	if !toolsInitOnce {
+		initTools()
+		toolsInitOnce = true
+	}
+	out := make(map[string]Tool)
+	for k, v := range registry {
+		if api && v.IsAPI || !api && v.IsQuery {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+/*
+   ──────────────────────────────────────────────────────────────────────────
+   Declarative spec → registry
+   ──────────────────────────────────────────────────────────────────────────
+*/
+
+// helper trims repetitive JSON quoting noise
+func js(src string) json.RawMessage { return json.RawMessage(src) }
+
+// NB: keep everything here; the compiler drops what you comment out.
 func initTools() {
-	// Initialize the Tools map
-	Tools = map[string]Tool{
-		"getQuery": {
-			FunctionDeclaration: nil,
-            Function: GetQuery,
-            Query: false,
-            Api: true,
+	specs := []struct {
+		Name, Desc string
+		Params     string // raw JSON schema
+		Handler    func(*utils.Conn, int, json.RawMessage) (interface{}, error)
+		Query, API bool
+	}{
+		// ════════════ market intelligence ════════════
+		{
+			"getSimilarInstances",
+			"Get a list of securities related to a specified security at the current time.",
+			`{"type":"object","properties":{"securityId":{"type":"integer","description":"The security ID of the security"}},"required":["securityId"]}`,
+			GetSimilarInstances, true, true,
 		},
-		"getSimilarInstances": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getSimilarInstances",
-				Description: "Get a list of securities related to a specified security at the current time.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The security ID of the security",
-						},
-					},
-					Required: []string{"securityId"},
-				},
-			},
-			Function: GetSimilarInstances,
-            Query: true,
-            Api: true,
+		{
+			"getCurrentSecurityID",
+			"Get the current security ID from a security ticker symbol.",
+			`{"type":"object","properties":{"ticker":{"type":"string","description":"The security ticker symbol, e.g. NVDA, AAPL, etc"}},"required":["ticker"]}`,
+			GetCurrentSecurityID, true, true,
 		},
-		"getCurrentSecurityID": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getCurrentSecurityID",
-				Description: "Get the current security ID from a security ticker symbol.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "The security ticker symbol, e.g. NVDA, AAPL, etc",
-						},
-					},
-					Required: []string{"ticker"},
-				},
-			},
-			Function: GetCurrentSecurityID,
-            Query: true,
-            Api: true,
+		{
+			"getSecuritiesFromTicker",
+			"Get a list of the closest 10 securitie ticker symbols to an input string.",
+			`{"type":"object","properties":{"ticker":{"type":"string","description":"string input to retrieve the list based on."}},"required":["ticker"]}`,
+			GetSecuritiesFromTicker, true, true,
 		},
-        //TODO remove icon for query
-		"getSecuritiesFromTicker": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getSecuritiesFromTicker",
-				Description: "Get a list of the closest 10 securitie ticker symbols to an input string.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "string input to retrieve the list based on.",
-						},
-					},
-					Required: []string{"ticker"},
-				},
-			},
-			Function: GetSecuritiesFromTicker,
-            Query: true,
-            Api: true,
+		{
+			"getCurrentTicker",
+			"Get the current security ticker symbol for a security ID.",
+			`{"type":"object","properties":{"securityId":{"type":"integer","description":"The security ID of the security to get the current ticker for."}},"required":["securityId"]}`,
+			GetCurrentTicker, true, true,
 		},
-		"getCurrentTicker": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getCurrentTicker",
-				Description: "Get the current security ticker symbol for a security ID.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The security ID of the security to get the current ticker for.",
-						},
-					},
-					Required: []string{"securityId"},
-				},
-			},
-			Function: GetCurrentTicker,
-            Query: true,
-            Api: true,
+		{
+			"getTickerMenuDetails",
+			"Get company name, market, locale, primary exchange, active status, market cap, description, logo, shares outstanding, industry, sector and total shares for a given security.",
+			`{"type":"object","properties":{"ticker":{"type":"string","description":"The security ticker symbol to get details for."}},"required":["ticker"]}`,
+			GetTickerMenuDetails, true, true,
 		},
-        //TODO remove logo
-		"getTickerMenuDetails": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getTickerMenuDetails",
-				Description: "Get company name, market, locale, primary exchange, active status, market cap, description, logo, shares outstanding, industry, sector and total shares for a given security.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "The security ticker symbol to get details for.",
-						},
-					},
-					Required: []string{"ticker"},
-				},
-			},
-			Function: GetTickerMenuDetails,
-            Query: true,
-            Api: true,
+		{
+			"getInstancesByTickers",
+			"Get security IDs for a list of security ticker symbols.",
+			`{"type":"object","properties":{"tickers":{"type":"array","description":"List of security ticker symbols.","items":{"type":"string"}}},"required":["tickers"]}`,
+			GetInstancesByTickers, true, true,
 		},
-		"getIcons": {
-			FunctionDeclaration: nil,			
-            Function: GetIcons,
-            Query: false,
-            Api: true,
+		{
+			"getPrevClose",
+			"Retrieves the previous closing price for a specified security ticker symbol.",
+			`{"type":"object","properties":{"ticker":{"type":"string","description":"The ticker symbol to get the previous close for."}},"required":["ticker"]}`,
+			GetPrevClose, true, true,
+		},
+		{
+			"getTickerDailySnapshot",
+			"Get the current bid, ask, price, change, percent change, volume, vwap price, and daily open, high, low and close for a specified security.",
+			`{"type":"object","properties":{"securityId":{"type":"integer","description":"The security ID to get the information for."}},"required":["securityId"]}`,
+			GetTickerDailySnapshot, true, false, // API=false as per original
+		},
+		{
+			"getAllTickerSnapshots",
+			"Get a list of the current bid, ask, price, change, percent change, volume, vwap price, and daily open, high, low and close for all securities.",
+			`{"type":"object","properties":{},"required":[]}`,
+			GetAllTickerSnapshots, true, false, // API=false as per original
+		},
+		{
+			"getSecurityClassifications",
+			"Retrieves sector and industry classifications for securities",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			GetSecurityClassifications, false, true,
+		},
+		{
+			"getActive",
+			"Retrieves a list of active securities",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			GetActive, false, true,
+		},
+		{
+			"getExchanges",
+			"Retrieves a list of stock exchanges and their MIC codes from Polygon.io",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			GetExchanges, false, true,
 		},
 
-		//chart
-		"getChartData": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getChartData",
-				Description: "Retrieves price chart data for a security",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the security to get chart data for",
-						},
-						"timeframe": {
-							Type:        genai.TypeString,
-							Description: "The timeframe for the chart data (e.g., '1d', '1h')",
-						},
-						"from": {
-							Type:        genai.TypeInteger,
-							Description: "The start timestamp in milliseconds",
-						},
-						"to": {
-							Type:        genai.TypeInteger,
-							Description: "The end timestamp in milliseconds",
-						},
-					},
-					Required: []string{"securityId", "timeframe", "from", "to"},
-				},
-			},
-			Function: GetChartData,
-            Query: true,
-            Api: true,
+		// ════════════ chart data ════════════
+		{
+			"getChartData",
+			"Retrieves price chart data for a security",
+			`{"type":"object","properties":{"securityId":{"type":"integer","description":"The ID of the security to get chart data for"},"timeframe":{"type":"string","description":"The timeframe for the chart data (e.g., '1d', '1h')"},"from":{"type":"integer","description":"The start timestamp in milliseconds"},"to":{"type":"integer","description":"The end timestamp in milliseconds"}},"required":["securityId","timeframe","from","to"]}`,
+			GetChartData, true, true,
 		},
-		//study
-        //
-		"getStudies": {
-			FunctionDeclaration:nil,/* &genai.FunctionDeclaration{
-				Name:        "getStudies",
-				Description: "Retrieves all study entries for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},*/
-			Function: GetStudies,
-            Query: false,
-            Api: true,
+		{
+			"setHorizontalLine",
+			"Create a new horizontal line on the chart of a specified security ID at a specificed price.",
+			`{"type":"object","properties":{"securityId":{"type":"integer","description":"The ID of the security to add the horizontal line to."},"price":{"type":"number","description":"The price level for the horizontal line."},"color":{"type":"string","description":"The color of the horizontal line (hex format, defaults to #FFFFFF)."},"lineWidth":{"type":"integer","description":"The width of the horizontal line in pixels (defaults to 1)."}},"required":["securityId","price"]}`,
+			SetHorizontalLine, true, true,
+		},
+		{
+			"getHorizontalLines",
+			"Retrieves all horizontal lines for a specific security",
+			`{"type":"object","properties":{"securityId":{"type":"integer","description":"The ID of the security to get horizontal lines for"}},"required":["securityId"]}`,
+			GetHorizontalLines, true, true,
+		},
+		{
+			"deleteHorizontalLine",
+			"Delete a horizontal line on the chart of a specified security ID.",
+			`{"type":"object","properties":{"id":{"type":"integer","description":"The ID of the horizontal line to delete."}},"required":["id"]}`,
+			DeleteHorizontalLine, true, true,
+		},
+		{
+			"updateHorizontalLine",
+			"Update an existing horizontal line on the chart of a specified security ID.",
+			`{"type":"object","properties":{"id":{"type":"integer","description":"The ID of the horizontal line to update."},"securityId":{"type":"integer","description":"The ID of the security the horizontal line belongs to."},"price":{"type":"number","description":"The new price level for the horizontal line."},"color":{"type":"string","description":"The new color of the horizontal line (hex format)."},"lineWidth":{"type":"integer","description":"The new width of the horizontal line in pixels."}},"required":["id","securityId","price"]}`,
+			UpdateHorizontalLine, true, true,
 		},
 
-		"newStudy": {
-			FunctionDeclaration: nil,/*&genai.FunctionDeclaration{
-				Name:        "newStudy",
-				Description: "Creates a new study entry for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},*/
-			Function: NewStudy,
-            Query: false,
-            Api: true,
-		},
-		"saveStudy": {
-			FunctionDeclaration: nil,/*&genai.FunctionDeclaration{
-				Name:        "saveStudy",
-				Description: "Saves content for an existing study entry",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},*/
-			Function: SaveStudy,
-            Query: false,
-            Api: true,
-		},
-		"deleteStudy": {
-			FunctionDeclaration: nil, /*&genai.FunctionDeclaration{
-				Name:        "deleteStudy",
-				Description: "Deletes a study entry for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},*/
-			Function: DeleteStudy,
-            Query: false,
-            Api: true,
-		},
-		"getStudyEntry": {
-			FunctionDeclaration: nil, /* &genai.FunctionDeclaration{
-				Name:        "getStudyEntry",
-				Description: "Retrieves the content of a specific study entry",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},*/
-			Function: GetStudyEntry,
-            Query: false,
-            Api: true,
-		},
-		"completeStudy": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "completeStudy",
-				Description: "Marks a study entry as completed or not completed",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: CompleteStudy,
-            Query: false,
-            Api: true,
-		},
-		"setStudySetup": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "setStudySetup",
-				Description: "Associates a setup configuration with a study entry",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: SetStudySetup,
-            Query: false,
-            Api: true,
-		},
-		//journal
-		"getJournals": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getJournals",
-				Description: "Retrieves all journal entries for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: GetJournals,
-            Query: false,
-            Api: true,
-		},
-		"saveJournal": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "saveJournal",
-				Description: "Saves content for an existing journal entry",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"id": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the journal entry to update",
-						},
-						"entry": {
-							Type:        genai.TypeObject,
-							Description: "The content of the journal entry in JSON format",
-							Properties: map[string]*genai.Schema{
-								"title": {
-									Type:        genai.TypeString,
-									Description: "The title of the journal entry",
-								},
-								"content": {
-									Type:        genai.TypeString,
-									Description: "The content of the journal entry",
-								},
-								"date": {
-									Type:        genai.TypeString,
-									Description: "The date of the journal entry",
-								},
-							},
-						},
-					},
-					Required: []string{"id", "entry"},
-				},
-			},
-			Function: SaveJournal,
-            Query: false,
-            Api: true,
-		},
-		"deleteJournal": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "deleteJournal",
-				Description: "Deletes a journal entry for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"id": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the journal entry to delete",
-						},
-					},
-					Required: []string{"id"},
-				},
-			},
-			Function: DeleteJournal,
-            Query: true,
-            Api: true,
-		},
-		"getJournalEntry": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getJournalEntry",
-				Description: "Retrieves the content of a specific journal entry",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"journalId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the journal entry to retrieve",
-						},
-					},
-					Required: []string{"journalId"},
-				},
-			},
-			Function: GetJournalEntry,
-            Query: false,
-            Api: true,
-		},
-		"completeJournal": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "completeJournal",
-				Description: "Marks a journal entry as completed or not completed",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"id": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the journal entry to update",
-						},
-						"completed": {
-							Type:        genai.TypeBoolean,
-							Description: "Whether the journal entry is completed",
-						},
-					},
-					Required: []string{"id", "completed"},
-				},
-			},
-			Function: CompleteJournal,
-            Query: true,
-            Api: true,
-		},
-		//screensaver
-		"getScreensavers": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getScreensavers",
-				Description: "Retrieves a list of trending securities for the screensaver display",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: GetScreensavers,
-            Query: false,
-            Api: true,
-		},
-		"getInstancesByTickers": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getInstancesByTickers",
-				Description: "Get security IDs for a list of security ticker symbols.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"tickers": {
-							Type:        genai.TypeArray,
-							Description: "List of security ticker symbols.",
-							Items: &genai.Schema{
-								Type: genai.TypeString,
-							},
-						},
-					},
-					Required: []string{"tickers"},
-				},
-			},
-			Function: GetInstancesByTickers,
-            Query: true,
-            Api: true,
-		},
-		//watchlist
-		"getWatchlists": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getWatchlists",
-				Description: "Get all watchlist names and IDs.",
-				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{}, // Empty map indicates no properties/arguments
-					Required:   []string{},
-				},
-			},
-			Function: GetWatchlists,
-            Query: true,
-            Api: true,
-		},
-		"deleteWatchlist": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "deleteWatchlist",
-				Description: "Delete a watchlist.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"watchlistId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the watchlist to delete.",
-						},
-					},
-					Required: []string{"watchlistId"},
-				},
-			},
-			Function: DeleteWatchlist,
-            Query: true,
-            Api: true,
-		},
-		"newWatchlist": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "newWatchlist",
-				Description: "Create a new empty watchlist",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"watchlistName": {
-							Type:        genai.TypeString,
-							Description: "The name of the watchlist to create",
-						},
-					},
-					Required: []string{"watchlistName"},
-				},
-			},
-			Function: NewWatchlist,
-            Query: true,
-            Api: true,
-		},
-		"getWatchlistItems": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getWatchlistItems",
-				Description: "Retrieves the security ID's of the securities in a specified watchlist.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"watchlistId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the watchlist to get the list of security IDs for.",
-						},
-					},
-					Required: []string{"watchlistId"},
-				},
-			},
-			Function: GetWatchlistItems,
-            Query: true,
-            Api: true,
-		},
-		"deleteWatchlistItem": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "deleteWatchlistItem",
-				Description: "Removes a security from a watchlist using a given watchlist item ID.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"watchlistItemId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the watchlist item to delete",
-						},
-					},
-					Required: []string{"watchlistItemId"},
-				},
-			},
-			Function: DeleteWatchlistItem,
-            Query: true,
-            Api: true,
-		},
-		"newWatchlistItem": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "newWatchlistItem",
-				Description: "Add a security to a watchlist.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"watchlistId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the watchlist to add the security to.",
-						},
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the security to add to the watchlist.",
-						},
-					},
-					Required: []string{"watchlistId", "securityId"},
-				},
-			},
-			Function: NewWatchlistItem,
-            Query: true,
-            Api: true,
-		},
-		//singles
-		"getPrevClose": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getPrevClose",
-				Description: "Retrieves the previous closing price for a specified security ticker symbol.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "The ticker symbol to get the previous close for.",
-						},
-					},
-					Required: []string{"ticker"},
-				},
-			},
-			Function: GetPrevClose,
-            Query: true,
-            Api: true,
-		},
-		//"getMarketCap": GetMarketCap,
-		//settings
-        //TODO ?
-		"getSettings": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getSettings",
-				Description: "Retrieves the user settings for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: GetSettings,
-            Query: false,
-            Api: true,
-		},
-        //TODO?
-		"setSettings": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "setSettings",
-				Description: "Updates the user settings for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"settings": {
-							Type:        genai.TypeObject,
-							Description: "The settings data in JSON format",
-							Properties: map[string]*genai.Schema{
-								"theme": {
-									Type:        genai.TypeString,
-									Description: "Theme preference (e.g., 'light', 'dark')",
-								},
-								"notifications": {
-									Type:        genai.TypeBoolean,
-									Description: "Whether notifications are enabled",
-								},
-							},
-						},
-					},
-					Required: []string{"settings"},
-				},
-			},
-			Function: SetSettings,
-            Query: false,
-            Api: true,
-		},
-		//profile
-		"updateProfilePicture": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "updateProfilePicture",
-				Description: "Updates the profile picture for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"imageData": {
-							Type:        genai.TypeString,
-							Description: "The base64-encoded image data for the profile picture",
-						},
-					},
-					Required: []string{"imageData"},
-				},
-			},
-			Function: UpdateProfilePicture,
-            Query: false,
-            Api: true,
-		},
-		//exchanges
-		"getExchanges": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getExchanges",
-				Description: "Retrieves a list of stock exchanges and their MIC codes from Polygon.io",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: GetExchanges,
-            Query: false,
-            Api: true,
-		},
-		//setups
-        //TODO
-		"getSetups": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getSetups",
-				Description: "Retrieves all setup configurations for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: GetSetups,
-            Query: false,
-            Api: true,
-		},
-		"newSetup": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "newSetup",
-				Description: "Creates a new setup configuration for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"name": {
-							Type:        genai.TypeString,
-							Description: "The name of the setup",
-						},
-						"timeframe": {
-							Type:        genai.TypeString,
-							Description: "The timeframe for the setup (e.g., '1d', '1h')",
-						},
-						"bars": {
-							Type:        genai.TypeInteger,
-							Description: "The number of bars to consider for the setup",
-						},
-						"threshold": {
-							Type:        genai.TypeInteger,
-							Description: "The threshold value for the setup",
-						},
-						"dolvol": {
-							Type:        genai.TypeNumber,
-							Description: "The dollar volume filter for the setup",
-						},
-						"adr": {
-							Type:        genai.TypeNumber,
-							Description: "The Average Daily Range filter for the setup",
-						},
-						"mcap": {
-							Type:        genai.TypeNumber,
-							Description: "The market capitalization filter for the setup",
-						},
-					},
-					Required: []string{"name", "timeframe"},
-				},
-			},
-			Function: NewSetup,
-            Query: false,
-            Api: true,
-		},
-		"setSetup": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "setSetup",
-				Description: "Updates an existing setup configuration for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"setupId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the setup to update",
-						},
-						"name": {
-							Type:        genai.TypeString,
-							Description: "The name of the setup",
-						},
-						"timeframe": {
-							Type:        genai.TypeString,
-							Description: "The timeframe for the setup (e.g., '1d', '1h')",
-						},
-						"bars": {
-							Type:        genai.TypeInteger,
-							Description: "The number of bars to consider for the setup",
-						},
-						"threshold": {
-							Type:        genai.TypeInteger,
-							Description: "The threshold value for the setup",
-						},
-						"dolvol": {
-							Type:        genai.TypeNumber,
-							Description: "The dollar volume filter for the setup",
-						},
-						"adr": {
-							Type:        genai.TypeNumber,
-							Description: "The Average Daily Range filter for the setup",
-						},
-						"mcap": {
-							Type:        genai.TypeNumber,
-							Description: "The market capitalization filter for the setup",
-						},
-					},
-					Required: []string{"setupId", "name", "timeframe"},
-				},
-			},
-			Function: SetSetup,
-            Query: false,
-            Api: true,
-		},
-		"deleteSetup": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "deleteSetup",
-				Description: "Deletes a setup configuration for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"setupId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the setup to delete",
-						},
-					},
-					Required: []string{"setupId"},
-				},
-			},
-			Function: DeleteSetup,
-            Query: false,
-            Api: true,
-		},
-		//algos
-		//"getAlgos": GetAlgos,
-		//samples
-		"labelTrainingQueueInstance": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "labelTrainingQueueInstance",
-				Description: "Labels a training instance in the queue",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: LabelTrainingQueueInstance,
-            Query: false,
-            Api: true,
-		},
-		"getTrainingQueue": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getTrainingQueue",
-				Description: "Retrieves the current training queue instances",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: GetTrainingQueue,
-            Query: false,
-            Api: true,
-		},
-		"setSample": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "setSample",
-				Description: "Sets a sample for training purposes",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: SetSample,
-            Query: false,
-            Api: true,
-		},
-		"getAlerts": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getAlerts",
-				Description: "Retrieves all alerts for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: GetAlerts,
-            Query: false,
-            Api: true,
-		},
-		"getAlertLogs": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getAlertLogs",
-				Description: "Retrieves the history of triggered alerts for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: GetAlertLogs,
-            Query: false,
-            Api: true,
-		},
-		"newAlert": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "newAlert",
-				Description: "Creates a new alert for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"alertType": {
-							Type:        genai.TypeString,
-							Description: "The type of alert (price, setup, or algo)",
-						},
-						"price": {
-							Type:        genai.TypeNumber,
-							Description: "The price threshold for a price alert (required for price alerts)",
-						},
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the security for a price alert (required for price alerts)",
-						},
-						"setupId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the setup for a setup alert (required for setup alerts)",
-						},
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "The ticker symbol for a price alert",
-						},
-						"algoId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the algorithm for an algo alert (required for algo alerts)",
-						},
-					},
-					Required: []string{"alertType"},
-				},
-			},
-			Function: NewAlert,
-            Query: false,
-            Api: true,
-		},
-		"deleteAlert": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "deleteAlert",
-				Description: "Deletes an alert for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"alertId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the alert to delete",
-						},
-					},
-					Required: []string{"alertId"},
-				},
-			},
-			Function: DeleteAlert,
-            Query: false,
-            Api: true,
-		},
-		"setHorizontalLine": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "setHorizontalLine",
-				Description: "Create a new horizontal line on the chart of a specified security ID at a specificed price.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the security to add the horizontal line to.",
-						},
-						"price": {
-							Type:        genai.TypeNumber,
-							Description: "The price level for the horizontal line.",
-						},
-						"color": {
-							Type:        genai.TypeString,
-							Description: "The color of the horizontal line (hex format, defaults to #FFFFFF).",
-						},
-						"lineWidth": {
-							Type:        genai.TypeInteger,
-							Description: "The width of the horizontal line in pixels (defaults to 1).",
-						},
-					},
-					Required: []string{"securityId", "price"},
-				},
-			},
-			Function: SetHorizontalLine,
-            Query: true,
-            Api: true,
-		},
-		"getHorizontalLines": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getHorizontalLines",
-				Description: "Retrieves all horizontal lines for a specific security",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the security to get horizontal lines for",
-						},
-					},
-					Required: []string{"securityId"},
-				},
-			},
-			Function: GetHorizontalLines,
-            Query: true,
-            Api: true,
-		},
-		"deleteHorizontalLine": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "deleteHorizontalLine",
-				Description: "Delete a horizontal line on the chart of a specified security ID.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"id": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the horizontal line to delete.",
-						},
-					},
-					Required: []string{"id"},
-				},
-			},
-			Function: DeleteHorizontalLine,
-            Query: true,
-            Api: true,
-		},
-		"updateHorizontalLine": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "updateHorizontalLine",
-				Description: "Update an existing horizontal line on the chart of a specified security ID.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"id": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the horizontal line to update.",
-						},
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the security the horizontal line belongs to.",
-						},
-						"price": {
-							Type:        genai.TypeNumber,
-							Description: "The new price level for the horizontal line.",
-						},
-						"color": {
-							Type:        genai.TypeString,
-							Description: "The new color of the horizontal line (hex format).",
-						},
-						"lineWidth": {
-							Type:        genai.TypeInteger,
-							Description: "The new width of the horizontal line in pixels.",
-						},
-					},
-					Required: []string{"id", "securityId", "price"},
-				},
-			},
-			Function: UpdateHorizontalLine,
-            Query: true,
-            Api: true,
-		},
-		"getActive": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getActive",
-				Description: "Retrieves a list of active securities",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: GetActive,
-            Query: false,
-            Api: true,
-		},
-		"getSecurityClassifications": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getSecurityClassifications",
-				Description: "Retrieves sector and industry classifications for securities",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: GetSecurityClassifications,
-            Query: false,
-            Api: true,
-		},
-		// chart events / SEC filings
-		"getLatestEdgarFilings": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getLatestEdgarFilings",
-				Description: "Retrieves the latest SEC EDGAR filings across all securities",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter; no parameter needed.",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: GetLatestEdgarFilings,
-            Query: false,
-            Api: true,
-		},
-		"getStockEdgarFilings": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getStockEdgarFilings",
-				Description: "Retrieve a list of urls and filing types for all SEC filings for a specified security within a specified time range.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"start": {
-							Type:        genai.TypeInteger,
-							Description: "The start of the date range in milliseconds.",
-						},
-						"end": {
-							Type:        genai.TypeInteger,
-							Description: "The end of the date range in milliseconds.",
-						},
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the security to get filings for.",
-						},
-					},
-					Required: []string{"start", "end", "securityId"},
-				},
-			},
-			Function: GetStockEdgarFilings,
-            Query: true,
-            Api: true,
-		},
-		"getChartEvents": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getChartEvents",
-				Description: "Retrieves splits, dividends and possibly SEC filings for a specified security ID within a date range",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the security to get events for.",
-						},
-						"from": {
-							Type:        genai.TypeInteger,
-							Description: "The start of the date range in milliseconds.",
-						},
-						"to": {
-							Type:        genai.TypeInteger,
-							Description: "The end of the date range in milliseconds.",
-						},
-						"includeSECFilings": {
-							Type:        genai.TypeBoolean,
-							Description: "Whether to include SEC filings in the result.",
-						},
-					},
-					Required: []string{"securityId", "from", "to"},
-				},
-			},
-			Function: GetChartEvents,
-            Query: true,
-            Api: true,
-		},
-		"getEarningsText": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getEarningsText",
-				Description: "Get the plain text content of the earnings SEC filing for a specified quarter, year, and security.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The security ID to get the filing for.",
-						},
-						"quarter": {
-							Type:        genai.TypeString,
-							Description: "The specific quarter (Q1, Q2, Q3, Q4) to retrieve the filing for, returns the latest filing if not specified.",
-						},
-						"year": {
-							Type:        genai.TypeInteger,
-							Description: "The specific year to retrieve the filing from.",
-						},
-					},
-					Required: []string{"securityId"},
-				},
-			},
-			Function: GetEarningsText,
-            Query: true,
-            Api: true,
-		},
-		"getFilingText": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getFilingText",
-				Description: "Retrieves the text content of a SEC filing from a specified url.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"url": {
-							Type:        genai.TypeString,
-							Description: "The URL of the SEC filing to retrieve.",
-						},
-					},
-					Required: []string{"url"},
-				},
-			},
-			Function: GetFilingText,
-            Query: true,
-            Api: true,
-		},
-		// Account / User Trades
-		"grab_user_trades": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "grab_user_trades",
-				Description: "Get user trades with optional filtering.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "Security ticker symbol to filter trades by.",
-						},
-						"startDate": {
-							Type:        genai.TypeString,
-							Description: "Date range start to filter trades by (format: YYYY-MM-DD).",
-						},
-						"endDate": {
-							Type:        genai.TypeString,
-							Description: "Date range end to filter trades by (format: YYYY-MM-DD).",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: GrabUserTrades,
-            Query: true,
-            Api: true,
-		},
-		"get_trade_statistics": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "get_trade_statistics",
-				Description: "Get user trading performance statistics.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "Security ticker symbol to filter trades by.",
-						},
-						"startDate": {
-							Type:        genai.TypeString,
-							Description: "Date range start to filter trades by (format: YYYY-MM-DD).",
-						},
-						"endDate": {
-							Type:        genai.TypeString,
-							Description: "Date range end to filter trades by (format: YYYY-MM-DD).",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: GetTradeStatistics,
-            Query: true,
-            Api: true,
-		},
-		"get_ticker_performance": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "get_ticker_performance",
-				Description: "Get user trade performance statistics for a specific security.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "The security ticker symbol to get performance statistics for.",
-						},
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The security ID to get performance statistics for.",
-						},
-					},
-					Required: []string{"ticker", "securityId"},
-				},
-			},
-			Function: GetTickerPerformance,
-            Query: true,
-            Api: true,
-		},
-		"delete_all_user_trades": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "delete_all_user_trades",
-				Description: "Deletes all trade records for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: DeleteAllUserTrades,
-            Query: false,
-            Api: true,
-		},
-		"handle_trade_upload": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "handle_trade_upload",
-				Description: "Processes and imports trade data from a CSV file",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"csvData": {
-							Type:        genai.TypeString,
-							Description: "The CSV trade data to process and import",
-						},
-						"broker": {
-							Type:        genai.TypeString,
-							Description: "The broker name for the trade data (e.g., 'interactive_brokers', 'td_ameritrade')",
-						},
-					},
-					Required: []string{"csvData", "broker"},
-				},
-			},
-			Function: HandleTradeUpload,
-            Query: false,
-            Api: true,
-		},
-		"get_daily_trade_stats": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "get_daily_trade_stats",
-				Description: "Retrieves user trading statistics for a specified year and month.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"year": {
-							Type:        genai.TypeInteger,
-							Description: "The year part of the date to get statistics for.",
-						},
-						"month": {
-							Type:        genai.TypeInteger,
-							Description: "The month part of the date to get statistics for.",
-						},
-					},
-					Required: []string{"year", "month"},
-				},
-			},
-			Function: GetDailyTradeStats,
-            Query: true,
-            Api: true,
-		},
-		"run_backtest": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "run_backtest",
-				Description: "Runs a backtest based on a natural language query about stock conditions, patterns, and indicators IF YOU CALL THIS TOOL, USE THE USER'S ORIGINAL QUERY. DO NOT GENERATE A NEW QUERY.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"query": {
-							Type:        genai.TypeString,
-							Description: "Natural language query describing the backtest criteria  IF YOU CALL THIS TOOL, USE THE USER'S ORIGINAL QUERY. DO NOT GENERATE A NEW QUERY.",
-						},
-					},
-					Required: []string{"query"},
-				},
-			},
-			Function: RunBacktest,
-            Query: true,
-            Api: true,
-		},
-		// Notes
-		"get_notes": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "get_notes",
-				Description: "Retrieves notes for the current user with optional filtering",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"category": {
-							Type:        genai.TypeString,
-							Description: "Optional category to filter notes by",
-						},
-						"tags": {
-							Type:        genai.TypeArray,
-							Description: "Optional array of tags to filter notes by",
-							Items: &genai.Schema{
-								Type: genai.TypeString,
-							},
-						},
-						"isPinned": {
-							Type:        genai.TypeBoolean,
-							Description: "Optional filter for pinned notes",
-						},
-						"isArchived": {
-							Type:        genai.TypeBoolean,
-							Description: "Optional filter for archived notes",
-						},
-						"searchQuery": {
-							Type:        genai.TypeString,
-							Description: "Optional text search query to filter notes by content",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: GetNotes,
-            Query: false,
-            Api: true,
-		},
-		"search_notes": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "search_notes",
-				Description: "Performs a full-text search on notes with highlighted results",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"query": {
-							Type:        genai.TypeString,
-							Description: "The search query to find relevant notes",
-						},
-						"isArchived": {
-							Type:        genai.TypeBoolean,
-							Description: "Optional filter for archived notes",
-						},
-					},
-					Required: []string{"query"},
-				},
-			},
-			Function: SearchNotes,
-            Query: false,
-            Api: true,
-		},
-		"get_note": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "get_note",
-				Description: "Retrieves a single note by ID",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"noteId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the note to retrieve",
-						},
-					},
-					Required: []string{"noteId"},
-				},
-			},
-			Function: GetNote,
-            Query: false,
-            Api: true,
-		},
-		"create_note": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "create_note",
-				Description: "Creates a new note for the user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"title": {
-							Type:        genai.TypeString,
-							Description: "The title of the note",
-						},
-						"content": {
-							Type:        genai.TypeString,
-							Description: "The content of the note",
-						},
-						"category": {
-							Type:        genai.TypeString,
-							Description: "Optional category for the note",
-						},
-						"tags": {
-							Type:        genai.TypeArray,
-							Description: "Optional array of tags for the note",
-							Items: &genai.Schema{
-								Type: genai.TypeString,
-							},
-						},
-						"isPinned": {
-							Type:        genai.TypeBoolean,
-							Description: "Whether the note is pinned",
-						},
-						"isArchived": {
-							Type:        genai.TypeBoolean,
-							Description: "Whether the note is archived",
-						},
-					},
-					Required: []string{"title"},
-				},
-			},
-			Function: CreateNote,
-            Query: false,
-            Api: true,
-		},
-		"update_note": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "update_note",
-				Description: "Updates an existing note",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"noteId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the note to update",
-						},
-						"title": {
-							Type:        genai.TypeString,
-							Description: "The updated title of the note",
-						},
-						"content": {
-							Type:        genai.TypeString,
-							Description: "The updated content of the note",
-						},
-						"category": {
-							Type:        genai.TypeString,
-							Description: "The updated category for the note",
-						},
-						"tags": {
-							Type:        genai.TypeArray,
-							Description: "The updated array of tags for the note",
-							Items: &genai.Schema{
-								Type: genai.TypeString,
-							},
-						},
-						"isPinned": {
-							Type:        genai.TypeBoolean,
-							Description: "Whether the note is pinned",
-						},
-						"isArchived": {
-							Type:        genai.TypeBoolean,
-							Description: "Whether the note is archived",
-						},
-					},
-					Required: []string{"noteId", "title"},
-				},
-			},
-			Function: UpdateNote,
-            Query: false,
-            Api: true,
-		},
-		"delete_note": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "delete_note",
-				Description: "Deletes a note",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"noteId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the note to delete",
-						},
-					},
-					Required: []string{"noteId"},
-				},
-			},
-			Function: DeleteNote,
-            Query: false,
-            Api: true,
-		},
-		"toggle_note_pin": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "toggle_note_pin",
-				Description: "Toggles the pinned status of a note",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"noteId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the note to toggle pin status",
-						},
-						"isPinned": {
-							Type:        genai.TypeBoolean,
-							Description: "The new pinned status",
-						},
-					},
-					Required: []string{"noteId", "isPinned"},
-				},
-			},
-			Function: ToggleNotePin,
-            Query: false,
-            Api: true,
-		},
-		"toggle_note_archive": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "toggle_note_archive",
-				Description: "Toggles the archived status of a note",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"noteId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the note to toggle archive status",
-						},
-						"isArchived": {
-							Type:        genai.TypeBoolean,
-							Description: "The new archived status",
-						},
-					},
-					Required: []string{"noteId", "isArchived"},
-				},
-			},
-			Function: ToggleNoteArchive,
-            Query: false,
-            Api: true,
-		},
-		"verifyAuth": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "verifyAuth",
-				Description: "Verifies the authentication status of the user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-                    Required: []string{}, // Added Required field
-				},
-			},
-			Function: func(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) { return nil, nil },
-            Query: false,
-            Api: true,
-		},
-		"getUserConversation": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getUserConversation",
-				Description: "Retrieves the conversation history for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter to satisfy Gemini API requirements",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: GetUserConversation,
-            Query: false,
-            Api: true,
-		},
-		"clearConversationHistory": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "clearConversationHistory",
-				Description: "Deletes the entire conversation history for the current user.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"dummy": {
-							Type:        genai.TypeString,
-							Description: "Dummy parameter, no input needed.",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function: ClearConversationHistory,
-            Query: false,
-            Api: true,
-		},
-		"getTickerDailySnapshot": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getTickerDailySnapshot",
-				Description: "Get the current bid, ask, price, change, percent change, volume, vwap price, and daily open, high, low and close for a specified security.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The security ID to get the information for.",
-						},
-					},
-					Required: []string{"securityId"},
-				},
-			},
-			Function: GetTickerDailySnapshot,
-            Query: true,
-            Api: false,
-		},
-		"getAllTickerSnapshots": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getAllTickerSnapshots",
-				Description: "Get a list of the current bid, ask, price, change, percent change, volume, vwap price, and daily open, high, low and close for all securities.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required: []string{},
-				},
-			},
-			Function: GetAllTickerSnapshots,
-            Query: true,
-            Api: false,
-		},
-		"getSuggestedQueries": {
-			FunctionDeclaration: nil,
-            Function: GetSuggestedQueries,
-            Query: false,
-            Api: true,
-		},
+		// ════════════ chart events / SEC filings ════════════
+		{
+			"getLatestEdgarFilings",
+			"Retrieves the latest SEC EDGAR filings across all securities",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			GetLatestEdgarFilings, false, true,
+		},
+		{
+			"getStockEdgarFilings",
+			"Retrieve a list of urls and filing types for all SEC filings for a specified security within a specified time range.",
+			`{"type":"object","properties":{"start":{"type":"integer","description":"The start of the date range in milliseconds."},"end":{"type":"integer","description":"The end of the date range in milliseconds."},"securityId":{"type":"integer","description":"The ID of the security to get filings for."}},"required":["start","end","securityId"]}`,
+			GetStockEdgarFilings, true, true,
+		},
+		{
+			"getChartEvents",
+			"Retrieves splits, dividends and possibly SEC filings for a specified security ID within a date range",
+			`{"type":"object","properties":{"securityId":{"type":"integer","description":"The ID of the security to get events for."},"from":{"type":"integer","description":"The start of the date range in milliseconds."},"to":{"type":"integer","description":"The end of the date range in milliseconds."},"includeSECFilings":{"type":"boolean","description":"Whether to include SEC filings in the result."}},"required":["securityId","from","to"]}`,
+			GetChartEvents, true, true,
+		},
+		{
+			"getEarningsText",
+			"Get the plain text content of the earnings SEC filing for a specified quarter, year, and security.",
+			`{"type":"object","properties":{"securityId":{"type":"integer","description":"The security ID to get the filing for."},"quarter":{"type":"string","description":"The specific quarter (Q1, Q2, Q3, Q4) to retrieve the filing for, returns the latest filing if not specified."},"year":{"type":"integer","description":"The specific year to retrieve the filing from."}},"required":["securityId"]}`,
+			GetEarningsText, true, true,
+		},
+		{
+			"getFilingText",
+			"Retrieves the text content of a SEC filing from a specified url.",
+			`{"type":"object","properties":{"url":{"type":"string","description":"The URL of the SEC filing to retrieve."}},"required":["url"]}`,
+			GetFilingText, true, true,
+		},
+
+		// ════════════ studies (back-office) ════════════
+		{"getStudies", "", `{}`, GetStudies, false, true},    // No FunctionDeclaration originally
+		{"newStudy", "", `{}`, NewStudy, false, true},      // No FunctionDeclaration originally
+		{"saveStudy", "", `{}`, SaveStudy, false, true},     // No FunctionDeclaration originally
+		{"deleteStudy", "", `{}`, DeleteStudy, false, true},   // No FunctionDeclaration originally
+		{"getStudyEntry", "", `{}`, GetStudyEntry, false, true}, // No FunctionDeclaration originally
+		{
+			"completeStudy",
+			"Marks a study entry as completed or not completed",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			CompleteStudy, false, true,
+		},
+		{
+			"setStudySetup",
+			"Associates a setup configuration with a study entry",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			SetStudySetup, false, true,
+		},
+
+		// ════════════ journal ════════════
+		{
+			"getJournals",
+			"Retrieves all journal entries for the current user",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			GetJournals, false, true,
+		},
+		{
+			"saveJournal",
+			"Saves content for an existing journal entry",
+			`{"type":"object","properties":{"id":{"type":"integer","description":"The ID of the journal entry to update"},"entry":{"type":"object","description":"The content of the journal entry in JSON format","properties":{"title":{"type":"string","description":"The title of the journal entry"},"content":{"type":"string","description":"The content of the journal entry"},"date":{"type":"string","description":"The date of the journal entry"}}}},"required":["id","entry"]}`,
+			SaveJournal, false, true,
+		},
+		{
+			"deleteJournal",
+			"Deletes a journal entry for the current user",
+			`{"type":"object","properties":{"id":{"type":"integer","description":"The ID of the journal entry to delete"}},"required":["id"]}`,
+			DeleteJournal, true, true,
+		},
+		{
+			"getJournalEntry",
+			"Retrieves the content of a specific journal entry",
+			`{"type":"object","properties":{"journalId":{"type":"integer","description":"The ID of the journal entry to retrieve"}},"required":["journalId"]}`,
+			GetJournalEntry, false, true,
+		},
+		{
+			"completeJournal",
+			"Marks a journal entry as completed or not completed",
+			`{"type":"object","properties":{"id":{"type":"integer","description":"The ID of the journal entry to update"},"completed":{"type":"boolean","description":"Whether the journal entry is completed"}},"required":["id","completed"]}`,
+			CompleteJournal, true, true,
+		},
+
+		// ════════════ watchlist ════════════
+		{
+			"getWatchlists",
+			"Get all watchlist names and IDs.",
+			`{"type":"object","properties":{},"required":[]}`, // Already updated to have no params
+			GetWatchlists, true, true,
+		},
+		{
+			"deleteWatchlist",
+			"Delete a watchlist.",
+			`{"type":"object","properties":{"watchlistId":{"type":"integer","description":"The ID of the watchlist to delete."}},"required":["watchlistId"]}`,
+			DeleteWatchlist, true, true,
+		},
+		{
+			"newWatchlist",
+			"Create a new empty watchlist",
+			`{"type":"object","properties":{"watchlistName":{"type":"string","description":"The name of the watchlist to create"}},"required":["watchlistName"]}`,
+			NewWatchlist, true, true,
+		},
+		{
+			"getWatchlistItems",
+			"Retrieves the security ID's of the securities in a specified watchlist.",
+			`{"type":"object","properties":{"watchlistId":{"type":"integer","description":"The ID of the watchlist to get the list of security IDs for."}},"required":["watchlistId"]}`,
+			GetWatchlistItems, true, true,
+		},
+		{
+			"deleteWatchlistItem",
+			"Removes a security from a watchlist using a given watchlist item ID.",
+			`{"type":"object","properties":{"watchlistItemId":{"type":"integer","description":"The ID of the watchlist item to delete"}},"required":["watchlistItemId"]}`,
+			DeleteWatchlistItem, true, true,
+		},
+		{
+			"newWatchlistItem",
+			"Add a security to a watchlist.",
+			`{"type":"object","properties":{"watchlistId":{"type":"integer","description":"The ID of the watchlist to add the security to."},"securityId":{"type":"integer","description":"The ID of the security to add to the watchlist."}},"required":["watchlistId","securityId"]}`,
+			NewWatchlistItem, true, true,
+		},
+
+		// ════════════ settings ════════════
+		{
+			"getSettings",
+			"Retrieves the user settings for the current user",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			GetSettings, false, true,
+		},
+		{
+			"setSettings",
+			"Updates the user settings for the current user",
+			`{"type":"object","properties":{"settings":{"type":"object","description":"The settings data in JSON format","properties":{"theme":{"type":"string","description":"Theme preference (e.g., 'light', 'dark')"},"notifications":{"type":"boolean","description":"Whether notifications are enabled"}}}},"required":["settings"]}`,
+			SetSettings, false, true,
+		},
+
+		// ════════════ profile ════════════
+		{
+			"updateProfilePicture",
+			"Updates the profile picture for the current user",
+			`{"type":"object","properties":{"imageData":{"type":"string","description":"The base64-encoded image data for the profile picture"}},"required":["imageData"]}`,
+			UpdateProfilePicture, false, true,
+		},
+
+		// ════════════ setups ════════════
+		{
+			"getSetups",
+			"Retrieves all setup configurations for the current user",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			GetSetups, false, true,
+		},
+		{
+			"newSetup",
+			"Creates a new setup configuration for the current user",
+			`{"type":"object","properties":{"name":{"type":"string","description":"The name of the setup"},"timeframe":{"type":"string","description":"The timeframe for the setup (e.g., '1d', '1h')"},"bars":{"type":"integer","description":"The number of bars to consider for the setup"},"threshold":{"type":"integer","description":"The threshold value for the setup"},"dolvol":{"type":"number","description":"The dollar volume filter for the setup"},"adr":{"type":"number","description":"The Average Daily Range filter for the setup"},"mcap":{"type":"number","description":"The market capitalization filter for the setup"}},"required":["name","timeframe"]}`,
+			NewSetup, false, true,
+		},
+		{
+			"setSetup",
+			"Updates an existing setup configuration for the current user",
+			`{"type":"object","properties":{"setupId":{"type":"integer","description":"The ID of the setup to update"},"name":{"type":"string","description":"The name of the setup"},"timeframe":{"type":"string","description":"The timeframe for the setup (e.g., '1d', '1h')"},"bars":{"type":"integer","description":"The number of bars to consider for the setup"},"threshold":{"type":"integer","description":"The threshold value for the setup"},"dolvol":{"type":"number","description":"The dollar volume filter for the setup"},"adr":{"type":"number","description":"The Average Daily Range filter for the setup"},"mcap":{"type":"number","description":"The market capitalization filter for the setup"}},"required":["setupId","name","timeframe"]}`,
+			SetSetup, false, true,
+		},
+		{
+			"deleteSetup",
+			"Deletes a setup configuration for the current user",
+			`{"type":"object","properties":{"setupId":{"type":"integer","description":"The ID of the setup to delete"}},"required":["setupId"]}`,
+			DeleteSetup, false, true,
+		},
+
+		// ════════════ samples / training ════════════
+		{
+			"labelTrainingQueueInstance",
+			"Labels a training instance in the queue",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			LabelTrainingQueueInstance, false, true,
+		},
+		{
+			"getTrainingQueue",
+			"Retrieves the current training queue instances",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			GetTrainingQueue, false, true,
+		},
+		{
+			"setSample",
+			"Sets a sample for training purposes",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			SetSample, false, true,
+		},
+
+		// ════════════ alerts ════════════
+		{
+			"getAlerts",
+			"Retrieves all alerts for the current user",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			GetAlerts, false, true,
+		},
+		{
+			"getAlertLogs",
+			"Retrieves the history of triggered alerts for the current user",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			GetAlertLogs, false, true,
+		},
+		{
+			"newAlert",
+			"Creates a new alert for the current user",
+			`{"type":"object","properties":{"alertType":{"type":"string","description":"The type of alert (price, setup, or algo)"},"price":{"type":"number","description":"The price threshold for a price alert (required for price alerts)"},"securityId":{"type":"integer","description":"The ID of the security for a price alert (required for price alerts)"},"setupId":{"type":"integer","description":"The ID of the setup for a setup alert (required for setup alerts)"},"ticker":{"type":"string","description":"The ticker symbol for a price alert"},"algoId":{"type":"integer","description":"The ID of the algorithm for an algo alert (required for algo alerts)"}},"required":["alertType"]}`,
+			NewAlert, false, true,
+		},
+		{
+			"deleteAlert",
+			"Deletes an alert for the current user",
+			`{"type":"object","properties":{"alertId":{"type":"integer","description":"The ID of the alert to delete"}},"required":["alertId"]}`,
+			DeleteAlert, false, true,
+		},
+
+		// ════════════ Account / User Trades ════════════
+		{
+			"grab_user_trades",
+			"Get user trades with optional filtering.",
+			`{"type":"object","properties":{"ticker":{"type":"string","description":"Security ticker symbol to filter trades by."},"startDate":{"type":"string","description":"Date range start to filter trades by (format: YYYY-MM-DD)."},"endDate":{"type":"string","description":"Date range end to filter trades by (format: YYYY-MM-DD)."}},"required":[]}`,
+			GrabUserTrades, true, true,
+		},
+		{
+			"get_trade_statistics",
+			"Get user trading performance statistics.",
+			`{"type":"object","properties":{"ticker":{"type":"string","description":"Security ticker symbol to filter trades by."},"startDate":{"type":"string","description":"Date range start to filter trades by (format: YYYY-MM-DD)."},"endDate":{"type":"string","description":"Date range end to filter trades by (format: YYYY-MM-DD)."}},"required":[]}`,
+			GetTradeStatistics, true, true,
+		},
+		{
+			"get_ticker_performance",
+			"Get user trade performance statistics for a specific security.",
+			`{"type":"object","properties":{"ticker":{"type":"string","description":"The security ticker symbol to get performance statistics for."},"securityId":{"type":"integer","description":"The security ID to get performance statistics for."}},"required":["ticker","securityId"]}`,
+			GetTickerPerformance, true, true,
+		},
+		{
+			"delete_all_user_trades",
+			"Deletes all trade records for the current user",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			DeleteAllUserTrades, false, true,
+		},
+		{
+			"handle_trade_upload",
+			"Processes and imports trade data from a CSV file",
+			`{"type":"object","properties":{"csvData":{"type":"string","description":"The CSV trade data to process and import"},"broker":{"type":"string","description":"The broker name for the trade data (e.g., 'interactive_brokers', 'td_ameritrade')"}},"required":["csvData","broker"]}`,
+			HandleTradeUpload, false, true,
+		},
+		{
+			"get_daily_trade_stats",
+			"Retrieves user trading statistics for a specified year and month.",
+			`{"type":"object","properties":{"year":{"type":"integer","description":"The year part of the date to get statistics for."},"month":{"type":"integer","description":"The month part of the date to get statistics for."}},"required":["year","month"]}`,
+			GetDailyTradeStats, true, true,
+		},
+
+		// ════════════ backtesting ════════════
+		{
+			"run_backtest",
+			"Runs a backtest based on a natural language query about stock conditions, patterns, and indicators IF YOU CALL THIS TOOL, USE THE USER'S ORIGINAL QUERY. DO NOT GENERATE A NEW QUERY.",
+			`{"type":"object","properties":{"query":{"type":"string","description":"Natural language query describing the backtest criteria  IF YOU CALL THIS TOOL, USE THE USER'S ORIGINAL QUERY. DO NOT GENERATE A NEW QUERY."}},"required":["query"]}`,
+			RunBacktest, true, true,
+		},
+
+		// ════════════ Notes ════════════
+		{
+			"get_notes",
+			"Retrieves notes for the current user with optional filtering",
+			`{"type":"object","properties":{"category":{"type":"string","description":"Optional category to filter notes by"},"tags":{"type":"array","description":"Optional array of tags to filter notes by","items":{"type":"string"}},"isPinned":{"type":"boolean","description":"Optional filter for pinned notes"},"isArchived":{"type":"boolean","description":"Optional filter for archived notes"},"searchQuery":{"type":"string","description":"Optional text search query to filter notes by content"}},"required":[]}`,
+			GetNotes, false, true,
+		},
+		{
+			"search_notes",
+			"Performs a full-text search on notes with highlighted results",
+			`{"type":"object","properties":{"query":{"type":"string","description":"The search query to find relevant notes"},"isArchived":{"type":"boolean","description":"Optional filter for archived notes"}},"required":["query"]}`,
+			SearchNotes, false, true,
+		},
+		{
+			"get_note",
+			"Retrieves a single note by ID",
+			`{"type":"object","properties":{"noteId":{"type":"integer","description":"The ID of the note to retrieve"}},"required":["noteId"]}`,
+			GetNote, false, true,
+		},
+		{
+			"create_note",
+			"Creates a new note for the user",
+			`{"type":"object","properties":{"title":{"type":"string","description":"The title of the note"},"content":{"type":"string","description":"The content of the note"},"category":{"type":"string","description":"Optional category for the note"},"tags":{"type":"array","description":"Optional array of tags for the note","items":{"type":"string"}},"isPinned":{"type":"boolean","description":"Whether the note is pinned"},"isArchived":{"type":"boolean","description":"Whether the note is archived"}},"required":["title"]}`,
+			CreateNote, false, true,
+		},
+		{
+			"update_note",
+			"Updates an existing note",
+			`{"type":"object","properties":{"noteId":{"type":"integer","description":"The ID of the note to update"},"title":{"type":"string","description":"The updated title of the note"},"content":{"type":"string","description":"The updated content of the note"},"category":{"type":"string","description":"The updated category for the note"},"tags":{"type":"array","description":"The updated array of tags for the note","items":{"type":"string"}},"isPinned":{"type":"boolean","description":"Whether the note is pinned"},"isArchived":{"type":"boolean","description":"Whether the note is archived"}},"required":["noteId","title"]}`,
+			UpdateNote, false, true,
+		},
+		{
+			"delete_note",
+			"Deletes a note",
+			`{"type":"object","properties":{"noteId":{"type":"integer","description":"The ID of the note to delete"}},"required":["noteId"]}`,
+			DeleteNote, false, true,
+		},
+		{
+			"toggle_note_pin",
+			"Toggles the pinned status of a note",
+			`{"type":"object","properties":{"noteId":{"type":"integer","description":"The ID of the note to toggle pin status"},"isPinned":{"type":"boolean","description":"The new pinned status"}},"required":["noteId","isPinned"]}`,
+			ToggleNotePin, false, true,
+		},
+		{
+			"toggle_note_archive",
+			"Toggles the archived status of a note",
+			`{"type":"object","properties":{"noteId":{"type":"integer","description":"The ID of the note to toggle archive status"},"isArchived":{"type":"boolean","description":"The new archived status"}},"required":["noteId","isArchived"]}`,
+			ToggleNoteArchive, false, true,
+		},
+
+		// ════════════ conversation management ════════════
+		{
+			"getUserConversation",
+			"Retrieves the conversation history for the current user",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			GetUserConversation, false, true,
+		},
+		{
+			"clearConversationHistory",
+			"Deletes the entire conversation history for the current user.",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			ClearConversationHistory, false, true,
+		},
+
+		// ════════════ utilities (non-LLM) ════════════
+		{"getIcons", "", `{}`, GetIcons, false, true}, // No FunctionDeclaration originally
+		{"getQuery", "", `{}`, GetQuery, false, true}, // internal MRKL entry point, No FunctionDeclaration originally
+		{
+			"verifyAuth",
+			"Verifies the authentication status of the user",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			func(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) { return nil, nil }, false, true,
+		},
+		{"getSuggestedQueries", "", `{}`, GetSuggestedQueries, false, true}, // No FunctionDeclaration originally
+		{"getScreensavers", // screensaver moved to utilities as it seems less core
+			"Retrieves a list of trending securities for the screensaver display",
+			`{"type":"object","properties":{},"required":[]}`, // Dummy param removed
+			GetScreensavers, false, true,
+		},
+	}
+
+	// ---- build registry ----
+	for _, s := range specs {
+		var def *llms.FunctionDefinition
+		if s.Desc != "" { // make LLM-callable only when we have a schema
+			def = &llms.FunctionDefinition{
+				Name:        s.Name,
+				Description: s.Desc,
+				Parameters:  js(s.Params),
+			}
+		}
+		registry[s.Name] = Tool{
+			Definition: def,
+			Handler:    s.Handler,
+			IsQuery:    s.Query,
+			IsAPI:      s.API,
+		}
 	}
 }
 

@@ -2,11 +2,15 @@ package tools
 
 import (
 	"backend/utils"
+    "time"
 	"context"
 	"encoding/json"
 	"fmt"
 	"math"
+    "os"
+    "path/filepath"
 	"strconv"
+    "runtime"
 	"strings"
 
 	"google.golang.org/genai"
@@ -161,6 +165,32 @@ func GetDataForBacktest(conn *utils.Conn, backtestJSON string) (string, error) {
 	}
 
 	return string(resultJSON), nil
+}
+func getSystemInstruction(systemPrompt string) (string, error) {
+	// Get the directory of the current file (gemini.go)
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", fmt.Errorf("error getting current file path")
+	}
+	currentDir := filepath.Dir(filename)
+
+	systemPrompt = systemPrompt + ".txt"
+	// Construct path to query.txt
+	queryFilePath := filepath.Join(currentDir, systemPrompt)
+
+	// Read the content of query.txt
+	content, err := os.ReadFile(queryFilePath)
+	if err != nil {
+		return "", fmt.Errorf("error reading query.txt: %w", err)
+	}
+
+	// Replace the {{CURRENT_TIME}} placeholder with the actual current time
+	currentTime := time.Now().Format(time.RFC3339)
+	currentTimeMilliseconds := time.Now().UnixMilli()
+	instruction := strings.Replace(string(content), "{{CURRENT_TIME}}", currentTime, -1)
+	instruction = strings.Replace(instruction, "{{CURRENT_TIME_MILLISECONDS}}", fmt.Sprintf("%d", currentTimeMilliseconds), -1)
+
+	return instruction, nil
 }
 
 func executeBacktestQuery(conn *utils.Conn, spec BacktestSpec, timeframe string) ([]map[string]interface{}, error) {

@@ -1,16 +1,214 @@
 package tools
 
 import (
-	"backend/utils"
 	"context"
-	"encoding/json"
-	//"fmt"
-	//"strings"
-	"time"
-    "backend/agent"
+    "strconv"
+    "encoding/json"
+    "fmt"
+    "log" // Import the log package
+    "os"
+    "strings"
+    "time"
 
-	//"google.golang.org/genai"
+    "backend/utils"
+
+    "github.com/tmc/langchaingo/chains"
+    "github.com/tmc/langchaingo/llms"
+    "github.com/tmc/langchaingo/llms/googleai"
+    "github.com/tmc/langchaingo/outputparser"
+    "github.com/tmc/langchaingo/prompts"
+
+	"github.com/go-redis/redis/v8"
+	"github.com/tmc/langchaingo/agents"
+	"github.com/tmc/langchaingo/schema" // Corrected import usage
+	ltools "github.com/tmc/langchaingo/tools" // Using alias ltools consistently
 )
+
+// RedisHistoryTool exposes cached conversation context as a LangChain tool.
+// Returns JSON so the LLM can parse or pass on.
+
+type RedisHistoryTool struct {
+    Conn   *utils.Conn
+    UserID int
+}
+
+func (t RedisHistoryTool) Name() string        { return "redis_history" }
+func (t RedisHistoryTool) Description() string { return "Return the user's last 10 conversation messages as JSON" }
+
+func (t RedisHistoryTool) Call(ctx context.Context, _ string) (string, error) {
+    convKey := "user:" + fmt.Sprint(t.UserID) + ":conversation"
+    data, err := t.Conn.Cache.Get(ctx, convKey).Result()
+    if err != nil {
+        return "{}", nil // empty history is OK
+    }
+    return data, nil
+}
+
+// Generic wrapper for legacy tool funcs so you don’t have to hand‑code every schema.
+
+func WrapFunc(name, desc string, fn func(*utils.Conn, int, json.RawMessage) (interface{}, error), conn *utils.Conn, uid int) ltools.Tool {
+    return funcTool{name: name, desc: desc, inner: fn, conn: conn, uid: uid}
+}
+
+type funcTool struct {
+    name        string
+    desc        string
+    inner       func(*utils.Conn, int, json.RawMessage) (interface{}, error)
+    conn        *utils.Conn
+    uid         int
+    singleParam string // key of the only param ("" = multi‑param)
+}
+
+func (f funcTool) Name() string        { return f.name }
+func (f funcTool) Description() string { return f.desc }
+
+func (f funcTool) Call(ctx context.Context, arg string) (string, error) {
+    log.Printf("DEBUG: %s received raw arg: %q", f.name, arg)
+
+    // ① Fast‑path: already a JSON object/array → use as‑is
+    trimmed := strings.TrimSpace(arg)
+    if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+        return f.execute(ctx, json.RawMessage(trimmed))
+    }
+
+    // ② If this tool has exactly ONE parameter, wrap raw value into an object
+    if f.singleParam != "" {
+        // quote bare words so `"AAPL"` not `AAPL`
+        // Also check for boolean and null literals
+        if !(strings.HasPrefix(trimmed, "\"") && strings.HasSuffix(trimmed, "\"")) &&
+            !isNumber(trimmed) && trimmed != "true" && trimmed != "false" && trimmed != "null" {
+            trimmed = strconv.Quote(trimmed) // Use strconv.Quote for proper string literal quoting
+        }
+        wrapped := fmt.Sprintf(`{"%s":%s}`, f.singleParam, trimmed)
+        log.Printf("DEBUG: %s wrapped single param arg: %s", f.name, wrapped)
+        return f.execute(ctx, json.RawMessage(wrapped))
+    }
+
+    // ③ Fallback: treat whatever we got as a JSON‑encoded string
+    // This case might be less common if schemas are well-defined, but acts as a safety net.
+    // Use strconv.Quote for robust JSON string encoding.
+    wrapped := strconv.Quote(trimmed)
+    log.Printf("DEBUG: %s wrapped fallback arg: %s", f.name, wrapped)
+    // Note: Passing a simple JSON string might not be what most handlers expect if they
+    // anticipate an object. Consider if this fallback is truly desired or if an error
+    // should be returned if steps ① and ② fail. For now, implementing as requested.
+    // If handlers expect objects, this might cause downstream unmarshal errors in f.inner.
+    // A potentially safer fallback might be returning an error:
+    // return "", fmt.Errorf("tool %q received non-JSON arg '%s' and is not a single-parameter tool", f.name, arg)
+    return f.execute(ctx, json.RawMessage(wrapped)) // Passing the quoted string as RawMessage
+}
+
+// helper that runs the inner handler + marshals result
+func (f funcTool) execute(ctx context.Context, raw json.RawMessage) (string, error) {
+    // Validate the final JSON before passing to the inner function
+    var dummy interface{}
+    if err := json.Unmarshal(raw, &dummy); err != nil {
+        // Log the raw JSON that failed validation
+        log.Printf("ERROR: Tool %q argument failed final JSON validation: %s", f.name, string(raw))
+        return "", fmt.Errorf("tool %q argument is not valid JSON: %w. Raw: %s", f.name, err, string(raw))
+    }
+
+    log.Printf("DEBUG: Tool %q executing with validated JSON args: %s", f.name, string(raw))
+    out, err := f.inner(f.conn, f.uid, raw)
+    if err != nil {
+        // Log the error from the inner tool function execution, including the args used
+        log.Printf("ERROR: Tool %q inner execution failed with args %s: %v", f.name, string(raw), err)
+        return "", fmt.Errorf("tool %q execution failed: %w", f.name, err) // Propagate the error from the tool
+    }
+
+    // Marshal the output from the tool function into a JSON string for the agent.
+    b, err := json.Marshal(out)
+    if err != nil {
+        log.Printf("ERROR: Failed to marshal output from tool %q: %v", f.name, err)
+        return "", fmt.Errorf("failed to marshal output from tool %q: %w", f.name, err)
+    }
+    return string(b), nil
+}
+
+// very small numeric detector
+func isNumber(s string) bool {
+    // Trim spaces just in case
+    s = strings.TrimSpace(s)
+    if s == "" {
+        return false
+    }
+    _, err := strconv.ParseFloat(s, 64)
+    // Consider integer parsing as well for completeness, although ParseFloat handles integers
+    // _, intErr := strconv.ParseInt(s, 10, 64)
+    // return err == nil || intErr == nil
+    return err == nil
+}
+
+// Runner wraps an agents.Executor.
+type Runner struct{ exec *agents.Executor }
+
+func NewRunner(conn *utils.Conn, userID int) (*Runner, error) {
+    ctx := context.Background()
+
+    apiKey, err := conn.GetGeminiKey()
+    if err != nil { return nil, err }
+
+    llm, err := googleai.New(
+        ctx,                                 // <-- first arg must be ctx :contentReference[oaicite:2]{index=2}
+        googleai.WithAPIKey(apiKey),         // auth option
+        googleai.WithDefaultModel("gemini-2.0-flash-thinking-exp"), // correct helper :contentReference[oaicite:3]{index=3}
+    )
+    if err != nil { return nil, fmt.Errorf("init gemini: %w", err) }
+
+    // Get the map of tool definitions filtered for query usage (IsQuery=true)
+    toolDefinitions := GetTools(false) // false means get tools for query/agent use
+
+    // Convert the map to a slice of ltools.Tool using the updated convertRegistry
+    agentTools := convertRegistry(toolDefinitions, conn, userID)
+
+    // Note: RedisHistoryTool is not defined using the standard Tool struct in tools.go,
+    // so it won't be picked up by GetTools/convertRegistry.
+    // We need to add it manually if it's required by the agent.
+    // Check if RedisHistoryTool is intended for agent use. If so, uncomment:
+    // agentTools = append(agentTools, RedisHistoryTool{Conn: conn, UserID: userID})
+    // Based on its description ("Return the user's last 10 conversation messages as JSON"),
+    // it seems plausible it might be useful for the agent.
+
+    // Log the tools being provided to the agent
+    toolNames := make([]string, len(agentTools))
+    for i, tool := range agentTools {
+        toolNames[i] = tool.Name()
+    }
+    log.Printf("DEBUG: Initializing OneShotAgent with tools: %v", toolNames)
+
+    // Updated system prompt for better guidance
+    systemPrompt := `You are a helpful financial assistant.
+Your goal is to answer the user's query based on the information you can access through the available tools.
+Use the tools provided when necessary to answer questions about stocks, market data, user trades, watchlists, etc.
+If a query seems unrelated to finance or the available tools, or if it is too vague like "test", respond naturally or ask for clarification.
+Do not make up information if the tools do not provide it.
+If the user asks for the keyword, it is GOOGLE.`
+
+    agent := agents.NewOneShotAgent(llm, agentTools, agents.WithPromptPrefix(systemPrompt)) // Removed trailing comma
+    executor := agents.NewExecutor(agent)
+    return &Runner{exec: executor}, nil
+}
+
+func (r *Runner) Run(ctx context.Context, q string) (string, error) {
+	log.Printf("DEBUG: Agent Runner received query: %q", q) // Log the input query
+	answer, err := chains.Run(ctx, r.exec, q)
+	if err != nil {
+		log.Printf("ERROR: Agent Runner chains.Run failed: %v", err) // Log the error if any
+		// It's possible the error message itself explains the empty content
+		// Return the error directly
+		return "", err
+	}
+	// Log the raw answer *before* returning
+	log.Printf("DEBUG: Agent Runner chains.Run raw answer: %q", answer)
+	if answer == "" {
+		log.Printf("WARN: Agent Runner chains.Run returned an empty answer for query: %q", q)
+		// Potentially return a more specific error here if needed,
+		// but for now, let's rely on the existing error handling in api.go
+		// which seems to be catching this ("no content in generation response").
+	}
+	return answer, nil
+}
+
 // FunctionCall represents a function to be called with its arguments
 type FunctionCall struct {
 	Name   string          `json:"name"`
@@ -64,7 +262,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
         return nil, err
     }
 
-    runner, err := agent.NewRunner(conn, userID)
+    runner, err := NewRunner(conn, userID)
     if err != nil {
         return nil, err
     }
@@ -73,238 +271,6 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
         return nil, err
     }
     return QueryResponse{Type: "text", Text: answer}, nil
-}
-
-/*
-// ExecuteResult represents the result of executing a function
-type ExecuteResult struct {
-	FunctionName string      `json:"function_name"`
-	Result       interface{} `json:"result"`
-	Error        string      `json:"error,omitempty"`
-	Args         interface{} `json:"args,omitempty"`
-}
-
-// ConversationData represents the data structure for storing conversation context
-type ConversationData struct {
-	Messages  []ChatMessage `json:"messages"`
-	Timestamp time.Time     `json:"timestamp"`
-}
-
-
-
-// ThinkingResponse represents the JSON output from the thinking model with rounds
-type ThinkingResponse struct {
-	Rounds                  [][]FunctionCall `json:"rounds"`
-	RequiresFurtherPlanning bool             `json:"requires_further_planning"`
-	RequiresFinalResponse   bool             `json:"requires_final_response"`
-	ContentChunks           []ContentChunk   `json:"content_chunks,omitempty"`
-	PlanningContext         json.RawMessage  `json:"planning_context,omitempty"`
-}
-// GetQuery processes a natural language query and returns the result
-func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
-
-	// Use the standardized Redis connectivity test
-	ctx := context.Background()
-	success, message := conn.TestRedisConnectivity(ctx, userID)
-	if !success {
-		fmt.Printf("WARNING: %s\n", message)
-	} else {
-		fmt.Println(message)
-	}
-
-	var query Query
-	if err := json.Unmarshal(args, &query); err != nil {
-		return nil, fmt.Errorf("error parsing request: %w", err)
-	}
-	userQuery := query.Query
-	// If the query is empty, return an error
-	if userQuery == "" {
-		return nil, fmt.Errorf("query cannot be empty")
-	}
-
-	// Check for existing conversation history
-	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
-	conversationData, err := getConversationFromCache(ctx, conn, userID, conversationKey)
-
-	// If we have existing conversation data, append the new message
-	fmt.Println("Accessing conversation for key:", conversationKey)
-
-	// If no conversation exists, create a new one
-	if err != nil || conversationData == nil {
-		fmt.Printf("Creating new conversation. Error: %v\n", err)
-		conversationData = &ConversationData{
-			Messages:  []ChatMessage{},
-			Timestamp: time.Now(),
-		}
-	} else {
-		fmt.Printf("Found existing conversation with %d messages\n", len(conversationData.Messages))
-	}
-
-	// Get function calls from the LLM with context from previous messages
-	var conversationHistory string
-	var allResults []ExecuteResult
-	var allThinkingResults []ThinkingResponse
-	if len(conversationData.Messages) > 0 {
-		// Build context from previous messages for Gemini
-		conversationHistory = buildConversationContext(conversationData.Messages)
-	} else {
-		conversationHistory = ""
-	}
-	maxTurns := 5
-	numTurns := 0
-	for numTurns < maxTurns {
-		var prompt strings.Builder
-		if conversationHistory != "" {
-			prompt.WriteString("Conversation History:\n")
-			prompt.WriteString(conversationHistory)
-			prompt.WriteString("\n\n")
-		}
-		prompt.WriteString("User Query:\n")
-		prompt.WriteString(userQuery)
-		prompt.WriteString("\n\n")
-		if len(allThinkingResults) > 0 {
-			prompt.WriteString("Results from all previous rounds:\n\n")
-			resultsJSON, _ := json.Marshal(allResults)
-			prompt.WriteString("```json\n")
-			prompt.WriteString(string(resultsJSON))
-			prompt.WriteString("\n```\n\n")
-		}
-
-		// This first passes the query to a thinking model
-		geminiThinkingResponse, err := getGeminiFunctionThinking(ctx, conn, "defaultSystemPrompt", prompt.String())
-		if err != nil {
-			return nil, fmt.Errorf("error getting thinking response: %w", err)
-		}
-
-		responseText := geminiThinkingResponse.Text
-		// Try to parse the thinking response as JSON
-		var thinkingResp ThinkingResponse
-		fmt.Println("thinking response ", thinkingResp)
-		// Find the JSON block in the response
-		jsonStartIdx := strings.Index(responseText, "{")
-		jsonEndIdx := strings.LastIndex(responseText, "}")
-
-		// If no valid JSON is found, just return the text response
-		if jsonStartIdx == -1 || jsonEndIdx == -1 || jsonEndIdx <= jsonStartIdx {
-			return QueryResponse{
-				Type:    "text",
-				Text:    responseText,
-				History: conversationData,
-			}, nil
-		}
-
-		jsonBlock := responseText[jsonStartIdx : jsonEndIdx+1]
-		_ = json.Unmarshal([]byte(jsonBlock), &thinkingResp) // Ignore error for now, as the block was empty
-
-		if len(thinkingResp.Rounds) == 0 && len(thinkingResp.ContentChunks) == 0 {
-			newMessage := ChatMessage{
-				Query:         query.Query,
-				ResponseText:  responseText,
-				FunctionCalls: []FunctionCall{},
-				ToolResults:   []ExecuteResult{},
-				Timestamp:     time.Now(),
-				ExpiresAt:     time.Now().Add(24 * time.Hour),
-			}
-
-			// Add new message to conversation history
-			conversationData.Messages = append(conversationData.Messages, newMessage)
-			conversationData.Timestamp = time.Now()
-			if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-				fmt.Printf("Error saving updated conversation: %v\n", err)
-			}
-
-			return QueryResponse{
-				Type:    "text",
-				Text:    responseText,
-				History: conversationData,
-			}, nil
-		}
-
-		// If we have content chunks directly in the response, return them
-		if len(thinkingResp.ContentChunks) > 0 {
-
-			newMessage := ChatMessage{
-				Query:         query.Query,
-				ContentChunks: thinkingResp.ContentChunks,
-				FunctionCalls: []FunctionCall{},
-				ToolResults:   []ExecuteResult{},
-				Timestamp:     time.Now(),
-				ExpiresAt:     time.Now().Add(24 * time.Hour),
-			}
-
-			// Add new message to conversation history
-			conversationData.Messages = append(conversationData.Messages, newMessage)
-			conversationData.Timestamp = time.Now()
-			if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-				fmt.Printf("Error saving updated conversation: %v\n", err)
-			}
-
-			// Return both the original ContentChunks for the frontend to render
-			// and the text version for systems that can't handle structured content
-			return QueryResponse{
-				Type:          "mixed_content",
-				ContentChunks: thinkingResp.ContentChunks,
-				History:       conversationData,
-			}, nil
-		}
-
-		// Try to process the thinking response as rounds
-		contentChunks, thinkingResults, err := processThinkingResponse(ctx, conn, userID, thinkingResp, query.Query)
-		if err == nil && len(thinkingResults) > 0 {
-			if len(contentChunks) > 0 {
-				// Create new message with the content chunks response
-				newMessage := ChatMessage{
-					Query:         query.Query,
-					ContentChunks: contentChunks,
-					FunctionCalls: []FunctionCall{},
-					ToolResults:   []ExecuteResult{},
-					Timestamp:     time.Now(),
-					ExpiresAt:     time.Now().Add(24 * time.Hour),
-				}
-				conversationData.Messages = append(conversationData.Messages, newMessage)
-				conversationData.Timestamp = time.Now()
-				if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-					fmt.Printf("Error saving updated conversation: %v\n", err)
-				}
-
-				return QueryResponse{
-					Type:          "mixed_content",
-					ContentChunks: newMessage.ContentChunks,
-					History:       conversationData,
-				}, nil
-			}
-			if !thinkingResp.RequiresFurtherPlanning {
-				// Create new message with the round results and formatted response
-				newMessage := ChatMessage{
-					Query:         query.Query,
-					ResponseText:  "Successfully processed the following function calls:\n\n",
-					FunctionCalls: []FunctionCall{}, // We don't store these as regular function calls
-					ToolResults:   thinkingResults,
-					Timestamp:     time.Now(),
-					ExpiresAt:     time.Now().Add(24 * time.Hour),
-				}
-
-				// Add new message to conversation history
-				conversationData.Messages = append(conversationData.Messages, newMessage)
-				conversationData.Timestamp = time.Now()
-				if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-					fmt.Printf("Error saving updated conversation: %v\n", err)
-				}
-
-				return QueryResponse{
-					Type:    "function_calls",
-					Results: thinkingResults,
-					Text:    "Successfully processed the following function calls:\n\n",
-					History: conversationData,
-				}, nil
-			}
-			allResults = append(allResults, thinkingResults...)
-			allThinkingResults = append(allThinkingResults, thinkingResp)
-		}
-
-		numTurns++
-	}
-	return nil, fmt.Errorf("error getting gemini function response: %w", err)
 }
 
 // buildConversationContext formats the conversation history for Gemini
@@ -484,6 +450,21 @@ func getConversationFromCache(ctx context.Context, conn *utils.Conn, userID int,
 
 	return &conversationData, nil
 }
+func ClearConversationHistory(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
+	ctx := context.Background()
+	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
+	fmt.Printf("Attempting to delete conversation for key: %s\n", conversationKey)
+
+	// Delete the key from Redis
+	err := conn.Cache.Del(ctx, conversationKey).Err()
+	if err != nil {
+		fmt.Printf("Failed to delete conversation from Redis: %v\n", err)
+		return nil, fmt.Errorf("failed to clear conversation history: %w", err)
+	}
+
+	fmt.Printf("Successfully deleted conversation for key: %s\n", conversationKey)
+	return map[string]string{"message": "Conversation history cleared successfully"}, nil
+}
 
 // GetUserConversation retrieves the conversation for a user
 func GetUserConversation(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
@@ -532,482 +513,354 @@ func GetUserConversation(conn *utils.Conn, userID int, args json.RawMessage) (in
 	return conversation, nil
 }
 
-func getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (string, error) {
-	apiKey, err := conn.GetGeminiKey()
-	if err != nil {
-		return "", fmt.Errorf("error getting gemini key: %w", err)
-	}
 
-	// Create a new client using the API key
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return "", fmt.Errorf("error creating gemini client: %w", err)
-	}
-
-	systemInstruction, err := getSystemInstruction("finalResponseSystemPrompt")
-	if err != nil {
-		return "", fmt.Errorf("error getting system instruction: %w", err)
-	}
-
-	config := &genai.GenerateContentConfig{
-		SystemInstruction: &genai.Content{
-			Parts: []*genai.Part{
-				{Text: systemInstruction},
-			},
-		},
-	}
-	result, err := client.Models.GenerateContent(ctx, "gemini-2.0-flash-001", genai.Text(query), config)
-	if err != nil {
-		return "", fmt.Errorf("error generating content: %w", err)
-	}
-
-	// Extract the response text
-	if len(result.Candidates) == 0 || len(result.Candidates[0].Content.Parts) == 0 {
-		return "", fmt.Errorf("no response from Gemini")
-	}
-
-	// Get the text from the response
-	text := fmt.Sprintf("%v", result.Candidates[0].Content.Parts[0].Text)
-	return text, nil
+// RedisChatHistory provides a langchaingo/memory.ChatMessageHistory implementation
+// backed by Redis lists.error you listed. | Err msg group | Root cause | Minimal patch | |---------------|------------|---------------| | **`td.FunctionDeclaration undefined`** | Your `Tool` struct now uses th
+type RedisChatHistory struct {
+	Client *redis.Client
+	Key    string        // Redis key for the chat history list, e.g., "user:42:chat"
+	TTL    time.Duration // Time-to-live for the history key. 0 means no expiry.
 }
 
-
-// FunctionResponse represents the response from the LLM with function calls
-type FunctionResponse struct {
-	FunctionCalls []FunctionCall `json:"function_calls"`
+// NewRedisChatHistory creates a new RedisChatHistory.
+func NewRedisChatHistory(client *redis.Client, key string, ttl time.Duration) *RedisChatHistory {
+	return &RedisChatHistory{
+		Client: client,
+		Key:    key,
+		TTL:    ttl,
+	}
 }
 
-type GeminiFunctionResponse struct {
-	FunctionCalls []FunctionCall `json:"function_calls"`
-	Text          string         `json:"text"`
-}
+// push adds a message to the end of the Redis list and updates TTL.
+func (h *RedisChatHistory) push(ctx context.Context, msg llms.ChatMessage) error { // Use llms.ChatMessage
+	// Marshal the message based on its type to preserve type information
+	var dataToStore []byte
+	var err error
+	var typedMsg map[string]interface{}
 
-func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemPrompt string, query string) (*GeminiFunctionResponse, error) {
-	apiKey, err := conn.GetGeminiKey()
-	if err != nil {
-		return nil, fmt.Errorf("error getting gemini key: %w", err)
-	}
-
-	// Create a new client using the API key
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error creating gemini client: %w", err)
-	}
-
-	// Get the system instruction
-	baseSystemInstruction, err := getSystemInstruction(systemPrompt)
-	if err != nil {
-		return nil, fmt.Errorf("error getting system instruction: %w", err)
-	}
-
-	// Enhance the system instruction with tool descriptions
-	enhancedSystemInstruction := enhanceSystemPromptWithTools(baseSystemInstruction)
-	config := &genai.GenerateContentConfig{
-		SystemInstruction: &genai.Content{
-			Parts: []*genai.Part{
-				{Text: enhancedSystemInstruction},
-			},
-		},
-	}
-
-	result, err := client.Models.GenerateContent(
-		ctx,
-		"gemini-2.0-flash-thinking-exp-01-21",
-		genai.Text(query),
-		config,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("error generating content with thinking model: %w", err)
-	}
-
-	// Extract the clean text response for display
-	responseText := ""
-	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
-		for _, part := range result.Candidates[0].Content.Parts {
-			if part.Text != "" {
-				responseText = part.Text
-				break
-			}
-		}
-	}
-	response := &GeminiFunctionResponse{
-		FunctionCalls: []FunctionCall{},
-		Text:          responseText,
-	}
-	return response, nil
-}
-
-// getGeminiFunctionResponse uses the Google Function API to return an ordered list of functions to execute
-func getGeminiFunctionResponse(ctx context.Context, conn *utils.Conn, query string) (*GeminiFunctionResponse, error) {
-	apiKey, err := conn.GetGeminiKey()
-	if err != nil {
-		return nil, fmt.Errorf("error getting gemini key: %w", err)
-	}
-
-	// Create a new client using the API key
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error creating gemini client: %w", err)
-	}
-
-	systemInstruction := "You are a helpful assistant that can answer questions and run functions"
-	var geminiTools []*genai.Tool
-	for _, tool := range GetTools(false) {
-		// Convert the FunctionDeclaration to a Tool
-		geminiTools = append(geminiTools, &genai.Tool{
-			FunctionDeclarations: []*genai.FunctionDeclaration{
-				{
-					Name:        tool.FunctionDeclaration.Name,
-					Description: tool.FunctionDeclaration.Description,
-					Parameters:  tool.FunctionDeclaration.Parameters,
-				},
-			},
-		})
-	}
-
-	config := &genai.GenerateContentConfig{
-		Tools: geminiTools,
-		SystemInstruction: &genai.Content{
-			Parts: []*genai.Part{
-				{Text: systemInstruction},
-			},
-		},
-	}
-	// Check if query has conversation history format ("User: ... Assistant: ...")
-	// If it does, use that directly as the prompt
-	if strings.Contains(query, "User:") && strings.Contains(query, "Assistant:") {
-		// Use the formatted query directly since it already contains the conversation history
-		result, err := client.Models.GenerateContent(
-			ctx,
-			"gemini-2.0-flash",
-			genai.Text(query),
-			config,
-		)
+	// Use llms types correctly
+	switch m := msg.(type) {
+	case llms.HumanChatMessage: // Use llms.HumanChatMessage
+		typedMsg = map[string]interface{}{"type": "human", "content": m.GetContent()}
+	case llms.AIChatMessage: // Use llms.AIChatMessage
+		typedMsg = map[string]interface{}{"type": "ai", "content": m.GetContent()}
+	case llms.SystemChatMessage: // Use llms.SystemChatMessage
+		typedMsg = map[string]interface{}{"type": "system", "content": m.GetContent()}
+	case llms.GenericChatMessage: // Use llms.GenericChatMessage
+		typedMsg = map[string]interface{}{"type": "generic", "content": m.GetContent(), "role": m.Role}
+	// TODO: Add cases for other types like FunctionChatMessage, ToolChatMessage if needed
+	default:
+		// Fallback for unknown types - attempt generic marshal, might lose specific type info
+		fmt.Printf("Warning: marshaling unknown chat message type: %T\n", msg)
+		dataToStore, err = json.Marshal(msg)
 		if err != nil {
-			return nil, fmt.Errorf("error generating content with history: %w", err)
+			return fmt.Errorf("failed to marshal unknown chat message type: %w", err)
 		}
-
-		// Process the result similarly to the single-query case
-		responseText := ""
-		if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
-			for _, part := range result.Candidates[0].Content.Parts {
-				if part.Text != "" {
-					responseText = part.Text
-					break
-				}
+		// Push the already marshaled data and return
+		if err := h.Client.RPush(ctx, h.Key, dataToStore).Err(); err != nil {
+			return fmt.Errorf("failed to push message to redis: %w", err)
+		}
+		// Update TTL if set (duplicate logic, consider refactoring)
+		if h.TTL > 0 {
+			if err := h.Client.Expire(ctx, h.Key, h.TTL).Err(); err != nil {
+				fmt.Printf("Warning: failed to set TTL for key %s: %v\n", h.Key, err)
 			}
 		}
-
-		// Extract function calls
-		var functionCalls []FunctionCall
-		for _, candidate := range result.Candidates {
-			if candidate.Content == nil {
-				continue
-			}
-
-			for _, part := range candidate.Content.Parts {
-				// Check if the part is a FunctionCall
-				if fc := part.FunctionCall; fc != nil {
-					// Convert arguments to JSON
-					args, err := json.Marshal(fc.Args)
-					if err != nil {
-						return nil, fmt.Errorf("error marshaling function args: %w", err)
-					}
-
-					functionCalls = append(functionCalls, FunctionCall{
-						Name: fc.Name,
-						Args: args,
-					})
-				}
-			}
-		}
-
-		return &GeminiFunctionResponse{
-			FunctionCalls: functionCalls,
-			Text:          responseText,
-		}, nil
+		return nil // Exit early for default case
 	}
 
-	// Fall back to the original implementation for simple queries
-	result, err := client.Models.GenerateContent(ctx, "gemini-2.0-flash-001", genai.Text(query), config)
+	// Marshal the structured message for known types
+	dataToStore, err = json.Marshal(typedMsg)
 	if err != nil {
-		return nil, fmt.Errorf("error generating content: %w", err)
+		return fmt.Errorf("failed to marshal chat message: %w", err)
 	}
 
-	// Extract the clean text response for display
-	responseText := ""
-	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
-		for _, part := range result.Candidates[0].Content.Parts {
-			if part.Text != "" {
-				responseText = part.Text
-				break
-			}
-		}
-	}
-
-	// Print the response for debugging
-	fmt.Println("Gemini response:", responseText)
-
-	// Extract function calls from response
-	var functionCalls []FunctionCall
-
-	// Process the response to extract function calls
-	for _, candidate := range result.Candidates {
-		if candidate.Content == nil {
-			continue
-		}
-
-		for _, part := range candidate.Content.Parts {
-			// Check if the part is a FunctionCall
-			if fc := part.FunctionCall; fc != nil {
-				// Convert arguments to JSON
-				args, err := json.Marshal(fc.Args)
-				if err != nil {
-					return nil, fmt.Errorf("error marshaling function args: %w", err)
-				}
-
-				functionCalls = append(functionCalls, FunctionCall{
-					Name: fc.Name,
-					Args: args,
-				})
-			}
-		}
-	}
-
-	return &GeminiFunctionResponse{
-		FunctionCalls: functionCalls,
-		Text:          responseText,
-	}, nil
-}
-
-// RoundResult stores the results of a round's function calls
-type RoundResult struct {
-	Results map[string]interface{} `json:"results"`
-}
-
-// processThinkingResponse attempts to parse and execute the thinking model's rounds
-func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, thinkingResp ThinkingResponse, originalQuery string) ([]ContentChunk, []ExecuteResult, error) {
-
-	// Check if this is a content_chunks response instead of rounds
-	if len(thinkingResp.Rounds) == 0 && len(thinkingResp.ContentChunks) > 0 {
-		return thinkingResp.ContentChunks, []ExecuteResult{}, nil
-	}
-
-	// Store all results from all rounds
-	var allResults []ExecuteResult
-	var allPreviousRoundResults []ExecuteResult
-
-	// Process each round sequentially, sending each to Gemini
-	for _, round := range thinkingResp.Rounds {
-
-		// Create a prompt for Gemini that includes:
-		// 1. The current round's function calls
-		// 2. The results from ALL previous rounds (not just the last one)
-
-		// First, convert the round to JSON
-		roundJSON, err := json.Marshal(round)
-		if err != nil {
-			fmt.Printf("Error marshaling round to JSON: %v\n", err)
-			continue
-		}
-
-		// Create a prompt that includes the round and previous results
-		var prompt strings.Builder
-		prompt.WriteString("Process this round of function calls:\n\n")
-		prompt.WriteString("```json\n")
-		prompt.WriteString(string(roundJSON))
-		prompt.WriteString("\n```\n\n")
-
-		// Include ALL previous round results if available
-		if len(allPreviousRoundResults) > 0 {
-			prompt.WriteString("Results from all previous rounds:\n\n")
-			resultsJSON, _ := json.Marshal(allPreviousRoundResults)
-			prompt.WriteString("```json\n")
-			prompt.WriteString(string(resultsJSON))
-			prompt.WriteString("\n```\n\n")
-		}
-
-		prompt.WriteString("Please process this round of function calls.\n")
-		// Send to Gemini for processing
-		fmt.Printf("Sending round to Gemini for processing:\n%s\n", prompt.String())
-		processedRound, err := processRoundWithGemini(ctx, conn, prompt.String())
-		if err != nil {
-			fmt.Printf("Error processing round with Gemini: %v\n", err)
-
-			continue
-		}
-
-		// Execute the functions returned by Gemini
-		roundResults, err := executeGeminiFunctions(ctx, conn, userID, processedRound)
-		if err != nil {
-			fmt.Printf("Error executing functions: %v\n", err)
-			continue
-		}
-
-		// Add this round's results to the combined results
-		allResults = append(allResults, roundResults...)
-		// Accumulate results for the next round
-		allPreviousRoundResults = append(allPreviousRoundResults, roundResults...)
-	}
-	if thinkingResp.RequiresFurtherPlanning {
-		return []ContentChunk{}, allResults, nil
-	}
-	if thinkingResp.RequiresFinalResponse {
-		var prompt strings.Builder
-		prompt.WriteString("Here is the original query: ")
-		prompt.WriteString(originalQuery)
-		prompt.WriteString("\n\nHere are the results from the function calls: ")
-		resultsJSON, _ := json.Marshal(allResults)
-		fmt.Printf("\n\n\nAll results: %v\n", allResults)
-		prompt.WriteString(string(resultsJSON))
-
-		prompt.WriteString("\n\nPlease provide a final response to the original query based on the results from the function calls.")
-		fmt.Println(prompt.String())
-		processedText, err := getGeminiResponse(ctx, conn, prompt.String())
-		if err != nil {
-			fmt.Printf("Error processing round with Gemini: %v\n", err)
-			return nil, nil, fmt.Errorf("error processing round with Gemini: %w", err)
-		}
-
-		// Clean up the text response to ensure it's just plain text
-		processedText = strings.TrimSpace(processedText)
-
-		// Try to parse the entire response as content chunks first
-		var contentChunksResponse struct {
-			ContentChunks []ContentChunk `json:"content_chunks"`
-		}
-		if err := json.Unmarshal([]byte(processedText), &contentChunksResponse); err == nil && len(contentChunksResponse.ContentChunks) > 0 {
-
-			return contentChunksResponse.ContentChunks, allResults, nil
-		}
-
-		// If that fails, try to find a JSON block within the response
-		jsonStartIdx := strings.Index(processedText, "{")
-		jsonEndIdx := strings.LastIndex(processedText, "}")
-
-		if jsonStartIdx != -1 && jsonEndIdx != -1 && jsonEndIdx > jsonStartIdx {
-			jsonBlock := processedText[jsonStartIdx : jsonEndIdx+1]
-			err := json.Unmarshal([]byte(jsonBlock), &contentChunksResponse)
-
-			if err == nil && len(contentChunksResponse.ContentChunks) > 0 {
-				return contentChunksResponse.ContentChunks, allResults, nil
-			}
-		}
-
-		var textResponse ContentChunk
-		textResponse.Type = "text"
-		textResponse.Content = processedText
-		return []ContentChunk{textResponse}, allResults, nil
-	}
-
-	return []ContentChunk{}, allResults, nil
-}
-
-// processRoundWithGemini sends a round to Gemini for processing and gets back the functions to execute
-func processRoundWithGemini(ctx context.Context, conn *utils.Conn, prompt string) ([]FunctionCall, error) {
-	// Get a response from Gemini with the processed functions
-	response, err := getGeminiFunctionResponse(ctx, conn, prompt)
 	if err != nil {
-		return nil, fmt.Errorf("error getting function response from Gemini: %w", err)
+		return fmt.Errorf("failed to marshal chat message: %w", err)
 	}
 
-	// Return the function calls from the response
-	return response.FunctionCalls, nil
-}
-
-// executeGeminiFunctions executes the function calls returned by Gemini
-func executeGeminiFunctions(ctx context.Context, conn *utils.Conn, userID int, functionCalls []FunctionCall) ([]ExecuteResult, error) {
-	var results []ExecuteResult
-
-	for _, fc := range functionCalls {
-		fmt.Printf("Executing function %s with args: %s\n", fc.Name, string(fc.Args))
-
-		// Parse arguments into a map for storage
-		var args interface{}
-		if err := json.Unmarshal(fc.Args, &args); err != nil {
-			fmt.Printf("Warning: Could not parse args for storage: %v\n", err)
-		}
-
-		// Check if the function exists in Tpols map
-		tool, exists := GetTools(false)[fc.Name]
-		if !exists {
-			results = append(results, ExecuteResult{
-				FunctionName: fc.Name,
-				Error:        fmt.Sprintf("function '%s' not found", fc.Name),
-				Args:         args,
-			})
-			continue
-		}
-
-		// Execute the function
-		result, err := tool.Function(conn, userID, fc.Args)
-		if err != nil {
-			fmt.Printf("Function %s execution error: %v\n", fc.Name, err)
-			results = append(results, ExecuteResult{
-				FunctionName: fc.Name,
-				Error:        err.Error(),
-				Args:         args,
-			})
-		} else {
-			fmt.Printf("Function %s executed successfully\n", fc.Name)
-			results = append(results, ExecuteResult{
-				FunctionName: fc.Name,
-				Result:       result,
-				Args:         args,
-			})
-		}
+	// Push the JSON string to the Redis list
+	if err := h.Client.RPush(ctx, h.Key, dataToStore).Err(); err != nil {
+		return fmt.Errorf("failed to push message to redis: %w", err)
 	}
 
-	return results, nil
+	// Update TTL if set
+	if h.TTL > 0 {
+		if err := h.Client.Expire(ctx, h.Key, h.TTL).Err(); err != nil {
+			// Log error but don't fail the operation just because TTL update failed
+			fmt.Printf("Warning: failed to set TTL for key %s: %v\n", h.Key, err)
+		}
+	}
+	return nil
 }
 
+// AddUserMessage adds a human message to the history.
+func (h *RedisChatHistory) AddUserMessage(ctx context.Context, text string) error {
+	return h.push(ctx, llms.HumanChatMessage{Content: text}) // Use llms.HumanChatMessage
+}
+
+// AddAIMessage adds an AI message to the history.
+func (h *RedisChatHistory) AddAIMessage(ctx context.Context, text string) error {
+	return h.push(ctx, llms.AIChatMessage{Content: text}) // Use llms.AIChatMessage
+}
+
+// Messages retrieves all messages from the history.
+func (h *RedisChatHistory) Messages(ctx context.Context) ([]llms.ChatMessage, error) { // Use llms.ChatMessage
+	// Retrieve all elements from the list
+	vals, err := h.Client.LRange(ctx, h.Key, 0, -1).Result()
+	if err != nil {
+		// If the key doesn't exist, return empty history, not an error
+		if err == redis.Nil {
+			return []llms.ChatMessage{}, nil // Use llms.ChatMessage
+		}
+		return nil, fmt.Errorf("failed to retrieve messages from redis: %w", err)
+	}
+
+	// Unmarshal each message back into the correct llms.ChatMessage type
+	out := make([]llms.ChatMessage, 0, len(vals)) // Use llms.ChatMessage
+	for _, v := range vals {
+		var base map[string]interface{}
+		if err := json.Unmarshal([]byte(v), &base); err != nil {
+			fmt.Printf("Warning: failed to unmarshal base message structure from redis: %v\n", err)
+			continue // Skip malformed messages
+		}
+
+		contentType, _ := base["type"].(string)
+		contentValue, _ := base["content"].(string)
+
+		var msg llms.ChatMessage // Use llms.ChatMessage
+		switch contentType {
+		case "human":
+			msg = llms.HumanChatMessage{Content: contentValue} // Use llms.HumanChatMessage
+		case "ai":
+			msg = llms.AIChatMessage{Content: contentValue} // Use llms.AIChatMessage
+		case "system":
+			msg = llms.SystemChatMessage{Content: contentValue} // Use llms.SystemChatMessage
+		case "generic":
+			roleValue, _ := base["role"].(string)
+			msg = llms.GenericChatMessage{Content: contentValue, Role: roleValue} // Use llms.GenericChatMessage
+		// Add cases for other types if stored differently
+		default:
+			// Attempt a generic unmarshal if type is unknown or missing
+			// Note: This generic unmarshal might not work correctly for llms.ChatMessage
+			// as it's an interface. Consider logging an error or handling specific types.
+			fmt.Printf("Warning: encountered unknown message type '%s' during retrieval\n", contentType)
+			// Attempt to create a generic message if possible, otherwise skip
+			if role, ok := base["role"].(string); ok {
+				msg = llms.GenericChatMessage{Content: contentValue, Role: role}
+			} else {
+				fmt.Printf("Warning: skipping message of unknown type '%s' without a role\n", contentType)
+				continue // Skip message if it cannot be represented generically
+			}
+
+			/* Original generic unmarshal attempt - likely problematic for interfaces
+			if err := json.Unmarshal([]byte(v), &msg); err != nil {
+				fmt.Printf("Warning: failed to unmarshal message of unknown type '%s' from redis: %v\n", contentType, err)
+				continue // Skip message if completely unparsable
+			}
+			*/
+			if err := json.Unmarshal([]byte(v), &msg); err != nil {
+				fmt.Printf("Warning: failed to unmarshal message of unknown type '%s' from redis: %v\n", contentType, err)
+				continue // Skip message if completely unparsable
+			}
+		}
+		out = append(out, msg)
+	}
+	return out, nil
+}
+
+// Clear removes all messages from the history.
+func (h *RedisChatHistory) Clear(ctx context.Context) error {
+	err := h.Client.Del(ctx, h.Key).Err()
+	if err != nil && err != redis.Nil { // Ignore error if key already doesn't exist
+		return fmt.Errorf("failed to clear chat history from redis: %w", err)
+	}
+	return nil
+}
+
+// AddMessage stores an arbitrary llms.ChatMessage
+func (h *RedisChatHistory) AddMessage(ctx context.Context, msg llms.ChatMessage) error { // Use llms.ChatMessage
+	// we already wrote push(), so just call it:
+	return h.push(ctx, msg)
+}
+
+// SetMessages replaces the entire history
+func (h *RedisChatHistory) SetMessages(ctx context.Context, msgs []llms.ChatMessage) error { // Use llms.ChatMessage
+	// Clear existing history first
+	if err := h.Clear(ctx); err != nil {
+		return fmt.Errorf("failed to clear history before setting messages: %w", err)
+	}
+	// Add new messages
+	for _, m := range msgs {
+		if err := h.AddMessage(ctx, m); err != nil {
+			// Log error but attempt to continue adding other messages
+			fmt.Printf("Warning: failed to add message during SetMessages: %v\n", err)
+		}
+	}
+	return nil
+}
+
+// Ensure RedisChatHistory implements the interface
+var _ schema.ChatMessageHistory = (*RedisChatHistory)(nil) // This interface is still in schema package
+
+// funcTool adapts a standard Go function to the langchaingo tools.Tool interface.
+// Name returns the name of the tool.
+
+// convertRegistry turns local Tool specs into langchaingo tools.
+func convertRegistry(reg map[string]Tool, conn *utils.Conn, uid int) []ltools.Tool {
+    res := make([]ltools.Tool, 0, len(reg))
+    for _, t := range reg {
+        if t.Handler == nil {
+            continue // nothing to wrap
+        }
+
+        name, desc := "unknown_tool", "no description"
+        if t.Definition != nil {
+            if t.Definition.Name != "" {
+                name = t.Definition.Name
+            }
+            if t.Definition.Description != "" {
+                desc = t.Definition.Description
+            }
+        }
+
+        // --- NEW: figure out if schema has exactly one property -------------
+        single := ""
+        // Check if Definition and Parameters exist
+        if t.Definition != nil && t.Definition.Parameters != nil {
+            // Assert Parameters to json.RawMessage (which is []byte)
+            paramsJSON, ok := t.Definition.Parameters.(json.RawMessage)
+            if !ok {
+                log.Printf("WARN: Tool '%s' Parameters field is not json.RawMessage, type is %T", name, t.Definition.Parameters)
+            } else if len(paramsJSON) > 0 { // Check length only if it's valid json.RawMessage
+                // Define a struct to capture the 'properties' field from the JSON schema
+                var schema struct {
+                    Properties map[string]json.RawMessage `json:"properties"`
+                    // We might also need 'required' if we only want to trigger this
+                    // for single *required* parameters, but for now, just checking
+                    // the number of properties seems sufficient based on the request.
+                }
+                // Attempt to unmarshal the parameters JSON into our struct
+                if err := json.Unmarshal(paramsJSON, &schema); err == nil {
+                    // Check if exactly one property is defined
+                    if len(schema.Properties) == 1 {
+                        // If yes, iterate (only once) to get the key (parameter name)
+                        for k := range schema.Properties {
+                            single = k
+                            break // Found the single key, no need to continue loop
+                        }
+                        log.Printf("DEBUG: Tool '%s' identified as single-parameter tool with param '%s'", name, single)
+                    } else {
+                        // Log if properties exist but not exactly one
+                        if len(schema.Properties) > 1 {
+                            log.Printf("DEBUG: Tool '%s' has multiple parameters (%d), not marking as single-parameter.", name, len(schema.Properties))
+                        } else {
+                            // len == 0
+                            log.Printf("DEBUG: Tool '%s' has zero parameters defined in schema.", name)
+                        }
+                    }
+                } else {
+                    // Log if unmarshalling the schema failed
+                    log.Printf("WARN: Failed to unmarshal parameters schema for tool '%s': %v. Raw schema: %s", name, err, string(paramsJSON))
+                }
+            } else {
+                 // Parameters field exists but is empty
+                 log.Printf("DEBUG: Tool '%s' has empty Parameters defined.", name)
+            }
+        } else {
+            // No Definition or no Parameters field
+            log.Printf("DEBUG: Tool '%s' has no Definition or Parameters field.", name)
+        }
+        // --------------------------------------------------------------------
+
+        res = append(res, funcTool{
+            name:        name,
+            desc:        desc,
+            inner:       t.Handler,
+            conn:        conn,
+            uid:         uid,
+            singleParam: single, // <- pass it on
+        })
+    }
+    return res
+}
 type GetSuggestedQueriesResponse struct {
 	Suggestions []string `json:"suggestions"`
 }
 
-func GetSuggestedQueries(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
+func GetSuggestedQueries(conn *utils.Conn, userID int, _ json.RawMessage) (interface{}, error) {
+    ctx := context.Background()
 
-	// Use the standardized Redis connectivity test
-	ctx := context.Background()
-	success, message := conn.TestRedisConnectivity(ctx, userID)
-	if !success {
-		fmt.Printf("WARNING: %s\n", message)
-	} else {
-		fmt.Println(message)
-	}
-	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
-	conversationData, err := getConversationFromCache(ctx, conn, userID, conversationKey)
-	if err != nil || conversationData == nil {
-		return GetSuggestedQueriesResponse{}, nil
-	}
-	var conversationHistory string
-	if len(conversationData.Messages) > 0 {
-		conversationHistory = buildConversationContext(conversationData.Messages)
-	}
+    // ---- 1) Build chat history ------------------------------------------------
+    conversationKey := fmt.Sprintf("user:%d:conversation", userID)
+    conv, _ := getConversationFromCache(ctx, conn, userID, conversationKey) // ignore "not found" errors
+    var history string
+    if conv != nil && len(conv.Messages) > 0 {
+        history = buildConversationContext(conv.Messages)
+    }
 
-	geminiRes, err := getGeminiFunctionThinking(ctx, conn, "suggestedQueriesPrompt", conversationHistory)
-	if err != nil {
-		return nil, fmt.Errorf("error getting suggested queries from Gemini: %w", err)
-	}
-	jsonStartIdx := strings.Index(geminiRes.Text, "{")
-	jsonEndIdx := strings.LastIndex(geminiRes.Text, "}")
-	if jsonStartIdx == -1 || jsonEndIdx == -1 {
-		return GetSuggestedQueriesResponse{}, nil
-	}
-	jsonBlock := geminiRes.Text[jsonStartIdx : jsonEndIdx+1]
-	var response GetSuggestedQueriesResponse
-	if err := json.Unmarshal([]byte(jsonBlock), &response); err != nil {
-		return GetSuggestedQueriesResponse{}, fmt.Errorf("error unmarshalling suggested queries: %w", err)
-	}
-	return response, nil
+    // ---- 2) Load the prompt template ------------------------------------------
+    // Adjusted path relative to the /app working directory inside the container
+    const promptPath = "tools/prompts/suggestedQueriesPrompt.txt"
 
-}*/
+    // Log the current working directory to debug file path issues
+    wd, err := os.Getwd()
+    if err != nil {
+        log.Printf("Error getting working directory: %v", err)
+    } else {
+        log.Printf("Attempting to read prompt file from path: %s (relative to working directory: %s)", promptPath, wd)
+    }
+
+    tplBytes, err := os.ReadFile(promptPath)
+    if err != nil {
+        // Log the error with more context
+        log.Printf("Error reading prompt file %q from working directory %q: %v", promptPath, wd, err)
+        return nil, fmt.Errorf("read prompt template %q: %w", promptPath, err)
+    }
+    tpl := prompts.NewPromptTemplate(string(tplBytes), []string{"history"})
+
+    // ---- 3) Initialise the Gemini LLM -----------------------------------------
+    apiKey, err := conn.GetGeminiKey()
+    if err != nil {
+        return nil, fmt.Errorf("get Gemini key: %w", err)
+    }
+    llm, err := googleai.New(
+        ctx,
+        googleai.WithAPIKey(apiKey),
+        googleai.WithDefaultModel("gemini-1.5-pro-latest"),
+    )
+    if err != nil {
+        return nil, fmt.Errorf("init Gemini client: %w", err)
+    }
+
+    // ---- 4) Build & run the chain ---------------------------------------------
+    chain := chains.NewLLMChain(llm, tpl) // simple LLMChain :contentReference[oaicite:0]{index=0}
+
+    // Set the output parser and key directly on the chain instance
+    chain.OutputParser = outputparser.NewSimple()
+    chain.OutputKey = "text" // Assuming the LLM response key is "text"
+
+    out, err := chains.Call(
+        ctx,
+        chain,
+        map[string]any{"history": history},
+        // chains.WithOutputParser(outputparser.NewSimple()), // Removed from here
+        chains.WithTemperature(0.4),
+    )
+    if err != nil {
+        return nil, fmt.Errorf("Gemini call failed: %w", err)
+    }
+
+    // ---- 5) Parse JSON block from the LLM response ----------------------------
+    text := out["text"].(string)
+    start, end := strings.Index(text, "{"), strings.LastIndex(text, "}")
+    if start == -1 || end == -1 || end <= start {
+        return GetSuggestedQueriesResponse{}, nil // model didn’t return JSON
+    }
+
+    var resp GetSuggestedQueriesResponse
+    if err := json.Unmarshal([]byte(text[start:end+1]), &resp); err != nil {
+        return GetSuggestedQueriesResponse{}, fmt.Errorf("unmarshal suggestions: %w", err)
+    }
+    return resp, nil
+}
