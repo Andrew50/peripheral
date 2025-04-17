@@ -3,9 +3,9 @@
 	import ChartContainer from '$lib/features/chart/chartContainer.svelte';
 	import Alerts from '$lib/features/alerts/alert.svelte';
 	import RightClick from '$lib/utils/popups/rightClick.svelte';
-	import Setup from '$lib/utils/popups/setup.svelte';
+	import StrategiesPopup from '$lib/utils/popups/strategiesPopup.svelte';
 	import Input from '$lib/utils/popups/input.svelte';
-	import Similar from '$lib/features/similar/similar.svelte';
+	//import Similar from '$lib/features/similar/similar.svelte';
 	import Study from '$lib/features/study.svelte';
 	import Watchlist from '$lib/features/watchlist.svelte';
 	//import TickerInfo from '$lib/features/quotes/tickerInfo.svelte';
@@ -16,7 +16,7 @@
 	// Windows that will be opened in draggable divs
 	import Screener from '$lib/features/screen.svelte';
 	import Account from '$lib/features/account.svelte';
-	import Setups from '$lib/features/setups/setups.svelte';
+	import Strategies from '$lib/features/strategies/strategies.svelte';
 	import Settings from '$lib/features/settings.svelte';
 	import Newsfeed from '$lib/features/newsfeed.svelte';
 	import LLMSummary from '$lib/features/llmSummary.svelte';
@@ -69,7 +69,7 @@
 		| 'screener'
 		| 'account'
 		| 'options'
-		| 'setups'
+		| 'strategies'
 		| 'settings'
 		| 'newsfeed'
 		| 'query'
@@ -787,7 +787,7 @@
 	<!-- Global Popups -->
 	<Input />
 	<RightClick />
-	<Setup />
+	<StrategiesPopup />
 	<Algo />
 	<!-- Main area wrapper -->
 	<div class="app-container">
@@ -829,10 +829,8 @@
 							<div class="window-content">
 								{#if w.type === 'screener'}
 									<Screener />
-								{:else if w.type === 'options'}
-									<Options />
-								{:else if w.type === 'setups'}
-									<Setups />
+								{:else if w.type === 'strategies'}
+									<Strategies />
 								{:else if w.type === 'account'}
 									<Account />
 								{:else if w.type === 'settings'}
@@ -930,24 +928,12 @@
 			>
 				Screener
 			</button>
-			<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'active') ? 'active' : ''}"
-				on:click={() => openBottomWindow('active')}
-			>
-				Active
-			</button>
-			<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'options') ? 'active' : ''}"
-				on:click={() => openBottomWindow('options')}
-			>
-				Options
-			</button>
-			<button
+			<!--<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'setups') ? 'active' : ''}"
 				on:click={() => openBottomWindow('setups')}
 			>
 				Setups
-			</button>
+			</button>-->
 			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'account') ? 'active' : ''}"
 				on:click={() => openBottomWindow('account')}

@@ -4,16 +4,18 @@ CREATE TABLE IF NOT EXISTS schema_versions (
     applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     description TEXT
 );
--- Insert hardcoded entry for migrations up to version 10, when adding migrations 
--- to the init.sql file, update the version number here
+
+-------------
+-- SET CURRENT SCHEMA VERSION
+-------------
 INSERT INTO schema_versions (version, description)
 VALUES (
-        14,
-        'Initial schema version - all migrations up to 14 included in init.sql'
+        16, 
+        'Initial schema version'
     ) ON CONFLICT (version) DO NOTHING;
--- Schema versions will be populated by the migration script--init.sql
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 CREATE TABLE users (
     userId SERIAL PRIMARY KEY,
     username VARCHAR(100) UNIQUE NOT NULL,
@@ -26,57 +28,6 @@ CREATE TABLE users (
 );
 CREATE INDEX idxUsers ON users (username, password);
 CREATE INDEX idxUserAuthType ON users(auth_type);
-
--- Added in migration 14 (replaces setups)
-create table strategies (
-    strategyId serial primary key,
-    userId int references users(userId) on delete cascade,
-    name varchar(50) not null,
-    criteria JSON,
-    unique (userId, name)
-);
-CREATE INDEX idxStrategiesByUserId on strategies(strategyId);
-CREATE INDEX idxStrategiesByStrategyId on strategies(strategyId);
-
--- Added in migration 14 (replaces old studies)
-CREATE TABLE studies (
-    studyId serial primary key,
-    userId serial references users(userId) on delete cascade,
-    securityId int, -- optional security id references securities(securityId), --cant because not unique
-    strategyId int, -- referneces strategies(strategyId) but can be null
-    timestamp timestamp,
-    tradeId int,
-    completed boolean not null default false,
-    entry json,
-    unique(userId, securityId, strategyId, timestamp, tradeId)
-);
-CREATE INDEX idxStudiesByUserId on studies(userId);
-CREATE INDEX idxStudiesByTagUserId on studies(userId,securityId,strategyId,timestamp,tradeId);
-
--- Added in migration 14 (replaces part of alerts)
-CREATE TABLE priceAlerts (
-    priceAlertId SERIAL PRIMARY KEY,
-    userId SERIAL references users(userId),
-    active BOOLEAN NOT NULL DEFAULT false,
-    price DECIMAL(10, 4),
-    direction Boolean,
-    securityID serial references securities(securityId)
-);
-CREATE INDEX idxPriceAlertByUserId on priceAlerts(userId);
-CREATE INDEX idxPriceAlertByUserIdSecurityId on priceAlerts(userId,securityId);
-
--- Added in migration 14 (replaces part of alerts)
-CREATE TABLE strategyAlerts (
-    strategyAlertId SERIAL PRIMARY KEY,
-    userId SERIAL references users(userId),
-    active BOOLEAN NOT NULL DEFAULT false,
-    strategyId serial references strategies(strategyId),
-    direction Boolean,
-    securityID serial references securities(securityId)
-);
-CREATE INDEX idxStrategyAlertByUserId on strategyAlerts(userId);
-CREATE INDEX idxStrategyAlertByUserIdSecurityId on strategyAlerts(userId,securityId);
-
 CREATE TABLE securities (
     securityid SERIAL,
     ticker varchar(10) not null,
@@ -108,37 +59,59 @@ CREATE INDEX trgm_idx_securities_ticker ON securities USING gin (ticker gin_trgm
 create index idxTickerDateRange on securities (ticker, minDate, maxDate);
 CREATE TABLE watchlists (
     watchlistId serial primary key,
-    userId serial references users(userId) on delete cascade,
+    userId int references users(userId) on delete cascade,
     watchlistName varchar(50) not null,
     unique(watchlistName, userId)
 );
 CREATE INDEX idxWatchlistIdUserId on watchlists(watchlistId, userId);
 CREATE TABLE watchlistItems (
     watchlistItemId serial primary key,
-    watchlistId serial references watchlists(watchlistId) on delete cascade,
-    securityId int,
-    --serial references securities(securityId) on delete cascade,
+    watchlistId int references watchlists(watchlistId) on delete cascade,
+    securityId int, --serial references securities(securityId) on delete cascade,
     unique (watchlistId, securityId)
 );
 CREATE INDEX idxWatchlistId on watchlistItems(watchlistId);
 -- The old alerts table is dropped and replaced by priceAlerts and strategyAlerts in migration 14
-CREATE TABLE alertLogs (
-    alertLogId serial primary key,
-    -- alertId now refers conceptually to either priceAlertId or strategyAlertId,
-    -- but we can't use a direct FK constraint easily. This might need application logic adjustment.
-    -- Consider adding separate FKs or a type column if strict FKs are needed.
-    alertId int, -- Was: serial references alerts(alertId) on delete cascade,
-    timestamp timestamp not null,
-    securityId INT,
-    --references sercurities
-    unique(alertId, timestamp, securityId)
+
+create table strategies (
+    strategyId serial primary key,
+    userId int references users(userId) on delete cascade,
+    name varchar(50) not null,
+    criteria JSON,
+    alertActive bool not null default false,
+    unique (userId, name)
 );
-CREATE INDEX idxAlertLogId on alertLogs(alertLogId);
+CREATE INDEX idxStrategiesByUserId ON strategies(strategyId);
+CREATE TABLE studies (
+    studyId serial primary key,
+    userId int references users(userId) on delete cascade,
+    securityId int, --security id isnt unique,
+    strategyId int null references strategies(strategyId),
+    timestamp timestamp, 
+    tradeId int,
+    completed boolean not null default false,
+    entry json,
+    unique(userId, securityId, strategyId, timestamp, tradeId)
+);
+CREATE INDEX idxStudiesByUserId on studies(userId);
+CREATE INDEX idxStudiesByTagUserId on studies(userId,securityId,strategyId,timestamp,tradeId);
+
+CREATE TABLE alerts (
+    alertId SERIAL PRIMARY KEY,
+    userId int references users(userId),
+    active BOOLEAN NOT NULL DEFAULT false,
+    triggeredTimestamp timestamp default null,
+    price DECIMAL(10, 4),
+    direction Boolean,
+    securityId int-- references securities(securityId)
+);
+CREATE INDEX idxalertByUserId on alerts(userId);
+CREATE INDEX idxalertByUserIdSecurityId on alerts(userId,securityId);
+
 CREATE TABLE horizontal_lines (
     id serial primary key,
-    userId serial references users(userId) on delete cascade,
-    securityId int,
-    --references securities(securityId),
+    userId int references users(userId) on delete cascade,
+    securityId int, --references securities(securityId),
     price float not null,
     color varchar(20) DEFAULT '#FFFFFF',
     -- Default to white
