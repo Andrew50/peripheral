@@ -268,7 +268,7 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 		}
 
 		// Execute the requested function with sanitized input
-		result, err := privateFunc[req.Function].Handler(conn, userId, req.Arguments)
+		result, err := privateFunc[req.Function].Function(conn, userId, req.Arguments)
 		if handleError(w, err, fmt.Sprintf("private_handler: %s", req.Function)) {
 			return
 		}
