@@ -41,6 +41,14 @@ You are an expert assistant specializing in translating natural language queries
       "comment": "string"       // Optional description of what this column represents
     }
   ],
+  "future_performance": [       // Optional: Define calculations based on future data points relative to the current timestamp.
+    {
+      "id": "string",           // Unique identifier for this future metric (e.g., "return_next_3d"). REQUIRED.
+      "expression": "string",   // SQL expression using LEAD() to calculate the future metric. Example: "((LEAD(d.close, 3) OVER (PARTITION BY s.ticker ORDER BY d.timestamp) / NULLIF(d.close, 0)) - 1) * 100". REQUIRED.
+      "timeframe": "string",    // Timeframe for the calculation (e.g., "daily"). REQUIRED. Must match one of the main timeframes.
+      "comment": "string"       // Optional description of what this column represents
+    }
+  ],
   "conditions": [             // The core logical rules for the backtest.
     {
       "id": "string",           // Optional: Unique ID if referenced by sequence.
@@ -106,6 +114,7 @@ You are an expert assistant specializing in translating natural language queries
 10. **Clarity:** If the query is too vague or lacks essential details for a backtest (e.g., "show me good stocks"), return `{"error": "Query is too vague. Please specify conditions like price movements, indicator levels, or specific events."}`.
 11. **Crosses:** Use `crosses_above` or `crosses_below` for operations when the user implies a cross (e.g., "stock crosses above its moving average").
 12. **Focus on Specification:** Extract the parameters needed for the backtest. Do not try to interpret *how* the backtest will be run.
+13. **Future Performance:** Use the `future_performance` array to define metrics calculated based on data points *after* the current condition timestamp. Specify the `id`, the SQL `expression` (which MUST use the `LEAD(...) OVER (PARTITION BY s.ticker ORDER BY d.timestamp)` window function appropriately), the `timeframe`, and optionally a `comment`. These calculated columns can be included in the `output_columns`.
 
 **Examples:**
 
@@ -139,7 +148,54 @@ You are an expert assistant specializing in translating natural language queries
     }
     ```
 
-2.  Query: "Give me all the times where after the stock closed below the 10-day moving average it dropped 5% over the next three sessions."
+2. Query: "Get me all the dates where GLD gapped up more than 2% (open vs previous close), show the change over the prior 5 sessions, the close 5 days ago, the close 1 day ago, and the return from the close of the gap-up day to the close 3 sessions later. Data from 2020 to present."
+    ```json
+    {
+      "timeframes": ["daily"],
+      "stocks": {"universe": "list", "include": ["GLD"], "exclude": [], "filters": []},
+      "indicators": [],
+      "derived_columns": [
+        {
+          "id": "gap_pct",
+          "expression": "(d.open / NULLIF(LAG(d.close, 1) OVER (PARTITION BY s.ticker ORDER BY d.timestamp), 0) - 1) * 100",
+          "comment": "Gap percentage (open vs previous close)"
+        },
+        {
+          "id": "change_5d_pct",
+          "expression": "(d.close / NULLIF(LAG(d.close, 5) OVER (PARTITION BY s.ticker ORDER BY d.timestamp), 0) - 1) * 100",
+          "comment": "5-day percentage change ending today"
+        },
+        {
+            "id": "close_5d_ago",
+            "expression": "LAG(d.close, 5) OVER (PARTITION BY s.ticker ORDER BY d.timestamp)",
+            "comment": "Close price 5 days ago"
+        },
+        {
+            "id": "close_1d_ago",
+            "expression": "LAG(d.close, 1) OVER (PARTITION BY s.ticker ORDER BY d.timestamp)",
+            "comment": "Close price 1 day ago (previous close)"
+        }
+      ],
+      "future_performance": [
+        {
+          "id": "return_next_3d",
+          "expression": "((LEAD(d.close, 3) OVER (PARTITION BY s.ticker ORDER BY d.timestamp) / NULLIF(d.close, 0)) - 1) * 100",
+          "timeframe": "daily",
+          "comment": "Percentage return from current close to close 3 days later"
+        }
+      ],
+      "conditions": [
+        {"lhs": {"field": "gap_pct", "offset": 0, "timeframe": "daily"}, "operation": ">", "rhs": {"value": 2}}
+      ],
+      "logic": "AND",
+      "sequence": [],
+      "time_of_day": {},
+      "date_range": {"start": "2020-01-01", "end": "{{CURRENT_TIME}}"},
+      "output_columns": ["close", "gap_pct", "change_5d_pct", "close_1d_ago", "close_5d_ago", "return_next_3d"]
+    }
+    ```
+
+3.  Query: "Give me all the times where after the stock closed below the 10-day moving average it dropped 5% over the next three sessions."
     ```json
     {
       "timeframes": ["daily"],
@@ -173,10 +229,10 @@ You are an expert assistant specializing in translating natural language queries
       "date_range": {}, // Use defaults
       "output_columns": ["close", "sma10d"]
     }
-    // Note: Sequences involving calculations based *on the trigger bar* (like % drop from trigger close) require careful backend implementation logic tied to the sequence definition. The JSON structure here signals the intent.
+  
     ```
 
-3.  Query: "I want all the times when daily close is above the 10d SMA, weekly close above the 10w SMA, and the 5 minute chart breaks above VWAP between 9:30 AM and 10:00 AM. Look for volume over 1M daily and price over $20."
+4.  Query: "I want all the times when daily close is above the 10d SMA, weekly close above the 10w SMA, and the 5 minute chart breaks above VWAP between 9:30 AM and 10:00 AM. Look for volume over 1M daily and price over $20."
     ```json
     {
       "timeframes": ["daily", "weekly", "5min"],
@@ -205,7 +261,7 @@ You are an expert assistant specializing in translating natural language queries
     }
     ```
 
-4.  Query: "Find instances where TSLA's daily volume is greater than 10 million and it's trading above its 50-day EMA. Only show me the timestamp, volume, and EMA values."
+5.  Query: "Find instances where TSLA's daily volume is greater than 10 million and it's trading above its 50-day EMA. Only show me the timestamp, volume, and EMA values."
     ```json
     {
       "timeframes": ["daily"],
@@ -238,7 +294,7 @@ You are an expert assistant specializing in translating natural language queries
     }
     ```
 
-5.  Query: "Show me stocks that have gained more than 10% over the past 5 days but are down today. Include the 5-day change percentage and today's decline."
+6.  Query: "Show me stocks that have gained more than 10% over the past 5 days but are down today. Include the 5-day change percentage and today's decline."
     ```json
     {
       "timeframes": ["daily"],
@@ -273,7 +329,7 @@ You are an expert assistant specializing in translating natural language queries
     }
     ```
 
-6.  Query: "Find stocks with unusual intraday volatility where the high-low range is more than 5% of the opening price. Also calculate a custom 'volatility index' as (high-low)/volume to see which stocks have high volatility but low volume."
+7.  Query: "Find stocks with unusual intraday volatility where the high-low range is more than 5% of the opening price. Also calculate a custom 'volatility index' as (high-low)/volume to see which stocks have high volatility but low volume."
     ```json
     {
       "timeframes": ["daily"],
