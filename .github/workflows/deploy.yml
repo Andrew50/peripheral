@@ -110,7 +110,7 @@ jobs:
         with:
           ref: ${{ env.CHECKOUT_REF }}
           token: ${{ github.token }}
-          #fetch-depth: 1
+          fetch-depth: 1
           lfs: false
       
       - name: Show Git Information
