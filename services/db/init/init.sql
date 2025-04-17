@@ -8,8 +8,8 @@ CREATE TABLE IF NOT EXISTS schema_versions (
 -- to the init.sql file, update the version number here
 INSERT INTO schema_versions (version, description)
 VALUES (
-        11,
-        'Initial schema version - all migrations up to 11 included in init.sql'
+        14,
+        'Initial schema version - all migrations up to 14 included in init.sql'
     ) ON CONFLICT (version) DO NOTHING;
 -- Schema versions will be populated by the migration script--init.sql
 CREATE EXTENSION IF NOT EXISTS timescaledb;
@@ -26,6 +26,57 @@ CREATE TABLE users (
 );
 CREATE INDEX idxUsers ON users (username, password);
 CREATE INDEX idxUserAuthType ON users(auth_type);
+
+-- Added in migration 14 (replaces setups)
+create table strategies (
+    strategyId serial primary key,
+    userId int references users(userId) on delete cascade,
+    name varchar(50) not null,
+    criteria JSON,
+    unique (userId, name)
+);
+CREATE INDEX idxStrategiesByUserId on strategies(strategyId);
+CREATE INDEX idxStrategiesByStrategyId on strategies(strategyId);
+
+-- Added in migration 14 (replaces old studies)
+CREATE TABLE studies (
+    studyId serial primary key,
+    userId serial references users(userId) on delete cascade,
+    securityId int, -- optional security id references securities(securityId), --cant because not unique
+    strategyId int, -- referneces strategies(strategyId) but can be null
+    timestamp timestamp,
+    tradeId int,
+    completed boolean not null default false,
+    entry json,
+    unique(userId, securityId, strategyId, timestamp, tradeId)
+);
+CREATE INDEX idxStudiesByUserId on studies(userId);
+CREATE INDEX idxStudiesByTagUserId on studies(userId,securityId,strategyId,timestamp,tradeId);
+
+-- Added in migration 14 (replaces part of alerts)
+CREATE TABLE priceAlerts (
+    priceAlertId SERIAL PRIMARY KEY,
+    userId SERIAL references users(userId),
+    active BOOLEAN NOT NULL DEFAULT false,
+    price DECIMAL(10, 4),
+    direction Boolean,
+    securityID serial references securities(securityId)
+);
+CREATE INDEX idxPriceAlertByUserId on priceAlerts(userId);
+CREATE INDEX idxPriceAlertByUserIdSecurityId on priceAlerts(userId,securityId);
+
+-- Added in migration 14 (replaces part of alerts)
+CREATE TABLE strategyAlerts (
+    strategyAlertId SERIAL PRIMARY KEY,
+    userId SERIAL references users(userId),
+    active BOOLEAN NOT NULL DEFAULT false,
+    strategyId serial references strategies(strategyId),
+    direction Boolean,
+    securityID serial references securities(securityId)
+);
+CREATE INDEX idxStrategyAlertByUserId on strategyAlerts(userId);
+CREATE INDEX idxStrategyAlertByUserIdSecurityId on strategyAlerts(userId,securityId);
+
 CREATE TABLE securities (
     securityid SERIAL,
     ticker varchar(10) not null,
@@ -55,56 +106,6 @@ CREATE TABLE securities (
 );
 CREATE INDEX trgm_idx_securities_ticker ON securities USING gin (ticker gin_trgm_ops);
 create index idxTickerDateRange on securities (ticker, minDate, maxDate);
-create table setups (
-    setupId serial primary key,
-    userId int references users(userId) on delete cascade,
-    name varchar(50) not null,
-    timeframe varchar(10) not null,
-    bars int not null,
-    threshold int not null,
-    modelVersion int not null default 0,
-    score int default 0,
-    sampleSize int default 0,
-    untrainedSamples int default 0,
-    dolvol float not null,
-    adr float not null,
-    mcap float not null,
-    unique (userId, name)
-);
-create index idxUserIdName on setups(userId, name);
-create table samples (
-    sampleId SERIAL PRIMARY KEY,
-    setupId serial references setups(setupId) on delete cascade,
-    securityId int,
-    -- references securities(securityId), -- not unique
-    timestamp timestamp not null,
-    label boolean,
-    unique (securityId, timestamp, setupId)
-);
-create index idxSetupId on samples(setupId);
-CREATE TABLE studies (
-    studyId serial primary key,
-    userId serial references users(userId) on delete cascade,
-    securityId int,
-    --references securities(securityId), --cant because not unique
-    setupId serial references setups(setupId),
-    --no action
-    timestamp timestamp not null,
-    completed boolean not null default false,
-    entry json,
-    unique(userId, securityId, timestamp, setupId)
-);
-create index idxUserIdCompleted on studies(userId, completed);
-CREATE TABLE journals (
-    journalId serial primary key,
-    userId serial references users(userId),
-    timestamp timestamp not null,
-    completed boolean not null default false,
-    entry json,
-    unique (timestamp, userId)
-);
-CREATE INDEX idxJournalIdUserId on journals(journalId, userId);
-CREATE INDEX idxTimestamp on journals(timestamp);
 CREATE TABLE watchlists (
     watchlistId serial primary key,
     userId serial references users(userId) on delete cascade,
@@ -120,50 +121,13 @@ CREATE TABLE watchlistItems (
     unique (watchlistId, securityId)
 );
 CREATE INDEX idxWatchlistId on watchlistItems(watchlistId);
-/*CREATE TABLE algos (
- algoId serial primary key,
- algoName VARCHAR(50) not null
- );*/
-CREATE TABLE alerts (
-    alertId SERIAL PRIMARY KEY,
-    userId SERIAL REFERENCES users(userId) ON DELETE CASCADE,
-    active BOOLEAN NOT NULL DEFAULT false,
-    alertType VARCHAR(10) NOT NULL CHECK (alertType IN ('price', 'setup', 'algo')),
-    -- Restrict the allowed alert types
-    setupId INT REFERENCES setups(setupId) ON DELETE CASCADE,
-    --algoId INT REFERENCES algos(algoId) ON DELETE CASCADE,
-    algoId INT,
-    price DECIMAL(10, 4),
-    direction Boolean,
-    securityID INT,
-    CONSTRAINT chk_alert_price_or_setup CHECK (
-        (
-            alertType = 'price'
-            AND price IS NOT NULL
-            AND securityID IS NOT NULL
-            AND direction IS NOT NULL
-            AND algoId IS NULL
-            AND setupId IS NULL
-        )
-        OR (
-            alertType = 'setup'
-            AND setupId IS NOT NULL
-            AND algoId IS NULL
-            AND price IS NULL
-            AND securityID IS NULL
-        )
-        OR (
-            alertType = 'algo'
-            AND algoId IS NOT NULL
-            AND setupId IS NULL
-            AND price IS NULL
-        )
-    )
-);
-CREATE INDEX idxAlertByUserId on alerts(userId);
+-- The old alerts table is dropped and replaced by priceAlerts and strategyAlerts in migration 14
 CREATE TABLE alertLogs (
     alertLogId serial primary key,
-    alertId serial references alerts(alertId) on delete cascade,
+    -- alertId now refers conceptually to either priceAlertId or strategyAlertId,
+    -- but we can't use a direct FK constraint easily. This might need application logic adjustment.
+    -- Consider adding separate FKs or a type column if strict FKs are needed.
+    alertId int, -- Was: serial references alerts(alertId) on delete cascade,
     timestamp timestamp not null,
     securityId INT,
     --references sercurities
@@ -213,24 +177,6 @@ CREATE TABLE trade_executions (
     direction VARCHAR(10) NOT NULL,
     tradeId INT REFERENCES trades(tradeId)
 );
-CREATE TABLE notes (
-    noteId SERIAL PRIMARY KEY,
-    userId INT REFERENCES users(userId) ON DELETE CASCADE,
-    title VARCHAR(255) NOT NULL,
-    content TEXT,
-    category VARCHAR(100),
-    tags TEXT [] DEFAULT ARRAY []::TEXT [],
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    is_pinned BOOLEAN DEFAULT FALSE,
-    is_archived BOOLEAN DEFAULT FALSE
-);
-CREATE INDEX idx_notes_userId ON notes(userId);
-CREATE INDEX idx_notes_category ON notes(category);
-CREATE INDEX idx_notes_created_at ON notes(created_at);
-CREATE INDEX idx_notes_is_pinned ON notes(is_pinned);
-CREATE INDEX idx_notes_is_archived ON notes(is_archived);
-CREATE INDEX idx_notes_tags ON notes USING GIN(tags);
 CREATE INDEX idxUserIdSecurityIdPrice on horizontal_lines(userId, securityId, price);
 -- Create the daily OHLCV table for storing time-series market data
 CREATE TABLE IF NOT EXISTS daily_ohlcv (
@@ -264,48 +210,6 @@ VALUES (
         'guest-password',
         'guest@atlantis.local',
         'guest'
-    );
-Insert into setups (
-        setupid,
-        userid,
-        name,
-        timeframe,
-        bars,
-        threshold,
-        dolvol,
-        adr,
-        mcap
-    )
-values (1, 0, 'ep', '1d', 30, 30, 5000000, 2.5, 0),
-    (2, 0, 'f', '1d', 60, 30, 5000000, 2.5, 0),
-    (3, 0, 'mr', '1d', 30, 30, 5000000, 2.5, 0),
-    (4, 0, 'nep', '1d', 30, 30, 5000000, 2.5, 0),
-    (5, 0, 'nf', '1d', 60, 30, 5000000, 2.5, 0),
-    (6, 0, 'np', '1d', 30, 30, 5000000, 2.5, 0),
-    (7, 0, 'p', '1d', 30, 30, 5000000, 2.5, 0);
-alter sequence setups_setupid_seq restart with 8;
-CREATE TEMP TABLE temp (
-    setupId INTEGER NOT NULL,
-    ticker VARCHAR(10) NOT NULL,
-    timestamp INTEGER NOT NULL,
-    label BOOLEAN
-);
-COPY temp(setupId, ticker, timestamp, label)
-FROM '/docker-entrypoint-initdb.d/samples.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');
-INSERT INTO samples (setupId, securityId, timestamp, label)
-SELECT ts.setupId,
-    sec.securityId,
-    TO_TIMESTAMP(ts.timestamp),
-    ts.label
-FROM temp ts
-    JOIN securities sec ON ts.ticker = sec.ticker
-WHERE (
-        sec.minDate <= TO_TIMESTAMP(ts.timestamp)
-        OR sec.minDate IS NULL
-    )
-    AND (
-        sec.maxDate > TO_TIMESTAMP(ts.timestamp)
-        OR sec.maxDate IS NULL
     );
 CREATE UNIQUE INDEX idx_users_email ON users(email)
 WHERE email IS NOT NULL;

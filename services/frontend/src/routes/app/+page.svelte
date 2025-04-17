@@ -7,7 +7,6 @@
 	import Input from '$lib/utils/popups/input.svelte';
 	import Similar from '$lib/features/similar/similar.svelte';
 	import Study from '$lib/features/study.svelte';
-	import Journal from '$lib/features/journal.svelte';
 	import Watchlist from '$lib/features/watchlist.svelte';
 	//import TickerInfo from '$lib/features/quotes/tickerInfo.svelte';
 	import Quote from '$lib/features/quotes/quote.svelte';
@@ -17,9 +16,7 @@
 	// Windows that will be opened in draggable divs
 	import Screener from '$lib/features/screen.svelte';
 	import Account from '$lib/features/account.svelte';
-	import Active from '$lib/features/active.svelte';
 	import Setups from '$lib/features/setups/setups.svelte';
-	import Options from '$lib/features/options.svelte';
 	import Settings from '$lib/features/settings.svelte';
 	import Newsfeed from '$lib/features/newsfeed.svelte';
 	import LLMSummary from '$lib/features/llmSummary.svelte';
@@ -58,11 +55,11 @@
 	// Add new import for Query component
 	import Query from '$lib/features/query.svelte';
 
-	type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'journal' | 'similar';
+	type Menu = 'none' | 'watchlist' | 'alerts' | 'study';
 
 	let lastSidebarMenu: Menu | null = null;
 	let sidebarWidth = 0;
-	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'journal', 'similar'];
+	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study'];
 
 	// Initialize chartWidth with a default value
 	let chartWidth = 0;
@@ -71,7 +68,6 @@
 	type BottomWindowType =
 		| 'screener'
 		| 'account'
-		| 'active'
 		| 'options'
 		| 'setups'
 		| 'settings'
@@ -833,8 +829,6 @@
 							<div class="window-content">
 								{#if w.type === 'screener'}
 									<Screener />
-								{:else if w.type === 'active'}
-									<Active />
 								{:else if w.type === 'options'}
 									<Options />
 								{:else if w.type === 'setups'}
@@ -885,10 +879,6 @@
 								<Alerts />
 							{:else if $activeMenu === 'study'}
 								<Study />
-							{:else if $activeMenu === 'journal'}
-								<Journal />
-							{:else if $activeMenu === 'similar'}
-								<Similar />
 							{/if}
 						</div>
 

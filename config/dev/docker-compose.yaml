@@ -66,23 +66,6 @@ services:
     networks:
       - compose_network
 
-  tf:
-    build:
-      context: ../../services/tf
-      dockerfile: Dockerfile.dev
-    restart: unless-stopped
-    platform: ${PLATFORM:-linux/amd64}
-    ports:
-      - "8501:8501"
-      - "8500:8500"
-    volumes:
-      - tf:/models
-    networks:
-      - compose_network
-    environment:
-      - MODEL_NAME=1
-      - MODEL_VERSION=9
-
   worker:
     build:
       context: ../../services/worker
