@@ -203,6 +203,10 @@
 	// Add new property to track alert lines
 	let alertLines: AlertLine[] = [];
 
+	// State for quote line visibility
+	let isViewingLiveData = true; // Assume true initially
+	let lastQuoteData: QuoteData | null = null;
+
 	let arrowSeries: any = null; // Initialize as null
 	let eventSeries: ISeriesApi<'Custom', Time, EventMarker>;
 	let eventMarkerView: EventMarkersPaneView;
@@ -258,6 +262,27 @@
 		const date = new Date(timestamp);
 		const minutes = date.getHours() * 60 + date.getMinutes();
 		return minutes < 570 || minutes >= 960; // 9:30 AM - 4:00 PM EST
+	}
+
+	// Helper function to clear quote lines
+	function clearQuoteLines() {
+		if (bidLine && askLine) {
+			bidLine.setData([]);
+			askLine.setData([]);
+		}
+	}
+
+	// Helper function to apply the last known quote
+	function applyLastQuote() {
+		// Assumes isViewingLiveData is already true when called
+		if (lastQuoteData && bidLine && askLine) {
+			const candle = chartCandleSeries?.data()?.at(-1);
+			if (candle) {
+				const time = candle.time;
+				bidLine.setData([{ time: time, value: lastQuoteData.bidPrice }]);
+				askLine.setData([{ time: time, value: lastQuoteData.askPrice }]);
+			}
+		}
 	}
 
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
@@ -486,7 +511,7 @@
 						const visibleRange = chart.timeScale().getVisibleRange();
 						const vrFrom = visibleRange?.from;
 						const vrTo = visibleRange?.to;
-
+						console.log('visibleRange', vrFrom, vrTo);
 						// Only set visible range if both from and to values are valid
 						chartCandleSeries.setData(newCandleData);
 						chartVolumeSeries.setData(newVolumeData);
@@ -628,11 +653,21 @@
 		if (!data?.bidPrice || !data?.askPrice) {
 			return;
 		}
+		// Always store the latest quote
+		lastQuoteData = data;
+
+		// Only update lines if viewing live data
+		if (isViewingLiveData) {
+			applyLastQuote();
+		}
+		/*
 		const candle = chartCandleSeries.data().at(-1);
 		if (!candle) return;
 		const time = candle.time;
+		console.log('updateLatestQuote', data);
 		bidLine.setData([{ time: time, value: data.bidPrice }]);
 		askLine.setData([{ time: time, value: data.askPrice }]);
+		*/
 	}
 	// Create a horizontal line at the current crosshair position (Y-coordinate)
 
@@ -1088,6 +1123,16 @@
 			...updatedReq
 		};
 
+		// Determine if viewing live data based on timestamp
+		isViewingLiveData = updatedReq.timestamp === 0;
+		// Clear quote lines if not viewing live data initially
+		if (!isViewingLiveData) {
+			clearQuoteLines();
+		} else if (lastQuoteData) {
+			// If switching back to live view and we have quote data, apply it (might be applied again later)
+			applyLastQuote();
+		}
+
 		if (
 			typeof chartId === 'number' &&
 			typeof updatedReq.chartId === 'number' &&
@@ -1126,9 +1171,6 @@
 		if ('trades' in newReq && Array.isArray(newReq.trades)) {
 			updatedReq.trades = newReq.trades;
 		}
-
-		backendLoadChartData(updatedReq);
-
 		// Clear existing alert lines when changing tickers
 		if (chartCandleSeries) {
 			alertLines.forEach((line) => {
@@ -1150,6 +1192,9 @@
 			sessionHighlighting = new SessionHighlighting(createDefaultSessionHighlighter());
 			chartCandleSeries.attachPrimitive(sessionHighlighting);
 		}
+		backendLoadChartData(updatedReq);
+
+		
 	}
 
 	onMount(() => {
@@ -1538,40 +1583,37 @@
 			}
 			const barsOnScreen = Math.floor(logicalRange.to) - Math.ceil(logicalRange.from);
 			const bufferInScreenSizes = 0.7;
-			if (logicalRange.from / barsOnScreen < bufferInScreenSizes) {
-				if (chartEarliestDataReached) {
-					return;
+
+
+			if (logicalRange.from > 10 && logicalRange.from / barsOnScreen < bufferInScreenSizes) {
+				if (!chartEarliestDataReached) {
+					// Get the earliest timestamp from current data
+					const earliestBar = chartCandleSeries.data()[0];
+					if (!earliestBar) return;
+
+					// Convert the earliest time from EST seconds to UTC milliseconds for the API request
+					const earliestTimestamp = ESTSecondstoUTCMillis(earliestBar.time as UTCTimestamp);
+
+					// Make sure to include extendedHours in the request
+					const inst: CoreInstance & { extendedHours?: boolean } = {
+						ticker: currentChartInstance.ticker,
+						timestamp: earliestTimestamp,
+						timeframe: currentChartInstance.timeframe,
+						securityId: currentChartInstance.securityId,
+						price: currentChartInstance.price,
+						extendedHours: currentChartInstance.extendedHours
+					};
+
+					backendLoadChartData({
+						...inst,
+						bars: Math.floor(bufferInScreenSizes * barsOnScreen) + 100,
+						direction: 'backward',
+						requestType: 'loadAdditionalData',
+						includeLastBar: true
+					});
 				}
-				('2');
-
-				// Get the earliest timestamp from current data
-				const earliestBar = chartCandleSeries.data()[0];
-				if (!earliestBar) return;
-
-				// Convert the earliest time from EST seconds to UTC milliseconds for the API request
-				const earliestTimestamp = ESTSecondstoUTCMillis(earliestBar.time as UTCTimestamp);
-
-				// Make sure to include extendedHours in the request
-				const inst: CoreInstance & { extendedHours?: boolean } = {
-					ticker: currentChartInstance.ticker,
-					timestamp: earliestTimestamp,
-					timeframe: currentChartInstance.timeframe,
-					securityId: currentChartInstance.securityId,
-					price: currentChartInstance.price,
-					extendedHours: currentChartInstance.extendedHours
-				};
-
-				backendLoadChartData({
-					...inst,
-					bars: Math.floor(bufferInScreenSizes * barsOnScreen) + 100,
-					direction: 'backward',
-					requestType: 'loadAdditionalData',
-					includeLastBar: true
-				});
-			} else if (
-				(chartCandleSeries.data().length - logicalRange.to) / barsOnScreen <
-				bufferInScreenSizes
-			) {
+			}
+			if ((chartCandleSeries.data().length - logicalRange.to) / barsOnScreen < bufferInScreenSizes) {
 				// forward load
 				if (chartLatestDataReached) {
 					return;
@@ -1580,10 +1622,16 @@
 					return;
 				}
 
+				const lastBar = chartCandleSeries.data().at(-1);
+				if (!lastBar) return; // Exit if no data exists
+
+				// Convert the last bar's time from EST seconds to UTC milliseconds for the API request
+				const requestTimestamp = ESTSecondstoUTCMillis(lastBar.time as UTCTimestamp);
+
 				// Also fix the forward load to include extendedHours
 				const inst: CoreInstance & { extendedHours?: boolean } = {
 					ticker: currentChartInstance.ticker,
-					timestamp: currentChartInstance.timestamp,
+					timestamp: requestTimestamp, // Correct: Use the last loaded bar's timestamp
 					timeframe: currentChartInstance.timeframe,
 					securityId: currentChartInstance.securityId,
 					price: currentChartInstance.price,
