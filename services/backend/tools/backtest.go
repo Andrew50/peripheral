@@ -86,6 +86,12 @@ type BacktestSpec struct {
 		Expression string `json:"expression"`
 		Comment    string `json:"comment,omitempty"`
 	} `json:"derived_columns,omitempty"`
+	FuturePerformance []struct {
+		ID         string `json:"id"`
+		Expression string `json:"expression"`
+		Timeframe  string `json:"timeframe"`
+		Comment    string `json:"comment,omitempty"`
+	} `json:"future_performance,omitempty"`
 	Conditions []struct {
 		ID  string `json:"id"`
 		LHS struct {
@@ -248,6 +254,12 @@ func buildBacktestQuery(spec BacktestSpec, timeframe string) (string, []interfac
 		query += ",\n    " + indicatorSelects
 	}
 
+	// Add future performance calculations
+	futurePerformanceSelects := getFuturePerformanceSelects(spec.FuturePerformance, timeframe)
+	if futurePerformanceSelects != "" {
+		query += ",\n    " + futurePerformanceSelects
+	}
+
 	// FROM clause - use daily_ohlcv table for daily data
 	query += "\n  FROM securities s JOIN daily_ohlcv d ON s.securityid = d.securityid"
 
@@ -324,6 +336,12 @@ func buildBacktestQuery(spec BacktestSpec, timeframe string) (string, []interfac
 		for _, indicator := range spec.Indicators {
 			if indicator.Timeframe == timeframe {
 				query += ", " + indicator.ID
+			}
+		}
+		// Include all future performance columns in the output
+		for _, futureCol := range spec.FuturePerformance {
+			if futureCol.Timeframe == timeframe {
+				query += ", " + futureCol.ID
 			}
 		}
 	}
@@ -598,6 +616,26 @@ func getIndicatorSelects(indicators []struct {
 	}
 
 	return strings.Join(selects, ", ")
+}
+
+func getFuturePerformanceSelects(futurePerformances []struct {
+	ID         string `json:"id"`
+	Expression string `json:"expression"`
+	Timeframe  string `json:"timeframe"`
+	Comment    string `json:"comment,omitempty"`
+}, timeframe string) string {
+	var selects []string
+
+	for _, fp := range futurePerformances {
+		if fp.Timeframe == timeframe && fp.Expression != "" && fp.ID != "" {
+			// Directly use the provided expression, aliased by ID.
+			// Basic validation could be added here (e.g., check if expression contains 'LEAD(')
+			// but proper SQL sanitization is complex.
+			selects = append(selects, fmt.Sprintf("(%s) AS %s", fp.Expression, fp.ID))
+		}
+	}
+
+	return strings.Join(selects, ", \n    ")
 }
 
 func buildStockFilter(stocks struct {
