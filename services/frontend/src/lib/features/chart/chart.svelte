@@ -287,9 +287,6 @@
 
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
 		eventSeries.setData([]);
-		if(inst.direction === 'forward'){
-			console.log('backendLoadChartData', inst);
-		}
 		if (inst.requestType === 'loadNewTicker') {
 			// Clear pending updates when loading a new ticker
 			pendingBarUpdate = null;
@@ -302,6 +299,7 @@
 		if (isLoadingChartData || !inst.ticker || !inst.timeframe || !inst.securityId) {
 			return;
 		}
+		console.log('backendLoadChartData', inst);
 		isLoadingChartData = true;
 		lastChartQueryDispatchTime = Date.now();
 		if (
@@ -513,7 +511,7 @@
 						const visibleRange = chart.timeScale().getVisibleRange();
 						const vrFrom = visibleRange?.from;
 						const vrTo = visibleRange?.to;
-
+						console.log('visibleRange', vrFrom, vrTo);
 						// Only set visible range if both from and to values are valid
 						chartCandleSeries.setData(newCandleData);
 						chartVolumeSeries.setData(newVolumeData);
@@ -1586,39 +1584,36 @@
 			const barsOnScreen = Math.floor(logicalRange.to) - Math.ceil(logicalRange.from);
 			const bufferInScreenSizes = 0.7;
 
-			if (logicalRange.from / barsOnScreen < bufferInScreenSizes) {
-				if (chartEarliestDataReached) {
-					return;
+
+			if (logicalRange.from > 10 && logicalRange.from / barsOnScreen < bufferInScreenSizes) {
+				if (!chartEarliestDataReached) {
+					// Get the earliest timestamp from current data
+					const earliestBar = chartCandleSeries.data()[0];
+					if (!earliestBar) return;
+
+					// Convert the earliest time from EST seconds to UTC milliseconds for the API request
+					const earliestTimestamp = ESTSecondstoUTCMillis(earliestBar.time as UTCTimestamp);
+
+					// Make sure to include extendedHours in the request
+					const inst: CoreInstance & { extendedHours?: boolean } = {
+						ticker: currentChartInstance.ticker,
+						timestamp: earliestTimestamp,
+						timeframe: currentChartInstance.timeframe,
+						securityId: currentChartInstance.securityId,
+						price: currentChartInstance.price,
+						extendedHours: currentChartInstance.extendedHours
+					};
+
+					backendLoadChartData({
+						...inst,
+						bars: Math.floor(bufferInScreenSizes * barsOnScreen) + 100,
+						direction: 'backward',
+						requestType: 'loadAdditionalData',
+						includeLastBar: true
+					});
 				}
-
-				// Get the earliest timestamp from current data
-				const earliestBar = chartCandleSeries.data()[0];
-				if (!earliestBar) return;
-
-				// Convert the earliest time from EST seconds to UTC milliseconds for the API request
-				const earliestTimestamp = ESTSecondstoUTCMillis(earliestBar.time as UTCTimestamp);
-
-				// Make sure to include extendedHours in the request
-				const inst: CoreInstance & { extendedHours?: boolean } = {
-					ticker: currentChartInstance.ticker,
-					timestamp: earliestTimestamp,
-					timeframe: currentChartInstance.timeframe,
-					securityId: currentChartInstance.securityId,
-					price: currentChartInstance.price,
-					extendedHours: currentChartInstance.extendedHours
-				};
-
-				backendLoadChartData({
-					...inst,
-					bars: Math.floor(bufferInScreenSizes * barsOnScreen) + 100,
-					direction: 'backward',
-					requestType: 'loadAdditionalData',
-					includeLastBar: true
-				});
-			} else if (
-				(chartCandleSeries.data().length - logicalRange.to) / barsOnScreen <
-				bufferInScreenSizes
-			) {
+			}
+			if ((chartCandleSeries.data().length - logicalRange.to) / barsOnScreen < bufferInScreenSizes) {
 				// forward load
 				if (chartLatestDataReached) {
 					return;
