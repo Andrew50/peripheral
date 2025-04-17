@@ -66,34 +66,6 @@ services:
     networks:
       - compose_network
 
-  worker:
-    build:
-      context: ../../services/worker
-      dockerfile: Dockerfile.dev
-    platform: ${PLATFORM:-linux/amd64}
-    networks:
-      - compose_network
-    volumes:
-      - ../../services/worker:/app #for hot reload
-      - tf:/models
-    restart: unless-stopped
-    environment:
-      - DB_USER=postgres
-      - DB_PASSWORD=devpassword
-      - DB_HOST=db
-      - REDIS_HOST=cache
-      - TF_MODEL_NAME=1
-      - TF_MODEL_VERSION=9
-      - POLYGON_API_KEY=${POLYGON_API_KEY}
-      - GEMINI_FREE_KEYS=${GEMINI_FREE_KEYS}
-    deploy:
-      resources:
-        limits:
-          memory: 32g
-          cpus: '4.0'
-            #ulimits:
-            #stack: 65536
-
   cache:
     build:
       context: ../../services/cache

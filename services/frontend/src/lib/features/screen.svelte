@@ -7,7 +7,7 @@
 	import { queueRequest } from '$lib/core/backend';
 	import type { Writable } from 'svelte/store';
 	import type { Instance } from '$lib/core/types';
-	import { setups } from '$lib/core/stores';
+	import { strategies } from '$lib/core/stores';
 	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
 
 	// Assume this function is already coded and imported
@@ -16,17 +16,17 @@
 	let selectedDate: Writable<number> = writable(0); // Store for the date, default to current date
 
 	interface Screen extends Instance {
-		setupType: string;
+		strategyType: string;
 		score: number;
 		flagged: boolean;
 	}
 
 	function runScreen() {
-		const setupIds = get(setups)
+		const strategyIds = get(strategies)
 			.filter((v) => v.activeScreen)
-			.map((v) => v.setupId);
+			.map((v) => v.strategyId);
 		const dateToScreen = get(selectedDate); // Get the currently selected date
-		queueRequest<Screen[]>('screen', { setupIds: setupIds, timestamp: dateToScreen / 1000 }).then(
+		queueRequest<Screen[]>('screen', { strategyIds: strategyIds, timestamp: dateToScreen / 1000 }).then(
 			(response) => {
 				response;
 				screens.set(response);
@@ -47,15 +47,15 @@
 </script>
 
 <div class="controls-container">
-	{#if Array.isArray($setups) && $setups.length > 0}
-		{#each $setups as setup (setup.setupId)}
+	{#if Array.isArray($strategies) && $strategies.length > 0}
+		{#each $strategies as strategy (strategy.strategyId)}
 			<button
-				class="toggle-button {setup.activeScreen ? 'active' : ''}"
+				class="toggle-button {strategy.activeScreen ? 'active' : ''}"
 				on:click={() => {
-					setup.activeScreen = !setup.activeScreen;
+					strategy.activeScreen = !strategy.activeScreen;
 				}}
 			>
-				{setup.name}
+				{strategy.name}
 			</button>
 		{/each}
 	{/if}

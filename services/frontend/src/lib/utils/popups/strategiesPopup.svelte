@@ -3,13 +3,13 @@
 	import { writable } from 'svelte/store';
 	import type { Writable } from 'svelte/store';
 	import type { Setup } from '$lib/core/types';
-	import { newSetup } from '$lib/features/setups/interface';
-	import { setups } from '$lib/core/stores';
+	import { newSetup } from '$lib/features/strategies/interface';
+	import { strategies } from '$lib/core/stores';
 	interface UserSetupMenu {
 		x: number;
 		y: number;
 		status: 'active' | 'inactive';
-		setup: Setup | null | 'new';
+		strategy: Setup | null | 'new';
 	}
 
 	const inactiveUserSetupMenu = { x: 0, y: 0, status: 'inactive' } as UserSetupMenu;
@@ -30,13 +30,13 @@
 		return { x, y };
 	}
 
-	export async function querySetup(event: MouseEvent): Promise<number> {
+	export async function queryStrategy(event: MouseEvent): Promise<number> {
 		const { x, y } = getInitialPosition(event.clientX, event.clientY);
 		const menuState: UserSetupMenu = {
 			x,
 			y,
 			status: 'active',
-			setup: null
+			strategy: null
 		};
 		userSetupMenu.set(menuState);
 		('open');
@@ -44,17 +44,17 @@
 			const unsubscribe = userSetupMenu.subscribe(async (menuState: UserSetupMenu) => {
 				if (menuState.status === 'inactive') {
 					menuState;
-					if (menuState.setup === 'new') {
-						('TODO: implement new setup functionality');
+					if (menuState.strategy === 'new') {
+						('TODO: implement new strategy functionality');
 						unsubscribe();
 						reject();
-					} else if (menuState.setup === null) {
+					} else if (menuState.strategy === null) {
 						unsubscribe();
 						reject();
 					} else {
 						unsubscribe();
-						resolve(menuState.setup.setupId);
-					} // Return the selected setup
+						resolve(menuState.strategy.strategyId);
+					} // Return the selected strategy
 				}
 			});
 		});
@@ -101,9 +101,9 @@
 		}
 	}
 
-	function closeMenu(setup: Setup | null | 'new' = null): void {
+	function closeMenu(strategy: Setup | null | 'new' = null): void {
 		console.trace();
-		userSetupMenu.set({ ...inactiveUserSetupMenu, setup: setup });
+		userSetupMenu.set({ ...inactiveUserSetupMenu, strategy: strategy });
 	}
 
 	function handleMouseDown(event: MouseEvent): void {
@@ -165,15 +165,15 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#if $setups && $setups.length > 0}
-						{#each $setups as setup}
+					{#if $strategies && $strategies.length > 0}
+						{#each $strategies as strategy}
 							<tr class="defalt-tr">
 								<td
 									on:click={() => {
-										closeMenu(setup);
+										closeMenu(strategy);
 									}}
 								>
-									{setup.name}
+									{strategy.name}
 								</td>
 							</tr>
 						{/each}
