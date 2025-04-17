@@ -3,11 +3,10 @@
 	import ChartContainer from '$lib/features/chart/chartContainer.svelte';
 	import Alerts from '$lib/features/alerts/alert.svelte';
 	import RightClick from '$lib/utils/popups/rightClick.svelte';
-	import Setup from '$lib/utils/popups/setup.svelte';
+	import StrategiesPopup from '$lib/utils/popups/strategiesPopup.svelte';
 	import Input from '$lib/utils/popups/input.svelte';
-	import Similar from '$lib/features/similar/similar.svelte';
+	//import Similar from '$lib/features/similar/similar.svelte';
 	import Study from '$lib/features/study.svelte';
-	import Journal from '$lib/features/journal.svelte';
 	import Watchlist from '$lib/features/watchlist.svelte';
 	//import TickerInfo from '$lib/features/quotes/tickerInfo.svelte';
 	import Quote from '$lib/features/quotes/quote.svelte';
@@ -17,9 +16,7 @@
 	// Windows that will be opened in draggable divs
 	import Screener from '$lib/features/screen.svelte';
 	import Account from '$lib/features/account.svelte';
-	import Active from '$lib/features/active.svelte';
-	import Setups from '$lib/features/setups/setups.svelte';
-	import Options from '$lib/features/options.svelte';
+	import Strategies from '$lib/features/strategies/strategies.svelte';
 	import Settings from '$lib/features/settings.svelte';
 	import Newsfeed from '$lib/features/newsfeed.svelte';
 	import LLMSummary from '$lib/features/llmSummary.svelte';
@@ -58,11 +55,11 @@
 	// Add new import for Query component
 	import Query from '$lib/features/query.svelte';
 
-	type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'journal' | 'similar';
+	type Menu = 'none' | 'watchlist' | 'alerts' | 'study';
 
 	let lastSidebarMenu: Menu | null = null;
 	let sidebarWidth = 0;
-	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'journal', 'similar'];
+	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study'];
 
 	// Initialize chartWidth with a default value
 	let chartWidth = 0;
@@ -71,9 +68,8 @@
 	type BottomWindowType =
 		| 'screener'
 		| 'account'
-		| 'active'
 		| 'options'
-		| 'setups'
+		| 'strategies'
 		| 'settings'
 		| 'newsfeed'
 		| 'query'
@@ -791,7 +787,7 @@
 	<!-- Global Popups -->
 	<Input />
 	<RightClick />
-	<Setup />
+	<StrategiesPopup />
 	<Algo />
 	<!-- Main area wrapper -->
 	<div class="app-container">
@@ -833,12 +829,8 @@
 							<div class="window-content">
 								{#if w.type === 'screener'}
 									<Screener />
-								{:else if w.type === 'active'}
-									<Active />
-								{:else if w.type === 'options'}
-									<Options />
-								{:else if w.type === 'setups'}
-									<Setups />
+								{:else if w.type === 'strategies'}
+									<Strategies />
 								{:else if w.type === 'account'}
 									<Account />
 								{:else if w.type === 'settings'}
@@ -885,10 +877,6 @@
 								<Alerts />
 							{:else if $activeMenu === 'study'}
 								<Study />
-							{:else if $activeMenu === 'journal'}
-								<Journal />
-							{:else if $activeMenu === 'similar'}
-								<Similar />
 							{/if}
 						</div>
 
@@ -940,24 +928,12 @@
 			>
 				Screener
 			</button>
-			<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'active') ? 'active' : ''}"
-				on:click={() => openBottomWindow('active')}
-			>
-				Active
-			</button>
-			<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'options') ? 'active' : ''}"
-				on:click={() => openBottomWindow('options')}
-			>
-				Options
-			</button>
-			<button
+			<!--<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'setups') ? 'active' : ''}"
 				on:click={() => openBottomWindow('setups')}
 			>
 				Setups
-			</button>
+			</button>-->
 			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'account') ? 'active' : ''}"
 				on:click={() => openBottomWindow('account')}
