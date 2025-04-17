@@ -467,10 +467,6 @@
 					return; // Don't proceed if ID or timestamp is invalid
 				}
 
-				// Call queryChart (or similar), passing ticker, securityId, and timestamp
-				// NOTE: You might need to adjust queryChart or the receiving function
-				// to accept and use the timestamp.
-				console.log(`Querying chart for ${ticker} (ID: ${securityId}) at timestamp ${timestampMs}`);
 				queryChart({
 					ticker: ticker,
 					securityId: securityId,
