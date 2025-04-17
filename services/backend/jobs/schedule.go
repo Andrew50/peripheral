@@ -199,13 +199,6 @@ var (
 			SkipOnWeekends: true,
 		},
 		{
-			Name:           "PushJournals",
-			Function:       pushJournalsForToday,
-			Schedule:       []TimeOfDay{{Hour: 4, Minute: 5}}, // Run at 4:05 AM, shortly after market open
-			RunOnInit:      false,
-			SkipOnWeekends: true,
-		},
-		{
 			Name:           "StopServices",
 			Function:       stopServicesJob,
 			Schedule:       []TimeOfDay{{Hour: 20, Minute: 0}}, // Stop services at 8:00 PM
@@ -223,13 +216,6 @@ var (
 			Name:           "SimpleUpdateSecurities",
 			Function:       simpleSecuritiesUpdateJob,
 			Schedule:       []TimeOfDay{{Hour: 20, Minute: 45}}, // Run at 8:45 PM
-			RunOnInit:      true,
-			SkipOnWeekends: true,
-		},
-		{
-			Name:           "UpdateMarketMetrics",
-			Function:       updateMarketMetrics,
-			Schedule:       []TimeOfDay{{Hour: 20, Minute: 30}, {Hour: 8, Minute: 0}}, // Run at 8:30 PM and 8:00 AM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 		},
@@ -734,14 +720,6 @@ func updateSectors(conn *utils.Conn) error {
 	return fmt.Errorf("sector update task monitoring failed")
 }
 
-func updateMarketMetrics(conn *utils.Conn) error {
-	fmt.Println("Starting market metrics update - calculating market activity indicators...")
-	_, err := utils.Queue(conn, "update_active", map[string]interface{}{})
-	if err != nil {
-		return fmt.Errorf("error queueing market metrics update: %w", err)
-	}
-	return nil
-}
 
 // clearWorkerQueue clears the worker queue to prevent backlog
 func clearWorkerQueue(conn *utils.Conn) error {

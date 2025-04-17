@@ -16,7 +16,7 @@ from trainerQueue import refillTrainerQueue
 #    get_ticker_performance,
 #    delete_all_user_trades,
 #)
-from active import update_active
+#from active import update_active
 from sector import update_sectors
 import time
 
@@ -28,7 +28,7 @@ funcMap = {
     #"handle_trade_upload": handle_trade_upload,
     #"grab_user_trades": grab_user_trades,
     "update_sectors": update_sectors,
-    "update_active": update_active,
+    #"update_active": update_active,
     #"get_trade_statistics": get_trade_statistics,
     #"get_ticker_trades": get_ticker_trades,
     #"get_ticker_performance": get_ticker_performance,

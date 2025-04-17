@@ -1,4 +1,4 @@
-package tools
+package toolstools.
 
 import (
 	"backend/utils"
@@ -84,7 +84,7 @@ func initTools() {
 			},
 			Function: GetSimilarInstances,
             Query: true,
-            Api: true,
+            Api: false,
 		},
 		"getCurrentSecurityID": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
