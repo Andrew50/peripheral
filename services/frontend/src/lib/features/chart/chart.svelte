@@ -203,6 +203,10 @@
 	// Add new property to track alert lines
 	let alertLines: AlertLine[] = [];
 
+	// State for quote line visibility
+	let isViewingLiveData = true; // Assume true initially
+	let lastQuoteData: QuoteData | null = null;
+
 	let arrowSeries: any = null; // Initialize as null
 	let eventSeries: ISeriesApi<'Custom', Time, EventMarker>;
 	let eventMarkerView: EventMarkersPaneView;
@@ -260,8 +264,32 @@
 		return minutes < 570 || minutes >= 960; // 9:30 AM - 4:00 PM EST
 	}
 
+	// Helper function to clear quote lines
+	function clearQuoteLines() {
+		if (bidLine && askLine) {
+			bidLine.setData([]);
+			askLine.setData([]);
+		}
+	}
+
+	// Helper function to apply the last known quote
+	function applyLastQuote() {
+		// Assumes isViewingLiveData is already true when called
+		if (lastQuoteData && bidLine && askLine) {
+			const candle = chartCandleSeries?.data()?.at(-1);
+			if (candle) {
+				const time = candle.time;
+				bidLine.setData([{ time: time, value: lastQuoteData.bidPrice }]);
+				askLine.setData([{ time: time, value: lastQuoteData.askPrice }]);
+			}
+		}
+	}
+
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
 		eventSeries.setData([]);
+		if(inst.direction === 'forward'){
+			console.log('backendLoadChartData', inst);
+		}
 		if (inst.requestType === 'loadNewTicker') {
 			// Clear pending updates when loading a new ticker
 			pendingBarUpdate = null;
@@ -274,7 +302,6 @@
 		if (isLoadingChartData || !inst.ticker || !inst.timeframe || !inst.securityId) {
 			return;
 		}
-		console.log('backendLoadChartData', inst);
 		isLoadingChartData = true;
 		lastChartQueryDispatchTime = Date.now();
 		if (
@@ -628,11 +655,21 @@
 		if (!data?.bidPrice || !data?.askPrice) {
 			return;
 		}
+		// Always store the latest quote
+		lastQuoteData = data;
+
+		// Only update lines if viewing live data
+		if (isViewingLiveData) {
+			applyLastQuote();
+		}
+		/*
 		const candle = chartCandleSeries.data().at(-1);
 		if (!candle) return;
 		const time = candle.time;
+		console.log('updateLatestQuote', data);
 		bidLine.setData([{ time: time, value: data.bidPrice }]);
 		askLine.setData([{ time: time, value: data.askPrice }]);
+		*/
 	}
 	// Create a horizontal line at the current crosshair position (Y-coordinate)
 
@@ -1088,6 +1125,16 @@
 			...updatedReq
 		};
 
+		// Determine if viewing live data based on timestamp
+		isViewingLiveData = updatedReq.timestamp === 0;
+		// Clear quote lines if not viewing live data initially
+		if (!isViewingLiveData) {
+			clearQuoteLines();
+		} else if (lastQuoteData) {
+			// If switching back to live view and we have quote data, apply it (might be applied again later)
+			applyLastQuote();
+		}
+
 		if (
 			typeof chartId === 'number' &&
 			typeof updatedReq.chartId === 'number' &&
@@ -1126,9 +1173,6 @@
 		if ('trades' in newReq && Array.isArray(newReq.trades)) {
 			updatedReq.trades = newReq.trades;
 		}
-
-		backendLoadChartData(updatedReq);
-
 		// Clear existing alert lines when changing tickers
 		if (chartCandleSeries) {
 			alertLines.forEach((line) => {
@@ -1150,6 +1194,9 @@
 			sessionHighlighting = new SessionHighlighting(createDefaultSessionHighlighter());
 			chartCandleSeries.attachPrimitive(sessionHighlighting);
 		}
+		backendLoadChartData(updatedReq);
+
+		
 	}
 
 	onMount(() => {
@@ -1538,6 +1585,7 @@
 			}
 			const barsOnScreen = Math.floor(logicalRange.to) - Math.ceil(logicalRange.from);
 			const bufferInScreenSizes = 0.7;
+
 			if (logicalRange.from / barsOnScreen < bufferInScreenSizes) {
 				if (chartEarliestDataReached) {
 					return;
