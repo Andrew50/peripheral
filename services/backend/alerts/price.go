@@ -11,7 +11,7 @@ func processPriceAlert(conn *utils.Conn, alert Alert) error {
 	defer socket.AggDataMutex.RUnlock() // Release read lock
 	ds := socket.AggData[*alert.SecurityID]
 	if ds == nil {
-		return fmt.Errorf("1-90vj- price alert")
+		return fmt.Errorf("market data not found for security ID %d", *alert.SecurityID)
 	}
 	ds.SecondDataExtended.Mutex.RLock()
 	defer ds.SecondDataExtended.Mutex.RUnlock()
