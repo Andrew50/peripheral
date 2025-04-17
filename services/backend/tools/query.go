@@ -135,59 +135,46 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (any, error) {
 //  The Plan → Execute → Reflect loop
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ───────────────────────────────────────────
+// 1️⃣  LOOP
+// ───────────────────────────────────────────
 func (a *Agent) loop() error {
-    var allResults []ExecuteResult
+	var allResults []ExecuteResult
 
-    for round := 0; round < a.MaxRounds; round++ {
-        // PLAN
-        fmt.Println("planning")
-        calls, err := a.plan()
-        if err != nil {
-            return err
-        }
-        // EXECUTE
-        var results []ExecuteResult
-        if len(calls) != 0 {
-            fmt.Println("executing")
-            results = a.execute(calls)
-            allResults = append(allResults, results...)
-            break
-        }
+	for round := 0; round < a.MaxRounds; round++ {
+		// PLAN ― guide only, not stored in history
+		guide, err := a.plan()
+		if err != nil { return err }
 
+		// EXECUTE ― Flash picks & calls tools
+        results, draftText,err := a.executeStage(guide)
+		if err != nil { return err }
+		allResults = append(allResults, results...)
 
-        // REFLECT — decide to stop or continue
-        fmt.Println("reflecting")
-        done, reflectText, err := a.reflect(results)
-        if err != nil {
-            return err
-        }
-        if done {
-            // Build the final QueryResponse matching old behaviour.
-            a.finalResponse = &QueryResponse{
-                Type:          "function_calls",
-                Text:          reflectText,
-                Results:       allResults,
-                History:       a.History,
-            }
-            
-            // Log the entire conversation history when loop completes
-            logConversationHistory(a.History)
-            
-            return nil
-        }
-    }
+		// REFLECT ― decide if finished
+        done, txt, err := a.reflect(results, draftText)
+		if err != nil { return err }
+		if done {
+			a.finalResponse = &QueryResponse{
+				Type:    "function_calls",
+				Text:    txt,
+				Results: allResults,
+				History: a.History,
+			}
+			logConversationHistory(a.History)
+			return nil
+		}
+	}
 
-    // Fallback text if max rounds hit.
-    a.finalResponse = &QueryResponse{
-        Type:    "text",
-        Text:    "Reached maximum reasoning rounds without completion.",
-        History: a.History,
-    }
-    
-    // Log the entire conversation history when loop completes (even on max rounds)
-    logConversationHistory(a.History)
-    
-    return nil
+	// fallback
+	a.finalResponse = &QueryResponse{
+		Type:    "text",
+		Text:    "Reached maximum reasoning rounds without completion.",
+		Results: allResults,
+		History: a.History,
+	}
+	logConversationHistory(a.History)
+	return nil
 }
 
 // logConversationHistory logs the entire conversation history for debugging
@@ -254,91 +241,120 @@ func buildToolPlaintext() string {
     }
     return b.String()
 }
+func (a *Agent) plan() (string, error) {
+	const model = "gemini-2.0-flash-thinking-exp-01-21"
 
-func (a *Agent) plan() ([]FunctionCall, error) {
-    const model = "gemini-2.0-flash-thinking-exp-01-21"
+	prompt := buildToolPlaintext() + "\n\n" +
+		buildHistoryPrompt(a.History) + "\nUser: "
 
-    // Put the whole history *after* the tool list so the model sees definitions first.
-    prompt := buildToolPlaintext() + "\n\n" +
-        buildHistoryPrompt(a.History) + "\nUser: "
+	resp, err := a.callGemini(model, mustSystemPrompt("plan"), prompt, false)
+	if err != nil { return "", err }
 
-    // ⚠️  NO function‑call metadata – the model rejects it.  We therefore
-    //     pass withTools=false.
-    resp, err := a.callGemini(model, mustSystemPrompt("plan"), prompt, false)
-    if err != nil {
-        return nil, err
-    }
-
-    // If function‑calling were somehow enabled we still honour it,
-    // otherwise fall back to the JSON list in `resp.Text`.
-    if len(resp.FunctionCalls) > 0 {
-        return resp.FunctionCalls, nil
-    }
-
-    // Parse a JSON array inside the assistant text.
-    start, end := strings.Index(resp.Text, "["), strings.LastIndex(resp.Text, "]")
-    if start == -1 || end == -1 || end <= start {
-        return nil, fmt.Errorf("plan: no function calls returned")
-    }
-
-    var rawCalls []struct {
-        Name string          `json:"name"`
-        Args json.RawMessage `json:"args"`
-    }
-    if err := json.Unmarshal([]byte(resp.Text[start:end+1]), &rawCalls); err != nil {
-        return nil, fmt.Errorf("plan: cannot parse JSON tool list: %w", err)
-    }
-
-    out := make([]FunctionCall, len(rawCalls))
-    for i, c := range rawCalls {
-        out[i] = FunctionCall{Name: c.Name, Args: c.Args}
-    }
-    return out, nil
+	return strings.TrimSpace(resp.Text), nil
 }
+// ───────────────────────────────────────────
+// 3️⃣  EXECUTE STAGE  (Gemini‑Flash 2‑0)
+// ───────────────────────────────────────────
+func (a *Agent) executeStage(guide string) ([]ExecuteResult, string, error) {
+    const model = "gemini-2.0-flash-001"
 
-func (a *Agent) execute(calls []FunctionCall) []ExecuteResult {
+    prompt := buildHistoryPrompt(a.History) +
+        "\nAssistant GUIDE:\n" + guide +
+        "\n\nAssistant: Decide which, if any, tools to call next. " +
+        "Return function calls or answer directly."
+
+    fmt.Println("execute stage hit")
+    resp, err := a.callGemini(model, mustSystemPrompt("execute"), prompt, true)
+    if err != nil {
+        return nil, "", err
+    }
+
+    // Capture Gemini’s draft answer even if it also returned tool calls
+    draftText := strings.TrimSpace(resp.Text)
+
+    // If no tool calls, just return the text – reflector will decide
+    fmt.Println(resp)
+    if len(resp.FunctionCalls) == 0 {
+        fmt.Println("no tool calls")
+        if draftText != "" {
+            a.appendAssistant(draftText)
+        }
+        return nil, draftText, nil
+    }
+
+    // … run the tools exactly as before …
     tools := GetTools(false)
     var results []ExecuteResult
-    for _, c := range calls {
-        tool, ok := tools[c.Name]
+    for _, fc := range resp.FunctionCalls {
+        tool, ok := tools[fc.Name]
         if !ok {
-            results = append(results, ExecuteResult{FunctionName: c.Name, Error: "tool not found", Args: c.Args})
+            results = append(results, ExecuteResult{FunctionName: fc.Name, Error: "tool not found"})
             continue
         }
-        res, err := tool.Function(a.Conn, a.UserID, c.Args)
+        res, err := tool.Function(a.Conn, a.UserID, fc.Args)
         if err != nil {
-            results = append(results, ExecuteResult{FunctionName: c.Name, Error: err.Error(), Args: c.Args})
+            results = append(results, ExecuteResult{FunctionName: fc.Name, Error: err.Error(), Args: fc.Args})
         } else {
-            results = append(results, ExecuteResult{FunctionName: c.Name, Result: res, Args: c.Args})
+            results = append(results, ExecuteResult{FunctionName: fc.Name, Result: res, Args: fc.Args})
         }
     }
-    // Add a tool message to history (JSON chunk)
+
+    // Store tool output in history
     a.History.Messages = append(a.History.Messages, ChatMessage{
         Role:          "tool",
         ContentChunks: []ContentChunk{{Type: "json", Content: results}},
         Timestamp:     time.Now(),
         ExpiresAt:     time.Now().Add(24 * time.Hour),
     })
-    return results
+
+    // Also keep Gemini’s explanatory text (if any) so the reflector can check it
+    if draftText != "" {
+        a.History.Messages = append(a.History.Messages, ChatMessage{
+            Role: "assistant",
+            ContentChunks: []ContentChunk{{Type: "text", Content: draftText}},
+            Timestamp: time.Now(),
+            ExpiresAt: time.Now().Add(24 * time.Hour),
+        })
+    }
+
+    return results, draftText, nil
 }
 
-func (a *Agent) reflect(results []ExecuteResult) (bool, string, error) {
-    payload, _ := json.Marshal(results)
-    prompt := buildHistoryPrompt(a.History) + "\nTool results:\n```json\n" + string(payload) + "\n```"
-    resp, err := a.callGemini("gemini-2.0-flash-001", mustSystemPrompt("reflect"), prompt, true)
+
+func (a *Agent) reflect(results []ExecuteResult, draft string) (bool, string, error) {
+    // Fetch the latest user utterance for the reflector prompt
+    var userQuery string
+    for i := len(a.History.Messages) - 1; i >= 0; i-- {
+        if a.History.Messages[i].Role == "user" {
+            userQuery = a.History.Messages[i].ContentChunks[0].Content.(string)
+            break
+        }
+    }
+
+    execTrace, _ := json.Marshal(results)
+    prompt := fmt.Sprintf(
+        "Original user query: %s\n"+
+        "Plan + observations: %s\n"+
+        "Draft answer: %s\n",
+        userQuery, string(execTrace), draft)
+
+    resp, err := a.callGemini(
+        "gemini-2.0-flash-001",
+        mustSystemPrompt("reflect"),
+        prompt,
+        /*withTools=*/false)        // reflector never calls tools
     if err != nil {
         return false, "", err
     }
 
     text := strings.TrimSpace(resp.Text)
     text = injectSecurityIDs(a.Conn, text)
-
     a.appendAssistant(text)
 
-    //lower := strings.ToLower(text)
-    done := strings.Contains(text, "ANSWER")// || strings.HasPrefix(lower, "done")
+    done := strings.HasPrefix(text, "ANSWER:")
     return done, text, nil
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  History helpers & utilities
@@ -408,6 +424,8 @@ func (a *Agent) callGemini(model, systemPrompt, prompt string, withTools bool) (
     cfg := &genai.GenerateContentConfig{SystemInstruction: &genai.Content{Parts: []*genai.Part{{Text: systemPrompt}}}}
     if withTools {
         cfg.Tools = convertTools()
+        fmt.Println("tools")
+        fmt.Println(cfg.Tools)
     }
 
     res, err := client.Models.GenerateContent(a.Ctx, model, genai.Text(prompt), cfg)
@@ -431,19 +449,24 @@ func (a *Agent) callGemini(model, systemPrompt, prompt string, withTools bool) (
 }
 
 func convertTools() []*genai.Tool {
-    ts := GetTools(false)
-    names := make([]string, 0, len(ts))
-    for n := range ts {
-        names = append(names, n)
-    }
-    sort.Strings(names)
+    ts := GetTools(false) // query‑mode tools
 
-    var out []*genai.Tool
-    for _, n := range names {
-        t := ts[n]
-        out = append(out, &genai.Tool{FunctionDeclarations: []*genai.FunctionDeclaration{t.FunctionDeclaration}})
+    // Collect function declarations that are actually present.
+    var fds []*genai.FunctionDeclaration
+    for _, t := range ts {
+        if t.FunctionDeclaration != nil {
+            fds = append(fds, t.FunctionDeclaration)
+        }
     }
-    return out
+    // Keep a stable order (helps with caching / tests).
+    sort.Slice(fds, func(i, j int) bool { return fds[i].Name < fds[j].Name })
+
+    if len(fds) == 0 {
+        return nil // nothing to expose this turn
+    }
+    return []*genai.Tool{
+        {FunctionDeclarations: fds}, // **one** Tool, many declarations
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -615,7 +638,7 @@ func GetSuggestedQueries(conn *utils.Conn, userID int, args json.RawMessage) (an
     }
 
     hist := buildHistoryPrompt(conv)
-    res, err := agent.callGemini("gemini-2.0-flash-001", mustSystemPrompt("suggestedQueries"), hist, false)
+    res, err := agent.callGemini("gemini-2.0-flash-001", mustSystemPrompt("suggestions"), hist, false)
     if err != nil { return nil, err }
 
     start, end := strings.Index(res.Text, "{"), strings.LastIndex(res.Text, "}")

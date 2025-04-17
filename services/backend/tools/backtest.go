@@ -30,7 +30,7 @@ func GetBacktestJSONFromGemini(conn *utils.Conn, query string) (string, error) {
 		return "", fmt.Errorf("error creating gemini client: %v", err)
 	}
 
-	systemInstruction, err := getSystemInstruction("backtestSystemPrompt")
+	systemInstruction, err := getSystemInstruction("backtest")
 	if err != nil {
 		return "", fmt.Errorf("error getting system instruction: %v", err)
 	}

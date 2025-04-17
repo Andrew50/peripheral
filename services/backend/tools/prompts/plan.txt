@@ -14,13 +14,13 @@ grounded in a tool result.
 • Do **NOT** execute the tools.
 
 ### Tool Catalogue
-{tool_descriptions}   ← *(insert function schemas, one per tool)*
+{You can invoke a tool by returning a JSON array like:
+[
+  {"name":"tool_name","args":{…}},
+  …
+]
 
-### Few‑shot Examples
-{plan_examples}       ← *(one or two trimmed ReAct examples)*
-
-### Current User Goal
-{user_query}
+Tools available:tool_descriptions}   ← *(insert function schemas, one per tool)*
 
 ### Output ONLY the JSON plan
 

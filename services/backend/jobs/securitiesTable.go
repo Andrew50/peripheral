@@ -573,15 +573,15 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 		// Fetch both logo and icon
 		logoBase64, err := fetchImage(details.Branding.LogoURL, conn.PolygonKey)
 		if err != nil {
-			log.Printf("Failed to fetch logo for %s: %v", ticker, err)
+			//log.Printf("Failed to fetch logo for %s: %v", ticker, err)
 		}
 		iconBase64, err := fetchImage(details.Branding.IconURL, conn.PolygonKey)
 		if err != nil {
-			log.Printf("Failed to fetch icon for %s: %v", ticker, err)
+			//log.Printf("Failed to fetch icon for %s: %v", ticker, err)
 		}
 		currentPrice, err := utils.GetMostRecentRegularClose(conn.Polygon, ticker, time.Now())
 		if err != nil {
-			log.Printf("Failed to get current price for %s: %v", ticker, err)
+			//log.Printf("Failed to get current price for %s: %v", ticker, err)
 			return
 		}
 
