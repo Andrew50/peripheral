@@ -88,7 +88,7 @@ func UpdateDailyOHLCV(conn *utils.Conn) error {
 	var securityCache sync.Map
 
 	// Use a semaphore to limit concurrent API calls
-	maxConcurrency := 1 // Reduce from 5 to 2, then 2 to 1
+	maxConcurrency := 3 // Increase from 1 to 5
 	sem := semaphore.NewWeighted(int64(maxConcurrency))
 	var wg sync.WaitGroup
 	errorCh := make(chan error, len(dates))
@@ -178,7 +178,7 @@ func storeDailyOHLCVParallel(conn *utils.Conn, ohlcvResponse *models.GetGroupedD
 
 	// Process batches in parallel with controlled concurrency
 	var wg sync.WaitGroup
-	maxConcurrency := 1 // Reduce from 3 to 2, then 2 to 1
+	maxConcurrency := 1 // Reduce back to 1 to prevent INSERT deadlocks
 	sem := semaphore.NewWeighted(int64(maxConcurrency))
 	errorCh := make(chan error, batchCount)
 
@@ -309,7 +309,8 @@ func storeDailyOHLCVParallel(conn *utils.Conn, ohlcvResponse *models.GetGroupedD
 						argPosition+8, argPosition+9))
 
 				valueArgs = append(valueArgs,
-					date, securityID, record.Ticker, record.Open, record.High,
+					record.Timestamp,
+					securityID, record.Ticker, record.Open, record.High,
 					record.Low, record.Close, record.Volume, record.VWAP,
 					record.Transactions)
 
