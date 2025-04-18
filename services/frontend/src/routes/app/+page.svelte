@@ -20,7 +20,7 @@
 	import Settings from '$lib/features/settings.svelte';
 	import News from '$lib/features/news.svelte';
     import Deploy from '$lib/features/deploy.svelte'
-    import Backtest from '$lib/features/deploy.svelte'
+    import Backtest from '$lib/features/backtest.svelte'
 
 	// Replay logic
 	import {
@@ -834,8 +834,10 @@
 									<Account />
 								{:else if w.type === 'settings'}
 									<Settings />
-								{:else if w.type === 'news'}
-									<News />
+								{:else if w.type === 'backtest'}
+                                <Backtest/>
+								{:else if w.type === 'deploy'}
+                                <Deploy/>
 								{/if}
 							</div>
 						</div>
