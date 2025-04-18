@@ -95,7 +95,6 @@ spec:
             # Add Google redirect URL
             - name: GOOGLE_REDIRECT_URL
               value: ${GOOGLE_REDIRECT_URL}
-          # Removed health checks as backend is a job runner, not an HTTP server
           resources:
             requests:
               cpu: "1000m"
