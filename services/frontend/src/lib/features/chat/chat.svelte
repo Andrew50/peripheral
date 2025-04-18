@@ -348,11 +348,11 @@
 			});
 	}
 
-	function handleKeyDown(event: KeyboardEvent) {
-		if (event.key === 'Enter') {
-			event.preventDefault();
-			handleSubmit();
-		}
+	// Function to adjust textarea height dynamically
+	function adjustTextareaHeight() {
+		if (!queryInput) return;
+		queryInput.style.height = 'auto'; // Reset height to allow shrinking
+		queryInput.style.height = `${queryInput.scrollHeight}px`; // Set height to content height
 	}
 
 	function formatTimestamp(date: Date): string {
@@ -671,24 +671,25 @@
 			<!-- Add other action buttons like Search here if needed -->
 		</div>
 		<div class="input-field-container">
-			<input
-				type="text"
+			<textarea
 				class="chat-input"
 				placeholder="Ask about anything..."
 				bind:value={$inputValue}
 				bind:this={queryInput}
+				rows="1"
+				on:input={adjustTextareaHeight}
 				on:keydown={(event) => {
 					// Prevent space key events from propagating to parent elements
 					if (event.key === ' ' || event.code === 'Space') {
 						event.stopPropagation();
 					}
-					// Original handler
-					if (event.key === 'Enter') {
-						event.preventDefault();
+					// Submit on Enter, allow newline with Shift+Enter
+					if (event.key === 'Enter' && !event.shiftKey) {
+						event.preventDefault(); // Prevent default newline insertion
 						handleSubmit();
 					}
 				}}
-			/>
+			></textarea>
 			<button
 				class="send-button"
 				on:click={handleSubmit}
@@ -1000,14 +1001,21 @@
 		border: 1px solid var(--ui-border, #444);
 		color: var(--text-primary, #fff);
 		border-radius: 0.25rem;
-		min-height: clamp(36px, 5vh, 48px);
-		padding-right: clamp(3rem, 5vw, 3.5rem);
+		padding-right: clamp(3rem, 5vw, 3.5rem); /* Keep padding for the button */
+		resize: none; /* Disable manual resizing */
+		overflow-y: hidden; /* Hide scrollbar during resize and when content fits */
+		line-height: 1.4; /* Adjust line height for better readability in textarea */
+		height: auto; /* Allow height to adjust */
+		box-sizing: border-box; /* Include padding and border in element's total width and height */
+		font-family: inherit; /* Ensure font matches the rest of the UI */
+		max-height: 200px; /* Add a max height to prevent excessive growth */
+		/* overflow-y: auto; */ /* Remove this; scrollbar appears automatically if max-height exceeded and overflow is not hidden */
 	}
 
 	.send-button {
 		position: absolute;
 		right: 0.75rem;
-		bottom: 0.6rem;
+		bottom: 0.75rem; /* Adjusted for better vertical alignment */
 		background: transparent;
 		border: none;
 		cursor: pointer;
