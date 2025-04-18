@@ -205,7 +205,7 @@ pngB64 := base64.StdEncoding.EncodeToString(png.Bytes())
 		cfg,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("Gemini call failed: %v", err)
+		return nil, fmt.Errorf("gemini call failed: %v", err)
 	}
 
 	analysis := ""
