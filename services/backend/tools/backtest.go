@@ -10,131 +10,70 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/genai"
 )
 
-type BacktestArgs struct {
-	Query string `json:"query"`
+
+
+
+type RunBacktestArgs struct {
+    StrategyId int `json:"strategyId"`
 }
 
-func GetBacktestJSONFromGemini(conn *utils.Conn, query string) (string, error) {
-	apikey, err := conn.GetGeminiKey()
+func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args RunBacktestArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+    fmt.Println("backtesting")
+    fmt.Println(args.StrategyId)
+
+    backtestJSON, err := _getStrategySpec(conn,userId,args.StrategyId) // get spec from db using helper
+    if err != nil { 
+        return nil, fmt.Errorf("ERR vdi0s: failed to fetch strategy %v",err)
+    }
+	var spec StrategySpec
+	if err := json.Unmarshal((backtestJSON), &spec); err != nil { //unmarhsal into struct
+        return "", fmt.Errorf("ERR fi00: error parsing backtest JSON: %v", err)
+	}
+	data, err := GetDataForBacktest(conn, spec)
 	if err != nil {
-		return "", fmt.Errorf("error getting gemini key: %v", err)
+		return nil, fmt.Errorf("error getting data for backtest: %v", err)
 	}
 
-	client, err := genai.NewClient(context.Background(), &genai.ClientConfig{
-		APIKey:  apikey,
-		Backend: genai.BackendGeminiAPI,
-	})
+	// Parse the data to check if we got results
+	var results map[string]interface{}
+	err = json.Unmarshal([]byte(data), &results)
 	if err != nil {
-		return "", fmt.Errorf("error creating gemini client: %v", err)
+		return nil, fmt.Errorf("error parsing backtest results: %v", err)
 	}
 
-	systemInstruction, err := getSystemInstruction("backtestSystemPrompt")
-	if err != nil {
-		return "", fmt.Errorf("error getting system instruction: %v", err)
-	}
-	config := &genai.GenerateContentConfig{
-		SystemInstruction: &genai.Content{
-			Parts: []*genai.Part{
-				{Text: systemInstruction},
-			},
-		},
-	}
-	result, err := client.Models.GenerateContent(context.Background(), "gemini-2.0-flash-thinking-exp-01-21", genai.Text(query), config)
-	if err != nil {
-		return "", fmt.Errorf("error generating content: %v", err)
+	// Check if we have results for daily timeframe
+	dailyData, ok := results["daily"]
+	if !ok {
+		return nil, fmt.Errorf("no daily data found in results")
 	}
 
-	responseText := ""
-	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
-		for _, part := range result.Candidates[0].Content.Parts {
-			if part.Text != "" {
-				responseText = part.Text
-				break
-			}
-		}
+	// Check if we have any records
+	dailyRecords, ok := dailyData.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("daily data is not in expected format")
 	}
 
-	return responseText, nil
+	// Format the results for LLM readability
+	formattedResults, err := formatResultsForLLM(dailyRecords)
+	if err != nil {
+		return nil, fmt.Errorf("error formatting results for LLM: %v", err)
+	}
+	return formattedResults, nil
 }
 
-// BacktestSpec represents the parsed JSON structure of the backtest specification
-type BacktestSpec struct {
-	Timeframes []string `json:"timeframes"`
-	Stocks     struct {
-		Universe string   `json:"universe"`
-		Include  []string `json:"include"`
-		Exclude  []string `json:"exclude"`
-		Filters  []struct {
-			Metric    string  `json:"metric"`
-			Operator  string  `json:"operator"`
-			Value     float64 `json:"value"`
-			Timeframe string  `json:"timeframe"`
-		} `json:"filters"`
-	} `json:"stocks"`
-	Indicators []struct {
-		ID         string                 `json:"id"`
-		Type       string                 `json:"type"`
-		Parameters map[string]interface{} `json:"parameters"`
-		InputField string                 `json:"input_field"`
-		Timeframe  string                 `json:"timeframe"`
-	} `json:"indicators"`
-	DerivedColumns []struct {
-		ID         string `json:"id"`
-		Expression string `json:"expression"`
-		Comment    string `json:"comment,omitempty"`
-	} `json:"derived_columns,omitempty"`
-	FuturePerformance []struct {
-		ID         string `json:"id"`
-		Expression string `json:"expression"`
-		Timeframe  string `json:"timeframe"`
-		Comment    string `json:"comment,omitempty"`
-	} `json:"future_performance,omitempty"`
-	Conditions []struct {
-		ID  string `json:"id"`
-		LHS struct {
-			Field     string `json:"field"`
-			Offset    int    `json:"offset"`
-			Timeframe string `json:"timeframe"`
-		} `json:"lhs"`
-		Operation string `json:"operation"`
-		RHS       struct {
-			Field       string  `json:"field,omitempty"`
-			Offset      int     `json:"offset,omitempty"`
-			Timeframe   string  `json:"timeframe,omitempty"`
-			IndicatorID string  `json:"indicator_id,omitempty"`
-			Value       float64 `json:"value,omitempty"`
-			Multiplier  float64 `json:"multiplier,omitempty"`
-		} `json:"rhs"`
-	} `json:"conditions"`
-	Logic     string `json:"logic"`
-	DateRange struct {
-		Start string `json:"start"`
-		End   string `json:"end"`
-	} `json:"date_range"`
-	TimeOfDay struct {
-		Constraint string `json:"constraint"`
-		StartTime  string `json:"start_time"`
-		EndTime    string `json:"end_time"`
-	} `json:"time_of_day"`
-	OutputColumns []string `json:"output_columns"`
-}
 
-func GetDataForBacktest(conn *utils.Conn, backtestJSON string) (string, error) {
-	var spec BacktestSpec
+// StrategySpec represents the parsed JSON structure of the backtest specification
 
-	jsonStartIdx := strings.Index(backtestJSON, "{")
-	jsonEndIdx := strings.LastIndex(backtestJSON, "}")
-
-	jsonBlock := backtestJSON[jsonStartIdx : jsonEndIdx+1]
-	if err := json.Unmarshal([]byte(jsonBlock), &spec); err != nil {
-		return "", fmt.Errorf("error parsing backtest JSON: %v", err)
-	}
+func GetDataForBacktest(conn *utils.Conn, spec StrategySpec) (string, error) {
 
 	// Initialize results
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 
 	// Currently only using daily timeframe since that's what the database supports
 	timeframe := "daily"
@@ -170,7 +109,7 @@ func GetDataForBacktest(conn *utils.Conn, backtestJSON string) (string, error) {
 	return string(resultJSON), nil
 }
 
-func executeBacktestQuery(conn *utils.Conn, spec BacktestSpec, timeframe string) ([]map[string]interface{}, error) {
+func executeBacktestQuery(conn *utils.Conn, spec StrategySpec, timeframe string) ([]map[string]interface{}, error) {
 	// Build SQL query based on specification
 	query, args := buildBacktestQuery(spec, timeframe)
 
@@ -223,7 +162,7 @@ func executeBacktestQuery(conn *utils.Conn, spec BacktestSpec, timeframe string)
 	return results, nil
 }
 
-func buildBacktestQuery(spec BacktestSpec, timeframe string) (string, []interface{}) {
+func buildBacktestQuery(spec StrategySpec, timeframe string) (string, []interface{}) {
 	var args []interface{}
 
 	// Build CTE for window functions first
@@ -688,55 +627,32 @@ func mapOperator(op string) string {
 	}
 }
 
-func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var args BacktestArgs
-	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		return nil, fmt.Errorf("invalid args: %v", err)
+// prettyPrintJSON extracts and formats JSON from a string that may contain text before/after the JSON
+func prettyPrintJSON(jsonStr string) (string, error) {
+	// Find the JSON block within the string
+	jsonStartIdx := strings.Index(jsonStr, "{")
+	jsonEndIdx := strings.LastIndex(jsonStr, "}")
+	
+	if jsonStartIdx == -1 || jsonEndIdx == -1 || jsonEndIdx < jsonStartIdx {
+		return "", fmt.Errorf("no valid JSON block found")
 	}
-
-	fmt.Printf("Running backtest with query: %s\n", args.Query)
-
-	backtestJSON, err := GetBacktestJSONFromGemini(conn, args.Query)
+	
+	// Extract the JSON block
+	jsonBlock := jsonStr[jsonStartIdx : jsonEndIdx+1]
+	
+	// Parse the JSON to validate it
+	var parsedJSON interface{}
+	if err := json.Unmarshal([]byte(jsonBlock), &parsedJSON); err != nil {
+		return "", fmt.Errorf("invalid JSON: %v", err)
+	}
+	
+	// Pretty print the JSON
+	prettyJSON, err := json.MarshalIndent(parsedJSON, "", "  ")
 	if err != nil {
-		return nil, fmt.Errorf("error getting backtest JSON from gemini: %v", err)
+		return "", fmt.Errorf("error pretty printing JSON: %v", err)
 	}
-	fmt.Println("Gemini returned backtest JSON: ", backtestJSON)
-
-	// Make sure we have JSON content
-	if !strings.Contains(backtestJSON, "{") || !strings.Contains(backtestJSON, "}") {
-		return nil, fmt.Errorf("no valid JSON found in Gemini response: %s", backtestJSON)
-	}
-
-	data, err := GetDataForBacktest(conn, backtestJSON)
-	if err != nil {
-		return nil, fmt.Errorf("error getting data for backtest: %v", err)
-	}
-
-	// Parse the data to check if we got results
-	var results map[string]interface{}
-	err = json.Unmarshal([]byte(data), &results)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing backtest results: %v", err)
-	}
-
-	// Check if we have results for daily timeframe
-	dailyData, ok := results["daily"]
-	if !ok {
-		return nil, fmt.Errorf("no daily data found in results")
-	}
-
-	// Check if we have any records
-	dailyRecords, ok := dailyData.([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("daily data is not in expected format")
-	}
-
-	// Format the results for LLM readability
-	formattedResults, err := formatResultsForLLM(dailyRecords)
-	if err != nil {
-		return nil, fmt.Errorf("error formatting results for LLM: %v", err)
-	}
-	return formattedResults, nil
+	
+	return string(prettyJSON), nil
 }
 
 // formatResultsForLLM converts raw database results into a clean, LLM-friendly format
