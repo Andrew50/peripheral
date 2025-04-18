@@ -296,7 +296,7 @@
 			askLine.setData([]);
 			arrowSeries.setData([]);
 		}
-		if (!inst.ticker || !inst.timeframe || !inst.securityId) {
+		if (isLoadingChartData || !inst.ticker || !inst.timeframe || !inst.securityId) {
 			return;
 		}
 		console.log('backendLoadChartData', inst);
