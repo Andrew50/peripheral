@@ -45,7 +45,7 @@ export async function publicRequest<T>(func: string, args: Record<string, unknow
     }
 }
 
-export async function privateFileRequest<T>(
+export async function uploadRequest<T>(
     func: string,
     file: File,
     additionalArgs: object = {}
@@ -67,7 +67,7 @@ export async function privateFileRequest<T>(
         headers['Authorization'] = authToken;
     }
 
-    const response = await fetch(`${base_url}/private-upload`, {
+    const response = await fetch(`${base_url}/uploadRequest`, {
         method: 'POST',
         headers,
         body: formData
