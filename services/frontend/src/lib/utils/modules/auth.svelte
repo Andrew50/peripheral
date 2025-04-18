@@ -377,6 +377,8 @@
 		margin-bottom: clamp(0.25rem, 1vh, 0.5rem);
 		font-size: 1.5rem;
 		font-weight: 600;
+		text-transform: none;
+		letter-spacing: normal;
 	}
 
 	.subtitle {
