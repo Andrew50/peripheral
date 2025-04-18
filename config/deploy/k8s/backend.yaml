@@ -72,7 +72,7 @@ spec:
             # Add Polygon API key
             - name: GEMINI_FREE_KEYS
               valueFrom: 
-                secretkeyRef: 
+                secretKeyRef: 
                   name: gemini-secret
                   key: GEMINI_FREE_KEYS
             - name: POLYGON_API_KEY
