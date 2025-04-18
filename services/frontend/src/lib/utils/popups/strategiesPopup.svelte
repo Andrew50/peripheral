@@ -1,60 +1,53 @@
-<!-- sample.svelte -->
+<!-- strategiesPopup.svelte -->
 <script lang="ts" context="module">
-	import { writable } from 'svelte/store';
-	import type { Writable } from 'svelte/store';
-	import type { Setup } from '$lib/core/types';
-	import { newSetup } from '$lib/features/strategies/interface';
+	/* ─────────────── Stores & Types ─────────────── */
+	import { writable, type Writable } from 'svelte/store';
 	import { strategies } from '$lib/core/stores';
-	interface UserSetupMenu {
+	import type { Strategy as CoreStrategy } from '$lib/core/types';
+	import { eventDispatcher } from '$lib/features/strategies/interface';   // 🆕 dispatch “new”
+
+	/* ─────────────── Menu State ─────────────── */
+	interface StrategyMenuState {
 		x: number;
 		y: number;
 		status: 'active' | 'inactive';
-		strategy: Setup | null | 'new';
+		strategy: CoreStrategy | null | 'new';
 	}
 
-	const inactiveUserSetupMenu = { x: 0, y: 0, status: 'inactive' } as UserSetupMenu;
-	let userSetupMenu: Writable<UserSetupMenu> = writable(inactiveUserSetupMenu);
+	const inactiveState: StrategyMenuState = { x: 0, y: 0, status: 'inactive', strategy: null };
+	const menuState: Writable<StrategyMenuState> = writable(inactiveState);
 
-	const MARGIN = 20; // Margin from window edges in pixels
-
-	// Initial position without height constraint
-	function getInitialPosition(x: number, y: number): { x: number; y: number } {
-		if (browser) {
-			const windowWidth = window.innerWidth;
-			const menuWidth = 220; // Match our CSS width
-			return {
-				x: Math.min(Math.max(MARGIN, x), windowWidth - menuWidth - MARGIN),
-				y: Math.max(MARGIN, y)
-			};
-		}
-		return { x, y };
+	const MARGIN = 20;
+	function clamp(v: number, min: number, max: number) {
+		return Math.min(Math.max(v, min), max);
 	}
 
-	export async function queryStrategy(event: MouseEvent): Promise<number> {
-		const { x, y } = getInitialPosition(event.clientX, event.clientY);
-		const menuState: UserSetupMenu = {
-			x,
-			y,
+	/* ─────────────── Public helper ─────────────── */
+	/** Opens the pop‑up and resolves with the chosen strategyId. */
+	export function queryStrategy(e: MouseEvent): Promise<number> {
+		const menuWidth = 220;
+		const { clientX, clientY } = e;
+
+		menuState.set({
+			x: browser ? clamp(clientX, MARGIN, window.innerWidth - menuWidth - MARGIN) : clientX,
+			y: clamp(clientY, MARGIN, 99999), // y is further clamped when dragging
 			status: 'active',
 			strategy: null
-		};
-		userSetupMenu.set(menuState);
-		('open');
+		});
+
 		return new Promise<number>((resolve, reject) => {
-			const unsubscribe = userSetupMenu.subscribe(async (menuState: UserSetupMenu) => {
-				if (menuState.status === 'inactive') {
-					menuState;
-					if (menuState.strategy === 'new') {
-						('TODO: implement new strategy functionality');
-						unsubscribe();
-						reject();
-					} else if (menuState.strategy === null) {
-						unsubscribe();
-						reject();
+			const unsub = menuState.subscribe((s) => {
+				if (s.status === 'inactive') {
+					unsub();
+
+					if (s.strategy === 'new') {            // 🆕 “create new” clicked
+						eventDispatcher.set('new');
+						reject('new');
+					} else if (s.strategy) {
+						resolve(s.strategy.strategyId);
 					} else {
-						unsubscribe();
-						resolve(menuState.strategy.strategyId);
-					} // Return the selected strategy
+						reject('cancel');
+					}
 				}
 			});
 		});
@@ -62,122 +55,95 @@
 </script>
 
 <script lang="ts">
+	/* ─────────────── Local behaviour ─────────────── */
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
+
 	let menu: HTMLElement;
-	let startX: number;
-	let startY: number;
-	let initialX: number;
-	let initialY: number;
-	let isDragging = false;
+	let dragStart = { x: 0, y: 0 };
+	let initialPos = { x: 0, y: 0 };
+	let dragging = false;
+
+	function close(strat: CoreStrategy | null | 'new' = null) {
+		menuState.set({ ...inactiveState, strategy: strat });
+	}
+
+	/* event listeners are attached only while the menu is open */
 	onMount(() => {
-		userSetupMenu.subscribe((menuState) => {
-			if (browser) {
-				if (menuState.status === 'active') {
-					setTimeout(() => {
-						document.addEventListener('click', handleClickOutside);
-						document.addEventListener('keydown', handleKeyDown);
-						document.addEventListener('mousedown', handleMouseDown);
-					}, 0);
-				} else {
-					document.removeEventListener('click', handleClickOutside);
-					document.removeEventListener('keydown', handleKeyDown);
-					document.removeEventListener('mousedown', handleMouseDown);
-				}
+		menuState.subscribe((s) => {
+			if (!browser) return;
+
+			if (s.status === 'active') {
+				setTimeout(() => {
+					window.addEventListener('click', outside);
+					window.addEventListener('keydown', esc);
+				});
+			} else {
+				window.removeEventListener('click', outside);
+				window.removeEventListener('keydown', esc);
+				window.removeEventListener('mousemove', move);
+				window.removeEventListener('mouseup', up);
 			}
 		});
 	});
-	function handleClickOutside(event: MouseEvent): void {
-		event.target;
-		menu;
-		if (menu && !menu.contains(event.target as Node)) {
-			('close');
-			closeMenu();
-		}
+
+	function outside(e: MouseEvent) {
+		if (menu && !menu.contains(e.target as Node)) close();
 	}
-	function handleKeyDown(event: KeyboardEvent): void {
-		if (event.key === 'Escape') {
-			closeMenu();
-		}
+	function esc(e: KeyboardEvent) {
+		if (e.key === 'Escape') close();
 	}
 
-	function closeMenu(strategy: Setup | null | 'new' = null): void {
-		console.trace();
-		userSetupMenu.set({ ...inactiveUserSetupMenu, strategy: strategy });
+	function down(e: MouseEvent) {
+		if (!(e.target as HTMLElement).classList.contains('context-menu')) return;
+		dragging = true;
+		dragStart = { x: e.clientX, y: e.clientY };
+		initialPos = { x: $menuState.x, y: $menuState.y };
+		window.addEventListener('mousemove', move);
+		window.addEventListener('mouseup', up);
 	}
+	function move(e: MouseEvent) {
+		if (!dragging) return;
+		const { innerWidth, innerHeight } = window;
+		const menuWidth = 220;
+		const menuHeight = menu?.offsetHeight ?? 0;
 
-	function handleMouseDown(event: MouseEvent): void {
-		if (event.target && (event.target as HTMLElement).classList.contains('context-menu')) {
-			startX = event.clientX;
-			startY = event.clientY;
-			initialX = $userSetupMenu.x;
-			initialY = $userSetupMenu.y;
-			isDragging = true;
-			document.addEventListener('mousemove', handleMouseMove);
-			document.addEventListener('mouseup', handleMouseUp);
-		}
+		const nx = clamp(initialPos.x + (e.clientX - dragStart.x), MARGIN, innerWidth - menuWidth - MARGIN);
+		const ny = clamp(initialPos.y + (e.clientY - dragStart.y), MARGIN, innerHeight - menuHeight - MARGIN);
+		menuState.update((s) => ({ ...s, x: nx, y: ny }));
 	}
-
-	function constrainPosition(x: number, y: number): { x: number; y: number } {
-		if (browser) {
-			const windowWidth = window.innerWidth;
-			const windowHeight = window.innerHeight;
-			const menuWidth = 220;
-			const menuHeight = menu?.offsetHeight || 0;
-
-			return {
-				x: Math.min(Math.max(MARGIN, x), windowWidth - menuWidth - MARGIN),
-				y: Math.min(Math.max(MARGIN, y), windowHeight - menuHeight - MARGIN)
-			};
-		}
-		return { x, y };
-	}
-
-	function handleMouseMove(event: MouseEvent): void {
-		if (isDragging) {
-			const deltaX = event.clientX - startX;
-			const deltaY = event.clientY - startY;
-			const { x, y } = constrainPosition(initialX + deltaX, initialY + deltaY);
-			userSetupMenu.update((menuState) => {
-				return { ...menuState, x, y };
-			});
-		}
-	}
-
-	function handleMouseUp(): void {
-		isDragging = false;
-		document.removeEventListener('mousemove', handleMouseMove);
-		document.removeEventListener('mouseup', handleMouseUp);
+	function up() {
+		dragging = false;
+		window.removeEventListener('mousemove', move);
+		window.removeEventListener('mouseup', up);
 	}
 </script>
 
-{#if $userSetupMenu.status === 'active'}
+{#if $menuState.status === 'active'}
 	<div
-		class="popup-container responsive-shadow responsive-border"
+		class="context-menu popup-container responsive-shadow responsive-border"
 		bind:this={menu}
-		style="top: {$userSetupMenu.y}px; left: {$userSetupMenu.x}px;"
+		style="top: {$menuState.y}px; left: {$menuState.x}px;"
+		on:mousedown|preventDefault={down}
 	>
 		<div class="content-container content-padding">
 			<table>
 				<thead>
-					<tr class="defalt-tr">
-						<th class="defalt-th">Setup</th>
+					<tr class="header-row">
+						<th>Strategy</th>
 					</tr>
 				</thead>
 				<tbody>
-					{#if $strategies && $strategies.length > 0}
-						{#each $strategies as strategy}
-							<tr class="defalt-tr">
-								<td
-									on:click={() => {
-										closeMenu(strategy);
-									}}
-								>
-									{strategy.name}
-								</td>
-							</tr>
-						{/each}
-					{/if}
+					<!-- 🆕 “Create new” entry -->
+					<tr class="item-row new-row" on:click={() => close('new')}>
+						<td>＋ New strategy</td>
+					</tr>
+
+					{#each $strategies as strat}
+						<tr class="item-row" on:click={() => close(strat)}>
+							<td>{strat.name}</td>
+						</tr>
+					{/each}
 				</tbody>
 			</table>
 		</div>
@@ -187,52 +153,34 @@
 <style>
 	.popup-container {
 		width: clamp(180px, 30vw, 220px);
+		position: fixed;
+		z-index: 1000;
 		background: var(--ui-bg-primary);
 		border: 1px solid var(--ui-border);
 		border-radius: clamp(6px, 0.8vw, 8px);
-		display: flex;
-		flex-direction: column;
 		overflow: hidden;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-		position: fixed;
-		z-index: 1000;
-		padding: clamp(2px, 0.5vw, 4px);
+		box-shadow: 0 4px 12px rgba(0 0 0 / 0.2);
 	}
+	.content-container { padding: clamp(4px, 1vw, 8px); }
 
-	.content-container {
-		padding: clamp(4px, 1vw, 8px);
-	}
-
-	table {
-		width: 100%;
-		border-collapse: collapse;
-	}
-
-	.defalt-tr {
+	table { width: 100%; border-collapse: collapse; }
+	.header-row th {
+		text-align: left;
+		font-weight: 600;
+		text-transform: uppercase;
+		padding: 0.5rem 0.75rem;
+		color: var(--text-secondary);
 		border-bottom: 1px solid var(--ui-border);
 	}
 
-	.defalt-tr:last-child {
-		border-bottom: none;
-	}
-
-	.defalt-th {
-		text-align: left;
-		padding: clamp(6px, 1vw, 8px) clamp(8px, 1.5vw, 12px);
-		color: var(--text-secondary);
-		font-weight: 600;
-		text-transform: uppercase;
-	}
-
-	td {
-		padding: clamp(6px, 1vw, 8px) clamp(8px, 1.5vw, 12px);
-		color: var(--text-primary);
+	.item-row td {
+		padding: 0.5rem 0.75rem;
 		cursor: pointer;
-		border-radius: clamp(3px, 0.5vw, 4px);
-		transition: background-color 0.2s ease;
+		border-radius: 4px;
+		transition: background 0.2s;
 	}
+	.item-row:hover td { background: var(--ui-bg-hover); }
 
-	td:hover {
-		background: var(--ui-bg-hover);
-	}
+	.new-row td { font-style: italic; }        /* 🆕 styling */
 </style>
+

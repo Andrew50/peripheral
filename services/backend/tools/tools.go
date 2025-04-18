@@ -680,8 +680,8 @@ func initTools() {
 				},
 			},
 			Function: NewStrategy,
-			Query:    true,
-			Api:      true,
+            Query: false, //llm create strategies by hitting the createstreagey from natural language endpoint, this liekly needa change god
+            Api: true,
 		},
 		"setStrategy": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -1260,21 +1260,46 @@ func initTools() {
 		"run_backtest": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "run_backtest",
-				Description: "Runs a backtest based on a natural language query about stock conditions, patterns, and indicators IF YOU CALL THIS TOOL, USE THE USER'S ORIGINAL QUERY. DO NOT GENERATE A NEW QUERY.",
+				Description: "Backtest a specified strategy, which is based on stock conditions, patterns, and indicators.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"strategyId": {
+							Type:        genai.TypeInteger,
+							Description: "id of the strategy to backtest",
+						},
+					},
+					Required: []string{"strategyId"},
+				},
+			},
+			Function: RunBacktest,
+            Query: true,
+            Api: true,
+		},
+		
+        "getStrategyFromNaturalLanguage" : {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getStrategyFromNaturalLanguage",
+				Description: "Create a strategy and save it to the specified id (-1 to create new and the funciton will return the new id) based on a natural language query about stock conditions, patterns, and indicators primarily used for running a backtest on. This function does not run the backtest itself, that is the run_backtest function. IF YOU CALL THIS TOOL, USE THE USER'S ORIGINAL QUERY. DO NOT GENERATE A NEW QUERY.",
+
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"query": {
 							Type:        genai.TypeString,
-							Description: "Natural language query describing the backtest criteria  IF YOU CALL THIS TOOL, USE THE USER'S ORIGINAL QUERY. DO NOT GENERATE A NEW QUERY.",
+							Description: "Natural language query describing the strategy criteria  IF YOU CALL THIS TOOL, USE THE USER'S ORIGINAL QUERY. DO NOT GENERATE A NEW QUERY.",
+						},
+						"strategyId": {
+							Type:        genai.TypeInteger,
+							Description: "id of the strategy to overwrite, -1 means create new",
 						},
 					},
-					Required: []string{"query"},
+					Required: []string{"query","strategyId"},
 				},
 			},
-			Function: RunBacktest,
-			Query:    true,
-			Api:      true,
+			Function: CreateStrategyFromNaturalLanguage,
+            Query: true,
+            Api: true,
 		},
 		"getUserConversation": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
