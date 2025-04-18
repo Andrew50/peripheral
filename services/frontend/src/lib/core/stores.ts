@@ -162,7 +162,7 @@ export function initStores() {
     setInterval(updateTime, 250);
 }
 
-export type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'journal' | 'similar';
+export type Menu = 'none' | 'watchlist' | 'alerts' | 'study' ;
 
 export const activeMenu = writable<Menu>('none');
 
