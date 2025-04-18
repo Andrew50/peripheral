@@ -82,7 +82,6 @@ type StrategySpec struct {
 
 
 
-/*─────────────── Call‑side JSON args ───────────────*/
 // AnalyzeInstanceFeaturesArgs contains parameters for analyzing features of a specific security instance
 type AnalyzeInstanceFeaturesArgs struct {
 	SecurityID int    `json:"securityId"`
@@ -91,7 +90,6 @@ type AnalyzeInstanceFeaturesArgs struct {
 	Bars       int    `json:"bars"`      // # of candles to pull **backward** from timestamp
 }
 
-/*────────── Main entrypoint exposed to Gemini ─────────*/
 // AnalyzeInstanceFeatures analyzes chart data for a specific security and returns Gemini's analysis
 func AnalyzeInstanceFeatures(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 
@@ -166,7 +164,6 @@ if _, err = wt.WriteTo(&png); err != nil {
 }
 pngB64 := base64.StdEncoding.EncodeToString(png.Bytes())
 
-	/* 4. Build Gemini prompt */
 	barsJSON, _ := json.Marshal(resp.Bars)
 
 	sysPrompt, err := getSystemInstruction("analyzeInstance")
@@ -188,7 +185,6 @@ pngB64 := base64.StdEncoding.EncodeToString(png.Bytes())
 		},
 	}
 
-	/* 5. Call Gemini */
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
 		return nil, fmt.Errorf("error getting Gemini key: %v", err)
@@ -212,7 +208,6 @@ pngB64 := base64.StdEncoding.EncodeToString(png.Bytes())
 		return nil, fmt.Errorf("Gemini call failed: %v", err)
 	}
 
-	/* 6. Extract Gemini’s textual answer */
 	analysis := ""
 	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
 		for _, p := range result.Candidates[0].Content.Parts {
