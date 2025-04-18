@@ -209,7 +209,9 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 			}
 			queryStartTime = minDateSQL
 			if queryStartTime.After(queryEndTime) {
-				return nil, fmt.Errorf("i10i0v")
+				// Requested time is before the earliest known data for this security record.
+				// Return empty data, indicating the earliest point was reached.
+				return GetChartDataResponse{Bars: []GetChartDataResults{}, IsEarliestData: true}, nil
 			}
 		case "forward":
 			queryStartTime = inputTimestamp

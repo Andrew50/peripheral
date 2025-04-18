@@ -3,11 +3,10 @@
 	import ChartContainer from '$lib/features/chart/chartContainer.svelte';
 	import Alerts from '$lib/features/alerts/alert.svelte';
 	import RightClick from '$lib/utils/popups/rightClick.svelte';
-	import Setup from '$lib/utils/popups/setup.svelte';
+	import StrategiesPopup from '$lib/utils/popups/strategiesPopup.svelte';
 	import Input from '$lib/utils/popups/input.svelte';
-	import Similar from '$lib/features/similar/similar.svelte';
+	//import Similar from '$lib/features/similar/similar.svelte';
 	import Study from '$lib/features/study.svelte';
-	import Journal from '$lib/features/journal.svelte';
 	import Watchlist from '$lib/features/watchlist.svelte';
 	//import TickerInfo from '$lib/features/quotes/tickerInfo.svelte';
 	import Quote from '$lib/features/quotes/quote.svelte';
@@ -17,9 +16,7 @@
 	// Windows that will be opened in draggable divs
 	import Screener from '$lib/features/screen.svelte';
 	import Account from '$lib/features/account.svelte';
-	import Active from '$lib/features/active.svelte';
-	import Setups from '$lib/features/setups/setups.svelte';
-	import Options from '$lib/features/options.svelte';
+	import Strategies from '$lib/features/strategies/strategies.svelte';
 	import Settings from '$lib/features/settings.svelte';
 	import Newsfeed from '$lib/features/newsfeed.svelte';
 	import LLMSummary from '$lib/features/llmSummary.svelte';
@@ -43,9 +40,11 @@
 		streamInfo,
 		formatTimestamp,
 		dispatchMenuChange,
-		menuWidth
+		menuWidth,
+		settings
 	} from '$lib/core/stores';
 	import { writable, type Writable } from 'svelte/store';
+	import { colorSchemes, applyColorScheme } from '$lib/core/styles/colorSchemes';
 
 	// Import Instance from types
 	import type { Instance } from '$lib/core/types';
@@ -56,11 +55,11 @@
 	// Add new import for Query component
 	import Query from '$lib/features/query.svelte';
 
-	type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'journal' | 'similar';
+	type Menu = 'none' | 'watchlist' | 'alerts' | 'study';
 
 	let lastSidebarMenu: Menu | null = null;
 	let sidebarWidth = 0;
-	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'journal', 'similar'];
+	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study'];
 
 	// Initialize chartWidth with a default value
 	let chartWidth = 0;
@@ -69,9 +68,8 @@
 	type BottomWindowType =
 		| 'screener'
 		| 'account'
-		| 'active'
 		| 'options'
-		| 'setups'
+		| 'strategies'
 		| 'settings'
 		| 'newsfeed'
 		| 'query'
@@ -118,6 +116,14 @@
 	let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
 	const INACTIVITY_TIMEOUT = 5 * 1000; // 5 seconds in milliseconds
 
+	// Apply color scheme reactively based on the store
+	$: if ($settings.colorScheme && browser) {
+		const scheme = colorSchemes[$settings.colorScheme];
+		if (scheme) {
+			applyColorScheme(scheme);
+		}
+	}
+
 	// Add a reactive statement to handle window events
 	$: if (draggingWindowId !== null) {
 		if (browser) {
@@ -136,8 +142,8 @@
 	function updateChartWidth() {
 		if (browser) {
 			const rightSidebarWidth = $menuWidth;
-			const maxRightSidebarWidth = Math.min(500, window.innerWidth - 60);
-			const maxLeftSidebarWidth = Math.min(500, window.innerWidth - 60);
+			const maxRightSidebarWidth = Math.min(800, window.innerWidth - 60);
+			const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 60);
 
 			// Only reduce chart width if sidebar widths are within bounds
 			if (rightSidebarWidth <= maxRightSidebarWidth && leftMenuWidth <= maxLeftSidebarWidth) {
@@ -340,7 +346,7 @@
 
 		// Calculate width from right edge of window, excluding the sidebar buttons width
 		let newWidth = window.innerWidth - clientX - 60; // 60px is the width of sidebar buttons
-		const maxSidebarWidth = Math.min(500, window.innerWidth - 60);
+		const maxSidebarWidth = Math.min(800, window.innerWidth - 60);
 
 		// Store state before closing
 		if (newWidth < minWidth && lastSidebarMenu !== null) {
@@ -737,7 +743,7 @@
 
 		// Calculate width from left edge of window
 		let newWidth = clientX;
-		const maxLeftSidebarWidth = Math.min(500, window.innerWidth - 60);
+		const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 60);
 
 		// Manage resize
 		if (newWidth < minWidth) {
@@ -781,7 +787,7 @@
 	<!-- Global Popups -->
 	<Input />
 	<RightClick />
-	<Setup />
+	<StrategiesPopup />
 	<Algo />
 	<!-- Main area wrapper -->
 	<div class="app-container">
@@ -823,12 +829,8 @@
 							<div class="window-content">
 								{#if w.type === 'screener'}
 									<Screener />
-								{:else if w.type === 'active'}
-									<Active />
-								{:else if w.type === 'options'}
-									<Options />
-								{:else if w.type === 'setups'}
-									<Setups />
+								{:else if w.type === 'strategies'}
+									<Strategies />
 								{:else if w.type === 'account'}
 									<Account />
 								{:else if w.type === 'settings'}
@@ -875,10 +877,6 @@
 								<Alerts />
 							{:else if $activeMenu === 'study'}
 								<Study />
-							{:else if $activeMenu === 'journal'}
-								<Journal />
-							{:else if $activeMenu === 'similar'}
-								<Similar />
 							{/if}
 						</div>
 
@@ -930,24 +928,12 @@
 			>
 				Screener
 			</button>
-			<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'active') ? 'active' : ''}"
-				on:click={() => openBottomWindow('active')}
-			>
-				Active
-			</button>
-			<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'options') ? 'active' : ''}"
-				on:click={() => openBottomWindow('options')}
-			>
-				Options
-			</button>
-			<button
+			<!--<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'setups') ? 'active' : ''}"
 				on:click={() => openBottomWindow('setups')}
 			>
 				Setups
-			</button>
+			</button>-->
 			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'account') ? 'active' : ''}"
 				on:click={() => openBottomWindow('account')}
@@ -960,7 +946,6 @@
 			>
 				News
 			</button>
-			<button class="toggle-button" on:click={() => goto('/app/notes')}> Notes </button>
 		</div>
 
 		<div class="bottom-bar-right">
@@ -1126,7 +1111,7 @@
 		position: relative;
 		flex-shrink: 0;
 		border-left: 1px solid var(--ui-border);
-		max-width: min(500px, calc(100vw - 60px)); /* Reduce max width to 500px */
+		max-width: min(800px, calc(100vw - 60px)); /* Reduce max width to 500px */
 	}
 
 	.sidebar-buttons {
@@ -1140,7 +1125,8 @@
 		background-color: var(--c2);
 		z-index: 2;
 		flex-shrink: 0;
-		border-left: 1px solid var(--c4);
+		border-right: 1px solid var(--ui-border);
+		max-width: min(800px, calc(100vw - 60px));
 	}
 
 	.resize-handle {
@@ -1169,6 +1155,7 @@
 	}
 
 	.menu-icon {
+		filter: brightness(0) invert(1);
 		width: 24px;
 		height: 24px;
 		object-fit: contain;
@@ -1360,11 +1347,13 @@
 	}
 
 	.settings-modal {
-		width: 50%;
-		height: 50%;
+		width: 85%;
+		height: 90%;
+		min-width: 800px;
+		min-height: 600px;
 		background-color: var(--c1);
 		border-radius: 8px;
-		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
@@ -1372,7 +1361,7 @@
 
 	.settings-header {
 		background-color: var(--c2);
-		padding: 12px 16px;
+		padding: 16px 24px;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
@@ -1382,16 +1371,17 @@
 	.settings-header h2 {
 		margin: 0;
 		color: var(--f1);
-		font-size: 1.2em;
+		font-size: 1.25rem;
+		font-weight: 600;
 	}
 
 	.settings-header .close-btn {
 		background: none;
 		border: none;
 		color: var(--f1);
-		font-size: 1.5em;
+		font-size: 1.75rem;
 		cursor: pointer;
-		padding: 0 4px;
+		padding: 0 8px;
 		line-height: 1;
 	}
 
@@ -1401,8 +1391,7 @@
 
 	.settings-content {
 		flex: 1;
-		overflow-y: auto;
-		padding: 16px;
+		overflow: hidden;
 	}
 
 	/* Prevent text-selection while dragging */
@@ -1467,7 +1456,7 @@
 		position: relative;
 		flex-shrink: 0;
 		border-right: 1px solid var(--ui-border);
-		max-width: min(500px, calc(100vw - 60px));
+		max-width: min(800px, calc(100vw - 60px));
 	}
 
 	/* Add right position for left sidebar handle */

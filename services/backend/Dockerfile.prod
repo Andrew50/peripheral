@@ -1,21 +1,18 @@
 FROM golang:1.24-alpine AS builder
-RUN apk add --no-cache git tzdata
+RUN apk add --no-cache git tzdata file
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-#RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 RUN GOOS=linux go build -a -installsuffix cgo -o main .
-# Build the jobctl CLI tool
-RUN GOOS=linux go build -a -installsuffix cgo -o jobctl ./cmd/jobctl
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /usr/local/bin/jobctl ./cmd/jobctl
 
 FROM alpine:latest
-RUN apk add --no-cache bash
-COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+# Add bash and necessary runtime dependencies
+RUN apk add --no-cache bash tzdata
 WORKDIR /app
 COPY --from=builder /app/main /app/main
-COPY --from=builder /app/jobctl /usr/local/bin/jobctl
+COPY --from=builder /usr/local/bin/jobctl /usr/local/bin/jobctl
 EXPOSE 5058
-# Environment variables will be provided by Kubernetes
 ENV IN_CONTAINER=true
 ENTRYPOINT ["/app/main"]

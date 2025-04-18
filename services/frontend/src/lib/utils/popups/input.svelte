@@ -426,6 +426,9 @@
 			iQ.instance.price = parseFloat(iQ.inputString);
 		}
 
+		// Always clear the input string when a field is entered successfully
+		iQ.inputString = '';
+
 		// Mark as complete but then check if further input is needed.
 		iQ.status = 'complete';
 		if (iQ.requiredKeys === 'any') {
@@ -441,9 +444,8 @@
 			}
 		}
 
-		// Only reset input state if we're fully complete
+		// Only reset input type and validity if we're fully complete
 		if (iQ.status === 'complete') {
-			iQ.inputString = '';
 			iQ.inputType = '';
 			iQ.inputValid = true;
 			// Reset manualInputType to auto after input is entered
@@ -927,42 +929,38 @@
 								<span class="loading-text">Loading securities...</span>
 							</div>
 						{:else if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
-							<table>
-								<tbody>
-									{#each $inputQuery.securities as sec, i}
-										<tr
-											on:click={async () => {
-												const updatedQuery = await enterInput($inputQuery, i);
-												inputQuery.set(updatedQuery);
-											}}
-										>
-											<td class="defalt-td">
-												<div
-													style="background-color: transparent; width: 100px; height: 30px; display: flex; align-items: center; justify-content: center;"
-												>
-													{#if sec.icon}
-														<img
-															src={sec.icon.startsWith('data:')
-																? sec.icon
-																: `data:image/jpeg;base64,${sec.icon}`}
-															alt="Security Image"
-															style="max-width: 100%; max-height: 100%; object-fit: contain;"
-															on:error={() => {}}
-														/>
-													{/if}
-												</div>
-											</td>
-											<td class="defalt-td">{sec.ticker}</td>
-											<td class="defalt-td">{sec.name}</td>
-											<td class="defalt-td"
+							<div class="securities-list-flex">
+								{#each $inputQuery.securities as sec, i}
+									<div
+										class="security-item-flex"
+										on:click={async () => {
+											const updatedQuery = await enterInput($inputQuery, i);
+											inputQuery.set(updatedQuery);
+										}}
+									>
+										<div class="security-icon-flex">
+											{#if sec.icon}
+												<img
+													src={sec.icon.startsWith('data:')
+														? sec.icon
+														: `data:image/jpeg;base64,${sec.icon}`}
+													alt="Security Icon"
+													on:error={() => {}}
+												/>
+											{/if}
+										</div>
+										<div class="security-info-flex">
+											<span class="ticker-flex">{sec.ticker}</span>
+											<span class="name-flex">{sec.name}</span>
+											<span class="timestamp-flex"
 												>{sec.timestamp !== undefined
 													? UTCTimestampToESTString(sec.timestamp)
-													: ''}</td
+													: ''}</span
 											>
-										</tr>
-									{/each}
-								</tbody>
-							</table>
+										</div>
+									</div>
+								{/each}
+							</div>
 						{:else if $inputQuery.inputString && $inputQuery.inputString.length > 0}
 							<!-- Show initially blank loading state until load state is set -->
 							{#if loadedSecurityResultRequest === -1 || loadedSecurityResultRequest !== currentSecurityResultRequest}
@@ -1039,14 +1037,17 @@
 
 <style>
 	.popup-container {
-		width: 700px;
-		height: 600px;
+		/* Responsive sizing */
+		width: 90vw; /* Use viewport width */
+		max-width: 700px; /* Max width */
+		height: 85vh; /* Use viewport height */
+		max-height: 600px; /* Max height */
 		background: var(--ui-bg-primary);
 		border: 1px solid var(--ui-border);
 		border-radius: 8px;
 		display: flex;
 		flex-direction: column;
-		overflow: hidden;
+		overflow: hidden; /* Keep hidden to manage internal scrolling */
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 		position: fixed;
 		top: 50%;
@@ -1061,11 +1062,14 @@
 		gap: 4px;
 		flex-wrap: nowrap;
 		margin-left: auto;
-		max-width: 75%;
+		/* Remove max-width: 75%; */
 		justify-content: flex-end;
-		overflow-x: auto;
+		overflow-x: auto; /* Allows horizontal scrolling */
 		white-space: nowrap;
-		padding-left: 10px;
+		padding-left: 10px; /* Keep padding */
+		/* Add scrollbar styling for better UX */
+		scrollbar-width: thin;
+		scrollbar-color: var(--ui-border) transparent;
 	}
 
 	.toggle-button {
@@ -1182,6 +1186,7 @@
 		padding: 6px 10px;
 		color: var(--text-primary);
 		border-radius: 4px;
+		font-size: 14px; /* Ensure consistent font size */
 	}
 
 	.search-icon {
@@ -1223,89 +1228,135 @@
 	}
 
 	.securities-list {
+		/* Remove if no longer needed */
+	}
+
+	.security-item {
+		/* Remove if no longer needed */
+	}
+
+	.security-item:hover {
+		/* Remove if no longer needed */
+	}
+
+	.security-icon {
+		/* Remove if no longer needed */
+	}
+
+	.security-icon img {
+		/* Remove if no longer needed */
+	}
+
+	.security-info {
+		/* Remove if no longer needed */
+	}
+
+	.security-main {
+		/* Remove if no longer needed */
+	}
+
+	.ticker {
+		/* Remove if no longer needed */
+	}
+
+	.name {
+		/* Remove if no longer needed */
+	}
+
+	.security-details {
+		/* Remove if no longer needed */
+	}
+
+	.sector {
+		/* Remove if no longer needed */
+	}
+
+	.exchange {
+		/* Remove if no longer needed */
+	}
+
+	/* Styles for Flexbox security list */
+	.content-container {
+		flex: 1; /* Allow container to grow and shrink */
+		overflow-y: auto; /* Scroll within this container */
+		padding: 8px 12px; /* Add padding */
+	}
+
+	.table-container { /* Style the container for the flex list */
+		height: 100%;
 		display: flex;
 		flex-direction: column;
 	}
 
-	.security-item {
+	.securities-list-flex {
+		display: flex;
+		flex-direction: column;
+		gap: 4px; /* Spacing between items */
+	}
+
+	.security-item-flex {
 		display: flex;
 		align-items: center;
-		padding: 8px 12px;
+		padding: 6px 8px;
 		cursor: pointer;
-		border-bottom: 1px solid var(--ui-border);
-		height: 40px;
+		border-radius: 4px;
+		border: 1px solid transparent; /* For hover effect */
+		transition: background-color 0.15s ease, border-color 0.15s ease;
+		gap: 12px; /* Space between icon and info */
 	}
 
-	.security-item:hover {
-		background: var(--ui-bg-hover);
+	.security-item-flex:hover {
+		background-color: var(--ui-bg-hover);
+		border-color: var(--ui-border);
 	}
 
-	.security-icon {
-		margin-right: 12px;
-		width: 24px;
-		height: 24px;
+	.security-icon-flex {
+		width: 60px; /* Fixed width for icon container */
+		height: 30px;
+		flex-shrink: 0; /* Prevent shrinking */
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		overflow: hidden; /* Hide overflow if icon is too large */
 	}
 
-	.security-icon img {
-		width: 28px;
-		height: 28px;
-		object-fit: contain;
+	.security-icon-flex img {
+		max-width: 100%;
+		max-height: 100%;
+		object-fit: contain; /* Scale icon while preserving aspect ratio */
 	}
 
-	.security-info {
-		flex: 1;
+	.security-info-flex {
+		flex: 1; /* Take remaining space */
 		display: flex;
-		flex-direction: row;
-		align-items: center;
-		gap: 12px;
+		align-items: baseline; /* Align text baselines */
+		gap: 10px; /* Space between ticker, name, timestamp */
+		overflow: hidden; /* Prevent content from overflowing the item */
+		font-size: 13px; /* Base font size */
+		white-space: nowrap; /* Prevent wrapping within info */
 	}
 
-	.security-main {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		flex: 1;
-	}
-
-	.ticker {
+	.ticker-flex {
 		font-weight: 600;
 		color: var(--text-primary);
-		min-width: 60px;
-		font-size: 0.9em;
+		flex-basis: 70px; /* Give ticker a base width */
+		flex-shrink: 0; /* Don't shrink ticker */
 	}
 
-	.name {
+	.name-flex {
 		color: var(--text-secondary);
-		font-size: 0.85em;
-		flex: 1;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		flex-grow: 1; /* Allow name to take up available space */
+		overflow: hidden; /* Hide overflow */
+		text-overflow: ellipsis; /* Add ellipsis for long names */
+		min-width: 100px; /* Ensure name has some minimum width */
 	}
 
-	.security-details {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		flex: 1;
+	.timestamp-flex {
 		color: var(--text-secondary);
-		font-size: 0.8em;
-		margin-left: auto;
-	}
-
-	.sector {
-		color: var(--text-secondary);
-		font-size: 0.8em;
-		margin-right: 8px;
-	}
-
-	.exchange {
-		color: var(--text-secondary);
-		font-size: 0.8em;
-		min-width: 50px;
+		font-size: 0.9em; /* Slightly smaller timestamp */
+		flex-shrink: 0; /* Don't shrink timestamp */
+		margin-left: auto; /* Push timestamp to the right */
+		padding-left: 10px; /* Add padding */
 	}
 
 	.date {

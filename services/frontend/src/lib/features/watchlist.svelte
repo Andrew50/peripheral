@@ -21,7 +21,6 @@
 	let container: HTMLDivElement;
 	let newNameInput: HTMLInputElement;
 	let showWatchlistInput = false;
-	let confirmingDelete = false;
 
 	function closeNewWatchlistWindow() {
 		showWatchlistInput = false;
@@ -381,11 +380,14 @@
 		{/if}
 	</div>
 
-	<List
-		parentDelete={deleteItem}
-		columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Ext']}
-		list={activeList}
-	/>
+	<!-- Wrap List component for scrolling -->
+	<div class="list-scroll-container">
+		<List
+			parentDelete={deleteItem}
+			columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Ext']}
+			list={activeList}
+		/>
+	</div>
 </div>
 
 <style>
@@ -587,5 +589,32 @@
 	:global(.default-select optgroup) {
 		font-weight: 600;
 		color: var(--text-secondary);
+	}
+
+	/* New style for the list container */
+	.list-scroll-container {
+		flex-grow: 1; /* Take remaining vertical space */
+		overflow-y: auto; /* Allow vertical scrolling */
+		min-height: 0; /* Necessary for flex-grow in some cases */
+	}
+
+	/* Custom scrollbar for WebKit browsers */
+	.list-scroll-container::-webkit-scrollbar {
+		width: 8px; /* Width of the scrollbar */
+	}
+
+	.list-scroll-container::-webkit-scrollbar-track {
+		background: var(--ui-bg-primary); /* Match the primary background */
+		border-radius: 4px;
+	}
+
+	.list-scroll-container::-webkit-scrollbar-thumb {
+		background-color: var(--ui-border); /* Use border color for the thumb */
+		border-radius: 4px;
+		border: 2px solid var(--ui-bg-primary); /* Creates padding around thumb */
+	}
+
+	.list-scroll-container::-webkit-scrollbar-thumb:hover {
+		background-color: var(--text-secondary); /* Slightly lighter on hover */
 	}
 </style>

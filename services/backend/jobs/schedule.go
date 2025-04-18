@@ -152,12 +152,16 @@ func simpleSecuritiesUpdateJob(conn *utils.Conn) error {
 	return simpleUpdateSecurities(conn)
 }
 
-// Helper function for pushJournals which returns void in journals.go
-func pushJournalsJob(conn *utils.Conn, year int, month time.Month, day int) error {
-	// Call the original function which doesn't return an error
-	fmt.Printf("Pushing journals for date %d-%02d-%02d...\n", year, month, day)
-	pushJournals(conn, year, month, day)
-	return nil
+// Wrapper for UpdateSectors to match JobFunc signature
+func updateSectorsJob(conn *utils.Conn) error {
+	fmt.Println("Starting sector update - fetching latest sector/industry data...")
+	_, err := UpdateSectors(context.Background(), conn) // Discard the statBlock
+	if err != nil {
+		fmt.Printf("Sector update job failed: %v\n", err)
+	} else {
+		fmt.Println("Sector update job completed successfully.")
+	}
+	return err // Return the error, if any
 }
 
 // Define all jobs and their schedules
@@ -199,13 +203,6 @@ var (
 			SkipOnWeekends: true,
 		},
 		{
-			Name:           "PushJournals",
-			Function:       pushJournalsForToday,
-			Schedule:       []TimeOfDay{{Hour: 4, Minute: 5}}, // Run at 4:05 AM, shortly after market open
-			RunOnInit:      false,
-			SkipOnWeekends: true,
-		},
-		{
 			Name:           "StopServices",
 			Function:       stopServicesJob,
 			Schedule:       []TimeOfDay{{Hour: 20, Minute: 0}}, // Stop services at 8:00 PM
@@ -214,7 +211,7 @@ var (
 		},
 		{
 			Name:           "UpdateSectors",
-			Function:       updateSectors,
+			Function:       updateSectorsJob,                    // Use the new wrapper function
 			Schedule:       []TimeOfDay{{Hour: 20, Minute: 15}}, // Run at 8:15 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
@@ -223,13 +220,6 @@ var (
 			Name:           "SimpleUpdateSecurities",
 			Function:       simpleSecuritiesUpdateJob,
 			Schedule:       []TimeOfDay{{Hour: 20, Minute: 45}}, // Run at 8:45 PM
-			RunOnInit:      true,
-			SkipOnWeekends: true,
-		},
-		{
-			Name:           "UpdateMarketMetrics",
-			Function:       updateMarketMetrics,
-			Schedule:       []TimeOfDay{{Hour: 20, Minute: 30}, {Hour: 8, Minute: 0}}, // Run at 8:30 PM and 8:00 AM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 		},
@@ -356,7 +346,6 @@ func (s *JobScheduler) Start() chan struct{} {
 	utils.StartEdgarFilingsService(s.Conn)
 	go func() {
 		for filing := range utils.NewFilingsChannel {
-			fmt.Printf("\n\nBroadcasting global SEC filing\n\n")
 			socket.BroadcastGlobalSECFiling(filing)
 		}
 	}()
@@ -415,13 +404,6 @@ func (s *JobScheduler) checkAndRunJobs(now time.Time) {
 			go s.executeJob(job, now)
 		}
 	}
-}
-
-// pushJournalsForToday pushes journals for the current day
-func pushJournalsForToday(conn *utils.Conn) error {
-	now := time.Now()
-	year, month, day := now.Date()
-	return pushJournalsJob(conn, year, month, day)
 }
 
 // shouldRunJob determines if a job should run based on its schedule
@@ -684,63 +666,6 @@ func (s *JobScheduler) printQueueStatus() {
 	}
 
 	fmt.Println("=========================")
-}
-
-func updateSectors(conn *utils.Conn) error {
-	fmt.Println("Starting sector update - organizing securities by sectors...")
-	taskID, err := utils.Queue(conn, "update_sectors", map[string]interface{}{})
-	if err != nil {
-		return fmt.Errorf("error queueing sector update: %w", err)
-	}
-
-	// Monitor the task until completion
-	fmt.Printf("Sector update task queued with ID: %s. Monitoring for completion...\n", taskID)
-
-	maxRetries := 30
-	retryInterval := time.Second * 10
-
-	for i := 0; i < maxRetries; i++ {
-		result, pollErr := utils.Poll(conn, taskID)
-		if pollErr == nil && result != nil {
-			// Parse the result to check status
-			var resultMap map[string]interface{}
-			if err := json.Unmarshal(result, &resultMap); err == nil {
-				// Check if the result contains an error field
-				if errVal, ok := resultMap["error"]; ok && errVal != nil {
-					return fmt.Errorf("sector update failed: %v", errVal)
-				}
-
-				// Check if state is completed
-				if state, ok := resultMap["state"]; ok {
-					if state == "completed" {
-						fmt.Println("Sector update completed successfully")
-						return nil
-					} else if state == "failed" {
-						return fmt.Errorf("sector update task failed")
-					}
-				}
-			}
-		}
-
-		// If we've reached the last retry, log a timeout
-		if i == maxRetries-1 {
-			return fmt.Errorf("sector update task timed out after %d retries", maxRetries)
-		}
-
-		// Wait before retrying
-		time.Sleep(retryInterval)
-	}
-
-	return fmt.Errorf("sector update task monitoring failed")
-}
-
-func updateMarketMetrics(conn *utils.Conn) error {
-	fmt.Println("Starting market metrics update - calculating market activity indicators...")
-	_, err := utils.Queue(conn, "update_active", map[string]interface{}{})
-	if err != nil {
-		return fmt.Errorf("error queueing market metrics update: %w", err)
-	}
-	return nil
 }
 
 // clearWorkerQueue clears the worker queue to prevent backlog

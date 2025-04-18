@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+DB_NAME="${1:-postgres}"
+MIGRATIONS_DIR="/migrations"
+
+# ─────────────────────────  helpers  ──────────────────────────
+log()       { printf '[%(%F %T)T] MIGRATION: %s\n' -1 "$1"; }
+error_log() { printf '[%(%F %T)T] MIGRATION ERROR: %s\n' -1 "$1" >&2; }
+
+# extract numeric prefix before optional separator (001, 12_add_users, etc.)
+extract_version() {
+  local file="$1"
+  file="${file##*/}"         # strip path
+  file="${file%.sql}"        # strip extension
+  [[ $file =~ ^([0-9]+) ]] && printf '%d' "${BASH_REMATCH[1]}"
+}
+
+PSQL() { PGPASSWORD=$POSTGRES_PASSWORD psql -qAt -U postgres -d "$DB_NAME" "$@"; }
+
+# ───────────────────────  sanity checks  ──────────────────────
+TABLE_EXISTS=$(PSQL -c "SELECT to_regclass('public.schema_versions') IS NOT NULL;")
+
+if [[ $TABLE_EXISTS != "t" ]]; then
+  error_log "schema_versions table does not exist – aborting."
+  exit 1
+fi
+
+CURRENT_VERSION=$(PSQL -c "SELECT COALESCE(MAX(version), NULL) FROM schema_versions;")
+
+if [[ -z $CURRENT_VERSION ]]; then
+  error_log "schema_versions table is empty – it must contain at least one row."
+  exit 1
+fi
+
+log "Current schema version: $CURRENT_VERSION"
+
+# ──────────────────────  collect migrations  ──────────────────
+if [[ ! -d $MIGRATIONS_DIR ]]; then
+  error_log "Migrations directory $MIGRATIONS_DIR not found."
+  exit 1
+fi
+
+mapfile -t MIGRATION_FILES < <(find "$MIGRATIONS_DIR" -type f -name '*.sql' | sort -V)
+
+if [[ ${#MIGRATION_FILES[@]} -eq 0 ]]; then
+  log "No migration files found – nothing to do."
+  exit 0
+fi
+
+# ──────────────────────  apply migrations  ────────────────────
+# …(unchanged header and helpers)…
+
+for FILE in "${MIGRATION_FILES[@]}"; do
+  VERSION=$(extract_version "$FILE") || continue
+  (( VERSION > CURRENT_VERSION )) || continue
+
+  log "Applying migration $VERSION from $(basename "$FILE")"
+
+  # -- run the file and capture full output -----------------------------
+  if OUTPUT=$(PSQL -v ON_ERROR_STOP=1 -f "$FILE" 2>&1); then
+      PSQL -c "INSERT INTO schema_versions(version, description)
+               VALUES ($VERSION, \$\$${DESCRIPTION}\$\$);"
+      CURRENT_VERSION=$VERSION
+      log "Migration $VERSION applied successfully."
+  else
+      error_log "Failed to apply migration $VERSION – aborting."
+      error_log "psql said:\n${OUTPUT}"
+      exit 1
+  fi
+done
+
+
+log "All pending migrations executed."
+PSQL -c "SELECT version, applied_at, description FROM schema_versions ORDER BY version;"
+

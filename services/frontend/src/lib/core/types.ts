@@ -22,18 +22,29 @@ export interface Instance {
     sortOrder?: number;
     flagged?: boolean;
 }
-export interface Setup {
-    setupId: number;
-    name: string;
+
+// Defines the structure for the criteria JSON object within a Strategy
+export interface StrategyCriteria {
     timeframe: string;
     bars: number;
     threshold: number;
     dolvol: number;
     adr: number;
     mcap: number;
-    score: number;
-    activeScreen: boolean;
+    // Note: score and activeScreen might be handled differently in the application logic
+    // as they are not direct columns in the strategies table's criteria JSON based on init.sql
+    // score?: number;
+    // activeScreen?: boolean;
 }
+
+// Updated Strategy interface based on the 'strategies' table in init.sql
+export interface Strategy {
+    strategyId: number;
+    userId: number;
+    name: string;
+    criteria: StrategyCriteria; // Corresponds to the JSON column
+}
+
 export interface Watchlist {
     watchlistName: string;
     watchlistId: number;
@@ -66,6 +77,13 @@ export interface Settings {
     filterTaS: boolean;
     showFilings: boolean;
     enableScreensaver: boolean;
+    screensaverTimeframes: string[];
+    screensaverSpeed: number;
+    screensaverTimeout: number;
+    screensaverDataSource: 'gainers-losers' | 'watchlist' | 'user-defined';
+    screensaverWatchlistId?: number;
+    screensaverTickers?: string[];
+    colorScheme: 'default' | 'dark-blue' | 'midnight' | 'forest' | 'sunset';
 }
 export interface StreamInfo {
     status: 'replay' | 'realtime' | 'paused';
@@ -78,18 +96,59 @@ export interface AlertData {
     timestamp: number;
     securityId: number;
 }
-export interface AlertLog extends Instance, Alert { }
+export interface AlertLog {
+    alertLogId: number;
+    alertId: number; // Refers to either PriceAlert or StrategyAlert ID
+    timestamp: string; // Assuming timestamp comes as string, adjust if Date object
+    securityId: number;
+}
+
+// Generic Alert configuration used in frontend components.
+// May represent either a PriceAlert or StrategyAlert configuration.
 export interface Alert {
     active?: boolean;
-    alertId?: number;
-    alertType: string;
-    setupId?: number;
-    algoId?: number;
-    securityId?: string | number;
+    alertId?: number; // Could be priceAlertId or strategyAlertId
+    alertType: 'price' | 'strategy' | string; // Type discriminator
+    strategyId?: number; // Replaces setupId, relevant for strategy alerts
+    securityId?: string | number; // Can be string (ticker) or number (securityId)
     ticker?: string;
-    price?: number;
-    alertPrice?: number;
+    price?: number; // Target price for price alerts
+    direction?: boolean; // Direction for price/strategy alerts
+    // alertPrice?: number; // This seems redundant if 'price' is used for target price
 }
+
+// Specific type for Price Alerts based on 'priceAlerts' table
+export interface PriceAlert {
+    priceAlertId: number;
+    userId: number;
+    active: boolean;
+    price: number; // Using number, adjust if DECIMAL needs string representation
+    direction: boolean;
+    securityID: number;
+}
+
+// Specific type for Strategy Alerts based on 'strategyAlerts' table
+export interface StrategyAlert {
+    strategyAlertId: number;
+    userId: number;
+    active: boolean;
+    strategyId: number;
+    direction: boolean;
+    securityID: number;
+}
+
+// Interface for Studies based on the 'studies' table
+export interface Study {
+    studyId: number;
+    userId: number;
+    securityId?: number;
+    strategyId?: number;
+    timestamp: string; // Assuming timestamp comes as string, adjust if Date object
+    tradeId?: number;
+    completed: boolean;
+    entry: any; // JSON blob, define more strictly if structure is known
+}
+
 
 export interface Trade {
     time: number;

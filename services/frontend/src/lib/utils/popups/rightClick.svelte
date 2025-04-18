@@ -8,10 +8,10 @@
 	import { embedInstance } from '$lib/utils/modules/entry.svelte';
 	import { newStudy } from '$lib/features/study.svelte';
 	import { get, writable } from 'svelte/store';
-	import { setSample } from '$lib/features/setups/interface';
-	import { querySimilarInstances } from '$lib/features/similar/interface';
+	import { setSample } from '$lib/features/strategies/interface';
+//	import { querySimilarInstances } from '$lib/features/similar/interface';
 	import { newPriceAlert } from '$lib/features/alerts/interface';
-	import { querySetup } from '$lib/utils/popups/setup.svelte';
+	import { queryStrategy } from '$lib/utils/popups/strategiesPopup.svelte';
 	import { startReplay } from '$lib/utils/stream/interface';
 	import { addHorizontalLine } from '$lib/features/chart/drawingMenu.svelte';
 	import { getLLMSummary } from '$lib/features/summary.svelte';
@@ -178,7 +178,7 @@
 	}
 
 	function sSample(event: MouseEvent) {
-		querySetup(event).then((v: number) => {
+		queryStrategy(event).then((v: number) => {
 			if (v == null) return;
 			setSample(v, $rightClickQuery.instance);
 		});
@@ -225,12 +225,12 @@
 				Add to Study
 			</button>
 			<button class="wide-button" on:click={(event) => sSample(event)}> Add to Sample </button>
-			<button
+			<!--<button
 				class="wide-button"
 				on:click={(event) => querySimilarInstances($rightClickQuery.instance)}
 			>
 				Similar Instances
-			</button>
+			</button>-->
 			<button class="wide-button" on:click={() => getLLMSummary($rightClickQuery.instance)}>
 				Get LLM Summary for {$rightClickQuery.instance.ticker}
 			</button>

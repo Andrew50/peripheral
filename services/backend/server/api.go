@@ -22,11 +22,10 @@ var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, err
 	"login":          Login,
 	"googleLogin":    GoogleLogin,
 	"googleCallback": GoogleCallback,
-	"guestLogin":     GuestLogin,
 }
 
 // Define privateFunc as an alias to Tools
-var privateFunc = tools.GetTools()
+var privateFunc = tools.GetTools(true)
 
 // Request represents a structure for handling Request data.
 type Request struct {
@@ -95,15 +94,8 @@ func publicHandler(conn *utils.Conn) http.HandlerFunc {
 			return
 		}
 
-		// Apply JSON sanitization to arguments
-		sanitizedArgs, err := sanitizeJSON(req.Arguments)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Invalid arguments: %v", err), http.StatusBadRequest)
-			return
-		}
-
 		// Execute the requested function with sanitized input
-		result, err := publicFunc[req.Function](conn, sanitizedArgs)
+		result, err := publicFunc[req.Function](conn, req.Arguments)
 		if err != nil {
 			// Limit error information in public endpoints
 			log.Printf("public_handler error: %s - %v", req.Function, err)
@@ -224,17 +216,11 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 			return
 		}
 
-		//fmt.Println("debug: got private request")
 		token_string := r.Header.Get("Authorization")
 		_, err := validateToken(token_string)
 		if handleError(w, err, "auth") {
 			return
 		}
-		var req Request
-		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "decoding request") {
-			return
-		}
-		//fmt.Printf("debug: %s\n", req.Function)
 
 		// Validate content type to prevent content-type sniffing attacks
 		contentType := r.Header.Get("Content-Type")
@@ -255,16 +241,22 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 			return
 		}
 
-		// Validate the function name
-		if _, exists := privateFunc[req.Function]; !exists {
-			http.Error(w, "Unknown function", http.StatusBadRequest)
+		var req Request
+		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "decoding request") {
 			return
 		}
 
-		// Apply JSON sanitization to arguments - restrict to allowed patterns for each argument type
+		// Sanitize the JSON input to prevent injection attacks
 		sanitizedArgs, err := sanitizeJSON(req.Arguments)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Invalid arguments: %v", err), http.StatusBadRequest)
+			handleError(w, err, "sanitizing input")
+			return
+		}
+		req.Arguments = sanitizedArgs
+
+		// Validate the function name
+		if _, exists := privateFunc[req.Function]; !exists {
+			http.Error(w, "Unknown function", http.StatusBadRequest)
 			return
 		}
 
@@ -275,7 +267,7 @@ func privateHandler(conn *utils.Conn) http.HandlerFunc {
 		}
 
 		// Execute the requested function with sanitized input
-		result, err := privateFunc[req.Function].Function(conn, userId, sanitizedArgs)
+		result, err := privateFunc[req.Function].Function(conn, userId, req.Arguments)
 		if handleError(w, err, fmt.Sprintf("private_handler: %s", req.Function)) {
 			return
 		}
@@ -374,15 +366,7 @@ func containsInjectionPattern(s string) bool {
 		"eval\\(",
 	}
 
-	// Check for other common injection patterns
-	otherPatterns := []string{
-		"../",     // Path traversal
-		"://.*/",  // URL injection
-		"\\${.*}", // Template injection
-	}
-
 	patterns := append(sqlPatterns, xssPatterns...)
-	patterns = append(patterns, otherPatterns...)
 
 	for _, pattern := range patterns {
 		matched, _ := regexp.MatchString("(?i)"+pattern, s)
@@ -399,53 +383,6 @@ type QueueRequest struct {
 	Arguments interface{} `json:"args"`
 }
 
-func queueHandler(conn *utils.Conn) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		addCORSHeaders(w)
-		if r.Method != "POST" {
-			return
-		}
-		fmt.Println("debug: got queue request")
-		token_string := r.Header.Get("Authorization")
-		userId, err := validateToken(token_string)
-		if handleError(w, err, "auth") {
-			return
-		}
-		var req Request
-		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "decoding request") {
-			return
-		}
-
-		// Create a map for the combined arguments
-		var args map[string]interface{}
-
-		// If req.Arguments is not empty, unmarshal it into the args map
-		if len(req.Arguments) > 0 {
-			if err := json.Unmarshal(req.Arguments, &args); err != nil {
-				handleError(w, err, "parsing arguments")
-				return
-			}
-		} else {
-			// Initialize empty map if no arguments were provided
-			args = make(map[string]interface{})
-		}
-
-		// Add userId to the arguments
-		args["user_id"] = userId
-
-		taskId, err := utils.Queue(conn, req.Function, args)
-		if handleError(w, err, "queue") {
-			return
-		}
-		response := map[string]string{
-			"taskId": taskId,
-		}
-		if err := json.NewEncoder(w).Encode(response); err != nil {
-			handleError(w, err, "190v0id")
-			return
-		}
-	}
-}
 
 // PollRequest represents a structure for handling PollRequest data.
 type PollRequest struct {
@@ -537,26 +474,6 @@ func WSHandler(conn *utils.Conn) http.HandlerFunc {
 	}
 }
 
-// Health check endpoint handler
-func healthHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Create a response object
-		response := map[string]string{
-			"status":  "healthy",
-			"service": "backend",
-		}
-
-		// Set content type header
-		w.Header().Set("Content-Type", "application/json")
-
-		// Write the response
-		if err := json.NewEncoder(w).Encode(response); err != nil {
-			log.Printf("Error encoding health response: %v", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-		}
-	}
-}
-
 // StartServer performs operations related to StartServer functionality.
 func StartServer() {
 	conn, cleanup := utils.InitConn(true)
@@ -565,11 +482,11 @@ func StartServer() {
 	defer close(stopScheduler)
 	http.HandleFunc("/public", publicHandler(conn))
 	http.HandleFunc("/private", privateHandler(conn))
-	http.HandleFunc("/queue", queueHandler(conn))
+	//http.HandleFunc("/queue", queueHandler(conn))
 	http.HandleFunc("/poll", pollHandler(conn))
 	http.HandleFunc("/ws", WSHandler(conn))
-	http.HandleFunc("/private-upload", privateUploadHandler(conn))
-	http.HandleFunc("/health", healthHandler())
+	http.HandleFunc("/upload", privateUploadHandler(conn))
+	//http.HandleFunc("/health", healthHandler())
 	//http.HandleFunc("/backend/health", healthHandler())
 	fmt.Println("debug: Server running on port 5058 ----------------------------------------------------------")
 	if err := http.ListenAndServe(":5058", nil); err != nil {

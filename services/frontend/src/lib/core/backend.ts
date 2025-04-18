@@ -45,7 +45,7 @@ export async function publicRequest<T>(func: string, args: Record<string, unknow
     }
 }
 
-export async function privateFileRequest<T>(
+export async function uploadRequest<T>(
     func: string,
     file: File,
     additionalArgs: object = {}
@@ -67,7 +67,7 @@ export async function privateFileRequest<T>(
         headers['Authorization'] = authToken;
     }
 
-    const response = await fetch(`${base_url}/private-upload`, {
+    const response = await fetch(`${base_url}/uploadRequest`, {
         method: 'POST',
         headers,
         body: formData
@@ -91,7 +91,8 @@ export async function privateFileRequest<T>(
 export async function privateRequest<T>(
     func: string,
     args: Record<string, unknown>,
-    verbose = false
+    verbose = false,
+    keepalive = false
 ): Promise<T> {
     // Skip API calls during SSR to prevent crashes
     if (typeof window === 'undefined') {
@@ -115,7 +116,8 @@ export async function privateRequest<T>(
     const response = await fetch(`${base_url}/private`, {
         method: 'POST',
         headers: headers,
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        keepalive: keepalive
     }).catch((e) => {
         return Promise.reject(e);
     });

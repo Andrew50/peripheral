@@ -1,33 +1,40 @@
-# Stage 1: Build the SvelteKit app
+# Build stage
 FROM node:18-alpine AS builder
+
+# Set working directory
 WORKDIR /app
 
-# Copy package files first
+# Copy package files
 COPY package*.json ./
-# Replace npm ci with npm install to generate/update package-lock.json
+
+# Install dependencies
 RUN npm install
 
-# Copy the entire app
+# Copy the rest of the code
 COPY . .
 
-# Build the app for production
+# Build the application
 RUN npm run build
 
-# Stage 2: Run the production build
+# Production stage
 FROM node:18-alpine
+
+# Set working directory
 WORKDIR /app
 
-# Copy the built app from the builder stage
+# Copy build output from builder stage
 COPY --from=builder /app/build /app/build
+
+# Copy package files
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/package-lock.json ./
 
-# Now we can use npm ci since package-lock.json is in sync
+# Install production dependencies after ensuring lock file is in sync
+#RUN npm install 
 RUN npm ci --omit=dev
 
 # Expose the port
 EXPOSE 3000
 
-# Start the app with the built-in SvelteKit server
+# Start the application
 CMD ["node", "build"]
-

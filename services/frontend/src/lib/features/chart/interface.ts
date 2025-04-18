@@ -92,7 +92,6 @@ export function queryChart(newInstance: Instance, includeLast: boolean = true): 
 	if (get(streamInfo).replayActive) {
 		queryDispatch.timestamp = get(streamInfo).timestamp;
 	}
-
 	// Ensure we have all necessary instance properties
 	if (!newInstance.name && newInstance.securityId) {
 		privateRequest<Record<string, any>>(
