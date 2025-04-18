@@ -5,40 +5,31 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
+    "strconv"
+    "embed"
 	"time"
 )
 
-// getSystemInstruction reads the content of query.txt to be used as system instruction
-func getSystemInstruction(systemPrompt string) (string, error) {
-	// Get the directory of the current file (gemini.go)
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", fmt.Errorf("error getting current file path")
-	}
-	currentDir := filepath.Dir(filename)
 
-	systemPrompt = systemPrompt + ".txt"
-	// Construct path to query.txt
-	queryFilePath := filepath.Join(currentDir, systemPrompt)
+//go:embed prompts/*
+var fs embed.FS           // 2️⃣ compiled into the binary
 
-	// Read the content of query.txt
-	content, err := os.ReadFile(queryFilePath)
+// getSystemInstruction returns the processed prompt named <name>.txt
+func getSystemInstruction(name string) (string, error) {
+    fmt.Println(fs)
+	raw, err := fs.ReadFile("prompts/" + name + ".txt") // 3️⃣ no paths, no os.ReadFile
 	if err != nil {
-		return "", fmt.Errorf("error reading query.txt: %w", err)
+		return "", fmt.Errorf("reading prompt: %w", err)
 	}
 
-	// Replace the {{CURRENT_TIME}} placeholder with the actual current time
-	currentTime := time.Now().Format(time.RFC3339)
-	currentTimeMilliseconds := time.Now().UnixMilli()
-	instruction := strings.Replace(string(content), "{{CURRENT_TIME}}", currentTime, -1)
-	instruction = strings.Replace(instruction, "{{CURRENT_TIME_MILLISECONDS}}", fmt.Sprintf("%d", currentTimeMilliseconds), -1)
-
-	return instruction, nil
+	now := time.Now()
+	s := strings.ReplaceAll(string(raw), "{{CURRENT_TIME}}",
+		now.Format(time.RFC3339))
+	s = strings.ReplaceAll(s, "{{CURRENT_TIME_MILLISECONDS}}",
+		strconv.FormatInt(now.UnixMilli(), 10))
+	return s, nil
 }
 
 // enhanceSystemPromptWithTools adds a formatted list of available tools to the system prompt
@@ -48,6 +39,7 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 	// Start with the base prompt
 	toolsDescription.WriteString(basePrompt)
 	toolsDescription.WriteString("\n\nHere are the functions you can use:\n\n")
+
 
 	// Sort tool names for consistent output
 	var toolNames []string
@@ -59,6 +51,7 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 	// Add each tool's description and parameters
 	for _, name := range toolNames {
 		tool := GetTools(false)[name]
+
 
 		// Add function name and description
 		toolsDescription.WriteString(fmt.Sprintf("- %s: %s\n", name, tool.FunctionDeclaration.Description))
