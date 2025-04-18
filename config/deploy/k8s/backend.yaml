@@ -23,24 +23,23 @@ spec:
         - name: backend
           image: ${DOCKER_USERNAME}/backend:${DOCKER_TAG}
           imagePullPolicy: Always
-          command:
-            - /bin/sh
-          args:
-            - -c
-            - >
-              /app/main &
-              jobctl run ClearWorkerQueue && 
-              jobctl run InitAggregates && 
-              jobctl run SimpleUpdateSecurities && 
-              jobctl run StartAlertLoop && 
-              jobctl run StartPolygonWebSocket && 
-              jobctl run UpdateMarketMetrics && 
-              jobctl run UpdateSectors && 
-              jobctl run UpdateSecurityCik && 
-              jobctl run UpdateSecurityDetails &&
-              wait
+          #command: ["/app/main"] # hanlded by the docker file
           ports:
             - containerPort: 5058
+          readinessProbe:
+            httpGet:
+              path: /healthz      # add a trivial handler that just returns 200
+              port: 5058
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 5058
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
           env:
             # Database connection
             - name: DB_HOST
