@@ -39,13 +39,6 @@ spec:
                 name: backend
                 port:
                   number: 5058
-          - path: /poll
-            pathType: Prefix
-            backend:
-              service:
-                name: backend
-                port:
-                  number: 5058
           - path: /public
             pathType: Prefix
             backend:
@@ -53,14 +46,14 @@ spec:
                 name: backend
                 port:
                   number: 5058
-          - path: /queue
+          - path: /ws
             pathType: Prefix
             backend:
               service:
                 name: backend
                 port:
                   number: 5058
-          - path: /ws
+          - path: /upload
             pathType: Prefix
             backend:
               service:
