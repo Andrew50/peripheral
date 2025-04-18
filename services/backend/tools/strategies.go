@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"google.golang.org/genai"
-    "regexp"
 	"bytes"
 	"encoding/base64"
      "github.com/pplcc/plotext/custplotter"
