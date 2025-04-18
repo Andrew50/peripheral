@@ -5,11 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math"
-	"net/http"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -185,13 +182,16 @@ func GetChartEvents(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inte
 	if args.IncludeSECFilings {
 		go func() {
 			defer wg.Done()
-			from := time.Unix(args.From/1000, 0)
-			to := time.Unix(args.To/1000, 0)
-
-			filings, err := getStockEdgarFilings(conn, args.SecurityID, EdgarFilingOptions{
-				From: &from,
-				To:   &to,
-			})
+			options := EdgarFilingOptions{
+				Start:      args.From,
+				End:        args.To,
+				SecurityID: args.SecurityID,
+			}
+			optionsJSON, err := json.Marshal(options)
+			if err != nil {
+				return
+			}
+			res, err := GetStockEdgarFilings(conn, userId, optionsJSON)
 			if err != nil {
 				// Log the error but don't fail the entire request
 				secFilingErr = fmt.Errorf("error fetching SEC filings for %s: %v", ticker, err)
@@ -200,6 +200,7 @@ func GetChartEvents(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inte
 
 			// Process SEC filings and add to events with mutex protection
 			var filingEvents []ChartEvent
+			filings := res.([]utils.EDGARFiling)
 			// Process SEC filings
 			for _, filing := range filings {
 				// The timestamp is already in UTC milliseconds
@@ -304,243 +305,4 @@ func getStockDividends(conn *utils.Conn, ticker string) ([]models.Dividend, erro
 	}
 
 	return dividends, nil
-}
-
-// EdgarFilingOptions represents optional parameters for fetching EDGAR filings
-type EdgarFilingOptions struct {
-	From *time.Time
-	To   *time.Time
-}
-
-// getStockEdgarFilings retrieves SEC filings for a security with optional filters
-func getStockEdgarFilings(conn *utils.Conn, securityId int, opts EdgarFilingOptions) ([]utils.EDGARFiling, error) {
-	// Get ticker for the security
-	to := time.Now()
-	if opts.To != nil {
-		to = *opts.To
-	}
-
-	ticker, err := utils.GetTicker(conn, securityId, to)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get ticker: %v", err)
-	}
-
-	// Fetch CIK from SEC
-	cik, err := utils.GetCIKFromTicker(conn, ticker, to)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get CIK for %s: %v", ticker, err)
-	}
-	cikStr := fmt.Sprintf("%d", cik)
-	filings, err := fetchEdgarFilings(cikStr)
-	if err != nil {
-		return nil, err
-	}
-
-	// Filter filings based on options
-	var filteredFilings []utils.EDGARFiling
-	for _, filing := range filings {
-		filingTime := time.UnixMilli(filing.Timestamp)
-
-		// Apply date filters if provided
-		if opts.From != nil {
-			if opts.From != nil && filingTime.Before(*opts.From) {
-				continue
-			}
-			if opts.To != nil && filingTime.After(*opts.To) {
-				continue
-			}
-		}
-
-		filteredFilings = append(filteredFilings, filing)
-	}
-
-	// Sort filings by timestamp in ascending order (oldest first)
-	sort.Slice(filteredFilings, func(i, j int) bool {
-		return filteredFilings[i].Timestamp < filteredFilings[j].Timestamp
-	})
-
-	return filteredFilings, nil
-}
-
-// fetchEdgarFilings fetches filings for a specific CIK
-func fetchEdgarFilings(cik string) ([]utils.EDGARFiling, error) {
-
-	// Format CIK with leading zeros to make it 10 digits long
-	paddedCik := cik
-	if len(cik) < 10 {
-		paddedCik = fmt.Sprintf("%010s", cik)
-	}
-
-	url := fmt.Sprintf("https://data.sec.gov/submissions/CIK%s.json", paddedCik)
-	fmt.Printf("Making SEC API request to: %s\n", url)
-
-	// Create HTTP client with reasonable timeout
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	// Make the request with retries for rate limiting
-	var resp *http.Response
-	var err error
-	maxRetries := 5
-	retryDelay := 1 * time.Second
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			return nil, err
-		}
-
-		// SEC requires a User-Agent header
-		req.Header.Set("User-Agent", "atlantis admin@atlantis.trading")
-
-		resp, err = client.Do(req)
-		if err != nil {
-			return nil, err
-		}
-
-		// Check for rate limiting (429)
-		if resp.StatusCode == 429 {
-			resp.Body.Close()
-
-			// Exponential backoff
-			waitTime := retryDelay * time.Duration(1<<attempt)
-			time.Sleep(waitTime)
-			continue
-		}
-
-		// Check for other non-success status codes
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			return nil, fmt.Errorf("SEC API returned status %d: %s", resp.StatusCode, string(body[:100])) // Show first 100 chars
-		}
-
-		// If we get here, we have a successful response
-		break
-	}
-
-	// Check if all retries failed
-	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("SEC API rate limit exceeded after %d retries", maxRetries)
-	}
-
-	defer resp.Body.Close()
-
-	// Check content type to ensure we're getting JSON
-	contentType := resp.Header.Get("Content-Type")
-	if !strings.Contains(contentType, "application/json") {
-		body, _ := io.ReadAll(resp.Body)
-		bodyPreview := string(body)
-		if len(bodyPreview) > 100 {
-			bodyPreview = bodyPreview[:100] + "..."
-		}
-		return nil, fmt.Errorf("unexpected content type: %s, response: %s", contentType, bodyPreview)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	return parseEdgarFilingsResponse(body, cik)
-}
-
-// parseEdgarFilingsResponse parses the JSON response from SEC EDGAR API
-func parseEdgarFilingsResponse(body []byte, cik string) ([]utils.EDGARFiling, error) {
-	var result struct {
-		Filings struct {
-			Recent struct {
-				AccessionNumber []string `json:"accessionNumber"`
-				FilingDate      []string `json:"filingDate"`
-				Form            []string `json:"form"`
-				PrimaryDocument []string `json:"primaryDocument"`
-				FilingTime      []string `json:"acceptanceDateTime"`
-			} `json:"recent"`
-		} `json:"filings"`
-	}
-
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal SEC response: %v", err)
-	}
-
-	recent := result.Filings.Recent
-	if recent.AccessionNumber == nil || recent.FilingDate == nil || recent.Form == nil || recent.PrimaryDocument == nil {
-		return []utils.EDGARFiling{}, nil
-	}
-
-	minLen := len(recent.AccessionNumber)
-	if len(recent.FilingDate) < minLen {
-		minLen = len(recent.FilingDate)
-	}
-	if len(recent.Form) < minLen {
-		minLen = len(recent.Form)
-	}
-	if len(recent.PrimaryDocument) < minLen {
-		minLen = len(recent.PrimaryDocument)
-	}
-
-	// Create a map to track seen accession numbers to avoid duplicates
-	seen := make(map[string]bool)
-	filings := make([]utils.EDGARFiling, 0, minLen)
-
-	for i := 0; i < minLen; i++ {
-		// Skip Form 4 filings and duplicates
-		if recent.Form[i] == "4" {
-			continue
-		}
-
-		// Check for duplicates using accession number
-		accessionNumber := strings.Replace(recent.AccessionNumber[i], "-", "", -1)
-		if seen[accessionNumber] {
-			continue
-		}
-		seen[accessionNumber] = true
-
-		date, err := time.Parse("2006-01-02", recent.FilingDate[i])
-		if err != nil {
-			continue
-		}
-
-		// Parse the full timestamp
-		var timestampTime time.Time
-		if len(recent.FilingTime) > i {
-			timestampTime, err = time.Parse("2006-01-02T15:04:05.000Z", recent.FilingTime[i])
-			if err == nil {
-				// Convert to EST to check market hours
-				est, err := time.LoadLocation("America/New_York")
-				if err == nil {
-					estTime := timestampTime.In(est)
-
-					// Check if outside market hours (4 AM to 8 PM EST)
-					hour := estTime.Hour()
-					if hour < 4 || hour >= 20 {
-						// Set to midnight of the filing date
-						timestampTime = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
-					}
-				}
-			}
-		}
-
-		// If timestamp parsing failed, default to midnight of filing date in UTC
-		if timestampTime.IsZero() {
-			timestampTime = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
-		}
-
-		// Convert to UTC milliseconds
-		utcMillis := timestampTime.UTC().UnixMilli()
-
-		// Create URL that points to the human-readable HTML page
-		htmlURL := fmt.Sprintf("https://www.sec.gov/Archives/edgar/data/%s/%s/%s",
-			cik, accessionNumber, recent.PrimaryDocument[i])
-
-		filings = append(filings, utils.EDGARFiling{
-			Type:      recent.Form[i],
-			Date:      date,
-			URL:       htmlURL,
-			Timestamp: utcMillis,
-		})
-	}
-
-	return filings, nil
 }

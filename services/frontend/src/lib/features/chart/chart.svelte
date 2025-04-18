@@ -94,6 +94,7 @@
 		timeframe: string;
 		securityId: number;
 		price: number;
+		trades?: any[]; // Add optional trades property
 	}
 
 	let bidLine: any;
@@ -186,7 +187,6 @@
 		price: 0,
 		extendedHours: false
 	};
-	let blockingChartQueryDispatch = {};
 	let isPanning = false;
 	const excludedConditions = new Set([2, 7, 10, 13, 15, 16, 20, 21, 22, 29, 33, 37]);
 	let mouseDownStartX = 0;
@@ -202,6 +202,10 @@
 
 	// Add new property to track alert lines
 	let alertLines: AlertLine[] = [];
+
+	// State for quote line visibility
+	let isViewingLiveData = true; // Assume true initially
+	let lastQuoteData: QuoteData | null = null;
 
 	let arrowSeries: any = null; // Initialize as null
 	let eventSeries: ISeriesApi<'Custom', Time, EventMarker>;
@@ -254,23 +258,40 @@
 		amount?: number;
 	}
 
-	interface ScreenshotOptions {
-		type: string;
-		url: string;
-		ratio: number;
-	}
-
-	type StreamReleaseFunction = () => void;
-
 	function extendedHours(timestamp: number): boolean {
 		const date = new Date(timestamp);
 		const minutes = date.getHours() * 60 + date.getMinutes();
 		return minutes < 570 || minutes >= 960; // 9:30 AM - 4:00 PM EST
 	}
 
+	// Helper function to clear quote lines
+	function clearQuoteLines() {
+		if (bidLine && askLine) {
+			bidLine.setData([]);
+			askLine.setData([]);
+		}
+	}
+
+	// Helper function to apply the last known quote
+	function applyLastQuote() {
+		// Assumes isViewingLiveData is already true when called
+		if (lastQuoteData && bidLine && askLine) {
+			const candle = chartCandleSeries?.data()?.at(-1);
+			if (candle) {
+				const time = candle.time;
+				bidLine.setData([{ time: time, value: lastQuoteData.bidPrice }]);
+				askLine.setData([{ time: time, value: lastQuoteData.askPrice }]);
+			}
+		}
+	}
+
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
 		eventSeries.setData([]);
 		if (inst.requestType === 'loadNewTicker') {
+			// Clear pending updates when loading a new ticker
+			pendingBarUpdate = null;
+			pendingVolumeUpdate = null;
+			
 			bidLine.setData([]);
 			askLine.setData([]);
 			arrowSeries.setData([]);
@@ -278,6 +299,7 @@
 		if (isLoadingChartData || !inst.ticker || !inst.timeframe || !inst.securityId) {
 			return;
 		}
+		console.log('backendLoadChartData', inst);
 		isLoadingChartData = true;
 		lastChartQueryDispatchTime = Date.now();
 		if (
@@ -300,7 +322,6 @@
 		})
 			.then((response) => {
 				const barDataList = response.bars;
-				blockingChartQueryDispatch = inst;
 				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
 					return;
 				}
@@ -348,14 +369,6 @@
 					}
 					releaseFast();
 					releaseQuote();
-					/*privateRequest<number>('getMarketCap', { ticker: inst.ticker }).then(
-						(res: { marketCap: number }) => {
-							hoveredCandleData.update((v: typeof defaultHoveredCandleData) => {
-								v.mcap = res.marketCap;
-								return v;
-							});
-						}
-					);*/
 					drawingMenuProps.update((v) => ({
 						...v,
 						chartCandleSeries: chartCandleSeries,
@@ -389,7 +402,7 @@
 					if (inst.direction == 'backward') {
 						chartEarliestDataReached = response.isEarliestData;
 					} else if (inst.direction == 'forward') {
-						('chartLatestDataReached');
+						console.log('chartLatestDataReached');
 						chartLatestDataReached = true;
 					}
 				}
@@ -414,7 +427,7 @@
 								if (!events || events.length === 0) {
 									// Clear any existing events data
 									eventSeries.setData([]);
-									return; // Exit early
+									return;
 								}
 
 								const eventsByTime = new Map<
@@ -498,7 +511,7 @@
 						const visibleRange = chart.timeScale().getVisibleRange();
 						const vrFrom = visibleRange?.from;
 						const vrTo = visibleRange?.to;
-
+						console.log('visibleRange', vrFrom, vrTo);
 						// Only set visible range if both from and to values are valid
 						chartCandleSeries.setData(newCandleData);
 						chartVolumeSeries.setData(newVolumeData);
@@ -561,6 +574,8 @@
 							}));
 							// Sort markers by timestamp (time) in ascending order
 							markers.sort((a, b) => a.time - b.time);
+							
+
 							arrowSeries.setData(markers);
 						}
 					}
@@ -615,7 +630,6 @@
 						!chartLatestDataReached &&
 						!$streamInfo.replayActive
 					) {
-						('1');
 						backendLoadChartData({
 							...currentChartInstance,
 							timestamp: ESTSecondstoUTCMillis(
@@ -639,11 +653,21 @@
 		if (!data?.bidPrice || !data?.askPrice) {
 			return;
 		}
+		// Always store the latest quote
+		lastQuoteData = data;
+
+		// Only update lines if viewing live data
+		if (isViewingLiveData) {
+			applyLastQuote();
+		}
+		/*
 		const candle = chartCandleSeries.data().at(-1);
 		if (!candle) return;
 		const time = candle.time;
+		console.log('updateLatestQuote', data);
 		bidLine.setData([{ time: time, value: data.bidPrice }]);
 		askLine.setData([{ time: time, value: data.askPrice }]);
+		*/
 	}
 	// Create a horizontal line at the current crosshair position (Y-coordinate)
 
@@ -815,7 +839,7 @@
 
 	function shiftOverlayTrack(event: MouseEvent): void {
 		shiftOverlay.update((v: ShiftOverlay): ShiftOverlay => {
-			const god = {
+			const overlay = {
 				...v,
 				width: Math.abs(event.clientX - v.startX),
 				height: Math.abs(event.clientY - v.startY),
@@ -823,7 +847,7 @@
 				y: Math.min(event.clientY, v.startY),
 				currentPrice: chartCandleSeries.coordinateToPrice(event.clientY) || 0
 			};
-			return god;
+			return overlay;
 		});
 	}
 
@@ -844,6 +868,7 @@
 	}
 
 	async function updateLatestChartBar(trade: TradeData) {
+
 		// Early returns for invalid data
 		if (
 			!trade?.price ||
@@ -851,22 +876,16 @@
 			!trade?.timestamp ||
 			!chartCandleSeries?.data()?.length ||
 			isLoadingChartData
-		) {
-			return;
-		}
+		) { return; }
 		// Check excluded conditions early
-		if (trade.conditions?.some((condition) => excludedConditions.has(condition))) {
-			return;
-		}
+		if (trade.conditions?.some((condition) => excludedConditions.has(condition))) { return; }
 
 		// Check extended hours early
 		const isExtendedHours = extendedHours(trade.timestamp);
 		if (
 			isExtendedHours &&
 			(!currentChartInstance.extendedHours || /^[dwm]/.test(currentChartInstance.timeframe || ''))
-		) {
-			return;
-		}
+		) { return; }
 
 		const dolvol = get(settings).dolvol;
 		const mostRecentBar = chartCandleSeries.data().at(-1);
@@ -1014,11 +1033,6 @@
 			);
 
 			if (barIndex !== -1) {
-				// Create safe mutable copies for data updates
-				function createMutableCopy<T>(data: readonly T[]): T[] {
-					return [...data];
-				}
-
 				// Update bar data with safe copies
 				const updatedCandle = {
 					time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
@@ -1027,20 +1041,16 @@
 					low: barData.low,
 					close: barData.close
 				};
+				console.log('updatedCandle', updatedCandle);
+				chartCandleSeries.update(updatedCandle);
 
-				// Create a new mutable copy of the data array before updating it
-				const updatedCandleData = createMutableCopy(allCandleData);
-				updatedCandleData[barIndex] = updatedCandle;
-				chartCandleSeries.setData(updatedCandleData);
-
-				// Create a new mutable copy of the volume data array before updating it
-				const updatedVolumeData = createMutableCopy(chartVolumeSeries.data());
-				updatedVolumeData[barIndex] = {
+				// Create a new mutable copy of the volume data array before updating it	
+				const updatedVolumeBar = {
 					time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
 					value: barData.volume * (dolvol ? barData.close : 1),
 					color: barData.close > barData.open ? '#089981' : '#ef5350'
 				};
-				chartVolumeSeries.setData([...updatedVolumeData] as Array<HistogramData<Time>>);
+				chartVolumeSeries.update(updatedVolumeBar);
 			}
 		} catch (error) {
 			console.error('Error fetching historical data:', error);
@@ -1081,6 +1091,11 @@
 	}
 
 	function change(newReq: ChartQueryDispatch) {
+		// Reset pending updates when changing charts
+		pendingBarUpdate = null;
+		pendingVolumeUpdate = null;
+		lastUpdateTime = 0;
+		
 		const securityId =
 			typeof newReq.securityId === 'string'
 				? parseInt(newReq.securityId, 10)
@@ -1088,11 +1103,10 @@
 
 		const chartId =
 			typeof newReq.chartId === 'string' ? parseInt(newReq.chartId, 10) : newReq.chartId;
-
 		const updatedReq: ChartInstance = {
 			ticker: newReq.ticker || currentChartInstance.ticker,
-			timestamp: newReq.timestamp ?? currentChartInstance.timestamp,
-			timeframe: newReq.timeframe || '1d',
+			timestamp: newReq.timestamp || 0,
+			timeframe: newReq.timeframe || currentChartInstance.timeframe,
 			securityId: securityId,
 			price: newReq.price ?? currentChartInstance.price,
 			chartId: chartId,
@@ -1100,7 +1114,7 @@
 			direction: newReq.direction,
 			requestType: newReq.requestType,
 			includeLastBar: newReq.includeLastBar,
-			extendedHours: newReq.extendedHours
+			extendedHours: newReq.extendedHours ?? currentChartInstance.extendedHours
 		};
 
 		// Update currentChartInstance
@@ -1108,6 +1122,16 @@
 			...currentChartInstance,
 			...updatedReq
 		};
+
+		// Determine if viewing live data based on timestamp
+		isViewingLiveData = updatedReq.timestamp === 0;
+		// Clear quote lines if not viewing live data initially
+		if (!isViewingLiveData) {
+			clearQuoteLines();
+		} else if (lastQuoteData) {
+			// If switching back to live view and we have quote data, apply it (might be applied again later)
+			applyLastQuote();
+		}
 
 		if (
 			typeof chartId === 'number' &&
@@ -1143,8 +1167,10 @@
 			}
 		}
 
-		backendLoadChartData(updatedReq);
-
+		// Preserve trades data if it exists in newReq
+		if ('trades' in newReq && Array.isArray(newReq.trades)) {
+			updatedReq.trades = newReq.trades;
+		}
 		// Clear existing alert lines when changing tickers
 		if (chartCandleSeries) {
 			alertLines.forEach((line) => {
@@ -1166,6 +1192,9 @@
 			sessionHighlighting = new SessionHighlighting(createDefaultSessionHighlighter());
 			chartCandleSeries.attachPrimitive(sessionHighlighting);
 		}
+		backendLoadChartData(updatedReq);
+
+		
 	}
 
 	onMount(() => {
@@ -1520,6 +1549,7 @@
 				chgprct: chgprct,
 				rvol: 0
 			});
+			/*
 			if (currentChartInstance.timeframe && /^\d+$/.test(currentChartInstance.timeframe)) {
 				let barsForRVOL;
 				if (cursorBarIndex !== undefined && cursorBarIndex >= 1000) {
@@ -1543,7 +1573,7 @@
 						});
 					});
 				}
-			}
+			}*/
 			latestCrosshairPositionTime = bar.time as number;
 			latestCrosshairPositionY = param.point.y as number; //inccorect
 		});
@@ -1553,40 +1583,37 @@
 			}
 			const barsOnScreen = Math.floor(logicalRange.to) - Math.ceil(logicalRange.from);
 			const bufferInScreenSizes = 0.7;
-			if (logicalRange.from / barsOnScreen < bufferInScreenSizes) {
-				if (chartEarliestDataReached) {
-					return;
+
+
+			if (logicalRange.from > 10 && logicalRange.from / barsOnScreen < bufferInScreenSizes) {
+				if (!chartEarliestDataReached) {
+					// Get the earliest timestamp from current data
+					const earliestBar = chartCandleSeries.data()[0];
+					if (!earliestBar) return;
+
+					// Convert the earliest time from EST seconds to UTC milliseconds for the API request
+					const earliestTimestamp = ESTSecondstoUTCMillis(earliestBar.time as UTCTimestamp);
+
+					// Make sure to include extendedHours in the request
+					const inst: CoreInstance & { extendedHours?: boolean } = {
+						ticker: currentChartInstance.ticker,
+						timestamp: earliestTimestamp,
+						timeframe: currentChartInstance.timeframe,
+						securityId: currentChartInstance.securityId,
+						price: currentChartInstance.price,
+						extendedHours: currentChartInstance.extendedHours
+					};
+
+					backendLoadChartData({
+						...inst,
+						bars: Math.floor(bufferInScreenSizes * barsOnScreen) + 100,
+						direction: 'backward',
+						requestType: 'loadAdditionalData',
+						includeLastBar: true
+					});
 				}
-				('2');
-
-				// Get the earliest timestamp from current data
-				const earliestBar = chartCandleSeries.data()[0];
-				if (!earliestBar) return;
-
-				// Convert the earliest time from EST seconds to UTC milliseconds for the API request
-				const earliestTimestamp = ESTSecondstoUTCMillis(earliestBar.time as UTCTimestamp);
-
-				// Make sure to include extendedHours in the request
-				const inst: CoreInstance & { extendedHours?: boolean } = {
-					ticker: currentChartInstance.ticker,
-					timestamp: earliestTimestamp,
-					timeframe: currentChartInstance.timeframe,
-					securityId: currentChartInstance.securityId,
-					price: currentChartInstance.price,
-					extendedHours: currentChartInstance.extendedHours
-				};
-
-				backendLoadChartData({
-					...inst,
-					bars: Math.floor(bufferInScreenSizes * barsOnScreen) + 100,
-					direction: 'backward',
-					requestType: 'loadAdditionalData',
-					includeLastBar: true
-				});
-			} else if (
-				(chartCandleSeries.data().length - logicalRange.to) / barsOnScreen <
-				bufferInScreenSizes
-			) {
+			}
+			if ((chartCandleSeries.data().length - logicalRange.to) / barsOnScreen < bufferInScreenSizes) {
 				// forward load
 				if (chartLatestDataReached) {
 					return;
@@ -1594,12 +1621,17 @@
 				if ($streamInfo.replayActive) {
 					return;
 				}
-				('3');
+
+				const lastBar = chartCandleSeries.data().at(-1);
+				if (!lastBar) return; // Exit if no data exists
+
+				// Convert the last bar's time from EST seconds to UTC milliseconds for the API request
+				const requestTimestamp = ESTSecondstoUTCMillis(lastBar.time as UTCTimestamp);
 
 				// Also fix the forward load to include extendedHours
 				const inst: CoreInstance & { extendedHours?: boolean } = {
 					ticker: currentChartInstance.ticker,
-					timestamp: currentChartInstance.timestamp,
+					timestamp: requestTimestamp, // Correct: Use the last loaded bar's timestamp
 					timeframe: currentChartInstance.timeframe,
 					securityId: currentChartInstance.securityId,
 					price: currentChartInstance.price,
@@ -1759,23 +1791,6 @@
 			// Handle amount
 		}
 	}
-
-	// Handle Instance type
-	const createInstance = (chartInstance: Partial<CoreInstance>): CoreInstance => ({
-		ticker: chartInstance.ticker || '',
-		timestamp: chartInstance.timestamp || 0,
-		timeframe: chartInstance.timeframe || '',
-		securityId:
-			typeof chartInstance.securityId === 'string'
-				? parseInt(chartInstance.securityId, 10)
-				: chartInstance.securityId || 0,
-		price: chartInstance.price || 0
-	});
-
-	// Handle bars calculation safely
-	const calculateBars = (instance: Partial<ChartInstance>): number => {
-		return instance.bars || Math.floor(bufferInScreenSizes * defaultBarsOnScreen) + 100;
-	};
 
 	function ensureNumericSecurityId(instance: ExtendedInstance | CoreInstance): number {
 		const securityId = instance.securityId;

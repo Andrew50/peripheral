@@ -1,4 +1,4 @@
-package tools 
+package tools
 
 import (
 	"backend/utils"
@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 )
-
 
 // UpdateProfilePictureArgs represents a structure for handling UpdateProfilePictureArgs data.
 type UpdateProfilePictureArgs struct {

@@ -665,16 +665,112 @@ func GetIcons(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 	return results, nil
 }
 
-// GetLatestEdgarFilings returns the most recent SEC filings across all companies
-func GetLatestEdgarFilings(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	// Get the latest filings from the cache
-	filings := utils.GetLatestEdgarFilings()
+type GetCurrentSecurityIDArgs struct {
+	Ticker string `json:"ticker"`
+}
 
-	// Apply a limit to avoid sending too much data
-	limit := 100
-	if len(filings) > limit {
-		filings = filings[:limit]
+// GetCurrentSecurityID performs operations related to GetSecurityID functionality.
+func GetCurrentSecurityID(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetCurrentSecurityIDArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+	var securityID int
+	err := conn.DB.QueryRow(context.Background(), "SELECT securityId from securities where ticker = $1 and maxDate is NULL", args.Ticker).Scan(&securityID)
+	if err != nil {
+		return 0, fmt.Errorf("43333ngb %v", err)
+	}
+	return securityID, nil
+}
+
+type GetTickerDailySnapshotArgs struct {
+	SecurityID int `json:"securityId"`
+}
+type GetTickerDailySnapshotResults struct {
+	Ticker             string  `json:"ticker"`
+	LastBid            float64 `json:"lastBid,omitempty"`
+	LastAsk            float64 `json:"lastAsk,omitempty"`
+	LastTradePrice     float64 `json:"lastTradePrice"`
+	TodayChange        float64 `json:"todayChange"`
+	TodayChangePercent float64 `json:"todayChangePercent"`
+	Timestamp          int64   `json:"timestamp"`
+	Volume             float64 `json:"volume"`
+	Vwap               float64 `json:"vwap"`
+	TodayOpen          float64 `json:"todayOpen"`
+	TodayHigh          float64 `json:"todayHigh"`
+	TodayLow           float64 `json:"todayLow"`
+	TodayClose         float64 `json:"todayClose"`
+}
+
+func GetTickerDailySnapshot(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetTickerDailySnapshotArgs
+
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+	ticker, err := utils.GetTicker(conn, args.SecurityID, time.Now())
+
+	if err != nil {
+		return nil, fmt.Errorf("error getting ticker: %v", err)
 	}
 
-	return filings, nil
+	res, err := utils.GetPolygonTickerSnapshot(conn.Polygon, ticker, context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("error getting ticker snapshot: %v", err)
+	}
+	snapshot := res.Snapshot
+	var results GetTickerDailySnapshotResults
+	results.LastBid = snapshot.LastQuote.BidPrice
+	results.LastAsk = snapshot.LastQuote.AskPrice
+	results.LastTradePrice = snapshot.LastTrade.Price
+	currPrice := snapshot.Day.Close
+	lastClose := snapshot.PrevDay.Close
+	results.TodayChange = currPrice - lastClose
+	results.TodayChangePercent = ((currPrice - lastClose) / lastClose) * 100
+	results.Timestamp = int64(time.Time(snapshot.Updated).Unix())
+	results.Volume = snapshot.Day.Volume
+	results.Vwap = snapshot.Day.VolumeWeightedAverage
+	results.TodayOpen = snapshot.Day.Open
+	results.TodayHigh = snapshot.Day.High
+	results.TodayLow = snapshot.Day.Low
+	results.TodayClose = snapshot.Day.Close
+	results.Ticker = ticker
+	return results, nil
+}
+
+type GetAllTickerSnapshotResults struct {
+	Tickers []GetTickerDailySnapshotResults `json:"tickers"`
+}
+
+func GetAllTickerSnapshots(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	res, err := utils.GetPolygonAllTickerSnapshots(conn.Polygon, context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("error getting all ticker snapshots: %v", err)
+	}
+	response := res.Tickers
+	var results GetAllTickerSnapshotResults
+	for _, snapshot := range response {
+		var ticker GetTickerDailySnapshotResults
+		ticker.LastTradePrice = snapshot.LastTrade.Price
+		ticker.TodayChange = snapshot.Day.Close - snapshot.PrevDay.Close
+		ticker.TodayChangePercent = ((snapshot.Day.Close - snapshot.PrevDay.Close) / snapshot.PrevDay.Close) * 100
+		ticker.Timestamp = int64(time.Time(snapshot.Updated).Unix())
+		ticker.Volume = snapshot.Day.Volume
+		ticker.Vwap = snapshot.Day.VolumeWeightedAverage
+		ticker.TodayOpen = snapshot.Day.Open
+		ticker.TodayHigh = snapshot.Day.High
+		ticker.TodayLow = snapshot.Day.Low
+		ticker.TodayClose = snapshot.Day.Close
+		results.Tickers = append(results.Tickers, ticker)
+	}
+	return results, nil
+}
+
+type GetFilteredTickerSnapshotArgs struct {
+	SecurityID int `json:"securityId"`
+	Start      int `json:"start"`
+	End        int `json:"end"`
+}
+type GetFilteredTickerSnapshotResults struct {
+	Snapshots []GetTickerDailySnapshotResults `json:"snapshots"`
 }

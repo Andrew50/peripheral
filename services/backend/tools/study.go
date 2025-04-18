@@ -20,7 +20,7 @@ type GetStudiesResult struct {
 	SecurityID int    `json:"securityId"`
 	Ticker     string `json:"ticker"`
 	Timestamp  int64  `json:"timestamp"`
-	SetupID    *int64 `json:"setupId"` // Pointer to handle null values
+	StrategyID    *int64 `json:"strategyId"` // Pointer to handle null values
 	Completed  bool   `json:"completed"`
 }
 
@@ -33,7 +33,7 @@ func GetStudies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfac
 	}
 
 	rows, err := conn.DB.Query(context.Background(), `
-		SELECT s.studyId, s.securityId, s.setupId, sec.ticker, s.timestamp, s.completed 
+		SELECT s.studyId, s.securityId, s.strategyId, sec.ticker, s.timestamp, s.completed 
 		FROM studies AS s 
 		JOIN securities AS sec ON s.securityId = sec.securityId 
 		WHERE s.userId = $1 AND s.completed = $2
@@ -46,20 +46,20 @@ func GetStudies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfac
 	var studies []GetStudiesResult
 	for rows.Next() {
 		var study GetStudiesResult
-		var setupID sql.NullInt64 // Handle nullable setupId
+		var strategyID sql.NullInt64 // Handle nullable setupId
 		var studyTime time.Time
 
 		// Scan the row data
-		err := rows.Scan(&study.StudyID, &study.SecurityID, &setupID, &study.Ticker, &studyTime, &study.Completed)
+		err := rows.Scan(&study.StudyID, &study.SecurityID, &strategyID, &study.Ticker, &studyTime, &study.Completed)
 		if err != nil {
 			return nil, err
 		}
 
-		// Handle nullable setupId
-		if setupID.Valid {
-			study.SetupID = &setupID.Int64
+		// Handle nullable strategyId
+		if strategyID.Valid {
+			study.StrategyID = &strategyID.Int64
 		} else {
-			study.SetupID = nil
+			study.StrategyID = nil
 		}
 
 		study.Timestamp = studyTime.Unix()
@@ -69,22 +69,22 @@ func GetStudies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfac
 	return studies, nil
 }
 
-// SetStudySetupArgs represents a structure for handling SetStudySetupArgs data.
-type SetStudySetupArgs struct {
+// SetStudyStrategyArgs represents a structure for handling SetStudyStrategyArgs data.
+type SetStudyStrategyArgs struct {
 	Id      int `json:"id"`
-	SetupID int `json:"setupId"`
+	StrategyID int `json:"strategyId"`
 }
 
-// SetStudySetup performs operations related to SetStudySetup functionality.
-func SetStudySetup(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var args SetStudySetupArgs
+// SetStudyStrategy performs operations related to SetStudyStrategy functionality.
+func SetStudyStrategy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args SetStudyStrategyArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
 		return nil, fmt.Errorf("3og9 invalid args: %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE studies Set setupId = $1 where studyId = $2", args.SetupID, args.Id)
+	cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE studies SET strategyId = $1 WHERE studyId = $2 AND userId = $3", args.StrategyID, args.Id, userId)
 	if cmdTag.RowsAffected() == 0 {
-		return nil, fmt.Errorf("0n8912")
+		return nil, fmt.Errorf("study not found or you don't have permission to update it")
 	}
 	return nil, err
 }
@@ -102,9 +102,9 @@ func SaveStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface
 	if err != nil {
 		return nil, fmt.Errorf("3og9 invalid args: %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE studies Set entry = $1 where studyId = $2", args.Entry, args.Id)
+	cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE studies SET entry = $1 WHERE studyId = $2 AND userId = $3", args.Entry, args.Id, userId)
 	if cmdTag.RowsAffected() == 0 {
-		return nil, fmt.Errorf("0n8912")
+		return nil, fmt.Errorf("study not found or you don't have permission to update it")
 	}
 	return nil, err
 }
@@ -122,9 +122,9 @@ func CompleteStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inter
 	if err != nil {
 		return nil, fmt.Errorf("215d invalid args: %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE studies Set completed = $1 where studyId = $2", args.Completed, args.Id)
+	cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE studies SET completed = $1 WHERE studyId = $2 AND userId = $3", args.Completed, args.Id, userId)
 	if cmdTag.RowsAffected() == 0 {
-		return nil, fmt.Errorf("0n8912")
+		return nil, fmt.Errorf("study not found or you don't have permission to update it")
 	}
 	return nil, err
 }
@@ -141,12 +141,12 @@ func DeleteStudy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if err != nil {
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), "DELETE FROM studies where studyId = $1", args.Id)
+	cmdTag, err := conn.DB.Exec(context.Background(), "DELETE FROM studies where studyId = $1 AND userId = $2", args.Id, userId)
 	if err != nil {
 		return nil, err
 	}
 	if cmdTag.RowsAffected() == 0 {
-		return nil, fmt.Errorf("ssd7g3")
+		return nil, fmt.Errorf("study not found or you don't have permission to delete it")
 	}
 	return nil, err
 }
@@ -164,7 +164,7 @@ func GetStudyEntry(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inter
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
 	var entry json.RawMessage
-	err = conn.DB.QueryRow(context.Background(), "SELECT entry from studies where studyId = $1", args.StudyID).Scan(&entry)
+	err = conn.DB.QueryRow(context.Background(), "SELECT entry from studies where studyId = $1 AND userId = $2", args.StudyID, userId).Scan(&entry)
 	if err != nil {
 		return nil, err
 	}

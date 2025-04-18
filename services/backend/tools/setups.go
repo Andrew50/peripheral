@@ -3,6 +3,7 @@ package tools
 import (
 	"backend/utils"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 )
@@ -30,143 +31,180 @@ func GetAlgos(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 	return algos, nil
 }*/
 
-// SetupResult represents a setup configuration with its evaluation score.
-type SetupResult struct {
-	SetupID   int     `json:"setupId"`
-	Name      string  `json:"name"`
+// StrategyCriteria represents the criteria for a strategy
+type StrategyCriteria struct {
 	Timeframe string  `json:"timeframe"`
 	Bars      int     `json:"bars"`
 	Threshold int     `json:"threshold"`
 	Dolvol    float64 `json:"dolvol"`
 	Adr       float64 `json:"adr"`
 	Mcap      float64 `json:"mcap"`
-	Score     int     `json:"score"`
 }
 
-// GetSetups performs operations related to GetSetups functionality.
-func GetSetups(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+// StrategyResult represents a strategy configuration with its evaluation score.
+type StrategyResult struct {
+	StrategyID int             `json:"strategyId"`
+	Name       string          `json:"name"`
+	Criteria   StrategyCriteria `json:"criteria"`
+	Score      int             `json:"score"`
+}
+
+// GetStrategies performs operations related to GetStrategies functionality.
+func GetStrategies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(), `
-    SELECT setupId, name, timeframe, bars, threshold, dolvol, adr, mcap, score
-    from setups where userId = $1`, userId)
+    SELECT strategyId, name, criteria
+    FROM strategies WHERE userId = $1`, userId)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var setupResults []SetupResult
+	
+	var strategies []StrategyResult
 	for rows.Next() {
-		var setupResult SetupResult
-		if err := rows.Scan(&setupResult.SetupID, &setupResult.Name, &setupResult.Timeframe, &setupResult.Bars, &setupResult.Threshold, &setupResult.Dolvol, &setupResult.Adr, &setupResult.Mcap, &setupResult.Score); err != nil {
-			return nil, fmt.Errorf("sdifn0 %v", err)
+		var strategy StrategyResult
+		var criteriaJSON json.RawMessage
+		
+		if err := rows.Scan(&strategy.StrategyID, &strategy.Name, &criteriaJSON); err != nil {
+			return nil, fmt.Errorf("error scanning strategy: %v", err)
 		}
-		setupResults = append(setupResults, setupResult)
+		
+		// Parse the criteria JSON
+		if err := json.Unmarshal(criteriaJSON, &strategy.Criteria); err != nil {
+			return nil, fmt.Errorf("error parsing criteria JSON: %v", err)
+		}
+		
+		// Get the score from the studies table (if available)
+		var score sql.NullInt32
+		err := conn.DB.QueryRow(context.Background(), `
+			SELECT COUNT(*) FROM studies 
+			WHERE userId = $1 AND strategyId = $2 AND completed = true`, 
+			userId, strategy.StrategyID).Scan(&score)
+		
+		if err == nil && score.Valid {
+			strategy.Score = int(score.Int32)
+		}
+		
+		strategies = append(strategies, strategy)
 	}
-	return setupResults, nil
+	
+	return strategies, nil
 }
 
-// NewSetupArgs represents a structure for handling NewSetupArgs data.
-type NewSetupArgs struct {
-	Name      string  `json:"name"`
-	Timeframe string  `json:"timeframe"`
-	Bars      int     `json:"bars"`
-	Threshold int     `json:"threshold"`
-	Dolvol    float64 `json:"dolvol"`
-	Adr       float64 `json:"adr"`
-	Mcap      float64 `json:"mcap"`
+// NewStrategyArgs represents a structure for handling NewStrategyArgs data.
+type NewStrategyArgs struct {
+	Name     string          `json:"name"`
+	Criteria StrategyCriteria `json:"criteria"`
 }
 
-// NewSetup performs operations related to NewSetup functionality.
-func NewSetup(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var args NewSetupArgs
+// NewStrategy performs operations related to NewStrategy functionality.
+func NewStrategy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args NewStrategyArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, err
 	}
-	if args.Name == "" || args.Timeframe == "" {
-		return nil, fmt.Errorf("dlkns")
+	
+	if args.Name == "" || args.Criteria.Timeframe == "" {
+		return nil, fmt.Errorf("missing required fields")
 	}
-	var setupID int
-	err := conn.DB.QueryRow(context.Background(), `
-		INSERT INTO setups (name, timeframe, bars, threshold, dolvol, adr, mcap, userId) 
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING setupId`,
-		args.Name, args.Timeframe, args.Bars, args.Threshold, args.Dolvol, args.Adr, args.Mcap, userId,
-	).Scan(&setupID)
+	
+	// Convert criteria to JSON
+	criteriaJSON, err := json.Marshal(args.Criteria)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling criteria: %v", err)
+	}
+	
+	var strategyID int
+	err = conn.DB.QueryRow(context.Background(), `
+		INSERT INTO strategies (name, criteria, userId) 
+		VALUES ($1, $2, $3) RETURNING strategyId`,
+		args.Name, criteriaJSON, userId,
+	).Scan(&strategyID)
 
 	if err != nil {
-		return nil, fmt.Errorf("dkngvw0 %v", err)
+		return nil, fmt.Errorf("error creating strategy: %v", err)
 	}
-	utils.CheckSampleQueue(conn, setupID, false)
-	return SetupResult{
-		SetupID:   setupID,
+	
+	// Call the equivalent of CheckSampleQueue for strategies
+	utils.CheckSampleQueue(conn, strategyID, false)
+	
+	return StrategyResult{
+		StrategyID: strategyID,
 		Name:      args.Name,
-		Timeframe: args.Timeframe,
-		Bars:      args.Bars,
-		Threshold: args.Threshold,
-		Dolvol:    args.Dolvol,
-		Adr:       args.Adr,
-		Mcap:      args.Mcap,
+		Criteria:  args.Criteria,
+		Score:     0, // New strategy has no score yet
 	}, nil
 }
 
-// DeleteSetupArgs represents a structure for handling DeleteSetupArgs data.
-type DeleteSetupArgs struct {
-	SetupID int `json:"setupId"`
+// DeleteStrategyArgs represents a structure for handling DeleteStrategyArgs data.
+type DeleteStrategyArgs struct {
+	StrategyID int `json:"strategyId"`
 }
 
-// DeleteSetup performs operations related to DeleteSetup functionality.
-func DeleteSetup(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var args DeleteSetupArgs
+// DeleteStrategy performs operations related to DeleteStrategy functionality.
+func DeleteStrategy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args DeleteStrategyArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, err
 	}
-	_, err := conn.DB.Exec(context.Background(), `
-		DELETE FROM setups 
-		WHERE setupId = $1`, args.SetupID)
+	
+	result, err := conn.DB.Exec(context.Background(), `
+		DELETE FROM strategies 
+		WHERE strategyId = $1 AND userId = $2`, args.StrategyID, userId)
 
 	if err != nil {
-		return nil, fmt.Errorf("error deleting setup: %v", err)
+		return nil, fmt.Errorf("error deleting strategy: %v", err)
 	}
+
+	// Check if any rows were affected
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		return nil, fmt.Errorf("strategy not found or you don't have permission to delete it")
+	}
+
 	return nil, nil
 }
 
-// SetSetupArgs represents a structure for handling SetSetupArgs data.
-type SetSetupArgs struct {
-	SetupID   int     `json:"setupId"`
-	Name      string  `json:"name"`
-	Timeframe string  `json:"timeframe"`
-	Bars      int     `json:"bars"`
-	Threshold int     `json:"threshold"`
-	Dolvol    float64 `json:"dolvol"`
-	Adr       float64 `json:"adr"`
-	Mcap      float64 `json:"mcap"`
+// SetStrategyArgs represents a structure for handling SetStrategyArgs data.
+type SetStrategyArgs struct {
+	StrategyID int             `json:"strategyId"`
+	Name       string          `json:"name"`
+	Criteria   StrategyCriteria `json:"criteria"`
 }
 
-// SetSetup performs operations related to SetSetup functionality.
-func SetSetup(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var args SetSetupArgs
+// SetStrategy performs operations related to SetStrategy functionality.
+func SetStrategy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args SetStrategyArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error parsing args: %v", err)
 	}
-	if args.SetupID == 0 || args.Name == "" || args.Timeframe == "" {
+	
+	if args.StrategyID == 0 || args.Name == "" || args.Criteria.Timeframe == "" {
 		return nil, fmt.Errorf("missing required fields")
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), `
-		UPDATE setups 
-		SET name = $1, timeframe = $2, bars = $3, threshold = $4, dolvol = $5, adr = $6, mcap = $7 
-		WHERE setupId = $8`,
-		args.Name, args.Timeframe, args.Bars, args.Threshold, args.Dolvol, args.Adr, args.Mcap, args.SetupID)
+	
+	// Convert criteria to JSON
+	criteriaJSON, err := json.Marshal(args.Criteria)
 	if err != nil {
-		return nil, fmt.Errorf("error updating setup: %v", err)
-	} else if cmdTag.RowsAffected() != 1 {
-		return nil, fmt.Errorf("dkn0w")
-
+		return nil, fmt.Errorf("error marshaling criteria: %v", err)
 	}
-	return SetupResult{
-		SetupID:   args.SetupID,
+	
+	cmdTag, err := conn.DB.Exec(context.Background(), `
+		UPDATE strategies 
+		SET name = $1, criteria = $2
+		WHERE strategyId = $3 AND userId = $4`,
+		args.Name, criteriaJSON, args.StrategyID, userId)
+		
+	if err != nil {
+		return nil, fmt.Errorf("error updating strategy: %v", err)
+	} else if cmdTag.RowsAffected() != 1 {
+		return nil, fmt.Errorf("strategy not found or you don't have permission to update it")
+	}
+	
+	return StrategyResult{
+		StrategyID: args.StrategyID,
 		Name:      args.Name,
-		Timeframe: args.Timeframe,
-		Bars:      args.Bars,
-		Threshold: args.Threshold,
-		Dolvol:    args.Dolvol,
-		Adr:       args.Adr,
-		Mcap:      args.Mcap,
+		Criteria:  args.Criteria,
+		Score:     0, // We don't have the score here, it would need to be queried separately
 	}, nil
 }
+

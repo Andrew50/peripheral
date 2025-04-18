@@ -4,7 +4,7 @@ set -e
 # Check if a migration file was provided
 if [ $# -lt 1 ]; then
   echo "Usage: $0 <migration_file>"
-  echo "Example: $0 ../../services/db/rollouts/007_fix_cik_type.sql"
+  echo "Example: $0 ../../services/db/migrations/007_fix_cik_type.sql"
   exit 1
 fi
 
@@ -18,13 +18,13 @@ fi
 FILENAME=$(basename "$MIGRATION_FILE")
 echo "Applying migration: $FILENAME"
 
-# Ensure the rollouts directory exists in the container
-echo "Ensuring rollouts directory exists in the container..."
-docker-compose -f docker-compose.dev.yaml exec db mkdir -p /tmp/rollouts
+# Ensure the migrations directory exists in the container
+echo "Ensuring migrations directory exists in the container..."
+docker-compose -f docker-compose.dev.yaml exec db mkdir -p /tmp/migrations
 
 # Copy the migration file to the database container
 echo "Copying migration file to the database container..."
-docker cp "$MIGRATION_FILE" $(docker-compose -f docker-compose.dev.yaml ps -q db):/tmp/rollouts/
+docker cp "$MIGRATION_FILE" $(docker-compose -f docker-compose.dev.yaml ps -q db):/tmp/migrations/
 
 # Run the migration
 echo "Running migration..."

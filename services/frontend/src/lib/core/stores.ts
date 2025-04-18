@@ -20,7 +20,7 @@ export interface Algo {
     // Add other properties as needed
 }
 
-export const setups: Writable<Setup[]> = writable([]);
+export const strategies: Writable<Setup[]> = writable([]);
 export const watchlists: Writable<Watchlist[]> = writable([]);
 export const activeAlerts: Writable<Alert[] | undefined> = writable(undefined);
 export const inactiveAlerts: Writable<Alert[] | undefined> = writable(undefined);
@@ -80,16 +80,24 @@ export const defaultSettings: Settings = {
     filterTaS: true,
     divideTaS: false,
     showFilings: true,
-    enableScreensaver: true
+    enableScreensaver: true,
+    // Default screensaver settings
+    screensaverTimeframes: ['1w', '1d', '1h', '1'],
+    screensaverSpeed: 5,
+    screensaverTimeout: 5 * 60, // 5 minutes in seconds
+    screensaverDataSource: 'gainers-losers',
+    screensaverWatchlistId: undefined,
+    screensaverTickers: [],
+    colorScheme: 'default'
 };
 export const settings: Writable<Settings> = writable(defaultSettings);
 export function initStores() {
     privateRequest<Settings>('getSettings', {}).then((s: Settings) => {
         settings.set({ ...defaultSettings, ...s });
     });
-    privateRequest<Setup[]>('getSetups', {}).then((v: Setup[]) => {
+    privateRequest<Setup[]>('getStrategies', {}).then((v: Setup[]) => {
         if (!v) {
-            setups.set([]);
+            strategies.set([]);
             return;
         }
         v = v.map((v: Setup) => {
@@ -98,7 +106,7 @@ export function initStores() {
                 activeScreen: true
             };
         });
-        setups.set(v);
+        strategies.set(v);
     });
 
     // Add alert initialization
@@ -154,7 +162,7 @@ export function initStores() {
     setInterval(updateTime, 250);
 }
 
-export type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'journal' | 'similar';
+export type Menu = 'none' | 'watchlist' | 'alerts' | 'study' ;
 
 export const activeMenu = writable<Menu>('none');
 
