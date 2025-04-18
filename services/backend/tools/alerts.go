@@ -4,7 +4,7 @@ import (
 	"backend/alerts"
 	"backend/utils"
 	"context"
-    "database/sql"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -17,7 +17,7 @@ import (
 */
 
 // Alert mirrors the alerts table after the schema change.
-// All alerts are “price” alerts, each with a single optional trigger timestamp.
+// All alerts are "price" alerts, each with a single optional trigger timestamp.
 type Alert struct {
 	AlertID            int      `json:"alertId"`
 	AlertType          string   `json:"alertType"`            // Always "price"
@@ -25,7 +25,7 @@ type Alert struct {
 	SecurityID         *int     `json:"securityId,omitempty"` // Pointer -> nullable
 	Ticker             *string  `json:"ticker,omitempty"`
 	Active             bool     `json:"active"`
-	Direction          *bool    `json:"direction,omitempty"`          // true = above, false = below
+	Direction          *bool    `json:"direction,omitempty"`          // true = above, false = below
 	TriggeredTimestamp *int64   `json:"triggeredTimestamp,omitempty"` // ms since epoch, nil until fired
 }
 
@@ -35,7 +35,7 @@ type Alert struct {
 type GetAlertLogsResult struct {
 	AlertLogID int     `json:"alertLogId"` // identical to alertId (kept to preserve signature)
 	AlertID    int     `json:"alertId"`
-	Timestamp  int64   `json:"timestamp"`  // ms since epoch
+	Timestamp  int64   `json:"timestamp"` // ms since epoch
 	SecurityID int     `json:"securityId"`
 	Ticker     *string `json:"ticker,omitempty"`
 }
@@ -84,7 +84,7 @@ func GetAlerts(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface
 
 /*
    ────────────────────────────────────────────────────────────────────────────────
-   “Logs” = alerts that have a non‑NULL triggeredTimestamp
+   "Logs" = alerts that have a non-NULL triggeredTimestamp
    ────────────────────────────────────────────────────────────────────────────────
 */
 
@@ -108,8 +108,8 @@ func GetAlertLogs(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	var logs []GetAlertLogsResult
 	for rows.Next() {
 		var (
-			l      GetAlertLogsResult
-			fired  time.Time
+			l     GetAlertLogsResult
+			fired time.Time
 		)
 		if err := rows.Scan(&l.AlertID, &l.AlertLogID, &fired, &l.SecurityID, &l.Ticker); err != nil {
 			return nil, fmt.Errorf("scanning alert log: %w", err)
@@ -122,12 +122,12 @@ func GetAlertLogs(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 
 /*
    ────────────────────────────────────────────────────────────────────────────────
-   New Alert
+   New Alert
    ────────────────────────────────────────────────────────────────────────────────
 */
 
 type NewAlertArgs struct {
-	// AlertType kept for backward compatibility but ignored (always “price”).
+	// AlertType kept for backward compatibility but ignored (always "price").
 	AlertType  string   `json:"alertType,omitempty"`
 	Price      *float64 `json:"price,omitempty"`
 	SecurityID *int     `json:"securityId,omitempty"`
@@ -148,7 +148,7 @@ func NewAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 	if err != nil {
 		return nil, fmt.Errorf("fetching last trade: %w", err)
 	}
-	dir := *args.Price > lastTrade.Price // true = wait for price to rise up to alert
+	dir := *args.Price > lastTrade.Price // true = wait for price to rise up to alert
 
 	var alertID int
 	if err := conn.DB.QueryRow(context.Background(), `
@@ -160,19 +160,17 @@ func NewAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 	}
 
 	newAlert := Alert{
-		AlertID:   alertID,
-		AlertType: "price",
-		Price:     args.Price,
+		AlertID:    alertID,
+		Price:      args.Price,
 		SecurityID: args.SecurityID,
-		Ticker:    args.Ticker,
-		Active:    true,
-		Direction: &dir,
+		Ticker:     args.Ticker,
+		Active:     true,
+		Direction:  &dir,
 	}
-	// Keep in‑memory scheduler/store up‑to‑date
+	// Keep in-memory scheduler/store up-to-date
 	alerts.AddAlert(conn, alerts.Alert{
-		AlertID:   newAlert.AlertID,
-		AlertType: newAlert.AlertType,
-		Price:     newAlert.Price,
+		AlertID:    newAlert.AlertID,
+		Price:      newAlert.Price,
 		SecurityID: newAlert.SecurityID,
 		Direction:  newAlert.Direction,
 	})
@@ -182,7 +180,7 @@ func NewAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{
 
 /*
    ────────────────────────────────────────────────────────────────────────────────
-   Delete Alert
+   Delete Alert
    ────────────────────────────────────────────────────────────────────────────────
 */
 
@@ -209,4 +207,3 @@ func DeleteAlert(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	alerts.RemoveAlert(args.AlertID)
 	return nil, nil
 }
-

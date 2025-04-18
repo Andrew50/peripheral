@@ -70,6 +70,11 @@ spec:
                   name: redis-secret
                   key: REDIS_PASSWORD
             # Add Polygon API key
+            - name: GEMINI_FREE_KEYS
+              valueFrom: 
+                secretkeyRef: 
+                  name: gemini-secret
+                  key: GEMINI_FREE_KEYS
             - name: POLYGON_API_KEY
               valueFrom:
                 secretKeyRef:

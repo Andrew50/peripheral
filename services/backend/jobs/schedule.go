@@ -164,7 +164,6 @@ func updateSectorsJob(conn *utils.Conn) error {
 	return err // Return the error, if any
 }
 
-
 // Define all jobs and their schedules
 var (
 	JobList = []*Job{
@@ -212,7 +211,7 @@ var (
 		},
 		{
 			Name:           "UpdateSectors",
-			Function:       updateSectorsJob, // Use the new wrapper function
+			Function:       updateSectorsJob,                    // Use the new wrapper function
 			Schedule:       []TimeOfDay{{Hour: 20, Minute: 15}}, // Run at 8:15 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
@@ -347,7 +346,6 @@ func (s *JobScheduler) Start() chan struct{} {
 	utils.StartEdgarFilingsService(s.Conn)
 	go func() {
 		for filing := range utils.NewFilingsChannel {
-			fmt.Printf("\n\nBroadcasting global SEC filing\n\n")
 			socket.BroadcastGlobalSECFiling(filing)
 		}
 	}()
@@ -407,7 +405,6 @@ func (s *JobScheduler) checkAndRunJobs(now time.Time) {
 		}
 	}
 }
-
 
 // shouldRunJob determines if a job should run based on its schedule
 func (s *JobScheduler) shouldRunJob(job *Job, now time.Time) bool {
@@ -670,7 +667,6 @@ func (s *JobScheduler) printQueueStatus() {
 
 	fmt.Println("=========================")
 }
-
 
 // clearWorkerQueue clears the worker queue to prevent backlog
 func clearWorkerQueue(conn *utils.Conn) error {
