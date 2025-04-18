@@ -83,6 +83,7 @@ type StrategySpec struct {
 
 
 /*─────────────── Call‑side JSON args ───────────────*/
+// AnalyzeInstanceFeaturesArgs contains parameters for analyzing features of a specific security instance
 type AnalyzeInstanceFeaturesArgs struct {
 	SecurityID int    `json:"securityId"`
 	Timestamp  int64  `json:"timestamp"` // Unix ms of reference bar (0 ⇒ “now”)
@@ -91,6 +92,7 @@ type AnalyzeInstanceFeaturesArgs struct {
 }
 
 /*────────── Main entrypoint exposed to Gemini ─────────*/
+// AnalyzeInstanceFeatures analyzes chart data for a specific security and returns Gemini's analysis
 func AnalyzeInstanceFeatures(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 
 	/* 1. Parse args */
@@ -488,7 +490,7 @@ func DeleteStrategy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inte
 	// Check if any rows were affected
 	rowsAffected := result.RowsAffected()
 	if rowsAffected == 0 {
-		return nil, fmt.Errorf("ERR 4140: strategy not found or you don't have permission to delete it")
+		return nil, fmt.Errorf("strategy not found or you don't have permission to delete it")
 	}
 
 	return nil, nil
@@ -521,7 +523,7 @@ func _setStrategy(conn *utils.Conn, userId int, strategyId int, name string, spe
 	if err != nil {
 		return fmt.Errorf("error updating strategy: %v", err)
 	} else if cmdTag.RowsAffected() != 1 {
-		return fmt.Errorf("ERR 210: strategy not found or you don't have permission to update it")
+		return fmt.Errorf("strategy not found or you don't have permission to update it")
 	}
 	return nil
 }
