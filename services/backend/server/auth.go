@@ -7,14 +7,11 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
-
 	"fmt"
 	"log"
 	"os"
 	"time"
-
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/jackc/pgx/v4"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
