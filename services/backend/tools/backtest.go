@@ -24,6 +24,8 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
+    fmt.Println("backtesting")
+    fmt.Println(args.StrategyId)
 
     backtestJSON, err := _getStrategySpec(conn,userId,args.StrategyId) // get spec from db using helper
     if err != nil { 
