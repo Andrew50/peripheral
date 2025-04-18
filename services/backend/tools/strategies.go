@@ -3,13 +3,15 @@ package tools
 import (
 	"backend/utils"
 	"context"
-    "strings"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
+
 	"google.golang.org/genai"
-    "regexp"
 )
+
 type StrategySpec struct {
 	Timeframes []string `json:"timeframes"`
 	Stocks     struct {
@@ -71,10 +73,9 @@ type StrategySpec struct {
 	OutputColumns []string `json:"output_columns"`
 }
 type CreateStrategyFromNaturalLanguageArgs struct {
-	Query string `json:"query"`
-    StrategyId int `json:"strategyId,omitempty"`
+	Query      string `json:"query"`
+	StrategyId int    `json:"strategyId,omitempty"`
 }
-
 
 func extractName(resp string, jsonEnd int) (string, bool) {
 	// Slice the response starting *after* the last `}`
@@ -147,8 +148,7 @@ func CreateStrategyFromNaturalLanguage(conn *utils.Conn, userId int, rawArgs jso
 		return nil, fmt.Errorf("no valid JSON found in Gemini response: %s", jsonBlock)
 	}
 
-
-    //TODO return to gemini on faillure to verify and fix the format in a loop here???
+	//TODO return to gemini on faillure to verify and fix the format in a loop here???
 
 	// Pretty print the JSON spec for better readability
 	prettyJSON, err := prettyPrintJSON(jsonBlock)
@@ -161,33 +161,31 @@ func CreateStrategyFromNaturalLanguage(conn *utils.Conn, userId int, rawArgs jso
 
 	var spec StrategySpec
 	if err := json.Unmarshal(([]byte(jsonBlock)), &spec); err != nil { //unmarhsal into struct
-        return "", fmt.Errorf("ERR 01v: error parsing backtest JSON: %v", err)
+		return "", fmt.Errorf("ERR 01v: error parsing backtest JSON: %v", err)
 	}
 
-    name, ok := extractName(responseText, jsonEndIdx)
+	name, ok := extractName(responseText, jsonEndIdx)
 	if !ok || name == "" {
 		name = "UntitledStrategy" // fallback or return error, your choice
 	}
 
-    //if args.StrategyId < 0 { // if it wants new then it passes strat id of -1
-    return _newStrategy(conn,userId,name,spec) // bandaid
-    //}else {
-        //return args.StrategyId, _setStrategy(conn,userId,args.StrategyId,name,spec)
-    //}
+	//if args.StrategyId < 0 { // if it wants new then it passes strat id of -1
+	return _newStrategy(conn, userId, name, spec) // bandaid
+	//}else {
+	//return args.StrategyId, _setStrategy(conn,userId,args.StrategyId,name,spec)
+	//}
 }
-
 
 // StrategyResult represents a strategy configuration with its evaluation score.
 type StrategyResult struct {
-	StrategyID int             `json:"strategyId"`
-	Name       string          `json:"name"`
+	StrategyID int          `json:"strategyId"`
+	Name       string       `json:"name"`
 	Criteria   StrategySpec `json:"criteria"`
-	Score      int             `json:"score"`
+	Score      int          `json:"score"`
 }
 
-
 type GetStrategySpecArgs struct {
-    StrategyId int `json:"strategyId"`
+	StrategyId int `json:"strategyId"`
 }
 
 func GetStrategySpec(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -195,26 +193,22 @@ func GetStrategySpec(conn *utils.Conn, userId int, rawArgs json.RawMessage) (int
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-    return _getStrategySpec(conn,args.StrategyId,userId)
+	return _getStrategySpec(conn, args.StrategyId, userId)
 }
 
-func _getStrategySpec(conn *utils.Conn, strategyId int,userId int) (json.RawMessage, error) {
-    var strategyCriteria json.RawMessage
-    fmt.Println(userId)
+func _getStrategySpec(conn *utils.Conn, userId int, strategyId int) (json.RawMessage, error) {
+	var strategyCriteria json.RawMessage
+	fmt.Println(userId)
 	err := conn.DB.QueryRow(context.Background(), `
     SELECT criteria
     FROM strategies WHERE strategyId = $1`, strategyId).Scan(&strategyCriteria)
-    //TODO add user id check back
+	//TODO add user id check back
 	if err != nil {
 		return nil, err
 	}
 
-    return strategyCriteria, nil
+	return strategyCriteria, nil
 }
-	
-
-
-
 
 // GetStrategies performs operations related to GetStrategies functionality.
 func GetStrategies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -225,54 +219,55 @@ func GetStrategies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inter
 		return nil, err
 	}
 	defer rows.Close()
-	
+
 	var strategies []StrategyResult
 	for rows.Next() {
 		var strategy StrategyResult
 		var criteriaJSON json.RawMessage
-		
+
 		if err := rows.Scan(&strategy.StrategyID, &strategy.Name, &criteriaJSON); err != nil {
 			return nil, fmt.Errorf("error scanning strategy: %v", err)
 		}
-		
+
 		// Parse the criteria JSON
 		if err := json.Unmarshal(criteriaJSON, &strategy.Criteria); err != nil {
 			return nil, fmt.Errorf("error parsing criteria JSON: %v", err)
 		}
-		
+
 		// Get the score from the studies table (if available)
 		var score sql.NullInt32
 		err := conn.DB.QueryRow(context.Background(), `
 			SELECT COUNT(*) FROM studies 
-			WHERE userId = $1 AND strategyId = $2 AND completed = true`, 
+			WHERE userId = $1 AND strategyId = $2 AND completed = true`,
 			userId, strategy.StrategyID).Scan(&score)
-		
+
 		if err == nil && score.Valid {
 			strategy.Score = int(score.Int32)
 		}
-		
+
 		strategies = append(strategies, strategy)
 	}
-	
+
 	return strategies, nil
 }
 
 // NewStrategyArgs represents a structure for handling NewStrategyArgs data.
 type NewStrategyArgs struct {
-	Name     string          `json:"name"`
+	Name     string       `json:"name"`
 	Criteria StrategySpec `json:"criteria"`
 }
-func _newStrategy(conn *utils.Conn, userId int, name string, spec StrategySpec) (int, error){
+
+func _newStrategy(conn *utils.Conn, userId int, name string, spec StrategySpec) (int, error) {
 	if name == "" {
 		return -1, fmt.Errorf("missing required fields")
 	}
-	
+
 	// Convert criteria to JSON
 	criteriaJSON, err := json.Marshal(spec)
 	if err != nil {
 		return -1, fmt.Errorf("error marshaling criteria: %v", err)
 	}
-	
+
 	var strategyID int
 	err = conn.DB.QueryRow(context.Background(), `
 		INSERT INTO strategies (name, criteria, userId) 
@@ -283,9 +278,10 @@ func _newStrategy(conn *utils.Conn, userId int, name string, spec StrategySpec) 
 	if err != nil {
 		return -1, fmt.Errorf("error creating strategy: %v", err)
 	}
-    return strategyID, nil
+	return strategyID, nil
 
 }
+
 // NewStrategy performs operations related to NewStrategy functionality.
 func NewStrategy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args NewStrategyArgs
@@ -293,17 +289,16 @@ func NewStrategy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 		return nil, err
 	}
 
-    strategyId, err := _newStrategy(conn, userId, args.Name, args.Criteria)
-    if err != nil {
-        return nil, err
-    }
-	
-	
+	strategyId, err := _newStrategy(conn, userId, args.Name, args.Criteria)
+	if err != nil {
+		return nil, err
+	}
+
 	return StrategyResult{
 		StrategyID: strategyId,
-		Name:      args.Name,
-		Criteria:  args.Criteria,
-		Score:     0, // New strategy has no score yet
+		Name:       args.Name,
+		Criteria:   args.Criteria,
+		Score:      0, // New strategy has no score yet
 	}, nil
 }
 
@@ -318,7 +313,7 @@ func DeleteStrategy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inte
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, err
 	}
-	
+
 	result, err := conn.DB.Exec(context.Background(), `
 		DELETE FROM strategies 
 		WHERE strategyId = $1 AND userId = $2`, args.StrategyID, userId)
@@ -330,7 +325,7 @@ func DeleteStrategy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inte
 	// Check if any rows were affected
 	rowsAffected := result.RowsAffected()
 	if rowsAffected == 0 {
-        return nil, fmt.Errorf("ERR 4140: strategy not found or you don't have permission to delete it")
+		return nil, fmt.Errorf("ERR 4140: strategy not found or you don't have permission to delete it")
 	}
 
 	return nil, nil
@@ -338,35 +333,34 @@ func DeleteStrategy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inte
 
 // SetStrategyArgs represents a structure for handling SetStrategyArgs data.
 type SetStrategyArgs struct {
-	StrategyID int             `json:"strategyId"`
-	Name       string          `json:"name"`
+	StrategyID int          `json:"strategyId"`
+	Name       string       `json:"name"`
 	Criteria   StrategySpec `json:"criteria"`
 }
 
-
-func _setStrategy(conn *utils.Conn, userId int, strategyId int, name string, spec StrategySpec) (error) {
+func _setStrategy(conn *utils.Conn, userId int, strategyId int, name string, spec StrategySpec) error {
 	if name == "" {
 		return fmt.Errorf("missing required field name")
 	}
-	
+
 	// Convert criteria to JSON
 	criteriaJSON, err := json.Marshal(spec)
 	if err != nil {
-		return  fmt.Errorf("error marshaling criteria: %v", err)
+		return fmt.Errorf("error marshaling criteria: %v", err)
 	}
-	
+
 	cmdTag, err := conn.DB.Exec(context.Background(), `
 		UPDATE strategies 
 		SET name = $1, criteria = $2
 		WHERE strategyId = $3 AND userId = $4`,
 		name, criteriaJSON, strategyId, userId)
-		
+
 	if err != nil {
 		return fmt.Errorf("error updating strategy: %v", err)
 	} else if cmdTag.RowsAffected() != 1 {
-        return fmt.Errorf("ERR 210: strategy not found or you don't have permission to update it")
+		return fmt.Errorf("ERR 210: strategy not found or you don't have permission to update it")
 	}
-    return nil
+	return nil
 }
 
 // SetStrategy performs operations related to SetStrategy functionality.
@@ -375,15 +369,14 @@ func SetStrategy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error parsing args: %v", err)
 	}
-    err := _setStrategy(conn,userId,args.StrategyID,args.Name,args.Criteria);
-    if err != nil {
-        return nil, err 
-    }
+	err := _setStrategy(conn, userId, args.StrategyID, args.Name, args.Criteria)
+	if err != nil {
+		return nil, err
+	}
 	return StrategyResult{
 		StrategyID: args.StrategyID,
-		Name:      args.Name,
-		Criteria:  args.Criteria,
-		Score:     0, // We don't have the score here, it would need to be queried separately
+		Name:       args.Name,
+		Criteria:   args.Criteria,
+		Score:      0, // We don't have the score here, it would need to be queried separately
 	}, nil
 }
-
