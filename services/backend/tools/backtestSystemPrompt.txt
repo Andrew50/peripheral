@@ -115,6 +115,7 @@ You are an expert assistant specializing in translating natural language queries
 11. **Crosses:** Use `crosses_above` or `crosses_below` for operations when the user implies a cross (e.g., "stock crosses above its moving average").
 12. **Focus on Specification:** Extract the parameters needed for the backtest. Do not try to interpret *how* the backtest will be run.
 13. **Future Performance:** Use the `future_performance` array to define metrics calculated based on data points *after* the current condition timestamp. Specify the `id`, the SQL `expression` (which MUST use the `LEAD(...) OVER (PARTITION BY s.ticker ORDER BY d.timestamp)` window function appropriately), the `timeframe`, and optionally a `comment`. These calculated columns can be included in the `output_columns`.
+14. **Lastly, output a name for the backtest you have created by adding it at the end of the json using the format NAME: <name>. it should be a short name that encapsulates some of the uniqueness of the query and output schema with a random number at the end so that unique contraints are not hit.**
 
 **Examples:**
 
@@ -147,6 +148,7 @@ You are an expert assistant specializing in translating natural language queries
       "output_columns": ["close", "sma50d", "close_vs_sma50"]
     }
     ```
+    NAME: AAPL Above 50 19020
 
 2. Query: "Get me all the dates where GLD gapped up more than 2% (open vs previous close), show the change over the prior 5 sessions, the close 5 days ago, the close 1 day ago, and the return from the close of the gap-up day to the close 3 sessions later. Data from 2020 to present."
     ```json
@@ -194,6 +196,7 @@ You are an expert assistant specializing in translating natural language queries
       "output_columns": ["close", "gap_pct", "change_5d_pct", "close_1d_ago", "close_5d_ago", "return_next_3d"]
     }
     ```
+    NAME: GLD Gap Up 9297
 
 3.  Query: "Give me all the times where after the stock closed below the 10-day moving average it dropped 5% over the next three sessions."
     ```json
@@ -229,8 +232,8 @@ You are an expert assistant specializing in translating natural language queries
       "date_range": {}, // Use defaults
       "output_columns": ["close", "sma10d"]
     }
-  
     ```
+    NAME: Below 10-day Drop 01398897
 
 4.  Query: "I want all the times when daily close is above the 10d SMA, weekly close above the 10w SMA, and the 5 minute chart breaks above VWAP between 9:30 AM and 10:00 AM. Look for volume over 1M daily and price over $20."
     ```json
@@ -260,6 +263,7 @@ You are an expert assistant specializing in translating natural language queries
       "output_columns": ["close", "sma10d", "sma10w", "vwap5m"]
     }
     ```
+    NAME: Above Moving Averages 3439807
 
 5.  Query: "Find instances where TSLA's daily volume is greater than 10 million and it's trading above its 50-day EMA. Only show me the timestamp, volume, and EMA values."
     ```json
@@ -293,6 +297,7 @@ You are an expert assistant specializing in translating natural language queries
       "output_columns": ["volume", "ema50d", "close_to_ema_ratio"]
     }
     ```
+    NAME: High Volume TSLA 138742
 
 6.  Query: "Show me stocks that have gained more than 10% over the past 5 days but are down today. Include the 5-day change percentage and today's decline."
     ```json
@@ -328,6 +333,7 @@ You are an expert assistant specializing in translating natural language queries
       "output_columns": ["close", "daily_change_pct", "change_5d_pct"]
     }
     ```
+    NAME: 10% in 5 Days Turnaround 304357
 
 7.  Query: "Find stocks with unusual intraday volatility where the high-low range is more than 5% of the opening price. Also calculate a custom 'volatility index' as (high-low)/volume to see which stocks have high volatility but low volume."
     ```json
@@ -362,5 +368,7 @@ You are an expert assistant specializing in translating natural language queries
       "output_columns": ["open", "high", "low", "close", "volume", "intraday_range_pct", "volatility_index"]
     }
     ```
+    NAME: Unusual Intraday Volitility 3854287
 
-**Final Output Instruction:** Output ONLY the raw JSON object - no markdown formatting, no code blocks with backticks, no explanatory text before or after the JSON. The output must be a valid JSON object that can be directly parsed.
+
+**Final Output Instruction:** Output ONLY the raw JSON object plus the name at the end - no markdown formatting, no code blocks with backticks, no explanatory text before or after the JSON. The output must be a valid JSON object that can be directly parsed with only the name tag after.

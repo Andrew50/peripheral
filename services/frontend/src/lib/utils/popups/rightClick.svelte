@@ -15,6 +15,7 @@
 	import { startReplay } from '$lib/utils/stream/interface';
 	import { addHorizontalLine } from '$lib/features/chart/drawingMenu.svelte';
 	import { getLLMSummary } from '$lib/features/summary.svelte';
+    import {addInstanceToChat} from '$lib/features/chat/interface';
 	interface RightClickQuery {
 		x?: number;
 		y?: number;
@@ -234,6 +235,9 @@
 			<button class="wide-button" on:click={() => getLLMSummary($rightClickQuery.instance)}>
 				Get LLM Summary for {$rightClickQuery.instance.ticker}
 			</button>
+            <button class="wide-button" on:click={() => addInstanceToChat($rightClickQuery.instance)}>
+                Add to Chat
+            </button>
 		</div>
 
 		{#if $entryOpen}

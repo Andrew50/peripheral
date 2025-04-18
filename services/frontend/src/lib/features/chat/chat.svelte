@@ -4,6 +4,7 @@
 	import { marked } from 'marked'; // Import the markdown parser
 	import { queryChart } from '$lib/features/chart/interface'; // Import queryChart
 	import type { Instance } from '$lib/core/types';
+    import {inputValue} from './interface'
 
 	// Set default options for the markdown parser (optional)
 	marked.setOptions({
@@ -145,8 +146,7 @@
 		suggestions: string[];
 	};
 
-	let inputValue = '';
-	let queryInput: HTMLTextAreaElement;
+	let queryInput: HTMLInputElement;
 	let isLoading = false;
 	let messagesContainer: HTMLDivElement;
 
@@ -258,7 +258,7 @@
 
 	// Function to handle clicking on a suggested query
 	function handleSuggestedQueryClick(query: string) {
-		inputValue = query;
+		inputValue.set(query)
 		handleSubmit();
 	}
 
@@ -268,11 +268,11 @@
 	}
 
 	function handleSubmit() {
-		if (!inputValue.trim()) return;
+		if (!$inputValue.trim()) return;
 
 		const userMessage: Message = {
 			id: generateId(),
-			content: inputValue,
+			content: $inputValue,
 			sender: 'user',
 			timestamp: new Date()
 		};
@@ -291,8 +291,8 @@
 		messages = [...messages, loadingMessage];
 		scrollToBottom();
 
-		const queryText = inputValue;
-		inputValue = '';
+		const queryText = $inputValue;
+		inputValue.set('');
 
 		// Prepend if backtest mode is active
 		const finalQuery = isBacktestMode ? `[RUN BACKTEST] ${queryText}` : queryText;
@@ -674,7 +674,7 @@
 			<textarea
 				class="chat-input"
 				placeholder="Ask about anything..."
-				bind:value={inputValue}
+				bind:value={$inputValue}
 				bind:this={queryInput}
 				rows="1"
 				on:input={adjustTextareaHeight}
@@ -694,7 +694,7 @@
 				class="send-button"
 				on:click={handleSubmit}
 				aria-label="Send message"
-				disabled={!inputValue.trim() || isLoading}
+				disabled={!$inputValue.trim() || isLoading}
 			>
 				<svg viewBox="0 0 24 24" class="send-icon">
 					<path d="M2,21L23,12L2,3V10L17,12L2,14V21Z" />
