@@ -1301,6 +1301,54 @@ func initTools() {
             Query: true,
             Api: true,
 		},
+        "analyzeInstanceFeatures": {
+    FunctionDeclaration: &genai.FunctionDeclaration{
+        Name: "analyzeInstanceFeatures",
+        Description: `Analyze the recent price action surrounding a specific market
+            instance and return technical context (e.g., trend direction, volatility,
+            support/resistance, common indicator values) that can be used when building
+            or refining a trading strategy when a specific instance has been added in the users query. Run this before getStrategyFromNaturalLanguage whenver an instance has been attached, especially if there is minimal or no natural language description of the desired strategy.
+
+            An “instance” is uniquely identified by:
+              • securityId – the instrument’s numeric ID in our database  
+              • timestamp  – Unix epoch (seconds) marking the candle that should be treated
+                             as the reference point (“the current bar”)  
+              • timeframe  – resolution of each candle. Accepts:
+                             s  (seconds), h (hours), d (days), w (weeks), m (months)
+                             Optionally prefix with a number (e.g. "15m", "2h").
+                             A blank string defaults to daily (“1d”).  
+              • bars       – number of historical candles (looking **backwards** from
+                             timestamp) that should be included in the analysis window`,
+                Parameters: &genai.Schema{
+                    Type: genai.TypeObject,
+                    Properties: map[string]*genai.Schema{
+                        "securityId": {
+                            Type:        genai.TypeInteger,
+                            Description: "Unique numeric identifier for the security (e.g., 12345)",
+                        },
+                        "timestamp": {
+                            Type:        genai.TypeInteger,
+                            Description: "Reference Unix timestamp (seconds) of the ‘current’ candle",
+                        },
+                        "timeframe": {
+                            Type:        genai.TypeString,
+                            Description: `Candle interval (\"s\", \"h\", \"d\", \"w\", \"m\").
+                                            May be preceded by an integer, e.g., \"30s\", \"15m\", \"2h\". Empty string ⇒ \"1d\"`,
+                        },
+                        "bars": {
+                            Type:        genai.TypeInteger,
+                            Description: "Number of candles to analyze, counting backward from timestamp",
+                        },
+                    },
+                    Required: []string{"securityId", "timestamp", "timeframe", "bars"},
+                },
+            },
+            Function: AnalyzeInstanceFeatures,
+            Query:    true,
+            Api:      false,
+        },
+
+
 		"getUserConversation": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getUserConversation",
