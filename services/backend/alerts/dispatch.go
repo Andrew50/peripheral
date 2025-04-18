@@ -73,6 +73,7 @@ func writeAlertMessage(alert Alert) string {
 }
 
 func dispatchAlert(conn *utils.Conn, alert Alert) error {
+	log.Printf("DEBUG: Dispatching alert: %+v", alert)
 	fmt.Println("dispatching alert", alert)
 	alertMessage := writeAlertMessage(alert)
 	timestamp := time.Now()
