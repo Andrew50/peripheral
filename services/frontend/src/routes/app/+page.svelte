@@ -18,8 +18,9 @@
 	import Account from '$lib/features/account.svelte';
 	import Strategies from '$lib/features/strategies/strategies.svelte';
 	import Settings from '$lib/features/settings.svelte';
-	import Newsfeed from '$lib/features/newsfeed.svelte';
-	import LLMSummary from '$lib/features/llmSummary.svelte';
+	import News from '$lib/features/news.svelte';
+    import Deploy from '$lib/features/deploy.svelte'
+    import Backtest from '$lib/features/deploy.svelte'
 
 	// Replay logic
 	import {
@@ -53,13 +54,13 @@
 	import Screensaver from '$lib/features/screensaver.svelte';
 
 	// Add new import for Query component
-	import Query from '$lib/features/query.svelte';
+	import Query from '$lib/features/chat/chat.svelte';
 
-	type Menu = 'none' | 'watchlist' | 'alerts' | 'study';
+	type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
 
 	let lastSidebarMenu: Menu | null = null;
 	let sidebarWidth = 0;
-	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study'];
+	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'news'];
 
 	// Initialize chartWidth with a default value
 	let chartWidth = 0;
@@ -68,12 +69,13 @@
 	type BottomWindowType =
 		| 'screener'
 		| 'account'
-		| 'options'
+		//| 'options'
 		| 'strategies'
 		| 'settings'
-		| 'newsfeed'
+        | 'deploy'
+        | 'backtest'
+		//| 'news'
 		| 'query'
-		| 'llm-summary';
 	interface BottomWindow {
 		id: number;
 		type: BottomWindowType;
@@ -240,11 +242,8 @@
 		dispatchMenuChange.subscribe((menuName: string) => {
 			if (sidebarMenus.includes(menuName as Menu)) {
 				toggleMenu(menuName as Menu);
-			} else if (menuName === 'llm-summary') {
-				// Open the LLM summary window
-				openBottomWindow('llm-summary');
 			}
-		});
+        });
 
 		// Force profile display to update
 		currentProfileDisplay = calculateProfileDisplay();
@@ -835,10 +834,8 @@
 									<Account />
 								{:else if w.type === 'settings'}
 									<Settings />
-								{:else if w.type === 'newsfeed'}
-									<Newsfeed />
-								{:else if w.type === 'llm-summary'}
-									<LLMSummary />
+								{:else if w.type === 'news'}
+									<News />
 								{/if}
 							</div>
 						</div>
@@ -877,6 +874,8 @@
 								<Alerts />
 							{:else if $activeMenu === 'study'}
 								<Study />
+							{:else if $activeMenu === 'news'}
+								<News />
 							{/if}
 						</div>
 
@@ -923,29 +922,35 @@
 				<img src="query.png" alt="AI Query" class="menu-icon" />
 			</button>
 			<button
+				class="toggle-button {bottomWindows.some((w) => w.type === 'strategies') ? 'active' : ''}"
+				on:click={() => openBottomWindow('strategies')}
+			>
+				Strategies
+			</button>
+			<button
+				class="toggle-button {bottomWindows.some((w) => w.type === 'backtest') ? 'active' : ''}"
+				on:click={() => openBottomWindow('backtest')}
+			>
+				Backtest
+			</button>
+			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'screener') ? 'active' : ''}"
 				on:click={() => openBottomWindow('screener')}
 			>
 				Screener
-			</button>
-			<!--<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'setups') ? 'active' : ''}"
-				on:click={() => openBottomWindow('setups')}
+			</button>	<button
+				class="toggle-button {bottomWindows.some((w) => w.type === 'deploy') ? 'active' : ''}"
+				on:click={() => openBottomWindow('deploy')}
 			>
-				Setups
-			</button>-->
+				Deploy
+			</button>
 			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'account') ? 'active' : ''}"
 				on:click={() => openBottomWindow('account')}
 			>
 				Account
 			</button>
-			<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'newsfeed') ? 'active' : ''}"
-				on:click={() => openBottomWindow('newsfeed')}
-			>
-				News
-			</button>
+
 		</div>
 
 		<div class="bottom-bar-right">
