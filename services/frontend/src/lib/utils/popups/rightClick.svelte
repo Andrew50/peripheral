@@ -15,6 +15,7 @@
 	import { startReplay } from '$lib/utils/stream/interface';
 	import { addHorizontalLine } from '$lib/features/chart/drawingMenu.svelte';
 	import { getLLMSummary } from '$lib/features/summary.svelte';
+    import {addInstanceToChat} from '$lib/features/chat/interface';
 	interface RightClickQuery {
 		x?: number;
 		y?: number;
