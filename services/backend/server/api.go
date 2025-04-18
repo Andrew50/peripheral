@@ -474,26 +474,6 @@ func WSHandler(conn *utils.Conn) http.HandlerFunc {
 	}
 }
 
-// Health check endpoint handler
-func healthHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Create a response object
-		response := map[string]string{
-			"status":  "healthy",
-			"service": "backend",
-		}
-
-		// Set content type header
-		w.Header().Set("Content-Type", "application/json")
-
-		// Write the response
-		if err := json.NewEncoder(w).Encode(response); err != nil {
-			log.Printf("Error encoding health response: %v", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-		}
-	}
-}
-
 // StartServer performs operations related to StartServer functionality.
 func StartServer() {
 	conn, cleanup := utils.InitConn(true)
