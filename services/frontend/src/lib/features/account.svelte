@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { privateFileRequest, privateRequest } from '$lib/core/backend';
+	import { uploadRequest, privateRequest } from '$lib/core/backend';
 	import { queueRequest } from '$lib/core/backend';
 	import type { Instance } from '$lib/core/types';
 	import List from '$lib/utils/modules/list.svelte';
@@ -123,7 +123,7 @@
 		message = 'Uploading...';
 
 		try {
-			const result = await privateFileRequest<{ trades: Trade[] }>('handle_trade_upload', files[0]);
+			const result = await uploadRequest<{ trades: Trade[] }>('handle_trade_upload', files[0]);
 			trades.set(result.trades);
 			message = 'Upload successful!';
 		} catch (error) {

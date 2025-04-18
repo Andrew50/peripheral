@@ -94,8 +94,7 @@ spec:
                   key: JWT_SECRET
             # Add Google redirect URL
             - name: GOOGLE_REDIRECT_URL
-              value: "https://atlantis.trading/auth/google/callback"
-          # Removed health checks as backend is a job runner, not an HTTP server
+              value: ${GOOGLE_REDIRECT_URL}
           resources:
             requests:
               cpu: "1000m"
