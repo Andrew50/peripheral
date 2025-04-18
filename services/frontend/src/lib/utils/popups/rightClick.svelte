@@ -234,6 +234,9 @@
 			<button class="wide-button" on:click={() => getLLMSummary($rightClickQuery.instance)}>
 				Get LLM Summary for {$rightClickQuery.instance.ticker}
 			</button>
+            <button class="wide-button" on:click={() => addInstanceToChat($rightClickQuery.instance)}>
+                Add to Chat
+            </button>
 		</div>
 
 		{#if $entryOpen}
