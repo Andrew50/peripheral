@@ -22,7 +22,6 @@ var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, err
 	"login":          Login,
 	"googleLogin":    GoogleLogin,
 	"googleCallback": GoogleCallback,
-	"guestLogin":     GuestLogin,
 }
 
 // Define privateFunc as an alias to Tools
