@@ -474,6 +474,18 @@ func WSHandler(conn *utils.Conn) http.HandlerFunc {
 	}
 }
 
+func HealthCheck() http.HandlerFunc {
+	type status struct {
+		OK bool `json:"ok"`
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// If you need DB ping logic, insert it here and flip OK accordingly.
+		_ = json.NewEncoder(w).Encode(status{OK: true})
+	}
+}
+
 // StartServer performs operations related to StartServer functionality.
 func StartServer() {
 	conn, cleanup := utils.InitConn(true)
@@ -486,7 +498,7 @@ func StartServer() {
 	http.HandleFunc("/poll", pollHandler(conn))
 	http.HandleFunc("/ws", WSHandler(conn))
 	http.HandleFunc("/upload", privateUploadHandler(conn))
-	//http.HandleFunc("/health", healthHandler())
+	http.HandleFunc("/healthz", HealthCheck())
 	//http.HandleFunc("/backend/health", healthHandler())
 	fmt.Println("debug: Server running on port 5058 ----------------------------------------------------------")
 	if err := http.ListenAndServe(":5058", nil); err != nil {
