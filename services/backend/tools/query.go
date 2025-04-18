@@ -809,7 +809,6 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 
 	// Check if this is an immediate content_chunks response (no rounds executed)
 	if len(thinkingResp.Rounds) == 0 && len(thinkingResp.ContentChunks) > 0 {
-		fmt.Println("Processing initial ContentChunks from ThinkingResponse (no rounds)")
 		// Even though we inject later, we *could* inject here too if needed
 		// For now, return as is, assuming injection happens after final response gen
 		return thinkingResp.ContentChunks, []ExecuteResult{}, nil
@@ -889,11 +888,9 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 
 		// 2. Inject security IDs directly into the raw response string
 		tickerTimestampRegex := regexp.MustCompile(`\$\$\$([A-Z]{1,5})-(\d+)\$\$\$`)
-		fmt.Println("--- Running security ID injection on raw text ---")
 		processedTextWithIds := tickerTimestampRegex.ReplaceAllStringFunc(processedText, func(match string) string {
 			return replaceTickerPlaceholder(conn, match)
 		})
-		fmt.Printf("--- Finished security ID injection. Result:\n%s\n", processedTextWithIds)
 
 		// 3. Parse the modified text into ContentChunks
 		var contentChunksResponse struct {
@@ -902,7 +899,6 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 
 		// Try parsing the entire modified string as JSON
 		if err := json.Unmarshal([]byte(processedTextWithIds), &contentChunksResponse); err == nil && len(contentChunksResponse.ContentChunks) > 0 {
-			fmt.Println("Successfully parsed injected text as full ContentChunks JSON.")
 			return contentChunksResponse.ContentChunks, allResults, nil
 		}
 
@@ -912,13 +908,11 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 		if jsonStartIdx != -1 && jsonEndIdx != -1 && jsonEndIdx > jsonStartIdx {
 			jsonBlock := processedTextWithIds[jsonStartIdx : jsonEndIdx+1]
 			if err := json.Unmarshal([]byte(jsonBlock), &contentChunksResponse); err == nil && len(contentChunksResponse.ContentChunks) > 0 {
-				fmt.Println("Successfully parsed injected text from JSON block.")
 				return contentChunksResponse.ContentChunks, allResults, nil
 			}
 		}
 
 		// Fallback: Treat the modified string as a single text chunk
-		fmt.Println("Could not parse injected text as JSON, falling back to single text chunk.")
 		return []ContentChunk{{Type: "text", Content: processedTextWithIds}}, allResults, nil
 	}
 
