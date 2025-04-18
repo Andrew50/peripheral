@@ -22,7 +22,6 @@ var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, err
 	"login":          Login,
 	"googleLogin":    GoogleLogin,
 	"googleCallback": GoogleCallback,
-	"guestLogin":     GuestLogin,
 }
 
 // Define privateFunc as an alias to Tools
@@ -384,53 +383,6 @@ type QueueRequest struct {
 	Arguments interface{} `json:"args"`
 }
 
-func queueHandler(conn *utils.Conn) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		addCORSHeaders(w)
-		if r.Method != "POST" {
-			return
-		}
-		fmt.Println("debug: got queue request")
-		token_string := r.Header.Get("Authorization")
-		userId, err := validateToken(token_string)
-		if handleError(w, err, "auth") {
-			return
-		}
-		var req Request
-		if handleError(w, json.NewDecoder(r.Body).Decode(&req), "decoding request") {
-			return
-		}
-
-		// Create a map for the combined arguments
-		var args map[string]interface{}
-
-		// If req.Arguments is not empty, unmarshal it into the args map
-		if len(req.Arguments) > 0 {
-			if err := json.Unmarshal(req.Arguments, &args); err != nil {
-				handleError(w, err, "parsing arguments")
-				return
-			}
-		} else {
-			// Initialize empty map if no arguments were provided
-			args = make(map[string]interface{})
-		}
-
-		// Add userId to the arguments
-		args["user_id"] = userId
-
-		taskId, err := utils.Queue(conn, req.Function, args)
-		if handleError(w, err, "queue") {
-			return
-		}
-		response := map[string]string{
-			"taskId": taskId,
-		}
-		if err := json.NewEncoder(w).Encode(response); err != nil {
-			handleError(w, err, "190v0id")
-			return
-		}
-	}
-}
 
 // PollRequest represents a structure for handling PollRequest data.
 type PollRequest struct {
@@ -522,26 +474,6 @@ func WSHandler(conn *utils.Conn) http.HandlerFunc {
 	}
 }
 
-// Health check endpoint handler
-func healthHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Create a response object
-		response := map[string]string{
-			"status":  "healthy",
-			"service": "backend",
-		}
-
-		// Set content type header
-		w.Header().Set("Content-Type", "application/json")
-
-		// Write the response
-		if err := json.NewEncoder(w).Encode(response); err != nil {
-			log.Printf("Error encoding health response: %v", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-		}
-	}
-}
-
 // StartServer performs operations related to StartServer functionality.
 func StartServer() {
 	conn, cleanup := utils.InitConn(true)
@@ -550,11 +482,11 @@ func StartServer() {
 	defer close(stopScheduler)
 	http.HandleFunc("/public", publicHandler(conn))
 	http.HandleFunc("/private", privateHandler(conn))
-	http.HandleFunc("/queue", queueHandler(conn))
+	//http.HandleFunc("/queue", queueHandler(conn))
 	http.HandleFunc("/poll", pollHandler(conn))
 	http.HandleFunc("/ws", WSHandler(conn))
-	http.HandleFunc("/private-upload", privateUploadHandler(conn))
-	http.HandleFunc("/health", healthHandler())
+	http.HandleFunc("/upload", privateUploadHandler(conn))
+	//http.HandleFunc("/health", healthHandler())
 	//http.HandleFunc("/backend/health", healthHandler())
 	fmt.Println("debug: Server running on port 5058 ----------------------------------------------------------")
 	if err := http.ListenAndServe(":5058", nil); err != nil {
