@@ -11,10 +11,10 @@ on:
         description: 'Branch to deploy'
         required: true
         type: string
-      k8s_context:
-        description: 'Kubernetes context to use'
-        required: true
-        type: string
+        #      k8s_context:
+        #description: 'Kubernetes context to use'
+        #required: true
+        #type: string
       k8s_namespace:
         description: 'Kubernetes namespace to deploy to'
         required: true
