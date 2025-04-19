@@ -1,423 +1,418 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  /*
+    QueryBuilder.svelte — graphical builder for the new strategy “Spec” DSL defined in Go
+    -------------------------------------------------------------------------------
+    ‣ Author: ChatGPT (o3)
+    ‣ Purpose: let users create/edit a Spec JSON interactively.
+    ‣ Usage: <QueryBuilder bind:value={spec} /> — two‑way bind to the Spec object.
+  */
+
   import { writable, get } from 'svelte/store';
-  import { strategies } from '$lib/core/stores';
-  import { privateRequest } from '$lib/core/backend';
-  import '$lib/core/global.css';
+  import { createEventDispatcher } from 'svelte';
 
-  /***********************
-   *     ─ Types ─       *
-   ***********************/
-  type StrategyId = number | 'new' | null;
+  // ────────────────────────────────────────────────────────────────────────────
+  //                TS types mirroring Go (partial / optional)
+  // ────────────────────────────────────────────────────────────────────────────
+  type NodeID = number;
 
-  /**  ───────── High‑level record saved to DB ───────── */
-  interface Strategy {
-    strategyId: number;
+  // --- value nodes ----------------------------------------------------------
+  interface ConstNode    { kind: 'const';  number?: number; }
+  interface ColumnNode   { kind: 'column'; name?: string;  }
+  interface ExprNode     { kind: 'expr';   op?: ArithOp;  args: NodeID[]; }
+  interface AggregateNode{ kind: 'agg';    fn?: AggFn; of?: NodeID; scope?: string; period?: number; }
+
+  // --- boolean nodes --------------------------------------------------------
+  interface ComparisonNode { op?: CompOp; lhs?: NodeID; rhs?: NodeID; kind: 'comparison'; }
+  interface RankFilterNode { fn?: RankFn; expr?: NodeID; param?: number; kind: 'rank'; }
+  interface LogicNode      { op?: LogicOp; args: NodeID[]; kind: 'logic'; }
+
+  type ValueNode   = ConstNode | ColumnNode | ExprNode | AggregateNode;
+  type BooleanNode = ComparisonNode | RankFilterNode | LogicNode;
+  export type AnyNode    = ValueNode | BooleanNode;
+
+  // --- enums mirrored -------------------------------------------------------
+  const arithOps  = ['+', '-', '*', '/', 'offset'] as const;
+  type ArithOp    = typeof arithOps[number];
+
+  const compOps   = ['==','!=','<','<=','>','>='] as const;
+  type CompOp     = typeof compOps[number];
+
+  const aggFns    = ['avg','stdev','median'] as const;
+  type AggFn      = typeof aggFns[number];
+
+  const rankFns   = ['top_pct','bottom_pct','top_n','bottom_n'] as const;
+  type RankFn     = typeof rankFns[number];
+
+  const logicOps  = ['AND','OR','NOT'] as const;
+  type LogicOp    = typeof logicOps[number];
+
+  // --- exposed component API -----------------------------------------------
+  export interface Spec {
     name: string;
-    spec: StrategySpec;
-    score?: number;
+    nodes: AnyNode[];
+    root: NodeID | null;
   }
 
-  /**  ───────── Local editable copy ───────── */
-  interface EditableStrategy extends Strategy {
-    strategyId: StrategyId;
+  export let value: Spec = { name: '', nodes: [], root: null };
+  const dispatch = createEventDispatcher<{ change: Spec }>();
+
+  // local store mirroring `value` to leverage Svelte reactivity on deep edits
+  const nodes = writable<AnyNode[]>(value.nodes);
+  const specName = writable(value.name);
+  const root = writable<NodeID | null>(value.root ?? null);
+
+  // UI state ---------------------------------------------------------------
+  let showAddMenu = false;   // controls the “Add Node” pop‑over
+
+  // keep parent in‑sync -----------------------------------------------------
+  $: value = { name: get(specName), nodes: get(nodes), root: get(root) };
+  $: dispatch('change', value);
+
+  // helpers ------------------------------------------------------------------
+  function addNode(kind: AnyNode['kind']) {
+    const arr = get(nodes);
+    let newNode: AnyNode;
+    switch (kind) {
+      case 'const':      newNode = { kind:'const',  number:0 }; break;
+      case 'column':     newNode = { kind:'column', name:'' }; break;
+      case 'expr':       newNode = { kind:'expr',   op:'+', args:[] }; break;
+      case 'agg':        newNode = { kind:'agg',    fn:'avg', of:0, scope:'self', period:0 }; break;
+      case 'comparison': newNode = { kind:'comparison', op:'>', lhs:0, rhs:0 }; break;
+      case 'rank':       newNode = { kind:'rank', fn:'top_pct', expr:0, param:10 }; break;
+      case 'logic':      newNode = { kind:'logic', op:'AND', args:[] }; break;
+      default:           return;
+    }
+    nodes.set([...arr, newNode]);
   }
 
-  /**  ───────── PARSED STRATEGY SPEC ───────── */
-  interface StrategySpec {
-    timeframes: string[];
-    stocks: {
-      universe: string;
-      include: string[];
-      exclude: string[];
-      filters: StockFilter[];
-    };
-    indicators: Indicator[];
-    derived_columns: DerivedColumn[];
-    future_performance: FuturePerf[];
-    conditions: Condition[];
-    logic: string;
-    date_range: { start: string; end: string };
-    time_of_day: { constraint: string; start_time: string; end_time: string };
-    output_columns: string[];
-  }
-
-  interface StockFilter {
-    metric: string;
-    operator: string;
-    value: number;
-    timeframe: string;
-  }
-
-  interface Indicator {
-    id: string;
-    type: string;
-    parameters: Record<string, any>;
-    input_field: string;
-    timeframe: string;
-  }
-
-  interface DerivedColumn {
-    id: string;
-    expression: string;
-    comment?: string;
-  }
-
-  interface FuturePerf {
-    id: string;
-    expression: string;
-    timeframe: string;
-    comment?: string;
-  }
-
-  interface ConditionLHS {
-    field: string;
-    offset: number;
-    timeframe: string;
-  }
-  interface ConditionRHS {
-    field?: string;
-    offset?: number;
-    timeframe?: string;
-    indicator_id?: string;
-    value?: number;
-    multiplier?: number;
-  }
-  interface Condition {
-    id?: string;
-    lhs: ConditionLHS;
-    operation: string;
-    rhs: ConditionRHS;
-  }
-
-  /***********************
-   *   ─ Component State ─
-   ***********************/
-  const loading = writable(false);
-  let selectedStrategyId: StrategyId = null;
-  let editedStrategy: EditableStrategy | null = null;
-
-  /***********************
-   *   ─ Helpers ─
-   ***********************/
-  function blankSpec(): StrategySpec {
-    return {
-      timeframes: ['daily'],
-      stocks: {
-        universe: 'all',
-        include: [],
-        exclude: [],
-        filters: []
-      },
-      indicators: [],
-      derived_columns: [],
-      future_performance: [],
-      conditions: [],
-      logic: 'AND',
-      date_range: { start: '', end: '' },
-      time_of_day: { constraint: '', start_time: '', end_time: '' },
-      output_columns: []
-    };
-  }
-
-  async function loadStrategies() {
-    loading.set(true);
-    try {
-      const data = await privateRequest<Strategy[]>('getStrategies', {});
-      // if old backend returns criteria, map → spec placeholder
-      if (Array.isArray(data) && data.length){
-      data.forEach((d: any) => {
-        if (!('spec' in d)) {
-          d.spec = blankSpec();
-        }
-      });
-      }
-      strategies.set(data);
-    } finally {
-      loading.set(false);
+  function deleteNode(idx: number) {
+    const arr = get(nodes);
+    arr.splice(idx,1);
+    // fix references ↓
+    arr.forEach((n)=>updateRefs(n,idx));
+    nodes.set(arr);
+    // root update
+    if (get(root) !== null) {
+      const r = get(root)!;
+      if (r === idx) root.set(null);
+      else if (r > idx) root.set(r - 1);
     }
   }
-  onMount(loadStrategies);
 
-  /***********************
-   *       ─ CRUD ─
-   ***********************/
-  function startCreate() {
-    editedStrategy = {
-      strategyId: 'new',
-      name: '',
-      spec: blankSpec()
-    } as EditableStrategy;
-    selectedStrategyId = 'new';
-  }
-
-  function editStrategy(strat: Strategy) {
-    selectedStrategyId = strat.strategyId;
-    editedStrategy = JSON.parse(JSON.stringify(strat)); // deep clone
-  }
-
-  function cancelEdit() {
-    selectedStrategyId = null;
-    editedStrategy = null;
-  }
-
-  async function deleteStrategy(id: number) {
-    if (!confirm('Delete this strategy?')) return;
-    await privateRequest('deleteStrategy', { strategyId: id });
-    strategies.update(arr => arr.filter(s => s.strategyId !== id));
-    cancelEdit();
-  }
-
-  async function saveStrategy() {
-    if (!editedStrategy) return;
-
-    const payload = {
-      name: editedStrategy.name,
-      spec: editedStrategy.spec
-    };
-
-    if (editedStrategy.strategyId === 'new') {
-      const created = await privateRequest<Strategy>('newStrategy', payload);
-      strategies.update(arr => [...arr, created]);
-    } else if (typeof editedStrategy.strategyId === 'number') {
-      await privateRequest('setStrategy', {
-        strategyId: editedStrategy.strategyId,
-        ...payload
-      });
-      strategies.update(arr =>
-        arr.map(s => (s.strategyId === editedStrategy!.strategyId ? { ...(editedStrategy as Strategy) } : s))
-      );
+  function updateRefs(n: AnyNode, removedIdx: number) {
+    const dec = (id?: number)=> (id!==undefined && id>removedIdx)? id-1 : id;
+    switch(n.kind){
+      case 'expr': n.args = n.args.map(dec as (id:number)=>number); break;
+      case 'agg':  n.of = dec(n.of); break;
+      case 'comparison': n.lhs = dec(n.lhs); n.rhs = dec(n.rhs); break;
+      case 'rank': n.expr = dec(n.expr); break;
+      case 'logic': n.args = n.args.map(dec as (id:number)=>number); break;
     }
-
-    cancelEdit();
   }
 
-  /***********************
-   *   ─ Utility funcs ─
-   ***********************/
-  const timeframeOptions = ['daily', 'hourly', 'minute'];
-  const stockMetricOptions = ['dolvol', 'adr', 'mcap'];
-  const operatorOptions = ['>', '<', '>=', '<=', '==', '!='];
+  // Helper to ensure store updates are propagated when directly mutating node properties
+  function bump() {
+    nodes.update(arr => arr); // same array reference, but re-emits to trigger reactivity
+  }
+
+  // Helper for immutable node updates
+  function mutate(idx: number, fn: (n: AnyNode) => AnyNode) {
+    nodes.update(arr => {
+      const next = [...arr];
+      next[idx] = fn(structuredClone(arr[idx])); // safe copy
+      return next;
+    });
+  }
+
+  // Download JSON to file
+  function downloadJSON() {
+    const jsonStr = JSON.stringify(value, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${value.name || 'strategy'}_spec.json`;
+    document.body.appendChild(a);
+    a.click();
+    
+    // Cleanup
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+  }
+
+  const availableNodeIDs = () => Array.from(get(nodes).keys());
+  const boolNodeIDs = () => get(nodes).flatMap((n,i)=>(n.kind==='comparison'||n.kind==='rank'||n.kind==='logic')? [i] : []);
+  const isRootNode = (idx: number) => get(root) === idx;
 </script>
 
-{#if selectedStrategyId === null}
-  <!-- List View -->
-  <div class="toolbar">
-    <button on:click={startCreate}>＋ New Strategy</button>
-  </div>
+<!-- ────────────────────────────────── UI layout ────────────────────────────────── -->
+<div class="qb-root">
+  <label class="name-input">Spec Name
+    <input bind:value={$specName} placeholder="My Strategy" />
+  </label>
 
-  {#if $loading}
-    <p>Loading…</p>
-  {:else}
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Timeframes</th>
-            <th>Score</th>
-            <th style="width:8rem">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#if Array.isArray($strategies) && $strategies.length}
-            {#each $strategies as s}
-              <tr>
-                <td>{s.name}</td>
-                <!--<td>{s.spec.timeframes?.join(', ')}</td>-->
-                <td>{s.score ?? '—'}</td>
-                <td>
-                  <button on:click={() => editStrategy(s)}>Edit</button>
-                  <button class="danger" on:click={() => deleteStrategy(s.strategyId)}>Delete</button>
-                </td>
-              </tr>
-            {/each}
-          {:else}
-            <tr><td colspan="4">No strategies yet.</td></tr>
-          {/if}
-        </tbody>
-      </table>
-    </div>
-  {/if}
-{:else if editedStrategy}
-  <!-- Edit / Create View -->
-  <div class="form-block">
-    <label>
-      Name
-      <input type="text" bind:value={editedStrategy.name} placeholder="Strategy name" />
-    </label>
-  </div>
-
-  <!-- Timeframes section -->
-  <fieldset class="section">
-    <legend>Timeframes</legend>
-    {#each timeframeOptions as tf}
-      <label class="inline">
-      <input type="checkbox" value={tf} 
-      checked={editedStrategy.spec.timeframes.includes(tf)} 
-      on:change={(e) => {
-          const checked = e.currentTarget.checked;
-        const arr = editedStrategy?.spec.timeframes;
-        if (checked) arr.push(tf); 
-        else {
-            editedStrategy.spec.timeframes = arr.filter(v => v !== tf);
-        }
-      }}> {tf}</label>
-    {/each}
-  </fieldset>
-
-  <!-- Stocks section -->
-  <fieldset class="section">
-    <legend>Stocks Universe</legend>
-
-    <label>
-      Universe
-      <select bind:value={editedStrategy.spec.stocks.universe}>
-        <option value="all">All</option>
-        <option value="list">Custom List</option>
-        <option value="sp500">S&P 500</option>
-      </select>
-    </label>
-
-    <div class="flex flex-space">
-      <div class="pill-group">
-        <h4>Include</h4>
-        {#each editedStrategy.spec.stocks.include as ticker, i (ticker)}
-          <span class="pill" on:click={() => editedStrategy?.spec.stocks.include.splice(i, 1)}>{ticker} ✕</span>
+  <section>
+    <h3>Nodes <small>({$nodes.length})</small></h3>
+    <button class="add-btn" on:click={() => showAddMenu = !showAddMenu}>＋ Add Node</button>
+    {#if showAddMenu}
+      <div class="add-menu">
+        {#each ['const','column','expr','agg','comparison','rank','logic'] as k}
+          <button on:click={() => { addNode(k); showAddMenu=false; }}>{k}</button>
         {/each}
-        <input class="small" placeholder="Ticker" on:keydown={(e) => {
-          if (e.key === 'Enter' && e.target.value.trim()) {
-            editedStrategy.spec.stocks.include.push(e.target.value.trim().toUpperCase());
-            e.target.value = '';
-          }
-        }} />
       </div>
-
-      <div class="pill-group">
-        <h4>Exclude</h4>
-        {#each editedStrategy.spec.stocks.exclude as ticker, i (ticker)}
-          <span class="pill" on:click={() => editedStrategy?.spec.stocks.exclude.splice(i, 1)}>{ticker} ✕</span>
-        {/each}
-        <input class="small" placeholder="Ticker" on:keydown={(e) => {
-          if (e.key === 'Enter' && e.target.value.trim()) {
-            editedStrategy?.spec.stocks.exclude.push(e.target.value.trim().toUpperCase());
-            e.target.value = '';
-          }
-        }} />
-      </div>
-    </div>
-
-    <details>
-      <summary>Filters</summary>
-      <table class="mini">
-        <thead>
-          <tr><th>Metric</th><th>Operator</th><th>Value</th><th>Timeframe</th><th></th></tr>
-        </thead>
-        <tbody>
-          {#each editedStrategy.spec.stocks.filters as f, i (i)}
-            <tr>
-              <td>
-                <select bind:value={f.metric}>{#each stockMetricOptions as m}<option value={m}>{m}</option>{/each}</select>
-              </td>
-              <td>
-                <select bind:value={f.operator}>{#each operatorOptions as op}<option value={op}>{op}</option>{/each}</select>
-              </td>
-              <td><input type="number" step="any" bind:value={f.value} /></td>
-              <td><input type="text" class="tiny" bind:value={f.timeframe} /></td>
-              <td><button on:click={() => editedStrategy?.spec.stocks.filters.splice(i, 1)}>✕</button></td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-      <button on:click={() => editedStrategy?.spec.stocks.filters.push({metric:'dolvol', operator:'>', value:0, timeframe:'daily'})}>＋ Add Filter</button>
-    </details>
-  </fieldset>
-
-  <!-- Conditions section -->
-  <fieldset class="section">
-    <legend>Conditions</legend>
-    {#each editedStrategy.spec.conditions as c, idx (idx)}
-      <div class="condition-row">
-        <input class="tiny" placeholder="field" bind:value={c.lhs.field} />
-        <input class="tiny" type="number" bind:value={c.lhs.offset} placeholder="offset" />
-        <input class="tiny" placeholder="tf" bind:value={c.lhs.timeframe} />
-
-        <select bind:value={c.operation}>{#each operatorOptions as op}<option value={op}>{op}</option>{/each}</select>
-
-        <input class="tiny" placeholder="value / field / id" 
-        bind:value={c.rhs.value} 
-        on:input={(e)=>{
-            const v=parseFloat(e.target.value); 
-        if (!isNaN(v)) c.rhs.value=v}} />
-
-        <button on:click={() => editedStrategy?.spec.conditions.splice(idx,1)}>✕</button>
-      </div>
-    {/each}
-    <button on:click={() => editedStrategy?.spec.conditions.push({lhs:{field:'',offset:0,timeframe:'daily'},operation:'>',rhs:{value:0}})}>＋ Add Condition</button>
-  </fieldset>
-
-  <!-- Output columns section -->
-  <fieldset class="section">
-    <legend>Output Columns</legend>
-    <div class="pill-group">
-      {#each editedStrategy.spec.output_columns as col, i (col)}
-        <span class="pill" on:click={() => editedStrategy?.spec.output_columns.splice(i,1)}>{col} ✕</span>
-      {/each}
-      <input class="small" placeholder="column" on:keydown={(e)=>{if(e.key==='Enter' && e.target.value.trim()){editedStrategy?.spec.output_columns.push(e.target.value.trim()); e.target.value='';}}} />
-    </div>
-  </fieldset>
-
-  <!-- Save / Cancel -->
-  <div class="actions">
-    <button on:click={saveStrategy}>💾 Save</button>
-    <button on:click={cancelEdit}>Cancel</button>
-    {#if editedStrategy.strategyId !== 'new'}
-      <button class="danger" on:click={() => deleteStrategy(editedStrategy?.strategyId)}>Delete</button>
     {/if}
-  </div>
-{/if}
+
+    {#if $nodes.length === 0}
+      <p class="dim">No nodes yet. Add one to start.</p>
+    {:else}
+      <div class="node-list">
+        {#each $nodes as n, idx (idx)}
+          <div class="node-card" class:root-node={isRootNode(idx)}>
+            <header>
+              <strong>#{idx}</strong> <span class="tag">{n.kind}</span>
+              <button class="delete" on:click={() => deleteNode(idx)}>✕</button>
+            </header>
+
+            {#if n.kind === 'const'}
+              <label>Number <input type="number" bind:value={(n).number} /></label>
+            {:else if n.kind === 'column'}
+              <label>Column Name <input bind:value={(n).name} placeholder="close" /></label>
+            {:else if n.kind === 'expr'}
+              <label>Operator
+                <select bind:value={(n).op}>
+                  {#each arithOps as op}<option value={op}>{op}</option>{/each}
+                </select>
+              </label>
+              <div class="arg-list">
+                <h4>Args</h4>
+                {#each (n).args as id, i (i)}
+                  <span class="pill" on:click={() => (n).args.splice(i,1)}>{id} ✕</span>
+                {/each}
+                <select on:change={(e)=>{ const v=parseInt((e.target).value); if(!isNaN(v)){ (n).args.push(v); (e.target).selectedIndex=0; }}}>
+                  <option disabled selected>Add…</option>
+                  {#each availableNodeIDs() as id}
+                    {#if id !== idx}<option value={id}>{id}</option>{/if}
+                  {/each}
+                </select>
+              </div>
+            {:else if n.kind === 'agg'}
+              <label>Function
+                <select bind:value={(n).fn}>
+                  {#each aggFns as fn}<option value={fn}>{fn}</option>{/each}
+                </select>
+              </label>
+              <label>Of Node
+                <select bind:value={(n).of}>{#each availableNodeIDs() as id}<option value={id}>{id}</option>{/each}</select>
+              </label>
+              <label>Scope <input bind:value={(n).scope} placeholder="self/sector/market" /></label>
+              <label>Period (bars) <input type="number" min="0" bind:value={(n).period} /></label>
+            {:else if n.kind === 'comparison'}
+              <label>Op
+                <select bind:value={(n).op}>{#each compOps as op}<option value={op}>{op}</option>{/each}</select>
+              </label>
+              <label>LHS
+                <select bind:value={(n).lhs}>{#each availableNodeIDs() as id}<option value={id}>{id}</option>{/each}</select>
+              </label>
+              <label>RHS
+
+                <select bind:value={(n).rhs}>{#each availableNodeIDs() as id}<option value={id}>{id}</option>{/each}</select>
+              </label>
+            {:else if n.kind === 'rank'}
+              <label>Fn
+                <select bind:value={(n).fn}>{#each rankFns as fn}<option value={fn}>{fn}</option>{/each}</select>
+              </label>
+              <label>Expr Node
+                <select bind:value={(n).expr}>{#each availableNodeIDs() as id}<option value={id}>{id}</option>{/each}</select>
+              </label>
+              <label>Param <input type="number" min="1" bind:value={(n).param} /></label>
+            {:else if n.kind === 'logic'}
+              <label>Op
+                <select bind:value={(n ).op}>{#each logicOps as op}<option value={op}>{op}</option>{/each}</select>
+              </label>
+              <div class="arg-list">
+                <h4>Args</h4>
+                {#each (n ).args as id, i (i)}
+                  <span class="pill" on:click={() => (n ).args.splice(i,1)}>{id} ✕</span>
+                {/each}
+                <select on:change={(e)=>{ const v=parseInt(e.target.value); if(!isNaN(v)){ (n).args.push(v); e.target.selectedIndex=0; }}}>
+                  <option disabled selected>Add…</option>
+                  {#each boolNodeIDs() as id}
+                    {#if id !== idx}<option value={id}>{id}</option>{/if}
+                  {/each}
+                </select>
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </section>
+
+  <!-- Root selector -->
+  <section>
+    <h3>Root Node</h3>
+    <select bind:value={$root}>
+      <option value={null}>— choose —</option>
+      {#each boolNodeIDs() as id}<option value={id}>{id}</option>{/each}
+    </select>
+  </section>
+
+  <!-- JSON preview & export -->
+  <section>
+    <h3>Spec JSON</h3>
+    <div class="json-actions">
+      <button class="download-btn" on:click={downloadJSON}>Download JSON</button>
+    </div>
+    <textarea readonly rows="10">{JSON.stringify(value, null, 2)}</textarea>
+  </section>
+</div>
 
 <style>
-  /*  ─── Layout & Typography ─── */
-  .toolbar { margin-bottom: 0.75rem; }
-  .table-container { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #e2e8f0; text-align: left; }
-  th { font-weight: 600; }
+  /*
+    All colors now come from the global design‑system CSS variables declared
+    on :root.  This keeps the component consistent with the site‑wide theme and
+    avoids the previous high‑contrast black/white look.
+  */
 
-  /*  ─── Form Sections ─── */
-  .form-block { margin-bottom: 1rem; }
-  fieldset.section { border: 1px solid #cbd5e1; border-radius: 4px; padding: 0.75rem; margin-bottom: 1rem; }
-  legend { padding: 0 8px; font-weight: 600; }
+  .qb-root{
+    font-family:system-ui;
+    display:flex;
+    flex-direction:column;
+    gap:1rem;
+    color:var(--text-primary);
+  }
 
-  label { display: flex; flex-direction: column; font-size: 0.9rem; margin-bottom: 0.5rem; }
-  input, select { padding: 0.35rem 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.9rem; }
-  input.small { width: 6rem; }
-  input.tiny { width: 4.5rem; }
+  label{
+    display:flex;
+    flex-direction:column;
+    font-size:0.85rem;
+    margin-bottom:0.25rem;
+    color:var(--text-secondary);
+  }
 
-  details > summary { cursor: pointer; margin-bottom: 0.5rem; font-weight: 500; }
+  input,select,textarea{
+    font:inherit;
+    padding:4px;
+    background:var(--ui-bg-element);
+    border:1px solid var(--ui-border);
+    border-radius:4px;
+    color:var(--text-primary);
+  }
+  input::placeholder, textarea::placeholder{ color:var(--text-secondary); }
 
-  .mini { width: 100%; margin-bottom: 0.5rem; }
-  .mini td, .mini th { padding: 0.3rem 0.4rem; }
-  .mini input, .mini select { width: 100%; font-size: 0.8rem; }
+  .name-input{ max-width:18rem; }
 
-  /*  ─── Pills & Flex helpers ─── */
-  .pill-group { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-  .pill { background: #e2e8f0; border-radius: 12px; padding: 2px 8px; font-size: 0.8rem; cursor: pointer; user-select: none; }
-  .pill:hover { background: #cbd5e1; }
+  h3{
+    margin:0 0 0.25rem 0;
+    font-size:1rem;
+    color:var(--text-primary);
+  }
 
-  .flex { display: flex; gap: 1rem; }
-  .flex-space { justify-content: space-between; }
+  .node-list{ display:flex; flex-wrap:wrap; gap:0.75rem; }
 
-  .condition-row { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; }
+  .node-card{
+    background:var(--ui-bg-secondary);
+    border:1px solid var(--ui-border);
+    border-radius:6px;
+    padding:0.5rem;
+    min-width:220px;
+    position:relative;
+  }
 
-  /*  ─── Buttons ─── */
-  button { padding: 0.35rem 0.75rem; border: 1px solid #94a3b8; background: #f8fafc; border-radius: 4px; font-size: 0.9rem; cursor: pointer; transition: background 120ms; }
-  button:hover { background: #e2e8f0; }
-  button.danger { color: #b91c1c; border-color: #b91c1c; }
-  button.danger:hover { background: #fecaca; }
-  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  .node-card header{ display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem; }
 
-  .actions { margin-top: 0.75rem; }
+  .tag{
+    background:var(--ui-bg-hover);
+    border-radius:4px;
+    padding:0 4px;
+    font-size:0.7rem;
+    color:var(--text-secondary);
+  }
+
+  .delete{
+    position:absolute;
+    top:4px;
+    right:4px;
+    background:none;
+    border:none;
+    cursor:pointer;
+    color:var(--color-down);
+    font-size:0.9rem;
+  }
+  .delete:hover{ color:var(--color-down-strong); }
+
+  .add-btn{
+    align-self:flex-start;
+    background:var(--ui-accent);
+    color:var(--text-primary);
+    border:none;
+    padding:4px 8px;
+    border-radius:4px;
+    cursor:pointer;
+  }
+  .add-btn:hover{ background:var(--c3-hover); }
+
+  .add-menu{ display:flex; gap:4px; margin:4px 0 8px 0; }
+
+  .add-menu button{
+    padding:2px 6px;
+    font-size:0.75rem;
+    background:var(--ui-bg-hover);
+    border:1px solid var(--ui-border);
+    border-radius:4px;
+    color:var(--text-primary);
+    cursor:pointer;
+  }
+  .add-menu button:hover{ background:var(--ui-bg-element); }
+
+  .arg-list h4{ margin:0; font-size:0.75rem; color:var(--text-secondary); }
+
+  .pill{
+    background:var(--ui-bg-hover);
+    border-radius:12px;
+    padding:2px 8px;
+    font-size:0.75rem;
+    margin-right:4px;
+    cursor:pointer;
+  }
+  .pill:hover{ background:var(--ui-accent); color:#fff; }
+
+  textarea{
+    width:100%;
+    font-family:monospace;
+    background:var(--ui-bg-element);
+    border:1px solid var(--ui-border);
+    color:var(--text-primary);
+  }
+
+  .dim{ opacity:0.6; color:var(--text-secondary); }
+
+  .root-node {
+    border: 2px solid var(--color-up);
+    box-shadow: 0 0 4px rgba(var(--color-up-rgb), 0.3);
+  }
+
+  .json-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5rem;
+  }
+
+  .download-btn {
+    background: var(--ui-accent);
+    color: var(--text-primary);
+    border: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  
+  .download-btn:hover {
+    background: var(--c3-hover);
+  }
 </style>
 
