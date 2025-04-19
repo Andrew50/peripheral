@@ -394,12 +394,19 @@
 		});
 	}
 
-	function handleImageError(e: Event) {
+	function handleImageError(e: Event, ticker: string) {
 		const img = e.currentTarget as HTMLImageElement;
-		if (img) {
-			console.warn(`Failed to load icon for ${img.alt}`);
-			// Replace with a black box placeholder instead of hiding
-			img.src = BLACK_PIXEL;
+		if (img && ticker) {
+			// Update the cache so we don't retry loading the bad icon
+			iconCache.set(ticker, BLACK_PIXEL);
+			// Force the specific item in the list to use the black pixel
+			// This ensures the {#if} condition evaluates correctly
+			list.update((items: ExtendedInstance[]) =>
+				items.map((item: ExtendedInstance) => (item.ticker === ticker ? { ...item, icon: BLACK_PIXEL } : item))
+			);
+			// Optionally, set the current img src directly for immediate visual feedback
+			// although the list update above should handle it reactively.
+			// img.src = BLACK_PIXEL; 
 		}
 	}
 
@@ -501,19 +508,28 @@
 							{/if}
 							<td class="default-td">
 								{#if isFlagged(watch, $flagWatchlist)}
-									<span class="flag-icon">⚑</span>
+									<span class="flag-icon">
+										<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+											<path d="M5 5v14"></path>
+											<path d="M19 5l-6 4 6 4-6 4"></path>
+										</svg>
+									</span>
 								{/if}
 							</td>
 							{#each columns as col}
 								{#if col === 'Ticker'}
 									<td class="default-td">
-										{#if watch.icon}
+										{#if watch.icon && watch.icon !== BLACK_PIXEL}
 											<img
 												src={watch.icon}
 												alt={`${watch.ticker} icon`}
 												class="ticker-icon"
-												on:error={handleImageError}
+												on:error={(e) => handleImageError(e, watch.ticker)}
 											/>
+										{:else if watch.ticker}
+											<span class="default-ticker-icon">
+												{watch.ticker.charAt(0).toUpperCase()}
+											</span>
 										{/if}
 										{watch.ticker}
 									</td>
@@ -843,20 +859,51 @@
 	}
 
 	.ticker-icon {
-		width: 20px;
-		height: 20px;
-		margin-right: 5px;
-		vertical-align: middle;
+		width: 24px;
+		height: 24px;
+		border-radius: 50%; /* Make icons circular */
+		object-fit: cover; /* Ensure icon covers the area nicely */
+		background-color: var(--ui-bg-element); /* BG for unloaded images */
+		vertical-align: middle; /* Align with text */
+		margin-right: 5px; /* Space between icon and text */
 	}
 
-	.loading,
-	.error {
-		text-align: center;
-		padding: 2rem;
-		color: var(--text-primary);
+	.default-ticker-icon {
+		display: inline-flex; /* Use inline-flex for alignment */
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		background-color: var(--ui-border); /* Use border color for background */
+		color: var(--text-primary); /* Use primary text color */
+		font-size: 12px;
+		font-weight: 500;
+		user-select: none; /* Prevent text selection */
+		vertical-align: middle; /* Align with text */
+		margin-right: 5px; /* Space between icon and text */
 	}
 
-	.error {
-		color: var(--c5);
+	.ticker-name {
+		flex-grow: 1; /* Allow ticker name to take remaining space */
+		overflow: hidden; /* Prevent long names from breaking layout */
+		white-space: nowrap;
+	}
+
+	/* Style for different trade types */
+	.long {
+		color: var(--color-positive);
+	}
+
+	/* Professional flag icon styling */
+	.flag-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.flag-icon svg {
+		width: 16px;
+		height: 16px;
+		color: var(--accent-color);
 	}
 </style>
