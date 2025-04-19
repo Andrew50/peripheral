@@ -22,12 +22,7 @@ const (
 )
 
 
-type ScopeId int
-type Scope struct {
-    Id     ScopeId  `json:"id"`
-    Name   string   `json:"name,omitempty"`  // optional label for UI
-    Rules  RuleNode `json:"rules"`           // full AND/OR/NOT tree
-}
+
 // -----------  Comparison ------------------
 type Operand struct { // this will do mult*feature[shift] + const , therefore if feature undefined then just a const
 	FeatureId   int      `json:"feature_id,omitempty"` // ID of the feature to reference
