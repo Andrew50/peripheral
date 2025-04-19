@@ -37,6 +37,7 @@ type Feature struct {
 	Modifier  string        `json:"modifier,omitempty"`  // stddev, mean, median, rsi, macd, raw
 	Period    int           `json:"period,omitempty"`    // period for technical indicators
 	Shift     int           `json:"shift,omitempty"`     // bars back, put this here instead of operand because you usually display feature values after backtest in query
+    RuleNode    RuleNode  `json:"rule"` //blank for all, usually would be the stcok being screened, but could also be sector = 
 }
 
 type ComparisonId int
