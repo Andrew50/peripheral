@@ -1,5 +1,5 @@
 import { type Instance } from '$lib/core/types';
-import {writable, get} from "svelte/store"
+import { writable, get, type Writable } from "svelte/store"
 
 // Define a type for SEC Filing context items
 export interface FilingContext {
@@ -10,11 +10,11 @@ export interface FilingContext {
 	timestamp: number; // Keep timestamp for unique key in #each loops
 }
 
-export const inputValue = writable("");
+export const inputValue: Writable<string> = writable("");
 // Store for chat context items - can hold Instances or FilingContexts
-export const contextItems = writable<(Instance | FilingContext)[]>([]);
+export const contextItems: Writable<(Instance | FilingContext)[]> = writable<(Instance | FilingContext)[]>([]);
 
-export async function addInstanceToChat(instance: Instance) {
+export function addInstanceToChat(instance: Instance) {
 	// Add instance to chat context (avoid duplicates based on securityId and timestamp)
 	contextItems.update(items => {
 		const exists = items.some(i =>
@@ -56,5 +56,16 @@ export function removeFilingFromChat(filing: FilingContext) {
 				item.link === filing.link)
 		)
 	);
+}
+
+/** Signals +page.svelte to open the chat pane */
+export const requestChatOpen = writable(false);
+
+/** Holds the context and query to be processed by the chat component upon opening */
+export const pendingChatQuery = writable<{ context: (Instance | FilingContext)[]; query: string } | null>(null);
+
+export function openChatAndQuery(context: FilingContext | Instance, query: string) {
+	pendingChatQuery.set({ context: [context], query }); // Context is always an array
+	requestChatOpen.set(true); // Signal the page to open the chat
 }
 
