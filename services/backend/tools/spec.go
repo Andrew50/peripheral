@@ -21,6 +21,13 @@ const (
 	OpLE Operator = "<="
 )
 
+
+type ScopeId int
+type Scope struct {
+    Id     ScopeId  `json:"id"`
+    Name   string   `json:"name,omitempty"`  // optional label for UI
+    Rules  RuleNode `json:"rules"`           // full AND/OR/NOT tree
+}
 // -----------  Comparison ------------------
 type Operand struct { // this will do mult*feature[shift] + const , therefore if feature undefined then just a const
 	FeatureId   int      `json:"feature_id,omitempty"` // ID of the feature to reference
@@ -37,7 +44,7 @@ type Feature struct {
 	Modifier  string        `json:"modifier,omitempty"`  // stddev, mean, median, rsi, macd, raw
 	Period    int           `json:"period,omitempty"`    // period for technical indicators
 	Shift     int           `json:"shift,omitempty"`     // bars back, put this here instead of operand because you usually display feature values after backtest in query
-    RuleNode    RuleNode  `json:"rule"` //blank for all, usually would be the stcok being screened, but could also be sector = 
+    //ScopeId    *ScopeId       `json:"scope_id,omitempty"`  // ← one small pointer
 }
 
 type ComparisonId int
@@ -62,6 +69,7 @@ type Stats struct {
 }
 
 type Spec struct {
+    Spec    *Spec   `json:"spec"`
 	Comparisons []Comparison `json:"comparisons"`
 	Features    []Feature    `json:"features"`
 	Logic       []RuleNode   `json:"logic"`
