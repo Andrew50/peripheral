@@ -67,7 +67,7 @@ export async function uploadRequest<T>(
         headers['Authorization'] = authToken;
     }
 
-    const response = await fetch(`${base_url}/uploadRequest`, {
+    const response = await fetch(`${base_url}/upload`, {
         method: 'POST',
         headers,
         body: formData
