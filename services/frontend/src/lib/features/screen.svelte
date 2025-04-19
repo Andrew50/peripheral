@@ -56,19 +56,23 @@
 
 <!-- ─────────────── Strategy toggle buttons ─────────────── -->
 <div class="controls-container">
-	{#each $strategies as strategy (strategy.strategyId)}
-		<button
-			class="toggle-button { $selectedStrategyIds.has(strategy.strategyId) ? 'active' : '' }"
-			on:click={() => toggleStrategy(strategy.strategyId)}
-		>
-			{strategy.name}
-		</button>
-	{/each}
+    {#if Array.isArray($strategies)}
+        {#each $strategies as strategy (strategy.strategyId)}
+            <button
+                class="toggle-button { $selectedStrategyIds.has(strategy.strategyId) ? 'active' : '' }"
+                on:click={() => toggleStrategy(strategy.strategyId)}
+            >
+                {strategy.name}
+            </button>
+        {/each}
+    {:else}
+        <p1> No strategies Found </p1>
+    {/if}
 </div>
 
 <!-- ─────────────── Run / Date buttons ─────────────── -->
 <div class="button-row">
-	<button on:click={changeDate}>Change Date</button>
+	<!--<button on:click={changeDate}>Change Date</button>-->
 	<button on:click={runScreen}>
 		Screen {UTCTimestampToESTString($selectedDate)}
 	</button>
