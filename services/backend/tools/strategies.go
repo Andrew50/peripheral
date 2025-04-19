@@ -503,6 +503,7 @@ func _setStrategy(conn *utils.Conn, userId int, strategyId int, name string, spe
 		return fmt.Errorf("missing required field name")
 	}
 
+
 	// Convert criteria to JSON
 	criteriaJSON, err := json.Marshal(spec)
 	if err != nil {
