@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+    "errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -19,65 +20,125 @@ import (
 	//"github.com/wcharczuk/go-chart/v2"
 )
 
+
+// ---------- ENUMS -----------------------------------------------------------
+
+// Arithmetic, comparison, and aggregate operators.
+type ArithOp   string
+type CompOp    string
+type AggFn     string
+type RankFn    string
+type LogicOp   string
+
+const (
+	ArithAdd ArithOp = "+"
+	ArithSub          = "-"
+	ArithMul          = "*"
+	ArithDiv          = "/"
+	ArithOffset       = "offset" // arg[1] = k (const)
+
+	CompEQ CompOp = "=="
+	CompNE         = "!="
+	CompLT         = "<"
+	CompLE         = "<="
+	CompGT         = ">"
+	CompGE         = ">="
+
+	AggAvg   AggFn = "avg"
+	AggStd          = "stdev"
+	AggMedian       = "median"
+	// (add Sum/Min/Max if needed)
+
+	RankTopPct   RankFn = "top_pct"
+	RankBottomPct        = "bottom_pct"
+	RankTopN             = "top_n"
+	RankBottomN          = "bottom_n"
+
+	LogicAnd LogicOp = "AND"
+	LogicOr           = "OR"
+	LogicNot          = "NOT"
+)
+
+// ---------- VALUE NODES -----------------------------------------------------
+
+// ValueKind tells the decoder which concrete struct to unmarshal into.
+type ValueKind string
+
+const (
+	ValConst  ValueKind = "const"
+	ValCol               = "column"
+	ValExpr              = "expr"
+	ValAgg               = "agg"
+)
+
+// Value is a discriminated union.  Each concrete type embeds it so that the
+// "kind" field round‑trips through JSON.
+type Value struct {
+	Kind ValueKind `json:"kind"`
+}
+
+// ----- scalar literals ------------------------------------------------------
+
+type Const struct {
+	Value
+	Number float64 `json:"number"`         // or String if you need it
+}
+
+// ----- raw column -----------------------------------------------------------
+
+type Column struct {
+	Value
+	Name string `json:"name"`              // e.g. "close"
+}
+
+// ----- arithmetic / offset --------------------------------------------------
+
+type Expr struct {
+	Value
+	Op   ArithOp   `json:"op"`             // "+", "-", "*", "/", "offset"
+	Args []NodeID  `json:"args"`           // operands (indices into Spec.Nodes)
+}
+
+// ----- aggregation (avg, stdev, …) -----------------------------------------
+
+type Aggregate struct {
+	Value
+	Fn      AggFn   `json:"fn"`            // "avg", "stdev", "median"
+	Of      NodeID  `json:"of"`            // series being reduced
+	Scope   string  `json:"scope,omitempty"`  // "self", "sector", "market", peers…
+	Period  int     `json:"period,omitempty"` // rolling window in bars; 0 = full
+}
+
+// ---------- BOOLEAN NODES ---------------------------------------------------
+
+type Comparison struct {
+	Op  CompOp `json:"op"`   // ">", "<=", …
+	LHS NodeID `json:"lhs"`  // scalar
+	RHS NodeID `json:"rhs"`  // scalar
+}
+
+type RankFilter struct {
+	Fn    RankFn `json:"fn"`    // "top_pct", "top_n", …
+	Expr  NodeID `json:"expr"`  // series to rank
+	Param int    `json:"param"` // 10 → top‑10 % or top‑10 rows
+}
+
+type Logic struct {
+	Op   LogicOp `json:"op"`    // AND / OR / NOT
+	Args []NodeID `json:"args"` // boolean children
+}
+
+// NodeID is just an int index into Spec.Nodes, so references stay light‑weight
+// and graphs are easy to manipulate.
+type NodeID int
+
+// ---------- ROOT SPEC -------------------------------------------------------
+
 type StrategySpec struct {
-	Timeframes []string `json:"timeframes"`
-	Stocks     struct {
-		Universe string   `json:"universe"`
-		Include  []string `json:"include"`
-		Exclude  []string `json:"exclude"`
-		Filters  []struct {
-			Metric    string  `json:"metric"`
-			Operator  string  `json:"operator"`
-			Value     float64 `json:"value"`
-			Timeframe string  `json:"timeframe"`
-		} `json:"filters"`
-	} `json:"stocks"`
-	Indicators []struct {
-		ID         string                 `json:"id"`
-		Type       string                 `json:"type"`
-		Parameters map[string]interface{} `json:"parameters"`
-		InputField string                 `json:"input_field"`
-		Timeframe  string                 `json:"timeframe"`
-	} `json:"indicators"`
-	DerivedColumns []struct {
-		ID         string `json:"id"`
-		Expression string `json:"expression"`
-		Comment    string `json:"comment,omitempty"`
-	} `json:"derived_columns,omitempty"`
-	FuturePerformance []struct {
-		ID         string `json:"id"`
-		Expression string `json:"expression"`
-		Timeframe  string `json:"timeframe"`
-		Comment    string `json:"comment,omitempty"`
-	} `json:"future_performance,omitempty"`
-	Conditions []struct {
-		ID  string `json:"id"`
-		LHS struct {
-			Field     string `json:"field"`
-			Offset    int    `json:"offset"`
-			Timeframe string `json:"timeframe"`
-		} `json:"lhs"`
-		Operation string `json:"operation"`
-		RHS       struct {
-			Field       string  `json:"field,omitempty"`
-			Offset      int     `json:"offset,omitempty"`
-			Timeframe   string  `json:"timeframe,omitempty"`
-			IndicatorID string  `json:"indicator_id,omitempty"`
-			Value       float64 `json:"value,omitempty"`
-			Multiplier  float64 `json:"multiplier,omitempty"`
-		} `json:"rhs"`
-	} `json:"conditions"`
-	Logic     string `json:"logic"`
-	DateRange struct {
-		Start string `json:"start"`
-		End   string `json:"end"`
-	} `json:"date_range"`
-	TimeOfDay struct {
-		Constraint string `json:"constraint"`
-		StartTime  string `json:"start_time"`
-		EndTime    string `json:"end_time"`
-	} `json:"time_of_day"`
-	OutputColumns []string `json:"output_columns"`
+	Name  string        `json:"name"`
+	Nodes []any         `json:"nodes"` // slice of *Const, *Column, *Expr, *Aggregate,
+	                                  // *Comparison, *RankFilter, *Logic
+	Root  NodeID        `json:"root"`  // the final boolean node to evaluate
 }
 
 
@@ -237,6 +298,11 @@ type CreateStrategyFromNaturalLanguageArgs struct {
 	StrategyId int    `json:"strategyId,omitempty"`
 }
 
+type CreateStrategyFromNaturalLanguageResult struct {
+    StrategySpec    StrategySpec    `json:"strategySpec"`
+    StrategyId  int     `json"stategyId"`
+}
+
 func extractName(resp string, jsonEnd int) (string, bool) {
 	// Slice the response starting *after* the last `}`
 	if jsonEnd < 0 || jsonEnd+1 >= len(resp) {
@@ -330,7 +396,11 @@ func CreateStrategyFromNaturalLanguage(conn *utils.Conn, userId int, rawArgs jso
 	}
 
 	//if args.StrategyId < 0 { // if it wants new then it passes strat id of -1
-	return _newStrategy(conn, userId, name, spec) // bandaid
+    id, err :=  _newStrategy(conn, userId, name, spec) // bandaid
+    return CreateStrategyFromNaturalLanguageResult {
+        StrategySpec: spec,
+        StrategyId: id,
+    }, nil
 	//}else {
 	//return args.StrategyId, _setStrategy(conn,userId,args.StrategyId,name,spec)
 	//}
@@ -411,7 +481,142 @@ func GetStrategies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inter
 	return strategies, nil
 }
 
-// NewStrategyArgs represents a structure for handling NewStrategyArgs data.
+
+func ValidateSpec(s *StrategySpec) error {
+	if len(s.Nodes) == 0 {
+		return errors.New("spec has no nodes")
+	}
+
+	// --- helpers ------------------------------------------------------------
+
+	checkRef := func(id NodeID, cur, total int) error {
+		idx := int(id)
+		if idx < 0 || idx >= total {
+			return fmt.Errorf("reference to nonexistent node %d", idx)
+		}
+		if idx >= cur {
+			return fmt.Errorf("node %d references future node %d", cur, idx)
+		}
+		return nil
+	}
+
+	// allowed look‑ups
+	allowedCols := map[string]struct{}{
+		"timestamp": {}, "securityid": {}, "ticker": {}, "open": {}, "high": {},
+		"low": {}, "close": {}, "volume": {}, "vwap": {}, "transactions": {},
+		"market_cap": {}, "share_class_shares_outstanding": {},
+	}
+
+	allowedArith := map[ArithOp]struct{}{
+		ArithAdd: {}, ArithSub: {}, ArithMul: {}, ArithDiv: {}, ArithOffset: {},
+	}
+	allowedComp := map[CompOp]struct{}{
+		CompEQ: {}, CompNE: {}, CompLT: {}, CompLE: {}, CompGT: {}, CompGE: {},
+	}
+	allowedAgg := map[AggFn]struct{}{AggAvg: {}, AggStd: {}, AggMedian: {}}
+	allowedRank := map[RankFn]struct{}{
+		RankTopPct: {}, RankBottomPct: {}, RankTopN: {}, RankBottomN: {},
+	}
+	allowedLogic := map[LogicOp]struct{}{LogicAnd: {}, LogicOr: {}, LogicNot: {}}
+
+	// --- root validation ----------------------------------------------------
+
+	if int(s.Root) < 0 || int(s.Root) >= len(s.Nodes) {
+		return fmt.Errorf("root index %d out of range", s.Root)
+	}
+	switch s.Nodes[s.Root].(type) {
+	case *Comparison, *RankFilter, *Logic:
+		// ok
+	default:
+		return errors.New("root must reference a boolean‑returning node")
+	}
+
+	// --- node‑by‑node checks ------------------------------------------------
+
+	for i, n := range s.Nodes {
+		switch node := n.(type) {
+
+		case *Const:
+			// nothing extra to validate
+
+		case *Column:
+			if _, ok := allowedCols[node.Name]; !ok {
+				return fmt.Errorf("node %d: unknown column %q", i, node.Name)
+			}
+
+		case *Expr:
+			if _, ok := allowedArith[node.Op]; !ok {
+				return fmt.Errorf("node %d: invalid arithmetic op %q", i, node.Op)
+			}
+			if node.Op == ArithOffset && len(node.Args) != 2 {
+				return fmt.Errorf("node %d: offset requires exactly 2 args", i)
+			}
+			if node.Op != ArithOffset && len(node.Args) < 2 {
+				return fmt.Errorf("node %d: expr needs ≥2 args", i)
+			}
+			for _, id := range node.Args {
+				if err := checkRef(id, i, len(s.Nodes)); err != nil {
+					return err
+				}
+			}
+
+		case *Aggregate:
+			if _, ok := allowedAgg[node.Fn]; !ok {
+				return fmt.Errorf("node %d: invalid aggregate fn %q", i, node.Fn)
+			}
+			if err := checkRef(node.Of, i, len(s.Nodes)); err != nil {
+				return err
+			}
+			if node.Period < 0 {
+				return fmt.Errorf("node %d: period cannot be negative", i)
+			}
+
+		case *Comparison:
+			if _, ok := allowedComp[node.Op]; !ok {
+				return fmt.Errorf("node %d: invalid comparison op %q", i, node.Op)
+			}
+			if err := checkRef(node.LHS, i, len(s.Nodes)); err != nil {
+				return err
+			}
+			if err := checkRef(node.RHS, i, len(s.Nodes)); err != nil {
+				return err
+			}
+
+		case *RankFilter:
+			if _, ok := allowedRank[node.Fn]; !ok {
+				return fmt.Errorf("node %d: invalid rank fn %q", i, node.Fn)
+			}
+			if node.Param <= 0 {
+				return fmt.Errorf("node %d: param must be > 0", i)
+			}
+			if err := checkRef(node.Expr, i, len(s.Nodes)); err != nil {
+				return err
+			}
+
+		case *Logic:
+			if _, ok := allowedLogic[node.Op]; !ok {
+				return fmt.Errorf("node %d: invalid logic op %q", i, node.Op)
+			}
+			if node.Op == LogicNot && len(node.Args) != 1 {
+				return fmt.Errorf("node %d: NOT expects exactly 1 arg", i)
+			}
+			if node.Op != LogicNot && len(node.Args) < 2 {
+				return fmt.Errorf("node %d: %s expects ≥2 args", i, node.Op)
+			}
+			for _, id := range node.Args {
+				if err := checkRef(id, i, len(s.Nodes)); err != nil {
+					return err
+				}
+			}
+
+		default:
+			return fmt.Errorf("node %d: unknown node type %T", i, n)
+		}
+	}
+
+	return nil
+}
+
 type NewStrategyArgs struct {
 	Name     string       `json:"name"`
 	Criteria StrategySpec `json:"criteria"`
@@ -422,11 +627,18 @@ func _newStrategy(conn *utils.Conn, userId int, name string, spec StrategySpec) 
 		return -1, fmt.Errorf("missing required fields")
 	}
 
+    err := ValidateSpec(&spec)
+    if err != nil {
+        return -1, err
+    }
+    
+
 	// Convert criteria to JSON
 	criteriaJSON, err := json.Marshal(spec)
 	if err != nil {
 		return -1, fmt.Errorf("error marshaling criteria: %v", err)
 	}
+
 
 	var strategyID int
 	err = conn.DB.QueryRow(context.Background(), `

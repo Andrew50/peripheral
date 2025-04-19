@@ -1280,7 +1280,7 @@ func initTools() {
         "getStrategyFromNaturalLanguage" : {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStrategyFromNaturalLanguage",
-				Description: "Create a strategy and save it to the specified id (-1 to create new and the funciton will return the new id) based on a natural language query about stock conditions, patterns, and indicators primarily used for running a backtest on. This function does not run the backtest itself, that is the run_backtest function. IF YOU CALL THIS TOOL, USE THE USER'S ORIGINAL QUERY. DO NOT GENERATE A NEW QUERY.",
+				Description: "Create a strategy and save it to the specified id (-1 to create new and the funciton will return the new id) based on a natural language query about stock conditions, patterns, and indicators primarily used for running a backtest on. This function does not run the backtest itself, that is the run_backtest function. IF YOU CALL THIS TOOL, USE THE USER'S ORIGINAL QUERY. DO NOT GENERATE A NEW QUERY unless you are adding feedback from an error message, especially related to the spec format being wrong.",
 
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
