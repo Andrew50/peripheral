@@ -20,126 +20,241 @@ import (
 	//"github.com/wcharczuk/go-chart/v2"
 )
 
+/*
+   Nested‑tree Strategy Spec (v2)
+   ------------------------------
+   A strategy is a JSON object of the form:
 
-// ---------- ENUMS -----------------------------------------------------------
+     {
+       "name": "Label",
+       "rule": <BoolNode>
+     }
 
-// Arithmetic, comparison, and aggregate operators.
-type ArithOp   string
-type CompOp    string
-type AggFn     string
-type RankFn    string
-type LogicOp   string
+   Where <BoolNode> is one of:
+     • Comparison  {"cmp":{"op":"<","lhs":<Value>,"rhs":<Value>}}
+     • Rank        {"rank":{"fn":"top_pct","expr":<Value>,"param":10}}
+     • Logic       {"logic":{"op":"AND","args":[<BoolNode>,…]}}
 
+   <Value> is one of:
+     • Const   {"const":1.23}
+     • Column  {"column":"close"}
+     • Expr    {"expr":{"op":"*","args":[<Value>,<Value>]}}
+     • Agg     {"agg":{"fn":"avg","of":<Value>,"period":50}}
+
+   Validation guarantees:
+     1. `rule` is a boolean node (cmp / rank / logic).
+     2. All enums, column names, numeric constraints are valid.
+     3. Numeric literals appear only in `const` nodes.
+*/
+
+
+// ───────────────────── Enumerations ────────────────────────
+
+type ArithOp string
 const (
-	ArithAdd ArithOp = "+"
-	ArithSub          = "-"
-	ArithMul          = "*"
-	ArithDiv          = "/"
-	ArithOffset       = "offset" // arg[1] = k (const)
-
-	CompEQ CompOp = "=="
-	CompNE         = "!="
-	CompLT         = "<"
-	CompLE         = "<="
-	CompGT         = ">"
-	CompGE         = ">="
-
-	AggAvg   AggFn = "avg"
-	AggStd          = "stdev"
-	AggMedian       = "median"
-	// (add Sum/Min/Max if needed)
-
-	RankTopPct   RankFn = "top_pct"
-	RankBottomPct        = "bottom_pct"
-	RankTopN             = "top_n"
-	RankBottomN          = "bottom_n"
-
-	LogicAnd LogicOp = "AND"
-	LogicOr           = "OR"
-	LogicNot          = "NOT"
+    ArithAdd    ArithOp = "+"
+    ArithSub            = "-"
+    ArithMul            = "*"
+    ArithDiv            = "/"
+    ArithOffset         = "offset"
 )
 
-// ---------- VALUE NODES -----------------------------------------------------
-
-// ValueKind tells the decoder which concrete struct to unmarshal into.
-type ValueKind string
-
+type AggFn string
 const (
-	ValConst  ValueKind = "const"
-	ValCol               = "column"
-	ValExpr              = "expr"
-	ValAgg               = "agg"
+    AggAvg   AggFn = "avg"
+    AggStd          = "stdev"
+    AggMedian       = "median"
 )
 
-// Value is a discriminated union.  Each concrete type embeds it so that the
-// "kind" field round‑trips through JSON.
-type Value struct {
-	Kind ValueKind `json:"kind"`
-}
+type CompOp string
+const (
+    CompEQ CompOp = "=="
+    CompNE         = "!="
+    CompLT         = "<"
+    CompLE         = "<="
+    CompGT         = ">"
+    CompGE         = ">="
+)
 
-// ----- scalar literals ------------------------------------------------------
+type RankFn string
+const (
+    RankTopPct    RankFn = "top_pct"
+    RankBottomPct        = "bottom_pct"
+    RankTopN             = "top_n"
+    RankBottomN          = "bottom_n"
+)
 
-type Const struct {
-	Value
-	Number float64 `json:"number"`         // or String if you need it
-}
+type LogicOp string
+const (
+    LogicAnd LogicOp = "AND"
+    LogicOr          = "OR"
+    LogicNot         = "NOT"
+)
 
-// ----- raw column -----------------------------------------------------------
-
-type Column struct {
-	Value
-	Name string `json:"name"`              // e.g. "close"
-}
-
-// ----- arithmetic / offset --------------------------------------------------
-
-type Expr struct {
-	Value
-	Op   ArithOp   `json:"op"`             // "+", "-", "*", "/", "offset"
-	Args []NodeID  `json:"args"`           // operands (indices into Spec.Nodes)
-}
-
-// ----- aggregation (avg, stdev, …) -----------------------------------------
-
-type Aggregate struct {
-	Value
-	Fn      AggFn   `json:"fn"`            // "avg", "stdev", "median"
-	Of      NodeID  `json:"of"`            // series being reduced
-	Scope   string  `json:"scope,omitempty"`  // "self", "sector", "market", peers…
-	Period  int     `json:"period,omitempty"` // rolling window in bars; 0 = full
-}
-
-// ---------- BOOLEAN NODES ---------------------------------------------------
-
-type Comparison struct {
-	Op  CompOp `json:"op"`   // ">", "<=", …
-	LHS NodeID `json:"lhs"`  // scalar
-	RHS NodeID `json:"rhs"`  // scalar
-}
-
-type RankFilter struct {
-	Fn    RankFn `json:"fn"`    // "top_pct", "top_n", …
-	Expr  NodeID `json:"expr"`  // series to rank
-	Param int    `json:"param"` // 10 → top‑10 % or top‑10 rows
-}
-
-type Logic struct {
-	Op   LogicOp `json:"op"`    // AND / OR / NOT
-	Args []NodeID `json:"args"` // boolean children
-}
-
-// NodeID is just an int index into Spec.Nodes, so references stay light‑weight
-// and graphs are easy to manipulate.
-type NodeID int
-
-// ---------- ROOT SPEC -------------------------------------------------------
+// ─────────────────── Top‑level Spec struct ──────────────────
 
 type StrategySpec struct {
-	Name  string        `json:"name"`
-	Nodes []any         `json:"nodes"` // slice of *Const, *Column, *Expr, *Aggregate,
-	                                  // *Comparison, *RankFilter, *Logic
-	Root  NodeID        `json:"root"`  // the final boolean node to evaluate
+    Name string          `json:"name"`
+    Rule json.RawMessage `json:"rule"`
 }
+
+// ───────────────────── Validation API ───────────────────────
+
+var (
+    allowedCols = map[string]struct{}{
+        "timestamp":{}, "securityid":{}, "ticker":{}, "open":{}, "high":{},
+        "low":{}, "close":{}, "volume":{}, "vwap":{}, "transactions":{},
+        "market_cap":{}, "share_class_shares_outstanding":{},
+    }
+    allowedArith = map[string]struct{}{string(ArithAdd):{},string(ArithSub):{},string(ArithMul):{},string(ArithDiv):{},string(ArithOffset):{}}
+    allowedAgg   = map[string]struct{}{string(AggAvg):{},string(AggStd):{},string(AggMedian):{}}
+    allowedComp  = map[string]struct{}{string(CompEQ):{},string(CompNE):{},string(CompLT):{},string(CompLE):{},string(CompGT):{},string(CompGE):{}}
+    allowedRank  = map[string]struct{}{string(RankTopPct):{},string(RankBottomPct):{},string(RankTopN):{},string(RankBottomN):{}}
+    allowedLogic = map[string]struct{}{string(LogicAnd):{},string(LogicOr):{},string(LogicNot):{}}
+)
+
+// ValidateSpec walks a StrategySpec and returns an error if it violates
+// any format rule or hard constraint.
+func ValidateSpec(s *StrategySpec) error {
+    if s.Rule == nil {
+        return errors.New("missing rule root")
+    }
+    var root interface{}
+    if err := json.Unmarshal(s.Rule, &root); err != nil {
+        return fmt.Errorf("rule is not valid JSON: %v", err)
+    }
+    if err := validateBoolNode(root); err != nil {
+        return fmt.Errorf("rule: %w", err)
+    }
+    return nil
+}
+
+// ───────────────────── helpers ──────────────────────────────
+
+// validateBoolNode checks cmp / rank / logic structures
+func validateBoolNode(node interface{}) error {
+    m, ok := node.(map[string]interface{})
+    if !ok {
+        return errors.New("boolean node must be an object")
+    }
+    switch {
+    case m["cmp"] != nil:
+        cmp, ok := m["cmp"].(map[string]interface{})
+        if !ok { return errors.New("cmp must be object") }
+        op, ok := cmp["op"].(string)
+        if !ok || !hasKey(allowedComp, op) {
+            return fmt.Errorf("cmp: invalid op %v", cmp["op"])
+        }
+        if err := validateValueNode(cmp["lhs"]); err != nil { return fmt.Errorf("cmp.lhs: %w", err) }
+        if err := validateValueNode(cmp["rhs"]); err != nil { return fmt.Errorf("cmp.rhs: %w", err) }
+        return nil
+
+    case m["rank"] != nil:
+        r, ok := m["rank"].(map[string]interface{})
+        if !ok { return errors.New("rank must be object") }
+        fn, ok := r["fn"].(string)
+        if !ok || !hasKey(allowedRank, fn) {
+            return fmt.Errorf("rank: invalid fn %v", r["fn"])
+        }
+        if param, ok := r["param"].(float64); !ok || param <= 0 || param != float64(int(param)) {
+            return errors.New("rank.param must be positive int")
+        }
+        if err := validateValueNode(r["expr"]); err != nil { return fmt.Errorf("rank.expr: %w", err) }
+        return nil
+
+    case m["logic"] != nil:
+        l, ok := m["logic"].(map[string]interface{})
+        if !ok { return errors.New("logic must be object") }
+        op, ok := l["op"].(string)
+        if !ok || !hasKey(allowedLogic, op) {
+            return fmt.Errorf("logic: invalid op %v", l["op"])
+        }
+        args, ok := l["args"].([]interface{})
+        if !ok || len(args) == 0 {
+            return errors.New("logic.args must be non‑empty array")
+        }
+        if op == string(LogicNot) && len(args) != 1 {
+            return errors.New("logic NOT requires exactly one arg")
+        }
+        if op != string(LogicNot) && len(args) < 2 {
+            return errors.New("logic AND/OR require ≥2 args")
+        }
+        for i, a := range args {
+            if err := validateBoolNode(a); err != nil {
+                return fmt.Errorf("logic arg %d: %w", i, err)
+            }
+        }
+        return nil
+    default:
+        return errors.New("boolean node must contain cmp, rank, or logic key")
+    }
+}
+
+// validateValueNode checks const / column / expr / agg
+func validateValueNode(node interface{}) error {
+    m, okObj := node.(map[string]interface{})
+    if !okObj {
+        return errors.New("value node must be object")
+    }
+
+    switch {
+    case m["const"] != nil:
+        _, ok := m["const"].(float64)
+        if !ok {
+            return errors.New("const must be number")
+        }
+        return nil
+
+    case m["column"] != nil:
+        col, ok := m["column"].(string)
+        if !ok || !hasKey(allowedCols, col) {
+            return fmt.Errorf("invalid column %v", m["column"])
+        }
+        return nil
+
+    case m["expr"] != nil:
+        e, ok := m["expr"].(map[string]interface{})
+        if !ok { return errors.New("expr must be object") }
+        op, ok := e["op"].(string)
+        if !ok || !hasKey(allowedArith, op) {
+            return fmt.Errorf("expr: invalid op %v", e["op"])
+        }
+        args, ok := e["args"].([]interface{})
+        if !ok || len(args) < 2 {
+            return errors.New("expr.args must be array with ≥2 items")
+        }
+        if op == string(ArithOffset) && len(args) != 2 {
+            return errors.New("offset requires exactly 2 args")
+        }
+        for i, a := range args {
+            if err := validateValueNode(a); err != nil {
+                return fmt.Errorf("expr arg %d: %w", i, err)
+            }
+        }
+        return nil
+
+    case m["agg"] != nil:
+        a, ok := m["agg"].(map[string]interface{})
+        if !ok { return errors.New("agg must be object") }
+        fn, ok := a["fn"].(string)
+        if !ok || !hasKey(allowedAgg, fn) {
+            return fmt.Errorf("agg: invalid fn %v", a["fn"])
+        }
+        if err := validateValueNode(a["of"]); err != nil {
+            return fmt.Errorf("agg.of: %w", err)
+        }
+        if p, ok := a["period"]; ok {
+            if v, ok2 := p.(float64); !ok2 || v < 0 || v != float64(int(v)) {
+                return errors.New("agg.period must be non‑negative int")
+            }
+        }
+        return nil
+    default:
+        return errors.New("value node must contain const, column, expr, or agg key")
+    }
+}
+
+func hasKey(m map[string]struct{}, k string) bool { _, ok := m[k]; return ok }
 
 
 
@@ -289,10 +404,6 @@ pngB64 := base64.StdEncoding.EncodeToString(png.Bytes())
 
 
 
-
-
-
-
 type CreateStrategyFromNaturalLanguageArgs struct {
 	Query      string `json:"query"`
 	StrategyId int    `json:"strategyId,omitempty"`
@@ -317,6 +428,15 @@ func extractName(resp string, jsonEnd int) (string, bool) {
 		return strings.TrimSpace(m[1]), true
 	}
 	return "", false
+}
+
+func isLogicOp(op string) bool {
+	switch LogicOp(strings.ToUpper(op)) {
+	case LogicAnd, LogicOr, LogicNot:
+		return true
+	default:
+		return false
+	}
 }
 
 func CreateStrategyFromNaturalLanguage(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, error) {
@@ -386,9 +506,9 @@ func CreateStrategyFromNaturalLanguage(conn *utils.Conn, userId int, rawArgs jso
 	}
 
 	var spec StrategySpec
-	if err := json.Unmarshal(([]byte(jsonBlock)), &spec); err != nil { //unmarhsal into struct
+    if err := json.Unmarshal([]byte(jsonBlock), &spec); err != nil {
 		return "", fmt.Errorf("ERR 01v: error parsing backtest JSON: %v", err)
-	}
+    }
 
 	name, ok := extractName(responseText, jsonEndIdx)
 	if !ok || name == "" {
@@ -397,6 +517,9 @@ func CreateStrategyFromNaturalLanguage(conn *utils.Conn, userId int, rawArgs jso
 
 	//if args.StrategyId < 0 { // if it wants new then it passes strat id of -1
     id, err :=  _newStrategy(conn, userId, name, spec) // bandaid
+    if err != nil {
+        return nil, err
+    }
     return CreateStrategyFromNaturalLanguageResult {
         StrategySpec: spec,
         StrategyId: id,
@@ -481,141 +604,19 @@ func GetStrategies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inter
 	return strategies, nil
 }
 
-
-func ValidateSpec(s *StrategySpec) error {
-	if len(s.Nodes) == 0 {
-		return errors.New("spec has no nodes")
-	}
-
-	// --- helpers ------------------------------------------------------------
-
-	checkRef := func(id NodeID, cur, total int) error {
-		idx := int(id)
-		if idx < 0 || idx >= total {
-			return fmt.Errorf("reference to nonexistent node %d", idx)
-		}
-		if idx >= cur {
-			return fmt.Errorf("node %d references future node %d", cur, idx)
-		}
-		return nil
-	}
-
-	// allowed look‑ups
-	allowedCols := map[string]struct{}{
-		"timestamp": {}, "securityid": {}, "ticker": {}, "open": {}, "high": {},
-		"low": {}, "close": {}, "volume": {}, "vwap": {}, "transactions": {},
-		"market_cap": {}, "share_class_shares_outstanding": {},
-	}
-
-	allowedArith := map[ArithOp]struct{}{
-		ArithAdd: {}, ArithSub: {}, ArithMul: {}, ArithDiv: {}, ArithOffset: {},
-	}
-	allowedComp := map[CompOp]struct{}{
-		CompEQ: {}, CompNE: {}, CompLT: {}, CompLE: {}, CompGT: {}, CompGE: {},
-	}
-	allowedAgg := map[AggFn]struct{}{AggAvg: {}, AggStd: {}, AggMedian: {}}
-	allowedRank := map[RankFn]struct{}{
-		RankTopPct: {}, RankBottomPct: {}, RankTopN: {}, RankBottomN: {},
-	}
-	allowedLogic := map[LogicOp]struct{}{LogicAnd: {}, LogicOr: {}, LogicNot: {}}
-
-	// --- root validation ----------------------------------------------------
-
-	if int(s.Root) < 0 || int(s.Root) >= len(s.Nodes) {
-		return fmt.Errorf("root index %d out of range", s.Root)
-	}
-	switch s.Nodes[s.Root].(type) {
-	case *Comparison, *RankFilter, *Logic:
-		// ok
-	default:
-		return errors.New("root must reference a boolean‑returning node")
-	}
-
-	// --- node‑by‑node checks ------------------------------------------------
-
-	for i, n := range s.Nodes {
-		switch node := n.(type) {
-
-		case *Const:
-			// nothing extra to validate
-
-		case *Column:
-			if _, ok := allowedCols[node.Name]; !ok {
-				return fmt.Errorf("node %d: unknown column %q", i, node.Name)
-			}
-
-		case *Expr:
-			if _, ok := allowedArith[node.Op]; !ok {
-				return fmt.Errorf("node %d: invalid arithmetic op %q", i, node.Op)
-			}
-			if node.Op == ArithOffset && len(node.Args) != 2 {
-				return fmt.Errorf("node %d: offset requires exactly 2 args", i)
-			}
-			if node.Op != ArithOffset && len(node.Args) < 2 {
-				return fmt.Errorf("node %d: expr needs ≥2 args", i)
-			}
-			for _, id := range node.Args {
-				if err := checkRef(id, i, len(s.Nodes)); err != nil {
-					return err
-				}
-			}
-
-		case *Aggregate:
-			if _, ok := allowedAgg[node.Fn]; !ok {
-				return fmt.Errorf("node %d: invalid aggregate fn %q", i, node.Fn)
-			}
-			if err := checkRef(node.Of, i, len(s.Nodes)); err != nil {
-				return err
-			}
-			if node.Period < 0 {
-				return fmt.Errorf("node %d: period cannot be negative", i)
-			}
-
-		case *Comparison:
-			if _, ok := allowedComp[node.Op]; !ok {
-				return fmt.Errorf("node %d: invalid comparison op %q", i, node.Op)
-			}
-			if err := checkRef(node.LHS, i, len(s.Nodes)); err != nil {
-				return err
-			}
-			if err := checkRef(node.RHS, i, len(s.Nodes)); err != nil {
-				return err
-			}
-
-		case *RankFilter:
-			if _, ok := allowedRank[node.Fn]; !ok {
-				return fmt.Errorf("node %d: invalid rank fn %q", i, node.Fn)
-			}
-			if node.Param <= 0 {
-				return fmt.Errorf("node %d: param must be > 0", i)
-			}
-			if err := checkRef(node.Expr, i, len(s.Nodes)); err != nil {
-				return err
-			}
-
-		case *Logic:
-			if _, ok := allowedLogic[node.Op]; !ok {
-				return fmt.Errorf("node %d: invalid logic op %q", i, node.Op)
-			}
-			if node.Op == LogicNot && len(node.Args) != 1 {
-				return fmt.Errorf("node %d: NOT expects exactly 1 arg", i)
-			}
-			if node.Op != LogicNot && len(node.Args) < 2 {
-				return fmt.Errorf("node %d: %s expects ≥2 args", i, node.Op)
-			}
-			for _, id := range node.Args {
-				if err := checkRef(id, i, len(s.Nodes)); err != nil {
-					return err
-				}
-			}
-
-		default:
-			return fmt.Errorf("node %d: unknown node type %T", i, n)
-		}
-	}
-
-	return nil
+// helper at top of file
+func isCompOp(op string) bool {
+    switch CompOp(op) {
+    case CompEQ, CompNE, CompLT, CompLE, CompGT, CompGE:
+        return true
+    default:
+        return false
+    }
 }
+
+
+
+
 
 type NewStrategyArgs struct {
 	Name     string       `json:"name"`
@@ -629,6 +630,7 @@ func _newStrategy(conn *utils.Conn, userId int, name string, spec StrategySpec) 
 
     err := ValidateSpec(&spec)
     if err != nil {
+        fmt.Printf("SPEC VLAIDATION FAILED ---------------- %v",err)
         return -1, err
     }
     
