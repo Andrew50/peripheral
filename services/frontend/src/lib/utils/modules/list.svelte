@@ -85,6 +85,17 @@
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
+		// Ignore keydown events if the target is an input, textarea, or select element
+		const targetElement = event.target as HTMLElement;
+		if (
+			targetElement &&
+			(targetElement.tagName === 'INPUT' ||
+				targetElement.tagName === 'TEXTAREA' ||
+				targetElement.tagName === 'SELECT')
+		) {
+			return; // Do nothing if the event originated from an input-like element
+		}
+
 		if (event.key === 'ArrowUp' || (event.key === ' ' && event.shiftKey)) {
 			event.preventDefault();
 			moveUp();
@@ -524,7 +535,7 @@
 												src={watch.icon}
 												alt={`${watch.ticker} icon`}
 												class="ticker-icon"
-												on:error={(e) => handleImageError(e, watch.ticker)}
+												on:error={(e) => handleImageError(e, watch.ticker ?? '')}
 											/>
 										{:else if watch.ticker}
 											<span class="default-ticker-icon">
