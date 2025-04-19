@@ -3,7 +3,7 @@ import { writable } from 'svelte/store';
 //export let currentTimestamp = writable(0);
 import type {
     Settings,
-    Setup,
+    Strategy,
     Instance,
     Watchlist,
     Alert,
@@ -20,7 +20,7 @@ export interface Algo {
     // Add other properties as needed
 }
 
-export const strategies: Writable<Setup[]> = writable([]);
+export const strategies: Writable<Strategy[]> = writable([]);
 export const watchlists: Writable<Watchlist[]> = writable([]);
 export const activeAlerts: Writable<Alert[] | undefined> = writable(undefined);
 export const inactiveAlerts: Writable<Alert[] | undefined> = writable(undefined);
@@ -29,7 +29,7 @@ export const alertPopup: Writable<AlertData | null> = writable(null);
 export const menuWidth = writable(0);
 export let flagWatchlistId: number | undefined;
 export const entryOpen = writable(false);
-export let flagWatchlist: Writable<Instance[]>;
+export let flagWatchlist: Writable<Instance[]> = writable([]);
 export const streamInfo = writable<StreamInfo>({
     replayActive: false,
     replaySpeed: 1,
@@ -95,12 +95,12 @@ export function initStores() {
     privateRequest<Settings>('getSettings', {}).then((s: Settings) => {
         settings.set({ ...defaultSettings, ...s });
     });
-    privateRequest<Setup[]>('getStrategies', {}).then((v: Setup[]) => {
+    privateRequest<Strategy[]>('getStrategies', {}).then((v: Strategy[]) => {
         if (!v) {
             strategies.set([]);
             return;
         }
-        v = v.map((v: Setup) => {
+        v = v.map((v: Strategy) => {
             return {
                 ...v,
                 activeScreen: true
@@ -126,25 +126,25 @@ export function initStores() {
         alertLogs.set(v || []);
     });
 
-    function loadFlagWatchlist() {
-        privateRequest<Instance[]>('getWatchlistItems', { watchlistId: flagWatchlistId }).then(
-            (v: Instance[]) => {
-                flagWatchlist = writable(v);
-            }
-        );
-    }
     privateRequest<Watchlist[]>('getWatchlists', {}).then((list: Watchlist[]) => {
-        watchlists.set(list);
+        watchlists.set(list || []);
         const flagWatch = list?.find((v: Watchlist) => v.watchlistName === 'flag');
         if (flagWatch === undefined) {
-            privateRequest<number>('newWatchlist', { watchlistName: 'flag' }).then((v: number) => {
-                flagWatchlistId = v;
-                loadFlagWatchlist();
+            privateRequest<number>('newWatchlist', { watchlistName: 'flag' }).then((newId: number) => {
+                flagWatchlistId = newId;
+                watchlists.update(currentList => {
+                    const newList = currentList || [];
+                    return [{ watchlistId: newId, watchlistName: 'flag' }, ...newList];
+                });
+            }).catch(err => {
+                 console.error("Error creating flag watchlist:", err);
             });
         } else {
             flagWatchlistId = flagWatch.watchlistId;
         }
-        loadFlagWatchlist();
+    }).catch(err => {
+        console.error("Error fetching watchlists:", err);
+        watchlists.set([]);
     });
     function updateTime() {
         streamInfo.update((v: StreamInfo) => {
