@@ -109,7 +109,7 @@
 	let currentProfileDisplay = ''; // Add this to hold the current display value
 
 	let sidebarResizing = false;
-	let tickerHeight = 300; // Initial height
+	let tickerHeight = 500; // Initial height
 	const MIN_TICKER_HEIGHT = 100;
 	const MAX_TICKER_HEIGHT = 600;
 
@@ -891,7 +891,7 @@
 							tabindex="0"
 						></div>
 
-						<div class="ticker-info-container">
+						<div class="ticker-info-container" style="height: {tickerHeight}px">
 							<Quote />
 						</div>
 					</div>

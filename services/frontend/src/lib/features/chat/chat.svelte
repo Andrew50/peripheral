@@ -354,6 +354,8 @@
 	function adjustTextareaHeight() {
 		if (!queryInput) return;
 		queryInput.style.height = 'auto'; // Reset height to allow shrinking
+		// Force reflow to ensure the 'auto' height takes effect before reading scrollHeight
+		queryInput.offsetHeight; 
 		queryInput.style.height = `${queryInput.scrollHeight}px`; // Set height to content height
 	}
 
@@ -719,8 +721,8 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: 0.75rem 1.5rem;
-		border-bottom: 1px solid var(--ui-border, #444);
-		background: var(--ui-bg-element-darker, #2a2a2a);
+		border-bottom: 1px solid var(--ui-border); /* Use theme border */
+		background: var(--ui-bg-primary); /* Use theme background */
 	}
 
 	.chat-header h3 {
@@ -734,10 +736,10 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		padding: 0.5rem 0.75rem;
-		background: rgba(244, 67, 54, 0.1);
-		color: var(--error-color, #f44336);
-		border: 1px solid var(--error-color, #f44336);
+		padding: 0.3rem 0.6rem; /* Slightly smaller padding */
+		background: transparent; /* Remove background */
+		color: var(--text-secondary, #aaa); /* Use secondary text color */
+		border: 1px solid transparent; /* Transparent border */
 		border-radius: 0.25rem;
 		font-size: 0.75rem;
 		cursor: pointer;
@@ -745,7 +747,9 @@
 	}
 
 	.clear-button:hover:not(:disabled) {
-		background: rgba(244, 67, 54, 0.2);
+		background: var(--ui-bg-hover, rgba(255, 255, 255, 0.1)); /* Subtle hover */
+		color: var(--text-primary, #fff); /* Primary text color on hover */
+		border-color: var(--ui-border, #444); /* Show border on hover */
 	}
 
 	.clear-button:disabled {
@@ -955,8 +959,8 @@
 		display: flex;
 		flex-direction: column; /* Stack actions and input vertically */
 		padding: clamp(0.5rem, 1.5vw, 1rem) clamp(0.75rem, 2vw, 1.5rem);
-		background: var(--ui-bg-element-darker, #2a2a2a);
-		border-top: 1px solid var(--ui-border, #444);
+		background: var(--ui-bg-primary); /* Use theme background */
+		border-top: 1px solid var(--ui-border); /* Use theme border */
 		gap: 0.5rem; /* Gap between actions and input field */
 	}
 

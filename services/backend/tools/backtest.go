@@ -9,14 +9,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
 )
 
-
-
-
 type RunBacktestArgs struct {
-    StrategyId int `json:"strategyId"`
+	StrategyId int `json:"strategyId"`
 }
 
 func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -24,16 +20,16 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-    fmt.Println("backtesting")
-    fmt.Println(args.StrategyId)
+	fmt.Println("backtesting")
+	fmt.Println(args.StrategyId)
 
-    backtestJSON, err := _getStrategySpec(conn,userId,args.StrategyId) // get spec from db using helper
-    if err != nil { 
-        return nil, fmt.Errorf("ERR vdi0s: failed to fetch strategy %v",err)
-    }
+	backtestJSON, err := _getStrategySpec(conn, userId, args.StrategyId) // get spec from db using helper
+	if err != nil {
+		return nil, fmt.Errorf("ERR vdi0s: failed to fetch strategy %v", err)
+	}
 	var spec StrategySpec
 	if err := json.Unmarshal((backtestJSON), &spec); err != nil { //unmarhsal into struct
-        return "", fmt.Errorf("ERR fi00: error parsing backtest JSON: %v", err)
+		return "", fmt.Errorf("ERR fi00: error parsing backtest JSON: %v", err)
 	}
 	data, err := GetDataForBacktest(conn, spec)
 	if err != nil {
@@ -66,7 +62,6 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	}
 	return formattedResults, nil
 }
-
 
 // StrategySpec represents the parsed JSON structure of the backtest specification
 
@@ -167,7 +162,7 @@ func buildBacktestQuery(spec StrategySpec, timeframe string) (string, []interfac
 
 	// Build CTE for window functions first
 	query := "WITH data_with_indicators AS (\n"
-	query += "  SELECT s.ticker, d.timestamp, d.open, d.high, d.low, d.close, d.volume"
+	query += "  SELECT s.ticker, s.securityid, d.timestamp, d.open, d.high, d.low, d.close, d.volume"
 
 	// Add basic window expressions for previous values
 	query += ",\n    LAG(d.close, 1) OVER (PARTITION BY s.ticker ORDER BY d.timestamp) AS prev_close"
@@ -256,7 +251,7 @@ func buildBacktestQuery(spec StrategySpec, timeframe string) (string, []interfac
 		selectColumns := []string{}
 
 		// Always include ticker and timestamp as fundamental columns
-		selectColumns = append(selectColumns, "ticker", "timestamp")
+		selectColumns = append(selectColumns, "ticker", "timestamp", "securityid")
 
 		// Add other requested columns
 		for _, col := range spec.OutputColumns {
@@ -632,26 +627,26 @@ func prettyPrintJSON(jsonStr string) (string, error) {
 	// Find the JSON block within the string
 	jsonStartIdx := strings.Index(jsonStr, "{")
 	jsonEndIdx := strings.LastIndex(jsonStr, "}")
-	
+
 	if jsonStartIdx == -1 || jsonEndIdx == -1 || jsonEndIdx < jsonStartIdx {
 		return "", fmt.Errorf("no valid JSON block found")
 	}
-	
+
 	// Extract the JSON block
 	jsonBlock := jsonStr[jsonStartIdx : jsonEndIdx+1]
-	
+
 	// Parse the JSON to validate it
 	var parsedJSON interface{}
 	if err := json.Unmarshal([]byte(jsonBlock), &parsedJSON); err != nil {
 		return "", fmt.Errorf("invalid JSON: %v", err)
 	}
-	
+
 	// Pretty print the JSON
 	prettyJSON, err := json.MarshalIndent(parsedJSON, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("error pretty printing JSON: %v", err)
 	}
-	
+
 	return string(prettyJSON), nil
 }
 
