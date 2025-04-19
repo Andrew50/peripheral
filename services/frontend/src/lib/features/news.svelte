@@ -11,7 +11,6 @@
 	} from '$lib/utils/stream/interface';
 	import { subscribeSECFilings, unsubscribeSECFilings } from '$lib/utils/stream/socket';
 	import type { StreamCallback, StreamData } from '$lib/utils/stream/socket';
-	import type { TradeData, QuoteData, CloseData } from '$lib/core/types';
 	import type { Filing } from '$lib/utils/stream/secfilings';
 
 	// Add tab state
@@ -169,6 +168,9 @@
 		if (currentSecurityId && activeTab === 'filings') {
 			loadFilings();
 		}
+		if (activeTab === 'filings') {
+			subscribeToGlobalFilings();
+		}
 	});
 
 	// Clean up on destroy
@@ -189,7 +191,7 @@
 	<div class="tab-navigation">
 		<button
 			class={activeTab === 'filings' ? 'active' : ''}
-			on:click={() => (activeTab = 'filings')}
+			on:click={() => { activeTab = 'filings'; subscribeToGlobalFilings(); }}
 		>
 			Global SEC Filings
 		</button>
@@ -201,12 +203,6 @@
 		</button>
 		<button class={activeTab === 'news' ? 'active' : ''} on:click={() => (activeTab = 'news')}>
 			News
-		</button>
-		<button class:active={activeTab === 'social'} on:click={() => handleTabChange('social')}>
-			Social
-		</button>
-		<button class:active={activeTab === 'blogs'} on:click={() => handleTabChange('blogs')}>
-			Blogs
 		</button>
 	</div>
 
@@ -297,13 +293,6 @@
 		</div>
 	{/if}
 
-	<!-- Blogs Tab (placeholder) -->
-	{#if activeTab === 'blogs'}
-		<div class="tab-content">
-			<h2>Blog Posts</h2>
-			<p class="message">Blog feed will be implemented in a future update.</p>
-		</div>
-	{/if}
 </div>
 
 <style>

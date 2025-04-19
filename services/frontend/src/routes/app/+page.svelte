@@ -18,8 +18,9 @@
 	import Account from '$lib/features/account.svelte';
 	import Strategies from '$lib/features/strategies/strategies.svelte';
 	import Settings from '$lib/features/settings.svelte';
-	import Newsfeed from '$lib/features/newsfeed.svelte';
-	import LLMSummary from '$lib/features/llmSummary.svelte';
+	import News from '$lib/features/news.svelte';
+    import Deploy from '$lib/features/deploy.svelte'
+    import Backtest from '$lib/features/backtest.svelte'
 
 	// Replay logic
 	import {
@@ -53,13 +54,13 @@
 	import Screensaver from '$lib/features/screensaver.svelte';
 
 	// Add new import for Query component
-	import Query from '$lib/features/query.svelte';
+	import Query from '$lib/features/chat/chat.svelte';
 
-	type Menu = 'none' | 'watchlist' | 'alerts' | 'study';
+	type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
 
 	let lastSidebarMenu: Menu | null = null;
 	let sidebarWidth = 0;
-	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study'];
+	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'news'];
 
 	// Initialize chartWidth with a default value
 	let chartWidth = 0;
@@ -68,12 +69,13 @@
 	type BottomWindowType =
 		| 'screener'
 		| 'account'
-		| 'options'
+		//| 'options'
 		| 'strategies'
 		| 'settings'
-		| 'newsfeed'
+        | 'deploy'
+        | 'backtest'
+		//| 'news'
 		| 'query'
-		| 'llm-summary';
 	interface BottomWindow {
 		id: number;
 		type: BottomWindowType;
@@ -107,7 +109,7 @@
 	let currentProfileDisplay = ''; // Add this to hold the current display value
 
 	let sidebarResizing = false;
-	let tickerHeight = 300; // Initial height
+	let tickerHeight = 500; // Initial height
 	const MIN_TICKER_HEIGHT = 100;
 	const MAX_TICKER_HEIGHT = 600;
 
@@ -240,11 +242,8 @@
 		dispatchMenuChange.subscribe((menuName: string) => {
 			if (sidebarMenus.includes(menuName as Menu)) {
 				toggleMenu(menuName as Menu);
-			} else if (menuName === 'llm-summary') {
-				// Open the LLM summary window
-				openBottomWindow('llm-summary');
 			}
-		});
+        });
 
 		// Force profile display to update
 		currentProfileDisplay = calculateProfileDisplay();
@@ -835,10 +834,10 @@
 									<Account />
 								{:else if w.type === 'settings'}
 									<Settings />
-								{:else if w.type === 'newsfeed'}
-									<Newsfeed />
-								{:else if w.type === 'llm-summary'}
-									<LLMSummary />
+								{:else if w.type === 'backtest'}
+                                <Backtest/>
+								{:else if w.type === 'deploy'}
+                                <Deploy/>
 								{/if}
 							</div>
 						</div>
@@ -877,6 +876,8 @@
 								<Alerts />
 							{:else if $activeMenu === 'study'}
 								<Study />
+							{:else if $activeMenu === 'news'}
+								<News />
 							{/if}
 						</div>
 
@@ -890,7 +891,7 @@
 							tabindex="0"
 						></div>
 
-						<div class="ticker-info-container">
+						<div class="ticker-info-container" style="height: {tickerHeight}px">
 							<Quote />
 						</div>
 					</div>
@@ -923,34 +924,41 @@
 				<img src="query.png" alt="AI Query" class="menu-icon" />
 			</button>
 			<button
+				class="toggle-button {bottomWindows.some((w) => w.type === 'strategies') ? 'active' : ''}"
+				on:click={() => openBottomWindow('strategies')}
+			>
+				Strategies
+			</button>
+			<button
+				class="toggle-button {bottomWindows.some((w) => w.type === 'backtest') ? 'active' : ''}"
+				on:click={() => openBottomWindow('backtest')}
+			>
+				Backtest
+			</button>
+			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'screener') ? 'active' : ''}"
 				on:click={() => openBottomWindow('screener')}
 			>
 				Screener
-			</button>
-			<!--<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'setups') ? 'active' : ''}"
-				on:click={() => openBottomWindow('setups')}
+			</button>	<button
+				class="toggle-button {bottomWindows.some((w) => w.type === 'deploy') ? 'active' : ''}"
+				on:click={() => openBottomWindow('deploy')}
 			>
-				Setups
-			</button>-->
+				Deploy
+			</button>
 			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'account') ? 'active' : ''}"
 				on:click={() => openBottomWindow('account')}
 			>
 				Account
 			</button>
-			<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'newsfeed') ? 'active' : ''}"
-				on:click={() => openBottomWindow('newsfeed')}
-			>
-				News
-			</button>
+
 		</div>
 
 		<div class="bottom-bar-right">
 			<!-- Combined replay button -->
 			<button
+				class="toggle-button replay-button { !$streamInfo.replayActive || $streamInfo.replayPaused ? 'play' : 'pause' }"
 				on:click={() => {
 					if (!$streamInfo.replayActive) {
 						handlePlay();
@@ -960,20 +968,27 @@
 						handlePause();
 					}
 				}}
+				title={$streamInfo.replayActive && !$streamInfo.replayPaused ? 'Pause Replay' : 'Start/Resume Replay'}
 			>
 				{#if !$streamInfo.replayActive}
-					Replay
+					<svg viewBox="0 0 24 24"><path d="M8,5.14V19.14L19,12.14L8,5.14Z" /></svg> <span>Replay</span>
 				{:else if $streamInfo.replayPaused}
-					Play
+					<svg viewBox="0 0 24 24"><path d="M8,5.14V19.14L19,12.14L8,5.14Z" /></svg> <span>Play</span>
 				{:else}
-					Pause
+					<svg viewBox="0 0 24 24"><path d="M14,19H18V5H14M6,19H10V5H6V19Z" /></svg> <span>Pause</span>
 				{/if}
 			</button>
 
 			{#if $streamInfo.replayActive}
-				<button on:click={handleStop}>Stop</button>
-				<button on:click={handleReset}>Reset</button>
-				<button on:click={handleNextDay}>Next Day</button>
+				<button class="toggle-button replay-button stop" on:click={handleStop} title="Stop Replay">
+					<svg viewBox="0 0 24 24"><path d="M18,18H6V6H18V18Z" /></svg> <!-- Stop Icon -->
+				</button>
+				<button class="toggle-button replay-button reset" on:click={handleReset} title="Reset Replay">
+					<svg viewBox="0 0 24 24"><path d="M12,5V1L7,6L12,11V8C15.31,8 18,10.69 18,14C18,17.31 15.31,20 12,20C8.69,20 6,17.31 6,14H4C4,18.42 7.58,22 12,22C16.42,22 20,18.42 20,14C20,9.58 16.42,6 12,6V5Z" /></svg> <!-- Reset Icon (e.g., refresh) -->
+				</button>
+				<button class="toggle-button replay-button next-day" on:click={handleNextDay} title="Next Day">
+					<svg viewBox="0 0 24 24"><path d="M14,19.14V4.86L11,7.86L9.59,6.45L15.14,0.89L20.7,6.45L19.29,7.86L16,4.86V19.14H14M5,19.14V4.86H3V19.14H5Z" /></svg> <!-- Next Day Icon (e.g., skip next track) -->
+				</button>
 
 				<label class="speed-label">
 					Speed:
@@ -1483,5 +1498,53 @@
 
 	.query-feature .menu-icon {
 		filter: drop-shadow(0 0 2px rgba(0, 123, 255, 0.8));
+	}
+
+	/* Replay button styles */
+	.replay-button {
+		padding: 0.3rem 0.8rem; /* Adjust padding slightly for text */
+		min-width: auto; /* Remove fixed min-width */
+		min-height: 32px;
+		display: inline-flex; /* Use inline-flex */
+		justify-content: center;
+		align-items: center;
+		gap: 0.4rem; /* Add gap between icon and text */
+	}
+
+	.replay-button svg {
+		width: 16px; /* Adjust icon size */
+		height: 16px;
+		fill: currentColor; /* Use button text color for icon */
+	}
+
+	.replay-button.play {
+		/* Optional: Style play button differently, maybe green? */
+		/* background-color: var(--success-color-faded); */
+		/* border-color: var(--success-color); */
+		/* color: var(--success-color); */
+	}
+
+	.replay-button.pause {
+		/* Optional: Style pause button differently, maybe orange? */
+		/* background-color: var(--warning-color-faded); */
+		/* border-color: var(--warning-color); */
+		/* color: var(--warning-color); */
+	}
+
+	.replay-button.stop {
+		/* Optional: Style stop button differently, maybe red? */
+		/* background-color: var(--error-color-faded); */
+		/* border-color: var(--error-color); */
+		/* color: var(--error-color); */
+	}
+
+	.replay-button:hover {
+		background-color: var(--ui-bg-hover);
+		border-color: var(--ui-border-hover);
+	}
+
+	.replay-button:active {
+		background-color: var(--ui-bg-active);
+		transform: translateY(1px);
 	}
 </style>

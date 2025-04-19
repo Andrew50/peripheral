@@ -16,18 +16,17 @@
 
 	type StreamCellType = 'price' | 'change' | 'change %' | 'change % extended' | 'market cap';
 
-	interface SimilarTrade {
-		entry_time: number;
-		ticker: string;
-		direction: string;
-		pnl: number;
-		similarity_score: number;
-	}
-
 	interface ExtendedInstance extends Instance {
 		trades?: Trade[];
 		[key: string]: any; // Allow dynamic property access
 	}
+
+	// Response shape from getIcons API
+	interface IconResponse {
+		ticker: string;
+		icon?: string;
+	}
+
 	let longPressTimer: ReturnType<typeof setTimeout>;
 	export let list: Writable<ExtendedInstance[]> = writable([]);
 	export let columns: Array<string>;
@@ -50,6 +49,7 @@
 	let loadError: string | null = null;
 	// Add a flag to track icon loading state
 	let iconsLoadedForTickers = new Set<string>();
+	let iconCache = new Map<string, string>();
 	let isLoadingIcons = false;
 
 	// Replace all instances of the current base64 placeholder with a pure black pixel
@@ -170,7 +170,7 @@
 	function sortList() {
 		if (!sortColumn) return;
 
-		list.update((items) => {
+		list.update((items: ExtendedInstance[]) => {
 			const sorted = [...items].sort((a, b) => {
 				// Handle special column cases first based on column name directly
 				if (sortColumn === 'Price') {
@@ -254,93 +254,50 @@
 	});
 
 	async function loadIcons() {
-		// Skip if already loading or if no tickers
-		if (isLoadingIcons) {
+		if (isLoadingIcons) return;
+		isLoadingIcons = true;
+
+		// Gather all tickers in the current list
+		const tickers = [...new Set($list.map((item) => item?.ticker).filter(Boolean))];
+		if (tickers.length === 0) {
+			isLoadingIcons = false;
 			return;
 		}
 
-		try {
-			isLoadingIcons = true;
-			// Get all unique, non-empty tickers from the list
-			const tickers = [...new Set($list.map((item) => item?.ticker).filter(Boolean))];
-			if (tickers.length === 0) {
-				return;
-			}
-
-			// Check if we already loaded icons for these tickers
-			const newTickers = tickers.filter((ticker) => ticker && !iconsLoadedForTickers.has(ticker));
-			if (newTickers.length === 0) {
-				return;
-			}
-
-			const iconsResponse = await privateRequest('getIcons', { tickers: newTickers });
-
-			if (!iconsResponse) {
-				return;
-			}
-
-			if (!Array.isArray(iconsResponse)) {
-				console.warn('Invalid icon response format:', iconsResponse);
-				return;
-			}
-
-			// Create a map of ticker to icon for faster lookup
-			const iconMap = new Map();
-			iconsResponse.forEach((item) => {
-				if (item && item.ticker) {
-					iconMap.set(item.ticker, item.icon || '');
-					// Mark this ticker as processed
-					iconsLoadedForTickers.add(item.ticker);
+		// Figure out which tickers we haven't cached yet
+		const toFetch = tickers.filter((t) => t && !iconCache.has(t));
+		if (toFetch.length > 0) {
+			try {
+				// Fetch icon data for tickers not yet cached
+				const resp = await privateRequest<IconResponse[]>('getIcons', { tickers: toFetch });
+				if (Array.isArray(resp)) {
+					resp.forEach((ir: IconResponse) => {
+						if (ir.ticker) {
+							const raw = ir.icon || '';
+							const url = raw.startsWith('data:')
+								? raw
+								: raw.startsWith('/9j/')
+									? `data:image/jpeg;base64,${raw}`
+									: `data:image/png;base64,${raw}`;
+							iconCache.set(ir.ticker, url);
+						}
+					});
 				}
-			});
-
-			list.update((items) => {
-				return items.map((item) => {
-					if (!item?.ticker) return item; // Skip if no ticker
-					if (item.icon) return item; // Skip if already has icon
-
-					// Look up the icon in our map
-					const iconData = iconMap.get(item.ticker);
-					if (!iconData) {
-						// Add a black box placeholder for missing icons
-						item.icon = BLACK_PIXEL;
-						// Mark as processed even if no icon found to avoid repeated attempts
-						if (item.ticker) iconsLoadedForTickers.add(item.ticker);
-						return item;
-					}
-
-					if (!iconData.length) {
-						// Add a black box placeholder for empty icons
-						item.icon = BLACK_PIXEL;
-						if (item.ticker) iconsLoadedForTickers.add(item.ticker);
-						return item;
-					}
-
-					try {
-						// Ensure we don't double-prefix the icon data
-						// If the iconData is already a data URL, use it as is
-						// Otherwise, treat it as base64 data and add the appropriate prefix
-						const iconUrl = iconData.startsWith('data:')
-							? iconData
-							: iconData.startsWith('/9j/')
-								? `data:image/jpeg;base64,${iconData}`
-								: `data:image/png;base64,${iconData}`;
-
-						return { ...item, icon: iconUrl };
-					} catch (e) {
-						console.warn('Failed to process icon for ticker:', item.ticker, e);
-						// Add a black box placeholder for failed icons
-						item.icon = BLACK_PIXEL;
-						if (item.ticker) iconsLoadedForTickers.add(item.ticker);
-						return item;
-					}
-				});
-			});
-		} catch (error) {
-			console.error('Failed to load icons:', error);
-		} finally {
-			isLoadingIcons = false;
+			} catch (e) {
+				console.error('Error fetching icons:', e);
+			}
 		}
+
+		// Apply any cached icons to all list items
+		list.update((items: ExtendedInstance[]) =>
+			items.map((item: ExtendedInstance) => {
+				const ticker = item.ticker;
+				if (typeof ticker !== 'string') return item;
+				const url = iconCache.get(ticker);
+				return url ? { ...item, icon: url } : item;
+			})
+		);
+		isLoadingIcons = false;
 	}
 
 	onDestroy(() => {
@@ -423,32 +380,33 @@
 		return trade.trades || [];
 	}
 
-	// Modify the reactive statement to only load icons for new tickers
+	// Whenever the Ticker column is active and there are rows, refresh icons (using cache)
 	$: if (columns?.includes('Ticker') && $list?.length > 0) {
-		const newTickersExist = $list.some((item) => {
-			// Make sure ticker exists before checking
-			return typeof item?.ticker === 'string' && !iconsLoadedForTickers.has(item.ticker);
-		});
-		if (newTickersExist) {
-			loadIcons();
-		}
+		loadIcons();
 	}
 
 	// Watch for expanded rows changes
 	$: if (expandedRows) {
-		expandedRows.forEach((index) => {
+		expandedRows.forEach((index: number) => {
 			if ($list[index]) {
 				const content = expandedContent($list[index]);
 			}
 		});
 	}
 
-	function handleImageError(e: Event) {
+	function handleImageError(e: Event, ticker: string) {
 		const img = e.currentTarget as HTMLImageElement;
-		if (img) {
-			console.warn(`Failed to load icon for ${img.alt}`);
-			// Replace with a black box placeholder instead of hiding
-			img.src = BLACK_PIXEL;
+		if (img && ticker) {
+			// Update the cache so we don't retry loading the bad icon
+			iconCache.set(ticker, BLACK_PIXEL);
+			// Force the specific item in the list to use the black pixel
+			// This ensures the {#if} condition evaluates correctly
+			list.update((items: ExtendedInstance[]) =>
+				items.map((item: ExtendedInstance) => (item.ticker === ticker ? { ...item, icon: BLACK_PIXEL } : item))
+			);
+			// Optionally, set the current img src directly for immediate visual feedback
+			// although the list update above should handle it reactively.
+			// img.src = BLACK_PIXEL; 
 		}
 	}
 
@@ -550,19 +508,28 @@
 							{/if}
 							<td class="default-td">
 								{#if isFlagged(watch, $flagWatchlist)}
-									<span class="flag-icon">⚑</span>
+									<span class="flag-icon">
+										<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+											<path d="M5 5v14"></path>
+											<path d="M19 5l-6 4 6 4-6 4"></path>
+										</svg>
+									</span>
 								{/if}
 							</td>
 							{#each columns as col}
 								{#if col === 'Ticker'}
 									<td class="default-td">
-										{#if watch.icon}
+										{#if watch.icon && watch.icon !== BLACK_PIXEL}
 											<img
 												src={watch.icon}
 												alt={`${watch.ticker} icon`}
 												class="ticker-icon"
-												on:error={handleImageError}
+												on:error={(e) => handleImageError(e, watch.ticker)}
 											/>
+										{:else if watch.ticker}
+											<span class="default-ticker-icon">
+												{watch.ticker.charAt(0).toUpperCase()}
+											</span>
 										{/if}
 										{watch.ticker}
 									</td>
@@ -892,20 +859,51 @@
 	}
 
 	.ticker-icon {
-		width: 20px;
-		height: 20px;
-		margin-right: 5px;
-		vertical-align: middle;
+		width: 24px;
+		height: 24px;
+		border-radius: 50%; /* Make icons circular */
+		object-fit: cover; /* Ensure icon covers the area nicely */
+		background-color: var(--ui-bg-element); /* BG for unloaded images */
+		vertical-align: middle; /* Align with text */
+		margin-right: 5px; /* Space between icon and text */
 	}
 
-	.loading,
-	.error {
-		text-align: center;
-		padding: 2rem;
-		color: var(--text-primary);
+	.default-ticker-icon {
+		display: inline-flex; /* Use inline-flex for alignment */
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		background-color: var(--ui-border); /* Use border color for background */
+		color: var(--text-primary); /* Use primary text color */
+		font-size: 12px;
+		font-weight: 500;
+		user-select: none; /* Prevent text selection */
+		vertical-align: middle; /* Align with text */
+		margin-right: 5px; /* Space between icon and text */
 	}
 
-	.error {
-		color: var(--c5);
+	.ticker-name {
+		flex-grow: 1; /* Allow ticker name to take remaining space */
+		overflow: hidden; /* Prevent long names from breaking layout */
+		white-space: nowrap;
+	}
+
+	/* Style for different trade types */
+	.long {
+		color: var(--color-positive);
+	}
+
+	/* Professional flag icon styling */
+	.flag-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.flag-icon svg {
+		width: 16px;
+		height: 16px;
+		color: var(--accent-color);
 	}
 </style>

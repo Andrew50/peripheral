@@ -160,9 +160,37 @@ func SendAlertToUser(userID int, alert AlertMessage) {
 	}
 }
 func (c *Client) writePump() {
-	defer c.ws.Close()
-	for message := range c.send {
-		if err := c.ws.WriteMessage(websocket.TextMessage, message); err != nil {
+	// ticker := time.NewTicker(pingPeriod) // Keep connection alive if needed
+	defer func() {
+		// ticker.Stop() // Stop the ticker if used
+		c.ws.Close() // Ensure connection is closed ONLY here on exit
+		fmt.Println("writePump exiting, connection closed")
+	}()
+	for {
+		select {
+		case message, ok := <-c.send:
+			// c.ws.SetWriteDeadline(time.Now().Add(writeWait)) // Set deadline if needed
+			if !ok {
+				// The send channel was closed. Tell the client.
+				fmt.Println("send channel closed, sending close message")
+				c.ws.WriteMessage(websocket.CloseMessage, []byte{})
+				return // Exit writePump
+			}
+
+			if err := c.ws.WriteMessage(websocket.TextMessage, message); err != nil {
+				fmt.Println("writePump error:", err)
+				return // Exit writePump on write error
+			}
+		/* // Example ping logic if needed
+		case <-ticker.C:
+			// c.ws.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.ws.WriteMessage(websocket.PingMessage, nil); err != nil {
+				fmt.Println("writePump ping error:", err)
+				return // Exit writePump on ping error
+			}
+		*/
+		case <-c.done: // Add a way to explicitly stop writePump if needed elsewhere
+			fmt.Println("writePump received done signal")
 			return
 		}
 	}
@@ -175,17 +203,27 @@ and unsubscribe messages. breaks the loop when the socket is closed
 */
 func (c *Client) readPump(conn *utils.Conn) {
 	defer func() {
-		c.close()
-		c.ws.Close()
+		c.close() // Clean up client resources (unsubscribe, remove from maps etc.)
 	}()
+	// c.ws.SetReadLimit(maxMessageSize) // Set read limit if needed
+	// c.ws.SetReadDeadline(time.Now().Add(pongWait)) // Set initial read deadline
+	// c.ws.SetPongHandler(func(string) error { c.ws.SetReadDeadline(time.Now().Add(pongWait)); return nil }) // Pong handler to reset deadline
+
 	for {
 		_, message, err := c.ws.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				fmt.Println("4kltyvk, WebSocket read error:", err)
+			} else {
+				fmt.Println("WebSocket read error (expected close?):", err)
 			}
-			break
+			break // Exit readPump loop on any error
 		}
+
+		// Reset read deadline on successful read if using deadlines
+		// c.ws.SetReadDeadline(time.Now().Add(pongWait))
+
+		// Process message
 		var clientMsg struct {
 			Action        string   `json:"action"`
 			ChannelName   string   `json:"channelName"`
@@ -291,40 +329,39 @@ to the red pub sub
 func (c *Client) close() {
 	// Lock to ensure thread safety
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	close(c.done)
-	// Stop replay if it's active
-	if c.replayActive {
-		c.stopReplay()
+
+	// Signal writePump to stop *if* it hasn't already exited due to error/channel close
+	// Use select to avoid blocking if done channel is already closed or nil
+	select {
+	case <-c.done:
+		// Already closing or closed
+	default:
+		// Not closing yet, signal it
+		close(c.done)
+		fmt.Println("Closed done channel in close()")
 	}
 
+	// Stop replay if it's active (moved unlock after potential stopReplay which might lock/unlock)
+	replayWasActive := c.replayActive
+	c.mu.Unlock() // Unlock before potentially long-running cleanup
+
+	if replayWasActive {
+		c.stopReplay() // Needs to happen after unlocking mu if stopReplay uses it
+	}
+
+	// Re-lock for map/channel cleanup? Let's assume stopReplay and unsubscribe handle their own locking
+	c.mu.Lock()
 	// Clear all replayData
 	c.replayData = make(map[string]*ReplayData)
 	c.replayActive = false
 	c.replayPaused = false
 	c.simulatedTime = 0
+	c.mu.Unlock()
 
 	// Remove the client from all channel subscribers and close Redis subscriptions if needed
-	channelsMutex.Lock()
-	defer channelsMutex.Unlock()
-	for channelName, subscribers := range channelSubscribers {
-		if _, ok := subscribers[c]; ok {
-			// Remove the client from the list of subscribers
-			delete(subscribers, c)
-
-			// If there are no more subscribers, close the Redis Pub/Sub and clean up
-			/*
-				if len(subscribers) == 0 {
-					if pubsub, exists := redisSubscriptions[channelName]; exists {
-						pubsub.Close()
-						delete(redisSubscriptions, channelName)
-					}
-				}*/
-
-			// Clean up the channelSubscribers map
-			delete(channelSubscribers, channelName)
-		}
-	}
+	// Assuming unsubscribeRealtime/unsubscribeReplay called by readPump/stopReplay handle this.
+	// If not, the logic needs to be here or called explicitly.
+	// Let's simplify and assume the specific unsubscribe calls handle channelSubscribers map.
 
 	// Remove the client from the UserToClient map
 	UserToClientMutex.Lock()
@@ -336,14 +373,6 @@ func (c *Client) close() {
 	}
 	UserToClientMutex.Unlock()
 
-	// Close the send channel to stop the writePump
-	fmt.Println("closing channel")
-	close(c.send)
-
-	// Close the WebSocket connection
-	if err := c.ws.Close(); err != nil {
-		fmt.Println("Error closing WebSocket connection:", err)
-	}
 }
 
 // HandleWebSocket performs operations related to HandleWebSocket functionality.

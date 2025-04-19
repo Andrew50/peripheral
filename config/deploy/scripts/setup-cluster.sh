@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
+
+#setup-cluster.sh
 set -Eeuo pipefail
 
-: "${K8S_CONTEXT:?Missing K8S_CONTEXT}"
+
 : "${K8S_NAMESPACE:?Missing K8S_NAMESPACE}"
-: "${MINIKUBE_PROFILE:?Missing MINIKUBE_PROFILE}"
+: "${MINIKUBE_PROFILE:?Missing MINIKUBE_PROFILE}" # use this as kubectl context every time
 echo "Checking minikube status for profile: $MINIKUBE_PROFILE..."
 if ! minikube status -p "$MINIKUBE_PROFILE" &> /dev/null; then
     echo "Minikube profile '$MINIKUBE_PROFILE' is not running. Starting with 16 CPUs and 64GB RAM..."
     
 
-    if [[ "$MINIKUBE_PROFILE" != "minikube" ]]; then #less resources for stage
+    if [[ "$MINIKUBE_PROFILE" != "minikube-prod" ]]; then #less resources for stage
         CPU_COUNT=8
         MEM_SIZE=32768  # 32GB
     else
@@ -42,15 +44,15 @@ echo "Ingress addon enabled."
 
 echo "Waiting for ingress-nginx admission configuration jobs to complete..."
 # Wait up to 2 minutes for the admission create job
-if ! kubectl wait --namespace ingress-nginx \
+if ! kubectl wait --namespace ingress-nginx --context="${MINIKUBE_PROFILE}" \
   --for=condition=complete job \
   --selector=app.kubernetes.io/component=admission-webhook \
   --timeout=120s; then
   echo "ERROR: Ingress Nginx admission jobs did not complete in time."
   echo "Checking job status:"
-  kubectl get jobs --namespace ingress-nginx --selector=app.kubernetes.io/component=admission-webhook -o wide
+  kubectl get jobs --namespace ingress-nginx --context="${MINIKUBE_PROFILE}" --selector=app.kubernetes.io/component=admission-webhook -o wide
   echo "Checking pod status for jobs:"
-  kubectl get pods --namespace ingress-nginx --selector=app.kubernetes.io/component=admission-webhook -o wide
+  kubectl get pods --namespace ingress-nginx --context="${MINIKUBE_PROFILE}" --selector=app.kubernetes.io/component=admission-webhook -o wide
   exit 1
 fi
 echo "Ingress Nginx admission jobs completed."
@@ -58,61 +60,40 @@ echo "Ingress Nginx admission jobs completed."
 
 echo "Waiting for ingress-nginx controller deployment to be ready..."
 # Wait up to 2 minutes for the deployment to become available in the ingress-nginx namespace
-if ! kubectl wait --namespace ingress-nginx \
+if ! kubectl wait --namespace ingress-nginx --context="${MINIKUBE_PROFILE}" \
   --for=condition=available deployment \
   --selector=app.kubernetes.io/component=controller \
   --timeout=120s; then
   echo "ERROR: Ingress Nginx controller deployment did not become ready in time."
   echo "Describing deployment:"
-  kubectl describe deployment --namespace ingress-nginx --selector=app.kubernetes.io/component=controller
+  kubectl describe deployment --namespace ingress-nginx --context="${MINIKUBE_PROFILE}" --selector=app.kubernetes.io/component=controller
   echo "Checking pods:"
-  kubectl get pods --namespace ingress-nginx --selector=app.kubernetes.io/component=controller -o wide
+  kubectl get pods --namespace ingress-nginx --context="${MINIKUBE_PROFILE}" --selector=app.kubernetes.io/component=controller -o wide
   exit 1
 fi
 echo "Ingress Nginx controller deployment is ready."
 
 
-EXPECTED_CONTEXT="$MINIKUBE_PROFILE"
-
-# Check if we're using the minikube profile or a specific context
-if [[ "$K8S_CONTEXT" == "$EXPECTED_CONTEXT" || -z "$K8S_CONTEXT" ]]; then
-  echo "Using minikube profile '$MINIKUBE_PROFILE' as the Kubernetes context"
-  kubectl config use-context "$EXPECTED_CONTEXT"
-  CURRENT_CONTEXT="$EXPECTED_CONTEXT"
-else
-  echo "Switching to Kubernetes context: $K8S_CONTEXT"
-  if kubectl config get-contexts "$K8S_CONTEXT" &>/dev/null; then
-    kubectl config use-context "$K8S_CONTEXT"
-    CURRENT_CONTEXT=$(kubectl config current-context)
-    if [[ "$CURRENT_CONTEXT" != "$K8S_CONTEXT" ]]; then
-      echo "ERROR: Wrong context! Expected '$K8S_CONTEXT' but got '$CURRENT_CONTEXT'"
-      exit 1
-    fi
-  else
-    echo "WARNING: Context '$K8S_CONTEXT' not found. Using current context instead."
-    CURRENT_CONTEXT=$(kubectl config current-context)
-    echo "Current context: $CURRENT_CONTEXT"
-  fi
-fi
+#kubectl config use-context "${MINIKUBE_PROFILE}" #should --context arg be passed here? remove this becuase all kuectl commands statelessly use --context="{MINIKUBE_PROFILE}"
 
 # Set namespace if provided and create it if it doesn't exist
 if [[ -n "$K8S_NAMESPACE" ]]; then
   echo "Setting namespace to: $K8S_NAMESPACE"
   
   # Check if namespace exists, create it if it doesn't
-  if ! kubectl get namespace "$K8S_NAMESPACE" &>/dev/null; then
+  if ! kubectl get namespace "$K8S_NAMESPACE" --context=${MINIKUBE_PROFILE} &>/dev/null; then
     echo "Namespace '$K8S_NAMESPACE' does not exist. Creating it..."
-    kubectl create namespace "$K8S_NAMESPACE"
+    kubectl create namespace "$K8S_NAMESPACE" --context=${MINIKUBE_PROFILE}
     echo "Namespace '$K8S_NAMESPACE' created successfully."
   else
     echo "Namespace '$K8S_NAMESPACE' already exists."
   fi
   
   # Set the namespace in the current context
-  kubectl config set-context --current --namespace="$K8S_NAMESPACE"
+  kubectl config set-context "$MINIKUBE_PROFILE" --namespace="$K8S_NAMESPACE"
 else
   echo "No namespace specified, using default namespace"
-  K8S_NAMESPACE=$(kubectl config view --minify --output 'jsonpath={..namespace}')
+  K8S_NAMESPACE=$(kubectl config view --context=${MINIKUBE_PROFILE} --minify --output 'jsonpath={..namespace}')
   if [[ -z "$K8S_NAMESPACE" ]]; then
     K8S_NAMESPACE="default"
   fi
@@ -121,14 +102,14 @@ fi
 
 echo "Verifying cluster connectivity..."
 echo "Current kubectl configuration:"
-kubectl config view --minify
+kubectl config view --context=${MINIKUBE_PROFILE} --minify
 
 # Ensure kubectl is properly configured with the correct context
 echo "Current kubectl context: $(kubectl config current-context)"
 
 # Check if kubectl can reach the Kubernetes API server
 echo "Testing connection to Kubernetes API server..."
-if ! kubectl get nodes --namespace="$K8S_NAMESPACE" &>/dev/null; then
+if ! kubectl get nodes --namespace="$K8S_NAMESPACE" --context="${MINIKUBE_PROFILE}" &>/dev/null; then
   echo "WARNING: Cannot connect to Kubernetes API server. Trying to fix connection..."
   
   # Try to get minikube IP
@@ -141,7 +122,7 @@ if ! kubectl get nodes --namespace="$K8S_NAMESPACE" &>/dev/null; then
   
   # Try to update the minikube context again
   echo "Updating minikube context..."
-  minikube update-context
+  minikube update-context -p "$MINIKUBE_PROFILE"
   
   # Wait a moment for connections to stabilize
   sleep 5
@@ -149,14 +130,14 @@ fi
 
 # Now try cluster-info with explicit output redirection to capture any errors
 echo "Running kubectl cluster-info..."
-if ! kubectl cluster-info --namespace="$K8S_NAMESPACE" > >(tee /tmp/cluster-info-out.log) 2> >(tee /tmp/cluster-info-err.log >&2); then
+if ! kubectl cluster-info --namespace="$K8S_NAMESPACE" --context="${MINIKUBE_PROFILE}" > >(tee /tmp/cluster-info-out.log) 2> >(tee /tmp/cluster-info-err.log >&2); then
   echo "ERROR: kubectl cluster-info failed. See error output above."
   echo "Contents of /tmp/cluster-info-err.log:"
   cat /tmp/cluster-info-err.log
   
   # Try one more time with a different approach
   echo "Trying alternative approach to verify cluster..."
-  if kubectl version --short --namespace="$K8S_NAMESPACE"; then
+  if kubectl version --short --namespace="$K8S_NAMESPACE" --context="${MINIKUBE_PROFILE}"; then
     echo "kubectl version succeeded, continuing despite cluster-info failure."
   else
     echo "ERROR: Both kubectl cluster-info and kubectl version failed."
@@ -167,4 +148,4 @@ else
   echo "Cluster info command succeeded."
 fi
 
-echo "Kubernetes setup complete. Current context: $CURRENT_CONTEXT, namespace: $K8S_NAMESPACE"
+echo "Kubernetes setup complete. Current context: {$MINIKUBE_PROFILE}, namespace: {$K8S_NAMESPACE}"

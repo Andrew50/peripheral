@@ -14,7 +14,8 @@ import (
 )
 
 type Query struct {
-	Query string `json:"query"`
+	Query   string                   `json:"query"`
+	Context []map[string]interface{} `json:"context,omitempty"`
 }
 
 // ExecuteResult represents the result of executing a function
@@ -63,6 +64,27 @@ type ThinkingResponse struct {
 	RequiresFinalResponse   bool             `json:"requires_final_response"`
 	ContentChunks           []ContentChunk   `json:"content_chunks,omitempty"`
 	PlanningContext         json.RawMessage  `json:"planning_context,omitempty"`
+}
+
+// buildContextPrompt formats incoming chart/filing context for the model
+func buildContextPrompt(contextItems []map[string]interface{}) string {
+	var sb strings.Builder
+	for _, item := range contextItems {
+		// Treat filing contexts first
+		if _, ok := item["link"]; ok {
+			ticker, _ := item["ticker"].(string)
+			fType, _ := item["filingType"].(string)
+			link, _ := item["link"].(string)
+			sb.WriteString(fmt.Sprintf("Filing - Ticker: %s, Type: %s, Link: %s\n", ticker, fType, link))
+		} else if _, ok := item["timestamp"]; ok {
+			// Then treat instance contexts
+			ticker, _ := item["ticker"].(string)
+			secId := fmt.Sprint(item["securityId"])
+			tsStr := fmt.Sprint(item["timestamp"])
+			sb.WriteString(fmt.Sprintf("Instance - Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secId, tsStr))
+		}
+	}
+	return sb.String()
 }
 
 // replaceTickerPlaceholder is a helper function used by ReplaceAllStringFunc.
@@ -119,8 +141,12 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 	if err := json.Unmarshal(args, &query); err != nil {
 		return nil, fmt.Errorf("error parsing request: %w", err)
 	}
+
+	// Build context prompt section
+	contextSection := buildContextPrompt(query.Context)
+	fmt.Println("contextSection ", contextSection)
+	// If userQuery is empty, error
 	userQuery := query.Query
-	// If the query is empty, return an error
 	if userQuery == "" {
 		return nil, fmt.Errorf("query cannot be empty")
 	}
@@ -162,6 +188,11 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			prompt.WriteString(conversationHistory)
 			prompt.WriteString("\n\n")
 		}
+		if contextSection != "" {
+			prompt.WriteString("User added context:\n")
+			prompt.WriteString(contextSection)
+			prompt.WriteString("\n")
+		}
 		prompt.WriteString("User Query:\n")
 		prompt.WriteString(userQuery)
 		prompt.WriteString("\n\n")
@@ -172,6 +203,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			prompt.WriteString(string(resultsJSON))
 			prompt.WriteString("\n```\n\n")
 		}
+		fmt.Println("prompt ", prompt.String())
 
 		// This first passes the query to a thinking model
 		geminiThinkingResponse, err := getGeminiFunctionThinking(ctx, conn, "defaultSystemPrompt", prompt.String())

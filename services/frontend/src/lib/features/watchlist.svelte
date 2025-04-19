@@ -92,6 +92,17 @@
 		if (flagWatchlistId !== undefined) {
 			selectWatchlist(String(flagWatchlistId));
 		}
+
+		// Subscribe to watchlists store to select initial watchlist when list arrives
+		const unsubscribeWatchlists = watchlists.subscribe((list) => {
+			if (Array.isArray(list) && list.length > 0 && (currentWatchlistId === undefined || isNaN(currentWatchlistId))) {
+				selectWatchlist(String(list[0].watchlistId));
+			}
+		});
+		// Cleanup the subscription when component unmounts
+		return () => {
+			unsubscribeWatchlists();
+		};
 	});
 
 	function addInstance() {
@@ -228,17 +239,34 @@
 		showWatchlistInput = false;
 		newWatchlistName = '';
 		const watchlistId = parseInt(watchlistIdString);
-		if (watchlistId === flagWatchlistId) {
-			activeList = flagWatchlist as unknown as Writable<WatchlistItem[]>;
-		} else {
-			activeList = writable<WatchlistItem[]>([]);
-		}
 		currentWatchlistId = watchlistId;
-		privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId }).then(
-			(v: WatchlistItem[]) => {
-				activeList.set(v);
-			}
-		);
+
+		// Decide whether to use the global flagWatchlist store or a local one
+		if (watchlistId === flagWatchlistId) {
+			activeList = flagWatchlist; // Point to the global store
+
+			// Fetch items and update the GLOBAL flagWatchlist store
+			privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId }).then(
+				(v: WatchlistItem[]) => {
+					flagWatchlist.set(v || []); // Update the global store
+				}
+			).catch(err => {
+				flagWatchlist.set([]); // Set global store empty on error
+			});
+		} else {
+			// For regular watchlists, create a new local writable store
+			activeList = writable<WatchlistItem[]>([]); 
+			currentWatchlistId = watchlistId;
+
+			// Fetch items and update the LOCAL activeList store
+			privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId }).then(
+				(v: WatchlistItem[]) => {
+					activeList.set(v || []); // Update the local store
+				}
+			).catch(err => {
+				activeList.set([]); // Set local store empty on error
+			});
+		}
 	}
 
 	function deleteWatchlist(id: number) {
@@ -297,6 +325,7 @@
 		currentWatchlistId = parseInt(value, 10);
 		selectWatchlist(value);
 	}
+
 </script>
 
 <div tabindex="-1" class="feature-container" bind:this={container}>
@@ -314,7 +343,7 @@
 						{#each $watchlists as watchlist}
 							<option value={watchlist.watchlistId.toString()}>
 								{watchlist.watchlistName === 'flag'
-									? '🚩 Flag (Protected)'
+									? 'Flag (Protected)'
 									: watchlist.watchlistName}
 							</option>
 						{/each}
@@ -372,9 +401,16 @@
 					on:click={() => selectWatchlist(String(watchlist.watchlistId))}
 					title={watchlist.watchlistName}
 				>
-					{watchlist.watchlistName.toLowerCase() === 'flag'
-						? '🚩'
-						: getWatchlistInitial(watchlist.watchlistName)}
+					{#if watchlist.watchlistName.toLowerCase() === 'flag'}
+						<span class="flag-shortcut-icon">
+							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<path d="M5 5v14"></path>
+								<path d="M19 5l-6 4 6 4-6 4"></path>
+							</svg>
+						</span>
+					{:else}
+						{getWatchlistInitial(watchlist.watchlistName)}
+					{/if}
 				</button>
 			{/each}
 		{/if}
@@ -549,7 +585,7 @@
 		height: 100%;
 		background: var(--ui-bg-primary);
 		border-radius: 8px;
-		overflow: hidden;
+		overflow: visible;
 	}
 
 	.controls-container {
@@ -616,5 +652,17 @@
 
 	.list-scroll-container::-webkit-scrollbar-thumb:hover {
 		background-color: var(--text-secondary); /* Slightly lighter on hover */
+	}
+
+	/* Shortcut flag icon styling */
+	.flag-shortcut-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.flag-shortcut-icon svg {
+		width: 14px;
+		height: 14px;
+		color: var(--accent-color);
 	}
 </style>
