@@ -4,12 +4,14 @@
 	import { marked } from 'marked'; // Import the markdown parser
 	import { queryChart } from '$lib/features/chart/interface'; // Import queryChart
 	import type { Instance } from '$lib/core/types';
+	import { browser } from '$app/environment'; // Import browser
 	import {
 		inputValue,
 		contextItems,
 		removeInstanceFromChat,
 		removeFilingFromChat,
-		type FilingContext // Import the new type
+		type FilingContext, // Import the new type
+		pendingChatQuery // Import the new store
 	} from './interface'
 
 	// Set default options for the markdown parser (optional)
@@ -115,6 +117,7 @@
 			function_calls?: any[];
 			timestamp: string | Date;
 			expires_at?: string | Date;
+			context_items?: (Instance | FilingContext)[];
 		}>;
 		timestamp: string | Date;
 	};
@@ -130,6 +133,7 @@
 		responseType?: string;
 		isLoading?: boolean;
 		suggestedQueries?: string[];
+		contextItems?: (Instance | FilingContext)[];
 	};
 
 	// Type for suggested queries response
@@ -149,6 +153,7 @@
 
 	// Chat history
 	let messages: Message[] = [];
+	let historyLoaded = false; // Add state variable
 
 	// Load any existing conversation history from the server
 	async function loadConversationHistory() {
@@ -167,7 +172,8 @@
 						content: msg.query,
 						sender: 'user',
 						timestamp: new Date(msg.timestamp),
-						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined
+						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
+						contextItems: msg.context_items || []
 					});
 
 					messages.push({
@@ -187,6 +193,7 @@
 			console.error('Error loading conversation history:', error);
 		} finally {
 			isLoading = false;
+			historyLoaded = true; // Set history loaded flag
 		}
 	}
 
@@ -262,7 +269,8 @@
 			id: generateId(),
 			content: $inputValue,
 			sender: 'user',
-			timestamp: new Date()
+			timestamp: new Date(),
+			contextItems: [...$contextItems]
 		};
 
 		messages = [...messages, userMessage];
@@ -490,6 +498,31 @@
 			return '';
 		}
 	}
+
+	// Reactive block to handle pending query
+	$: if ($pendingChatQuery && browser && historyLoaded) {
+		const queryData = $pendingChatQuery;
+		pendingChatQuery.set(null); // Clear the pending query immediately to prevent re-triggering
+
+		// Add context items (preventing duplicates)
+		contextItems.update(currentItems => {
+			const newItems = queryData.context.filter((newItem: Instance | FilingContext) =>
+				!currentItems.some(existingItem =>
+					// Simple comparison logic, adjust if needed for more complex cases
+					JSON.stringify(existingItem) === JSON.stringify(newItem)
+				)
+			);
+			return [...currentItems, ...newItems];
+		});
+
+		// Set the input value
+		inputValue.set(queryData.query);
+
+		// Use tick to ensure input value is updated before submitting
+		tick().then(() => {
+			handleSubmit();
+		});
+	}
 </script>
 
 <div class="chat-container">
@@ -533,6 +566,22 @@
 								<span></span>
 							</div>
 						{:else}
+							<!-- Display context chips for user messages -->
+							{#if message.sender === 'user' && message.contextItems && message.contextItems.length > 0}
+								<div class="message-context-chips">
+									{#each message.contextItems as item (item.securityId + '-' + ('filingType' in item ? item.link : item.timestamp))}
+										{@const isFiling = 'filingType' in item}
+										<span class="message-context-chip">
+											{item.ticker?.toUpperCase() || ''}
+											{#if isFiling}
+												{item.filingType}
+											{:else}
+												{formatChipDate(item.timestamp)}
+											{/if}
+										</span>
+									{/each}
+								</div>
+							{/if}
 							<div class="message-content">
 								{#if message.contentChunks && message.contentChunks.length > 0}
 									<div class="content-chunks">
@@ -1290,5 +1339,23 @@
 
 	.chip:hover {
 		background: var(--ui-bg-hover, rgba(255,255,255,0.05));
+	}
+
+	/* Styles for context chips within user messages */
+	.message-context-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		margin-bottom: 0.5rem; /* Space between chips and message text */
+	}
+
+	.message-context-chip {
+		background: rgba(255, 255, 255, 0.1); /* Slightly different background */
+		color: inherit; /* Inherit text color from message bubble */
+		border: 1px solid rgba(255, 255, 255, 0.2); /* Subtle border */
+		padding: 0.2rem 0.5rem; /* Slightly smaller padding */
+		border-radius: 0.25rem;
+		font-size: 0.7rem; /* Smaller font size */
+		cursor: default; /* Not interactive */
 	}
 </style>

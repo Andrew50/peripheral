@@ -34,13 +34,14 @@ type ConversationData struct {
 
 // ChatMessage represents a single message in the conversation
 type ChatMessage struct {
-	Query         string          `json:"query"`
-	ContentChunks []ContentChunk  `json:"content_chunks,omitempty"`
-	ResponseText  string          `json:"response_text,omitempty"`
-	FunctionCalls []FunctionCall  `json:"function_calls"`
-	ToolResults   []ExecuteResult `json:"tool_results"`
-	Timestamp     time.Time       `json:"timestamp"`
-	ExpiresAt     time.Time       `json:"expires_at"` // When this message should expire
+	Query         string                   `json:"query"`
+	ContentChunks []ContentChunk           `json:"content_chunks,omitempty"`
+	ResponseText  string                   `json:"response_text,omitempty"`
+	FunctionCalls []FunctionCall           `json:"function_calls"`
+	ToolResults   []ExecuteResult          `json:"tool_results"`
+	ContextItems  []map[string]interface{} `json:"context_items,omitempty"` // Store context sent with user message
+	Timestamp     time.Time                `json:"timestamp"`
+	ExpiresAt     time.Time                `json:"expires_at"` // When this message should expire
 }
 
 // ContentChunk represents a piece of content in the response sequence
@@ -237,6 +238,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 				ResponseText:  responseText,
 				FunctionCalls: []FunctionCall{},
 				ToolResults:   []ExecuteResult{},
+				ContextItems:  query.Context, // Store context with the user query message
 				Timestamp:     time.Now(),
 				ExpiresAt:     time.Now().Add(24 * time.Hour),
 			}
@@ -263,6 +265,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 				ContentChunks: thinkingResp.ContentChunks,
 				FunctionCalls: []FunctionCall{},
 				ToolResults:   []ExecuteResult{},
+				ContextItems:  query.Context, // Store context with the user query message
 				Timestamp:     time.Now(),
 				ExpiresAt:     time.Now().Add(24 * time.Hour),
 			}
@@ -293,6 +296,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 					ContentChunks: contentChunks,
 					FunctionCalls: []FunctionCall{},
 					ToolResults:   []ExecuteResult{},
+					ContextItems:  query.Context, // Store context with the user query message
 					Timestamp:     time.Now(),
 					ExpiresAt:     time.Now().Add(24 * time.Hour),
 				}
@@ -315,6 +319,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 					ResponseText:  "Successfully processed the following function calls:\n\n",
 					FunctionCalls: []FunctionCall{}, // We don't store these as regular function calls
 					ToolResults:   thinkingResults,
+					ContextItems:  query.Context, // Store context with the user query message
 					Timestamp:     time.Now(),
 					ExpiresAt:     time.Now().Add(24 * time.Hour),
 				}
@@ -356,6 +361,12 @@ func buildConversationContext(messages []ChatMessage) string {
 		context.WriteString("User: ")
 		context.WriteString(messages[i].Query)
 		context.WriteString("\n")
+		// Include context items if they exist for the user message
+		if len(messages[i].ContextItems) > 0 {
+			context.WriteString("User Context:\n")
+			context.WriteString(buildContextPrompt(messages[i].ContextItems)) // Reuse existing formatting function
+			context.WriteString("\n")
+		}
 
 		context.WriteString("Assistant: ")
 		if len(messages[i].ContentChunks) > 0 {
