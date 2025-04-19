@@ -117,7 +117,14 @@ func publicHandler(conn *utils.Conn) http.HandlerFunc {
 func privateUploadHandler(conn *utils.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		addCORSHeaders(w)
+		// Handle CORS preflight request
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		// Original check was here, moved after OPTIONS check.
 		if r.Method != "POST" {
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		token_string := r.Header.Get("Authorization")
@@ -384,7 +391,6 @@ type QueueRequest struct {
 	Function  string      `json:"func"`
 	Arguments interface{} `json:"args"`
 }
-
 
 // PollRequest represents a structure for handling PollRequest data.
 type PollRequest struct {
