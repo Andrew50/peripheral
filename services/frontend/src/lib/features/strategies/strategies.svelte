@@ -397,6 +397,7 @@
 
   details > summary { cursor: pointer; margin-bottom: 0.5rem; font-weight: 500; }
 
+
   .mini { width: 100%; margin-bottom: 0.5rem; }
   .mini td, .mini th { padding: 0.3rem 0.4rem; }
   .mini input, .mini select { width: 100%; font-size: 0.8rem; }
