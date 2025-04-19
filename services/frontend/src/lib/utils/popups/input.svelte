@@ -376,25 +376,6 @@
 	// flag to indicate that an async validation (ticker lookup) is in progress
 	//let secQueryActive = false;
 
-	// Add this reactive statement
-	$: if (
-		manualInputType !== 'auto' &&
-		($inputQuery.status === 'active' || $inputQuery.status === 'initializing')
-	) {
-		setTimeout(() => {
-			inputQuery.update((v) => ({
-				...v,
-				inputType: manualInputType,
-				inputValid: true // Reset validity when manually changing type
-			}));
-		}, 0);
-	}
-
-	interface ValidateResponse {
-		inputValid: boolean;
-		securities: Instance[];
-	}
-
 	async function enterInput(iQ: InputQuery, tickerIndex: number = 0): Promise<InputQuery> {
 		if (iQ.inputType === 'ticker') {
 			// Store the timestamp to preserve it
@@ -849,13 +830,16 @@
 					class="toggle-button {manualInputType === 'auto' && $inputQuery.inputType === ''
 						? 'active'
 						: ''}"
-					on:click|stopPropagation={() => {
+					on:click|stopPropagation={async () => {
 						manualInputType = 'auto';
 						inputQuery.update((v) => ({
 							...v,
 							inputType: '',
-							inputValid: true // Reset validity when manually changing type
+							inputString: '',
+							inputValid: true
 						}));
+						await tick(); // Wait for next UI update cycle
+						console.log('After Auto click, inputType is:', get(inputQuery).inputType); // Log state
 					}}
 				>
 					Auto
@@ -1066,8 +1050,6 @@
 							</div>
 						</div>
 					</div>
-				{:else}
-					'{$inputQuery.inputType}'
 				{/if}
 			{/if}
 		</div>
