@@ -232,11 +232,11 @@
 				<StreamCell instance={$instance} type="price" />
 			</div>
 			<div class="metric-item">
-				<span class="label">Chg %</span>
+				<span class="label">Change %</span>
 				<StreamCell instance={$instance} type="change %" />
 			</div>
 			<div class="metric-item">
-				<span class="label">Chg $</span>
+				<span class="label">Change</span>
 				<StreamCell instance={$instance} type="change" />
 			</div>
 			<div class="metric-item">
