@@ -337,10 +337,11 @@ func CreateStrategyFromNaturalLanguage(conn *utils.Conn, userId int, rawArgs jso
 }
 
 // StrategyResult represents a strategy configuration with its evaluation score.
+// StrategyResult represents a strategy configuration returned to the frontend.
 type StrategyResult struct {
 	StrategyID int          `json:"strategyId"`
 	Name       string       `json:"name"`
-	Criteria   StrategySpec `json:"criteria"`
+	Criteria   StrategySpec `json:"spec"` // Changed tag to "spec" to match frontend expectation
 	Score      int          `json:"score"`
 }
 

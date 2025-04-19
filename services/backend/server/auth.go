@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
+	"github.com/jackc/pgx/v4"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -115,6 +116,18 @@ func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		return nil, fmt.Errorf("email already registered")
 	}
 
+	// Check if username already exists
+	fmt.Println("Checking if username exists...")
+	err = tx.QueryRow(ctx, "SELECT COUNT(*) FROM users WHERE username=$1", a.Username).Scan(&count)
+	if err != nil {
+		fmt.Printf("ERROR: Database query failed while checking username: %v\n", err)
+		return nil, fmt.Errorf("error checking username: %v", err)
+	}
+	if count > 0 {
+		fmt.Printf("Username already taken: %s\n", a.Username)
+		return nil, fmt.Errorf("username already taken")
+	}
+
 	// Insert new user with auth_type='password'
 	var userID int
 	fmt.Println("Inserting new user record...")
@@ -125,6 +138,7 @@ func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		fmt.Printf("ERROR: Failed to create user: %v\n", err)
 		return nil, fmt.Errorf("error creating user: %v", err)
 	}
+
 
 	fmt.Printf("User created successfully with ID: %d\n", userID)
 
@@ -196,59 +210,68 @@ func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 
 	var resp LoginResponse
 	var userID int
-	var profilePicture sql.NullString
+	var storedPw string
 	var authType string
+	var profilePicture sql.NullString
 
-	// First check if the user exists and get their auth_type
+	// 1) Does the email exist? Get user details.
 	fmt.Println("Querying user info...")
 	err := conn.DB.QueryRow(ctx,
-		"SELECT userId, username, profile_picture, auth_type FROM users WHERE email=$1",
-		a.Email).Scan(&userID, &resp.Username, &profilePicture, &authType)
+		`SELECT userId, username, password, profile_picture, auth_type
+		 FROM users WHERE email=$1`,
+		a.Email).Scan(&userID, &resp.Username, &storedPw, &profilePicture, &authType)
 
-	if err != nil {
-		fmt.Printf("ERROR: User lookup failed: %v\n", err)
+	switch {
+	case err == pgx.ErrNoRows:
+		fmt.Printf("ERROR: No user found for email: %s\n", a.Email)
 		// Print connection pool stats after error
 		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
 			conn.DB.Stat().MaxConns(),
 			conn.DB.Stat().TotalConns(),
 			conn.DB.Stat().IdleConns(),
 			conn.DB.Stat().AcquiredConns())
-		return nil, fmt.Errorf("invalid credentials: %v", err)
+		return nil, fmt.Errorf("incorrect email") // <-- NEW specific error
+	case err != nil:
+		fmt.Printf("ERROR: Database query failed while checking email: %v\n", err)
+		// Print connection pool stats after error
+		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
+			conn.DB.Stat().MaxConns(),
+			conn.DB.Stat().TotalConns(),
+			conn.DB.Stat().IdleConns(),
+			conn.DB.Stat().AcquiredConns())
+		return nil, fmt.Errorf("database error: %v", err)
 	}
 
 	fmt.Printf("Found user with ID: %d, username: %s, auth_type: %s\n", userID, resp.Username, authType)
 
-	// Check if this is a Google-only auth user trying to use password login
+	// 2) Is this a Google-only account?
 	if authType == "google" {
 		fmt.Println("ERROR: Google-only user attempting password login")
 		return nil, fmt.Errorf("this account uses Google Sign-In. Please login with Google")
 	}
 
-	// Now verify the password for password-based or both auth types
-	fmt.Println("Verifying password...")
-	var passwordMatch bool
-	err = conn.DB.QueryRow(ctx,
-		"SELECT (password = $1) FROM users WHERE userId=$2 AND (auth_type='password' OR auth_type='both')",
-		a.Password, userID).Scan(&passwordMatch)
-
-	if err != nil || !passwordMatch {
-		if err != nil {
-			fmt.Printf("ERROR: Password verification query failed: %v\n", err)
-		} else {
+	// 3) Wrong password? (Only check for 'password' or 'both' auth types)
+	if authType == "password" || authType == "both" {
+		fmt.Println("Verifying password...")
+		if storedPw != a.Password {
 			fmt.Println("ERROR: Password mismatch")
+			// Print connection pool stats after error
+			fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
+				conn.DB.Stat().MaxConns(),
+				conn.DB.Stat().TotalConns(),
+				conn.DB.Stat().IdleConns(),
+				conn.DB.Stat().AcquiredConns())
+			return nil, fmt.Errorf("incorrect password") // <-- NEW specific error
 		}
-
-		// Print connection pool stats after error
-		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
-			conn.DB.Stat().MaxConns(),
-			conn.DB.Stat().TotalConns(),
-			conn.DB.Stat().IdleConns(),
-			conn.DB.Stat().AcquiredConns())
-
-		return nil, fmt.Errorf("invalid credentials")
+		fmt.Println("Password verified.")
+	} else {
+		// This case should ideally not be reached if authType logic is correct,
+		// but added for robustness.
+		fmt.Printf("ERROR: Unexpected auth_type '%s' encountered for password login attempt.\n", authType)
+		return nil, fmt.Errorf("invalid account state")
 	}
 
-	fmt.Println("Password verified, creating authentication token...")
+	fmt.Println("Creating authentication token...")
 	token, err := createToken(userID)
 	if err != nil {
 		fmt.Printf("ERROR: Token creation failed: %v\n", err)

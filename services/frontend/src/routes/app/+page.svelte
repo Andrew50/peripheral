@@ -56,6 +56,8 @@
 	// Add new import for Query component
 	import Query from '$lib/features/chat/chat.svelte';
 
+	import { requestChatOpen } from '$lib/features/chat/interface'; // Import the store
+
 	type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
 
 	let lastSidebarMenu: Menu | null = null;
@@ -771,6 +773,19 @@
 			leftMenuWidth = 300;
 		}
 		updateChartWidth();
+	}
+
+	// Subscribe to the requestChatOpen store
+	$: if ($requestChatOpen && browser) {
+		if (leftMenuWidth === 0) {
+			toggleLeftPane(); // Open the left pane if closed
+		}
+		// Reset the trigger after handling
+		// Use setTimeout to ensure the pane opens before resetting,
+		// although direct reset might work fine with Svelte's reactivity.
+		setTimeout(() => {
+			requestChatOpen.set(false);
+		}, 0);
 	}
 </script>
 

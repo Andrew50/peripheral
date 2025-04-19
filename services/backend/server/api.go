@@ -97,9 +97,11 @@ func publicHandler(conn *utils.Conn) http.HandlerFunc {
 		// Execute the requested function with sanitized input
 		result, err := publicFunc[req.Function](conn, req.Arguments)
 		if err != nil {
-			// Limit error information in public endpoints
+			// Log the detailed error on the server
 			log.Printf("public_handler error: %s - %v", req.Function, err)
-			http.Error(w, "Request processing failed", http.StatusBadRequest)
+			// Send the specific error message back to the client
+			// Use StatusBadRequest for general input/logic errors from Login/Signup
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
@@ -115,7 +117,14 @@ func publicHandler(conn *utils.Conn) http.HandlerFunc {
 func privateUploadHandler(conn *utils.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		addCORSHeaders(w)
+		// Handle CORS preflight request
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		// Original check was here, moved after OPTIONS check.
 		if r.Method != "POST" {
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		token_string := r.Header.Get("Authorization")
@@ -382,7 +391,6 @@ type QueueRequest struct {
 	Function  string      `json:"func"`
 	Arguments interface{} `json:"args"`
 }
-
 
 // PollRequest represents a structure for handling PollRequest data.
 type PollRequest struct {
