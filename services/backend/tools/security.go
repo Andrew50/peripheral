@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -773,4 +774,21 @@ type GetFilteredTickerSnapshotArgs struct {
 }
 type GetFilteredTickerSnapshotResults struct {
 	Snapshots []GetTickerDailySnapshotResults `json:"snapshots"`
+}
+
+type GetLastPriceArgs struct {
+	Ticker string `json:"ticker"`
+}
+
+func GetLastPrice(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetLastPriceArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+	trade, err := utils.GetLastTrade(conn.Polygon, args.Ticker)
+	if err != nil {
+		return nil, fmt.Errorf("error getting last trade: %v", err)
+	}
+	roundedPrice := math.Round(trade.Price*100) / 100
+	return roundedPrice, nil
 }
