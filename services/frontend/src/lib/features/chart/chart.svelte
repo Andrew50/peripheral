@@ -1817,23 +1817,20 @@
 	}
 
 	// Function to add SEC filing to chat context
-	function addFilingToChat() {
-		if (!selectedEvent) return;
-
-		// Find the first SEC filing event in the selected group
-		const filingEvent = selectedEvent.events.find(e => e.type === 'sec_filing');
+	function addFilingToChat(filingEvent: EventMarker['events'][number]) {
 		if (!selectedEvent || !filingEvent) return;
 
 		const timestampMs = selectedEvent.time * 1000; // convert seconds to ms
 		const filingContext: FilingContext = {
 			ticker: currentChartInstance.ticker,
 			securityId: currentChartInstance.securityId,
-			timestamp: timestampMs, // Needed for unique key in Svelte each blocks
-			filingType: filingEvent.title, // Use the found event's title
-			link: filingEvent.url      // Use the found event's URL
+			timestamp: timestampMs,
+			filingType: filingEvent.title,
+			link: filingEvent.url || ''
 		};
 		addFilingToChatContext(filingContext);
 	}
+
 </script>
 
 <div class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
@@ -1867,46 +1864,57 @@
 			<button class="close-button" on:click={closeEventPopup}>×</button>
 		</div>
 		<div class="event-content">
-			{#each selectedEvent.events as event}
-				{#if event.type === 'sec_filing'}
-					<div class="event-row">
-						<div class="event-type">{event.title}</div>
+			{#each selectedEvent.events as filing}
+				{#if filing.type === 'sec_filing'}
+					<div class="event-row filing-row">
+						<div class="filing-info">
+							<span class="event-type">{filing.title}</span>
+						</div>
 						<div class="event-actions">
-							{#if event.url}
+							{#if filing.url}
 								<a
-									href={event.url}
+									href={filing.url}
 									target="_blank"
 									rel="noopener noreferrer"
-									class="event-link"
-									on:click|stopPropagation={addFilingToChat}
+									class="btn btn-primary btn-sm"
+									on:click|stopPropagation={() => addFilingToChat(filing)}
 								>
 									View →
 								</a>
 							{/if}
-							<button class="add-context-btn" on:click|stopPropagation={addFilingToChat}>
+							<button
+								class="btn btn-secondary btn-sm"
+								on:click|stopPropagation={() => addFilingToChat(filing)}
+							>
 								+ Chat
+							</button>
+							<button
+								class="btn btn-tertiary btn-sm"
+								on:click|stopPropagation={() => onSummarize(filing)}
+							>
+								Summarize
 							</button>
 						</div>
 					</div>
-				{:else if event.type === 'split'}
+				{:else if filing.type === 'split'}
 					<div class="event-row">
-						<span class="event-type">{event.title}</span>
+						<span class="event-type">{filing.title}</span>
 					</div>
-				{:else if event.type === 'dividend'}
+				{:else if filing.type === 'dividend'}
 					<div class="event-row dividend-row">
 						<div class="dividend-details">
-							<span class="event-type">{event.title}</span>
-							{#if event.exDate}
-								<span class="dividend-date">Ex-Date: {event.exDate}</span>
+							<span class="event-type">{filing.title}</span>
+							{#if filing.exDate}
+								<span class="dividend-date">Ex-Date: {filing.exDate}</span>
 							{/if}
-							{#if event.payoutDate}
-								<span class="dividend-date">Payout: {event.payoutDate}</span>
+							{#if filing.payoutDate}
+								<span class="dividend-date">Payout: {filing.payoutDate}</span>
 							{/if}
 						</div>
 					</div>
 				{:else}
 					<div class="event-row">
-						<span class="event-type">{event.title}</span>
+						<span class="event-type">{filing.title}</span>
 					</div>
 				{/if}
 			{/each}
@@ -1920,11 +1928,12 @@
 		background: #252525;
 		border: none;
 		border-radius: 8px;
-		padding: 12px;
+		padding: 10px;
 		z-index: 1000;
-		width: 240px;
+		width: 220px;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-		transform: translate(-50%, calc(-100% - 15px)); /* Center H, shift above marker + 15px gap */
+		transform: translate(-50%, calc(-100% - 15px)) scale(0.95);
+		transform-origin: bottom center;
 		opacity: 0;
 		animation: fadeInDown 0.2s ease-out forwards;
 	}
@@ -2006,14 +2015,78 @@
 		background: var(--ui-bg-element, #333);
 		border: 1px solid var(--ui-border, #444);
 		color: var(--text-secondary, #aaa);
-		padding: 0.2rem 0.5rem;
-		font-size: 0.7rem;
+		padding: 0.3rem 0.6rem;
+		font-size: 0.8rem;
 		border-radius: 0.25rem;
 		cursor: pointer;
 		transition: all 0.2s ease;
-	}
-	.add-context-btn:hover {
+	}	.add-context-btn:hover {
 		border-color: var(--accent-color, #3a8bf7);
 		color: var(--text-primary, #fff);
+	}
+	/* Sleek button and filing styles */
+	.btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.4rem 0.8rem;
+		border-radius: 4px;
+		font-size: 0.85rem;
+		font-weight: 600;
+		text-decoration: none;
+		transition: background-color 0.2s ease, color 0.2s ease;
+	}
+	.btn svg {
+		margin-right: 0.25rem;
+	}
+	.btn-primary {
+		background-color: var(--accent-color, #3a8bf7);
+		color: #fff;
+		border: none;
+	}
+	.btn-primary:hover {
+		background-color: var(--accent-color-dark, #336ecf);
+	}
+	.btn-secondary {
+		background-color: transparent;
+		color: var(--text-primary, #fff);
+		border: 1px solid var(--accent-color, #3a8bf7);
+	}
+	.btn-secondary:hover {
+		background-color: var(--accent-color, #3a8bf7);
+		color: #fff;
+	}
+	.btn-tertiary {
+		background-color: transparent;
+		color: var(--text-secondary, #aaa);
+		border: 1px solid var(--ui-border, #444);
+	}
+	.btn-tertiary:hover {
+		background-color: rgba(255,255,255,0.1);
+		color: #fff;
+	}
+	.filing-row {
+		display: grid;
+		grid-template-columns: 1fr auto;
+		gap: 0.75rem;
+		align-items: center;
+		padding: 0.5rem 0;
+		border-bottom: 1px solid #444;
+	}
+	.filing-info .event-type {
+		font-size: 1rem;
+		font-weight: 600;
+		color: #fff;
+	}
+	.filing-row .event-actions {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: 0.5rem;
+	}
+	.btn-sm {
+		padding: 0.15rem 0.3rem;
+		font-size: 0.7rem;
+		height: 1.3rem;
 	}
 </style>
