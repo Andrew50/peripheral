@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { privateRequest } from '$lib/core/backend';
 	import { marked } from 'marked'; // Import the markdown parser
 	import { queryChart } from '$lib/features/chart/interface'; // Import queryChart
@@ -146,7 +146,7 @@
 		suggestions: string[];
 	};
 
-	let queryInput: HTMLInputElement;
+	let queryInput: HTMLTextAreaElement;
 	let isLoading = false;
 	let messagesContainer: HTMLDivElement;
 
@@ -267,7 +267,7 @@
 		isBacktestMode = !isBacktestMode;
 	}
 
-	function handleSubmit() {
+	async function handleSubmit() {
 		if (!$inputValue.trim()) return;
 
 		const userMessage: Message = {
@@ -293,6 +293,8 @@
 
 		const queryText = $inputValue;
 		inputValue.set('');
+		await tick(); // Wait for DOM update
+		adjustTextareaHeight(); // Reset height after clearing input and waiting for tick
 
 		// Prepend if backtest mode is active
 		const finalQuery = isBacktestMode ? `[RUN BACKTEST] ${queryText}` : queryText;
