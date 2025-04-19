@@ -354,6 +354,8 @@
 	function adjustTextareaHeight() {
 		if (!queryInput) return;
 		queryInput.style.height = 'auto'; // Reset height to allow shrinking
+		// Force reflow to ensure the 'auto' height takes effect before reading scrollHeight
+		queryInput.offsetHeight; 
 		queryInput.style.height = `${queryInput.scrollHeight}px`; // Set height to content height
 	}
 
