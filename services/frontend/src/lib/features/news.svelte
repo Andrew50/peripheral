@@ -168,6 +168,9 @@
 		if (currentSecurityId && activeTab === 'filings') {
 			loadFilings();
 		}
+		if (activeTab === 'filings') {
+			subscribeToGlobalFilings();
+		}
 	});
 
 	// Clean up on destroy
@@ -188,7 +191,7 @@
 	<div class="tab-navigation">
 		<button
 			class={activeTab === 'filings' ? 'active' : ''}
-			on:click={() => (activeTab = 'filings')}
+			on:click={() => { activeTab = 'filings'; subscribeToGlobalFilings(); }}
 		>
 			Global SEC Filings
 		</button>
