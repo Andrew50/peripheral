@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	polygon "github.com/polygon-io/client-go/rest"
@@ -90,6 +91,7 @@ func GetTickerDetails(client *polygon.Client, ticker string, dateString string) 
 	}
 	res, err := client.GetTickerDetails(context.Background(), params)
 	if err != nil {
+		fmt.Printf("failed to get ticker detail ^^^^^^^^^^^%%%s: %v\n", err)
 		return nil, err
 	}
 	return &res.Results, nil
