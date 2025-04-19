@@ -17,7 +17,7 @@
 
 	<!-- Remove #if showHero block -->
 	<!-- {#if showHero} -->
-		<div class="hero-wrapper" transition:fade={{ duration: 800, delay: 200 }}>
+		<div class="hero-wrapper">
 			<Header />
 			<section class="hero-section">
 				<div class="hero-content content-padding">
