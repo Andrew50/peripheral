@@ -73,11 +73,17 @@
 			}
 			goto('/app');
 		} catch (error) {
-			if (error instanceof Error) {
-				errorMessage.set(error.message);
-			} else {
-				errorMessage.set('Login failed. Please try again.');
+			let displayError = 'Login failed. Please try again.';
+			if (typeof error === 'string') {
+				// Extract the core message sent from the backend
+				// It usually comes prefixed like "Server error: 400 - actual message"
+				const prefix = /^Server error: \d+ - /;
+				displayError = error.replace(prefix, '');
+			} else if (error instanceof Error) {
+				const prefix = /^Server error: \d+ - /;
+				displayError = error.message.replace(prefix, '');
 			}
+			errorMessage.set(displayError);
 		} finally {
 			loading = false;
 		}
@@ -93,14 +99,20 @@
 				sessionStorage.removeItem('userId');
 			}
 
-			await publicRequest('signup', { email: email, username: username, password: password });
+			await publicRequest('signup', { email: email, username: username, password: password })
 			await signIn(email, password);
 		} catch (error) {
-			if (error instanceof Error) {
-				errorMessage.set(error.message);
-			} else {
-				errorMessage.set('Failed to create account');
+            console.log(error)
+			let displayError = 'Failed to create account. Please try again.';
+			if (typeof error === 'string') {
+				// Extract the core message sent from the backend
+				const prefix = /^Server error: \d+ - /;
+				displayError = error.replace(prefix, '');
+			} else if (error instanceof Error) {
+				const prefix = /^Server error: \d+ - /;
+				displayError = error.message.replace(prefix, '');
 			}
+			errorMessage.set(displayError);
 			loading = false;
 		}
 	}
