@@ -22,7 +22,6 @@
 			<section class="hero-section">
 				<div class="hero-content content-padding">
 					<h1>ATLANTIS</h1>
-					<h2> STAGE </h2>
 					<p class="tagline fluid-text">Comprehensive Market Analysis Suite</p>
 					<div class="cta-buttons responsive-flex">
 						<a href="/signup" class="cta-button primary responsive-shadow">Get Started</a>
