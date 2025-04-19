@@ -498,9 +498,25 @@ func initTools() {
 			Query:    true,
 			Api:      true,
 		},
-		//"getMarketCap": GetMarketCap,
-		//settings
-		//TODO ?
+		"getLastPrice": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getLastPrice",
+				Description: "Retrieves the last price for a specified security ticker symbol.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"ticker": {
+							Type:        genai.TypeString,
+							Description: "The ticker symbol to get the last price for.",
+						},
+					},
+					Required: []string{"ticker"},
+				},
+			},
+			Function: GetLastPrice,
+			Query:    true,
+			Api:      false,
+		},
 		"getSettings": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getSettings",
@@ -1170,7 +1186,7 @@ func initTools() {
 				},
 			},
 			Function: GetTickerDailySnapshot,
-			Query:    true,
+			Query:    false,
 			Api:      false,
 		},
 		"getAllTickerSnapshots": {
