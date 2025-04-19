@@ -115,6 +115,7 @@
 			function_calls?: any[];
 			timestamp: string | Date;
 			expires_at?: string | Date;
+			context_items?: (Instance | FilingContext)[];
 		}>;
 		timestamp: string | Date;
 	};
@@ -130,6 +131,7 @@
 		responseType?: string;
 		isLoading?: boolean;
 		suggestedQueries?: string[];
+		contextItems?: (Instance | FilingContext)[];
 	};
 
 	// Type for suggested queries response
@@ -167,7 +169,8 @@
 						content: msg.query,
 						sender: 'user',
 						timestamp: new Date(msg.timestamp),
-						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined
+						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
+						contextItems: msg.context_items || []
 					});
 
 					messages.push({
@@ -262,7 +265,8 @@
 			id: generateId(),
 			content: $inputValue,
 			sender: 'user',
-			timestamp: new Date()
+			timestamp: new Date(),
+			contextItems: [...$contextItems]
 		};
 
 		messages = [...messages, userMessage];
@@ -533,6 +537,22 @@
 								<span></span>
 							</div>
 						{:else}
+							<!-- Display context chips for user messages -->
+							{#if message.sender === 'user' && message.contextItems && message.contextItems.length > 0}
+								<div class="message-context-chips">
+									{#each message.contextItems as item (item.securityId + '-' + ('filingType' in item ? item.link : item.timestamp))}
+										{@const isFiling = 'filingType' in item}
+										<span class="message-context-chip">
+											{item.ticker?.toUpperCase() || ''}
+											{#if isFiling}
+												{item.filingType}
+											{:else}
+												{formatChipDate(item.timestamp)}
+											{/if}
+										</span>
+									{/each}
+								</div>
+							{/if}
 							<div class="message-content">
 								{#if message.contentChunks && message.contentChunks.length > 0}
 									<div class="content-chunks">
@@ -1290,5 +1310,23 @@
 
 	.chip:hover {
 		background: var(--ui-bg-hover, rgba(255,255,255,0.05));
+	}
+
+	/* Styles for context chips within user messages */
+	.message-context-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		margin-bottom: 0.5rem; /* Space between chips and message text */
+	}
+
+	.message-context-chip {
+		background: rgba(255, 255, 255, 0.1); /* Slightly different background */
+		color: inherit; /* Inherit text color from message bubble */
+		border: 1px solid rgba(255, 255, 255, 0.2); /* Subtle border */
+		padding: 0.2rem 0.5rem; /* Slightly smaller padding */
+		border-radius: 0.25rem;
+		font-size: 0.7rem; /* Smaller font size */
+		cursor: default; /* Not interactive */
 	}
 </style>
