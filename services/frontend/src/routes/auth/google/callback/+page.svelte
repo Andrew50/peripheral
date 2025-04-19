@@ -65,7 +65,12 @@
 			<p>Redirecting to login page...</p>
 		</div>
 	{:else}
-		<div class="loading">Authenticating...</div>
+		<!-- Enhanced loading state -->
+		<div class="loading-container">
+			<div class="spinner"></div>
+			<p>Authenticating with Google...</p>
+			<p>Please wait.</p>
+		</div>
 	{/if}
 </div>
 
@@ -74,20 +79,74 @@
 		display: flex;
 		justify-content: center;
 		align-items: center;
-		height: 100vh;
-		font-size: 1.2em;
+		min-height: 100vh; /* Use min-height */
+		width: 100%;
+		background-color: var(--c2, #1a1c21); /* Use theme background */
+		color: var(--f1, #f9fafb); /* Use theme text color */
+		font-family: var(--font-primary, 'Inter', sans-serif);
+		padding: 1rem;
+		box-sizing: border-box;
 	}
 
-	.loading {
+	/* Remove old .loading style */
+	/* .loading { ... } */
+
+	.loading-container {
 		text-align: center;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.loading-container p {
+		margin: 0;
+		color: var(--f2, #9ca3af); /* Use secondary text color */
+		font-size: 1rem;
+	}
+
+	.loading-container p:first-of-type {
+		color: var(--f1, #f9fafb); /* Make first line primary color */
+		font-size: 1.1rem;
+		font-weight: 500;
 	}
 
 	.error {
-		color: #e74c3c;
+		/* Use theme error color */
+		color: var(--c5, #ef4444);
 		text-align: center;
-		max-width: 400px;
-		padding: 20px;
-		background-color: rgba(0, 0, 0, 0.05);
-		border-radius: 8px;
+		max-width: 450px;
+		padding: 1.5rem 2rem;
+		background-color: var(--c1, rgba(45, 49, 57, 0.8)); /* Use theme background */
+		border-radius: var(--radius-md, 6px);
+		border: 1px solid var(--c5, #ef4444);
 	}
+
+	.error h2 {
+		margin-top: 0;
+		margin-bottom: 1rem;
+		color: var(--f1, #f9fafb);
+	}
+
+	.error p {
+		margin-bottom: 0.5rem;
+		color: var(--f2, #9ca3af);
+	}
+
+	/* Simple CSS Spinner */
+	.spinner {
+		width: 40px;
+		height: 40px;
+		border: 4px solid var(--c4, #374151); /* Use separator color for track */
+		border-top: 4px solid var(--c3, #3b82f6); /* Use accent color for spinner */
+		border-radius: 50%;
+		animation: spin 1s linear infinite;
+		margin-bottom: 0.5rem;
+	}
+
+	@keyframes spin {
+		0% { transform: rotate(0deg); }
+		100% { transform: rotate(360deg); }
+	}
+
 </style>
