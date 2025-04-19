@@ -677,6 +677,14 @@
 		min-width: 80px; /* Minimum width before wrapping */
 		max-width: 200px; /* Maximum width */
 		width: auto; /* Let it be flexible */
+		height: 38px; /* Explicit height for consistency */
+		box-sizing: border-box; /* Ensure padding/border included in height */
+		vertical-align: middle; /* Align items vertically */
+		border-radius: 4px; /* Consistent roundness */
+		font-family: inherit; /* Consistent font */
+		font-size: inherit; /* Consistent font size */
+		line-height: 36px; /* Vertical text centering (height - 2*border) */
+		padding: 0 10px; /* Horizontal padding */
 	}
 
 	.message {
@@ -687,16 +695,30 @@
 	select,
 	input[type='date'],
 	input[type='text'] {
-		padding: 8px;
+		/* padding: 8px; */ /* Removed, now handled by rule above */
 		background-color: #333;
 		color: white;
 		border: 1px solid #444;
-		border-radius: 4px;
+		/* border-radius: 4px; */ /* Removed, now handled by rule above */
+		box-sizing: border-box; /* Keep for safety, though redundant */
+		/* Adjust padding for specific input types if needed */
+		padding-left: 8px; /* Add back some left padding for inputs */
+		padding-right: 8px;/* Add back some right padding for inputs */
+		text-align: left; /* Ensure input text isn't centered */
 	}
 
 	select option {
-		background-color: #333;
-		color: white;
+		/* padding: 8px 15px; */ /* Removed, now handled by rule above */
+		/* border-radius: 4px; */ /* Removed, now handled by rule above */
+		border: 1px solid #b71c1c; /* Add a darker red border */
+		cursor: pointer;
+		margin-left: 8px; /* Keep margin */
+		/* font-size: 0.9em; */ /* Removed, handled by inherit now */
+		transition: background-color 0.2s ease; /* Add transition */
+		/* box-sizing: border-box; */ /* Removed, handled by rule above */
+		/* Height is now set in .filters-section button, input, select */
+		/* line-height should be inherited */
+		/* padding should be inherited */
 	}
 
 	.statistics-grid {
@@ -941,11 +963,13 @@
 	.delete-button {
 		background-color: #d32f2f;
 		color: white;
-		border: none;
-		padding: 8px 16px;
+		border: 1px solid #b71c1c;
+		padding: 8px 15px;
 		border-radius: 4px;
 		cursor: pointer;
 		margin-left: 8px;
+		transition: background-color 0.2s ease;
+		box-sizing: border-box;
 	}
 
 	.delete-button:hover {
