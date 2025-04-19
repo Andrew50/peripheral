@@ -227,12 +227,50 @@ export const sunsetScheme: ColorScheme = {
     colorDownStrong: '#f56565'
 };
 
+// Grayscale theme
+export const grayscaleScheme: ColorScheme = {
+    name: 'Grayscale',
+    c1: '#424242',
+    c2: '#212121',
+    c3: '#757575',
+    c4: '#616161',
+    c5: '#ef4444', // Use standard red for error indication
+    c6: '#22c55e', // Use standard green for success indication
+
+    c3Hover: '#616161',
+    c6Hover: '#16a34a', // Use standard green hover
+
+    f1: '#f5f5f5',
+    f2: '#bdbdbd',
+
+    accentPurple: '#9e9e9e',
+    accentIndigo: '#757575',
+    accentYellow: '#eeeeee',
+
+    uiBgPrimary: '#303030',
+    uiBgSecondary: '#424242',
+    uiBgHover: '#515151',
+    uiBgElement: '#353535',
+    uiBgHighlight: '#515151',
+    uiBorder: '#616161',
+    uiAccent: '#9e9e9e',
+
+    textPrimary: '#f5f5f5',
+    textSecondary: '#bdbdbd',
+
+    colorUp: '#66bb6a', // Standard green
+    colorUpStrong: '#43a047',
+    colorDown: '#ef5350', // Standard red
+    colorDownStrong: '#e53935'
+};
+
 export const colorSchemes: Record<string, ColorScheme> = {
     'default': defaultScheme,
     'dark-blue': darkBlueScheme,
     'midnight': midnightScheme,
     'forest': forestScheme,
-    'sunset': sunsetScheme
+    'sunset': sunsetScheme,
+    'grayscale': grayscaleScheme
 };
 
 // Function to apply a color scheme to CSS variables
