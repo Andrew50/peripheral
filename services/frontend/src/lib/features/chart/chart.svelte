@@ -1378,7 +1378,10 @@
 						.catch((error) => {
 							isInputActive = false;
 							keyBuffer = []; // Clear buffer
-							console.error('Input error:', error);
+							// Only log errors that are *not* 'User cancelled input'
+							if (error && error.message !== 'User cancelled input') {
+								console.error('Input error:', error);
+							}
 							setTimeout(() => chartContainer.focus(), 0);
 						});
 				}
