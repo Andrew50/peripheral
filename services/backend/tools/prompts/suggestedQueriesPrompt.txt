@@ -20,7 +20,7 @@ Analyze the provided conversation history and the list of available function too
 
 **Output Format:**
 Respond ONLY with a valid JSON object. The object should contain a single key named "suggestions", and its value should be an array of strings, where each string is a suggested follow-up question.
-
+DO NOT reveal any tool names (function names) in your suggested queries. 
 **Example Output:**
 ```json
 {
