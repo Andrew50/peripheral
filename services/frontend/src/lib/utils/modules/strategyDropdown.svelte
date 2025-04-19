@@ -58,7 +58,7 @@
   class="strategy-dropdown"
   bind:value={selectedId}
   on:change={handleChange}
-  disabled={$loading || !$strategies.length}
+  disabled={$loading || !Array.isArray($strategies)}
 >
   <option value="" disabled selected>{placeholder}</option>
 
@@ -68,11 +68,13 @@
     </option>
   {/if}
 
+  {#if Array.isArray($strategies)}
   {#each $strategies as s (s.strategyId)}
     <option value={s.strategyId}>
       {s.name}
     </option>
   {/each}
+  {/if}
 </select>
 
 <style>
