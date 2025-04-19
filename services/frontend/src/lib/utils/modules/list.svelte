@@ -508,7 +508,12 @@
 							{/if}
 							<td class="default-td">
 								{#if isFlagged(watch, $flagWatchlist)}
-									<span class="flag-icon">⚑</span>
+									<span class="flag-icon">
+										<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+											<path d="M5 5v14"></path>
+											<path d="M19 5l-6 4 6 4-6 4"></path>
+										</svg>
+									</span>
 								{/if}
 							</td>
 							{#each columns as col}
@@ -882,12 +887,23 @@
 	.ticker-name {
 		flex-grow: 1; /* Allow ticker name to take remaining space */
 		overflow: hidden; /* Prevent long names from breaking layout */
-		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 
 	/* Style for different trade types */
 	.long {
 		color: var(--color-positive);
+	}
+
+	/* Professional flag icon styling */
+	.flag-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.flag-icon svg {
+		width: 16px;
+		height: 16px;
+		color: var(--accent-color);
 	}
 </style>

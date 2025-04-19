@@ -1,5 +1,4 @@
 import { type Instance } from '$lib/core/types';
-import { privateRequest } from '$lib/core/backend';
 import {writable, get} from "svelte/store"
 
 // Define a type for SEC Filing context items
