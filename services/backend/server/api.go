@@ -97,9 +97,11 @@ func publicHandler(conn *utils.Conn) http.HandlerFunc {
 		// Execute the requested function with sanitized input
 		result, err := publicFunc[req.Function](conn, req.Arguments)
 		if err != nil {
-			// Limit error information in public endpoints
+			// Log the detailed error on the server
 			log.Printf("public_handler error: %s - %v", req.Function, err)
-			http.Error(w, "Request processing failed", http.StatusBadRequest)
+			// Send the specific error message back to the client
+			// Use StatusBadRequest for general input/logic errors from Login/Signup
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
