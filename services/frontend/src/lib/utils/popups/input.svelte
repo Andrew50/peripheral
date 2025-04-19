@@ -376,25 +376,6 @@
 	// flag to indicate that an async validation (ticker lookup) is in progress
 	//let secQueryActive = false;
 
-	// Add this reactive statement
-	$: if (
-		manualInputType !== 'auto' &&
-		($inputQuery.status === 'active' || $inputQuery.status === 'initializing')
-	) {
-		setTimeout(() => {
-			inputQuery.update((v) => ({
-				...v,
-				inputType: manualInputType,
-				inputValid: true // Reset validity when manually changing type
-			}));
-		}, 0);
-	}
-
-	interface ValidateResponse {
-		inputValid: boolean;
-		securities: Instance[];
-	}
-
 	async function enterInput(iQ: InputQuery, tickerIndex: number = 0): Promise<InputQuery> {
 		if (iQ.inputType === 'ticker') {
 			// Store the timestamp to preserve it
@@ -849,13 +830,16 @@
 					class="toggle-button {manualInputType === 'auto' && $inputQuery.inputType === ''
 						? 'active'
 						: ''}"
-					on:click|stopPropagation={() => {
+					on:click|stopPropagation={async () => {
 						manualInputType = 'auto';
 						inputQuery.update((v) => ({
 							...v,
 							inputType: '',
-							inputValid: true // Reset validity when manually changing type
+							inputString: '',
+							inputValid: true
 						}));
+						await tick(); // Wait for next UI update cycle
+						console.log('After Auto click, inputType is:', get(inputQuery).inputType); // Log state
 					}}
 				>
 					Auto
@@ -898,26 +882,57 @@
 			/>
 		</div>
 		<div class="content-container">
-			<!--{#if $inputQuery.instance && Object.keys($inputQuery.instance).length > 0}-->
 			{#if true}
 				{#if $inputQuery.inputType === ''}
 					<div class="span-container">
 						{#if Array.isArray($inputQuery.possibleKeys)}
 							{#each $inputQuery.possibleKeys as key}
-								<div class="span-row">
-									<span
-										class={Array.isArray($inputQuery.requiredKeys) &&
-										$inputQuery.requiredKeys.includes(key) &&
-										!$inputQuery.instance[key]
-											? 'red'
-											: ''}
-									>
-										{capitalize(key)}
-									</span>
-									<span class="value">
-										{displayValue($inputQuery, key)}
-									</span>
-								</div>
+								{#if key === 'extendedHours'}
+									<!-- Render the specific row for extendedHours -->
+									<div class="span-row extended-hours-row">
+										<span class="label">Market Hours <span class="hint"><kbd>Tab</kbd> to toggle</span></span>
+										<div class="hours-buttons">
+											<button
+												class="toggle-button {!$inputQuery.instance.extendedHours ? 'active' : ''}"
+												on:click={() => {
+													inputQuery.update((q) => ({
+														...q,
+														instance: { ...q.instance, extendedHours: false }
+													}));
+												}}
+											>
+												Regular
+											</button>
+											<button
+												class="toggle-button {$inputQuery.instance.extendedHours ? 'active' : ''}"
+												on:click={() => {
+													inputQuery.update((q) => ({
+														...q,
+														instance: { ...q.instance, extendedHours: true }
+													}));
+												}}
+											>
+												Extended
+											</button>
+										</div>
+									</div>
+								{:else}
+									<!-- Render standard row for other keys -->
+									<div class="span-row">
+										<span
+											class={Array.isArray($inputQuery.requiredKeys) &&
+											$inputQuery.requiredKeys.includes(key) &&
+											!$inputQuery.instance[key]
+												? 'red'
+												: ''}
+										>
+											{capitalize(key)}
+										</span>
+										<span class="value">
+											{displayValue($inputQuery, key)}
+										</span>
+									</div>
+								{/if}
 							{/each}
 						{/if}
 					</div>
@@ -1006,14 +1021,35 @@
 						</div>
 					</div>
 				{:else if $inputQuery.inputType === 'extendedHours'}
-					<div class="span-container">
-						<div class="span-row">
-							<span class="label">Extended Hours</span>
-							<span class="value">{$inputQuery.instance.extendedHours ? 'True' : 'False'}</span>
+					<div class="span-container extended-hours-container">
+						<div class="span-row extended-hours-row">
+							<span class="label">Market Hours <span class="hint"><kbd>Tab</kbd> to toggle</span></span>
+							<div class="hours-buttons">
+								<button
+									class="toggle-button {!$inputQuery.instance.extendedHours ? 'active' : ''}"
+									on:click={() => {
+										inputQuery.update((q) => ({
+											...q,
+											instance: { ...q.instance, extendedHours: false }
+										}));
+									}}
+								>
+									Regular
+								</button>
+								<button
+									class="toggle-button {$inputQuery.instance.extendedHours ? 'active' : ''}"
+									on:click={() => {
+										inputQuery.update((q) => ({
+											...q,
+											instance: { ...q.instance, extendedHours: true }
+										}));
+									}}
+								>
+									Extended
+								</button>
+							</div>
 						</div>
 					</div>
-				{:else}
-					'{$inputQuery.inputType}'
 				{/if}
 			{/if}
 		</div>
@@ -1128,7 +1164,7 @@
 	}
 
 	.span-container {
-		display: felx;
+		display: flex;
 		flex-direction: column;
 		gap: 8px;
 		width: 100%;
@@ -1421,5 +1457,78 @@
 	.field-select span {
 		color: var(--text-secondary);
 		font-size: 14px;
+	}
+
+	/* Added styles for extended hours buttons */
+	.extended-hours-container .span-row {
+		align-items: center; /* Center align items vertically */
+		justify-content: flex-start; /* Align items to the start */
+		gap: 15px; /* Add space between label and button group */
+	}
+
+	.extended-hours-container .hours-buttons {
+		display: flex;
+		gap: 8px; /* Space between buttons */
+	}
+
+	.extended-hours-container .hours-buttons .toggle-button {
+		/* Reuse existing toggle-button styles */
+		/* Add specific adjustments if needed */
+		min-width: 80px; /* Give buttons a bit more width */
+	}
+
+	.extended-hours-container .label .hint {
+		font-size: 0.8em; /* Smaller font size */
+		color: var(--text-secondary); /* Lighter color */
+		font-weight: 400; /* Normal weight */
+		margin-left: 4px; /* Small space from label */
+	}
+
+	.extended-hours-container .label .hint kbd {
+		background-color: var(--ui-bg-element);
+		border: 1px solid var(--ui-border);
+		border-radius: 3px;
+		padding: 1px 4px;
+		font-family: monospace;
+		font-size: 0.9em;
+		box-shadow: 1px 1px 1px rgba(0, 0, 0, 0.1);
+	}
+
+	/* Style the specific row in both Auto and dedicated views */
+	.extended-hours-container .span-row,
+	.span-container .extended-hours-row {
+		align-items: center; /* Keep vertical alignment */
+		justify-content: flex-start; /* Align label and button group to the start */
+		gap: 15px; /* Space between label and button group */
+	}
+
+	/* Style for the hint text and kbd */
+	.label .hint {
+		font-size: 0.8em; /* Smaller font size */
+		color: var(--text-secondary); /* Lighter color */
+		font-weight: 400; /* Normal weight */
+		margin-left: 4px; /* Small space from label */
+	}
+
+	.label .hint kbd {
+		background-color: var(--ui-bg-element);
+		border: 1px solid var(--ui-border);
+		border-radius: 3px;
+		padding: 1px 4px;
+		font-family: monospace;
+		font-size: 0.9em;
+		box-shadow: 1px 1px 1px rgba(0, 0, 0, 0.1);
+	}
+
+	/* Override layout for extended hours rows */
+	.span-row.extended-hours-row {
+		justify-content: flex-start !important;
+		gap: 8px;
+	}
+
+	/* Ensure buttons in extended-hours rows are inline and spaced */
+	.span-row.extended-hours-row .hours-buttons {
+		display: flex;
+		gap: 8px;
 	}
 </style>
