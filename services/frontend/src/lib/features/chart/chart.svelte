@@ -56,6 +56,7 @@
 	import { EventMarkersPaneView, type EventMarker } from './eventMarkers';
 	import { adjustEventsToTradingDays, handleScreenshot } from './chartHelpers';
 	import { SessionHighlighting, createDefaultSessionHighlighter } from './sessionShade';
+	import { type FilingContext, addFilingToChatContext } from '$lib/features/chat/interface';
 
 	interface EventValue {
 		type?: string;
@@ -214,6 +215,7 @@
 		events: EventMarker['events'];
 		x: number;
 		y: number;
+		time: number;
 	} | null = null;
 	let hoveredEvent: {
 		events: EventMarker['events'];
@@ -1378,7 +1380,10 @@
 						.catch((error) => {
 							isInputActive = false;
 							keyBuffer = []; // Clear buffer
-							console.error('Input error:', error);
+							// Only log errors that are *not* 'User cancelled input'
+							if (error && error.message !== 'User cancelled input') {
+								console.error('Input error:', error);
+							}
 							setTimeout(() => chartContainer.focus(), 0);
 						});
 				}
@@ -1578,6 +1583,9 @@
 			latestCrosshairPositionY = param.point.y as number; //inccorect
 		});
 		chart.timeScale().subscribeVisibleLogicalRangeChange((logicalRange) => {
+			if (selectedEvent) {
+				selectedEvent = null; // Close popup on scroll/pan
+			}
 			if (!logicalRange || Date.now() - lastChartQueryDispatchTime < chartRequestThrottleDuration) {
 				return;
 			}
@@ -1734,7 +1742,12 @@
 	});
 
 	// Handle event marker clicks
-	function handleEventClick(events: EventMarker['events'], x: number, y: number) {
+	function handleEventClick(
+		events: EventMarker['events'],
+		x: number,
+		y: number,
+		time: number
+	) {
 		// Check if clicking on the same event that's already selected
 		if (
 			selectedEvent &&
@@ -1746,7 +1759,7 @@
 			selectedEvent = null;
 		} else {
 			// Otherwise, select the new event
-			selectedEvent = { events, x, y };
+			selectedEvent = { events, x, y, time };
 			hoveredEvent = null; // Clear hover when clicked
 		}
 	}
@@ -1802,6 +1815,22 @@
 		}
 		return 0; // Default value if undefined
 	}
+
+	// Function to add SEC filing to chat context
+	function addFilingToChat(filingEvent: EventMarker['events'][number]) {
+		if (!selectedEvent || !filingEvent) return;
+
+		const timestampMs = selectedEvent.time * 1000; // convert seconds to ms
+		const filingContext: FilingContext = {
+			ticker: currentChartInstance.ticker,
+			securityId: currentChartInstance.securityId,
+			timestamp: timestampMs,
+			filingType: filingEvent.title,
+			link: filingEvent.url || ''
+		};
+		addFilingToChatContext(filingContext);
+	}
+
 </script>
 
 <div class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
@@ -1815,8 +1844,8 @@
 	<div
 		class="event-info"
 		style="
-            left: {selectedEvent.x - 100}px; 
-            top: {selectedEvent.y - (80 + selectedEvent.events.length * 40)}px"
+            left: {selectedEvent.x}px;
+            top: {selectedEvent.y}px; /* Position relative to marker's y */"
 	>
 		<div class="event-header">
 			{#if selectedEvent.events[0]?.type === 'sec_filing'}
@@ -1835,36 +1864,57 @@
 			<button class="close-button" on:click={closeEventPopup}>×</button>
 		</div>
 		<div class="event-content">
-			{#each selectedEvent.events as event}
-				{#if event.type === 'sec_filing'}
-					<a
-						href={event.url}
-						target="_blank"
-						rel="noopener noreferrer"
-						class="event-row filing-link"
-					>
-						<span class="event-type">{event.title}</span>
-						<span class="event-link">View →</span>
-					</a>
-				{:else if event.type === 'split'}
-					<div class="event-row">
-						<span class="event-type">{event.title}</span>
+			{#each selectedEvent.events as filing}
+				{#if filing.type === 'sec_filing'}
+					<div class="event-row filing-row">
+						<div class="filing-info">
+							<span class="event-type">{filing.title}</span>
+						</div>
+						<div class="event-actions">
+							{#if filing.url}
+								<a
+									href={filing.url}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="btn btn-primary btn-sm"
+									on:click|stopPropagation={() => addFilingToChat(filing)}
+								>
+									View →
+								</a>
+							{/if}
+							<button
+								class="btn btn-secondary btn-sm"
+								on:click|stopPropagation={() => addFilingToChat(filing)}
+							>
+								+ Chat
+							</button>
+							<button
+								class="btn btn-tertiary btn-sm"
+								on:click|stopPropagation={() => onSummarize(filing)}
+							>
+								Summarize
+							</button>
+						</div>
 					</div>
-				{:else if event.type === 'dividend'}
+				{:else if filing.type === 'split'}
+					<div class="event-row">
+						<span class="event-type">{filing.title}</span>
+					</div>
+				{:else if filing.type === 'dividend'}
 					<div class="event-row dividend-row">
 						<div class="dividend-details">
-							<span class="event-type">{event.title}</span>
-							{#if event.exDate}
-								<span class="dividend-date">Ex-Date: {event.exDate}</span>
+							<span class="event-type">{filing.title}</span>
+							{#if filing.exDate}
+								<span class="dividend-date">Ex-Date: {filing.exDate}</span>
 							{/if}
-							{#if event.payoutDate}
-								<span class="dividend-date">Payout: {event.payoutDate}</span>
+							{#if filing.payoutDate}
+								<span class="dividend-date">Payout: {filing.payoutDate}</span>
 							{/if}
 						</div>
 					</div>
 				{:else}
 					<div class="event-row">
-						<span class="event-type">{event.title}</span>
+						<span class="event-type">{filing.title}</span>
 					</div>
 				{/if}
 			{/each}
@@ -1875,101 +1925,168 @@
 <style>
 	.event-info {
 		position: absolute;
-		background: #1e1e1e;
-		border: 1px solid #333;
-		border-radius: 4px;
-		padding: 8px;
+		background: #252525;
+		border: none;
+		border-radius: 8px;
+		padding: 10px;
 		z-index: 1000;
-		width: 220px; /* Increased width to accommodate more content */
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-		transform: translateX(0); /* Center popup above marker */
+		width: 220px;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+		transform: translate(-50%, calc(-100% - 15px)) scale(0.95);
+		transform-origin: bottom center;
+		opacity: 0;
+		animation: fadeInDown 0.2s ease-out forwards;
 	}
-
+	@keyframes fadeInDown {
+		from {
+			opacity: 0;
+			transform: translate(-50%, calc(-100% - 5px)); /* Start slightly lower than final */
+		}
+		to {
+			opacity: 1;
+			transform: translate(-50%, calc(-100% - 15px)); /* End in final position */
+		}
+	}
+	.event-info::after {
+		content: '';
+		position: absolute;
+		top: 100%; /* Position arrow below the box */
+		left: 50%;
+		transform: translateX(-50%);
+		border-width: 8px 8px 0; /* T:8 R:8 B:0 L:8 -> Points Down */
+		border-style: solid;
+		border-color: #252525 transparent transparent transparent; /* Color top border */
+	}
 	.event-header {
 		display: flex;
 		align-items: center;
+		justify-content: space-between;
 		gap: 8px;
-		padding-bottom: 8px;
-		border-bottom: 1px solid #333;
-		margin-bottom: 8px;
+		padding-bottom: 10px;
+		border-bottom: 1px solid #444;
+		margin-bottom: 10px;
 		position: relative;
 	}
-
 	.close-button {
-		position: absolute;
-		right: 0;
-		top: 0;
-		background: none;
+		background: transparent;
 		border: none;
-		color: #888;
-		font-size: 18px;
+		color: #bbb;
+		font-size: 16px;
 		cursor: pointer;
-		padding: 0 4px;
+		padding: 4px;
+		transition: color 0.2s;
 	}
-
 	.close-button:hover {
 		color: #fff;
 	}
-
-	.event-icon {
-		font-size: 1.2rem;
-	}
-
-	.event-title {
-		font-weight: bold;
-	}
-
-	.event-content {
-		max-height: 150px;
-		overflow-y: auto;
-	}
-
 	.event-row {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: 4px 0;
-		border-bottom: 1px solid #333;
-		color: #fff;
+		padding: 6px 0;
+		border-bottom: 1px solid #444;
+		color: #e0e0e0;
 		text-decoration: none;
+		transition: background 0.2s;
 	}
-
-	.event-row:last-child {
-		border-bottom: none;
+	.event-row:hover {
+		background: rgba(255,255,255,0.05);
 	}
-
 	.event-type {
-		font-size: 0.9rem;
+		font-size: 0.95rem;
+		color: #fff;
+		font-weight: 500;
 	}
-
 	.event-link {
 		color: #4caf50;
+		font-weight: 600;
+		font-size: 0.85rem;
+	}
+	.dividend-date {
+		font-size: 0.85rem;
+		color: #ccc;
+		margin-top: 4px;
+	}
+	.event-actions {
+		display: flex;
+		gap: 0.5rem;
+	}
+	.add-context-btn {
+		background: var(--ui-bg-element, #333);
+		border: 1px solid var(--ui-border, #444);
+		color: var(--text-secondary, #aaa);
+		padding: 0.3rem 0.6rem;
 		font-size: 0.8rem;
-	}
-
-	.filing-link {
+		border-radius: 0.25rem;
 		cursor: pointer;
-		transition: background-color 0.2s;
+		transition: all 0.2s ease;
+	}	.add-context-btn:hover {
+		border-color: var(--accent-color, #3a8bf7);
+		color: var(--text-primary, #fff);
 	}
-
-	.filing-link:hover {
-		background-color: #333;
+	/* Sleek button and filing styles */
+	.btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.4rem 0.8rem;
+		border-radius: 4px;
+		font-size: 0.85rem;
+		font-weight: 600;
+		text-decoration: none;
+		transition: background-color 0.2s ease, color 0.2s ease;
 	}
-
-	.dividend-row {
-		flex-direction: column;
-		align-items: flex-start;
+	.btn svg {
+		margin-right: 0.25rem;
 	}
-
-	.dividend-details {
+	.btn-primary {
+		background-color: var(--accent-color, #3a8bf7);
+		color: #fff;
+		border: none;
+	}
+	.btn-primary:hover {
+		background-color: var(--accent-color-dark, #336ecf);
+	}
+	.btn-secondary {
+		background-color: transparent;
+		color: var(--text-primary, #fff);
+		border: 1px solid var(--accent-color, #3a8bf7);
+	}
+	.btn-secondary:hover {
+		background-color: var(--accent-color, #3a8bf7);
+		color: #fff;
+	}
+	.btn-tertiary {
+		background-color: transparent;
+		color: var(--text-secondary, #aaa);
+		border: 1px solid var(--ui-border, #444);
+	}
+	.btn-tertiary:hover {
+		background-color: rgba(255,255,255,0.1);
+		color: #fff;
+	}
+	.filing-row {
+		display: grid;
+		grid-template-columns: 1fr auto;
+		gap: 0.75rem;
+		align-items: center;
+		padding: 0.5rem 0;
+		border-bottom: 1px solid #444;
+	}
+	.filing-info .event-type {
+		font-size: 1rem;
+		font-weight: 600;
+		color: #fff;
+	}
+	.filing-row .event-actions {
 		display: flex;
 		flex-direction: column;
-		width: 100%;
+		align-items: flex-end;
+		gap: 0.5rem;
 	}
-
-	.dividend-date {
-		font-size: 0.8rem;
-		color: #bbb;
-		margin-top: 2px;
+	.btn-sm {
+		padding: 0.15rem 0.3rem;
+		font-size: 0.7rem;
+		height: 1.3rem;
 	}
 </style>
