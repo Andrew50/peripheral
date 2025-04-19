@@ -4,7 +4,13 @@
 	import { marked } from 'marked'; // Import the markdown parser
 	import { queryChart } from '$lib/features/chart/interface'; // Import queryChart
 	import type { Instance } from '$lib/core/types';
-    import {inputValue} from './interface'
+	import {
+		inputValue,
+		contextItems,
+		removeInstanceFromChat,
+		removeFilingFromChat,
+		type FilingContext // Import the new type
+	} from './interface'
 
 	// Set default options for the markdown parser (optional)
 	marked.setOptions({
@@ -51,23 +57,11 @@
 			const contentWithTickerButtons = parsedString.replace(
 				tickerRegex,
 				(match, ticker, securityId, timestampMs) => {
-					// Use all captured groups in data attributes
-					let buttonText = ticker;
-					// Check if timestamp is not 0
-					if (timestampMs && timestampMs !== '0') {
-						try {
-							const date = new Date(parseInt(timestampMs, 10));
-							// Format date as YYYY-MM-DD
-							const year = date.getFullYear();
-							const month = (date.getMonth() + 1).toString().padStart(2, '0'); // Months are 0-indexed
-							const day = date.getDate().toString().padStart(2, '0');
-							buttonText += ` (${year}-${month}-${day})`; // Append formatted date
-						} catch (e) {
-							console.error('Error parsing timestamp for button text:', e);
-							// Keep original ticker text if date parsing fails
-						}
-					}
-					// Return the button HTML with potentially updated text
+					// Use the existing formatChipDate function
+					const formattedDate = formatChipDate(parseInt(timestampMs, 10));
+					const buttonText = `${ticker}${formattedDate}`;
+
+					// Return the button HTML
 					return `<button class="ticker-button" data-ticker="${ticker}" data-security-id="${securityId}" data-timestamp-ms="${timestampMs}">${buttonText}</button>`;
 				}
 			);
@@ -109,7 +103,6 @@
 		response_type: 'text' | 'mixed_content' | 'function_calls';
 		text?: string;
 		content_chunks?: ContentChunk[];
-		results?: FunctionResult[];
 		history?: any;
 	};
 
@@ -120,9 +113,8 @@
 			content_chunks?: ContentChunk[];
 			response_text: string;
 			function_calls?: any[];
-			tool_results?: FunctionResult[];
 			timestamp: string | Date;
-			expires_at?: string | Date; // When this message expires
+			expires_at?: string | Date;
 		}>;
 		timestamp: string | Date;
 	};
@@ -133,12 +125,11 @@
 		content: string;
 		sender: 'user' | 'assistant' | 'system';
 		timestamp: Date;
-		expiresAt?: Date; // When this message expires
-		functionResults?: FunctionResult[];
-		contentChunks?: ContentChunk[]; // Add support for content chunks
+		expiresAt?: Date;
+		contentChunks?: ContentChunk[];
 		responseType?: string;
 		isLoading?: boolean;
-		suggestedQueries?: string[]; // Add suggested queries property
+		suggestedQueries?: string[];
 	};
 
 	// Type for suggested queries response
@@ -179,7 +170,6 @@
 						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined
 					});
 
-					// Add assistant response
 					messages.push({
 						id: generateId(),
 						sender: 'assistant',
@@ -187,8 +177,7 @@
 						contentChunks: msg.content_chunks || [],
 						timestamp: new Date(msg.timestamp),
 						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
-						responseType: msg.function_calls?.length ? 'function_calls' : 'text',
-						functionResults: msg.tool_results || []
+						responseType: msg.function_calls?.length ? 'function_calls' : 'text'
 					});
 				});
 
@@ -196,7 +185,6 @@
 			}
 		} catch (error) {
 			console.error('Error loading conversation history:', error);
-			// If we can't load history, just continue with empty messages
 		} finally {
 			isLoading = false;
 		}
@@ -299,36 +287,31 @@
 		// Prepend if backtest mode is active
 		const finalQuery = isBacktestMode ? `[RUN BACKTEST] ${queryText}` : queryText;
 
-		privateRequest('getQuery', { query: finalQuery })
+		privateRequest('getQuery', { query: finalQuery, context: $contextItems })
 			.then((response) => {
 				console.log('response', response);
 				// Type assertion to handle the response type
 				const typedResponse = response as unknown as QueryResponse;
 				console.log('Response:', typedResponse);
 
-				// Remove loading message
 				messages = messages.filter((m) => m.id !== loadingMessage.id);
 
-				// Set expiration time
 				const expiresAt = new Date();
-				expiresAt.setHours(expiresAt.getHours() + 24); // 24 hour expiration
+				expiresAt.setHours(expiresAt.getHours() + 24); 
 
 				const assistantMessage: Message = {
 					id: generateId(),
-					content: typedResponse.text || 'Function calls executed successfully.',
+					content: typedResponse.text || "Error processing request.",
 					sender: 'assistant',
 					timestamp: new Date(),
 					expiresAt: expiresAt,
 					responseType: typedResponse.response_type,
-					contentChunks: typedResponse.content_chunks, // Always include content chunks if they exist
-					functionResults:
-						typedResponse.response_type === 'function_calls' ? typedResponse.results || [] : undefined
+					contentChunks: typedResponse.content_chunks
 				};
 
 				messages = [...messages, assistantMessage];
 				scrollToBottom();
 				
-				// Fetch suggested queries after response
 				fetchSuggestedQueries();
 			})
 			.catch((error) => {
@@ -490,6 +473,23 @@
 		tableExpansionStates[tableKey] = !tableExpansionStates[tableKey];
 		tableExpansionStates = tableExpansionStates; // Trigger reactivity
 	}
+
+	// Format timestamp for context chip (matches parseMarkdown format)
+	function formatChipDate(timestampMs?: number): string {
+		if (!timestampMs || timestampMs === 0) {
+			return '';
+		}
+		try {
+			const date = new Date(timestampMs);
+			const year = date.getFullYear();
+			const month = (date.getMonth() + 1).toString().padStart(2, '0');
+			const day = date.getDate().toString().padStart(2, '0');
+			return ` (${year}-${month}-${day})`; // Add leading space
+		} catch (e) {
+			console.error('Error formatting chip date:', e);
+			return '';
+		}
+	}
 </script>
 
 <div class="chat-container">
@@ -595,42 +595,6 @@
 								{/if}
 							</div>
 
-							{#if message.functionResults && message.functionResults.length > 0}
-								<div class="function-tools">
-									{#each message.functionResults as result}
-										<div class="function-tool {result.error ? 'error' : 'success'}">
-											<div class="function-header">
-												<div class="function-icon">
-													<svg viewBox="0 0 24 24" width="16" height="16">
-														<path
-															d="M20,19V7H4V19H20M20,3C21.1,3 22,3.9 22,5V19C22,20.1 21.1,21 20,21H4C2.9,21 2,20.1 2,19V5C2,3.9 2.9,3 4,3H20M13,17V15H18V17H13M9.58,13L5.57,9H8.4L11.7,12.3C12.09,12.69 12.09,13.33 11.7,13.72L8.42,17H5.59L9.58,13Z"
-															fill="currentColor"
-														/>
-													</svg>
-												</div>
-												<div class="function-name">{result.function_name}</div>
-											</div>
-
-											{#if result.error}
-												<div class="function-error">
-													<svg viewBox="0 0 24 24" width="16" height="16">
-														<path
-															d="M13,13H11V7H13M13,17H11V15H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"
-															fill="currentColor"
-														/>
-													</svg>
-													<span>{result.error}</span>
-												</div>
-											{:else}
-												<div class="function-result-data">
-													<pre>{JSON.stringify(result.result, null, 2)}</pre>
-												</div>
-											{/if}
-										</div>
-									{/each}
-								</div>
-							{/if}
-
 							{#if message.suggestedQueries && message.suggestedQueries.length > 0}
 								<div class="suggested-queries">
 									{#each message.suggestedQueries as query}
@@ -669,41 +633,72 @@
 				aria-label="Toggle Backtest Mode"
 				title="Toggle Backtest Mode"
 			>
-				<!-- You could add an icon here later -->
 				Backtest
 			</button>
-			<!-- Add other action buttons like Search here if needed -->
 		</div>
-		<div class="input-field-container">
-			<textarea
-				class="chat-input"
-				placeholder="Ask about anything..."
-				bind:value={$inputValue}
-				bind:this={queryInput}
-				rows="1"
-				on:input={adjustTextareaHeight}
-				on:keydown={(event) => {
-					// Prevent space key events from propagating to parent elements
-					if (event.key === ' ' || event.code === 'Space') {
-						event.stopPropagation();
-					}
-					// Submit on Enter, allow newline with Shift+Enter
-					if (event.key === 'Enter' && !event.shiftKey) {
-						event.preventDefault(); // Prevent default newline insertion
-						handleSubmit();
-					}
-				}}
-			></textarea>
-			<button
-				class="send-button"
-				on:click={handleSubmit}
-				aria-label="Send message"
-				disabled={!$inputValue.trim() || isLoading}
-			>
-				<svg viewBox="0 0 24 24" class="send-icon">
-					<path d="M2,21L23,12L2,3V10L17,12L2,14V21Z" />
-				</svg>
-			</button>
+
+		<div class="input-area-wrapper">
+			{#if $contextItems.length > 0}
+				<div class="context-chips">
+					{#each $contextItems as item (
+						item.securityId + '-' + ('filingType' in item ? item.link : item.timestamp)
+					)}
+						{@const isFiling = 'filingType' in item}
+						<button
+							type="button"
+							class="chip"
+							on:click={() => {
+								if (isFiling) {
+									removeFilingFromChat(item);
+								} else {
+									removeInstanceFromChat(item);
+								}
+							}}
+						>
+							{item.ticker?.toUpperCase() || ''}
+							{#if isFiling}
+								{item.filingType}
+							{:else}
+								{formatChipDate(item.timestamp)}
+							{/if}
+							×
+						</button>
+					{/each}
+				</div>
+			{/if}
+
+			<div class="input-field-container">
+				<textarea
+					class="chat-input"
+					placeholder="Ask about anything..."
+					bind:value={$inputValue}
+					bind:this={queryInput}
+					rows="1"
+					on:input={adjustTextareaHeight}
+					on:keydown={(event) => {
+						// Prevent space key events from propagating to parent elements
+						if (event.key === ' ' || event.code === 'Space') {
+							event.stopPropagation();
+						}
+
+						// Submit on Enter, allow newline with Shift+Enter
+						if (event.key === 'Enter' && !event.shiftKey) {
+							event.preventDefault(); // Prevent default newline insertion
+							handleSubmit();
+						}
+					}}
+				></textarea>
+				<button
+					class="send-button"
+					on:click={handleSubmit}
+					aria-label="Send message"
+					disabled={!$inputValue.trim() || isLoading}
+				>
+					<svg viewBox="0 0 24 24" class="send-icon">
+						<path d="M2,21L23,12L2,3V10L17,12L2,14V21Z" />
+					</svg>
+				</button>
+			</div>
 		</div>
 	</div>
 </div>
@@ -1274,5 +1269,26 @@
 	.table-toggle-btn:hover {
 		border-color: var(--accent-color, #3a8bf7);
 		color: var(--text-primary, #fff);
+	}
+
+	.context-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin-bottom: 0.5rem;
+	}
+
+	.chip {
+		background: var(--ui-bg-element, #333);
+		color: var(--text-primary, #fff);
+		border: 1px solid var(--ui-border, #444);
+		padding: 0.25rem 0.5rem;
+		border-radius: 0.25rem;
+		font-size: 0.75rem;
+		cursor: pointer;
+	}
+
+	.chip:hover {
+		background: var(--ui-bg-hover, rgba(255,255,255,0.05));
 	}
 </style>

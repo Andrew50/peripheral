@@ -8,7 +8,6 @@ import type {
 	PriceLineSource
 } from 'lightweight-charts';
 import type { Time, CustomSeriesPricePlotValues } from 'lightweight-charts';
-import { ColorType } from 'lightweight-charts';
 
 // Define your custom data type for event markers.
 export interface EventMarker extends CustomData<Time> {
@@ -40,6 +39,7 @@ interface MarkerPosition {
 	y: number;
 	events: EventMarker['events'];
 	radius: number;
+	time: number; // Timestamp of the marker (EST seconds)
 }
 
 // Helper function to draw event markers with different colors based on type
@@ -119,13 +119,25 @@ export class EventMarkersPaneView
 	private markerPositions: MarkerPosition[] = [];
 	private options: CustomSeriesOptions = this.defaultOptions();
 	private visibleRange: { from: number; to: number } = { from: 0, to: 0 };
-	private clickCallback?: (events: EventMarker['events'], x: number, y: number) => void;
+	private clickCallback?: (
+		events: EventMarker['events'],
+		x: number,
+		y: number,
+		time: number
+	) => void;
 	private hoverCallback?: (events: EventMarker['events'] | null, x: number, y: number) => void;
 	private hoveredMarkerIndex: number = -1;
 	private lastMousePosition: {x: number, y: number} = {x: 0, y: 0};
 
 	// Add method to set click handler
-	public setClickCallback(callback: (events: EventMarker['events'], x: number, y: number) => void) {
+	public setClickCallback(
+		callback: (
+			events: EventMarker['events'],
+			x: number,
+			y: number,
+			time: number
+		) => void
+	) {
 		this.clickCallback = callback;
 	}
 
@@ -202,7 +214,7 @@ export class EventMarkersPaneView
 		// If we found a marker to click
 		if (closestMarker >= 0) {
 			const marker = this.markerPositions[closestMarker];
-			this.clickCallback?.(marker.events, marker.x, marker.y);
+			this.clickCallback?.(marker.events, marker.x, marker.y, marker.time);
 			return true;
 		}
 		
@@ -247,7 +259,11 @@ export class EventMarkersPaneView
 								x: x as number,
 								y,
 								events: marker.originalData.events,
-								radius: markerSize * 1.5 // Store the radius for accurate detection
+								radius: markerSize * 1.5, // Store the radius for accurate detection
+								time:
+									typeof marker.time === 'number'
+										? marker.time
+										: (marker.time as unknown as number)
 							});
 							
 							// Check if THIS marker is the one being hovered
