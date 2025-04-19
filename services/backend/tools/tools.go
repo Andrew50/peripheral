@@ -143,7 +143,7 @@ func initTools() {
 		"getTickerMenuDetails": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getTickerMenuDetails",
-				Description: "Retrieves ticker menu information for a security; ticker, name, market, primary exchange, etc",
+				Description: "Retrieves ticker menu information for a security; ticker, name, market, primary exchange, shares outstanding, etc",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -151,8 +151,12 @@ func initTools() {
 							Type:        genai.TypeString,
 							Description: "The ticker symbol to get details for",
 						},
+						"securityId": {
+							Type:        genai.TypeInteger,
+							Description: "The securityID of the security to get details for",
+						},
 					},
-					Required: []string{"ticker"},
+					Required: []string{"ticker", "securityId"},
 				},
 			},
 			Function: GetTickerMenuDetails,
@@ -680,8 +684,8 @@ func initTools() {
 				},
 			},
 			Function: NewStrategy,
-            Query: false, //llm create strategies by hitting the createstreagey from natural language endpoint, this liekly needa change god
-            Api: true,
+			Query:    false, //llm create strategies by hitting the createstreagey from natural language endpoint, this liekly needa change god
+			Api:      true,
 		},
 		"setStrategy": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -1172,7 +1176,7 @@ func initTools() {
 		"get_ticker_performance": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "get_ticker_performance",
-				Description: "Retrieves detailed performance statistics for a specific ticker",
+				Description: "Retrieves the user's trade performance statistics for a specific ticker (p/l, win rate, average gain/loss, etc)",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -1273,11 +1277,11 @@ func initTools() {
 				},
 			},
 			Function: RunBacktest,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
-		
-        "getStrategyFromNaturalLanguage" : {
+
+		"getStrategyFromNaturalLanguage": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStrategyFromNaturalLanguage",
 				Description: "Create a strategy and save it to the specified id (-1 to create new and the funciton will return the new id) based on a natural language query about stock conditions, patterns, and indicators primarily used for running a backtest on. This function does not run the backtest itself, that is the run_backtest function. IF YOU CALL THIS TOOL, USE THE USER'S ORIGINAL QUERY. DO NOT GENERATE A NEW QUERY.",
@@ -1294,17 +1298,17 @@ func initTools() {
 							Description: "id of the strategy to overwrite, -1 means create new",
 						},
 					},
-					Required: []string{"query","strategyId"},
+					Required: []string{"query", "strategyId"},
 				},
 			},
 			Function: CreateStrategyFromNaturalLanguage,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
-        "analyzeInstanceFeatures": {
-    FunctionDeclaration: &genai.FunctionDeclaration{
-        Name: "analyzeInstanceFeatures",
-        Description: `Analyze the recent price action surrounding a specific market
+		"analyzeInstanceFeatures": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name: "analyzeInstanceFeatures",
+				Description: `Analyze the recent price action surrounding a specific market
             instance and return technical context (e.g., trend direction, volatility,
             support/resistance, common indicator values) that can be used when building
             or refining a trading strategy when a specific instance has been added in the users query. Run this before getStrategyFromNaturalLanguage whenver an instance has been attached, especially if there is minimal or no natural language description of the desired strategy.
@@ -1319,35 +1323,34 @@ func initTools() {
                              A blank string defaults to daily (“1d”).  
               • bars       – number of historical candles (looking **backwards** from
                              timestamp) that should be included in the analysis window`,
-                Parameters: &genai.Schema{
-                    Type: genai.TypeObject,
-                    Properties: map[string]*genai.Schema{
-                        "securityId": {
-                            Type:        genai.TypeInteger,
-                            Description: "Unique numeric identifier for the security (e.g., 12345)",
-                        },
-                        "timestamp": {
-                            Type:        genai.TypeInteger,
-                            Description: "Reference Unix timestamp (seconds) of the ‘current’ candle",
-                        },
-                        "timeframe": {
-                            Type:        genai.TypeString,
-                            Description: `Candle interval (\"s\", \"h\", \"d\", \"w\", \"m\").
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"securityId": {
+							Type:        genai.TypeInteger,
+							Description: "Unique numeric identifier for the security (e.g., 12345)",
+						},
+						"timestamp": {
+							Type:        genai.TypeInteger,
+							Description: "Reference Unix timestamp (seconds) of the ‘current’ candle",
+						},
+						"timeframe": {
+							Type: genai.TypeString,
+							Description: `Candle interval (\"s\", \"h\", \"d\", \"w\", \"m\").
                                             May be preceded by an integer, e.g., \"30s\", \"15m\", \"2h\". Empty string ⇒ \"1d\"`,
-                        },
-                        "bars": {
-                            Type:        genai.TypeInteger,
-                            Description: "Number of candles to analyze, counting backward from timestamp",
-                        },
-                    },
-                    Required: []string{"securityId", "timestamp", "timeframe", "bars"},
-                },
-            },
-            Function: AnalyzeInstanceFeatures,
-            Query:    true,
-            Api:      false,
-        },
-
+						},
+						"bars": {
+							Type:        genai.TypeInteger,
+							Description: "Number of candles to analyze, counting backward from timestamp",
+						},
+					},
+					Required: []string{"securityId", "timestamp", "timeframe", "bars"},
+				},
+			},
+			Function: AnalyzeInstanceFeatures,
+			Query:    true,
+			Api:      false,
+		},
 
 		"getUserConversation": {
 			FunctionDeclaration: &genai.FunctionDeclaration{

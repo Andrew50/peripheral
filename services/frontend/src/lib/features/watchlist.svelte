@@ -92,6 +92,17 @@
 		if (flagWatchlistId !== undefined) {
 			selectWatchlist(String(flagWatchlistId));
 		}
+
+		// Subscribe to watchlists store to select initial watchlist when list arrives
+		const unsubscribeWatchlists = watchlists.subscribe((list) => {
+			if (Array.isArray(list) && list.length > 0 && (currentWatchlistId === undefined || isNaN(currentWatchlistId))) {
+				selectWatchlist(String(list[0].watchlistId));
+			}
+		});
+		// Cleanup the subscription when component unmounts
+		return () => {
+			unsubscribeWatchlists();
+		};
 	});
 
 	function addInstance() {
