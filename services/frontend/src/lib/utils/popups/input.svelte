@@ -868,7 +868,7 @@
 		<div class="search-bar">
 			<input
 				type="text"
-				placeholder="Enter Value"
+				placeholder="Enter ticker, timestamp, timeframe..."
 				value={$inputQuery.inputString}
 				readonly
 				tabindex="-1"

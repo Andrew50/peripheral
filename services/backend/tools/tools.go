@@ -4,6 +4,7 @@ import (
 	"backend/utils"
 	"encoding/json"
 	"sync"
+
 	"google.golang.org/genai"
 )
 
@@ -41,7 +42,6 @@ func GetTools(api bool) map[string]Tool {
 	return filteredTools
 }
 
-
 /*
 ///////
 
@@ -62,9 +62,9 @@ func initTools() {
 	Tools = map[string]Tool{
 		"getQuery": {
 			FunctionDeclaration: nil,
-            Function: GetQuery,
-            Query: false,
-            Api: true,
+			Function:            GetQuery,
+			Query:               false,
+			Api:                 true,
 		},
 		"getSimilarInstances": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -82,8 +82,8 @@ func initTools() {
 				},
 			},
 			Function: GetSimilarInstances,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"getCurrentSecurityID": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -101,10 +101,10 @@ func initTools() {
 				},
 			},
 			Function: GetCurrentSecurityID,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
-        //TODO remove icon for query
+		//TODO remove icon for query
 		"getSecuritiesFromTicker": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getSecuritiesFromTicker",
@@ -121,8 +121,8 @@ func initTools() {
 				},
 			},
 			Function: GetSecuritiesFromTicker,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"getCurrentTicker": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -140,10 +140,10 @@ func initTools() {
 				},
 			},
 			Function: GetCurrentTicker,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
-        //TODO remove logo
+		//TODO remove logo
 		"getTickerMenuDetails": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getTickerMenuDetails",
@@ -155,19 +155,23 @@ func initTools() {
 							Type:        genai.TypeString,
 							Description: "The security ticker symbol to get details for.",
 						},
+						"securityId": {
+							Type:        genai.TypeInteger,
+							Description: "The securityID of the security to get details for",
+						},
 					},
-					Required: []string{"ticker"},
+					Required: []string{"ticker", "securityId"},
 				},
 			},
 			Function: GetTickerMenuDetails,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"getIcons": {
-			FunctionDeclaration: nil,			
-            Function: GetIcons,
-            Query: false,
-            Api: true,
+			FunctionDeclaration: nil,
+			Function:            GetIcons,
+			Query:               false,
+			Api:                 true,
 		},
 
 		//chart
@@ -199,13 +203,13 @@ func initTools() {
 				},
 			},
 			Function: GetChartData,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		//study
-        //
+		//
 		"getStudies": {
-			FunctionDeclaration:nil,/* &genai.FunctionDeclaration{
+			FunctionDeclaration: nil, /* &genai.FunctionDeclaration{
 				Name:        "getStudies",
 				Description: "Retrieves all study entries for the current user",
 				Parameters: &genai.Schema{
@@ -220,12 +224,12 @@ func initTools() {
 				},
 			},*/
 			Function: GetStudies,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 
 		"newStudy": {
-			FunctionDeclaration: nil,/*&genai.FunctionDeclaration{
+			FunctionDeclaration: nil, /*&genai.FunctionDeclaration{
 				Name:        "newStudy",
 				Description: "Creates a new study entry for the current user",
 				Parameters: &genai.Schema{
@@ -240,11 +244,11 @@ func initTools() {
 				},
 			},*/
 			Function: NewStudy,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		"saveStudy": {
-			FunctionDeclaration: nil,/*&genai.FunctionDeclaration{
+			FunctionDeclaration: nil, /*&genai.FunctionDeclaration{
 				Name:        "saveStudy",
 				Description: "Saves content for an existing study entry",
 				Parameters: &genai.Schema{
@@ -259,8 +263,8 @@ func initTools() {
 				},
 			},*/
 			Function: SaveStudy,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		"deleteStudy": {
 			FunctionDeclaration: nil, /*&genai.FunctionDeclaration{
@@ -278,8 +282,8 @@ func initTools() {
 				},
 			},*/
 			Function: DeleteStudy,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		"getStudyEntry": {
 			FunctionDeclaration: nil, /* &genai.FunctionDeclaration{
@@ -297,8 +301,8 @@ func initTools() {
 				},
 			},*/
 			Function: GetStudyEntry,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		"completeStudy": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -316,8 +320,8 @@ func initTools() {
 				},
 			},
 			Function: CompleteStudy,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		"getScreensavers": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -335,8 +339,8 @@ func initTools() {
 				},
 			},
 			Function: GetScreensavers,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		"getInstancesByTickers": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -357,8 +361,8 @@ func initTools() {
 				},
 			},
 			Function: GetInstancesByTickers,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		//watchlist
 		"getWatchlists": {
@@ -372,8 +376,8 @@ func initTools() {
 				},
 			},
 			Function: GetWatchlists,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"deleteWatchlist": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -391,8 +395,8 @@ func initTools() {
 				},
 			},
 			Function: DeleteWatchlist,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"newWatchlist": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -410,8 +414,8 @@ func initTools() {
 				},
 			},
 			Function: NewWatchlist,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"getWatchlistItems": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -429,8 +433,8 @@ func initTools() {
 				},
 			},
 			Function: GetWatchlistItems,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"deleteWatchlistItem": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -448,8 +452,8 @@ func initTools() {
 				},
 			},
 			Function: DeleteWatchlistItem,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"newWatchlistItem": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -471,8 +475,8 @@ func initTools() {
 				},
 			},
 			Function: NewWatchlistItem,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		//singles
 		"getPrevClose": {
@@ -491,12 +495,12 @@ func initTools() {
 				},
 			},
 			Function: GetPrevClose,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		//"getMarketCap": GetMarketCap,
 		//settings
-        //TODO ?
+		//TODO ?
 		"getSettings": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getSettings",
@@ -513,10 +517,10 @@ func initTools() {
 				},
 			},
 			Function: GetSettings,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
-        //TODO?
+		//TODO?
 		"setSettings": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "setSettings",
@@ -543,8 +547,8 @@ func initTools() {
 				},
 			},
 			Function: SetSettings,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		//profile
 		"updateProfilePicture": {
@@ -563,8 +567,8 @@ func initTools() {
 				},
 			},
 			Function: UpdateProfilePicture,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		//exchanges
 		"getExchanges": {
@@ -583,11 +587,11 @@ func initTools() {
 				},
 			},
 			Function: GetExchanges,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		//setups
-        //TODO
+		//TODO
 		"getAlerts": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getAlerts",
@@ -604,8 +608,8 @@ func initTools() {
 				},
 			},
 			Function: GetAlerts,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		"getAlertLogs": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -623,8 +627,8 @@ func initTools() {
 				},
 			},
 			Function: GetAlertLogs,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		"newAlert": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -662,8 +666,8 @@ func initTools() {
 				},
 			},
 			Function: NewAlert,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		"deleteAlert": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -681,8 +685,8 @@ func initTools() {
 				},
 			},
 			Function: DeleteAlert,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		"setHorizontalLine": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -712,8 +716,8 @@ func initTools() {
 				},
 			},
 			Function: SetHorizontalLine,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"getHorizontalLines": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -731,8 +735,8 @@ func initTools() {
 				},
 			},
 			Function: GetHorizontalLines,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"deleteHorizontalLine": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -750,8 +754,8 @@ func initTools() {
 				},
 			},
 			Function: DeleteHorizontalLine,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"updateHorizontalLine": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -785,8 +789,8 @@ func initTools() {
 				},
 			},
 			Function: UpdateHorizontalLine,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"getSecurityClassifications": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -804,8 +808,8 @@ func initTools() {
 				},
 			},
 			Function: GetSecurityClassifications,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		// chart events / SEC filings
 		"getLatestEdgarFilings": {
@@ -824,8 +828,8 @@ func initTools() {
 				},
 			},
 			Function: GetLatestEdgarFilings,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		"getStockEdgarFilings": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -851,8 +855,8 @@ func initTools() {
 				},
 			},
 			Function: GetStockEdgarFilings,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"getChartEvents": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -882,8 +886,8 @@ func initTools() {
 				},
 			},
 			Function: GetChartEvents,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"getEarningsText": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -909,8 +913,8 @@ func initTools() {
 				},
 			},
 			Function: GetEarningsText,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"getFilingText": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -928,8 +932,8 @@ func initTools() {
 				},
 			},
 			Function: GetFilingText,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		// Account / User Trades
 		"grab_user_trades": {
@@ -956,8 +960,8 @@ func initTools() {
 				},
 			},
 			Function: GrabUserTrades,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"get_trade_statistics": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -983,13 +987,13 @@ func initTools() {
 				},
 			},
 			Function: GetTradeStatistics,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"get_ticker_performance": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "get_ticker_performance",
-				Description: "Get user trade performance statistics for a specific security.",
+				Description: "Retrieves the user's trade performance statistics for a specific ticker (p/l, win rate, average gain/loss, etc)",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -1006,8 +1010,8 @@ func initTools() {
 				},
 			},
 			Function: GetTickerPerformance,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"delete_all_user_trades": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -1025,8 +1029,8 @@ func initTools() {
 				},
 			},
 			Function: DeleteAllUserTrades,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		"handle_trade_upload": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -1048,8 +1052,8 @@ func initTools() {
 				},
 			},
 			Function: HandleTradeUpload,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		"get_daily_trade_stats": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -1071,10 +1075,10 @@ func initTools() {
 				},
 			},
 			Function: GetDailyTradeStats,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
-	"run_backtest": {
+		"run_backtest": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "run_backtest",
 				Description: "Backtest a specified strategy, which is based on stock conditions, patterns, and indicators.",
@@ -1090,8 +1094,8 @@ func initTools() {
 				},
 			},
 			Function: RunBacktest,
-            Query: true,
-            Api: true,
+			Query:    true,
+			Api:      true,
 		},
 		"verifyAuth": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -1105,12 +1109,12 @@ func initTools() {
 							Description: "Dummy parameter to satisfy Gemini API requirements",
 						},
 					},
-                    Required: []string{}, // Added Required field
+					Required: []string{}, // Added Required field
 				},
 			},
 			Function: func(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) { return nil, nil },
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		"getUserConversation": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -1128,8 +1132,8 @@ func initTools() {
 				},
 			},
 			Function: GetUserConversation,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		"clearConversationHistory": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -1147,8 +1151,8 @@ func initTools() {
 				},
 			},
 			Function: ClearConversationHistory,
-            Query: false,
-            Api: true,
+			Query:    false,
+			Api:      true,
 		},
 		"getTickerDailySnapshot": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -1166,30 +1170,30 @@ func initTools() {
 				},
 			},
 			Function: GetTickerDailySnapshot,
-            Query: true,
-            Api: false,
+			Query:    true,
+			Api:      false,
 		},
 		"getAllTickerSnapshots": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getAllTickerSnapshots",
 				Description: "Get a list of the current bid, ask, price, change, percent change, volume, vwap price, and daily open, high, low and close for all securities.",
 				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
+					Type:       genai.TypeObject,
 					Properties: map[string]*genai.Schema{},
-					Required: []string{},
+					Required:   []string{},
 				},
 			},
 			Function: GetAllTickerSnapshots,
-            Query: true,
-            Api: false,
+			Query:    true,
+			Api:      false,
 		},
 		"getSuggestedQueries": {
 			FunctionDeclaration: nil,
-            Function: GetSuggestedQueries,
-            Query: false,
-            Api: true,
+			Function:            GetSuggestedQueries,
+			Query:               false,
+			Api:                 true,
 		},
-"setStudyStrategy": {
+		"setStudyStrategy": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "setStudyStrategy",
 				Description: "Associates a strategy configuration with a study entry",
@@ -1265,7 +1269,7 @@ func initTools() {
 		},
 		"deleteStrategy": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name: "deleteStrategy",
+				Name:        "deleteStrategy",
 				Description: "Deletes a strategy configuration",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
@@ -1326,6 +1330,5 @@ An “instance” is uniquely identified by:
 			Api:      false,
 		},
 	}
-	
-}
 
+}
