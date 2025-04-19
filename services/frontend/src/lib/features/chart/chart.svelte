@@ -56,7 +56,7 @@
 	import { EventMarkersPaneView, type EventMarker } from './eventMarkers';
 	import { adjustEventsToTradingDays, handleScreenshot } from './chartHelpers';
 	import { SessionHighlighting, createDefaultSessionHighlighter } from './sessionShade';
-	import { type FilingContext, addFilingToChatContext } from '$lib/features/chat/interface';
+	import { type FilingContext, addFilingToChatContext, openChatAndQuery } from '$lib/features/chat/interface';
 
 	interface EventValue {
 		type?: string;
@@ -1831,6 +1831,23 @@
 		addFilingToChatContext(filingContext);
 	}
 
+	// Define the onSummarize function
+	function onSummarize(filingEvent: EventMarker['events'][number]) {
+		if (!selectedEvent || !filingEvent || !filingEvent.url) return; // Ensure URL exists for summarization
+
+		const timestampMs = selectedEvent.time * 1000; // convert seconds to ms
+		const filingContext: FilingContext = {
+			ticker: currentChartInstance.ticker,
+			securityId: currentChartInstance.securityId,
+			timestamp: timestampMs,
+			filingType: filingEvent.title,
+			link: filingEvent.url // Use the non-optional URL
+		};
+
+		// Call the function from chat interface
+		openChatAndQuery(filingContext, `Summarize the attached filing: ${filingEvent.title}`);
+	}
+
 </script>
 
 <div class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
@@ -1891,6 +1908,8 @@
 							<button
 								class="btn btn-tertiary btn-sm"
 								on:click|stopPropagation={() => onSummarize(filing)}
+								disabled={!filing.url}
+								title={!filing.url ? 'No link available to summarize' : 'Summarize this filing'}
 							>
 								Summarize
 							</button>

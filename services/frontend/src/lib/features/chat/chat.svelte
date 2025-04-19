@@ -4,12 +4,14 @@
 	import { marked } from 'marked'; // Import the markdown parser
 	import { queryChart } from '$lib/features/chart/interface'; // Import queryChart
 	import type { Instance } from '$lib/core/types';
+	import { browser } from '$app/environment'; // Import browser
 	import {
 		inputValue,
 		contextItems,
 		removeInstanceFromChat,
 		removeFilingFromChat,
-		type FilingContext // Import the new type
+		type FilingContext, // Import the new type
+		pendingChatQuery // Import the new store
 	} from './interface'
 
 	// Set default options for the markdown parser (optional)
@@ -151,6 +153,7 @@
 
 	// Chat history
 	let messages: Message[] = [];
+	let historyLoaded = false; // Add state variable
 
 	// Load any existing conversation history from the server
 	async function loadConversationHistory() {
@@ -190,6 +193,7 @@
 			console.error('Error loading conversation history:', error);
 		} finally {
 			isLoading = false;
+			historyLoaded = true; // Set history loaded flag
 		}
 	}
 
@@ -493,6 +497,31 @@
 			console.error('Error formatting chip date:', e);
 			return '';
 		}
+	}
+
+	// Reactive block to handle pending query
+	$: if ($pendingChatQuery && browser && historyLoaded) {
+		const queryData = $pendingChatQuery;
+		pendingChatQuery.set(null); // Clear the pending query immediately to prevent re-triggering
+
+		// Add context items (preventing duplicates)
+		contextItems.update(currentItems => {
+			const newItems = queryData.context.filter((newItem: Instance | FilingContext) =>
+				!currentItems.some(existingItem =>
+					// Simple comparison logic, adjust if needed for more complex cases
+					JSON.stringify(existingItem) === JSON.stringify(newItem)
+				)
+			);
+			return [...currentItems, ...newItems];
+		});
+
+		// Set the input value
+		inputValue.set(queryData.query);
+
+		// Use tick to ensure input value is updated before submitting
+		tick().then(() => {
+			handleSubmit();
+		});
 	}
 </script>
 
