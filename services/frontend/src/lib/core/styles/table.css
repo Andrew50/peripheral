@@ -41,7 +41,6 @@
 	border-bottom: 1px solid var(--ui-border);
 	white-space: nowrap;
 	overflow: hidden;
-	text-overflow: ellipsis;
 	line-height: 1.1;
 	height: 20px;
 	position: relative;

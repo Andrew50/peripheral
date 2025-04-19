@@ -540,6 +540,7 @@
 								<option value="midnight">Midnight</option>
 								<option value="forest">Forest</option>
 								<option value="sunset">Sunset</option>
+								<option value="grayscale">Grayscale</option>
 							</select>
 						</div>
 					</div>
