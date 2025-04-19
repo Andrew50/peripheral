@@ -29,6 +29,12 @@ if ! kubectl apply -f "$TMP_DIR" --recursive --validate=false --namespace="${K8S
   exit 1
 fi
 
+echo "Forcing a fresh rollout because we reuse the :main tag"
+for dep in "${SERVICES_ARRAY[@]}"; do
+  kubectl rollout restart deployment/"$dep" \
+    --namespace="$K8S_NAMESPACE" --context="$MINIKUBE_PROFILE"
+done
+
 # 5. Verify PVCs are correctly bound
 echo "Verifying PersistentVolumeClaims in namespace ${K8S_NAMESPACE}..."
 
