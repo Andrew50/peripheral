@@ -10,6 +10,13 @@ import (
 	"strings"
 
 	"google.golang.org/genai"
+	"bytes"
+	"encoding/base64"
+     "github.com/pplcc/plotext/custplotter"
+    "gonum.org/v1/plot"
+    //"gonum.org/v1/plot/vg"
+
+	//"github.com/wcharczuk/go-chart/v2"
 )
 
 type StrategySpec struct {
@@ -72,6 +79,159 @@ type StrategySpec struct {
 	} `json:"time_of_day"`
 	OutputColumns []string `json:"output_columns"`
 }
+
+
+
+// AnalyzeInstanceFeaturesArgs contains parameters for analyzing features of a specific security instance
+type AnalyzeInstanceFeaturesArgs struct {
+	SecurityID int    `json:"securityId"`
+	Timestamp  int64  `json:"timestamp"` // Unix ms of reference bar (0 ⇒ “now”)
+	Timeframe  string `json:"timeframe"` // e.g. "15m", "h", "d"
+	Bars       int    `json:"bars"`      // # of candles to pull **backward** from timestamp
+}
+
+// AnalyzeInstanceFeatures analyzes chart data for a specific security and returns Gemini's analysis
+func AnalyzeInstanceFeatures(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+
+	/* 1. Parse args */
+	var args AnalyzeInstanceFeaturesArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+	if args.Bars <= 0 {
+		args.Bars = 50 // sensible default
+	}
+
+	/* 2. Pull chart data (uses existing GetChartData) */
+	chartReq := GetChartDataArgs{
+		SecurityID:    args.SecurityID,
+		Timeframe:     args.Timeframe,
+		Timestamp:     args.Timestamp,
+		Direction:     "backward",
+		Bars:          args.Bars,
+		ExtendedHours: false,
+		IsReplay:      false,
+	}
+	reqBytes, _ := json.Marshal(chartReq)
+
+	rawResp, err := GetChartData(conn, userId, reqBytes)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching chart data: %v", err)
+	}
+	resp, ok := rawResp.(GetChartDataResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected GetChartData response type")
+	}
+	if len(resp.Bars) == 0 {
+		return nil, fmt.Errorf("no bars returned for that window")
+	}
+
+	/* 3. Render a quick candlestick PNG (go‑chart v2 expects parallel slices) */
+    // ─── Step 3: build and render the chart ─────────────────────────────────────
+var bars custplotter.TOHLCVs
+for _, b := range resp.Bars {
+    // the candlestick plotter expects Unix seconds for the X value
+    bars = append(bars, struct {
+        T, O, H, L, C, V float64
+    }{
+        T: float64(b.Timestamp) / 1e3, // resp.Bars is milliseconds
+        O: b.Open,
+        H: b.High,
+        L: b.Low,
+        C: b.Close,
+        V: b.Volume,
+    })
+}
+
+// create the plot
+p := plot.New()
+//if err != nil { return nil, fmt.Errorf("plot init: %w", err) }
+
+p.HideY()                       // optional cosmetics
+p.X.Tick.Marker = plot.TimeTicks{Format: "01‑02\n15:04"}
+
+// add candlesticks
+candles, err := custplotter.NewCandlesticks(bars)
+if err != nil { return nil, fmt.Errorf("candles: %w", err) }
+p.Add(candles)
+
+// render to an in‑memory PNG
+var png bytes.Buffer
+wt, err := p.WriterTo(600, 300, "png") // width, height, format
+if err != nil { return nil, fmt.Errorf("writer: %w", err) }
+if _, err = wt.WriteTo(&png); err != nil {
+    return nil, fmt.Errorf("render: %w", err)
+}
+pngB64 := base64.StdEncoding.EncodeToString(png.Bytes())
+
+	barsJSON, _ := json.Marshal(resp.Bars)
+
+	sysPrompt, err := getSystemInstruction("analyzeInstance")
+	if err != nil {
+		return nil, fmt.Errorf("error fetching system prompt: %v", err)
+	}
+
+	cfg := &genai.GenerateContentConfig{
+		SystemInstruction: &genai.Content{
+			Parts: []*genai.Part{{Text: sysPrompt}},
+		},
+	}
+
+	// User‑side content parts
+	userContent := &genai.Content{
+		Parts: []*genai.Part{
+			{Text: "BARS_JSON:\n" + string(barsJSON)},
+			{Text: "CHART_PNG_BASE64:\n" + pngB64},
+		},
+	}
+
+	apiKey, err := conn.GetGeminiKey()
+	if err != nil {
+		return nil, fmt.Errorf("error getting Gemini key: %v", err)
+	}
+	client, err := genai.NewClient(context.Background(), &genai.ClientConfig{
+		APIKey:  apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("error creating Gemini client: %v", err)
+	}
+
+	result, err := client.Models.GenerateContent(
+		context.Background(),
+		"gemini-2.0-flash-thinking-exp-01-21",
+		[]*genai.Content{userContent}, // expects []*genai.Content
+		cfg,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("gemini call failed: %v", err)
+	}
+
+	analysis := ""
+	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
+		for _, p := range result.Candidates[0].Content.Parts {
+			if p.Text != "" {
+				analysis = p.Text
+				break
+			}
+		}
+	}
+
+	return map[string]interface{}{
+		"analysis": analysis,         // Gemini’s narrative
+	//	"bars":     json.RawMessage(barsJSON),
+	//	"chart":    pngB64,           // base‑64 PNG for client preview
+	}, nil
+}
+
+
+
+
+
+
+
+
 type CreateStrategyFromNaturalLanguageArgs struct {
 	Query      string `json:"query"`
 	StrategyId int    `json:"strategyId,omitempty"`
@@ -325,7 +485,7 @@ func DeleteStrategy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inte
 	// Check if any rows were affected
 	rowsAffected := result.RowsAffected()
 	if rowsAffected == 0 {
-		return nil, fmt.Errorf("ERR 4140: strategy not found or you don't have permission to delete it")
+		return nil, fmt.Errorf("strategy not found or you don't have permission to delete it")
 	}
 
 	return nil, nil
@@ -358,7 +518,7 @@ func _setStrategy(conn *utils.Conn, userId int, strategyId int, name string, spe
 	if err != nil {
 		return fmt.Errorf("error updating strategy: %v", err)
 	} else if cmdTag.RowsAffected() != 1 {
-		return fmt.Errorf("ERR 210: strategy not found or you don't have permission to update it")
+		return fmt.Errorf("strategy not found or you don't have permission to update it")
 	}
 	return nil
 }
