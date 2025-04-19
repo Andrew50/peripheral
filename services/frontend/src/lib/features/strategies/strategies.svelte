@@ -202,6 +202,7 @@
 
   function editStrategy(strat: Strategy) {
     selectedStrategyId.set(strat.strategyId);
+    console.log(strat.spec)
     
     // Make sure the spec is valid and complete
     const validSpec = ensureValidSpec(strat.spec);
