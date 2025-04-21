@@ -203,7 +203,7 @@ func initTools() {
 				},
 			},
 			Function: GetChartData,
-			Query:    true,
+			Query:    false,
 			Api:      true,
 		},
 		//study

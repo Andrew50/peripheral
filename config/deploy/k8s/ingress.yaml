@@ -67,5 +67,43 @@ spec:
                 name: frontend
                 port:
                   number: 80
+    - host: www.${INGRESS_HOST}
+      http:
+        paths:
+          - path: /private
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /public
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /upload
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
 
 

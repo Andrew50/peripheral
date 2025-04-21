@@ -6,13 +6,14 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
-	"github.com/jackc/pgx/v4"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"time"
+
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/jackc/pgx/v4"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
@@ -139,7 +140,6 @@ func Signup(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		return nil, fmt.Errorf("error creating user: %v", err)
 	}
 
-
 	fmt.Printf("User created successfully with ID: %d\n", userID)
 
 	// Commit the transaction
@@ -247,7 +247,8 @@ func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	// 2) Is this a Google-only account?
 	if authType == "google" {
 		fmt.Println("ERROR: Google-only user attempting password login")
-		return nil, fmt.Errorf("this account uses Google Sign-In. Please login with Google")
+		errorMessage := "This account uses Google Sign-In. Please login with Google."
+		return nil, fmt.Errorf("%s", errorMessage)
 	}
 
 	// 3) Wrong password? (Only check for 'password' or 'both' auth types)
@@ -299,8 +300,6 @@ func Login(conn *utils.Conn, rawArgs json.RawMessage) (interface{}, error) {
 
 	return resp, nil
 }
-
-
 
 func createToken(userId int) (string, error) {
 	expirationTime := time.Now().Add(1 * time.Hour)
