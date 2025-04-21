@@ -393,7 +393,7 @@ func buildConversationContext(messages []ChatMessage) string {
 		}
 		context.WriteString("\n\n")
 	}
-
+	fmt.Println("context ", context.String())
 	return context.String()
 }
 
@@ -660,6 +660,7 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemProm
 
 	// Enhance the system instruction with tool descriptions
 	enhancedSystemInstruction := enhanceSystemPromptWithTools(baseSystemInstruction)
+	fmt.Println("enhancedSystemInstruction ", enhancedSystemInstruction)
 	config := &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{
 			Parts: []*genai.Part{
