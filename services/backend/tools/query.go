@@ -126,45 +126,6 @@ func replaceTickerPlaceholder(conn *utils.Conn, match string) string {
 	return replacement
 }
 
-// logQueryDetails inserts a record into the query_logs table.
-func logQueryDetails(ctx context.Context, conn *utils.Conn, userID int, queryText string, contextItems []map[string]interface{}, responseType string, responseSummary string, llmThinkingResponse string, llmFinalResponse string, requestedFuncs []FunctionCall, executedFuncs []string, logError error) {
-	contextJSON, err := json.Marshal(contextItems)
-	if err != nil {
-		fmt.Printf("Error marshaling context for logging: %v\n", err)
-		contextJSON = []byte("null") // Log null if marshaling fails
-	}
-
-	executedFuncsJSON, err := json.Marshal(executedFuncs)
-	if err != nil {
-		fmt.Printf("Error marshaling executed functions for logging: %v\n", err)
-		executedFuncsJSON = []byte("[]") // Log empty array if marshaling fails
-	}
-
-	requestedFuncsJSON, err := json.Marshal(requestedFuncs)
-	if err != nil {
-		fmt.Printf("Error marshaling requested functions for logging: %v\n", err)
-		requestedFuncsJSON = []byte("[]") // Log empty array if marshaling fails
-	}
-
-	// If there was an error during query processing, use its message as the summary
-	if logError != nil {
-		responseSummary = logError.Error()
-		responseType = "error"
-	}
-
-	query := `
-		INSERT INTO query_logs (user_id, query_text, context, response_type, response_summary, llm_thinking_response, llm_final_response, requested_functions, executed_functions)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	`
-
-	// Use conn.DB.Exec for write operations with pgxpool
-	_, err = conn.DB.Exec(ctx, query, userID, queryText, contextJSON, responseType, responseSummary, llmThinkingResponse, llmFinalResponse, requestedFuncsJSON, executedFuncsJSON)
-	if err != nil {
-		// Log the error but don't fail the main request because of logging failure
-		fmt.Printf("ERROR logging query details: %v\n", err)
-	}
-}
-
 // GetQuery processes a natural language query and returns the result
 func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
 
@@ -178,65 +139,16 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 	}
 
 	var query Query
-	var logErr error
-	var queryResp *QueryResponse // Use pointer to allow nil check
-	var llmThinkingResponseText string
-	var llmFinalResponseText string
-	var requestedFunctions []FunctionCall
-	var executedFunctionNames []string
-	var thinkingResp *ThinkingResponse // Store the thinking response for logging
-
-	defer func() {
-		responseType := "unknown"
-		responseSummary := ""
-
-		if queryResp != nil {
-			responseType = queryResp.Type
-			if queryResp.Text != "" {
-				responseSummary = queryResp.Text
-				// Truncate if too long
-				if len(responseSummary) > 500 {
-					responseSummary = responseSummary[:500] + "..."
-				}
-			} else if len(queryResp.ContentChunks) > 0 {
-				// Create a simple summary from content chunks
-				var summaryBuilder strings.Builder
-				for _, chunk := range queryResp.ContentChunks {
-					summaryBuilder.WriteString(fmt.Sprintf("[%s] ", chunk.Type))
-				}
-				responseSummary = strings.TrimSpace(summaryBuilder.String())
-			} else if len(queryResp.Results) > 0 {
-				responseSummary = fmt.Sprintf("%d function calls executed", len(queryResp.Results))
-				for _, res := range queryResp.Results {
-					// Capture executed function names here
-					executedFunctionNames = append(executedFunctionNames, res.FunctionName)
-				}
-			}
-		}
-		// Extract requested functions from the thinking response if available
-		if thinkingResp != nil {
-			for _, round := range thinkingResp.Rounds {
-				requestedFunctions = append(requestedFunctions, round...)
-			}
-		}
-
-		// Pass the processing error (logErr) to the logging function
-		logQueryDetails(context.Background(), conn, userID, query.Query, query.Context, responseType, responseSummary, llmThinkingResponseText, llmFinalResponseText, requestedFunctions, executedFunctionNames, logErr)
-	}()
-
 	if err := json.Unmarshal(args, &query); err != nil {
-		logErr = fmt.Errorf("error parsing request: %w", err)
-		return nil, logErr
+		return nil, fmt.Errorf("error parsing request: %w", err)
 	}
 
 	// Build context prompt section
 	contextSection := buildContextPrompt(query.Context)
-	fmt.Println("contextSection ", contextSection)
 	// If userQuery is empty, error
 	userQuery := query.Query
 	if userQuery == "" {
-		logErr = fmt.Errorf("query cannot be empty")
-		return nil, logErr
+		return nil, fmt.Errorf("query cannot be empty")
 	}
 
 	// Check for existing conversation history
@@ -292,18 +204,15 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			prompt.WriteString("\n```\n\n")
 		}
 		fmt.Println("prompt ", prompt.String())
-
 		// This first passes the query to a thinking model
 		geminiThinkingResponse, err := getGeminiFunctionThinking(ctx, conn, "defaultSystemPrompt", prompt.String())
 		if err != nil {
-			logErr = fmt.Errorf("error getting thinking response: %w", err)
-			return nil, logErr
+			return nil, fmt.Errorf("error getting thinking response: %w", err)
 		}
-		llmThinkingResponseText = geminiThinkingResponse.Text // Capture raw thinking response
 
 		responseText := geminiThinkingResponse.Text
 		// Try to parse the thinking response as JSON
-		thinkingResp = &ThinkingResponse{}
+		var thinkingResp ThinkingResponse
 		fmt.Println("thinking response ", thinkingResp)
 		// Find the JSON block in the response
 		jsonStartIdx := strings.Index(responseText, "{")
@@ -311,28 +220,11 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 
 		// If no valid JSON is found, just return the text response
 		if jsonStartIdx == -1 || jsonEndIdx == -1 || jsonEndIdx <= jsonStartIdx {
-			newMessage := ChatMessage{
-				Query:         query.Query,
-				ResponseText:  responseText,
-				FunctionCalls: []FunctionCall{},
-				ToolResults:   []ExecuteResult{},
-				ContextItems:  query.Context, // Store context with the user query message
-				Timestamp:     time.Now(),
-				ExpiresAt:     time.Now().Add(24 * time.Hour),
-			}
-
-			// Add new message to conversation history
-			conversationData.Messages = append(conversationData.Messages, newMessage)
-			conversationData.Timestamp = time.Now()
-			if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-				fmt.Printf("Error saving updated conversation: %v\n", err)
-			}
-			queryResp = &QueryResponse{
+			return QueryResponse{
 				Type:    "text",
 				Text:    responseText,
 				History: conversationData,
-			}
-			return queryResp, nil
+			}, nil
 		}
 
 		jsonBlock := responseText[jsonStartIdx : jsonEndIdx+1]
@@ -355,18 +247,16 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
 				fmt.Printf("Error saving updated conversation: %v\n", err)
 			}
-			queryResp = &QueryResponse{
+
+			return QueryResponse{
 				Type:    "text",
 				Text:    responseText,
 				History: conversationData,
-			}
-			return queryResp, nil
+			}, nil
 		}
 
 		// If we have content chunks directly in the response, return them
 		if len(thinkingResp.ContentChunks) > 0 {
-			// If ContentChunks exist directly, this might be the final response from thinking
-			llmFinalResponseText = llmThinkingResponseText // Log thinking response as final response
 
 			newMessage := ChatMessage{
 				Query:         query.Query,
@@ -387,16 +277,15 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 
 			// Return both the original ContentChunks for the frontend to render
 			// and the text version for systems that can't handle structured content
-			queryResp = &QueryResponse{
+			return QueryResponse{
 				Type:          "mixed_content",
 				ContentChunks: thinkingResp.ContentChunks,
 				History:       conversationData,
-			}
-			return queryResp, nil
+			}, nil
 		}
 
 		// Try to process the thinking response as rounds
-		contentChunks, thinkingResults, err := processThinkingResponse(ctx, conn, userID, *thinkingResp, query.Query, &llmFinalResponseText)
+		contentChunks, thinkingResults, err := processThinkingResponse(ctx, conn, userID, thinkingResp, query.Query)
 		if err == nil && len(thinkingResults) > 0 {
 			if len(contentChunks) > 0 {
 				// Create new message with the content chunks response
@@ -415,12 +304,11 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 					fmt.Printf("Error saving updated conversation: %v\n", err)
 				}
 
-				queryResp = &QueryResponse{
+				return QueryResponse{
 					Type:          "mixed_content",
 					ContentChunks: newMessage.ContentChunks,
 					History:       conversationData,
-				}
-				return queryResp, nil
+				}, nil
 			}
 			if !thinkingResp.RequiresFurtherPlanning {
 				// Create new message with the round results and formatted response
@@ -441,24 +329,20 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 					fmt.Printf("Error saving updated conversation: %v\n", err)
 				}
 
-				queryResp = &QueryResponse{
+				return QueryResponse{
 					Type:    "function_calls",
 					Results: thinkingResults,
 					Text:    "Successfully processed the following function calls:\n\n",
 					History: conversationData,
-				}
-				return queryResp, nil
+				}, nil
 			}
 			allResults = append(allResults, thinkingResults...)
-			allThinkingResults = append(allThinkingResults, *thinkingResp)
+			allThinkingResults = append(allThinkingResults, thinkingResp)
 		}
 
 		numTurns++
 	}
-
-	// If loop completes without returning, it's an error or unexpected state
-	logErr = fmt.Errorf("max processing turns reached or unexpected state in GetQuery")
-	return nil, logErr
+	return nil, fmt.Errorf("error getting gemini function response: %w", err)
 }
 
 // buildConversationContext formats the conversation history for Gemini
@@ -507,7 +391,6 @@ func buildConversationContext(messages []ChatMessage) string {
 		}
 		context.WriteString("\n\n")
 	}
-	fmt.Println("context ", context.String())
 	return context.String()
 }
 
@@ -774,7 +657,6 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemProm
 
 	// Enhance the system instruction with tool descriptions
 	enhancedSystemInstruction := enhanceSystemPromptWithTools(baseSystemInstruction)
-	fmt.Println("enhancedSystemInstruction ", enhancedSystemInstruction)
 	config := &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{
 			Parts: []*genai.Part{
@@ -963,8 +845,7 @@ type RoundResult struct {
 
 // processThinkingResponse attempts to parse and execute the thinking model's rounds
 // and modifies the final response string *before* parsing into chunks.
-// It now accepts a pointer to llmFinalResponseText to capture the final LLM response.
-func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, thinkingResp ThinkingResponse, originalQuery string, llmFinalResponseText *string) ([]ContentChunk, []ExecuteResult, error) {
+func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, thinkingResp ThinkingResponse, originalQuery string) ([]ContentChunk, []ExecuteResult, error) {
 
 	// Check if this is an immediate content_chunks response (no rounds executed)
 	if len(thinkingResp.Rounds) == 0 && len(thinkingResp.ContentChunks) > 0 {
@@ -1042,7 +923,6 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 		if err != nil {
 			return nil, nil, fmt.Errorf("error getting final gemini response: %w", err)
 		}
-		*llmFinalResponseText = processedText // Capture raw final response text
 		processedText = strings.TrimSpace(processedText)
 		fmt.Printf("Raw final response text from Gemini:\n%s\n", processedText)
 
