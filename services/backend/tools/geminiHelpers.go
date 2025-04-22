@@ -3,22 +3,21 @@ package tools
 import (
 	"backend/utils"
 	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
-    "strconv"
-    "embed"
 	"time"
 )
 
-
 //go:embed prompts/*
-var fs embed.FS           // 2️⃣ compiled into the binary
+var fs embed.FS // 2️⃣ compiled into the binary
 
 // getSystemInstruction returns the processed prompt named <name>.txt
 func getSystemInstruction(name string) (string, error) {
-    fmt.Println(fs)
+	fmt.Println(fs)
 	raw, err := fs.ReadFile("prompts/" + name + ".txt") // 3️⃣ no paths, no os.ReadFile
 	if err != nil {
 		return "", fmt.Errorf("reading prompt: %w", err)
@@ -40,7 +39,6 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 	toolsDescription.WriteString(basePrompt)
 	toolsDescription.WriteString("\n\nHere are the functions you can use:\n\n")
 
-
 	// Sort tool names for consistent output
 	var toolNames []string
 	for name := range GetTools(false) {
@@ -51,7 +49,6 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 	// Add each tool's description and parameters
 	for _, name := range toolNames {
 		tool := GetTools(false)[name]
-
 
 		// Add function name and description
 		toolsDescription.WriteString(fmt.Sprintf("- %s: %s\n", name, tool.FunctionDeclaration.Description))
@@ -70,7 +67,7 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 			for paramName, paramSchema := range tool.FunctionDeclaration.Parameters.Properties {
 				isReq := ""
 				if required[paramName] {
-					isReq = " (required)"
+					isReq = " (REQUIRED)"
 				}
 				toolsDescription.WriteString(fmt.Sprintf("  - %s: %s%s\n", paramName, paramSchema.Description, isReq))
 			}
