@@ -763,10 +763,6 @@ func formatResultsForLLM(records []interface{}) (map[string]interface{}, error) 
 	// Create a summary
 	summary := make(map[string]interface{})
 	if len(instances) > 0 {
-		// Get the ticker from the first instance
-		if ticker, ok := instances[0]["ticker"].(string); ok {
-			summary["ticker"] = ticker
-		}
 		summary["count"] = len(instances)
 		summary["timeframe"] = "daily"
 		summary["columns"] = columnNames
