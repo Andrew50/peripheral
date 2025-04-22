@@ -482,7 +482,7 @@ func initTools() {
 		"getPrevClose": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getPrevClose",
-				Description: "Retrieves the previous closing price for a specified security ticker symbol.",
+				Description: "Retrieves the previous closing price for a specified security ticker symbol. This also gets the most recent price if the market is closed or in after hours.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
