@@ -684,6 +684,33 @@ func GetCurrentSecurityID(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 	return securityID, nil
 }
 
+type GetSecurityIDFromTickerTimestampArgs struct {
+	Ticker    string `json:"ticker"`
+	Timestamp int64  `json:"timestamp"`
+}
+
+type GetSecurityIDFromTickerTimestampResults struct {
+	SecurityID int `json:"securityId"`
+}
+
+func GetSecurityIDFromTickerTimestamp(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetSecurityIDFromTickerTimestampArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+	var timestamp time.Time
+	if args.Timestamp == 0 {
+		timestamp = time.Now()
+	} else {
+		timestamp = time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6)
+	}
+	securityID, err := utils.GetSecurityID(conn, args.Ticker, timestamp)
+	if err != nil {
+		return nil, fmt.Errorf("error getting security ID: %v", err)
+	}
+	return GetSecurityIDFromTickerTimestampResults{SecurityID: securityID}, nil
+}
+
 type GetTickerDailySnapshotArgs struct {
 	SecurityID int `json:"securityId"`
 }
