@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { onMount, tick, onDestroy } from 'svelte';
 	import { privateRequest } from '$lib/core/backend';
 	import { marked } from 'marked'; // Import the markdown parser
 	import { queryChart } from '$lib/features/chart/interface'; // Import queryChart
@@ -8,11 +8,13 @@
 	import {
 		inputValue,
 		contextItems,
+		addInstanceToChat,
 		removeInstanceFromChat,
 		removeFilingFromChat,
 		type FilingContext, // Import the new type
 		pendingChatQuery // Import the new store
 	} from './interface'
+	import { activeChartInstance } from '$lib/features/chart/interface';
 
 	// Set default options for the markdown parser (optional)
 	marked.setOptions({
@@ -154,6 +156,17 @@
 	// Chat history
 	let messages: Message[] = [];
 	let historyLoaded = false; // Add state variable
+
+	// Manage active chart context: subscribe to add new and remove old chart contexts
+	let previousChartInstance: Instance | null = null;
+	const unsubscribeChart = activeChartInstance.subscribe((chartInstance) => {
+		if (previousChartInstance) removeInstanceFromChat(previousChartInstance);
+		if (chartInstance) addInstanceToChat(chartInstance);
+		previousChartInstance = chartInstance;
+	});
+	onDestroy(() => {
+		unsubscribeChart();
+	});
 
 	// Load any existing conversation history from the server
 	async function loadConversationHistory() {

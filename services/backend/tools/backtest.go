@@ -77,6 +77,17 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 		return nil, fmt.Errorf("failed to extract summary from formatted backtest results")
 	}
 
+	// --- Save Summary to Persistent Context ---
+	go func() {
+		ctx := context.Background()
+		contextKey := fmt.Sprintf("backtest_summary_strategy_%d", args.StrategyId)
+		// Use 0 for itemExpiration to rely on the default context expiration (7 days)
+		if err := AddOrUpdatePersistentContextItem(ctx, conn, userId, contextKey, summary, 0); err != nil {
+			fmt.Printf("Warning: Failed to save backtest summary (strategy %d) to persistent context: %v\n", args.StrategyId, err)
+		}
+	}()
+	// --- End Save Summary ---
+
 	return summary, nil // Return only the summary map
 }
 
