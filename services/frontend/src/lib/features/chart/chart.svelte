@@ -1199,7 +1199,7 @@
 		
 	}
 
-	onMount(() => {
+	onMount(() => { // Keep onMount synchronous
 		const chartOptions = {
 			autoSize: true,
 			crosshair: {
@@ -1592,8 +1592,10 @@
 			const barsOnScreen = Math.floor(logicalRange.to) - Math.ceil(logicalRange.from);
 			const bufferInScreenSizes = 0.7;
 
-
-			if (logicalRange.from > 10 && logicalRange.from / barsOnScreen < bufferInScreenSizes) {
+			// Backward loading condition:
+			// Original condition: logicalRange.from / barsOnScreen < bufferInScreenSizes
+			// Corrected condition: Check if number of bars to the left is less than the buffer
+			if (logicalRange.from > 10 && logicalRange.from < bufferInScreenSizes * barsOnScreen) {
 				if (!chartEarliestDataReached) {
 					// Get the earliest timestamp from current data
 					const earliestBar = chartCandleSeries.data()[0];
@@ -1726,6 +1728,40 @@
 			sessionHighlighting = new SessionHighlighting(createDefaultSessionHighlighter());
 			chartCandleSeries.attachPrimitive(sessionHighlighting);
 		}
+
+		const loadDefaultChart = async () => {
+			// Check if the current instance is still empty/default before loading NVDA
+			if (!currentChartInstance || !currentChartInstance.ticker) {
+				try {
+					type SecurityIdResponse = { securityId?: number };
+					const response = await privateRequest<SecurityIdResponse>(
+						'getSecurityIDFromTickerTimestamp',
+						{
+							ticker: 'NVDA',
+							timestampMs: 0
+						}
+					);
+
+					const nvdaSecurityId = response?.securityId ?? 0;
+
+					if (nvdaSecurityId !== 0) {
+						queryChart({
+							ticker: 'NVDA',
+							timeframe: '1d',
+							timestamp: 0,
+							securityId: nvdaSecurityId,
+							price: 0
+						});
+					} else {
+						console.warn('Could not fetch securityId for default ticker NVDA.');
+					}
+				} catch (error) {
+					console.error('Error fetching securityId for default ticker NVDA:', error);
+				}
+			}
+		};
+
+		loadDefaultChart();
 
 		return () => {
 			// Apply any pending updates before unmounting
