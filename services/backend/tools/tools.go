@@ -104,6 +104,28 @@ func initTools() {
 			Query:    true,
 			Api:      true,
 		},
+		"getSecurityIDFromTickerTimestamp": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getSecurityIDFromTickerTimestamp",
+				Description: "Get the security ID for a given ticker and timestamp.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"ticker": {
+							Type: genai.TypeString,
+						},
+						"timestamp": {
+							Type: genai.TypeInteger,
+						},
+					},
+					Required: []string{"ticker", "timestamp"},
+				},
+			},
+			Function: GetSecurityIDFromTickerTimestamp,
+			Query:    false,
+			Api:      true,
+		},
+
 		//TODO remove icon for query
 		"getSecuritiesFromTicker": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -1303,7 +1325,7 @@ func initTools() {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name: "getStrategyFromNaturalLanguage",
 				Description: "Create (or overwrite) a strategy from a natural‑language description. " +
-					"Use the user’s original query verbatim. Pass strategyId = -1 to create a new strategy.",
+					"IF YOU USE THIS FUNCTION, USE THE USER'S ORIGINAL QUERY AS IS. Pass strategyId = -1 to create a new strategy.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -1325,11 +1347,11 @@ func initTools() {
 					`Call this **before** getStrategyFromNaturalLanguage whenever the user ` +
 					`has attached an explicit instance but provided little or no NL description.
 
-An “instance” is uniquely identified by:
-  • securityId – numeric DB identifier  
-  • timestamp  – Unix epoch *seconds* marking the “current bar”  
-  • timeframe  – candle resolution (e.g. "15m", "2h", "1d")  
-  • bars       – number of historical candles to analyse (looking **backwards**)`,
+					An "instance" is uniquely identified by:
+					• securityId - numeric DB identifier  
+					• timestamp - Unix epoch *seconds* marking the "current bar"  
+					• timeframe - candle resolution (e.g. "15m", "2h", "1d")  
+					• bars - number of historical candles to analyse (looking **backwards**)`,
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -1342,6 +1364,33 @@ An “instance” is uniquely identified by:
 				},
 			},
 			Function: AnalyzeInstanceFeatures,
+			Query:    true,
+			Api:      false,
+		},
+		"calculateBacktestStatistic": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "calculateBacktestStatistic",
+				Description: "Calculates a statistic for a specific column from cached backtest results. Use this instead of requesting raw backtest data for simple calculations.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"strategyId": {
+							Type:        genai.TypeInteger,
+							Description: "The ID of the strategy whose backtest results should be used.",
+						},
+						"columnName": {
+							Type:        genai.TypeString,
+							Description: "The original column name in the backtest results to perform the calculation on (e.g., 'close', 'volume', 'future_1d_return').",
+						},
+						"calculationType": {
+							Type:        genai.TypeString,
+							Description: "The type of calculation to perform. Supported values: 'average', 'sum', 'min', 'max', 'count'.",
+						},
+					},
+					Required: []string{"strategyId", "columnName", "calculationType"},
+				},
+			},
+			Function: CalculateBacktestStatistic,
 			Query:    true,
 			Api:      false,
 		},

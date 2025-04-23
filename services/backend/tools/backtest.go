@@ -56,11 +56,28 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	}
 
 	// Format the results for LLM readability
-	formattedResults, err := formatResultsForLLM(dailyRecords)
+	formattedResults, err := formatBacktestResults(dailyRecords)
 	if err != nil {
 		return nil, fmt.Errorf("error formatting results for LLM: %v", err)
 	}
-	return formattedResults, nil
+
+	// Save the full formatted results (including instances) to cache
+	go func() { // Run in a goroutine to avoid blocking the main response
+		bgCtx := context.Background() // Use a background context for the goroutine
+		if err := SaveBacktestToCache(bgCtx, conn, userId, args.StrategyId, formattedResults); err != nil {
+			fmt.Printf("Warning: Failed to save backtest results to cache for strategy %d: %v\n", args.StrategyId, err)
+			// We log the error but don't fail the main operation
+		}
+	}()
+
+	// Extract only the summary to return to the LLM
+	summary, ok := formattedResults["summary"].(map[string]interface{})
+	if !ok {
+		// This should ideally not happen if formatResultsForLLM worked
+		return nil, fmt.Errorf("failed to extract summary from formatted backtest results")
+	}
+
+	return summary, nil // Return only the summary map
 }
 
 // StrategySpec represents the parsed JSON structure of the backtest specification
@@ -651,7 +668,7 @@ func prettyPrintJSON(jsonStr string) (string, error) {
 }
 
 // formatResultsForLLM converts raw database results into a clean, LLM-friendly format
-func formatResultsForLLM(records []interface{}) (map[string]interface{}, error) {
+func formatBacktestResults(records []interface{}) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
 
 	// Create a clean array of instances
