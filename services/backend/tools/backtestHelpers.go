@@ -45,7 +45,7 @@ func SaveBacktestToCache(ctx context.Context, conn *utils.Conn, userID int, stra
 type CalculateBacktestStatisticArgs struct {
 	StrategyID      int    `json:"strategyId"`
 	ColumnName      string `json:"columnName"`
-	CalculationType string `json:"calculationType"` // e.g., "average", "sum", "min", "max", "count"
+	CalculationType string `json:"calculationType"` // e.g., "average", "sum", "min", "max", "count
 }
 
 // CalculateBacktestStatistic retrieves cached backtest results and performs a calculation on a specific column.
