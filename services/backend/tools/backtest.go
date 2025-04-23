@@ -683,7 +683,6 @@ func formatBacktestResults(records []interface{}) (map[string]interface{}, error
 			}
 		}
 	}
-
 	for _, record := range records {
 		recordMap, ok := record.(map[string]interface{})
 		if !ok {
