@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -114,10 +115,8 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 	// Check for existing conversation history
 	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
 	conversationData, err := getConversationFromCache(ctx, conn, userID, conversationKey)
-
 	// If we have existing conversation data, append the new message
 	fmt.Println("Accessing conversation for key:", conversationKey)
-
 	// If no conversation exists, create a new one
 	if err != nil || conversationData == nil {
 		fmt.Printf("Creating new conversation. Error: %v\n", err)
@@ -129,8 +128,16 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		fmt.Printf("Found existing conversation with %d messages\n", len(conversationData.Messages))
 	}
 
+	persistentContextData, err := getPersistentContext(ctx, conn, userID)
+	if err != nil {
+		// Log the error but don't fail the request, just proceed without this context
+		fmt.Printf("Warning: Failed to retrieve persistent context: %v\n", err)
+		persistentContextData = &PersistentContextData{Items: make(map[string]PersistentContextItem)}
+	}
+
 	// Get function calls from the LLM with context from previous messages
 	var conversationHistory string
+	var persistentHistory string
 	var allResults []ExecuteResult
 	var allThinkingResults []ThinkingResponse
 	if len(conversationData.Messages) > 0 {
@@ -139,10 +146,22 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 	} else {
 		conversationHistory = ""
 	}
+	if len(persistentContextData.Items) > 0 {
+		persistentHistory = buildPersistentHistory(persistentContextData)
+	} else {
+		persistentHistory = ""
+	}
 	maxTurns := 5
 	numTurns := 0
 	for numTurns < maxTurns {
 		var prompt strings.Builder
+
+		if persistentHistory != "" {
+			prompt.WriteString("Persistent Context Items:\n")
+			prompt.WriteString(persistentHistory)
+			prompt.WriteString("\n\n")
+			fmt.Println("persistentHistory ", persistentHistory)
+		}
 		if conversationHistory != "" {
 			prompt.WriteString("Conversation History:\n")
 			prompt.WriteString(conversationHistory)
@@ -303,6 +322,39 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		numTurns++
 	}
 	return nil, fmt.Errorf("error getting gemini function response: %w", err)
+}
+
+func buildPersistentHistory(persistentContextData *PersistentContextData) string {
+	var persistentHistory strings.Builder
+	if persistentContextData != nil && len(persistentContextData.Items) > 0 {
+		keys := make([]string, 0, len(persistentContextData.Items))
+		for k := range persistentContextData.Items {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			item := persistentContextData.Items[key]
+			// Attempt to pretty-print the JSON value
+			var prettyValue string
+			var structuredValue interface{}
+			if err := json.Unmarshal(item.Value, &structuredValue); err == nil {
+				prettyBytes, err := json.MarshalIndent(structuredValue, "", "  ")
+				if err == nil {
+					prettyValue = string(prettyBytes)
+				} else {
+					prettyValue = string(item.Value) // Fallback to raw JSON string
+				}
+			} else {
+				prettyValue = string(item.Value) // Fallback if not valid JSON
+			}
+
+			persistentHistory.WriteString(fmt.Sprintf("- Key: %s (Last Updated: %s)\n",
+				item.Key, item.Timestamp.Format(time.RFC1123)))
+			persistentHistory.WriteString(fmt.Sprintf("  Value:\n```json\n%s\n```\n", prettyValue))
+		}
+		persistentHistory.WriteString("\n") // Add separation
+	}
+	return persistentHistory.String()
 }
 
 // buildConversationContext formats the conversation history for Gemini
