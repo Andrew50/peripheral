@@ -51,20 +51,20 @@
 			const parsed = marked.parse(processedContent);
 			const parsedString = typeof parsed === 'string' ? parsed : String(parsed);
 
-			// Regex to find $$$TICKER-securityId-TIMESTAMPINMS$$$ patterns
-			// Captures TICKER (1), securityId (2), TIMESTAMPINMS (3)
-			const tickerRegex = /\$\$\$([A-Z]{1,5})-(\d+)-(\d+)\$\$\$/g;
+			// Regex to find $$$TICKER-TIMESTAMPINMS$$$ patterns
+			// Captures TICKER (1), TIMESTAMPINMS (2)
+			const tickerRegex = /\$\$\$([A-Z]{1,5})-(\d+)\$\$\$/g;
 
-			// Replace ticker patterns with buttons including all data attributes
+			// Replace ticker patterns with buttons including only ticker and timestamp data attributes
 			const contentWithTickerButtons = parsedString.replace(
 				tickerRegex,
-				(match, ticker, securityId, timestampMs) => {
+				(match, ticker, timestampMs) => {
 					// Use the existing formatChipDate function
 					const formattedDate = formatChipDate(parseInt(timestampMs, 10));
 					const buttonText = `${ticker}${formattedDate}`;
 
-					// Return the button HTML
-					return `<button class="ticker-button" data-ticker="${ticker}" data-security-id="${securityId}" data-timestamp-ms="${timestampMs}">${buttonText}</button>`;
+					// Return the button HTML without securityId initially
+					return `<button class="ticker-button" data-ticker="${ticker}" data-timestamp-ms="${timestampMs}">${buttonText}</button>`;
 				}
 			);
 
@@ -446,27 +446,55 @@
 	}
 
 	// Function to handle clicks on ticker buttons
-	function handleTickerButtonClick(event: MouseEvent) {
-		const target = event.target as HTMLElement;
+	async function handleTickerButtonClick(event: MouseEvent) {
+		const target = event.target as HTMLButtonElement; // Assert as Button Element
 		if (target && target.classList.contains('ticker-button')) {
 			const ticker = target.dataset.ticker;
-			const securityIdStr = target.dataset.securityId;
-			const timestampMsStr = target.dataset.timestampMs; // Get the timestamp
+			const timestampMsStr = target.dataset.timestampMs; // Get the timestamp string
 
-			if (ticker && securityIdStr && timestampMsStr) {
-				const securityId = parseInt(securityIdStr, 10);
+			if (ticker && timestampMsStr) {
 				const timestampMs = parseInt(timestampMsStr, 10); // Parse the timestamp
 
-				if (isNaN(securityId) || isNaN(timestampMs)) {
-					console.error('Invalid securityId or timestampMs on ticker button');
-					return; // Don't proceed if ID or timestamp is invalid
+				if (isNaN(timestampMs)) {
+					console.error('Invalid timestampMs on ticker button');
+					return; // Don't proceed if timestamp is invalid
 				}
 
-				queryChart({
-					ticker: ticker,
-					securityId: securityId,
-					timestamp: timestampMs // Pass timestamp as number (milliseconds)
-				} as Instance);
+				try {
+					target.disabled = true;
+
+					// Call the new backend function to get the securityId
+					// Define expected response shape
+					type SecurityIdResponse = { securityId?: number };
+					const response = await privateRequest<SecurityIdResponse>('getSecurityIDFromTickerTimestamp', {
+						ticker: ticker,
+						timestampMs: timestampMs // Pass timestamp as number
+					});
+
+					// Safely access the securityId
+					const securityId = response?.securityId;
+
+					if (securityId && !isNaN(securityId)) {
+						// If securityId is valid, query the chart
+						queryChart({
+							ticker: ticker,
+							securityId: securityId,
+							timestamp: timestampMs // Pass timestamp as number (milliseconds)
+						} as Instance);
+					} else {
+						console.error('Failed to retrieve a valid securityId from backend:', response);
+						// Handle error visually if needed (e.g., show error message)
+						target.textContent = 'Error'; // Revert button text or indicate error
+						await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+					}
+
+				} catch (error) {
+					console.error('Error fetching securityId:', error);
+					await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+				} finally {
+					target.disabled = false;
+				}
+
 			} else {
 				console.error('Missing data attributes on ticker button');
 			}
