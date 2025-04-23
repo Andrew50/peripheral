@@ -69,7 +69,6 @@ func GetMarketCap(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 // GetPrevCloseArgs represents a structure for handling GetPrevCloseArgs data.
 type GetPrevCloseArgs struct {
 	SecurityID int `json:"securityId"`
-	Timestamp  int `json:"timestamp"`
 }
 
 // PolygonBar represents a structure for handling PolygonBar data.
@@ -83,9 +82,8 @@ func GetPrevClose(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("getPrevClose invalid args: %v", err)
 	}
-
+	currentDay := time.Now()
 	// Start at the given timestamp and subtract a day until a valid close is found
-	currentDay := time.Unix(int64(args.Timestamp/1000), 0).UTC()
 	currentDay = currentDay.AddDate(0, 0, -1)
 
 	var bar PolygonBar
@@ -728,6 +726,7 @@ type GetTickerDailySnapshotResults struct {
 	TodayHigh          float64 `json:"todayHigh"`
 	TodayLow           float64 `json:"todayLow"`
 	TodayClose         float64 `json:"todayClose"`
+	PreviousClose      float64 `json:"previousClose"`
 }
 
 func GetTickerDailySnapshot(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -762,7 +761,9 @@ func GetTickerDailySnapshot(conn *utils.Conn, userId int, rawArgs json.RawMessag
 	results.TodayHigh = snapshot.Day.High
 	results.TodayLow = snapshot.Day.Low
 	results.TodayClose = snapshot.Day.Close
+	results.PreviousClose = lastClose
 	results.Ticker = ticker
+	fmt.Println(results)
 	return results, nil
 }
 
