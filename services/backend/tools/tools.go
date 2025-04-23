@@ -508,12 +508,12 @@ func initTools() {
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "The ticker symbol to get the previous close for.",
+						"securityId": {
+							Type:        genai.TypeInteger,
+							Description: "The security ID of the stock to get the previous close for.",
 						},
 					},
-					Required: []string{"ticker"},
+					Required: []string{"securityId"},
 				},
 			},
 			Function: GetPrevClose,
@@ -1195,7 +1195,7 @@ func initTools() {
 		"getTickerDailySnapshot": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getTickerDailySnapshot",
-				Description: "Get the current bid, ask, price, change, percent change, volume, vwap price, and daily open, high, low and close for a specified security.",
+				Description: "Get the current price, change, percent change, volume, vwap price, and open, high, low and close for a specified security.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -1208,7 +1208,7 @@ func initTools() {
 				},
 			},
 			Function: GetTickerDailySnapshot,
-			Query:    false,
+			Query:    true,
 			Api:      false,
 		},
 		"getAllTickerSnapshots": {
