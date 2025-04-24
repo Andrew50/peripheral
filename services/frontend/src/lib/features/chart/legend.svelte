@@ -22,31 +22,52 @@
 	let isCollapsed = false;
 	let isUpdating = false;
 
+	// Common preset timeframes to display as buttons
+	const commonTimeframes = ['1', '1h', '1d', '1w'];
+
+	// Helper computed value to check if current timeframe is custom
+	$: isCustomTimeframe = instance?.timeframe && !commonTimeframes.includes(instance.timeframe);
+
 	function toggleCollapse() {
 		isCollapsed = !isCollapsed;
 	}
 
-	function handleClick(event: MouseEvent | TouchEvent) {
+	// --- New Handlers for Buttons ---
+	function handleTickerClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
-		queryInstanceInput([], ['ticker', 'timeframe', 'timestamp', 'extendedHours'], instance).then(
-			(v: Instance) => {
-				queryChart(v, true);
-			}
-		);
+		event.stopPropagation(); // Prevent legend collapse toggle
+		queryInstanceInput([], ['ticker'], instance).then((v: Instance) => {
+			if (v) queryChart(v, true);
+		});
 	}
 
-	function handleKeydown(event: KeyboardEvent) {
+	function handleTickerKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter' || event.key === ' ') {
 			event.preventDefault();
-			queryInstanceInput(
-				'any',
-				['ticker', 'timeframe', 'timestamp', 'extendedHours'],
-				instance
-			).then((v: Instance) => {
-				queryChart(v, true);
+			event.stopPropagation(); // Prevent legend collapse toggle
+			queryInstanceInput('any', ['ticker'], instance).then((v: Instance) => {
+				if (v) queryChart(v, true);
 			});
 		}
 	}
+
+	function handleTimestampClick(event: MouseEvent | TouchEvent) {
+		event.preventDefault();
+		event.stopPropagation(); // Prevent legend collapse toggle
+		queryInstanceInput([], ['timestamp'], instance).then((v: Instance) => {
+			if (v) queryChart(v, true);
+		});
+	}
+
+	function handleSessionClick(event: MouseEvent | TouchEvent) {
+		event.preventDefault();
+		event.stopPropagation(); // Prevent legend collapse toggle
+		if (instance) {
+			const updatedInstance = { ...instance, extendedHours: !instance.extendedHours };
+			queryChart(updatedInstance, true);
+		}
+	}
+	// --- End New Handlers ---
 
 	function formatLargeNumber(volume: number, dolvol: boolean): string {
 		if (volume === undefined) {
@@ -132,6 +153,23 @@
 		}, 50);
 	}
 
+	// Function to handle selecting a preset timeframe button
+	function selectTimeframe(newTimeframe: string) {
+		if (instance && instance.timeframe !== newTimeframe) {
+			const updatedInstance = { ...instance, timeframe: newTimeframe };
+			queryChart(updatedInstance, true);
+		}
+		// No need to hide selector anymore
+	}
+
+	// Function to handle clicking the "..." timeframe button
+	function handleCustomTimeframeClick() {
+		// No selector to hide
+		queryInstanceInput([], ['timeframe'], instance).then((v: Instance) => {
+			if (v) queryChart(v, true);
+		});
+	}
+
 	// Watch for content changes that might affect size
 	$: if (hoveredCandleData || instance || width) {
 		debouncedCheckOverflow();
@@ -164,20 +202,11 @@
 			resizeObserver.disconnect();
 		}
 	});
-
-	// Watch for content changes that might affect size
-	$: if (hoveredCandleData || instance || width) {
-		debouncedCheckOverflow();
-	}
 </script>
 
 <div
 	bind:this={legendElement}
 	tabindex="-1"
-	role="button"
-	on:click={handleClick}
-	on:keydown={handleKeydown}
-	on:touchstart={handleClick}
 	class="legend {isCollapsed ? 'collapsed' : ''} {isOverflowing ? 'compact' : ''}"
 >
 	<div class="header">
@@ -191,17 +220,58 @@
 				on:error={() => {}}
 			/>
 		{/if}
-		<span class="symbol">
+		<button
+			class="symbol metadata-button"
+			on:click={handleTickerClick}
+			on:keydown={handleTickerKeydown}
+			aria-label="Change ticker"
+		>
 			<svg class="search-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
 				<path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L21.5,20L20,21.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z" />
 			</svg>
 			{instance?.ticker || 'NaN'}
-		</span>
+		</button>
 		<span class="metadata">
-			<span class="timeframe">{instance?.timeframe || '1d'}</span>
+			<!-- Add common timeframe buttons -->
+			{#each commonTimeframes as tf}
+				<button
+					class="timeframe-preset-button metadata-button {instance?.timeframe === tf ? 'active' : ''}"
+					on:click={() => selectTimeframe(tf)}
+					aria-label="Set timeframe to {tf}"
+					aria-pressed={instance?.timeframe === tf}
+				>
+					{tf}
+				</button>
+			{/each}
+			<!-- Button to open custom timeframe input -->
+			<button
+				class="timeframe-custom-button metadata-button {isCustomTimeframe ? 'active' : ''}"
+				on:click={handleCustomTimeframeClick}
+				aria-label="Select custom timeframe"
+				aria-pressed={isCustomTimeframe ? 'true' : 'false'}
+			>
+				{#if isCustomTimeframe}
+					{instance.timeframe}
+				{:else}
+					...
+				{/if}
+			</button>
+
 			{#if !isOverflowing}
-				<span class="timestamp">{UTCTimestampToESTString(instance?.timestamp ?? 0)}</span>
-				<span class="session-type">{instance?.extendedHours ? 'Extended' : 'Regular'}</span>
+				<button
+					class="timestamp metadata-button"
+					on:click={handleTimestampClick}
+					aria-label="Change timestamp"
+				>
+					{UTCTimestampToESTString(instance?.timestamp ?? 0)}
+				</button>
+				<button
+					class="session-type metadata-button"
+					on:click={handleSessionClick}
+					aria-label="Toggle session type"
+				>
+					{instance?.extendedHours ? 'Extended' : 'Regular'}
+				</button>
 			{/if}
 		</span>
 	</div>
@@ -289,7 +359,6 @@
 		backdrop-filter: var(--backdrop-blur);
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 		user-select: none;
-		cursor: pointer;
 	}
 
 	/* Update hover styles to not affect width/layout */
@@ -507,7 +576,98 @@
 		transition: opacity 0.2s ease;
 	}
 
-	.symbol:hover .search-icon {
+	/* Adjust hover for search icon on button */
+	.symbol.metadata-button:hover .search-icon {
 		opacity: 1;
+	}
+
+	/* Base styles for new metadata buttons */
+	.metadata-button {
+		font-family: inherit; /* Inherit font from legend */
+		font-size: 13px;
+		line-height: 18px;
+		color: var(--text-secondary);
+		padding: 4px 8px;
+		background: var(--ui-bg-element);
+		border-radius: 4px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		border: 1px solid var(--ui-border);
+		cursor: pointer;
+		transition: background-color 0.2s ease, border-color 0.2s ease;
+		text-align: left; /* Ensure text alignment */
+		display: inline-flex; /* For alignment with potential icons */
+		align-items: center; /* Align text/icons vertically */
+		gap: 4px; /* Gap for icons if added */
+	}
+
+	/* Remove default button appearance */
+	.metadata-button:focus {
+		outline: none; /* Remove default focus outline */
+		box-shadow: 0 0 0 2px var(--accent-color); /* Add custom focus ring */
+	}
+
+	.metadata-button:hover {
+		background-color: var(--ui-bg-element-hover);
+		border-color: var(--ui-border-hover);
+		color: var(--text-primary); /* Slightly brighten text on hover */
+	}
+
+	/* Specific style adjustments for symbol button */
+	.symbol.metadata-button {
+		font-size: 14px;
+		line-height: 20px;
+		font-weight: 600;
+		color: var(--text-primary);
+		padding: 4px 10px; /* Keep original padding */
+		gap: 4px; /* Ensure gap for icon */
+	}
+
+	/* Adjust original span styles to target buttons */
+	.timeframe.metadata-button,
+	.timestamp.metadata-button,
+	.session-type.metadata-button {
+		/* Styles previously applied to .timeframe, .timestamp, .session-type spans now applied via .metadata-button base class */
+	}
+
+	.timestamp.metadata-button {
+		font-family: monospace;
+	}
+
+	/* Styles for preset timeframe buttons */
+	.timeframe-preset-button {
+		min-width: 30px; /* Ensure buttons have some width */
+		text-align: center;
+		padding: 4px 6px; /* Adjust padding */
+		display: inline-flex;
+		justify-content: center;
+		align-items: center;
+	}
+
+	.timeframe-preset-button.active {
+		background-color: var(--accent-color-translucent);
+		border-color: var(--accent-color);
+		color: var(--accent-color);
+		font-weight: 500;
+	}
+
+	/* Styles for the custom timeframe '...' button */
+	.timeframe-custom-button {
+		padding: 4px 6px;
+		min-width: 30px; /* Give it similar min-width */
+		text-align: center;
+		/* Add flex properties for robust centering */
+		display: inline-flex;
+		justify-content: center;
+		align-items: center;
+	}
+
+	/* Apply active styles also to the custom button when it's showing a custom value */
+	.timeframe-custom-button.active {
+		background-color: var(--accent-color-translucent);
+		border-color: var(--accent-color);
+		color: var(--accent-color);
+		font-weight: 500;
 	}
 </style>
