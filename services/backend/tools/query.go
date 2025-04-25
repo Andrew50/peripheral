@@ -50,11 +50,10 @@ type ContentChunk struct {
 }
 
 type QueryResponse struct {
-	Type          string            `json:"type"` //"mixed_content", "function_calls", "simple_text"
-	ContentChunks []ContentChunk    `json:"content_chunks,omitempty"`
-	Text          string            `json:"text,omitempty"`
-	Results       []ExecuteResult   `json:"results,omitempty"`
-	History       *ConversationData `json:"history,omitempty"`
+	Type          string          `json:"type"` //"mixed_content", "function_calls", "simple_text"
+	ContentChunks []ContentChunk  `json:"content_chunks,omitempty"`
+	Text          string          `json:"text,omitempty"`
+	Results       []ExecuteResult `json:"results,omitempty"`
 }
 
 // ThinkingResponse represents the JSON output from the thinking model with rounds
@@ -200,9 +199,8 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		// If no valid JSON is found, just return the text response
 		if jsonStartIdx == -1 || jsonEndIdx == -1 || jsonEndIdx <= jsonStartIdx {
 			return QueryResponse{
-				Type:    "text",
-				Text:    responseText,
-				History: conversationData,
+				Type: "text",
+				Text: responseText,
 			}, nil
 		}
 
@@ -228,9 +226,8 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			}
 
 			return QueryResponse{
-				Type:    "text",
-				Text:    responseText,
-				History: conversationData,
+				Type: "text",
+				Text: responseText,
 			}, nil
 		}
 
@@ -259,7 +256,6 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			return QueryResponse{
 				Type:          "mixed_content",
 				ContentChunks: thinkingResp.ContentChunks,
-				History:       conversationData,
 			}, nil
 		}
 
@@ -286,7 +282,6 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 				return QueryResponse{
 					Type:          "mixed_content",
 					ContentChunks: newMessage.ContentChunks,
-					History:       conversationData,
 				}, nil
 			}
 			if !thinkingResp.RequiresFurtherPlanning {
