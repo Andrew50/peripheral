@@ -50,11 +50,10 @@ type ContentChunk struct {
 }
 
 type QueryResponse struct {
-	Type          string            `json:"type"` //"mixed_content", "function_calls", "simple_text"
-	ContentChunks []ContentChunk    `json:"content_chunks,omitempty"`
-	Text          string            `json:"text,omitempty"`
-	Results       []ExecuteResult   `json:"results,omitempty"`
-	History       *ConversationData `json:"history,omitempty"`
+	Type          string          `json:"type"` //"mixed_content", "function_calls", "simple_text"
+	ContentChunks []ContentChunk  `json:"content_chunks,omitempty"`
+	Text          string          `json:"text,omitempty"`
+	Results       []ExecuteResult `json:"results,omitempty"`
 }
 
 // ThinkingResponse represents the JSON output from the thinking model with rounds
@@ -200,9 +199,8 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		// If no valid JSON is found, just return the text response
 		if jsonStartIdx == -1 || jsonEndIdx == -1 || jsonEndIdx <= jsonStartIdx {
 			return QueryResponse{
-				Type:    "text",
-				Text:    responseText,
-				History: conversationData,
+				Type: "text",
+				Text: responseText,
 			}, nil
 		}
 
@@ -228,9 +226,8 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			}
 
 			return QueryResponse{
-				Type:    "text",
-				Text:    responseText,
-				History: conversationData,
+				Type: "text",
+				Text: responseText,
 			}, nil
 		}
 
@@ -259,7 +256,6 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			return QueryResponse{
 				Type:          "mixed_content",
 				ContentChunks: thinkingResp.ContentChunks,
-				History:       conversationData,
 			}, nil
 		}
 
@@ -286,34 +282,10 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 				return QueryResponse{
 					Type:          "mixed_content",
 					ContentChunks: newMessage.ContentChunks,
-					History:       conversationData,
 				}, nil
 			}
 			if !thinkingResp.RequiresFurtherPlanning {
-				// Create new message with the round results and formatted response
-				newMessage := ChatMessage{
-					Query:         query.Query,
-					ResponseText:  "Successfully processed the following function calls:\n\n",
-					FunctionCalls: []FunctionCall{}, // We don't store these as regular function calls
-					ToolResults:   thinkingResults,
-					ContextItems:  query.Context, // Store context with the user query message
-					Timestamp:     time.Now(),
-					ExpiresAt:     time.Now().Add(24 * time.Hour),
-				}
-
-				// Add new message to conversation history
-				conversationData.Messages = append(conversationData.Messages, newMessage)
-				conversationData.Timestamp = time.Now()
-				if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-					fmt.Printf("Error saving updated conversation: %v\n", err)
-				}
-
-				return QueryResponse{
-					Type:    "function_calls",
-					Results: thinkingResults,
-					Text:    "Successfully processed the following function calls:\n\n",
-					History: conversationData,
-				}, nil
+				GetQuery(conn, userID, json.RawMessage(fmt.Sprintf(`{"query": "%s"}`, userQuery)))
 			}
 			allResults = append(allResults, thinkingResults...)
 			allThinkingResults = append(allThinkingResults, thinkingResp)
