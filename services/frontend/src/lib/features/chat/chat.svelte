@@ -149,14 +149,6 @@
 
 	// Manage active chart context: subscribe to add new and remove old chart contexts
 	let previousChartInstance: Instance | null = null;
-	const unsubscribeChart = activeChartInstance.subscribe((chartInstance) => {
-		if (previousChartInstance) removeInstanceFromChat(previousChartInstance);
-		if (chartInstance) addInstanceToChat(chartInstance);
-		previousChartInstance = chartInstance;
-	});
-	onDestroy(() => {
-		unsubscribeChart();
-	});
 
 	// Load any existing conversation history from the server
 	async function loadConversationHistory() {
@@ -296,8 +288,12 @@
 
 		// Prepend if backtest mode is active
 		const finalQuery = isBacktestMode ? `[RUN BACKTEST] ${queryText}` : queryText;
-
-		privateRequest('getQuery', { query: finalQuery, context: $contextItems })
+		const currentActiveChart = $activeChartInstance; // Get current active chart instance
+		privateRequest('getQuery', {
+			query: finalQuery,
+			context: $contextItems, // Send only manually added context items
+			activeChartContext: currentActiveChart // Send active chart separately
+		})
 			.then((response) => {
 				console.log('response', response);
 				// Type assertion to handle the response type
