@@ -104,7 +104,7 @@
 	};
 
 	type QueryResponse = {
-		response_type: 'text' | 'mixed_content' | 'function_calls';
+		response_type: 'text' | 'mixed_content';
 		text?: string;
 		content_chunks?: ContentChunk[];
 		history?: any;
@@ -116,7 +116,6 @@
 			query: string;
 			content_chunks?: ContentChunk[];
 			response_text: string;
-			function_calls?: any[];
 			timestamp: string | Date;
 			expires_at?: string | Date;
 			context_items?: (Instance | FilingContext)[];
@@ -196,7 +195,6 @@
 						contentChunks: msg.content_chunks || [],
 						timestamp: new Date(msg.timestamp),
 						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
-						responseType: msg.function_calls?.length ? 'function_calls' : 'text'
 					});
 				});
 
