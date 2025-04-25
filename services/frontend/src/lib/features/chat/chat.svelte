@@ -107,7 +107,6 @@
 		response_type: 'text' | 'mixed_content';
 		text?: string;
 		content_chunks?: ContentChunk[];
-		history?: any;
 	};
 
 	// Conversation history type
