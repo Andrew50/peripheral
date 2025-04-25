@@ -83,14 +83,6 @@
 			return content; // Fallback to plain text if parsing fails
 		}
 	}
-
-	// Define types for our response data
-	type FunctionResult = {
-		function_name: string;
-		result?: any;
-		error?: string;
-	};
-
 	// Define the ContentChunk and TableData types to match the backend
 	type TableData = {
 		caption?: string;
