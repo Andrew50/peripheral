@@ -290,30 +290,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 				}, nil
 			}
 			if !thinkingResp.RequiresFurtherPlanning {
-				// Create new message with the round results and formatted response
-				newMessage := ChatMessage{
-					Query:         query.Query,
-					ResponseText:  "Successfully processed the following function calls:\n\n",
-					FunctionCalls: []FunctionCall{}, // We don't store these as regular function calls
-					ToolResults:   thinkingResults,
-					ContextItems:  query.Context, // Store context with the user query message
-					Timestamp:     time.Now(),
-					ExpiresAt:     time.Now().Add(24 * time.Hour),
-				}
-
-				// Add new message to conversation history
-				conversationData.Messages = append(conversationData.Messages, newMessage)
-				conversationData.Timestamp = time.Now()
-				if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-					fmt.Printf("Error saving updated conversation: %v\n", err)
-				}
-
-				return QueryResponse{
-					Type:    "function_calls",
-					Results: thinkingResults,
-					Text:    "Successfully processed the following function calls:\n\n",
-					History: conversationData,
-				}, nil
+				GetQuery(conn, userID, json.RawMessage(fmt.Sprintf(`{"query": "%s"}`, userQuery)))
 			}
 			allResults = append(allResults, thinkingResults...)
 			allThinkingResults = append(allThinkingResults, thinkingResp)
