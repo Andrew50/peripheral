@@ -28,7 +28,7 @@ func UpdateDailyOHLCV(conn *utils.Conn) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	maxDateRows, err := conn.DB.Query(ctx, "SELECT MAX(timestamp) FROM daily_ohlcv")
+	maxDateRows, err := conn.DB.Query(ctx, "SELECT MAX(timestamp) FROM ohlcv_1d")
 	if err != nil {
 		fmt.Println("Error getting max date in ohlcv table:", err)
 		return err
@@ -295,7 +295,7 @@ func storeDailyOHLCVParallel(conn *utils.Conn, ohlcvResponse *models.GetGroupedD
 
 			// Build the batch insert
 			valueStrings := make([]string, 0, len(recordsToProcess))
-			valueArgs := make([]interface{}, 0, len(recordsToProcess)*10)
+			valueArgs := make([]interface{}, 0, len(recordsToProcess)*7) // Changed from 10 to 7 for reduced columns
 			argPosition := 1
 
 			for _, item := range recordsToProcess {
@@ -303,23 +303,21 @@ func storeDailyOHLCVParallel(conn *utils.Conn, ohlcvResponse *models.GetGroupedD
 				securityID := item.securityID
 
 				valueStrings = append(valueStrings,
-					fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
+					fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)",
 						argPosition, argPosition+1, argPosition+2, argPosition+3,
-						argPosition+4, argPosition+5, argPosition+6, argPosition+7,
-						argPosition+8, argPosition+9))
+						argPosition+4, argPosition+5, argPosition+6))
 
 				valueArgs = append(valueArgs,
 					record.Timestamp,
-					securityID, record.Ticker, record.Open, record.High,
-					record.Low, record.Close, record.Volume, record.VWAP,
-					record.Transactions)
+					securityID, record.Open, record.High,
+					record.Low, record.Close, record.Volume)
 
-				argPosition += 10
+				argPosition += 7 // Changed from 10 to 7 for reduced columns
 			}
 
 			// Execute batch insert
 			query := fmt.Sprintf(
-				"INSERT INTO daily_ohlcv (timestamp, securityid, ticker, open, high, low, close, volume, vwap, transactions) VALUES %s",
+				"INSERT INTO ohlcv_1d (timestamp, securityid, open, high, low, close, volume) VALUES %s",
 				valueStrings[0])
 
 			for i := 1; i < len(valueStrings); i++ {
