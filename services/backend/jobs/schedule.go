@@ -174,14 +174,13 @@ var (
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 		},
-        //renable later when alerts are redone
-		/*{
+		{
 			Name:           "InitAggregates",
 			Function:       initAggregates,
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 56}}, // Run before market open
 			RunOnInit:      true,
 			SkipOnWeekends: true,
-		},*/
+		},
 		{
 			Name:           "StartAlertLoop",
 			Function:       startAlertLoop,
@@ -210,13 +209,13 @@ var (
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 		},
-		/*{
+		{
 			Name:           "SimpleUpdateSecurities",
 			Function:       simpleSecuritiesUpdateJob,
 			Schedule:       []TimeOfDay{{Hour: 20, Minute: 45}}, // Run at 8:45 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
-		},*/
+		},
 		{
 			Name:           "UpdateSecurityDetails",
 			Function:       securityDetailUpdateJob,
