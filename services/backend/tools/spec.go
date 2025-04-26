@@ -136,7 +136,7 @@ type Strategy struct {
 	Complexity        int       `json:"complexity"`  // Estimated compute time / parameter count
 	AlertActive       bool      `json:"alertActive"` // Indicates if real-time alerts are enabled
 	Spec              Spec      `json:"spec"`        // Strategy specification
-	sql               string    // never needs to be stored or go to frontend so no json or capitalization
+//	sql               string    // never needs to be stored or go to frontend so no json or capitalization
 }
 
 // UniverseFilter lists items to include/exclude in a universe dimension.
