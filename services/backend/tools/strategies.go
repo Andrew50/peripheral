@@ -8,16 +8,13 @@ import (
 	"fmt"
 	"strings"
 
-	"google.golang.org/genai"
 	"bytes"
 	"encoding/base64"
-    "github.com/pplcc/plotext/custplotter"
-    "gonum.org/v1/plot"
-    //"gonum.org/v1/plot/vg"
-	// "github.com/wcharczuk/go-chart/v2" // Assuming go-chart is not used elsewhere based on commented import
+
+	"github.com/pplcc/plotext/custplotter"
+	"gonum.org/v1/plot"
+	"google.golang.org/genai"
 )
-
-
 
 // AnalyzeInstanceFeaturesArgs contains parameters for analyzing features of a specific security instance
 type AnalyzeInstanceFeaturesArgs struct {
@@ -64,42 +61,46 @@ func AnalyzeInstanceFeatures(conn *utils.Conn, userId int, rawArgs json.RawMessa
 	}
 
 	/* 3. Render a quick candlestick PNG (go‑chart v2 expects parallel slices) */
-    // ─── Step 3: build and render the chart ─────────────────────────────────────
-    var bars custplotter.TOHLCVs
-    for _, b := range resp.Bars {
-        // the candlestick plotter expects Unix seconds for the X value
-        bars = append(bars, struct {
-            T, O, H, L, C, V float64
-        }{
-            T: float64(b.Timestamp) / 1e3, // resp.Bars is milliseconds
-            O: b.Open,
-            H: b.High,
-            L: b.Low,
-            C: b.Close,
-            V: b.Volume,
-        })
-    }
+	// ─── Step 3: build and render the chart ─────────────────────────────────────
+	var bars custplotter.TOHLCVs
+	for _, b := range resp.Bars {
+		// the candlestick plotter expects Unix seconds for the X value
+		bars = append(bars, struct {
+			T, O, H, L, C, V float64
+		}{
+			T: float64(b.Timestamp) / 1e3, // resp.Bars is milliseconds
+			O: b.Open,
+			H: b.High,
+			L: b.Low,
+			C: b.Close,
+			V: b.Volume,
+		})
+	}
 
-    // create the plot
-    p := plot.New()
-    //if err != nil { return nil, fmt.Errorf("plot init: %w", err) }
+	// create the plot
+	p := plot.New()
+	//if err != nil { return nil, fmt.Errorf("plot init: %w", err) }
 
-    p.HideY()                       // optional cosmetics
-    p.X.Tick.Marker = plot.TimeTicks{Format: "01‑02\n15:04"}
+	p.HideY() // optional cosmetics
+	p.X.Tick.Marker = plot.TimeTicks{Format: "01‑02\n15:04"}
 
-    // add candlesticks
-    candles, err := custplotter.NewCandlesticks(bars)
-    if err != nil { return nil, fmt.Errorf("candles: %w", err) }
-    p.Add(candles)
+	// add candlesticks
+	candles, err := custplotter.NewCandlesticks(bars)
+	if err != nil {
+		return nil, fmt.Errorf("candles: %w", err)
+	}
+	p.Add(candles)
 
-    // render to an in‑memory PNG
-    var png bytes.Buffer
-    wt, err := p.WriterTo(600, 300, "png") // width, height, format
-    if err != nil { return nil, fmt.Errorf("writer: %w", err) }
-    if _, err = wt.WriteTo(&png); err != nil {
-        return nil, fmt.Errorf("render: %w", err)
-    }
-    pngB64 := base64.StdEncoding.EncodeToString(png.Bytes())
+	// render to an in‑memory PNG
+	var png bytes.Buffer
+	wt, err := p.WriterTo(600, 300, "png") // width, height, format
+	if err != nil {
+		return nil, fmt.Errorf("writer: %w", err)
+	}
+	if _, err = wt.WriteTo(&png); err != nil {
+		return nil, fmt.Errorf("render: %w", err)
+	}
+	pngB64 := base64.StdEncoding.EncodeToString(png.Bytes())
 
 	barsJSON, _ := json.Marshal(resp.Bars)
 
@@ -156,19 +157,16 @@ func AnalyzeInstanceFeatures(conn *utils.Conn, userId int, rawArgs json.RawMessa
 	}
 
 	return map[string]interface{}{
-		"analysis": analysis,         // Gemini’s narrative
-	//	"bars":     json.RawMessage(barsJSON),
-	//	"chart":    pngB64,           // base‑64 PNG for client preview
+		"analysis": analysis, // Gemini’s narrative
+		//	"bars":     json.RawMessage(barsJSON),
+		//	"chart":    pngB64,           // base‑64 PNG for client preview
 	}, nil
 }
-
 
 type CreateStrategyFromNaturalLanguageArgs struct {
 	Query      string `json:"query"`
 	StrategyId int    `json:"strategyId,omitempty"`
 }
-
-
 
 func CreateStrategyFromNaturalLanguage(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, error) {
 	var args CreateStrategyFromNaturalLanguageArgs
@@ -260,7 +258,6 @@ func CreateStrategyFromNaturalLanguage(conn *utils.Conn, userId int, rawArgs jso
 			// Parts expects []*genai.Part, and we need to create a Part directly
 			conversationHistory = append(conversationHistory, &genai.Content{Role: "user", Parts: []*genai.Part{{Text: errorMsg}}})
 
-
 			continue
 		}
 
@@ -297,12 +294,11 @@ func CreateStrategyFromNaturalLanguage(conn *utils.Conn, userId int, rawArgs jso
 		}
 		// --- End SQL Compilation ---
 
-
 		// If validation succeeds, create the strategy using the validated name and spec
 		strategyId, err := _newStrategy(conn, userId, name, spec)
 		if err != nil {
 			// This is an internal error, not Gemini's fault, so return directly
-            fmt.Printf("ie20hifi0: %v\n", err)
+			fmt.Printf("ie20hifi0: %v\n", err)
 			return nil, fmt.Errorf("error saving validated strategy: %w", err)
 		}
 
@@ -322,7 +318,6 @@ func CreateStrategyFromNaturalLanguage(conn *utils.Conn, userId int, rawArgs jso
 type GetStrategySpecArgs struct {
 	StrategyId int `json:"strategyId"`
 }
-
 
 func GetStrategySpec(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetStrategySpecArgs
@@ -345,9 +340,6 @@ func _getStrategySpec(conn *utils.Conn, strategyId int, userId int) (json.RawMes
 	return strategyCriteria, nil
 }
 
-
-
-
 // GetStrategies performs operations related to GetStrategies functionality.
 func GetStrategies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(), `
@@ -362,7 +354,7 @@ func GetStrategies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inter
 	for rows.Next() {
 		var strategy Strategy
 
-		if err := rows.Scan(&strategy.StrategyId, &strategy.Name ); err != nil {
+		if err := rows.Scan(&strategy.StrategyId, &strategy.Name); err != nil {
 			return nil, fmt.Errorf("error scanning strategy: %v", err)
 		}
 
@@ -385,7 +377,6 @@ func GetStrategies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inter
 
 // No longer needed:
 // type NewStrategyArgs struct { ... }
-
 
 // _newStrategy saves a validated strategy spec to the database.
 // It now takes userId, name, and the validated Spec object directly.
@@ -417,7 +408,6 @@ func _newStrategy(conn *utils.Conn, userId int, name string, spec Spec) (int, er
 	fmt.Printf("Successfully created strategy with ID: %d for user %d\n", strategyID, userId)
 	return strategyID, nil
 }
-
 
 // NewStrategy performs operations related to NewStrategy functionality.
 // It expects a JSON object with "name" and "spec" fields.
