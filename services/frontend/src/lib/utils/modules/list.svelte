@@ -696,25 +696,12 @@
 </div>
 
 <style>
-	/* Styles remain unchanged */
 	.selected {
 		outline: 2px solid var(--ui-accent);
-		/* Ensure selected row background doesn't conflict */
-		background-color: var(--ui-bg-selected, var(--ui-bg-hover)); /* Use a specific var or fallback */
 	}
 
-    /* Ensure hover effect doesn't override selected outline/background */
-    tr:hover:not(.selected) {
-        background-color: var(--ui-bg-hover);
-    }
-    tr.selected:hover {
-         /* Optional: slightly different hover for selected row */
-        background-color: var(--ui-bg-selected-hover, var(--ui-bg-selected, var(--ui-bg-hover)));
-    }
-
-
 	tr {
-		transition: outline 0.2s ease, background-color 0.2s ease; /* Added background-color transition */
+		transition: outline 0.2s ease;
 	}
 
 	.list-container {
@@ -737,16 +724,7 @@
 		padding: 8px;
 		text-align: left;
 		border-bottom: 1px solid var(--ui-border);
-		white-space: nowrap; /* Prevent wrapping by default */
-        overflow: hidden;
-        text-overflow: ellipsis; /* Add ellipsis for overflow */
 	}
-    /* Allow Ticker cell to potentially wrap if needed or adjust width */
-    th[data-type="ticker"], td:has(.ticker-name) {
-        /* width: 150px; /* Example fixed width */
-        /* white-space: normal; /* Allow wrapping if needed */
-    }
-
 
 	th {
 		background-color: var(--ui-bg-element);
@@ -768,26 +746,16 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-        gap: 4px; /* Add gap between text and sort icon */
 	}
-     /* Ensure span takes available space but respects icon */
-    .th-content span:first-child {
-        flex-grow: 1;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
 
 	.sort-icon {
-		/* margin-left: 4px; Removed margin, using gap now */
+		margin-left: 4px;
 		font-size: 0.8em;
 		opacity: 0.7;
-        flex-shrink: 0; /* Prevent icon from shrinking */
 	}
 
 	.sorting {
-		/* Slightly dim the table during sort animation */
-       /* background-color: var(--ui-bg-hover); */ /* This might be too much */
+		background-color: var(--ui-bg-hover);
 	}
 
 	table.sorting tbody tr {
@@ -806,9 +774,8 @@
 		left: 0;
 		right: 0;
 		bottom: 0;
-		background: rgba(0, 0, 0, 0.05); /* Subtle overlay during sort */
+		background: rgba(0, 0, 0, 0.05);
 		pointer-events: none;
-        z-index: 2; /* Ensure overlay is above content but below header */
 	}
 
 	.sort-asc .sort-icon,
@@ -821,151 +788,200 @@
 		background-color: var(--ui-bg-hover);
 	}
 
-	/* tr { */
-		/* transition: background-color 0.2s; Redundant, already defined */
-	/* } */
+	tr {
+		transition: background-color 0.2s;
+	}
 
-	/* tr:hover { */
-		/* background-color: var(--ui-bg-hover); Redundant, handled above */
-	/* } */
+	tr:hover {
+		background-color: var(--ui-bg-hover);
+	}
 
 	.expandable {
 		cursor: pointer;
 	}
-    /* Ensure non-expandable rows don't show pointer cursor */
-    tr:not(.expandable) {
-        cursor: default;
-    }
-
 
 	.expand-cell {
-		width: 30px; /* Fixed width for expand icon */
+		width: 30px;
 		text-align: center;
 		padding: 4px;
-        flex-shrink: 0;
 	}
-    th.expand-column {
-         width: 30px; /* Match cell width */
-         padding: 4px;
-    }
 
 	.expand-icon {
 		color: var(--text-secondary);
-        font-weight: bold;
 	}
 
 	.expanded-content {
-		background-color: var(--ui-bg-element); /* Slightly different bg for expanded */
+		background-color: var(--ui-bg-element);
 	}
 
 	.expanded-content td {
-		padding: 0; /* Remove padding from the container TD */
-        border-bottom: 1px solid var(--ui-border); /* Ensure bottom border continuity */
+		padding: 8px;
 	}
 
 	.trade-details {
-		/* background-color: var(--ui-bg-element); */ /* Inherits from expanded-content */
-		padding: 12px 16px; /* More padding inside the details */
-		/* border-radius: 4px; */ /* Remove radius if inside TD */
-        border-top: 1px dashed var(--ui-border); /* Add a separator line */
+		background-color: var(--ui-bg-element);
+		padding: 8px;
+		border-radius: 4px;
 	}
 
 	.trade-details h4 {
-		margin: 0 0 8px 0; /* Adjusted margin */
+		margin: 0 0 6px 0;
 		color: var(--text-secondary);
 		font-size: 0.9em;
-        font-weight: 600; /* Make title slightly bolder */
 	}
 
 	.trade-details table {
 		width: 100%;
 		font-size: 0.85em;
-        background-color: transparent; /* Ensure table inside doesn't override BG */
-        border-collapse: collapse; /* Ensure borders work correctly */
-        table-layout: auto; /* Allow content to determine width */
 	}
 
-	.trade-details th, .trade-details td {
-		/* background-color: var(--ui-bg-element); */ /* Inherit background */
+	.trade-details th {
+		background-color: var(--ui-bg-element);
 		padding: 6px 8px;
-        text-align: left;
-        border-bottom: 1px solid var(--ui-border-light, var(--ui-border)); /* Lighter border inside details */
-        white-space: nowrap; /* Prevent wrapping */
 	}
-     .trade-details th {
-        color: var(--text-secondary);
-        font-weight: 500; /* Normal weight for sub-headers */
-        border-bottom-width: 1px; /* Ensure header has border */
-     }
-      .trade-details tbody tr:last-child td {
-        border-bottom: none; /* Remove border on last row */
-      }
-
 
 	.trade-details tr {
-		background-color: transparent; /* Ensure rows are transparent */
+		background-color: transparent;
 	}
 
 	.trade-details tr:hover {
-		background-color: var(--ui-bg-hover); /* Hover effect for detail rows */
+		background-color: var(--ui-bg-hover);
 	}
 
-	/* Color coding for trade types */
-	.entry, .buy, .buy-to-cover { /* Group positive actions */
+	.entry,
+	.buy {
 		color: var(--positive);
 	}
 
-	.exit, .sell, .short { /* Group negative/short actions */
+	.exit,
+	.sell {
 		color: var(--negative);
 	}
 
-	/* Container and sticky columns setup */
-	.table-container {
-		width: 100%;
-		overflow: hidden; /* Changed to hidden, assuming outer scroll handles it */
-		max-width: 100%;
-		/* padding-bottom: 2px; Removed padding */
-		/* padding-right: 8px; Removed padding */
-		border: 1px solid var(--ui-border); /* Add border to container */
-        border-radius: 4px; /* Optional: round corners */
-        position: relative; /* Needed for potential absolute elements */
-        overflow-x: auto; /* Ensure horizontal scroll */
+	.short {
+		color: var(--negative);
 	}
 
-    /* Sticky first column (Flag Icon) */
-    th:nth-child(2), td:nth-child(2) { /* Target the flag column */
-        position: sticky;
-        left: 0;
-        z-index: 1; /* Above non-sticky cells */
-        background-color: inherit; /* Inherit row/header background */
-        width: 24px; /* Minimal width */
-        min-width: 24px;
-        max-width: 24px;
-        padding: 0 4px; /* Minimal padding */
-        text-align: center;
-    }
-     th:nth-child(2) {
-        z-index: 3; /* Above tbody cells and sort overlay */
-         background-color: var(--ui-bg-element); /* Ensure header BG */
-    }
+	.buy-to-cover {
+		color: var(--positive);
+	}
 
-    /* Sticky first column (Expand Icon) if expandable */
-    th.expand-column, td.expand-cell {
-        position: sticky;
-        left: 0;
-        z-index: 1;
-        background-color: inherit;
-    }
-     th.expand-column {
-         z-index: 3;
-         background-color: var(--ui-bg-element);
-     }
-     /* Adjust second column's left position if expand is present */
-     th.expand-column + th, td.expand-cell + td {
-        left: 30px; /* Width of expand column */
-     }
+	.table-container {
+		width: 100%;
+		overflow: hidden;
+		max-width: 100%;
+		padding-bottom: 2px;
+		padding-right: 8px;
+	}
 
+	td:last-child {
+		position: sticky;
+		right: 8px;
+		width: 24px;
+		max-width: 24px;
+		padding: 0;
+		text-align: center;
+		background-color: var(--ui-bg-primary);
+		vertical-align: middle;
+	}
 
+	th:last-child {
+		position: sticky;
+		right: 8px;
+		width: 24px;
+		max-width: 24px;
+		padding: 0;
+		transition: opacity 0.2s ease;
+	}
+
+	.delete-button {
+		opacity: 0;
+		transition: opacity 0.2s ease;
+	}
+
+	tr:hover .delete-button {
+		opacity: 1;
+	}
+
+	tr:hover td {
+		background-color: var(--ui-bg-hover);
+	}
+
+	.loading,
+	.error,
+	.no-results {
+		padding: 10px;
+		text-align: center;
+		color: var(--text-secondary);
+	}
+
+	.error {
+		color: var(--negative);
+	}
+
+	.positive {
+		color: var(--positive);
+	}
+
+	.negative {
+		color: var(--negative);
+	}
+
+	h4 {
+		margin: 20px 0 10px 0;
+		color: var(--text-secondary);
+	}
+
+	.ticker-icon {
+		width: 24px;
+		height: 24px;
+		border-radius: 50%; /* Make icons circular */
+		object-fit: cover; /* Ensure icon covers the area nicely */
+		background-color: var(--ui-bg-element); /* BG for unloaded images */
+		vertical-align: middle; /* Align with text */
+		margin-right: 5px; /* Space between icon and text */
+	}
+
+	.default-ticker-icon {
+		display: inline-flex; /* Use inline-flex for alignment */
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		background-color: var(--ui-border); /* Use border color for background */
+		color: var(--text-primary); /* Use primary text color */
+		font-size: 12px;
+		font-weight: 500;
+		user-select: none; /* Prevent text selection */
+		vertical-align: middle; /* Align with text */
+		margin-right: 5px; /* Space between icon and text */
+	}
+
+	.ticker-name {
+		flex-grow: 1; /* Allow ticker name to take remaining space */
+		overflow: hidden; /* Prevent long names from breaking layout */
+		white-space: nowrap;
+	}
+
+	/* Style for different trade types */
+	.long {
+		color: var(--color-positive);
+	}
+
+	/* Professional flag icon styling */
+	.flag-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.flag-icon svg {
+		width: 16px;
+		height: 16px;
+		color: var(--accent-color);
+	}
+
+	/* ---- START DELETE BUTTON / STICKY COLUMN STYLES ---- */
 	/* Sticky Last column (Delete Button) */
 	th:last-child, td:last-child {
 		position: sticky;
@@ -978,10 +994,9 @@
 		text-align: center;
 		vertical-align: middle;
 	}
-     th:last-child {
+    th:last-child {
         z-index: 3; /* Above tbody cells and sort overlay */
         background-color: var(--ui-bg-element); /* Ensure header BG */
-        /* transition: opacity 0.2s ease; */ /* Don't fade header */
      }
 
 	.delete-button {
@@ -1007,114 +1022,15 @@
 	}
 
 	/* Adjust background for sticky columns on hover/select */
-    tr:hover th:nth-child(2), tr:hover td:nth-child(2),
-    tr:hover th:last-child, tr:hover td:last-child,
-    tr:hover th.expand-column, tr:hover td.expand-cell {
+    /* Assuming .selected class is used for row selection */
+    tr:hover th:last-child, tr:hover td:last-child {
         background-color: var(--ui-bg-hover);
     }
-     tr.selected th:nth-child(2), tr.selected td:nth-child(2),
-     tr.selected th:last-child, tr.selected td:last-child,
-     tr.selected th.expand-column, tr.selected td.expand-cell {
+     tr.selected th:last-child, tr.selected td:last-child {
         background-color: var(--ui-bg-selected, var(--ui-bg-hover));
     }
-     tr.selected:hover th:nth-child(2), tr.selected:hover td:nth-child(2),
-     tr.selected:hover th:last-child, tr.selected:hover td:last-child,
-     tr.selected:hover th.expand-column, tr.selected:hover td.expand-cell {
+     tr.selected:hover th:last-child, tr.selected:hover td:last-child {
         background-color: var(--ui-bg-selected-hover, var(--ui-bg-selected, var(--ui-bg-hover)));
      }
-
-
-	/* Loading / Error / No Results states */
-	.loading,
-	.error,
-	.no-results { /* Add .no-results class if needed */
-		padding: 20px;
-		text-align: center;
-		color: var(--text-secondary);
-        font-style: italic;
-	}
-
-	.error {
-		color: var(--negative);
-        font-style: normal;
-	}
-    .error button {
-        margin-left: 10px;
-        padding: 4px 8px;
-        cursor: pointer;
-    }
-
-
-	/* Color utilities (ensure these vars are defined elsewhere) */
-	.positive {
-		color: var(--positive);
-	}
-
-	.negative {
-		color: var(--negative);
-	}
-
-	/* General heading style (if used outside details) */
-	h4 {
-		margin: 20px 0 10px 0;
-		color: var(--text-secondary);
-	}
-
-	/* Ticker Icon and Name Styles */
-    td:has(.ticker-icon), td:has(.default-ticker-icon) {
-        display: flex; /* Use flex for alignment */
-        align-items: center;
-        gap: 6px; /* Space between icon and name */
-    }
-
-	.ticker-icon {
-		width: 24px;
-		height: 24px;
-		border-radius: 50%; /* Make icons circular */
-		object-fit: cover; /* Ensure icon covers the area nicely */
-		background-color: var(--ui-bg-element); /* BG for unloaded images */
-		/* vertical-align: middle; Removed, using flex align */
-		/* margin-right: 5px; Removed, using gap */
-        flex-shrink: 0; /* Prevent icon from shrinking */
-	}
-
-	.default-ticker-icon {
-		display: inline-flex; /* Use inline-flex for alignment */
-		align-items: center;
-		justify-content: center;
-		width: 24px;
-		height: 24px;
-		border-radius: 50%;
-		background-color: var(--ui-border); /* Use border color for background */
-		color: var(--text-primary); /* Use primary text color */
-		font-size: 12px;
-		font-weight: 500;
-		user-select: none; /* Prevent text selection */
-		/* vertical-align: middle; Removed, using flex align */
-		/* margin-right: 5px; Removed, using gap */
-        flex-shrink: 0; /* Prevent icon from shrinking */
-	}
-
-	.ticker-name {
-		flex-grow: 1; /* Allow ticker name to take remaining space */
-		overflow: hidden; /* Prevent long names from breaking layout */
-		text-overflow: ellipsis;
-        white-space: nowrap; /* Ensure name stays on one line */
-	}
-
-
-	/* Flag Icon Styling */
-	.flag-icon {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-        line-height: 1; /* Prevent extra space */
-        vertical-align: middle; /* Align better if needed */
-	}
-	.flag-icon svg {
-		width: 16px;
-		height: 16px;
-		color: var(--ui-accent); /* Use accent color */
-	}
-
+    /* ---- END DELETE BUTTON / STICKY COLUMN STYLES ---- */
 </style>
