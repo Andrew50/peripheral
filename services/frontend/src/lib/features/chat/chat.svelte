@@ -15,6 +15,7 @@
 		pendingChatQuery // Import the new store
 	} from './interface'
 	import { activeChartInstance } from '$lib/features/chart/interface';
+	import { functionStatusStore, type FunctionStatusUpdate } from '$lib/utils/stream/socket'; // <-- Import the status store and FunctionStatusUpdate type
 
 	// Set default options for the markdown parser (optional)
 	marked.setOptions({
@@ -306,17 +307,24 @@
 		// Create loading message placeholder
 		const loadingMessage: Message = {
 			id: generateId(),
-			content: '',
+			content: '', // Content is now handled by the store
 			sender: 'assistant',
 			timestamp: new Date(),
 			isLoading: true
 		};
-
 		messages = [...messages, loadingMessage];
+		
+		// <-- Set initial status immediately -->
+		functionStatusStore.set({
+			type: 'function_status',
+			userMessage: 'Processing request...' 
+		});
+
 		scrollToBottom();
 
 		const queryText = $inputValue;
 		inputValue.set('');
+		// We already set an initial status, no need to clear here
 		await tick(); // Wait for DOM update
 		adjustTextareaHeight(); // Reset height after clearing input and waiting for tick
 
@@ -335,6 +343,7 @@
 				console.log('Response:', typedResponse);
 
 				messages = messages.filter((m) => m.id !== loadingMessage.id);
+				functionStatusStore.set(null); // Clear status store on success
 
 				const expiresAt = new Date();
 				expiresAt.setHours(expiresAt.getHours() + 24); 
@@ -359,6 +368,7 @@
 
 				// Remove loading message and add error message
 				messages = messages.filter((m) => m.id !== loadingMessage.id);
+				functionStatusStore.set(null); // Clear status store on error
 
 				const errorMessage: Message = {
 					id: generateId(),
@@ -676,11 +686,8 @@
 							: ''} {isNearExpiration(message) ? 'expiring' : ''}"
 					>
 						{#if message.isLoading}
-							<div class="typing-indicator">
-								<span></span>
-								<span></span>
-								<span></span>
-							</div>
+							<!-- Always display status text when loading, as we set an initial one -->
+							<p class="loading-status">{$functionStatusStore?.userMessage || 'Processing...'}</p> 
 						{:else}
 							<!-- Display context chips for user messages -->
 							{#if message.sender === 'user' && message.contextItems && message.contextItems.length > 0}
@@ -1579,4 +1586,35 @@
 		margin-bottom: 1.5rem; /* Space before the 'Ask...' prompt */
 		line-height: 1.4;
 	}
+
+	.loading-status {
+		color: transparent;
+		font-size: 0.8rem;
+		padding: 0.5rem 0;
+		margin: 0;
+		text-align: left; 
+		/* Apply gradient as background */
+		background: linear-gradient(
+			90deg,
+			var(--text-secondary, #aaa),
+			rgba(255, 255, 255, 0.6),
+			var(--text-secondary, #aaa)
+		);
+		background-size: 200% auto;
+		background-clip: text;
+		-webkit-background-clip: text;
+		/* Animate the background position - Slower animation */
+		animation: loading-text-highlight 3s infinite linear; /* Changed duration to 3s */
+	}
+
+	/* Update keyframes to animate background-position */
+	@keyframes loading-text-highlight {
+		0% {
+			background-position: 200% center;
+		}
+		100% {
+			background-position: -200% center;
+		}
+	}
+
 </style>
