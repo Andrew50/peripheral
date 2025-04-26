@@ -454,7 +454,7 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 		}
 
 		// Process all *other* fields dynamically using the keys from the recordMap
-		for key, _ := range recordMap {
+		for key := range recordMap {
 			// Skip already handled standard fields
 			if key == "ticker" || key == "securityid" || (key == "timestamp" && processedTimestamp) {
 				continue
@@ -521,12 +521,6 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 				if tsMs > maxTimeMs {
 					maxTimeMs = tsMs
 				}
-			} else if tsMs == 0 {
-				// Optionally log zero timestamps if they are unexpected
-				// fmt.Printf("Debug format: Instance has zero timestamp (ms) for secId %v\n", instance["securityId"])
-			} else {
-				// Log if timestamp is not int64 as expected after processing
-				// fmt.Printf("Warning format: Instance timestamp is not int64 or is invalid: Type %T, value: %v\n", instance["timestamp"], instance["timestamp"])
 			}
 		}
 
