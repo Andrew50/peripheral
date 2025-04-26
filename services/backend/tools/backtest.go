@@ -386,16 +386,6 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 		}
 	}
 
-	// Get all unique column names from the first record
-	var columnNames []string
-	if len(records) > 0 {
-		if recordMap, ok := records[0].(map[string]any); ok {
-			for key := range recordMap {
-				columnNames = append(columnNames, key)
-			}
-		}
-	}
-
 	for _, record := range records {
 		recordMap, ok := record.(map[string]any)
 		if !ok {
