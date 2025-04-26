@@ -1112,7 +1112,6 @@ func integrateChartEvents(
 		fmt.Printf("Warning: Failed to fetch chart events for secId %d between %d and %d: %v. Returning bars without events.\\n", securityID, fromMs, toMs, err)
 		return // Continue without events
 	}
-	fmt.Printf("\n\n\n\nchartEvents: %v\n", chartEvents)
 
 	if len(chartEvents) == 0 {
 		return // No events found for this range
