@@ -94,7 +94,7 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 
 	// --- BEGIN: Calculate N-Day Returns for Multiple Windows ---
 	if len(args.ReturnWindows) > 0 && len(records) > 0 {
-		fmt.Printf("Calculating %d-Day Returns for %d results across %d windows...\n", len(args.ReturnWindows), len(records), len(args.ReturnWindows))
+		fmt.Printf("Calculating returns for %d results across %d windows...\n", len(records), len(args.ReturnWindows))
 
 		// Prepare the query once (remains the same structure)
 		returnQuery := `
@@ -169,16 +169,30 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 				if err != nil {
 					parsedTime, err = time.Parse(time.RFC3339, t)
 				}
-				if err == nil {
+				if err == nil && !parsedTime.IsZero() {
 					startTime = parsedTime
-				} else {
+				} else if err != nil {
 					fmt.Printf("Warning: Could not parse timestamp string '%s' for secId %d: %v\n", t, securityId, err)
 					for _, window := range args.ReturnWindows {
 						returnColumnName := fmt.Sprintf("%d Day Return %%", window)
 						record[returnColumnName] = nil
 					}
 					continue
+				} else { // Handle zero time after parsing
+					fmt.Printf("Warning: Parsed timestamp is zero for secId %d. Original string: %s\n", securityId, t)
+					for _, window := range args.ReturnWindows {
+						returnColumnName := fmt.Sprintf("%d Day Return %%", window)
+						record[returnColumnName] = nil
+					}
+					continue
 				}
+			case nil:
+				fmt.Printf("Warning: Skipping return calculation for record with securityid %d due to nil timestamp.\n", securityId)
+				for _, window := range args.ReturnWindows {
+					returnColumnName := fmt.Sprintf("%d Day Return %%", window)
+					record[returnColumnName] = nil
+				}
+				continue
 			default:
 				fmt.Printf("Warning: Skipping return calculation for record with securityid %d due to unexpected timestamp type: %T. Value: %v\n", securityId, tsAny, tsAny)
 				for _, window := range args.ReturnWindows {
@@ -188,9 +202,9 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 				continue
 			}
 
-			// Check for zero time
+			// Final check for zero time (should be redundant if parsing logic is correct, but safe)
 			if startTime.IsZero() {
-				fmt.Printf("Warning: Skipping return calculation for record with securityid %d due to zero timestamp.\n", securityId)
+				fmt.Printf("Warning: Skipping return calculation for record with securityid %d due to zero timestamp after processing.\n", securityId)
 				for _, window := range args.ReturnWindows {
 					returnColumnName := fmt.Sprintf("%d Day Return %%", window)
 					record[returnColumnName] = nil
@@ -223,9 +237,10 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 
 				// --- Calculate percentage change for this window ---
 				if startClose.Valid && endClose.Valid && startClose.Float64 != 0 {
-					percentChange := ((endClose.Float64 - startClose.Float64) / startClose.Float64) * 100
-					// Round to reasonable precision, e.g., 2 decimal places
-					record[returnColumnName] = math.Round(percentChange*100) / 100
+					// Calculate the change as a decimal
+					decimalChange := (endClose.Float64 - startClose.Float64) / startClose.Float64
+					// Store as decimal, rounded to 4 places for reasonable precision
+					record[returnColumnName] = math.Round(decimalChange*10000) / 10000
 				} else {
 					// Handle cases: start price missing, end price missing, or start price is 0
 					// Log specific reason for nil result for this window
