@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -105,10 +106,13 @@ func CalculateBacktestStatistic(conn *utils.Conn, userID int, rawArgs json.RawMe
 			continue
 		}
 
+		// First, attempt to process the value in case it's a raw numeric map
+		value := processNumericValue(valueInterface)
+
 		// Attempt to convert value to float64
-		valueFloat, ok := valueInterface.(float64)
+		valueFloat, ok := value.(float64)
 		if !ok {
-			fmt.Printf("Warning: Value for column '%s' in instance %d for strategy %d is not a float64 (%T), skipping.\n", args.ColumnName, i, args.StrategyID, valueInterface)
+			fmt.Printf("Warning: Value for column '%s' in instance %d for strategy %d is not a float64 (%T), skipping.\n", args.ColumnName, i, args.StrategyID, value)
 			continue
 		}
 		values = append(values, valueFloat)
@@ -257,40 +261,48 @@ func GenerateBacktestTableFromInstruction(ctx context.Context, conn *utils.Conn,
 			}
 
 			// Handle regular columns
-			if value, exists := instance[internalColName]; exists {
+			if valueInterface, exists := instance[internalColName]; exists {
 
-				// Handle nil values explicitly first
-				if value == nil {
+				// First, attempt to process the value in case it's a raw numeric map from cache
+				processedValue := processNumericValue(valueInterface)
+
+				// Handle nil values explicitly first (after potential conversion)
+				if processedValue == nil {
 					row[i] = "N/A"
 					continue
 				}
 
 				// Special handling for explicit timestamp (convert ms to readable string)
 				if internalColName == "timestamp" {
-					if tsMillis, ok := value.(float64); ok {
+					if tsMillis, ok := processedValue.(float64); ok {
 						row[i] = time.UnixMilli(int64(tsMillis)).Format(time.RFC3339)
 					} else {
-						// If timestamp exists but isn't a float, treat as invalid for display
 						row[i] = "N/A"
 					}
-					continue // Skip further processing for timestamp column
+					continue
 				}
 
-				// 2. General formatting/rounding for other columns (value is not nil here)
-				formattedValue := value // Start with the non-nil raw value
+				// 2. General formatting/rounding for other columns
+				formattedValue := processedValue // Start with the potentially converted value
 
 				// Apply formatting/rounding only if it's a float64
-				if floatVal, ok := value.(float64); ok {
+				if floatVal, ok := processedValue.(float64); ok {
 					// Check for custom format string
 					if formatStr, formatExists := instruction.ColumnFormat[internalColName]; formatExists {
-						// Use custom format
-						formattedValue = fmt.Sprintf(formatStr, floatVal)
+						// Check if the format string is intended for percentage display
+						if strings.Contains(formatStr, "%%") {
+							// Multiply by 100 for percentage formatting
+							formattedValue = fmt.Sprintf(formatStr, floatVal*100)
+						} else {
+							// Use custom format directly for non-percentage cases
+							formattedValue = fmt.Sprintf(formatStr, floatVal)
+						}
 					} else {
 						// Apply default rounding (2 decimal places) if no format specified
 						formattedValue = math.Round(floatVal*100) / 100
 					}
 				}
-				// else: non-float values remain as `formattedValue = value`
+				// else: non-float values (like strings) remain as is
 
 				row[i] = formattedValue
 

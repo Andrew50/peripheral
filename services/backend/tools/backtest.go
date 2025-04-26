@@ -3,18 +3,20 @@ package tools
 import (
 	"backend/utils"
 	"context"
-    "github.com/jackc/pgx/v4"
 	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v4"
 )
 
 type RunBacktestArgs struct {
-	StrategyId int `json:"strategyId"`
-    ReturnResults bool `json:"returnResults"`
+	StrategyId    int  `json:"strategyId"`
+	ReturnResults bool `json:"returnResults"`
 }
 
 // RunBacktest executes a backtest for the given strategy
@@ -27,7 +29,7 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 	fmt.Println("backtesting")
 	fmt.Println(args.StrategyId)
 
-	backtestJSON, err := _getStrategySpec(conn,  args.StrategyId,userId) // get spec from db using helper
+	backtestJSON, err := _getStrategySpec(conn, args.StrategyId, userId) // get spec from db using helper
 	if err != nil {
 		return nil, fmt.Errorf("ERR vdi0s: failed to fetch strategy %v", err)
 	}
@@ -82,6 +84,8 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 	// formatBacktestResults handles an empty input slice correctly,
 	// returning a map with empty "instances" and "summary".
 	formattedResults, err := formatBacktestResults(recordsInterface, &spec)
+	fmt.Println("\n\n FORMATTED RESULTS: ", formattedResults)
+	fmt.Println("\n\n\n RETURN RESULTS: ", args.ReturnResults)
 	if err != nil {
 		// This error path should ideally not be reached if formatBacktestResults
 		// handles empty input, but kept for robustness.
@@ -106,7 +110,7 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 		// even for empty input.
 		return nil, fmt.Errorf("failed to extract summary from formatted backtest results (internal error)")
 	}
-
+	fmt.Println("\n\n SUMMARY: ", summary)
 	// --- Save Summary to Persistent Context ---
 	// This will save the empty summary map if no results were found.
 	go func() {
@@ -119,12 +123,13 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 	}()
 	// --- End Save Summary ---
 
-    if (args.ReturnResults){
-        return formattedResults, nil
-	// Return the formatted results (which will contain empty instances/summary if no hits) and nil error
-    }else{
-        return summary, nil
-    }
+	if args.ReturnResults {
+		fmt.Println("\n\n FORMATTED RESULTS: ", formattedResults)
+		return formattedResults, nil
+		// Return the formatted results (which will contain empty instances/summary if no hits) and nil error
+	} else {
+		return summary, nil
+	}
 }
 
 // runCompiledBacktest executes a backtest for a given spec using the new compiler
@@ -174,210 +179,257 @@ func ScanRows(rows pgx.Rows) ([]map[string]any, error) {
 // formatBacktestResults converts raw database results into a clean, LLM-friendly format
 // with feature values using feature names from the spec if available
 func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
-    result := make(map[string]any)
+	result := make(map[string]any)
 
-    // Create a clean array of instances
-    instances := make([]map[string]any, 0, len(records))
+	// Create a clean array of instances
+	instances := make([]map[string]any, 0, len(records))
 
-    // Map feature IDs to feature names if spec is provided
-    featureMap := make(map[string]string) // Maps "f0", "f1" to actual feature names
-    if spec != nil {
-        for _, feature := range spec.Features {
-            featureKey := fmt.Sprintf("f%d", feature.FeatureId)
-            featureMap[featureKey] = feature.Name
-        }
-    }
+	// --- Sample Collection Initialization ---
+	columnSamples := make(map[string][]any)
+	sampleCounts := make(map[string]int)
+	const maxSamples = 3 // Number of samples to collect per column
+	// --- End Sample Collection Initialization ---
 
-    // Get all unique column names from the first record
-    var columnNames []string
-    if len(records) > 0 {
-        if recordMap, ok := records[0].(map[string]any); ok {
-            for key := range recordMap {
-                columnNames = append(columnNames, key)
-            }
-        }
-    }
+	// Map feature IDs to feature names if spec is provided
+	featureMap := make(map[string]string) // Maps "f0", "f1" to actual feature names
+	if spec != nil {
+		for _, feature := range spec.Features {
+			featureKey := fmt.Sprintf("f%d", feature.FeatureId)
+			featureMap[featureKey] = feature.Name
+		}
+	}
 
-    for _, record := range records {
-        recordMap, ok := record.(map[string]any)
-        if !ok {
-            continue
-        }
+	// Get all unique column names from the first record
+	var columnNames []string
+	if len(records) > 0 {
+		if recordMap, ok := records[0].(map[string]any); ok {
+			for key := range recordMap {
+				columnNames = append(columnNames, key)
+			}
+		}
+	}
 
-        // Create a clean instance
-        instance := make(map[string]any)
+	for _, record := range records {
+		recordMap, ok := record.(map[string]any)
+		if !ok {
+			continue
+		}
 
-        // Process ticker, securityId, and timestamp directly
-        if ticker, ok := recordMap["ticker"]; ok {
-            instance["ticker"] = ticker
-        }
-        if securityId, ok := recordMap["securityid"]; ok {
-            instance["securityId"] = securityId
-        }
-        if timestampValue, ok := recordMap["timestamp"]; ok {
-            // Convert timestamp logic (keeping existing implementation)
-            var timestampMs int64
-            switch t := timestampValue.(type) {
-            case time.Time:
-                timestampMs = t.UnixMilli()
-            case string:
-                parsedTime, err := time.Parse(time.RFC3339, t)
-                if err == nil {
-                    timestampMs = parsedTime.UnixMilli()
-                } else {
-                    fmt.Printf("Warning: Could not parse timestamp string '%s': %v\n", t, err)
-                    instance["timestamp"] = timestampValue
-                    continue
-                }
-            default:
-                fmt.Printf("Warning: Unhandled timestamp type: %T\n", timestampValue)
-                instance["timestamp"] = timestampValue
-                continue
-            }
-            instance["timestamp"] = timestampMs
-        } else {
-            instance["timestamp"] = nil
-        }
+		// Create a clean instance
+		instance := make(map[string]any)
 
-// Process all numeric fields including OHLCV and indicators
-        for _, key := range columnNames {
-            // Skip already handled fields
-            if key == "ticker" || key == "securityid" || key == "timestamp" {
-                continue
-            }
+		// Process ticker, securityId, and timestamp directly
+		if ticker, ok := recordMap["ticker"]; ok {
+			instance["ticker"] = ticker
+		}
+		if securityId, ok := recordMap["securityid"]; ok {
+			instance["securityId"] = securityId
+		}
+		if timestampValue, ok := recordMap["timestamp"]; ok {
+			// Convert timestamp logic (keeping existing implementation)
+			var timestampMs int64
+			switch t := timestampValue.(type) {
+			case time.Time:
+				timestampMs = t.UnixMilli()
+			case string:
+				parsedTime, err := time.Parse(time.RFC3339, t)
+				if err == nil {
+					timestampMs = parsedTime.UnixMilli()
+				} else {
+					fmt.Printf("Warning: Could not parse timestamp string '%s': %v\n", t, err)
+					instance["timestamp"] = timestampValue
+					continue
+				}
+			default:
+				fmt.Printf("Warning: Unhandled timestamp type: %T\n", timestampValue)
+				instance["timestamp"] = timestampValue
+				continue
+			}
+			instance["timestamp"] = timestampMs
+		} else {
+			instance["timestamp"] = nil
+		}
 
-            // Check if this is a feature column (like "f0", "f1", etc.)
-            columnName := key
-            if spec != nil && strings.HasPrefix(key, "f") {
-                if mappedName, ok := featureMap[key]; ok {
-                    columnName = mappedName // Use the proper feature name from spec
-                }
-            }
+		// Process all numeric fields including OHLCV and indicators
+		for _, key := range columnNames {
+			// Skip already handled fields
+			if key == "ticker" || key == "securityid" || key == "timestamp" {
+				continue
+			}
 
-            if value, ok := recordMap[key]; ok {
-                // Process the value (numeric handling logic from original implementation)
-                processedValue := processNumericValue(value)
-                
-                // Double-check if the processed value is still a map with numeric type fields
-                // This handles nested numeric objects that might not be caught by the first pass
-                if valueMap, isMap := processedValue.(map[string]any); isMap {
-                    if _, hasExp := valueMap["Exp"]; hasExp {
-                        if _, hasInt := valueMap["Int"]; hasInt {
-                            // This is still a numeric object, process it again
-                            processedValue = processNumericValue(processedValue)
-                        }
-                    }
-                }
-                
-                instance[columnName] = processedValue
-            }
-        }
+			// Check if this is a feature column (like "f0", "f1", etc.)
+			columnName := key
+			if spec != nil && strings.HasPrefix(key, "f") {
+				if mappedName, ok := featureMap[key]; ok {
+					columnName = mappedName // Use the proper feature name from spec
+				}
+			}
 
-        instances = append(instances, instance)
-    }
+			if value, ok := recordMap[key]; ok {
+				// Process the value (numeric handling logic from original implementation)
+				processedValue := processNumericValue(value)
 
-    // Create a summary
-    summary := make(map[string]any)
+				// Double-check if the processed value is still a map with numeric type fields
+				// This handles nested numeric objects that might not be caught by the first pass
+				if valueMap, isMap := processedValue.(map[string]any); isMap {
+					if _, hasExp := valueMap["Exp"]; hasExp {
+						if _, hasInt := valueMap["Int"]; hasInt {
+							// This is still a numeric object, process it again
+							processedValue = processNumericValue(processedValue)
+						}
+					}
+				}
 
-    // Add the count of instances to the summary
-    summary["count"] = len(instances)
+				instance[columnName] = processedValue
+			}
+		}
 
-    if len(instances) > 0 {
-    // Find the earliest and latest timestamps
-    var minTimeMs int64 = math.MaxInt64
-    var maxTimeMs int64 = 0
-    var startTimeStr, endTimeStr string
+		instances = append(instances, instance)
 
-    // Scan all instances to find min and max timestamps
-    for _, instance := range instances {
-        if tsMs, ok := instance["timestamp"].(int64); ok {
-            if tsMs < minTimeMs {
-                minTimeMs = tsMs
-                startTimeStr = time.UnixMilli(minTimeMs).Format(time.RFC3339)
-            }
-            if tsMs > maxTimeMs {
-                maxTimeMs = tsMs
-                endTimeStr = time.UnixMilli(maxTimeMs).Format(time.RFC3339)
-            }
-        }
-    }
+		// --- Collect Samples ---
+		for colName, value := range instance {
+			if sampleCounts[colName] < maxSamples && value != nil {
+				// Ensure the sample itself is processed, just in case it wasn't fully converted earlier
+				processedSample := processNumericValue(value)
+				columnSamples[colName] = append(columnSamples[colName], processedSample)
+				sampleCounts[colName]++
+			}
+		}
+		// --- End Collect Samples ---
+	}
 
-    if minTimeMs != math.MaxInt64 && maxTimeMs != 0 {
-        summary["date_range"] = map[string]any{
-            "start_ms": minTimeMs,
-            "end_ms":   maxTimeMs,
-            "start":    startTimeStr,
-            "end":      endTimeStr,
-        }
-    }
-}
+	// Create a summary
+	summary := make(map[string]any)
 
-    // Create the final result structure
-    result["instances"] = instances
-    result["summary"] = summary
+	// Add the count of instances to the summary
+	summary["count"] = len(instances)
 
-    return result, nil
+	if len(instances) > 0 {
+		// Find the earliest and latest timestamps
+		var minTimeMs int64 = math.MaxInt64
+		var maxTimeMs int64 = 0
+		var startTimeStr, endTimeStr string
+
+		// Scan all instances to find min and max timestamps
+		for _, instance := range instances {
+			if tsMs, ok := instance["timestamp"].(int64); ok {
+				if tsMs < minTimeMs {
+					minTimeMs = tsMs
+					startTimeStr = time.UnixMilli(minTimeMs).Format(time.RFC3339)
+				}
+				if tsMs > maxTimeMs {
+					maxTimeMs = tsMs
+					endTimeStr = time.UnixMilli(maxTimeMs).Format(time.RFC3339)
+				}
+			}
+		}
+
+		if minTimeMs != math.MaxInt64 && maxTimeMs != 0 {
+			summary["date_range"] = map[string]any{
+				"start_ms": minTimeMs,
+				"end_ms":   maxTimeMs,
+				"start":    startTimeStr,
+				"end":      endTimeStr,
+			}
+		}
+	}
+
+	// Add the final processed column names to the summary
+	if len(instances) > 0 {
+		finalColumns := make([]string, 0, len(instances[0]))
+		for key := range instances[0] {
+			finalColumns = append(finalColumns, key)
+		}
+		summary["columns"] = finalColumns
+	} else {
+		if len(columnNames) > 0 {
+			summary["columns"] = columnNames
+		} else {
+			summary["columns"] = []string{}
+		}
+	}
+
+	// Add collected samples to the summary
+	summary["columnSamples"] = columnSamples
+
+	// Create the final result structure
+	result["instances"] = instances
+	result["summary"] = summary
+
+	return result, nil
 }
 
 // Helper function to process numeric values from the database
 func processNumericValue(value any) any {
-    // Handle PostgreSQL numeric type
-    if numericMap, ok := value.(map[string]any); ok {
-        // Check if this is a PostgreSQL numeric type with Exp and Int fields
-        exp, hasExp := numericMap["Exp"]
-        intVal, hasInt := numericMap["Int"]
-        
-        if hasExp && hasInt {
-            // Convert exponent to float64
-            var expFloat float64
-            switch e := exp.(type) {
-            case float64:
-                expFloat = e
-            case int:
-                expFloat = float64(e)
-            case int64:
-                expFloat = float64(e)
-            case string:
-                if parsed, err := strconv.ParseFloat(e, 64); err == nil {
-                    expFloat = parsed
-                }
-            }
-            
-            // Convert integer value to float64
-            var floatVal float64
-            switch v := intVal.(type) {
-            case float64:
-                floatVal = v
-            case int:
-                floatVal = float64(v)
-            case int64:
-                floatVal = float64(v)
-            case string:
-                if parsed, err := strconv.ParseFloat(v, 64); err == nil {
-                    floatVal = parsed
-                }
-            }
-            
-            // Calculate actual decimal value
-            return floatVal * math.Pow(10, expFloat)
-        }
-        
-        // If it's not a standard numeric type but has a direct numeric value
-        if val, ok := numericMap["Float64"]; ok {
-            return val
-        }
-        
-        // Return the raw value if we can't process it
-        return value
-    }
-    
-    // Handle other numeric types that might be strings
-    if strVal, ok := value.(string); ok {
-        if floatVal, err := strconv.ParseFloat(strVal, 64); err == nil {
-            return floatVal
-        }
-    }
-    
-    // Pass through non-numeric values
-    return value
+	// --- ADDED: Handle pgtype.Numeric directly ---
+	if pgNum, ok := value.(pgtype.Numeric); ok {
+		var f float64
+		err := pgNum.AssignTo(&f) // Try to assign the numeric value to a float64
+		if err == nil {
+			return f // Return the float64 if successful
+		}
+		// If AssignTo fails, fall through to map handling or return original
+		fmt.Printf("Warning: Failed to assign pgtype.Numeric to float64: %v\n", err)
+	}
+	// --- END ADDED SECTION ---
+
+	// Handle PostgreSQL numeric type represented as map[string]any (fallback or other cases)
+	if numericMap, ok := value.(map[string]any); ok {
+		// Check if this is a PostgreSQL numeric type with Exp and Int fields
+		exp, hasExp := numericMap["Exp"]
+		intVal, hasInt := numericMap["Int"]
+
+		if hasExp && hasInt {
+			// Convert exponent to float64
+			var expFloat float64
+			switch e := exp.(type) {
+			case float64:
+				expFloat = e
+			case int:
+				expFloat = float64(e)
+			case int64:
+				expFloat = float64(e)
+			case string:
+				if parsed, err := strconv.ParseFloat(e, 64); err == nil {
+					expFloat = parsed
+				}
+			}
+
+			// Convert integer value to float64
+			var floatVal float64
+			switch v := intVal.(type) {
+			case float64:
+				floatVal = v
+			case int:
+				floatVal = float64(v)
+			case int64:
+				floatVal = float64(v)
+			case string:
+				if parsed, err := strconv.ParseFloat(v, 64); err == nil {
+					floatVal = parsed
+				}
+			}
+
+			// Calculate actual decimal value
+			return floatVal * math.Pow(10, expFloat)
+		}
+
+		// If it's not a standard numeric type but has a direct numeric value
+		if val, ok := numericMap["Float64"]; ok {
+			return val
+		}
+
+		// Return the raw value if we can't process it
+		return value
+	}
+
+	// Handle other numeric types that might be strings
+	if strVal, ok := value.(string); ok {
+		if floatVal, err := strconv.ParseFloat(strVal, 64); err == nil {
+			return floatVal
+		}
+	}
+
+	// Pass through non-numeric values
+	return value
 }
