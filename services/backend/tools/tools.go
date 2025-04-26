@@ -82,7 +82,7 @@ func initTools() {
 				},
 			},
 			Function: GetSimilarInstances,
-			Query:    true,
+			Query:    false,
 			Api:      true,
 		},
 		"getCurrentSecurityID": {
@@ -1261,16 +1261,16 @@ func initTools() {
 			Api:      true,
 		},
 		"newStrategy": {
-			FunctionDeclaration:nil,
-            Function: NewStrategy,
-			Query:    false,
-			Api:      true,
+			FunctionDeclaration: nil,
+			Function:            NewStrategy,
+			Query:               false,
+			Api:                 true,
 		},
 		"setStrategy": {
 			FunctionDeclaration: nil,
-			Function: SetStrategy,
-			Query:    false,
-			Api:      true,
+			Function:            SetStrategy,
+			Query:               false,
+			Api:                 true,
 		},
 		"deleteStrategy": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -1331,15 +1331,15 @@ func initTools() {
 				},
 			},
 			Function: AnalyzeInstanceFeatures,
-			Query:    true,
+			Query:    false,
 			Api:      false,
 		},
-        "getStrategySpec": {
-            FunctionDeclaration: nil,
-            Function: GetStrategySpec,
-            Query: false, //prolly should allow this
-            Api: true,
-        },
+		"getStrategySpec": {
+			FunctionDeclaration: nil,
+			Function:            GetStrategySpec,
+			Query:               false, //prolly should allow this
+			Api:                 true,
+		},
 		"calculateBacktestStatistic": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "calculateBacktestStatistic",

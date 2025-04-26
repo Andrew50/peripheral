@@ -323,7 +323,7 @@
 			isreplay: $streamInfo.replayActive
 		})
 			.then((response) => {
-				//console.log('backendLoadChartData response', response);
+				console.log('backendLoadChartData response', response);
 				const barDataList = response.bars;
 				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
 					return;
