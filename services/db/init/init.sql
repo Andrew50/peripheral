@@ -177,7 +177,7 @@ CREATE INDEX IF NOT EXISTS idx_ohlcv_1d_securityid ON ohlcv_1d(securityid);
 CREATE INDEX IF NOT EXISTS idx_ohlcv_1d_timestamp ON ohlcv_1d(timestamp DESC);
 
 CREATE TABLE fundamentals (
-    security_id VARCHAR(20) REFERENCES securities(security_id),
+    security_id VARCHAR(20),-- REFERENCES securities(security_id),
     timestamp TIMESTAMP,
     market_cap DECIMAL(22,2),
     shares_outstanding BIGINT,
