@@ -1127,6 +1127,11 @@ func initTools() {
 							Type:        genai.TypeInteger,
 							Description: "id of the strategy to backtest",
 						},
+                        "returnWindow" : {
+							Type:        genai.TypeInteger,
+							Description: "number of days after each backtest result to get the performance result from.",
+						},
+
 					},
 					Required: []string{"strategyId"},
 				},
