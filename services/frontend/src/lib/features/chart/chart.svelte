@@ -288,12 +288,10 @@
 	}
 
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
-		eventSeries.setData([]);
 		if (inst.requestType === 'loadNewTicker') {
-			// Clear pending updates when loading a new ticker
+			eventSeries.setData([]); // Clear events only when loading new ticker
 			pendingBarUpdate = null;
 			pendingVolumeUpdate = null;
-			
 			bidLine.setData([]);
 			askLine.setData([]);
 			arrowSeries.setData([]);
@@ -320,7 +318,8 @@
 			direction: inst.direction,
 			bars: inst.bars,
 			extendedhours: inst.extendedHours,
-			isreplay: $streamInfo.replayActive
+			isreplay: $streamInfo.replayActive,
+			includeSECFilings: get(settings).showFilings
 		})
 			.then((response) => {
 				console.log('backendLoadChartData response', response);
@@ -412,27 +411,18 @@
 				queuedLoad = () => {
 					// Add SEC filings request when loading new ticker
 					try {
-						const bars = chartCandleSeries.data();
-						if (bars.length > 0) {
-							const firstBar = bars[0];
-							const lastBar = bars[bars.length - 1];
+						const barsWithEvents = response.bars; // Use the original response with events
+						if (barsWithEvents && barsWithEvents.length > 0) {
 
-							const fromTime = ESTSecondstoUTCMillis(firstBar.time as UTCTimestamp) as number;
-							const toTime = ESTSecondstoUTCMillis(lastBar.time as UTCTimestamp) as number;
-
-							privateRequest<any[]>('getChartEvents', {
-								securityId: inst.securityId,
-								from: fromTime,
-								to: toTime,
-								includeSECFilings: get(settings).showFilings
-							}).then((events) => {
-								// Check if events is empty or undefined
-								if (!events || events.length === 0) {
-									// Clear any existing events data
-									eventSeries.setData([]);
-									return;
+							const allEventsRaw: Array<{timestamp: number, type: string, value: string}> = [];
+							barsWithEvents.forEach(bar => {
+								if (bar.events && bar.events.length > 0) {
+									allEventsRaw.push(...bar.events);
 								}
+							});
 
+							// Check if new raw events exist
+							if (allEventsRaw && allEventsRaw.length > 0) {
 								const eventsByTime = new Map<
 									number,
 									Array<{
@@ -445,69 +435,92 @@
 									}>
 								>();
 
-								events.forEach((event) => {
-									// Convert timestamp from UTC milliseconds to EST seconds
-									event.timestamp = UTCSecondstoESTSeconds(event.timestamp / 1000) as UTCTimestamp;
+								// Iterate through bars, using bar.time as the key
+								barsWithEvents.forEach((bar) => {
+									if (bar.events && bar.events.length > 0) {
+										const barTime = bar.time as number; // Already EST seconds
 
-									// Round to the nearest timeframe
-									const roundedTime =
-										Math.floor(event.timestamp / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+										if (!eventsByTime.has(barTime)) {
+											eventsByTime.set(barTime, []);
+										}
 
-									if (!eventsByTime.has(roundedTime)) {
-										eventsByTime.set(roundedTime, []);
-									}
+										// Process each event attached to this bar
+										bar.events.forEach((event) => {
+											// Parse the JSON string in event.value into an object
+											let valueObj: EventValue = {};
+											try {
+												valueObj = JSON.parse(event.value);
+											} catch (e) {
+												console.error('Failed to parse event value:', e, event.value);
+											}
 
-									// Parse the JSON string into an object
-									let valueObj: EventValue = {};
-									try {
-										valueObj = JSON.parse(event.value);
-									} catch (e) {
-										console.error('Failed to parse event value:', e, event.value);
-									}
-
-									// Create proper event object based on type
-									if (event.type === 'sec_filing') {
-										eventsByTime.get(roundedTime)?.push({
-											type: 'sec_filing',
-											title: valueObj.type || 'SEC Filing',
-											url: valueObj.url
-										});
-									} else if (event.type === 'split') {
-										eventsByTime.get(roundedTime)?.push({
-											type: 'split',
-											title: `Split: ${valueObj.ratio || 'unknown'}`,
-											value: valueObj.ratio
-										});
-									} else if (event.type === 'dividend') {
-										const amount = typeof valueObj.amount === 'string' ? valueObj.amount : '0.00';
-										eventsByTime.get(roundedTime)?.push({
-											type: 'dividend',
-											title: `Dividend: $${amount}`,
-											value: amount,
-											exDate: valueObj.exDate || 'Unknown',
-											payoutDate: valueObj.payDate || 'Unknown'
+											// Create proper event object based on type and add to the map using barTime
+											if (event.type === 'sec_filing') {
+												eventsByTime.get(barTime)?.push({
+													type: 'sec_filing',
+													title: valueObj.type || 'SEC Filing',
+													url: valueObj.url
+												});
+											} else if (event.type === 'split') {
+												eventsByTime.get(barTime)?.push({
+													type: 'split',
+													title: `Split: ${valueObj.ratio || 'unknown'}`,
+													value: valueObj.ratio
+												});
+											} else if (event.type === 'dividend') {
+												const amount = typeof valueObj.amount === 'string' ? valueObj.amount : '0.00';
+												eventsByTime.get(barTime)?.push({
+													type: 'dividend',
+													title: `Dividend: $${amount}`,
+													value: amount,
+													exDate: valueObj.exDate || 'Unknown',
+													payoutDate: valueObj.payDate || 'Unknown'
+												});
+											}
 										});
 									}
 								});
 
-								// Fix the event data handling
-								let eventData: EventMarker[] = [];
-								eventsByTime.forEach((events, time) => {
-									eventData.push({
+								// Process the newly fetched events
+								let newEventData: EventMarker[] = [];
+								eventsByTime.forEach((eventsList, time) => {
+									newEventData.push({
 										time: time as UTCTimestamp,
-										events: events
+										events: eventsList
 									});
 								});
 
-								// Cast the data array to any to avoid readonly issues
-								eventData = adjustEventsToTradingDays(eventData, [...chartCandleSeries.data()]);
+								// Get existing events ONLY if loading additional data
+								const existingEventData = (inst.requestType === 'loadAdditionalData')
+									? eventSeries.data() as EventMarker[]
+									: [];
 
-								// Set the data on the event markers series
-								eventSeries.setData(eventData);
-							});
-						}
+								// Combine using a Map to handle potential overlaps/updates
+								const combinedEventsMap = new Map<number, EventMarker>();
+								existingEventData.forEach(event => combinedEventsMap.set(event.time as number, event));
+								newEventData.forEach(event => combinedEventsMap.set(event.time as number, event)); // New events overwrite existing at the same time
+
+								let finalEventData = Array.from(combinedEventsMap.values());
+
+								// Sort the combined data by time
+								finalEventData.sort((a, b) => (a.time as number) - (b.time as number));
+
+								// Adjust events to trading days using the combined candle data
+								// Ensure newCandleData exists and is an array before spreading
+								const candleDataForAdjustment = Array.isArray(newCandleData) ? [...newCandleData] : [];
+								finalEventData = adjustEventsToTradingDays(finalEventData, candleDataForAdjustment);
+
+								// Set the final data
+								eventSeries.setData(finalEventData);
+
+							}
+						} 
 					} catch (error) {
-						console.warn('Failed to fetch chart events:', error);
+						console.warn('Failed to process chart events from bars:', error);
+						// Avoid clearing events on error during additional load
+						if (inst.requestType !== 'loadAdditionalData') {
+							eventSeries.setData([]);
+						}
 					}
 
 					if (inst.direction == 'forward') {
@@ -1182,9 +1195,6 @@
 			alertLines = [];
 		}
 
-		if (eventSeries) {
-			eventSeries.setData([]);
-		}
 		if (arrowSeries) {
 			arrowSeries.setData([]);
 		}

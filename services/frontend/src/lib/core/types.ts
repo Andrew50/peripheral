@@ -114,7 +114,7 @@ export interface Alert {
     ticker?: string;
     price?: number; // Target price for price alerts
     direction?: boolean; // Direction for price/strategy alerts
-    // alertPrice?: number; // This seems redundant if 'price' is used for target price
+    alertPrice?: number; // Ensure this field is present
 }
 
 // Specific type for Price Alerts based on 'priceAlerts' table
