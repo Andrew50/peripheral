@@ -177,79 +177,113 @@ func buildUniverseConditions(u *Universe) ([]string, error) {
 // -----------------------------------------------------------------------------
 
 func compileFeatureExpr(f Feature, partitionKey string) (string, error) {
-    const rowAlias = "u" // the alias we use in the features CTE
-    
-    // Handle empty expressions
-    if len(f.Expr) == 0 {
-        return "", fmt.Errorf("empty expression")
-    }
-    
-    // Implement RPN evaluation using a stack
-    var stack []string
-    
-    for _, part := range f.Expr {
-        if part.Type == "column" {
-            // Push column reference to stack
-            colName := strings.ToLower(part.Value)
-            stack = append(stack, fmt.Sprintf("%s.%s", rowAlias, colName))
-        } else if part.Type == "operator" {
-            // Need at least two operands for binary operation
-            if len(stack) < 2 {
-                return "", fmt.Errorf("not enough operands for operator '%s'", part.Value)
-            }
-            
-            // Pop the two top operands
-            idx := len(stack) - 2
-            left := stack[idx]
-            right := stack[idx+1]
-            stack = stack[:idx]
-            
-            // Create the operation expression and push result back to stack
-            expr := fmt.Sprintf("(%s %s %s)", left, part.Value, right)
-            stack = append(stack, expr)
-        }
-    }
-    
-    // After processing all parts, we should have exactly one value on the stack
-    if len(stack) != 1 {
-        return "", fmt.Errorf("invalid RPN expression: does not evaluate to a single result")
-    }
-    
-    expr := stack[0]
-    
-    // Extract the partition key column
-    pkCol := partitionKey
-    if i := strings.Index(pkCol, "."); i != -1 {
-        pkCol = pkCol[i+1:]
-    }
-    
-    // Wrap smoothing window (simple moving average via AVG)
-    if f.Window > 1 {
-        expr = fmt.Sprintf(
-            "AVG((%s)) OVER (PARTITION BY %s.%s ORDER BY %s.timestamp ROWS BETWEEN %d PRECEDING AND CURRENT ROW)",
-            expr, rowAlias, pkCol, rowAlias, f.Window-1,
-        )
-    }
-    
-    // Output post‑processing
-    switch f.Output {
-    case "raw":
-        // do nothing
-    case "rankn": // 0‑1 normalised
-        expr = fmt.Sprintf(
-            "PERCENT_RANK() OVER (PARTITION BY %s.timestamp ORDER BY %s)",
-            rowAlias, expr,
-        )
-    case "rankp": // 1‑100 percentiles using NTILE
-        expr = fmt.Sprintf(
-            "NTILE(100) OVER (PARTITION BY %s.timestamp ORDER BY %s)",
-            rowAlias, expr,
-        )
-    default:
-        return "", fmt.Errorf("unsupported output kind %q", f.Output)
-    }
-    
-    return expr, nil
+	const rowAlias = "u" // the alias we use in the features CTE
+
+	// Handle empty expressions
+	if len(f.Expr) == 0 {
+		return "", fmt.Errorf("empty expression")
+	}
+
+	// Implement RPN evaluation using a stack
+	var stack []string
+
+	for _, part := range f.Expr {
+		if part.Type == "column" {
+			// Push column reference to stack, applying LAG if offset > 0
+			colName := strings.ToLower(part.Value)
+			colRef := fmt.Sprintf("%s.%s", rowAlias, colName) // Base reference
+
+			if part.Offset < 0 {
+				// This should be caught by validation, but handle defensively
+				return "", fmt.Errorf("invalid negative offset %d for column %s", part.Offset, colName)
+			}
+
+			if part.Offset > 0 {
+				// Apply LAG function if offset is specified.
+				// LAG operates within the time series of a single security.
+				lagPartitionKey := fmt.Sprintf("%s.securityid", rowAlias) // Partition LAG by security
+				// Use 0 as the default value for LAG if the lagged row doesn't exist (e.g., at the start of the series)
+				// Using COALESCE might be better if NULL is desired instead of 0. For simplicity, using 0 default in LAG.
+				colRef = fmt.Sprintf("LAG(%s, %d, 0) OVER (PARTITION BY %s ORDER BY %s.timestamp)",
+					colRef, part.Offset, lagPartitionKey, rowAlias)
+			}
+			stack = append(stack, colRef)
+
+		} else if part.Type == "operator" {
+			// Need at least two operands for binary operation
+			if len(stack) < 2 {
+				return "", fmt.Errorf("not enough operands for operator '%s'", part.Value)
+			}
+
+			// Pop the two top operands
+			// Note: RPN pops right operand first, then left
+			right := stack[len(stack)-1]
+			left := stack[len(stack)-2]
+			stack = stack[:len(stack)-2] // Remove the top two elements
+
+
+			// Create the operation expression and push result back to stack
+			// Handle potential division by zero - replace 0 with NULLIF or CASE WHEN
+			var expr string
+			if part.Value == "/" {
+                 // Avoid division by zero; NULLIF(divisor, 0) returns NULL if divisor is 0
+                 expr = fmt.Sprintf("(%s %s NULLIF(%s, 0))", left, part.Value, right)
+            } else if part.Value == "^" {
+				// Use POWER function for exponentiation as '^' is not standard SQL for power
+				expr = fmt.Sprintf("POWER(%s, %s)", left, right)
+			} else {
+				expr = fmt.Sprintf("(%s %s %s)", left, part.Value, right)
+			}
+			stack = append(stack, expr)
+		}
+	}
+
+	// After processing all parts, we should have exactly one value on the stack
+	if len(stack) != 1 {
+		return "", fmt.Errorf("invalid RPN expression: does not evaluate to a single result (stack size: %d)", len(stack))
+	}
+
+	expr := stack[0]
+
+	// Determine the partitioning column for the outer window functions (AVG, NTILE, PERCENT_RANK)
+	// Use the partitionKey provided, which might be securityid, sector, etc.
+	windowPartitionCol := partitionKey
+	// Ensure the alias 'u.' is used if the key comes from the universe CTE
+	if strings.HasPrefix(windowPartitionCol, "s.") {
+		windowPartitionCol = fmt.Sprintf("%s.%s", rowAlias, strings.TrimPrefix(windowPartitionCol, "s."))
+	} else if !strings.HasPrefix(windowPartitionCol, rowAlias + ".") {
+		// If no alias, assume it's a column in the universe CTE and add the alias
+		windowPartitionCol = fmt.Sprintf("%s.%s", rowAlias, windowPartitionCol)
+	}
+
+
+	// Wrap smoothing window (simple moving average via AVG)
+	if f.Window > 1 {
+		expr = fmt.Sprintf(
+			"AVG(%s) OVER (PARTITION BY %s ORDER BY %s.timestamp ROWS BETWEEN %d PRECEDING AND CURRENT ROW)",
+			expr, windowPartitionCol, rowAlias, f.Window-1,
+		)
+	}
+
+	// Output post‑processing (Rank/Percentile) - Partitioning uses windowPartitionCol
+	switch f.Output {
+	case "raw":
+		// do nothing
+	case "rankn": // 0‑1 normalised (PERCENT_RANK is 0-based)
+		expr = fmt.Sprintf(
+			"PERCENT_RANK() OVER (PARTITION BY %s.timestamp ORDER BY %s ASC)", // Partition by timestamp for ranking across securities at that time
+			rowAlias, expr,
+		)
+	case "rankp": // 1‑100 percentiles using NTILE
+		expr = fmt.Sprintf(
+			"NTILE(100) OVER (PARTITION BY %s.timestamp ORDER BY %s ASC)", // Partition by timestamp for ranking across securities at that time
+			rowAlias, expr,
+		)
+	default:
+		return "", fmt.Errorf("unsupported output kind %q", f.Output)
+	}
+
+	return expr, nil
 }
 
 // Updated to accept a FeatureSource struct instead of a string
