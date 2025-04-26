@@ -88,7 +88,7 @@ for dep in "${SERVICES_ARRAY[@]}"; do
   fi
   
   # Set maximum attempts and timeout per attempt
-  MAX_ATTEMPTS=12  # Total of 12 attempts
+  MAX_ATTEMPTS=5  # Total of 12 attempts
   TIMEOUT_PER_ATTEMPT="1m"  # 1 minute per attempt (total 12 minutes max)
   
   # Try rollout status with multiple short attempts
