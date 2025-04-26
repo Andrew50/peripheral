@@ -136,6 +136,7 @@
 	let queryInput: HTMLTextAreaElement;
 	let isLoading = false;
 	let messagesContainer: HTMLDivElement;
+	let initialSuggestions: string[] = [];
 
 	// Backtest mode state
 	let isBacktestMode = false;
@@ -156,6 +157,26 @@
 
 	// Manage active chart context: subscribe to add new and remove old chart contexts
 	let previousChartInstance: Instance | null = null;
+
+	// Function to fetch initial suggestions based on active chart
+	async function fetchInitialSuggestions() {
+		initialSuggestions = []; // Clear previous suggestions first
+		if ($activeChartInstance) { // Only fetch if there's an active instance
+			try {
+				const response = await privateRequest<{ suggestions: string[] }>('getInitialQuerySuggestions', {
+					activeChartInstance: $activeChartInstance
+				});
+				if (response && response.suggestions) {
+					initialSuggestions = response.suggestions;
+				} else {
+					initialSuggestions = []; // Ensure it's an empty array on bad response
+				}
+			} catch (error) {
+				console.error('Error fetching initial suggestions:', error);
+				initialSuggestions = []; // Ensure it's an empty array on error
+			}
+		}
+	}
 
 	// Load any existing conversation history from the server
 	async function loadConversationHistory() {
@@ -194,7 +215,13 @@
 			console.error('Error loading conversation history:', error);
 		} finally {
 			isLoading = false;
-			historyLoaded = true; // Set history loaded flag
+			historyLoaded = true;
+
+			// Clear previous suggestions and fetch if history is empty
+			initialSuggestions = [];
+			if (messages.length === 0) {
+				fetchInitialSuggestions(); // <-- Call the new helper function
+			}
 		}
 	}
 
@@ -393,28 +420,14 @@
 	async function clearConversation() {
 		try {
 			isLoading = true;
-			const response = await privateRequest('clearConversationHistory', {});
-			
+			// Wait for backend confirmation before clearing locally and fetching suggestions
+			await privateRequest('clearConversationHistory', {});
+
 			// Clear local messages
 			messages = [];
-			
-			// Optional: Show a temporary system message that history was cleared
-			const systemMessage: Message = {
-				id: generateId(),
-				content: "Conversation history has been cleared.",
-				sender: 'assistant',
-				timestamp: new Date(),
-				responseType: 'system'
-			};
-			
-			messages = [systemMessage];
-			
-			// Remove the system message after a few seconds
-			setTimeout(() => {
-				if (messages.length === 1 && messages[0].id === systemMessage.id) {
-					messages = [];
-				}
-			}, 3000);
+
+			// Fetch initial suggestions now that history is cleared and confirmed
+			fetchInitialSuggestions(); // <-- Call the new helper function
 			
 		} catch (error) {
 			console.error('Error clearing conversation history:', error);
@@ -423,12 +436,11 @@
 			const errorMessage: Message = {
 				id: generateId(),
 				content: `Error: Failed to clear conversation history`,
-				sender: 'assistant',
+				sender: 'assistant', // Or 'system'? Let's keep 'assistant' for consistency with other errors
 				timestamp: new Date(),
 				responseType: 'error'
 			};
-			
-			messages = [...messages, errorMessage];
+			messages = [errorMessage]; // Show error on empty background
 		} finally {
 			isLoading = false;
 		}
@@ -647,16 +659,13 @@
 
 	<div class="chat-messages" bind:this={messagesContainer}>
 		{#if messages.length === 0}
-			<div class="empty-chat">
-				<div class="empty-chat-icon">
-					<svg viewBox="0 0 24 24" width="48" height="48">
-						<path
-							d="M20,2H4C2.9,2 2,2.9 2,4V22L6,18H20C21.1,18 22,17.1 22,16V4C22,2.9 21.1,2 20,2M20,16H5.2L4,17.2V4H20V16Z"
-							fill="currentColor"
-						/>
-					</svg>
-				</div>
-				<p>No messages yet. Start a conversation!</p>
+			<!-- Only show the container and header when chat is empty -->
+			<div class="initial-container">
+				<!-- Capabilities text merged here -->
+				<p class="capabilities-text">Chat is a powerful interface for analyzing market data, filings, news, backtesting strategies, and more. It can answer questions and perform tasks.</p>
+				<p class="suggestions-header">Ask Atlantis a question or to perform a task to get started.</p>
+
+
 			</div>
 		{:else}
 			{#each messages as message (message.id)}
@@ -796,6 +805,22 @@
 	</div>
 
 	<div class="chat-input-wrapper">
+		<!-- Moved Initial Suggestions Here -->
+		{#if messages.length === 0 && initialSuggestions.length > 0}
+			<div class="initial-suggestions-input-area">
+				<div class="suggested-queries">
+					{#each initialSuggestions as query}
+						<button
+							class="suggested-query-btn"
+							on:click={() => handleSuggestedQueryClick(query)}
+						>
+							{query}
+						</button>
+					{/each}
+				</div>
+			</div>
+		{/if}
+
 		<div class="input-actions">
 			<button
 				class="action-toggle-button {isBacktestMode ? 'active' : ''}"
@@ -1090,27 +1115,50 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.5rem;
-		margin: 0.75rem 0;
+		margin: 0.75rem 0; /* Keep vertical margin */
+	}
+
+	/* Specific styling for initial suggestions above input */
+	.initial-suggestions-input-area {
+		width: 100%; /* Ensure container takes full width */
+		padding-bottom: 0.5rem; /* Space between suggestions and actions */
+		border-bottom: 1px solid var(--ui-border); /* Separator line */
+		margin-bottom: 0.5rem; /* Space below the separator */
+	}
+
+	/* Adjust margin for suggested queries only when they are in the input area */
+	.initial-suggestions-input-area .suggested-queries {
+		margin: 0; /* Remove margin when above input */
+		display: flex; /* Use flexbox */
+		flex-direction: column; /* Stack items vertically */
+		align-items: stretch; /* Make items stretch to fill width */
+		gap: 0.5rem; /* Keep gap between buttons */
+	}
+
+	/* Reset styles specifically for buttons in the initial suggestions area */
+	.initial-suggestions-input-area .suggested-query-btn {
+		padding: 0.4rem 1rem; /* Use standard button padding */
+		height: auto;         /* Reset height */
+		flex: none;           /* Reset flex property */
+		text-align: center;   /* Center text within the stretched button */
 	}
 
 	.suggested-query-btn {
 		/* Match the ticker button styles */
 		background: var(--ui-bg-element-darker, #2a2a2a);
 		border: 1px solid var(--ui-border, #444);
-		color: var(--text-primary, #fff); /* Use primary text color */
-		padding: 0.4rem 1rem; /* Match padding */
+		color: var(--text-primary, #fff);
+		/* padding: 0.4rem 1rem; */ /* Padding is now handled more specifically */
 		border-radius: 0.25rem; /* Match border-radius */
 		font-size: 0.75rem; /* Match font-size */
 		font-weight: 500;
 		cursor: pointer;
 		transition: all 0.2s ease;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		max-width: 100%;
-		line-height: 1; /* Ensure consistent height */
+		max-width: 100%; /* Keep max-width */
+		line-height: 1.3; /* ADJUST line-height for wrapping */
 		text-decoration: none; /* Remove default button underline */
 		display: inline-block; /* Ensure proper alignment */
+		text-align: left; /* Align wrapped text to the left */
 	}
 
 	.suggested-query-btn:hover {
@@ -1504,5 +1552,31 @@
 		border-radius: 0.25rem;
 		font-size: 0.7rem; /* Smaller font size */
 		cursor: default; /* Not interactive */
+	}
+
+	.initial-container {
+		text-align: center;
+		color: var(--text-secondary, #aaa);
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		height: 100%;
+		flex: 1;
+		padding: 2rem;
+	}
+
+	.suggestions-header {
+		font-size: 0.9rem;
+		margin-bottom: 1rem;
+		font-weight: 500;
+		color: var(--text-primary, #fff);
+	}
+
+	/* Style for the capabilities text within the initial container */
+	.capabilities-text {
+		font-size: 0.8rem;
+		color: var(--text-secondary, #aaa);
+		margin-bottom: 1.5rem; /* Space before the 'Ask...' prompt */
+		line-height: 1.4;
 	}
 </style>
