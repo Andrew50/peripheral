@@ -13,8 +13,9 @@ import (
 )
 
 type Query struct {
-	Query   string                   `json:"query"`
-	Context []map[string]interface{} `json:"context,omitempty"`
+	Query              string                   `json:"query"`
+	Context            []map[string]interface{} `json:"context,omitempty"`
+	ActiveChartContext map[string]interface{}   `json:"activeChartContext,omitempty"`
 }
 
 // ExecuteResult represents the result of executing a function
@@ -50,11 +51,9 @@ type ContentChunk struct {
 }
 
 type QueryResponse struct {
-	Type          string            `json:"type"` //"mixed_content", "function_calls", "simple_text"
-	ContentChunks []ContentChunk    `json:"content_chunks,omitempty"`
-	Text          string            `json:"text,omitempty"`
-	Results       []ExecuteResult   `json:"results,omitempty"`
-	History       *ConversationData `json:"history,omitempty"`
+	Type          string         `json:"type"` //"mixed_content", "function_calls", "simple_text"
+	ContentChunks []ContentChunk `json:"content_chunks,omitempty"`
+	Text          string         `json:"text,omitempty"`
 }
 
 // ThinkingResponse represents the JSON output from the thinking model with rounds
@@ -157,30 +156,40 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		var prompt strings.Builder
 
 		if persistentHistory != "" {
-			prompt.WriteString("Persistent Context Items:\n")
+			prompt.WriteString("<PersistentContext>\n")
 			prompt.WriteString(persistentHistory)
-			prompt.WriteString("\n\n")
+			prompt.WriteString("</PersistentContext>\n\n")
 			fmt.Println("persistentHistory ", persistentHistory)
 		}
 		if conversationHistory != "" {
-			prompt.WriteString("Conversation History:\n")
+			prompt.WriteString("<ConversationHistory>\n")
 			prompt.WriteString(conversationHistory)
-			prompt.WriteString("\n\n")
+			prompt.WriteString("</ConversationHistory>\n\n")
+		}
+		// Add active chart context if present
+		if query.ActiveChartContext != nil {
+			ticker, _ := query.ActiveChartContext["ticker"].(string)
+			secId := fmt.Sprint(query.ActiveChartContext["securityId"])
+			tsStr := fmt.Sprint(query.ActiveChartContext["timestamp"])
+			prompt.WriteString("<UserActiveChart>\n")
+			prompt.WriteString(fmt.Sprintf("- Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secId, tsStr))
+			prompt.WriteString("</UserActiveChart>\n\n")
 		}
 		if contextSection != "" {
-			prompt.WriteString("User added context:\n")
+			prompt.WriteString("<UserContext>\n")
 			prompt.WriteString(contextSection)
-			prompt.WriteString("\n")
+			prompt.WriteString("</UserContext>\n\n")
 		}
-		prompt.WriteString("User Query:\n")
+		prompt.WriteString("<UserQuery>\n")
 		prompt.WriteString(userQuery)
-		prompt.WriteString("\n\n")
+		prompt.WriteString("\n</UserQuery>\n\n")
 		if len(allThinkingResults) > 0 {
-			prompt.WriteString("Results from all previous rounds:\n\n")
+			prompt.WriteString("<PreviousRoundResults>\n")
 			resultsJSON, _ := json.Marshal(allResults)
 			prompt.WriteString("```json\n")
 			prompt.WriteString(string(resultsJSON))
-			prompt.WriteString("\n```\n\n")
+			prompt.WriteString("\n```\n")
+			prompt.WriteString("</PreviousRoundResults>\n\n")
 		}
 		fmt.Println("prompt ", prompt.String())
 		// This first passes the query to a thinking model
@@ -200,9 +209,8 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		// If no valid JSON is found, just return the text response
 		if jsonStartIdx == -1 || jsonEndIdx == -1 || jsonEndIdx <= jsonStartIdx {
 			return QueryResponse{
-				Type:    "text",
-				Text:    responseText,
-				History: conversationData,
+				Type: "text",
+				Text: responseText,
 			}, nil
 		}
 
@@ -228,9 +236,8 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			}
 
 			return QueryResponse{
-				Type:    "text",
-				Text:    responseText,
-				History: conversationData,
+				Type: "text",
+				Text: responseText,
 			}, nil
 		}
 
@@ -259,7 +266,6 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			return QueryResponse{
 				Type:          "mixed_content",
 				ContentChunks: thinkingResp.ContentChunks,
-				History:       conversationData,
 			}, nil
 		}
 
@@ -286,34 +292,10 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 				return QueryResponse{
 					Type:          "mixed_content",
 					ContentChunks: newMessage.ContentChunks,
-					History:       conversationData,
 				}, nil
 			}
 			if !thinkingResp.RequiresFurtherPlanning {
-				// Create new message with the round results and formatted response
-				newMessage := ChatMessage{
-					Query:         query.Query,
-					ResponseText:  "Successfully processed the following function calls:\n\n",
-					FunctionCalls: []FunctionCall{}, // We don't store these as regular function calls
-					ToolResults:   thinkingResults,
-					ContextItems:  query.Context, // Store context with the user query message
-					Timestamp:     time.Now(),
-					ExpiresAt:     time.Now().Add(24 * time.Hour),
-				}
-
-				// Add new message to conversation history
-				conversationData.Messages = append(conversationData.Messages, newMessage)
-				conversationData.Timestamp = time.Now()
-				if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-					fmt.Printf("Error saving updated conversation: %v\n", err)
-				}
-
-				return QueryResponse{
-					Type:    "function_calls",
-					Results: thinkingResults,
-					Text:    "Successfully processed the following function calls:\n\n",
-					History: conversationData,
-				}, nil
+				GetQuery(conn, userID, json.RawMessage(fmt.Sprintf(`{"query": "%s"}`, userQuery)))
 			}
 			allResults = append(allResults, thinkingResults...)
 			allThinkingResults = append(allThinkingResults, thinkingResp)
@@ -884,15 +866,16 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 			prompt.WriteString("Process this round of function calls:\n\n")
 			prompt.WriteString("```json\n")
 			prompt.WriteString(string(roundJSON))
-			prompt.WriteString("\n```\n\n")
+			prompt.WriteString("\n```\n")
 
 			// Include ALL previous round results if available
 			if len(allPreviousRoundResults) > 0 {
-				prompt.WriteString("Results from all previous rounds:\n\n")
+				prompt.WriteString("<PreviousRoundResults>\n")
 				resultsJSON, _ := json.Marshal(allPreviousRoundResults)
 				prompt.WriteString("```json\n")
 				prompt.WriteString(string(resultsJSON))
-				prompt.WriteString("\n```\n\n")
+				prompt.WriteString("\n```\n")
+				prompt.WriteString("</PreviousRoundResults>\n")
 			}
 
 			prompt.WriteString("Please process this round of function calls.\n")
@@ -924,12 +907,14 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 		if thinkingResp.RequiresFinalResponse {
 			// 1. Generate the final response text using accumulated results
 			var finalPrompt strings.Builder
-			finalPrompt.WriteString("Here is the original query: ")
+			finalPrompt.WriteString("<OriginalUserQuery>")
 			finalPrompt.WriteString(originalQuery)
-			finalPrompt.WriteString("\n\nHere are the results from the function calls: ")
+			finalPrompt.WriteString("</OriginalUserQuery>\n")
+			finalPrompt.WriteString("<FunctionCallResults>")
 			resultsJSON, _ := json.Marshal(allResults)
 			finalPrompt.WriteString(string(resultsJSON))
-			finalPrompt.WriteString("\n\nPlease provide a final response to the original query based on the results from the function calls.")
+			finalPrompt.WriteString("\n</FunctionCallResults>\n")
+			finalPrompt.WriteString("Please provide a final response to the original query based on the results from the function calls.")
 
 			processedText, err := getGeminiResponse(ctx, conn, finalPrompt.String())
 			if err != nil {
