@@ -332,13 +332,12 @@ func GetStrategySpec(conn *utils.Conn, userId int, rawArgs json.RawMessage) (int
 	return _getStrategySpec(conn, args.StrategyId, userId)
 }
 
-func _getStrategySpec(conn *utils.Conn, userId int, strategyId int) (json.RawMessage, error) {
+func _getStrategySpec(conn *utils.Conn, strategyId int, userId int) (json.RawMessage, error) {
 	var strategyCriteria json.RawMessage
 	fmt.Println(userId)
 	err := conn.DB.QueryRow(context.Background(), `
     SELECT spec
-    FROM strategies WHERE strategyId = $1`, strategyId).Scan(&strategyCriteria)
-	//TODO add user id check back
+    FROM strategies WHERE strategyId = $1 and userId = $2`, strategyId, userId).Scan(&strategyCriteria)
 	if err != nil {
 		return nil, err
 	}
@@ -346,10 +345,13 @@ func _getStrategySpec(conn *utils.Conn, userId int, strategyId int) (json.RawMes
 	return strategyCriteria, nil
 }
 
+
+
+
 // GetStrategies performs operations related to GetStrategies functionality.
 func GetStrategies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(), `
-    SELECT strategyId, name, spec
+    SELECT strategyId, name
     FROM strategies WHERE userId = $1`, userId)
 	if err != nil {
 		return nil, err
@@ -359,15 +361,9 @@ func GetStrategies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inter
 	var strategies []Strategy
 	for rows.Next() {
 		var strategy Strategy
-		var specJSON json.RawMessage
 
-		if err := rows.Scan(&strategy.StrategyId, &strategy.Name, &specJSON); err != nil {
+		if err := rows.Scan(&strategy.StrategyId, &strategy.Name ); err != nil {
 			return nil, fmt.Errorf("error scanning strategy: %v", err)
-		}
-
-		// Parse the spec JSON
-		if err := json.Unmarshal(specJSON, &strategy.Spec); err != nil {
-			return nil, fmt.Errorf("error parsing spec JSON: %v", err)
 		}
 
 		// Get the score from the studies table (if available)

@@ -80,7 +80,7 @@
     
     try {
       console.log("running")
-      const res = await privateRequest<any>('run_backtest', { strategyId: selectedId }, true);
+      const res = await privateRequest<any>('run_backtest', { strategyId: selectedId, returnResults: true }, true);
       console.log(res)
       
       // Extract instances and summary
