@@ -1,29 +1,7 @@
-// spec_sql_compiler.go
-//
-// Author: ChatGPT (April 2025)
-//
-// A very first‑pass SQL compiler that translates a validated *Spec* (defined in
-// tools/spec.go) into a runnable ANSI‑SQL query.  The implementation follows
-// the guidelines in spec.txt & attached notes.  It deliberately keeps to the
-// simplest subset that covers security‑level features and the four official
-// timeframes (1 min, 1 h, 1 d, 1 w).  More sophisticated partitioning (sector‑
-// level, cross‑ticker joins, etc.) can be layered on top in future PRs.
-//
-// ⚠️ This file **assumes** the caller has already executed the heavy‑duty
-// validation logic in spec.go.  Compile*() therefore trusts that every token
-// in feature.Expr is drawn from the allowed whitelist and will panic early if
-// that contract is violated.
-//
-// Usage example:
-//      sql, err := tools.CompileSpecToSQL(mySpec)
-//      if err != nil { … }
-//      rows, err := db.Query(ctx, sql)
-//
 package tools
 
 import (
     "fmt"
-    "regexp"
     "strings"
 )
 
@@ -39,21 +17,25 @@ func CompileSpecToSQL(spec Spec) (string, error) {
         return "", fmt.Errorf("spec did not pass validation: %w", err)
     }
 
-    baseTable, ok := timeframeToTable[spec.Universe.Timeframe]
+    // Convert Timeframe to string for table lookup
+    timeframeStr := string(spec.Universe.Timeframe)
+    baseTable, ok := timeframeToTable[timeframeStr]
     if !ok {
-        return "", fmt.Errorf("unsupported timeframe %q", spec.Universe.Timeframe)
+        return "", fmt.Errorf("unsupported timeframe %q", timeframeStr)
     }
 
     // ------------------------------------------------------------------
     // 1. Universe CTE ----------------------------------------------------
     // ------------------------------------------------------------------
 
+
     universeConditions, err := buildUniverseConditions(&spec.Universe)
     if err != nil {
         return "", err
     }
     universeCTE := fmt.Sprintf(`universe AS (
-        SELECT  d.*,  s.securityid, s.ticker, s.sector, s.industry, s.market
+        SELECT  d.timestamp, d.open, d.high, d.low, d.close, d.volume, 
+                s.securityid, s.ticker, s.sector, s.industry, s.market
         FROM    %s               AS d
         JOIN    securities       AS s  ON s.securityid = d.securityid
         WHERE   %s
@@ -67,6 +49,7 @@ func CompileSpecToSQL(spec Spec) (string, error) {
     featureExprs := make([]string, len(spec.Features))
 
     for i, f := range spec.Features {
+        // Get partition key based on the source's field and value
         pKey := partitionKeyForSource(f.Source)
         compiledExpr, err := compileFeatureExpr(f, pKey)
         if err != nil {
@@ -95,9 +78,9 @@ func CompileSpecToSQL(spec Spec) (string, error) {
 
 %s
 
-SELECT  timestamp,
-        securityid,
-        ticker,
+SELECT  features.timestamp,
+        features.securityid,
+        features.ticker,
         %s
 FROM    features
 %s
@@ -116,18 +99,20 @@ FROM    features
 // Internal helpers – universe --------------------------------------------------
 // -----------------------------------------------------------------------------
 
+// Updated to use the new standard table naming convention
 var timeframeToTable = map[string]string{
-    "1":  "minute_ohlcv",
-    "1h": "hourly_ohlcv",
-    "1d": "daily_ohlcv",
-    "1w": "weekly_ohlcv",
+    "1":  "ohlcv_1m",
+    "1h": "ohlcv_1h",
+    "1d": "ohlcv_1d",
+    "1w": "ohlcv_1w",
 }
 
 func buildUniverseConditions(u *Universe) ([]string, error) {
     var conds []string
+    timeframeStr := string(u.Timeframe)
 
     // 1. Start/end time – only valid for intraday minute data
-    if u.Timeframe == timeframe1Min {
+    if timeframeStr == timeframe1Min {
         if !u.StartTime.IsZero() {
             conds = append(conds, fmt.Sprintf("EXTRACT(TIME FROM d.timestamp) >= '%s'",
                 u.StartTime.Format("15:04:05")))
@@ -137,25 +122,47 @@ func buildUniverseConditions(u *Universe) ([]string, error) {
                 u.EndTime.Format("15:04:05")))
         }
         if !u.ExtendedHours {
-            // Assumes a boolean column minute_ohlcv.is_extended_hours (legacy code)
-            conds = append(conds, "d.is_extended_hours = false")
+            // Updated to use explicit extended_hours column in the new table
+            conds = append(conds, "d.extended_hours = false")
         }
     }
 
-    // 2. Whitelists / blacklists
-    appendInNotIn := func(column string, whitelist, blacklist []string) {
-        if len(whitelist) > 0 {
-            conds = append(conds, fmt.Sprintf("%s IN (%s)", column, quoteList(whitelist)))
+    // 2. Process the Filters slice instead of separate whitelist/blacklist fields
+    for _, filter := range u.Filters {
+        featureStr := string(filter.SecurityFeature)
+        var columnName string
+
+        // Map the SecurityFeature to the corresponding SQL column
+        switch featureStr {
+        case "Sector":
+            columnName = "s.sector"
+        case "Industry":
+            columnName = "s.industry"
+        case "Ticker":
+            columnName = "s.ticker"
+        case "SecurityId":
+            columnName = "s.securityid"
+        case "Market":
+            columnName = "s.market"
+        case "PrimaryExchange":
+            columnName = "s.primary_exchange"
+        case "Locale":
+            columnName = "s.locale"
+        case "Active":
+            columnName = "s.active"
+        default:
+            // Handle other security features or default to a common column
+            columnName = "s." + strings.ToLower(featureStr)
         }
-        if len(blacklist) > 0 {
-            conds = append(conds, fmt.Sprintf("%s NOT IN (%s)", column, quoteList(blacklist)))
+
+        // Add include/exclude conditions
+        if len(filter.Include) > 0 {
+            conds = append(conds, fmt.Sprintf("%s IN (%s)", columnName, quoteList(filter.Include)))
+        }
+        if len(filter.Exclude) > 0 {
+            conds = append(conds, fmt.Sprintf("%s NOT IN (%s)", columnName, quoteList(filter.Exclude)))
         }
     }
-
-    appendInNotIn("s.sector", u.Sectors.WhiteList, u.Sectors.Blacklist)
-    appendInNotIn("s.industry", u.Industries.WhiteList, u.Industries.Blacklist)
-    appendInNotIn("s.ticker", u.Securities.WhiteList, u.Securities.Blacklist)
-    appendInNotIn("s.market", u.Markets.WhiteList, u.Markets.Blacklist)
 
     // Always have at least one condition for syntactic correctness
     if len(conds) == 0 {
@@ -168,104 +175,91 @@ func buildUniverseConditions(u *Universe) ([]string, error) {
 // Internal helpers – features --------------------------------------------------
 // -----------------------------------------------------------------------------
 
-// Accept base‑column tokens plus numeric literals/operators.  Validation layer
-// guarantees safety; we still use a strict regexp to convert [lag] tokens.
-var (
-    lagPattern        = regexp.MustCompile(`\b(open|high|low|close|volume)\[(\d+)\]`)
-    // Simple pattern to find base keywords, context check done separately.
-    basePatternSimple = regexp.MustCompile(`\b(open|high|low|close|volume)\b`)
-)
-
+// compileFeatureExpr now works with the new ExprPart array format instead of a string expression
 func compileFeatureExpr(f Feature, partitionKey string) (string, error) {
-    expr := f.Expr
-
-    // Replace lag tokens first – keep them idempotent to avoid double‑replacement.
-    expr = lagPattern.ReplaceAllStringFunc(expr, func(tok string) string {
-        parts := lagPattern.FindStringSubmatch(tok)
-        col, offset := parts[1], parts[2]
-        return fmt.Sprintf(
-            "LAG(d.%s, %s) OVER (PARTITION BY %s ORDER BY d.timestamp)",
-            col, offset, partitionKey,
-        )
-    })
-
-    // Replace base columns (open, high, low, close, volume) with qualified names (d.open, etc.)
-    // ONLY if they are NOT followed by '[' (which indicates a lag handled above).
-    // We use FindAllStringIndex and check context manually because Go's regexp (RE2)
-    // doesn't support negative lookahead (?!\[).
-    matches := basePatternSimple.FindAllStringIndex(expr, -1)
-    var replacements []struct{ start, end int; replacement string }
-
-    for _, matchIndices := range matches {
-        start := matchIndices[0]
-        end := matchIndices[1]
-        word := expr[start:end]
-
-        // Check if the character immediately after the match is '['
-        isLag := false
-        if end < len(expr) && expr[end] == '[' {
-            isLag = true
-        }
-
-        if !isLag {
-            // Schedule replacement if it's not a lag token
-            replacements = append(replacements, struct{ start, end int; replacement string }{
-                start:       start,
-                end:         end,
-                replacement: "d." + word,
-            })
-        }
+    const rowAlias = "u" // the alias we use in the features CTE
+    
+    // Handle empty expressions
+    if len(f.Expr) == 0 {
+        return "", fmt.Errorf("empty expression")
     }
-
-    // Apply replacements in reverse order to avoid messing up indices
-    // as the string length changes.
-    for i := len(replacements) - 1; i >= 0; i-- {
-        rep := replacements[i]
-        expr = expr[:rep.start] + rep.replacement + expr[rep.end:]
+    
+    // Build the SQL expression from the ExprPart array
+    var sqlExpr strings.Builder
+    
+    // Add the first part (no operator)
+    firstPart := f.Expr[0]
+    sqlExpr.WriteString(fmt.Sprintf("%s.%s", rowAlias, strings.ToLower(firstPart.Column)))
+    
+    // Process the remaining parts with their operators
+    for i := 1; i < len(f.Expr); i++ {
+        part := f.Expr[i]
+        sqlExpr.WriteString(fmt.Sprintf(" %s %s.%s", 
+            string(part.ExprOperator), 
+            rowAlias, 
+            strings.ToLower(part.Column)))
     }
-
-
+    
+    // Extract the partition key column
+    pkCol := partitionKey
+    if i := strings.Index(pkCol, "."); i != -1 {
+        pkCol = pkCol[i+1:]
+    }
+    
     // Wrap smoothing window (simple moving average via AVG)
     if f.Window > 1 {
-        expr = fmt.Sprintf(
-            "AVG((%s)) OVER (PARTITION BY %s ORDER BY d.timestamp ROWS BETWEEN %d PRECEDING AND CURRENT ROW)",
-            expr, partitionKey, f.Window-1,
-        )
+        sqlExpr = strings.Builder{}
+        sqlExpr.WriteString(fmt.Sprintf(
+            "AVG((%s)) OVER (PARTITION BY %s.%s ORDER BY %s.timestamp ROWS BETWEEN %d PRECEDING AND CURRENT ROW)",
+            sqlExpr.String(), rowAlias, pkCol, rowAlias, f.Window-1,
+        ))
     }
-
+    
+    expr := sqlExpr.String()
+    
     // Output post‑processing
     switch f.Output {
     case "raw":
         // do nothing
     case "rankn": // 0‑1 normalised
         expr = fmt.Sprintf(
-            "PERCENT_RANK() OVER (PARTITION BY d.timestamp ORDER BY %s)",
-            expr,
+            "PERCENT_RANK() OVER (PARTITION BY %s.timestamp ORDER BY %s)",
+            rowAlias, expr,
         )
     case "rankp": // 1‑100 percentiles using NTILE
         expr = fmt.Sprintf(
-            "NTILE(100) OVER (PARTITION BY d.timestamp ORDER BY %s)",
-            expr,
+            "NTILE(100) OVER (PARTITION BY %s.timestamp ORDER BY %s)",
+            rowAlias, expr,
         )
     default:
         return "", fmt.Errorf("unsupported output kind %q", f.Output)
     }
-
+    
     return expr, nil
 }
 
-func partitionKeyForSource(src string) string {
-    switch strings.ToLower(src) {
-    case "security", "":
-        return "s.securityid"
-    case "sector":
-        return "s.sector"
-    case "industry":
-        return "s.industry"
-    case "market":
-        return "s.market"
-    default:
-        // A specific ticker or proprietary source – fall back to securityid.
+// Updated to accept a FeatureSource struct instead of a string
+func partitionKeyForSource(src FeatureSource) string {
+    // Get the field value
+    fieldStr := string(src.Field)
+    
+    // If value is "relative", use the field to determine partition key
+    if src.Value == "relative" {
+        switch strings.ToLower(fieldStr) {
+        case "sector":
+            return "s.sector"
+        case "industry":
+            return "s.industry"
+        case "market":
+            return "s.market"
+        case "securityid", "ticker":
+            return "s.securityid"
+        default:
+            // Default to securityid for unknown fields
+            return "s.securityid"
+        }
+    } else {
+        // For specific values (like a ticker), default to securityid
         return "s.securityid"
     }
 }
@@ -298,11 +292,11 @@ func buildOrderBy(sb SortBy) string {
     if sb.Feature == 0 && sb.Direction == "" {
         return "" // No sorting specified.
     }
-    dir := strings.ToUpper(sb.Direction)
+    dir := strings.ToUpper(string(sb.Direction))
     if dir != "ASC" && dir != "DESC" {
         dir = "DESC" // defensive default
     }
-    return fmt.Sprintf("ORDER BY f%d %s, securityid, timestamp", sb.Feature, dir)
+    return fmt.Sprintf("ORDER BY f%d %s, features.securityid, features.timestamp", sb.Feature, dir)
 }
 
 // -----------------------------------------------------------------------------
@@ -341,21 +335,3 @@ func indent(s string, levels int) string {
     }
     return strings.Join(lines, "\n")
 }
-
-// -----------------------------------------------------------------------------
-// Basic smoke‑test -------------------------------------------------------------
-// -----------------------------------------------------------------------------
-
-// The tiny test lives in this file for convenience.  Real projects should move
-// it to *_test.go.
-
-// func example() {
-//     spec := Spec{ /* … fill or unmarshal … */ }
-//     sql, err := CompileSpecToSQL(spec)
-//     if err != nil { panic(err) }
-//     fmt.Println(sql)
-// }
-
-// -----------------------------------------------------------------------------
-// End of file ------------------------------------------------------------------
-
