@@ -14,6 +14,7 @@ import (
 
 type RunBacktestArgs struct {
 	StrategyId int `json:"strategyId"`
+    ReturnResults bool `json:"returnResults"`
 }
 
 // RunBacktest executes a backtest for the given strategy
@@ -26,7 +27,7 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 	fmt.Println("backtesting")
 	fmt.Println(args.StrategyId)
 
-	backtestJSON, err := _getStrategySpec(conn, userId, args.StrategyId) // get spec from db using helper
+	backtestJSON, err := _getStrategySpec(conn,  args.StrategyId,userId) // get spec from db using helper
 	if err != nil {
 		return nil, fmt.Errorf("ERR vdi0s: failed to fetch strategy %v", err)
 	}
@@ -118,8 +119,12 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 	}()
 	// --- End Save Summary ---
 
+    if (args.ReturnResults){
+        return formattedResults, nil
 	// Return the formatted results (which will contain empty instances/summary if no hits) and nil error
-	return formattedResults, nil
+    }else{
+        return summary, nil
+    }
 }
 
 // runCompiledBacktest executes a backtest for a given spec using the new compiler
@@ -234,11 +239,7 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
             instance["timestamp"] = nil
         }
 
-<<<<<<< HEAD
-        // Process all numeric fields including OHLCV and indicators
-=======
 // Process all numeric fields including OHLCV and indicators
->>>>>>> Snippet
         for _, key := range columnNames {
             // Skip already handled fields
             if key == "ticker" || key == "securityid" || key == "timestamp" {
@@ -255,9 +256,6 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 
             if value, ok := recordMap[key]; ok {
                 // Process the value (numeric handling logic from original implementation)
-<<<<<<< HEAD
-                instance[columnName] = processNumericValue(value)
-=======
                 processedValue := processNumericValue(value)
                 
                 // Double-check if the processed value is still a map with numeric type fields
@@ -272,7 +270,6 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
                 }
                 
                 instance[columnName] = processedValue
->>>>>>> Snippet
             }
         }
 
@@ -281,6 +278,10 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 
     // Create a summary
     summary := make(map[string]any)
+
+    // Add the count of instances to the summary
+    summary["count"] = len(instances)
+
     if len(instances) > 0 {
     // Find the earliest and latest timestamps
     var minTimeMs int64 = math.MaxInt64

@@ -21,6 +21,7 @@ func CompileSpecToSQL(spec Spec) (string, error) {
     timeframeStr := string(spec.Universe.Timeframe)
     baseTable, ok := timeframeToTable[timeframeStr]
     if !ok {
+
         return "", fmt.Errorf("unsupported timeframe %q", timeframeStr)
     }
 
