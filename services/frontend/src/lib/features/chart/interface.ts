@@ -123,6 +123,7 @@ export interface BarData {
 	low: number;
 	close: number;
 	volume: number;
+	events?: Array<{timestamp: number, type: string, value: string}>;
 }
 
 export interface CustomData<Time extends UTCTimestamp> extends Omit<BarData, 'time'> {
