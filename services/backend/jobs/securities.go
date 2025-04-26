@@ -183,7 +183,7 @@ func simpleUpdateSecurities(conn *utils.Conn) error {
 					)
 					if err != nil {
 						// Log error but continue with other tickers
-						fmt.Printf("Warning: Failed to reactivate ticker %s: %v\n", sec.Ticker, err)
+						//fmt.Printf("Warning: Failed to reactivate ticker %s: %v\n", sec.Ticker, err)
 						continue
 					}
 				}
