@@ -108,8 +108,8 @@ func GetReferenceStartTimeForMonths(timestamp int64, multiplier int, easternLoca
 func GetReferenceStartTimeForWeeks(timestamp int64, multiplier int, easternLocation *time.Location) int64 {
 	utcTime := time.Unix(0, timestamp*int64(time.Millisecond)).UTC()
 	nyTime := utcTime.In(easternLocation)
-	// Reference date: September 8, 2003, in New York time (Monday of that week)
-	referenceDate := time.Date(2003, time.September, 8, 0, 0, 0, 0, easternLocation)
+	// Reference date: September 7, 2003, in New York time (Sunday of that week)
+	referenceDate := time.Date(2003, time.September, 7, 0, 0, 0, 0, easternLocation)
 	// Calculate the difference in weeks between the current time and the reference date
 	elapsedTimeInWeeks := int(nyTime.Sub(referenceDate).Hours() / (24 * 7))
 	// Calculate the number of full bars (based on the multiplier, which is the timeframe in weeks)
