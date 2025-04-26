@@ -160,7 +160,9 @@ func SendAlertToUser(userID int, alert AlertMessage) {
 	}
 }
 
-// New struct for function status updates (simplified)
+// FunctionStatusUpdate represents a status update message sent to the client
+// during long-running backend operations (e.g., function tool execution).
+// It contains a user-friendly message describing the current step.
 type FunctionStatusUpdate struct {
 	Type        string `json:"type"` // Will be "function_status"
 	UserMessage string `json:"userMessage"`
