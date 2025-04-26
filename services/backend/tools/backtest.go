@@ -3,6 +3,7 @@ package tools
 import (
 	"backend/utils"
 	"context"
+    "github.com/jackc/pgx/v4"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -13,9 +14,12 @@ import (
 
 type RunBacktestArgs struct {
 	StrategyId int `json:"strategyId"`
+    ReturnResults bool `json:"returnResults"`
 }
 
-func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+// RunBacktest executes a backtest for the given strategy
+// RunBacktest executes a backtest for the given strategy
+func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, error) {
 	var args RunBacktestArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -23,45 +27,69 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	fmt.Println("backtesting")
 	fmt.Println(args.StrategyId)
 
-	backtestJSON, err := _getStrategySpec(conn, userId, args.StrategyId) // get spec from db using helper
+	backtestJSON, err := _getStrategySpec(conn,  args.StrategyId,userId) // get spec from db using helper
 	if err != nil {
 		return nil, fmt.Errorf("ERR vdi0s: failed to fetch strategy %v", err)
 	}
-	var spec StrategySpec
-	if err := json.Unmarshal((backtestJSON), &spec); err != nil { //unmarhsal into struct
+
+	var spec Spec
+	if err := json.Unmarshal((backtestJSON), &spec); err != nil { //unmarshal into struct
 		return "", fmt.Errorf("ERR fi00: error parsing backtest JSON: %v", err)
 	}
-	data, err := GetDataForBacktest(conn, spec)
+
+	// *** New approach using CompileSpecToSQL ***
+	// Generate SQL from the spec
+	sql, err := CompileSpecToSQL(spec)
 	if err != nil {
-		return nil, fmt.Errorf("error getting data for backtest: %v", err)
+		return nil, fmt.Errorf("error compiling SQL for backtest: %v", err)
 	}
+	fmt.Println("Generated SQL:", sql)
 
-	// Parse the data to check if we got results
-	var results map[string]interface{}
-	err = json.Unmarshal([]byte(data), &results)
+	// Execute the query
+	ctx := context.Background()
+	rows, err := conn.DB.Query(ctx, sql)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing backtest results: %v", err)
+		// Handle potential query errors (syntax errors, connection issues, etc.)
+		return nil, fmt.Errorf("error executing backtest query: %v", err)
+	}
+	defer rows.Close() // Ensure rows are closed even if ScanRows errors
+
+	// Process the results
+	// ScanRows will return an empty slice if there are no rows, and a nil error.
+	records, err := ScanRows(rows)
+	if err != nil {
+		// Handle errors during row scanning (data type mismatches, etc.)
+		return nil, fmt.Errorf("error scanning backtest results: %v", err)
 	}
 
-	// Check if we have results for daily timeframe
-	dailyData, ok := results["daily"]
-	if !ok {
-		return nil, fmt.Errorf("no daily data found in results")
-	}
+	// ******************************************************************
+	// ** CHANGE: Removed the check for len(records) == 0            **
+	// ** The code now proceeds even if records is empty.            **
+	// ******************************************************************
+	// // Check if we have any records
+	// // if len(records) == 0 {
+	// // 	 return nil, fmt.Errorf("no data found for backtest") // <--- REMOVED THIS BLOCK
+	// // }
 
-	// Check if we have any records
-	dailyRecords, ok := dailyData.([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("daily data is not in expected format")
+	// Convert to interface slice for formatBacktestResults
+	// This correctly handles an empty records slice, resulting in an empty recordsInterface slice.
+	recordsInterface := make([]any, len(records))
+	for i, record := range records {
+		recordsInterface[i] = record
 	}
 
 	// Format the results for LLM readability
-	formattedResults, err := formatBacktestResults(dailyRecords)
+	// formatBacktestResults handles an empty input slice correctly,
+	// returning a map with empty "instances" and "summary".
+	formattedResults, err := formatBacktestResults(recordsInterface, &spec)
 	if err != nil {
+		// This error path should ideally not be reached if formatBacktestResults
+		// handles empty input, but kept for robustness.
 		return nil, fmt.Errorf("error formatting results for LLM: %v", err)
 	}
 
 	// Save the full formatted results (including instances) to cache
+	// This will save the empty structure if no results were found.
 	go func() { // Run in a goroutine to avoid blocking the main response
 		bgCtx := context.Background() // Use a background context for the goroutine
 		if err := SaveBacktestToCache(bgCtx, conn, userId, args.StrategyId, formattedResults); err != nil {
@@ -70,14 +98,17 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 		}
 	}()
 
-	// Extract only the summary to return to the LLM
-	summary, ok := formattedResults["summary"].(map[string]interface{})
+	// Extract only the summary to return to the LLM (Now handled inside formatBacktestResults)
+	// The summary will be an empty map if there were no records.
+	summary, ok := formattedResults["summary"].(map[string]any)
 	if !ok {
-		// This should ideally not happen if formatResultsForLLM worked
-		return nil, fmt.Errorf("failed to extract summary from formatted backtest results")
+		// This should ideally not happen if formatBacktestResults worked correctly
+		// even for empty input.
+		return nil, fmt.Errorf("failed to extract summary from formatted backtest results (internal error)")
 	}
 
 	// --- Save Summary to Persistent Context ---
+	// This will save the empty summary map if no results were found.
 	go func() {
 		ctx := context.Background()
 		contextKey := fmt.Sprintf("backtest_summary_strategy_%d", args.StrategyId)
@@ -88,80 +119,35 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	}()
 	// --- End Save Summary ---
 
-	return summary, nil // Return only the summary map
+    if (args.ReturnResults){
+        return formattedResults, nil
+	// Return the formatted results (which will contain empty instances/summary if no hits) and nil error
+    }else{
+        return summary, nil
+    }
 }
 
-// StrategySpec represents the parsed JSON structure of the backtest specification
+// runCompiledBacktest executes a backtest for a given spec using the new compiler
 
-func GetDataForBacktest(conn *utils.Conn, spec StrategySpec) (string, error) {
-
-	// Initialize results
-	result := make(map[string]any)
-
-	// Currently only using daily timeframe since that's what the database supports
-	timeframe := "daily"
-
-	// Override any specified timeframes to ensure we use daily
-	spec.Timeframes = []string{timeframe}
-
-	// Adjust any non-daily indicators/conditions to daily
-	for i := range spec.Indicators {
-		spec.Indicators[i].Timeframe = timeframe
-	}
-
-	for i := range spec.Conditions {
-		spec.Conditions[i].LHS.Timeframe = timeframe
-		if spec.Conditions[i].RHS.Timeframe != "" {
-			spec.Conditions[i].RHS.Timeframe = timeframe
-		}
-	}
-
-	// Execute query for daily data
-	data, err := executeBacktestQuery(conn, spec, timeframe)
-	if err != nil {
-		return "", fmt.Errorf("error executing query for timeframe %s: %v", timeframe, err)
-	}
-	result[timeframe] = data
-
-	// Convert results to JSON
-	resultJSON, err := json.Marshal(result)
-	if err != nil {
-		return "", fmt.Errorf("error serializing results: %v", err)
-	}
-
-	return string(resultJSON), nil
-}
-
-func executeBacktestQuery(conn *utils.Conn, spec StrategySpec, timeframe string) ([]map[string]interface{}, error) {
-	// Build SQL query based on specification
-	query, args := buildBacktestQuery(spec, timeframe)
-
-	fmt.Printf("Executing SQL query: %s\nWith args: %v\n", query, args)
-
-	// Execute query
-	rows, err := conn.DB.Query(context.Background(), query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("database query error: %v", err)
-	}
-	defer rows.Close()
-
-	// Process results
-	var results []map[string]interface{}
-
-	// Get field descriptions (pgx equivalent of rows.Columns())
+// ScanRows converts pgx.Rows to a slice of maps
+func ScanRows(rows pgx.Rows) ([]map[string]any, error) {
+	// Get field descriptions
 	fieldDescriptions := rows.FieldDescriptions()
 	columns := make([]string, len(fieldDescriptions))
 	for i, fd := range fieldDescriptions {
 		columns[i] = string(fd.Name)
 	}
 
+	// Process results
+	var results []map[string]any
+
 	// Scan each row
 	for rows.Next() {
-
-		// Create a slice of interface{} to hold the values
-		values := make([]interface{}, len(columns))
+		// Create a slice of any to hold the values
+		values := make([]any, len(columns))
 		for i := range values {
-			values[i] = new(interface{})
+			values[i] = new(any)
+
 		}
 
 		// Scan the row into the slice
@@ -170,9 +156,9 @@ func executeBacktestQuery(conn *utils.Conn, spec StrategySpec, timeframe string)
 		}
 
 		// Create a map for this row
-		row := make(map[string]interface{})
+		row := make(map[string]any)
 		for i, col := range columns {
-			row[col] = *(values[i].(*interface{}))
+			row[col] = *(values[i].(*any))
 		}
 		results = append(results, row)
 	}
@@ -185,643 +171,213 @@ func executeBacktestQuery(conn *utils.Conn, spec StrategySpec, timeframe string)
 	return results, nil
 }
 
-func buildBacktestQuery(spec StrategySpec, timeframe string) (string, []interface{}) {
-	var args []interface{}
+// formatBacktestResults converts raw database results into a clean, LLM-friendly format
+// with feature values using feature names from the spec if available
+func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
+    result := make(map[string]any)
 
-	// Build CTE for window functions first
-	query := "WITH data_with_indicators AS (\n"
-	query += "  SELECT s.ticker, s.securityid, d.timestamp, d.open, d.high, d.low, d.close, d.volume"
+    // Create a clean array of instances
+    instances := make([]map[string]any, 0, len(records))
 
-	// Add basic window expressions for previous values
-	query += ",\n    LAG(d.close, 1) OVER (PARTITION BY s.ticker ORDER BY d.timestamp) AS prev_close"
-	query += ",\n    LAG(d.open, 1) OVER (PARTITION BY s.ticker ORDER BY d.timestamp) AS prev_open"
-	query += ",\n    LAG(d.high, 1) OVER (PARTITION BY s.ticker ORDER BY d.timestamp) AS prev_high"
-	query += ",\n    LAG(d.low, 1) OVER (PARTITION BY s.ticker ORDER BY d.timestamp) AS prev_low"
+    // Map feature IDs to feature names if spec is provided
+    featureMap := make(map[string]string) // Maps "f0", "f1" to actual feature names
+    if spec != nil {
+        for _, feature := range spec.Features {
+            featureKey := fmt.Sprintf("f%d", feature.FeatureId)
+            featureMap[featureKey] = feature.Name
+        }
+    }
 
-	// Add user-defined derived columns
-	for _, derivedCol := range spec.DerivedColumns {
-		// Sanitize the expression and ID to prevent SQL injection
-		// In a production system, you'd want more comprehensive validation
-		expression := derivedCol.Expression
-		id := derivedCol.ID
-		if expression != "" && id != "" {
-			// Add the custom expression with the given ID
-			query += fmt.Sprintf(",\n    (%s) AS %s", expression, id)
-		}
-	}
+    // Get all unique column names from the first record
+    var columnNames []string
+    if len(records) > 0 {
+        if recordMap, ok := records[0].(map[string]any); ok {
+            for key := range recordMap {
+                columnNames = append(columnNames, key)
+            }
+        }
+    }
 
-	// Add indicator calculations if needed
-	indicatorSelects := getIndicatorSelects(spec.Indicators, timeframe)
-	if indicatorSelects != "" {
-		query += ",\n    " + indicatorSelects
-	}
+    for _, record := range records {
+        recordMap, ok := record.(map[string]any)
+        if !ok {
+            continue
+        }
 
-	// Add future performance calculations
-	futurePerformanceSelects := getFuturePerformanceSelects(spec.FuturePerformance, timeframe)
-	if futurePerformanceSelects != "" {
-		query += ",\n    " + futurePerformanceSelects
-	}
+        // Create a clean instance
+        instance := make(map[string]any)
 
-	// FROM clause - use daily_ohlcv table for daily data
-	query += "\n  FROM securities s JOIN daily_ohlcv d ON s.securityid = d.securityid"
+        // Process ticker, securityId, and timestamp directly
+        if ticker, ok := recordMap["ticker"]; ok {
+            instance["ticker"] = ticker
+        }
+        if securityId, ok := recordMap["securityid"]; ok {
+            instance["securityId"] = securityId
+        }
+        if timestampValue, ok := recordMap["timestamp"]; ok {
+            // Convert timestamp logic (keeping existing implementation)
+            var timestampMs int64
+            switch t := timestampValue.(type) {
+            case time.Time:
+                timestampMs = t.UnixMilli()
+            case string:
+                parsedTime, err := time.Parse(time.RFC3339, t)
+                if err == nil {
+                    timestampMs = parsedTime.UnixMilli()
+                } else {
+                    fmt.Printf("Warning: Could not parse timestamp string '%s': %v\n", t, err)
+                    instance["timestamp"] = timestampValue
+                    continue
+                }
+            default:
+                fmt.Printf("Warning: Unhandled timestamp type: %T\n", timestampValue)
+                instance["timestamp"] = timestampValue
+                continue
+            }
+            instance["timestamp"] = timestampMs
+        } else {
+            instance["timestamp"] = nil
+        }
 
-	// Basic filters in the CTE
-	whereConditions := []string{}
+// Process all numeric fields including OHLCV and indicators
+        for _, key := range columnNames {
+            // Skip already handled fields
+            if key == "ticker" || key == "securityid" || key == "timestamp" {
+                continue
+            }
 
-	// Date range
-	if spec.DateRange.Start != "" {
-		whereConditions = append(whereConditions, fmt.Sprintf("d.timestamp >= $%d", len(args)+1))
-		args = append(args, spec.DateRange.Start)
-	}
-	if spec.DateRange.End != "" {
-		whereConditions = append(whereConditions, fmt.Sprintf("d.timestamp <= $%d", len(args)+1))
-		args = append(args, spec.DateRange.End)
-	}
+            // Check if this is a feature column (like "f0", "f1", etc.)
+            columnName := key
+            if spec != nil && strings.HasPrefix(key, "f") {
+                if mappedName, ok := featureMap[key]; ok {
+                    columnName = mappedName // Use the proper feature name from spec
+                }
+            }
 
-	// Stock universe filtering
-	stockFilter := buildStockFilter(spec.Stocks)
-	if stockFilter != "" {
-		whereConditions = append(whereConditions, stockFilter)
-	}
+            if value, ok := recordMap[key]; ok {
+                // Process the value (numeric handling logic from original implementation)
+                processedValue := processNumericValue(value)
+                
+                // Double-check if the processed value is still a map with numeric type fields
+                // This handles nested numeric objects that might not be caught by the first pass
+                if valueMap, isMap := processedValue.(map[string]any); isMap {
+                    if _, hasExp := valueMap["Exp"]; hasExp {
+                        if _, hasInt := valueMap["Int"]; hasInt {
+                            // This is still a numeric object, process it again
+                            processedValue = processNumericValue(processedValue)
+                        }
+                    }
+                }
+                
+                instance[columnName] = processedValue
+            }
+        }
 
-	// Stock explicit inclusions
-	if len(spec.Stocks.Include) > 0 {
-		placeholders := make([]string, len(spec.Stocks.Include))
-		for i := range placeholders {
-			placeholders[i] = fmt.Sprintf("$%d", len(args)+1)
-			args = append(args, spec.Stocks.Include[i])
-		}
-		whereConditions = append(whereConditions, fmt.Sprintf("s.ticker IN (%s)", strings.Join(placeholders, ",")))
-	}
+        instances = append(instances, instance)
+    }
 
-	// Stock explicit exclusions
-	if len(spec.Stocks.Exclude) > 0 {
-		placeholders := make([]string, len(spec.Stocks.Exclude))
-		for i := range placeholders {
-			placeholders[i] = fmt.Sprintf("$%d", len(args)+1)
-			args = append(args, spec.Stocks.Exclude[i])
-		}
-		whereConditions = append(whereConditions, fmt.Sprintf("s.ticker NOT IN (%s)", strings.Join(placeholders, ",")))
-	}
+    // Create a summary
+    summary := make(map[string]any)
 
-	// Add basic filters (except conditions) to the CTE
-	if len(whereConditions) > 0 {
-		query += "\n  WHERE " + strings.Join(whereConditions, " AND ")
-	}
+    // Add the count of instances to the summary
+    summary["count"] = len(instances)
 
-	// Close the CTE
-	query += "\n)\n"
+    if len(instances) > 0 {
+    // Find the earliest and latest timestamps
+    var minTimeMs int64 = math.MaxInt64
+    var maxTimeMs int64 = 0
+    var startTimeStr, endTimeStr string
 
-	// Main query using the CTE
-	// Check if specific output columns are requested
-	if len(spec.OutputColumns) > 0 {
-		// Build custom SELECT with requested columns
-		selectColumns := []string{}
+    // Scan all instances to find min and max timestamps
+    for _, instance := range instances {
+        if tsMs, ok := instance["timestamp"].(int64); ok {
+            if tsMs < minTimeMs {
+                minTimeMs = tsMs
+                startTimeStr = time.UnixMilli(minTimeMs).Format(time.RFC3339)
+            }
+            if tsMs > maxTimeMs {
+                maxTimeMs = tsMs
+                endTimeStr = time.UnixMilli(maxTimeMs).Format(time.RFC3339)
+            }
+        }
+    }
 
-		// Always include ticker and timestamp as fundamental columns
-		selectColumns = append(selectColumns, "ticker", "timestamp", "securityid")
-
-		// Add other requested columns
-		for _, col := range spec.OutputColumns {
-			// Skip ticker and timestamp since they're already included
-			if col != "ticker" && col != "timestamp" {
-				selectColumns = append(selectColumns, col)
-			}
-		}
-
-		query += "SELECT " + strings.Join(selectColumns, ", ")
-	} else {
-		// Default columns if none specified
-		query += "SELECT ticker, securityid, timestamp, open, high, low, close, volume"
-
-		// Include all indicators in the output
-		for _, indicator := range spec.Indicators {
-			if indicator.Timeframe == timeframe {
-				query += ", " + indicator.ID
-			}
-		}
-		// Include all future performance columns in the output
-		for _, futureCol := range spec.FuturePerformance {
-			if futureCol.Timeframe == timeframe {
-				query += ", " + futureCol.ID
-			}
-		}
-	}
-
-	query += "\nFROM data_with_indicators\n"
-
-	// Apply complex conditions in the main query
-	mainWhereConditions := []string{}
-
-	// Add stock filters
-	for _, filter := range spec.Stocks.Filters {
-		if filter.Timeframe == timeframe {
-			filterCond, filterArgs := buildSimpleFilterCondition(filter, len(args)+1)
-			mainWhereConditions = append(mainWhereConditions, filterCond)
-			args = append(args, filterArgs...)
-		}
-	}
-
-	// Add condition logic
-	conditionClauses := buildConditionClausesForCTE(spec.Conditions, spec.Logic, timeframe, len(args)+1)
-	if conditionClauses != "" {
-		mainWhereConditions = append(mainWhereConditions, conditionClauses)
-	}
-
-	// Combine all WHERE conditions for main query
-	if len(mainWhereConditions) > 0 {
-		query += "WHERE " + strings.Join(mainWhereConditions, " AND ")
-	}
-
-	// Order by timestamp
-	query += "\nORDER BY ticker, timestamp"
-
-	return query, args
+    if minTimeMs != math.MaxInt64 && maxTimeMs != 0 {
+        summary["date_range"] = map[string]any{
+            "start_ms": minTimeMs,
+            "end_ms":   maxTimeMs,
+            "start":    startTimeStr,
+            "end":      endTimeStr,
+        }
+    }
 }
 
-// buildSimpleFilterCondition creates a simple filter without window functions
-func buildSimpleFilterCondition(filter struct {
-	Metric    string  `json:"metric"`
-	Operator  string  `json:"operator"`
-	Value     float64 `json:"value"`
-	Timeframe string  `json:"timeframe"`
-}, paramIdx int) (string, []interface{}) {
-	var args []interface{}
+    // Create the final result structure
+    result["instances"] = instances
+    result["summary"] = summary
 
-	// Map metric to DB column
-	var column string
-	switch filter.Metric {
-	case "market_cap":
-		column = "marketcap"
-	case "volume":
-		column = "volume"
-	case "dollar_volume":
-		column = "close * volume"
-	case "share_price":
-		column = "close"
-	default:
-		column = filter.Metric
-	}
-
-	// Build condition with proper parameter index
-	args = append(args, filter.Value)
-	return fmt.Sprintf("%s %s $%d", column, filter.Operator, paramIdx), args
+    return result, nil
 }
 
-// buildConditionClausesForCTE builds condition clauses for the CTE approach
-func buildConditionClausesForCTE(conditions []struct {
-	ID  string `json:"id"`
-	LHS struct {
-		Field     string `json:"field"`
-		Offset    int    `json:"offset"`
-		Timeframe string `json:"timeframe"`
-	} `json:"lhs"`
-	Operation string `json:"operation"`
-	RHS       struct {
-		Field       string  `json:"field,omitempty"`
-		Offset      int     `json:"offset,omitempty"`
-		Timeframe   string  `json:"timeframe,omitempty"`
-		IndicatorID string  `json:"indicator_id,omitempty"`
-		Value       float64 `json:"value,omitempty"`
-		Multiplier  float64 `json:"multiplier,omitempty"`
-	} `json:"rhs"`
-}, logic string, timeframe string, startParamIdx int) string {
-	var clauses []string
-
-	for _, condition := range conditions {
-		if condition.LHS.Timeframe == timeframe {
-			var clause string
-
-			// Handle different condition types
-			if condition.Operation == "crosses_above" {
-				clause = buildCrossesAboveCondition(condition)
-			} else if condition.Operation == "crosses_below" {
-				clause = buildCrossesBelowCondition(condition)
-			} else {
-				clause = buildSimpleConditionForCTE(condition)
-			}
-
-			if clause != "" {
-				clauses = append(clauses, clause)
-			}
-		}
-	}
-
-	if len(clauses) == 0 {
-		return ""
-	}
-
-	logicOp := " AND "
-	if strings.ToUpper(logic) == "OR" {
-		logicOp = " OR "
-	}
-
-	return "(" + strings.Join(clauses, logicOp) + ")"
-}
-
-// buildSimpleConditionForCTE builds a simple condition clause for CTE
-func buildSimpleConditionForCTE(condition struct {
-	ID  string `json:"id"`
-	LHS struct {
-		Field     string `json:"field"`
-		Offset    int    `json:"offset"`
-		Timeframe string `json:"timeframe"`
-	} `json:"lhs"`
-	Operation string `json:"operation"`
-	RHS       struct {
-		Field       string  `json:"field,omitempty"`
-		Offset      int     `json:"offset,omitempty"`
-		Timeframe   string  `json:"timeframe,omitempty"`
-		IndicatorID string  `json:"indicator_id,omitempty"`
-		Value       float64 `json:"value,omitempty"`
-		Multiplier  float64 `json:"multiplier,omitempty"`
-	} `json:"rhs"`
-}) string {
-	// Build LHS
-	var lhs string
-	if condition.LHS.Offset == 0 {
-		lhs = condition.LHS.Field
-	} else if condition.LHS.Offset == -1 {
-		lhs = "prev_" + condition.LHS.Field
-	} else {
-		// More complex offsets not supported in simple CTE approach
-		return ""
-	}
-
-	// Build RHS
-	var rhs string
-	if condition.RHS.IndicatorID != "" {
-		rhs = condition.RHS.IndicatorID
-	} else if condition.RHS.Field != "" {
-		if condition.RHS.Offset == 0 {
-			rhs = condition.RHS.Field
-		} else if condition.RHS.Offset == -1 {
-			rhs = "prev_" + condition.RHS.Field
-		} else {
-			// More complex offsets not supported in simple CTE approach
-			return ""
-		}
-	} else {
-		// Value comparison
-		rhs = fmt.Sprintf("%v", condition.RHS.Value)
-	}
-	if condition.RHS.Multiplier != 0 {
-		rhs = fmt.Sprintf("%s * %f", rhs, condition.RHS.Multiplier)
-	}
-
-	return fmt.Sprintf("%s %s %s", lhs, mapOperator(condition.Operation), rhs)
-}
-
-// buildCrossesAboveCondition builds a crosses above condition
-func buildCrossesAboveCondition(condition struct {
-	ID  string `json:"id"`
-	LHS struct {
-		Field     string `json:"field"`
-		Offset    int    `json:"offset"`
-		Timeframe string `json:"timeframe"`
-	} `json:"lhs"`
-	Operation string `json:"operation"`
-	RHS       struct {
-		Field       string  `json:"field,omitempty"`
-		Offset      int     `json:"offset,omitempty"`
-		Timeframe   string  `json:"timeframe,omitempty"`
-		IndicatorID string  `json:"indicator_id,omitempty"`
-		Value       float64 `json:"value,omitempty"`
-		Multiplier  float64 `json:"multiplier,omitempty"`
-	} `json:"rhs"`
-}) string {
-	field := condition.LHS.Field
-
-	var rhsExpr string
-	if condition.RHS.IndicatorID != "" {
-		rhsExpr = condition.RHS.IndicatorID
-	} else if condition.RHS.Field != "" {
-		rhsExpr = condition.RHS.Field
-	} else {
-		rhsExpr = fmt.Sprintf("%v", condition.RHS.Value)
-	}
-
-	return fmt.Sprintf("%s > %s AND prev_%s <= %s", field, rhsExpr, field, rhsExpr)
-}
-
-// buildCrossesBelowCondition builds a crosses below condition
-func buildCrossesBelowCondition(condition struct {
-	ID  string `json:"id"`
-	LHS struct {
-		Field     string `json:"field"`
-		Offset    int    `json:"offset"`
-		Timeframe string `json:"timeframe"`
-	} `json:"lhs"`
-	Operation string `json:"operation"`
-	RHS       struct {
-		Field       string  `json:"field,omitempty"`
-		Offset      int     `json:"offset,omitempty"`
-		Timeframe   string  `json:"timeframe,omitempty"`
-		IndicatorID string  `json:"indicator_id,omitempty"`
-		Value       float64 `json:"value,omitempty"`
-		Multiplier  float64 `json:"multiplier,omitempty"`
-	} `json:"rhs"`
-}) string {
-	field := condition.LHS.Field
-
-	var rhsExpr string
-	if condition.RHS.IndicatorID != "" {
-		rhsExpr = condition.RHS.IndicatorID
-	} else if condition.RHS.Field != "" {
-		rhsExpr = condition.RHS.Field
-	} else {
-		rhsExpr = fmt.Sprintf("%v", condition.RHS.Value)
-	}
-
-	return fmt.Sprintf("%s < %s AND prev_%s >= %s", field, rhsExpr, field, rhsExpr)
-}
-
-func getIndicatorSelects(indicators []struct {
-	ID         string                 `json:"id"`
-	Type       string                 `json:"type"`
-	Parameters map[string]interface{} `json:"parameters"`
-	InputField string                 `json:"input_field"`
-	Timeframe  string                 `json:"timeframe"`
-}, timeframe string) string {
-	var selects []string
-
-	for _, indicator := range indicators {
-		if indicator.Timeframe == timeframe {
-			switch indicator.Type {
-			case "SMA":
-				period := int(indicator.Parameters["period"].(float64))
-				field := indicator.InputField
-				if field == "" {
-					field = "close"
-				}
-				selects = append(selects, fmt.Sprintf("AVG(d.%s) OVER (PARTITION BY s.ticker ORDER BY d.timestamp ROWS BETWEEN %d PRECEDING AND CURRENT ROW) AS %s",
-					field, period-1, indicator.ID))
-
-			case "VWAP":
-				// For daily data, VWAP is essentially a volume-weighted calculation over the day
-				selects = append(selects, "d.vwap AS "+indicator.ID)
-
-			case "EMA":
-				// EMA requires more complex window functions
-				period := int(indicator.Parameters["period"].(float64))
-				field := indicator.InputField
-				if field == "" {
-					field = "close"
-				}
-				// This is a simplified approximation using PostgreSQL window functions
-				// For a true EMA, you might need custom logic in Go after fetching the data
-				selects = append(selects, fmt.Sprintf(
-					"AVG(d.%s) OVER (PARTITION BY s.ticker ORDER BY d.timestamp ROWS BETWEEN %d PRECEDING AND CURRENT ROW) AS %s",
-					field, period*2-1, indicator.ID))
-			}
-		}
-	}
-
-	return strings.Join(selects, ", ")
-}
-
-func getFuturePerformanceSelects(futurePerformances []struct {
-	ID         string `json:"id"`
-	Expression string `json:"expression"`
-	Timeframe  string `json:"timeframe"`
-	Comment    string `json:"comment,omitempty"`
-}, timeframe string) string {
-	var selects []string
-
-	for _, fp := range futurePerformances {
-		if fp.Timeframe == timeframe && fp.Expression != "" && fp.ID != "" {
-			// Directly use the provided expression, aliased by ID.
-			// Basic validation could be added here (e.g., check if expression contains 'LEAD(')
-			// but proper SQL sanitization is complex.
-			selects = append(selects, fmt.Sprintf("(%s) AS %s", fp.Expression, fp.ID))
-		}
-	}
-
-	return strings.Join(selects, ", \n    ")
-}
-
-func buildStockFilter(stocks struct {
-	Universe string   `json:"universe"`
-	Include  []string `json:"include"`
-	Exclude  []string `json:"exclude"`
-	Filters  []struct {
-		Metric    string  `json:"metric"`
-		Operator  string  `json:"operator"`
-		Value     float64 `json:"value"`
-		Timeframe string  `json:"timeframe"`
-	} `json:"filters"`
-}) string {
-	switch stocks.Universe {
-	case "sector":
-		return "s.sector IN (SELECT sector FROM sectors)"
-	case "list":
-		return "" // Handle with Include list
-	default:
-		return "" // "all" or default
-	}
-}
-
-/*
-func buildTimeOfDayCondition(timeOfDay struct {
-	Constraint string `json:"constraint"`
-	StartTime  string `json:"start_time"`
-	EndTime    string `json:"end_time"`
-}) string {
-	switch timeOfDay.Constraint {
-	case "specific_time":
-		return fmt.Sprintf("TIME(d.timestamp) = '%s'", timeOfDay.StartTime)
-	case "range":
-		return fmt.Sprintf("TIME(d.timestamp) BETWEEN '%s' AND '%s'", timeOfDay.StartTime, timeOfDay.EndTime)
-	case "pre_market":
-		return "TIME(d.timestamp) < '09:30'"
-	case "after_hours":
-		return "TIME(d.timestamp) > '16:00'"
-	default:
-		return ""
-	}
-}
-*/ // End temporary comment
-func mapOperator(op string) string {
-	switch op {
-	case "==":
-		return "="
-	default:
-		return op
-	}
-}
-
-// prettyPrintJSON extracts and formats JSON from a string that may contain text before/after the JSON
-func prettyPrintJSON(jsonStr string) (string, error) {
-	// Find the JSON block within the string
-	jsonStartIdx := strings.Index(jsonStr, "{")
-	jsonEndIdx := strings.LastIndex(jsonStr, "}")
-
-	if jsonStartIdx == -1 || jsonEndIdx == -1 || jsonEndIdx < jsonStartIdx {
-		return "", fmt.Errorf("no valid JSON block found")
-	}
-
-	// Extract the JSON block
-	jsonBlock := jsonStr[jsonStartIdx : jsonEndIdx+1]
-
-	// Parse the JSON to validate it
-	var parsedJSON interface{}
-	if err := json.Unmarshal([]byte(jsonBlock), &parsedJSON); err != nil {
-		return "", fmt.Errorf("invalid JSON: %v", err)
-	}
-
-	// Pretty print the JSON
-	prettyJSON, err := json.MarshalIndent(parsedJSON, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("error pretty printing JSON: %v", err)
-	}
-
-	return string(prettyJSON), nil
-}
-
-// formatResultsForLLM converts raw database results into a clean, LLM-friendly format
-func formatBacktestResults(records []interface{}) (map[string]interface{}, error) {
-	result := make(map[string]interface{})
-
-	// Create a clean array of instances
-	instances := make([]map[string]interface{}, 0, len(records))
-
-	// Get all unique column names from the first record
-	var columnNames []string
-	if len(records) > 0 {
-		if recordMap, ok := records[0].(map[string]interface{}); ok {
-			for key := range recordMap {
-				columnNames = append(columnNames, key)
-			}
-		}
-	}
-	for _, record := range records {
-		recordMap, ok := record.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		// Create a clean instance
-		instance := make(map[string]interface{})
-
-		// Process ticker and timestamp directly
-		if ticker, ok := recordMap["ticker"]; ok {
-			instance["ticker"] = ticker
-		}
-		if timestampValue, ok := recordMap["timestamp"]; ok {
-			// Attempt to convert the timestamp to Unix milliseconds
-			var timestampMs int64
-			switch t := timestampValue.(type) {
-			case time.Time:
-				timestampMs = t.UnixMilli()
-			case string:
-				// Attempt to parse the string (assuming RFC3339 format)
-				parsedTime, err := time.Parse(time.RFC3339, t)
-				if err == nil {
-					timestampMs = parsedTime.UnixMilli()
-				} else {
-					fmt.Printf("Warning: Could not parse timestamp string '%s': %v\n", t, err)
-					// Fallback: Store the original string if parsing fails
-					instance["timestamp"] = timestampValue
-					continue // Skip assigning milliseconds if parsing failed
-				}
-			default:
-				fmt.Printf("Warning: Unhandled timestamp type: %T\n", timestampValue)
-				// Fallback: Store the original value if type is unexpected
-				instance["timestamp"] = timestampValue
-				continue // Skip assigning milliseconds if type is unknown
-			}
-			// Assign the timestamp in milliseconds
-			instance["timestamp"] = timestampMs
-		} else {
-			// Handle case where timestamp is missing if necessary
-			instance["timestamp"] = nil // Or some default value
-		}
-
-		// Process all numeric fields including OHLCV and indicators
-		for _, key := range columnNames {
-			// Skip ticker and timestamp as they're already handled
-			if key == "ticker" || key == "timestamp" {
-				continue
-			}
-
-			if value, ok := recordMap[key]; ok {
-				// Convert the PostgreSQL numeric type
-				if numericMap, ok := value.(map[string]interface{}); ok {
-					// Extract exponent and value
-					if exp, hasExp := numericMap["Exp"]; hasExp {
-						if intVal, hasInt := numericMap["Int"]; hasInt {
-							// Try to convert to float64
-							expFloat, expOk := exp.(float64)
-							var floatVal float64
-
-							// Handle different numeric formats
-							switch v := intVal.(type) {
-							case float64:
-								floatVal = v
-							case string:
-								// Parse scientific notation
-								if parsedFloat, err := strconv.ParseFloat(v, 64); err == nil {
-									floatVal = parsedFloat
-								}
-							}
-
-							if expOk && floatVal != 0 {
-								// Calculate actual decimal value
-								actualValue := floatVal * math.Pow(10, expFloat)
-								instance[key] = actualValue
-							} else {
-								instance[key] = intVal
-							}
-						}
-					} else {
-						// If structure doesn't match expected format, use original value
-						instance[key] = value
-					}
-				} else {
-					// Pass through non-numeric values
-					instance[key] = value
-				}
-			}
-		}
-
-		instances = append(instances, instance)
-	}
-
-	// Create a summary
-	summary := make(map[string]interface{})
-	if len(instances) > 0 {
-		summary["count"] = len(instances)
-		summary["timeframe"] = "daily"
-		summary["columns"] = columnNames
-
-		// Calculate date range using the converted millisecond timestamps
-		if len(instances) > 0 {
-			var startTimeMs, endTimeMs int64
-			var startTimeStr, endTimeStr string
-
-			if firstTimestamp, ok := instances[0]["timestamp"].(int64); ok {
-				startTimeMs = firstTimestamp
-				startTimeStr = time.UnixMilli(startTimeMs).Format(time.RFC3339)
-			}
-			if lastTimestamp, ok := instances[len(instances)-1]["timestamp"].(int64); ok {
-				endTimeMs = lastTimestamp
-				endTimeStr = time.UnixMilli(endTimeMs).Format(time.RFC3339)
-			}
-
-			if startTimeStr != "" && endTimeStr != "" {
-				summary["date_range"] = map[string]interface{}{
-					"start_ms": startTimeMs,
-					"end_ms":   endTimeMs,
-					"start":    startTimeStr, // Keep original string format for summary readability if desired
-					"end":      endTimeStr,
-				}
-			}
-		}
-	}
-
-	// Create the final result structure
-	result["instances"] = instances
-	result["summary"] = summary
-
-	return result, nil
+// Helper function to process numeric values from the database
+func processNumericValue(value any) any {
+    // Handle PostgreSQL numeric type
+    if numericMap, ok := value.(map[string]any); ok {
+        // Check if this is a PostgreSQL numeric type with Exp and Int fields
+        exp, hasExp := numericMap["Exp"]
+        intVal, hasInt := numericMap["Int"]
+        
+        if hasExp && hasInt {
+            // Convert exponent to float64
+            var expFloat float64
+            switch e := exp.(type) {
+            case float64:
+                expFloat = e
+            case int:
+                expFloat = float64(e)
+            case int64:
+                expFloat = float64(e)
+            case string:
+                if parsed, err := strconv.ParseFloat(e, 64); err == nil {
+                    expFloat = parsed
+                }
+            }
+            
+            // Convert integer value to float64
+            var floatVal float64
+            switch v := intVal.(type) {
+            case float64:
+                floatVal = v
+            case int:
+                floatVal = float64(v)
+            case int64:
+                floatVal = float64(v)
+            case string:
+                if parsed, err := strconv.ParseFloat(v, 64); err == nil {
+                    floatVal = parsed
+                }
+            }
+            
+            // Calculate actual decimal value
+            return floatVal * math.Pow(10, expFloat)
+        }
+        
+        // If it's not a standard numeric type but has a direct numeric value
+        if val, ok := numericMap["Float64"]; ok {
+            return val
+        }
+        
+        // Return the raw value if we can't process it
+        return value
+    }
+    
+    // Handle other numeric types that might be strings
+    if strVal, ok := value.(string); ok {
+        if floatVal, err := strconv.ParseFloat(strVal, 64); err == nil {
+            return floatVal
+        }
+    }
+    
+    // Pass through non-numeric values
+    return value
 }
