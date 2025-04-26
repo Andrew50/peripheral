@@ -3,9 +3,10 @@ package tools
 import (
 	"backend/utils"
 	"context"
-    "github.com/jackc/pgx/v4"
+	"database/sql" // <-- Added for sql.NullFloat64
 	"encoding/json"
 	"fmt"
+	"github.com/jackc/pgx/v4"
 	"math"
 	"strconv"
 	"strings"
@@ -13,23 +14,31 @@ import (
 )
 
 type RunBacktestArgs struct {
-	StrategyId int `json:"strategyId"`
-    ReturnResults bool `json:"returnResults"`
+	StrategyId    int  `json:"strategyId"`
+	ReturnResults bool `json:"returnResults"`
+	ReturnWindow  int  `json:"returnWindow"` // Added return window
 }
 
-// RunBacktest executes a backtest for the given strategy
-// RunBacktest executes a backtest for the given strategy
+// RunBacktest executes a backtest for the given strategy and calculates future returns
 func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, error) {
 	var args RunBacktestArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-	fmt.Println("backtesting")
-	fmt.Println(args.StrategyId)
 
-	backtestJSON, err := _getStrategySpec(conn,  args.StrategyId,userId) // get spec from db using helper
+	// Validate ReturnWindow
+	if args.ReturnWindow <= 0 {
+		// Provide a default or return an error if 0 or negative is invalid
+		// For now, we'll proceed but the calculation won't make sense.
+		// Consider adding validation: return nil, fmt.Errorf("returnWindow must be positive")
+		fmt.Printf("Warning: returnWindow is %d, return calculation might not be meaningful.\n", args.ReturnWindow)
+	}
+
+	fmt.Println("backtesting strategyId:", args.StrategyId)
+
+	backtestJSON, err := _getStrategySpec(conn, args.StrategyId, userId) // get spec from db using helper
 	if err != nil {
-		return nil, fmt.Errorf("ERR vdi0s: failed to fetch strategy %v", err)
+		return nil, fmt.Errorf("ERR vdi0s: failed to fetch strategy: %v", err)
 	}
 
 	var spec Spec
@@ -39,15 +48,15 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 
 	// *** New approach using CompileSpecToSQL ***
 	// Generate SQL from the spec
-	sql, err := CompileSpecToSQL(spec)
+	sqlQuery, err := CompileSpecToSQL(spec) // Renamed 'sql' to 'sqlQuery' to avoid conflict
 	if err != nil {
 		return nil, fmt.Errorf("error compiling SQL for backtest: %v", err)
 	}
-	fmt.Println("Generated SQL:", sql)
+	fmt.Println("Generated SQL:", sqlQuery)
 
 	// Execute the query
 	ctx := context.Background()
-	rows, err := conn.DB.Query(ctx, sql)
+	rows, err := conn.DB.Query(ctx, sqlQuery)
 	if err != nil {
 		// Handle potential query errors (syntax errors, connection issues, etc.)
 		return nil, fmt.Errorf("error executing backtest query: %v", err)
@@ -62,25 +71,154 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 		return nil, fmt.Errorf("error scanning backtest results: %v", err)
 	}
 
-	// ******************************************************************
-	// ** CHANGE: Removed the check for len(records) == 0            **
-	// ** The code now proceeds even if records is empty.            **
-	// ******************************************************************
-	// // Check if we have any records
-	// // if len(records) == 0 {
-	// // 	 return nil, fmt.Errorf("no data found for backtest") // <--- REMOVED THIS BLOCK
-	// // }
+	// --- BEGIN: Calculate N-Day Returns ---
+	if args.ReturnWindow > 0 && len(records) > 0 {
+		fmt.Printf("Calculating %d-Day Returns for %d results...\n", args.ReturnWindow, len(records))
+		returnColumnName := fmt.Sprintf("%d Day Return %%", args.ReturnWindow)
+
+		// Prepare the query once
+		// Fetches the close price at the start timestamp and the first close price
+		// on or after the timestamp + returnWindow days.
+		returnQuery := `
+            WITH start_data AS (
+                SELECT timestamp, close
+                FROM ohlcv_1d
+                WHERE securityid = $1 AND timestamp = $2
+                LIMIT 1
+            ), target_date AS (
+                -- Calculate the date ReturnWindow days after the start timestamp
+                SELECT ($2::timestamp + $3 * interval '1 day')::date AS date
+            ), future_price AS (
+                -- Find the first closing price on or after the target date
+                SELECT close
+                FROM ohlcv_1d
+                WHERE securityid = $1
+                  AND timestamp::date >= (SELECT date FROM target_date)
+                ORDER BY timestamp ASC
+                LIMIT 1
+            )
+            SELECT
+                sd.close AS start_close,
+                fp.close AS end_close
+            FROM start_data sd
+            CROSS JOIN future_price fp; -- Use CROSS JOIN as future_price returns at most one row
+        `
+		// Use CROSS JOIN because future_price is guaranteed to have 0 or 1 row.
+		// If we need to handle cases where start_data might be missing, a different join/structure might be needed.
+		// A simpler alternative if start_data is guaranteed by the backtest:
+		/*
+			WITH target_date AS (
+				SELECT ($2::timestamp + $3 * interval '1 day')::date as date -- Calculate target date
+			), future_price AS (
+				SELECT close
+				FROM ohlcv_1d
+				WHERE securityid = $1
+				AND timestamp::date >= (SELECT date FROM target_date)
+				ORDER BY timestamp ASC
+				LIMIT 1
+			)
+			SELECT
+				t1.close AS start_close,
+				fp.close AS end_close
+			FROM ohlcv_1d t1
+			LEFT JOIN future_price fp ON true -- Left join guarantees the start row is returned
+			WHERE t1.securityid = $1
+			AND t1.timestamp = $2
+			LIMIT 1;
+		*/
+
+
+		for _, record := range records {
+			// Extract necessary info, handling potential type issues
+			secIdAny, okSecId := record["securityid"]
+			tsAny, okTs := record["timestamp"]
+
+			if !okSecId || !okTs {
+				fmt.Println("Warning: Skipping return calculation for a record due to missing securityid or timestamp.")
+				record[returnColumnName] = nil // Set return to nil if key info is missing
+				continue
+			}
+
+			// Convert securityId to int (adjust type if necessary, e.g., int64)
+			var securityId int
+			switch v := secIdAny.(type) {
+			case int:
+				securityId = v
+			case int32:
+				securityId = int(v)
+			case int64:
+				securityId = int(v) // Potential overflow if original is large int64
+			case float64: // Handle if ID comes as float
+			    securityId = int(v)
+			default:
+				fmt.Printf("Warning: Skipping return calculation for a record due to unexpected securityid type: %T\n", secIdAny)
+				record[returnColumnName] = nil
+				continue
+			}
+
+
+			// Convert timestamp to time.Time
+			var startTime time.Time
+			switch t := tsAny.(type) {
+			case time.Time:
+				startTime = t
+			// Add handling for other potential timestamp representations if needed (e.g., string, int64)
+			default:
+				fmt.Printf("Warning: Skipping return calculation for record with securityid %d due to unexpected timestamp type: %T\n", securityId, tsAny)
+				record[returnColumnName] = nil
+				continue
+			}
+
+			// --- Execute query to get start and end prices ---
+			var startClose, endClose sql.NullFloat64 // Use NullFloat64 for safety
+
+			err := conn.DB.QueryRow(ctx, returnQuery, securityId, startTime, args.ReturnWindow).Scan(&startClose, &endClose)
+
+			if err != nil {
+				if err == pgx.ErrNoRows {
+					// This case means the *starting* price wasn't found in ohlcv_1d, which is odd if the backtest found it.
+					fmt.Printf("Warning: No starting price found in ohlcv_1d for securityId %d at %v. Setting return to nil.\n", securityId, startTime)
+					record[returnColumnName] = nil
+				} else {
+					// Other potential errors (DB connection, query syntax)
+					fmt.Printf("Error fetching return data for securityId %d at %v: %v. Setting return to nil.\n", securityId, startTime, err)
+					record[returnColumnName] = nil
+				}
+				continue // Move to the next record
+			}
+
+			// --- Calculate percentage change ---
+			if startClose.Valid && endClose.Valid && startClose.Float64 != 0 {
+				percentChange := ((endClose.Float64 - startClose.Float64) / startClose.Float64) * 100
+				// Round to reasonable precision, e.g., 2 decimal places
+				record[returnColumnName] = math.Round(percentChange*100) / 100
+			} else {
+				// Handle cases: start price missing, end price missing, or start price is 0
+				if !startClose.Valid {
+					fmt.Printf("Info: Start price missing for securityId %d at %v. Return set to nil.\n", securityId, startTime)
+				} else if !endClose.Valid {
+					fmt.Printf("Info: End price missing (%d days later) for securityId %d at %v. Return set to nil.\n", args.ReturnWindow, securityId, startTime)
+				} else if startClose.Float64 == 0 {
+					fmt.Printf("Info: Start price is 0 for securityId %d at %v. Cannot calculate return, setting to nil.\n", securityId, startTime)
+				}
+				record[returnColumnName] = nil // Assign nil if calculation cannot be done
+			}
+		}
+		fmt.Println("Finished calculating returns.")
+	}
+	// --- END: Calculate N-Day Returns ---
 
 	// Convert to interface slice for formatBacktestResults
 	// This correctly handles an empty records slice, resulting in an empty recordsInterface slice.
 	recordsInterface := make([]any, len(records))
 	for i, record := range records {
-		recordsInterface[i] = record
+		recordsInterface[i] = record // record now potentially includes the return column
 	}
 
 	// Format the results for LLM readability
 	// formatBacktestResults handles an empty input slice correctly,
 	// returning a map with empty "instances" and "summary".
+	// It should now also include the new return column if it was added.
 	formattedResults, err := formatBacktestResults(recordsInterface, &spec)
 	if err != nil {
 		// This error path should ideally not be reached if formatBacktestResults
@@ -89,7 +227,7 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 	}
 
 	// Save the full formatted results (including instances) to cache
-	// This will save the empty structure if no results were found.
+	// This will save the structure potentially including the return column.
 	go func() { // Run in a goroutine to avoid blocking the main response
 		bgCtx := context.Background() // Use a background context for the goroutine
 		if err := SaveBacktestToCache(bgCtx, conn, userId, args.StrategyId, formattedResults); err != nil {
@@ -98,17 +236,14 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 		}
 	}()
 
-	// Extract only the summary to return to the LLM (Now handled inside formatBacktestResults)
-	// The summary will be an empty map if there were no records.
+	// Extract only the summary to return to the LLM
 	summary, ok := formattedResults["summary"].(map[string]any)
 	if !ok {
 		// This should ideally not happen if formatBacktestResults worked correctly
-		// even for empty input.
 		return nil, fmt.Errorf("failed to extract summary from formatted backtest results (internal error)")
 	}
 
 	// --- Save Summary to Persistent Context ---
-	// This will save the empty summary map if no results were found.
 	go func() {
 		ctx := context.Background()
 		contextKey := fmt.Sprintf("backtest_summary_strategy_%d", args.StrategyId)
@@ -119,15 +254,12 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 	}()
 	// --- End Save Summary ---
 
-    if (args.ReturnResults){
-        return formattedResults, nil
-	// Return the formatted results (which will contain empty instances/summary if no hits) and nil error
-    }else{
-        return summary, nil
-    }
+	if args.ReturnResults {
+		return formattedResults, nil // Return full results (potentially with return column)
+	} else {
+		return summary, nil // Return only the summary
+	}
 }
-
-// runCompiledBacktest executes a backtest for a given spec using the new compiler
 
 // ScanRows converts pgx.Rows to a slice of maps
 func ScanRows(rows pgx.Rows) ([]map[string]any, error) {
@@ -144,21 +276,24 @@ func ScanRows(rows pgx.Rows) ([]map[string]any, error) {
 	// Scan each row
 	for rows.Next() {
 		// Create a slice of any to hold the values
+		// Use pointers to handle potential NULL values correctly
 		values := make([]any, len(columns))
+		valuePtrs := make([]any, len(columns))
 		for i := range values {
-			values[i] = new(any)
-
+			valuePtrs[i] = &values[i]
 		}
 
-		// Scan the row into the slice
-		if err := rows.Scan(values...); err != nil {
+		// Scan the row into the slice of pointers
+		if err := rows.Scan(valuePtrs...); err != nil {
 			return nil, fmt.Errorf("error scanning row: %v", err)
 		}
 
 		// Create a map for this row
 		row := make(map[string]any)
 		for i, col := range columns {
-			row[col] = *(values[i].(*any))
+			// Dereference the pointer to get the actual value.
+			// If the DB value was NULL, the corresponding `values[i]` will be `nil`.
+			row[col] = values[i]
 		}
 		results = append(results, row)
 	}
@@ -172,212 +307,235 @@ func ScanRows(rows pgx.Rows) ([]map[string]any, error) {
 }
 
 // formatBacktestResults converts raw database results into a clean, LLM-friendly format
-// with feature values using feature names from the spec if available
 func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
-    result := make(map[string]any)
+	result := make(map[string]any)
+	instances := make([]map[string]any, 0, len(records))
 
-    // Create a clean array of instances
-    instances := make([]map[string]any, 0, len(records))
+	featureMap := make(map[string]string) // Maps "f0", "f1" to actual feature names
+	if spec != nil {
+		for _, feature := range spec.Features {
+			featureKey := fmt.Sprintf("f%d", feature.FeatureId)
+			featureMap[featureKey] = feature.Name
+		}
+	}
 
-    // Map feature IDs to feature names if spec is provided
-    featureMap := make(map[string]string) // Maps "f0", "f1" to actual feature names
-    if spec != nil {
-        for _, feature := range spec.Features {
-            featureKey := fmt.Sprintf("f%d", feature.FeatureId)
-            featureMap[featureKey] = feature.Name
-        }
-    }
+	var columnNames []string
+	if len(records) > 0 {
+		if recordMap, ok := records[0].(map[string]any); ok {
+			for key := range recordMap {
+				columnNames = append(columnNames, key) // Collect all keys, including the new return column
+			}
+		}
+	}
 
-    // Get all unique column names from the first record
-    var columnNames []string
-    if len(records) > 0 {
-        if recordMap, ok := records[0].(map[string]any); ok {
-            for key := range recordMap {
-                columnNames = append(columnNames, key)
-            }
-        }
-    }
+	for _, record := range records {
+		recordMap, ok := record.(map[string]any)
+		if !ok {
+			fmt.Println("Warning: Skipping record during formatting as it's not a map[string]any")
+			continue
+		}
 
-    for _, record := range records {
-        recordMap, ok := record.(map[string]any)
-        if !ok {
-            continue
-        }
+		instance := make(map[string]any)
+		processedTimestamp := false // Flag to ensure timestamp is handled only once
 
-        // Create a clean instance
-        instance := make(map[string]any)
+		// Explicitly handle core fields first if they exist
+		if ticker, exists := recordMap["ticker"]; exists {
+			instance["ticker"] = ticker
+		}
+		if securityId, exists := recordMap["securityid"]; exists {
+			instance["securityId"] = securityId // Use consistent casing
+		}
+		if timestampValue, exists := recordMap["timestamp"]; exists {
+			// Convert timestamp logic (keeping existing implementation)
+			var timestampMs int64 = -1 // Default to -1 or some indicator of failure
+			switch t := timestampValue.(type) {
+			case time.Time:
+				// Ensure time is not zero before converting
+				if !t.IsZero() {
+					timestampMs = t.UnixMilli()
+				} else {
+					fmt.Printf("Warning: Encountered zero timestamp value for securityId %v\n", instance["securityId"])
+				}
+			case string:
+				parsedTime, err := time.Parse(time.RFC3339Nano, t) // Try with Nano first
+				if err != nil {
+				    parsedTime, err = time.Parse(time.RFC3339, t) // Fallback to RFC3339
+				}
+				if err == nil && !parsedTime.IsZero() {
+					timestampMs = parsedTime.UnixMilli()
+				} else {
+					fmt.Printf("Warning: Could not parse timestamp string '%v': %v\n", t, err)
+					// Keep original value if parsing fails
+					instance["timestamp"] = timestampValue
+				}
+			case nil:
+				// Handle nil timestamp if necessary
+				fmt.Printf("Warning: Encountered nil timestamp for securityId %v\n", instance["securityId"])
+			default:
+				fmt.Printf("Warning: Unhandled timestamp type: %T for value %v\n", timestampValue, timestampValue)
+				// Keep original value if type is unhandled
+				instance["timestamp"] = timestampValue
+			}
 
-        // Process ticker, securityId, and timestamp directly
-        if ticker, ok := recordMap["ticker"]; ok {
-            instance["ticker"] = ticker
-        }
-        if securityId, ok := recordMap["securityid"]; ok {
-            instance["securityId"] = securityId
-        }
-        if timestampValue, ok := recordMap["timestamp"]; ok {
-            // Convert timestamp logic (keeping existing implementation)
-            var timestampMs int64
-            switch t := timestampValue.(type) {
-            case time.Time:
-                timestampMs = t.UnixMilli()
-            case string:
-                parsedTime, err := time.Parse(time.RFC3339, t)
-                if err == nil {
-                    timestampMs = parsedTime.UnixMilli()
-                } else {
-                    fmt.Printf("Warning: Could not parse timestamp string '%s': %v\n", t, err)
-                    instance["timestamp"] = timestampValue
-                    continue
-                }
-            default:
-                fmt.Printf("Warning: Unhandled timestamp type: %T\n", timestampValue)
-                instance["timestamp"] = timestampValue
-                continue
-            }
-            instance["timestamp"] = timestampMs
-        } else {
-            instance["timestamp"] = nil
-        }
+			// Only assign timestampMs if it was successfully processed
+			if timestampMs != -1 {
+				instance["timestamp"] = timestampMs
+			} else if _, exists := instance["timestamp"]; !exists {
+			    // Ensure the key exists even if processing failed, potentially setting it to nil
+			    instance["timestamp"] = nil
+			}
+			processedTimestamp = true
+		} else {
+			instance["timestamp"] = nil // Ensure key exists if missing in source
+		}
 
-// Process all numeric fields including OHLCV and indicators
-        for _, key := range columnNames {
-            // Skip already handled fields
-            if key == "ticker" || key == "securityid" || key == "timestamp" {
-                continue
-            }
 
-            // Check if this is a feature column (like "f0", "f1", etc.)
-            columnName := key
-            if spec != nil && strings.HasPrefix(key, "f") {
-                if mappedName, ok := featureMap[key]; ok {
-                    columnName = mappedName // Use the proper feature name from spec
-                }
-            }
+		// Process all other fields dynamically
+		for key, value := range recordMap {
+			// Skip already handled fields
+			if key == "ticker" || key == "securityid" || (key == "timestamp" && processedTimestamp) {
+				continue
+			}
 
-            if value, ok := recordMap[key]; ok {
-                // Process the value (numeric handling logic from original implementation)
-                processedValue := processNumericValue(value)
-                
-                // Double-check if the processed value is still a map with numeric type fields
-                // This handles nested numeric objects that might not be caught by the first pass
-                if valueMap, isMap := processedValue.(map[string]any); isMap {
-                    if _, hasExp := valueMap["Exp"]; hasExp {
-                        if _, hasInt := valueMap["Int"]; hasInt {
-                            // This is still a numeric object, process it again
-                            processedValue = processNumericValue(processedValue)
-                        }
-                    }
-                }
-                
-                instance[columnName] = processedValue
-            }
-        }
+			// Determine the final column name (use feature name if mapped)
+			columnName := key
+			if spec != nil && strings.HasPrefix(key, "f") {
+				if mappedName, ok := featureMap[key]; ok {
+					columnName = mappedName // Use the proper feature name from spec
+				}
+			}
 
-        instances = append(instances, instance)
-    }
+			// Process the value (handle numeric types, pass others through)
+			// The new return column (float64 or nil) will be handled correctly by processNumericValue
+			instance[columnName] = processNumericValue(value)
+		}
 
-    // Create a summary
-    summary := make(map[string]any)
+		instances = append(instances, instance)
+	}
 
-    // Add the count of instances to the summary
-    summary["count"] = len(instances)
+	// Create a summary
+	summary := make(map[string]any)
+	summary["count"] = len(instances)
 
-    if len(instances) > 0 {
-    // Find the earliest and latest timestamps
-    var minTimeMs int64 = math.MaxInt64
-    var maxTimeMs int64 = 0
-    var startTimeStr, endTimeStr string
+	if len(instances) > 0 {
+		var minTimeMs int64 = math.MaxInt64
+		var maxTimeMs int64 = 0
+		var startTimeStr, endTimeStr string
+		foundValidTime := false
 
-    // Scan all instances to find min and max timestamps
-    for _, instance := range instances {
-        if tsMs, ok := instance["timestamp"].(int64); ok {
-            if tsMs < minTimeMs {
-                minTimeMs = tsMs
-                startTimeStr = time.UnixMilli(minTimeMs).Format(time.RFC3339)
-            }
-            if tsMs > maxTimeMs {
-                maxTimeMs = tsMs
-                endTimeStr = time.UnixMilli(maxTimeMs).Format(time.RFC3339)
-            }
-        }
-    }
+		for _, instance := range instances {
+			// Use type assertion with check
+			if tsMs, ok := instance["timestamp"].(int64); ok {
+			    foundValidTime = true // Found at least one valid timestamp
+				if tsMs < minTimeMs {
+					minTimeMs = tsMs
+				}
+				if tsMs > maxTimeMs {
+					maxTimeMs = tsMs
+				}
+			} else {
+			    // Log if timestamp is not int64 as expected after processing
+			    // fmt.Printf("Warning: Instance timestamp is not int64: %T, value: %v\n", instance["timestamp"], instance["timestamp"])
+			}
+		}
 
-    if minTimeMs != math.MaxInt64 && maxTimeMs != 0 {
-        summary["date_range"] = map[string]any{
-            "start_ms": minTimeMs,
-            "end_ms":   maxTimeMs,
-            "start":    startTimeStr,
-            "end":      endTimeStr,
-        }
-    }
-}
+		if foundValidTime { // Only add date range if valid timestamps were found
+			startTimeStr = time.UnixMilli(minTimeMs).UTC().Format(time.RFC3339) // Use UTC for consistency
+			endTimeStr = time.UnixMilli(maxTimeMs).UTC().Format(time.RFC3339)   // Use UTC for consistency
+			summary["date_range"] = map[string]any{
+				"start_ms": minTimeMs,
+				"end_ms":   maxTimeMs,
+				"start":    startTimeStr,
+				"end":      endTimeStr,
+			}
+		} else {
+		     fmt.Println("Warning: No valid timestamps found in instances to calculate date range.")
+		}
+	}
 
-    // Create the final result structure
-    result["instances"] = instances
-    result["summary"] = summary
+	result["instances"] = instances
+	result["summary"] = summary
 
-    return result, nil
+	return result, nil
 }
 
 // Helper function to process numeric values from the database
 func processNumericValue(value any) any {
-    // Handle PostgreSQL numeric type
-    if numericMap, ok := value.(map[string]any); ok {
-        // Check if this is a PostgreSQL numeric type with Exp and Int fields
-        exp, hasExp := numericMap["Exp"]
-        intVal, hasInt := numericMap["Int"]
-        
-        if hasExp && hasInt {
-            // Convert exponent to float64
-            var expFloat float64
-            switch e := exp.(type) {
-            case float64:
-                expFloat = e
-            case int:
-                expFloat = float64(e)
-            case int64:
-                expFloat = float64(e)
-            case string:
-                if parsed, err := strconv.ParseFloat(e, 64); err == nil {
-                    expFloat = parsed
-                }
-            }
-            
-            // Convert integer value to float64
-            var floatVal float64
-            switch v := intVal.(type) {
-            case float64:
-                floatVal = v
-            case int:
-                floatVal = float64(v)
-            case int64:
-                floatVal = float64(v)
-            case string:
-                if parsed, err := strconv.ParseFloat(v, 64); err == nil {
-                    floatVal = parsed
-                }
-            }
-            
-            // Calculate actual decimal value
-            return floatVal * math.Pow(10, expFloat)
-        }
-        
-        // If it's not a standard numeric type but has a direct numeric value
-        if val, ok := numericMap["Float64"]; ok {
-            return val
-        }
-        
-        // Return the raw value if we can't process it
-        return value
+    // Handle nil directly
+    if value == nil {
+        return nil
     }
-    
-    // Handle other numeric types that might be strings
-    if strVal, ok := value.(string); ok {
-        if floatVal, err := strconv.ParseFloat(strVal, 64); err == nil {
-            return floatVal
-        }
-    }
-    
-    // Pass through non-numeric values
-    return value
+
+	// Handle PostgreSQL numeric type (represented as map[string]any by pgx)
+	if numericMap, ok := value.(map[string]any); ok {
+		// Check standard pgx numeric representation (Status, Int, Exp, Neg)
+		// Note: pgx v4/v5 might represent numeric differently. Check your pgx version's behavior.
+		// This example assumes a common map structure often seen.
+		statusAny, hasStatus := numericMap["Status"] // pgtype.Present, pgtype.Null etc.
+		intStrAny, hasInt := numericMap["Int"]       // Usually a string representation of the integer part
+		expAny, hasExp := numericMap["Exp"]          // Exponent
+
+		// Check if it looks like the pgtype.Numeric structure
+		if hasStatus && hasInt && hasExp {
+			// Check if the status indicates a present (non-NULL) value
+			if status, ok := statusAny.(byte); ok && status == 2 { // 2 usually means Present
+				intStr, okIntStr := intStrAny.(string)
+				expInt, okExp := expAny.(int32) // Exponent is often int32
+
+				if okIntStr && okExp {
+					// Attempt to construct the float value
+					// This is a simplified conversion; a robust one would use big.Float
+					f, _, err := new(big.Float).Parse(intStr+"e"+strconv.Itoa(int(expInt)), 10)
+					if err == nil {
+						floatVal, _ := f.Float64() // Get float64 representation
+						return floatVal
+					} else {
+						fmt.Printf("Warning: Failed to parse pgtype.Numeric representation: %v\n", err)
+						return value // Return original map if parsing fails
+					}
+				}
+			} else {
+				// Handle NULL status if needed, though outer nil check should catch it
+				return nil
+			}
+		}
+		// Fallback for other map structures potentially representing numbers
+		// Example: Simple {"Float64": 123.45} map (less common from DB drivers)
+		if floatVal, ok := numericMap["Float64"]; ok {
+			return floatVal
+		}
+		// Could add more checks for other numeric representations if necessary
+	}
+
+	// Direct type assertions for common numeric types
+	switch v := value.(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case int32:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case string:
+		// Try parsing string as float
+		if floatVal, err := strconv.ParseFloat(v, 64); err == nil {
+			return floatVal
+		}
+		// If not parsable as float, return original string
+		return v
+    case []uint8: // Handle byte slices which might represent numbers
+        strVal := string(v)
+		if floatVal, err := strconv.ParseFloat(strVal, 64); err == nil {
+			return floatVal
+		}
+        fmt.Printf("Warning: Could not parse []uint8 as float64: %s\n", strVal)
+        return strVal // Return as string if not parsable
+	}
+
+	// If none of the above, return the value as is
+	fmt.Printf("Warning: Unhandled type in processNumericValue: %T, returning original value.\n", value)
+	return value
 }
