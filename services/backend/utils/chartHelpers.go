@@ -86,6 +86,13 @@ func GetTimeframeInSeconds(multiplier int, timeframe string) int64 {
 	} else if timeframe == "second" {
 		return int64(multiplier)
 	}
+	if timeframe == "day" {
+		return 24 * 60 * 60 * int64(multiplier)
+	}
+	if timeframe == "week" {
+		return 7 * 24 * 60 * 60 * int64(multiplier)
+	}
+
 	return 0
 }
 
