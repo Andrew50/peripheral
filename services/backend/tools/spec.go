@@ -162,8 +162,8 @@ type FeatureSource struct {
 }
 
 type ExprPart struct {
-	Column       string       `json:"column"`       // FundamentalFeature | OHLCFeature
-	ExprOperator ExprOperator `json:"exprOperator"` 
+	Type       string       `json:"type"`       // FundamentalFeature | OHLCFeature
+	Value string `json:"value"`  //ExprOperator
 }
 
 // Feature represents a calculated metric used for filtering.
@@ -198,6 +198,7 @@ type Spec struct {
 
 type SortBy struct {
 	Feature   FeatureId `json:"feature"`   // feature to sort by
+
 	Direction Direction  `json:"direction"`
 }
 
@@ -532,6 +533,8 @@ func validateFeatureSource(fs *FeatureSource, context string) error {
     return nil
 }
 
+
+// Validator for expressions in RPN format
 func validateExpr(exprParts []ExprPart, context string) error {
     var errs []string
     
@@ -540,55 +543,68 @@ func validateExpr(exprParts []ExprPart, context string) error {
         return errors.New(strings.Join(errs, "; "))
     }
     
+    // Track operand/operator stack depth for RPN validation
+    stackDepth := 0
+    
     // Validate each expression part
     for i, part := range exprParts {
         partCtx := fmt.Sprintf("%s.expr[%d]", context, i)
         
-        // Validate column
-        if part.Column == "" {
-            errs = append(errs, fmt.Sprintf("%s column cannot be empty", partCtx))
-        } else {
-            // Check if column is a valid OHLCV feature or fundamental feature
-            isValidOHLCV := false
-            isValidFundamental := false
-            
-            // Check OHLCV features
-            lowerColumn := strings.ToLower(part.Column)
-            if _, ok := validOHLCVFeatures[lowerColumn]; ok {
-                isValidOHLCV = true
-            }
-            
-            // Check fundamental features
-            if _, ok := validFundamentalFeatures[lowerColumn]; ok {
-                isValidFundamental = true
-            }
-            
-            if !isValidOHLCV && !isValidFundamental {
-                errs = append(errs, fmt.Sprintf("%s column '%s' is not a valid OHLCV or fundamental feature", 
-                    partCtx, part.Column))
-            }
+        // Validate part type
+        if part.Type != "column" && part.Type != "operator" {
+            errs = append(errs, fmt.Sprintf("%s type must be 'column' or 'operator', got '%s'", 
+                partCtx, part.Type))
         }
         
-        // Validate operator (only for non-first parts)
-        if i > 0 {
-            // Convert ExprOperator to string for validation
-            operatorStr := string(part.ExprOperator)
+        // Process based on part type
+        if part.Type == "column" {
+            // Validate column name
+            if part.Value == "" {
+                errs = append(errs, fmt.Sprintf("%s value cannot be empty for type 'column'", partCtx))
+            } else {
+                // Check if column is a valid OHLCV feature or fundamental feature
+                lowerValue := strings.ToLower(part.Value)
+                _, isValidOHLCV := validOHLCVFeatures[lowerValue]
+                _, isValidFundamental := validFundamentalFeatures[lowerValue]
+                
+                if !isValidOHLCV && !isValidFundamental {
+                    errs = append(errs, fmt.Sprintf("%s value '%s' is not a valid OHLCV or fundamental feature", 
+                        partCtx, part.Value))
+                }
+            }
+            
+            // Each column adds one value to the stack
+            stackDepth++
+            
+        } else if part.Type == "operator" {
+            // Validate operator
             validOp := false
             for op := range validExprOperators {
-                if operatorStr == string(op) {
+                if part.Value == string(op) {
                     validOp = true
                     break
                 }
             }
             if !validOp {
-                errs = append(errs, fmt.Sprintf("%s operator '%s' is not valid", partCtx, part.ExprOperator))
+                errs = append(errs, fmt.Sprintf("%s value '%s' is not a valid operator", partCtx, part.Value))
             }
-        } else {
-            // First part should not have an operator
-            if part.ExprOperator != "" {
-                errs = append(errs, fmt.Sprintf("%s first part should not have an operator", partCtx))
+            
+            // Each operator removes two operands and adds one result
+            stackDepth -= 2
+            stackDepth++
+            
+            // Check if we have enough operands
+            if stackDepth < 0 {
+                errs = append(errs, fmt.Sprintf("%s not enough operands for operator '%s'", partCtx, part.Value))
+                // Reset stack depth to avoid cascading errors
+                stackDepth = 0
             }
         }
+    }
+    
+    // After processing all parts, we should have exactly one value on the stack
+    if stackDepth != 1 {
+        errs = append(errs, fmt.Sprintf("%s expression does not evaluate to a single result, %d leftover", context, stackDepth-1))
     }
     
     if len(errs) > 0 {

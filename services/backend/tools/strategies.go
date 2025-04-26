@@ -310,7 +310,7 @@ func CreateStrategyFromNaturalLanguage(conn *utils.Conn, userId int, rawArgs jso
 		return map[string]interface{}{
 			"strategyId": strategyId,
 			"name":       name,
-			"spec":       spec, // Return the validated spec object
+			//"spec":       spec, // Return the validated spec object
 		}, nil
 	}
 
@@ -336,7 +336,7 @@ func _getStrategySpec(conn *utils.Conn, userId int, strategyId int) (json.RawMes
 	var strategyCriteria json.RawMessage
 	fmt.Println(userId)
 	err := conn.DB.QueryRow(context.Background(), `
-    SELECT criteria
+    SELECT spec
     FROM strategies WHERE strategyId = $1`, strategyId).Scan(&strategyCriteria)
 	//TODO add user id check back
 	if err != nil {
@@ -359,15 +359,15 @@ func GetStrategies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inter
 	var strategies []Strategy
 	for rows.Next() {
 		var strategy Strategy
-		var criteriaJSON json.RawMessage
+		var specJSON json.RawMessage
 
-		if err := rows.Scan(&strategy.StrategyId, &strategy.Name, &criteriaJSON); err != nil {
+		if err := rows.Scan(&strategy.StrategyId, &strategy.Name, &specJSON); err != nil {
 			return nil, fmt.Errorf("error scanning strategy: %v", err)
 		}
 
 		// Parse the spec JSON
-		if err := json.Unmarshal(criteriaJSON, &strategy.Spec); err != nil {
-			return nil, fmt.Errorf("error parsing criteria JSON: %v", err)
+		if err := json.Unmarshal(specJSON, &strategy.Spec); err != nil {
+			return nil, fmt.Errorf("error parsing spec JSON: %v", err)
 		}
 
 		// Get the score from the studies table (if available)
@@ -400,7 +400,7 @@ func _newStrategy(conn *utils.Conn, userId int, name string, spec Spec) (int, er
 	// userId is assumed to be validated by the caller function's context
 
 	// Convert the validated spec object back to JSON for database storage
-	criteriaJSON, err := json.Marshal(spec)
+	specJSON, err := json.Marshal(spec)
 	if err != nil {
 		// This should ideally not happen if the spec was correctly validated/constructed
 		return -1, fmt.Errorf("internal error marshaling validated spec: %w", err)
@@ -409,9 +409,9 @@ func _newStrategy(conn *utils.Conn, userId int, name string, spec Spec) (int, er
 	var strategyID int
 	// Ensure the userId from the function argument is used
 	err = conn.DB.QueryRow(context.Background(), `
-		INSERT INTO strategies (name, criteria, userId)
+		INSERT INTO strategies (name, spec, userId)
 		VALUES ($1, $2, $3) RETURNING strategyId`,
-		name, criteriaJSON, userId, // Use the passed userId
+		name, specJSON, userId, // Use the passed userId
 	).Scan(&strategyID)
 
 	if err != nil {
@@ -497,7 +497,7 @@ func _setStrategy(conn *utils.Conn, userId int, strategyId int, name string, spe
 	}
 
 	// Convert the validated spec object back to JSON for database storage
-	criteriaJSON, err := json.Marshal(spec)
+	specJSON, err := json.Marshal(spec)
 	if err != nil {
 		return fmt.Errorf("internal error marshaling validated spec: %w", err)
 	}
@@ -505,9 +505,9 @@ func _setStrategy(conn *utils.Conn, userId int, strategyId int, name string, spe
 	// Update the strategy, ensuring the userId matches for authorization
 	cmdTag, err := conn.DB.Exec(context.Background(), `
 		UPDATE strategies
-		SET name = $1, criteria = $2
+		SET name = $1, spec = $2
 		WHERE strategyId = $3 AND userId = $4`,
-		name, criteriaJSON, strategyId, userId) // Use userId from context
+		name, specJSON, strategyId, userId) // Use userId from context
 
 	if err != nil {
 		return fmt.Errorf("error updating strategy in database: %w", err)
