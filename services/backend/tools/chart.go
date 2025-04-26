@@ -16,23 +16,25 @@ import (
 
 // GetChartDataArgs represents a structure for handling GetChartDataArgs data.
 type GetChartDataArgs struct {
-	SecurityID    int    `json:"securityId"`
-	Timeframe     string `json:"timeframe"`
-	Timestamp     int64  `json:"timestamp"`
-	Direction     string `json:"direction"`
-	Bars          int    `json:"bars"`
-	ExtendedHours bool   `json:"extendedHours"`
-	IsReplay      bool   `json:"isreplay"`
+	SecurityID        int    `json:"securityId"`
+	Timeframe         string `json:"timeframe"`
+	Timestamp         int64  `json:"timestamp"`
+	Direction         string `json:"direction"`
+	Bars              int    `json:"bars"`
+	ExtendedHours     bool   `json:"extendedHours"`
+	IsReplay          bool   `json:"isreplay"`
+	IncludeSECFilings bool   `json:"includeSECFilings,omitempty"`
 }
 
 // GetChartDataResults represents a structure for handling GetChartDataResults data.
 type GetChartDataResults struct {
-	Timestamp float64 `json:"time"`
-	Open      float64 `json:"open"`
-	High      float64 `json:"high"`
-	Low       float64 `json:"low"`
-	Close     float64 `json:"close"`
-	Volume    float64 `json:"volume"`
+	Timestamp float64      `json:"time"`
+	Open      float64      `json:"open"`
+	High      float64      `json:"high"`
+	Low       float64      `json:"low"`
+	Close     float64      `json:"close"`
+	Volume    float64      `json:"volume"`
+	Events    []ChartEvent `json:"events"`
 }
 
 // GetChartDataResponse represents a structure for handling GetChartDataResponse data.
@@ -383,10 +385,12 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				isEarliestData = !exists
 			}
 		}
-
 		// For aggregator logic or forward queries, we skip reversing.
 		if haveToAggregate || args.Direction == "forward" {
 			if args.Direction == "backward" {
+				// Fetch events before handling incomplete bar for aggregate/forward
+				integrateChartEvents(&barDataList, conn, userId, args.SecurityID, args.IncludeSECFilings, multiplier, timespan, args.ExtendedHours, easternLocation)
+
 				// Potentially fetch incomplete bar if market is open or in replay
 				marketStatus, err := utils.GetMarketStatus(conn)
 				if err != nil {
@@ -426,6 +430,9 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 
 		// Otherwise, direction=backward with direct data—reverse the slice
 		reverse(barDataList)
+
+		// Fetch events after reversing and before handling incomplete bar for backward
+		integrateChartEvents(&barDataList, conn, userId, args.SecurityID, args.IncludeSECFilings, multiplier, timespan, args.ExtendedHours, easternLocation)
 
 		// Possibly append incomplete bar
 		marketStatus, err := utils.GetMarketStatus(conn)
@@ -984,4 +991,153 @@ func buildHigherTimeframeFromLower(
 	}
 
 	return barDataList, nil
+}
+
+// Helper function to determine the start timestamp (Unix seconds) of the bar an event belongs to
+func alignTimestampToStartOfBar(eventMs int64, multiplier int, timespan string, extendedHours bool, loc *time.Location) int64 {
+	timeframeSeconds := utils.GetTimeframeInSeconds(multiplier, timespan)
+	var barStartMs int64
+
+	// Ensure location is not nil, fallback to UTC if necessary to prevent panics
+	if loc == nil {
+		fmt.Println("Warning: Eastern location was nil in alignTimestampToStartOfBar, falling back to UTC.")
+		loc = time.UTC
+	}
+
+	if timespan == "second" || timespan == "minute" || timespan == "hour" {
+		referenceStartMs := utils.GetReferenceStartTime(eventMs, extendedHours, loc)
+		elapsedMs := eventMs - referenceStartMs
+		if elapsedMs < 0 {
+			// Event is before the calculated reference start for the day.
+			// This might happen for events near midnight or if reference logic has edge cases.
+			// Aligning to the reference start might be the most reasonable approach.
+			fmt.Printf("Warning: Event timestamp %d ms is before its reference start %d ms for %s %d. Aligning to reference start.\\n", eventMs, referenceStartMs, timespan, multiplier)
+			return referenceStartMs / 1000
+		}
+
+		// Ensure timeframeSeconds is valid before calculating milliseconds or dividing
+		if timeframeSeconds <= 0 {
+			fmt.Printf("Warning: Invalid timeframeSeconds %d calculated for %s %d. Using 60s fallback for alignment.\\n", timeframeSeconds, timespan, multiplier)
+			timeframeSeconds = 60 // Fallback to 60 seconds
+		}
+		tfMillis := int64(timeframeSeconds) * 1000
+		if tfMillis <= 0 {
+			fmt.Printf("Warning: Invalid timeframeMillis %d. Using 60000ms fallback.\\n", tfMillis)
+			tfMillis = 60000 // Prevent division by zero or negative values
+		}
+
+		barOffsetMs := (elapsedMs / tfMillis) * tfMillis
+		barStartMs = referenceStartMs + barOffsetMs
+	} else {
+		// Daily or above - use the specific reference start functions based on UTC time
+		switch timespan {
+		case "day":
+			barStartMs = utils.GetReferenceStartTimeForDays(eventMs, multiplier, loc) // loc might be needed if utils func uses it
+		case "week":
+			barStartMs = utils.GetReferenceStartTimeForWeeks(eventMs, multiplier, loc)
+		case "month":
+			barStartMs = utils.GetReferenceStartTimeForMonths(eventMs, multiplier, loc)
+		default:
+			fmt.Printf("Warning: Unknown timespan '%s' in alignTimestampToStartOfBar. Falling back to UTC day alignment.\\n", timespan)
+			// Fallback: align to UTC day start
+			t := time.UnixMilli(eventMs).UTC()
+			barStartMs = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC).UnixMilli()
+		}
+	}
+	return barStartMs / 1000 // Return Unix seconds
+}
+
+// Helper function to fetch and integrate events into the bar list
+func integrateChartEvents(
+	barDataList *[]GetChartDataResults, // Pointer to modify the slice
+	conn *utils.Conn,
+	userId int,
+	securityID int,
+	includeSECFilings bool,
+	multiplier int,
+	timespan string,
+	extendedHours bool,
+	easternLocation *time.Location,
+) {
+	// Ensure we have bars and necessary info to proceed
+	if barDataList == nil || len(*barDataList) == 0 {
+		return
+	}
+
+	bars := *barDataList // Dereference for easier use
+
+	// 1. Determine Time Range from existing bars
+	// Sort a temporary copy to reliably find min/max timestamps
+	tempSortedBars := make([]GetChartDataResults, len(bars))
+	copy(tempSortedBars, bars)
+	sort.Slice(tempSortedBars, func(i, j int) bool {
+		// Handle potential NaN or Inf values if they could occur
+		if math.IsNaN(tempSortedBars[i].Timestamp) || math.IsNaN(tempSortedBars[j].Timestamp) {
+			return false // Or handle according to desired NaN sorting
+		}
+		return tempSortedBars[i].Timestamp < tempSortedBars[j].Timestamp
+	})
+
+	// Check if sorting resulted in valid timestamps
+	if len(tempSortedBars) == 0 {
+		fmt.Println("Warning: No valid bars after sorting for event fetching.")
+		return
+	}
+
+	minTsSec := tempSortedBars[0].Timestamp
+	maxTsSec := tempSortedBars[len(tempSortedBars)-1].Timestamp
+
+	// Validate timestamps before proceeding
+	if math.IsNaN(minTsSec) || math.IsNaN(maxTsSec) || math.IsInf(minTsSec, 0) || math.IsInf(maxTsSec, 0) {
+		fmt.Printf("Warning: Invalid min/max timestamps after sorting: min=%f, max=%f. Cannot fetch events.\\n", minTsSec, maxTsSec)
+		return
+	}
+
+	chartTimeframeInSeconds := utils.GetTimeframeInSeconds(multiplier, timespan)
+	if chartTimeframeInSeconds <= 0 {
+		fmt.Printf("Warning: Cannot fetch events due to invalid timeframeSeconds: %d for %s %d\\n", chartTimeframeInSeconds, timespan, multiplier)
+		return
+	}
+
+	// Calculate time range in milliseconds for the API call
+	fromMs := int64(minTsSec * 1000)
+	// Extend 'toMs' to cover the full duration of the last bar
+	toMs := int64((maxTsSec + float64(chartTimeframeInSeconds)) * 1000)
+
+	// 2. Fetch Events
+	// Assuming fetchChartEventsInRange exists and is accessible
+	chartEvents, err := fetchChartEventsInRange(conn, userId, securityID, fromMs, toMs, includeSECFilings)
+	if err != nil {
+		// Log the error but don't fail the whole chart request
+		fmt.Printf("Warning: Failed to fetch chart events for secId %d between %d and %d: %v. Returning bars without events.\\n", securityID, fromMs, toMs, err)
+		return // Continue without events
+	}
+	fmt.Printf("\n\n\n\nchartEvents: %v\n", chartEvents)
+
+	if len(chartEvents) == 0 {
+		return // No events found for this range
+	}
+
+	// 3. Map Events to Bar Timestamps (using Unix seconds as key)
+	eventsByTimestamp := make(map[int64][]ChartEvent)
+	for _, event := range chartEvents {
+		// Align the event timestamp (UTC ms) to its corresponding bar's start time (Unix seconds)
+		barStartTimeSec := alignTimestampToStartOfBar(event.Timestamp, multiplier, timespan, extendedHours, easternLocation)
+		eventsByTimestamp[barStartTimeSec] = append(eventsByTimestamp[barStartTimeSec], event)
+	}
+
+	// 4. Attach Events to the Original Bars (modifying the slice via pointer)
+	for i := range bars {
+		// Convert the bar's float64 seconds timestamp to int64 for map lookup
+		barTimestampSec := int64(bars[i].Timestamp)
+		if eventsToAdd, ok := eventsByTimestamp[barTimestampSec]; ok {
+			// Ensure the Events slice is initialized before appending
+			if bars[i].Events == nil {
+				// Pre-allocate with approximate capacity if possible
+				bars[i].Events = make([]ChartEvent, 0, len(eventsToAdd))
+			}
+			bars[i].Events = append(bars[i].Events, eventsToAdd...)
+		}
+	}
+	// The modifications to 'bars' directly affect the slice pointed to by barDataList
 }
