@@ -1148,7 +1148,7 @@
 		background: var(--ui-bg-element-darker, #2a2a2a);
 		border: 1px solid var(--ui-border, #444);
 		color: var(--text-primary, #fff);
-		/* padding: 0.4rem 1rem; */ /* Padding is now handled more specifically */
+		padding: 0.25rem 0.8rem; /* Adjusted vertical padding */
 		border-radius: 0.25rem; /* Match border-radius */
 		font-size: 0.75rem; /* Match font-size */
 		font-weight: 500;

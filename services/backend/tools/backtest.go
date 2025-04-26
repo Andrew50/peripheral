@@ -6,13 +6,15 @@ import (
 	"database/sql" // <-- Added for sql.NullFloat64
 	"encoding/json"
 	"fmt"
-	"github.com/jackc/pgx/v4"
-	"math"
-	"math/big" // <-- Added for big.Float in processNumericValue
+	"math" // <-- Added for big.Float in processNumericValue
 	"strconv"
 	"strings"
 	"time"
-	// "sort" // <-- Might be needed if sorting columnNames in formatBacktestResults is desired
+
+	"github.com/jackc/pgx/v4"
+
+	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v4"
 )
 
 type RunBacktestArgs struct {
@@ -50,7 +52,6 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 		// validWindows = tempWindows
 		args.ReturnWindows = validWindows // Use the filtered list
 	}
-
 
 	fmt.Println("backtesting strategyId:", args.StrategyId)
 	if len(args.ReturnWindows) > 0 {
@@ -198,7 +199,6 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 				continue
 			}
 
-
 			// Now, loop through each requested return window for the current record
 			for _, window := range args.ReturnWindows {
 				returnColumnName := fmt.Sprintf("%d Day Return %%", window)
@@ -258,6 +258,8 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 	// returning a map with empty "instances" and "summary".
 	// It should now also include the new return columns if they were added.
 	formattedResults, err := formatBacktestResults(recordsInterface, &spec)
+	fmt.Println("\n\n FORMATTED RESULTS: ", formattedResults)
+	fmt.Println("\n\n\n RETURN RESULTS: ", args.ReturnResults)
 	if err != nil {
 		// This error path should ideally not be reached if formatBacktestResults
 		// handles empty input, but kept for robustness.
@@ -279,7 +281,7 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 		// This should ideally not happen if formatBacktestResults worked correctly
 		return nil, fmt.Errorf("failed to extract summary from formatted backtest results (internal error)")
 	}
-
+	fmt.Println("\n\n SUMMARY: ", summary)
 	// --- Save Summary to Persistent Context ---
 	go func() {
 		ctx := context.Background()
@@ -323,10 +325,10 @@ func ScanRows(rows pgx.Rows) ([]map[string]any, error) {
 		// Scan the row into the slice of pointers
 		if err := rows.Scan(valuePtrs...); err != nil {
 			// Check if the error is about incompatible types, often useful for debugging
-             if pgxErr, ok := err.(*pgx.ScanArgError); ok {
-                 fmt.Printf("Scan error: Column '%s', Index %d. Expected Go type compatible with DB type OID %d. Received type: %T\n",
-                     "idk", pgxErr.ColumnIndex, rows.FieldDescriptions()[pgxErr.ColumnIndex].DataTypeOID, values[pgxErr.ColumnIndex])
-             }
+			if pgxErr, ok := err.(*pgx.ScanArgError); ok {
+				fmt.Printf("Scan error: Column '%s', Index %d. Expected Go type compatible with DB type OID %d. Received type: %T\n",
+					"idk", pgxErr.ColumnIndex, rows.FieldDescriptions()[pgxErr.ColumnIndex].DataTypeOID, values[pgxErr.ColumnIndex])
+			}
 			return nil, fmt.Errorf("error scanning row: %v", err)
 		}
 
@@ -352,7 +354,15 @@ func ScanRows(rows pgx.Rows) ([]map[string]any, error) {
 // This function does NOT need changes, as it dynamically handles all keys present in the records.
 func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 	result := make(map[string]any)
+
+	// Create a clean array of instances
 	instances := make([]map[string]any, 0, len(records))
+
+	// --- Sample Collection Initialization ---
+	columnSamples := make(map[string][]any)
+	sampleCounts := make(map[string]int)
+	const maxSamples = 3 // Number of samples to collect per column
+	// --- End Sample Collection Initialization ---
 
 	featureMap := make(map[string]string) // Maps "f0", "f1" to actual feature names
 	if spec != nil {
@@ -362,19 +372,15 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 		}
 	}
 
-	// Dynamically get all column names from the first record (if available)
-	// This ensures all columns, including dynamically added return columns, are processed.
-	// Note: This assumes all records have the same set of columns, which should be true here.
-	// var columnNames []string
-	// if len(records) > 0 {
-	// 	if recordMap, ok := records[0].(map[string]any); ok {
-	// 		for key := range recordMap {
-	// 			columnNames = append(columnNames, key)
-	// 		}
-	// 		// Optional: Sort column names for consistent output order
-	// 		// sort.Strings(columnNames)
-	// 	}
-	// }
+	// Get all unique column names from the first record
+	var columnNames []string
+	if len(records) > 0 {
+		if recordMap, ok := records[0].(map[string]any); ok {
+			for key := range recordMap {
+				columnNames = append(columnNames, key)
+			}
+		}
+	}
 
 	for _, record := range records {
 		recordMap, ok := record.(map[string]any)
@@ -393,7 +399,7 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 		if securityId, exists := recordMap["securityid"]; exists {
 			instance["securityId"] = securityId // Use consistent casing
 		}
-        if timestampValue, exists := recordMap["timestamp"]; exists {
+		if timestampValue, exists := recordMap["timestamp"]; exists {
 			// Convert timestamp logic
 			var timestampMs int64 = -1
 			switch t := timestampValue.(type) {
@@ -406,7 +412,7 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 			case string:
 				parsedTime, err := time.Parse(time.RFC3339Nano, t)
 				if err != nil {
-				    parsedTime, err = time.Parse(time.RFC3339, t)
+					parsedTime, err = time.Parse(time.RFC3339, t)
 				}
 				if err == nil && !parsedTime.IsZero() {
 					timestampMs = parsedTime.UnixMilli()
@@ -426,13 +432,12 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 			if timestampMs != -1 {
 				instance["timestamp"] = timestampMs
 			} else if _, exists := instance["timestamp"]; !exists {
-			    instance["timestamp"] = nil // Ensure key exists even if processing failed
+				instance["timestamp"] = nil // Ensure key exists even if processing failed
 			}
 			processedTimestamp = true
 		} else {
 			instance["timestamp"] = nil // Ensure key exists if missing in source
 		}
-
 
 		// Process all *other* fields dynamically using the keys from the recordMap
 		for key, value := range recordMap {
@@ -449,12 +454,37 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 				}
 			}
 
-			// Process the value (handle numeric types, pass others through)
-			// This will correctly handle the new return columns (float64 or nil)
-			instance[columnName] = processNumericValue(value)
+			if value, ok := recordMap[key]; ok {
+				// Process the value (numeric handling logic from original implementation)
+				processedValue := processNumericValue(value)
+
+				// Double-check if the processed value is still a map with numeric type fields
+				// This handles nested numeric objects that might not be caught by the first pass
+				if valueMap, isMap := processedValue.(map[string]any); isMap {
+					if _, hasExp := valueMap["Exp"]; hasExp {
+						if _, hasInt := valueMap["Int"]; hasInt {
+							// This is still a numeric object, process it again
+							processedValue = processNumericValue(processedValue)
+						}
+					}
+				}
+
+				instance[columnName] = processedValue
+			}
 		}
 
 		instances = append(instances, instance)
+
+		// --- Collect Samples ---
+		for colName, value := range instance {
+			if sampleCounts[colName] < maxSamples && value != nil {
+				// Ensure the sample itself is processed, just in case it wasn't fully converted earlier
+				processedSample := processNumericValue(value)
+				columnSamples[colName] = append(columnSamples[colName], processedSample)
+				sampleCounts[colName]++
+			}
+		}
+		// --- End Collect Samples ---
 	}
 
 	// Create a summary
@@ -470,7 +500,7 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 		for _, instance := range instances {
 			// Use type assertion with check
 			if tsMs, ok := instance["timestamp"].(int64); ok && tsMs > 0 { // Ensure timestamp is positive int64
-			    foundValidTime = true
+				foundValidTime = true
 				if tsMs < minTimeMs {
 					minTimeMs = tsMs
 				}
@@ -478,11 +508,11 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 					maxTimeMs = tsMs
 				}
 			} else if tsMs == 0 {
-                // Optionally log zero timestamps if they are unexpected
-                // fmt.Printf("Debug format: Instance has zero timestamp (ms) for secId %v\n", instance["securityId"])
+				// Optionally log zero timestamps if they are unexpected
+				// fmt.Printf("Debug format: Instance has zero timestamp (ms) for secId %v\n", instance["securityId"])
 			} else {
-			    // Log if timestamp is not int64 as expected after processing
-			    // fmt.Printf("Warning format: Instance timestamp is not int64 or is invalid: Type %T, value: %v\n", instance["timestamp"], instance["timestamp"])
+				// Log if timestamp is not int64 as expected after processing
+				// fmt.Printf("Warning format: Instance timestamp is not int64 or is invalid: Type %T, value: %v\n", instance["timestamp"], instance["timestamp"])
 			}
 		}
 
@@ -496,7 +526,7 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 				"end":      endTimeStr,
 			}
 		} else {
-		     fmt.Println("Warning format: No valid, positive timestamps found in instances to calculate date range.")
+			fmt.Println("Warning format: No valid, positive timestamps found in instances to calculate date range.")
 		}
 	}
 
@@ -506,95 +536,77 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 	return result, nil
 }
 
-
 // Helper function to process numeric values from the database
 func processNumericValue(value any) any {
-    // Handle nil directly
-    if value == nil {
-        return nil
-    }
+	// --- ADDED: Handle pgtype.Numeric directly ---
+	if pgNum, ok := value.(pgtype.Numeric); ok {
+		var f float64
+		err := pgNum.AssignTo(&f) // Try to assign the numeric value to a float64
+		if err == nil {
+			return f // Return the float64 if successful
+		}
+		// If AssignTo fails, fall through to map handling or return original
+		fmt.Printf("Warning: Failed to assign pgtype.Numeric to float64: %v\n", err)
+	}
+	// --- END ADDED SECTION ---
 
-	// Handle PostgreSQL numeric type (represented as map[string]any by pgx v4)
-	// Note: pgx v5 uses pgtype.Numeric directly. This code assumes v4 behavior.
+	// Handle PostgreSQL numeric type represented as map[string]any (fallback or other cases)
 	if numericMap, ok := value.(map[string]any); ok {
-		statusAny, hasStatus := numericMap["Status"]
-		intStrAny, hasInt := numericMap["Int"]
-		expAny, hasExp := numericMap["Exp"]
+		// Check if this is a PostgreSQL numeric type with Exp and Int fields
+		exp, hasExp := numericMap["Exp"]
+		intVal, hasInt := numericMap["Int"]
 
-		// Check if it strongly resembles the pgtype.Numeric structure from pgx v4
-		if hasStatus && hasInt && hasExp {
-			if status, ok := statusAny.(byte); ok && (status == 2 || status == 1) { // 2=Present, 1=Present in pgx v4? Check docs. Assume 2 is main one.
-				intStr, okIntStr := intStrAny.(string)
-				expInt, okExp := expAny.(int32)
-
-				if okIntStr && okExp {
-					// Use big.Float for accurate conversion from scientific notation parts
-					f := new(big.Float)
-					_, _, err := f.Parse(intStr+"e"+strconv.Itoa(int(expInt)), 10) // Use base 10
-
-					if err == nil {
-						// Check for negative sign if the map has it separately (common pgx v4 pattern)
-						if neg, hasNeg := numericMap["Negative"]; hasNeg {
-							if isNeg, okIsNeg := neg.(bool); okIsNeg && isNeg {
-								f.Neg(f) // Make the big.Float negative
-							}
-						}
-
-						floatVal, _ := f.Float64() // Convert big.Float to float64
-						// Check for infinity resulting from overflow
-						if math.IsInf(floatVal, 0) {
-							fmt.Printf("Warning: pgx numeric conversion resulted in infinity for %v\n", numericMap)
-							// Decide how to handle infinity: return nil, max/min float, or keep original map?
-							return nil // Return nil for simplicity
-						}
-						return floatVal
-					} else {
-						fmt.Printf("Warning: Failed to parse big.Float from pgtype.Numeric map parts: %v, Map: %v\n", err, numericMap)
-						return value // Return original map if parsing fails
-					}
+		if hasExp && hasInt {
+			// Convert exponent to float64
+			var expFloat float64
+			switch e := exp.(type) {
+			case float64:
+				expFloat = e
+			case int:
+				expFloat = float64(e)
+			case int64:
+				expFloat = float64(e)
+			case string:
+				if parsed, err := strconv.ParseFloat(e, 64); err == nil {
+					expFloat = parsed
 				}
-			} else if status, ok := statusAny.(byte); ok && status == 0 { // Status 0 usually means NULL
-                return nil
-            }
+			}
+
+			// Convert integer value to float64
+			var floatVal float64
+			switch v := intVal.(type) {
+			case float64:
+				floatVal = v
+			case int:
+				floatVal = float64(v)
+			case int64:
+				floatVal = float64(v)
+			case string:
+				if parsed, err := strconv.ParseFloat(v, 64); err == nil {
+					floatVal = parsed
+				}
+			}
+
+			// Calculate actual decimal value
+			return floatVal * math.Pow(10, expFloat)
 		}
-		// Fallback check for other map structures (less likely from pgx but possible)
-		if floatVal, ok := numericMap["Float64"]; ok {
-			if fv, okf := floatVal.(float64); okf { return fv }
+
+		// If it's not a standard numeric type but has a direct numeric value
+		if val, ok := numericMap["Float64"]; ok {
+			return val
 		}
+
+		// Return the raw value if we can't process it
+		return value
 	}
 
-	// Direct type assertions for Go standard numeric types
-	switch v := value.(type) {
-	case float64:
-		return v
-	case float32:
-		return float64(v)
-	case int:
-		return float64(v)
-	case int32:
-		return float64(v)
-	case int64:
-		return float64(v)
-	case string:
-		// Try parsing string as float
-		if floatVal, err := strconv.ParseFloat(v, 64); err == nil {
-			return floatVal
-		}
-		// If not parsable as float, return original string
-		return v
-    case []uint8: // Handle byte slices which might represent numbers (e.g., from certain DB types)
-        strVal := string(v)
+	// Handle other numeric types that might be strings
+	if strVal, ok := value.(string); ok {
 		if floatVal, err := strconv.ParseFloat(strVal, 64); err == nil {
 			return floatVal
 		}
-        // If not parsable, return as string
-        // fmt.Printf("Warning: Could not parse []uint8 as float64: %s\n", strVal)
-        return strVal
 	}
 
-	// If none of the above conversions worked, return the value as is
-	// Consider logging this case if it's unexpected.
-	// fmt.Printf("Debug: Unhandled type in processNumericValue: %T, passing through value: %v\n", value, value)
+	// Pass through non-numeric values
 	return value
 }
-
