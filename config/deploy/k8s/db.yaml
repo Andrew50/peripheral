@@ -24,6 +24,8 @@ spec:
                 secretKeyRef:
                   name: db-secret
                   key: DB_ROOT_PASSWORD
+            - name: PGDATA                    # ← new: tell Postgres where to keep its cluster
+              value: /home/postgres/pgdata/data
           resources:
             requests:
               cpu: 1000m
@@ -33,11 +35,12 @@ spec:
               memory: 10000Mi
           volumeMounts:
             - name: db-pvc
-              mountPath: /var/lib/postgresql/data
+              mountPath: /home/postgres/pgdata
       volumes:
         - name: db-pvc
           persistentVolumeClaim:
             claimName: db-pvc
+      terminationGracePeriodOffset: 90
 
 ---
 apiVersion: v1
