@@ -1249,7 +1249,7 @@ func initTools() {
 		"getStrategies": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStrategies",
-				Description: "Retrieves all strategy configurations for the current user",
+				Description: "Retrieves all strategy names and ids for the current user. Use this to fetch unknown strategy ids.",
 				Parameters: &genai.Schema{
 					Type:       genai.TypeObject,
 					Properties: map[string]*genai.Schema{},
@@ -1257,52 +1257,19 @@ func initTools() {
 				},
 			},
 			Function: GetStrategies,
-			Query:    false,
+			Query:    true,
 			Api:      true,
 		},
 		"newStrategy": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "newStrategy",
-				Description: "Creates a new strategy configuration for the current user",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"name":      {Type: genai.TypeString, Description: "The name of the strategy"},
-						"timeframe": {Type: genai.TypeString, Description: "The timeframe (e.g., '1d', '1h')"},
-						"bars":      {Type: genai.TypeInteger, Description: "Number of bars to consider"},
-						"threshold": {Type: genai.TypeInteger, Description: "Threshold value"},
-						"dolvol":    {Type: genai.TypeNumber, Description: "Dollar‑volume filter"},
-						"adr":       {Type: genai.TypeNumber, Description: "Average Daily Range filter"},
-						"mcap":      {Type: genai.TypeNumber, Description: "Market‑cap filter"},
-					},
-					Required: []string{"name", "timeframe"},
-				},
-			},
-			Function: NewStrategy,
+			FunctionDeclaration:nil,
+            Function: NewStrategy,
 			Query:    false,
 			Api:      true,
 		},
 		"setStrategy": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "setStrategy",
-				Description: "Updates an existing strategy configuration",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"strategyId": {Type: genai.TypeInteger, Description: "Strategy ID"},
-						"name":       {Type: genai.TypeString, Description: "Name"},
-						"timeframe":  {Type: genai.TypeString, Description: "Timeframe"},
-						"bars":       {Type: genai.TypeInteger, Description: "Bars"},
-						"threshold":  {Type: genai.TypeInteger, Description: "Threshold"},
-						"dolvol":     {Type: genai.TypeNumber, Description: "Dollar‑volume"},
-						"adr":        {Type: genai.TypeNumber, Description: "ADR"},
-						"mcap":       {Type: genai.TypeNumber, Description: "Market‑cap"},
-					},
-					Required: []string{"strategyId", "name", "timeframe"},
-				},
-			},
+			FunctionDeclaration: nil,
 			Function: SetStrategy,
-			Query:    true,
+			Query:    false,
 			Api:      true,
 		},
 		"deleteStrategy": {
@@ -1345,7 +1312,7 @@ func initTools() {
 				Description: `Analyze recent price‑action around a specific market *instance* ` +
 					`and return technical context (trend, volatility, indicators, S/R, …). ` +
 					`Call this **before** getStrategyFromNaturalLanguage whenever the user ` +
-					`has attached an explicit instance but provided little or no NL description.
+					`has attached an explicit instance, especially if they provided little or no NL description.
 
 					An "instance" is uniquely identified by:
 					• securityId - numeric DB identifier  
@@ -1367,6 +1334,12 @@ func initTools() {
 			Query:    true,
 			Api:      false,
 		},
+        "getStrategySpec": {
+            FunctionDeclaration: nil,
+            Function: GetStrategySpec,
+            Query: false, //prolly should allow this
+            Api: true,
+        },
 		"calculateBacktestStatistic": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "calculateBacktestStatistic",

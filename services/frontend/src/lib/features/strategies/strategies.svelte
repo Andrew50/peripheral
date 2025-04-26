@@ -6,45 +6,61 @@ import { privateRequest } from '$lib/core/backend';
 import '$lib/core/global.css';
 
 // --- Interfaces ---
-// ... (Keep all Spec interfaces: UniverseFilterSpec, UniverseSpec, etc.) ...
 type StrategyId = number | 'new' | null;
 interface UniverseFilterSpec { securityFeature: "SecurityId" | "Ticker" | "Locale" | "Market" | "PrimaryExchange" | "Active" | "Sector" | "Industry"; include: string[]; exclude: string[]; }
 interface UniverseSpec { filters: UniverseFilterSpec[]; timeframe: "1" | "1h" | "1d" | "1w"; extendedHours: boolean; startTime: string | null; endTime: string | null; }
 interface SourceSpec { field: "SecurityId" | "Ticker" | "Locale" | "Market" | "PrimaryExchange" | "Active" | "Sector" | "Industry"; value: string; }
 interface ExprElement { type: "column" | "operator"; value: string; }
-interface FeatureSpec { name: string; featureId: number; source: SourceSpec; output: "raw" | "rankn" | "rankp"; expr: ExprElement[]; window: number; }
+interface FeatureSpec {
+    name: string;
+    featureId: number;
+    source: SourceSpec;
+    output: "raw" | "rankn" | "rankp";
+    expr: ExprElement[]; // RPN representation for backend/internal use
+    infixExpr: string; // User-facing infix expression for editing
+    exprError?: string; // To store parsing errors during edit
+    window: number;
+}
 interface RhsSpec { featureId: number; const: number; scale: number; }
 interface FilterSpec { name: string; lhs: number; operator: "<" | "<=" | ">=" | ">" | "!=" | "=="; rhs: RhsSpec; }
 interface SortBySpec { feature: number; direction: "asc" | "desc"; }
 interface NewStrategySpec { universe: UniverseSpec; features: FeatureSpec[]; filters: FilterSpec[]; sortBy: SortBySpec; }
 
+// Modified Strategy interface: spec is now optional in the base list
 interface Strategy {
   strategyId: number;
   name: string;
-  spec: NewStrategySpec;
+  spec?: NewStrategySpec; // Spec is optional now for list items
   score?: number;
   version?: string | number;
   createdAt?: string;
   isAlertActive?: boolean;
 }
-interface EditableStrategy extends Strategy { strategyId: StrategyId; spec: NewStrategySpec; }
+// EditableStrategy still requires the spec
+interface EditableStrategy extends Omit<Strategy, 'spec'> {
+    strategyId: StrategyId;
+    spec: NewStrategySpec; // Spec is required for editing/creating
+}
 
 // --- Stores ---
-const loading = writable(false);
+const loading = writable(false); // General loading state
+const loadingSpec = writable(false); // Specific loading state for fetching spec details
 const selectedStrategyId = writable<StrategyId>(null);
 const editedStrategy = writable<EditableStrategy | null>(null);
 const viewedStrategyId = writable<number | null>(null);
+const detailViewError = writable<string | null>(null); // For errors loading spec
 
-const viewedStrategy = derived(
-    [viewedStrategyId, strategies],
-    ([$viewedStrategyId, $strategies]) => {
-        if ($viewedStrategyId === null) return null;
-        return $strategies.find(s => s.strategyId === $viewedStrategyId) || null;
-    }
+// Derived store to get the currently viewed strategy object from the main list
+// Note: This might initially lack the 'spec' until it's fetched.
+const viewedStrategyBase = derived(
+  [viewedStrategyId, strategies],
+  ([$viewedStrategyId, $strategies]) => {
+    if ($viewedStrategyId === null) return null;
+    return $strategies.find(s => s.strategyId === $viewedStrategyId) || null;
+  }
 );
 
 // --- Constants & Options ---
-// ... (Keep timeframeOptions, securityFeatureOptions, etc.) ...
 const timeframeOptions = [ { value: '1', label: '1 Minute' }, { value: '1h', label: '1 Hour' }, { value: '1d', label: '1 Day' }, { value: '1w', label: '1 Week' } ];
 const securityFeatureOptions = ["SecurityId", "Ticker", "Locale", "Market", "PrimaryExchange", "Active", "Sector", "Industry"];
 const operatorOptions = ["<", "<=", ">=", ">", "!=", "=="];
@@ -56,135 +72,673 @@ const operatorPrecedence: { [key: string]: number } = { '+': 1, '-': 1, '*': 2, 
 
 
 // --- Help Text ---
-// ... (Keep helpText object) ...
-const helpText = { universeTimeframe: "Select the primary timeframe resolution for the strategy (e.g., 1d for daily).", universeExtendedHours: "Include pre-market and after-hours data? (Only applicable for 1-minute timeframe).", universeFilters: "Define the initial pool of securities using filters (e.g., Sector = Technology, Ticker includes AAPL).", universeTickerInclude: "Enter specific tickers to include (e.g. AAPL, MSFT). Press Enter after each ticker.", universeTickerExclude: "Enter specific tickers to exclude (e.g. TSLA, META). Press Enter after each ticker.", features: "Define calculated values (Features) used in your strategy's filters or sorting. Features use Reverse Polish Notation (RPN) for expressions.", featureExpr: "Expression in RPN (postfix). Use valid columns (e.g., 'close', 'volume') and operators (+, -, *, /, ^). Example: 'high low -' calculates High minus Low.", featureWindow: "Smoothing window for the expression (e.g., 14 for a 14-period average). 1 means no smoothing.", filters: "Define the conditions your strategy uses to select securities, comparing Features against constants or other Features.", sortBy: "Select a Feature to sort the final results by, and the direction (ascending/descending)." };
+// Updated help text for expression input
+const helpText = { universeTimeframe: "Select the primary timeframe resolution for the strategy (e.g., 1d for daily).", universeExtendedHours: "Include pre-market and after-hours data? (Only applicable for 1-minute timeframe).", universeFilters: "Define the initial pool of securities using filters (e.g., Sector = Technology, Ticker includes AAPL).", universeTickerInclude: "Enter specific tickers to include (e.g. AAPL, MSFT). Press Enter after each ticker.", universeTickerExclude: "Enter specific tickers to exclude (e.g. TSLA, META). Press Enter after each ticker.", features: "Define calculated values (Features) used in your strategy's filters or sorting. Features use standard infix notation (parentheses) for expressions.", featureExpr: "Expression using standard math notation. Use parentheses () for grouping, valid columns (e.g., 'close', 'volume') and operators (+, -, *, /, ^). Example: '(high - low) / 2'", featureWindow: "Smoothing window for the expression (e.g., 14 for a 14-period average). 1 means no smoothing.", filters: "Define the conditions your strategy uses to select securities, comparing Features against constants or other Features.", sortBy: "Select a Feature to sort the final results by, and the direction (ascending/descending)." };
 
 // --- Formatting/Helper Functions ---
+function formatName(name: string | undefined): string { if (!name) return 'Unnamed'; return name.replace(/_/g, ' ').toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '); }
 
-// Capitalizes first letter of each word and replaces underscores with spaces
-function formatName(name: string | undefined): string {
-    if (!name) return 'Unnamed';
-    return name.replace(/_/g, ' ')
-               .toLowerCase()
-               .split(' ')
-               .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-               .join(' ');
-}
-
-// Converts RPN expression array to infix string
-function formatExprInfix(expr: ExprElement[]): string {
+// Existing RPN to Infix formatter (used for View Page display)
+function formatExprInfix(expr: ExprElement[] | undefined): string {
+    if (!expr || expr.length === 0) return '(Empty Expression)';
     const stack: { value: string, precedence: number }[] = [];
-
     for (const element of expr) {
-        const formattedValue = formatName(element.value); // Format column names nicely
-        if (element.type === 'column') {
-            stack.push({ value: formattedValue, precedence: Infinity }); // Operands have highest precedence
+        // Treat all non-operators as operands (covers columns and potential future literals)
+        if (element.type !== 'operator') {
+            stack.push({ value: formatName(element.value), precedence: Infinity });
         } else if (element.type === 'operator') {
             const opPrecedence = operatorPrecedence[element.value] ?? 0;
-            // Basic implementation assumes binary operators for simplicity
-            if (stack.length < 2) return `(Error: Invalid RPN near '${element.value}')`; // Error handling
-
+            if (stack.length < 2) return `(Error: Invalid RPN near '${element.value}')`;
             const operand2 = stack.pop()!;
             const operand1 = stack.pop()!;
-
-            // Add parentheses if the inner operation has lower precedence
+            // Add parentheses if operand precedence is lower, or equal for right operand (for left-associativity)
             const val1 = operand1.precedence < opPrecedence ? `(${operand1.value})` : operand1.value;
-            const val2 = operand2.precedence <= opPrecedence ? `(${operand2.value})` : operand2.value; // Right-associativity check for same precedence (e.g. a - (b - c))
-
+            const val2 = operand2.precedence <= opPrecedence ? `(${operand2.value})` : operand2.value;
             stack.push({ value: `${val1} ${element.value} ${val2}`, precedence: opPrecedence });
         }
     }
-
-    if (stack.length !== 1) return '(Error: Invalid RPN expression)'; // Should end with one result
+    if (stack.length !== 1) return '(Error: Invalid RPN expression)';
     return stack[0].value;
 }
 
+function formatTimeframe(tf: string | undefined): string { return timeframeOptions.find(opt => opt.value === tf)?.label ?? tf ?? 'N/A'; }
+function formatFilterCondition(filter: FilterSpec, features: FeatureSpec[]): string { const lhsFeature = features.find(f => f.featureId === filter.lhs); const lhsName = formatName(lhsFeature?.name); let rhsDesc: string; if (filter.rhs.featureId !== 0) { const rhsFeature = features.find(f => f.featureId === filter.rhs.featureId); rhsDesc = formatName(rhsFeature?.name); if (filter.rhs.scale !== 1.0) { rhsDesc += ` * ${filter.rhs.scale}`; } } else { rhsDesc = `${filter.rhs.const}`; if (filter.rhs.scale !== 1.0) { rhsDesc = `${filter.rhs.const * filter.rhs.scale} (${filter.rhs.const} * ${filter.rhs.scale})`; } } return `${lhsName} ${filter.operator} ${rhsDesc}`; }
+function formatUniverseFilter(uFilter: UniverseFilterSpec): string { let desc = `${uFilter.securityFeature}`; if (uFilter.include.length > 0) desc += ` includes [${uFilter.include.join(', ')}]`; if (uFilter.exclude.length > 0) desc += `${uFilter.include.length > 0 ? ' and' : ''} excludes [${uFilter.exclude.join(', ')}]`; return desc; }
 
-function formatTimeframe(tf: string | undefined): string {
-    return timeframeOptions.find(opt => opt.value === tf)?.label ?? tf ?? 'N/A';
-}
 
-function formatFilterCondition(filter: FilterSpec, features: FeatureSpec[]): string {
-    const lhsFeature = features.find(f => f.featureId === filter.lhs);
-    const lhsName = formatName(lhsFeature?.name); // Use formatted name
+// --- Expression Parsing (Infix to RPN) ---
+// Basic Shunting-yard algorithm implementation
+function parseInfixToRPN(infix: string): { success: boolean; rpn?: ExprElement[]; error?: string } {
+    if (!infix?.trim()) {
+        return { success: true, rpn: [] }; // Empty infix is valid, results in empty RPN
+    }
 
-    let rhsDesc: string;
-    if (filter.rhs.featureId !== 0) {
-        const rhsFeature = features.find(f => f.featureId === filter.rhs.featureId);
-        rhsDesc = formatName(rhsFeature?.name); // Use formatted name
-        if (filter.rhs.scale !== 1.0) {
-            rhsDesc += ` * ${filter.rhs.scale}`;
-        }
-    } else {
-        rhsDesc = `${filter.rhs.const}`;
-        if (filter.rhs.scale !== 1.0) {
-            // Decide how to show scaling on constant, e.g., multiply it out or show explicitly
-            rhsDesc = `${filter.rhs.const * filter.rhs.scale} (${filter.rhs.const} * ${filter.rhs.scale})`; // Example: Show result and calculation
+    const outputQueue: ExprElement[] = [];
+    const operatorStack: string[] = [];
+    // Use regex to tokenize: finds operators, parentheses, or sequences of word characters (column names)
+    // Ignores whitespace between tokens. Handles potential negative numbers if needed (though not columns)
+    const tokens = infix.match(/(\b\w+\b|[+\-*/^()])/g);
+
+    if (!tokens) {
+        return { success: false, error: "Could not tokenize expression." };
+    }
+
+    const isValidOperand = (token: string) => baseColumnOptions.includes(token.toLowerCase()) || /^\d+(\.\d+)?$/.test(token); // Allows columns or numbers
+
+    for (const token of tokens) {
+        if (isValidOperand(token)) {
+            // Assuming all non-operator words are columns for now
+            outputQueue.push({ type: "column", value: token });
+        } else if (operatorChars.includes(token)) {
+            while (
+                operatorStack.length > 0 &&
+                operatorStack[operatorStack.length - 1] !== '(' &&
+                (operatorPrecedence[operatorStack[operatorStack.length - 1]] ?? 0) >= (operatorPrecedence[token] ?? 0)
+            ) {
+                outputQueue.push({ type: "operator", value: operatorStack.pop()! });
+            }
+            operatorStack.push(token);
+        } else if (token === '(') {
+            operatorStack.push(token);
+        } else if (token === ')') {
+            while (operatorStack.length > 0 && operatorStack[operatorStack.length - 1] !== '(') {
+                outputQueue.push({ type: "operator", value: operatorStack.pop()! });
+            }
+            if (operatorStack.length === 0 || operatorStack[operatorStack.length - 1] !== '(') {
+                return { success: false, error: "Mismatched parentheses." };
+            }
+            operatorStack.pop(); // Discard the '('
+        } else {
+             return { success: false, error: `Unrecognized token: ${token}` };
         }
     }
-    return `${lhsName} ${filter.operator} ${rhsDesc}`;
+
+    // Pop remaining operators from the stack to the output queue
+    while (operatorStack.length > 0) {
+        const op = operatorStack.pop()!;
+        if (op === '(') {
+            return { success: false, error: "Mismatched parentheses." };
+        }
+        outputQueue.push({ type: "operator", value: op });
+    }
+
+    // Basic validation: RPN requires n operands and n-1 operators for binary ops
+    // This is a simplification; a full check is more complex. Check if stack ends correctly.
+    // A simple check is if the output is empty when the input wasn't, or vice versa.
+    if (infix.trim() && outputQueue.length === 0) {
+         return { success: false, error: "Parsing resulted in empty RPN." };
+    }
+     // Very basic check: must end with exactly one value on a calculation stack
+     let stackHeight = 0;
+     for(const el of outputQueue) {
+         if (el.type === 'column') stackHeight++;
+         else if (el.type === 'operator') stackHeight--; // Assumes binary ops
+         if (stackHeight < 0) return { success: false, error: "Invalid RPN sequence (operator before operands?)." };
+     }
+     if (stackHeight !== 1 && outputQueue.length > 0) {
+         return { success: false, error: `Invalid RPN structure (stack height ${stackHeight}, expected 1).` };
+     }
+      if (stackHeight === 0 && outputQueue.length > 0) {
+         return { success: false, error: "Invalid RPN structure (empty stack)." };
+     }
+
+
+    return { success: true, rpn: outputQueue };
 }
 
-function formatUniverseFilter(uFilter: UniverseFilterSpec): string {
-    let desc = `${uFilter.securityFeature}`;
-    if (uFilter.include.length > 0) desc += ` includes [${uFilter.include.join(', ')}]`;
-    if (uFilter.exclude.length > 0) desc += `${uFilter.include.length > 0 ? ' and' : ''} excludes [${uFilter.exclude.join(', ')}]`;
-    return desc;
-}
-
-
-// ... (Keep: getNextFeatureId, blankSpec, ensureValidSpec) ...
+// --- Utility Functions ---
 function getNextFeatureId(features: FeatureSpec[]): number { if (!features || features.length === 0) return 0; return Math.max(...features.map(f => f.featureId)) + 1; }
-function blankSpec(): NewStrategySpec { const defaultFeatureId = 0; return { universe: { filters: [], timeframe: '1d', extendedHours: false, startTime: null, endTime: null }, features: [ { name: "close_price", featureId: defaultFeatureId, source: { field: "SecurityId", value: "relative" }, output: "raw", expr: [{ type: "column", value: "close" }], window: 1 } ], filters: [], sortBy: { feature: defaultFeatureId, direction: 'desc' } }; }
-function ensureValidSpec(spec: any): NewStrategySpec { const validSpec = blankSpec(); if (!spec) return validSpec; if (spec.universe) { if (Array.isArray(spec.universe.filters)) validSpec.universe.filters = spec.universe.filters; if (typeof spec.universe.timeframe === 'string' && ['1', '1h', '1d', '1w'].includes(spec.universe.timeframe)) { validSpec.universe.timeframe = spec.universe.timeframe as "1" | "1h" | "1d" | "1w"; } if (typeof spec.universe.extendedHours === 'boolean') validSpec.universe.extendedHours = spec.universe.extendedHours; validSpec.universe.startTime = typeof spec.universe.startTime === 'string' && spec.universe.startTime !== "" ? spec.universe.startTime : null; validSpec.universe.endTime = typeof spec.universe.endTime === 'string' && spec.universe.endTime !== "" ? spec.universe.endTime : null; } const tempFeatures: FeatureSpec[] = []; if (Array.isArray(spec.features) && spec.features.length > 0) { spec.features.forEach((f: any) => { const nextId = getNextFeatureId(tempFeatures); tempFeatures.push({ name: typeof f.name === 'string' ? f.name : `feature_${f.featureId ?? nextId}`, featureId: typeof f.featureId === 'number' ? f.featureId : nextId, source: f.source && typeof f.source.field === 'string' ? f.source : { field: "SecurityId", value: "relative" }, output: f.output && ["raw", "rankn", "rankp"].includes(f.output) ? f.output : "raw", expr: Array.isArray(f.expr) ? f.expr : [{ type: "column", value: "close" }], window: typeof f.window === 'number' && f.window >= 1 ? f.window : 1 }); }); validSpec.features = tempFeatures; } else { validSpec.features = blankSpec().features; } const validFeatureIds = new Set(validSpec.features.map(f => f.featureId)); if (Array.isArray(spec.filters)) { validSpec.filters = spec.filters.filter((f: any) => f && typeof f.lhs === 'number' && validFeatureIds.has(f.lhs)) .map((f: any) => ({ name: typeof f.name === 'string' ? f.name : `filter_${f.lhs}`, lhs: f.lhs, operator: f.operator && operatorOptions.includes(f.operator) ? f.operator : ">", rhs: { featureId: typeof f.rhs?.featureId === 'number' && (f.rhs.featureId === 0 || validFeatureIds.has(f.rhs.featureId)) ? f.rhs.featureId : 0, const: typeof f.rhs?.const === 'number' ? f.rhs.const : 0.0, scale: typeof f.rhs?.scale === 'number' ? f.rhs.scale : 1.0 } })); } if (spec.sortBy && typeof spec.sortBy.feature === 'number' && validFeatureIds.has(spec.sortBy.feature)) { validSpec.sortBy.feature = spec.sortBy.feature; if (typeof spec.sortBy.direction === 'string' && sortDirectionOptions.includes(spec.sortBy.direction)) { validSpec.sortBy.direction = spec.sortBy.direction as "asc" | "desc"; } } else { validSpec.sortBy = { feature: validSpec.features[0]?.featureId ?? 0, direction: 'desc' }; } return validSpec; }
+
+function blankSpec(): NewStrategySpec {
+    const defaultFeatureId = 0;
+    const defaultInfix = "close";
+    const parseResult = parseInfixToRPN(defaultInfix); // Should succeed
+    return {
+        universe: { filters: [], timeframe: '1d', extendedHours: false, startTime: null, endTime: null },
+        features: [ {
+            name: "close_price",
+            featureId: defaultFeatureId,
+            source: { field: "SecurityId", value: "relative" },
+            output: "raw",
+            infixExpr: defaultInfix, // Store default infix
+            expr: parseResult.rpn ?? [], // Use parsed RPN
+            window: 1
+        } ],
+        filters: [],
+        sortBy: { feature: defaultFeatureId, direction: 'desc' }
+    };
+}
+
+function ensureValidSpec(spec: any): NewStrategySpec {
+    const validSpec = blankSpec(); // Start with a blank, valid structure
+    if (!spec) return validSpec;
+
+    // Universe validation (mostly unchanged)
+    if (spec.universe) {
+        if (Array.isArray(spec.universe.filters)) validSpec.universe.filters = spec.universe.filters;
+        if (typeof spec.universe.timeframe === 'string' && ['1', '1h', '1d', '1w'].includes(spec.universe.timeframe)) {
+            validSpec.universe.timeframe = spec.universe.timeframe as "1" | "1h" | "1d" | "1w";
+        }
+        if (typeof spec.universe.extendedHours === 'boolean') validSpec.universe.extendedHours = spec.universe.extendedHours;
+        validSpec.universe.startTime = typeof spec.universe.startTime === 'string' && spec.universe.startTime !== "" ? spec.universe.startTime : null;
+        validSpec.universe.endTime = typeof spec.universe.endTime === 'string' && spec.universe.endTime !== "" ? spec.universe.endTime : null;
+    }
+
+    // Features validation (modified for infix/RPN)
+    const tempFeatures: FeatureSpec[] = [];
+    if (Array.isArray(spec.features) && spec.features.length > 0) {
+        spec.features.forEach((f: any) => {
+            const nextId = getNextFeatureId(tempFeatures);
+            const featureId = typeof f.featureId === 'number' ? f.featureId : nextId;
+            const name = typeof f.name === 'string' ? f.name : `feature_${featureId}`;
+            const source = f.source && typeof f.source.field === 'string' ? f.source : { field: "SecurityId", value: "relative" };
+            const output = f.output && ["raw", "rankn", "rankp"].includes(f.output) ? f.output : "raw";
+            const window = typeof f.window === 'number' && f.window >= 1 ? f.window : 1;
+
+            let infixExpr = "";
+            let expr: ExprElement[] = [];
+            let exprError: string | undefined = undefined;
+
+            if (typeof f.infixExpr === 'string' && f.infixExpr.trim()) {
+                // Priority: Use infixExpr if provided
+                infixExpr = f.infixExpr;
+                const parseResult = parseInfixToRPN(infixExpr);
+                if (parseResult.success) {
+                    expr = parseResult.rpn!;
+                } else {
+                    expr = []; // Set RPN to empty on parse failure
+                    exprError = parseResult.error || "Failed to parse expression.";
+                    console.warn(`Feature '${name}' (ID: ${featureId}) infix expression parsing failed: ${exprError}`);
+                }
+            } else if (Array.isArray(f.expr) && f.expr.length > 0) {
+                // Fallback: Use RPN expr if provided and infixExpr is missing
+                expr = f.expr;
+                // Attempt to generate a displayable infix string from the RPN
+                infixExpr = formatExprInfix(expr);
+                // Check if formatting resulted in an error message
+                if (infixExpr.startsWith('(Error:')) {
+                     console.warn(`Feature '${name}' (ID: ${featureId}) RPN could not be formatted to infix: ${infixExpr}`);
+                     exprError = "Invalid RPN data.";
+                     // Keep the original RPN but clear infix or show error?
+                     // infixExpr = ""; // Or maybe keep the error message?
+                }
+            } else {
+                 // No expression provided
+                 infixExpr = "";
+                 expr = [];
+                 exprError = "Expression is missing.";
+                 console.warn(`Feature '${name}' (ID: ${featureId}) has no expression defined.`);
+            }
+
+            tempFeatures.push({
+                name, featureId, source, output, window,
+                infixExpr, expr, exprError // Store all derived values
+            });
+        });
+        validSpec.features = tempFeatures;
+    } else {
+        // No features provided, use the default from blankSpec
+        validSpec.features = blankSpec().features;
+    }
+
+    // Filter and SortBy validation (mostly unchanged, relies on validFeatureIds)
+    const validFeatureIds = new Set(validSpec.features.map(f => f.featureId));
+    if (Array.isArray(spec.filters)) {
+        validSpec.filters = spec.filters
+            .filter((f: any) => f && typeof f.lhs === 'number' && validFeatureIds.has(f.lhs)) // Ensure LHS feature exists
+            .map((f: any) => ({
+                name: typeof f.name === 'string' ? f.name : `filter_${f.lhs}`,
+                lhs: f.lhs,
+                operator: f.operator && operatorOptions.includes(f.operator) ? f.operator : ">",
+                rhs: {
+                    featureId: typeof f.rhs?.featureId === 'number' && (f.rhs.featureId === 0 || validFeatureIds.has(f.rhs.featureId)) ? f.rhs.featureId : 0, // Ensure RHS feature exists if not const
+                    const: typeof f.rhs?.const === 'number' ? f.rhs.const : 0.0,
+                    scale: typeof f.rhs?.scale === 'number' ? f.rhs.scale : 1.0
+                }
+            }));
+    }
+
+    if (spec.sortBy && typeof spec.sortBy.feature === 'number' && validFeatureIds.has(spec.sortBy.feature)) {
+        validSpec.sortBy.feature = spec.sortBy.feature;
+        if (typeof spec.sortBy.direction === 'string' && sortDirectionOptions.includes(spec.sortBy.direction)) {
+            validSpec.sortBy.direction = spec.sortBy.direction as "asc" | "desc";
+        }
+    } else if (validSpec.features.length > 0) {
+        // Fallback sort: use the first valid feature if the original sort feature is invalid or missing
+        validSpec.sortBy = { feature: validSpec.features[0].featureId, direction: 'desc' };
+    } else {
+        // No features, use the default sort from blankSpec (though it might point to a non-existent feature)
+        validSpec.sortBy = blankSpec().sortBy;
+    }
+
+    return validSpec;
+}
+
 
 // --- Data Loading & CRUD Actions ---
-// ... (Keep loadStrategies, startCreate, startEdit, cancelEdit, deleteStrategyConfirm, saveStrategy) ...
-async function loadStrategies() { loading.set(true); viewedStrategyId.set(null); selectedStrategyId.set(null); try { const data = await privateRequest<Strategy[]>('getStrategies', {}); if (Array.isArray(data)) { data.forEach((d: any) => { d.spec = ensureValidSpec(d.spec); d.version = d.version ?? '1.0'; d.createdAt = d.createdAt ?? new Date(Date.now() - Math.random() * 1e10).toISOString(); d.isAlertActive = d.isAlertActive ?? (Math.random() > 0.7); }); } strategies.set(data || []); } catch (error) { console.error("Error loading strategies:", error); strategies.set([]); } finally { loading.set(false); } }
+
+async function loadStrategies() {
+  loading.set(true);
+  viewedStrategyId.set(null);
+  selectedStrategyId.set(null);
+  detailViewError.set(null);
+  try {
+    // Fetch basic strategy info (without spec)
+    const data = await privateRequest<Omit<Strategy, 'spec'>[]>('getStrategies', {}); // Expect data without spec
+    const initialStrategies: Strategy[] = (data || []).map((d: any) => ({
+        ...d,
+        // Initialize other fields if needed, spec will be fetched on demand
+        version: d.version ?? '1.0',
+        createdAt: d.createdAt ?? new Date(Date.now() - Math.random() * 1e10).toISOString(),
+        isAlertActive: d.isAlertActive ?? (Math.random() > 0.7),
+        spec: undefined // Explicitly set spec to undefined initially
+    }));
+    strategies.set(initialStrategies);
+  } catch (error) {
+    console.error("Error loading strategies:", error);
+    strategies.set([]);
+    detailViewError.set("Failed to load strategy list.");
+  } finally {
+    loading.set(false);
+  }
+}
+
 onMount(loadStrategies);
-function viewStrategy(id: number) { selectedStrategyId.set(null); editedStrategy.set(null); viewedStrategyId.set(id); }
-function startCreate() { const newStrategy: EditableStrategy = { strategyId: 'new', name: '', spec: blankSpec(), version: '1.0', createdAt: new Date().toISOString(), isAlertActive: false, }; viewedStrategyId.set(null); editedStrategy.set(newStrategy); selectedStrategyId.set('new'); }
-function startEdit(strategyToEdit: Strategy | null) { if (!strategyToEdit) return; const validSpec = ensureValidSpec(strategyToEdit.spec); const clonedStrategy: EditableStrategy = JSON.parse(JSON.stringify({ ...strategyToEdit, spec: validSpec })); editedStrategy.set(clonedStrategy); selectedStrategyId.set(strategyToEdit.strategyId); }
-function cancelEdit() { const editState = get(editedStrategy); editedStrategy.set(null); selectedStrategyId.set(null); if (editState?.strategyId === 'new') { viewedStrategyId.set(null); } }
-async function deleteStrategyConfirm(id: number | null) { if (id === null || typeof id !== 'number') return; if (!confirm(`Are you sure you want to delete this strategy (ID: ${id})?`)) return; try { await privateRequest('deleteStrategy', { strategyId: id }); strategies.update(arr => arr.filter(s => s.strategyId !== id)); viewedStrategyId.set(null); selectedStrategyId.set(null); editedStrategy.set(null); } catch (error) { console.error("Error deleting strategy:", error); alert("Failed to delete strategy."); } }
-async function saveStrategy() { const currentStrategy = get(editedStrategy); if (!currentStrategy) return; if (!currentStrategy.name.trim()) { alert("Strategy Name cannot be empty."); return; } if (!currentStrategy.spec?.features || currentStrategy.spec.features.length === 0) { alert("Strategy must have at least one Feature."); return; } const featureIds = currentStrategy.spec.features.map(f => f.featureId); if (new Set(featureIds).size !== featureIds.length) { alert("Feature IDs must be unique."); return; } const existingFeatureIds = new Set(featureIds); let invalidFilterFound = false; currentStrategy.spec.filters.forEach((filter, index) => { if (!existingFeatureIds.has(filter.lhs)) { alert(`Filter ${index + 1} uses non-existent LHS Feature.`); invalidFilterFound = true; } if (filter.rhs.featureId !== 0 && !existingFeatureIds.has(filter.rhs.featureId)) { alert(`Filter ${index + 1} uses non-existent RHS Feature.`); invalidFilterFound = true; } }); if (!existingFeatureIds.has(currentStrategy.spec.sortBy.feature)) { alert(`Sort By uses non-existent Feature.`); invalidFilterFound = true; } if (invalidFilterFound) return; const cleanSpec = ensureValidSpec(currentStrategy.spec); const payload = { name: currentStrategy.name, spec: cleanSpec }; console.log("Saving strategy with payload:", JSON.stringify(payload, null, 2)); try { let savedStrategyId: number | null = null; if (currentStrategy.strategyId === 'new') { const created = await privateRequest<Strategy>('newStrategy', payload); created.spec = ensureValidSpec(created.spec); created.version = created.version ?? currentStrategy.version ?? '1.0'; created.createdAt = created.createdAt ?? currentStrategy.createdAt ?? new Date().toISOString(); created.isAlertActive = created.isAlertActive ?? currentStrategy.isAlertActive ?? false; strategies.update(arr => [...arr, created]); savedStrategyId = created.strategyId; viewedStrategyId.set(null); selectedStrategyId.set(null); editedStrategy.set(null); } else if (typeof currentStrategy.strategyId === 'number') { await privateRequest('setStrategy', { strategyId: currentStrategy.strategyId, ...payload }); savedStrategyId = currentStrategy.strategyId; strategies.update(arr => arr.map(s => (s.strategyId === savedStrategyId ? { ...currentStrategy as Strategy, spec: cleanSpec } : s ))); selectedStrategyId.set(null); editedStrategy.set(null); } } catch (error: any) { console.error("Error saving strategy:", error); const errorMsg = error?.response?.data?.error || error.message || "An unknown error occurred."; alert(`Failed to save strategy: ${errorMsg}`); } }
+
+// Function to fetch spec for a given strategy ID and update the store
+async function fetchAndStoreSpec(id: number) {
+    const currentStrategies = get(strategies);
+    const targetStrategy = currentStrategies.find(s => s.strategyId === id);
+
+    // Only fetch if the strategy exists and doesn't already have a spec
+    if (targetStrategy && !targetStrategy.spec) {
+        loadingSpec.set(true);
+        detailViewError.set(null);
+        try {
+            const specData = await privateRequest<NewStrategySpec>('getStrategySpec', { strategyId: id });
+            // Validate fetched spec, including parsing infix if needed
+            const validSpec = ensureValidSpec(specData);
+
+            // Update the strategy in the main store
+            strategies.update(current =>
+                current.map(s =>
+                    s.strategyId === id ? { ...s, spec: validSpec } : s
+                )
+            );
+            // Check if validation found errors during spec processing
+            if (validSpec.features.some(f => f.exprError)) {
+                 detailViewError.set(`Strategy ${id} loaded, but some feature expressions have errors. Please edit to fix.`);
+            }
+
+        } catch (error: any) {
+            console.error(`Error fetching spec for strategy ${id}:`, error);
+            detailViewError.set(`Failed to load details for strategy ${id}: ${error.message || 'Unknown error'}`);
+            // Optionally remove the strategy from view if spec fails? Or keep showing base info?
+            // For now, we just show the error.
+        } finally {
+            loadingSpec.set(false);
+        }
+    } else if (!targetStrategy) {
+         detailViewError.set(`Strategy with ID ${id} not found in the list.`);
+    } else if (targetStrategy.spec && targetStrategy.spec.features.some(f => f.exprError)){
+        // Spec already loaded, but has errors from initial load/validation
+        detailViewError.set(`Displaying strategy ${id}, but some feature expressions have errors. Please edit to fix.`);
+    }
+     else {
+        // Spec already loaded and seems okay, clear any previous error for this ID
+         detailViewError.set(null);
+    }
+}
+
+// --- Reactive Statement ---
+// When viewedStrategyId changes, fetch the spec if needed
+$: if ($viewedStrategyId !== null) {
+    fetchAndStoreSpec($viewedStrategyId);
+}
+
+
+function viewStrategy(id: number) {
+  selectedStrategyId.set(null);
+  editedStrategy.set(null);
+  detailViewError.set(null); // Clear previous errors
+  viewedStrategyId.set(id); // This will trigger the reactive statement above
+}
+
+function startCreate() {
+  const newStrategy: EditableStrategy = {
+    strategyId: 'new',
+    name: '',
+    spec: blankSpec(), // Create uses a blank spec (with default 'close' feature)
+    version: '1.0',
+    createdAt: new Date().toISOString(),
+    isAlertActive: false,
+  };
+  viewedStrategyId.set(null);
+  detailViewError.set(null);
+  editedStrategy.set(newStrategy);
+  selectedStrategyId.set('new');
+}
+
+// Modified startEdit to fetch spec if needed
+async function startEdit(id: number | null) {
+    if (id === null || typeof id !== 'number') return;
+
+    loading.set(true); // Use general loading indicator for edit prep
+    detailViewError.set(null);
+    selectedStrategyId.set(null); // Reset selection first
+    editedStrategy.set(null);
+
+    try {
+        let strategyToEdit = get(strategies).find(s => s.strategyId === id);
+        let specToUse: NewStrategySpec;
+
+        if (!strategyToEdit) {
+            throw new Error(`Strategy with ID ${id} not found.`);
+        }
+
+        // Check if spec needs fetching or if it exists but failed validation previously
+        if (!strategyToEdit.spec || strategyToEdit.spec.features.some(f=>f.exprError)) {
+            console.log(`Spec for strategy ${id} not found locally or has errors, fetching/re-validating...`);
+            loadingSpec.set(true); // Show spec loading indicator briefly if needed
+            const specData = await privateRequest<NewStrategySpec>('getStrategySpec', { strategyId: id });
+            specToUse = ensureValidSpec(specData); // Re-validate fetched/existing data
+             loadingSpec.set(false);
+             // Update the store immediately so the base object has the potentially corrected spec for cloning
+             strategies.update(current =>
+                current.map(s =>
+                    s.strategyId === id ? { ...s, spec: specToUse } : s
+                )
+            );
+             // Re-fetch the strategy object now that it includes the updated spec
+             strategyToEdit = get(strategies).find(s => s.strategyId === id);
+             if (!strategyToEdit || !strategyToEdit.spec) {
+                  throw new Error(`Failed to retrieve or update strategy ${id} after fetching/validating spec.`);
+             }
+             // Check again for validation errors after fetching
+             if (specToUse.features.some(f => f.exprError)) {
+                 console.warn(`Strategy ${id} spec loaded for editing, but validation found expression errors.`);
+                 // We still allow editing, errors will be shown in the form.
+             }
+        } else {
+            // Spec already exists and seems valid, ensure it's freshly validated before editing
+            // (ensureValidSpec is idempotent, so this is safe)
+            specToUse = ensureValidSpec(strategyToEdit.spec);
+        }
+
+
+        // Clone the strategy *with* the validated spec for editing
+        // Make sure the cloned object matches EditableStrategy structure
+        const clonedStrategy: EditableStrategy = {
+             strategyId: strategyToEdit.strategyId,
+             name: strategyToEdit.name,
+             spec: JSON.parse(JSON.stringify(specToUse)), // Deep clone the validated spec
+             score: strategyToEdit.score,
+             version: strategyToEdit.version,
+             createdAt: strategyToEdit.createdAt,
+             isAlertActive: strategyToEdit.isAlertActive,
+        };
+
+        // Clear any exprError flags on the cloned spec for the edit session
+        // Errors will be re-evaluated on blur/save
+        clonedStrategy.spec.features.forEach(f => f.exprError = undefined);
+
+        editedStrategy.set(clonedStrategy);
+        selectedStrategyId.set(id);
+        viewedStrategyId.set(null); // Exit detail view
+
+    } catch (error: any) {
+         console.error(`Error preparing strategy ${id} for editing:`, error);
+         detailViewError.set(`Failed to prepare strategy for editing: ${error.message || 'Unknown error'}`);
+         // Reset states if edit fails
+         selectedStrategyId.set(null);
+         editedStrategy.set(null);
+    } finally {
+        loading.set(false);
+        loadingSpec.set(false);
+    }
+}
+
+
+function cancelEdit() {
+  const editState = get(editedStrategy);
+  editedStrategy.set(null);
+  selectedStrategyId.set(null);
+  detailViewError.set(null);
+  // If cancelling an edit, go back to viewing that strategy.
+  if (editState && typeof editState.strategyId === 'number') {
+      viewStrategy(editState.strategyId);
+  } else {
+      // If it was 'new', go back to list view
+      viewedStrategyId.set(null);
+  }
+}
+
+async function deleteStrategyConfirm(id: number | null) {
+  if (id === null || typeof id !== 'number') return;
+  if (!confirm(`Are you sure you want to delete strategy '${get(strategies).find(s=>s.strategyId===id)?.name ?? `ID: ${id}`}'?`)) return;
+  loading.set(true);
+  try {
+    await privateRequest('deleteStrategy', { strategyId: id });
+    strategies.update(arr => arr.filter(s => s.strategyId !== id));
+    viewedStrategyId.set(null);
+    selectedStrategyId.set(null);
+    editedStrategy.set(null);
+    detailViewError.set(null);
+  } catch (error) {
+    console.error("Error deleting strategy:", error);
+    alert("Failed to delete strategy.");
+    detailViewError.set("Failed to delete strategy.");
+  } finally {
+     loading.set(false);
+  }
+}
+
+async function saveStrategy() {
+  const currentStrategy = get(editedStrategy);
+  if (!currentStrategy) return;
+
+  // --- Validation ---
+    if (!currentStrategy.name.trim()) { alert("Strategy Name cannot be empty."); return; }
+    if (!currentStrategy.spec?.features || currentStrategy.spec.features.length === 0) { alert("Strategy must have at least one Feature."); return; }
+
+    // Re-parse all infix expressions to ensure RPN 'expr' is up-to-date and valid before saving
+    let hasExprError = false;
+    currentStrategy.spec.features.forEach((feature, index) => {
+        const result = parseInfixToRPN(feature.infixExpr);
+        if (!result.success) {
+            // Update the store directly to show the error in the UI immediately if save fails
+            updateEditedStrategy(s => { s.spec.features[index].exprError = result.error || "Invalid expression"; });
+            hasExprError = true;
+            console.error(`Feature '${feature.name}' expression error: ${result.error}`);
+        } else {
+            // Update the RPN 'expr' field in the strategy being saved
+            currentStrategy.spec.features[index].expr = result.rpn!;
+            // Clear any previous error for this feature in the edited state
+            updateEditedStrategy(s => { s.spec.features[index].exprError = undefined; });
+        }
+    });
+
+    if (hasExprError) {
+        alert("One or more feature expressions are invalid. Please correct the errors shown in the Features section.");
+        return; // Stop saving
+    }
+
+    // Continue with existing ID and filter validations
+    const featureIds = currentStrategy.spec.features.map(f => f.featureId);
+    if (new Set(featureIds).size !== featureIds.length) { alert("Feature IDs must be unique."); return; }
+    const existingFeatureIds = new Set(featureIds);
+    let invalidFilterFound = false;
+    currentStrategy.spec.filters.forEach((filter, index) => { if (!existingFeatureIds.has(filter.lhs)) { alert(`Filter ${index + 1} uses non-existent LHS Feature ID ${filter.lhs}.`); invalidFilterFound = true; } if (filter.rhs.featureId !== 0 && !existingFeatureIds.has(filter.rhs.featureId)) { alert(`Filter ${index + 1} uses non-existent RHS Feature ID ${filter.rhs.featureId}.`); invalidFilterFound = true; } });
+    if (!existingFeatureIds.has(currentStrategy.spec.sortBy.feature)) { alert(`Sort By uses non-existent Feature ID ${currentStrategy.spec.sortBy.feature}.`); invalidFilterFound = true; }
+    if (invalidFilterFound) return;
+  // --- End Validation ---
+
+  loading.set(true);
+  detailViewError.set(null);
+
+  // Ensure the spec going to the backend is clean/valid
+  // ensureValidSpec will re-parse/validate, but we've already done it above.
+  // We need to be careful here - pass the *current* state which we just validated.
+  // Backend only needs RPN ('expr'), not 'infixExpr' or 'exprError'
+  const cleanSpecForBackend: Omit<NewStrategySpec, 'features'> & { features: Omit<FeatureSpec, 'infixExpr' | 'exprError'>[] } = {
+        ...currentStrategy.spec,
+        features: currentStrategy.spec.features.map(({ infixExpr, exprError, ...rest }) => rest) // Remove UI-specific fields
+    };
+
+  // Payload only needs name and the cleaned spec
+  const payload = {
+      name: currentStrategy.name,
+      spec: cleanSpecForBackend // Send the spec without infixExpr/exprError
+  };
+  console.log("Saving strategy with payload:", JSON.stringify(payload, null, 2));
+
+  try {
+    let savedStrategyId: number | null = null;
+
+    if (currentStrategy.strategyId === 'new') {
+      // Create new strategy
+      const createdResult = await privateRequest<{strategyId: number, name: string}>('newStrategy', payload);
+      const created: Strategy = {
+          strategyId: createdResult.strategyId,
+          name: createdResult.name,
+          spec: ensureValidSpec(currentStrategy.spec), // Use validated spec from edit state for local store
+          version: currentStrategy.version ?? '1.0',
+          createdAt: currentStrategy.createdAt ?? new Date().toISOString(),
+          isAlertActive: currentStrategy.isAlertActive ?? false,
+          score: 0
+      };
+      strategies.update(arr => [...arr, created]);
+      savedStrategyId = created.strategyId;
+
+    } else if (typeof currentStrategy.strategyId === 'number') {
+       // Update existing strategy
+       await privateRequest('setStrategy', {
+           strategyId: currentStrategy.strategyId,
+           ...payload
+       });
+       savedStrategyId = currentStrategy.strategyId;
+
+       // Update the local store with the edited data (using validated spec)
+       const updatedSpec = ensureValidSpec(currentStrategy.spec); // Use the spec from the edit state
+       strategies.update(arr => arr.map(s =>
+           s.strategyId === savedStrategyId
+           ? { ...s,
+               name: payload.name,
+               spec: updatedSpec, // Store the fully validated spec locally
+               version: currentStrategy.version,
+               isAlertActive: currentStrategy.isAlertActive
+             }
+           : s
+       ));
+    }
+
+    // Success: Clear edit state and view the saved strategy
+    editedStrategy.set(null);
+    selectedStrategyId.set(null);
+    if (savedStrategyId !== null) {
+        viewStrategy(savedStrategyId); // View the strategy just saved/created
+    } else {
+         viewedStrategyId.set(null); // Fallback to list if ID is somehow null
+    }
+
+  } catch (error: any) {
+    console.error("Error saving strategy:", error);
+    const errorMsg = error?.response?.data?.error || error.message || "An unknown error occurred.";
+    alert(`Failed to save strategy: ${errorMsg}`);
+    detailViewError.set(`Failed to save strategy: ${errorMsg}`);
+  } finally {
+    loading.set(false);
+  }
+}
 
 
 // --- UI Update Helpers (Edit View) ---
-// ... (Keep: updateEditedStrategy, addUniverseFilter, etc... addFilter, removeFilter) ...
+// updateEditedStrategy remains useful for deep updates
 function updateEditedStrategy(updater: (strategy: EditableStrategy) => void) { editedStrategy.update(strategy => { if (!strategy) return null; const clone = JSON.parse(JSON.stringify(strategy)); updater(clone); return clone; }); }
+
+// Universe filter functions remain the same
 function addUniverseFilter() { updateEditedStrategy(s => { s.spec.universe.filters.push({ securityFeature: 'Ticker', include: [], exclude: [] }); }); }
 function removeUniverseFilter(index: number) { updateEditedStrategy(s => { s.spec.universe.filters.splice(index, 1); }); }
 function addUniverseInclude(filterIndex: number, value: string) { if (!value.trim()) return; updateEditedStrategy(s => { const filter = s.spec.universe.filters[filterIndex]; const upperVal = value.trim().toUpperCase(); if (filter && !filter.include.includes(upperVal)) { filter.include.push(upperVal); filter.exclude = filter.exclude.filter(ex => ex !== upperVal); } }); }
 function removeUniverseInclude(filterIndex: number, valueIndex: number) { updateEditedStrategy(s => { s.spec.universe.filters[filterIndex]?.include.splice(valueIndex, 1); }); }
 function addUniverseExclude(filterIndex: number, value: string) { if (!value.trim()) return; updateEditedStrategy(s => { const filter = s.spec.universe.filters[filterIndex]; const upperVal = value.trim().toUpperCase(); if (filter && !filter.exclude.includes(upperVal)) { filter.exclude.push(upperVal); filter.include = filter.include.filter(inc => inc !== upperVal); } }); }
 function removeUniverseExclude(filterIndex: number, valueIndex: number) { updateEditedStrategy(s => { s.spec.universe.filters[filterIndex]?.exclude.splice(valueIndex, 1); }); }
-function addFeature() { updateEditedStrategy(s => { const newId = getNextFeatureId(s.spec.features); s.spec.features.push({ name: `new_feature_${newId}`, featureId: newId, source: { field: "SecurityId", value: "relative" }, output: "raw", expr: [], window: 1 }); if (s.spec.features.length === 1 || s.spec.sortBy.feature === (blankSpec().features[0]?.featureId ?? 0)) { s.spec.sortBy.feature = newId; } }); }
-function removeFeature(index: number) { updateEditedStrategy(s => { const removedFeatureId = s.spec.features[index]?.featureId; s.spec.features.splice(index, 1); s.spec.filters = s.spec.filters.filter(f => f.lhs !== removedFeatureId && (f.rhs.featureId === 0 || f.rhs.featureId !== removedFeatureId)); if (s.spec.sortBy.feature === removedFeatureId) { s.spec.sortBy.feature = s.spec.features[0]?.featureId ?? 0; } }); }
-function addExprElement(featureIndex: number, type: 'column' | 'operator', value: string) { if (!value.trim()) return; updateEditedStrategy(s => { s.spec.features[featureIndex].expr.push({ type, value: value.trim() }); }); }
-function removeExprElement(featureIndex: number, elementIndex: number) { updateEditedStrategy(s => { s.spec.features[featureIndex].expr.splice(elementIndex, 1); }); }
+
+// Feature functions modified for infix
+function addFeature() {
+    updateEditedStrategy(s => {
+        const newId = getNextFeatureId(s.spec.features);
+        s.spec.features.push({
+            name: `new_feature_${newId}`,
+            featureId: newId,
+            source: { field: "SecurityId", value: "relative" },
+            output: "raw",
+            infixExpr: "", // Start with empty infix
+            expr: [],      // and empty RPN
+            window: 1,
+            exprError: "Expression is required." // Initial error state
+        });
+        // Update sortby if it was pointing to a removed feature or if this is the first feature
+        if (s.spec.features.length === 1 || !s.spec.features.some(f => f.featureId === s.spec.sortBy.feature)) {
+            s.spec.sortBy.feature = newId;
+        }
+    });
+}
+
+function removeFeature(index: number) {
+    updateEditedStrategy(s => {
+        const removedFeatureId = s.spec.features[index]?.featureId;
+        s.spec.features.splice(index, 1);
+        // Remove filters referencing this feature
+        s.spec.filters = s.spec.filters.filter(f =>
+            f.lhs !== removedFeatureId && (f.rhs.featureId === 0 || f.rhs.featureId !== removedFeatureId)
+        );
+        // Update sortby if it was pointing to the removed feature
+        if (s.spec.sortBy.feature === removedFeatureId) {
+            s.spec.sortBy.feature = s.spec.features[0]?.featureId ?? (blankSpec().sortBy.feature);
+        }
+    });
+}
+
+// Function to handle parsing when the infix expression input loses focus
+function handleInfixParse(featureIndex: number) {
+    updateEditedStrategy(s => {
+        const feature = s.spec.features[featureIndex];
+        if (!feature) return;
+        const result = parseInfixToRPN(feature.infixExpr);
+        if (result.success) {
+            feature.expr = result.rpn!;
+            feature.exprError = undefined; // Clear error on success
+        } else {
+            feature.expr = []; // Clear RPN on failure
+            feature.exprError = result.error || "Invalid expression";
+        }
+    });
+}
+
+// Filter functions remain the same
 function addFilter() { updateEditedStrategy(s => { const defaultLhsFeatureId = s.spec.features[0]?.featureId ?? 0; s.spec.filters.push({ name: `new_filter_${s.spec.filters.length}`, lhs: defaultLhsFeatureId, operator: '>', rhs: { featureId: 0, const: 0, scale: 1.0 } }); }); }
 function removeFilter(index: number) { updateEditedStrategy(s => { s.spec.filters.splice(index, 1); }); }
 
-// Derived store for Edit View dropdowns
+// Derived store for Edit View dropdowns - remains the same
 const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
-    if (!$editedStrategy || !$editedStrategy.spec?.features) return [];
-    return $editedStrategy.spec.features.map(f => ({ id: f.featureId, name: f.name || `Feature ${f.featureId}` }));
+  if (!$editedStrategy || !$editedStrategy.spec?.features) return [];
+  // Filter out features with errors? Maybe not, allow fixing them.
+  return $editedStrategy.spec.features.map(f => ({ id: f.featureId, name: f.name || `Feature ${f.featureId}` }));
 });
-
 
 </script>
 
 {#if $viewedStrategyId === null && $selectedStrategyId === null}
   <div class="toolbar">
-    <button on:click={startCreate}>＋ New Strategy</button>
+    <button on:click={startCreate} disabled={$loading}>＋ New Strategy</button>
+     {#if $loading}<span class="loading-indicator"> Loading...</span>{/if}
+     {#if $detailViewError}<div class="error-message">Error: {$detailViewError}</div>{/if}
   </div>
 
-  {#if $loading}
-    <p>Loading strategies...</p>
-  {:else if !$strategies || $strategies.length === 0}
+  {#if !$loading && (!$strategies || $strategies.length === 0)}
      <p>No strategies found. Click "＋ New Strategy" to create one.</p>
-  {:else}
+  {:else if !$loading}
     <div class="table-container">
       <table>
         <thead>
@@ -201,7 +755,7 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
           {#each $strategies as s (s.strategyId)}
             <tr class="clickable-row" on:click={() => viewStrategy(s.strategyId)} title="Click to view details">
               <td>{s.name}</td>
-              <td>{formatTimeframe(s.spec?.universe?.timeframe)}</td>
+              <td>{s.spec ? formatTimeframe(s.spec.universe?.timeframe) : '...'}</td>
               <td>{s.version ?? 'N/A'}</td>
               <td>{s.createdAt ? new Date(s.createdAt).toLocaleDateString() : 'N/A'}</td>
               <td class="alert-status">{s.isAlertActive ? '✔️ Active' : '❌ Inactive'}</td>
@@ -214,23 +768,60 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
   {/if}
 
 {:else if $viewedStrategyId !== null && $selectedStrategyId === null}
-  {#if $viewedStrategy}
-   {@const strat = $viewedStrategy}
-   <div class="detail-view-container">
+  {@const strat = $viewedStrategyBase} {#if $loadingSpec}
+    <div class="loading-container">
+        <p>Loading strategy details for '{$viewedStrategyBase?.name ?? `ID: ${$viewedStrategyId}`}'...</p>
+        <button class="secondary" on:click={() => { viewedStrategyId.set(null); detailViewError.set(null); }}>← Back to List</button>
+    </div>
+  {:else if $detailViewError && !strat?.spec} <div class="error-container">
+         <h2>Error Loading Strategy Details</h2>
+         <p class="error-message">{$detailViewError}</p>
+         {#if strat} <p>Showing partial information:</p> {/if}
+         <button class="secondary" on:click={() => { viewedStrategyId.set(null); detailViewError.set(null); }}>← Back to List</button>
+         {#if strat}<button on:click={() => fetchAndStoreSpec($viewedStrategyId)}>Retry Load</button>{/if}
+     </div>
+     {#if strat}
+         <div class="detail-view-container partial-info">
+             <div class="detail-view-header">
+                 <div class="detail-view-title">
+                     <h2>{formatName(strat.name)} (Details Failed to Load)</h2>
+                      <div class="detail-view-meta">
+                         <span>Version: {strat.version ?? 'N/A'}</span> |
+                         <span>Created: {strat.createdAt ? new Date(strat.createdAt).toLocaleString() : 'N/A'}</span> |
+                         <span class="alert-status">Alert: {strat.isAlertActive ? '✔️ Active' : '❌ Inactive'}</span>
+                     </div>
+                 </div>
+                  <div class="detail-view-actions">
+                      <button disabled>✏️ Edit (Unavailable)</button>
+                      <button class="danger" on:click={() => deleteStrategyConfirm(strat.strategyId)}>🗑️ Delete</button>
+                      <button class="secondary" on:click={() => { viewedStrategyId.set(null); detailViewError.set(null); }}>← Back to List</button>
+                  </div>
+             </div>
+         </div>
+     {/if}
+  {:else if strat && strat.spec} <div class="detail-view-container">
+        {#if $detailViewError}
+          <div class="error-message">Warning: {$detailViewError}</div>
+        {/if}
+
         <div class="detail-view-header">
             <div class="detail-view-title">
-                 <h2>{formatName(strat.name)}</h2>
-                 <div class="detail-view-meta">
+                <h2>{formatName(strat.name)}</h2>
+                <div class="detail-view-meta">
                     <span>Version: {strat.version ?? 'N/A'}</span> |
                     <span>Created: {strat.createdAt ? new Date(strat.createdAt).toLocaleString() : 'N/A'}</span> |
                     <span class="alert-status">Alert: {strat.isAlertActive ? '✔️ Active' : '❌ Inactive'}</span>
                 </div>
             </div>
              <div class="detail-view-actions">
-                <button on:click={() => startEdit(strat)}>✏️ Edit</button>
-                <button class="danger" on:click={() => deleteStrategyConfirm(strat.strategyId)}>🗑️ Delete</button>
-                <button class="secondary" on:click={() => viewedStrategyId.set(null)}>← Back to List</button>
-            </div>
+                 {#if $loading}
+                     <button disabled>✏️ Edit (Loading...)</button>
+                 {:else}
+                      <button on:click={() => startEdit(strat.strategyId)} disabled={$loadingSpec || !!$detailViewError || strat.spec.features.some(f=>f.exprError)}>✏️ Edit</button>
+                 {/if}
+                 <button class="danger" on:click={() => deleteStrategyConfirm(strat.strategyId)} disabled={$loading || $loadingSpec}>🗑️ Delete</button>
+                 <button class="secondary" on:click={() => { viewedStrategyId.set(null); detailViewError.set(null); }} disabled={$loading || $loadingSpec}>← Back to List</button>
+             </div>
         </div>
 
         <div class="detail-section-card">
@@ -258,105 +849,148 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
          <div class="detail-section-card">
              <h3>Features <span class="count-badge">{strat.spec.features.length}</span></h3>
              {#if strat.spec.features.length > 0}
-                <ul class="detail-list feature-list">
-                {#each strat.spec.features as feature}
-                    <li class="detail-list-item">
-                        <strong class="feature-name">{formatName(feature.name)}</strong>
-                        <div class="feature-details">
-                             <span>Output: {feature.output}</span>
-                             <span>Window: {feature.window}</span>
-                        </div>
-                        <div class="feature-expr">Expr: <code>{formatExprInfix(feature.expr)}</code></div>
-                    </li>
-                {/each}
-                </ul>
+                 <ul class="detail-list feature-list">
+                 {#each strat.spec.features as feature}
+                     <li class="detail-list-item">
+                         <strong class="feature-name">{formatName(feature.name)}</strong> (ID: {feature.featureId})
+                          <div class="feature-details">
+                              <span>Output: {feature.output}</span>
+                              <span>Window: {feature.window}</span>
+                               <span>Source: {feature.source.field}={feature.source.value}</span>
+                         </div>
+                         <div class="feature-expr">Expr: <code>{formatExprInfix(feature.expr)}</code></div>
+                         {#if feature.exprError}
+                            <small class="error-text feature-expr-error">Error: {feature.exprError}</small>
+                         {/if}
+                     </li>
+                 {/each}
+                 </ul>
              {:else}
-                <p class="warning-text">No features defined (strategy may not function).</p>
+                  <p class="warning-text">No features defined (strategy may not function).</p>
              {/if}
          </div>
 
          <div class="detail-section-card">
              <h3>Filters <span class="count-badge">{strat.spec.filters.length}</span></h3>
               {#if strat.spec.filters.length > 0}
-                <ul class="detail-list filter-list">
-                {#each strat.spec.filters as filter}
-                    <li class="detail-list-item">
-                        <strong class="filter-name">{formatName(filter.name) || 'Unnamed Filter'}</strong>
-                        <div class="filter-condition">
-                            <code>{formatFilterCondition(filter, strat.spec.features)}</code>
-                        </div>
-                    </li>
-                {/each}
-                </ul>
+                  <ul class="detail-list filter-list">
+                  {#each strat.spec.filters as filter}
+                      <li class="detail-list-item">
+                          <strong class="filter-name">{formatName(filter.name) || 'Unnamed Filter'}</strong>
+                          <div class="filter-condition">
+                              <code>{formatFilterCondition(filter, strat.spec.features)}</code>
+                          </div>
+                      </li>
+                  {/each}
+                  </ul>
              {:else}
-                 <p class="no-items-note"><em>No filters defined - strategy will likely return all securities from the universe.</em></p>
+                  <p class="no-items-note"><em>No filters defined - strategy will likely return all securities from the universe.</em></p>
              {/if}
          </div>
 
          <div class="detail-section-card">
              <h3>Sort By</h3>
              {#if strat.spec.sortBy && strat.spec.features.some(f => f.featureId === strat.spec.sortBy.feature)}
-                {@const sortFeature = strat.spec.features.find(f => f.featureId === strat.spec.sortBy.feature)}
-                 <p>Feature: <strong>{formatName(sortFeature?.name)}</strong> <br/> Direction: <strong>{strat.spec.sortBy.direction.toUpperCase()}</strong></p>
+                 {@const sortFeature = strat.spec.features.find(f => f.featureId === strat.spec.sortBy.feature)}
+                  <p>Feature: <strong>{formatName(sortFeature?.name)}</strong> (ID: {sortFeature?.featureId}) <br/> Direction: <strong>{strat.spec.sortBy.direction.toUpperCase()}</strong></p>
              {:else}
                   <p class="warning-text"><em>Sort feature (ID: {strat.spec.sortBy?.feature}) not found or invalid.</em></p>
              {/if}
          </div>
 
-   </div>
-   {:else}
-       <div class="loading-container">
-            <p>Loading strategy details...</p>
-            <button class="secondary" on:click={() => viewedStrategyId.set(null)}>← Back to List</button>
+    </div>
+  {:else if !strat && !$loadingSpec} <div class="error-container">
+           <p>Strategy with ID {$viewedStrategyId} not found.</p>
+           <button class="secondary" on:click={() => { viewedStrategyId.set(null); detailViewError.set(null); }}>← Back to List</button>
        </div>
-   {/if}
+    {/if}
 
 
 {:else if $editedStrategy}
-  <div class="form-block"> <label for="strategy-name">Strategy Name</label> <input id="strategy-name" type="text" placeholder="e.g., Daily Momentum Breakout" bind:value={$editedStrategy.name} /> </div>
-  <fieldset class="section"> <legend>Universe Definition</legend> <div class="layout-grid cols-3 items-end"> <label> Timeframe <span class="help-icon" title={helpText.universeTimeframe}>?</span> <select bind:value={$editedStrategy.spec.universe.timeframe}> {#each timeframeOptions as tf} <option value={tf.value}>{tf.label}</option> {/each} </select> </label> <label class="inline-label"> <input type="checkbox" bind:checked={$editedStrategy.spec.universe.extendedHours} disabled={$editedStrategy.spec.universe.timeframe !== '1'} /> Extended Hours? <span class="help-icon" title={helpText.universeExtendedHours}>?</span> </label> {#if $editedStrategy.spec.universe.timeframe === '1'} <p class="hint">(Only available for 1-min timeframe)</p> {/if} </div> <div class="layout-grid cols-2"> <label> Intraday Start Time (Optional) <input type="time" bind:value={$editedStrategy.spec.universe.startTime} /> </label> <label> Intraday End Time (Optional) <input type="time" bind:value={$editedStrategy.spec.universe.endTime} /> </label> </div> <div class="subsection"> <h4>Security Filters <span class="help-icon" title={helpText.universeFilters}>?</span></h4> {#each $editedStrategy.spec.universe.filters as uFilter, uIndex (uIndex)} <div class="universe-filter-row"> <div class="universe-filter-header"> <select bind:value={uFilter.securityFeature}> {#each securityFeatureOptions as sf} <option value={sf}>{sf}</option> {/each} </select> <button class="danger-text" on:click={() => removeUniverseFilter(uIndex)}>✕ Remove</button> </div> {#if uFilter.securityFeature === 'Ticker'} <div class="layout-grid cols-2"> <div class="pill-group"> <h5>Include Tickers <span class="help-icon" title={helpText.universeTickerInclude}>?</span></h5> {#each uFilter.include as ticker, i (ticker)} <span class="pill" on:click={() => removeUniverseInclude(uIndex, i)}>{ticker} ✕</span> {/each} <input class="small" placeholder="Add Ticker (Enter)" on:keydown={(e) => { if (e.key === 'Enter' && e.currentTarget.value.trim()) { addUniverseInclude(uIndex, e.currentTarget.value); e.currentTarget.value = ''; e.preventDefault(); } }} /> </div> <div class="pill-group"> <h5>Exclude Tickers <span class="help-icon" title={helpText.universeTickerExclude}>?</span></h5> {#each uFilter.exclude as ticker, i (ticker)} <span class="pill" on:click={() => removeUniverseExclude(uIndex, i)}>{ticker} ✕</span> {/each} <input class="small" placeholder="Add Ticker (Enter)" on:keydown={(e) => { if (e.key === 'Enter' && e.currentTarget.value.trim()) { addUniverseExclude(uIndex, e.currentTarget.value); e.currentTarget.value = ''; e.preventDefault(); } }} /> </div> </div> {:else} <div class="layout-grid cols-2"> <label>Include Values <input type="text" bind:value={uFilter.include[0]} placeholder="Value" title="Enter single value for non-ticker include" /></label> <label>Exclude Values <input type="text" bind:value={uFilter.exclude[0]} placeholder="Value" title="Enter single value for non-ticker exclude" /></label> </div> <p class="hint">Enter a single value for Include/Exclude for {uFilter.securityFeature}.</p> {/if} </div> {/each} <button type="button" on:click={addUniverseFilter}>＋ Add Universe Filter</button> </div> </fieldset>
-  <fieldset class="section"> <legend>Features <span class="help-icon" title={helpText.features}>?</span></legend> <p class="help-text">Define calculations used in Filters or Sorting. Use RPN for expressions.</p> {#each $editedStrategy.spec.features as feature, fIndex (feature.featureId)} <div class="feature-row"> <div class="layout-grid cols-3 items-center"> <label>Name <input type="text" bind:value={feature.name} placeholder="e.g., daily_range" /></label> <label>Output Type <select bind:value={feature.output}> {#each outputOptions as o} <option value={o}>{o}</option> {/each} </select> </label> <div class="feature-id-remove"> <span class="feature-id">ID: {feature.featureId}</span> {#if $editedStrategy.spec.features.length > 1} <button type="button" class="danger-text" on:click={() => removeFeature(fIndex)}>✕ Remove</button> {/if} </div> </div> <div class="layout-grid cols-3"> <label>Window <span class="help-icon" title={helpText.featureWindow}>?</span> <input type="number" min="1" step="1" bind:value={feature.window} /> </label> <label>Source Field <select bind:value={feature.source.field}> {#each securityFeatureOptions as sf} <option value={sf}>{sf}</option> {/each} </select> </label> <label>Source Value <input type="text" bind:value={feature.source.value} placeholder='"relative" or specific value' /> </label> </div> <div class="expr-builder"> <label class="expr-label">Expression (RPN) <span class="help-icon" title={helpText.featureExpr}>?</span></label> <div class="expression-display"> {#each feature.expr as element, eIndex (eIndex)} <span class="expr-element" class:operator={element.type === 'operator'} on:click={() => removeExprElement(fIndex, eIndex)} title="Click to remove"> {element.value} </span> {/each} {#if feature.expr.length === 0} <span class="hint">Empty Expression</span> {/if} </div> <div class="expression-input-area"> <input type="text" placeholder="Add Column/Operator (Enter)" list="rpn-suggestions" on:keydown={(e) => { if (e.key === 'Enter' && e.currentTarget.value.trim()) { const val = e.currentTarget.value.trim(); const type = operatorChars.includes(val) ? 'operator' : 'column'; addExprElement(fIndex, type, val); e.currentTarget.value = ''; e.preventDefault(); } }} /> <datalist id="rpn-suggestions"> {#each baseColumnOptions as col}<option value={col}>{col}</option>{/each} {#each operatorChars as op}<option value={op}>{op}</option>{/each} </datalist> <div class="quick-add"> {#each baseColumnOptions as col} <button type="button" class="quick-add-btn" on:click={() => addExprElement(fIndex, 'column', col)}>{col}</button> {/each} {#each operatorChars as op} <button type="button" class="quick-add-btn operator" on:click={() => addExprElement(fIndex, 'operator', op)}>{op}</button> {/each} </div> </div> </div> </div> {/each} <button type="button" on:click={addFeature}>＋ Add Feature</button> </fieldset>
-  <fieldset class="section"> <legend>Filters (Conditions) <span class="help-icon" title={helpText.filters}>?</span></legend> <p class="help-text">Define conditions comparing Features to constants or other Features.</p> {#if $availableFeatures.length === 0} <p class="warning-text">You need to define at least one Feature before adding Filters.</p> {:else} {#each $editedStrategy.spec.filters as filter, fIndex (fIndex)} <div class="filter-row"> <label class="filter-label">IF</label> <select bind:value={filter.lhs} title="Left Hand Side Feature"> {#each $availableFeatures as feat} <option value={feat.id}>{feat.name} (ID: {feat.id})</option> {/each} </select> <select bind:value={filter.operator} title="Comparison Operator"> {#each operatorOptions as op} <option value={op}>{op}</option> {/each} </select> <div class="rhs-group"> <select bind:value={filter.rhs.featureId} title="Right Hand Side Feature (0 for Constant)"> <option value={0}>Constant Value</option> {#each $availableFeatures as feat} <option value={feat.id}>{feat.name} (ID: {feat.id})</option> {/each} </select> {#if filter.rhs.featureId === 0} <input class="small" type="number" step="any" bind:value={filter.rhs.const} title="Constant Value"/> {/if} <span class="scale-label">Scale:</span> <input class="tiny" type="number" step="any" bind:value={filter.rhs.scale} title="Scale Factor (applied to RHS)" /> </div> <button type="button" class="danger-text" on:click={() => removeFilter(fIndex)}>✕</button> <label class="filter-name-label">Name (Optional): <input type="text" class="small" bind:value={filter.name} /></label> </div> {/each} <button type="button" on:click={addFilter} disabled={$availableFeatures.length === 0}>＋ Add Filter</button> {/if} </fieldset>
-  <fieldset class="section"> <legend>Sort Results By <span class="help-icon" title={helpText.sortBy}>?</span></legend> {#if $availableFeatures.length === 0} <p class="warning-text">You need to define at least one Feature before setting Sort criteria.</p> {:else} <div class="layout-grid cols-2"> <label>Feature to Sort By <select bind:value={$editedStrategy.spec.sortBy.feature}> {#each $availableFeatures as feat} <option value={feat.id}>{feat.name} (ID: {feat.id})</option> {/each} </select> </label> <label>Direction <select bind:value={$editedStrategy.spec.sortBy.direction}> {#each sortDirectionOptions as dir} <option value={dir}>{dir.toUpperCase()}</option> {/each} </select> </label> </div> {/if} </fieldset>
-  <div class="actions"> <button class="primary" on:click={saveStrategy}>💾 Save Strategy</button> <button type="button" on:click={cancelEdit}>Cancel</button> {#if typeof $editedStrategy.strategyId === 'number'} <button type="button" class="danger" on:click={() => deleteStrategyConfirm($editedStrategy.strategyId)}>Delete Strategy</button> {/if} </div>
+    {#if $loading}<div class="loading-overlay">Preparing editor...</div>{/if}
+    {#if $detailViewError}<div class="error-message">Error preparing editor: {$detailViewError}</div>{/if}
+
+    <div class="form-block"> <label for="strategy-name">Strategy Name</label> <input id="strategy-name" type="text" placeholder="e.g., Daily Momentum Breakout" bind:value={$editedStrategy.name} /> </div>
+
+    <fieldset class="section"> <legend>Universe Definition</legend> <div class="layout-grid cols-3 items-end"> <label> Timeframe <span class="help-icon" title={helpText.universeTimeframe}>?</span> <select bind:value={$editedStrategy.spec.universe.timeframe}> {#each timeframeOptions as tf} <option value={tf.value}>{tf.label}</option> {/each} </select> </label> <label class="inline-label"> <input type="checkbox" bind:checked={$editedStrategy.spec.universe.extendedHours} disabled={$editedStrategy.spec.universe.timeframe !== '1'} /> Extended Hours? <span class="help-icon" title={helpText.universeExtendedHours}>?</span> </label> {#if $editedStrategy.spec.universe.timeframe === '1'} <p class="hint">(Only available for 1-min timeframe)</p> {/if} </div> <div class="layout-grid cols-2"> <label> Intraday Start Time (Optional) <input type="time" bind:value={$editedStrategy.spec.universe.startTime} /> </label> <label> Intraday End Time (Optional) <input type="time" bind:value={$editedStrategy.spec.universe.endTime} /> </label> </div> <div class="subsection"> <h4>Security Filters <span class="help-icon" title={helpText.universeFilters}>?</span></h4> {#each $editedStrategy.spec.universe.filters as uFilter, uIndex (uIndex)} <div class="universe-filter-row"> <div class="universe-filter-header"> <select bind:value={uFilter.securityFeature}> {#each securityFeatureOptions as sf} <option value={sf}>{sf}</option> {/each} </select> <button type="button" class="danger-text" on:click={() => removeUniverseFilter(uIndex)}>✕ Remove</button> </div> {#if uFilter.securityFeature === 'Ticker'} <div class="layout-grid cols-2"> <div class="pill-group"> <h5>Include Tickers <span class="help-icon" title={helpText.universeTickerInclude}>?</span></h5> {#each uFilter.include as ticker, i (ticker)} <span class="pill" on:click={() => removeUniverseInclude(uIndex, i)}>{ticker} ✕</span> {/each} <input class="small" placeholder="Add Ticker (Enter)" on:keydown={(e) => { if (e.key === 'Enter' && e.currentTarget.value.trim()) { addUniverseInclude(uIndex, e.currentTarget.value); e.currentTarget.value = ''; e.preventDefault(); } }} /> </div> <div class="pill-group"> <h5>Exclude Tickers <span class="help-icon" title={helpText.universeTickerExclude}>?</span></h5> {#each uFilter.exclude as ticker, i (ticker)} <span class="pill" on:click={() => removeUniverseExclude(uIndex, i)}>{ticker} ✕</span> {/each} <input class="small" placeholder="Add Ticker (Enter)" on:keydown={(e) => { if (e.key === 'Enter' && e.currentTarget.value.trim()) { addUniverseExclude(uIndex, e.currentTarget.value); e.currentTarget.value = ''; e.preventDefault(); } }} /> </div> </div> {:else} <div class="layout-grid cols-2"> <label>Include Values <input type="text" bind:value={uFilter.include[0]} placeholder="Value" title="Enter single value for non-ticker include" /></label> <label>Exclude Values <input type="text" bind:value={uFilter.exclude[0]} placeholder="Value" title="Enter single value for non-ticker exclude" /></label> </div> <p class="hint">Enter a single value for Include/Exclude for {uFilter.securityFeature}.</p> {/if} </div> {/each} <button type="button" on:click={addUniverseFilter}>＋ Add Universe Filter</button> </div> </fieldset>
+
+    <fieldset class="section">
+        <legend>Features <span class="help-icon" title={helpText.features}>?</span></legend>
+        <p class="help-text">{helpText.featureExpr}</p>
+        {#each $editedStrategy.spec.features as feature, fIndex (feature.featureId)}
+            <div class="feature-row">
+                <div class="layout-grid cols-3 items-center">
+                    <label>Name <input type="text" bind:value={feature.name} placeholder="e.g., daily_range" /></label>
+                    <label>Output Type <select bind:value={feature.output}> {#each outputOptions as o} <option value={o}>{o}</option> {/each} </select> </label>
+                    <div class="feature-id-remove">
+                        <span class="feature-id-display">ID: {feature.featureId}</span>
+                        {#if $editedStrategy.spec.features.length > 1}
+                            <button type="button" class="danger-text" on:click={() => removeFeature(fIndex)}>✕ Remove</button>
+                        {/if}
+                    </div>
+                </div>
+                <div class="layout-grid cols-3">
+                    <label>Window <span class="help-icon" title={helpText.featureWindow}>?</span> <input type="number" min="1" step="1" bind:value={feature.window} /> </label>
+                    <label>Source Field <select bind:value={feature.source.field}> {#each securityFeatureOptions as sf} <option value={sf}>{sf}</option> {/each} </select> </label>
+                    <label>Source Value <input type="text" bind:value={feature.source.value} placeholder='"relative" or specific value' /> </label>
+                </div>
+
+                <div class="expr-builder">
+                    <label class="expr-label" for={`infix-expr-${feature.featureId}`}>Expression <span class="help-icon" title={helpText.featureExpr}>?</span></label>
+                    <input
+                        type="text"
+                        id={`infix-expr-${feature.featureId}`}
+                        class:invalid={feature.exprError}
+                        placeholder="(high - low) / 2"
+                        bind:value={feature.infixExpr}
+                        on:blur={() => handleInfixParse(fIndex)}
+                    />
+                     {#if feature.exprError}
+                        <small class="error-text expr-error-message">{feature.exprError}</small>
+                    {/if}
+                     <datalist id="expr-suggestions">
+                        {#each baseColumnOptions as col}<option value={col}>{col}</option>{/each}
+                        {#each operatorChars as op}<option value={op}>{op}</option>{/each}
+                        <option value="(">(</option>
+                        <option value=")">)</option>
+                    </datalist>
+                    <p class="hint">Available columns: {baseColumnOptions.join(', ')}. Operators: {operatorChars.join(', ')}. Use parentheses () for grouping.</p>
+                </div>
+            </div>
+        {/each}
+        <button type="button" on:click={addFeature}>＋ Add Feature</button>
+    </fieldset>
+
+    <fieldset class="section"> <legend>Filters (Conditions) <span class="help-icon" title={helpText.filters}>?</span></legend> <p class="help-text">Define conditions comparing Features to constants or other Features.</p> {#if $availableFeatures.length === 0} <p class="warning-text">You need to define at least one Feature before adding Filters.</p> {:else} {#each $editedStrategy.spec.filters as filter, fIndex (fIndex)} <div class="filter-row"> <label class="filter-label">IF</label> <select bind:value={filter.lhs} title="Left Hand Side Feature"> {#each $availableFeatures as feat} <option value={feat.id}>{feat.name} (ID: {feat.id})</option> {/each} </select> <select bind:value={filter.operator} title="Comparison Operator"> {#each operatorOptions as op} <option value={op}>{op}</option> {/each} </select> <div class="rhs-group"> <select bind:value={filter.rhs.featureId} title="Right Hand Side Feature (0 for Constant)"> <option value={0}>Constant Value</option> {#each $availableFeatures as feat} <option value={feat.id}>{feat.name} (ID: {feat.id})</option> {/each} </select> {#if filter.rhs.featureId === 0} <input class="small" type="number" step="any" bind:value={filter.rhs.const} title="Constant Value"/> {/if} <span class="scale-label">Scale:</span> <input class="tiny" type="number" step="any" bind:value={filter.rhs.scale} title="Scale Factor (applied to RHS)" /> </div> <button type="button" class="danger-text" on:click={() => removeFilter(fIndex)}>✕</button> <label class="filter-name-label">Name (Optional): <input type="text" class="small" bind:value={filter.name} placeholder="e.g., Price above average" /></label> </div> {/each} <button type="button" on:click={addFilter} disabled={$availableFeatures.length === 0}>＋ Add Filter</button> {/if} </fieldset>
+
+    <fieldset class="section"> <legend>Sort Results By <span class="help-icon" title={helpText.sortBy}>?</span></legend> {#if $availableFeatures.length === 0} <p class="warning-text">You need to define at least one Feature before setting Sort criteria.</p> {:else} <div class="layout-grid cols-2"> <label>Feature to Sort By <select bind:value={$editedStrategy.spec.sortBy.feature}> {#each $availableFeatures as feat} <option value={feat.id}>{feat.name} (ID: {feat.id})</option> {/each} </select> </label> <label>Direction <select bind:value={$editedStrategy.spec.sortBy.direction}> {#each sortDirectionOptions as dir} <option value={dir}>{dir.toUpperCase()}</option> {/each} </select> </label> </div> {/if} </fieldset>
+
+    <div class="actions">
+        <button class="primary" on:click={saveStrategy} disabled={$loading || $loadingSpec}>💾 Save Strategy</button>
+        <button type="button" on:click={cancelEdit} disabled={$loading || $loadingSpec}>Cancel</button>
+        {#if typeof $editedStrategy.strategyId === 'number'}
+            <button type="button" class="danger" on:click={() => deleteStrategyConfirm($editedStrategy.strategyId)} disabled={$loading || $loadingSpec}>Delete Strategy</button>
+        {/if}
+         {#if $loading}<span class="loading-indicator"> Saving...</span>{/if}
+    </div>
 {/if}
 
 
 <style>
   /* --- Base & General Styles --- */
-  :global(body) {
-    background-color: var(--ui-bg-primary, #f4f7f9); /* Lighter background */
-    color: var(--text-primary, #333);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"; /* System fonts */
-    font-size: 15px; /* Slightly smaller base */
-    line-height: 1.6;
-  }
-
-  input, select, textarea {
-    background: var(--ui-bg-element, #fff);
-    color: var(--text-primary, #333);
-    border: 1px solid var(--ui-border, #d1d9e0); /* Softer border */
-    padding: 0.5rem 0.75rem;
-    border-radius: 6px; /* Slightly larger radius */
-    width: 100%;
-    box-sizing: border-box;
-    margin-bottom: 0.5rem;
-    font-size: 0.9rem; /* Smaller input text */
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  }
-  input:focus, select:focus, textarea:focus {
-      border-color: var(--accent-blue, #007bff);
-      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2);
-      outline: none;
-  }
+  :global(body) { background-color: var(--ui-bg-primary, #f4f7f9); color: var(--text-primary, #333); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"; font-size: 15px; line-height: 1.6; }
+  input, select, textarea { background: var(--ui-bg-element, #fff); color: var(--text-primary, #333); border: 1px solid var(--ui-border, #d1d9e0); padding: 0.5rem 0.75rem; border-radius: 6px; width: 100%; box-sizing: border-box; margin-bottom: 0.5rem; font-size: 0.9rem; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent-blue, #007bff); box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2); outline: none; }
   input[type="checkbox"] { width: auto; margin-right: 0.5rem; vertical-align: middle; }
   input:disabled { background-color: var(--ui-bg-disabled, #e9ecef); cursor: not-allowed; }
   input.small { font-size: 0.8rem; padding: 0.25rem 0.5rem; }
   input.tiny { font-size: 0.75rem; padding: 0.1rem 0.3rem; width: 55px; }
+  /* Style for invalid input */
+  input.invalid, textarea.invalid { border-color: var(--color-down, #dc3545); background-color: var(--accent-red-light, #f8d7da); }
+  input.invalid:focus, textarea.invalid:focus { border-color: var(--color-down-dark, #a71d2a); box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.25); }
 
   label { display: block; font-weight: 500; margin-bottom: 0.25rem; font-size: 0.85rem; color: var(--text-secondary, #555); }
   label.inline-label { display: inline-flex; align-items: center; margin-bottom: 0.5rem; }
-
   button { background: var(--ui-bg-element, #fff); color: var(--text-primary, #333); border: 1px solid var(--ui-border, #d1d9e0); padding: 0.5rem 1.1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s ease; font-size: 0.9rem; vertical-align: middle; }
   button:hover { background: var(--ui-bg-hover, #f0f3f6); border-color: var(--ui-border-hover, #b8c4cf); }
   button:active { transform: translateY(1px); }
@@ -369,14 +1003,7 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
   button.danger:hover { background: rgba(220, 53, 69, 0.05); color: var(--color-down-dark, #a71d2a); border-color: var(--color-down-dark, #a71d2a); }
   button.danger-text { background: none; border: none; color: var(--color-down, #dc3545); padding: 0.25rem; margin-left: 0.5rem; font-size: 0.85rem; cursor: pointer; vertical-align: middle; }
   button.danger-text:hover { color: var(--color-down-dark, #a71d2a); text-decoration: underline; }
-
-  code {
-      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
-      background-color: var(--ui-bg-code, #e3eaf0);
-      padding: 0.1em 0.4em;
-      border-radius: 4px;
-      font-size: 0.9em;
-  }
+  code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; background-color: var(--ui-bg-code, #e3eaf0); color: var(--text-code, #212529); padding: 0.1em 0.4em; border-radius: 4px; font-size: 0.9em; } /* Added text color */
 
   /* --- Layout & Sections --- */
   .layout-grid { display: grid; gap: 1rem; margin-bottom: 1rem; }
@@ -384,26 +1011,37 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
   .layout-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
   .layout-grid.items-center { align-items: center; }
   .layout-grid.items-end { align-items: flex-end; }
-
   fieldset.section { border: 1px solid var(--ui-border, #d1d9e0); background: var(--ui-bg-element, #fff); border-radius: 8px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
   legend { font-weight: 600; font-size: 1.1rem; color: var(--text-primary, #333); padding: 0 0.5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--ui-border-light, #e9ecef); display: inline-block; }
   .subsection { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--ui-border-light, #e9ecef); }
   .subsection h4 { font-weight: 600; margin-bottom: 0.75rem; font-size: 1rem; }
   .subsection h5 { font-weight: 500; font-size: 0.8rem; margin-bottom: 0.25rem; color: var(--text-secondary); }
-
   .form-block { margin-bottom: 1rem; }
-  .actions { display: flex; gap: 1rem; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--ui-border-light, #e9ecef); }
+  .actions { display: flex; gap: 1rem; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--ui-border-light, #e9ecef); align-items: center;}
   .actions button { padding: 0.7rem 1.4rem; font-weight: 500; }
-
   .help-icon { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%; background: var(--text-secondary, #aaa); color: #fff; font-size: 10px; font-weight: bold; cursor: help; margin-left: 5px; vertical-align: middle; }
   .help-text { font-size: 0.85rem; color: var(--text-secondary, #666); margin-bottom: 1rem; margin-top: -0.75rem; }
   .hint { font-size: 0.75rem; color: var(--text-secondary, #777); font-style: italic; margin-top: 0.25rem; }
   .warning-text { color: var(--accent-orange, #fd7e14); font-size: 0.85rem; font-weight: 500; }
   .no-items-note { font-style: italic; color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.5rem; }
-  .loading-container { padding: 2rem; text-align: center; }
+  .loading-container { padding: 2rem; text-align: center; color: var(--text-secondary); }
+  .loading-indicator { font-style: italic; color: var(--text-secondary); margin-left: 1rem; }
+  .loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.7); display: flex; align-items: center; justify-content: center; z-index: 100; font-size: 1.2rem; color: var(--text-primary); }
+  /* General error message style */
+  .error-message { color: var(--color-down-dark, #721c24); background-color: var(--accent-red-light, #f8d7da); border: 1px solid var(--accent-red, #dc3545); padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem; }
+  /* Specific error text style (e.g., for inline errors) */
+   small.error-text { display: block; color: var(--color-down, #dc3545); font-size: 0.75rem; margin-top: 0.1rem; margin-bottom: 0.25rem; }
+   .feature-expr-error { margin-top: 0.25rem; }
+   .expr-error-message { margin-top: 0.1rem; font-size: 0.8rem; }
+
+  .error-container { padding: 1rem; border: 1px solid var(--color-down, #dc3545); background: var(--accent-red-light, #f8d7da); border-radius: 8px; margin-bottom: 1rem; }
+  .error-container h2 { color: var(--color-down-dark, #721c24); margin-top: 0; }
+  .error-container .error-message { /* Use general style */ }
+  .error-container button { margin-right: 0.5rem; }
+
 
   /* --- List View --- */
-  .toolbar { margin-bottom: 1rem; }
+  .toolbar { margin-bottom: 1rem; display: flex; align-items: center; gap: 1rem; }
   .table-container { overflow-x: auto; border: 1px solid var(--ui-border, #d1d9e0); border-radius: 8px; background-color: var(--ui-bg-element, #fff); }
   table { width: 100%; border-collapse: collapse; }
   th, td { padding: 0.8rem 1rem; border-bottom: 1px solid var(--ui-border, #d1d9e0); text-align: left; vertical-align: middle; font-size: 0.85rem; }
@@ -413,15 +1051,15 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
   tbody tr.clickable-row { cursor: pointer; }
   tbody tr.clickable-row:hover { background-color: var(--ui-bg-hover, #eef2f5); }
   .alert-status { font-weight: 500; white-space: nowrap; }
-  .alert-status > span { vertical-align: middle; margin-right: 0.25rem; } /* If using icons */
 
   /* --- Detail View --- */
   .detail-view-container { padding: 1rem; }
-  .detail-view-header { display: flex; justify-content: space-between; align-items: flex-start; /* Align items top */ margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--ui-border-light, #e9ecef); flex-wrap: wrap; gap: 0.5rem; }
+  .detail-view-container.partial-info { opacity: 0.7; filter: grayscale(50%); }
+  .detail-view-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--ui-border-light, #e9ecef); flex-wrap: wrap; gap: 0.5rem; }
   .detail-view-title h2 { margin: 0 0 0.25rem 0; font-size: 1.8rem; font-weight: 600; line-height: 1.2; color: var(--text-primary); }
-  .detail-view-meta { font-size: 0.8rem; color: var(--text-secondary, #666); display: flex; flex-wrap: wrap; gap: 0 0.75rem; /* Horizontal gap only */ }
+  .detail-view-meta { font-size: 0.8rem; color: var(--text-secondary, #666); display: flex; flex-wrap: wrap; gap: 0 0.75rem; }
   .detail-view-meta span { white-space: nowrap; }
-  .detail-view-actions { display: flex; gap: 0.5rem; flex-shrink: 0; /* Prevent shrinking */ align-self: flex-start; /* Align with title */ }
+  .detail-view-actions { display: flex; gap: 0.5rem; flex-shrink: 0; align-self: flex-start; }
   .detail-section-card { background-color: var(--ui-bg-element, #fff); border: 1px solid var(--ui-border-light, #e3eaf0); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.25rem; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
   .detail-section-card h3 { font-size: 1.15rem; font-weight: 600; margin: 0 0 0.75rem 0; color: var(--text-primary); display: flex; align-items: center; justify-content: space-between; }
   .count-badge { font-size: 0.8rem; font-weight: normal; background-color: var(--ui-bg-secondary, #e9ecef); color: var(--text-secondary, #555); padding: 0.15rem 0.5rem; border-radius: 10px; }
@@ -435,14 +1073,19 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
   .detail-list-item strong { color: var(--text-primary); font-weight: 500; }
   .feature-list .detail-list-item { padding: 0.6rem 0; }
   .feature-name { display: block; margin-bottom: 0.25rem; font-size: 1rem; }
-  .feature-details { display: flex; gap: 1rem; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; }
+  .feature-details { display: flex; gap: 1rem; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; flex-wrap: wrap; }
   .feature-expr { font-size: 0.85rem; margin-top: 0.25rem; }
-  .feature-expr code { background-color: transparent; padding: 0; }
+  /* Ensure code block in detail view uses default code style */
+  .feature-expr code {
+    /* Removed background-color: transparent and padding: 0 */
+    /* Inherits background, color, padding from global 'code' style */
+     white-space: normal; /* Allow wrapping */
+     word-break: break-word; /* Break long words if needed */
+  }
   .filter-name { display: block; margin-bottom: 0.25rem; }
-  .filter-condition code { display: block; background-color: var(--ui-bg-code, #e3eaf0); padding: 0.5rem; border-radius: 4px; white-space: normal; }
+  .filter-condition code { display: block; padding: 0.5rem; border-radius: 4px; white-space: normal; } /* Keep this code block styled */
 
   /* --- Edit View Specific --- */
-  /* (Styles for elements primarily used in Edit View, kept from previous version) */
   .pill-group { margin-bottom: 0.5rem; }
   .pill-group input.small { margin-top: 0.5rem; }
   .pill { background: var(--ui-bg-hover, #e9ecef); color: var(--text-primary, #333); display: inline-block; padding: 0.25rem 0.75rem; border-radius: 16px; margin: 0.25rem 0.25rem 0.25rem 0; cursor: pointer; font-size: 0.8rem; border: 1px solid var(--ui-border-light, #dee2e6); transition: background-color 0.15s ease-in-out; }
@@ -451,22 +1094,16 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
   .universe-filter-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
   .universe-filter-header select { flex-grow: 1; margin-right: 1rem; margin-bottom: 0; }
   .feature-row { border: 1px solid var(--ui-border-light, #e9ecef); padding: 1rem; margin-bottom: 1rem; border-radius: 6px; background-color: var(--ui-bg-element, #fff); }
-  .feature-id-remove { text-align: right; }
-  .feature-id { display: none; /* Hide in Edit view too */ }
+  .feature-id-remove { text-align: right; display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem;}
+  .feature-id-display { font-size: 0.8rem; color: var(--text-secondary); }
   .expr-builder { margin-top: 1rem; }
   .expr-label { font-weight: 500; display: block; margin-bottom: 0.25rem; }
-  .expression-display { border: 1px solid var(--ui-border, #ced4da); background-color: var(--ui-bg-secondary, #f8f9fa); padding: 0.5rem; border-radius: 4px; min-height: 40px; margin-bottom: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
-  .expr-element { display: inline-block; border: 1px solid var(--ui-border-hover, #adb5bd); padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.8rem; background-color: var(--ui-bg-element, #fff); cursor: pointer; transition: background-color 0.15s ease-in-out; white-space: nowrap; }
-  .expr-element:hover { background-color: var(--accent-red-light, #f8d7da); border-color: var(--accent-red, #dc3545); }
-  .expr-element.operator { background-color: var(--accent-blue-light, #cfe2ff); border-color: var(--accent-blue, #0d6efd); font-weight: bold; }
-  .expr-element.operator:hover { background-color: var(--accent-red-light, #f8d7da); border-color: var(--accent-red, #dc3545); }
-  .expression-input-area { display: grid; grid-template-columns: 1fr; gap: 0.5rem; /* Stack input and quick add */ }
-  .expression-input-area .quick-add { grid-row: 2; /* Ensure quick add is below */ }
-  .quick-add { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
-  .quick-add-btn { padding: 0.25rem 0.5rem; font-size: 0.75rem; background-color: var(--ui-bg-element, #e9ecef); border: 1px solid var(--ui-border, #ced4da); }
-  .quick-add-btn:hover { background-color: var(--ui-bg-hover, #dee2e6); }
-  .quick-add-btn.operator { background-color: var(--accent-blue-light, #cfe2ff); border-color: var(--accent-blue, #0d6efd); font-weight: bold; }
-  .quick-add-btn.operator:hover { background-color: var(--accent-blue, #0d6efd); color: #fff; }
+  /* Remove old RPN display/input styles */
+  /* .expression-display { ... } */
+  /* .expr-element { ... } */
+  /* .expression-input-area { ... } */
+  /* .quick-add { ... } */
+
   .filter-row { display: grid; grid-template-columns: auto minmax(120px, 1fr) auto minmax(180px, 1.5fr) auto; gap: 0.75rem; align-items: center; margin-bottom: 1rem; padding: 0.75rem; border: 1px solid var(--ui-border-light, #e9ecef); border-radius: 6px; background-color: var(--ui-bg-element, #fff); }
   .filter-label { font-size: 0.85rem; font-weight: bold; margin-bottom: 0; }
   .filter-row select, .filter-row .rhs-group { margin-bottom: 0; }
