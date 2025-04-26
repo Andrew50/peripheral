@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v4"
 
 	"github.com/jackc/pgtype"
-	"github.com/jackc/pgx/v4"
 )
 
 type RunBacktestArgs struct {
@@ -440,7 +439,7 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 		}
 
 		// Process all *other* fields dynamically using the keys from the recordMap
-		for key, value := range recordMap {
+		for key, _ := range recordMap {
 			// Skip already handled standard fields
 			if key == "ticker" || key == "securityid" || (key == "timestamp" && processedTimestamp) {
 				continue
