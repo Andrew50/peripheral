@@ -1367,6 +1367,12 @@ func initTools() {
 			Query:    true,
 			Api:      false,
 		},
+		"getInitialQuerySuggestions": {
+			FunctionDeclaration: nil,
+			Function:            GetInitialQuerySuggestions,
+			Query:               false,
+			Api:                 true,
+		},
 	}
 
 }
