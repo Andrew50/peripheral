@@ -5,9 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
+
+	"backend/socket"
 
 	"google.golang.org/genai"
 )
@@ -1019,6 +1022,19 @@ func processRoundWithGemini(ctx context.Context, conn *utils.Conn, prompt string
 	return response.FunctionCalls, nil
 }
 
+// formatStatusMessage replaces placeholders like {key} with values from the args map.
+func formatStatusMessage(message string, argsMap map[string]interface{}) string {
+	re := regexp.MustCompile(`{([^}]+)}`)
+	formattedMessage := re.ReplaceAllStringFunc(message, func(match string) string {
+		key := match[1 : len(match)-1] // Extract key from {key}
+		if val, ok := argsMap[key]; ok {
+			return fmt.Sprintf("%v", val) // Convert value to string
+		}
+		return match // Return original placeholder if key not found
+	})
+	return formattedMessage
+}
+
 // executeGeminiFunctionCalls executes the function calls returned by Gemini
 func executeGeminiFunctionCalls(ctx context.Context, conn *utils.Conn, userID int, functionCalls []FunctionCall) ([]ExecuteResult, error) {
 	var results []ExecuteResult
@@ -1026,22 +1042,34 @@ func executeGeminiFunctionCalls(ctx context.Context, conn *utils.Conn, userID in
 	for _, fc := range functionCalls {
 		fmt.Printf("Executing function %s with args: %s\n", fc.Name, string(fc.Args))
 
-		// Parse arguments into a map for storage
-		var args interface{}
-		if err := json.Unmarshal(fc.Args, &args); err != nil {
-			fmt.Printf("Warning: Could not parse args for storage: %v\n", err)
+		// Parse arguments into a map for storage and formatting
+		var argsMap map[string]interface{}
+		if err := json.Unmarshal(fc.Args, &argsMap); err != nil {
+			// If unmarshalling into a map fails, try interface{} for logging purposes
+			var argsForLog interface{}
+			_ = json.Unmarshal(fc.Args, &argsForLog) // Ignore error here
+			fmt.Printf("Warning: Could not parse args into map for function %s: %v. Args: %s\n", fc.Name, err, string(fc.Args))
+			argsMap = make(map[string]interface{}) // Use an empty map if parsing failed
+		} else {
+			// If parsing succeeds, also keep the raw interface{} form for ExecuteResult
+			var argsForLog interface{}
+			_ = json.Unmarshal(fc.Args, &argsForLog)
 		}
 
-		// Check if the function exists in Tpols map
+		// Check if the function exists in Tools map
 		tool, exists := GetTools(false)[fc.Name]
 		if !exists {
 			results = append(results, ExecuteResult{
 				FunctionName: fc.Name,
 				Error:        fmt.Sprintf("function '%s' not found", fc.Name),
-				Args:         args,
+				Args:         argsMap, // Log the parsed map if available
 			})
 			continue
 		}
+
+		// ---> Format and send status update to the client <---
+		formattedMsg := formatStatusMessage(tool.StatusMessage, argsMap)
+		socket.SendFunctionStatus(userID, formattedMsg)
 
 		// Execute the function
 		result, err := tool.Function(conn, userID, fc.Args)
@@ -1050,14 +1078,14 @@ func executeGeminiFunctionCalls(ctx context.Context, conn *utils.Conn, userID in
 			results = append(results, ExecuteResult{
 				FunctionName: fc.Name,
 				Error:        err.Error(),
-				Args:         args,
+				Args:         argsMap, // Log the parsed map
 			})
 		} else {
 			fmt.Printf("Function %s executed successfully\n", fc.Name)
 			results = append(results, ExecuteResult{
 				FunctionName: fc.Name,
 				Result:       result,
-				Args:         args,
+				Args:         argsMap, // Log the parsed map
 			})
 		}
 	}
