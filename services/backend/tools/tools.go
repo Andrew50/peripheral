@@ -1325,7 +1325,7 @@ func initTools() {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name: "getStrategyFromNaturalLanguage",
 				Description: "Create (or overwrite) a strategy from a natural‑language description. " +
-					"IF YOU USE THIS FUNCTION, USE THE USER'S ORIGINAL QUERY AS IS. Pass strategyId = -1 to create a new strategy.",
+					"IF YOU USE THIS FUNCTION, USE THE USER'S ORIGINAL QUERY AS IS. Pass strategyId = -1 to create a new strategy. This function will return the strategyId of the created strategy.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{

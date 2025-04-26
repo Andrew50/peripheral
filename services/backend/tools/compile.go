@@ -175,7 +175,6 @@ func buildUniverseConditions(u *Universe) ([]string, error) {
 // Internal helpers – features --------------------------------------------------
 // -----------------------------------------------------------------------------
 
-// compileFeatureExpr now works with the new ExprPart array format instead of a string expression
 func compileFeatureExpr(f Feature, partitionKey string) (string, error) {
     const rowAlias = "u" // the alias we use in the features CTE
     
@@ -184,21 +183,38 @@ func compileFeatureExpr(f Feature, partitionKey string) (string, error) {
         return "", fmt.Errorf("empty expression")
     }
     
-    // Build the SQL expression from the ExprPart array
-    var sqlExpr strings.Builder
+    // Implement RPN evaluation using a stack
+    var stack []string
     
-    // Add the first part (no operator)
-    firstPart := f.Expr[0]
-    sqlExpr.WriteString(fmt.Sprintf("%s.%s", rowAlias, strings.ToLower(firstPart.Column)))
-    
-    // Process the remaining parts with their operators
-    for i := 1; i < len(f.Expr); i++ {
-        part := f.Expr[i]
-        sqlExpr.WriteString(fmt.Sprintf(" %s %s.%s", 
-            string(part.ExprOperator), 
-            rowAlias, 
-            strings.ToLower(part.Column)))
+    for _, part := range f.Expr {
+        if part.Type == "column" {
+            // Push column reference to stack
+            colName := strings.ToLower(part.Value)
+            stack = append(stack, fmt.Sprintf("%s.%s", rowAlias, colName))
+        } else if part.Type == "operator" {
+            // Need at least two operands for binary operation
+            if len(stack) < 2 {
+                return "", fmt.Errorf("not enough operands for operator '%s'", part.Value)
+            }
+            
+            // Pop the two top operands
+            idx := len(stack) - 2
+            left := stack[idx]
+            right := stack[idx+1]
+            stack = stack[:idx]
+            
+            // Create the operation expression and push result back to stack
+            expr := fmt.Sprintf("(%s %s %s)", left, part.Value, right)
+            stack = append(stack, expr)
+        }
     }
+    
+    // After processing all parts, we should have exactly one value on the stack
+    if len(stack) != 1 {
+        return "", fmt.Errorf("invalid RPN expression: does not evaluate to a single result")
+    }
+    
+    expr := stack[0]
     
     // Extract the partition key column
     pkCol := partitionKey
@@ -208,14 +224,11 @@ func compileFeatureExpr(f Feature, partitionKey string) (string, error) {
     
     // Wrap smoothing window (simple moving average via AVG)
     if f.Window > 1 {
-        sqlExpr = strings.Builder{}
-        sqlExpr.WriteString(fmt.Sprintf(
+        expr = fmt.Sprintf(
             "AVG((%s)) OVER (PARTITION BY %s.%s ORDER BY %s.timestamp ROWS BETWEEN %d PRECEDING AND CURRENT ROW)",
-            sqlExpr.String(), rowAlias, pkCol, rowAlias, f.Window-1,
-        ))
+            expr, rowAlias, pkCol, rowAlias, f.Window-1,
+        )
     }
-    
-    expr := sqlExpr.String()
     
     // Output post‑processing
     switch f.Output {

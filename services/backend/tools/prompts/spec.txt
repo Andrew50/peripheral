@@ -30,8 +30,8 @@ You will create JSON objects with the following structure:
         "output": "",
         "expr": [
           {
-            "column": "",
-            "exprOperator": ""
+            "type": "",
+            "value": ""
           }
         ],
         "window": 1
@@ -97,13 +97,16 @@ You will create JSON objects with the following structure:
     - "rankn": Normalized rank (0-1)
     - "rankp": Percentile rank (0-100)
 
-- **expr**: Array of expression parts that make up the feature calculation
-  - **column**: Base column to use 
-    - OHLCV Features: "open", "high", "low", "close", "volume"
-    - Fundamental Features: "market_cap", "shares_outstanding", "eps", "revenue", "dividend", "social_sentiment", "fear_greed", "short_interest", "borrow_fee"
-    - IMPORTANT: Only valid column names are accepted, numeric constants are NOT allowed
-  - **exprOperator**: Arithmetic operator to combine with next part (not used for first part)
-    - Valid values: "+", "-", "*", "/", "^"
+- **expr**: Array of expression elements that make up the feature calculation in Reverse Polish Notation (postfix)
+  - **type**: The type of expression element
+    - Valid values: "column", "operator"
+  - **value**: The actual value of the expression element
+    - For type "column": Any valid column name
+      - OHLCV Features: "open", "high", "low", "close", "volume"
+      - Fundamental Features: "market_cap", "shares_outstanding", "eps", "revenue", "dividend", "social_sentiment", "fear_greed", "short_interest", "borrow_fee"
+    - For type "operator": Any valid arithmetic operator
+      - Valid values: "+", "-", "*", "/", "^"
+    - IMPORTANT: Numeric constants are NOT allowed as columns, use filter scaling instead
 
 - **window**: Smoothing window to apply (default: 1 for no smoothing)
 
@@ -127,27 +130,42 @@ You will create JSON objects with the following structure:
 
 ## Expression Format
 
-The expression system uses a structured array format:
+The expression system uses Reverse Polish Notation (postfix), where operators follow their operands:
 ```json
 "expr": [
   {
-    "column": "close",
-    "exprOperator": ""
+    "type": "column",
+    "value": "open"
   },
   {
-    "column": "open",
-    "exprOperator": "-"
+    "type": "column",
+    "value": "close"
   },
   {
-    "column": "open",
-    "exprOperator": "/"
+    "type": "operator",
+    "value": "-"
+  },
+  {
+    "type": "column",
+    "value": "close"
+  },
+  {
+    "type": "operator",
+    "value": "/"
   }
 ]
 ```
 
+This expression represents: (open - close) / close. The calculation follows these steps:
+1. Push "open" onto the stack
+2. Push "close" onto the stack
+3. Apply "-" operator: Pop the top two values, subtract, and push the result (open-close)
+4. Push "close" onto the stack
+5. Apply "/" operator: Pop the top two values, divide, and push the result ((open-close)/close)
+
 ## WARNING: Expression System Limitations
 
-The expression system has a key limitation - it only accepts valid column names in the "column" field. Numeric values like "100" are not valid columns and will cause validation errors.
+The expression system has a key limitation - it only accepts valid column names in the "value" field when type is "column". Numeric values like "100" are not valid and will cause validation errors.
 
 For percentage calculations and other operations requiring numeric constants:
 1. Use the "scale" parameter in filters to multiply results
@@ -157,8 +175,8 @@ For percentage calculations and other operations requiring numeric constants:
 INCORRECT (will cause validation error):
 ```json
 {
-  "column": "100",
-  "exprOperator": "*"
+  "type": "column",
+  "value": "100"
 }
 ```
 
@@ -168,16 +186,24 @@ Calculate the base ratio in the expression, then use scale in the filter to mult
 // Feature expression:
 "expr": [
   {
-    "column": "close",
-    "exprOperator": ""
+    "type": "column",
+    "value": "open"
   },
   {
-    "column": "open",
-    "exprOperator": "-"
+    "type": "column",
+    "value": "close"
   },
   {
-    "column": "open",
-    "exprOperator": "/"
+    "type": "operator",
+    "value": "-"
+  },
+  {
+    "type": "column",
+    "value": "close"
+  },
+  {
+    "type": "operator",
+    "value": "/"
   }
 ]
 
@@ -250,16 +276,24 @@ Response:
         "output": "raw",
         "expr": [
           {
-            "column": "open",
-            "exprOperator": ""
+            "type": "column",
+            "value": "open"
           },
           {
-            "column": "close",
-            "exprOperator": "-"
+            "type": "column",
+            "value": "close"
           },
           {
-            "column": "close",
-            "exprOperator": "/"
+            "type": "operator",
+            "value": "-"
+          },
+          {
+            "type": "column",
+            "value": "close"
+          },
+          {
+            "type": "operator",
+            "value": "/"
           }
         ],
         "window": 1
@@ -310,16 +344,24 @@ Response:
         "output": "raw",
         "expr": [
           {
-            "column": "close",
-            "exprOperator": ""
+            "type": "column",
+            "value": "close"
           },
           {
-            "column": "open",
-            "exprOperator": "-"
+            "type": "column",
+            "value": "open"
           },
           {
-            "column": "open",
-            "exprOperator": "/"
+            "type": "operator",
+            "value": "-"
+          },
+          {
+            "type": "column",
+            "value": "open"
+          },
+          {
+            "type": "operator",
+            "value": "/"
           }
         ],
         "window": 1
@@ -334,12 +376,16 @@ Response:
         "output": "raw",
         "expr": [
           {
-            "column": "high",
-            "exprOperator": ""
+            "type": "column",
+            "value": "high"
           },
           {
-            "column": "low",
-            "exprOperator": "-"
+            "type": "column",
+            "value": "low"
+          },
+          {
+            "type": "operator",
+            "value": "-"
           }
         ],
         "window": 14
@@ -391,16 +437,24 @@ Response:
           "output": "raw",
           "expr": [
             {
-              "column": "open",
-              "exprOperator": ""
+              "type": "column",
+              "value": "open"
             },
             {
-              "column": "close",
-              "exprOperator": "-"
+              "type": "column",
+              "value": "close"
             },
             {
-              "column": "close",
-              "exprOperator": "/"
+              "type": "operator",
+              "value": "-"
+            },
+            {
+              "type": "column",
+              "value": "close"
+            },
+            {
+              "type": "operator",
+              "value": "/"
             }
           ],
           "window": 1
@@ -415,12 +469,16 @@ Response:
           "output": "raw",
           "expr": [
             {
-              "column": "high",
-              "exprOperator": ""
+              "type": "column",
+              "value": "high"
             },
             {
-              "column": "low",
-              "exprOperator": "-"
+              "type": "column",
+              "value": "low"
+            },
+            {
+              "type": "operator",
+              "value": "-"
             }
           ],
           "window": 20
@@ -465,8 +523,8 @@ Response:
           "output": "raw",
           "expr": [
             {
-              "column": "high",
-              "exprOperator": ""
+              "type": "column",
+              "value": "high"
             }
           ],
           "window": 1
@@ -481,8 +539,8 @@ Response:
           "output": "raw",
           "expr": [
             {
-              "column": "close",
-              "exprOperator": ""
+              "type": "column",
+              "value": "close"
             }
           ],
           "window": 1
