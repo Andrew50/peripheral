@@ -1,5 +1,4 @@
-/* Base button styles */
-button {
+/* Base button styles */ button {
 	padding: 8px 16px;
 	background: var(--ui-bg-secondary);
 	border: 1px solid var(--ui-border);
