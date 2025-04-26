@@ -106,7 +106,6 @@ ohlcv tables: ohlcv_1, ohlcv_1h, ohlcv_1d, ohlcv_1w
 
 */
 
-//currently available
 type FeatureId int
 type OHLCVFeature string //open, high, low, close
 type FundamentalFeature string //market_cap, total_shares, active //eventually eps, revenue, news stuff
@@ -155,7 +154,6 @@ type Universe struct {
 	EndTime        time.Time        `json:"endTime"`       // Intraday end time for the strategy
 }
 
-// FeatureSource
 type FeatureSource struct {
 	Field   SecurityFeature `json:"field"`   // 
 	Value   string          `json:"value"`   // either "relative" meaning get the value from the security out of the universe, or a specific string value.
@@ -663,12 +661,6 @@ func validateFilter(f *Filter, context string, featureIDs map[int]struct{}, vali
         }
     }
     
-    // Ensure scale defaults to defaultRhsScale if not set and RHS is present
-    if (hasFeature || hasConst) && f.RHS.Scale == 0 {
-        // In the original, this would modify the Filter directly
-        // f.RHS.Scale = defaultRhsScale
-        // In validation-only code, we might just want to check this
-    }
     
     if len(errs) > 0 {
         return errors.New(strings.Join(errs, "; "))
