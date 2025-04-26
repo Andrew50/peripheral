@@ -1,5 +1,9 @@
 -- Migration: 011_change_version_to_numeric
 -- Description: Changes schema_versions.version from VARCHAR to a numeric type
+
+-- Drop the temporary table if it exists from a previous failed attempt
+DROP TABLE IF EXISTS schema_versions_new;
+
 -- First create a temporary table with the new structure
 CREATE TABLE schema_versions_new (
     version NUMERIC PRIMARY KEY,
