@@ -8,33 +8,54 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v4"
 	"math"
+	"math/big" // <-- Added for big.Float in processNumericValue
 	"strconv"
 	"strings"
 	"time"
+	// "sort" // <-- Might be needed if sorting columnNames in formatBacktestResults is desired
 )
 
 type RunBacktestArgs struct {
-	StrategyId    int  `json:"strategyId"`
-	ReturnResults bool `json:"returnResults"`
-	ReturnWindow  int  `json:"returnWindow"` // Added return window
+	StrategyId    int   `json:"strategyId"`
+	ReturnResults bool  `json:"returnResults"`
+	ReturnWindows []int `json:"returnWindows"` // Changed to slice of ints
 }
 
-// RunBacktest executes a backtest for the given strategy and calculates future returns
+// RunBacktest executes a backtest for the given strategy and calculates future returns for multiple windows
 func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, error) {
 	var args RunBacktestArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
-	// Validate ReturnWindow
-	if args.ReturnWindow <= 0 {
-		// Provide a default or return an error if 0 or negative is invalid
-		// For now, we'll proceed but the calculation won't make sense.
-		// Consider adding validation: return nil, fmt.Errorf("returnWindow must be positive")
-		fmt.Printf("Warning: returnWindow is %d, return calculation might not be meaningful.\n", args.ReturnWindow)
+	// Optional: Validate ReturnWindows - Ensure they are positive? Remove duplicates?
+	validWindows := []int{}
+	if args.ReturnWindows != nil {
+		for _, w := range args.ReturnWindows {
+			if w > 0 {
+				validWindows = append(validWindows, w) // Keep only positive windows
+			} else {
+				fmt.Printf("Warning: Skipping non-positive return window: %d\n", w)
+			}
+		}
+		// Remove duplicates (optional)
+		// uniqueWindows := make(map[int]bool)
+		// tempWindows := []int{}
+		// for _, w := range validWindows {
+		//  if !uniqueWindows[w] {
+		//      uniqueWindows[w] = true
+		//      tempWindows = append(tempWindows, w)
+		//  }
+		// }
+		// validWindows = tempWindows
+		args.ReturnWindows = validWindows // Use the filtered list
 	}
 
+
 	fmt.Println("backtesting strategyId:", args.StrategyId)
+	if len(args.ReturnWindows) > 0 {
+		fmt.Printf("Will calculate future returns for windows (days): %v\n", args.ReturnWindows)
+	}
 
 	backtestJSON, err := _getStrategySpec(conn, args.StrategyId, userId) // get spec from db using helper
 	if err != nil {
@@ -71,14 +92,11 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 		return nil, fmt.Errorf("error scanning backtest results: %v", err)
 	}
 
-	// --- BEGIN: Calculate N-Day Returns ---
-	if args.ReturnWindow > 0 && len(records) > 0 {
-		fmt.Printf("Calculating %d-Day Returns for %d results...\n", args.ReturnWindow, len(records))
-		returnColumnName := fmt.Sprintf("%d Day Return %%", args.ReturnWindow)
+	// --- BEGIN: Calculate N-Day Returns for Multiple Windows ---
+	if len(args.ReturnWindows) > 0 && len(records) > 0 {
+		fmt.Printf("Calculating %d-Day Returns for %d results across %d windows...\n", len(args.ReturnWindows), len(records), len(args.ReturnWindows))
 
-		// Prepare the query once
-		// Fetches the close price at the start timestamp and the first close price
-		// on or after the timestamp + returnWindow days.
+		// Prepare the query once (remains the same structure)
 		returnQuery := `
             WITH start_data AS (
                 SELECT timestamp, close
@@ -103,43 +121,25 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
             FROM start_data sd
             CROSS JOIN future_price fp; -- Use CROSS JOIN as future_price returns at most one row
         `
-		// Use CROSS JOIN because future_price is guaranteed to have 0 or 1 row.
-		// If we need to handle cases where start_data might be missing, a different join/structure might be needed.
-		// A simpler alternative if start_data is guaranteed by the backtest:
-		/*
-			WITH target_date AS (
-				SELECT ($2::timestamp + $3 * interval '1 day')::date as date -- Calculate target date
-			), future_price AS (
-				SELECT close
-				FROM ohlcv_1d
-				WHERE securityid = $1
-				AND timestamp::date >= (SELECT date FROM target_date)
-				ORDER BY timestamp ASC
-				LIMIT 1
-			)
-			SELECT
-				t1.close AS start_close,
-				fp.close AS end_close
-			FROM ohlcv_1d t1
-			LEFT JOIN future_price fp ON true -- Left join guarantees the start row is returned
-			WHERE t1.securityid = $1
-			AND t1.timestamp = $2
-			LIMIT 1;
-		*/
 
+		// Loop through each result from the initial backtest
 
 		for _, record := range records {
-			// Extract necessary info, handling potential type issues
+			// Extract necessary info once per record
 			secIdAny, okSecId := record["securityid"]
 			tsAny, okTs := record["timestamp"]
 
 			if !okSecId || !okTs {
 				fmt.Println("Warning: Skipping return calculation for a record due to missing securityid or timestamp.")
-				record[returnColumnName] = nil // Set return to nil if key info is missing
+				// Set all potential return columns to nil for this record
+				for _, window := range args.ReturnWindows {
+					returnColumnName := fmt.Sprintf("%d Day Return %%", window)
+					record[returnColumnName] = nil
+				}
 				continue
 			}
 
-			// Convert securityId to int (adjust type if necessary, e.g., int64)
+			// Convert securityId once per record
 			var securityId int
 			switch v := secIdAny.(type) {
 			case int:
@@ -149,62 +149,100 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 			case int64:
 				securityId = int(v) // Potential overflow if original is large int64
 			case float64: // Handle if ID comes as float
-			    securityId = int(v)
+				securityId = int(v)
 			default:
-				fmt.Printf("Warning: Skipping return calculation for a record due to unexpected securityid type: %T\n", secIdAny)
-				record[returnColumnName] = nil
+				fmt.Printf("Warning: Skipping return calculation for a record due to unexpected securityid type: %T. Value: %v\n", secIdAny, secIdAny)
+				for _, window := range args.ReturnWindows {
+					returnColumnName := fmt.Sprintf("%d Day Return %%", window)
+					record[returnColumnName] = nil
+				}
 				continue
 			}
 
-
-			// Convert timestamp to time.Time
+			// Convert timestamp once per record
 			var startTime time.Time
 			switch t := tsAny.(type) {
 			case time.Time:
 				startTime = t
-			// Add handling for other potential timestamp representations if needed (e.g., string, int64)
+			case string: // Handle potential string timestamp from initial query
+				parsedTime, err := time.Parse(time.RFC3339Nano, t)
+				if err != nil {
+					parsedTime, err = time.Parse(time.RFC3339, t)
+				}
+				if err == nil {
+					startTime = parsedTime
+				} else {
+					fmt.Printf("Warning: Could not parse timestamp string '%s' for secId %d: %v\n", t, securityId, err)
+					for _, window := range args.ReturnWindows {
+						returnColumnName := fmt.Sprintf("%d Day Return %%", window)
+						record[returnColumnName] = nil
+					}
+					continue
+				}
 			default:
-				fmt.Printf("Warning: Skipping return calculation for record with securityid %d due to unexpected timestamp type: %T\n", securityId, tsAny)
-				record[returnColumnName] = nil
+				fmt.Printf("Warning: Skipping return calculation for record with securityid %d due to unexpected timestamp type: %T. Value: %v\n", securityId, tsAny, tsAny)
+				for _, window := range args.ReturnWindows {
+					returnColumnName := fmt.Sprintf("%d Day Return %%", window)
+					record[returnColumnName] = nil
+				}
 				continue
 			}
 
-			// --- Execute query to get start and end prices ---
-			var startClose, endClose sql.NullFloat64 // Use NullFloat64 for safety
-
-			err := conn.DB.QueryRow(ctx, returnQuery, securityId, startTime, args.ReturnWindow).Scan(&startClose, &endClose)
-
-			if err != nil {
-				if err == pgx.ErrNoRows {
-					// This case means the *starting* price wasn't found in ohlcv_1d, which is odd if the backtest found it.
-					fmt.Printf("Warning: No starting price found in ohlcv_1d for securityId %d at %v. Setting return to nil.\n", securityId, startTime)
+			// Check for zero time
+			if startTime.IsZero() {
+				fmt.Printf("Warning: Skipping return calculation for record with securityid %d due to zero timestamp.\n", securityId)
+				for _, window := range args.ReturnWindows {
+					returnColumnName := fmt.Sprintf("%d Day Return %%", window)
 					record[returnColumnName] = nil
+				}
+				continue
+			}
+
+
+			// Now, loop through each requested return window for the current record
+			for _, window := range args.ReturnWindows {
+				returnColumnName := fmt.Sprintf("%d Day Return %%", window)
+
+				// --- Execute query to get start and end prices for this specific window ---
+				var startClose, endClose sql.NullFloat64 // Use NullFloat64 for safety
+
+				err := conn.DB.QueryRow(ctx, returnQuery, securityId, startTime, window).Scan(&startClose, &endClose)
+
+				if err != nil {
+					if err == pgx.ErrNoRows {
+						// This usually means start_data or future_price CTE returned no rows.
+						// Check if start price exists separately for better debugging if needed.
+						fmt.Printf("Warning: No price data found (start or %d days later) for securityId %d at %v. Setting '%s' to nil.\n", window, securityId, startTime, returnColumnName)
+						record[returnColumnName] = nil
+					} else {
+						// Other potential errors (DB connection, query syntax)
+						fmt.Printf("Error fetching %d-day return data for securityId %d at %v: %v. Setting '%s' to nil.\n", window, securityId, startTime, err, returnColumnName)
+						record[returnColumnName] = nil
+					}
+					continue // Continue to the next window for this record
+				}
+
+				// --- Calculate percentage change for this window ---
+				if startClose.Valid && endClose.Valid && startClose.Float64 != 0 {
+					percentChange := ((endClose.Float64 - startClose.Float64) / startClose.Float64) * 100
+					// Round to reasonable precision, e.g., 2 decimal places
+					record[returnColumnName] = math.Round(percentChange*100) / 100
 				} else {
-					// Other potential errors (DB connection, query syntax)
-					fmt.Printf("Error fetching return data for securityId %d at %v: %v. Setting return to nil.\n", securityId, startTime, err)
-					record[returnColumnName] = nil
+					// Handle cases: start price missing, end price missing, or start price is 0
+					// Log specific reason for nil result for this window
+					if !startClose.Valid {
+						// This is less likely if the cross join query succeeded without pgx.ErrNoRows, but check anyway.
+						fmt.Printf("Info: Start price missing for securityId %d at %v. Return '%s' set to nil.\n", securityId, startTime, returnColumnName)
+					} else if !endClose.Valid {
+						fmt.Printf("Info: End price missing (%d days later) for securityId %d at %v. Return '%s' set to nil.\n", window, securityId, startTime, returnColumnName)
+					} else if startClose.Float64 == 0 {
+						fmt.Printf("Info: Start price is 0 for securityId %d at %v. Cannot calculate %d-day return, setting '%s' to nil.\n", securityId, startTime, window, returnColumnName)
+					}
+					record[returnColumnName] = nil // Assign nil if calculation cannot be done
 				}
-				continue // Move to the next record
-			}
-
-			// --- Calculate percentage change ---
-			if startClose.Valid && endClose.Valid && startClose.Float64 != 0 {
-				percentChange := ((endClose.Float64 - startClose.Float64) / startClose.Float64) * 100
-				// Round to reasonable precision, e.g., 2 decimal places
-				record[returnColumnName] = math.Round(percentChange*100) / 100
-			} else {
-				// Handle cases: start price missing, end price missing, or start price is 0
-				if !startClose.Valid {
-					fmt.Printf("Info: Start price missing for securityId %d at %v. Return set to nil.\n", securityId, startTime)
-				} else if !endClose.Valid {
-					fmt.Printf("Info: End price missing (%d days later) for securityId %d at %v. Return set to nil.\n", args.ReturnWindow, securityId, startTime)
-				} else if startClose.Float64 == 0 {
-					fmt.Printf("Info: Start price is 0 for securityId %d at %v. Cannot calculate return, setting to nil.\n", securityId, startTime)
-				}
-				record[returnColumnName] = nil // Assign nil if calculation cannot be done
-			}
-		}
-		fmt.Println("Finished calculating returns.")
+			} // End loop over windows
+		} // End loop over records
+		fmt.Println("Finished calculating returns for all windows.")
 	}
 	// --- END: Calculate N-Day Returns ---
 
@@ -212,13 +250,13 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 	// This correctly handles an empty records slice, resulting in an empty recordsInterface slice.
 	recordsInterface := make([]any, len(records))
 	for i, record := range records {
-		recordsInterface[i] = record // record now potentially includes the return column
+		recordsInterface[i] = record // record now potentially includes multiple return columns
 	}
 
 	// Format the results for LLM readability
 	// formatBacktestResults handles an empty input slice correctly,
 	// returning a map with empty "instances" and "summary".
-	// It should now also include the new return column if it was added.
+	// It should now also include the new return columns if they were added.
 	formattedResults, err := formatBacktestResults(recordsInterface, &spec)
 	if err != nil {
 		// This error path should ideally not be reached if formatBacktestResults
@@ -226,8 +264,7 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 		return nil, fmt.Errorf("error formatting results for LLM: %v", err)
 	}
 
-	// Save the full formatted results (including instances) to cache
-	// This will save the structure potentially including the return column.
+	// Save the full formatted results (including instances and return columns) to cache
 	go func() { // Run in a goroutine to avoid blocking the main response
 		bgCtx := context.Background() // Use a background context for the goroutine
 		if err := SaveBacktestToCache(bgCtx, conn, userId, args.StrategyId, formattedResults); err != nil {
@@ -255,7 +292,7 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 	// --- End Save Summary ---
 
 	if args.ReturnResults {
-		return formattedResults, nil // Return full results (potentially with return column)
+		return formattedResults, nil // Return full results (potentially with multiple return columns)
 	} else {
 		return summary, nil // Return only the summary
 	}
@@ -285,6 +322,11 @@ func ScanRows(rows pgx.Rows) ([]map[string]any, error) {
 
 		// Scan the row into the slice of pointers
 		if err := rows.Scan(valuePtrs...); err != nil {
+			// Check if the error is about incompatible types, often useful for debugging
+             if pgxErr, ok := err.(*pgx.ScanArgError); ok {
+                 fmt.Printf("Scan error: Column '%s', Index %d. Expected Go type compatible with DB type OID %d. Received type: %T\n",
+                     "idk", pgxErr.ColumnIndex, rows.FieldDescriptions()[pgxErr.ColumnIndex].DataTypeOID, values[pgxErr.ColumnIndex])
+             }
 			return nil, fmt.Errorf("error scanning row: %v", err)
 		}
 
@@ -307,6 +349,7 @@ func ScanRows(rows pgx.Rows) ([]map[string]any, error) {
 }
 
 // formatBacktestResults converts raw database results into a clean, LLM-friendly format
+// This function does NOT need changes, as it dynamically handles all keys present in the records.
 func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 	result := make(map[string]any)
 	instances := make([]map[string]any, 0, len(records))
@@ -319,14 +362,19 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 		}
 	}
 
-	var columnNames []string
-	if len(records) > 0 {
-		if recordMap, ok := records[0].(map[string]any); ok {
-			for key := range recordMap {
-				columnNames = append(columnNames, key) // Collect all keys, including the new return column
-			}
-		}
-	}
+	// Dynamically get all column names from the first record (if available)
+	// This ensures all columns, including dynamically added return columns, are processed.
+	// Note: This assumes all records have the same set of columns, which should be true here.
+	// var columnNames []string
+	// if len(records) > 0 {
+	// 	if recordMap, ok := records[0].(map[string]any); ok {
+	// 		for key := range recordMap {
+	// 			columnNames = append(columnNames, key)
+	// 		}
+	// 		// Optional: Sort column names for consistent output order
+	// 		// sort.Strings(columnNames)
+	// 	}
+	// }
 
 	for _, record := range records {
 		recordMap, ok := record.(map[string]any)
@@ -338,51 +386,47 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 		instance := make(map[string]any)
 		processedTimestamp := false // Flag to ensure timestamp is handled only once
 
-		// Explicitly handle core fields first if they exist
+		// Explicitly handle core fields first if they exist, for potential ordering preference
 		if ticker, exists := recordMap["ticker"]; exists {
 			instance["ticker"] = ticker
 		}
 		if securityId, exists := recordMap["securityid"]; exists {
 			instance["securityId"] = securityId // Use consistent casing
 		}
-		if timestampValue, exists := recordMap["timestamp"]; exists {
-			// Convert timestamp logic (keeping existing implementation)
-			var timestampMs int64 = -1 // Default to -1 or some indicator of failure
+        if timestampValue, exists := recordMap["timestamp"]; exists {
+			// Convert timestamp logic
+			var timestampMs int64 = -1
 			switch t := timestampValue.(type) {
 			case time.Time:
-				// Ensure time is not zero before converting
 				if !t.IsZero() {
 					timestampMs = t.UnixMilli()
 				} else {
-					fmt.Printf("Warning: Encountered zero timestamp value for securityId %v\n", instance["securityId"])
+					fmt.Printf("Warning format: Encountered zero timestamp value for securityId %v\n", instance["securityId"])
 				}
 			case string:
-				parsedTime, err := time.Parse(time.RFC3339Nano, t) // Try with Nano first
+				parsedTime, err := time.Parse(time.RFC3339Nano, t)
 				if err != nil {
-				    parsedTime, err = time.Parse(time.RFC3339, t) // Fallback to RFC3339
+				    parsedTime, err = time.Parse(time.RFC3339, t)
 				}
 				if err == nil && !parsedTime.IsZero() {
 					timestampMs = parsedTime.UnixMilli()
 				} else {
-					fmt.Printf("Warning: Could not parse timestamp string '%v': %v\n", t, err)
-					// Keep original value if parsing fails
-					instance["timestamp"] = timestampValue
+					fmt.Printf("Warning format: Could not parse timestamp string '%v': %v\n", t, err)
+					instance["timestamp"] = timestampValue // Keep original if parsing fails
 				}
+			case int64: // Handle if timestamp is already processed to ms
+				timestampMs = t
 			case nil:
-				// Handle nil timestamp if necessary
-				fmt.Printf("Warning: Encountered nil timestamp for securityId %v\n", instance["securityId"])
+				fmt.Printf("Warning format: Encountered nil timestamp for securityId %v\n", instance["securityId"])
 			default:
-				fmt.Printf("Warning: Unhandled timestamp type: %T for value %v\n", timestampValue, timestampValue)
-				// Keep original value if type is unhandled
-				instance["timestamp"] = timestampValue
+				fmt.Printf("Warning format: Unhandled timestamp type: %T for value %v\n", timestampValue, timestampValue)
+				instance["timestamp"] = timestampValue // Keep original if unhandled
 			}
 
-			// Only assign timestampMs if it was successfully processed
 			if timestampMs != -1 {
 				instance["timestamp"] = timestampMs
 			} else if _, exists := instance["timestamp"]; !exists {
-			    // Ensure the key exists even if processing failed, potentially setting it to nil
-			    instance["timestamp"] = nil
+			    instance["timestamp"] = nil // Ensure key exists even if processing failed
 			}
 			processedTimestamp = true
 		} else {
@@ -390,9 +434,9 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 		}
 
 
-		// Process all other fields dynamically
+		// Process all *other* fields dynamically using the keys from the recordMap
 		for key, value := range recordMap {
-			// Skip already handled fields
+			// Skip already handled standard fields
 			if key == "ticker" || key == "securityid" || (key == "timestamp" && processedTimestamp) {
 				continue
 			}
@@ -406,7 +450,7 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 			}
 
 			// Process the value (handle numeric types, pass others through)
-			// The new return column (float64 or nil) will be handled correctly by processNumericValue
+			// This will correctly handle the new return columns (float64 or nil)
 			instance[columnName] = processNumericValue(value)
 		}
 
@@ -425,21 +469,24 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 
 		for _, instance := range instances {
 			// Use type assertion with check
-			if tsMs, ok := instance["timestamp"].(int64); ok {
-			    foundValidTime = true // Found at least one valid timestamp
+			if tsMs, ok := instance["timestamp"].(int64); ok && tsMs > 0 { // Ensure timestamp is positive int64
+			    foundValidTime = true
 				if tsMs < minTimeMs {
 					minTimeMs = tsMs
 				}
 				if tsMs > maxTimeMs {
 					maxTimeMs = tsMs
 				}
+			} else if tsMs == 0 {
+                // Optionally log zero timestamps if they are unexpected
+                // fmt.Printf("Debug format: Instance has zero timestamp (ms) for secId %v\n", instance["securityId"])
 			} else {
 			    // Log if timestamp is not int64 as expected after processing
-			    // fmt.Printf("Warning: Instance timestamp is not int64: %T, value: %v\n", instance["timestamp"], instance["timestamp"])
+			    // fmt.Printf("Warning format: Instance timestamp is not int64 or is invalid: Type %T, value: %v\n", instance["timestamp"], instance["timestamp"])
 			}
 		}
 
-		if foundValidTime { // Only add date range if valid timestamps were found
+		if foundValidTime { // Only add date range if valid, non-zero timestamps were found
 			startTimeStr = time.UnixMilli(minTimeMs).UTC().Format(time.RFC3339) // Use UTC for consistency
 			endTimeStr = time.UnixMilli(maxTimeMs).UTC().Format(time.RFC3339)   // Use UTC for consistency
 			summary["date_range"] = map[string]any{
@@ -449,7 +496,7 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 				"end":      endTimeStr,
 			}
 		} else {
-		     fmt.Println("Warning: No valid timestamps found in instances to calculate date range.")
+		     fmt.Println("Warning format: No valid, positive timestamps found in instances to calculate date range.")
 		}
 	}
 
@@ -459,6 +506,7 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 	return result, nil
 }
 
+
 // Helper function to process numeric values from the database
 func processNumericValue(value any) any {
     // Handle nil directly
@@ -466,48 +514,56 @@ func processNumericValue(value any) any {
         return nil
     }
 
-	// Handle PostgreSQL numeric type (represented as map[string]any by pgx)
+	// Handle PostgreSQL numeric type (represented as map[string]any by pgx v4)
+	// Note: pgx v5 uses pgtype.Numeric directly. This code assumes v4 behavior.
 	if numericMap, ok := value.(map[string]any); ok {
-		// Check standard pgx numeric representation (Status, Int, Exp, Neg)
-		// Note: pgx v4/v5 might represent numeric differently. Check your pgx version's behavior.
-		// This example assumes a common map structure often seen.
-		statusAny, hasStatus := numericMap["Status"] // pgtype.Present, pgtype.Null etc.
-		intStrAny, hasInt := numericMap["Int"]       // Usually a string representation of the integer part
-		expAny, hasExp := numericMap["Exp"]          // Exponent
+		statusAny, hasStatus := numericMap["Status"]
+		intStrAny, hasInt := numericMap["Int"]
+		expAny, hasExp := numericMap["Exp"]
 
-		// Check if it looks like the pgtype.Numeric structure
+		// Check if it strongly resembles the pgtype.Numeric structure from pgx v4
 		if hasStatus && hasInt && hasExp {
-			// Check if the status indicates a present (non-NULL) value
-			if status, ok := statusAny.(byte); ok && status == 2 { // 2 usually means Present
+			if status, ok := statusAny.(byte); ok && (status == 2 || status == 1) { // 2=Present, 1=Present in pgx v4? Check docs. Assume 2 is main one.
 				intStr, okIntStr := intStrAny.(string)
-				expInt, okExp := expAny.(int32) // Exponent is often int32
+				expInt, okExp := expAny.(int32)
 
 				if okIntStr && okExp {
-					// Attempt to construct the float value
-					// This is a simplified conversion; a robust one would use big.Float
-					f, _, err := new(big.Float).Parse(intStr+"e"+strconv.Itoa(int(expInt)), 10)
+					// Use big.Float for accurate conversion from scientific notation parts
+					f := new(big.Float)
+					_, _, err := f.Parse(intStr+"e"+strconv.Itoa(int(expInt)), 10) // Use base 10
+
 					if err == nil {
-						floatVal, _ := f.Float64() // Get float64 representation
+						// Check for negative sign if the map has it separately (common pgx v4 pattern)
+						if neg, hasNeg := numericMap["Negative"]; hasNeg {
+							if isNeg, okIsNeg := neg.(bool); okIsNeg && isNeg {
+								f.Neg(f) // Make the big.Float negative
+							}
+						}
+
+						floatVal, _ := f.Float64() // Convert big.Float to float64
+						// Check for infinity resulting from overflow
+						if math.IsInf(floatVal, 0) {
+							fmt.Printf("Warning: pgx numeric conversion resulted in infinity for %v\n", numericMap)
+							// Decide how to handle infinity: return nil, max/min float, or keep original map?
+							return nil // Return nil for simplicity
+						}
 						return floatVal
 					} else {
-						fmt.Printf("Warning: Failed to parse pgtype.Numeric representation: %v\n", err)
+						fmt.Printf("Warning: Failed to parse big.Float from pgtype.Numeric map parts: %v, Map: %v\n", err, numericMap)
 						return value // Return original map if parsing fails
 					}
 				}
-			} else {
-				// Handle NULL status if needed, though outer nil check should catch it
-				return nil
-			}
+			} else if status, ok := statusAny.(byte); ok && status == 0 { // Status 0 usually means NULL
+                return nil
+            }
 		}
-		// Fallback for other map structures potentially representing numbers
-		// Example: Simple {"Float64": 123.45} map (less common from DB drivers)
+		// Fallback check for other map structures (less likely from pgx but possible)
 		if floatVal, ok := numericMap["Float64"]; ok {
-			return floatVal
+			if fv, okf := floatVal.(float64); okf { return fv }
 		}
-		// Could add more checks for other numeric representations if necessary
 	}
 
-	// Direct type assertions for common numeric types
+	// Direct type assertions for Go standard numeric types
 	switch v := value.(type) {
 	case float64:
 		return v
@@ -526,16 +582,19 @@ func processNumericValue(value any) any {
 		}
 		// If not parsable as float, return original string
 		return v
-    case []uint8: // Handle byte slices which might represent numbers
+    case []uint8: // Handle byte slices which might represent numbers (e.g., from certain DB types)
         strVal := string(v)
 		if floatVal, err := strconv.ParseFloat(strVal, 64); err == nil {
 			return floatVal
 		}
-        fmt.Printf("Warning: Could not parse []uint8 as float64: %s\n", strVal)
-        return strVal // Return as string if not parsable
+        // If not parsable, return as string
+        // fmt.Printf("Warning: Could not parse []uint8 as float64: %s\n", strVal)
+        return strVal
 	}
 
-	// If none of the above, return the value as is
-	fmt.Printf("Warning: Unhandled type in processNumericValue: %T, returning original value.\n", value)
+	// If none of the above conversions worked, return the value as is
+	// Consider logging this case if it's unexpected.
+	// fmt.Printf("Debug: Unhandled type in processNumericValue: %T, passing through value: %v\n", value, value)
 	return value
 }
+
