@@ -1119,13 +1119,24 @@ func initTools() {
 		"run_backtest": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "run_backtest",
-				Description: "Backtest a specified strategy, which is based on stock conditions, patterns, and indicators.",
+				Description: "Backtest a specified strategy, which is based on stock conditions, patterns, and indicators. Can optionally calculate future returns for specified N-day windows.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"strategyId": {
 							Type:        genai.TypeInteger,
 							Description: "id of the strategy to backtest",
+						},
+						"returnWindows": {
+							Type:        genai.TypeArray,                                                                                                                                                                         // Changed from TypeInteger
+							Description: "(Optional) A list of integers representing the specific forward return days (e.g., [1, 5, 20]) to calculate after each backtest result. If omitted, no future returns are calculated.", // Updated description
+							Items: &genai.Schema{ // Specify the type of elements in the array
+								Type: genai.TypeInteger,
+							},
+						},
+						"returnResults": {
+							Type:        genai.TypeBoolean,
+							Description: "(Optional, defaults to false) If true, return the full backtest instances including calculated returns. If false, return only the summary.",
 						},
 					},
 					Required: []string{"strategyId"},
