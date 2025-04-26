@@ -41,7 +41,7 @@ type GetChartDataResponse struct {
 	IsEarliestData bool                  `json:"isEarliestData"`
 }
 
-var debug = false // Flip to `true` to enable verbose debugging output
+var debug = true // Flip to `true` to enable verbose debugging output
 // MaxDivisorOf30 performs operations related to MaxDivisorOf30 functionality.
 func MaxDivisorOf30(n int) int {
 	for k := n; k >= 1; k-- {
@@ -165,26 +165,48 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	}
 	defer rows.Close()
 
+	// Define a struct to hold the security data from the initial query
+	type securityRecord struct {
+		ticker         string
+		minDateFromSQL *time.Time
+		maxDateFromSQL *time.Time
+	}
+
+	// Read all security records into a slice to get the count first
+	var securityRecords []securityRecord
+	for rows.Next() {
+		var record securityRecord
+		if err := rows.Scan(&record.ticker, &record.minDateFromSQL, &record.maxDateFromSQL); err != nil {
+			if debug {
+				fmt.Printf("[DEBUG] Error scanning security record row: %v\n", err)
+			}
+			return nil, fmt.Errorf("error scanning security data: %w", err)
+		}
+		securityRecords = append(securityRecords, record)
+	}
+	// Check for errors during row iteration
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating security data rows: %w", err)
+	}
+	rows.Close() // Close rows immediately after reading
+
 	// Preallocate capacity for bar data. We'll at most fetch up to args.Bars + small overhead
 	barDataList := make([]GetChartDataResults, 0, args.Bars+10)
 	numBarsRemaining := args.Bars
 
 	if debug {
-		fmt.Printf("[DEBUG] Processing rows from DB...\n")
+		fmt.Printf("[DEBUG] Processing %d security record(s) from DB...\n", len(securityRecords))
 	}
 
-	for rows.Next() {
-		var ticker string
-		var minDateFromSQL, maxDateFromSQL *time.Time
+	// Now iterate over the fetched security records
+	for _, record := range securityRecords {
+		// Use data from the record struct
+		ticker := record.ticker
+		minDateFromSQL := record.minDateFromSQL
+		maxDateFromSQL := record.maxDateFromSQL
 
-		if err := rows.Scan(&ticker, &minDateFromSQL, &maxDateFromSQL); err != nil {
-			if debug {
-				fmt.Printf("[DEBUG] Error scanning row: %v\n", err)
-			}
-			return nil, fmt.Errorf("error scanning data: %w", err)
-		}
 		tickerForIncompleteAggregate = ticker
-
+		fmt.Printf("\n [DEBUG]ticker: %s, minDateFromSQL: %v, maxDateFromSQL: %v\n", tickerForIncompleteAggregate, minDateFromSQL, maxDateFromSQL)
 		// Handle NULL maxDate
 		if maxDateFromSQL == nil {
 			now := time.Now()
@@ -204,6 +226,9 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		switch args.Direction {
 		case "backward":
 			queryEndTime = inputTimestamp
+			if queryEndTime.Before(minDateSQL) {
+				continue // Requested time is before the earliest known data for this security record.
+			}
 			if maxDateSQL.Before(queryEndTime) {
 				queryEndTime = maxDateSQL
 			}

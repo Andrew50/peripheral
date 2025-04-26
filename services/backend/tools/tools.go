@@ -82,7 +82,7 @@ func initTools() {
 				},
 			},
 			Function: GetSimilarInstances,
-			Query:    true,
+			Query:    false,
 			Api:      true,
 		},
 		"getCurrentSecurityID": {
@@ -1324,8 +1324,8 @@ func initTools() {
 		"getStrategyFromNaturalLanguage": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name: "getStrategyFromNaturalLanguage",
-				Description: "Create (or overwrite) a strategy from a natural‑language description. " +
-					"IF YOU USE THIS FUNCTION, USE THE USER'S ORIGINAL QUERY AS IS. Pass strategyId = -1 to create a new strategy.",
+				Description: "Create (or overwrite) a strategy from a natural‑language description. This function only has access to historical data. If the user's query involves live data, use other functions to get the live data then pass that information in here." +
+					"Pass strategyId = -1 to create a new strategy.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -1364,7 +1364,7 @@ func initTools() {
 				},
 			},
 			Function: AnalyzeInstanceFeatures,
-			Query:    true,
+			Query:    false,
 			Api:      false,
 		},
 		"calculateBacktestStatistic": {

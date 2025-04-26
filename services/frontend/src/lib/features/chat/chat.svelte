@@ -143,6 +143,13 @@
 	// State for table expansion
 	let tableExpansionStates: { [key: string]: boolean } = {};
 
+	// State for table sorting
+	type SortState = {
+		columnIndex: number | null;
+		direction: 'asc' | 'desc' | null;
+	};
+	let tableSortStates: { [key: string]: SortState } = {};
+
 	// Chat history
 	let messages: Message[] = [];
 	let historyLoaded = false; // Add state variable
@@ -464,6 +471,8 @@
 					// Call the new backend function to get the securityId
 					// Define expected response shape
 					type SecurityIdResponse = { securityId?: number };
+					console.log('ticker', ticker);
+					console.log('timestampMs', timestampMs);
 					const response = await privateRequest<SecurityIdResponse>('getSecurityIDFromTickerTimestamp', {
 						ticker: ticker,
 						timestampMs: timestampMs // Pass timestamp as number
@@ -505,7 +514,79 @@
 			tableExpansionStates[tableKey] = false; // Default to collapsed if not set
 		}
 		tableExpansionStates[tableKey] = !tableExpansionStates[tableKey];
-		tableExpansionStates = tableExpansionStates; // Trigger reactivity
+		tableExpansionStates = { ...tableExpansionStates }; // Trigger reactivity
+	}
+
+	// Function to sort table data
+	function sortTable(tableKey: string, columnIndex: number, tableData: TableData) {
+		const currentSortState = tableSortStates[tableKey] || { columnIndex: null, direction: null };
+		let newDirection: 'asc' | 'desc' | null = 'asc';
+
+		if (currentSortState.columnIndex === columnIndex) {
+			// Toggle direction if clicking the same column
+			newDirection = currentSortState.direction === 'asc' ? 'desc' : 'asc';
+		}
+
+		// Update sort state for this table
+		tableSortStates[tableKey] = { columnIndex, direction: newDirection };
+		tableSortStates = { ...tableSortStates }; // Trigger reactivity
+
+		// Sort the rows
+		tableData.rows.sort((a, b) => {
+			const valA = a[columnIndex];
+			const valB = b[columnIndex];
+
+			// Basic comparison, can be enhanced for types
+			let comparison = 0;
+			if (typeof valA === 'number' && typeof valB === 'number') {
+				comparison = valA - valB;
+			} else {
+				// Attempt numeric conversion for strings that look like numbers
+				const numA = Number(String(valA).replace(/[^0-9.-]+/g,""));
+				const numB = Number(String(valB).replace(/[^0-9.-]+/g,""));
+
+				if (!isNaN(numA) && !isNaN(numB)) {
+					comparison = numA - numB;
+				} else {
+					// Fallback to string comparison
+					const stringA = String(valA).toLowerCase();
+					const stringB = String(valB).toLowerCase();
+					if (stringA < stringB) {
+						comparison = -1;
+					} else if (stringA > stringB) {
+						comparison = 1;
+					}
+				}
+			}
+
+
+			return newDirection === 'asc' ? comparison : comparison * -1;
+		});
+
+		// Find the message containing this table and update its content_chunks
+		// This is necessary because tableData is a copy within the #each loop
+		messages = messages.map(msg => {
+			if (msg.contentChunks) {
+				msg.contentChunks = msg.contentChunks.map((chunk, idx) => {
+					const currentTableKey = msg.id + '-' + idx;
+					if (currentTableKey === tableKey && chunk.type === 'table' && isTableData(chunk.content)) {
+						// Return a new chunk object with the sorted rows
+						return {
+							...chunk,
+							content: {
+								...chunk.content,
+								rows: [...tableData.rows] // Ensure a new array reference
+							}
+						};
+					}
+					return chunk;
+				});
+			}
+			return msg;
+		});
+
+		// Force Svelte to recognize the deep change in messages array
+		messages = [...messages];
 	}
 
 	// Format timestamp for context chip (matches parseMarkdown format)
@@ -622,6 +703,7 @@
 													{@const tableKey = message.id + '-' + index}
 													{@const isLongTable = tableData && tableData.rows.length > 5}
 													{@const isExpanded = tableExpansionStates[tableKey] === true}
+													{@const currentSort = tableSortStates[tableKey] || { columnIndex: null, direction: null }}
 
 													{#if tableData}
 														<div class="chunk-table-wrapper">
@@ -632,8 +714,21 @@
 																<table>
 																	<thead>
 																		<tr>
-																			{#each tableData.headers as header}
-																				<th>{header}</th>
+																			{#each tableData.headers as header, colIndex}
+																				<th
+																					on:click={() => sortTable(tableKey, colIndex, JSON.parse(JSON.stringify(tableData)))}
+																					class:sortable={true}
+																					class:sorted={currentSort.columnIndex === colIndex}
+																					class:asc={currentSort.columnIndex === colIndex && currentSort.direction === 'asc'}
+																					class:desc={currentSort.columnIndex === colIndex && currentSort.direction === 'desc'}
+																				>
+																					{header}
+																					{#if currentSort.columnIndex === colIndex}
+																						<span class="sort-indicator">
+																							{currentSort.direction === 'asc' ? '▲' : '▼'}
+																						</span>
+																					{/if}
+																				</th>
 																			{/each}
 																		</tr>
 																	</thead>
@@ -1261,6 +1356,32 @@
 		padding: 0.5rem;
 		text-align: left;
 		border: 1px solid var(--ui-border, #444);
+	}
+
+	.content-chunks th.sortable {
+		cursor: pointer;
+		position: relative; /* For positioning the indicator */
+		user-select: none; /* Prevent text selection on click */
+	}
+
+	.content-chunks th.sortable:hover {
+		background: rgba(255, 255, 255, 0.05); /* Subtle hover */
+	}
+
+	.content-chunks th .sort-indicator {
+		font-size: 0.7em; /* Smaller indicator */
+		margin-left: 0.4em;
+		display: inline-block;
+		opacity: 0.7;
+		/* Optional: absolute positioning */
+		/* position: absolute; */
+		/* right: 0.5rem; */
+		/* top: 50%; */
+		/* transform: translateY(-50%); */
+	}
+
+	.content-chunks th.sorted .sort-indicator {
+		opacity: 1; /* Make active indicator fully visible */
 	}
 	
 	.content-chunks td {
