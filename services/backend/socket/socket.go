@@ -159,6 +159,55 @@ func SendAlertToUser(userID int, alert AlertMessage) {
 		fmt.Println("Error marshaling alert:", err)
 	}
 }
+
+// FunctionStatusUpdate represents a status update message sent to the client
+// during long-running backend operations (e.g., function tool execution).
+// It contains a user-friendly message describing the current step.
+type FunctionStatusUpdate struct {
+	Type        string `json:"type"` // Will be "function_status"
+	UserMessage string `json:"userMessage"`
+}
+
+// SendFunctionStatus sends a status update about a running function to a specific user.
+func SendFunctionStatus(userID int, userMessage string) {
+	// Use a default message if the specific one is empty
+	messageToSend := userMessage
+	if messageToSend == "" {
+		// Use a generic message instead of revealing the function name
+		messageToSend = "Processing..."
+	}
+
+	statusUpdate := FunctionStatusUpdate{
+		Type:        "function_status",
+		UserMessage: messageToSend,
+	}
+
+	jsonData, err := json.Marshal(statusUpdate)
+	if err != nil {
+		fmt.Printf("Error marshaling function status update: %v\n", err)
+		return
+	}
+
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+
+	if !ok {
+		fmt.Printf("SendFunctionStatus: client not found for userID: %d\n", userID)
+		return
+	}
+
+	// Send the update non-blockingly
+	select {
+	case client.send <- jsonData:
+		fmt.Printf("Sent status message to user %d: '%s'\n", userID, messageToSend)
+	default:
+		// This might happen if the client's send buffer is full or the connection is closing.
+		// It's usually okay to just drop the status update in this case.
+		fmt.Printf("SendFunctionStatus: send channel blocked or closed for userID: %d. Dropping status update.\n", userID)
+	}
+}
+
 func (c *Client) writePump() {
 	// ticker := time.NewTicker(pingPeriod) // Keep connection alive if needed
 	defer func() {
@@ -176,6 +225,9 @@ func (c *Client) writePump() {
 				c.ws.WriteMessage(websocket.CloseMessage, []byte{})
 				return // Exit writePump
 			}
+
+			// Log the exact message being sent
+			fmt.Printf("DEBUG: Sending WebSocket message: %s\n", string(message))
 
 			if err := c.ws.WriteMessage(websocket.TextMessage, message); err != nil {
 				fmt.Println("writePump error:", err)

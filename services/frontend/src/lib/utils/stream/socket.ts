@@ -7,6 +7,15 @@ import { browser } from '$app/environment';
 import { handleAlert } from './alert';
 import type { AlertData } from '$lib/core/types';
 
+// Define the type for function status updates from backend (simplified)
+export type FunctionStatusUpdate = {
+	type: 'function_status';
+	userMessage: string;
+};
+
+// Store to hold the current function status message
+export const functionStatusStore = writable<FunctionStatusUpdate | null>(null);
+
 export type TimeType = 'regular' | 'extended';
 export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
 
@@ -78,8 +87,19 @@ function connect() {
 		try {
 			data = JSON.parse(event.data);
 		} catch {
+			console.warn('Failed to parse WebSocket message:', event.data);
 			return;
 		}
+
+		// Check message type first
+		if (data && data.type === 'function_status') {
+			const statusUpdate = data as FunctionStatusUpdate;
+			console.log('Received function status:', statusUpdate);
+			functionStatusStore.set(statusUpdate);
+			return; // Handled function status update
+		}
+
+		// Handle other message types (based on channel)
 		const channelName = data.channel;
 		if (channelName) {
 			if (channelName === 'alert') {
