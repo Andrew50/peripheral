@@ -41,6 +41,7 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if err != nil {
 		return nil, fmt.Errorf("error compiling SQL for backtest: %v", err)
 	}
+    fmt.Println(sql)
 	
 	// Execute the query
 	ctx := context.Background()

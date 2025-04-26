@@ -302,6 +302,7 @@ func CreateStrategyFromNaturalLanguage(conn *utils.Conn, userId int, rawArgs jso
 		strategyId, err := _newStrategy(conn, userId, name, spec)
 		if err != nil {
 			// This is an internal error, not Gemini's fault, so return directly
+            fmt.Printf("ie20hifi0: %v\n", err)
 			return nil, fmt.Errorf("error saving validated strategy: %w", err)
 		}
 
@@ -348,7 +349,7 @@ func _getStrategySpec(conn *utils.Conn, userId int, strategyId int) (json.RawMes
 // GetStrategies performs operations related to GetStrategies functionality.
 func GetStrategies(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(), `
-    SELECT strategyId, name, criteria
+    SELECT strategyId, name, spec
     FROM strategies WHERE userId = $1`, userId)
 	if err != nil {
 		return nil, err
