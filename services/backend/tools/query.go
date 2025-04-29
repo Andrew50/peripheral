@@ -660,6 +660,9 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemProm
 				{Text: enhancedSystemInstruction},
 			},
 		},
+		Tools: []*genai.Tool{
+			{GoogleSearch: &genai.GoogleSearch{}},
+		},
 	}
 
 	result, err := client.Models.GenerateContent(
@@ -674,11 +677,14 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemProm
 
 	// Extract the clean text response for display
 	responseText := ""
-	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
-		for _, part := range result.Candidates[0].Content.Parts {
-			if part.Text != "" {
-				responseText = part.Text
-				break
+	if len(result.Candidates) > 0 {
+		candidate := result.Candidates[0]
+		if candidate.Content != nil {
+			for _, part := range candidate.Content.Parts {
+				if part.Text != "" {
+					responseText = part.Text
+					break
+				}
 			}
 		}
 	}
