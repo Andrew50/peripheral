@@ -20,6 +20,12 @@ Current time: {{CURRENT_TIME}} // {{CURRENT_TIME_MILLISECONDS}}
     *   `content`: The actual data for the chunk (string for `"text"`, structured JSON for `"table"` as specified below).
 *   `"text"` chunk content: A string. Use Markdown formatting where appropriate.
 *   `"table"` chunk content: A JSON object with `headers` (array of strings) and `rows` (array of arrays of strings/numbers), and optionally `caption` (string).
+*   **Special formatting for ticker symbols**: Whenever you mention a stock ticker either in text or in a table, format it like `$$$TICKER-TIMESTAMPINMS$$$`.
+    *   `TIMESTAMPINMS` should be the relevant Unix timestamp in **milliseconds** for that point in time.
+    *   **If the context refers to the latest available data or the present time (not a specific past date/event), use `0` for `TIMESTAMPINMS`. You should default to 0 for the TIMESTAMPINMS. **
+    *   Example: `$$$AAPL-1678886400000$$$` (for a specific past date), `$$$TSLA-0$$$` (for the latest data).
+    *   Do not put any paraenthesis or other formating around tickers than what is specified. 
+    *   The backend will use this to add necessary identifiers before sending to the frontend.
 *   Example Direct/Final Answer Output:
     ```json
     {
