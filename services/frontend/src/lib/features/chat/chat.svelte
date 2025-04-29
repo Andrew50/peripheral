@@ -317,7 +317,7 @@
 		// <-- Set initial status immediately -->
 		functionStatusStore.set({
 			type: 'function_status',
-			userMessage: 'Processing request...' 
+			userMessage: 'Processing request...'
 		});
 
 		scrollToBottom();
@@ -359,7 +359,7 @@
 				};
 
 				messages = [...messages, assistantMessage];
-				scrollToBottom();
+				// scrollToBottom(); // Removed this call
 				
 				fetchSuggestedQueries();
 			})
@@ -379,7 +379,7 @@
 				};
 
 				messages = [...messages, errorMessage];
-				scrollToBottom();
+				// scrollToBottom(); // Removed this call
 			});
 	}
 
