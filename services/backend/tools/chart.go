@@ -388,8 +388,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 		// For aggregator logic or forward queries, we skip reversing.
 		if haveToAggregate || args.Direction == "forward" {
 			if args.Direction == "backward" {
-				// Fetch events before handling incomplete bar for aggregate/forward
-				integrateChartEvents(&barDataList, conn, userId, args.SecurityID, args.IncludeSECFilings, multiplier, timespan, args.ExtendedHours, easternLocation)
 
 				// Potentially fetch incomplete bar if market is open or in replay
 				marketStatus, err := utils.GetMarketStatus(conn)
@@ -422,6 +420,8 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 					}
 				}
 			}
+			// Integrate events just before returning for the aggregate/forward case
+			integrateChartEvents(&barDataList, conn, userId, args.SecurityID, args.IncludeSECFilings, multiplier, timespan, args.ExtendedHours, easternLocation)
 			return GetChartDataResponse{
 				Bars:           barDataList,
 				IsEarliestData: isEarliestData,
@@ -430,9 +430,6 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 
 		// Otherwise, direction=backward with direct data—reverse the slice
 		reverse(barDataList)
-
-		// Fetch events after reversing and before handling incomplete bar for backward
-		integrateChartEvents(&barDataList, conn, userId, args.SecurityID, args.IncludeSECFilings, multiplier, timespan, args.ExtendedHours, easternLocation)
 
 		// Possibly append incomplete bar
 		marketStatus, err := utils.GetMarketStatus(conn)
@@ -472,6 +469,8 @@ func GetChartData(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 				}
 			}
 		}
+		// Integrate events just before returning for the backward case
+		integrateChartEvents(&barDataList, conn, userId, args.SecurityID, args.IncludeSECFilings, multiplier, timespan, args.ExtendedHours, easternLocation)
 		return GetChartDataResponse{
 			Bars:           barDataList,
 			IsEarliestData: isEarliestData,
@@ -1106,6 +1105,7 @@ func integrateChartEvents(
 
 	// 2. Fetch Events
 	// Assuming fetchChartEventsInRange exists and is accessible
+	fmt.Println("Fetching chart events for secId", securityID, "from", fromMs, "to", toMs)
 	chartEvents, err := fetchChartEventsInRange(conn, userId, securityID, fromMs, toMs, includeSECFilings)
 	if err != nil {
 		// Log the error but don't fail the whole chart request
