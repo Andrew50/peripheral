@@ -1,4 +1,4 @@
-package tools
+package strategies
 
 import (
 	"backend/utils"

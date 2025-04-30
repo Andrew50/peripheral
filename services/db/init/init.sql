@@ -176,6 +176,7 @@ SELECT create_hypertable('ohlcv_1d', 'timestamp',
 CREATE INDEX IF NOT EXISTS idx_ohlcv_1d_securityid ON ohlcv_1d(securityid);
 CREATE INDEX IF NOT EXISTS idx_ohlcv_1d_timestamp ON ohlcv_1d(timestamp DESC);
 
+-- changes with time
 CREATE TABLE fundamentals (
     security_id VARCHAR(20),-- REFERENCES securities(security_id),
     timestamp TIMESTAMP,

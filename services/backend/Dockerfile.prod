@@ -4,6 +4,8 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+#build dynamic defs
+RUN go generate ./... 
 RUN GOOS=linux go build -a -installsuffix cgo -o main .
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /usr/local/bin/jobctl ./cmd/jobctl
 

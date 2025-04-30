@@ -1,4 +1,4 @@
-package tools
+package strategies
 
 import (
     "fmt"
@@ -17,12 +17,12 @@ func CompileSpecToSQL(spec Spec) (string, error) {
         return "", fmt.Errorf("spec did not pass validation: %w", err)
     }
 
-    // Convert Timeframe to string for table lookup
+    // Get base table name from specdefs using timeframe
     timeframeStr := string(spec.Universe.Timeframe)
-    baseTable, ok := timeframeToTable[timeframeStr]
+    baseTable, ok := specdefs.TimeframeToTable[timeframeStr]
     if !ok {
-
-        return "", fmt.Errorf("unsupported timeframe %q", timeframeStr)
+        // This should ideally be caught by validation, but check defensively
+        return "", fmt.Errorf("unsupported timeframe %q (not found in specdefs.TimeframeToTable)", timeframeStr)
     }
 
     // ------------------------------------------------------------------
@@ -75,17 +75,15 @@ func CompileSpecToSQL(spec Spec) (string, error) {
     orderByClause := buildOrderBy(spec.SortBy)
 
     finalSQL := fmt.Sprintf(`WITH
-%s,
-
-%s
-
-SELECT  features.timestamp,
-        features.securityid,
-        features.ticker,
-        %s
-FROM    features
-%s
-%s;`,
+            %s,
+            %s
+            SELECT  features.timestamp,
+                    features.securityid,
+                    features.ticker,
+                    %s
+            FROM    features
+            %s
+            %s;`,
         indent(universeCTE, 1),
         indent(featureCTE, 1),
         strings.Join(featureExprs, ", "),
@@ -100,13 +98,7 @@ FROM    features
 // Internal helpers – universe --------------------------------------------------
 // -----------------------------------------------------------------------------
 
-// Updated to use the new standard table naming convention
-var timeframeToTable = map[string]string{
-    "1":  "ohlcv_1m",
-    "1h": "ohlcv_1h",
-    "1d": "ohlcv_1d",
-    "1w": "ohlcv_1w",
-}
+// timeframeToTable is now generated in specdefs
 
 func buildUniverseConditions(u *Universe) ([]string, error) {
     var conds []string
@@ -131,29 +123,11 @@ func buildUniverseConditions(u *Universe) ([]string, error) {
     // 2. Process the Filters slice instead of separate whitelist/blacklist fields
     for _, filter := range u.Filters {
         featureStr := string(filter.SecurityFeature)
-        var columnName string
-
-        // Map the SecurityFeature to the corresponding SQL column
-        switch featureStr {
-        case "Sector":
-            columnName = "s.sector"
-        case "Industry":
-            columnName = "s.industry"
-        case "Ticker":
-            columnName = "s.ticker"
-        case "SecurityId":
-            columnName = "s.securityid"
-        case "Market":
-            columnName = "s.market"
-        case "PrimaryExchange":
-            columnName = "s.primary_exchange"
-        case "Locale":
-            columnName = "s.locale"
-        case "Active":
-            columnName = "s.active"
-        default:
-            // Handle other security features or default to a common column
-            columnName = "s." + strings.ToLower(featureStr)
+        // Map the SecurityFeature to the corresponding SQL column using specdefs
+        columnName, ok := specdefs.SecurityFeatureToColumn[featureStr]
+        if !ok {
+            // Should be caught by validation, but handle defensively
+            return nil, fmt.Errorf("invalid security feature '%s' encountered in universe filter (not in specdefs)", featureStr)
         }
 
         // Add include/exclude conditions
@@ -269,16 +243,16 @@ func compileFeatureExpr(f Feature, partitionKey string) (string, error) {
 	switch f.Output {
 	case "raw":
 		// do nothing
-	case "rankn": // 0‑1 normalised (PERCENT_RANK is 0-based)
-		expr = fmt.Sprintf(
-			"PERCENT_RANK() OVER (PARTITION BY %s.timestamp ORDER BY %s ASC)", // Partition by timestamp for ranking across securities at that time
-			rowAlias, expr,
-		)
-	case "rankp": // 1‑100 percentiles using NTILE
-		expr = fmt.Sprintf(
-			"NTILE(100) OVER (PARTITION BY %s.timestamp ORDER BY %s ASC)", // Partition by timestamp for ranking across securities at that time
-			rowAlias, expr,
-		)
+	case "rankn": // ➜ integer rank with gaps
+    expr = fmt.Sprintf(
+        "RANK() OVER (PARTITION BY %s.timestamp ORDER BY %s ASC)",
+        rowAlias, expr,
+    )
+case "rankp": // ➜ true percentile 0–100 float
+    expr = fmt.Sprintf(
+        "PERCENT_RANK() OVER (PARTITION BY %s.timestamp ORDER BY %s ASC)",
+        rowAlias, expr,
+    )
 	default:
 		return "", fmt.Errorf("unsupported output kind %q", f.Output)
 	}
@@ -286,31 +260,28 @@ func compileFeatureExpr(f Feature, partitionKey string) (string, error) {
 	return expr, nil
 }
 
-// Updated to accept a FeatureSource struct instead of a string
+// partitionKeyForSource determines the SQL column name to use for partitioning window functions
+// based on the feature's source definition. It defaults to securityid if the source is
+// not relative or the feature field is not recognized for partitioning.
 func partitionKeyForSource(src FeatureSource) string {
-    // Get the field value
-    fieldStr := string(src.Field)
-    
-    // If value is "relative", use the field to determine partition key
-    if src.Value == "relative" {
-        switch strings.ToLower(fieldStr) {
-        case "sector":
-            return "s.sector"
-        case "industry":
-            return "s.industry"
-        case "market":
-            return "s.market"
-        case "securityid", "ticker":
-            return "s.securityid"
-        default:
-            // Default to securityid for unknown fields
-            return "s.securityid"
-        }
-    } else {
-        // For specific values (like a ticker), default to securityid
-        return "s.securityid"
-    }
+	// If the source value is specific (not relative), partitioning should happen per security.
+	if src.Value != "relative" {
+		return "s.securityid" // Partition by the specific security ID
+	}
+
+	// If relative, use the specified field for partitioning if it's a known partitionable feature.
+	// We look up the base column name from specdefs and prepend the alias 's.'.
+	featureStr := string(src.Field)
+	if baseCol, ok := specdefs.SecurityFeatureToColumn[featureStr]; ok {
+		// Prepend the alias used for the securities table in the universe CTE
+		return "s." + baseCol
+	}
+
+	// Default to partitioning by security ID if the field isn't a recognized partition key.
+	return "s.securityid"
 }
+
+
 
 // -----------------------------------------------------------------------------
 // Internal helpers – filters & sorting ----------------------------------------

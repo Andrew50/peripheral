@@ -1,4 +1,4 @@
-package tools
+package strategies
 
 import (
     "time"
@@ -155,8 +155,8 @@ type Universe struct {
 }
 
 type FeatureSource struct {
-	Field   SecurityFeature `json:"field"`   //  FundamentalFeature
-	Value   string          `json:"value"`   // either "relative" meaning get the value from the security out of the universe, or a specific string value of type securityFeature for which to join on. for example setting 
+	Field   SecurityFeature `json:"field"`   // 
+	Value   string          `json:"value"`   // either "relative" meaning get the value from the security out of the universe, or a specific string value.
 }
 
 type ExprPart struct {
@@ -169,7 +169,7 @@ type ExprPart struct {
 type Feature struct {
 	Name      string        `json:"name"`
 	FeatureId int           `json:"featureId"`
-	Source    FeatureSource `json:"source"` //  
+	Source    FeatureSource `json:"source"` // "security", "sector", "industry", "related_stocks" (proprietary), "market", specific ticker like "AAPL" // NEW 
 	Output    OutputType    `json:"output"` // "raw", "rankn", "rankp"
 	Expr      []ExprPart    `json:"expr"`   // Expression using +, -, /, *, ^, and fundamentalfeatures and ohlcvfeatures.
 	Window    int           `json:"window"` // Smoothing window; 1 = none
@@ -179,7 +179,7 @@ type Feature struct {
 type Filter struct {
 	Name     string             `json:"name"`
 	LHS      FeatureId          `json:"lhs"`      // Left-hand side feature ID
-	Operator ComparisonOperator `json:"operator"` // "<", "<=", ">=", ">", "!=", "=="
+	Operator ComparisonOperator `json:"operator"` // "<", "<=", ">=", ">"
 	RHS      struct {
 		FeatureId FeatureId `json:"featureId"` // RHS feature (if any)
 		Const     float64   `json:"const"`     // Constant value
@@ -226,9 +226,13 @@ const (
     maxWindow1Hour = 2000
 
     maxWindow1Day  = 1000
+    maxWindow1Week = 200
 )
+
+// Define validation regexes (keep these)
+var (
+    // Ticker validation regex
     tickerRegex = regexp.MustCompile(`^[A-Z]{1,5}(\.[A-Z])?$`)
-    
     // Identifier validation regex
     identifierRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_ %$#+-./\\&@!?:;,|=<>(){}[\]^*]*$`)
     
@@ -296,18 +300,11 @@ func validateSpec(spec *Spec) error {
 func validateUniverse(u *Universe) error {
     var errs []string
 
-    // Validate timeframe by comparing string values
+    // Validate timeframe using specdefs
     timeframeStr := string(u.Timeframe)
-    validTimeframeFound := false
-    for tf := range validTimeframes {
-        if timeframeStr == string(tf) {
-            validTimeframeFound = true
-            break
-        }
-    }
-    if !validTimeframeFound {
-        errs = append(errs, fmt.Sprintf("universe.timeframe must be one of %s, %s, %s, %s", 
-            timeframe1Min, timeframe1Hour, timeframe1Day, timeframe1Week))
+    if _, ok := specdefs.ValidTimeframes[timeframeStr]; !ok {
+        errs = append(errs, fmt.Sprintf("universe.timeframe '%s' invalid; must be one of %v",
+            u.Timeframe, specdefs.Timeframes))
     }
 
     // Validate extended hours
@@ -327,20 +324,16 @@ func validateUniverse(u *Universe) error {
     for i, filter := range u.Filters {
         filterCtx := fmt.Sprintf("universe.filter[%d]", i)
         
-        // Validate SecurityFeature by converting to string
+
+        // Validate SecurityFeature using specdefs
         featureStr := string(filter.SecurityFeature)
-        validFeature := false
-        for sf := range validSecurityFeatures {
-            if featureStr == string(sf) {
-                validFeature = true
-                break
-            }
+        if _, ok := specdefs.ValidSecurityFeatures[featureStr]; !ok {
+            errs = append(errs, fmt.Sprintf("%s: invalid SecurityFeature '%s'; must be one of %v",
+                filterCtx, filter.SecurityFeature, specdefs.SecurityFeatures))
         }
-        
-        if !validFeature {
-            errs = append(errs, fmt.Sprintf("%s: invalid SecurityFeature '%s'", filterCtx, filter.SecurityFeature))
-        }
-        
+
+
+
         // Check for overlap between include and exclude
         set := make(map[string]struct{}, len(filter.Include))
         for _, v := range filter.Include {
@@ -394,12 +387,15 @@ func validateFeature(f *Feature, context string, featureIDs *map[int]struct{}, m
             *maxFeatureID = int(f.FeatureId)
         }
     }
-    
-    // Validate output type
-    if _, ok := validOutputTypes[f.Output]; !ok {
-        errs = append(errs, fmt.Sprintf("%s output '%s' invalid", context, f.Output))
+
+
+    // Validate output type using specdefs
+    outputStr := string(f.Output)
+    if _, ok := specdefs.ValidOutputTypes[outputStr]; !ok {
+        errs = append(errs, fmt.Sprintf("%s output '%s' invalid; must be one of %v",
+            context, f.Output, specdefs.OutputTypes))
     }
-    
+
     // Validate source
     if err := validateFeatureSource(&f.Source, context); err != nil {
         errs = append(errs, err.Error())
@@ -426,20 +422,14 @@ func validateFeature(f *Feature, context string, featureIDs *map[int]struct{}, m
 }
 
 func validateFeatureSource(fs *FeatureSource, context string) error {
-    // Validate Field by converting to string
+
+    // Validate Field using specdefs
     fieldStr := string(fs.Field)
-    validField := false
-    for field := range validSecurityFeatures {
-        if fieldStr == string(field) {
-            validField = true
-            break
-        }
+    if _, ok := specdefs.ValidSecurityFeatures[fieldStr]; !ok {
+        return fmt.Errorf("%s source.field '%s' invalid; must be one of %v",
+            context, fs.Field, specdefs.SecurityFeatures)
     }
-    
-    if !validField {
-        return fmt.Errorf("%s source.field '%s' invalid", context, fs.Field)
-    }
-    
+
     // Value can be "relative" or a specific string value
     if fs.Value != "relative" && !isTicker(fs.Value) {
         // This is simplified validation - you may need more complex validation based on the field
@@ -490,14 +480,16 @@ func validateExpr(exprParts []ExprPart, context string) error {
 			if part.Value == "" {
 				errs = append(errs, fmt.Sprintf("%s value cannot be empty for type 'column'", partCtx))
 			} else {
-				// Check if column is a valid OHLCV feature or fundamental feature
+
+				// Check if column is a valid OHLCV feature or fundamental feature using specdefs
 				lowerValue := strings.ToLower(part.Value)
-				_, isValidOHLCV := validOHLCVFeatures[lowerValue]
-				_, isValidFundamental := validFundamentalFeatures[lowerValue]
+				_, isValidOHLCV := specdefs.ValidOHLCVFeatures[lowerValue]
+				_, isValidFundamental := specdefs.ValidFundamentalFeatures[lowerValue]
 
 				if !isValidOHLCV && !isValidFundamental {
-					errs = append(errs, fmt.Sprintf("%s value '%s' is not a valid OHLCV or fundamental feature",
-						partCtx, part.Value))
+					validCols := append(specdefs.OHLCVFeatures, specdefs.FundamentalFeatures...)
+					errs = append(errs, fmt.Sprintf("%s value '%s' is not a valid OHLCV or fundamental feature; must be one of %v",
+						partCtx, part.Value, validCols))
 				}
 			}
 
@@ -511,16 +503,10 @@ func validateExpr(exprParts []ExprPart, context string) error {
 			stackDepth++
 
 		} else if part.Type == "operator" {
-			// Validate operator
-			validOp := false
-			for op := range validExprOperators {
-				if part.Value == string(op) {
-					validOp = true
-					break
-				}
-			}
-			if !validOp {
-				errs = append(errs, fmt.Sprintf("%s value '%s' is not a valid operator", partCtx, part.Value))
+			// Validate operator using specdefs
+			if _, ok := specdefs.ValidExprOperators[part.Value]; !ok {
+				errs = append(errs, fmt.Sprintf("%s value '%s' is not a valid operator; must be one of %v",
+					partCtx, part.Value, specdefs.ExprOperators))
 			}
 
 			// Offset is not applicable to operators, should be 0
@@ -571,12 +557,17 @@ func validateFilter(f *Filter, context string, featureIDs map[int]struct{}, vali
                 context, f.LHS))
         }
     }
-    
-    // Validate operator
-    if _, ok := validComparisonOperators[f.Operator]; !ok {
-        errs = append(errs, fmt.Sprintf("%s operator '%s' invalid", context, f.Operator))
+                 context, f.LHS))
+        }
     }
-    
+
+    // Validate operator using specdefs
+    opStr := string(f.Operator)
+    if _, ok := specdefs.ValidComparisonOperators[opStr]; !ok {
+        errs = append(errs, fmt.Sprintf("%s operator '%s' invalid; must be one of %v",
+            context, f.Operator, specdefs.ComparisonOperators))
+    }
+
     // Validate RHS
     hasFeature := f.RHS.FeatureId != 0
     hasConst := f.RHS.Const != 0.0 // Be careful with float comparison, but 0.0 is usually exact
@@ -624,20 +615,15 @@ func validateSortBy(sb *SortBy, featureIDs map[int]struct{}, validFeatureIDRange
         errs = append(errs, fmt.Sprintf("sortBy.direction ('%s' or '%s') is required when sortBy.feature is set", 
             sortAsc, sortDesc))
     } else {
-        // Convert Direction to string for validation
+
+        // Validate direction using specdefs
         directionStr := string(sb.Direction)
-        validDir := false
-        for dir := range validDirections {
-            if directionStr == string(dir) {
-                validDir = true
-                break
-            }
-        }
-        if !validDir {
-            errs = append(errs, fmt.Sprintf("sortBy.direction must be '%s' or '%s'", sortAsc, sortDesc))
+        if _, ok := specdefs.ValidDirections[directionStr]; !ok {
+            errs = append(errs, fmt.Sprintf("sortBy.direction '%s' invalid; must be one of %v",
+                sb.Direction, specdefs.Directions))
         }
     }
-    
+
     // Validate feature ID (0 is legal)
     if _, ok := featureIDs[int(sb.Feature)]; !ok && int(sb.Feature) != 0 {
         if int(sb.Feature) < minFeatureID || int(sb.Feature) >= validFeatureIDRange {

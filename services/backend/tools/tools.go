@@ -2,6 +2,8 @@ package tools
 
 import (
 	"backend/utils"
+    "backend/tools/query"
+    "backend/tools/strategies"
 	"encoding/json"
 	"sync"
 
@@ -63,7 +65,7 @@ func initTools() {
 	Tools = map[string]Tool{
 		"getQuery": {
 			FunctionDeclaration: nil,
-			Function:            GetQuery,
+			Function:            query.GetQuery,
 			Query:               false,
 			Api:                 true,
 			StatusMessage:       "",
@@ -84,6 +86,7 @@ func initTools() {
 				},
 			},
 			Function:      GetSimilarInstances,
+
 			Query:         false,
 			Api:           true,
 			StatusMessage: "Finding similar securities...",
