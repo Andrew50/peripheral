@@ -5,6 +5,7 @@
 	import { queryChart } from '$lib/features/chart/interface'; // Import queryChart
 	import type { Instance } from '$lib/core/types';
 	import { browser } from '$app/environment'; // Import browser
+	import { derived, writable } from 'svelte/store';
 	import {
 		inputValue,
 		contextItems,
@@ -50,23 +51,20 @@
 				}
 			});
 
-			// Handle the Promise case by converting immediately to string
-			const parsed = marked.parse(processedContent);
+			// 3. Handle the Promise case by converting immediately to string after markdown parsing
+			const parsed = marked.parse(processedContent); // marked.parse will treat our buttons as HTML
 			const parsedString = typeof parsed === 'string' ? parsed : String(parsed);
 
-			// Regex to find $$$TICKER-TIMESTAMPINMS$$$ patterns
+			// 4. Regex to find $$$TICKER-TIMESTAMPINMS$$$ patterns
 			// Captures TICKER (1), TIMESTAMPINMS (2)
+			// This runs *after* marked.parse and after simple tickers are converted.
 			const tickerRegex = /\$\$\$([A-Z]{1,5})-(\d+)\$\$\$/g;
 
-			// Replace ticker patterns with buttons including only ticker and timestamp data attributes
 			const contentWithTickerButtons = parsedString.replace(
 				tickerRegex,
 				(match, ticker, timestampMs) => {
-					// Use the existing formatChipDate function
 					const formattedDate = formatChipDate(parseInt(timestampMs, 10));
 					const buttonText = `${ticker}${formattedDate}`;
-
-					// Return the button HTML without securityId initially
 					return `<button class="ticker-button" data-ticker="${ticker}" data-timestamp-ms="${timestampMs}">${buttonText}</button>`;
 				}
 			);
@@ -153,8 +151,17 @@
 	let tableSortStates: { [key: string]: SortState } = {};
 
 	// Chat history
-	let messages: Message[] = [];
+	let messagesStore = writable<Message[]>([]); // Wrap messages in a writable store
 	let historyLoaded = false; // Add state variable
+
+	// Derived store to control initial chip visibility
+	const showChips = derived([inputValue, messagesStore], ([$val, $msgs]) => $msgs.length === 0 && $val.trim() === '');
+
+	// Reactive variable for top 3 suggestions
+	$: topChips = initialSuggestions.slice(0, 3);
+
+	// State for showing all initial suggestions
+	let showAllInitialSuggestions = false;
 
 	// Manage active chart context: subscribe to add new and remove old chart contexts
 	let previousChartInstance: Instance | null = null;
@@ -191,23 +198,23 @@
 				// Process each message in the conversation history
 				conversation.messages.forEach((msg) => {
 					// Add user message
-					messages.push({
+					messagesStore.update(current => [...current, {
 						id: generateId(),
 						content: msg.query,
 						sender: 'user',
 						timestamp: new Date(msg.timestamp),
 						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
 						contextItems: msg.context_items || []
-					});
+					}]);
 
-					messages.push({
+					messagesStore.update(current => [...current, {
 						id: generateId(),
 						sender: 'assistant',
 						content: msg.response_text,
 						contentChunks: msg.content_chunks || [],
 						timestamp: new Date(msg.timestamp),
 						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
-					});
+					}]);
 				});
 
 				scrollToBottom();
@@ -220,7 +227,7 @@
 
 			// Clear previous suggestions and fetch if history is empty
 			initialSuggestions = [];
-			if (messages.length === 0) {
+			if ($messagesStore.length === 0) {
 				fetchInitialSuggestions(); // <-- Call the new helper function
 			}
 		}
@@ -267,13 +274,15 @@
 			
 			if (queriesResponse && queriesResponse.suggestions && queriesResponse.suggestions.length > 0) {
 				// Find the last assistant message and add suggested queries to it
-				for (let i = messages.length - 1; i >= 0; i--) {
-					if (messages[i].sender === 'assistant' && !messages[i].isLoading) {
-						messages[i].suggestedQueries = queriesResponse.suggestions;
-						messages = [...messages]; // Force UI update
-						break;
+				messagesStore.update(current => {
+					for (let i = current.length - 1; i >= 0; i--) {
+						if (current[i].sender === 'assistant' && !current[i].isLoading) {
+							current[i].suggestedQueries = queriesResponse.suggestions;
+							break;
+						}
 					}
-				}
+					return [...current]; // Return new array to trigger update
+				});
 			}
 		} catch (error) {
 			console.error('Error fetching suggested queries:', error);
@@ -302,7 +311,7 @@
 			contextItems: [...$contextItems]
 		};
 
-		messages = [...messages, userMessage];
+		messagesStore.update(current => [...current, userMessage]);
 
 		// Create loading message placeholder
 		const loadingMessage: Message = {
@@ -312,7 +321,7 @@
 			timestamp: new Date(),
 			isLoading: true
 		};
-		messages = [...messages, loadingMessage];
+		messagesStore.update(current => [...current, loadingMessage]);
 		
 		// <-- Set initial status immediately -->
 		functionStatusStore.set({
@@ -342,7 +351,7 @@
 				const typedResponse = response as unknown as QueryResponse;
 				console.log('Response:', typedResponse);
 
-				messages = messages.filter((m) => m.id !== loadingMessage.id);
+				messagesStore.update(current => current.filter(m => m.id !== loadingMessage.id));
 				functionStatusStore.set(null); // Clear status store on success
 
 				const expiresAt = new Date();
@@ -358,7 +367,7 @@
 					contentChunks: typedResponse.content_chunks
 				};
 
-				messages = [...messages, assistantMessage];
+				messagesStore.update(current => [...current, assistantMessage]);
 				// scrollToBottom(); // Removed this call
 				
 				fetchSuggestedQueries();
@@ -367,7 +376,7 @@
 				console.error('Error fetching response:', error);
 
 				// Remove loading message and add error message
-				messages = messages.filter((m) => m.id !== loadingMessage.id);
+				messagesStore.update(current => current.filter(m => m.id !== loadingMessage.id));
 				functionStatusStore.set(null); // Clear status store on error
 
 				const errorMessage: Message = {
@@ -378,7 +387,7 @@
 					responseType: 'error'
 				};
 
-				messages = [...messages, errorMessage];
+				messagesStore.update(current => [...current, errorMessage]);
 				// scrollToBottom(); // Removed this call
 			});
 	}
@@ -434,7 +443,7 @@
 			await privateRequest('clearConversationHistory', {});
 
 			// Clear local messages
-			messages = [];
+			messagesStore.set([]);
 
 			// Fetch initial suggestions now that history is cleared and confirmed
 			fetchInitialSuggestions(); // <-- Call the new helper function
@@ -450,7 +459,7 @@
 				timestamp: new Date(),
 				responseType: 'error'
 			};
-			messages = [errorMessage]; // Show error on empty background
+			messagesStore.set([errorMessage]); // Show error on empty background
 		} finally {
 			isLoading = false;
 		}
@@ -587,7 +596,7 @@
 
 		// Find the message containing this table and update its content_chunks
 		// This is necessary because tableData is a copy within the #each loop
-		messages = messages.map(msg => {
+		messagesStore.update(current => current.map(msg => {
 			if (msg.contentChunks) {
 				msg.contentChunks = msg.contentChunks.map((chunk, idx) => {
 					const currentTableKey = msg.id + '-' + idx;
@@ -605,10 +614,7 @@
 				});
 			}
 			return msg;
-		});
-
-		// Force Svelte to recognize the deep change in messages array
-		messages = [...messages];
+		}));
 	}
 
 	// Format timestamp for context chip (matches parseMarkdown format)
@@ -657,7 +663,7 @@
 <div class="chat-container">
 	<div class="chat-header">
 		<h3>Chat</h3>
-		{#if messages.length > 0}
+		{#if $messagesStore.length > 0}
 			<button class="clear-button" on:click={clearConversation} disabled={isLoading}>
 				<svg viewBox="0 0 24 24" width="16" height="16">
 					<path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z" fill="currentColor" />
@@ -668,7 +674,7 @@
 	</div>
 
 	<div class="chat-messages" bind:this={messagesContainer}>
-		{#if messages.length === 0}
+		{#if $messagesStore.length === 0}
 			<!-- Only show the container and header when chat is empty -->
 			<div class="initial-container">
 				<!-- Capabilities text merged here -->
@@ -678,7 +684,7 @@
 
 			</div>
 		{:else}
-			{#each messages as message (message.id)}
+			{#each $messagesStore as message (message.id)}
 				<div class="message-wrapper {message.sender}">
 					<div
 						class="message {message.sender} {message.responseType === 'error'
@@ -724,7 +730,9 @@
 													{#if tableData}
 														<div class="chunk-table-wrapper">
 															{#if tableData.caption}
-																<div class="table-caption">{tableData.caption}</div>
+																<div class="table-caption">
+																	{@html parseMarkdown(tableData.caption)}
+																</div>
 															{/if}
 															<div class="chunk-table {isExpanded ? 'expanded' : ''}">
 																<table>
@@ -813,19 +821,19 @@
 
 	<div class="chat-input-wrapper">
 		<!-- Moved Initial Suggestions Here -->
-		{#if messages.length === 0 && initialSuggestions.length > 0}
-			<div class="initial-suggestions-input-area">
-				<div class="suggested-queries">
-					{#each initialSuggestions as query}
-						<button
-							class="suggested-query-btn"
-							on:click={() => handleSuggestedQueryClick(query)}
-						>
-							{query}
-						</button>
-					{/each}
-				</div>
-			</div>
+		{#if $showChips && topChips.length}
+		  <div class="chip-row">
+		    {#each initialSuggestions as q, i}
+		      {#if i < 3 || showAllInitialSuggestions}
+		      <button class="chip suggestion-chip" on:click={() => handleSuggestedQueryClick(q)}>
+		        <kbd>{i + 1}</kbd> {q}
+		      </button>
+		      {/if}
+		    {/each}
+		    {#if initialSuggestions.length > 3 && !showAllInitialSuggestions}
+		      <button class="chip suggestion-chip more" on:click={() => showAllInitialSuggestions = true}>⋯ More</button>
+		    {/if}
+		  </div>
 		{/if}
 
 		<div class="input-actions">
@@ -881,6 +889,13 @@
 						// Prevent space key events from propagating to parent elements
 						if (event.key === ' ' || event.code === 'Space') {
 							event.stopPropagation();
+						}
+
+						// Handle keyboard shortcuts for chips
+						if (event.key >= '1' && event.key <= '3' && $showChips && topChips[+event.key - 1]) {
+							handleSuggestedQueryClick(topChips[+event.key - 1]);
+							event.preventDefault();
+							return; // Prevent Enter key processing
 						}
 
 						// Submit on Enter, allow newline with Shift+Enter
@@ -1323,23 +1338,6 @@
 		margin-bottom: 0;
 	}
 	
-	.message-content :global(pre) {
-		background: rgba(0, 0, 0, 0.2);
-		padding: 0.5rem;
-		border-radius: 0.25rem;
-		overflow-x: auto;
-		margin: 0.5rem 0;
-		font-size: 0.8rem;
-	}
-	
-	.message-content :global(code) {
-		font-family: monospace;
-		background: rgba(0, 0, 0, 0.2);
-		padding: 0.1rem 0.25rem;
-		border-radius: 0.25rem;
-		font-size: 0.8rem;
-	}
-	
 	.message-content :global(ul), .message-content :global(ol) {
 		margin: 0.5rem 0;
 		padding-left: 1.5rem;
@@ -1615,6 +1613,53 @@
 		100% {
 			background-position: -200% center;
 		}
+	}
+
+	/* Chip row styles */
+	.chat-input-wrapper > .chip-row {
+		display: flex;
+		gap: 0.5rem;
+		margin-bottom: 0.35rem;
+		animation: fadeIn 0.2s;
+		flex-wrap: wrap; /* Allow wrapping if needed */
+		width: 100%; /* Ensure it takes full available width */
+		min-width: 0; /* Help flexbox wrapping calculations */
+	}
+
+	/* Specific styles for suggestion chips to override general .chip */
+	.suggestion-chip {
+		font-size: 0.75rem;
+		padding: 0.3rem 0.75rem;
+		border-radius: 9999px; /* Pill shape */
+		background: var(--ui-bg-element);
+		border: 1px solid var(--ui-border);
+		color: var(--text-secondary); /* Subtler text */
+		transition: .15s ease;
+		cursor: pointer;
+	}
+
+	.suggestion-chip:hover {
+		border-color: var(--ui-accent);
+		background: var(--ui-bg-element-hover, #444);
+		color: var(--text-primary); /* Highlight text on hover */
+	}
+
+	.suggestion-chip kbd {
+		background: transparent;
+		font: inherit;
+		opacity: 0.6;
+		margin-right: 0.25rem;
+		font-size: 0.7rem; /* Slightly smaller */
+		border: 1px solid var(--ui-border-darker); /* Subtle border */
+		padding: 0.1rem 0.25rem;
+		border-radius: 0.2rem;
+		line-height: 1; /* Prevent extra height */
+		display: inline-block; /* Ensure proper layout */
+	}
+
+	@keyframes fadeIn {
+		from { opacity: 0; transform: translateY(-5px); }
+		to { opacity: 1; transform: translateY(0); }
 	}
 
 </style>
