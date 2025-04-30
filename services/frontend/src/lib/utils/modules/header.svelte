@@ -35,6 +35,8 @@
 		</button>
 
 		<nav class="right" class:active={isMobileMenuOpen}>
+			<!--<a href="/features">Features</a>
+			<a href="/pricing">Pricing</a>-->
 			<a href="/login" on:click={() => navigateTo('/login')}>Sign In</a>
 			<a href="/signup" class="cta-button" on:click={() => navigateTo('/signup')}>Get Started</a>
 		</nav>
