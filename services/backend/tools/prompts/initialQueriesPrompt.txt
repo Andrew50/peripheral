@@ -19,7 +19,6 @@ Analyze the provided chart instance context AND the raw historical price data. B
 4.  **Query Split (IMPORTANT):** Generate **exactly 5** suggestions:
     *   **2 Backtest Queries:** Focus on historical performance under specific, quantifiable conditions observed recently.
     *   **2 Contextual Analysis Queries:** Focus on understanding the *reasons* behind recent moves or relevant external factors (SEC filings, news, catalysts). If suggesting filings or news, explicitly ask for a summary.
-    *   **1 Alert Creation Query:** Focus on setting up a real-time alert based on a *specific, quantifiable condition* you just observed in the `<RecentOHLCVData>`. Phrase it naturally, e.g., "Create an alert for [Ticker] if it gaps up more than [X]%", "Notify me if [Ticker] breaks the recent [N]-day low".
 5.  **Action-Oriented:** Ensure all queries are actionable.
 6.  **Contextual:** Use the ticker symbol within the suggestions. Phrase questions naturally.
 7.  **Conciseness:** Keep suggestions short and clear.
