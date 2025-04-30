@@ -950,7 +950,7 @@ func initTools() {
 			Function:      GetFilingText,
 			Query:         true,
 			Api:           true,
-			StatusMessage: "Getting filing text...",
+			StatusMessage: "Reading filing...",
 		},
 		// Account / User Trades
 		"grab_user_trades": {
@@ -1112,6 +1112,10 @@ func initTools() {
 							Type:        genai.TypeInteger,
 							Description: "id of the strategy to backtest",
 						},
+						"returnFullResults": {
+							Type:        genai.TypeBoolean,
+							Description: "Set this to false.",
+						},
 						"returnWindows": {
 							Type:        genai.TypeArray,                                                                                                                                                                         // Changed from TypeInteger
 							Description: "(Optional) A list of integers representing the specific forward return days (e.g., [1, 5, 20]) to calculate after each backtest result. If omitted, no future returns are calculated.", // Updated description
@@ -1119,12 +1123,8 @@ func initTools() {
 								Type: genai.TypeInteger,
 							},
 						},
-						"returnResults": {
-							Type:        genai.TypeBoolean,
-							Description: "(Optional, defaults to false) If true, return the full backtest instances including calculated returns. If false, return only the summary.",
-						},
 					},
-					Required: []string{"strategyId"},
+					Required: []string{"strategyId", "returnFullResults"},
 				},
 			},
 			Function:      RunBacktest,
