@@ -566,7 +566,7 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 
 		details, err := utils.GetTickerDetails(conn.Polygon, ticker, "now")
 		if err != nil {
-			log.Printf("Failed to get details for %s: %v", ticker, err)
+			//log.Printf("Failed to get details for %s: %v", ticker, err)
 			return
 		}
 

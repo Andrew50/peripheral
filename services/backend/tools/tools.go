@@ -950,7 +950,7 @@ func initTools() {
 			Function:      GetFilingText,
 			Query:         true,
 			Api:           true,
-			StatusMessage: "Getting filing text...",
+			StatusMessage: "Reading filing...",
 		},
 		// Account / User Trades
 		"grab_user_trades": {
@@ -1118,10 +1118,6 @@ func initTools() {
 							Items: &genai.Schema{ // Specify the type of elements in the array
 								Type: genai.TypeInteger,
 							},
-						},
-						"returnResults": {
-							Type:        genai.TypeBoolean,
-							Description: "(Optional, defaults to false) If true, return the full backtest instances including calculated returns. If false, return only the summary.",
 						},
 					},
 					Required: []string{"strategyId"},

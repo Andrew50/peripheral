@@ -226,9 +226,6 @@ func (c *Client) writePump() {
 				return // Exit writePump
 			}
 
-			// Log the exact message being sent
-			fmt.Printf("DEBUG: Sending WebSocket message: %s\n", string(message))
-
 			if err := c.ws.WriteMessage(websocket.TextMessage, message); err != nil {
 				fmt.Println("writePump error:", err)
 				return // Exit writePump on write error
