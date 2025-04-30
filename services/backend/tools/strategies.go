@@ -247,21 +247,38 @@ func CreateStrategyFromNaturalLanguage(conn *utils.Conn, userId int, rawArgs jso
 		fmt.Printf("DEBUG: Attempt %d/%d for user %d: Raw Gemini response: %s\n", attempt+1, maxRetries, userId, responseText)
 
 		// Extract JSON block
-		jsonStartIdx := strings.Index(responseText, "{")
-		jsonEndIdx := strings.LastIndex(responseText, "}")
+		jsonBlock := ""
+		// Try extracting from ```json ... ``` block first
+		jsonCodeBlockStart := strings.Index(responseText, "```json")
+		if jsonCodeBlockStart != -1 {
+			jsonCodeBlockStart += len("```json") // Move past the marker
+			jsonCodeBlockEnd := strings.Index(responseText[jsonCodeBlockStart:], "```")
+			if jsonCodeBlockEnd != -1 {
+				// Found the closing ```
+				jsonBlock = responseText[jsonCodeBlockStart : jsonCodeBlockStart+jsonCodeBlockEnd]
+				fmt.Printf("DEBUG: Attempt %d/%d for user %d: Extracted JSON from code block.\n", attempt+1, maxRetries, userId)
+			}
+		}
 
-		if jsonStartIdx == -1 || jsonEndIdx == -1 || jsonEndIdx <= jsonStartIdx {
+		// If not found in code block, fall back to searching for first { and last }
+		if jsonBlock == "" {
+			fmt.Printf("DEBUG: Attempt %d/%d for user %d: JSON code block not found, falling back to {} search.\n", attempt+1, maxRetries, userId)
+			jsonStartIdx := strings.Index(responseText, "{")
+			jsonEndIdx := strings.LastIndex(responseText, "}")
+			if jsonStartIdx != -1 && jsonEndIdx != -1 && jsonEndIdx > jsonStartIdx {
+				jsonBlock = responseText[jsonStartIdx : jsonEndIdx+1]
+			}
+		}
+
+		if jsonBlock == "" {
 			lastErr = fmt.Errorf("no valid JSON block found in Gemini response (attempt %d): %s", attempt+1, responseText)
 			fmt.Printf("WARN: Attempt %d/%d for user %d: No valid JSON block found in Gemini response.\n", attempt+1, maxRetries, userId)
 			// Append error message as user turn
-			errorMsg := fmt.Sprintf("Attempt %d failed: Could not find a valid JSON block in the response. Please ensure the response contains a single, valid JSON object starting with '{' and ending with '}'. The response received was:\n%s", attempt+1, responseText)
+			errorMsg := fmt.Sprintf("Attempt %d failed: Could not find a JSON block (neither in ```json ... ``` nor between '{' and '}') in the response. Please ensure the response contains a single, valid JSON object. The response received was:\n%s", attempt+1, responseText)
 			// Parts expects []*genai.Part, and we need to create a Part directly
 			conversationHistory = append(conversationHistory, &genai.Content{Role: "user", Parts: []*genai.Part{{Text: errorMsg}}})
-
 			continue
 		}
-
-		jsonBlock := responseText[jsonStartIdx : jsonEndIdx+1]
 
 		// Log the raw JSON block returned by Gemini
 		fmt.Printf("DEBUG: Attempt %d/%d for user %d: Extracted JSON block: \n%s\n", attempt+1, maxRetries, userId, jsonBlock)
