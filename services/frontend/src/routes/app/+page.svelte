@@ -120,6 +120,10 @@
 	let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
 	const INACTIVITY_TIMEOUT = 5 * 1000; // 5 seconds in milliseconds
 
+	// Add left sidebar state variables next to the other state variables
+	let leftMenuWidth = 550; // <-- Set initial width to 300
+	let leftResizing = false;
+
 	// Apply color scheme reactively based on the store
 	$: if ($settings.colorScheme && browser) {
 		const scheme = colorSchemes[$settings.colorScheme];
@@ -709,10 +713,6 @@
 			startResize(new MouseEvent('mousedown'));
 		}
 	}
-
-	// Add left sidebar state variables next to the other state variables
-	let leftMenuWidth = 0;
-	let leftResizing = false;
 
 	function handleKeyboardLeftResize(e: KeyboardEvent) {
 		if (e.key === 'Enter' || e.key === ' ') {
