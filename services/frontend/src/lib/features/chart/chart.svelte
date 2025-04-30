@@ -1890,7 +1890,7 @@
 			filingType: filingEvent.title,
 			link: filingEvent.url // Use the non-optional URL
 		};
-
+		
 		// Call the function from chat interface
 		openChatAndQuery(filingContext, `Summarize the attached filing: ${filingEvent.title}`);
 	}

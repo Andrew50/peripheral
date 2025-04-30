@@ -43,7 +43,7 @@ type GetChartDataResponse struct {
 	IsEarliestData bool                  `json:"isEarliestData"`
 }
 
-var debug = true // Flip to `true` to enable verbose debugging output
+var debug = false // Flip to `true` to enable verbose debugging output
 // MaxDivisorOf30 performs operations related to MaxDivisorOf30 functionality.
 func MaxDivisorOf30(n int) int {
 	for k := n; k >= 1; k-- {
@@ -1104,9 +1104,7 @@ func integrateChartEvents(
 	toMs := int64((maxTsSec + float64(chartTimeframeInSeconds)) * 1000)
 
 	// 2. Fetch Events
-	// Assuming fetchChartEventsInRange exists and is accessible
-	fmt.Println("Fetching chart events for secId", securityID, "from", fromMs, "to", toMs)
-	chartEvents, err := fetchChartEventsInRange(conn, userId, securityID, fromMs, toMs, includeSECFilings)
+	chartEvents, err := fetchChartEventsInRange(conn, userId, securityID, fromMs, toMs, includeSECFilings, true)
 	if err != nil {
 		// Log the error but don't fail the whole chart request
 		fmt.Printf("Warning: Failed to fetch chart events for secId %d between %d and %d: %v. Returning bars without events.\\n", securityID, fromMs, toMs, err)

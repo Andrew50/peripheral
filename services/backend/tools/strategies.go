@@ -19,7 +19,7 @@ import (
 // AnalyzeInstanceFeaturesArgs contains parameters for analyzing features of a specific security instance
 type AnalyzeInstanceFeaturesArgs struct {
 	SecurityID int    `json:"securityId"`
-	Timestamp  int64  `json:"timestamp"` // Unix ms of reference bar (0 ⇒ “now”)
+	Timestamp  int64  `json:"timestamp"` // Unix ms of reference bar (0 ⇒ "now")
 	Timeframe  string `json:"timeframe"` // e.g. "15m", "h", "d"
 	Bars       int    `json:"bars"`      // # of candles to pull **backward** from timestamp
 }
@@ -266,6 +266,7 @@ func CreateStrategyFromNaturalLanguage(conn *utils.Conn, userId int, rawArgs jso
 		// Log the raw JSON block returned by Gemini
 		fmt.Printf("DEBUG: Attempt %d/%d for user %d: Extracted JSON block: \n%s\n", attempt+1, maxRetries, userId, jsonBlock)
 
+		jsonBlock = strings.TrimSpace(jsonBlock)
 		// Use the new helper function to unmarshal and validate the entire JSON block
 		name, spec, err := UnmarshalAndValidateNewStrategyInput([]byte(jsonBlock))
 		if err != nil {

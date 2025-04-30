@@ -36,7 +36,7 @@ func GetChartEvents(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inte
 	}
 
 	// Fetch events using the modified helper function (ticker is determined within)
-	events, err := fetchChartEventsInRange(conn, userId, args.SecurityID, args.From, args.To, args.IncludeSECFilings)
+	events, err := fetchChartEventsInRange(conn, userId, args.SecurityID, args.From, args.To, args.IncludeSECFilings, false)
 	if err != nil {
 		// Propagate the error from the fetch function
 		return nil, err
@@ -48,7 +48,7 @@ func GetChartEvents(conn *utils.Conn, userId int, rawArgs json.RawMessage) (inte
 // fetchChartEventsInRange fetches splits, dividends, and optionally SEC filings for a given securityID and time range,
 // handling potential ticker changes within the range.
 // fromMs and toMs should be UTC milliseconds.
-func fetchChartEventsInRange(conn *utils.Conn, userId int, securityID int, fromMs, toMs int64, includeSECFilings bool) ([]ChartEvent, error) {
+func fetchChartEventsInRange(conn *utils.Conn, userId int, securityID int, fromMs, toMs int64, includeSECFilings bool, filterMinorFilings bool) ([]ChartEvent, error) {
 	// Create a context for database queries
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) // Increased timeout slightly
 	defer cancel()
@@ -225,6 +225,7 @@ func fetchChartEventsInRange(conn *utils.Conn, userId int, securityID int, fromM
 
 	// 4. Filter and Format Events based on the original time range [fromMs, toMs]
 	var finalEvents []ChartEvent
+	var rawEvents []ChartEvent // Temporary slice to hold events before final filtering
 
 	// Process Splits
 	processedSplitKeys := make(map[string]struct{}) // Deduplicate splits by execution date + ratio
@@ -253,7 +254,7 @@ func fetchChartEventsInRange(conn *utils.Conn, userId int, securityID int, fromM
 				fmt.Printf("Warning: error creating split value JSON: %v\n", err)
 				continue // Skip this event
 			}
-			finalEvents = append(finalEvents, ChartEvent{
+			rawEvents = append(rawEvents, ChartEvent{
 				Timestamp: utcTimestamp,
 				Type:      "split",
 				Value:     string(valueJSON),
@@ -293,7 +294,7 @@ func fetchChartEventsInRange(conn *utils.Conn, userId int, securityID int, fromM
 				fmt.Printf("Warning: error creating dividend value JSON: %v\n", err)
 				continue // Skip this event
 			}
-			finalEvents = append(finalEvents, ChartEvent{
+			rawEvents = append(rawEvents, ChartEvent{
 				Timestamp: utcTimestamp,
 				Type:      "dividend",
 				Value:     string(valueJSON),
@@ -302,7 +303,16 @@ func fetchChartEventsInRange(conn *utils.Conn, userId int, securityID int, fromM
 		}
 	}
 
-	// Process SEC Filings
+	// Process SEC Filings (if included)
+	minorFilingTypes := map[string]struct{}{
+		"3": {}, "4": {}, "5": {}, "13F": {}, "144": {}, "DEFA14A": {},
+	}
+	type FilingValue struct { // Helper struct to unmarshal filing Value JSON
+		Type string `json:"type"`
+		Date string `json:"date"`
+		URL  string `json:"url"`
+	}
+
 	if includeSECFilings && len(secFilings) > 0 {
 		processedFilingKeys := make(map[string]struct{}) // Deduplicate by timestamp + URL
 		for _, filing := range secFilings {
@@ -325,20 +335,39 @@ func fetchChartEventsInRange(conn *utils.Conn, userId int, securityID int, fromM
 					fmt.Printf("Warning: error creating filing value JSON: %v\n", err)
 					continue // Skip this event
 				}
-				finalEvents = append(finalEvents, ChartEvent{
-					Timestamp: utcTimestamp,
-					Type:      "sec_filing",
-					Value:     string(valueJSON),
-				})
-				processedFilingKeys[dedupeKey] = struct{}{}
+
+				// Check for filtering *before* adding to rawEvents
+				var filingInfo FilingValue
+				shouldFilter := false
+				if filterMinorFilings {
+					if err := json.Unmarshal(valueJSON, &filingInfo); err == nil {
+						if _, isMinor := minorFilingTypes[filingInfo.Type]; isMinor {
+							shouldFilter = true
+						}
+					} else {
+						fmt.Printf("Warning: could not unmarshal filing value for filtering: %v\n", err)
+					}
+				}
+
+				if !shouldFilter {
+					rawEvents = append(rawEvents, ChartEvent{
+						Timestamp: utcTimestamp,
+						Type:      "sec_filing",
+						Value:     string(valueJSON),
+					})
+					processedFilingKeys[dedupeKey] = struct{}{}
+				}
 			}
 		}
 	}
 
 	// 5. Sort the combined events by timestamp
-	sort.Slice(finalEvents, func(i, j int) bool {
-		return finalEvents[i].Timestamp < finalEvents[j].Timestamp
+	sort.Slice(rawEvents, func(i, j int) bool {
+		return rawEvents[i].Timestamp < rawEvents[j].Timestamp
 	})
+
+	// Assign the potentially filtered and sorted events to finalEvents
+	finalEvents = rawEvents
 
 	return finalEvents, nil
 }

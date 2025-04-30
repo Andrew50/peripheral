@@ -19,7 +19,7 @@ FROM schema_versions;
 -- Drop the existing table
 DROP TABLE schema_versions;
 -- Recreate the table with the correct column type
-CREATE TABLE schema_versions (
+CREATE TABLE IF NOT EXISTS schema_versions (
     version NUMERIC PRIMARY KEY,
     applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     description TEXT
