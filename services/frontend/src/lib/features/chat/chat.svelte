@@ -1590,19 +1590,19 @@
 		font-size: 0.8rem;
 		padding: 0.5rem 0;
 		margin: 0;
-		text-align: left; 
-		/* Apply gradient as background */
+		text-align: left;
+		/* Apply gradient as background - Increased contrast */
 		background: linear-gradient(
 			90deg,
 			var(--text-secondary, #aaa),
-			rgba(255, 255, 255, 0.6),
+			rgba(255, 255, 255, 0.9), /* Brighter middle color */
 			var(--text-secondary, #aaa)
 		);
 		background-size: 200% auto;
 		background-clip: text;
 		-webkit-background-clip: text;
-		/* Animate the background position - Slower animation */
-		animation: loading-text-highlight 3s infinite linear; /* Changed duration to 3s */
+		/* Animate the background position - Slightly faster animation */
+		animation: loading-text-highlight 2.5s infinite linear; /* Changed duration to 2s */
 	}
 
 	/* Update keyframes to animate background-position */
