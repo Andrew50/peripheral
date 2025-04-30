@@ -76,7 +76,7 @@ CREATE INDEX idxWatchlistId on watchlistItems(watchlistId);
 create table strategies (
     strategyId serial primary key,
     userId int references users(userId) on delete cascade,
-    name varchar(50) not null,
+    name varchar(100) not null,
     spec JSON,
     alertActive bool not null default false,
     unique (userId, name)
