@@ -250,9 +250,12 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		// If we have content chunks directly in the response, return them
 		if len(thinkingResp.ContentChunks) > 0 {
 
+			// Process potential table instructions *before* saving/returning
+			processedInitialChunks := processContentChunksForTables(ctx, conn, userID, thinkingResp.ContentChunks)
+
 			newMessage := ChatMessage{
 				Query:         query.Query,
-				ContentChunks: thinkingResp.ContentChunks,
+				ContentChunks: processedInitialChunks, // Use processed chunks
 				FunctionCalls: []FunctionCall{},
 				ToolResults:   []ExecuteResult{},
 				ContextItems:  query.Context, // Store context with the user query message
@@ -271,7 +274,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			// and the text version for systems that can't handle structured content
 			return QueryResponse{
 				Type:          "mixed_content",
-				ContentChunks: thinkingResp.ContentChunks,
+				ContentChunks: processedInitialChunks, // Return processed chunks
 			}, nil
 		}
 
@@ -742,9 +745,16 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 			finalContentChunks = []ContentChunk{}
 		}
 	}
-	processedChunks := make([]ContentChunk, 0, len(finalContentChunks))
-	for _, chunk := range finalContentChunks {
-		// Check for the new type "backtest_table"
+	processedChunks := processContentChunksForTables(ctx, conn, userID, finalContentChunks)
+
+	return processedChunks, allResults, nil
+}
+
+// processContentChunksForTables iterates through chunks and generates tables for "backtest_table" type.
+func processContentChunksForTables(ctx context.Context, conn *utils.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
+	processedChunks := make([]ContentChunk, 0, len(inputChunks))
+	for _, chunk := range inputChunks {
+		// Check for the type "backtest_table"
 		if chunk.Type == "backtest_table" {
 			// Attempt to parse the instruction content
 			instructionBytes, err := json.Marshal(chunk.Content)
@@ -786,10 +796,7 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 			processedChunks = append(processedChunks, chunk)
 		}
 	}
-	// finalProcessedChunks := injectSecurityIDsIntoChunks(conn, processedChunks) // Removed call
-
-	// return finalProcessedChunks, allResults, nil // Return processedChunks directly
-	return processedChunks, allResults, nil
+	return processedChunks
 }
 
 // processRoundWithGemini sends a round to Gemini for processing and gets back the functions to execute
