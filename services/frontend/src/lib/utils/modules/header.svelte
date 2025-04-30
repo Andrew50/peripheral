@@ -26,7 +26,7 @@
 	<div class="header-content">
 		<div class="left">
 			<a href="/" class="logo" on:click={() => navigateTo('/')}>
-				<span class="logo-text">ATLANTIS</span>
+				<img src="/atlantis_logo_transparent.png" alt="Atlantis Logo" class="logo-image" />
 			</a>
 		</div>
 
@@ -35,6 +35,8 @@
 		</button>
 
 		<nav class="right" class:active={isMobileMenuOpen}>
+			<!--<a href="/features">Features</a>
+			<a href="/pricing">Pricing</a>-->
 			<a href="/login" on:click={() => navigateTo('/login')}>Sign In</a>
 			<a href="/signup" class="cta-button" on:click={() => navigateTo('/signup')}>Get Started</a>
 		</nav>
@@ -70,12 +72,33 @@
 		align-items: center;
 	}
 
+	.left {
+		display: flex;
+		align-items: center;
+	}
+
 	.logo-text {
 		color: #3b82f6;
 		font-family: 'Space Mono', monospace;
 		font-weight: bold;
 		font-size: 1.5rem;
 		letter-spacing: 2px;
+	}
+
+	.logo-image {
+		height: 80px;
+		width: auto;
+		display: block;
+		transition: height 0.3s ease, transform 0.3s ease;
+		transform: translateY(5px);
+	}
+
+	.logo:hover .logo-image {
+		transform: translateY(5px) scale(1.1);
+	}
+
+	.header.scrolled .logo-image {
+		height: 60px;
 	}
 
 	.right {

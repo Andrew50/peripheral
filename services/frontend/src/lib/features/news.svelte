@@ -24,22 +24,11 @@
 	let globalFilings = writable<Filing[]>([]);
 	let isLoadingGlobalFilings = false;
 
-	// Store for news articles (for future implementation)
-	let news = writable<NewsItem[]>([]);
 	let isLoadingNews = false;
 
 	// Current ticker being viewed
 	let currentTicker = '';
 	let currentSecurityId: number | null = null;
-
-	// Interface for news items (for future implementation)
-	interface NewsItem {
-		title: string;
-		source: string;
-		summary: string;
-		url: string;
-		timestamp: number;
-	}
 
 	// Subscribe to active chart instance to get current ticker
 	activeChartInstance.subscribe((chartInstance) => {
@@ -123,24 +112,6 @@
 		unsubscribeGlobalFilings = addGlobalSECFilingsStream(handleGlobalSECFilingMessage);
 	}
 
-	// Function to load news (placeholder for future implementation)
-	async function loadNews() {
-		if (!currentTicker) return;
-
-		isLoadingNews = true;
-
-		try {
-			// This would be replaced with an actual API call in the future
-			// For now, just set an empty array
-			news.set([]);
-		} catch (error) {
-			console.error('Failed to load news:', error);
-			news.set([]);
-		} finally {
-			isLoadingNews = false;
-		}
-	}
-
 	// Load appropriate data when tab changes
 	function handleTabChange(tab: string) {
 		if (tab === 'filings' && activeTab !== 'filings') {
@@ -200,9 +171,6 @@
 			on:click={() => (activeTab = 'ticker-filings')}
 		>
 			Current Ticker Filings
-		</button>
-		<button class={activeTab === 'news' ? 'active' : ''} on:click={() => (activeTab = 'news')}>
-			News
 		</button>
 	</div>
 
@@ -273,23 +241,6 @@
 					}}
 				/>
 			{/if}
-		</div>
-	{/if}
-
-	<!-- News Tab (placeholder) -->
-	{#if activeTab === 'news'}
-		<div class="tab-content">
-			<h2>Latest News</h2>
-			<button class="refresh-button" on:click={loadNews} disabled={isLoadingNews}> Refresh </button>
-			<p class="message">News feed will be implemented in a future update.</p>
-		</div>
-	{/if}
-
-	<!-- Social Tab (placeholder) -->
-	{#if activeTab === 'social'}
-		<div class="tab-content">
-			<h2>Social Media Feed</h2>
-			<p class="message">Social media feed will be implemented in a future update.</p>
 		</div>
 	{/if}
 

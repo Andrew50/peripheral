@@ -76,8 +76,8 @@ CREATE INDEX idxWatchlistId on watchlistItems(watchlistId);
 create table strategies (
     strategyId serial primary key,
     userId int references users(userId) on delete cascade,
-    name varchar(50) not null,
-    criteria JSON,
+    name varchar(100) not null,
+    spec JSON,
     alertActive bool not null default false,
     unique (userId, name)
 );
@@ -152,27 +152,50 @@ CREATE TABLE trade_executions (
 );
 CREATE INDEX idxUserIdSecurityIdPrice on horizontal_lines(userId, securityId, price);
 -- Create the daily OHLCV table for storing time-series market data
-CREATE TABLE IF NOT EXISTS daily_ohlcv (
+
+
+-- Create the ohlcv_1d table
+CREATE TABLE IF NOT EXISTS ohlcv_1d (
     timestamp TIMESTAMP NOT NULL,
     securityid INTEGER NOT NULL,
-    ticker VARCHAR(10) NOT NULL,
     open DECIMAL(25, 6) NOT NULL,
     high DECIMAL(25, 6) NOT NULL,
     low DECIMAL(25, 6) NOT NULL,
     close DECIMAL(25, 6) NOT NULL,
     volume BIGINT NOT NULL,
-    vwap DECIMAL(25, 6),
-    transactions INTEGER,
-    market_cap DECIMAL(25, 6),
-    share_class_shares_outstanding BIGINT,
-    CONSTRAINT unique_security_date UNIQUE (securityid, timestamp)
+    PRIMARY KEY (securityid, timestamp)
 );
--- Convert to TimescaleDB hypertable
-SELECT create_hypertable('daily_ohlcv', 'timestamp');
+
+-- Convert to TimescaleDB hypertable with partitioning by securityid
+SELECT create_hypertable('ohlcv_1d', 'timestamp', 
+                         'securityid', number_partitions => 16,
+                         chunk_time_interval => INTERVAL '1 month',
+                         if_not_exists => TRUE);
+
 -- Create indexes for efficient querying
-CREATE INDEX IF NOT EXISTS idx_daily_ohlcv_security_id ON daily_ohlcv(securityid);
-CREATE INDEX IF NOT EXISTS idx_daily_ohlcv_ticker ON daily_ohlcv(ticker);
-CREATE INDEX IF NOT EXISTS idx_daily_ohlcv_timestamp_desc ON daily_ohlcv(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_ohlcv_1d_securityid ON ohlcv_1d(securityid);
+CREATE INDEX IF NOT EXISTS idx_ohlcv_1d_timestamp ON ohlcv_1d(timestamp DESC);
+
+CREATE TABLE fundamentals (
+    security_id VARCHAR(20),-- REFERENCES securities(security_id),
+    timestamp TIMESTAMP,
+    market_cap DECIMAL(22,2),
+    shares_outstanding BIGINT,
+    eps DECIMAL(12,4),
+    revenue DECIMAL(22,2),
+    dividend DECIMAL(12,4),
+    social_sentiment DECIMAL(10,4),
+    fear_greed DECIMAL(10,4),
+    short_interest DECIMAL(10,4),
+    borrow_fee DECIMAL(10,4),
+    PRIMARY KEY (security_id, timestamp)
+);
+
+
+
+
+
+
 COPY securities(securityid, ticker, figi, minDate, maxDate)
 FROM '/docker-entrypoint-initdb.d/securities.csv' DELIMITER ',' CSV HEADER;
 -- Create the guest account with user ID 0
@@ -186,3 +209,21 @@ VALUES (
     );
 CREATE UNIQUE INDEX idx_users_email ON users(email)
 WHERE email IS NOT NULL;
+
+-- Create query_logs table
+CREATE TABLE IF NOT EXISTS query_logs (
+    log_id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(userId),
+    query_text TEXT NOT NULL,
+    context JSONB, -- Store the provided context items
+    response_type VARCHAR(50), -- e.g., 'text', 'mixed_content', 'function_calls', 'error'
+    response_summary TEXT, -- Store a summary or error message
+    llm_thinking_response TEXT, -- Raw response from the thinking model
+    llm_final_response TEXT, -- Raw response from the final response model
+    requested_functions JSONB, -- Store JSON array of function calls requested by LLM
+    executed_functions JSONB, -- Store JSON array of function names called, if any
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_query_logs_user_id ON query_logs(user_id);
+CREATE INDEX idx_query_logs_timestamp ON query_logs(timestamp);

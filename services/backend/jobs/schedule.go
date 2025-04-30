@@ -168,13 +168,6 @@ func updateSectorsJob(conn *utils.Conn) error {
 var (
 	JobList = []*Job{
 		{
-			Name:           "ClearWorkerQueue",
-			Function:       clearWorkerQueue,
-			Schedule:       []TimeOfDay{{Hour: 3, Minute: 55}}, // Run before market open
-			RunOnInit:      true,
-			SkipOnWeekends: true,
-		},
-		{
 			Name:           "UpdateDailyOHLCV",
 			Function:       UpdateDailyOHLCV,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM
@@ -338,8 +331,6 @@ func (s *JobScheduler) Start() chan struct{} {
 	// Run jobs marked for initialization
 	s.runInitJobs()
 
-	// Print initial queue status
-	s.printQueueStatus()
 
 	// Start the Edgar Filings Service
 	fmt.Printf("\n\nStarting EdgarFilingsService\n\n")
@@ -362,9 +353,6 @@ func (s *JobScheduler) Start() chan struct{} {
 			case <-ticker.C:
 				now := time.Now().In(s.Location)
 				s.checkAndRunJobs(now)
-			case <-queueStatusTicker.C:
-				// Print queue status every 5 minutes
-				s.printQueueStatus()
 			case <-s.StopChan:
 				ticker.Stop()
 				queueStatusTicker.Stop()
@@ -567,8 +555,6 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 		s.saveJobLastCompletionTime(job)
 	}
 
-	// Print queue status
-	s.printQueueStatus()
 }
 
 // monitorQueuedTask polls a queued task until it completes or times out
@@ -625,62 +611,6 @@ func (s *JobScheduler) monitorQueuedTask(job *Job, taskID string, startTime time
 	}
 }
 
-// printQueueStatus prints the current status of the Redis queue
-func (s *JobScheduler) printQueueStatus() {
-	// Get the queue length
-	queueLen, err := s.Conn.Cache.LLen(context.Background(), "queue").Result()
-	if err != nil {
-		fmt.Printf("Error getting queue length: %v\n", err)
-		return
-	}
-
-	fmt.Println("\n=== REDIS QUEUE STATUS ===")
-	fmt.Printf("Queue length: %d\n", queueLen)
-
-	// If there are items in the queue, print the first few
-	if queueLen > 0 {
-		// Get up to 10 items from the queue (without removing them)
-		items, err := s.Conn.Cache.LRange(context.Background(), "queue", 0, 9).Result()
-		if err != nil {
-			fmt.Printf("Error getting queue items: %v\n", err)
-			return
-		}
-
-		fmt.Println("Queue items (up to 10):")
-		for i, item := range items {
-			// Try to parse the JSON to extract the function name
-			var queueArgs utils.QueueArgs
-			if err := json.Unmarshal([]byte(item), &queueArgs); err != nil {
-				fmt.Printf("  %d: [Error parsing item: %v]\n", i+1, err)
-			} else {
-				fmt.Printf("  %d: %s (ID: %s)\n", i+1, queueArgs.Func, queueArgs.ID)
-			}
-		}
-
-		// If there are more items than we displayed
-		if queueLen > 10 {
-			fmt.Printf("  ... and %d more items\n", queueLen-10)
-		}
-	} else {
-		fmt.Println("Queue is empty")
-	}
-
-	fmt.Println("=========================")
-}
-
-// clearWorkerQueue clears the worker queue to prevent backlog
-func clearWorkerQueue(conn *utils.Conn) error {
-	ctx := context.Background()
-
-	err := conn.Cache.Del(ctx, "queue").Err()
-	if err != nil {
-		fmt.Println("Failed to clear worker queue:", err)
-		return err
-	}
-
-	fmt.Println("Worker queue cleared successfully")
-	return nil
-}
 
 // initAggregates initializes the aggregates
 func initAggregates(conn *utils.Conn) error {

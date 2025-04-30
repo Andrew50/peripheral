@@ -2,7 +2,6 @@
 	import Header from '$lib/utils/modules/header.svelte';
 	import '$lib/core/global.css';
 	import { browser } from '$app/environment';
-	import { fade, fly } from 'svelte/transition';
 
 	if (browser) {
 		document.title = 'Atlantis';
@@ -10,18 +9,13 @@
 </script>
 
 <main class="main-container">
-	<!-- Remove chart-container -->
-	<!-- <div class="chart-container">
-		<MarketChart />
-	</div> -->
-
 	<!-- Remove #if showHero block -->
 	<!-- {#if showHero} -->
 		<div class="hero-wrapper">
 			<Header />
 			<section class="hero-section">
 				<div class="hero-content content-padding">
-					<h1>ATLANTIS</h1>
+					<h1>Atlantis</h1>
 					<p class="tagline fluid-text">Comprehensive Market Analysis Suite</p>
 					<div class="cta-buttons responsive-flex">
 						<a href="/signup" class="cta-button primary responsive-shadow">Get Started</a>
@@ -101,9 +95,6 @@
 		flex-direction: column;
 	}
 
-	/* Remove chart-container styles */
-	/* .chart-container { ... } */
-
 	.hero-wrapper {
 		display: flex;
 		flex-direction: column;
@@ -117,8 +108,6 @@
 		align-items: center; /* Center content horizontally */
 		min-height: 80vh; /* Give hero ample space */
 		width: 100%;
-		/* Optional: Add subtle gradient */
-		/* background: linear-gradient(180deg, var(--c2, #1a1c21) 0%, rgba(var(--c1-rgb, 45, 49, 57), 0.5) 100%); */
 		padding: var(--space-xl, 4rem) 0; /* Use spacing variables */
 	}
 
@@ -288,6 +277,5 @@
 		transform: translateY(-4px);
 		background: var(--ui-bg-hover, rgba(255, 255, 255, 0.05));
 		border-color: var(--c3, #3b82f6); /* Highlight border on hover */
-		/* box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); */
 	}
 </style>

@@ -1,4 +1,6 @@
 #!/bin/bash
+# This script starts a temporary Postgres instance, runs migrations,
+# stops the temporary instance, and then execs the final Postgres instance.
 set -e
 
 # Function to log messages with timestamps
@@ -11,41 +13,89 @@ error_log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] STARTUP ERROR: $1" >&2
 }
 
-# Start PostgreSQL using the official entrypoint
-log "Starting PostgreSQL..."
+# Determine the location of migrate.sh dynamically
+MIGRATE_SCRIPT=""
+if [ -f "/app/migrate.sh" ]; then
+  MIGRATE_SCRIPT="/app/migrate.sh"
+elif [ -f "/usr/local/bin/migrate.sh" ]; then
+  MIGRATE_SCRIPT="/usr/local/bin/migrate.sh"
+fi
+
+if [ -z "$MIGRATE_SCRIPT" ]; then
+  error_log "migrate.sh not found in expected locations (/app/migrate.sh or /usr/local/bin/migrate.sh)"
+  exit 1
+fi
+log "Using migration script: $MIGRATE_SCRIPT"
+
+# === Temporary Postgres Start for Migrations ===
+log "Starting temporary PostgreSQL instance for migrations..."
+# We use the official entrypoint to ensure the data directory is initialized
+# correctly on the very first run if needed.
+# Start it in the background.
 docker-entrypoint.sh postgres -c config_file=/etc/postgresql/postgresql.conf &
 PG_PID=$!
+log "Temporary PostgreSQL PID: $PG_PID"
 
-# Wait for PostgreSQL to start
-log "Waiting for PostgreSQL to start..."
-until pg_isready -U postgres -h localhost; do
-  echo "PostgreSQL is unavailable - sleeping"
-  sleep 1
+# Wait for the temporary PostgreSQL instance to start
+# Use pg_isready which is designed for this. Ensure PGHOST, PGUSER etc. are set
+# appropriately if defaults (localhost, current user) aren't sufficient.
+# The official postgres images often set PGUSER=postgres.
+log "Waiting for temporary PostgreSQL instance to become available..."
+WAIT_TIMEOUT=60 # Maximum wait time in seconds
+WAIT_INTERVAL=1 # Check interval
+SECONDS=0 # Start timer
+
+# Loop until pg_isready succeeds or timeout occurs
+until pg_isready -U postgres -h localhost -q; do
+  if ! kill -0 "$PG_PID" 2>/dev/null; then
+    error_log "Temporary PostgreSQL process (PID: $PG_PID) exited unexpectedly during startup wait."
+    # Optional: attempt to show recent postgres logs if possible/needed for debugging
+    exit 1 # Exit if the process died
+  fi
+  if [ "$SECONDS" -ge "$WAIT_TIMEOUT" ]; then
+    error_log "Timed out waiting for temporary PostgreSQL instance to start after ${WAIT_TIMEOUT} seconds."
+    # Attempt to gracefully stop the potentially stuck process before exiting
+    log "Attempting to stop potentially stuck temporary PostgreSQL (PID: $PG_PID)..."
+    kill -TERM "$PG_PID" || true
+    sleep 2
+    kill -KILL "$PG_PID" || true
+    exit 1
+  fi
+  log "Temporary PostgreSQL is unavailable - sleeping ${WAIT_INTERVAL}s (elapsed: ${SECONDS}s)"
+  sleep "$WAIT_INTERVAL"
 done
-log "PostgreSQL is up and running"
+log "Temporary PostgreSQL is up and running (PID: $PG_PID)"
 
-# Run migrations once on startup
+# Run migrations
 log "Running migrations..."
-# Use the correct path for the migrate.sh script based on the environment
-if [ -f "/app/migrate.sh" ]; then
-  # Development environment path
-  /app/migrate.sh postgres || {
-    error_log "Failed to run migrations"
-  }
-elif [ -f "/usr/local/bin/migrate.sh" ]; then
-  # Production environment path
-  /usr/local/bin/migrate.sh postgres || {
-    error_log "Failed to run migrations"
-  }
+# Ensure the migrate script has necessary DB connection info (e.g., via env vars PGDATABASE, PGUSER, PGPASSWORD, PGHOST)
+if "$MIGRATE_SCRIPT" postgres; then
+  log "Migrations completed successfully."
 else
-  error_log "migrate.sh not found in expected locations"
+  # If migrations fail, log the error, stop the temp instance, and exit non-zero
+  error_log "Migrations failed. Stopping temporary instance and exiting."
+  kill -TERM "$PG_PID" || true # Send SIGTERM
+  # Wait a bit for graceful shutdown before exiting container
+  wait "$PG_PID" || true
   exit 1
 fi
 
-log "PostgreSQL is running with migrations applied"
+# Stop the temporary PostgreSQL instance cleanly
+log "Stopping temporary PostgreSQL instance (PID: $PG_PID)..."
+# Send SIGTERM for graceful shutdown
+kill -TERM "$PG_PID"
+# Wait for the process to terminate
+wait "$PG_PID"
+log "Temporary PostgreSQL instance stopped."
 
-# Trap SIGTERM and SIGINT to properly shutdown
-trap 'log "Received shutdown signal"; kill -TERM $PG_PID; wait $PG_PID' TERM INT
+# === Final Postgres Start using exec ===
+log "Starting final PostgreSQL instance with exec (making it PID 1)..."
+# Use exec to replace the current script process with the postgres process.
+# The official entrypoint script will itself use 'exec postgres ...' at its end.
+# This ensures signals sent to the container (like SIGTERM from 'docker stop')
+# go directly to the postgres process run by the entrypoint.
+exec docker-entrypoint.sh postgres -c config_file=/etc/postgresql/postgresql.conf
 
-# Wait for PostgreSQL to exit
-wait $PG_PID
+# Note: Anything after 'exec' will not run unless 'exec' fails.
+error_log "Exec failed! Could not start final PostgreSQL instance."
+exit 1

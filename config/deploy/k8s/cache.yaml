@@ -99,30 +99,6 @@ spec:
     requests:
       storage: 100Gi
 ---
-# Cache PV
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: cache-pv
-spec:
-  capacity:
-    storage: 100Gi
-  volumeMode: Filesystem
-  accessModes:
-    - ReadWriteOnce
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: local-storage
-  local:
-    path: /mnt/disks/ssd3
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-        - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-                - minikube
----
 # Redis Config
 apiVersion: v1
 kind: ConfigMap
