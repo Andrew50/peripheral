@@ -1112,10 +1112,6 @@ func initTools() {
 							Type:        genai.TypeInteger,
 							Description: "id of the strategy to backtest",
 						},
-						"returnFullResults": {
-							Type:        genai.TypeBoolean,
-							Description: "Set this to false.",
-						},
 						"returnWindows": {
 							Type:        genai.TypeArray,                                                                                                                                                                         // Changed from TypeInteger
 							Description: "(Optional) A list of integers representing the specific forward return days (e.g., [1, 5, 20]) to calculate after each backtest result. If omitted, no future returns are calculated.", // Updated description
@@ -1124,7 +1120,7 @@ func initTools() {
 							},
 						},
 					},
-					Required: []string{"strategyId", "returnFullResults"},
+					Required: []string{"strategyId"},
 				},
 			},
 			Function:      RunBacktest,
