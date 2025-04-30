@@ -1,0 +1,2 @@
+ALTER TABLE strategies
+ALTER COLUMN name TYPE VARCHAR(100);

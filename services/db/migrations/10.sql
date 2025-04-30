@@ -5,20 +5,19 @@
 DROP TABLE IF EXISTS schema_versions_new;
 
 -- First create a temporary table with the new structure
-CREATE TABLE schema_versions_new (
+CREATE TABLE IF NOT EXISTS schema_versions_new (
     version NUMERIC PRIMARY KEY,
     applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     description TEXT
 );
 -- Copy data from the old table, converting version to numeric
 INSERT INTO schema_versions_new (version, applied_at, description)
-SELECT CASE
-        WHEN version ~ '^[0-9]+$' THEN version::NUMERIC
-        ELSE 0 -- Handle any non-numeric versions (shouldn't exist, but just in case)
-    END,
-    applied_at,
-    description
-FROM schema_versions;
+SELECT version::NUMERIC,
+       applied_at,
+       description
+FROM schema_versions
+WHERE version ~ '^[0-9]+$'; -- Only select rows where version is numeric
+
 -- Drop the old table
 DROP TABLE schema_versions;
 -- Rename the new table to schema_versions
