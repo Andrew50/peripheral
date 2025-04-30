@@ -10,6 +10,7 @@ import (
 	"google.golang.org/genai"
 )
 
+/*
 func getTextResponseFromGemini(ctx context.Context, conn *utils.Conn, model string, systemPrompt string, query string) (string, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
@@ -50,7 +51,7 @@ func getTextResponseFromGemini(ctx context.Context, conn *utils.Conn, model stri
 	// Get the text from the response
 	text := fmt.Sprintf("%v", result.Candidates[0].Content.Parts[0].Text)
 	return text, nil
-}
+}*/
 
 // FunctionCall represents a function to be called with its arguments
 type FunctionCall struct {
@@ -90,6 +91,8 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemProm
 		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}
 
+	thinkingBudget := int32(2000)
+
 	// Enhance the system instruction with tool descriptions
 	enhancedSystemInstruction := enhanceSystemPromptWithTools(baseSystemInstruction)
 	config := &genai.GenerateContentConfig{
@@ -100,6 +103,9 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemProm
 		},
 		Tools: []*genai.Tool{
 			{GoogleSearch: &genai.GoogleSearch{}},
+		},
+		ThinkingConfig: &genai.ThinkingConfig{
+			ThinkingBudget: &thinkingBudget,
 		},
 	}
 
