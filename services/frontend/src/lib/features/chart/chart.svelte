@@ -395,7 +395,6 @@
 						}
 					});
 				}
-
 				// Check if we reach end of avaliable data
 				if (inst.timestamp == 0) {
 					chartLatestDataReached = true;
@@ -523,15 +522,17 @@
 						}
 					}
 
-					if (inst.direction == 'forward') {
+					if (inst.direction == 'forward' && inst.requestType !== 'loadAdditionalData') {
 						const visibleRange = chart.timeScale().getVisibleRange();
 						const vrFrom = visibleRange?.from;
 						const vrTo = visibleRange?.to;
 						console.log('visibleRange', vrFrom, vrTo);
+						console.log('Applying forward load visibleRange:', { from: vrFrom, to: vrTo });
 						// Only set visible range if both from and to values are valid
 						chartCandleSeries.setData(newCandleData);
 						chartVolumeSeries.setData(newVolumeData);
 						if (vrFrom && vrTo && typeof vrFrom === 'number' && typeof vrTo === 'number') {
+							console.log('[Forward Load] Setting visible range:', { from: vrFrom, to: vrTo });
 							chart.timeScale().setVisibleRange({
 								from: vrFrom,
 								to: vrTo
@@ -597,6 +598,9 @@
 					}
 					queuedLoad = null;
 
+					// Log timestamp before applying rightOffset
+					console.log('[New Ticker] Timestamp before applying rightOffset:', currentChartInstance.timestamp);
+
 					// Fix the SMA data type issues
 					const smaResults = calculateMultipleSMAs(newCandleData, [10, 20]);
 					const sma10Data = smaResults.get(10);
@@ -645,7 +649,7 @@
 						inst.requestType === 'loadNewTicker' &&
 						!chartLatestDataReached &&
 						!$streamInfo.replayActive
-					) {
+						) {
 						backendLoadChartData({
 							...currentChartInstance,
 							timestamp: ESTSecondstoUTCMillis(
@@ -676,14 +680,6 @@
 		if (isViewingLiveData) {
 			applyLastQuote();
 		}
-		/*
-		const candle = chartCandleSeries.data().at(-1);
-		if (!candle) return;
-		const time = candle.time;
-		console.log('updateLatestQuote', data);
-		bidLine.setData([{ time: time, value: data.bidPrice }]);
-		askLine.setData([{ time: time, value: data.askPrice }]);
-		*/
 	}
 	// Create a horizontal line at the current crosshair position (Y-coordinate)
 
@@ -927,6 +923,9 @@
 		const sameBar = tradeTime < currentBarTimestamp + chartTimeframeInSeconds;
 
 		if (sameBar) {
+			// Only update if we are sure we have the latest data
+			if (!chartLatestDataReached) return;
+
 			// Use throttled updates
 			const now = Date.now();
 
@@ -984,92 +983,95 @@
 			}
 
 			return;
-		}
+		} else {
+			// Only create a new bar from live ticks if we are sure we have the latest data
+			if (!chartLatestDataReached) return;
 
-		// Create new bar - immediate update for new bars
-		// Reset throttling state for new bars
-		if (pendingBarUpdate) {
-			chartCandleSeries.update(pendingBarUpdate);
-			pendingBarUpdate = null;
-		}
+			// Create new bar - immediate update for new bars
+			// Reset throttling state for new bars
+			if (pendingBarUpdate) {
+				chartCandleSeries.update(pendingBarUpdate);
+				pendingBarUpdate = null;
+			}
 
-		if (pendingVolumeUpdate) {
-			chartVolumeSeries.update(pendingVolumeUpdate);
-			pendingVolumeUpdate = null;
-		}
+			if (pendingVolumeUpdate) {
+				chartVolumeSeries.update(pendingVolumeUpdate);
+				pendingVolumeUpdate = null;
+			}
 
-		lastUpdateTime = Date.now();
+			lastUpdateTime = Date.now();
 
-		const referenceStartTime = getReferenceStartTimeForDateMilliseconds(
-			trade.timestamp,
-			currentChartInstance.extendedHours
-		);
-		const timeDiff = (trade.timestamp - referenceStartTime) / 1000;
-		const flooredDifference =
-			Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds;
-		const newTime = UTCSecondstoESTSeconds(
-			referenceStartTime / 1000 + flooredDifference
-		) as UTCTimestamp;
+			const referenceStartTime = getReferenceStartTimeForDateMilliseconds(
+				trade.timestamp,
+				currentChartInstance.extendedHours
+			);
+			const timeDiff = (trade.timestamp - referenceStartTime) / 1000;
+			const flooredDifference =
+				Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+			const newTime = UTCSecondstoESTSeconds(
+				referenceStartTime / 1000 + flooredDifference
+			) as UTCTimestamp;
 
-		// Update with new bar
-		chartCandleSeries.update({
-			time: newTime,
-			open: trade.price,
-			high: trade.price,
-			low: trade.price,
-			close: trade.price
-		});
-
-		chartVolumeSeries.update({
-			time: newTime,
-			value: trade.size,
-			color: '#089981' // Default to green for new bars
-		});
-
-		// Fetch and update historical data
-		try {
-			const timeToRequestForUpdatingAggregate =
-				ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
-			const [barData] = await privateRequest<BarData[]>('getChartData', {
-				securityId: chartSecurityId,
-				timeframe: chartTimeframe,
-				timestamp: timeToRequestForUpdatingAggregate,
-				direction: 'backward',
-				bars: 1,
-				extendedHours: chartExtendedHours,
-				isreplay: $streamInfo.replayActive
+			// Update with new bar
+			chartCandleSeries.update({
+				time: newTime,
+				open: trade.price,
+				high: trade.price,
+				low: trade.price,
+				close: trade.price
 			});
 
-			if (!barData) return;
+			chartVolumeSeries.update({
+				time: newTime,
+				value: trade.size,
+				color: '#089981' // Default to green for new bars
+			});
 
-			// Find and update the matching bar
-			const allCandleData = [...chartCandleSeries.data()] as Array<CandlestickData<Time>>;
-			const barIndex = allCandleData.findIndex(
-				(candle) => candle.time === UTCSecondstoESTSeconds(barData.time)
-			);
+			// Fetch and update historical data
+			try {
+				const timeToRequestForUpdatingAggregate =
+					ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
+				const [barData] = await privateRequest<BarData[]>('getChartData', {
+					securityId: chartSecurityId,
+					timeframe: chartTimeframe,
+					timestamp: timeToRequestForUpdatingAggregate,
+					direction: 'backward',
+					bars: 1,
+					extendedHours: chartExtendedHours,
+					isreplay: $streamInfo.replayActive
+				});
 
-			if (barIndex !== -1) {
-				// Update bar data with safe copies
-				const updatedCandle = {
-					time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
-					open: barData.open,
-					high: barData.high,
-					low: barData.low,
-					close: barData.close
-				};
-				console.log('updatedCandle', updatedCandle);
-				chartCandleSeries.update(updatedCandle);
+				if (!barData) return;
 
-				// Create a new mutable copy of the volume data array before updating it	
-				const updatedVolumeBar = {
-					time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
-					value: barData.volume * (dolvol ? barData.close : 1),
-					color: barData.close > barData.open ? '#089981' : '#ef5350'
-				};
-				chartVolumeSeries.update(updatedVolumeBar);
+				// Find and update the matching bar
+				const allCandleData = [...chartCandleSeries.data()] as Array<CandlestickData<Time>>;
+				const barIndex = allCandleData.findIndex(
+					(candle) => candle.time === UTCSecondstoESTSeconds(barData.time)
+				);
+
+				if (barIndex !== -1) {
+					// Update bar data with safe copies
+					const updatedCandle = {
+						time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
+						open: barData.open,
+						high: barData.high,
+						low: barData.low,
+						close: barData.close
+					};
+					console.log('updatedCandle', updatedCandle);
+					chartCandleSeries.update(updatedCandle);
+
+					// Create a new mutable copy of the volume data array before updating it	
+					const updatedVolumeBar = {
+						time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
+						value: barData.volume * (dolvol ? barData.close : 1),
+						color: barData.close > barData.open ? '#089981' : '#ef5350'
+					};
+					chartVolumeSeries.update(updatedVolumeBar);
+				}
+			} catch (error) {
+				console.error('Error fetching historical data:', error);
 			}
-		} catch (error) {
-			console.error('Error fetching historical data:', error);
 		}
 	}
 
@@ -1658,7 +1660,6 @@
 					price: currentChartInstance.price,
 					extendedHours: currentChartInstance.extendedHours
 				};
-
 				backendLoadChartData({
 					...inst,
 					bars: Math.floor(bufferInScreenSizes * barsOnScreen) + 100,
