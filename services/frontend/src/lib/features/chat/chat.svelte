@@ -1,18 +1,22 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { onMount, tick, onDestroy } from 'svelte';
 	import { privateRequest } from '$lib/core/backend';
 	import { marked } from 'marked'; // Import the markdown parser
 	import { queryChart } from '$lib/features/chart/interface'; // Import queryChart
 	import type { Instance } from '$lib/core/types';
 	import { browser } from '$app/environment'; // Import browser
+	import { derived, writable } from 'svelte/store';
 	import {
 		inputValue,
 		contextItems,
+		addInstanceToChat,
 		removeInstanceFromChat,
 		removeFilingFromChat,
 		type FilingContext, // Import the new type
 		pendingChatQuery // Import the new store
 	} from './interface'
+	import { activeChartInstance } from '$lib/features/chart/interface';
+	import { functionStatusStore, type FunctionStatusUpdate } from '$lib/utils/stream/socket'; // <-- Import the status store and FunctionStatusUpdate type
 
 	// Set default options for the markdown parser (optional)
 	marked.setOptions({
@@ -47,24 +51,21 @@
 				}
 			});
 
-			// Handle the Promise case by converting immediately to string
-			const parsed = marked.parse(processedContent);
+			// 3. Handle the Promise case by converting immediately to string after markdown parsing
+			const parsed = marked.parse(processedContent); // marked.parse will treat our buttons as HTML
 			const parsedString = typeof parsed === 'string' ? parsed : String(parsed);
 
-			// Regex to find $$$TICKER-securityId-TIMESTAMPINMS$$$ patterns
-			// Captures TICKER (1), securityId (2), TIMESTAMPINMS (3)
-			const tickerRegex = /\$\$\$([A-Z]{1,5})-(\d+)-(\d+)\$\$\$/g;
+			// 4. Regex to find $$$TICKER-TIMESTAMPINMS$$$ patterns
+			// Captures TICKER (1), TIMESTAMPINMS (2)
+			// This runs *after* marked.parse and after simple tickers are converted.
+			const tickerRegex = /\$\$\$([A-Z]{1,5})-(\d+)\$\$\$/g;
 
-			// Replace ticker patterns with buttons including all data attributes
 			const contentWithTickerButtons = parsedString.replace(
 				tickerRegex,
-				(match, ticker, securityId, timestampMs) => {
-					// Use the existing formatChipDate function
+				(match, ticker, timestampMs) => {
 					const formattedDate = formatChipDate(parseInt(timestampMs, 10));
 					const buttonText = `${ticker}${formattedDate}`;
-
-					// Return the button HTML
-					return `<button class="ticker-button" data-ticker="${ticker}" data-security-id="${securityId}" data-timestamp-ms="${timestampMs}">${buttonText}</button>`;
+					return `<button class="ticker-button" data-ticker="${ticker}" data-timestamp-ms="${timestampMs}">${buttonText}</button>`;
 				}
 			);
 
@@ -81,14 +82,6 @@
 			return content; // Fallback to plain text if parsing fails
 		}
 	}
-
-	// Define types for our response data
-	type FunctionResult = {
-		function_name: string;
-		result?: any;
-		error?: string;
-	};
-
 	// Define the ContentChunk and TableData types to match the backend
 	type TableData = {
 		caption?: string;
@@ -102,10 +95,9 @@
 	};
 
 	type QueryResponse = {
-		response_type: 'text' | 'mixed_content' | 'function_calls';
+		response_type: 'text' | 'mixed_content';
 		text?: string;
 		content_chunks?: ContentChunk[];
-		history?: any;
 	};
 
 	// Conversation history type
@@ -114,7 +106,6 @@
 			query: string;
 			content_chunks?: ContentChunk[];
 			response_text: string;
-			function_calls?: any[];
 			timestamp: string | Date;
 			expires_at?: string | Date;
 			context_items?: (Instance | FilingContext)[];
@@ -144,6 +135,7 @@
 	let queryInput: HTMLTextAreaElement;
 	let isLoading = false;
 	let messagesContainer: HTMLDivElement;
+	let initialSuggestions: string[] = [];
 
 	// Backtest mode state
 	let isBacktestMode = false;
@@ -151,9 +143,48 @@
 	// State for table expansion
 	let tableExpansionStates: { [key: string]: boolean } = {};
 
+	// State for table sorting
+	type SortState = {
+		columnIndex: number | null;
+		direction: 'asc' | 'desc' | null;
+	};
+	let tableSortStates: { [key: string]: SortState } = {};
+
 	// Chat history
-	let messages: Message[] = [];
+	let messagesStore = writable<Message[]>([]); // Wrap messages in a writable store
 	let historyLoaded = false; // Add state variable
+
+	// Derived store to control initial chip visibility
+	const showChips = derived([inputValue, messagesStore], ([$val, $msgs]) => $msgs.length === 0 && $val.trim() === '');
+
+	// Reactive variable for top 3 suggestions
+	$: topChips = initialSuggestions.slice(0, 3);
+
+	// State for showing all initial suggestions
+	let showAllInitialSuggestions = false;
+
+	// Manage active chart context: subscribe to add new and remove old chart contexts
+	let previousChartInstance: Instance | null = null;
+
+	// Function to fetch initial suggestions based on active chart
+	async function fetchInitialSuggestions() {
+		initialSuggestions = []; // Clear previous suggestions first
+		if ($activeChartInstance) { // Only fetch if there's an active instance
+			try {
+				const response = await privateRequest<{ suggestions: string[] }>('getInitialQuerySuggestions', {
+					activeChartInstance: $activeChartInstance
+				});
+				if (response && response.suggestions) {
+					initialSuggestions = response.suggestions;
+				} else {
+					initialSuggestions = []; // Ensure it's an empty array on bad response
+				}
+			} catch (error) {
+				console.error('Error fetching initial suggestions:', error);
+				initialSuggestions = []; // Ensure it's an empty array on error
+			}
+		}
+	}
 
 	// Load any existing conversation history from the server
 	async function loadConversationHistory() {
@@ -167,24 +198,23 @@
 				// Process each message in the conversation history
 				conversation.messages.forEach((msg) => {
 					// Add user message
-					messages.push({
+					messagesStore.update(current => [...current, {
 						id: generateId(),
 						content: msg.query,
 						sender: 'user',
 						timestamp: new Date(msg.timestamp),
 						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
 						contextItems: msg.context_items || []
-					});
+					}]);
 
-					messages.push({
+					messagesStore.update(current => [...current, {
 						id: generateId(),
 						sender: 'assistant',
 						content: msg.response_text,
 						contentChunks: msg.content_chunks || [],
 						timestamp: new Date(msg.timestamp),
 						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
-						responseType: msg.function_calls?.length ? 'function_calls' : 'text'
-					});
+					}]);
 				});
 
 				scrollToBottom();
@@ -193,7 +223,13 @@
 			console.error('Error loading conversation history:', error);
 		} finally {
 			isLoading = false;
-			historyLoaded = true; // Set history loaded flag
+			historyLoaded = true;
+
+			// Clear previous suggestions and fetch if history is empty
+			initialSuggestions = [];
+			if ($messagesStore.length === 0) {
+				fetchInitialSuggestions(); // <-- Call the new helper function
+			}
 		}
 	}
 
@@ -238,13 +274,15 @@
 			
 			if (queriesResponse && queriesResponse.suggestions && queriesResponse.suggestions.length > 0) {
 				// Find the last assistant message and add suggested queries to it
-				for (let i = messages.length - 1; i >= 0; i--) {
-					if (messages[i].sender === 'assistant' && !messages[i].isLoading) {
-						messages[i].suggestedQueries = queriesResponse.suggestions;
-						messages = [...messages]; // Force UI update
-						break;
+				messagesStore.update(current => {
+					for (let i = current.length - 1; i >= 0; i--) {
+						if (current[i].sender === 'assistant' && !current[i].isLoading) {
+							current[i].suggestedQueries = queriesResponse.suggestions;
+							break;
+						}
 					}
-				}
+					return [...current]; // Return new array to trigger update
+				});
 			}
 		} catch (error) {
 			console.error('Error fetching suggested queries:', error);
@@ -273,36 +311,48 @@
 			contextItems: [...$contextItems]
 		};
 
-		messages = [...messages, userMessage];
+		messagesStore.update(current => [...current, userMessage]);
 
 		// Create loading message placeholder
 		const loadingMessage: Message = {
 			id: generateId(),
-			content: '',
+			content: '', // Content is now handled by the store
 			sender: 'assistant',
 			timestamp: new Date(),
 			isLoading: true
 		};
+		messagesStore.update(current => [...current, loadingMessage]);
+		
+		// <-- Set initial status immediately -->
+		functionStatusStore.set({
+			type: 'function_status',
+			userMessage: 'Processing request...'
+		});
 
-		messages = [...messages, loadingMessage];
 		scrollToBottom();
 
 		const queryText = $inputValue;
 		inputValue.set('');
+		// We already set an initial status, no need to clear here
 		await tick(); // Wait for DOM update
 		adjustTextareaHeight(); // Reset height after clearing input and waiting for tick
 
 		// Prepend if backtest mode is active
 		const finalQuery = isBacktestMode ? `[RUN BACKTEST] ${queryText}` : queryText;
-
-		privateRequest('getQuery', { query: finalQuery, context: $contextItems })
+		const currentActiveChart = $activeChartInstance; // Get current active chart instance
+		privateRequest('getQuery', {
+			query: finalQuery,
+			context: $contextItems, // Send only manually added context items
+			activeChartContext: currentActiveChart // Send active chart separately
+		})
 			.then((response) => {
 				console.log('response', response);
 				// Type assertion to handle the response type
 				const typedResponse = response as unknown as QueryResponse;
 				console.log('Response:', typedResponse);
 
-				messages = messages.filter((m) => m.id !== loadingMessage.id);
+				messagesStore.update(current => current.filter(m => m.id !== loadingMessage.id));
+				functionStatusStore.set(null); // Clear status store on success
 
 				const expiresAt = new Date();
 				expiresAt.setHours(expiresAt.getHours() + 24); 
@@ -317,8 +367,8 @@
 					contentChunks: typedResponse.content_chunks
 				};
 
-				messages = [...messages, assistantMessage];
-				scrollToBottom();
+				messagesStore.update(current => [...current, assistantMessage]);
+				// scrollToBottom(); // Removed this call
 				
 				fetchSuggestedQueries();
 			})
@@ -326,7 +376,8 @@
 				console.error('Error fetching response:', error);
 
 				// Remove loading message and add error message
-				messages = messages.filter((m) => m.id !== loadingMessage.id);
+				messagesStore.update(current => current.filter(m => m.id !== loadingMessage.id));
+				functionStatusStore.set(null); // Clear status store on error
 
 				const errorMessage: Message = {
 					id: generateId(),
@@ -336,8 +387,8 @@
 					responseType: 'error'
 				};
 
-				messages = [...messages, errorMessage];
-				scrollToBottom();
+				messagesStore.update(current => [...current, errorMessage]);
+				// scrollToBottom(); // Removed this call
 			});
 	}
 
@@ -388,28 +439,14 @@
 	async function clearConversation() {
 		try {
 			isLoading = true;
-			const response = await privateRequest('clearConversationHistory', {});
-			
+			// Wait for backend confirmation before clearing locally and fetching suggestions
+			await privateRequest('clearConversationHistory', {});
+
 			// Clear local messages
-			messages = [];
-			
-			// Optional: Show a temporary system message that history was cleared
-			const systemMessage: Message = {
-				id: generateId(),
-				content: "Conversation history has been cleared.",
-				sender: 'assistant',
-				timestamp: new Date(),
-				responseType: 'system'
-			};
-			
-			messages = [systemMessage];
-			
-			// Remove the system message after a few seconds
-			setTimeout(() => {
-				if (messages.length === 1 && messages[0].id === systemMessage.id) {
-					messages = [];
-				}
-			}, 3000);
+			messagesStore.set([]);
+
+			// Fetch initial suggestions now that history is cleared and confirmed
+			fetchInitialSuggestions(); // <-- Call the new helper function
 			
 		} catch (error) {
 			console.error('Error clearing conversation history:', error);
@@ -418,12 +455,11 @@
 			const errorMessage: Message = {
 				id: generateId(),
 				content: `Error: Failed to clear conversation history`,
-				sender: 'assistant',
+				sender: 'assistant', // Or 'system'? Let's keep 'assistant' for consistency with other errors
 				timestamp: new Date(),
 				responseType: 'error'
 			};
-			
-			messages = [...messages, errorMessage];
+			messagesStore.set([errorMessage]); // Show error on empty background
 		} finally {
 			isLoading = false;
 		}
@@ -446,27 +482,57 @@
 	}
 
 	// Function to handle clicks on ticker buttons
-	function handleTickerButtonClick(event: MouseEvent) {
-		const target = event.target as HTMLElement;
+	async function handleTickerButtonClick(event: MouseEvent) {
+		const target = event.target as HTMLButtonElement; // Assert as Button Element
 		if (target && target.classList.contains('ticker-button')) {
 			const ticker = target.dataset.ticker;
-			const securityIdStr = target.dataset.securityId;
-			const timestampMsStr = target.dataset.timestampMs; // Get the timestamp
+			const timestampMsStr = target.dataset.timestampMs; // Get the timestamp string
 
-			if (ticker && securityIdStr && timestampMsStr) {
-				const securityId = parseInt(securityIdStr, 10);
+			if (ticker && timestampMsStr) {
 				const timestampMs = parseInt(timestampMsStr, 10); // Parse the timestamp
 
-				if (isNaN(securityId) || isNaN(timestampMs)) {
-					console.error('Invalid securityId or timestampMs on ticker button');
-					return; // Don't proceed if ID or timestamp is invalid
+				if (isNaN(timestampMs)) {
+					console.error('Invalid timestampMs on ticker button');
+					return; // Don't proceed if timestamp is invalid
 				}
 
-				queryChart({
-					ticker: ticker,
-					securityId: securityId,
-					timestamp: timestampMs // Pass timestamp as number (milliseconds)
-				} as Instance);
+				try {
+					target.disabled = true;
+
+					// Call the new backend function to get the securityId
+					// Define expected response shape
+					type SecurityIdResponse = { securityId?: number };
+					console.log('ticker', ticker);
+					console.log('timestampMs', timestampMs);
+					const response = await privateRequest<SecurityIdResponse>('getSecurityIDFromTickerTimestamp', {
+						ticker: ticker,
+						timestampMs: timestampMs // Pass timestamp as number
+					});
+
+					// Safely access the securityId
+					const securityId = response?.securityId;
+
+					if (securityId && !isNaN(securityId)) {
+						// If securityId is valid, query the chart
+						queryChart({
+							ticker: ticker,
+							securityId: securityId,
+							timestamp: timestampMs // Pass timestamp as number (milliseconds)
+						} as Instance);
+					} else {
+						console.error('Failed to retrieve a valid securityId from backend:', response);
+						// Handle error visually if needed (e.g., show error message)
+						target.textContent = 'Error'; // Revert button text or indicate error
+						await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+					}
+
+				} catch (error) {
+					console.error('Error fetching securityId:', error);
+					await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+				} finally {
+					target.disabled = false;
+				}
+
 			} else {
 				console.error('Missing data attributes on ticker button');
 			}
@@ -479,7 +545,76 @@
 			tableExpansionStates[tableKey] = false; // Default to collapsed if not set
 		}
 		tableExpansionStates[tableKey] = !tableExpansionStates[tableKey];
-		tableExpansionStates = tableExpansionStates; // Trigger reactivity
+		tableExpansionStates = { ...tableExpansionStates }; // Trigger reactivity
+	}
+
+	// Function to sort table data
+	function sortTable(tableKey: string, columnIndex: number, tableData: TableData) {
+		const currentSortState = tableSortStates[tableKey] || { columnIndex: null, direction: null };
+		let newDirection: 'asc' | 'desc' | null = 'asc';
+
+		if (currentSortState.columnIndex === columnIndex) {
+			// Toggle direction if clicking the same column
+			newDirection = currentSortState.direction === 'asc' ? 'desc' : 'asc';
+		}
+
+		// Update sort state for this table
+		tableSortStates[tableKey] = { columnIndex, direction: newDirection };
+		tableSortStates = { ...tableSortStates }; // Trigger reactivity
+
+		// Sort the rows
+		tableData.rows.sort((a, b) => {
+			const valA = a[columnIndex];
+			const valB = b[columnIndex];
+
+			// Basic comparison, can be enhanced for types
+			let comparison = 0;
+			if (typeof valA === 'number' && typeof valB === 'number') {
+				comparison = valA - valB;
+			} else {
+				// Attempt numeric conversion for strings that look like numbers
+				const numA = Number(String(valA).replace(/[^0-9.-]+/g,""));
+				const numB = Number(String(valB).replace(/[^0-9.-]+/g,""));
+
+				if (!isNaN(numA) && !isNaN(numB)) {
+					comparison = numA - numB;
+				} else {
+					// Fallback to string comparison
+					const stringA = String(valA).toLowerCase();
+					const stringB = String(valB).toLowerCase();
+					if (stringA < stringB) {
+						comparison = -1;
+					} else if (stringA > stringB) {
+						comparison = 1;
+					}
+				}
+			}
+
+
+			return newDirection === 'asc' ? comparison : comparison * -1;
+		});
+
+		// Find the message containing this table and update its content_chunks
+		// This is necessary because tableData is a copy within the #each loop
+		messagesStore.update(current => current.map(msg => {
+			if (msg.contentChunks) {
+				msg.contentChunks = msg.contentChunks.map((chunk, idx) => {
+					const currentTableKey = msg.id + '-' + idx;
+					if (currentTableKey === tableKey && chunk.type === 'table' && isTableData(chunk.content)) {
+						// Return a new chunk object with the sorted rows
+						return {
+							...chunk,
+							content: {
+								...chunk.content,
+								rows: [...tableData.rows] // Ensure a new array reference
+							}
+						};
+					}
+					return chunk;
+				});
+			}
+			return msg;
+		}));
 	}
 
 	// Format timestamp for context chip (matches parseMarkdown format)
@@ -528,7 +663,7 @@
 <div class="chat-container">
 	<div class="chat-header">
 		<h3>Chat</h3>
-		{#if messages.length > 0}
+		{#if $messagesStore.length > 0}
 			<button class="clear-button" on:click={clearConversation} disabled={isLoading}>
 				<svg viewBox="0 0 24 24" width="16" height="16">
 					<path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z" fill="currentColor" />
@@ -539,20 +674,17 @@
 	</div>
 
 	<div class="chat-messages" bind:this={messagesContainer}>
-		{#if messages.length === 0}
-			<div class="empty-chat">
-				<div class="empty-chat-icon">
-					<svg viewBox="0 0 24 24" width="48" height="48">
-						<path
-							d="M20,2H4C2.9,2 2,2.9 2,4V22L6,18H20C21.1,18 22,17.1 22,16V4C22,2.9 21.1,2 20,2M20,16H5.2L4,17.2V4H20V16Z"
-							fill="currentColor"
-						/>
-					</svg>
-				</div>
-				<p>No messages yet. Start a conversation!</p>
+		{#if $messagesStore.length === 0}
+			<!-- Only show the container and header when chat is empty -->
+			<div class="initial-container">
+				<!-- Capabilities text merged here -->
+				<p class="capabilities-text">Chat is a powerful interface for analyzing market data, filings, news, backtesting strategies, and more. It can answer questions and perform tasks.</p>
+				<p class="suggestions-header">Ask Atlantis a question or to perform a task to get started.</p>
+
+
 			</div>
 		{:else}
-			{#each messages as message (message.id)}
+			{#each $messagesStore as message (message.id)}
 				<div class="message-wrapper {message.sender}">
 					<div
 						class="message {message.sender} {message.responseType === 'error'
@@ -560,11 +692,8 @@
 							: ''} {isNearExpiration(message) ? 'expiring' : ''}"
 					>
 						{#if message.isLoading}
-							<div class="typing-indicator">
-								<span></span>
-								<span></span>
-								<span></span>
-							</div>
+							<!-- Always display status text when loading, as we set an initial one -->
+							<p class="loading-status">{$functionStatusStore?.userMessage || 'Processing...'}</p> 
 						{:else}
 							<!-- Display context chips for user messages -->
 							{#if message.sender === 'user' && message.contextItems && message.contextItems.length > 0}
@@ -596,18 +725,34 @@
 													{@const tableKey = message.id + '-' + index}
 													{@const isLongTable = tableData && tableData.rows.length > 5}
 													{@const isExpanded = tableExpansionStates[tableKey] === true}
+													{@const currentSort = tableSortStates[tableKey] || { columnIndex: null, direction: null }}
 
 													{#if tableData}
 														<div class="chunk-table-wrapper">
 															{#if tableData.caption}
-																<div class="table-caption">{tableData.caption}</div>
+																<div class="table-caption">
+																	{@html parseMarkdown(tableData.caption)}
+																</div>
 															{/if}
 															<div class="chunk-table {isExpanded ? 'expanded' : ''}">
 																<table>
 																	<thead>
 																		<tr>
-																			{#each tableData.headers as header}
-																				<th>{header}</th>
+																			{#each tableData.headers as header, colIndex}
+																				<th
+																					on:click={() => sortTable(tableKey, colIndex, JSON.parse(JSON.stringify(tableData)))}
+																					class:sortable={true}
+																					class:sorted={currentSort.columnIndex === colIndex}
+																					class:asc={currentSort.columnIndex === colIndex && currentSort.direction === 'asc'}
+																					class:desc={currentSort.columnIndex === colIndex && currentSort.direction === 'desc'}
+																				>
+																					{header}
+																					{#if currentSort.columnIndex === colIndex}
+																						<span class="sort-indicator">
+																							{currentSort.direction === 'asc' ? '▲' : '▼'}
+																						</span>
+																					{/if}
+																				</th>
 																			{/each}
 																		</tr>
 																	</thead>
@@ -675,6 +820,22 @@
 	</div>
 
 	<div class="chat-input-wrapper">
+		<!-- Moved Initial Suggestions Here -->
+		{#if $showChips && topChips.length}
+		  <div class="chip-row">
+		    {#each initialSuggestions as q, i}
+		      {#if i < 3 || showAllInitialSuggestions}
+		      <button class="chip suggestion-chip" on:click={() => handleSuggestedQueryClick(q)}>
+		        <kbd>{i + 1}</kbd> {q}
+		      </button>
+		      {/if}
+		    {/each}
+		    {#if initialSuggestions.length > 3 && !showAllInitialSuggestions}
+		      <button class="chip suggestion-chip more" on:click={() => showAllInitialSuggestions = true}>⋯ More</button>
+		    {/if}
+		  </div>
+		{/if}
+
 		<div class="input-actions">
 			<button
 				class="action-toggle-button {isBacktestMode ? 'active' : ''}"
@@ -728,6 +889,13 @@
 						// Prevent space key events from propagating to parent elements
 						if (event.key === ' ' || event.code === 'Space') {
 							event.stopPropagation();
+						}
+
+						// Handle keyboard shortcuts for chips
+						if (event.key >= '1' && event.key <= '3' && $showChips && topChips[+event.key - 1]) {
+							handleSuggestedQueryClick(topChips[+event.key - 1]);
+							event.preventDefault();
+							return; // Prevent Enter key processing
 						}
 
 						// Submit on Enter, allow newline with Shift+Enter
@@ -969,27 +1137,50 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.5rem;
-		margin: 0.75rem 0;
+		margin: 0.75rem 0; /* Keep vertical margin */
+	}
+
+	/* Specific styling for initial suggestions above input */
+	.initial-suggestions-input-area {
+		width: 100%; /* Ensure container takes full width */
+		padding-bottom: 0.5rem; /* Space between suggestions and actions */
+		border-bottom: 1px solid var(--ui-border); /* Separator line */
+		margin-bottom: 0.5rem; /* Space below the separator */
+	}
+
+	/* Adjust margin for suggested queries only when they are in the input area */
+	.initial-suggestions-input-area .suggested-queries {
+		margin: 0; /* Remove margin when above input */
+		display: flex; /* Use flexbox */
+		flex-direction: column; /* Stack items vertically */
+		align-items: stretch; /* Make items stretch to fill width */
+		gap: 0.5rem; /* Keep gap between buttons */
+	}
+
+	/* Reset styles specifically for buttons in the initial suggestions area */
+	.initial-suggestions-input-area .suggested-query-btn {
+		padding: 0.4rem 1rem; /* Use standard button padding */
+		height: auto;         /* Reset height */
+		flex: none;           /* Reset flex property */
+		text-align: center;   /* Center text within the stretched button */
 	}
 
 	.suggested-query-btn {
 		/* Match the ticker button styles */
 		background: var(--ui-bg-element-darker, #2a2a2a);
 		border: 1px solid var(--ui-border, #444);
-		color: var(--text-primary, #fff); /* Use primary text color */
-		padding: 0.4rem 1rem; /* Match padding */
+		color: var(--text-primary, #fff);
+		padding: 0.25rem 0.8rem; /* Adjusted vertical padding */
 		border-radius: 0.25rem; /* Match border-radius */
 		font-size: 0.75rem; /* Match font-size */
 		font-weight: 500;
 		cursor: pointer;
 		transition: all 0.2s ease;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		max-width: 100%;
-		line-height: 1; /* Ensure consistent height */
+		max-width: 100%; /* Keep max-width */
+		line-height: 1.3; /* ADJUST line-height for wrapping */
 		text-decoration: none; /* Remove default button underline */
 		display: inline-block; /* Ensure proper alignment */
+		text-align: left; /* Align wrapped text to the left */
 	}
 
 	.suggested-query-btn:hover {
@@ -1147,23 +1338,6 @@
 		margin-bottom: 0;
 	}
 	
-	.message-content :global(pre) {
-		background: rgba(0, 0, 0, 0.2);
-		padding: 0.5rem;
-		border-radius: 0.25rem;
-		overflow-x: auto;
-		margin: 0.5rem 0;
-		font-size: 0.8rem;
-	}
-	
-	.message-content :global(code) {
-		font-family: monospace;
-		background: rgba(0, 0, 0, 0.2);
-		padding: 0.1rem 0.25rem;
-		border-radius: 0.25rem;
-		font-size: 0.8rem;
-	}
-	
 	.message-content :global(ul), .message-content :global(ol) {
 		margin: 0.5rem 0;
 		padding-left: 1.5rem;
@@ -1235,6 +1409,32 @@
 		padding: 0.5rem;
 		text-align: left;
 		border: 1px solid var(--ui-border, #444);
+	}
+
+	.content-chunks th.sortable {
+		cursor: pointer;
+		position: relative; /* For positioning the indicator */
+		user-select: none; /* Prevent text selection on click */
+	}
+
+	.content-chunks th.sortable:hover {
+		background: rgba(255, 255, 255, 0.05); /* Subtle hover */
+	}
+
+	.content-chunks th .sort-indicator {
+		font-size: 0.7em; /* Smaller indicator */
+		margin-left: 0.4em;
+		display: inline-block;
+		opacity: 0.7;
+		/* Optional: absolute positioning */
+		/* position: absolute; */
+		/* right: 0.5rem; */
+		/* top: 50%; */
+		/* transform: translateY(-50%); */
+	}
+
+	.content-chunks th.sorted .sort-indicator {
+		opacity: 1; /* Make active indicator fully visible */
 	}
 	
 	.content-chunks td {
@@ -1358,4 +1558,108 @@
 		font-size: 0.7rem; /* Smaller font size */
 		cursor: default; /* Not interactive */
 	}
+
+	.initial-container {
+		text-align: center;
+		color: var(--text-secondary, #aaa);
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		height: 100%;
+		flex: 1;
+		padding: 2rem;
+	}
+
+	.suggestions-header {
+		font-size: 0.9rem;
+		margin-bottom: 1rem;
+		font-weight: 500;
+		color: var(--text-primary, #fff);
+	}
+
+	/* Style for the capabilities text within the initial container */
+	.capabilities-text {
+		font-size: 0.8rem;
+		color: var(--text-secondary, #aaa);
+		margin-bottom: 1.5rem; /* Space before the 'Ask...' prompt */
+		line-height: 1.4;
+	}
+
+	.loading-status {
+		color: transparent;
+		font-size: 0.8rem;
+		padding: 0.5rem 0;
+		margin: 0;
+		text-align: left;
+		/* Apply gradient as background - Increased contrast */
+		background: linear-gradient(
+			90deg,
+			var(--text-secondary, #aaa),
+			rgba(255, 255, 255, 0.9), /* Brighter middle color */
+			var(--text-secondary, #aaa)
+		);
+		background-size: 200% auto;
+		background-clip: text;
+		-webkit-background-clip: text;
+		/* Animate the background position - Slightly faster animation */
+		animation: loading-text-highlight 2.5s infinite linear; /* Changed duration to 2s */
+	}
+
+	/* Update keyframes to animate background-position */
+	@keyframes loading-text-highlight {
+		0% {
+			background-position: 200% center;
+		}
+		100% {
+			background-position: -200% center;
+		}
+	}
+
+	/* Chip row styles */
+	.chat-input-wrapper > .chip-row {
+		display: flex;
+		gap: 0.5rem;
+		margin-bottom: 0.35rem;
+		animation: fadeIn 0.2s;
+		flex-wrap: wrap; /* Allow wrapping if needed */
+		width: 100%; /* Ensure it takes full available width */
+		min-width: 0; /* Help flexbox wrapping calculations */
+	}
+
+	/* Specific styles for suggestion chips to override general .chip */
+	.suggestion-chip {
+		font-size: 0.75rem;
+		padding: 0.3rem 0.75rem;
+		border-radius: 9999px; /* Pill shape */
+		background: var(--ui-bg-element);
+		border: 1px solid var(--ui-border);
+		color: var(--text-secondary); /* Subtler text */
+		transition: .15s ease;
+		cursor: pointer;
+	}
+
+	.suggestion-chip:hover {
+		border-color: var(--ui-accent);
+		background: var(--ui-bg-element-hover, #444);
+		color: var(--text-primary); /* Highlight text on hover */
+	}
+
+	.suggestion-chip kbd {
+		background: transparent;
+		font: inherit;
+		opacity: 0.6;
+		margin-right: 0.25rem;
+		font-size: 0.7rem; /* Slightly smaller */
+		border: 1px solid var(--ui-border-darker); /* Subtle border */
+		padding: 0.1rem 0.25rem;
+		border-radius: 0.2rem;
+		line-height: 1; /* Prevent extra height */
+		display: inline-block; /* Ensure proper layout */
+	}
+
+	@keyframes fadeIn {
+		from { opacity: 0; transform: translateY(-5px); }
+		to { opacity: 1; transform: translateY(0); }
+	}
+
 </style>

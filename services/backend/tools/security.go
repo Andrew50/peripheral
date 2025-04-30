@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -68,7 +69,6 @@ func GetMarketCap(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 // GetPrevCloseArgs represents a structure for handling GetPrevCloseArgs data.
 type GetPrevCloseArgs struct {
 	SecurityID int `json:"securityId"`
-	Timestamp  int `json:"timestamp"`
 }
 
 // PolygonBar represents a structure for handling PolygonBar data.
@@ -82,9 +82,8 @@ func GetPrevClose(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interf
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("getPrevClose invalid args: %v", err)
 	}
-
+	currentDay := time.Now()
 	// Start at the given timestamp and subtract a day until a valid close is found
-	currentDay := time.Unix(int64(args.Timestamp/1000), 0).UTC()
 	currentDay = currentDay.AddDate(0, 0, -1)
 
 	var bar PolygonBar
@@ -683,6 +682,33 @@ func GetCurrentSecurityID(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 	return securityID, nil
 }
 
+type GetSecurityIDFromTickerTimestampArgs struct {
+	Ticker    string `json:"ticker"`
+	Timestamp int64  `json:"timestamp"`
+}
+
+type GetSecurityIDFromTickerTimestampResults struct {
+	SecurityID int `json:"securityId"`
+}
+
+func GetSecurityIDFromTickerTimestamp(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetSecurityIDFromTickerTimestampArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+	var timestamp time.Time
+	if args.Timestamp == 0 {
+		timestamp = time.Now()
+	} else {
+		timestamp = time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6)
+	}
+	securityID, err := utils.GetSecurityID(conn, args.Ticker, timestamp)
+	if err != nil {
+		return nil, fmt.Errorf("error getting security ID: %v", err)
+	}
+	return GetSecurityIDFromTickerTimestampResults{SecurityID: securityID}, nil
+}
+
 type GetTickerDailySnapshotArgs struct {
 	SecurityID int `json:"securityId"`
 }
@@ -700,6 +726,7 @@ type GetTickerDailySnapshotResults struct {
 	TodayHigh          float64 `json:"todayHigh"`
 	TodayLow           float64 `json:"todayLow"`
 	TodayClose         float64 `json:"todayClose"`
+	PreviousClose      float64 `json:"previousClose"`
 }
 
 func GetTickerDailySnapshot(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
@@ -734,7 +761,9 @@ func GetTickerDailySnapshot(conn *utils.Conn, userId int, rawArgs json.RawMessag
 	results.TodayHigh = snapshot.Day.High
 	results.TodayLow = snapshot.Day.Low
 	results.TodayClose = snapshot.Day.Close
+	results.PreviousClose = lastClose
 	results.Ticker = ticker
+	fmt.Println(results)
 	return results, nil
 }
 
@@ -773,4 +802,21 @@ type GetFilteredTickerSnapshotArgs struct {
 }
 type GetFilteredTickerSnapshotResults struct {
 	Snapshots []GetTickerDailySnapshotResults `json:"snapshots"`
+}
+
+type GetLastPriceArgs struct {
+	Ticker string `json:"ticker"`
+}
+
+func GetLastPrice(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetLastPriceArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+	trade, err := utils.GetLastTrade(conn.Polygon, args.Ticker)
+	if err != nil {
+		return nil, fmt.Errorf("error getting last trade: %v", err)
+	}
+	roundedPrice := math.Round(trade.Price*100) / 100
+	return roundedPrice, nil
 }

@@ -3,22 +3,21 @@ package tools
 import (
 	"backend/utils"
 	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
-    "strconv"
-    "embed"
 	"time"
 )
 
-
 //go:embed prompts/*
-var fs embed.FS           // 2️⃣ compiled into the binary
+var fs embed.FS // 2️⃣ compiled into the binary
 
 // getSystemInstruction returns the processed prompt named <name>.txt
 func getSystemInstruction(name string) (string, error) {
-    fmt.Println(fs)
+	fmt.Println(fs)
 	raw, err := fs.ReadFile("prompts/" + name + ".txt") // 3️⃣ no paths, no os.ReadFile
 	if err != nil {
 		return "", fmt.Errorf("reading prompt: %w", err)
@@ -40,7 +39,6 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 	toolsDescription.WriteString(basePrompt)
 	toolsDescription.WriteString("\n\nHere are the functions you can use:\n\n")
 
-
 	// Sort tool names for consistent output
 	var toolNames []string
 	for name := range GetTools(false) {
@@ -51,7 +49,6 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 	// Add each tool's description and parameters
 	for _, name := range toolNames {
 		tool := GetTools(false)[name]
-
 
 		// Add function name and description
 		toolsDescription.WriteString(fmt.Sprintf("- %s: %s\n", name, tool.FunctionDeclaration.Description))
@@ -70,7 +67,7 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 			for paramName, paramSchema := range tool.FunctionDeclaration.Parameters.Properties {
 				isReq := ""
 				if required[paramName] {
-					isReq = " (required)"
+					isReq = " (REQUIRED)"
 				}
 				toolsDescription.WriteString(fmt.Sprintf("  - %s: %s%s\n", paramName, paramSchema.Description, isReq))
 			}
@@ -89,10 +86,31 @@ func ClearConversationHistory(conn *utils.Conn, userID int, args json.RawMessage
 	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
 	fmt.Printf("Attempting to delete conversation for key: %s\n", conversationKey)
 
-	// Delete the key from Redis
+	// Delete the conversation history key from Redis
 	err := conn.Cache.Del(ctx, conversationKey).Err()
 	if err != nil {
 		fmt.Printf("Failed to delete conversation from Redis: %v\n", err)
+		// Don't return immediately, still try to delete persistent context
+	} else {
+		fmt.Printf("Successfully deleted conversation for key: %s\n", conversationKey)
+	}
+
+	// Also delete the persistent context key
+	persistentContextKey := fmt.Sprintf(persistentContextKeyFormat, userID) // Use constant from persistentContext.go
+	pErr := conn.Cache.Del(ctx, persistentContextKey).Err()
+	if pErr != nil {
+		fmt.Printf("Failed to delete persistent context from Redis: %v\n", pErr)
+		// If conversation deletion succeeded but this failed, maybe return a specific error?
+		// For now, just log it and return the original error if it exists, or this one if not.
+		if err == nil { // If conversation delete was ok, return this error
+			return nil, fmt.Errorf("failed to clear persistent context: %w", pErr)
+		}
+	} else {
+		fmt.Printf("Successfully deleted persistent context for key: %s\n", persistentContextKey)
+	}
+
+	// If the conversation deletion failed initially, return that error now
+	if err != nil {
 		return nil, fmt.Errorf("failed to clear conversation history: %w", err)
 	}
 
