@@ -1,7 +1,7 @@
 -- Migration: 011_change_version_to_numeric
 -- Description: Changes schema_versions.version from VARCHAR to a numeric type
 -- First create a temporary table with the new structure
-CREATE TABLE schema_versions_new (
+CREATE TABLE IF NOT EXISTS schema_versions_new (
     version NUMERIC PRIMARY KEY,
     applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     description TEXT
@@ -9,7 +9,7 @@ CREATE TABLE schema_versions_new (
 -- Copy data from the old table, converting version to numeric
 INSERT INTO schema_versions_new (version, applied_at, description)
 SELECT CASE
-        WHEN version ~ '^[0-9]+$' THEN version::NUMERIC
+        WHEN version::text ~ '^[0-9]+$' THEN version::NUMERIC -- Explicitly cast version to text for regex match
         ELSE 0 -- Handle any non-numeric versions (shouldn't exist, but just in case)
     END,
     applied_at,
