@@ -50,23 +50,20 @@
 				}
 			});
 
-			// Handle the Promise case by converting immediately to string
-			const parsed = marked.parse(processedContent);
+			// 3. Handle the Promise case by converting immediately to string after markdown parsing
+			const parsed = marked.parse(processedContent); // marked.parse will treat our buttons as HTML
 			const parsedString = typeof parsed === 'string' ? parsed : String(parsed);
 
-			// Regex to find $$$TICKER-TIMESTAMPINMS$$$ patterns
+			// 4. Regex to find $$$TICKER-TIMESTAMPINMS$$$ patterns
 			// Captures TICKER (1), TIMESTAMPINMS (2)
+			// This runs *after* marked.parse and after simple tickers are converted.
 			const tickerRegex = /\$\$\$([A-Z]{1,5})-(\d+)\$\$\$/g;
 
-			// Replace ticker patterns with buttons including only ticker and timestamp data attributes
 			const contentWithTickerButtons = parsedString.replace(
 				tickerRegex,
 				(match, ticker, timestampMs) => {
-					// Use the existing formatChipDate function
 					const formattedDate = formatChipDate(parseInt(timestampMs, 10));
 					const buttonText = `${ticker}${formattedDate}`;
-
-					// Return the button HTML without securityId initially
 					return `<button class="ticker-button" data-ticker="${ticker}" data-timestamp-ms="${timestampMs}">${buttonText}</button>`;
 				}
 			);
@@ -724,7 +721,9 @@
 													{#if tableData}
 														<div class="chunk-table-wrapper">
 															{#if tableData.caption}
-																<div class="table-caption">{tableData.caption}</div>
+																<div class="table-caption">
+																	{@html parseMarkdown(tableData.caption)}
+																</div>
 															{/if}
 															<div class="chunk-table {isExpanded ? 'expanded' : ''}">
 																<table>
