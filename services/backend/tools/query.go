@@ -45,6 +45,7 @@ type ChatMessage struct {
 	ContextItems  []map[string]interface{} `json:"context_items,omitempty"` // Store context sent with user message
 	Timestamp     time.Time                `json:"timestamp"`
 	ExpiresAt     time.Time                `json:"expires_at"` // When this message should expire
+	Citations     []Citation               `json:"citations,omitempty"`
 }
 
 // ContentChunk represents a piece of content in the response sequence
@@ -57,6 +58,7 @@ type QueryResponse struct {
 	Type          string         `json:"type"` //"mixed_content", "function_calls", "simple_text"
 	ContentChunks []ContentChunk `json:"content_chunks,omitempty"`
 	Text          string         `json:"text,omitempty"`
+	Citations     []Citation     `json:"citations,omitempty"`
 }
 
 // ThinkingResponse represents the JSON output from the thinking model with rounds
@@ -206,6 +208,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 
 		responseText := geminiThinkingResponse.Text
 		// Try to parse the thinking response as JSON
+		citations := geminiThinkingResponse.Citations
 		var thinkingResp ThinkingResponse
 		fmt.Println("thinking response ", thinkingResp)
 		// Find the JSON block in the response
@@ -232,6 +235,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 				ContextItems:  query.Context, // Store context with the user query message
 				Timestamp:     time.Now(),
 				ExpiresAt:     time.Now().Add(24 * time.Hour),
+				Citations:     citations,
 			}
 
 			// Add new message to conversation history
@@ -261,6 +265,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 				ContextItems:  query.Context, // Store context with the user query message
 				Timestamp:     time.Now(),
 				ExpiresAt:     time.Now().Add(24 * time.Hour),
+				Citations:     citations,
 			}
 
 			// Add new message to conversation history
@@ -275,6 +280,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			return QueryResponse{
 				Type:          "mixed_content",
 				ContentChunks: processedInitialChunks, // Return processed chunks
+				Citations:     citations,
 			}, nil
 		}
 

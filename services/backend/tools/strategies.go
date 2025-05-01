@@ -194,11 +194,16 @@ func CreateStrategyFromNaturalLanguage(conn *utils.Conn, userId int, rawArgs jso
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %v", err)
 	}
+	thinkingBudget := int32(2000)
 	config := &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{
 			Parts: []*genai.Part{
 				{Text: systemInstruction},
 			},
+		},
+		ThinkingConfig: &genai.ThinkingConfig{
+			IncludeThoughts: true,
+			ThinkingBudget:  &thinkingBudget,
 		},
 	}
 
@@ -216,7 +221,7 @@ func CreateStrategyFromNaturalLanguage(conn *utils.Conn, userId int, rawArgs jso
 		fmt.Printf("Attempt %d/%d to generate and validate strategy spec...\n", attempt+1, maxRetries)
 
 		// Generate content using the current conversation history
-		result, err := client.Models.GenerateContent(context.Background(), "gemini-2.0-flash-thinking-exp-01-21", conversationHistory, config)
+		result, err := client.Models.GenerateContent(context.Background(), "gemini-2.5-flash-preview-04-17", conversationHistory, config)
 		if err != nil {
 			lastErr = fmt.Errorf("error generating content (attempt %d): %w", attempt+1, err)
 			fmt.Printf("WARN: Attempt %d/%d for user %d: Gemini content generation failed: %v\n", attempt+1, maxRetries, userId, err)
