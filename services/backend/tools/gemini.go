@@ -65,9 +65,15 @@ type FunctionResponse struct {
 	FunctionCalls []FunctionCall `json:"function_calls"`
 }
 
+type Citation struct {
+	Title string `json:"title"`
+	Url   string `json:"url"`
+}
+
 type GeminiFunctionResponse struct {
 	FunctionCalls []FunctionCall `json:"function_calls"`
 	Text          string         `json:"text"`
+	Citations     []Citation     `json:"citations,omitempty"`
 }
 
 func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemPrompt string, query string, model string) (*GeminiFunctionResponse, error) {
@@ -105,7 +111,8 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemProm
 			{GoogleSearch: &genai.GoogleSearch{}},
 		},
 		ThinkingConfig: &genai.ThinkingConfig{
-			ThinkingBudget: &thinkingBudget,
+			IncludeThoughts: true,
+			ThinkingBudget:  &thinkingBudget,
 		},
 	}
 
@@ -118,7 +125,7 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemProm
 	if err != nil {
 		return nil, fmt.Errorf("error generating content with thinking model: %w", err)
 	}
-
+	citations := []Citation{}
 	// Extract the clean text response for display
 	responseText := ""
 	if len(result.Candidates) > 0 {
@@ -131,10 +138,49 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemProm
 				}
 			}
 		}
+		fmt.Println("Grounding:", candidate.GroundingMetadata)
+		// Collect all indices first
+		// More efficient deduplication: collect and check uniqueness in one pass
+		seen := make(map[int]bool)
+		usedGroundingChunkIndices := []int{} // This will store the unique indices
+		if candidate.GroundingMetadata != nil {
+			if len(candidate.GroundingMetadata.GroundingSupports) > 0 {
+				for _, groundingSupport := range candidate.GroundingMetadata.GroundingSupports {
+					// Iterate through the indices within this support
+					for _, index := range groundingSupport.GroundingChunkIndices {
+						// Append each index (casting if necessary, assuming int32 from proto)
+						currentIndex := int(index)
+						// Check if we've seen this index before adding
+						if !seen[currentIndex] {
+							seen[currentIndex] = true
+							// Correctly assign the result of append back to the slice
+							usedGroundingChunkIndices = append(usedGroundingChunkIndices, currentIndex)
+						}
+					}
+				}
+			}
+		}
+		for _, index := range usedGroundingChunkIndices {
+			groundingChunk := candidate.GroundingMetadata.GroundingChunks[index]
+			if groundingChunk.Web != nil {
+				citations = append(citations, Citation{
+					Title: groundingChunk.Web.Title,
+					Url:   groundingChunk.Web.URI,
+				})
+			}
+			if groundingChunk.RetrievedContext != nil {
+				citations = append(citations, Citation{
+					Title: groundingChunk.RetrievedContext.Title,
+					Url:   groundingChunk.RetrievedContext.URI,
+				})
+			}
+		}
 	}
+	fmt.Println("Citations:", citations)
 	response := &GeminiFunctionResponse{
 		FunctionCalls: []FunctionCall{},
 		Text:          responseText,
+		Citations:     citations,
 	}
 	return response, nil
 }
