@@ -202,7 +202,8 @@ func CreateStrategyFromNaturalLanguage(conn *utils.Conn, userId int, rawArgs jso
 			},
 		},
 		ThinkingConfig: &genai.ThinkingConfig{
-			ThinkingBudget: &thinkingBudget,
+			IncludeThoughts: true,
+			ThinkingBudget:  &thinkingBudget,
 		},
 	}
 

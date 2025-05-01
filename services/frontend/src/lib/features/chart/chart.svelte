@@ -522,7 +522,7 @@
 						}
 					}
 
-					if (inst.direction == 'forward' && inst.requestType !== 'loadAdditionalData') {
+					if (inst.direction == 'forward') {
 						const visibleRange = chart.timeScale().getVisibleRange();
 						const vrFrom = visibleRange?.from;
 						const vrTo = visibleRange?.to;
