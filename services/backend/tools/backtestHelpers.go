@@ -1,4 +1,4 @@
-package strategies
+package tools
 
 import (
 	"backend/utils"
@@ -169,7 +169,7 @@ type TableInstructionData struct {
 }
 
 // GenerateBacktestTableFromInstruction retrieves cached backtest results and formats it
-// into a table ContentChunk based on LLM instructions.
+// into a table query.ContentChunk based on LLM instructions.
 func GenerateBacktestTableFromInstruction(ctx context.Context, conn *utils.Conn, userID int, instruction TableInstructionData) (*ContentChunk, error) {
 
 	cacheKey := fmt.Sprintf("user:%d:backtest:%d:results", userID, instruction.StrategyID)

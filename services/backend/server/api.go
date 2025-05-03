@@ -5,6 +5,7 @@ import (
 	"backend/socket"
 	"backend/tools"
 	"backend/utils"
+	"context" // Added for initialization context
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -498,6 +499,19 @@ func HealthCheck() http.HandlerFunc {
 func StartServer() {
 	conn, cleanup := utils.InitConn(true)
 	defer cleanup()
+
+	// --- Initialize dynamic validation sets ---
+	// Must run after DB connection is ready and before scheduler/handlers start.
+	// Use context.Background() for startup initialization.
+	ctx := context.Background() // Or a context with a timeout if preferred
+	if err := tools.InitializeDynamicValidationSets(ctx, conn); err != nil {
+
+		// Decide how to handle this error. Log and continue? Fatal?
+		log.Fatalf("CRITICAL: Failed to initialize dynamic validation sets: %v. Proceeding with potentially incomplete validation.", err)
+		// Or use log.Fatalf("...") to stop the application if these sets are absolutely critical
+	}
+	// -----------------------------------------
+
 	stopScheduler := jobs.StartScheduler(conn)
 	defer close(stopScheduler)
 	http.HandleFunc("/public", publicHandler(conn))

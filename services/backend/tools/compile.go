@@ -1,4 +1,4 @@
-package strategies
+package tools
 
 import (
     "fmt"
@@ -9,6 +9,16 @@ import (
 // Public entry‑point
 // -----------------------------------------------------------------------------
 
+var (
+    TimeframeToTable  = map[string]string{
+        "1d": "ohlcv_1d",
+        "1": "ohlcv_1",
+        "1h": "ohlcv_1h",
+        "1w": "ohlcv_1w",
+
+    }
+)
+
 // CompileSpecToSQL converts a *validated* Spec into an executable SQL query.
 // The returned string contains parameter‑free SQL –  production code should
 // switch literals to bind variables before running at scale.
@@ -17,12 +27,12 @@ func CompileSpecToSQL(spec Spec) (string, error) {
         return "", fmt.Errorf("spec did not pass validation: %w", err)
     }
 
-    // Get base table name from specdefs using timeframe
+    // Get base table name using timeframe
     timeframeStr := string(spec.Universe.Timeframe)
-    baseTable, ok := specdefs.TimeframeToTable[timeframeStr]
+    baseTable, ok := TimeframeToTable[timeframeStr]
     if !ok {
         // This should ideally be caught by validation, but check defensively
-        return "", fmt.Errorf("unsupported timeframe %q (not found in specdefs.TimeframeToTable)", timeframeStr)
+        return "", fmt.Errorf("unsupported timeframe %q (not found in TimeframeToTable)", timeframeStr)
     }
 
     // ------------------------------------------------------------------
@@ -123,12 +133,10 @@ func buildUniverseConditions(u *Universe) ([]string, error) {
     // 2. Process the Filters slice instead of separate whitelist/blacklist fields
     for _, filter := range u.Filters {
         featureStr := string(filter.SecurityFeature)
-        // Map the SecurityFeature to the corresponding SQL column using specdefs
-        columnName, ok := specdefs.SecurityFeatureToColumn[featureStr]
-        if !ok {
-            // Should be caught by validation, but handle defensively
-            return nil, fmt.Errorf("invalid security feature '%s' encountered in universe filter (not in specdefs)", featureStr)
-        }
+        // Construct the column name directly by prepending the alias 's.'
+        // Assumes featureStr ("ticker", "sector", etc.) matches the column name.
+        // Validation should ensure featureStr is valid.
+        columnName := "s." + featureStr
 
         // Add include/exclude conditions
         if len(filter.Include) > 0 {
@@ -269,16 +277,16 @@ func partitionKeyForSource(src FeatureSource) string {
 		return "s.securityid" // Partition by the specific security ID
 	}
 
-	// If relative, use the specified field for partitioning if it's a known partitionable feature.
-	// We look up the base column name from specdefs and prepend the alias 's.'.
+	// If relative, use the specified field for partitioning.
+	// Assumes src.Field ("ticker", "sector", etc.) directly corresponds to a column
+	// in the 'securities' table (aliased as 's'). Validation ensures this.
 	featureStr := string(src.Field)
-	if baseCol, ok := specdefs.SecurityFeatureToColumn[featureStr]; ok {
-		// Prepend the alias used for the securities table in the universe CTE
-		return "s." + baseCol
-	}
+	return "s." + featureStr
 
-	// Default to partitioning by security ID if the field isn't a recognized partition key.
-	return "s.securityid"
+	// Note: The case where src.Value != "relative" is handled before this block.
+	// The default case (returning "s.securityid" if the field wasn't recognized)
+	// is removed because validation now guarantees src.Field is a valid column name
+	// when src.Value is "relative".
 }
 
 

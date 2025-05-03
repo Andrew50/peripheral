@@ -1,12 +1,12 @@
-package query
+package tools
 
 import (
-	"backend/utils"
 	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
+    "backend/utils"
 
 	"github.com/go-redis/redis/v8"
 )
@@ -223,4 +223,41 @@ func RemovePersistentContextItem(ctx context.Context, conn *utils.Conn, userID i
 	}
 
 	return nil
+}
+// ClearConversationHistory deletes the conversation for a user
+func ClearConversationHistory(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
+	ctx := context.Background()
+	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
+	fmt.Printf("Attempting to delete conversation for key: %s\n", conversationKey)
+
+	// Delete the conversation history key from Redis
+	err := conn.Cache.Del(ctx, conversationKey).Err()
+	if err != nil {
+		fmt.Printf("Failed to delete conversation from Redis: %v\n", err)
+		// Don't return immediately, still try to delete persistent context
+	} else {
+		fmt.Printf("Successfully deleted conversation for key: %s\n", conversationKey)
+	}
+
+	// Also delete the persistent context key
+	persistentContextKey := fmt.Sprintf(persistentContextKeyFormat, userID) // Use constant from persistentContext.go
+	pErr := conn.Cache.Del(ctx, persistentContextKey).Err()
+	if pErr != nil {
+		fmt.Printf("Failed to delete persistent context from Redis: %v\n", pErr)
+		// If conversation deletion succeeded but this failed, maybe return a specific error?
+		// For now, just log it and return the original error if it exists, or this one if not.
+		if err == nil { // If conversation delete was ok, return this error
+			return nil, fmt.Errorf("failed to clear persistent context: %w", pErr)
+		}
+	} else {
+		fmt.Printf("Successfully deleted persistent context for key: %s\n", persistentContextKey)
+	}
+
+	// If the conversation deletion failed initially, return that error now
+	if err != nil {
+		return nil, fmt.Errorf("failed to clear conversation history: %w", err)
+	}
+
+	fmt.Printf("Successfully deleted conversation for key: %s\n", conversationKey)
+	return map[string]string{"message": "Conversation history cleared successfully"}, nil
 }

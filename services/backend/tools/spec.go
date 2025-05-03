@@ -3,209 +3,16 @@ package tools
 import (
     "time"
     "encoding/json"
+    "log"
+    "sync"
     "errors"
     "fmt"
     "regexp"
 	"strings"
+    "context"
+	"github.com/jackc/pgx/v4"
+    "backend/utils"
 )
-
-
-
-/*cant do old
-- moving averages - new window feature
-- earnings - earnings base columns
-- volitility injdicators - vix, custom indicators, stdev (manual claculation as expression with window smootthing)
-- short interest - add columnscj
-- borrow costs
-- earnings yeild
-- funeamental ratios - use base eearnings columns along with other base columns
-- price action patterns - use features
-    - doji, engulfing, hammer, etc
-- order flow, level 2 - add columns
-- weighting of different features such as value + momentumn > threshold - complex features that use multiple base columns
-- event based (news): copreate actions, geopolictal events - stored as base columns
-- social media sintements, news, macro indicators - stored as based columns
-- multi asset - 
-
-- orh: needs a way to get first minute of day
-
-*/
-
-
-//things to add
-/* new base columns:
-- earnings: eps, revenuve, etc
-- order flow/level 2: bid, ask, bid_size, ask_size
-- corperate action: dividend (0 or 1)
-- sentiments: socail_sentiment, fear_greed
-- short interest, borrow_costs
-- 
-
-other
-- tirggerrs per day limit?
-
-
-*/
-
-/* examples test queries
-create a strategy for all times gold gapped up over 3%
-- get all the isntance when a stock whose sector was up more than 100% on the year gapped up more than 5%
-- get the leading (>90 percentile price change) stocks on the year
-- get all the times AVGO was up more than NVDA on the day but then closed down more than NVDA.
-- get all the isntances when a stock was up more than its adr * 3 + its macd value
-- "Show the top‑decile stocks (10 %) whose sector is **Technology** and whose 20‑day change > sector average + 5 %."
-- create a streategy for stocks that gap up more than 1.5x their adr on the daily, and from those results filter on the 1 minute non extended hours when they trade above the opening range (1st minute) high.
-- get all time NVDA outperformed AVGO over last three days.
-- create a strategy for when the EPS is more than 3 times greater than the eps 2 years ago. 
-- get every time NVAX closed up more than 4% 4 days in a row. 
-
-
-
-ohlcv_<timeframe>: (row per timestep, timeframe, and security) only one timeframe per setup
-- timestamp
-- open, high, low, close, volume, 
-
-time series sporadic high freq: row per change //no implelentation yet
-
-- bid, ask, bid_size, ask_size
-
-fundamental: time series 2 (row per timestep and security), interval is as fast as possible
-- eps, revenue
-- dividend
-- social_sentiment, fear_greed
-- short_interest, borrow_fee
-- market_cap, shares_outstanding
-
-securities: scalar (row per security), never changes: 
-- sector, industry, market, related_securities
-- security_id
-
-
-
-
-questions:
-- what resolution on non ohlcv time series
-
-
-
-*/
-
-
-
-/*
-table layout:
-
-ohlcv tables: ohlcv_1, ohlcv_1h, ohlcv_1d, ohlcv_1w
-- timestamp: timestamp
-- open: decimal
-- high: decimal
-- low: decimal
-- close: decimal
-- volume: float
-
-
-*/
-
-type FeatureId int
-type OHLCVFeature string //open, high, low, close
-type FundamentalFeature string //market_cap, total_shares, active //eventually eps, revenue, news stuff
-type SecurityFeature string //securityId, ticker, locale, market, primary_exchange, active, sector, industry //doesnt change over time
-type OutputType string //raw, rankn, rankp
-type ComparisonOperator string// >, >=, <, <=
-type ExprOperator string //+, -, *, /, ^
-type Direction string // asc, desc
-type Timeframe string // 1, 1h, 1d, 1w
-
-
-/*
-
-locales: us
-markets: otc, stocks
-primary_exchange: XNAS, XASE, BATS, XNYS, ARCX
-*/
-
-// Strategy represents a stock strategy with relevant metadata.
-type Strategy struct {
-	Name              string    `json:"name"`
-	StrategyId        int       `json:"strategyId"`
-	UserId            int       `json:"userId"`
-	Version           int       `json:"version"`
-	CreationTimestamp time.Time `json:"creationTimestamp"`
-	Score             int       `json:"score"`
-	Complexity        int       `json:"complexity"`  // Estimated compute time / parameter count
-	AlertActive       bool      `json:"alertActive"` // Indicates if real-time alerts are enabled
-	Spec              Spec      `json:"spec"`        // Strategy specification
-//	sql               string    // never needs to be stored or go to frontend so no json or capitalization
-}
-
-// UniverseFilter lists items to include/exclude in a universe dimension.
-type UniverseFilter struct { //applied using FundamentalFeatures
-	SecurityFeature SecurityFeature `json:"securityFeature"`
-	Include         []string        `json:"include"`
-	Exclude         []string        `json:"exclude"`
-}
-
-// Universe defines the scope over which features are calculated.
-type Universe struct {
-	Filters        []UniverseFilter `json:"filters"`
-	Timeframe      Timeframe        `json:"timeframe"`     // "1", "1h", "1d", "1w"
-	ExtendedHours  bool             `json:"extendedHours"` // Only applies to 1-minute data
-	StartTime      time.Time        `json:"startTime"`     // Intraday start time for the strategy
-	EndTime        time.Time        `json:"endTime"`       // Intraday end time for the strategy
-}
-
-type FeatureSource struct {
-	Field   SecurityFeature `json:"field"`   //  FundamentalFeature
-	Value   string          `json:"value"`   // either "relative" meaning get the value from the security out of the universe, or a specific string value of type securityFeature for which to join on. for example setting 
-}
-
-type ExprPart struct {
-	Type   string `json:"type"`   // "column" | "operator"
-	Value  string `json:"value"`  // Feature name (OHLCVFeature, FundamentalFeature) or ExprOperator
-	Offset int    `json:"offset"` // Default 0, >= 0, time step offset for 'column' type
-}
-
-// Feature represents a calculated metric used for filtering.
-type Feature struct {
-	Name      string        `json:"name"`
-	FeatureId int           `json:"featureId"`
-	Source    FeatureSource `json:"source"` //  
-	Output    OutputType    `json:"output"` // "raw", "rankn", "rankp"
-	Expr      []ExprPart    `json:"expr"`   // Expression using +, -, /, *, ^, and fundamentalfeatures and ohlcvfeatures.
-	Window    int           `json:"window"` // Smoothing window; 1 = none
-}
-
-// Filter defines a comparison that eliminates instances from the universe.
-type Filter struct {
-	Name     string             `json:"name"`
-	LHS      FeatureId          `json:"lhs"`      // Left-hand side feature ID
-	Operator ComparisonOperator `json:"operator"` // "<", "<=", ">=", ">", "!=", "=="
-	RHS      struct {
-		FeatureId FeatureId `json:"featureId"` // RHS feature (if any)
-		Const     float64   `json:"const"`     // Constant value
-		Scale     float64   `json:"scale"`     // Multiplier for RHS feature
-	} `json:"rhs"`
-}
-
-// Spec bundles the universe, features, filters, and sort definition.
-type Spec struct {
-	Universe Universe  `json:"universe"` // First stage: scope to operate on
-	Features []Feature `json:"features"` // Features created by this strategy
-	Filters  []Filter  `json:"filters"`  // Boolean conditions
-	SortBy   SortBy    `json:"sortBy"`
-}
-
-type SortBy struct {
-	Feature   FeatureId `json:"feature"`   // feature to sort by
-
-	Direction Direction  `json:"direction"`
-}
-
-
-
-
-
-
 
 // Constants for validation logic
 const (
@@ -226,9 +33,274 @@ const (
     maxWindow1Hour = 2000
 
     maxWindow1Day  = 1000
+    maxWindow1Week = 200
 )
+
+var (
+	securityFeatures    = []string{"ticker", "sector", "industry", "market", "locale", "primaryExchange", "active"}
+	ohlcvFeatures       = []string{"open", "high", "low", "close", "volume"}
+	//fundamentalFeatures = []string{"marketCap", "sharesOutstanding", "eps", "revenue", "dividend", "socialSentiment", "fearGreed", "shortInterest", "borrowFee"}
+	timeframes          = []string{ "1d"} //add 1, 1h, 1w
+	outputTypes         = []string{"raw", "rankn", "rankp"}
+	comparisonOperators = []string{"<", "<=", ">", ">="}
+	exprOperators       = []string{"+", "-", "*", "/", "^"}
+	directions          = []string{"asc", "desc"}
+)
+
+// --- Derived Sets for Validation ---
+// These maps (sets) are created for efficient 'contains' checks.
+var (
+	ValidSecurityFeatures    = toSet(securityFeatures)
+	ValidOhlcvFeatures       = toSet(ohlcvFeatures)
+	ValidTimeframes          = toSet(timeframes)
+	ValidOutputTypes         = toSet(outputTypes)
+	ValidComparisonOperators = toSet(comparisonOperators)
+	ValidExprOperators       = toSet(exprOperators)
+	ValidDirections          = toSet(directions)
+	// Dynamic sets loaded from DB
+	ValidSectors             map[string]int // name -> id
+	ValidIndustries          map[string]int // name -> id
+	ValidSectorIds           map[int]string // id -> name
+	ValidIndustryIds         map[int]string // id -> name
+	ValidFundamentalFeatures map[string]struct{}
+)
+
+func toSet(items []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		set[item] = struct{}{}
+	}
+	return set
+}
+
+// Globals for dynamic validation sets loaded from the database
+var (
+	validSectors             = make(map[string]int) // name -> id
+	validIndustries          = make(map[string]int) // name -> id
+	validSectorIds           = make(map[int]string) // id -> name
+	validIndustryIds         = make(map[int]string) // id -> name
+	validFundamentalFeatures = make(map[string]struct{})
+	dynamicSetMutex          sync.RWMutex
+)
+
+// UpdateDynamicSet refreshes exactly one dynamic-validation map.
+// key must be "sectors", "industries", or "fundamentalFeatures".
+func UpdateDynamicSet(ctx context.Context, conn *utils.Conn, key string) error {
+	var (
+		rows pgx.Rows
+		err  error
+	)
+
+	switch key {
+	case "sectors":
+		// Select both id and name for mapping
+		const q = `SELECT sectorId, LOWER(sector)
+				   FROM sectors
+				   WHERE sector IS NOT NULL
+					 AND sector <> ''
+					 AND LOWER(sector) <> 'unknown'`
+		if rows, err = conn.DB.Query(ctx, q); err != nil {
+			return fmt.Errorf("querying sectors: %w", err)
+		}
+
+	case "industries":
+		// Select both id and name for mapping
+		const q = `SELECT industryId, LOWER(industry)
+				   FROM industries
+				   WHERE industry IS NOT NULL
+					 AND industry <> ''
+					 AND LOWER(industry) <> 'unknown'`
+		if rows, err = conn.DB.Query(ctx, q); err != nil {
+			return fmt.Errorf("querying industries: %w", err)
+		}
+
+	case "fundamentalFeatures":
+		const q = `
+			SELECT column_name
+			FROM information_schema.columns
+			WHERE table_schema = 'public'
+			  AND table_name   = 'fundamentals'
+			  AND column_name NOT IN ('security_id', 'timestamp')`
+		if rows, err = conn.DB.Query(ctx, q); err != nil {
+			return fmt.Errorf("querying fundamental columns: %w", err)
+		}
+
+	default:
+		return fmt.Errorf("unknown dynamic set key: %s", key)
+	}
+
+	// Collect values and build maps
+	newSectors := make(map[string]int)
+	newIndustries := make(map[string]int)
+	newSectorIds := make(map[int]string)
+	newIndustryIds := make(map[int]string)
+	newFundamentalFeatures := make(map[string]struct{})
+
+	for rows.Next() {
+		var id int
+		var name string
+		var featureName string // For fundamental features
+
+		switch key {
+		case "sectors":
+			if err := rows.Scan(&id, &name); err != nil {
+				rows.Close()
+				return fmt.Errorf("scanning sector: %w", err)
+			}
+			name = strings.ToLower(name)
+			newSectors[name] = id
+			newSectorIds[id] = name
+		case "industries":
+			if err := rows.Scan(&id, &name); err != nil {
+				rows.Close()
+				return fmt.Errorf("scanning industry: %w", err)
+			}
+			name = strings.ToLower(name)
+			newIndustries[name] = id
+			newIndustryIds[id] = name
+		case "fundamentalFeatures":
+			if err := rows.Scan(&featureName); err != nil {
+				rows.Close()
+				return fmt.Errorf("scanning fundamental feature: %w", err)
+			}
+			newFundamentalFeatures[strings.ToLower(featureName)] = struct{}{}
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("error iterating rows for %s: %w", key, err)
+	}
+
+	// Swap the global maps safely
+	dynamicSetMutex.Lock()
+	defer dynamicSetMutex.Unlock()
+
+	count := 0
+	switch key {
+	case "sectors":
+		validSectors = newSectors
+		validSectorIds = newSectorIds
+		count = len(validSectors)
+	case "industries":
+		validIndustries = newIndustries
+		validIndustryIds = newIndustryIds
+		count = len(validIndustries)
+	case "fundamentalFeatures":
+		validFundamentalFeatures = newFundamentalFeatures
+		count = len(validFundamentalFeatures)
+	}
+	fmt.Printf("Updated %s: %d entries\n", key, count)
+	return nil
+}
+
+// InitializeDynamicValidationSets populates the dynamic validation maps from the database.
+// This should be called once during application startup after the database connection is established.
+func InitializeDynamicValidationSets(ctx context.Context, conn *utils.Conn) error {
+	var errs []string
+	fmt.Println("Initializing dynamic validation sets...")
+
+	if err := UpdateDynamicSet(ctx, conn, "sectors"); err != nil {
+		errs = append(errs, fmt.Sprintf("failed to initialize sectors: %v", err))
+	}
+	if err := UpdateDynamicSet(ctx, conn, "industries"); err != nil {
+		errs = append(errs, fmt.Sprintf("failed to initialize industries: %v", err))
+	}
+	if err := UpdateDynamicSet(ctx, conn, "fundamentalFeatures"); err != nil {
+		errs = append(errs, fmt.Sprintf("failed to initialize fundamental features: %v", err))
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("errors during dynamic set initialization: %s", strings.Join(errs, "; "))
+	}
+
+	log.Println("Dynamic validation sets initialized successfully.")
+	return nil
+}
+
+
+// Strategy represents a stock strategy with relevant metadata.
+type Strategy struct {
+	Name              string    `json:"name"`
+	StrategyId        int       `json:"strategyId"`
+	UserId            int       `json:"userId"`
+	Version           int       `json:"version"`
+	CreationTimestamp time.Time `json:"creationTimestamp"`
+	Score             int       `json:"score"`
+	Complexity        int       `json:"complexity"`  // Estimated compute time / parameter count
+	AlertActive       bool      `json:"alertActive"` // Indicates if real-time alerts are enabled
+	Spec              Spec      `json:"spec"`        // Strategy specification
+//	sql               string    // never needs to be stored or go to frontend so no json or capitalization
+}
+
+// UniverseFilter lists items to include/exclude in a universe dimension.
+type UniverseFilter struct {
+	SecurityFeature string `json:"securityFeature"`
+	// Fields used for API input/output (names)
+	Include []string `json:"include"`
+	Exclude []string `json:"exclude"`
+	// Fields used for database storage (IDs) - omitempty helps keep JSON clean if unused
+	IncludeIds []int `json:"includeIds,omitempty"`
+	ExcludeIds []int `json:"excludeIds,omitempty"`
+}
+
+// Universe defines the scope over which features are calculated.
+type Universe struct {
+	Filters        []UniverseFilter `json:"filters"`
+	Timeframe      string        `json:"timeframe"`     // "1", "1h", "1d", "1w"
+	ExtendedHours  bool             `json:"extendedHours"` // Only applies to 1-minute data
+	StartTime      time.Time        `json:"startTime"`     // Intraday start time for the strategy
+	EndTime        time.Time        `json:"endTime"`       // Intraday end time for the strategy
+}
+
+type FeatureSource struct {
+	Field   string `json:"field"`   // 
+	Value   string          `json:"value"`   // either "relative" meaning get the value from the security out of the universe, or a specific string value.
+}
+
+type ExprPart struct {
+	Type   string `json:"type"`   // "column" | "operator"
+	Value  string `json:"value"`  // Feature name (OHLCVFeature, FundamentalFeature) or ExprOperator
+	Offset int    `json:"offset"` // Default 0, >= 0, time step offset for 'column' type
+}
+
+// Feature represents a calculated metric used for filtering.
+type Feature struct {
+	Name      string        `json:"name"`
+	FeatureId int           `json:"featureId"`
+	Source    FeatureSource `json:"source"` // "security", "sector", "industry", "related_stocks" (proprietary), "market", specific ticker like "AAPL" // NEW 
+	Output    string    `json:"output"` // "raw", "rankn", "rankp"
+	Expr      []ExprPart    `json:"expr"`   // Expression using +, -, /, *, ^, and fundamentalfeatures and ohlcvfeatures.
+	Window    int           `json:"window"` // Smoothing window; 1 = none
+}
+
+// Filter defines a comparison that eliminates instances from the universe.
+type Filter struct {
+	Name     string             `json:"name"`
+	LHS      int          `json:"lhs"`      // Left-hand side feature ID
+	Operator string `json:"operator"` // "<", "<=", ">=", ">"
+	RHS      struct {
+		FeatureId int `json:"featureId"` // RHS feature (if any)
+		Const     float64   `json:"const"`     // Constant value
+		Scale     float64   `json:"scale"`     // Multiplier for RHS feature
+	} `json:"rhs"`
+}
+
+// Spec bundles the universe, features, filters, and sort definition.
+type Spec struct {
+	Universe Universe  `json:"universe"` // First stage: scope to operate on
+	Features []Feature `json:"features"` // Features created by this strategy
+	Filters  []Filter  `json:"filters"`  // Boolean conditions
+	SortBy   SortBy    `json:"sortBy"`
+}
+
+type SortBy struct {
+	Feature   int `json:"feature"`   // feature to sort by
+	Direction string  `json:"direction"`
+}
+
+var (
+    // Ticker validation regex
     tickerRegex = regexp.MustCompile(`^[A-Z]{1,5}(\.[A-Z])?$`)
-    
     // Identifier validation regex
     identifierRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_ %$#+-./\\&@!?:;,|=<>(){}[\]^*]*$`)
     
@@ -296,18 +368,11 @@ func validateSpec(spec *Spec) error {
 func validateUniverse(u *Universe) error {
     var errs []string
 
-    // Validate timeframe by comparing string values
+    // Validate timeframe
     timeframeStr := string(u.Timeframe)
-    validTimeframeFound := false
-    for tf := range validTimeframes {
-        if timeframeStr == string(tf) {
-            validTimeframeFound = true
-            break
-        }
-    }
-    if !validTimeframeFound {
-        errs = append(errs, fmt.Sprintf("universe.timeframe must be one of %s, %s, %s, %s", 
-            timeframe1Min, timeframe1Hour, timeframe1Day, timeframe1Week))
+    if _, ok := ValidTimeframes[timeframeStr]; !ok {
+        errs = append(errs, fmt.Sprintf("universe.timeframe '%s' invalid; must be one of %v",
+            u.Timeframe, timeframes)) // Use the original slice for the error message
     }
 
     // Validate extended hours
@@ -326,34 +391,73 @@ func validateUniverse(u *Universe) error {
     // Validate universe filters
     for i, filter := range u.Filters {
         filterCtx := fmt.Sprintf("universe.filter[%d]", i)
-        
-        // Validate SecurityFeature by converting to string
+
+        // Validate SecurityFeature
         featureStr := string(filter.SecurityFeature)
-        validFeature := false
-        for sf := range validSecurityFeatures {
-            if featureStr == string(sf) {
-                validFeature = true
-                break
+        if _, ok := ValidSecurityFeatures[featureStr]; !ok {
+            errs = append(errs, fmt.Sprintf("%s: invalid SecurityFeature '%s'; must be one of %v",
+                filterCtx, filter.SecurityFeature, securityFeatures)) // Use the original slice for the error message
+            continue // Skip further validation for this filter if feature is invalid
+        }
+
+        // Validate include/exclude values based on SecurityFeature
+        dynamicSetMutex.RLock() // Lock for reading dynamic sets
+        switch featureStr {
+        case "sector":
+            for _, name := range filter.Include {
+                lowerName := strings.ToLower(name)
+                if _, ok := validSectors[lowerName]; !ok {
+                    errs = append(errs, fmt.Sprintf("%s: invalid sector '%s' in include list", filterCtx, name))
+                }
             }
+            for _, name := range filter.Exclude {
+                lowerName := strings.ToLower(name)
+                if _, ok := validSectors[lowerName]; !ok {
+                    errs = append(errs, fmt.Sprintf("%s: invalid sector '%s' in exclude list", filterCtx, name))
+                }
+            }
+        case "industry":
+            for _, name := range filter.Include {
+                lowerName := strings.ToLower(name)
+                if _, ok := validIndustries[lowerName]; !ok {
+                    errs = append(errs, fmt.Sprintf("%s: invalid industry '%s' in include list", filterCtx, name))
+                }
+            }
+            for _, name := range filter.Exclude {
+                lowerName := strings.ToLower(name)
+                if _, ok := validIndustries[lowerName]; !ok {
+                    errs = append(errs, fmt.Sprintf("%s: invalid industry '%s' in exclude list", filterCtx, name))
+                }
+            }
+        case "ticker": // Assuming "ticker" is the feature name for security filtering by ticker symbol
+            for _, ticker := range filter.Include {
+                if !isTicker(ticker) {
+                    errs = append(errs, fmt.Sprintf("%s: invalid ticker format '%s' in include list", filterCtx, ticker))
+                }
+            }
+            for _, ticker := range filter.Exclude {
+                if !isTicker(ticker) {
+                    errs = append(errs, fmt.Sprintf("%s: invalid ticker format '%s' in exclude list", filterCtx, ticker))
+                }
+            }
+        // Add cases for other SecurityFeatures if they need specific validation
         }
-        
-        if !validFeature {
-            errs = append(errs, fmt.Sprintf("%s: invalid SecurityFeature '%s'", filterCtx, filter.SecurityFeature))
-        }
-        
-        // Check for overlap between include and exclude
-        set := make(map[string]struct{}, len(filter.Include))
+        dynamicSetMutex.RUnlock() // Unlock after reading
+
+        // Check for overlap between include and exclude (case-insensitive)
+        includeSet := make(map[string]struct{}, len(filter.Include))
         for _, v := range filter.Include {
-            set[strings.ToUpper(v)] = struct{}{}
+            includeSet[strings.ToLower(v)] = struct{}{}
         }
         for _, v := range filter.Exclude {
-            if _, ok := set[strings.ToUpper(v)]; ok {
+            if _, ok := includeSet[strings.ToLower(v)]; ok {
                 errs = append(errs, fmt.Sprintf("%s: include and exclude lists overlap on '%s'", filterCtx, v))
             }
         }
 
-        // If the filter is for securities, validate ticker format
-        if featureStr == "SecurityId" || featureStr == "Ticker" {
+        // Note: Ticker format validation moved inside the switch statement
+        /*
+        if featureStr == "SecurityId" || featureStr == "Ticker" { // Assuming Ticker is used
             for _, ticker := range filter.Include {
                 if !isTicker(ticker) {
                     errs = append(errs, fmt.Sprintf("%s: invalid ticker format '%s' in include list", filterCtx, ticker))
@@ -365,6 +469,7 @@ func validateUniverse(u *Universe) error {
                 }
             }
         }
+        */
     }
 
     if len(errs) > 0 {
@@ -373,7 +478,7 @@ func validateUniverse(u *Universe) error {
     return nil
 }
 
-func validateFeature(f *Feature, context string, featureIDs *map[int]struct{}, maxFeatureID *int, timeframe Timeframe) error {
+func validateFeature(f *Feature, context string, featureIDs *map[int]struct{}, maxFeatureID *int, timeframe string) error {
     var errs []string
     
     // Validate name
@@ -394,12 +499,14 @@ func validateFeature(f *Feature, context string, featureIDs *map[int]struct{}, m
             *maxFeatureID = int(f.FeatureId)
         }
     }
-    
+
     // Validate output type
-    if _, ok := validOutputTypes[f.Output]; !ok {
-        errs = append(errs, fmt.Sprintf("%s output '%s' invalid", context, f.Output))
+    outputStr := string(f.Output)
+    if _, ok := ValidOutputTypes[outputStr]; !ok {
+        errs = append(errs, fmt.Sprintf("%s output '%s' invalid; must be one of %v",
+            context, f.Output, outputTypes)) // Use the original slice for the error message
     }
-    
+
     // Validate source
     if err := validateFeatureSource(&f.Source, context); err != nil {
         errs = append(errs, err.Error())
@@ -426,20 +533,19 @@ func validateFeature(f *Feature, context string, featureIDs *map[int]struct{}, m
 }
 
 func validateFeatureSource(fs *FeatureSource, context string) error {
-    // Validate Field by converting to string
+
+    // Validate Field
     fieldStr := string(fs.Field)
-    validField := false
-    for field := range validSecurityFeatures {
-        if fieldStr == string(field) {
-            validField = true
-            break
+    if _, ok := ValidSecurityFeatures[fieldStr]; !ok {
+        // Get keys from the map for the error message
+        validFields := make([]string, 0, len(ValidSecurityFeatures))
+        for k := range ValidSecurityFeatures {
+            validFields = append(validFields, k)
         }
+        return fmt.Errorf("%s source.field '%s' invalid; must be one of %v",
+            context, fs.Field, validFields)
     }
-    
-    if !validField {
-        return fmt.Errorf("%s source.field '%s' invalid", context, fs.Field)
-    }
-    
+
     // Value can be "relative" or a specific string value
     if fs.Value != "relative" && !isTicker(fs.Value) {
         // This is simplified validation - you may need more complex validation based on the field
@@ -490,14 +596,25 @@ func validateExpr(exprParts []ExprPart, context string) error {
 			if part.Value == "" {
 				errs = append(errs, fmt.Sprintf("%s value cannot be empty for type 'column'", partCtx))
 			} else {
+
 				// Check if column is a valid OHLCV feature or fundamental feature
 				lowerValue := strings.ToLower(part.Value)
-				_, isValidOHLCV := validOHLCVFeatures[lowerValue]
-				_, isValidFundamental := validFundamentalFeatures[lowerValue]
+				_, isValidOHLCV := ValidOhlcvFeatures[lowerValue]
+				dynamicSetMutex.RLock() // Need read lock for dynamic set
+				_, isValidFundamental := ValidFundamentalFeatures[lowerValue]
+				dynamicSetMutex.RUnlock()
 
 				if !isValidOHLCV && !isValidFundamental {
-					errs = append(errs, fmt.Sprintf("%s value '%s' is not a valid OHLCV or fundamental feature",
-						partCtx, part.Value))
+					// Collect valid keys from both maps for the error message
+					validCols := make([]string, 0, len(ValidOhlcvFeatures)+len(ValidFundamentalFeatures))
+					for k := range ValidOhlcvFeatures {
+						validCols = append(validCols, k)
+					}
+					for k := range ValidFundamentalFeatures {
+						validCols = append(validCols, k)
+					}
+					errs = append(errs, fmt.Sprintf("%s value '%s' is not a valid OHLCV or fundamental feature; must be one of %v",
+						partCtx, part.Value, validCols))
 				}
 			}
 
@@ -512,15 +629,9 @@ func validateExpr(exprParts []ExprPart, context string) error {
 
 		} else if part.Type == "operator" {
 			// Validate operator
-			validOp := false
-			for op := range validExprOperators {
-				if part.Value == string(op) {
-					validOp = true
-					break
-				}
-			}
-			if !validOp {
-				errs = append(errs, fmt.Sprintf("%s value '%s' is not a valid operator", partCtx, part.Value))
+			if _, ok := ValidExprOperators[part.Value]; !ok {
+				errs = append(errs, fmt.Sprintf("%s value '%s' is not a valid operator; must be one of %v",
+					partCtx, part.Value, exprOperators)) // Use the original slice for the error message
 			}
 
 			// Offset is not applicable to operators, should be 0
@@ -571,12 +682,14 @@ func validateFilter(f *Filter, context string, featureIDs map[int]struct{}, vali
                 context, f.LHS))
         }
     }
-    
+
     // Validate operator
-    if _, ok := validComparisonOperators[f.Operator]; !ok {
-        errs = append(errs, fmt.Sprintf("%s operator '%s' invalid", context, f.Operator))
+    opStr := string(f.Operator)
+    if _, ok := ValidComparisonOperators[opStr]; !ok {
+        errs = append(errs, fmt.Sprintf("%s operator '%s' invalid; must be one of %v",
+            context, f.Operator, comparisonOperators)) // Use the original slice for the error message
     }
-    
+
     // Validate RHS
     hasFeature := f.RHS.FeatureId != 0
     hasConst := f.RHS.Const != 0.0 // Be careful with float comparison, but 0.0 is usually exact
@@ -624,20 +737,15 @@ func validateSortBy(sb *SortBy, featureIDs map[int]struct{}, validFeatureIDRange
         errs = append(errs, fmt.Sprintf("sortBy.direction ('%s' or '%s') is required when sortBy.feature is set", 
             sortAsc, sortDesc))
     } else {
-        // Convert Direction to string for validation
+
+        // Validate direction
         directionStr := string(sb.Direction)
-        validDir := false
-        for dir := range validDirections {
-            if directionStr == string(dir) {
-                validDir = true
-                break
-            }
-        }
-        if !validDir {
-            errs = append(errs, fmt.Sprintf("sortBy.direction must be '%s' or '%s'", sortAsc, sortDesc))
+        if _, ok := ValidDirections[directionStr]; !ok {
+            errs = append(errs, fmt.Sprintf("sortBy.direction '%s' invalid; must be one of %v",
+                sb.Direction, directions)) // Use the original slice for the error message
         }
     }
-    
+
     // Validate feature ID (0 is legal)
     if _, ok := featureIDs[int(sb.Feature)]; !ok && int(sb.Feature) != 0 {
         if int(sb.Feature) < minFeatureID || int(sb.Feature) >= validFeatureIDRange {
@@ -709,7 +817,118 @@ func checkWindowSize(window int, timeframe string) error {
     return nil
 }
 
-// Unmarshal and validation functions from JSON input (these stay mostly the same)
+
+// convertSpecNamesToIds modifies the spec in-place, converting sector/industry names
+// in universe filters to their corresponding IDs using the globally loaded maps.
+// It clears the name fields (Include/Exclude) before returning.
+// This should be called BEFORE marshalling the spec to JSON for database storage.
+func convertSpecNamesToIds(spec *Spec) error {
+	dynamicSetMutex.RLock() // Read lock needed for accessing validation maps
+	defer dynamicSetMutex.RUnlock()
+
+	for i := range spec.Universe.Filters {
+		filter := &spec.Universe.Filters[i] // Operate on pointer to modify original
+		var nameMap map[string]int
+		featureName := ""
+
+		switch filter.SecurityFeature {
+		case "sector":
+			nameMap = validSectors
+			featureName = "sector"
+		case "industry":
+			nameMap = validIndustries
+			featureName = "industry"
+		default:
+			continue // Skip filters that are not sector or industry
+		}
+
+		// Convert Include names to IDs
+		filter.IncludeIds = make([]int, 0, len(filter.Include))
+		for _, name := range filter.Include {
+			lowerName := strings.ToLower(name)
+			if id, ok := nameMap[lowerName]; ok {
+				filter.IncludeIds = append(filter.IncludeIds, id)
+			} else {
+				// This should ideally not happen if validation passed, but handle defensively
+				return fmt.Errorf("universe filter %d: unknown %s name '%s' found during ID conversion", i, featureName, name)
+			}
+		}
+
+		// Convert Exclude names to IDs
+		filter.ExcludeIds = make([]int, 0, len(filter.Exclude))
+		for _, name := range filter.Exclude {
+			lowerName := strings.ToLower(name)
+			if id, ok := nameMap[lowerName]; ok {
+				filter.ExcludeIds = append(filter.ExcludeIds, id)
+			} else {
+				return fmt.Errorf("universe filter %d: unknown %s name '%s' found during ID conversion", i, featureName, name)
+			}
+		}
+
+		// Clear the name fields as they are redundant for storage
+		filter.Include = nil
+		filter.Exclude = nil
+	}
+	return nil
+}
+
+// convertSpecIdsToNames modifies the spec in-place, converting sector/industry IDs
+// in universe filters back to their names using the globally loaded maps.
+// It clears the ID fields (IncludeIds/ExcludeIds) before returning.
+// This should be called AFTER unmarshalling the spec from database JSON.
+func convertSpecIdsToNames(spec *Spec) error {
+	dynamicSetMutex.RLock() // Read lock needed for accessing validation maps
+	defer dynamicSetMutex.RUnlock()
+
+	for i := range spec.Universe.Filters {
+		filter := &spec.Universe.Filters[i] // Operate on pointer to modify original
+		var idMap map[int]string
+		featureName := ""
+
+		switch filter.SecurityFeature {
+		case "sector":
+			idMap = validSectorIds
+			featureName = "sector"
+		case "industry":
+			idMap = validIndustryIds
+			featureName = "industry"
+		default:
+			continue // Skip filters that are not sector or industry
+		}
+
+		// Convert Include IDs to names
+		filter.Include = make([]string, 0, len(filter.IncludeIds))
+		for _, id := range filter.IncludeIds {
+			if name, ok := idMap[id]; ok {
+				filter.Include = append(filter.Include, name)
+			} else {
+				// Data inconsistency? Log or return error
+				log.Printf("Warning: universe filter %d: unknown %s ID '%d' found during name conversion", i, featureName, id)
+				// Optionally return an error:
+				// return fmt.Errorf("universe filter %d: unknown %s ID '%d' found during name conversion", i, featureName, id)
+			}
+		}
+
+		// Convert Exclude IDs to names
+		filter.Exclude = make([]string, 0, len(filter.ExcludeIds))
+		for _, id := range filter.ExcludeIds {
+			if name, ok := idMap[id]; ok {
+				filter.Exclude = append(filter.Exclude, name)
+			} else {
+				log.Printf("Warning: universe filter %d: unknown %s ID '%d' found during name conversion", i, featureName, id)
+				// Optionally return an error
+			}
+		}
+
+		// Clear the ID fields as they are redundant for API response
+		filter.IncludeIds = nil
+		filter.ExcludeIds = nil
+	}
+	return nil
+}
+
+
+// Unmarshal and validation functions from JSON input
 
 // temp struct for unmarshalling {name, spec} input
 type newStrategyInput struct {

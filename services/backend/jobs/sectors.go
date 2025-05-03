@@ -29,6 +29,7 @@ package jobs
 
 import (
 	"context"
+    "backend/tools"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -171,7 +172,23 @@ func UpdateSectors(ctx context.Context, c *utils.Conn) (statBlock, error) {
 
 	<-done
 	log.Printf("update_sectors completed: %+v\n", stats)
-	return stats, nil
+
+	// After processing all tickers, update the dynamic validation sets in strategies
+	// Use a background context as this is part of the job's cleanup/finalization
+	updateCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // Add a timeout
+	defer cancel()
+
+	log.Println("Updating dynamic validation sets for sectors and industries...")
+	if err := tools.UpdateDynamicSet(updateCtx, c, "sectors"); err != nil {
+		log.Printf("Error updating dynamic sectors set after job completion: %v", err)
+		// Decide if this error should make the whole job fail. Returning the stats anyway for now.
+	}
+	if err := tools.UpdateDynamicSet(updateCtx, c, "industries"); err != nil {
+		log.Printf("Error updating dynamic industries set after job completion: %v", err)
+		// Decide if this error should make the whole job fail. Returning the stats anyway for now.
+	}
+
+	return stats, nil // Return original job stats, potentially logging update errors above
 }
 
 // --------------------------- worker logic -------------------------------- //

@@ -16,6 +16,20 @@ VALUES (
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
+
+CREATE TABLE sectors (
+    sectorId serial primary key,
+    sector varchar(50) not null
+);
+CREATE INDEX idxSector ON sectors(sector);
+
+CREATE TABLE industries (
+    industryId serial primary key,
+    industry varchar(50) not null
+);
+CREATE INDEX idxIndustry ON industries(industry);
+
+
 CREATE TABLE users (
     userId SERIAL PRIMARY KEY,
     username VARCHAR(100) UNIQUE NOT NULL,

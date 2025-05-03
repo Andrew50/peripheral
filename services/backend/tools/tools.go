@@ -2,8 +2,6 @@ package tools
 
 import (
 	"backend/utils"
-    "backend/tools/query"
-    "backend/tools/strategies"
 	"encoding/json"
 	"sync"
 
@@ -65,7 +63,7 @@ func initTools() {
 	Tools = map[string]Tool{
 		"getQuery": {
 			FunctionDeclaration: nil,
-			Function:            query.GetQuery,
+			Function:            GetQuery,
 			Query:               false,
 			Api:                 true,
 			StatusMessage:       "",
