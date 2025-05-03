@@ -210,7 +210,6 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		// Try to parse the thinking response as JSON
 		citations := geminiThinkingResponse.Citations
 		var thinkingResp ThinkingResponse
-		fmt.Println("thinking response ", thinkingResp)
 		// Find the JSON block in the response
 		jsonStartIdx := strings.Index(responseText, "{")
 		jsonEndIdx := strings.LastIndex(responseText, "}")
@@ -225,7 +224,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 
 		jsonBlock := responseText[jsonStartIdx : jsonEndIdx+1]
 		_ = json.Unmarshal([]byte(jsonBlock), &thinkingResp) // Ignore error for now, as the block was empty
-
+		fmt.Println("thinking response ", thinkingResp)
 		if len(thinkingResp.Rounds) == 0 && len(thinkingResp.ContentChunks) == 0 {
 			newMessage := ChatMessage{
 				Query:         query.Query,

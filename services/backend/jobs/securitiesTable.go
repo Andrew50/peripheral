@@ -581,7 +581,7 @@ func updateSecurityDetails(conn *utils.Conn, test bool) error {
 		}
 		currentPrice, err := utils.GetMostRecentRegularClose(conn.Polygon, ticker, time.Now())
 		if err != nil {
-			log.Printf("Failed to get current price for %s: %v", ticker, err)
+			//log.Printf("Failed to get current price for %s: %v", ticker, err)
 			return
 		}
 
