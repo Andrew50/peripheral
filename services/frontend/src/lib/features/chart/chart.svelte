@@ -233,7 +233,6 @@
 
 	let keyBuffer: string[] = []; // This is for catching key presses from the keyboard before the input system is active
 	let isInputActive = false; // Track if input window is active/initializing
-
 	// Add type definitions at the top
 	interface Alert {
 		alertType: string;
@@ -300,6 +299,7 @@
 			return;
 		}
 		console.log('backendLoadChartData', inst);
+		const visibleRange = chart.timeScale().getVisibleRange();
 		isLoadingChartData = true;
 		lastChartQueryDispatchTime = Date.now();
 		if (
@@ -409,6 +409,78 @@
 				}
 				queuedLoad = () => {
 					// Add SEC filings request when loading new ticker
+
+					if (inst.direction == 'forward') {
+						// Only set visible range if both from and to values are valid
+						chartCandleSeries.setData(newCandleData);
+						chartVolumeSeries.setData(newVolumeData);
+
+						if (visibleRange && typeof visibleRange.from === 'number' && typeof visibleRange.to === 'number') {
+							console.log('[Forward Load] Setting visible range:', { from: visibleRange.from, to: visibleRange.to });
+							chart.timeScale().setVisibleRange({
+								from: visibleRange.from,
+								to: visibleRange.to
+							});
+						}
+					} else if (inst.direction == 'backward') {
+						chartCandleSeries.setData(newCandleData);
+						chartVolumeSeries.setData(newVolumeData);
+						if (
+							arrowSeries &&
+							inst &&
+							typeof inst === 'object' &&
+							'trades' in inst &&
+							Array.isArray(inst.trades)
+						) {
+							const markersByTime = new Map<
+								number,
+								{
+									entries: Array<{ price: number; isLong: boolean }>;
+									exits: Array<{ price: number; isLong: boolean }>;
+								}
+							>();
+
+							// Process all trades
+							inst.trades.forEach((trade: Trade) => {
+								const tradeTime = UTCSecondstoESTSeconds(trade.time / 1000);
+								const roundedTime =
+									Math.floor(tradeTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+
+								if (!markersByTime.has(roundedTime)) {
+									markersByTime.set(roundedTime, { entries: [], exits: [] });
+								}
+
+								// Determine if this is an entry or exit based on trade type
+								const isEntry = trade.type === 'Buy' || trade.type === 'Short';
+								const isLong = trade.type === 'Buy' || trade.type === 'Sell';
+
+								if (isEntry) {
+									markersByTime.get(roundedTime)?.entries.push({
+										price: trade.price,
+										isLong: isLong
+									});
+								} else {
+									markersByTime.get(roundedTime)?.exits.push({
+										price: trade.price,
+										isLong: isLong
+									});
+								}
+							});
+
+							// Convert to format for ArrowMarkersPaneView
+							const markers = Array.from(markersByTime.entries()).map(([time, data]) => ({
+								time: time as UTCTimestamp,
+								entries: data.entries,
+								exits: data.exits
+							}));
+							// Sort markers by timestamp (time) in ascending order
+							markers.sort((a, b) => a.time - b.time);
+							
+
+							arrowSeries.setData(markers);
+							
+						}
+					}
 					try {
 						const barsWithEvents = response.bars; // Use the original response with events
 						if (barsWithEvents && barsWithEvents.length > 0) {
@@ -521,85 +593,9 @@
 							eventSeries.setData([]);
 						}
 					}
-
-					if (inst.direction == 'forward') {
-						const visibleRange = chart.timeScale().getVisibleRange();
-						const vrFrom = visibleRange?.from;
-						const vrTo = visibleRange?.to;
-						console.log('visibleRange', vrFrom, vrTo);
-						console.log('Applying forward load visibleRange:', { from: vrFrom, to: vrTo });
-						// Only set visible range if both from and to values are valid
-						chartCandleSeries.setData(newCandleData);
-						chartVolumeSeries.setData(newVolumeData);
-						if (vrFrom && vrTo && typeof vrFrom === 'number' && typeof vrTo === 'number') {
-							console.log('[Forward Load] Setting visible range:', { from: vrFrom, to: vrTo });
-							chart.timeScale().setVisibleRange({
-								from: vrFrom,
-								to: vrTo
-							});
-						}
-					} else if (inst.direction == 'backward') {
-						chartCandleSeries.setData(newCandleData);
-						chartVolumeSeries.setData(newVolumeData);
-						if (
-							arrowSeries &&
-							inst &&
-							typeof inst === 'object' &&
-							'trades' in inst &&
-							Array.isArray(inst.trades)
-						) {
-							const markersByTime = new Map<
-								number,
-								{
-									entries: Array<{ price: number; isLong: boolean }>;
-									exits: Array<{ price: number; isLong: boolean }>;
-								}
-							>();
-
-							// Process all trades
-							inst.trades.forEach((trade: Trade) => {
-								const tradeTime = UTCSecondstoESTSeconds(trade.time / 1000);
-								const roundedTime =
-									Math.floor(tradeTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
-
-								if (!markersByTime.has(roundedTime)) {
-									markersByTime.set(roundedTime, { entries: [], exits: [] });
-								}
-
-								// Determine if this is an entry or exit based on trade type
-								const isEntry = trade.type === 'Buy' || trade.type === 'Short';
-								const isLong = trade.type === 'Buy' || trade.type === 'Sell';
-
-								if (isEntry) {
-									markersByTime.get(roundedTime)?.entries.push({
-										price: trade.price,
-										isLong: isLong
-									});
-								} else {
-									markersByTime.get(roundedTime)?.exits.push({
-										price: trade.price,
-										isLong: isLong
-									});
-								}
-							});
-
-							// Convert to format for ArrowMarkersPaneView
-							const markers = Array.from(markersByTime.entries()).map(([time, data]) => ({
-								time: time as UTCTimestamp,
-								entries: data.entries,
-								exits: data.exits
-							}));
-							// Sort markers by timestamp (time) in ascending order
-							markers.sort((a, b) => a.time - b.time);
-							
-
-							arrowSeries.setData(markers);
-						}
-					}
 					queuedLoad = null;
 
-					// Log timestamp before applying rightOffset
-					console.log('[New Ticker] Timestamp before applying rightOffset:', currentChartInstance.timestamp);
+
 
 					// Fix the SMA data type issues
 					const smaResults = calculateMultipleSMAs(newCandleData, [10, 20]);
@@ -642,10 +638,11 @@
 				if (
 					inst.direction == 'backward' ||
 					inst.requestType == 'loadNewTicker' ||
-					(inst.direction == 'forward' && !isPanning)
+					(inst.direction == 'forward' && !isPanning) ||
+					(inst.direction == 'forward' && !isLoadingChartData)
 				) {
 					queuedLoad();
-					if (
+					/*if (
 						inst.requestType === 'loadNewTicker' &&
 						!chartLatestDataReached &&
 						!$streamInfo.replayActive
@@ -660,7 +657,7 @@
 							requestType: 'loadAdditionalData',
 							includeLastBar: true
 						});
-					}
+					}*/
 				}
 			})
 			.catch((error: string) => {
@@ -1644,14 +1641,15 @@
 				if ($streamInfo.replayActive) {
 					return;
 				}
-
+				if (isLoadingChartData) {
+					return;
+				}
 				const lastBar = chartCandleSeries.data().at(-1);
 				if (!lastBar) return; // Exit if no data exists
 
 				// Convert the last bar's time from EST seconds to UTC milliseconds for the API request
 				const requestTimestamp = ESTSecondstoUTCMillis(lastBar.time as UTCTimestamp);
 
-				// Also fix the forward load to include extendedHours
 				const inst: CoreInstance & { extendedHours?: boolean } = {
 					ticker: currentChartInstance.ticker,
 					timestamp: requestTimestamp, // Correct: Use the last loaded bar's timestamp
