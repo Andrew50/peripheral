@@ -11,3 +11,5 @@ CREATE TABLE IF NOT EXISTS industries (
 );
 CREATE INDEX idxIndustry ON industries(industry);
 COMMIT;
+ALTER TABLE strategies
+ALTER COLUMN name TYPE VARCHAR(100);

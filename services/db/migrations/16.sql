@@ -66,5 +66,17 @@ CREATE TABLE IF NOT EXISTS fundamentals (
 CREATE INDEX IF NOT EXISTS idx_fundamentals_security  ON fundamentals (security_id);
 CREATE INDEX IF NOT EXISTS idx_fundamentals_timestamp ON fundamentals ("timestamp");
 -- Strategies ----------------------------------------------------------------
-ALTER TABLE IF EXISTS strategies
-    RENAME COLUMN criteria TO spec;
+DO $$
+BEGIN
+    -- Check if the 'criteria' column exists in the 'strategies' table
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = current_schema() -- Use current_schema() for safety
+          AND table_name = 'strategies'
+          AND column_name = 'criteria'
+    ) THEN
+        -- If it exists, rename it to 'spec'
+        ALTER TABLE strategies RENAME COLUMN criteria TO spec;
+    END IF;
+END $$;

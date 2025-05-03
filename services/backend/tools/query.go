@@ -46,6 +46,7 @@ type ChatMessage struct {
 	ContextItems  []map[string]interface{} `json:"context_items,omitempty"` // Store context sent with user message
 	Timestamp     time.Time                `json:"timestamp"`
 	ExpiresAt     time.Time                `json:"expires_at"` // When this message should expire
+	Citations     []Citation               `json:"citations,omitempty"`
 }
 
 // ContentChunk represents a piece of content in the response sequence
@@ -58,6 +59,7 @@ type QueryResponse struct {
 	Type          string         `json:"type"` //"mixed_content", "function_calls", "simple_text"
 	ContentChunks []ContentChunk `json:"content_chunks,omitempty"`
 	Text          string         `json:"text,omitempty"`
+	Citations     []Citation     `json:"citations,omitempty"`
 }
 
 // ThinkingResponse represents the JSON output from the thinking model with rounds
@@ -68,6 +70,9 @@ type ThinkingResponse struct {
 	ContentChunks           []ContentChunk   `json:"content_chunks,omitempty"`
 	PlanningContext         json.RawMessage  `json:"planning_context,omitempty"`
 }
+
+const initialQueryModel = "gemini-2.5-flash-preview-04-17"
+const thinkingModel = "gemini-2.0-flash-thinking-exp-01-21"
 
 // buildContextPrompt formats incoming chart/filing context for the model
 func buildContextPrompt(contextItems []map[string]interface{}) string {
@@ -197,13 +202,14 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		}
 		fmt.Println("prompt ", prompt.String())
 		// This first passes the query to a thinking model
-		geminiThinkingResponse, err := getGeminiFunctionThinking(ctx, conn, "defaultSystemPrompt", prompt.String())
+		geminiThinkingResponse, err := getGeminiFunctionThinking(ctx, conn, "defaultSystemPrompt", prompt.String(), initialQueryModel)
 		if err != nil {
 			return nil, fmt.Errorf("error getting thinking response: %w", err)
 		}
 
 		responseText := geminiThinkingResponse.Text
 		// Try to parse the thinking response as JSON
+		citations := geminiThinkingResponse.Citations
 		var thinkingResp ThinkingResponse
 		fmt.Println("thinking response ", thinkingResp)
 		// Find the JSON block in the response
@@ -230,6 +236,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 				ContextItems:  query.Context, // Store context with the user query message
 				Timestamp:     time.Now(),
 				ExpiresAt:     time.Now().Add(24 * time.Hour),
+				Citations:     citations,
 			}
 
 			// Add new message to conversation history
@@ -248,14 +255,18 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 		// If we have content chunks directly in the response, return them
 		if len(thinkingResp.ContentChunks) > 0 {
 
+			// Process potential table instructions *before* saving/returning
+			processedInitialChunks := processContentChunksForTables(ctx, conn, userID, thinkingResp.ContentChunks)
+
 			newMessage := ChatMessage{
 				Query:         query.Query,
-				ContentChunks: thinkingResp.ContentChunks,
+				ContentChunks: processedInitialChunks, // Use processed chunks
 				FunctionCalls: []FunctionCall{},
 				ToolResults:   []ExecuteResult{},
 				ContextItems:  query.Context, // Store context with the user query message
 				Timestamp:     time.Now(),
 				ExpiresAt:     time.Now().Add(24 * time.Hour),
+				Citations:     citations,
 			}
 
 			// Add new message to conversation history
@@ -269,7 +280,8 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 			// and the text version for systems that can't handle structured content
 			return QueryResponse{
 				Type:          "mixed_content",
-				ContentChunks: thinkingResp.ContentChunks,
+				ContentChunks: processedInitialChunks, // Return processed chunks
+				Citations:     citations,
 			}, nil
 		}
 
@@ -615,233 +627,6 @@ func getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (str
 	return text, nil
 }
 
-// FunctionCall represents a function to be called with its arguments
-type FunctionCall struct {
-	Name   string          `json:"name"`
-	CallID string          `json:"call_id,omitempty"`
-	Args   json.RawMessage `json:"args,omitempty"`
-}
-
-// FunctionResponse represents the response from the LLM with function calls
-type FunctionResponse struct {
-	FunctionCalls []FunctionCall `json:"function_calls"`
-}
-
-type GeminiFunctionResponse struct {
-	FunctionCalls []FunctionCall `json:"function_calls"`
-	Text          string         `json:"text"`
-}
-
-func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemPrompt string, query string) (*GeminiFunctionResponse, error) {
-	apiKey, err := conn.GetGeminiKey()
-	if err != nil {
-		return nil, fmt.Errorf("error getting gemini key: %w", err)
-	}
-
-	// Create a new client using the API key
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error creating gemini client: %w", err)
-	}
-
-	// Get the system instruction
-	baseSystemInstruction, err := getSystemInstruction(systemPrompt)
-	if err != nil {
-		return nil, fmt.Errorf("error getting system instruction: %w", err)
-	}
-
-	// Enhance the system instruction with tool descriptions
-	enhancedSystemInstruction := enhanceSystemPromptWithTools(baseSystemInstruction)
-	config := &genai.GenerateContentConfig{
-		SystemInstruction: &genai.Content{
-			Parts: []*genai.Part{
-				{Text: enhancedSystemInstruction},
-			},
-		},
-		Tools: []*genai.Tool{
-			{GoogleSearch: &genai.GoogleSearch{}},
-		},
-	}
-
-	result, err := client.Models.GenerateContent(
-		ctx,
-		"gemini-2.0-flash-thinking-exp-01-21",
-		genai.Text(query),
-		config,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("error generating content with thinking model: %w", err)
-	}
-
-	// Extract the clean text response for display
-	responseText := ""
-	if len(result.Candidates) > 0 {
-		candidate := result.Candidates[0]
-		if candidate.Content != nil {
-			for _, part := range candidate.Content.Parts {
-				if part.Text != "" {
-					responseText = part.Text
-					break
-				}
-			}
-		}
-	}
-	response := &GeminiFunctionResponse{
-		FunctionCalls: []FunctionCall{},
-		Text:          responseText,
-	}
-	return response, nil
-}
-
-// getGeminiFunctionResponse uses the Google Function API to return an ordered list of functions to execute
-func getGeminiFunctionResponse(ctx context.Context, conn *utils.Conn, query string) (*GeminiFunctionResponse, error) {
-	apiKey, err := conn.GetGeminiKey()
-	if err != nil {
-		return nil, fmt.Errorf("error getting gemini key: %w", err)
-	}
-
-	// Create a new client using the API key
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error creating gemini client: %w", err)
-	}
-
-	systemInstruction := "You are a helpful assistant that can answer questions and run functions"
-	var geminiTools []*genai.Tool
-	for _, tool := range GetTools(false) {
-		// Convert the FunctionDeclaration to a Tool
-		geminiTools = append(geminiTools, &genai.Tool{
-			FunctionDeclarations: []*genai.FunctionDeclaration{
-				{
-					Name:        tool.FunctionDeclaration.Name,
-					Description: tool.FunctionDeclaration.Description,
-					Parameters:  tool.FunctionDeclaration.Parameters,
-				},
-			},
-		})
-	}
-
-	config := &genai.GenerateContentConfig{
-		Tools: geminiTools,
-		SystemInstruction: &genai.Content{
-			Parts: []*genai.Part{
-				{Text: systemInstruction},
-			},
-		},
-	}
-	// Check if query has conversation history format ("User: ... Assistant: ...")
-	// If it does, use that directly as the prompt
-	if strings.Contains(query, "User:") && strings.Contains(query, "Assistant:") {
-		// Use the formatted query directly since it already contains the conversation history
-		result, err := client.Models.GenerateContent(
-			ctx,
-			"gemini-2.0-flash",
-			genai.Text(query),
-			config,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("error generating content with history: %w", err)
-		}
-
-		// Process the result similarly to the single-query case
-		responseText := ""
-		if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
-			for _, part := range result.Candidates[0].Content.Parts {
-				if part.Text != "" {
-					responseText = part.Text
-					break
-				}
-			}
-		}
-
-		// Extract function calls
-		var functionCalls []FunctionCall
-		for _, candidate := range result.Candidates {
-			if candidate.Content == nil {
-				continue
-			}
-
-			for _, part := range candidate.Content.Parts {
-				// Check if the part is a FunctionCall
-				if fc := part.FunctionCall; fc != nil {
-					// Convert arguments to JSON
-					args, err := json.Marshal(fc.Args)
-					if err != nil {
-						return nil, fmt.Errorf("error marshaling function args: %w", err)
-					}
-
-					functionCalls = append(functionCalls, FunctionCall{
-						Name: fc.Name,
-						Args: args,
-					})
-				}
-			}
-		}
-
-		return &GeminiFunctionResponse{
-			FunctionCalls: functionCalls,
-			Text:          responseText,
-		}, nil
-	}
-
-	// Fall back to the original implementation for simple queries
-	result, err := client.Models.GenerateContent(ctx, "gemini-2.0-flash-001", genai.Text(query), config)
-	if err != nil {
-		return nil, fmt.Errorf("error generating content: %w", err)
-	}
-
-	// Extract the clean text response for display
-	responseText := ""
-	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
-		for _, part := range result.Candidates[0].Content.Parts {
-			if part.Text != "" {
-				responseText = part.Text
-				break
-			}
-		}
-	}
-
-	// Print the response for debugging
-	fmt.Println("Gemini response:", responseText)
-
-	// Extract function calls from response
-	var functionCalls []FunctionCall
-
-	// Process the response to extract function calls
-	for _, candidate := range result.Candidates {
-		if candidate.Content == nil {
-			continue
-		}
-
-		for _, part := range candidate.Content.Parts {
-			// Check if the part is a FunctionCall
-			if fc := part.FunctionCall; fc != nil {
-				// Convert arguments to JSON
-				args, err := json.Marshal(fc.Args)
-				if err != nil {
-					return nil, fmt.Errorf("error marshaling function args: %w", err)
-				}
-
-				functionCalls = append(functionCalls, FunctionCall{
-					Name: fc.Name,
-					Args: args,
-				})
-			}
-		}
-	}
-
-	return &GeminiFunctionResponse{
-		FunctionCalls: functionCalls,
-		Text:          responseText,
-	}, nil
-}
-
 // RoundResult stores the results of a round's function calls
 type RoundResult struct {
 	Results map[string]interface{} `json:"results"`
@@ -967,9 +752,16 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 			finalContentChunks = []ContentChunk{}
 		}
 	}
-	processedChunks := make([]ContentChunk, 0, len(finalContentChunks))
-	for _, chunk := range finalContentChunks {
-		// Check for the new type "backtest_table"
+	processedChunks := processContentChunksForTables(ctx, conn, userID, finalContentChunks)
+
+	return processedChunks, allResults, nil
+}
+
+// processContentChunksForTables iterates through chunks and generates tables for "backtest_table" type.
+func processContentChunksForTables(ctx context.Context, conn *utils.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
+	processedChunks := make([]ContentChunk, 0, len(inputChunks))
+	for _, chunk := range inputChunks {
+		// Check for the type "backtest_table"
 		if chunk.Type == "backtest_table" {
 			// Attempt to parse the instruction content
 			instructionBytes, err := json.Marshal(chunk.Content)
@@ -1011,10 +803,7 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 			processedChunks = append(processedChunks, chunk)
 		}
 	}
-	// finalProcessedChunks := injectSecurityIDsIntoChunks(conn, processedChunks) // Removed call
-
-	// return finalProcessedChunks, allResults, nil // Return processedChunks directly
-	return processedChunks, allResults, nil
+	return processedChunks
 }
 
 // processRoundWithGemini sends a round to Gemini for processing and gets back the functions to execute
@@ -1124,7 +913,7 @@ func GetSuggestedQueries(conn *utils.Conn, userID int, rawArgs json.RawMessage) 
 		conversationHistory = buildConversationContext(conversationData.Messages)
 	}
 
-	geminiRes, err := getGeminiFunctionThinking(ctx, conn, "suggestedQueriesPrompt", conversationHistory)
+	geminiRes, err := getGeminiFunctionThinking(ctx, conn, "suggestedQueriesPrompt", conversationHistory, thinkingModel)
 	if err != nil {
 		return nil, fmt.Errorf("error getting suggested queries from Gemini: %w", err)
 	}

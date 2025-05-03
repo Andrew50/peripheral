@@ -17,9 +17,9 @@ import (
 )
 
 type RunBacktestArgs struct {
-	StrategyId    int   `json:"strategyId"`
-	ReturnResults bool  `json:"returnResults"`
-	ReturnWindows []int `json:"returnWindows"` // Changed to slice of ints
+	StrategyId        int   `json:"strategyId"`
+	ReturnFullResults bool  `json:"returnFullResults,omitempty"`
+	ReturnWindows     []int `json:"returnWindows"` // Changed to slice of ints
 }
 
 // RunBacktest executes a backtest for the given strategy and calculates future returns for multiple windows
@@ -272,8 +272,7 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 	// returning a map with empty "instances" and "summary".
 	// It should now also include the new return columns if they were added.
 	formattedResults, err := formatBacktestResults(recordsInterface, &spec)
-	fmt.Println("\n\n FORMATTED RESULTS: ", formattedResults)
-	fmt.Println("\n\n\n RETURN RESULTS: ", args.ReturnResults)
+	//fmt.Println("\n\n FORMATTED RESULTS: ", formattedResults)
 	if err != nil {
 		// This error path should ideally not be reached if formatBacktestResults
 		// handles empty input, but kept for robustness.
@@ -307,7 +306,7 @@ func RunBacktest(conn *utils.Conn, userId int, rawArgs json.RawMessage) (any, er
 	}()
 	// --- End Save Summary ---
 
-	if args.ReturnResults {
+	if args.ReturnFullResults {
 		return formattedResults, nil // Return full results (potentially with multiple return columns)
 	} else {
 		return summary, nil // Return only the summary
@@ -494,7 +493,7 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 	// Create a summary
 	summary := make(map[string]any)
 	summary["count"] = len(instances)
-
+	summary["columnSamples"] = columnSamples
 	if len(instances) > 0 {
 		var minTimeMs int64 = math.MaxInt64
 		var maxTimeMs int64 = 0
