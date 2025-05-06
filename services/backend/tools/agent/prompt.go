@@ -1,0 +1,154 @@
+package agent
+
+import (
+	"backend/utils"
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+)
+
+func BuildPlanningPrompt(conn *utils.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}) string {
+	ctx := context.Background()
+	var sb strings.Builder
+	// Call the exported function with the cache key
+	conversationData, err := GetConversationFromCache(ctx, conn, userID)
+	if err != nil {
+		fmt.Printf("Error getting user conversation: %v\n", err)
+	}
+	if conversationData != nil && len(conversationData.Messages) > 0 {
+		conversationContext := _buildConversationContext(conversationData.Messages)
+		sb.WriteString("<ConversationHistory>\n")
+		sb.WriteString(conversationContext)
+		sb.WriteString("\n</ConversationHistory>\n")
+	}
+	if len(contextItems) > 0 {
+		sb.WriteString("<ContextItems>\n")
+		sb.WriteString(_buildContextItems(contextItems))
+		sb.WriteString("\n</ContextItems>\n")
+	}
+	if activeChartContext != nil {
+		sb.WriteString("<UserActiveChart>\n")
+		ticker, _ := activeChartContext["ticker"].(string)
+		secId := fmt.Sprint(activeChartContext["securityId"])
+		tsStr := fmt.Sprint(activeChartContext["timestamp"])
+		sb.WriteString(fmt.Sprintf("Instance - Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secId, tsStr))
+		sb.WriteString("\n</UserActiveChart>\n")
+	}
+	sb.WriteString("<UserQuery>\n")
+	sb.WriteString(query)
+	sb.WriteString("\n</UserQuery>\n")
+
+	return sb.String()
+}
+
+func BuildPlanningPromptWithResults(conn *utils.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, results []ExecuteResult) string {
+	// Start with the basic planning prompt
+	sb := strings.Builder{}
+	sb.WriteString(BuildPlanningPrompt(conn, userID, query, contextItems, activeChartContext))
+
+	// Add execution results
+	if len(results) > 0 {
+		sb.WriteString("\n<ExecutionResults>\n")
+		resultsJSON, err := json.Marshal(results)
+		if err != nil {
+			sb.WriteString(fmt.Sprintf("Error marshaling results: %v\n", err))
+		} else {
+			sb.WriteString("```json\n")
+			sb.WriteString(string(resultsJSON))
+			sb.WriteString("\n```\n")
+		}
+		sb.WriteString("</ExecutionResults>\n")
+	}
+
+	return sb.String()
+}
+
+func _buildContextItems(contextItems []map[string]interface{}) string {
+	var context strings.Builder
+	for _, item := range contextItems {
+		// Treat filing contexts first
+		if _, ok := item["link"]; ok {
+			ticker, _ := item["ticker"].(string)
+			fType, _ := item["filingType"].(string)
+			link, _ := item["link"].(string)
+			context.WriteString(fmt.Sprintf("SEC Filing - Ticker: %s, Type: %s, Link: %s\n", ticker, fType, link))
+		} else if _, ok := item["timestamp"]; ok {
+			// Then treat instance contexts
+			ticker, _ := item["ticker"].(string)
+			secId := fmt.Sprint(item["securityId"])
+			tsStr := fmt.Sprint(item["timestamp"])
+			context.WriteString(fmt.Sprintf("Instance - Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secId, tsStr))
+		}
+	}
+	return context.String()
+}
+
+func _buildConversationContext(messages []ChatMessage) string {
+	var context strings.Builder
+
+	// Include up to last 10 messages for context
+	startIdx := 0
+	if len(messages) > 10 {
+		startIdx = len(messages) - 10
+	}
+
+	for i := startIdx; i < len(messages); i++ {
+		context.WriteString("User: ")
+		context.WriteString(messages[i].Query)
+		context.WriteString("\n")
+		// Include context items if they exist for the user message
+		if len(messages[i].ContextItems) > 0 {
+			context.WriteString("User Context:\n")
+			context.WriteString(_buildContextItems(messages[i].ContextItems)) // Reuse existing formatting function
+			context.WriteString("\n")
+		}
+
+		context.WriteString("Assistant: ")
+		if len(messages[i].ContentChunks) > 0 {
+			for _, chunk := range messages[i].ContentChunks {
+				// Safely handle different content types
+				switch v := chunk.Content.(type) {
+				case string:
+					context.WriteString(v)
+				case map[string]interface{}:
+					// For table data or other structured content, convert to a simple text representation
+					jsonData, err := json.Marshal(v)
+					if err == nil {
+						context.WriteString(fmt.Sprintf("[Table data: %s]", string(jsonData)))
+					} else {
+						context.WriteString("[Table data]")
+					}
+				default:
+					// Handle any other type by converting to string
+					context.WriteString(fmt.Sprintf("%v", v))
+				}
+			}
+		} else {
+			context.WriteString(messages[i].ResponseText)
+		}
+		context.WriteString("\n\n")
+	}
+	return context.String()
+}
+
+func BuildFinalResponsePrompt(conn *utils.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, allResults []ExecuteResult) string {
+	// Start with the basic planning prompt
+	sb := strings.Builder{}
+	sb.WriteString(BuildPlanningPrompt(conn, userID, query, contextItems, activeChartContext))
+
+	// Add execution results
+	if len(allResults) > 0 {
+		sb.WriteString("\n<ExecutionResults>\n")
+		resultsJSON, err := json.Marshal(allResults)
+		if err != nil {
+			sb.WriteString(fmt.Sprintf("Error marshaling results: %v\n", err))
+		} else {
+			sb.WriteString("```json\n")
+			sb.WriteString(string(resultsJSON))
+			sb.WriteString("\n```\n")
+		}
+		sb.WriteString("</ExecutionResults>\n")
+	}
+	return sb.String()
+}
