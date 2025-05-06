@@ -157,7 +157,7 @@ func GetFinalResponse(ctx context.Context, conn *utils.Conn, prompt string) (*Fi
 
 	result, err := client.Models.GenerateContent(ctx, finalResponseModel, genai.Text(prompt), config)
 	if err != nil {
-		return nil, fmt.Errorf("Gemini had an error generating final response: %w", err)
+		return nil, fmt.Errorf("gemini had an error generating final response: %w", err)
 	}
 
 	if len(result.Candidates) <= 0 {
