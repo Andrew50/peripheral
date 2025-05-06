@@ -566,7 +566,6 @@
 							class:expandable
 							class:expanded={expandedRows.has(i)}
 							on:click={() => expandable && toggleRow(i)}
-							transition:fade={{ duration: 150 }}
 						>
 							{#if expandable}
 								<td class="default-td expand-cell">
