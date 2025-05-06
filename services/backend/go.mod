@@ -20,7 +20,7 @@ require (
 	golang.org/x/oauth2 v0.29.0
 	golang.org/x/sync v0.13.0
 	gonum.org/v1/plot v0.16.0
-	google.golang.org/genai v1.2.0
+	google.golang.org/genai v1.3.0
 	gopkg.in/telebot.v3 v3.3.8
 )
 

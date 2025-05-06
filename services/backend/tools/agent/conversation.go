@@ -28,6 +28,28 @@ type ChatMessage struct {
 	Citations     []Citation               `json:"citations,omitempty"`
 }
 
+func saveMessageToConversation(conn *utils.Conn, userID int, query string, contextItems []map[string]interface{}, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult) error {
+	message := ChatMessage{
+		Query:         query,
+		ContextItems:  contextItems,
+		ContentChunks: contentChunks,
+		FunctionCalls: functionCalls,
+		ToolResults:   toolResults,
+		Timestamp:     time.Now(),
+		ExpiresAt:     time.Now().Add(24 * time.Hour),
+	}
+
+	conversation, err := GetConversationFromCache(context.Background(), conn, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get user conversation: %w", err)
+	}
+	conversation.Messages = append(conversation.Messages, message)
+	conversation.Timestamp = time.Now()
+
+	return saveConversationToCache(context.Background(), conn, userID, fmt.Sprintf("user:%d:conversation", userID), conversation)
+
+}
+
 // saveConversationToCache saves the conversation data to Redis
 func saveConversationToCache(ctx context.Context, conn *utils.Conn, userID int, cacheKey string, data *ConversationData) error {
 	if data == nil {
