@@ -97,7 +97,7 @@ func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (Execut
 	if tool.StatusMessage != "" {
 		socket.SendFunctionStatus(e.userId, formatStatusMessage(tool.StatusMessage, argsMap))
 	}
-	ctx, span := e.tracer.Start(ctx, fc.Name, trace.WithAttributes(attribute.String("agent.tool", fc.Name)))
+	_, span := e.tracer.Start(ctx, fc.Name, trace.WithAttributes(attribute.String("agent.tool", fc.Name)))
 	defer span.End()
 
 	result, err := tool.Function(e.conn, e.userId, fc.Args)
