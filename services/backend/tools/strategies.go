@@ -4,9 +4,12 @@ import (
 	"backend/utils"
 	"context"
 	"database/sql"
+	"embed"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"bytes"
 	"encoding/base64"
@@ -15,6 +18,9 @@ import (
 	"gonum.org/v1/plot"
 	"google.golang.org/genai"
 )
+
+//go:embed prompts/*
+var fs embed.FS // 2️⃣ compiled into the binary
 
 // AnalyzeInstanceFeaturesArgs contains parameters for analyzing features of a specific security instance
 type AnalyzeInstanceFeaturesArgs struct {
@@ -553,4 +559,19 @@ func SetStrategy(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interfa
 		Spec:       spec, // Return the validated spec
 		// Score is not updated here, would need separate logic/query if needed
 	}, nil
+}
+
+// getSystemInstruction returns the processed prompt named <name>.txt
+func getSystemInstruction(name string) (string, error) {
+	raw, err := fs.ReadFile("prompts/" + name + ".txt")
+	if err != nil {
+		return "", fmt.Errorf("reading prompt: %w", err)
+	}
+
+	now := time.Now()
+	s := strings.ReplaceAll(string(raw), "{{CURRENT_TIME}}",
+		now.Format(time.RFC3339))
+	s = strings.ReplaceAll(s, "{{CURRENT_TIME_MILLISECONDS}}",
+		strconv.FormatInt(now.UnixMilli(), 10))
+	return s, nil
 }
