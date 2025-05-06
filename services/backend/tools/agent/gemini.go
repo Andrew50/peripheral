@@ -1,4 +1,4 @@
-package tools
+package agent
 
 import (
 	"backend/utils"
@@ -52,13 +52,6 @@ func getTextResponseFromGemini(ctx context.Context, conn *utils.Conn, model stri
 	text := fmt.Sprintf("%v", result.Candidates[0].Content.Parts[0].Text)
 	return text, nil
 }*/
-
-// FunctionCall represents a function to be called with its arguments
-type FunctionCall struct {
-	Name   string          `json:"name"`
-	CallID string          `json:"call_id,omitempty"`
-	Args   json.RawMessage `json:"args,omitempty"`
-}
 
 // FunctionResponse represents the response from the LLM with function calls
 type FunctionResponse struct {

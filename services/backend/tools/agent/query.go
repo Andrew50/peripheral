@@ -1,11 +1,10 @@
-package tools
+package agent
 
 import (
 	"backend/utils"
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -19,39 +18,6 @@ type Query struct {
 	Query              string                   `json:"query"`
 	Context            []map[string]interface{} `json:"context,omitempty"`
 	ActiveChartContext map[string]interface{}   `json:"activeChartContext,omitempty"`
-}
-
-// ExecuteResult represents the result of executing a function
-type ExecuteResult struct {
-	FunctionName string      `json:"function_name"`
-	Result       interface{} `json:"result"`
-	Error        string      `json:"error,omitempty"`
-	Args         interface{} `json:"args,omitempty"`
-}
-
-// ConversationData represents the data structure for storing conversation context
-type ConversationData struct {
-	Messages  []ChatMessage `json:"messages"`
-	Timestamp time.Time     `json:"timestamp"`
-}
-
-// ChatMessage represents a single message in the conversation
-type ChatMessage struct {
-	Query         string                   `json:"query"`
-	ContentChunks []ContentChunk           `json:"content_chunks,omitempty"`
-	ResponseText  string                   `json:"response_text,omitempty"`
-	FunctionCalls []FunctionCall           `json:"function_calls"`
-	ToolResults   []ExecuteResult          `json:"tool_results"`
-	ContextItems  []map[string]interface{} `json:"context_items,omitempty"` // Store context sent with user message
-	Timestamp     time.Time                `json:"timestamp"`
-	ExpiresAt     time.Time                `json:"expires_at"` // When this message should expire
-	Citations     []Citation               `json:"citations,omitempty"`
-}
-
-// ContentChunk represents a piece of content in the response sequence
-type ContentChunk struct {
-	Type    string      `json:"type"`    // "text" or "table" (or others later, e.g., "image")
-	Content interface{} `json:"content"` // string for "text", TableData for "table"
 }
 
 type QueryResponse struct {
@@ -121,7 +87,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 
 	// Check for existing conversation history
 	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
-	conversationData, err := getConversationFromCache(ctx, conn, userID, conversationKey)
+	conversationData, err := GetConversationFromCache(ctx, conn, userID)
 	// If we have existing conversation data, append the new message
 	fmt.Println("Accessing conversation for key:", conversationKey)
 	// If no conversation exists, create a new one
@@ -149,7 +115,7 @@ func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, 
 	var allThinkingResults []ThinkingResponse
 	if len(conversationData.Messages) > 0 {
 		// Build context from previous messages for Gemini
-		conversationHistory = buildConversationContext(conversationData.Messages)
+		conversationHistory = _buildConversationContext(conversationData.Messages)
 	} else {
 		conversationHistory = ""
 	}
@@ -351,236 +317,6 @@ func buildPersistentHistory(persistentContextData *PersistentContextData) string
 		persistentHistory.WriteString("\n") // Add separation
 	}
 	return persistentHistory.String()
-}
-
-// buildConversationContext formats the conversation history for Gemini
-func buildConversationContext(messages []ChatMessage) string {
-	var context strings.Builder
-
-	// Include up to last 10 messages for context
-	startIdx := 0
-	if len(messages) > 10 {
-		startIdx = len(messages) - 10
-	}
-
-	for i := startIdx; i < len(messages); i++ {
-		context.WriteString("User: ")
-		context.WriteString(messages[i].Query)
-		context.WriteString("\n")
-		// Include context items if they exist for the user message
-		if len(messages[i].ContextItems) > 0 {
-			context.WriteString("User Context:\n")
-			context.WriteString(buildContextPrompt(messages[i].ContextItems)) // Reuse existing formatting function
-			context.WriteString("\n")
-		}
-
-		context.WriteString("Assistant: ")
-		if len(messages[i].ContentChunks) > 0 {
-			for _, chunk := range messages[i].ContentChunks {
-				// Safely handle different content types
-				switch v := chunk.Content.(type) {
-				case string:
-					context.WriteString(v)
-				case map[string]interface{}:
-					// For table data or other structured content, convert to a simple text representation
-					jsonData, err := json.Marshal(v)
-					if err == nil {
-						context.WriteString(fmt.Sprintf("[Table data: %s]", string(jsonData)))
-					} else {
-						context.WriteString("[Table data]")
-					}
-				default:
-					// Handle any other type by converting to string
-					context.WriteString(fmt.Sprintf("%v", v))
-				}
-			}
-		} else {
-			context.WriteString(messages[i].ResponseText)
-		}
-		context.WriteString("\n\n")
-	}
-	return context.String()
-}
-
-// saveConversationToCache saves the conversation data to Redis
-func saveConversationToCache(ctx context.Context, conn *utils.Conn, userID int, cacheKey string, data *ConversationData) error {
-	if data == nil {
-		return fmt.Errorf("cannot save nil conversation data")
-	}
-
-	// Test Redis connectivity before saving
-	success, message := conn.TestRedisConnectivity(ctx, userID)
-	if !success {
-		fmt.Printf("WARNING: %s\n", message)
-		return fmt.Errorf("redis connectivity test failed: %s", message)
-	}
-
-	// Filter out expired messages
-	now := time.Now()
-	var validMessages []ChatMessage
-	for _, msg := range data.Messages {
-		if msg.ExpiresAt.After(now) {
-			validMessages = append(validMessages, msg)
-		} else {
-			fmt.Printf("Removing expired message from %s\n", msg.Timestamp.Format(time.RFC3339))
-		}
-	}
-
-	// Update the data with only valid messages
-	data.Messages = validMessages
-
-	if len(data.Messages) == 0 {
-		fmt.Println("Warning: Saving empty conversation data to cache (all messages expired)")
-	}
-
-	// Print details about what we're saving
-	fmt.Printf("Saving conversation with %d valid messages to key: %s\n", len(data.Messages), cacheKey)
-
-	// Serialize the conversation data
-	serialized, err := json.Marshal(data)
-	if err != nil {
-		fmt.Printf("Failed to serialize conversation data: %v\n", err)
-		return fmt.Errorf("failed to serialize conversation data: %w", err)
-	}
-
-	// Save to Redis without an expiration - we'll handle expiration at the message level
-	err = conn.Cache.Set(ctx, cacheKey, serialized, 0).Err()
-	if err != nil {
-		fmt.Printf("Failed to save conversation to Redis: %v\n", err)
-		return fmt.Errorf("failed to save conversation to cache: %w", err)
-	}
-
-	// Verify the data was saved correctly
-	verification, err := conn.Cache.Get(ctx, cacheKey).Result()
-	if err != nil {
-		fmt.Printf("Failed to verify saved conversation: %v\n", err)
-		return fmt.Errorf("failed to verify saved conversation: %w", err)
-	}
-
-	var verifiedData ConversationData
-	if err := json.Unmarshal([]byte(verification), &verifiedData); err != nil {
-		fmt.Printf("Failed to parse verified conversation: %v\n", err)
-		return fmt.Errorf("failed to parse verified conversation: %w", err)
-	}
-
-	fmt.Printf("Successfully saved and verified conversation to Redis. Verified %d messages.\n",
-		len(verifiedData.Messages))
-
-	return nil
-}
-
-// SetMessageExpiration allows setting a custom expiration time for a message
-func SetMessageExpiration(message *ChatMessage, duration time.Duration) {
-	message.ExpiresAt = time.Now().Add(duration)
-}
-
-// getConversationFromCache retrieves conversation data from Redis
-func getConversationFromCache(ctx context.Context, conn *utils.Conn, userID int, cacheKey string) (*ConversationData, error) {
-	// Get the conversation data from Redis
-	cachedValue, err := conn.Cache.Get(ctx, cacheKey).Result()
-	if err != nil {
-		return nil, fmt.Errorf("conversation not found in cache: %w", err)
-	}
-
-	// Deserialize the conversation data
-	var conversationData ConversationData
-	err = json.Unmarshal([]byte(cachedValue), &conversationData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to deserialize conversation data: %w", err)
-	}
-
-	// Filter out expired messages
-	now := time.Now()
-	originalCount := len(conversationData.Messages)
-	var validMessages []ChatMessage
-
-	for _, msg := range conversationData.Messages {
-		if msg.ExpiresAt.After(now) {
-			validMessages = append(validMessages, msg)
-		} else {
-			fmt.Printf("Filtering out expired message from %s during retrieval\n",
-				msg.Timestamp.Format(time.RFC3339))
-		}
-	}
-
-	// Update with only valid messages
-	conversationData.Messages = validMessages
-
-	// If we filtered out messages, update the cache
-	if len(validMessages) < originalCount {
-		fmt.Printf("Removed %d expired messages from conversation\n",
-			originalCount-len(validMessages))
-
-		// Save the updated conversation back to cache if we have at least one valid message
-		if len(validMessages) > 0 {
-			go func() {
-				// Create a new context for the goroutine
-				bgCtx := context.Background()
-				if err := saveConversationToCache(bgCtx, conn, userID, cacheKey, &conversationData); err != nil {
-					fmt.Printf("Failed to update cache after filtering expired messages: %v\n", err)
-				}
-			}()
-		} else if originalCount > 0 {
-			// All messages expired, so we should delete the conversation entirely
-			go func() {
-				bgCtx := context.Background()
-				if err := conn.Cache.Del(bgCtx, cacheKey).Err(); err != nil {
-					fmt.Printf("Failed to delete empty conversation after all messages expired: %v\n", err)
-				} else {
-					fmt.Printf("Deleted conversation %s as all messages expired\n", cacheKey)
-				}
-			}()
-		}
-	}
-
-	return &conversationData, nil
-}
-
-// GetUserConversation retrieves the conversation for a user
-func GetUserConversation(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
-	ctx := context.Background()
-
-	// Test Redis connectivity before attempting to retrieve conversation
-	success, message := conn.TestRedisConnectivity(ctx, userID)
-	if !success {
-		fmt.Printf("WARNING: %s\n", message)
-	} else {
-		fmt.Println(message)
-	}
-
-	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
-	fmt.Println("GetUserConversation", conversationKey)
-
-	conversation, err := getConversationFromCache(ctx, conn, userID, conversationKey)
-	if err != nil {
-		// Handle the case when conversation doesn't exist in cache
-		if strings.Contains(err.Error(), "redis: nil") {
-			fmt.Println("No conversation found in cache, returning empty history")
-			// Return empty conversation history instead of error
-			return &ConversationData{
-				Messages:  []ChatMessage{},
-				Timestamp: time.Now(),
-			}, nil
-		}
-		return nil, fmt.Errorf("failed to get user conversation: %w", err)
-	}
-
-	// Log the conversation data for debugging
-	fmt.Printf("Retrieved conversation: %+v\n", conversation)
-	if conversation != nil {
-		fmt.Printf("Number of messages: %d\n", len(conversation.Messages))
-	}
-
-	// Ensure we're returning valid data
-	if conversation == nil || len(conversation.Messages) == 0 {
-		fmt.Println("Conversation was retrieved but has no messages, returning empty history")
-		return &ConversationData{
-			Messages:  []ChatMessage{},
-			Timestamp: time.Now(),
-		}, nil
-	}
-
-	return conversation, nil
 }
 
 func getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (string, error) {
@@ -816,19 +552,6 @@ func processRoundWithGemini(ctx context.Context, conn *utils.Conn, prompt string
 	return response.FunctionCalls, nil
 }
 
-// formatStatusMessage replaces placeholders like {key} with values from the args map.
-func formatStatusMessage(message string, argsMap map[string]interface{}) string {
-	re := regexp.MustCompile(`{([^}]+)}`)
-	formattedMessage := re.ReplaceAllStringFunc(message, func(match string) string {
-		key := match[1 : len(match)-1] // Extract key from {key}
-		if val, ok := argsMap[key]; ok {
-			return fmt.Sprintf("%v", val) // Convert value to string
-		}
-		return match // Return original placeholder if key not found
-	})
-	return formattedMessage
-}
-
 // executeGeminiFunctionCalls executes the function calls returned by Gemini
 func executeGeminiFunctionCalls(ctx context.Context, conn *utils.Conn, userID int, functionCalls []FunctionCall) ([]ExecuteResult, error) {
 	var results []ExecuteResult
@@ -885,178 +608,4 @@ func executeGeminiFunctionCalls(ctx context.Context, conn *utils.Conn, userID in
 	}
 
 	return results, nil
-}
-
-type GetSuggestedQueriesResponse struct {
-	Suggestions []string `json:"suggestions"`
-}
-
-func GetSuggestedQueries(conn *utils.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
-
-	// Use the standardized Redis connectivity test
-	ctx := context.Background()
-	success, message := conn.TestRedisConnectivity(ctx, userID)
-	if !success {
-		fmt.Printf("WARNING: %s\n", message)
-	} else {
-		fmt.Println(message)
-	}
-	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
-	conversationData, err := getConversationFromCache(ctx, conn, userID, conversationKey)
-	if err != nil || conversationData == nil {
-		return GetSuggestedQueriesResponse{}, nil
-	}
-	var conversationHistory string
-	if len(conversationData.Messages) > 0 {
-		conversationHistory = buildConversationContext(conversationData.Messages)
-	}
-
-	geminiRes, err := getGeminiFunctionThinking(ctx, conn, "suggestedQueriesPrompt", conversationHistory, thinkingModel)
-	if err != nil {
-		return nil, fmt.Errorf("error getting suggested queries from Gemini: %w", err)
-	}
-	jsonStartIdx := strings.Index(geminiRes.Text, "{")
-	jsonEndIdx := strings.LastIndex(geminiRes.Text, "}")
-	if jsonStartIdx == -1 || jsonEndIdx == -1 {
-		return GetSuggestedQueriesResponse{}, nil
-	}
-	jsonBlock := geminiRes.Text[jsonStartIdx : jsonEndIdx+1]
-	var response GetSuggestedQueriesResponse
-	if err := json.Unmarshal([]byte(jsonBlock), &response); err != nil {
-		return GetSuggestedQueriesResponse{}, fmt.Errorf("error unmarshalling suggested queries: %w", err)
-	}
-	return response, nil
-
-}
-
-type GetInitialQuerySuggestionsArgs struct {
-	ActiveChartInstance map[string]interface{} `json:"activeChartInstance"`
-}
-type GetInitialQuerySuggestionsResponse struct {
-	Suggestions []string `json:"suggestions"`
-}
-
-func GetInitialQuerySuggestions(conn *utils.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
-	ctx := context.Background()
-
-	var args GetInitialQuerySuggestionsArgs
-	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		return nil, fmt.Errorf("error unmarshalling initial query suggestions args: %w", err)
-	}
-
-	if args.ActiveChartInstance == nil {
-		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, nil
-	}
-
-	// --- Data Fetching ---
-	securityIdFloat, secIdOk := args.ActiveChartInstance["securityId"].(float64)
-	barsToFetch := 10 // Fetch a decent number for context/plotting
-
-	if !secIdOk {
-		fmt.Println("Warning: Could not extract securityId for fetching chart data.")
-		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, nil // Cannot proceed without these
-	}
-
-	securityId := int(securityIdFloat)
-
-	chartReq := GetChartDataArgs{
-		SecurityID:    securityId,
-		Timeframe:     "1d",
-		Timestamp:     0,
-		Direction:     "backward",
-		Bars:          barsToFetch,
-		ExtendedHours: false,
-		IsReplay:      false,
-	}
-	reqBytes, _ := json.Marshal(chartReq)
-
-	rawResp, chartErr := GetChartData(conn, userID, reqBytes)
-	if chartErr != nil {
-		fmt.Printf("Warning: error fetching chart data for suggestions: %v\n", chartErr)
-		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, nil
-	}
-	resp, ok := rawResp.(GetChartDataResponse)
-	if !ok || len(resp.Bars) == 0 {
-		fmt.Println("Warning: no bars returned or unexpected type from GetChartData.")
-		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, nil
-	}
-	// --- End Data Fetching ---
-
-	// --- Prepare Prompt for LLM ---
-	barsJSON, _ := json.MarshalIndent(resp.Bars, "", "  ") // Use the bars from GetChartData response
-
-	sysPrompt, err := getSystemInstruction("initialQueriesPrompt")
-	if err != nil {
-		fmt.Printf("Error getting system instruction: %v\n", err)
-		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, fmt.Errorf("error fetching system prompt: %w", err)
-	}
-
-	cfg := &genai.GenerateContentConfig{
-		SystemInstruction: &genai.Content{
-			Parts: []*genai.Part{{Text: sysPrompt}},
-		},
-	}
-
-	// Build user content parts
-	userParts := []*genai.Part{
-		{Text: "<ChartInstanceContext>\n" + buildContextPrompt([]map[string]interface{}{args.ActiveChartInstance}) + "</ChartInstanceContext>\n"},
-		{Text: "<RecentOHLCVData>\n```json\n" + string(barsJSON) + "\n```\n</RecentOHLCVData>\n"},
-	}
-	userContent := &genai.Content{Parts: userParts}
-	// --- End Prompt Preparation ---
-
-	// --- Call LLM ---
-	apiKey, err := conn.GetGeminiKey()
-	if err != nil {
-		return nil, fmt.Errorf("error getting Gemini key: %w", err)
-	}
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error creating Gemini client: %w", err)
-	}
-
-	// Use GenerateContent with []*genai.Content input
-	result, err := client.Models.GenerateContent(
-		ctx,
-		"gemini-2.0-flash-thinking-exp-01-21",
-		[]*genai.Content{userContent},
-		cfg,
-	)
-	if err != nil {
-		fmt.Printf("Error getting initial suggestions from Gemini: %v\n", err)
-		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, nil
-	}
-	// --- End Call LLM ---
-
-	// --- Parse Response ---
-	llmResponseText := ""
-	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
-		for _, p := range result.Candidates[0].Content.Parts {
-			if p.Text != "" {
-				llmResponseText = p.Text
-				break
-			}
-		}
-	}
-
-	jsonStartIdx := strings.Index(llmResponseText, "{")
-	jsonEndIdx := strings.LastIndex(llmResponseText, "}")
-
-	if jsonStartIdx == -1 || jsonEndIdx == -1 || jsonEndIdx < jsonStartIdx {
-		fmt.Printf("No valid JSON block found in initial suggestions response: %s\n", llmResponseText)
-		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, nil
-	}
-
-	jsonBlock := llmResponseText[jsonStartIdx : jsonEndIdx+1]
-	var response GetInitialQuerySuggestionsResponse
-	if err := json.Unmarshal([]byte(jsonBlock), &response); err != nil {
-		fmt.Printf("Error unmarshalling initial suggestions JSON: %v. JSON block: %s\n", err, jsonBlock)
-		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, nil
-	}
-	// --- End Parse Response ---
-
-	return response, nil
 }

@@ -4,6 +4,7 @@ import (
 	"backend/jobs"
 	"backend/socket"
 	"backend/tools"
+	"backend/tools/agent"
 	"backend/utils"
 	"encoding/base64"
 	"encoding/json"
@@ -25,7 +26,7 @@ var publicFunc = map[string]func(*utils.Conn, json.RawMessage) (interface{}, err
 }
 
 // Define privateFunc as an alias to Tools
-var privateFunc = tools.GetTools(true)
+var privateFunc = agent.GetTools(true)
 
 // Request represents a structure for handling Request data.
 type Request struct {

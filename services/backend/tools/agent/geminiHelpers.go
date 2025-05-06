@@ -1,9 +1,10 @@
-package tools
+package agent
 
 import (
 	"backend/utils"
 	"context"
 	"embed"
+
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -17,7 +18,6 @@ var fs embed.FS // 2️⃣ compiled into the binary
 
 // getSystemInstruction returns the processed prompt named <name>.txt
 func getSystemInstruction(name string) (string, error) {
-	fmt.Println(fs)
 	raw, err := fs.ReadFile("prompts/" + name + ".txt") // 3️⃣ no paths, no os.ReadFile
 	if err != nil {
 		return "", fmt.Errorf("reading prompt: %w", err)
