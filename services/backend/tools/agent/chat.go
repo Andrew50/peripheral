@@ -65,6 +65,7 @@ func GetChatRequest(conn *utils.Conn, userID int, args json.RawMessage) (interfa
 		switch v := result.(type) {
 		case DirectAnswer:
 			processedChunks := processContentChunksForTables(ctx, conn, userID, v.ContentChunks)
+			saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, []ExecuteResult{})
 			return QueryResponse{
 				Type:          "mixed_content",
 				ContentChunks: processedChunks,
@@ -102,7 +103,7 @@ func GetChatRequest(conn *utils.Conn, userID int, args json.RawMessage) (interfa
 
 				// Process any table instructions in the content chunks
 				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
-
+				saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, allResults)
 				return QueryResponse{
 					Type:          "mixed_content",
 					ContentChunks: processedChunks,
@@ -111,7 +112,7 @@ func GetChatRequest(conn *utils.Conn, userID int, args json.RawMessage) (interfa
 		}
 		maxTurns--
 		if maxTurns <= 0 {
-			return nil, fmt.Errorf("Model took too many turns to run.")
+			return nil, fmt.Errorf("model took too many turns to run")
 		}
 	}
 
