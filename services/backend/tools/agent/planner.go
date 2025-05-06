@@ -54,6 +54,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *utils.Conn, systemPrompt str
 	if err != nil {
 		return Plan{}, fmt.Errorf("error creating gemini client: %w", err)
 	}
+	fmt.Println("prompt", prompt)
 	thinkingBudget := int32(2000)
 	// Enhance the system instruction with tool descriptions
 	enhancedSystemInstruction := enhanceSystemPromptWithTools(systemPrompt)
@@ -88,6 +89,9 @@ func _geminiGeneratePlan(ctx context.Context, conn *utils.Conn, systemPrompt str
 			}
 		}
 	}
+	fmt.Println("\n TOKEN COUNT: ", candidate.TokenCount)
+	fmt.Println("groundingMetadata", candidate.GroundingMetadata)
+	fmt.Println("citationMetadata", candidate.CitationMetadata)
 	fmt.Println("\n\n\n\n\nresultText", resultText)
 
 	// --- Extract JSON block --- START
