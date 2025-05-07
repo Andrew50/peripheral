@@ -1,6 +1,5 @@
 # .air.toml
 
-# Configuring the air tool
 [build]
   cmd = "go build -o ./tmp/main ."
   bin = "./tmp/main"
@@ -19,4 +18,3 @@
   watch_delay = 1000
   grace_time = 1000
   output = "air.log"
-
