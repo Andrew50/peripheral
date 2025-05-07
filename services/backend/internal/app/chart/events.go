@@ -2,6 +2,8 @@ package chart
 
 import (
 	"backend/internal/data"
+	"backend/internal/data/edgar"
+	"backend/internal/data/postgres"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -99,7 +101,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 		fmt.Printf("Warning: No security records found for securityId %d overlapping range %d-%d\n", securityID, fromMs, toMs)
 		// Attempt to find *any* ticker for the security ID as a fallback for fetching events
 		// This might be needed if the time range falls entirely outside known min/max dates
-		fallbackTicker, fallbackErr := utils.GetTicker(conn, securityID, fromTime) // Use 'fromTime' for fallback
+		fallbackTicker, fallbackErr := postgres.GetTicker(conn, securityID, fromTime) // Use 'fromTime' for fallback
 		if fallbackErr != nil {
 			fmt.Printf("Warning: Could not find fallback ticker for securityId %d: %v\n", securityID, fallbackErr)
 			return []ChartEvent{}, nil // Return empty if no records and no fallback
@@ -113,7 +115,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 	var mutex sync.Mutex // Protect shared slices
 	var allSplits []models.Split
 	var allDividends []models.Dividend
-	var secFilings []utils.EDGARFiling // Fetched separately
+	var secFilings []edgar.EDGARFiling // Fetched separately
 
 	var splitErr, dividendErr, secFilingErr error // Collect errors from goroutines
 
@@ -128,7 +130,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			options := EdgarFilingOptions{
+			options := edgar.EdgarFilingOptions{
 				Start:      fromMs,
 				End:        toMs,
 				SecurityID: securityID,
@@ -141,7 +143,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 				return
 			}
 
-			res, err := GetStockEdgarFilings(conn, userId, optionsJSON)
+			res, err := edgar.GetStockEdgarFilings(conn, userId, optionsJSON)
 			if err != nil {
 				// Log the error but don't make it fatal for the whole function
 				fmt.Printf("Warning: error fetching SEC filings for securityId %d: %v\n", securityID, err)

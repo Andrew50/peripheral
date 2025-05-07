@@ -5,18 +5,19 @@ import (
 	"sync"
 	"time"
     "backend/internal/data/edgar"
+    "backend/internal/data"
 )
 
 var (
 	latestFilingsMutex  sync.RWMutex
-	latestFilings       []GlobalEDGARFiling
+	latestFilings       []edgar.GlobalEDGARFiling
 	edgarServiceRunning bool
 	edgarServiceMutex   sync.Mutex
-	NewFilingsChannel   = make(chan GlobalEDGARFiling, 100)
+	NewFilingsChannel   = make(chan edgar.GlobalEDGARFiling, 100)
 )
 
 // StartEdgarFilingsService starts a background service to fetch and broadcast SEC filings
-func StartEdgarFilingsService(conn *Conn) {
+func StartEdgarFilingsService(conn *data.Conn) {
 	edgarServiceMutex.Lock()
 	defer edgarServiceMutex.Unlock()
 	if edgarServiceRunning {
@@ -28,7 +29,7 @@ func StartEdgarFilingsService(conn *Conn) {
 	edgarServiceRunning = true
 
 	// Initial fetch
-	filings, err := FetchLatestEdgarFilings(conn)
+	filings, err := edgar.FetchLatestEdgarFilings(conn)
 	if err != nil {
 		fmt.Printf("Error fetching initial SEC filings: %v\n", err)
 	} else {
@@ -43,7 +44,7 @@ func StartEdgarFilingsService(conn *Conn) {
 		defer ticker.Stop()
 
 		for range ticker.C {
-			newFilings, err := FetchLatestEdgarFilings(conn)
+			newFilings, err := edgar.FetchLatestEdgarFilings(conn)
 			if err != nil {
 				fmt.Printf("Error fetching SEC filings: %v\n", err)
 				continue
@@ -57,7 +58,7 @@ func StartEdgarFilingsService(conn *Conn) {
 			}
 			latestFilingsMutex.RUnlock()
 
-			var newOnes []GlobalEDGARFiling
+			var newOnes []edgar.GlobalEDGARFiling
 			for _, filing := range newFilings {
 				if currentURLs[filing.URL] {
 					break // Stop at the first known filing
@@ -86,10 +87,10 @@ func StartEdgarFilingsService(conn *Conn) {
 }
 
 // GetLatestEdgarFilings returns a copy of the cached latest SEC filings
-func GetLatestEdgarFilings() []GlobalEDGARFiling {
+func GetLatestEdgarFilings() []edgar.GlobalEDGARFiling {
 	latestFilingsMutex.RLock()
 	defer latestFilingsMutex.RUnlock()
-	filingsCopy := make([]GlobalEDGARFiling, len(latestFilings))
+	filingsCopy := make([]edgar.GlobalEDGARFiling, len(latestFilings))
 	copy(filingsCopy, latestFilings)
 	return filingsCopy
 }
