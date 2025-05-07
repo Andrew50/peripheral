@@ -13,7 +13,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// SimpleUpdateSecruities fetches the latest tickers from Polygon, checks if AAPL is present,
+// SimpleUpdateSecurities fetches the latest tickers from Polygon, checks if AAPL is present,
 // and if so, updates the securities table by marking missing tickers as delisted
 // (maxDate = now) and inserting brand-new tickers (keeping the same securityId for existing ones).
 func SimpleUpdateSecurities(conn *data.Conn) error {
