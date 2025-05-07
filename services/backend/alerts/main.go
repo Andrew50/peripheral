@@ -98,8 +98,6 @@ func processAlerts(conn *utils.Conn) {
 				err = processPriceAlert(conn, a)
 			case "setup":
 				err = processSetupAlert(conn, a)
-			case "algo":
-				err = processAlgoAlert(conn, a)
 			default:
 				log.Printf("Unknown alert type: %s", a.AlertType)
 				return
