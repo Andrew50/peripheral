@@ -196,7 +196,7 @@ func getGeminiFunctionResponse(ctx context.Context, conn *data.Conn, query strin
 
 	systemInstruction := "You are a helpful assistant that can run functions"
 	var geminiTools []*genai.Tool
-	for _, tool := range GetTools(false) {
+	for _, tool := range Tools {
 		// Convert the FunctionDeclaration to a Tool
 		geminiTools = append(geminiTools, &genai.Tool{
 			FunctionDeclarations: []*genai.FunctionDeclaration{

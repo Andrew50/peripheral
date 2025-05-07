@@ -2,6 +2,7 @@ package alerts
 
 import (
 	"backend/internal/data"
+    "backend/internal/services/socket"
 	"context"
 	"fmt"
 	"log"
@@ -77,7 +78,7 @@ func dispatchAlert(conn *data.Conn, alert Alert) error {
 	alertMessage := writeAlertMessage(alert)
 	timestamp := time.Now()
 	SendTelegramMessage(alertMessage, ChatID)
-	server.SendAlertToUser(alert.UserID, server.AlertMessage{
+	socket.SendAlertToUser(alert.UserID, socket.AlertMessage{
 		AlertID:    alert.AlertID,
 		Timestamp:  timestamp.Unix() * 1000,
 		SecurityID: *alert.SecurityID,

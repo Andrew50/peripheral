@@ -1,4 +1,4 @@
-package tools
+package watchlist
 
 import (
 	"backend/internal/data"

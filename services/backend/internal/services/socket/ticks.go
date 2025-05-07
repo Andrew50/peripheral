@@ -1,8 +1,10 @@
-// ticks.go
-package replay
+package socket
 
 import (
 	"backend/internal/data"
+    "backend/internal/data/utils"
+    "backend/internal/data/polygon"
+    "backend/internal/data/postgres"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -147,7 +149,7 @@ func getTradeData(conn *data.Conn, securityId int, timestamp int64, lengthOfTime
 			return nil, fmt.Errorf("error converting time: %v", err)
 		}
 
-		iter, err := utils.GetTrade(conn.Polygon, ticker, windowStartTimeNanos, "asc", models.GTE, 30000)
+		iter, err := polygon.GetTrade(conn.Polygon, ticker, windowStartTimeNanos, "asc", models.GTE, 30000)
 		if err != nil {
 			return nil, fmt.Errorf("error getting trade data: %v", err)
 		}
@@ -224,7 +226,7 @@ func getQuoteData(conn *data.Conn, securityId int, timestamp int64, lengthOfTime
 		if err != nil {
 			return nil, fmt.Errorf("error converting time: %v", err)
 		}
-		iter := utils.GetQuote(conn.Polygon, ticker, windowStartTimeNanos, "asc", models.GTE, 30000)
+		iter := polygon.GetQuote(conn.Polygon, ticker, windowStartTimeNanos, "asc", models.GTE, 30000)
 		for iter.Next() {
 			quoteTsMillis := int64(time.Time(iter.Item().ParticipantTimestamp).Unix()) * 1000
 			if quoteTsMillis > windowEndTime {
@@ -257,7 +259,7 @@ func getPrevCloseData(conn *data.Conn, securityId int, timestamp int64) ([]TickD
 		return nil, fmt.Errorf("issue loading eastern location: %v", err)
 	}
 	inputTime := time.Unix(timestamp/1000, (timestamp%1000)*1e6).In(easternLocation)
-	ticker, err := utils.GetTicker(conn, securityId, inputTime)
+	ticker, err := postgres.GetTicker(conn, securityId, inputTime)
 	if err != nil {
 		return nil, fmt.Errorf("error getting ticker: %v", err)
 	}
@@ -267,7 +269,7 @@ func getPrevCloseData(conn *data.Conn, securityId int, timestamp int64) ([]TickD
 	startMillis := models.Millis(startOfDay.AddDate(0, 0, -5))
 	endMillis := models.Millis(inputTime)
 
-	iter, err := utils.GetAggsData(conn.Polygon, ticker, 1, "minute", startMillis, endMillis, 1, "desc", true)
+	iter, err := polygon.GetAggsData(conn.Polygon, ticker, 1, "minute", startMillis, endMillis, 1, "desc", true)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching recent minute data: %v", err)
 	}
@@ -293,7 +295,7 @@ func getPrevCloseData(conn *data.Conn, securityId int, timestamp int64) ([]TickD
 	prevSessionStart := time.Date(prevSessionDay.Year(), prevSessionDay.Month(), prevSessionDay.Day(), 0, 0, 0, 0, easternLocation)
 	prevSessionEnd := time.Date(prevSessionDay.Year(), prevSessionDay.Month(), prevSessionDay.Day(), 23, 59, 59, 999999999, easternLocation)
 
-	iter, err = utils.GetAggsData(conn.Polygon, ticker, 1, "day",
+	iter, err = polygon.GetAggsData(conn.Polygon, ticker, 1, "day",
 		models.Millis(prevSessionStart),
 		models.Millis(prevSessionEnd), 1, "desc", true)
 	if err != nil {
@@ -341,7 +343,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 	} else {
 		queryTime = time.Unix(timestamp/1000, (timestamp%1000)*1e6).UTC()
 	}
-	ticker, err := utils.GetTicker(conn, securityId, queryTime)
+	ticker, err := postgres.GetTicker(conn, securityId, queryTime)
 	if err != nil {
 		return nil, fmt.Errorf("error getting ticker: %v", err)
 	}
@@ -355,7 +357,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 		var quoteTimestamp int64
 		if timestamp == 0 {
 			// Latest quote
-			quote, err := utils.GetLastQuote(conn.Polygon, ticker)
+			quote, err := polygon.GetLastQuote(conn.Polygon, ticker)
 			if err != nil {
 				return nil, fmt.Errorf("could not get last quote: %v", err)
 			}
@@ -366,7 +368,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 			quoteTimestamp = time.Time(quote.SipTimestamp).UnixNano() / 1e6
 		} else {
 			// Historical quote
-			quote, err := utils.GetQuoteAtTimestamp(conn.Polygon, securityId, queryTime)
+			quote, err := polygon.GetQuoteAtTimestamp(conn, securityId, queryTime)
 			if err != nil {
 				return nil, fmt.Errorf("could not get quote at timestamp: %v", err)
 			}
@@ -396,7 +398,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 
 		var trade models.Trade
 		if timestamp == 0 {
-			latestTrade, err := utils.GetLastTrade(conn.Polygon, ticker)
+			latestTrade, err := polygon.GetLastTrade(conn.Polygon, ticker)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get last trade: %v", err)
 			}
@@ -408,7 +410,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 				Exchange:     int(latestTrade.Exchange),
 			}
 		} else {
-			fetchedTrade, err := utils.GetTradeAtTimestamp(conn.Polygon, securityId, queryTime)
+			fetchedTrade, err := polygon.GetTradeAtTimestamp(conn, securityId, queryTime)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get trade at timestamp: %v", err)
 			}
@@ -416,7 +418,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 		}
 		tradeTime := time.Time(trade.SipTimestamp)
 		if !extendedHours && !utils.IsTimestampRegularHours(tradeTime) {
-			closePrice, err := utils.GetMostRecentRegularClose(conn.Polygon, ticker, tradeTime)
+			closePrice, err := polygon.GetMostRecentRegularClose(conn.Polygon, ticker, tradeTime)
 			if err != nil {
 				return nil, fmt.Errorf("error getting close price: %v", err)
 			}
@@ -428,7 +430,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 			// When in extended hours mode but during regular trading hours
 			// We should use the daily open price as the reference point
 			// This represents how much the price has changed since the open (including pre-market activity)
-			dailyOpen, err := utils.GetDailyOpen(conn.Polygon, ticker, tradeTime)
+			dailyOpen, err := polygon.GetDailyOpen(conn.Polygon, ticker, tradeTime)
 			if err != nil {
 				return nil, fmt.Errorf("error getting daily open: %v", err)
 			}
@@ -499,14 +501,14 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 					marketCloseTime := time.Date(today.Year(), today.Month(), today.Day(), 16, 0, 0, 0, easternLocation)
 
 					// Get the closing price at 4:00 PM
-					closePrice, err := utils.GetMostRecentRegularClose(conn.Polygon, ticker, marketCloseTime)
+					closePrice, err := polygon.GetMostRecentRegularClose(conn.Polygon, ticker, marketCloseTime)
 					if err != nil {
 						return nil, fmt.Errorf("error getting today's close price: %v", err)
 					}
 					referencePrice = closePrice
 				} else {
 					// Pre-market, use daily open
-					dailyOpen, err := utils.GetDailyOpen(conn.Polygon, ticker, queryTime)
+					dailyOpen, err := polygon.GetDailyOpen(conn.Polygon, ticker, queryTime)
 					if err != nil {
 						return nil, fmt.Errorf("error getting daily open: %v", err)
 					}
