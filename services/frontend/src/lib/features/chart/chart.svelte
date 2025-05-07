@@ -194,6 +194,12 @@
 	let mouseDownStartY = 0;
 	const DRAG_THRESHOLD = 3; // pixels of movement before considered a drag
 
+	// Type guards moved to a higher scope
+	const isCandlestick = (data: any): data is CandlestickData<Time> =>
+		data && typeof data === 'object' && 'open' in data && 'high' in data && 'low' in data && 'close' in data;
+	const isHistogram = (data: any): data is HistogramData<Time> =>
+		data && typeof data === 'object' && 'value' in data;
+
 	// Add new interface for alert lines
 	interface AlertLine {
 		price: number;
@@ -257,6 +263,64 @@
 		color: string;
 		lineWidth: number;
 		amount?: number;
+	}
+
+	// Helper function to refresh legend with the latest candle data
+	function _refreshLegendWithLatestCandleData() {
+		const candleData = chartCandleSeries?.data();
+		const volumeData = chartVolumeSeries?.data();
+
+		if (!candleData || !volumeData || !candleData.length) {
+			hoveredCandleData.set(defaultHoveredCandleData);
+			return;
+		}
+
+		const allCandles = candleData.filter(isCandlestick) as CandlestickData<Time>[];
+		const allVolumes = volumeData.filter(isHistogram) as HistogramData<Time>[];
+
+		if (!allCandles.length) {
+			hoveredCandleData.set(defaultHoveredCandleData);
+			return;
+		}
+
+		const lastCandle = allCandles[allCandles.length - 1];
+		const lastCandleIndex = allCandles.length - 1;
+
+		let volumeForLastCandle = 0;
+		const lastVolumeEntry = allVolumes.find(v => v.time === lastCandle.time);
+		if (lastVolumeEntry) {
+			volumeForLastCandle = lastVolumeEntry.value;
+		} else if (allVolumes.length > 0) {
+			// Fallback if no direct time match, use the absolute last volume entry
+			volumeForLastCandle = allVolumes[allVolumes.length - 1].value;
+		}
+
+		let barsForADR;
+		if (lastCandleIndex >= 19) {
+			barsForADR = allCandles.slice(lastCandleIndex - 19, lastCandleIndex + 1);
+		} else {
+			barsForADR = allCandles.slice(0, lastCandleIndex + 1);
+		}
+
+		let chg = 0;
+		let chgprct = 0;
+		if (lastCandleIndex > 0) {
+			const prevBar = allCandles[lastCandleIndex - 1];
+			chg = lastCandle.close - prevBar.close;
+			chgprct = (lastCandle.close / prevBar.close - 1) * 100;
+		}
+
+		hoveredCandleData.set({
+			open: lastCandle.open,
+			high: lastCandle.high,
+			low: lastCandle.low,
+			close: lastCandle.close,
+			volume: volumeForLastCandle,
+			adr: calculateSingleADR(barsForADR),
+			chg: chg,
+			chgprct: chgprct,
+			rvol: 0 // RVOL calculation is currently commented out
+		});
 	}
 
 	function extendedHours(timestamp: number): boolean {
@@ -877,125 +941,95 @@
 	}
 
 	async function updateLatestChartBar(trade: TradeData) {
-
-		// Early returns for invalid data
+		// Early returns for invalid data or conditions
 		if (
 			!trade?.price ||
 			!trade?.size ||
 			!trade?.timestamp ||
 			!chartCandleSeries?.data()?.length ||
-			isLoadingChartData
-		) { return; }
-		// Check excluded conditions early
-		if (trade.conditions?.some((condition) => excludedConditions.has(condition))) { return; }
+			isLoadingChartData ||
+			trade.conditions?.some((condition) => excludedConditions.has(condition))
+		) {
+			return;
+		}
 
-		// Check extended hours early
-		const isExtendedHours = extendedHours(trade.timestamp);
+		const isExtendedHoursTrade = extendedHours(trade.timestamp);
 		if (
-			isExtendedHours &&
+			isExtendedHoursTrade &&
 			(!currentChartInstance.extendedHours || /^[dwm]/.test(currentChartInstance.timeframe || ''))
-		) { return; }
+		) {
+			return;
+		}
 
 		const dolvol = get(settings).dolvol;
-		const mostRecentBar = chartCandleSeries.data().at(-1);
-		if (!mostRecentBar) return;
+		const allCandleDataLive = chartCandleSeries.data();
+		const mostRecentBarRaw = allCandleDataLive.at(-1);
 
-		// Type guard for CandlestickData
-		const isCandlestick = (data: any): data is CandlestickData<Time> =>
-			data &&
-			typeof data === 'object' &&
-			'open' in data &&
-			'high' in data &&
-			'low' in data &&
-			'close' in data;
+		if (!mostRecentBarRaw || !isCandlestick(mostRecentBarRaw)) return;
+		const mostRecentBar = mostRecentBarRaw as CandlestickData<Time>; // Now we know it's a CandlestickData
 
-		// Type guard for HistogramData
-		const isHistogram = (data: any): data is HistogramData<Time> =>
-			data && typeof data === 'object' && 'value' in data;
-
-		if (!isCandlestick(mostRecentBar)) return;
+		let legendIsDisplayingCurrentLastCandle = false;
+		const currentLegendData = get(hoveredCandleData);
+		// Check if legend is showing the current last bar's data by comparing time and close price (as a heuristic)
+		if (currentLegendData.close === mostRecentBar.close && latestCrosshairPositionTime === mostRecentBar.time) {
+			legendIsDisplayingCurrentLastCandle = true;
+		}
 
 		currentBarTimestamp = mostRecentBar.time as number;
 		const tradeTime = UTCSecondstoESTSeconds(trade.timestamp / 1000);
 		const sameBar = tradeTime < currentBarTimestamp + chartTimeframeInSeconds;
 
 		if (sameBar) {
-			// Only update if we are sure we have the latest data
 			if (!chartLatestDataReached) return;
-
-			// Use throttled updates
 			const now = Date.now();
 
-			// Initialize pendingBarUpdate if this is the first update in this throttle window
 			if (!pendingBarUpdate) {
-				pendingBarUpdate = {
-					time: mostRecentBar.time,
-					open: mostRecentBar.open,
-					high: mostRecentBar.high,
-					low: mostRecentBar.low,
-					close: mostRecentBar.close
-				};
+				pendingBarUpdate = { ...mostRecentBar }; // Create a mutable copy
 			}
 
-			// Initialize pendingVolumeUpdate
 			if (!pendingVolumeUpdate) {
-				const lastVolume = chartVolumeSeries.data().at(-1);
-				if (lastVolume && isHistogram(lastVolume)) {
-					pendingVolumeUpdate = {
-						time: mostRecentBar.time,
-						value: lastVolume.value,
-						color: mostRecentBar.close > mostRecentBar.open ? '#089981' : '#ef5350'
-					};
+				const lastVolumeRaw = chartVolumeSeries.data().at(-1);
+				if (lastVolumeRaw && isHistogram(lastVolumeRaw)) {
+					pendingVolumeUpdate = { ...lastVolumeRaw as HistogramData<Time> }; // Create a mutable copy
 				}
 			}
 
-			// Update pending data with new trade
-			if (
-				trade.size >= 100 &&
-				!trade.conditions?.some((condition) => excludedConditions.has(condition))
-			) {
-				pendingBarUpdate.high = Math.max(pendingBarUpdate.high, trade.price);
-				pendingBarUpdate.low = Math.min(pendingBarUpdate.low, trade.price);
-				pendingBarUpdate.close = trade.price;
-			}
+			pendingBarUpdate.high = Math.max(pendingBarUpdate.high, trade.price);
+			pendingBarUpdate.low = Math.min(pendingBarUpdate.low, trade.price);
+			pendingBarUpdate.close = trade.price;
+
 			if (pendingVolumeUpdate) {
-				pendingVolumeUpdate.value += trade.size;
+				pendingVolumeUpdate.value = (pendingVolumeUpdate.value || 0) + trade.size;
 				pendingVolumeUpdate.color =
 					pendingBarUpdate.close > pendingBarUpdate.open ? '#089981' : '#ef5350';
 			}
 
-			// Apply updates only if throttle time has passed
 			if (now - lastUpdateTime >= updateThrottleMs) {
 				if (pendingBarUpdate) {
 					chartCandleSeries.update(pendingBarUpdate);
 					pendingBarUpdate = null;
 				}
-
 				if (pendingVolumeUpdate) {
 					chartVolumeSeries.update(pendingVolumeUpdate);
 					pendingVolumeUpdate = null;
 				}
-
 				lastUpdateTime = now;
+				if (legendIsDisplayingCurrentLastCandle) {
+					_refreshLegendWithLatestCandleData();
+				}
 			}
-
 			return;
 		} else {
-			// Only create a new bar from live ticks if we are sure we have the latest data
 			if (!chartLatestDataReached) return;
 
-			// Create new bar - immediate update for new bars
-			// Reset throttling state for new bars
 			if (pendingBarUpdate) {
 				chartCandleSeries.update(pendingBarUpdate);
 				pendingBarUpdate = null;
 			}
-
 			if (pendingVolumeUpdate) {
 				chartVolumeSeries.update(pendingVolumeUpdate);
 				pendingVolumeUpdate = null;
 			}
-
 			lastUpdateTime = Date.now();
 
 			const referenceStartTime = getReferenceStartTimeForDateMilliseconds(
@@ -1009,7 +1043,6 @@
 				referenceStartTime / 1000 + flooredDifference
 			) as UTCTimestamp;
 
-			// Update with new bar
 			chartCandleSeries.update({
 				time: newTime,
 				open: trade.price,
@@ -1021,10 +1054,13 @@
 			chartVolumeSeries.update({
 				time: newTime,
 				value: trade.size,
-				color: '#089981' // Default to green for new bars
+				color: '#089981'
 			});
 
-			// Fetch and update historical data
+			if (legendIsDisplayingCurrentLastCandle) {
+				_refreshLegendWithLatestCandleData();
+			}
+
 			try {
 				const timeToRequestForUpdatingAggregate =
 					ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
@@ -1040,14 +1076,12 @@
 
 				if (!barData) return;
 
-				// Find and update the matching bar
-				const allCandleData = [...chartCandleSeries.data()] as Array<CandlestickData<Time>>;
-				const barIndex = allCandleData.findIndex(
+				const allCandleDataForUpdate = [...chartCandleSeries.data()].filter(isCandlestick) as CandlestickData<Time>[];
+				const barIndex = allCandleDataForUpdate.findIndex(
 					(candle) => candle.time === UTCSecondstoESTSeconds(barData.time)
 				);
 
 				if (barIndex !== -1) {
-					// Update bar data with safe copies
 					const updatedCandle = {
 						time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
 						open: barData.open,
@@ -1055,16 +1089,18 @@
 						low: barData.low,
 						close: barData.close
 					};
-					console.log('updatedCandle', updatedCandle);
 					chartCandleSeries.update(updatedCandle);
 
-					// Create a new mutable copy of the volume data array before updating it	
 					const updatedVolumeBar = {
 						time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
 						value: barData.volume * (dolvol ? barData.close : 1),
 						color: barData.close > barData.open ? '#089981' : '#ef5350'
 					};
 					chartVolumeSeries.update(updatedVolumeBar);
+					// After historical update, if legend was tracking live, refresh it again
+					if (legendIsDisplayingCurrentLastCandle) {
+						_refreshLegendWithLatestCandleData();
+					}
 				}
 			} catch (error) {
 				console.error('Error fetching historical data:', error);
@@ -1478,119 +1514,119 @@
 		}) as ISeriesApi<'Custom', Time, EventMarker>;
 
 		chart.subscribeCrosshairMove((param) => {
-			if (!chartCandleSeries.data().length || !param.point || !currentChartInstance.securityId) {
+			// Type guard for CandlestickData (local to this callback)
+			const isCandlestickLocal = (data: any): data is CandlestickData<Time> =>
+				data && typeof data === 'object' && 'open' in data && 'high' in data && 'low' in data && 'close' in data;
+			// Type guard for HistogramData (local to this callback)
+			const isHistogramLocal = (data: any): data is HistogramData<Time> =>
+				data && typeof data === 'object' && 'value' in data;
+
+			const candleSeriesActualData = chartCandleSeries.data(); // This includes WhitespaceData
+			const volumeSeriesActualData = chartVolumeSeries.data();
+
+			if (!candleSeriesActualData.length || !currentChartInstance.securityId) {
+				hoveredCandleData.set(defaultHoveredCandleData);
 				return;
 			}
-			const volumeData = param.seriesData.get(chartVolumeSeries);
-			const volume =
-				volumeData && 'value' in volumeData ? (volumeData as HistogramData<Time>).value : 0;
-			const allCandleData = [...chartCandleSeries.data()] as Array<CandlestickData<Time>>;
-			const validCrosshairPoint = !(
-				param === undefined ||
-				param.time === undefined ||
-				param.point.x < 0 ||
-				param.point.y < 0
-			);
-			let bar;
-			let cursorBarIndex: number | undefined;
-			if (!validCrosshairPoint) {
-				if (param?.logical !== undefined && param.logical < 0) {
-					bar = allCandleData[0];
+
+			// Filter out whitespace to get only actual chart data points
+			const allCandles = candleSeriesActualData.filter(isCandlestickLocal) as CandlestickData<Time>[];
+			const allVolumes = volumeSeriesActualData.filter(isHistogramLocal) as HistogramData<Time>[];
+
+			if (!allCandles.length) { // If, after filtering, there are no valid candles
+				hoveredCandleData.set(defaultHoveredCandleData);
+				return;
+			}
+
+			let barToUse: CandlestickData<Time>;
+			let volumeForBar: number = 0;
+			let indexOfBarInAllCandles: number;
+
+			const lastCandleInSeries = allCandles[allCandles.length - 1];
+			const lastCandleIndex = allCandles.length - 1;
+
+			const hoveredCandleFromParam = param && param.seriesData ? param.seriesData.get(chartCandleSeries) : undefined;
+			const logicalIdx = param?.logical; // The logical index of the bar under the crosshair
+
+			// Decision logic for which bar's data to display
+			if (logicalIdx !== undefined && logicalIdx > lastCandleIndex) {
+				// Case 1: Crosshair is logically to the right of the last available candle.
+				barToUse = lastCandleInSeries;
+				indexOfBarInAllCandles = lastCandleIndex;
+			} else if (param && param.time !== undefined && isCandlestickLocal(hoveredCandleFromParam)) {
+				// Case 2: Crosshair is over a valid candle data point, and not logically to the right.
+				// Ensure this hovered candle is one of our 'allCandles'.
+				const potentialBarIndex = allCandles.findIndex(c => c.time === hoveredCandleFromParam.time);
+				if (potentialBarIndex !== -1) {
+					barToUse = hoveredCandleFromParam;
+					indexOfBarInAllCandles = potentialBarIndex;
+				} else {
+					// Fallback: If hovered candle isn't in our filtered list (should be rare), use last.
+					barToUse = lastCandleInSeries;
+					indexOfBarInAllCandles = lastCandleIndex;
 				}
 			} else {
-				bar = param.seriesData.get(chartCandleSeries);
-				if (!bar) {
-					return;
+				// Case 3: Crosshair is not over a specific candle (e.g., off chart, between bars) or param is invalid.
+				barToUse = lastCandleInSeries;
+				indexOfBarInAllCandles = lastCandleIndex;
+			}
+
+			// Get volume for the barToUse
+			// Try to get volume from param if it matches the barToUse's time (most direct)
+			const correspondingVolumeFromParam = param && param.seriesData ? param.seriesData.get(chartVolumeSeries) : undefined;
+			if (isHistogramLocal(correspondingVolumeFromParam) && correspondingVolumeFromParam.time === barToUse.time) {
+				volumeForBar = correspondingVolumeFromParam.value;
+			} else {
+				// Fallback: find volume by time from allVolumes array
+				const volumeMatch = allVolumes.find(v => v.time === barToUse.time);
+				if (volumeMatch) {
+					volumeForBar = volumeMatch.value;
+				} else if (barToUse.time === lastCandleInSeries.time && allVolumes.length > 0) {
+					// If it's the last candle and no direct time match for volume,
+					// try taking the absolute last volume entry as a weaker fallback.
+					volumeForBar = allVolumes[allVolumes.length -1].value;
 				}
+				// if no volume found, volumeForBar remains 0 (initialized value)
 			}
 
-			// Type guard to check if bar is CandlestickData
-			const isCandlestick = (data: any): data is CandlestickData<Time> =>
-				data &&
-				typeof data === 'object' &&
-				'open' in data &&
-				'high' in data &&
-				'low' in data &&
-				'close' in data;
-
-			if (!isCandlestick(bar)) {
-				return; // Skip if the bar is not CandlestickData
-			}
-
-			// Get cursor bar index if it wasn't set in the validCrosshairPoint block
-			if (validCrosshairPoint && cursorBarIndex === undefined) {
-				const cursorTime = bar.time as number;
-				cursorBarIndex = allCandleData.findIndex((candle) => candle.time === cursorTime);
-			}
-
-			// Ensure cursorBarIndex is defined before using it
-			if (cursorBarIndex === undefined) return;
-
+			// Calculations (ADR, CHG) based on barToUse and indexOfBarInAllCandles
 			let barsForADR;
-			if (cursorBarIndex >= 20) {
-				barsForADR = allCandleData.slice(cursorBarIndex - 19, cursorBarIndex + 1);
+			if (indexOfBarInAllCandles >= 19) { // Need 20 bars for ADR (current + 19 previous)
+				barsForADR = allCandles.slice(indexOfBarInAllCandles - 19, indexOfBarInAllCandles + 1);
 			} else {
-				barsForADR = allCandleData.slice(0, cursorBarIndex + 1);
+				barsForADR = allCandles.slice(0, indexOfBarInAllCandles + 1);
 			}
+
 			let chg = 0;
 			let chgprct = 0;
-			if (cursorBarIndex > 0) {
-				const prevBar = allCandleData[cursorBarIndex - 1];
-
-				if (isCandlestick(prevBar)) {
-					chg = bar.close - prevBar.close;
-					chgprct = (bar.close / prevBar.close - 1) * 100;
-				}
+			if (indexOfBarInAllCandles > 0) {
+				const prevBar = allCandles[indexOfBarInAllCandles - 1];
+				chg = barToUse.close - prevBar.close;
+				chgprct = (barToUse.close / prevBar.close - 1) * 100;
 			}
+			// If indexOfBarInAllCandles is 0 (first bar), chg and chgprct remain 0, which is correct.
 
 			hoveredCandleData.set({
-				open: bar.open,
-				high: bar.high,
-				low: bar.low,
-				close: bar.close,
-				volume: volume,
-				adr: calculateSingleADR(
-					barsForADR.filter(
-						(candle) =>
-							candle &&
-							typeof candle === 'object' &&
-							'open' in candle &&
-							'high' in candle &&
-							'low' in candle &&
-							'close' in candle
-					) as CandlestickData<Time>[]
-				),
+				open: barToUse.open,
+				high: barToUse.high,
+				low: barToUse.low,
+				close: barToUse.close,
+				volume: volumeForBar,
+				adr: calculateSingleADR(barsForADR), // calculateSingleADR expects CandlestickData[]
 				chg: chg,
 				chgprct: chgprct,
-				rvol: 0
+				rvol: 0 // RVOL calculation is currently commented out in the original code
 			});
+
+			latestCrosshairPositionTime = barToUse.time as number;
+			latestCrosshairPositionY = (param && param.point) ? param.point.y : 0;
+
 			/*
-			if (currentChartInstance.timeframe && /^\d+$/.test(currentChartInstance.timeframe)) {
-				let barsForRVOL;
-				if (cursorBarIndex !== undefined && cursorBarIndex >= 1000) {
-					barsForADR = allCandleData.slice(cursorBarIndex - 1000, cursorBarIndex + 1);
-				} else if (cursorBarIndex !== undefined) {
-					// Transform the histogram data to the format expected by calculateRVOL
-					const volumeData = chartVolumeSeries.data().slice(0, cursorBarIndex + 1);
-					barsForRVOL = volumeData
-						.filter((bar) => bar && typeof bar === 'object' && 'value' in bar) // Filter to ensure only HistogramData is included
-						.map((bar) => ({
-							time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
-							value: (bar as HistogramData<Time>).value || 0
-						}));
-				}
-				// Only call calculateRVOL if barsForRVOL is defined
-				if (barsForRVOL && barsForRVOL.length > 0) {
-					calculateRVOL(barsForRVOL, currentChartInstance.securityId).then((r: any) => {
-						hoveredCandleData.update((v) => {
-							v.rvol = r;
-							return v;
-						});
-					});
-				}
-			}*/
-			latestCrosshairPositionTime = bar.time as number;
-			latestCrosshairPositionY = param.point.y as number; //inccorect
+			// Original RVOL calculation logic was here, would need adaptation
+			// if currentChartInstance.timeframe && /^\d+$/.test(currentChartInstance.timeframe)) {
+			//	...
+			// }
+			*/
 		});
 		chart.timeScale().subscribeVisibleLogicalRangeChange((logicalRange) => {
 			if (selectedEvent) {
