@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"backend/utils"
+	"backend/internal/data"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -28,7 +28,7 @@ type ChatMessage struct {
 	Citations     []Citation               `json:"citations,omitempty"`
 }
 
-func saveMessageToConversation(conn *utils.Conn, userID int, query string, contextItems []map[string]interface{}, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult) error {
+func saveMessageToConversation(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult) error {
 	message := ChatMessage{
 		Query:         query,
 		ContextItems:  contextItems,
@@ -51,7 +51,7 @@ func saveMessageToConversation(conn *utils.Conn, userID int, query string, conte
 }
 
 // saveConversationToCache saves the conversation data to Redis
-func saveConversationToCache(ctx context.Context, conn *utils.Conn, userID int, cacheKey string, data *ConversationData) error {
+func saveConversationToCache(ctx context.Context, conn *data.Conn, userID int, cacheKey string, data *ConversationData) error {
 	if data == nil {
 		return fmt.Errorf("cannot save nil conversation data")
 	}
@@ -123,7 +123,7 @@ func SetMessageExpiration(message *ChatMessage, duration time.Duration) {
 }
 
 // GetConversationFromCache retrieves conversation data from Redis
-func GetConversationFromCache(ctx context.Context, conn *utils.Conn, userID int) (*ConversationData, error) {
+func GetConversationFromCache(ctx context.Context, conn *data.Conn, userID int) (*ConversationData, error) {
 	// Get the conversation data from Redis
 	cacheKey := fmt.Sprintf("user:%d:conversation", userID)
 	cachedValue, err := conn.Cache.Get(ctx, cacheKey).Result()
@@ -186,7 +186,7 @@ func GetConversationFromCache(ctx context.Context, conn *utils.Conn, userID int)
 }
 
 // GetUserConversation retrieves the conversation for a user
-func GetUserConversation(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
+func GetUserConversation(conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
 	ctx := context.Background()
 
 	// Test Redis connectivity before attempting to retrieve conversation

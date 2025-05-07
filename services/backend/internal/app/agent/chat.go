@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"backend/utils"
+	"backend/internal/data"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -36,7 +36,7 @@ type ContentChunk struct {
 	Content interface{} `json:"content"` // string for "text", TableData for "table"
 }
 
-func GetChatRequest(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
+func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
 	ctx := context.Background()
 	success, message := conn.TestRedisConnectivity(ctx, userID)
 	if !success {

@@ -1,8 +1,8 @@
 package agent
 
 import (
-	"backend/socket"
-	"backend/utils"
+	"backend/internal/services/clients"
+	"backend/internal/data"
 	"context"
 
 	"encoding/json"
@@ -25,7 +25,7 @@ type ExecuteResult struct {
 }
 
 type Executor struct {
-	conn       *utils.Conn
+	conn       *data.Conn
 	userId     int
 	tools      map[string]Tool
 	log        *zap.Logger
@@ -33,7 +33,7 @@ type Executor struct {
 	maxWorkers int
 }
 
-func NewExecutor(conn *utils.Conn, userId int, maxWorkers int, lg *zap.Logger) *Executor {
+func NewExecutor(conn *data.Conn, userId int, maxWorkers int, lg *zap.Logger) *Executor {
 	if maxWorkers <= 0 {
 		maxWorkers = 3
 	}
@@ -95,7 +95,7 @@ func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (Execut
 	var argsMap map[string]interface{}
 	_ = json.Unmarshal(fc.Args, &argsMap)
 	if tool.StatusMessage != "" {
-		socket.SendFunctionStatus(e.userId, formatStatusMessage(tool.StatusMessage, argsMap))
+		server.SendFunctionStatus(e.userId, formatStatusMessage(tool.StatusMessage, argsMap))
 	}
 	_, span := e.tracer.Start(ctx, fc.Name, trace.WithAttributes(attribute.String("agent.tool", fc.Name)))
 	defer span.End()

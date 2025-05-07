@@ -1,15 +1,15 @@
 package agent
 
 import (
-	"backend/utils"
+	"backend/internal/data"
 	"context"
+    "backend/internal/services/clients"
 	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
-	"backend/socket"
 
 	"google.golang.org/genai"
 )
@@ -61,7 +61,7 @@ func buildContextPrompt(contextItems []map[string]interface{}) string {
 }
 
 // GetQuery processes a natural language query and returns the result
-func GetQuery(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
+func GetQuery(conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
 
 	// Use the standardized Redis connectivity test
 	ctx := context.Background()
@@ -319,7 +319,7 @@ func buildPersistentHistory(persistentContextData *PersistentContextData) string
 	return persistentHistory.String()
 }
 
-func getGeminiResponse(ctx context.Context, conn *utils.Conn, query string) (string, error) {
+func getGeminiResponse(ctx context.Context, conn *data.Conn, query string) (string, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
 		return "", fmt.Errorf("error getting gemini key: %w", err)
@@ -368,7 +368,7 @@ type RoundResult struct {
 
 // processThinkingResponse attempts to parse and execute the thinking model's rounds
 // and modifies the final response string *before* parsing into chunks.
-func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, thinkingResp ThinkingResponse, originalQuery string) ([]ContentChunk, []ExecuteResult, error) {
+func processThinkingResponse(ctx context.Context, conn *data.Conn, userID int, thinkingResp ThinkingResponse, originalQuery string) ([]ContentChunk, []ExecuteResult, error) {
 
 	var finalContentChunks []ContentChunk
 	var allResults []ExecuteResult
@@ -492,7 +492,7 @@ func processThinkingResponse(ctx context.Context, conn *utils.Conn, userID int, 
 }
 
 // processContentChunksForTables iterates through chunks and generates tables for "backtest_table" type.
-func processContentChunksForTables(ctx context.Context, conn *utils.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
+func processContentChunksForTables(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
 	processedChunks := make([]ContentChunk, 0, len(inputChunks))
 	for _, chunk := range inputChunks {
 		// Check for the type "backtest_table"
@@ -541,7 +541,7 @@ func processContentChunksForTables(ctx context.Context, conn *utils.Conn, userID
 }
 
 // processRoundWithGemini sends a round to Gemini for processing and gets back the functions to execute
-func processRoundWithGemini(ctx context.Context, conn *utils.Conn, prompt string) ([]FunctionCall, error) {
+func processRoundWithGemini(ctx context.Context, conn *data.Conn, prompt string) ([]FunctionCall, error) {
 	// Get a response from Gemini with the processed functions
 	response, err := getGeminiFunctionResponse(ctx, conn, prompt)
 	if err != nil {
@@ -553,7 +553,7 @@ func processRoundWithGemini(ctx context.Context, conn *utils.Conn, prompt string
 }
 
 // executeGeminiFunctionCalls executes the function calls returned by Gemini
-func executeGeminiFunctionCalls(ctx context.Context, conn *utils.Conn, userID int, functionCalls []FunctionCall) ([]ExecuteResult, error) {
+func executeGeminiFunctionCalls(ctx context.Context, conn *data.Conn, userID int, functionCalls []FunctionCall) ([]ExecuteResult, error) {
 	var results []ExecuteResult
 
 	for _, fc := range functionCalls {
@@ -586,7 +586,7 @@ func executeGeminiFunctionCalls(ctx context.Context, conn *utils.Conn, userID in
 
 		// ---> Format and send status update to the client <---
 		formattedMsg := formatStatusMessage(tool.StatusMessage, argsMap)
-		socket.SendFunctionStatus(userID, formattedMsg)
+		clients.SendFunctionStatus(userID, formattedMsg)
 
 		// Execute the function
 		result, err := tool.Function(conn, userID, fc.Args)

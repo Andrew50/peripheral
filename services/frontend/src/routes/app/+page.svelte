@@ -6,7 +6,7 @@
 	import StrategiesPopup from '$lib/utils/popups/strategiesPopup.svelte';
 	import Input from '$lib/utils/popups/input.svelte';
 	//import Similar from '$lib/features/similar/similar.svelte';
-	import Study from '$lib/features/study.svelte';
+	//import Study from '$lib/features/study.svelte';
 	import Watchlist from '$lib/features/watchlist.svelte';
 	//import TickerInfo from '$lib/features/quotes/tickerInfo.svelte';
 	import Quote from '$lib/features/quotes/quote.svelte';
@@ -58,11 +58,13 @@
 
 	import { requestChatOpen } from '$lib/features/chat/interface'; // Import the store
 
-	type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
+	//type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
+	type Menu = 'none' | 'watchlist' | 'alerts'  | 'news';
 
 	let lastSidebarMenu: Menu | null = null;
 	let sidebarWidth = 0;
-	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'news'];
+	//const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'news'];
+	const sidebarMenus: Menu[] = ['watchlist', 'alerts',  'news'];
 
 	// Initialize chartWidth with a default value
 	let chartWidth = 0;
@@ -889,8 +891,8 @@
 								<Watchlist />
 							{:else if $activeMenu === 'alerts'}
 								<Alerts />
-							{:else if $activeMenu === 'study'}
-								<Study />
+							<!--{:else if $activeMenu === 'study'}
+								<Study />-->
 							{:else if $activeMenu === 'news'}
 								<News />
 							{/if}

@@ -1,11 +1,14 @@
 package main
 
 import (
-	"backend/server"
+    "backend/internal/server"
+    "backend/internal/data"
 )
 
 func main() {
-	// Application configuration is handled through environment variables
-	// Command line arguments may be added in the future if needed
+	conn, cleanup := data.InitConn(true)
+	defer cleanup()
+	stopScheduler := server.StartScheduler(conn)
+	defer close(stopScheduler)
 	server.StartServer()
 }

@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"backend/utils"
+	"backend/internal/data"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -29,7 +29,7 @@ type FinalResponse struct {
 const planningModel = "gemini-2.5-flash-preview-04-17"
 const finalResponseModel = "gemini-2.5-flash-preview-04-17"
 
-func RunPlanner(ctx context.Context, conn *utils.Conn, prompt string) (interface{}, error) {
+func RunPlanner(ctx context.Context, conn *data.Conn, prompt string) (interface{}, error) {
 	systemPrompt, err := getSystemInstruction("defaultSystemPrompt")
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %w", err)
@@ -41,7 +41,7 @@ func RunPlanner(ctx context.Context, conn *utils.Conn, prompt string) (interface
 	return plan, nil
 }
 
-func _geminiGeneratePlan(ctx context.Context, conn *utils.Conn, systemPrompt string, prompt string) (interface{}, error) {
+func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt string, prompt string) (interface{}, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
 		return Plan{}, fmt.Errorf("error getting gemini key: %w", err)
@@ -124,7 +124,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *utils.Conn, systemPrompt str
 	return nil, fmt.Errorf("no valid plan or direct answer found in response: %s", resultText)
 }
 
-func GetFinalResponse(ctx context.Context, conn *utils.Conn, prompt string) (*FinalResponse, error) {
+func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*FinalResponse, error) {
 	systemPrompt, err := getSystemInstruction("finalResponseSystemPrompt")
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %w", err)

@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"backend/utils"
+	"backend/internal/data"
 	"context"
 	"embed"
 
@@ -81,7 +81,7 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 }
 
 // ClearConversationHistory deletes the conversation for a user
-func ClearConversationHistory(conn *utils.Conn, userID int, args json.RawMessage) (interface{}, error) {
+func ClearConversationHistory(conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
 	ctx := context.Background()
 	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
 	fmt.Printf("Attempting to delete conversation for key: %s\n", conversationKey)
