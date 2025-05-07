@@ -161,7 +161,7 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
-// updateSecurities updates the securities table with new data.
+// UpdateSecurities updates the securities table with new data.
 // Currently unused but kept for future automated updates.
 // nolint:unused
 //
