@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"backend/utils"
+	"backend/internal/data"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,7 +11,7 @@ import (
 )
 
 /*
-func getTextResponseFromGemini(ctx context.Context, conn *utils.Conn, model string, systemPrompt string, query string) (string, error) {
+func getTextResponseFromGemini(ctx context.Context, conn *data.Conn, model string, systemPrompt string, query string) (string, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
 		return "", fmt.Errorf("error getting gemini key: %w", err)
@@ -69,7 +69,7 @@ type GeminiFunctionResponse struct {
 	Citations     []Citation     `json:"citations,omitempty"`
 }
 
-func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemPrompt string, query string, model string) (*GeminiFunctionResponse, error) {
+func getGeminiFunctionThinking(ctx context.Context, conn *data.Conn, systemPrompt string, query string, model string) (*GeminiFunctionResponse, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
 		return nil, fmt.Errorf("error getting gemini key: %w", err)
@@ -179,7 +179,7 @@ func getGeminiFunctionThinking(ctx context.Context, conn *utils.Conn, systemProm
 }
 
 // getGeminiFunctionResponse uses the Google Function API to return an ordered list of functions to execute
-func getGeminiFunctionResponse(ctx context.Context, conn *utils.Conn, query string) (*GeminiFunctionResponse, error) {
+func getGeminiFunctionResponse(ctx context.Context, conn *data.Conn, query string) (*GeminiFunctionResponse, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
 		return nil, fmt.Errorf("error getting gemini key: %w", err)

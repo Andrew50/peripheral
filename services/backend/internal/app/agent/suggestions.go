@@ -1,12 +1,12 @@
 package agent
 
 import (
-	"backend/tools"
-	"backend/utils"
+	"backend/internal/data"
 	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
+    "backend/internal/app/chart"
 
 	"google.golang.org/genai"
 )
@@ -15,7 +15,7 @@ type GetSuggestedQueriesResponse struct {
 	Suggestions []string `json:"suggestions"`
 }
 
-func GetSuggestedQueries(conn *utils.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+func GetSuggestedQueries(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 
 	// Use the standardized Redis connectivity test
 	ctx := context.Background()
@@ -59,7 +59,7 @@ type GetInitialQuerySuggestionsResponse struct {
 	Suggestions []string `json:"suggestions"`
 }
 
-func GetInitialQuerySuggestions(conn *utils.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	ctx := context.Background()
 
 	var args GetInitialQuerySuggestionsArgs
@@ -82,7 +82,7 @@ func GetInitialQuerySuggestions(conn *utils.Conn, userID int, rawArgs json.RawMe
 
 	securityId := int(securityIdFloat)
 
-	chartReq := tools.GetChartDataArgs{
+	chartReq := chart.GetChartDataArgs{
 		SecurityID:    securityId,
 		Timeframe:     "1d",
 		Timestamp:     0,
@@ -93,12 +93,12 @@ func GetInitialQuerySuggestions(conn *utils.Conn, userID int, rawArgs json.RawMe
 	}
 	reqBytes, _ := json.Marshal(chartReq)
 
-	rawResp, chartErr := tools.GetChartData(conn, userID, reqBytes)
+	rawResp, chartErr := chart.GetChartData(conn, userID, reqBytes)
 	if chartErr != nil {
 		fmt.Printf("Warning: error fetching chart data for suggestions: %v\n", chartErr)
 		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, nil
 	}
-	resp, ok := rawResp.(tools.GetChartDataResponse)
+	resp, ok := rawResp.(chart.GetChartDataResponse)
 	if !ok || len(resp.Bars) == 0 {
 		fmt.Println("Warning: no bars returned or unexpected type from GetChartData.")
 		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, nil
