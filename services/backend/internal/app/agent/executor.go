@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"backend/internal/services/clients"
 	"backend/internal/data"
 	"context"
 
@@ -40,7 +39,7 @@ func NewExecutor(conn *data.Conn, userId int, maxWorkers int, lg *zap.Logger) *E
 	return &Executor{
 		conn:       conn,
 		userId:     userId,
-		tools:      GetTools(false),
+		tools:      Tools,
 		log:        lg,
 		tracer:     otel.Tracer("agent-executor"),
 		maxWorkers: maxWorkers,

@@ -1,4 +1,4 @@
-package server
+package socket
 
 import (
 	"backend/internal/data"
@@ -21,9 +21,6 @@ var (
 	channelSubscribers      = make(map[string]map[*Client]bool)
 	UserToClient            = make(map[int]*Client)
 	UserToClientMutex       sync.RWMutex
-	//redisSubscriptions      = make(map[string]*redis.PubSub)
-	lastTimestampUpdate time.Time
-	timestampMutex      sync.RWMutex
 )
 
 // ReplayData represents a structure for handling ReplayData data.
@@ -432,32 +429,6 @@ func handleWebSocket(conn *data.Conn, ws *websocket.Conn, userID int) {
 	client.readPump(conn)
 }
 
-func broadcastTimestamp() {
-	timestampMutex.Lock()
-	now := time.Now()
-	if now.Sub(lastTimestampUpdate) >= TimestampUpdateInterval {
-		timestamp := now.UnixNano() / int64(time.Millisecond)
-		timestampUpdate := map[string]interface{}{
-			"channel":   "timestamp",
-			"timestamp": timestamp,
-		}
-		jsonData, err := json.Marshal(timestampUpdate)
-		if err == nil {
-			// Broadcast to all connected clients
-			for client := range UserToClient {
-				if c := UserToClient[client]; c != nil {
-					select {
-					case c.send <- jsonData:
-					default:
-						// Channel full or closed
-					}
-				}
-			}
-		}
-		lastTimestampUpdate = now
-	}
-	timestampMutex.Unlock()
-}
 
 // subscribeSECFilings handles subscription to the SEC filings feed
 func (c *Client) subscribeSECFilings(conn *data.Conn) {

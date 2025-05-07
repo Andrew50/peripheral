@@ -1,7 +1,12 @@
-package marketData
+package socket
 
 import (
 	"backend/internal/data"
+    "backend/internal/data/utils"
+    "backend/internal/data/postgres"
+    "backend/internal/data/polygon"
+    "backend/internal/app/chart"
+
 	"context"
 	"errors"
 	"fmt"
@@ -414,18 +419,18 @@ func initTimeframeData(conn *data.Conn, securityId int, timeframe int, isExtende
 		fmt.Printf("Invalid timeframe: %d\n", timeframe)
 		return td
 	}
-	fromMillis, toMillis, err := utils.GetRequestStartEndTime(time.Unix(0, 0), toTime, "backward", tfStr, multiplier, AggsLength)
+	fromMillis, toMillis, err := chart.GetRequestStartEndTime(time.Unix(0, 0), toTime, "backward", tfStr, multiplier, AggsLength)
 	if err != nil {
 		fmt.Printf("error g2io002")
 		return td
 	}
-	ticker, err := utils.GetTicker(conn, securityId, toTime)
+	ticker, err := postgres.GetTicker(conn, securityId, toTime)
 	//ticker := obj.ticekr
 	if err != nil {
 		fmt.Printf("error getting hist data")
 		return td
 	}
-	iter, err := utils.GetAggsData(conn.Polygon, ticker, multiplier, tfStr, fromMillis, toMillis, AggsLength, "desc", true)
+	iter, err := polygon.GetAggsData(conn.Polygon, ticker, multiplier, tfStr, fromMillis, toMillis, AggsLength, "desc", true)
 	if err != nil {
 		fmt.Printf("Error getting historical data: %v\n", err)
 		return td

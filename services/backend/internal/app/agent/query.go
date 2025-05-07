@@ -3,7 +3,7 @@ package agent
 import (
 	"backend/internal/data"
 	"context"
-    "backend/internal/services/clients"
+    "backend/internal/services/socket"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -574,7 +574,7 @@ func executeGeminiFunctionCalls(ctx context.Context, conn *data.Conn, userID int
 		}
 
 		// Check if the function exists in Tools map
-		tool, exists := GetTools(false)[fc.Name]
+		tool, exists := Tools[fc.Name]
 		if !exists {
 			results = append(results, ExecuteResult{
 				FunctionName: fc.Name,
@@ -586,7 +586,7 @@ func executeGeminiFunctionCalls(ctx context.Context, conn *data.Conn, userID int
 
 		// ---> Format and send status update to the client <---
 		formattedMsg := formatStatusMessage(tool.StatusMessage, argsMap)
-		clients.SendFunctionStatus(userID, formattedMsg)
+		socket.SendFunctionStatus(userID, formattedMsg)
 
 		// Execute the function
 		result, err := tool.Function(conn, userID, fc.Args)

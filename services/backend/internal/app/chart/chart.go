@@ -392,7 +392,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			if args.Direction == "backward" {
 
 				// Potentially fetch incomplete bar if market is open or in replay
-				marketStatus, err := utils.GetMarketStatus(conn)
+				marketStatus, err := polygon.GetMarketStatus(conn)
 				if err != nil {
 					return nil, fmt.Errorf("issue with market status")
 				}
@@ -434,7 +434,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		reverse(barDataList)
 
 		// Possibly append incomplete bar
-		marketStatus, err := utils.GetMarketStatus(conn)
+		marketStatus, err :=polygon.GetMarketStatus(conn)
 		if err != nil {
 			return nil, fmt.Errorf("issue with market status")
 		}
@@ -521,9 +521,9 @@ func requestIncompleteBar(
 
 	// Same logic as before
 	if timespan == "second" || timespan == "minute" || timespan == "hour" {
-		currentDayStart = utils.GetReferenceStartTime(timestampEnd, extendedHours, easternLocation)
+		currentDayStart = GetReferenceStartTime(timestampEnd, extendedHours, easternLocation)
 		elapsed := timestampEnd - currentDayStart
-		timeframeInSeconds := utils.GetTimeframeInSeconds(multiplier, timespan)
+		timeframeInSeconds := GetTimeframeInSeconds(multiplier, timespan)
 		if elapsed < 0 {
 			// Means we're before the day start
 			return incompleteBar, nil
@@ -533,14 +533,14 @@ func requestIncompleteBar(
 	} else {
 		// Daily or above
 		// Calculate the start of the current day but we don't need to store it in a variable
-		timestampStart = utils.GetReferenceStartTime(timestampEnd, false, easternLocation)
+		timestampStart = GetReferenceStartTime(timestampEnd, false, easternLocation)
 		switch timespan {
 		case "day":
-			timestampStart = utils.GetReferenceStartTimeForDays(timestampEnd, multiplier, easternLocation)
+			timestampStart = GetReferenceStartTimeForDays(timestampEnd, multiplier, easternLocation)
 		case "week":
-			timestampStart = utils.GetReferenceStartTimeForWeeks(timestampEnd, multiplier, easternLocation)
+			timestampStart = GetReferenceStartTimeForWeeks(timestampEnd, multiplier, easternLocation)
 		case "month":
-			timestampStart = utils.GetReferenceStartTimeForMonths(timestampEnd, multiplier, easternLocation)
+			timestampStart = GetReferenceStartTimeForMonths(timestampEnd, multiplier, easternLocation)
 		}
 	}
 	// This is the official bar "start" in seconds
@@ -845,7 +845,7 @@ func fetchAggData(
 	start := models.Millis(time.Unix(0, startMs*int64(time.Millisecond)).UTC())
 	end := models.Millis(time.Unix(0, endMs*int64(time.Millisecond)).UTC())
 
-	it, err := utils.GetAggsData(conn.Polygon, ticker, multiplier, timespan, start, end, 10000, "asc", !isReplay)
+	it, err := polygon.GetAggsData(conn.Polygon, ticker, multiplier, timespan, start, end, 10000, "asc", !isReplay)
 	if err != nil {
 		return nil, err
 	}
@@ -880,7 +880,7 @@ func fetchTrades(
 	}
 	startNanos := models.Nanos(time.Unix(startMs/1000, (startMs%1000)*1e6).UTC())
 
-	it, err := utils.GetTrade(conn.Polygon, ticker, startNanos, "asc", models.GTE, 30000)
+	it, err := polygon.GetTrade(conn.Polygon, ticker, startNanos, "asc", models.GTE, 30000)
 	if err != nil {
 		return nil, err
 	}
@@ -922,7 +922,7 @@ func buildHigherTimeframeFromLower(
 	var barStartTime time.Time
 
 	// Convert the "one unit" (minute/second) into time.Duration for aggregator logic
-	unitDuration := utils.TimespanStringToDuration(timespan)
+	unitDuration := TimespanStringToDuration(timespan)
 	// The length of each bar in lower timeframe
 	requiredDuration := time.Duration(multiplier) * unitDuration
 
@@ -996,7 +996,7 @@ func buildHigherTimeframeFromLower(
 
 // Helper function to determine the start timestamp (Unix seconds) of the bar an event belongs to
 func alignTimestampToStartOfBar(eventMs int64, multiplier int, timespan string, extendedHours bool, loc *time.Location) int64 {
-	timeframeSeconds := utils.GetTimeframeInSeconds(multiplier, timespan)
+	timeframeSeconds := GetTimeframeInSeconds(multiplier, timespan)
 	var barStartMs int64
 
 	// Ensure location is not nil, fallback to UTC if necessary to prevent panics
@@ -1006,7 +1006,7 @@ func alignTimestampToStartOfBar(eventMs int64, multiplier int, timespan string, 
 	}
 
 	if timespan == "second" || timespan == "minute" || timespan == "hour" {
-		referenceStartMs := utils.GetReferenceStartTime(eventMs, extendedHours, loc)
+		referenceStartMs := GetReferenceStartTime(eventMs, extendedHours, loc)
 		elapsedMs := eventMs - referenceStartMs
 		if elapsedMs < 0 {
 			// Event is before the calculated reference start for the day.
@@ -1033,11 +1033,11 @@ func alignTimestampToStartOfBar(eventMs int64, multiplier int, timespan string, 
 		// Daily or above - use the specific reference start functions based on UTC time
 		switch timespan {
 		case "day":
-			barStartMs = utils.GetReferenceStartTimeForDays(eventMs, multiplier, loc) // loc might be needed if utils func uses it
+			barStartMs = GetReferenceStartTimeForDays(eventMs, multiplier, loc) // loc might be needed if utils func uses it
 		case "week":
-			barStartMs = utils.GetReferenceStartTimeForWeeks(eventMs, multiplier, loc)
+			barStartMs = GetReferenceStartTimeForWeeks(eventMs, multiplier, loc)
 		case "month":
-			barStartMs = utils.GetReferenceStartTimeForMonths(eventMs, multiplier, loc)
+			barStartMs = GetReferenceStartTimeForMonths(eventMs, multiplier, loc)
 		default:
 			fmt.Printf("Warning: Unknown timespan '%s' in alignTimestampToStartOfBar. Falling back to UTC day alignment.\\n", timespan)
 			// Fallback: align to UTC day start
@@ -1094,7 +1094,7 @@ func integrateChartEvents(
 		return
 	}
 
-	chartTimeframeInSeconds := utils.GetTimeframeInSeconds(multiplier, timespan)
+	chartTimeframeInSeconds := GetTimeframeInSeconds(multiplier, timespan)
 	if chartTimeframeInSeconds <= 0 {
 		fmt.Printf("Warning: Cannot fetch events due to invalid timeframeSeconds: %d for %s %d\\n", chartTimeframeInSeconds, timespan, multiplier)
 		return

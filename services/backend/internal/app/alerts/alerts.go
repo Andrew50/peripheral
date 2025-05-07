@@ -3,6 +3,7 @@ package alerts
 import (
 	"backend/internal/data"
     "backend/internal/data/polygon"
+    "backend/internal/services/alerts"
 	"context"
 	"database/sql"
 	"encoding/json"

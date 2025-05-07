@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+    "backend/internal/data/edgar"
 )
 
 var (

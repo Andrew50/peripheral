@@ -1,4 +1,4 @@
-package polygon
+package socket
 
 import (
 	"backend/internal/data"
@@ -32,8 +32,36 @@ const TimestampUpdateInterval = 2 * time.Second
 var (
 	lastTickTimestamp  int64
 	tickTimestampMutex sync.RWMutex
+	lastTimestampUpdate time.Time
+	timestampMutex      sync.RWMutex
 )
 
+func broadcastTimestamp() {
+	timestampMutex.Lock()
+	now := time.Now()
+	if now.Sub(lastTimestampUpdate) >= TimestampUpdateInterval {
+		timestamp := now.UnixNano() / int64(time.Millisecond)
+		timestampUpdate := map[string]interface{}{
+			"channel":   "timestamp",
+			"timestamp": timestamp,
+		}
+		jsonData, err := json.Marshal(timestampUpdate)
+		if err == nil {
+			// Broadcast to all connected clients
+			for client := range UserToClient {
+				if c := UserToClient[client]; c != nil {
+					select {
+					case c.send <- jsonData:
+					default:
+						// Channel full or closed
+					}
+				}
+			}
+		}
+		lastTimestampUpdate = now
+	}
+	timestampMutex.Unlock()
+}
 // StreamPolygonDataToRedis performs operations related to StreamPolygonDataToRedis functionality.
 func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 	err := polygonWS.Subscribe(polygonws.StocksQuotes)

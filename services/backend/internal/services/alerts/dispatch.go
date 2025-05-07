@@ -1,7 +1,6 @@
 package alerts
 
 import (
-	"backend/internal/services/clients"
 	"backend/internal/data"
 	"context"
 	"fmt"
