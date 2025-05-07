@@ -3,12 +3,13 @@ package server
 import (
 	"backend/internal/services/alerts"
 	"backend/internal/data"
+    "backend/internal/services/securities"
+    "backend/internal/services/marketData"
+    "backend/internal/services/socket"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -136,25 +137,25 @@ func (s *JobScheduler) saveJobLastCompletionTime(job *Job) {
 func securityDetailUpdateJob(conn *data.Conn) error {
 	// Call the actual function from securitiesTable.go
 	fmt.Println("Starting security details update - updating logos and icons...")
-	return updateSecurityDetails(conn, true)
+	return securities.UpdateSecurityDetails(conn, true)
 }
 
 func securityCikUpdateJob(conn *data.Conn) error {
 	// We call the function from securities.go
 	fmt.Println("Starting security CIK update - linking tickers to SEC identifiers...")
-	return updateSecurityCik(conn)
+	return securities.UpdateSecurityCik(conn)
 }
 
 func simpleSecuritiesUpdateJob(conn *data.Conn) error {
 	// We call the function from securities.go
 	fmt.Println("Starting securities update - refreshing security data...")
-	return simpleUpdateSecurities(conn)
+	return securities.SimpleUpdateSecurities(conn)
 }
 
 // Wrapper for UpdateSectors to match JobFunc signature
 func updateSectorsJob(conn *data.Conn) error {
 	fmt.Println("Starting sector update - fetching latest sector/industry data...")
-	_, err := UpdateSectors(context.Background(), conn) // Discard the statBlock
+	_, err := securities.UpdateSectors(context.Background(), conn) // Discard the statBlock
 	if err != nil {
 		fmt.Printf("Sector update job failed: %v\n", err)
 	} else {
@@ -168,7 +169,7 @@ var (
 	JobList = []*Job{
 		{
 			Name:           "UpdateDailyOHLCV",
-			Function:       UpdateDailyOHLCV,
+			Function:       marketData.UpdateDailyOHLCV,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
@@ -333,9 +334,9 @@ func (s *JobScheduler) Start() chan struct{} {
 
 	// Start the Edgar Filings Service
 	fmt.Printf("\n\nStarting EdgarFilingsService\n\n")
-	utils.StartEdgarFilingsService(s.Conn)
+	marketData.StartEdgarFilingsService(s.Conn)
 	go func() {
-		for filing := range utils.NewFilingsChannel {
+		for filing := range marketData.NewFilingsChannel {
 			socket.BroadcastGlobalSECFiling(filing)
 		}
 	}()
@@ -503,19 +504,7 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	fmt.Printf("\n=== JOB START: %s ===\n", jobName)
 	fmt.Printf("Time: %s\n", now.Format("2006-01-02 15:04:05"))
 
-	// Execute job: either queue it or run directly
-	if strings.HasPrefix(jobName, "queue:") {
-		// Queue the job for async execution
-		funcName := strings.TrimPrefix(jobName, "queue:")
-		taskID, err = utils.Queue(s.Conn, funcName, nil)
-		isQueued = true
-		if err != nil {
-			log.Printf("Error queueing job %s: %v", jobName, err)
-		}
-	} else {
-		// Execute the job directly
-		err = job.Function(s.Conn)
-	}
+    err = job.Function(s.Conn)
 
 	// Update job status
 	duration := time.Since(startTime).Round(time.Millisecond)
@@ -537,10 +526,6 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 		fmt.Printf("Duration: %v\n", duration)
 		fmt.Printf("Task ID: %s\n", taskID)
 
-		// Monitor queued task for completion
-		if taskID != "" {
-			go s.monitorQueuedTask(job, taskID, startTime)
-		}
 	} else {
 		// Job completed directly
 		fmt.Printf("\n=== JOB COMPLETED: %s ===\n", jobName)
@@ -556,59 +541,6 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 
 }
 
-// monitorQueuedTask polls a queued task until it completes or times out
-func (s *JobScheduler) monitorQueuedTask(job *Job, taskID string, startTime time.Time) {
-	jobName := job.Name
-	maxRetries := 30
-	retryInterval := time.Second * 10
-	taskSucceeded := false
-
-	for i := 0; i < maxRetries; i++ {
-		result, pollErr := utils.Poll(s.Conn, taskID)
-		if pollErr == nil && result != nil {
-			// Try to parse the result to check for errors
-			var resultMap map[string]interface{}
-			if err := json.Unmarshal(result, &resultMap); err == nil {
-				// Check if the result contains an error field
-				if errVal, ok := resultMap["error"]; ok && errVal != nil {
-					fmt.Printf("\n=== JOB VERIFICATION FAILED: %s ===\n", jobName)
-					fmt.Printf("Error: %v\n", errVal)
-					break
-				}
-
-				// Check if the state is completed
-				if state, ok := resultMap["state"]; ok && state == "completed" {
-					// Task completed successfully
-					taskSucceeded = true
-					completionTime := time.Now()
-
-					job.ExecutionMutex.Lock()
-					job.LastCompletionTime = completionTime
-					job.ExecutionMutex.Unlock()
-
-					// Save the completion time to Redis
-					s.saveJobLastCompletionTime(job)
-
-					fmt.Printf("\n=== JOB COMPLETED: %s ===\n", jobName)
-					fmt.Printf("Actual Completion Time: %s\n", completionTime.Format("2006-01-02 15:04:05"))
-					fmt.Printf("Task ID: %s\n", taskID)
-					fmt.Printf("Total Duration: %v\n", time.Since(startTime).Round(time.Millisecond))
-					break
-				}
-			}
-		}
-
-		// If we've reached the last retry, log a timeout
-		if i == maxRetries-1 && !taskSucceeded {
-			fmt.Printf("\n=== JOB VERIFICATION TIMEOUT: %s ===\n", jobName)
-			fmt.Printf("Task ID: %s\n", taskID)
-			fmt.Printf("Timed out after %d retries\n", maxRetries)
-		}
-
-		// Wait before retrying
-		time.Sleep(retryInterval)
-	}
-}
 
 
 // initAggregates initializes the aggregates

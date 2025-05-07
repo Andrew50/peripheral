@@ -1,10 +1,13 @@
 //go:build !test
 // +build !test
 
-package jobs
+package securities
 
 import (
 	"backend/internal/data"
+    "backend/internal/data/utils"
+    "backend/internal/data/polygon"
+
 	"context"
 	"fmt"
 	"io"
@@ -23,7 +26,7 @@ import (
 	"encoding/base64"
 
 	_ "github.com/lib/pq"
-	polygon "github.com/polygon-io/client-go/rest"
+	_polygon "github.com/polygon-io/client-go/rest"
 	"github.com/polygon-io/client-go/rest/models"
 )
 
@@ -108,7 +111,7 @@ func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []mode
 // nolint:unused
 //
 //lint:ignore U1000 kept for future use
-func dataExists(client *polygon.Client, ticker string, fromDate string, toDate string) bool {
+func dataExists(client *_polygon.Client, ticker string, fromDate string, toDate string) bool {
 	timespan := models.Timespan("day")
 	fromMillis, err := utils.MillisFromDatetimeString(fromDate)
 	if err != nil {
@@ -163,7 +166,7 @@ func contains(slice []string, item string) bool {
 // nolint:unused
 //
 //lint:ignore U1000 kept for future use
-func updateSecurities(conn *data.Conn, test bool) error {
+func UpdateSecurities(conn *data.Conn, test bool) error {
 	var startDate time.Time
 	//fmt.Print(dataExists(conn.Polygon,"VBR","2003-09-24","2004-01-29"))
 	//return nil
@@ -206,14 +209,14 @@ func updateSecurities(conn *data.Conn, test bool) error {
 		//startDate = time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC) //need to pull from a record of last update, prolly in db
 	}
 	dateFormat := "2006-01-02"
-	yesterdayPolyTickers, err := utils.AllTickers(conn.Polygon, startDate.AddDate(0, 0, -1).Format(dateFormat))
+	yesterdayPolyTickers, err := polygon.AllTickers(conn.Polygon, startDate.AddDate(0, 0, -1).Format(dateFormat))
 	if err != nil {
 		return fmt.Errorf("1j9v %v", err)
 	}
 	activeYesterday := toFilteredMap(yesterdayPolyTickers)
 	for currentDate := startDate; currentDate.Before(time.Now()); currentDate = currentDate.AddDate(0, 0, 1) {
 		currentDateString := currentDate.Format(dateFormat)
-		polyTickers, err := utils.AllTickers(conn.Polygon, currentDateString)
+		polyTickers, err := polygon.AllTickers(conn.Polygon, currentDateString)
 		if err != nil {
 			return fmt.Errorf("423n %v", err)
 		}
@@ -448,7 +451,7 @@ func updateSecurities(conn *data.Conn, test bool) error {
 	return nil
 }
 
-func updateSecurityDetails(conn *data.Conn, test bool) error {
+func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 	// Query active securities (where maxDate is null)
 	fmt.Println("Updating security details")
 
@@ -564,7 +567,7 @@ func updateSecurityDetails(conn *data.Conn, test bool) error {
 
 		<-rateLimiter.C // Wait for rate limiter
 
-		details, err := utils.GetTickerDetails(conn.Polygon, ticker, "now")
+		details, err := polygon.GetTickerDetails(conn.Polygon, ticker, "now")
 		if err != nil {
 			//log.Printf("Failed to get details for %s: %v", ticker, err)
 			return
@@ -579,7 +582,7 @@ func updateSecurityDetails(conn *data.Conn, test bool) error {
 		if err != nil {
 			log.Printf("Failed to fetch icon for %s: %v", ticker, err)
 		}
-		currentPrice, err := utils.GetMostRecentRegularClose(conn.Polygon, ticker, time.Now())
+		currentPrice, err := polygon.GetMostRecentRegularClose(conn.Polygon, ticker, time.Now())
 		if err != nil {
 			//log.Printf("Failed to get current price for %s: %v", ticker, err)
 			return
