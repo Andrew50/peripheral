@@ -1431,12 +1431,12 @@
 			wickDownColor: '#ef5350'
 		});
 		chartVolumeSeries = chart.addHistogramSeries({
-			lastValueVisible: true,
+			lastValueVisible: false,
 			priceLineVisible: false,
 			priceFormat: { type: 'volume' },
 			priceScaleId: ''
 		});
-		chartVolumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+		chartVolumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 }, visible: false });
 		chartCandleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.2 } });
 		const smaOptions: DeepPartial<LineStyleOptions & SeriesOptionsCommon> = {
 			lineWidth: 1,
