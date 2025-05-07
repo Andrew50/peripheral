@@ -743,7 +743,7 @@ func GetTickerDailySnapshot(conn *data.Conn, userId int, rawArgs json.RawMessage
 		return nil, fmt.Errorf("error getting ticker: %v", err)
 	}
 
-	res, err := utils.GetPolygonTickerSnapshot(conn.Polygon, ticker, context.Background())
+	res, err := polygon.GetPolygonTickerSnapshot(conn.Polygon, ticker, context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("error getting ticker snapshot: %v", err)
 	}
