@@ -25,7 +25,6 @@ const (
 	minuteAggs = false
 	hourAggs   = false
 	dayAggs    = false
-	volBurst   = true
 )
 
 var (
@@ -46,12 +45,6 @@ type TimeframeData struct {
 	Mutex             sync.RWMutex
 }
 
-// VolBurstData represents a structure for handling VolBurstData data.
-type VolBurstData struct {
-	VolumeThreshold []float64
-	PriceThreshold  []float64
-}
-
 // SecurityData represents a structure for handling SecurityData data.
 type SecurityData struct {
 	SecondDataExtended TimeframeData
@@ -61,7 +54,6 @@ type SecurityData struct {
 	Dolvol             float64
 	Mcap               float64
 	Adr                float64
-	VolBurstData       VolBurstData
 }
 
 func updateTimeframe(td *TimeframeData, timestamp int64, price float64, volume float64, timeframe int) {
@@ -478,135 +470,6 @@ func initTimeframeData(conn *utils.Conn, securityId int, timeframe int, isExtend
 	td.Size = idx
 	return td
 }
-
-// initVolBurstData initializes threshold data for volume burst (tape burst)
-// detection based on historical trading data. We define seven periods:
-//
-//	0: premarket (4:00 - 9:30)
-//	1: open 9:30 - 9:45
-//	2: 9:45 - 10:00
-//	3: 10:00 - 12:00
-//	4: 12:00 - 14:00
-//	5: 14:00 - 16:00
-//	6: after hours (16:00 - 20:00)
-//
-// For each period, we break the interval into 20 second segments and compute
-// the average total volume and average % price range (from high to low) over those windows.
-// The resulting thresholds are saved in the order specified.
-func initVolBurstData(conn *utils.Conn, securityId int) VolBurstData {
-	location, err := time.LoadLocation("America/New_York")
-	if err != nil {
-		fmt.Printf("error getting location: %v\n", err)
-		return VolBurstData{}
-	}
-	now := time.Now().In(location)
-	// Single fetch for the last 15 days
-	globalStart := time.Date(now.Year(), now.Month(), now.Day(), 4, 0, 0, 0, location).AddDate(0, 0, -15)
-	globalEnd := time.Date(now.Year(), now.Month(), now.Day(), 20, 0, 0, 0, location)
-
-	ticker, err := utils.GetTicker(conn, securityId, now)
-	if err != nil {
-		fmt.Printf("error getting ticker: %v\n", err)
-		return VolBurstData{}
-	}
-
-	fromMillis := models.Millis(globalStart)
-	endMillis := models.Millis(globalEnd)
-
-	iter, err := utils.GetAggsData(conn.Polygon, ticker, 1, "second", fromMillis, endMillis, 100000, "asc", true)
-	if err != nil {
-		fmt.Printf("error getting aggs data: %v\n", err)
-		return VolBurstData{}
-	}
-
-	// Read all second bars
-	var allAggs []models.Agg
-	for iter.Next() {
-		allAggs = append(allAggs, iter.Item())
-	}
-	// Separate them by day
-	dailyBars := make(map[time.Time][]models.Agg)
-	for _, agg := range allAggs {
-		t := time.Time(agg.Timestamp).In(location)
-		dateKey := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, location)
-		dailyBars[dateKey] = append(dailyBars[dateKey], agg)
-	}
-
-	// We'll accumulate totalVol & totalPct in 7 buckets across all days
-	totalVol := make([]float64, 7)
-	totalPct := make([]float64, 7)
-	countWin := make([]int, 7)
-
-	// For each of the last 15 days
-	for d := 0; d < 15; d++ {
-		dayKey := now.AddDate(0, 0, -d)
-		midnight := time.Date(dayKey.Year(), dayKey.Month(), dayKey.Day(), 0, 0, 0, 0, location)
-
-		// Actual day boundaries
-		dayStart := midnight.Add(4 * time.Hour) // 4:00
-		dayEnd := midnight.Add(20 * time.Hour)  // 20:00
-		bars := dailyBars[midnight]             // might be nil if no data that day
-		if len(bars) == 0 {
-			continue
-		}
-
-		// Predefine the 7 time-of-day "periods"
-		// We'll define the 7 time-based sub-periods for *that day*.
-		// We'll compute the total volume / pct range stats for each sub-period via our sliding window.
-		subPeriods := []struct {
-			idx       int
-			startTime time.Time
-			endTime   time.Time
-		}{
-			{0, dayStart, time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 9, 30, 0, 0, location)}, // pre
-			{1, time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 9, 30, 0, 0, location),
-				time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 9, 45, 0, 0, location)},
-			{2, time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 9, 45, 0, 0, location),
-				time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 10, 0, 0, 0, location)},
-			{3, time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 10, 0, 0, 0, location),
-				time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 12, 0, 0, 0, location)},
-			{4, time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 12, 0, 0, 0, location),
-				time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 14, 0, 0, 0, location)},
-			{5, time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 14, 0, 0, 0, location),
-				time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 16, 0, 0, 0, location)},
-			{6, time.Date(midnight.Year(), midnight.Month(), midnight.Day(), 16, 0, 0, 0, location), dayEnd},
-		}
-
-		// For each sub-period, run the sliding window logic
-		for _, sp := range subPeriods {
-			if sp.endTime.Before(sp.startTime) {
-				continue
-			}
-			if sp.endTime.After(dayEnd) {
-				sp.endTime = dayEnd
-			}
-
-			vol, pct, cnt := slidingWindowStats(bars, sp.startTime, sp.endTime)
-			totalVol[sp.idx] += vol
-			totalPct[sp.idx] += pct
-			countWin[sp.idx] += cnt
-		}
-	}
-
-	// Compute the final averages
-	volThreshold := make([]float64, 7)
-	priceThreshold := make([]float64, 7)
-	for i := 0; i < 7; i++ {
-		if countWin[i] > 0 {
-			volThreshold[i] = totalVol[i] / float64(countWin[i])
-			priceThreshold[i] = totalPct[i] / float64(countWin[i])
-		}
-	}
-
-	// Possibly debug print if it's a well-known ticker
-	if ticker == "NVDA" || ticker == "TSLA" {
-		fmt.Printf("volThreshold: %v, priceThreshold: %v, ticker %v\n", volThreshold, priceThreshold, ticker)
-	}
-	return VolBurstData{
-		VolumeThreshold: volThreshold,
-		PriceThreshold:  priceThreshold,
-	}
-}
 func slidingWindowStats(bars []models.Agg, startTime, endTime time.Time) (float64, float64, int) {
 	const windowDur = 20 * time.Second
 	const slideStep = 5 * time.Second
@@ -685,9 +548,6 @@ func initSecurityData(conn *utils.Conn, securityId int) *SecurityData {
 
 	if dayAggs {
 		sd.DayData = initTimeframeData(conn, securityId, Day, false)
-	}
-	if volBurst {
-		sd.VolBurstData = initVolBurstData(conn, securityId)
 	}
 	return sd
 }
