@@ -13,7 +13,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// updateSecurities fetches the latest tickers from Polygon, checks if AAPL is present,
+// SimpleUpdateSecruities fetches the latest tickers from Polygon, checks if AAPL is present,
 // and if so, updates the securities table by marking missing tickers as delisted
 // (maxDate = now) and inserting brand-new tickers (keeping the same securityId for existing ones).
 func SimpleUpdateSecurities(conn *data.Conn) error {
@@ -209,7 +209,7 @@ func SimpleUpdateSecurities(conn *data.Conn) error {
 
 }
 
-// updateSecurityCik fetches the latest CIK (Central Index Key) data from the SEC API
+// UpdateSecurityCik fetches the latest CIK (Central Index Key) data from the SEC API
 // and updates the securities table with CIK values for active securities.
 func UpdateSecurityCik(conn *data.Conn) error {
 	// Create a client and request with appropriate headers
