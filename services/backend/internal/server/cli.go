@@ -10,6 +10,11 @@ import (
 	"strings"
 	"time"
 )
+type QueueArgs struct {
+	ID   string      `json:"id"`
+	Func string      `json:"func"`
+	Args interface{} `json:"args"`
+}
 
 // TableWriter represents a structure for handling TableWriter data.
 type TableWriter struct {
@@ -326,7 +331,7 @@ func runJob(jobName string) {
 		var taskIDs []string
 		var taskFuncs []string
 		for _, item := range queueItems {
-			var queueArgs utils.QueueArgs
+			var queueArgs QueueArgs
 			if err := json.Unmarshal([]byte(item), &queueArgs); err != nil {
 				fmt.Printf("Error parsing queue item: %v\n", err)
 				continue
@@ -712,7 +717,7 @@ func getQueueStatus() {
 		table.SetHeader([]string{"ID", "Function", "Arguments"})
 
 		for i, item := range queueItems {
-			var queueArgs utils.QueueArgs
+			var queueArgs QueueArgs
 			if err := json.Unmarshal([]byte(item), &queueArgs); err != nil {
 				fmt.Printf("Error parsing queue item: %v\n", err)
 				continue

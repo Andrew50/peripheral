@@ -1,4 +1,4 @@
-package jobs
+package securities
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+    "backend/internal/data/polygon"
 
 	"backend/internal/data"
 
@@ -15,11 +16,11 @@ import (
 // updateSecurities fetches the latest tickers from Polygon, checks if AAPL is present,
 // and if so, updates the securities table by marking missing tickers as delisted
 // (maxDate = now) and inserting brand-new tickers (keeping the same securityId for existing ones).
-func simpleUpdateSecurities(conn *data.Conn) error {
+func SimpleUpdateSecurities(conn *data.Conn) error {
 	// 1) Fetch current list of Polygon tickers (use "today" or whichever date you prefer).
 	today := time.Now().Format("2006-01-02")
 	fmt.Println("running simpleUpdateSecurities")
-	polyTickers, err := utils.AllTickers(conn.Polygon, today)
+	polyTickers, err := polygon.AllTickers(conn.Polygon, today)
 	fmt.Println("polyTickers", len(polyTickers))
 	if err != nil {
 		return fmt.Errorf("failed to fetch Polygon tickers: %w", err)
@@ -210,7 +211,7 @@ func simpleUpdateSecurities(conn *data.Conn) error {
 
 // updateSecurityCik fetches the latest CIK (Central Index Key) data from the SEC API
 // and updates the securities table with CIK values for active securities.
-func updateSecurityCik(conn *data.Conn) error {
+func UpdateSecurityCik(conn *data.Conn) error {
 	// Create a client and request with appropriate headers
 	fmt.Println("🟢 fetching sec company tickers")
 	client := &http.Client{}

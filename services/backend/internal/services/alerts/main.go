@@ -1,8 +1,9 @@
 package alerts
 
 import (
-	"backend/internal/services/marketData"
 	"backend/internal/data"
+    "backend/internal/data/postgres"
+    "backend/internal/services/socket"
 	"context"
 	"fmt"
 	"log"
@@ -34,7 +35,7 @@ var (
 // AddAlert performs operations related to AddAlert functionality.
 func AddAlert(conn *data.Conn, alert Alert) {
 	if alert.AlertType == "price" {
-		ticker, err := utils.GetTicker(conn, *alert.SecurityID, time.Now())
+		ticker, err := postgres.GetTicker(conn, *alert.SecurityID, time.Now())
 		if err != nil {
 			fmt.Println("error getting ticker: %w", err)
 			return
@@ -145,7 +146,7 @@ func initAlerts(conn *data.Conn) error {
 			return fmt.Errorf("scanning alert row: %w", err)
 		}
 		if alert.AlertType == "price" {
-			ticker, err := utils.GetTicker(conn, *alert.SecurityID, time.Now())
+			ticker, err := postgres.GetTicker(conn, *alert.SecurityID, time.Now())
 			if err != nil {
 				fmt.Println("error getting ticker: %w", err)
 				return fmt.Errorf("getting ticker: %w", err)
@@ -179,7 +180,7 @@ func initAlerts(conn *data.Conn) error {
 	alerts.Range(func(key, value interface{}) bool {
 		alert := value.(Alert)
 		if alert.SecurityID != nil {
-			if _, exists := ticks.AggData[*alert.SecurityID]; !exists {
+			if _, exists := socket.AggData[*alert.SecurityID]; !exists {
 				alertErrors = append(alertErrors,
 					fmt.Errorf("alert ID %d references non-existent security ID %d",
 						alert.AlertID, *alert.SecurityID))

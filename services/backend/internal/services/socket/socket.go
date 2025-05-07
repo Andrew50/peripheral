@@ -3,7 +3,9 @@ package socket
 import (
 	"backend/internal/data"
     "backend/internal/data/utils"
-	"container/list"
+    "backend/internal/data/edgar"
+    "backend/internal/services/marketData"
+    "container/list"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -96,7 +98,7 @@ type SECFilingMessage struct {
 
 
 // BroadcastGlobalSECFiling sends a new global SEC filing to all clients subscribed to the sec-filings channel
-func BroadcastGlobalSECFiling(filing utils.GlobalEDGARFiling) {
+func BroadcastGlobalSECFiling(filing edgar.GlobalEDGARFiling) {
 	filingMessage := SECFilingMessage{
 		Type:      filing.Type,
 		Date:      filing.Date,
@@ -403,7 +405,7 @@ func (c *Client) close() {
 }
 
 // HandleWebSocket performs operations related to HandleWebSocket functionality.
-func handleWebSocket(conn *data.Conn, ws *websocket.Conn, userID int) {
+func HandleWebSocket(conn *data.Conn, ws *websocket.Conn, userID int) {
 	client := &Client{
 		ws:                  ws,
 		send:                make(chan []byte, 3000),
@@ -447,7 +449,7 @@ func (c *Client) subscribeSECFilings(conn *data.Conn) {
 	// Get the latest filings from the cache
 	if conn != nil {
 		// Get the latest filings from the cache
-		latestFilings := utils.GetLatestEdgarFilings()
+		latestFilings := marketData.GetLatestEdgarFilings()
 
 		// Limit to 50 filings if there are more
 		if len(latestFilings) > 50 {
