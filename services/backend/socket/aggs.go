@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"sync"
 	"time"
-
-	"github.com/polygon-io/client-go/rest/models"
 )
 
 const (
@@ -469,7 +467,7 @@ func initTimeframeData(conn *utils.Conn, securityId int, timeframe int, isExtend
 	//}
 	td.Size = idx
 	return td
-}
+} /*
 func slidingWindowStats(bars []models.Agg, startTime, endTime time.Time) (float64, float64, int) {
 	const windowDur = 20 * time.Second
 	const slideStep = 5 * time.Second
@@ -530,7 +528,7 @@ func slidingWindowStats(bars []models.Agg, startTime, endTime time.Time) (float6
 	}
 
 	return totalVol, totalPct, count
-}
+}*/
 func initSecurityData(conn *utils.Conn, securityId int) *SecurityData {
 	sd := &SecurityData{}
 
