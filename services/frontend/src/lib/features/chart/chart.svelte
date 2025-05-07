@@ -1059,6 +1059,11 @@
 
 			if (legendIsDisplayingCurrentLastCandle) {
 				_refreshLegendWithLatestCandleData();
+				// Crucially, update latestCrosshairPositionTime to the NEW latest bar's time
+				const currentCandles = chartCandleSeries.data().filter(isCandlestick) as CandlestickData<Time>[];
+				if (currentCandles.length > 0) {
+					latestCrosshairPositionTime = currentCandles[currentCandles.length - 1].time as number;
+				}
 			}
 
 			try {
@@ -1076,34 +1081,42 @@
 
 				if (!barData) return;
 
-				const allCandleDataForUpdate = [...chartCandleSeries.data()].filter(isCandlestick) as CandlestickData<Time>[];
+				// Find and update the matching (previous) bar
+				const allCandleDataForUpdate = chartCandleSeries.data().filter(isCandlestick) as CandlestickData<Time>[];
 				const barIndex = allCandleDataForUpdate.findIndex(
 					(candle) => candle.time === UTCSecondstoESTSeconds(barData.time)
 				);
 
 				if (barIndex !== -1) {
-					const updatedCandle = {
+					const updatedPrevCandle = {
 						time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
 						open: barData.open,
 						high: barData.high,
 						low: barData.low,
 						close: barData.close
 					};
-					chartCandleSeries.update(updatedCandle);
+					chartCandleSeries.update(updatedPrevCandle);
 
-					const updatedVolumeBar = {
+					const updatedPrevVolumeBar = {
 						time: UTCSecondstoESTSeconds(barData.time) as UTCTimestamp,
 						value: barData.volume * (dolvol ? barData.close : 1),
 						color: barData.close > barData.open ? '#089981' : '#ef5350'
 					};
-					chartVolumeSeries.update(updatedVolumeBar);
-					// After historical update, if legend was tracking live, refresh it again
+					chartVolumeSeries.update(updatedPrevVolumeBar);
+
+					// If legend was tracking live, it should still track the NEW latest bar.
+					// Refresh its data as ADR might change due to previous bar update.
 					if (legendIsDisplayingCurrentLastCandle) {
 						_refreshLegendWithLatestCandleData();
+						// Ensure latestCrosshairPositionTime still points to the current latest bar
+						const currentCandles = chartCandleSeries.data().filter(isCandlestick) as CandlestickData<Time>[];
+						if (currentCandles.length > 0) {
+							latestCrosshairPositionTime = currentCandles[currentCandles.length - 1].time as number;
+						}
 					}
 				}
 			} catch (error) {
-				console.error('Error fetching historical data:', error);
+				console.error('Error fetching historical data for previous bar:', error);
 			}
 		}
 	}
