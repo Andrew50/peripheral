@@ -1,15 +1,15 @@
 package alerts
 
 import (
-	"backend/internal/services/marketData"
+	"backend/internal/services/socket"
 	"backend/internal/data"
 	"fmt"
 )
 
 func processPriceAlert(conn *data.Conn, alert Alert) error {
-	marketData.AggDataMutex.RLock()         // Acquire read lock
-	defer marketData.AggDataMutex.RUnlock() // Release read lock
-	ds := marketData.AggData[*alert.SecurityID]
+	socket.AggDataMutex.RLock()         // Acquire read lock
+	defer socket.AggDataMutex.RUnlock() // Release read lock
+	ds := socket.AggData[*alert.SecurityID]
 	if ds == nil {
 		return fmt.Errorf("market data not found for security ID %d", *alert.SecurityID)
 	}
@@ -17,7 +17,7 @@ func processPriceAlert(conn *data.Conn, alert Alert) error {
 	defer ds.SecondDataExtended.Mutex.RUnlock()
 	directionPtr := alert.Direction
 	if directionPtr != nil {
-		price := ds.SecondDataExtended.Aggs[marketData.AggsLength-1][1]
+		price := ds.SecondDataExtended.Aggs[socket.AggsLength-1][1]
 		if *directionPtr {
 			if price >= *alert.Price {
 				dispatchAlert(conn, alert)

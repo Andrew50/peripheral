@@ -3,6 +3,7 @@ package server
 import (
 	"backend/internal/data"
 	"encoding/base64"
+    "backend/internal/services/socket"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
     "backend/internal/app/settings"
     "backend/internal/app/strategy"
     "backend/internal/app/watchlist"
+    "backend/internal/app/filings"
 )
 
 var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, error){
@@ -267,7 +269,7 @@ func privateUploadHandler(conn *data.Conn) http.HandlerFunc {
 			}
 
 			// Call the Go implementation directly
-			result, err := tools.HandleTradeUpload(conn, userId, argsBytes)
+			result, err := account.HandleTradeUpload(conn, userId, argsBytes)
 			if handleError(w, err, "processing trade upload") {
 				return
 			}
@@ -278,27 +280,6 @@ func privateUploadHandler(conn *data.Conn) http.HandlerFunc {
 				handleError(w, err, "encoding response")
 				return
 			}
-			return
-		}
-
-		// For other functions, use the queue as before
-		args := map[string]interface{}{
-			"file_content":    encodedContent,
-			"additional_args": additionalArgs,
-			"user_id":         userId,
-		}
-
-		taskId, err := utils.Queue(conn, funcName, args)
-		if handleError(w, err, "queuing task") {
-			return
-		}
-
-		response := map[string]string{
-			"taskId": taskId,
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(response); err != nil {
-			handleError(w, err, "encoding response")
 			return
 		}
 	}
@@ -362,7 +343,7 @@ func privateHandler(conn *data.Conn) http.HandlerFunc {
 		}
 
 		// Execute the requested function with sanitized input
-		result, err := privateFunc[req.Function].Function(conn, userId, req.Arguments)
+		result, err := privateFunc[req.Function](conn, userId, req.Arguments)
 		if handleError(w, err, fmt.Sprintf("private_handler: %s", req.Function)) {
 			return
 		}
@@ -506,7 +487,7 @@ func WSHandler(conn *data.Conn) http.HandlerFunc {
 		}
 
 		// Call the slimmed-down version of WsHandler in socket.go
-		handleWebSocket(conn, ws, userID)
+		socket.HandleWebSocket(conn, ws, userID)
 	}
 }
 

@@ -156,7 +156,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 				return
 			}
 
-			filingsResult, ok := res.([]utils.EDGARFiling)
+			filingsResult, ok := res.([]edgar.EDGARFiling)
 			if !ok {
 				mutex.Lock()
 				secFilingErr = fmt.Errorf("unexpected type returned from GetStockEdgarFilings: %T", res)

@@ -4,11 +4,10 @@ import (
 	"backend/internal/data"
 	"encoding/json"
 	"backend/internal/app/account"
-	"backend/internal/app/alerts"
 	"backend/internal/app/chart"
 	"backend/internal/app/helpers"
 	"backend/internal/app/screensaver"
-	"backend/internal/app/settings"
+	"backend/internal/app/filings"
 	"backend/internal/app/strategy"
 	"backend/internal/app/watchlist"
 
@@ -117,7 +116,7 @@ var (
 					Required: []string{"tickers"},
 				},
 			},
-			Function:      helpers.GetInstancesByTickers,
+			Function:      screensaver.GetInstancesByTickers,
 			StatusMessage: "Looking up tickers...",
 		},
 		//watchlist
@@ -388,7 +387,7 @@ var (
 					Required: []string{"start", "end", "securityId"},
 				},
 			},
-			Function:      helpers.GetStockEdgarFilings,
+			Function:      filings.GetStockEdgarFilings,
 			StatusMessage: "Searching SEC filings...",
 		},
 		"getChartEvents": {
@@ -444,7 +443,7 @@ var (
 					Required: []string{"securityId"},
 				},
 			},
-			Function:      helpers.GetEarningsText,
+			Function:      filings.GetEarningsText,
 			StatusMessage: "Getting earnings transcript...",
 		},
 		"getFilingText": {
@@ -462,7 +461,7 @@ var (
 					Required: []string{"url"},
 				},
 			},
-			Function:      helpers.GetFilingText,
+			Function:      filings.GetFilingText,
 			StatusMessage: "Reading filing...",
 		},
 		// Account / User Trades

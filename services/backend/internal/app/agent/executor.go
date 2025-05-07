@@ -2,6 +2,7 @@ package agent
 
 import (
 	"backend/internal/data"
+    "backend/internal/services/socket"
 	"context"
 
 	"encoding/json"
@@ -94,7 +95,7 @@ func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (Execut
 	var argsMap map[string]interface{}
 	_ = json.Unmarshal(fc.Args, &argsMap)
 	if tool.StatusMessage != "" {
-		server.SendFunctionStatus(e.userId, formatStatusMessage(tool.StatusMessage, argsMap))
+		socket.SendFunctionStatus(e.userId, formatStatusMessage(tool.StatusMessage, argsMap))
 	}
 	_, span := e.tracer.Start(ctx, fc.Name, trace.WithAttributes(attribute.String("agent.tool", fc.Name)))
 	defer span.End()

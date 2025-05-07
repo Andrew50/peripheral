@@ -10,5 +10,5 @@ func main() {
 	defer cleanup()
 	stopScheduler := server.StartScheduler(conn)
 	defer close(stopScheduler)
-	server.StartServer()
+	server.StartServer(conn)
 }

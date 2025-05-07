@@ -25,7 +25,7 @@
 //    fmt.Printf("%+v\n", stats)
 // ---------------------------------------------------------------------------
 
-package jobs
+package securities
 
 import (
 	"context"

@@ -1,5 +1,4 @@
-// replay.go
-package replay
+package socket
 
 import (
 	"container/list"

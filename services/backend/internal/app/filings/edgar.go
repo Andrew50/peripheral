@@ -1,6 +1,7 @@
-package tools
+package filings
 
 import (
+	"backend/internal/data"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,15 +9,16 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
     "backend/internal/data/edgar"
-    "backend/internal/data"
+    "backend/internal/data/postgres"
+    "backend/internal/services/marketData"
+	"time"
 )
 
 // GetLatestEdgarFilings returns the most recent SEC filings across all companies
 func GetLatestEdgarFilings(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	// Get the latest filings from the cache
-	filings := edgar.GetLatestEdgarFilings()
+	filings := marketData.GetLatestEdgarFilings()
 
 	// Apply a limit to avoid sending too much data
 	limit := 100
@@ -35,7 +37,7 @@ type EdgarFilingOptions struct {
 }
 
 // GetStockEdgarFilings retrieves SEC filings for a security with optional filters
-func GetStockEdgarFilings(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetStockEdgarFilings(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args EdgarFilingOptions
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -45,13 +47,13 @@ func GetStockEdgarFilings(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 	start := time.UnixMilli(args.Start)
 	end := time.UnixMilli(args.End)
 
-	ticker, err := utils.GetTicker(conn, args.SecurityID, end)
+	ticker, err := postgres.GetTicker(conn, args.SecurityID, end)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ticker: %v", err)
 	}
 
 	// Fetch CIK from SEC
-	cik, err := utils.GetCIKFromTicker(conn, ticker, end)
+	cik, err := postgres.GetCIKFromTicker(conn, ticker, end)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get CIK for %s: %v", ticker, err)
 	}
@@ -62,7 +64,7 @@ func GetStockEdgarFilings(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 	}
 
 	// Filter filings based on options
-	var filteredFilings []utils.EDGARFiling
+	var filteredFilings []edgar.EDGARFiling
 	for _, filing := range filings {
 		filingTime := time.UnixMilli(filing.Timestamp)
 
@@ -82,7 +84,7 @@ func GetStockEdgarFilings(conn *utils.Conn, userId int, rawArgs json.RawMessage)
 }
 
 // fetchEdgarFilings fetches filings for a specific CIK
-func fetchEdgarFilings(cik string) ([]utils.EDGARFiling, error) {
+func fetchEdgarFilings(cik string) ([]edgar.EDGARFiling, error) {
 
 	// Format CIK with leading zeros to make it 10 digits long
 	paddedCik := cik
@@ -165,7 +167,7 @@ func fetchEdgarFilings(cik string) ([]utils.EDGARFiling, error) {
 }
 
 // parseEdgarFilingsResponse parses the JSON response from SEC EDGAR API
-func parseEdgarFilingsResponse(body []byte, cik string) ([]utils.EDGARFiling, error) {
+func parseEdgarFilingsResponse(body []byte, cik string) ([]edgar.EDGARFiling, error) {
 	var result struct {
 		Filings struct {
 			Recent struct {
@@ -184,7 +186,7 @@ func parseEdgarFilingsResponse(body []byte, cik string) ([]utils.EDGARFiling, er
 
 	recent := result.Filings.Recent
 	if recent.AccessionNumber == nil || recent.FilingDate == nil || recent.Form == nil || recent.PrimaryDocument == nil {
-		return []utils.EDGARFiling{}, nil
+		return []edgar.EDGARFiling{}, nil
 	}
 
 	minLen := len(recent.AccessionNumber)
@@ -200,7 +202,7 @@ func parseEdgarFilingsResponse(body []byte, cik string) ([]utils.EDGARFiling, er
 
 	// Create a map to track seen accession numbers to avoid duplicates
 	seen := make(map[string]bool)
-	filings := make([]utils.EDGARFiling, 0, minLen)
+	filings := make([]edgar.EDGARFiling, 0, minLen)
 
 	for i := 0; i < minLen; i++ {
 		// Skip Form 4 filings and duplicates
@@ -252,7 +254,7 @@ func parseEdgarFilingsResponse(body []byte, cik string) ([]utils.EDGARFiling, er
 		htmlURL := fmt.Sprintf("https://www.sec.gov/Archives/edgar/data/%s/%s/%s",
 			cik, accessionNumber, recent.PrimaryDocument[i])
 
-		filings = append(filings, utils.EDGARFiling{
+		filings = append(filings, edgar.EDGARFiling{
 			Type:      recent.Form[i],
 			Date:      date,
 			URL:       htmlURL,
@@ -282,7 +284,7 @@ type EarningsTextResponse struct {
 }
 
 // getFilingQuarter extracts the quarter and year from a filing
-func getFilingQuarter(filing utils.EDGARFiling) (string, int) {
+func getFilingQuarter(filing edgar.EDGARFiling) (string, int) {
 	// Get year from the filing date
 	year := filing.Date.Year()
 
@@ -315,7 +317,7 @@ func getFilingQuarter(filing utils.EDGARFiling) (string, int) {
 }
 
 // GetEarningsText fetches the latest 10-K or 10-Q filing for a security and extracts the text content
-func GetEarningsText(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetEarningsText(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetEarningsTextArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -325,13 +327,13 @@ func GetEarningsText(conn *utils.Conn, userId int, rawArgs json.RawMessage) (int
 	now := time.Now()
 
 	// Get ticker for the security
-	ticker, err := utils.GetTicker(conn, args.SecurityID, now)
+	ticker, err := postgres.GetTicker(conn, args.SecurityID, now)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ticker: %v", err)
 	}
 
 	// Get CIK from ticker
-	cik, err := utils.GetCIKFromTicker(conn, ticker, now)
+	cik, err := postgres.GetCIKFromTicker(conn, ticker, now)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get CIK for %s: %v", ticker, err)
 	}
@@ -344,7 +346,7 @@ func GetEarningsText(conn *utils.Conn, userId int, rawArgs json.RawMessage) (int
 	}
 
 	// Filter filings to find the specified quarter/year or the latest
-	var targetFiling *utils.EDGARFiling
+	var targetFiling *edgar.EDGARFiling
 
 	// If quarter is specified, filter by quarter and year
 	if args.Quarter != "" {
@@ -356,7 +358,7 @@ func GetEarningsText(conn *utils.Conn, userId int, rawArgs json.RawMessage) (int
 		}
 
 		// Filter filings based on quarter and year
-		var matchingFilings []utils.EDGARFiling
+		var matchingFilings []edgar.EDGARFiling
 		for _, filing := range filings {
 			// Skip non 10-K/10-Q filings
 			if filing.Type != "10-K" && filing.Type != "10-Q" {
@@ -442,7 +444,7 @@ type GetFilingTextResponse struct {
 	Text string `json:"text"`
 }
 
-func GetFilingText(conn *utils.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetFilingText(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetFilingTextArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -557,4 +559,3 @@ func normalizeWhitespace(text string) string {
 
 	return strings.TrimSpace(text)
 }
-
