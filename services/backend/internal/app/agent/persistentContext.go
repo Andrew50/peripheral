@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"backend/utils"
+	"backend/internal/data"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -32,7 +32,7 @@ const defaultPersistentContextExpiration = 7 * 24 * time.Hour // Default expirat
 const maxPersistentContextItems = 20                          // Max number of items to keep (pruning)
 
 // savePersistentContext saves the entire persistent context data block to Redis.
-func savePersistentContext(ctx context.Context, conn *utils.Conn, userID int, data *PersistentContextData) error {
+func savePersistentContext(ctx context.Context, conn *data.Conn, userID int, data *PersistentContextData) error {
 	if data == nil {
 		return fmt.Errorf("cannot save nil persistent context data")
 	}
@@ -97,7 +97,7 @@ func savePersistentContext(ctx context.Context, conn *utils.Conn, userID int, da
 }
 
 // getPersistentContext retrieves the persistent context data block from Redis.
-func getPersistentContext(ctx context.Context, conn *utils.Conn, userID int) (*PersistentContextData, error) {
+func getPersistentContext(ctx context.Context, conn *data.Conn, userID int) (*PersistentContextData, error) {
 	cacheKey := fmt.Sprintf(persistentContextKeyFormat, userID)
 
 	cachedValue, err := conn.Cache.Get(ctx, cacheKey).Result()
@@ -155,7 +155,7 @@ func getPersistentContext(ctx context.Context, conn *utils.Conn, userID int) (*P
 // --- Helper Functions for Modifying Context ---
 
 // AddOrUpdatePersistentContextItem adds or updates a single item in the persistent context.
-func AddOrUpdatePersistentContextItem(ctx context.Context, conn *utils.Conn, userID int, key string, value interface{}, itemExpiration time.Duration) error {
+func AddOrUpdatePersistentContextItem(ctx context.Context, conn *data.Conn, userID int, key string, value interface{}, itemExpiration time.Duration) error {
 	// 1. Get current context
 	data, err := getPersistentContext(ctx, conn, userID)
 	if err != nil {
@@ -197,7 +197,7 @@ func AddOrUpdatePersistentContextItem(ctx context.Context, conn *utils.Conn, use
 }
 
 // RemovePersistentContextItem removes a specific item from the persistent context by its key.
-func RemovePersistentContextItem(ctx context.Context, conn *utils.Conn, userID int, key string) error {
+func RemovePersistentContextItem(ctx context.Context, conn *data.Conn, userID int, key string) error {
 	// 1. Get current context
 	data, err := getPersistentContext(ctx, conn, userID)
 	if err != nil {

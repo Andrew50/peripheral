@@ -1,14 +1,14 @@
 package agent
 
 import (
-	"backend/utils"
+	"backend/internal/data"
 	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 )
 
-func BuildPlanningPrompt(conn *utils.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}) string {
+func BuildPlanningPrompt(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}) string {
 	ctx := context.Background()
 	var sb strings.Builder
 	// Call the exported function with the cache key
@@ -42,7 +42,7 @@ func BuildPlanningPrompt(conn *utils.Conn, userID int, query string, contextItem
 	return sb.String()
 }
 
-func BuildPlanningPromptWithResults(conn *utils.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, results []ExecuteResult) string {
+func BuildPlanningPromptWithResults(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, results []ExecuteResult) string {
 	// Start with the basic planning prompt
 	sb := strings.Builder{}
 	sb.WriteString(BuildPlanningPrompt(conn, userID, query, contextItems, activeChartContext))
@@ -132,7 +132,7 @@ func _buildConversationContext(messages []ChatMessage) string {
 	return context.String()
 }
 
-func BuildFinalResponsePrompt(conn *utils.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, allResults []ExecuteResult) string {
+func BuildFinalResponsePrompt(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, allResults []ExecuteResult) string {
 	// Start with the basic planning prompt
 	sb := strings.Builder{}
 	sb.WriteString(BuildPlanningPrompt(conn, userID, query, contextItems, activeChartContext))

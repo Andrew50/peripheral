@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"backend/utils"
+	"backend/internal/data"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -21,7 +21,7 @@ type CalculateBacktestStatisticArgs struct {
 }
 
 // CalculateBacktestStatistic retrieves cached backtest results and performs a calculation on a specific column.
-func CalculateBacktestStatistic(conn *utils.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+func CalculateBacktestStatistic(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args CalculateBacktestStatisticArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args for CalculateBacktestStatistic: %v", err)
@@ -141,7 +141,7 @@ type TableInstructionData struct {
 
 // GenerateBacktestTableFromInstruction retrieves cached backtest results and formats it
 // into a table ContentChunk based on LLM instructions.
-func GenerateBacktestTableFromInstruction(ctx context.Context, conn *utils.Conn, userID int, instruction TableInstructionData) (*ContentChunk, error) {
+func GenerateBacktestTableFromInstruction(ctx context.Context, conn *data.Conn, userID int, instruction TableInstructionData) (*ContentChunk, error) {
 
 	cacheKey := fmt.Sprintf("user:%d:backtest:%d:results", userID, instruction.StrategyID)
 
