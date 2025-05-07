@@ -203,6 +203,7 @@ func InitializeDynamicValidationSets(ctx context.Context, conn *utils.Conn) erro
 		errs = append(errs, fmt.Sprintf("failed to initialize sectors: %v", err))
 	}
 	if err := UpdateDynamicSet(ctx, conn, "industries"); err != nil {
+
 		errs = append(errs, fmt.Sprintf("failed to initialize industries: %v", err))
 	}
 	if err := UpdateDynamicSet(ctx, conn, "fundamentalFeatures"); err != nil {
