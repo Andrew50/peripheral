@@ -20,7 +20,7 @@ type Exchange struct {
 type Response struct {
 	Results []Exchange `json:"results"`
 }
-func GetExchanges(conn data.Conn) (map[int]string,error){
+func GetExchanges(conn *data.Conn) (map[int]string,error){
 	url := fmt.Sprintf("https://api.polygon.io/v3/reference/exchanges?asset_class=stocks&apiKey=%s", conn.PolygonKey)
 	resp, err := http.Get(url)
 	if err != nil {

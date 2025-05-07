@@ -6,6 +6,7 @@ import (
 	"log"
     "backend/internal/data/postgres"
     "backend/internal/data"
+    "backend/internal/data/utils"
 	"time"
 
 	polygon "github.com/polygon-io/client-go/rest"
@@ -146,7 +147,7 @@ func GetQuoteAtTimestamp(conn *data.Conn, securityId int, timestamp time.Time) (
 
 	maxRetries := 3
 	iter, err := retryWithBackoff("get quote at timestamp", ticker, maxRetries, false, func() (*iter.Iter[models.Quote], error) {
-		return ListQuotes(context.Background(), models.ListQuotesParams{
+		return conn.Polygon.ListQuotes(context.Background(), models.ListQuotesParams{
 			Ticker: ticker,
 		}.WithTimestamp(models.LTE, nanoTimestamp).
 			WithSort(models.Timestamp).
@@ -279,7 +280,7 @@ func GetMostRecentRegularClose(client *polygon.Client, ticker string, referenceT
 	for iter.Next() {
 		agg := iter.Item()
 		timestamp := time.Time(agg.Timestamp)
-		if IsTimestampRegularHours(timestamp) {
+		if utils.IsTimestampRegularHours(timestamp) {
 			return agg.Close, nil
 		}
 	}
@@ -337,7 +338,7 @@ func GetMostRecentExtendedHoursClose(client *polygon.Client, ticker string, refe
 	for iter.Next() {
 		agg := iter.Item()
 		timestamp := time.Time(agg.Timestamp)
-		if IsTimestampRegularHours(timestamp) {
+		if utils.IsTimestampRegularHours(timestamp) {
 			return agg.Close, nil
 		}
 	}

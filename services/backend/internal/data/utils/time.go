@@ -2,9 +2,7 @@ package utils
 
 import (
 	"fmt"
-	"strconv"
 	"time"
-	"unicode"
 
 	"github.com/polygon-io/client-go/rest/models"
 )

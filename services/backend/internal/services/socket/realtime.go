@@ -1,4 +1,4 @@
-package polygon
+package socket
 
 import (
 	"backend/internal/data"
