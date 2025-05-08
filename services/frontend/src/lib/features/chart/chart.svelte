@@ -1940,7 +1940,7 @@
 		};
 		
 		// Call the function from chat interface
-		openChatAndQuery(filingContext, `Summarize the attached filing: ${filingEvent.title}`);
+		openChatAndQuery(filingContext, `Summarize the attached filing and any relevant exhibits: ${filingEvent.title}`);
 	}
 
 </script>
