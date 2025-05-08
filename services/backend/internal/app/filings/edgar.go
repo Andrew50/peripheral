@@ -588,7 +588,6 @@ func GetExhibitList(conn *data.Conn, userId int, rawArgs json.RawMessage) (inter
 	}
 
 	sort.Slice(stubs, func(i, j int) bool { return stubs[i].FileName < stubs[j].FileName })
-	fmt.Println(stubs)
 	return stubs, nil
 
 }
