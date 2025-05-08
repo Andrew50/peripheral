@@ -2,16 +2,20 @@ package filings
 
 import (
 	"backend/internal/data"
+	"backend/internal/data/edgar"
+	"backend/internal/data/postgres"
+	"backend/internal/services/marketData"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
-    "backend/internal/data/edgar"
-    "backend/internal/data/postgres"
-    "backend/internal/services/marketData"
+	"sync"
 	"time"
 )
 
@@ -558,4 +562,246 @@ func normalizeWhitespace(text string) string {
 	text = wsRegex.ReplaceAllString(text, " ")
 
 	return strings.TrimSpace(text)
+}
+
+type GetExhibitListArgs struct {
+	URL string `json:"url"`
+}
+type ExhibitStub struct {
+	FileName string `json:"fileName"`
+	URL      string `json:"url"`
+	DocType  string `json:"docType,omitempty"` // EX-99.1, EX-2.1… (empty if not requested / unknown)
+}
+
+func GetExhibitList(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetExhibitListArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+	_, accession, base, err := splitSECURL(args.URL)
+	if err != nil {
+		return nil, fmt.Errorf("issue with splitting SEC URL: %v", err)
+	}
+	stubs, err := stubsFromHeaders(base, headersFileName(accession))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse headers: %v", err)
+	}
+
+	sort.Slice(stubs, func(i, j int) bool { return stubs[i].FileName < stubs[j].FileName })
+	fmt.Println(stubs)
+	return stubs, nil
+
+}
+
+// splitSECURL extracts cik, accession and base directory URL from a filing page
+func splitSECURL(u string) (cik, acc, base string, err error) {
+	re := regexp.MustCompile(`/data/(\d+)/(\d{18})/`)
+	m := re.FindStringSubmatch(u)
+	if len(m) != 3 {
+		return "", "", "", fmt.Errorf("SEC URL pattern not recognised: %s", u)
+	}
+	cik, acc = m[1], m[2]
+	base = fmt.Sprintf("https://www.sec.gov/Archives/edgar/data/%s/%s/", cik, acc)
+	return
+}
+func headersFileName(accession string) string {
+	// 0001045810-18-000113-index-headers.html
+	return fmt.Sprintf("%s-%s-%s-index-headers.html", accession[:10], accession[10:12], accession[12:])
+}
+
+// stubsFromHeaders pulls <FILENAME> + <TYPE> out of the SGML headers file
+func stubsFromHeaders(base, url string) ([]ExhibitStub, error) {
+	resp, err := httpGet(base + url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	reDoc := regexp.MustCompile(`(?s)<DOCUMENT>(.*?)</DOCUMENT>`)
+	reType := regexp.MustCompile(`(?i)<TYPE>\s*([^<\r\n]+)`)
+	reFile := regexp.MustCompile(`(?i)<FILENAME>\s*([^<\r\n]+)`)
+
+	all, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unescape HTML entities
+	unescapedString := html.UnescapeString(string(all))
+	all = []byte(unescapedString) // Convert back to []byte for regex and existing debug print
+
+	filter := regexp.MustCompile(`(?i)^ex.*\.(htm|html|txt|pdf)$`)
+	stubs := []ExhibitStub{}
+
+	for _, blk := range reDoc.FindAll(all, -1) {
+		typ := reType.FindSubmatch(blk)
+		fnm := reFile.FindSubmatch(blk)
+
+		if len(typ) != 2 || len(fnm) != 2 {
+			continue
+		}
+
+		extractedType := string(typ[1])
+		extractedFilename := string(fnm[1])
+
+		if !filter.MatchString(extractedFilename) {
+			continue
+		}
+
+		stubs = append(stubs, ExhibitStub{
+			FileName: extractedFilename,
+			DocType:  extractedType, // already "EX-99.1" etc.
+			URL:      base + extractedFilename,
+		})
+	}
+	return stubs, nil
+}
+
+type GetExhibitContentArgs struct {
+	URL string `json:"url"`
+}
+type ExhibitContent struct {
+	Text       string        `json:"text,omitempty"`   // readable text if present
+	Images     []Base64Image `json:"images,omitempty"` // loaded & encoded
+	ContentURL string        `json:"contentUrl"`       // always echo back original URL
+}
+
+type Base64Image struct {
+	FileName string `json:"fileName"`
+	MimeType string `json:"mimeType"` // "image/png", "image/jpeg" …
+	DataURI  string `json:"dataUri"`  // "data:image/png;base64,AAAA…"
+}
+
+func GetExhibitContent(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetExhibitContentArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+	lo := strings.ToLower(args.URL)
+	switch {
+	case strings.HasSuffix(lo, ".htm"), strings.HasSuffix(lo, ".html"), strings.HasSuffix(lo, ".txt"):
+		return readHTMLExhibit(args.URL)
+	default:
+		return nil, fmt.Errorf("unsupported exhibit type")
+	}
+}
+func readHTMLExhibit(url string) (ExhibitContent, error) {
+	resp, err := httpGet(url) // same retry helper
+	if err != nil {
+		return ExhibitContent{}, err
+	}
+	defer resp.Body.Close()
+
+	b, _ := io.ReadAll(resp.Body)
+	html := string(b)
+
+	// -------- text ----------
+	text := extractTextFromHTML(html)
+	if len(strings.Fields(text)) < 50 { // heuristic: ignore boiler-plate
+		text = ""
+	}
+
+	// -------- images ---------
+	imgURLs := collectImageLinks(html, url)
+	imgs := fetchAndEncodeImages(imgURLs) // may return empty
+
+	return ExhibitContent{
+		Text:       text,
+		Images:     imgs,
+		ContentURL: url,
+	}, nil
+}
+func collectImageLinks(html, baseURL string) []string {
+	srcRe := regexp.MustCompile(`(?i)<img[^>]+src=["']?([^"'>\s]+)`)
+	matches := srcRe.FindAllStringSubmatch(html, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	// base dir for resolving relative links
+	base := baseURL[:strings.LastIndex(baseURL, "/")+1]
+	out := make([]string, 0, len(matches))
+	for _, m := range matches {
+		link := strings.TrimSpace(m[1])
+		if strings.HasPrefix(link, "http") {
+			out = append(out, link)
+		} else {
+			out = append(out, base+link)
+		}
+	}
+	return out
+}
+func fetchAndEncodeImages(urls []string) []Base64Image {
+	const (
+		maxBytes = 1 << 20 // 1 MiB per image (enough for 300 dpi letter page)
+		timeout  = 10 * time.Second
+	)
+	out := make([]Base64Image, 0, len(urls))
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	sem := make(chan struct{}, 4) // limit concurrency
+
+	for _, u := range urls {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(link string) {
+			defer func() { <-sem; wg.Done() }()
+			cli := &http.Client{Timeout: timeout}
+			req, _ := http.NewRequest("GET", link, nil)
+			req.Header.Set("User-Agent", "atlantis admin@atlantis.trading")
+			res, err := cli.Do(req)
+			if err != nil {
+				return
+			}
+			defer res.Body.Close()
+
+			mt := res.Header.Get("Content-Type")
+			if !strings.HasPrefix(mt, "image/") {
+				return
+			}
+
+			// cap to maxBytes to avoid huge scans
+			lim := io.LimitReader(res.Body, maxBytes+1)
+			buf, _ := io.ReadAll(lim)
+			if int64(len(buf)) > maxBytes {
+				return
+			} // skip oversized
+
+			enc := base64.StdEncoding.EncodeToString(buf)
+			dataURI := fmt.Sprintf("data:%s;base64,%s", mt, enc)
+
+			mu.Lock()
+			out = append(out, Base64Image{
+				FileName: path.Base(link),
+				MimeType: mt,
+				DataURI:  dataURI,
+			})
+			mu.Unlock()
+		}(u)
+	}
+	wg.Wait()
+	return out
+}
+func httpGet(url string) (*http.Response, error) {
+	const maxRetries = 2
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	for i := 0; i < maxRetries; i++ {
+		req, _ := http.NewRequest("GET", url, nil)
+		req.Header.Set("User-Agent", "atlantis admin@atlantis.trading")
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode == http.StatusOK {
+			return resp, nil
+		}
+		if resp.StatusCode == 429 {
+			resp.Body.Close()
+			time.Sleep(time.Duration(1<<i) * time.Second)
+			continue
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return nil, fmt.Errorf("status %d: %.120s", resp.StatusCode, b)
+	}
+	return nil, fmt.Errorf("rate-limited after %d tries: %s", maxRetries, url)
 }
