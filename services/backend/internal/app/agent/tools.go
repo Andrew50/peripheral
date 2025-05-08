@@ -1,15 +1,15 @@
 package agent
 
 import (
-	"backend/internal/data"
-	"encoding/json"
 	"backend/internal/app/account"
 	"backend/internal/app/chart"
+	"backend/internal/app/filings"
 	"backend/internal/app/helpers"
 	"backend/internal/app/screensaver"
-	"backend/internal/app/filings"
 	"backend/internal/app/strategy"
 	"backend/internal/app/watchlist"
+	"backend/internal/data"
+	"encoding/json"
 
 	"google.golang.org/genai"
 )
@@ -573,7 +573,7 @@ var (
 							Description: "id of the strategy to backtest",
 						},
 						"returnWindows": {
-							Type:        genai.TypeArray, // Changed from TypeInteger
+							Type:        genai.TypeArray,                                                                                                                                                                         // Changed from TypeInteger
 							Description: "(Optional) A list of integers representing the specific forward return days (e.g., [1, 5, 20]) to calculate after each backtest result. If omitted, no future returns are calculated.", // Updated description
 							Items: &genai.Schema{ // Specify the type of elements in the array
 								Type: genai.TypeInteger,
@@ -688,6 +688,36 @@ var (
 			},
 			Function:      CalculateBacktestStatistic,
 			StatusMessage: "Calculating backtest statistics...",
+		},
+		"getExhibitList": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getExhibitList",
+				Description: "Retrieves the list of exhibits for a specified SEC filing URL.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"url": {Type: genai.TypeString, Description: "The URL of the SEC filing to retrieve exhibits for."},
+					},
+					Required: []string{"url"},
+				},
+			},
+			Function:      filings.GetExhibitList,
+			StatusMessage: "Reading Exhibits in SEC Filing...",
+		},
+		"getExhibitContent": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getExhibitContent",
+				Description: "Retrieves the content of a specific exhibit from a SEC filing. Use this after getExhibitList to get the content of an exhibit.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"url": {Type: genai.TypeString, Description: "The URL of the SEC exhibit to retrieve content for."},
+					},
+					Required: []string{"url"},
+				},
+			},
+			Function:      filings.GetExhibitContent,
+			StatusMessage: "Reading Exhibit Content...",
 		},
 	}
 )
