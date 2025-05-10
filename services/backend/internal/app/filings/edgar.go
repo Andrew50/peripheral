@@ -628,7 +628,7 @@ func stubsFromHeaders(base, url string) ([]ExhibitStub, error) {
 	unescapedString := html.UnescapeString(string(all))
 	all = []byte(unescapedString) // Convert back to []byte for regex and existing debug print
 
-	filter := regexp.MustCompile(`(?i)^ex.*\.(htm|html|txt|pdf)$`)
+	filter := regexp.MustCompile(`(?i)^ex.*$`)
 	stubs := []ExhibitStub{}
 
 	for _, blk := range reDoc.FindAll(all, -1) {
@@ -642,7 +642,7 @@ func stubsFromHeaders(base, url string) ([]ExhibitStub, error) {
 		extractedType := string(typ[1])
 		extractedFilename := string(fnm[1])
 
-		if !filter.MatchString(extractedFilename) {
+		if !filter.MatchString(extractedType) {
 			continue
 		}
 
