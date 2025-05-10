@@ -464,6 +464,36 @@ var (
 			Function:      filings.GetFilingText,
 			StatusMessage: "Reading filing...",
 		},
+		"getExhibitList": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getExhibitList",
+				Description: "Retrieves the list of exhibits for a specified SEC filing URL.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"url": {Type: genai.TypeString, Description: "The URL of the SEC filing to retrieve exhibits for."},
+					},
+					Required: []string{"url"},
+				},
+			},
+			Function:      filings.GetExhibitList,
+			StatusMessage: "Reading Exhibits in SEC Filing...",
+		},
+		"getExhibitContent": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getExhibitContent",
+				Description: "Retrieves the content of a specific exhibit from a SEC filing. Use this after getExhibitList to get the content of an exhibit.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"url": {Type: genai.TypeString, Description: "The URL of the SEC exhibit to retrieve content for."},
+					},
+					Required: []string{"url"},
+				},
+			},
+			Function:      filings.GetExhibitContent,
+			StatusMessage: "Reading Exhibit Content...",
+		},
 		// Account / User Trades
 		"grab_user_trades": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -689,35 +719,20 @@ var (
 			Function:      CalculateBacktestStatistic,
 			StatusMessage: "Calculating backtest statistics...",
 		},
-		"getExhibitList": {
+		"runWebSearch": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getExhibitList",
-				Description: "Retrieves the list of exhibits for a specified SEC filing URL.",
+				Name:        "runWebSearch",
+				Description: "Run a web search using Google Search.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"url": {Type: genai.TypeString, Description: "The URL of the SEC filing to retrieve exhibits for."},
+						"query": {Type: genai.TypeString, Description: "The query to search for."},
 					},
-					Required: []string{"url"},
+					Required: []string{"query"},
 				},
 			},
-			Function:      filings.GetExhibitList,
-			StatusMessage: "Reading Exhibits in SEC Filing...",
-		},
-		"getExhibitContent": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getExhibitContent",
-				Description: "Retrieves the content of a specific exhibit from a SEC filing. Use this after getExhibitList to get the content of an exhibit.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"url": {Type: genai.TypeString, Description: "The URL of the SEC exhibit to retrieve content for."},
-					},
-					Required: []string{"url"},
-				},
-			},
-			Function:      filings.GetExhibitContent,
-			StatusMessage: "Reading Exhibit Content...",
+			Function:      RunWebSearch,
+			StatusMessage: "Searching the web...",
 		},
 	}
 )
