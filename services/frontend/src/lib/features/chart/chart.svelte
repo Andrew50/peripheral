@@ -386,7 +386,6 @@
 			includeSECFilings: get(settings).showFilings
 		})
 			.then((response) => {
-				console.log('backendLoadChartData response', response);
 				const barDataList = response.bars;
 				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
 					return;
@@ -480,7 +479,6 @@
 						chartVolumeSeries.setData(newVolumeData);
 
 						if (visibleRange && typeof visibleRange.from === 'number' && typeof visibleRange.to === 'number') {
-							console.log('[Forward Load] Setting visible range:', { from: visibleRange.from, to: visibleRange.to });
 							chart.timeScale().setVisibleRange({
 								from: visibleRange.from,
 								to: visibleRange.to
@@ -1281,6 +1279,7 @@
 			},
 			timeScale: {
 				timeVisible: true,
+				shiftVisibleRangeOnNewBar: false, 
 				borderColor: 'black'
 			},
 			rightPriceScale: {
