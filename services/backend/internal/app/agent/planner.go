@@ -55,7 +55,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 		return Plan{}, fmt.Errorf("error creating gemini client: %w", err)
 	}
 	fmt.Println("prompt", prompt)
-	thinkingBudget := int32(2000)
+	thinkingBudget := int32(1000)
 	// Enhance the system instruction with tool descriptions
 	enhancedSystemInstruction := enhanceSystemPromptWithTools(systemPrompt)
 	config := &genai.GenerateContentConfig{
@@ -63,9 +63,6 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 			Parts: []*genai.Part{
 				{Text: enhancedSystemInstruction},
 			},
-		},
-		Tools: []*genai.Tool{
-			{GoogleSearch: &genai.GoogleSearch{}},
 		},
 		ThinkingConfig: &genai.ThinkingConfig{
 			IncludeThoughts: true,
