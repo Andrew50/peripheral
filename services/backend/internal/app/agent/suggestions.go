@@ -1,12 +1,13 @@
 package agent
 
 import (
+	"backend/internal/app/chart"
 	"backend/internal/data"
 	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
-    "backend/internal/app/chart"
+	"time"
 
 	"google.golang.org/genai"
 )
@@ -105,8 +106,49 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 	}
 	// --- End Data Fetching ---
 
-	// --- Prepare Prompt for LLM ---
-	barsJSON, _ := json.MarshalIndent(resp.Bars, "", "  ") // Use the bars from GetChartData response
+	// Add DateString to each bar
+	easternLocation, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		// Handle error, perhaps log and continue without date strings
+		fmt.Printf("Warning: could not load America/New_York timezone: %v\n", err)
+	}
+
+	processedBars := make([]map[string]interface{}, len(resp.Bars))
+	for i, bar := range resp.Bars {
+		// Create a map from the struct fields for JSON marshalling
+		barMap := map[string]interface{}{
+			"open":   bar.Open,
+			"high":   bar.High,
+			"low":    bar.Low,
+			"close":  bar.Close,
+			"volume": bar.Volume,
+		}
+
+		if easternLocation != nil {
+			// bar.Timestamp is float64, assume it's Unix timestamp in seconds or milliseconds.
+			// Convert to int64 for time.Unix
+			ts := bar.Timestamp
+			var sec int64
+			var nsec int64
+			// Check if float64 has a fractional part or is large (milliseconds)
+			if ts > 1e12 { // Heuristic: if it's a large number, assume milliseconds
+				sec = int64(ts) / 1000
+				nsec = (int64(ts) % 1000) * 1e6
+			} else if ts == float64(int64(ts)) { // Whole number, likely seconds
+				sec = int64(ts)
+			} else { // Has fractional part, treat as seconds with nanoseconds
+				sec = int64(ts)
+				nsec = int64((ts - float64(sec)) * 1e9)
+			}
+			timestamp := time.Unix(sec, nsec).In(easternLocation)
+			barMap["DateS"] = timestamp.Format("2006-01-02")
+		} else {
+			barMap["Date"] = bar.Timestamp
+		}
+		processedBars[i] = barMap
+	}
+
+	barsJSON, _ := json.MarshalIndent(processedBars, "", "  ") // Use processedBars
 
 	sysPrompt, err := getSystemInstruction("initialQueriesPrompt")
 	if err != nil {
@@ -119,7 +161,6 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 			Parts: []*genai.Part{{Text: sysPrompt}},
 		},
 	}
-
 	// Build user content parts
 	userParts := []*genai.Part{
 		{Text: "<ChartInstanceContext>\n" + buildContextPrompt([]map[string]interface{}{args.ActiveChartInstance}) + "</ChartInstanceContext>\n"},

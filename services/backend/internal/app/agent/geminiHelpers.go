@@ -22,10 +22,10 @@ func getSystemInstruction(name string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("reading prompt: %w", err)
 	}
-
+	const rfc3339Seconds = "2006-01-02T15:04:05Z07:00"
 	now := time.Now()
 	s := strings.ReplaceAll(string(raw), "{{CURRENT_TIME}}",
-		now.Format(time.RFC3339))
+		now.Format(rfc3339Seconds))
 	s = strings.ReplaceAll(s, "{{CURRENT_TIME_MILLISECONDS}}",
 		strconv.FormatInt(now.UnixMilli(), 10))
 	return s, nil
