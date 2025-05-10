@@ -679,8 +679,8 @@ var (
 		"getStrategyFromNaturalLanguage": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name: "getStrategyFromNaturalLanguage",
-				Description: "Create (or overwrite) a strategy from a natural‑language description. " +
-					"IF YOU USE THIS FUNCTION, USE THE USER'S ORIGINAL QUERY AS IS. Pass strategyId = -1 to create a new strategy. This function will return the strategyId of the created strategy.",
+				Description: "IF YOU USE THIS FUNCTION TO CREATE A NEW STRATEGY, USE THE USER'S ORIGINAL QUERY AS IS. Create (or overwrite) a strategy from a natural‑language description. " +
+					"Pass strategyId = -1 to create a new strategy.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
