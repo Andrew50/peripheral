@@ -90,7 +90,7 @@ func getGeminiFunctionThinking(ctx context.Context, conn *data.Conn, systemPromp
 		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}
 
-	thinkingBudget := int32(2000)
+	thinkingBudget := int32(1000)
 
 	// Enhance the system instruction with tool descriptions
 	enhancedSystemInstruction := enhanceSystemPromptWithTools(baseSystemInstruction)
