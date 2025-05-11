@@ -13,7 +13,7 @@ if [[ ${#SERVICES_ARRAY[@]} -eq 0 ]]; then
 fi
 
 for srv in "${SERVICES_ARRAY[@]}"; do
-  local dockerfile="services/${srv}/Dockerfile.prod"
+  dockerfile="services/${srv}/Dockerfile.prod"
   echo "Building $srv from $dockerfile..."
   docker build -t "$DOCKER_USERNAME/$srv:${DOCKER_TAG}" -f "$dockerfile" "services/$srv"
 done
