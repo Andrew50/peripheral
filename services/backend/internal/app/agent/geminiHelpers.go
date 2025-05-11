@@ -28,6 +28,8 @@ func getSystemInstruction(name string) (string, error) {
 		now.Format(rfc3339Seconds))
 	s = strings.ReplaceAll(s, "{{CURRENT_TIME_MILLISECONDS}}",
 		strconv.FormatInt(now.UnixMilli(), 10))
+	s = strings.ReplaceAll(s, "{{CURRENT_YEAR}}",
+		strconv.Itoa(now.Year()))
 	return s, nil
 }
 
