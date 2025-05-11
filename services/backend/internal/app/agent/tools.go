@@ -498,13 +498,13 @@ var (
 		"grab_user_trades": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "grab_user_trades",
-				Description: "Get user trades with optional filtering.",
+				Description: "Get user trades with optional filters.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"ticker": {
 							Type:        genai.TypeString,
-							Description: "Security ticker symbol to filter trades by.",
+							Description: "Ticker symbol to grab trades for.",
 						},
 						"startDate": {
 							Type:        genai.TypeString,
