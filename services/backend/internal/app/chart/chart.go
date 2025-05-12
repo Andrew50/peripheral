@@ -45,7 +45,7 @@ type GetChartDataResponse struct {
 	IsEarliestData bool                  `json:"isEarliestData"`
 }
 
-var debug = false // Flip to `true` to enable verbose debugging output
+//var debug = false // Flip to `true` to enable verbose debugging output
 // MaxDivisorOf30 performs operations related to MaxDivisorOf30 functionality.
 func MaxDivisorOf30(n int) int {
 	for k := n; k >= 1; k-- {

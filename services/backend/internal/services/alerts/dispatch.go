@@ -34,12 +34,13 @@ func InitTelegramBot() error {
 }
 
 // SendTelegramMessage performs operations related to SendTelegramMessage functionality.
-func SendTelegramMessage(msg string, chatID int64) {
+func SendTelegramMessage(msg string, chatID int64) error {
 	recipient := telebot.ChatID(chatID)
 	_, err := bot.Send(recipient, msg)
-	if err != nil {
+    return err
+//	if err != nil {
 		//log.Printf("Failed to send message to chat ID %d: %v", chatID, err)
-	}
+	//}
 }
 
 func writeAlertMessage(alert Alert) string {
@@ -77,7 +78,10 @@ func dispatchAlert(conn *data.Conn, alert Alert) error {
 	////fmt.Println("dispatching alert", alert)
 	alertMessage := writeAlertMessage(alert)
 	timestamp := time.Now()
-	SendTelegramMessage(alertMessage, ChatID)
+    err := SendTelegramMessage(alertMessage, ChatID)
+    if err != nil {
+        return err
+    }
 	socket.SendAlertToUser(alert.UserID, socket.AlertMessage{
 		AlertID:    alert.AlertID,
 		Timestamp:  timestamp.Unix() * 1000,
@@ -91,7 +95,7 @@ func dispatchAlert(conn *data.Conn, alert Alert) error {
         VALUES ($1, $2, $3)
     `
 
-	_, err := conn.DB.Exec(context.Background(),
+	_, err = conn.DB.Exec(context.Background(),
 		query,
 		alert.AlertID,
 		timestamp,
