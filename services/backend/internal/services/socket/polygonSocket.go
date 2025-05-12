@@ -69,23 +69,26 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 	if err != nil {
 		//log.Println("niv0: ", err)
 		return
-	} else {
-		////fmt.Println("✅ Connected to Polygon Quotes stream")
 	}
+    //else {
+		////fmt.Println("✅ Connected to Polygon Quotes stream")
+	//}
 	err = polygonWS.Subscribe(polygonws.StocksTrades)
 	if err != nil {
 		//log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
-	} else {
-		////fmt.Println("✅ Connected to Polygon Trades stream")
 	}
+    //else {
+		////fmt.Println("✅ Connected to Polygon Trades stream")
+	//}
 	err = polygonWS.Subscribe(polygonws.StocksMinAggs)
 	if err != nil {
 		//log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
-	} else {
-		////fmt.Println("✅ Connected to Polygon Minute Aggregates stream")
 	}
+    //else {
+		////fmt.Println("✅ Connected to Polygon Minute Aggregates stream")
+	//}
 
 	////fmt.Println("🚀 All Polygon streams initialized and ready to process data")
 
@@ -148,9 +151,9 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 					Channel:    channelName,
 				}
 				jsonData, err := json.Marshal(data)
-				if err != nil {
+	//			if err != nil {
 					////fmt.Println("Error marshling JSON:", err)
-				}
+	//			}
 				broadcastToChannel(channelName, string(jsonData))
 				channelName = fmt.Sprintf("%d-all", securityId)
 				data.Channel = channelName
@@ -176,9 +179,9 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 					slowChannelName := fmt.Sprintf("%d-slow-%s", securityId, channelNameType)
 					data.Channel = slowChannelName
 					jsonData, err = json.Marshal(data)
-					if err != nil {
+//					if err != nil {
 						////fmt.Println("E2fi200e2e0rror marshling JSON:", err)
-					}
+					//}
 					//conn.Cache.Publish(context.Background(), slowChannelName, string(jsonData))
 					broadcastToChannel(slowChannelName, string(jsonData))
 					nextDispatchTimes.Lock()
