@@ -55,7 +55,6 @@
 	const BLACK_PIXEL =
 		'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
-	// --- START MINIMAL CHANGE: Helper function for formatting column headers ---
 	function formatColumnHeader(columnName: string): string {
 		if (!columnName) return ''; // Handle empty column names if they occur
 		return columnName
@@ -64,7 +63,6 @@
 			.map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Capitalize each word
 			.join(' '); // Join back with spaces
 	}
-	// --- END MINIMAL CHANGE ---
 
 	function isFlagged(instance: ExtendedInstance, flagWatch: ExtendedInstance[]) {
 		if (!Array.isArray(flagWatch)) return false;
