@@ -3,7 +3,6 @@ package socket
 import (
 	"backend/internal/data"
 	"context"
-	"fmt"
 	"os"
 	"time"
 
@@ -37,19 +36,19 @@ func (c *Client) subscribeRealtime(conn *data.Conn, channelName string) {
 			return
 		} else if err != nil && err != redis.Nil {
 			// Only log real errors. redis.Nil just means "not found."
-			fmt.Println("Error reading Redis cache:", err)
+			////fmt.Println("Error reading Redis cache:", err)
 		}
 
 		// 2) Cache miss -> fetch from Polygon / DB
 		initialValue, fetchErr := getInitialStreamValue(conn, channelName, 0)
 		if fetchErr != nil {
-			fmt.Println("Error fetching initial value from API:", fetchErr)
+			////fmt.Println("Error fetching initial value from API:", fetchErr)
 			return
 		}
 		// 3) Store in Redis so next subscription can get it quickly
 		setErr := conn.Cache.Set(ctx, cacheKey, string(initialValue), 5*time.Minute).Err()
 		if setErr != nil {
-			fmt.Println("Error writing Redis cache:", setErr)
+			////fmt.Println("Error writing Redis cache:", setErr)
 		}
 
 		// 4) Send to the client
@@ -57,7 +56,7 @@ func (c *Client) subscribeRealtime(conn *data.Conn, channelName string) {
 		defer c.mu.Unlock()
 		err = c.ws.WriteMessage(websocket.TextMessage, initialValue)
 		if err != nil {
-			fmt.Println("WebSocket write error while sending initial value:", err)
+			////fmt.Println("WebSocket write error while sending initial value:", err)
 		}
 	}()
 }

@@ -74,7 +74,7 @@ func writeAlertMessage(alert Alert) string {
 
 func dispatchAlert(conn *data.Conn, alert Alert) error {
 	log.Printf("DEBUG: Dispatching alert: %+v", alert)
-	fmt.Println("dispatching alert", alert)
+	////fmt.Println("dispatching alert", alert)
 	alertMessage := writeAlertMessage(alert)
 	timestamp := time.Now()
 	SendTelegramMessage(alertMessage, ChatID)
