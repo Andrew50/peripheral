@@ -69,18 +69,18 @@ func saveConversationToCache(ctx context.Context, conn *data.Conn, userID int, c
 	for _, msg := range data.Messages {
 		if msg.ExpiresAt.After(now) {
 			validMessages = append(validMessages, msg)
-		} else {
-			////fmt.Printf("Removing expired message from %s\n", msg.Timestamp.Format(time.RFC3339))
 		}
+       // else {
+			////fmt.Printf("Removing expired message from %s\n", msg.Timestamp.Format(time.RFC3339))
+		//}
 	}
 
 	// Update the data with only valid messages
 	data.Messages = validMessages
 
-	if len(data.Messages) == 0 {
+	//if len(data.Messages) == 0 {
 		////fmt.Println("Warning: Saving empty conversation data to cache (all messages expired)")
-	}
-
+	//}
 	// Print details about what we're saving
 	////fmt.Printf("Saving conversation with %d valid messages to key: %s\n", len(data.Messages), cacheKey)
 
@@ -145,9 +145,9 @@ func GetConversationFromCache(ctx context.Context, conn *data.Conn, userID int) 
 	for _, msg := range conversationData.Messages {
 		if msg.ExpiresAt.After(now) {
 			validMessages = append(validMessages, msg)
-		} else {
+        }// else {
 			////fmt.Printf("Filtering out expired message from %s during retrieval\n", msg.Timestamp.Format(time.RFC3339))
-		}
+		//}
 	}
 
 	// Update with only valid messages
@@ -168,14 +168,17 @@ func GetConversationFromCache(ctx context.Context, conn *data.Conn, userID int) 
 			}()
 		} else if originalCount > 0 {
 			// All messages expired, so we should delete the conversation entirely
-			go func() {
-				bgCtx := context.Background()
-				if err := conn.Cache.Del(bgCtx, cacheKey).Err(); err != nil {
-					////fmt.Printf("Failed to delete empty conversation after all messages expired: %v\n", err)
-				} else {
+			//go func() {
+            bgCtx := context.Background()
+            if err := conn.Cache.Del(bgCtx, cacheKey).Err(); err != nil {
+                return nil, err
+                    
+                ////fmt.Printf("Failed to delete empty conversation after all messages expired: %v\n", err)
+            } 
+                //else {
 					////fmt.Printf("Deleted conversation %s as all messages expired\n", cacheKey)
-				}
-			}()
+				//}
+			//}()
 		}
 	}
 
@@ -189,7 +192,7 @@ func GetUserConversation(conn *data.Conn, userID int, args json.RawMessage) (int
 	// Test Redis connectivity before attempting to retrieve conversation
 	success, message := conn.TestRedisConnectivity(ctx, userID)
 	if !success {
-        return nil, fmt.Errorf("%s\n",message)
+        return nil, fmt.Errorf("%s",message)
 		////fmt.Printf("WARNING: %s\n", message)
 	} else {
 		////fmt.Println(message)
@@ -214,9 +217,9 @@ func GetUserConversation(conn *data.Conn, userID int, args json.RawMessage) (int
 
 	// Log the conversation data for debugging
 	////fmt.Printf("Retrieved conversation: %+v\n", conversation)
-	if conversation != nil {
-		////fmt.Printf("Number of messages: %d\n", len(conversation.Messages))
-	}
+	/*if conversation != nil {
+		fmt.Printf("Number of messages: %d\n", len(conversation.Messages))
+	}*/
 
 	// Ensure we're returning valid data
 	if conversation == nil || len(conversation.Messages) == 0 {

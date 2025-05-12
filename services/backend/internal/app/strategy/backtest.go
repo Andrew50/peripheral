@@ -35,9 +35,9 @@ func RunBacktest(conn *data.Conn, userId int, rawArgs json.RawMessage) (any, err
 		for _, w := range args.ReturnWindows {
 			if w > 0 {
 				validWindows = append(validWindows, w) // Keep only positive windows
-			} else {
+			} //else {
 				////fmt.Printf("Warning: Skipping non-positive return window: %d\n", w)
-			}
+			//}
 		}
 		// Remove duplicates (optional)
 		// uniqueWindows := make(map[int]bool)
@@ -53,9 +53,9 @@ func RunBacktest(conn *data.Conn, userId int, rawArgs json.RawMessage) (any, err
 	}
 
 	////fmt.Println("backtesting strategyId:", args.StrategyId)
-	if len(args.ReturnWindows) > 0 {
+	//if len(args.ReturnWindows) > 0 {
 		////fmt.Printf("Will calculate future returns for windows (days): %v\n", args.ReturnWindows)
-	}
+	//}
 
 	backtestJSON, err := _getStrategySpec(conn, args.StrategyId, userId) // get spec from db using helper
 	if err != nil {
@@ -247,11 +247,12 @@ func RunBacktest(conn *data.Conn, userId int, rawArgs json.RawMessage) (any, err
 					if !startClose.Valid {
 						// This is less likely if the cross join query succeeded without pgx.ErrNoRows, but check anyway.
 						////fmt.Printf("Info: Start price missing for securityId %d at %v. Return '%s' set to nil.\n", securityId, startTime, returnColumnName)
-					} else if !endClose.Valid {
+					} 
+                    /*else if !endClose.Valid {
 						////fmt.Printf("Info: End price missing (%d days later) for securityId %d at %v. Return '%s' set to nil.\n", window, securityId, startTime, returnColumnName)
 					} else if startClose.Float64 == 0 {
 						////fmt.Printf("Info: Start price is 0 for securityId %d at %v. Cannot calculate %d-day return, setting '%s' to nil.\n", securityId, startTime, window, returnColumnName)
-					}
+					}*/
 					record[returnColumnName] = nil // Assign nil if calculation cannot be done
 				}
 			} // End loop over windows
@@ -511,9 +512,10 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 				"start":    startTimeStr,
 				"end":      endTimeStr,
 			}
-		} else {
+		} 
+        //else {
 			////fmt.Println("Warning format: No valid, positive timestamps found in instances to calculate date range.")
-		}
+		//}
 	}
 
 	result["instances"] = instances

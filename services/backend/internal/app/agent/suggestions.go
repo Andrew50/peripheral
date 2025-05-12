@@ -22,11 +22,12 @@ func GetSuggestedQueries(conn *data.Conn, userID int, rawArgs json.RawMessage) (
 	ctx := context.Background()
 	success, message := conn.TestRedisConnectivity(ctx, userID)
 	if !success {
-        return nil, fmt.Errorf("%s\n",message)
+        return nil, fmt.Errorf("%s",message)
 		////fmt.Printf("WARNING: %s\n", message)
-	} else {
-		////fmt.Println(message)
 	}
+    //else {
+		////fmt.Println(message)
+	//}
 	conversationData, err := GetConversationFromCache(ctx, conn, userID)
 	if err != nil || conversationData == nil {
 		return GetSuggestedQueriesResponse{}, nil

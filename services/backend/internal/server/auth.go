@@ -161,11 +161,11 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	// Log in the new user
 	////fmt.Println("Attempting to log in new user...")
 	result, err := Login(conn, loginArgs)
-	if err != nil {
+	/*if err != nil {
 		////fmt.Printf("ERROR: Login after signup failed: %v\n", err)
 	} else {
 		////fmt.Println("Login successful")
-	}
+	}*/
 
 	// Print final connection pool stats
 	////fmt.Printf("Connection pool stats at end of signup - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", conn.DB.Stat().MaxConns(), conn.DB.Stat().TotalConns(), conn.DB.Stat().IdleConns(), conn.DB.Stat().AcquiredConns())
@@ -499,6 +499,7 @@ func DeleteAccount(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error
 	// Delete watchlists
 	_, err = tx.Exec(ctx, "DELETE FROM watchlists WHERE userId = $1", userID)
 	if err != nil {
+        return nil, err
 		////fmt.Printf("ERROR: Failed to delete watchlists: %v\n", err)
 		// Continue despite error
 	}
@@ -508,6 +509,7 @@ func DeleteAccount(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error
 	if err != nil {
 		////fmt.Printf("ERROR: Failed to delete setups: %v\n", err)
 		// Continue despite error
+        return nil, err
 	}
 
 	// Delete the user
