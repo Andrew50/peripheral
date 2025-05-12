@@ -22,7 +22,7 @@
 // ---------------------------------------------------------------------------
 //    stats, err := UpdateSectors(context.Background(), myConn)
 //    if err != nil { log.Fatal(err) }
-//    fmt.Printf("%+v\n", stats)
+//    ////fmt.Printf("%+v\n", stats)
 // ---------------------------------------------------------------------------
 
 package securities

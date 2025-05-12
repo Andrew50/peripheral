@@ -59,7 +59,7 @@ func saveConversationToCache(ctx context.Context, conn *data.Conn, userID int, c
 	// Test Redis connectivity before saving
 	success, message := conn.TestRedisConnectivity(ctx, userID)
 	if !success {
-		fmt.Printf("WARNING: %s\n", message)
+		////fmt.Printf("WARNING: %s\n", message)
 		return fmt.Errorf("redis connectivity test failed: %s", message)
 	}
 
@@ -70,7 +70,7 @@ func saveConversationToCache(ctx context.Context, conn *data.Conn, userID int, c
 		if msg.ExpiresAt.After(now) {
 			validMessages = append(validMessages, msg)
 		} else {
-			fmt.Printf("Removing expired message from %s\n", msg.Timestamp.Format(time.RFC3339))
+			////fmt.Printf("Removing expired message from %s\n", msg.Timestamp.Format(time.RFC3339))
 		}
 	}
 
@@ -78,41 +78,40 @@ func saveConversationToCache(ctx context.Context, conn *data.Conn, userID int, c
 	data.Messages = validMessages
 
 	if len(data.Messages) == 0 {
-		fmt.Println("Warning: Saving empty conversation data to cache (all messages expired)")
+		////fmt.Println("Warning: Saving empty conversation data to cache (all messages expired)")
 	}
 
 	// Print details about what we're saving
-	fmt.Printf("Saving conversation with %d valid messages to key: %s\n", len(data.Messages), cacheKey)
+	////fmt.Printf("Saving conversation with %d valid messages to key: %s\n", len(data.Messages), cacheKey)
 
 	// Serialize the conversation data
 	serialized, err := json.Marshal(data)
 	if err != nil {
-		fmt.Printf("Failed to serialize conversation data: %v\n", err)
+		////fmt.Printf("Failed to serialize conversation data: %v\n", err)
 		return fmt.Errorf("failed to serialize conversation data: %w", err)
 	}
 
 	// Save to Redis without an expiration - we'll handle expiration at the message level
 	err = conn.Cache.Set(ctx, cacheKey, serialized, 0).Err()
 	if err != nil {
-		fmt.Printf("Failed to save conversation to Redis: %v\n", err)
+		////fmt.Printf("Failed to save conversation to Redis: %v\n", err)
 		return fmt.Errorf("failed to save conversation to cache: %w", err)
 	}
 
 	// Verify the data was saved correctly
 	verification, err := conn.Cache.Get(ctx, cacheKey).Result()
 	if err != nil {
-		fmt.Printf("Failed to verify saved conversation: %v\n", err)
+		////fmt.Printf("Failed to verify saved conversation: %v\n", err)
 		return fmt.Errorf("failed to verify saved conversation: %w", err)
 	}
 
 	var verifiedData ConversationData
 	if err := json.Unmarshal([]byte(verification), &verifiedData); err != nil {
-		fmt.Printf("Failed to parse verified conversation: %v\n", err)
+		////fmt.Printf("Failed to parse verified conversation: %v\n", err)
 		return fmt.Errorf("failed to parse verified conversation: %w", err)
 	}
 
-	fmt.Printf("Successfully saved and verified conversation to Redis. Verified %d messages.\n",
-		len(verifiedData.Messages))
+	////fmt.Printf("Successfully saved and verified conversation to Redis. Verified %d messages.\n", len(verifiedData.Messages))
 
 	return nil
 }
@@ -147,8 +146,7 @@ func GetConversationFromCache(ctx context.Context, conn *data.Conn, userID int) 
 		if msg.ExpiresAt.After(now) {
 			validMessages = append(validMessages, msg)
 		} else {
-			fmt.Printf("Filtering out expired message from %s during retrieval\n",
-				msg.Timestamp.Format(time.RFC3339))
+			////fmt.Printf("Filtering out expired message from %s during retrieval\n", msg.Timestamp.Format(time.RFC3339))
 		}
 	}
 
@@ -157,8 +155,7 @@ func GetConversationFromCache(ctx context.Context, conn *data.Conn, userID int) 
 
 	// If we filtered out messages, update the cache
 	if len(validMessages) < originalCount {
-		fmt.Printf("Removed %d expired messages from conversation\n",
-			originalCount-len(validMessages))
+		////fmt.Printf("Removed %d expired messages from conversation\n", originalCount-len(validMessages))
 
 		// Save the updated conversation back to cache if we have at least one valid message
 		if len(validMessages) > 0 {
@@ -166,7 +163,7 @@ func GetConversationFromCache(ctx context.Context, conn *data.Conn, userID int) 
 				// Create a new context for the goroutine
 				bgCtx := context.Background()
 				if err := saveConversationToCache(bgCtx, conn, userID, cacheKey, &conversationData); err != nil {
-					fmt.Printf("Failed to update cache after filtering expired messages: %v\n", err)
+					////fmt.Printf("Failed to update cache after filtering expired messages: %v\n", err)
 				}
 			}()
 		} else if originalCount > 0 {
@@ -174,9 +171,9 @@ func GetConversationFromCache(ctx context.Context, conn *data.Conn, userID int) 
 			go func() {
 				bgCtx := context.Background()
 				if err := conn.Cache.Del(bgCtx, cacheKey).Err(); err != nil {
-					fmt.Printf("Failed to delete empty conversation after all messages expired: %v\n", err)
+					////fmt.Printf("Failed to delete empty conversation after all messages expired: %v\n", err)
 				} else {
-					fmt.Printf("Deleted conversation %s as all messages expired\n", cacheKey)
+					////fmt.Printf("Deleted conversation %s as all messages expired\n", cacheKey)
 				}
 			}()
 		}
@@ -192,19 +189,20 @@ func GetUserConversation(conn *data.Conn, userID int, args json.RawMessage) (int
 	// Test Redis connectivity before attempting to retrieve conversation
 	success, message := conn.TestRedisConnectivity(ctx, userID)
 	if !success {
-		fmt.Printf("WARNING: %s\n", message)
+        return nil, fmt.Errorf("%s\n",message)
+		////fmt.Printf("WARNING: %s\n", message)
 	} else {
-		fmt.Println(message)
+		////fmt.Println(message)
 	}
 
-	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
-	fmt.Println("GetUserConversation", conversationKey)
+	//conversationKey := fmt.Sprintf("user:%d:conversation", userID)
+	////fmt.Println("GetUserConversation", conversationKey)
 
 	conversation, err := GetConversationFromCache(ctx, conn, userID)
 	if err != nil {
 		// Handle the case when conversation doesn't exist in cache
 		if strings.Contains(err.Error(), "redis: nil") {
-			fmt.Println("No conversation found in cache, returning empty history")
+			////fmt.Println("No conversation found in cache, returning empty history")
 			// Return empty conversation history instead of error
 			return &ConversationData{
 				Messages:  []ChatMessage{},
@@ -215,14 +213,14 @@ func GetUserConversation(conn *data.Conn, userID int, args json.RawMessage) (int
 	}
 
 	// Log the conversation data for debugging
-	fmt.Printf("Retrieved conversation: %+v\n", conversation)
+	////fmt.Printf("Retrieved conversation: %+v\n", conversation)
 	if conversation != nil {
-		fmt.Printf("Number of messages: %d\n", len(conversation.Messages))
+		////fmt.Printf("Number of messages: %d\n", len(conversation.Messages))
 	}
 
 	// Ensure we're returning valid data
 	if conversation == nil || len(conversation.Messages) == 0 {
-		fmt.Println("Conversation was retrieved but has no messages, returning empty history")
+		////fmt.Println("Conversation was retrieved but has no messages, returning empty history")
 		return &ConversationData{
 			Messages:  []ChatMessage{},
 			Timestamp: time.Now(),

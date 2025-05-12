@@ -14,7 +14,7 @@ func BuildPlanningPrompt(conn *data.Conn, userID int, query string, contextItems
 	// Call the exported function with the cache key
 	conversationData, err := GetConversationFromCache(ctx, conn, userID)
 	if err != nil {
-		fmt.Printf("Error getting user conversation: %v\n", err)
+		////fmt.Printf("Error getting user conversation: %v\n", err)
 	}
 	if conversationData != nil && len(conversationData.Messages) > 0 {
 		conversationContext := _buildConversationContext(conversationData.Messages)

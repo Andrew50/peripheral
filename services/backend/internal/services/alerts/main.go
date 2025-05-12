@@ -37,7 +37,7 @@ func AddAlert(conn *data.Conn, alert Alert) {
 	if alert.AlertType == "price" {
 		ticker, err := postgres.GetTicker(conn, *alert.SecurityID, time.Now())
 		if err != nil {
-			fmt.Println("error getting ticker: %w", err)
+			////fmt.Println("error getting ticker: %w", err)
 			return
 		}
 		alert.Ticker = &ticker
@@ -57,7 +57,7 @@ func StartAlertLoop(conn *data.Conn) error { //entrypoint
 		return err
 	}
 	if err := initAlerts(conn); err != nil {
-		fmt.Println("error : god0ws")
+		////fmt.Println("error : god0ws")
 		return err
 	}
 
@@ -148,7 +148,7 @@ func initAlerts(conn *data.Conn) error {
 		if alert.AlertType == "price" {
 			ticker, err := postgres.GetTicker(conn, *alert.SecurityID, time.Now())
 			if err != nil {
-				fmt.Println("error getting ticker: %w", err)
+				////fmt.Println("error getting ticker: %w", err)
 				return fmt.Errorf("getting ticker: %w", err)
 			}
 			alert.Ticker = &ticker
@@ -173,7 +173,7 @@ func initAlerts(conn *data.Conn) error {
 		Ticker:     nil, // Not needed for algo alerts
 	}
 	alerts.Store(algoAlert.AlertID, algoAlert)
-	fmt.Println("Added manual algo alert for testing")
+	////fmt.Println("Added manual algo alert for testing")
 
 	// Validate alert securities exist in data map
 	var alertErrors []error
@@ -201,6 +201,6 @@ func initAlerts(conn *data.Conn) error {
 		return fmt.Errorf("errors validating alerts: %s", errMsg)
 	}
 
-	fmt.Println("Finished initializing alerts")
+	////fmt.Println("Finished initializing alerts")
 	return nil
 }
