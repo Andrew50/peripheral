@@ -7,7 +7,6 @@ import (
     "backend/internal/services/marketData"
     "container/list"
 	"encoding/json"
-	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -116,7 +115,7 @@ func BroadcastGlobalSECFiling(filing edgar.GlobalEDGARFiling) {
 
 	jsonData, err := json.Marshal(wrapper)
 	if err != nil {
-		fmt.Println("Error marshaling global SEC filing:", err)
+		////fmt.Println("Error marshaling global SEC filing:", err)
 		return
 	}
 
@@ -131,12 +130,12 @@ func SendAlertToUser(userID int, alert AlertMessage) {
 		client, ok := UserToClient[userID]
 		UserToClientMutex.RUnlock()
 		if !ok {
-			fmt.Println("client not found")
+			////fmt.Println("client not found")
 			return
 		}
 		client.send <- jsonData
 	} else {
-		fmt.Println("Error marshaling alert:", err)
+		////fmt.Println("Error marshaling alert:", err)
 	}
 }
 
@@ -164,7 +163,7 @@ func SendFunctionStatus(userID int, userMessage string) {
 
 	jsonData, err := json.Marshal(statusUpdate)
 	if err != nil {
-		fmt.Printf("Error marshaling function status update: %v\n", err)
+		////fmt.Printf("Error marshaling function status update: %v\n", err)
 		return
 	}
 
@@ -173,18 +172,18 @@ func SendFunctionStatus(userID int, userMessage string) {
 	UserToClientMutex.RUnlock()
 
 	if !ok {
-		fmt.Printf("SendFunctionStatus: client not found for userID: %d\n", userID)
+		////fmt.Printf("SendFunctionStatus: client not found for userID: %d\n", userID)
 		return
 	}
 
 	// Send the update non-blockingly
 	select {
 	case client.send <- jsonData:
-		fmt.Printf("Sent status message to user %d: '%s'\n", userID, messageToSend)
+		////fmt.Printf("Sent status message to user %d: '%s'\n", userID, messageToSend)
 	default:
 		// This might happen if the client's send buffer is full or the connection is closing.
 		// It's usually okay to just drop the status update in this case.
-		fmt.Printf("SendFunctionStatus: send channel blocked or closed for userID: %d. Dropping status update.\n", userID)
+		////fmt.Printf("SendFunctionStatus: send channel blocked or closed for userID: %d. Dropping status update.\n", userID)
 	}
 }
 
@@ -193,7 +192,7 @@ func (c *Client) writePump() {
 	defer func() {
 		// ticker.Stop() // Stop the ticker if used
 		c.ws.Close() // Ensure connection is closed ONLY here on exit
-		fmt.Println("writePump exiting, connection closed")
+		////fmt.Println("writePump exiting, connection closed")
 	}()
 	for {
 		select {
@@ -201,25 +200,25 @@ func (c *Client) writePump() {
 			// c.ws.SetWriteDeadline(time.Now().Add(writeWait)) // Set deadline if needed
 			if !ok {
 				// The send channel was closed. Tell the client.
-				fmt.Println("send channel closed, sending close message")
+				////fmt.Println("send channel closed, sending close message")
 				c.ws.WriteMessage(websocket.CloseMessage, []byte{})
 				return // Exit writePump
 			}
 
 			if err := c.ws.WriteMessage(websocket.TextMessage, message); err != nil {
-				fmt.Println("writePump error:", err)
+				////fmt.Println("writePump error:", err)
 				return // Exit writePump on write error
 			}
 		/* // Example ping logic if needed
 		case <-ticker.C:
 			// c.ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.ws.WriteMessage(websocket.PingMessage, nil); err != nil {
-				fmt.Println("writePump ping error:", err)
+				////fmt.Println("writePump ping error:", err)
 				return // Exit writePump on ping error
 			}
 		*/
 		case <-c.done: // Add a way to explicitly stop writePump if needed elsewhere
-			fmt.Println("writePump received done signal")
+			////fmt.Println("writePump received done signal")
 			return
 		}
 	}
@@ -242,9 +241,9 @@ func (c *Client) readPump(conn *data.Conn) {
 		_, message, err := c.ws.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				fmt.Println("4kltyvk, WebSocket read error:", err)
+				////fmt.Println("4kltyvk, WebSocket read error:", err)
 			} else {
-				fmt.Println("WebSocket read error (expected close?):", err)
+				////fmt.Println("WebSocket read error (expected close?):", err)
 			}
 			break // Exit readPump loop on any error
 		}
@@ -261,11 +260,11 @@ func (c *Client) readPump(conn *data.Conn) {
 			ExtendedHours *bool    `json:"extendedHours,omitempty"`
 		}
 		if err := json.Unmarshal(message, &clientMsg); err != nil {
-			fmt.Println("Invalid message format", err)
+			////fmt.Println("Invalid message format", err)
 			continue
 		}
 		os.Stdout.Sync()
-		//fmt.Printf("clientMsg.Action: %v %v\n", clientMsg.Action, clientMsg.ChannelName)
+		//////fmt.Printf("clientMsg.Action: %v %v\n", clientMsg.Action, clientMsg.ChannelName)
 		switch clientMsg.Action {
 		case "subscribe-sec-filings":
 			// Special handler for SEC filings subscription
@@ -286,10 +285,10 @@ func (c *Client) readPump(conn *data.Conn) {
 				c.unsubscribeRealtime(clientMsg.ChannelName)
 			}
 		case "replay":
-			fmt.Println("replay request")
+			////fmt.Println("replay request")
 			if !c.replayActive {
 				if clientMsg.Timestamp == nil {
-					fmt.Println("ERR-------------------------nil timestamp")
+					////fmt.Println("ERR-------------------------nil timestamp")
 				} else {
 					c.simulatedTime = *(clientMsg.Timestamp)
 					c.realtimeToReplay()
@@ -302,7 +301,7 @@ func (c *Client) readPump(conn *data.Conn) {
 		case "speed":
 			c.setReplaySpeed(*(clientMsg.Speed))
 		case "realtime":
-			fmt.Println("realtime request")
+			////fmt.Println("realtime request")
 			if c.replayActive {
 				c.replayToRealtime()
 			}
@@ -315,13 +314,13 @@ func (c *Client) readPump(conn *data.Conn) {
 				c.replayExtendedHours = *(clientMsg.ExtendedHours)
 			}
 		default:
-			fmt.Println("Unknown Action:", clientMsg.Action)
+			////fmt.Println("Unknown Action:", clientMsg.Action)
 		}
 	}
 }
 
 func (c *Client) realtimeToReplay() {
-	fmt.Printf("replay started at %v\n", c.simulatedTime)
+	////fmt.Printf("replay started at %v\n", c.simulatedTime)
 	c.mu.Lock()
 	c.replayActive = true
 	c.replayPaused = false
@@ -330,7 +329,7 @@ func (c *Client) realtimeToReplay() {
 	c.lastTickTime = time.Now()
 	c.mu.Unlock()
 	for channelName := range channelSubscribers {
-		fmt.Println(channelName)
+		////fmt.Println(channelName)
 		if _, isSubscribed := channelSubscribers[channelName][c]; isSubscribed {
 			c.unsubscribeRealtime(channelName)
 			c.subscribeReplay(channelName)
@@ -367,7 +366,7 @@ func (c *Client) close() {
 	default:
 		// Not closing yet, signal it
 		close(c.done)
-		fmt.Println("Closed done channel in close()")
+		////fmt.Println("Closed done channel in close()")
 	}
 
 	// Stop replay if it's active (moved unlock after potential stopReplay which might lock/unlock)
@@ -435,7 +434,7 @@ func HandleWebSocket(conn *data.Conn, ws *websocket.Conn, userID int) {
 // subscribeSECFilings handles subscription to the SEC filings feed
 func (c *Client) subscribeSECFilings(conn *data.Conn) {
 	channelName := "sec-filings"
-	fmt.Printf("\nGot subscription to SEC filings feed\n")
+	////fmt.Printf("\nGot subscription to SEC filings feed\n")
 
 	// Add client to the channel subscribers
 	channelsMutex.Lock()
@@ -457,11 +456,11 @@ func (c *Client) subscribeSECFilings(conn *data.Conn) {
 		}
 
 		if len(latestFilings) > 0 {
-			fmt.Printf("Found %d SEC filings to send initially\n", len(latestFilings))
+			////fmt.Printf("Found %d SEC filings to send initially\n", len(latestFilings))
 
 			// Debug: Print the first filing's timestamp
 			if len(latestFilings) > 0 {
-				fmt.Printf("First filing timestamp: %d\n", latestFilings[0].Timestamp)
+				////fmt.Printf("First filing timestamp: %d\n", latestFilings[0].Timestamp)
 			}
 
 			// Create a message with channel information
@@ -474,17 +473,16 @@ func (c *Client) subscribeSECFilings(conn *data.Conn) {
 			jsonData, err := json.Marshal(message)
 			if err == nil {
 				c.send <- jsonData
-				fmt.Printf("Sent %d initial SEC filings to client\n", len(latestFilings))
+				////fmt.Printf("Sent %d initial SEC filings to client\n", len(latestFilings))
 			} else {
-				fmt.Println("Error marshaling SEC filings:", err)
+				////fmt.Println("Error marshaling SEC filings:", err)
 			}
 		} else {
-			fmt.Println("No SEC filings available to send initially")
+			////fmt.Println("No SEC filings available to send initially")
 		}
 	}
 
-	fmt.Printf("Client subscribed to SEC filings feed, %d subscribers\n",
-		channelSubscriberCounts[channelName])
+	////fmt.Printf("Client subscribed to SEC filings feed, %d subscribers\n", channelSubscriberCounts[channelName])
 }
 
 // unsubscribeSECFilings handles unsubscription from the SEC filings feed
@@ -498,8 +496,8 @@ func (c *Client) unsubscribeSECFilings() {
 		if _, ok := subscribers[c]; ok {
 			delete(subscribers, c)
 			channelSubscriberCounts[channelName]--
-			fmt.Printf("Client unsubscribed from SEC filings feed, %d subscribers remaining\n",
-				channelSubscriberCounts[channelName])
+			////fmt.Printf("Client unsubscribed from SEC filings feed, %d subscribers remaining\n", channelSubscriberCounts[channelName])
+
 		}
 	}
 }
