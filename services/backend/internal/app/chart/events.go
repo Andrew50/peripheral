@@ -214,16 +214,16 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 
 	// --- Error Handling (Post-Wait) ---
 	// Check for critical errors collected during fetch
-	if splitErr != nil {
+	//if splitErr != nil {
 		////fmt.Printf("Non-fatal error encountered during split fetching: %v\n", splitErr)
 		// Decide if this should be fatal - currently logged as warning
-	}
-	if dividendErr != nil {
+	//}
+	//if dividendErr != nil {
 		////fmt.Printf("Non-fatal error encountered during dividend fetching: %v\n", dividendErr)
-	}
-	if secFilingErr != nil {
+	//}
+	//if secFilingErr != nil {
 		////fmt.Printf("Non-fatal error encountered during SEC filing fetching: %v\n", secFilingErr)
-	}
+	//}
 
 	// 4. Filter and Format Events based on the original time range [fromMs, toMs]
 	var finalEvents []ChartEvent
@@ -346,9 +346,9 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 						if _, isMinor := minorFilingTypes[filingInfo.Type]; isMinor {
 							shouldFilter = true
 						}
-					} else {
+                    }// else {
 						////fmt.Printf("Warning: could not unmarshal filing value for filtering: %v\n", err)
-					}
+					//}
 				}
 
 				if !shouldFilter {

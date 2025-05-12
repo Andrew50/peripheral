@@ -91,11 +91,13 @@ func ClearConversationHistory(conn *data.Conn, userID int, args json.RawMessage)
 	// Delete the conversation history key from Redis
 	err := conn.Cache.Del(ctx, conversationKey).Err()
 	if err != nil {
+        return nil, err
 		////fmt.Printf("Failed to delete conversation from Redis: %v\n", err)
 		// Don't return immediately, still try to delete persistent context
-	} else {
+	} 
+    //else {
 		////fmt.Printf("Successfully deleted conversation for key: %s\n", conversationKey)
-	}
+	//}
 
 	// Also delete the persistent context key
 	persistentContextKey := fmt.Sprintf(persistentContextKeyFormat, userID) // Use constant from persistentContext.go
@@ -107,9 +109,10 @@ func ClearConversationHistory(conn *data.Conn, userID int, args json.RawMessage)
 		if err == nil { // If conversation delete was ok, return this error
 			return nil, fmt.Errorf("failed to clear persistent context: %w", pErr)
 		}
-	} else {
-		////fmt.Printf("Successfully deleted persistent context for key: %s\n", persistentContextKey)
 	}
+    //else {
+		////fmt.Printf("Successfully deleted persistent context for key: %s\n", persistentContextKey)
+	//}
 
 	// If the conversation deletion failed initially, return that error now
 	if err != nil {

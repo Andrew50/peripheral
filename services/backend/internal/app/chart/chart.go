@@ -62,17 +62,17 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-	if debug {
+//	if debug {
 		////fmt.Printf("[DEBUG] GetChartData: SecurityID=%d, Timeframe=%s, Direction=%s\n", args.SecurityID, args.Timeframe, args.Direction)
-	}
+//	}
 
 	multiplier, timespan, _, _, err := GetTimeFrame(args.Timeframe)
 	if err != nil {
 		return nil, fmt.Errorf("invalid timeframe: %v", err)
 	}
-	if debug {
+	//if debug {
 		////fmt.Printf("[DEBUG] Parsed timeframe => multiplier=%d, timespan=%s\n", multiplier, timespan)
-	}
+	//}
 	// Determine if we must build a higher TF from a lower TF
 	var queryTimespan string
 	var queryMultiplier int
@@ -158,9 +158,9 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 
 	rows, err := conn.DB.Query(ctx, query, queryParams...)
 	if err != nil {
-		if debug {
+		//if debug {
 			////fmt.Printf("[DEBUG] Database query failed: %v\n", err)
-		}
+		//}
 		if ctx.Err() == context.DeadlineExceeded {
 			return nil, fmt.Errorf("query timed out: %w", err)
 		}
@@ -180,9 +180,9 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	for rows.Next() {
 		var record securityRecord
 		if err := rows.Scan(&record.ticker, &record.minDateFromSQL, &record.maxDateFromSQL); err != nil {
-			if debug {
+			//if debug {
 				////fmt.Printf("[DEBUG] Error scanning security record row: %v\n", err)
-			}
+			//}
 			return nil, fmt.Errorf("error scanning security data: %w", err)
 		}
 		securityRecords = append(securityRecords, record)
@@ -197,9 +197,9 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	barDataList := make([]GetChartDataResults, 0, args.Bars+10)
 	numBarsRemaining := args.Bars
 
-	if debug {
+	//if debug {
 		////fmt.Printf("[DEBUG] Processing %d security record(s) from DB...\n", len(securityRecords))
-	}
+	//}
 
 	// Now iterate over the fetched security records
 	for _, record := range securityRecords {
@@ -256,15 +256,15 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			queryStartTime, queryEndTime, args.Direction, timespan, multiplier, queryBars,
 		)
 		if err != nil {
-			if debug {
+			//if debug {
 				////fmt.Printf("[DEBUG] GetRequestStartEndTime failed: %v\n", err)
-			}
+			//}
 			return nil, fmt.Errorf("dkn0 %v", err)
 		}
 
-		if debug {
+		//if debug {
 			////fmt.Printf("[DEBUG] Polygon request for %s: start=%v end=%v aggregator=%v\n", ticker, date1, date2, haveToAggregate)
-		}
+		//}
 
 		// If we have to aggregate (e.g., second->minute, or minute->hour), do so
 		if haveToAggregate {
@@ -308,18 +308,18 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 				!args.IsReplay,
 			)
 			if err != nil {
-				if debug {
+				//if debug {
 					////fmt.Printf("[DEBUG] Polygon API error: %v\n", err)
-				}
+				//}
 				return nil, fmt.Errorf("error fetching data from Polygon: %v", err)
 			}
 
 			for it.Next() {
 				item := it.Item()
 				if it.Err() != nil {
-					if debug {
+				//	if debug {
 						////fmt.Printf("[DEBUG] Iterator error: %v\n", it.Err())
-					}
+					//}
 					return nil, fmt.Errorf("dkn0w")
 				}
 
@@ -437,9 +437,9 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			return nil, fmt.Errorf("issue with market status")
 		}
 		if (args.Timestamp == 0 && marketStatus != "closed") || args.IsReplay {
-			if debug {
+			//if debug {
 				////fmt.Printf("\n\nrequesting incomplete bar\n\n")
-			}
+			//}
 			incompleteAgg, err := requestIncompleteBar(
 				conn,
 				tickerForIncompleteAggregate,
@@ -450,9 +450,9 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 				args.IsReplay,
 				easternLocation,
 			)
-			if debug {
+			//if debug {
 				////fmt.Printf("\n\nincompleteAgg: %v\n\n", incompleteAgg)
-			}
+			//}
 			if err != nil {
 				return nil, fmt.Errorf("issue with incomplete aggregate: %v", err)
 			}
@@ -477,9 +477,9 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		}, nil
 	}
 
-	if debug {
+	//if debug {
 		////fmt.Printf("[DEBUG] No data found. numBarsRemaining=%d\n", numBarsRemaining)
-	}
+	//}
 	return nil, fmt.Errorf("no data found")
 }
 
