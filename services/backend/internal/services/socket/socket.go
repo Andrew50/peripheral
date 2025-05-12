@@ -53,6 +53,7 @@ type Client struct {
 	simulatedTimeStart    int64
 	accumulatedActiveTime time.Duration
 	lastTickTime          time.Time
+	subscribedChannels    map[string]struct{}
 }
 
 /*
@@ -387,10 +388,18 @@ func (c *Client) close() {
 	c.simulatedTime = 0
 	c.mu.Unlock()
 
-	// Remove the client from all channel subscribers and close Redis subscriptions if needed
-	// Assuming unsubscribeRealtime/unsubscribeReplay called by readPump/stopReplay handle this.
-	// If not, the logic needs to be here or called explicitly.
-	// Let's simplify and assume the specific unsubscribe calls handle channelSubscribers map.
+	for channelName := range c.subscribedChannels {
+		channelsMutex.Lock()
+		if subs, ok := channelSubscribers[channelName]; ok {
+			delete(subs, c)
+			if len(subs) == 0 {
+				delete(channelSubscribers, channelName)
+			}
+		}
+		channelsMutex.Unlock()
+		decListeners(channelName)
+		c.removeSubscribedChannel(channelName)
+	}
 
 	// Remove the client from the UserToClient map
 	UserToClientMutex.Lock()
@@ -419,6 +428,7 @@ func HandleWebSocket(conn *data.Conn, ws *websocket.Conn, userID int) {
 		conn:                conn,
 		buffer:              10000,
 		loopRunning:         false,
+		subscribedChannels:  make(map[string]struct{}),
 	}
 
 	// Store the client in the userToClient map
@@ -429,6 +439,13 @@ func HandleWebSocket(conn *data.Conn, ws *websocket.Conn, userID int) {
 	// Start the writePump and readPump goroutines
 	go client.writePump()
 	client.readPump(conn)
+}
+
+func (c *Client) addSubscribedChannel(channelName string) {
+	c.subscribedChannels[channelName] = struct{}{}
+}
+func (c *Client) removeSubscribedChannel(channelName string) {
+	delete(c.subscribedChannels, channelName)
 }
 
 // subscribeSECFilings handles subscription to the SEC filings feed
@@ -443,6 +460,7 @@ func (c *Client) subscribeSECFilings(conn *data.Conn) {
 	}
 	channelSubscribers[channelName][c] = true
 	incListeners(channelName)
+	c.addSubscribedChannel(channelName)
 	channelsMutex.Unlock()
 
 	// Get the latest filings from the cache
@@ -495,6 +513,7 @@ func (c *Client) unsubscribeSECFilings() {
 		if _, ok := subscribers[c]; ok {
 			delete(subscribers, c)
 			decListeners(channelName)
+			c.removeSubscribedChannel(channelName)
 		}
 	}
 }

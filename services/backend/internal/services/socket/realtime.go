@@ -20,6 +20,7 @@ func (c *Client) subscribeRealtime(conn *data.Conn, channelName string) {
 	}
 	subscribers[c] = true
 	channelsMutex.Unlock()
+	c.addSubscribedChannel(channelName)
 	incListeners(channelName)
 	go func() {
 		/*
@@ -74,6 +75,7 @@ func (c *Client) unsubscribeRealtime(channelName string) {
 		}
 	}
 	decListeners(channelName)
+	c.removeSubscribedChannel(channelName)
 }
 
 // Broadcast a message to all clients subscribed to the given channelName
