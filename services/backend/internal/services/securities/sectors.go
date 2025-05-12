@@ -95,7 +95,7 @@ func UpdateSectors(ctx context.Context, c *data.Conn) (statBlock, error) {
 
 	stats.Total = len(all)
 	if stats.Total == 0 {
-		log.Println("update_sectors: nothing to do")
+		//log.Println("update_sectors: nothing to do")
 		return stats, nil
 	}
 
@@ -104,7 +104,7 @@ func UpdateSectors(ctx context.Context, c *data.Conn) (statBlock, error) {
 	// ------------------------------------------------------------------ //
 	batch := envInt("UPDATE_SECTORS_BATCH_SIZE", 100)
 	if len(all) > batch {
-		log.Printf("Processing %d securities in batches of %d\n", len(all), batch)
+		//log.Printf("Processing %d securities in batches of %d\n", len(all), batch)
 		all = all[:batch]
 		stats.Total = batch
 	}
@@ -119,7 +119,7 @@ func UpdateSectors(ctx context.Context, c *data.Conn) (statBlock, error) {
 		max(1, len(all)/2),
 	)
 
-	log.Printf("Starting update_sectors with %d workers for %d securities\n",
+	//log.Printf("Starting update_sectors with %d workers for %d securities\n",
 		workerCount, len(all))
 
 	jobs := make(chan security)
@@ -144,14 +144,14 @@ func UpdateSectors(ctx context.Context, c *data.Conn) (statBlock, error) {
 	go func() {
 		for r := range results {
 			if r.Err != nil {
-				log.Printf("Failed to update %s: %v\n", r.Ticker, r.Err)
+				//log.Printf("Failed to update %s: %v\n", r.Ticker, r.Err)
 				stats.Failed++
 				continue
 			}
 			curr := findCurrent(all, r.Ticker)
 			if shouldUpdate(curr, r) {
 				if err := applyUpdate(ctx, c.DB, r); err != nil {
-					log.Printf("DB update error for %s: %v\n", r.Ticker, err)
+					//log.Printf("DB update error for %s: %v\n", r.Ticker, err)
 					stats.Failed++
 				} else {
 					stats.Updated++
@@ -170,7 +170,7 @@ func UpdateSectors(ctx context.Context, c *data.Conn) (statBlock, error) {
 	}()
 
 	<-done
-	log.Printf("update_sectors completed: %+v\n", stats)
+	//log.Printf("update_sectors completed: %+v\n", stats)
 	return stats, nil
 }
 
@@ -236,7 +236,7 @@ func queryYahoo(ctx context.Context, ticker string) (sector, industry string, er
 			jitter := time.Duration(rand.Intn(jitterRange))
 			waitTime := backoff + jitter
 			
-			log.Printf("Retrying %s (attempt %d/%d) after %v due to: %v", 
+			//log.Printf("Retrying %s (attempt %d/%d) after %v due to: %v", 
 				ticker, attempt, maxRetries, waitTime, lastErr)
 			
 			// Wait before retrying

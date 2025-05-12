@@ -102,11 +102,11 @@ func processAlerts(conn *data.Conn) {
             case "strategy":
                 err = processStrategyAlert(conn,a)
 			default:
-				log.Printf("Unknown alert type: %s", a.AlertType)
+				//log.Printf("Unknown alert type: %s", a.AlertType)
 				return
 			}
 			if err != nil {
-				log.Printf("Error processing alert %d: %v", a.AlertID, err)
+				//log.Printf("Error processing alert %d: %v", a.AlertID, err)
 				return
 			}
 		}(alert)

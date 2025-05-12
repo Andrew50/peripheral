@@ -41,7 +41,7 @@ func logAction(test bool, loop int, ticker string, targetTicker string, figi str
 			////fmt.Printf("loop %-5d | time %s | ticker %-10s | targetTicker %-12s | figi %-20s | date %-10s | action %-20s | error %v\n", loop, time.Now().Format("2006-01-02 15:04:05"), ticker, targetTicker, figi, currentDate, action, err)
 		}
 
-		log.Printf("loop %-5d | ticker %-10s | targetTicker %-12s | figi %-20s | date %-10s | action %-35s | error %v\n",
+		//log.Printf("loop %-5d | ticker %-10s | targetTicker %-12s | figi %-20s | date %-10s | action %-35s | error %v\n",
 			loop, ticker, targetTicker, figi, currentDate, action, err)
 	}
 }
@@ -347,7 +347,7 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 						var minDate sql.NullTime
 						var maxDate sql.NullTime
 						if err := rows.Scan(&secID, &ticker, &figi, &minDate, &maxDate); err != nil {
-							log.Printf("Error scanning row: %v", err)
+							//log.Printf("Error scanning row: %v", err)
 							continue
 						}
                         /*
@@ -396,7 +396,7 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 			cmdTag, _ := conn.DB.Exec(context.Background(), "UPDATE securities SET maxDate = $1 where ticker = $2 and maxDate is NULL", currentDateString, sec.Ticker)
 			// Log the number of rows affected if needed
 			if test && cmdTag.RowsAffected() > 0 {
-				log.Printf("Updated %d rows for ticker %s", cmdTag.RowsAffected(), sec.Ticker)
+				//log.Printf("Updated %d rows for ticker %s", cmdTag.RowsAffected(), sec.Ticker)
 			}
 			targetTicker := ""
 			if cmdTag.RowsAffected() == 0 { //this whole thing is just for error checking but if rows affected is zero then it should be a removal of a overdue removal after a ticker change
@@ -572,22 +572,22 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 
 		details, err := polygon.GetTickerDetails(conn.Polygon, ticker, "now")
 		if err != nil {
-			//log.Printf("Failed to get details for %s: %v", ticker, err)
+			////log.Printf("Failed to get details for %s: %v", ticker, err)
 			return
 		}
 
 		// Fetch both logo and icon
 		logoBase64, err := fetchImage(details.Branding.LogoURL, conn.PolygonKey)
 		if err != nil {
-			log.Printf("Failed to fetch logo for %s: %v", ticker, err)
+			//log.Printf("Failed to fetch logo for %s: %v", ticker, err)
 		}
 		iconBase64, err := fetchImage(details.Branding.IconURL, conn.PolygonKey)
 		if err != nil {
-			log.Printf("Failed to fetch icon for %s: %v", ticker, err)
+			//log.Printf("Failed to fetch icon for %s: %v", ticker, err)
 		}
 		currentPrice, err := polygon.GetMostRecentRegularClose(conn.Polygon, ticker, time.Now())
 		if err != nil {
-			//log.Printf("Failed to get current price for %s: %v", ticker, err)
+			////log.Printf("Failed to get current price for %s: %v", ticker, err)
 			return
 		}
 
@@ -625,7 +625,7 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 
 		if err != nil {
 			if test {
-				log.Printf("Failed to update details for %s: Column error - market_cap=%v, share_class_shares_outstanding=%v - Error: %v",
+				//log.Printf("Failed to update details for %s: Column error - market_cap=%v, share_class_shares_outstanding=%v - Error: %v",
 					ticker,
 					details.MarketCap,
 					details.ShareClassSharesOutstanding,
@@ -642,7 +642,7 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 		// Successfully updated details - no action needed in non-test mode
 		// Uncomment the log line below if you want to enable logging in test mode
 		// if test {
-		//     log.Printf("Successfully updated details for %s", ticker)
+		//     //log.Printf("Successfully updated details for %s", ticker)
 		// }
 	}
 

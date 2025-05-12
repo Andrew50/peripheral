@@ -67,21 +67,21 @@ func broadcastTimestamp() {
 func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 	err := polygonWS.Subscribe(polygonws.StocksQuotes)
 	if err != nil {
-		log.Println("niv0: ", err)
+		//log.Println("niv0: ", err)
 		return
 	} else {
 		////fmt.Println("✅ Connected to Polygon Quotes stream")
 	}
 	err = polygonWS.Subscribe(polygonws.StocksTrades)
 	if err != nil {
-		log.Println("Error subscribing to Polygon WebSocket: ", err)
+		//log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	} else {
 		////fmt.Println("✅ Connected to Polygon Trades stream")
 	}
 	err = polygonWS.Subscribe(polygonws.StocksMinAggs)
 	if err != nil {
-		log.Println("Error subscribing to Polygon WebSocket: ", err)
+		//log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	} else {
 		////fmt.Println("✅ Connected to Polygon Minute Aggregates stream")
@@ -114,7 +114,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				symbol = msg.Symbol
 				timestamp = msg.Timestamp
 			default:
-				//jlog.Println("Unknown message type received")
+				//j//log.Println("Unknown message type received")
 				continue
 			}
 
@@ -129,7 +129,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 			securityId, exists := tickerToSecurityId[symbol]
 			tickerToSecurityIdLock.RUnlock()
 			if !exists {
-				//log.Printf("Symbol %s not found in tickerToSecurityId map\n", symbol)
+				////log.Printf("Symbol %s not found in tickerToSecurityId map\n", symbol)
 				continue
 			}
 			switch msg := out.(type) {
@@ -212,7 +212,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 		jsonData := `{"message": "Hello, WebSocket!", "value": 123}`
 		err := conn.Cache.Publish(context.Background(), "websocket-test", jsonData).Err()
 		if err != nil {
-			log.Println("Error publishing to Redis:", err)
+			//log.Println("Error publishing to Redis:", err)
 		}
 	}
 */
