@@ -58,7 +58,11 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 	maxTurns := 7
 	for {
 		if planningPrompt == "" {
-			planningPrompt = BuildPlanningPrompt(conn, userID, query.Query, query.Context, query.ActiveChartContext)
+            var err error
+            planningPrompt, err = BuildPlanningPrompt(conn, userID, query.Query, query.Context, query.ActiveChartContext)
+            if err != nil {
+                return nil, err
+            }
 		}
 		result, err := RunPlanner(ctx, conn, planningPrompt)
 		if err != nil {
@@ -92,10 +96,16 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 				}
 				// Update query with results for next planning iteration
 				// The planner will process these results to either plan more or finalize
-				planningPrompt = BuildPlanningPromptWithResults(conn, userID, query.Query, query.Context, query.ActiveChartContext, allResults)
+				planningPrompt, err = BuildPlanningPromptWithResults(conn, userID, query.Query, query.Context, query.ActiveChartContext, allResults)
+                if err != nil {
+                    return nil,err
+                }
 			case StageFinishedExecuting:
 				// Generate final response based on execution results
-				finalPrompt := BuildFinalResponsePrompt(conn, userID, query.Query, query.Context, query.ActiveChartContext, allResults)
+				finalPrompt, err := BuildFinalResponsePrompt(conn, userID, query.Query, query.Context, query.ActiveChartContext, allResults)
+                if err != nil {
+                    return nil, err
+                }
 
 				// Get the final response from the model
 				finalResponse, err := GetFinalResponse(ctx, conn, finalPrompt)
