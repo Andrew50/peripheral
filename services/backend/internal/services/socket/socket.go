@@ -134,9 +134,10 @@ func SendAlertToUser(userID int, alert AlertMessage) {
 			return
 		}
 		client.send <- jsonData
-	} else {
+	} 
+    //else {
 		////fmt.Println("Error marshaling alert:", err)
-	}
+	//}
 }
 
 // FunctionStatusUpdate represents a status update message sent to the client
@@ -242,9 +243,10 @@ func (c *Client) readPump(conn *data.Conn) {
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				////fmt.Println("4kltyvk, WebSocket read error:", err)
-			} else {
+			} 
+            //else {
 				////fmt.Println("WebSocket read error (expected close?):", err)
-			}
+			//}
 			break // Exit readPump loop on any error
 		}
 
@@ -459,9 +461,9 @@ func (c *Client) subscribeSECFilings(conn *data.Conn) {
 			////fmt.Printf("Found %d SEC filings to send initially\n", len(latestFilings))
 
 			// Debug: Print the first filing's timestamp
-			if len(latestFilings) > 0 {
+			//if len(latestFilings) > 0 {
 				////fmt.Printf("First filing timestamp: %d\n", latestFilings[0].Timestamp)
-			}
+			//}
 
 			// Create a message with channel information
 			message := map[string]interface{}{
@@ -474,12 +476,15 @@ func (c *Client) subscribeSECFilings(conn *data.Conn) {
 			if err == nil {
 				c.send <- jsonData
 				////fmt.Printf("Sent %d initial SEC filings to client\n", len(latestFilings))
-			} else {
-				////fmt.Println("Error marshaling SEC filings:", err)
 			}
-		} else {
+
+            //else {
+				////fmt.Println("Error marshaling SEC filings:", err)
+			//}
+		} 
+        //else {
 			////fmt.Println("No SEC filings available to send initially")
-		}
+		//}
 	}
 
 	////fmt.Printf("Client subscribed to SEC filings feed, %d subscribers\n", channelSubscriberCounts[channelName])
