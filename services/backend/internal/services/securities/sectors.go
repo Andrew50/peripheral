@@ -33,7 +33,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	//"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -119,8 +119,7 @@ func UpdateSectors(ctx context.Context, c *data.Conn) (statBlock, error) {
 		max(1, len(all)/2),
 	)
 
-	//log.Printf("Starting update_sectors with %d workers for %d securities\n",
-		workerCount, len(all))
+	//log.Printf("Starting update_sectors with %d workers for %d securities\n", workerCount, len(all))
 
 	jobs := make(chan security)
 	results := make(chan result)
@@ -236,8 +235,7 @@ func queryYahoo(ctx context.Context, ticker string) (sector, industry string, er
 			jitter := time.Duration(rand.Intn(jitterRange))
 			waitTime := backoff + jitter
 			
-			//log.Printf("Retrying %s (attempt %d/%d) after %v due to: %v", 
-				ticker, attempt, maxRetries, waitTime, lastErr)
+			//log.Printf("Retrying %s (attempt %d/%d) after %v due to: %v", ticker, attempt, maxRetries, waitTime, lastErr)
 			
 			// Wait before retrying
 			select {
