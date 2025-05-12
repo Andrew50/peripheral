@@ -244,10 +244,10 @@ func RunBacktest(conn *data.Conn, userId int, rawArgs json.RawMessage) (any, err
 				} else {
 					// Handle cases: start price missing, end price missing, or start price is 0
 					// Log specific reason for nil result for this window
-					if !startClose.Valid {
+					//if !startClose.Valid {
 						// This is less likely if the cross join query succeeded without pgx.ErrNoRows, but check anyway.
 						////fmt.Printf("Info: Start price missing for securityId %d at %v. Return '%s' set to nil.\n", securityId, startTime, returnColumnName)
-					} 
+					//} 
                     /*else if !endClose.Valid {
 						////fmt.Printf("Info: End price missing (%d days later) for securityId %d at %v. Return '%s' set to nil.\n", window, securityId, startTime, returnColumnName)
 					} else if startClose.Float64 == 0 {
@@ -281,13 +281,14 @@ func RunBacktest(conn *data.Conn, userId int, rawArgs json.RawMessage) (any, err
 	}
 
 	// Save the full formatted results (including instances and return columns) to cache
-	go func() { // Run in a goroutine to avoid blocking the main response
+	//go func() { // Run in a goroutine to avoid blocking the main response
 		bgCtx := context.Background() // Use a background context for the goroutine
 		if err := SaveBacktestToCache(bgCtx, conn, userId, args.StrategyId, formattedResults); err != nil {
 			////fmt.Printf("Warning: Failed to save backtest results to cache for strategy %d: %v\n", args.StrategyId, err)
 			// We log the error but don't fail the main operation
+            return nil, err
 		}
-	}()
+	//}()
 
 	// Extract only the summary to return to the LLM
 	summary, ok := formattedResults["summary"].(map[string]any)
@@ -399,9 +400,10 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 			case time.Time:
 				if !t.IsZero() {
 					timestampMs = t.UnixMilli()
-				} else {
+				} 
+                //else {
 					////fmt.Printf("Warning format: Encountered zero timestamp value for securityId %v\n", instance["securityId"])
-				}
+				//}
 			case string:
 				parsedTime, err := time.Parse(time.RFC3339Nano, t)
 				if err != nil {
