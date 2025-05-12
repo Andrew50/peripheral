@@ -2,6 +2,7 @@ package securities
 
 import (
 	"context"
+    "strings"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,10 +14,8 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// SimpleUpdateSecurities fetches the latest tickers from Polygon, checks if AAPL is present,
-// and if so, updates the securities table by marking missing tickers as delisted
-// (maxDate = now) and inserting brand-new tickers (keeping the same securityId for existing ones).
 func SimpleUpdateSecurities(conn *data.Conn) error {
+<<<<<<< HEAD
 	// 1) Fetch current list of Polygon tickers (use "today" or whichever date you prefer).
 	today := time.Now().Format("2006-01-02")
 	////fmt.Println("running simpleUpdateSecurities")
@@ -39,31 +38,34 @@ func SimpleUpdateSecurities(conn *data.Conn) error {
 		////fmt.Println("AAPL not found in Polygon tickers; skipping updates.")
 		return nil
 	}
+=======
+    ctx := context.Background()
+    today := time.Now().Format("2006-01-02")
 
-	// 3) Fetch all currently active (maxDate IS NULL) tickers from the db.
-	rows, err := conn.DB.Query(context.Background(),
-		"SELECT securityId, ticker FROM securities WHERE maxDate IS NULL",
-	)
-	if err != nil {
-		return fmt.Errorf("failed to query active securities: %w", err)
-	}
-	defer rows.Close()
+    // 1) Fetch the tickers from Polygon
+    poly, err := polygon.AllTickers(conn.Polygon, today)
+    if err != nil {
+        return fmt.Errorf("fetch polygon tickers: %w", err)
+    }
+>>>>>>> 55b3c949001d01089a79007b4e209b64ddfc6c90
 
-	dbActiveTickers := make(map[string]int)
-	for rows.Next() {
-		var (
-			sid    int
-			ticker string
-		)
-		if err := rows.Scan(&sid, &ticker); err != nil {
-			return fmt.Errorf("failed to scan security row: %w", err)
-		}
-		dbActiveTickers[ticker] = sid
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("row iteration error: %w", err)
-	}
+    // collect just the symbols
+    tickers := make([]string, len(poly))
+    for i, s := range poly {
+        tickers[i] = s.Ticker
+    }
 
+    // 2) Mark as DELISTED any ticker NOT in today's list
+    if _, err := conn.DB.Exec(ctx, `
+        UPDATE securities
+           SET maxDate = CURRENT_DATE
+         WHERE maxDate IS NULL
+           AND ticker NOT IN (` + placeholders(len(tickers)) + `)
+    `, stringArgs(tickers)...); err != nil {
+        return fmt.Errorf("delist tickers: %w", err)
+    }
+
+<<<<<<< HEAD
 	// 4) For tickers in DB but not in Polygon -> mark them delisted (set maxDate = now()).
 	for ticker := range dbActiveTickers {
 		if _, found := tickerSet[ticker]; !found {
@@ -206,8 +208,39 @@ func SimpleUpdateSecurities(conn *data.Conn) error {
 
 	////fmt.Println("Securities table updated successfully.")
 	return nil
+=======
+    // 3) REACTIVATE any ticker IN today's list
+    if _, err := conn.DB.Exec(ctx, `
+        UPDATE securities
+           SET maxDate = NULL
+         WHERE maxDate IS NOT NULL
+           AND ticker IN (` + placeholders(len(tickers)) + `)
+    `, stringArgs(tickers)...); err != nil {
+        return fmt.Errorf("reactivate tickers: %w", err)
+    }
+>>>>>>> 55b3c949001d01089a79007b4e209b64ddfc6c90
 
+    return nil
 }
+
+// placeholders(n) returns "$1,$2,…,$n"
+func placeholders(n int) string {
+    ps := make([]string, n)
+    for i := range ps {
+        ps[i] = fmt.Sprintf("$%d", i+1)
+    }
+    return strings.Join(ps, ",")
+}
+
+// stringArgs converts []string to []interface{} for Exec()
+func stringArgs(ss []string) []interface{} {
+    out := make([]interface{}, len(ss))
+    for i, s := range ss {
+        out[i] = s
+    }
+    return out
+}
+
 
 // UpdateSecurityCik fetches the latest CIK (Central Index Key) data from the SEC API
 // and updates the securities table with CIK values for active securities.
