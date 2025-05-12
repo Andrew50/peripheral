@@ -341,7 +341,7 @@ func storeDailyOHLCVParallel(conn *data.Conn, ohlcvResponse *models.GetGroupedDa
 					startIdx, endIdx, err)
 				return
 			}
-			committed = true
+			//committed = true
 
 		}(i)
 	}

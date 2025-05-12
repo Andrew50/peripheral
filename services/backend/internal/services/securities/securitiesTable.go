@@ -224,7 +224,7 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 		}
 		activeToday := toFilteredMap(polyTickers)
 		additions, removals, figiChanges := diff(activeToday, activeYesterday)
-		for i, sec := range figiChanges {
+		for _, sec := range figiChanges {
 			cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE securities set figi = $1 where ticker = $2 and maxDate is NULL", sec.CompositeFIGI, sec.Ticker)
 			if err != nil {
 				//logAction(test, i, sec.Ticker, "", sec.CompositeFIGI, currentDateString, "figi change 1", err)
@@ -234,7 +234,7 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 				//logAction(test, i, sec.Ticker, "", sec.CompositeFIGI, currentDateString, "figi change 1", nil)
 			}
 		}
-		for i, sec := range additions {
+		for _, sec := range additions {
 			diagnoses := make([]string, 0)
 			var maxDate sql.NullTime
 			targetTicker := ""
