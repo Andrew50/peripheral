@@ -3,7 +3,7 @@ package polygon
 import (
 	"context"
 	"fmt"
-	"log"
+//	"log"
     "backend/internal/data/postgres"
     "backend/internal/data"
     "backend/internal/data/utils"
