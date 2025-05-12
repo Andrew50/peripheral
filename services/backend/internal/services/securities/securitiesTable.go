@@ -41,8 +41,7 @@ func logAction(test bool, loop int, ticker string, targetTicker string, figi str
 			////fmt.Printf("loop %-5d | time %s | ticker %-10s | targetTicker %-12s | figi %-20s | date %-10s | action %-20s | error %v\n", loop, time.Now().Format("2006-01-02 15:04:05"), ticker, targetTicker, figi, currentDate, action, err)
 		}
 
-		//log.Printf("loop %-5d | ticker %-10s | targetTicker %-12s | figi %-20s | date %-10s | action %-35s | error %v\n",
-			loop, ticker, targetTicker, figi, currentDate, action, err)
+		//log.Printf("loop %-5d | ticker %-10s | targetTicker %-12s | figi %-20s | date %-10s | action %-35s | error %v\n", loop, ticker, targetTicker, figi, currentDate, action, err)
 	}
 }
 
@@ -625,11 +624,7 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 
 		if err != nil {
 			if test {
-				//log.Printf("Failed to update details for %s: Column error - market_cap=%v, share_class_shares_outstanding=%v - Error: %v",
-					ticker,
-					details.MarketCap,
-					details.ShareClassSharesOutstanding,
-					err)
+				//log.Printf("Failed to update details for %s: Column error - market_cap=%v, share_class_shares_outstanding=%v - Error: %v", ticker, details.MarketCap, details.ShareClassSharesOutstanding, err)
 			}
 			errChan <- fmt.Errorf("failed to update %s: Column error - market_cap=%v, share_class_shares_outstanding=%v - Error: %v",
 				ticker,
