@@ -2,14 +2,15 @@ package socket
 
 import (
 	"backend/internal/data"
-    "backend/internal/data/utils"
-    "backend/internal/data/edgar"
-    "backend/internal/services/marketData"
-    "container/list"
+	"backend/internal/data/edgar"
+	"backend/internal/data/utils"
+	"backend/internal/services/marketData"
+	"container/list"
 	"encoding/json"
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -19,7 +20,7 @@ import (
 
 var (
 	channelsMutex           sync.RWMutex
-	channelSubscriberCounts = make(map[string]int)
+	channelSubscriberCounts sync.Map // key = channelName, value = *atomic.Int64 (num subscribers)
 	channelSubscribers      = make(map[string]map[*Client]bool)
 	UserToClient            = make(map[int]*Client)
 	UserToClientMutex       sync.RWMutex
@@ -95,7 +96,6 @@ type SECFilingMessage struct {
 	Ticker    string `json:"ticker"`    // The ticker symbol
 	Channel   string `json:"channel"`   // Channel name (always "sec-filings")
 }
-
 
 // BroadcastGlobalSECFiling sends a new global SEC filing to all clients subscribed to the sec-filings channel
 func BroadcastGlobalSECFiling(filing edgar.GlobalEDGARFiling) {
@@ -431,7 +431,6 @@ func HandleWebSocket(conn *data.Conn, ws *websocket.Conn, userID int) {
 	client.readPump(conn)
 }
 
-
 // subscribeSECFilings handles subscription to the SEC filings feed
 func (c *Client) subscribeSECFilings(conn *data.Conn) {
 	channelName := "sec-filings"
@@ -443,7 +442,7 @@ func (c *Client) subscribeSECFilings(conn *data.Conn) {
 		channelSubscribers[channelName] = make(map[*Client]bool)
 	}
 	channelSubscribers[channelName][c] = true
-	channelSubscriberCounts[channelName]++
+	incListeners(channelName)
 	channelsMutex.Unlock()
 
 	// Get the latest filings from the cache
@@ -483,8 +482,6 @@ func (c *Client) subscribeSECFilings(conn *data.Conn) {
 		}
 	}
 
-	fmt.Printf("Client subscribed to SEC filings feed, %d subscribers\n",
-		channelSubscriberCounts[channelName])
 }
 
 // unsubscribeSECFilings handles unsubscription from the SEC filings feed
@@ -497,11 +494,30 @@ func (c *Client) unsubscribeSECFilings() {
 	if subscribers, exists := channelSubscribers[channelName]; exists {
 		if _, ok := subscribers[c]; ok {
 			delete(subscribers, c)
-			channelSubscriberCounts[channelName]--
-			fmt.Printf("Client unsubscribed from SEC filings feed, %d subscribers remaining\n",
-				channelSubscriberCounts[channelName])
+			decListeners(channelName)
 		}
 	}
+}
+
+func incListeners(channelName string) {
+	v, _ := channelSubscriberCounts.LoadOrStore(channelName, &atomic.Int64{})
+	v.(*atomic.Int64).Add(1)
+	fmt.Printf("incListeners: %s, %d\n", channelName, v.(*atomic.Int64).Load())
+}
+func decListeners(channelName string) {
+	fmt.Printf("decListeners: %s\n", channelName)
+	if v, ok := channelSubscriberCounts.Load(channelName); ok {
+		if v.(*atomic.Int64).Add(-1) <= 0 {
+			channelSubscriberCounts.Delete(channelName)
+		}
+	}
+
+}
+func hasListeners(channelName string) bool {
+	if v, ok := channelSubscriberCounts.Load(channelName); ok {
+		return v.(*atomic.Int64).Load() > 0
+	}
+	return false
 }
 
 // /socket.go

@@ -2,9 +2,9 @@ package helpers
 
 import (
 	"backend/internal/data"
+	"backend/internal/data/polygon"
+	"backend/internal/data/postgres"
 	"context"
-    "backend/internal/data/polygon"
-    "backend/internal/data/postgres"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
@@ -815,7 +815,7 @@ func GetLastPrice(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-	trade, err := polygon.GetLastTrade(conn.Polygon, args.Ticker)
+	trade, err := polygon.GetLastTrade(conn.Polygon, args.Ticker, true)
 	if err != nil {
 		return nil, fmt.Errorf("error getting last trade: %v", err)
 	}
