@@ -99,10 +99,7 @@ func GetQuery(conn *data.Conn, userID int, args json.RawMessage) (interface{}, e
 			Messages:  []ChatMessage{},
 			Timestamp: time.Now(),
 		}
-	} else {
-		////fmt.Printf("Found existing conversation with %d messages\n", len(conversationData.Messages))
 	}
-
 	persistentContextData, err := getPersistentContext(ctx, conn, userID)
 	if err != nil {
 		// Log the error but don't fail the request, just proceed without this context
@@ -209,6 +206,7 @@ func GetQuery(conn *data.Conn, userID int, args json.RawMessage) (interface{}, e
 			conversationData.Messages = append(conversationData.Messages, newMessage)
 			conversationData.Timestamp = time.Now()
 			if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
+                return nil, err
 				////fmt.Printf("Error saving updated conversation: %v\n", err)
 			}
 
@@ -239,6 +237,7 @@ func GetQuery(conn *data.Conn, userID int, args json.RawMessage) (interface{}, e
 			conversationData.Messages = append(conversationData.Messages, newMessage)
 			conversationData.Timestamp = time.Now()
 			if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
+                return nil, err
 				////fmt.Printf("Error saving updated conversation: %v\n", err)
 			}
 
@@ -268,6 +267,7 @@ func GetQuery(conn *data.Conn, userID int, args json.RawMessage) (interface{}, e
 				conversationData.Messages = append(conversationData.Messages, newMessage)
 				conversationData.Timestamp = time.Now()
 				if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
+                    return nil, err
 					////fmt.Printf("Error saving updated conversation: %v\n", err)
 				}
 

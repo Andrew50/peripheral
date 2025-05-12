@@ -111,6 +111,7 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 	// Add DateString to each bar
 	easternLocation, err := time.LoadLocation("America/New_York")
 	if err != nil {
+        return nil, err
 		// Handle error, perhaps log and continue without date strings
 		////fmt.Printf("Warning: could not load America/New_York timezone: %v\n", err)
 	}
