@@ -108,9 +108,11 @@
 		releaseSlow = addStream<TradeData>(instance, slowStreamName, (v: TradeData) => {
 			if (v && v.price) {
 				changeStore.update((s: ChangeStore) => {
+					if(v.size < 100) {
+						return s;
+					}
 					const price = v.price;
 					const prevClose = s.prevClose;
-
 					// Update the instance with the price
 					(instance as any)['price'] = price;
 

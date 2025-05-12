@@ -30,8 +30,8 @@ var polygonWSConn *polygonws.Client
 const TimestampUpdateInterval = 2 * time.Second
 
 var (
-	lastTickTimestamp  int64
-	tickTimestampMutex sync.RWMutex
+	lastTickTimestamp   int64
+	tickTimestampMutex  sync.RWMutex
 	lastTimestampUpdate time.Time
 	timestampMutex      sync.RWMutex
 )
@@ -62,6 +62,7 @@ func broadcastTimestamp() {
 	}
 	timestampMutex.Unlock()
 }
+
 // StreamPolygonDataToRedis performs operations related to StreamPolygonDataToRedis functionality.
 func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 	err := polygonWS.Subscribe(polygonws.StocksQuotes)
@@ -150,9 +151,6 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				if err != nil {
 					fmt.Println("Error marshling JSON:", err)
 				}
-				//	conn.Cache.Publish(context.Background(), "trades-agg", string(jsonData))
-
-				//conn.Cache.Publish(context.Background(), channelName, string(jsonData))
 				broadcastToChannel(channelName, string(jsonData))
 				channelName = fmt.Sprintf("%d-all", securityId)
 				data.Channel = channelName
