@@ -3,19 +3,19 @@
 	import Legend from './legend.svelte';
 	import Shift from './shift.svelte';
 	import DrawingMenu from './drawingMenu.svelte';
-	import { privateRequest } from '$lib/core/backend';
+	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { type DrawingMenuProps, addHorizontalLine, drawingMenuProps } from './drawingMenu.svelte';
-	import type { Instance as CoreInstance, TradeData, QuoteData } from '$lib/core/types';
+	import type { Instance as CoreInstance, TradeData, QuoteData } from '$lib/utils/types/types';
 	import {
 		setActiveChart,
 		chartQueryDispatcher,
 		chartEventDispatcher,
 		queryChart
 	} from './interface';
-	import { streamInfo, settings, activeAlerts } from '$lib/core/stores';
+	import { streamInfo, settings, activeAlerts } from '$lib/utils/stores/stores';
 	import type { ShiftOverlay, ChartEventDispatch, BarData, ChartQueryDispatch } from './interface';
-	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
-	import { queryInstanceRightClick } from '$lib/utils/popups/rightClick.svelte';
+	import { queryInstanceInput } from '$lib/components/input.svelte';
+	import { queryInstanceRightClick } from '$lib/components/rightClick.svelte';
 	import { createChart, ColorType, CrosshairMode } from 'lightweight-charts';
 	import type {
 		IChartApi,
@@ -50,7 +50,7 @@
 		ESTSecondstoUTCMillis,
 		getReferenceStartTimeForDateMilliseconds,
 		timeframeToSeconds
-	} from '$lib/core/timestamp';
+	} from '$lib/utils/helpers/timestamp';
 	import { addStream } from '$lib/utils/stream/interface';
 	import { ArrowMarkersPaneView, type ArrowMarker } from './arrowMarkers';
 	import { EventMarkersPaneView, type EventMarker } from './eventMarkers';

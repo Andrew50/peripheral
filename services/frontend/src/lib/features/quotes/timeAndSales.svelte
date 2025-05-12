@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import type { Writable } from 'svelte/store';
-	import type { TradeData, QuoteData, Instance } from '$lib/core/types';
+	import type { TradeData, QuoteData, Instance } from '$lib/utils/types/types';
 	import { addStream } from '$lib/utils/stream/interface';
-	import '$lib/core/global.css';
-	import { settings } from '$lib/core/stores';
+	import '$lib/styles/global.css';
+	import { settings } from '$lib/utils/stores/stores';
 	import { get } from 'svelte/store';
-	import { privateRequest } from '$lib/core/backend';
+	import { privateRequest } from '$lib/utils/helpers/backend';
 
 	export let instance: Writable<Instance>;
 	let store: Writable<TradeData>;

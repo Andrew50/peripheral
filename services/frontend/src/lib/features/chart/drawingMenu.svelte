@@ -84,9 +84,9 @@
 </script>
 
 <script lang="ts">
-	import '$lib/core/global.css';
+	import '$lib/styles/global.css';
 	import { onMount } from 'svelte';
-	import { privateRequest } from '$lib/core/backend';
+	import { privateRequest } from '$lib/utils/helpers/backend';
 	export let drawingMenuProps: Writable<DrawingMenuProps>;
 
 	let menuElement: HTMLDivElement;

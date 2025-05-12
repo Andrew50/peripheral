@@ -1,7 +1,7 @@
-import type { Instance } from '$lib/core/types';
+import type { Instance } from '$lib/utils/types/types';
 import { writable, get, type Writable } from 'svelte/store';
-import { streamInfo } from '$lib/core/stores';
-import { privateRequest } from '$lib/core/backend';
+import { streamInfo } from '$lib/utils/stores/stores';
+import { privateRequest } from '$lib/utils/helpers/backend';
 import type { UTCTimestamp } from 'lightweight-charts';
 
 export interface ShiftOverlay {
