@@ -3,7 +3,7 @@ package data
 import (
 	"context"
 	"fmt"
-	"log"
+//	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -66,7 +66,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		// Create a connection pool configuration
 		poolConfig, err := pgxpool.ParseConfig(dbUrl)
 		if err != nil {
-			log.Printf("Unable to parse pool config: %v\n", err)
+			//log.Printf("Unable to parse pool config: %v\n", err)
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -82,7 +82,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		// Create the connection pool with our custom configuration
 		dbConn, err = pgxpool.ConnectConfig(context.Background(), poolConfig)
 		if err != nil {
-			log.Printf("waiting for db %v\n", err)
+			//log.Printf("waiting for db %v\n", err)
 			time.Sleep(5 * time.Second)
 		} else {
 			break
@@ -116,7 +116,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		err = cache.Ping(context.Background()).Err()
 		if err != nil {
 			//if strings.Contains(err.Error(), "the database system is starting up") {
-			log.Println("waiting for cache")
+			//log.Println("waiting for cache")
 			time.Sleep(5 * time.Second)
 		} else {
 			break

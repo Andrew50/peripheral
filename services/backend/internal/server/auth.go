@@ -422,7 +422,7 @@ func generateState() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		// If there's an error reading random bytes, log it and return a fallback value
-		log.Printf("Error generating random state: %v", err)
+		//log.Printf("Error generating random state: %v", err)
 		// Use current time as fallback for some randomness
 		return base64.URLEncoding.EncodeToString([]byte(time.Now().String()))
 	}
