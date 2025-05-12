@@ -4,7 +4,6 @@ import (
 	"backend/internal/data"
 	"backend/internal/data/edgar"
 	"backend/internal/data/utils"
-	"backend/internal/services/marketData"
 	"container/list"
 	"encoding/json"
 	"fmt"
@@ -447,77 +446,6 @@ func (c *Client) addSubscribedChannel(channelName string) {
 func (c *Client) removeSubscribedChannel(channelName string) {
 	delete(c.subscribedChannels, channelName)
 }
-
-// subscribeSECFilings handles subscription to the SEC filings feed
-func (c *Client) subscribeSECFilings(conn *data.Conn) {
-	channelName := "sec-filings"
-	fmt.Printf("\nGot subscription to SEC filings feed\n")
-
-	// Add client to the channel subscribers
-	channelsMutex.Lock()
-	if _, exists := channelSubscribers[channelName]; !exists {
-		channelSubscribers[channelName] = make(map[*Client]bool)
-	}
-	channelSubscribers[channelName][c] = true
-	incListeners(channelName)
-	c.addSubscribedChannel(channelName)
-	channelsMutex.Unlock()
-
-	// Get the latest filings from the cache
-	if conn != nil {
-		// Get the latest filings from the cache
-		latestFilings := marketData.GetLatestEdgarFilings()
-
-		// Limit to 50 filings if there are more
-		if len(latestFilings) > 50 {
-			latestFilings = latestFilings[:50]
-		}
-
-		if len(latestFilings) > 0 {
-			fmt.Printf("Found %d SEC filings to send initially\n", len(latestFilings))
-
-			// Debug: Print the first filing's timestamp
-			if len(latestFilings) > 0 {
-				fmt.Printf("First filing timestamp: %d\n", latestFilings[0].Timestamp)
-			}
-
-			// Create a message with channel information
-			message := map[string]interface{}{
-				"channel": channelName,
-				"data":    latestFilings,
-			}
-
-			// Send the initial data
-			jsonData, err := json.Marshal(message)
-			if err == nil {
-				c.send <- jsonData
-				fmt.Printf("Sent %d initial SEC filings to client\n", len(latestFilings))
-			} else {
-				fmt.Println("Error marshaling SEC filings:", err)
-			}
-		} else {
-			fmt.Println("No SEC filings available to send initially")
-		}
-	}
-
-}
-
-// unsubscribeSECFilings handles unsubscription from the SEC filings feed
-func (c *Client) unsubscribeSECFilings() {
-	channelName := "sec-filings"
-
-	channelsMutex.Lock()
-	defer channelsMutex.Unlock()
-
-	if subscribers, exists := channelSubscribers[channelName]; exists {
-		if _, ok := subscribers[c]; ok {
-			delete(subscribers, c)
-			decListeners(channelName)
-			c.removeSubscribedChannel(channelName)
-		}
-	}
-}
-
 func incListeners(channelName string) {
 	v, _ := channelSubscriberCounts.LoadOrStore(channelName, &atomic.Int64{})
 	v.(*atomic.Int64).Add(1)
