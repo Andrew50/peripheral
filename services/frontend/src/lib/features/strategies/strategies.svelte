@@ -1,9 +1,9 @@
 <script lang="ts">
 import { onMount } from 'svelte';
 import { writable, get, derived } from 'svelte/store';
-import { strategies } from '$lib/core/stores';
-import { privateRequest } from '$lib/core/backend';
-import '$lib/core/global.css';
+import { strategies } from '$lib/utils/stores/stores';
+import { privateRequest } from '$lib/utils/helpers/backend';
+import '$lib/styles/global.css';
 
 // --- Interfaces ---
 type StrategyId = number | 'new' | null;
