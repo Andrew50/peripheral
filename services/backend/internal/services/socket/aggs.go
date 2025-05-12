@@ -464,9 +464,9 @@ func initTimeframeData(conn *data.Conn, securityId int, timeframe int, isExtende
 		idx++
 		lastTimestamp = time.Time(agg.Timestamp).Unix()
 	}
-	if err := iter.Err(); err != nil {
+//	if err := iter.Err(); err != nil {
 		////fmt.Printf("Error iterating historical data: %v\n", err)
-	}
+	//}
 	//if td.rolloverTimestamp == -1 {
 	td.rolloverTimestamp = lastTimestamp + int64(timeframe) //if theres no data then this wont work but is extreme edge case
 	//}

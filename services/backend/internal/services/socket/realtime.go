@@ -47,17 +47,20 @@ func (c *Client) subscribeRealtime(conn *data.Conn, channelName string) {
 		}
 		// 3) Store in Redis so next subscription can get it quickly
 		setErr := conn.Cache.Set(ctx, cacheKey, string(initialValue), 5*time.Minute).Err()
-		if setErr != nil {
+        if setErr != nil {
+            return
+        }
+//		if setErr != nil {
 			////fmt.Println("Error writing Redis cache:", setErr)
-		}
+//		}
 
 		// 4) Send to the client
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		err = c.ws.WriteMessage(websocket.TextMessage, initialValue)
-		if err != nil {
+//		if err != nil {
 			////fmt.Println("WebSocket write error while sending initial value:", err)
-		}
+//		}
 	}()
 }
 
