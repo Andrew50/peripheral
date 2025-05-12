@@ -2,9 +2,9 @@ package socket
 
 import (
 	"backend/internal/data"
-    "backend/internal/data/utils"
-    "backend/internal/data/polygon"
-    "backend/internal/data/postgres"
+	"backend/internal/data/polygon"
+	"backend/internal/data/postgres"
+	"backend/internal/data/utils"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,6 +14,7 @@ import (
 
 	"github.com/polygon-io/client-go/rest/models"
 )
+
 // TickData represents a structure for handling TickData data.
 type TickData interface {
 	GetTimestamp() int64
@@ -21,6 +22,7 @@ type TickData interface {
 	GetChannel() string
 	SetChannel(channel string)
 }
+
 // TradeData represents a structure for handling TradeData data.
 type TradeData struct {
 	Price      float64 `json:"price"`
@@ -43,6 +45,7 @@ func (t TradeData) GetChannel() string {
 func (t *TradeData) SetChannel(channel string) {
 	t.Channel = channel
 }
+
 // QuoteData represents a structure for handling QuoteData data.
 type QuoteData struct {
 	BidPrice  float64 `json:"bidPrice"`
@@ -398,7 +401,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 
 		var trade models.Trade
 		if timestamp == 0 {
-			latestTrade, err := polygon.GetLastTrade(conn.Polygon, ticker)
+			latestTrade, err := polygon.GetLastTrade(conn.Polygon, ticker, true)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get last trade: %v", err)
 			}
@@ -407,7 +410,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 				Size:         latestTrade.Size,
 				SipTimestamp: latestTrade.Timestamp,
 				Conditions:   latestTrade.Conditions,
-				Exchange:     int(latestTrade.Exchange),
+				Exchange:     latestTrade.Exchange,
 			}
 		} else {
 			fetchedTrade, err := polygon.GetTradeAtTimestamp(conn, securityId, queryTime)
@@ -417,13 +420,13 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 			trade = fetchedTrade
 		}
 		tradeTime := time.Time(trade.SipTimestamp)
+		size = int64(trade.Size)
 		if !extendedHours && !utils.IsTimestampRegularHours(tradeTime) {
 			closePrice, err := polygon.GetMostRecentRegularClose(conn.Polygon, ticker, tradeTime)
 			if err != nil {
 				return nil, fmt.Errorf("error getting close price: %v", err)
 			}
 			price = closePrice
-			size = 0
 			conditions = []int32{}
 			tradeTimestamp = tradeTime.UnixNano() / 1e6
 		} else if extendedHours && utils.IsTimestampRegularHours(tradeTime) {
@@ -435,12 +438,10 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 				return nil, fmt.Errorf("error getting daily open: %v", err)
 			}
 			price = dailyOpen
-			size = 0
 			conditions = []int32{}
 			tradeTimestamp = tradeTime.UnixNano() / 1e6
 		} else {
 			price = trade.Price
-			size = int64(trade.Size)
 			conditions = trade.Conditions
 			tradeTimestamp = tradeTime.UnixNano() / 1e6
 		}
@@ -449,6 +450,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 			Size:       size,
 			Timestamp:  tradeTimestamp,
 			Conditions: conditions,
+			ExchangeID: int32(trade.Exchange),
 			Channel:    channelName,
 		}
 		return json.Marshal(data)
