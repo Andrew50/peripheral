@@ -550,7 +550,7 @@
 			</thead>
 			{#if Array.isArray($list) && $list.length > 0}
 				<tbody>
-					{#each $list as watch, i (`${watch.securityId || i}-${i}`)}
+					{#each $list as watch, i (watch.watchlistItemId)}
 						<tr
 							class="default-tr {rowClass(watch)}" 
 							on:mousedown={(event) => clickHandler(event, watch, i)}
