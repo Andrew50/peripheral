@@ -131,7 +131,7 @@ func GetPrevClose(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 
 		// If the close price is found, return it
 		if bar.Close != 0 {
-			fmt.Println(currentDay)
+			////fmt.Println(currentDay)
 			return bar.Close, nil
 		}
 
@@ -391,7 +391,7 @@ func GetTickerDetails(conn *data.Conn, userId int, rawArgs json.RawMessage) (int
 	}
 	details, err := polygon.GetTickerDetails(conn.Polygon, ticker, "now")
 	if err != nil {
-		fmt.Printf("failed to get ticker details: %v\n", err)
+		////fmt.Printf("failed to get ticker details: %v\n", err)
 		return nil, nil
 		//return nil, fmt.Errorf("failed to get ticker details: %v", err)
 	}
@@ -472,13 +472,13 @@ func GetTickerDetails(conn *data.Conn, userId int, rawArgs json.RawMessage) (int
 	// Fetch both logo and icon with proper error handling
 	logoBase64, logoErr := fetchImage(details.Branding.LogoURL)
 	if logoErr != nil {
-		fmt.Printf("Warning: Failed to fetch logo: %v\n", logoErr)
+		////fmt.Printf("Warning: Failed to fetch logo: %v\n", logoErr)
 		logoBase64 = "" // Set to empty string on error
 	}
 
 	iconBase64, iconErr := fetchImage(details.Branding.IconURL)
 	if iconErr != nil {
-		fmt.Printf("Warning: Failed to fetch icon: %v\n", iconErr)
+		////fmt.Printf("Warning: Failed to fetch icon: %v\n", iconErr)
 		iconBase64 = "" // Set to empty string on error
 	}
 
@@ -765,7 +765,7 @@ func GetTickerDailySnapshot(conn *data.Conn, userId int, rawArgs json.RawMessage
 	results.TodayClose = snapshot.Day.Close
 	results.PreviousClose = lastClose
 	results.Ticker = ticker
-	fmt.Println(results)
+	////fmt.Println(results)
 	return results, nil
 }
 

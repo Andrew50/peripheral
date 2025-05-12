@@ -188,7 +188,7 @@ func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFilin
 
 			// Exponential backoff
 			waitTime := retryDelay * time.Duration(1<<attempt)
-			fmt.Printf("Rate limited by SEC API (429). Retrying in %v...\n", waitTime)
+			////fmt.Printf("Rate limited by SEC API (429). Retrying in %v...\n", waitTime)
 			time.Sleep(waitTime)
 			continue
 		}
@@ -331,7 +331,7 @@ func fetchEdgarFilingsPage(conn *data.Conn,page int, perPage int) ([]GlobalEDGAR
 		if resp.StatusCode == 429 {
 			resp.Body.Close()
 			waitTime := retryDelay * time.Duration(1<<attempt)
-			fmt.Printf("Rate limited by SEC API (429). Retrying in %v (page %d)...\n", waitTime, page)
+			////fmt.Printf("Rate limited by SEC API (429). Retrying in %v (page %d)...\n", waitTime, page)
 			time.Sleep(waitTime)
 			continue
 		}
@@ -370,7 +370,7 @@ func parseEdgarXMLFeed(conn *data.Conn,body []byte) ([]GlobalEDGARFiling, error)
 		// Extract date and time from the updated field
 		updatedTime, err := time.Parse(time.RFC3339, entry.Updated)
 		if err != nil {
-			fmt.Printf("Error parsing time %s: %v\n", entry.Updated, err)
+			////fmt.Printf("Error parsing time %s: %v\n", entry.Updated, err)
 			// Use current time as fallback instead of skipping
 			updatedTime = time.Now()
 		}

@@ -69,24 +69,24 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 		log.Println("niv0: ", err)
 		return
 	} else {
-		fmt.Println("✅ Connected to Polygon Quotes stream")
+		////fmt.Println("✅ Connected to Polygon Quotes stream")
 	}
 	err = polygonWS.Subscribe(polygonws.StocksTrades)
 	if err != nil {
 		log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	} else {
-		fmt.Println("✅ Connected to Polygon Trades stream")
+		////fmt.Println("✅ Connected to Polygon Trades stream")
 	}
 	err = polygonWS.Subscribe(polygonws.StocksMinAggs)
 	if err != nil {
 		log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	} else {
-		fmt.Println("✅ Connected to Polygon Minute Aggregates stream")
+		////fmt.Println("✅ Connected to Polygon Minute Aggregates stream")
 	}
 
-	fmt.Println("🚀 All Polygon streams initialized and ready to process data")
+	////fmt.Println("🚀 All Polygon streams initialized and ready to process data")
 
 	// Add timestamp ticker
 	timestampTicker := time.NewTicker(TimestampUpdateInterval)
@@ -96,8 +96,8 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 		select {
 		case <-timestampTicker.C:
 			broadcastTimestamp()
-		case err := <-polygonWS.Error():
-			fmt.Printf("PolygonWS Error: %v", err)
+//		case err := <-polygonWS.Error():
+			////fmt.Printf("PolygonWS Error: %v", err)
 		case out := <-polygonWS.Output():
 			var symbol string
 			var timestamp int64
@@ -148,7 +148,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				}
 				jsonData, err := json.Marshal(data)
 				if err != nil {
-					fmt.Println("Error marshling JSON:", err)
+					////fmt.Println("Error marshling JSON:", err)
 				}
 				//	conn.Cache.Publish(context.Background(), "trades-agg", string(jsonData))
 
@@ -158,7 +158,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				data.Channel = channelName
 				jsonData, err = json.Marshal(data)
 				if err != nil {
-					fmt.Println("Error marshling JSON:", err)
+					////fmt.Println("Error marshling JSON:", err)
 				}
 				//conn.Cache.Publish(context.Background(), channelName, string(jsonData))
 				broadcastToChannel(channelName, string(jsonData))
@@ -167,7 +167,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				nextDispatch, exists := nextDispatchTimes.times[msg.Symbol]
 				nextDispatchTimes.RUnlock()
 				// Only append tick if aggregates are initialized
-				//fmt.Println("debug: alerts.IsAggsInitialized()", alerts.IsAggsInitialized())
+				//////fmt.Println("debug: alerts.IsAggsInitialized()", alerts.IsAggsInitialized())
 
 				//if alerts.IsAggsInitialized() {
 				if useAlerts {
@@ -179,7 +179,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 					data.Channel = slowChannelName
 					jsonData, err = json.Marshal(data)
 					if err != nil {
-						fmt.Println("E2fi200e2e0rror marshling JSON:", err)
+						////fmt.Println("E2fi200e2e0rror marshling JSON:", err)
 					}
 					//conn.Cache.Publish(context.Background(), slowChannelName, string(jsonData))
 					broadcastToChannel(slowChannelName, string(jsonData))
@@ -199,7 +199,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				}
 				jsonData, err := json.Marshal(data)
 				if err != nil {
-					fmt.Printf("io1nv %v\n", err)
+					////fmt.Printf("io1nv %v\n", err)
 					continue
 				}
 				broadcastToChannel(channelName, string(jsonData))

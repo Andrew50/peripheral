@@ -22,9 +22,10 @@ func GetSuggestedQueries(conn *data.Conn, userID int, rawArgs json.RawMessage) (
 	ctx := context.Background()
 	success, message := conn.TestRedisConnectivity(ctx, userID)
 	if !success {
-		fmt.Printf("WARNING: %s\n", message)
+        return nil, fmt.Errorf("%s\n",message)
+		////fmt.Printf("WARNING: %s\n", message)
 	} else {
-		fmt.Println(message)
+		////fmt.Println(message)
 	}
 	conversationData, err := GetConversationFromCache(ctx, conn, userID)
 	if err != nil || conversationData == nil {
@@ -77,7 +78,7 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 	barsToFetch := 10 // Fetch a decent number for context/plotting
 
 	if !secIdOk {
-		fmt.Println("Warning: Could not extract securityId for fetching chart data.")
+		////fmt.Println("Warning: Could not extract securityId for fetching chart data.")
 		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, nil // Cannot proceed without these
 	}
 
@@ -96,12 +97,12 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 
 	rawResp, chartErr := chart.GetChartData(conn, userID, reqBytes)
 	if chartErr != nil {
-		fmt.Printf("Warning: error fetching chart data for suggestions: %v\n", chartErr)
+		////fmt.Printf("Warning: error fetching chart data for suggestions: %v\n", chartErr)
 		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, nil
 	}
 	resp, ok := rawResp.(chart.GetChartDataResponse)
 	if !ok || len(resp.Bars) == 0 {
-		fmt.Println("Warning: no bars returned or unexpected type from GetChartData.")
+		////fmt.Println("Warning: no bars returned or unexpected type from GetChartData.")
 		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, nil
 	}
 	// --- End Data Fetching ---
@@ -110,7 +111,7 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 	easternLocation, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		// Handle error, perhaps log and continue without date strings
-		fmt.Printf("Warning: could not load America/New_York timezone: %v\n", err)
+		////fmt.Printf("Warning: could not load America/New_York timezone: %v\n", err)
 	}
 
 	processedBars := make([]map[string]interface{}, len(resp.Bars))
@@ -152,7 +153,7 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 
 	sysPrompt, err := getSystemInstruction("initialQueriesPrompt")
 	if err != nil {
-		fmt.Printf("Error getting system instruction: %v\n", err)
+		////fmt.Printf("Error getting system instruction: %v\n", err)
 		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, fmt.Errorf("error fetching system prompt: %w", err)
 	}
 
@@ -190,7 +191,7 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 		cfg,
 	)
 	if err != nil {
-		fmt.Printf("Error getting initial suggestions from Gemini: %v\n", err)
+		////fmt.Printf("Error getting initial suggestions from Gemini: %v\n", err)
 		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, nil
 	}
 	// --- End Call LLM ---
@@ -210,14 +211,14 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 	jsonEndIdx := strings.LastIndex(llmResponseText, "}")
 
 	if jsonStartIdx == -1 || jsonEndIdx == -1 || jsonEndIdx < jsonStartIdx {
-		fmt.Printf("No valid JSON block found in initial suggestions response: %s\n", llmResponseText)
+		////fmt.Printf("No valid JSON block found in initial suggestions response: %s\n", llmResponseText)
 		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, nil
 	}
 
 	jsonBlock := llmResponseText[jsonStartIdx : jsonEndIdx+1]
 	var response GetInitialQuerySuggestionsResponse
 	if err := json.Unmarshal([]byte(jsonBlock), &response); err != nil {
-		fmt.Printf("Error unmarshalling initial suggestions JSON: %v. JSON block: %s\n", err, jsonBlock)
+		////fmt.Printf("Error unmarshalling initial suggestions JSON: %v. JSON block: %s\n", err, jsonBlock)
 		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, nil
 	}
 	// --- End Parse Response ---

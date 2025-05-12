@@ -181,11 +181,11 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
-	fmt.Printf("INFO: Starting CreateStrategyFromNaturalLanguage for user %d with query: %q\n", userId, args.Query)
+	////fmt.Printf("INFO: Starting CreateStrategyFromNaturalLanguage for user %d with query: %q\n", userId, args.Query)
 
 	apikey, err := conn.GetGeminiKey()
 	if err != nil {
-		fmt.Printf("ERROR: Error getting Gemini key for user %d: %v\n", userId, err)
+		////fmt.Printf("ERROR: Error getting Gemini key for user %d: %v\n", userId, err)
 		return nil, fmt.Errorf("error getting gemini key: %v", err)
 	}
 
@@ -225,13 +225,13 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 	conversationHistory := []*genai.Content{initialContent[0]} // Start with the user's query
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		fmt.Printf("Attempt %d/%d to generate and validate strategy spec...\n", attempt+1, maxRetries)
+		////fmt.Printf("Attempt %d/%d to generate and validate strategy spec...\n", attempt+1, maxRetries)
 
 		// Generate content using the current conversation history
 		result, err := client.Models.GenerateContent(context.Background(), "gemini-2.5-flash-preview-04-17", conversationHistory, config)
 		if err != nil {
 			lastErr = fmt.Errorf("error generating content (attempt %d): %w", attempt+1, err)
-			fmt.Printf("WARN: Attempt %d/%d for user %d: Gemini content generation failed: %v\n", attempt+1, maxRetries, userId, err)
+			////fmt.Printf("WARN: Attempt %d/%d for user %d: Gemini content generation failed: %v\n", attempt+1, maxRetries, userId, err)
 			// Append error as user message for context? Maybe too noisy. Let's just retry.
 			continue // Retry the API call
 		}
@@ -248,7 +248,7 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 			}
 		} else {
 			lastErr = fmt.Errorf("gemini returned no response candidates (attempt %d)", attempt+1)
-			fmt.Printf("WARN: Attempt %d/%d for user %d: Gemini returned no response candidates.\n", attempt+1, maxRetries, userId)
+			////fmt.Printf("WARN: Attempt %d/%d for user %d: Gemini returned no response candidates.\n", attempt+1, maxRetries, userId)
 			// Append error message as user turn
 			errorMsg := fmt.Sprintf("Attempt %d failed: Gemini returned no response. Please try again.", attempt+1)
 			// Parts expects []*genai.Part, and we need to create a Part directly
@@ -256,7 +256,7 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 			continue
 		}
 
-		fmt.Printf("DEBUG: Attempt %d/%d for user %d: Raw Gemini response: %s\n", attempt+1, maxRetries, userId, responseText)
+		////fmt.Printf("DEBUG: Attempt %d/%d for user %d: Raw Gemini response: %s\n", attempt+1, maxRetries, userId, responseText)
 
 		// Extract JSON block
 		jsonBlock := ""
@@ -268,13 +268,13 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 			if jsonCodeBlockEnd != -1 {
 				// Found the closing ```
 				jsonBlock = responseText[jsonCodeBlockStart : jsonCodeBlockStart+jsonCodeBlockEnd]
-				fmt.Printf("DEBUG: Attempt %d/%d for user %d: Extracted JSON from code block.\n", attempt+1, maxRetries, userId)
+				////fmt.Printf("DEBUG: Attempt %d/%d for user %d: Extracted JSON from code block.\n", attempt+1, maxRetries, userId)
 			}
 		}
 
 		// If not found in code block, fall back to searching for first { and last }
 		if jsonBlock == "" {
-			fmt.Printf("DEBUG: Attempt %d/%d for user %d: JSON code block not found, falling back to {} search.\n", attempt+1, maxRetries, userId)
+			////fmt.Printf("DEBUG: Attempt %d/%d for user %d: JSON code block not found, falling back to {} search.\n", attempt+1, maxRetries, userId)
 			jsonStartIdx := strings.Index(responseText, "{")
 			jsonEndIdx := strings.LastIndex(responseText, "}")
 			if jsonStartIdx != -1 && jsonEndIdx != -1 && jsonEndIdx > jsonStartIdx {
@@ -284,7 +284,7 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 
 		if jsonBlock == "" {
 			lastErr = fmt.Errorf("no valid JSON block found in Gemini response (attempt %d): %s", attempt+1, responseText)
-			fmt.Printf("WARN: Attempt %d/%d for user %d: No valid JSON block found in Gemini response.\n", attempt+1, maxRetries, userId)
+			////fmt.Printf("WARN: Attempt %d/%d for user %d: No valid JSON block found in Gemini response.\n", attempt+1, maxRetries, userId)
 			// Append error message as user turn
 			errorMsg := fmt.Sprintf("Attempt %d failed: Could not find a JSON block (neither in ```json ... ``` nor between '{' and '}') in the response. Please ensure the response contains a single, valid JSON object. The response received was:\n%s", attempt+1, responseText)
 			// Parts expects []*genai.Part, and we need to create a Part directly
@@ -293,14 +293,14 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 		}
 
 		// Log the raw JSON block returned by Gemini
-		fmt.Printf("DEBUG: Attempt %d/%d for user %d: Extracted JSON block: \n%s\n", attempt+1, maxRetries, userId, jsonBlock)
+		////fmt.Printf("DEBUG: Attempt %d/%d for user %d: Extracted JSON block: \n%s\n", attempt+1, maxRetries, userId, jsonBlock)
 
 		jsonBlock = strings.TrimSpace(jsonBlock)
 		// Use the new helper function to unmarshal and validate the entire JSON block
 		name, spec, err := UnmarshalAndValidateNewStrategyInput([]byte(jsonBlock))
 		if err != nil {
 			lastErr = fmt.Errorf("failed to unmarshal or validate Gemini JSON response (attempt %d): %w", attempt+1, err)
-			fmt.Printf("WARN: Attempt %d/%d for user %d: Failed to unmarshal/validate JSON: %v\n", attempt+1, maxRetries, userId, err)
+			////fmt.Printf("WARN: Attempt %d/%d for user %d: Failed to unmarshal/validate JSON: %v\n", attempt+1, maxRetries, userId, err)
 			// Format error message for the next prompt
 			errorMsg := fmt.Sprintf("Attempt %d failed: Could not parse or validate the JSON structure. Ensure the response is a single JSON object with 'name' (string) and 'spec' (object) fields, and that the spec is valid. Error: %v\nReceived JSON:\n%s\nPlease fix the JSON based on the error and the original query.", attempt+1, err, jsonBlock)
 			// Parts expects []*genai.Part, and we need to create a Part directly
@@ -308,18 +308,18 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 			continue
 		}
 
-		fmt.Printf("INFO: Attempt %d/%d for user %d: Successfully validated name '%s' and spec.\n", attempt+1, maxRetries, userId, name)
+		////fmt.Printf("INFO: Attempt %d/%d for user %d: Successfully validated name '%s' and spec.\n", attempt+1, maxRetries, userId, name)
 
 		// --- Compile the validated spec to SQL ---
-		sqlQuery, compileErr := CompileSpecToSQL(spec)
+		_, compileErr := CompileSpecToSQL(spec)
 		if compileErr != nil {
 			// Log the error but proceed with saving the strategy for now.
 			// The user might want to fix the spec manually later.
-			fmt.Printf("ERROR: User %d: Failed to compile validated spec for strategy '%s' to SQL: %v\n", userId, name, compileErr)
+			////fmt.Printf("ERROR: User %d: Failed to compile validated spec for strategy '%s' to SQL: %v\n", userId, name, compileErr)
 			// Optionally, you could add this error info back into the conversation history
 			// if you wanted Gemini to potentially fix the spec based on compilation failure.
 		} else {
-			fmt.Printf("INFO: User %d: Successfully compiled spec for strategy '%s' to SQL:\n%s\n", userId, name, sqlQuery)
+			////fmt.Printf("INFO: User %d: Successfully compiled spec for strategy '%s' to SQL:\n%s\n", userId, name, sqlQuery)
 			// You could potentially store this compiled SQL alongside the strategy spec if needed.
 		}
 		// --- End SQL Compilation ---
@@ -328,7 +328,7 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 		strategyId, err := _newStrategy(conn, userId, name, spec)
 		if err != nil {
 			// This is an internal error, not Gemini's fault, so return directly
-			fmt.Printf("ie20hifi0: %v\n", err)
+			////fmt.Printf("ie20hifi0: %v\n", err)
 			return nil, fmt.Errorf("error saving validated strategy: %w", err)
 		}
 
@@ -341,7 +341,7 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 	}
 
 	// If loop finishes without success
-	fmt.Printf("ERROR: User %d: Failed to create valid strategy from query %q after %d attempts. Last error: %v\n", userId, args.Query, maxRetries, lastErr)
+	////fmt.Printf("ERROR: User %d: Failed to create valid strategy from query %q after %d attempts. Last error: %v\n", userId, args.Query, maxRetries, lastErr)
 	return nil, fmt.Errorf("failed to create valid strategy after %d attempts: %w", maxRetries, lastErr)
 }
 
@@ -359,7 +359,7 @@ func GetStrategySpec(conn *data.Conn, userId int, rawArgs json.RawMessage) (inte
 
 func _getStrategySpec(conn *data.Conn, strategyId int, userId int) (json.RawMessage, error) {
 	var strategyCriteria json.RawMessage
-	fmt.Println(userId)
+	////fmt.Println(userId)
 	err := conn.DB.QueryRow(context.Background(), `
     SELECT spec
     FROM strategies WHERE strategyId = $1 and userId = $2`, strategyId, userId).Scan(&strategyCriteria)
@@ -435,7 +435,7 @@ func _newStrategy(conn *data.Conn, userId int, name string, spec Spec) (int, err
 		// Consider checking for specific DB errors (e.g., unique constraint violation) if needed
 		return -1, fmt.Errorf("error inserting strategy into database: %w", err)
 	}
-	fmt.Printf("Successfully created strategy with ID: %d for user %d\n", strategyID, userId)
+	////fmt.Printf("Successfully created strategy with ID: %d for user %d\n", strategyID, userId)
 	return strategyID, nil
 }
 
@@ -532,7 +532,7 @@ func _setStrategy(conn *data.Conn, userId int, strategyId int, name string, spec
 		// This means either the strategyId didn't exist or it didn't belong to the user
 		return fmt.Errorf("strategy not found or permission denied")
 	}
-	fmt.Printf("Successfully updated strategy ID: %d for user %d\n", strategyId, userId)
+	////fmt.Printf("Successfully updated strategy ID: %d for user %d\n", strategyId, userId)
 	return nil
 }
 

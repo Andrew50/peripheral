@@ -122,7 +122,7 @@ func GetScreensavers(conn *data.Conn, userId int, rawArgs json.RawMessage) (inte
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch losers: %v", err)
 	}
-	fmt.Println(losers)
+	////fmt.Println(losers)
 
 	// Combine gainers and losers
 	tickers := append(gainers, losers...)

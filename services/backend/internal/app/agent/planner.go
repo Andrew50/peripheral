@@ -54,7 +54,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	if err != nil {
 		return Plan{}, fmt.Errorf("error creating gemini client: %w", err)
 	}
-	fmt.Println("prompt", prompt)
+	////fmt.Println("prompt", prompt)
 	thinkingBudget := int32(1000)
 	// Enhance the system instruction with tool descriptions
 	enhancedSystemInstruction := enhanceSystemPromptWithTools(systemPrompt)
@@ -86,10 +86,10 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 			}
 		}
 	}
-	fmt.Println("\n TOKEN COUNT: ", candidate.TokenCount)
-	fmt.Println("groundingMetadata", candidate.GroundingMetadata)
-	fmt.Println("citationMetadata", candidate.CitationMetadata)
-	fmt.Println("\n\n\n\n\nresultText", resultText)
+	////fmt.Println("\n TOKEN COUNT: ", candidate.TokenCount)
+	////fmt.Println("groundingMetadata", candidate.GroundingMetadata)
+	////fmt.Println("citationMetadata", candidate.CitationMetadata)
+	////fmt.Println("\n\n\n\n\nresultText", resultText)
 
 	// --- Extract JSON block --- START
 	jsonBlock := ""
@@ -101,7 +101,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 		// If no JSON block found, we can't parse it as Plan or DirectAnswer
 		// Depending on expected behavior, you might return an error or default
 		// For now, let the unmarshal attempts fail below, which leads to the final error
-		fmt.Println("Warning: No JSON block found in planner response")
+		////fmt.Println("Warning: No JSON block found in planner response")
 	}
 	// --- Extract JSON block --- END
 

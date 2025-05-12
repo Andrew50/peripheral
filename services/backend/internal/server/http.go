@@ -146,7 +146,7 @@ func publicHandler(conn *data.Conn) http.HandlerFunc {
 		if r.Method == "OPTIONS" {
 			return
 		}
-		fmt.Println("debug: got public request")
+		////fmt.Println("debug: got public request")
 		// Validate content type to prevent content-type sniffing attacks
 		contentType := r.Header.Get("Content-Type")
 		if contentType != "application/json" {
@@ -481,7 +481,7 @@ func WSHandler(conn *data.Conn) http.HandlerFunc {
 		// Upgrade the connection to a WebSocket
 		ws, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-	//		fmt.Println("Failed to upgrade to WebSocket:", err)
+	//		////fmt.Println("Failed to upgrade to WebSocket:", err)
 			return
 		}
 
@@ -509,7 +509,7 @@ func StartServer(conn *data.Conn) {
 	http.HandleFunc("/ws", WSHandler(conn))
 	http.HandleFunc("/upload", privateUploadHandler(conn))
 	http.HandleFunc("/healthz", HealthCheck())
-	//fmt.Println("debug: Server running on port 5058 ----------------------------------------------------------")
+	//////fmt.Println("debug: Server running on port 5058 ----------------------------------------------------------")
 	if err := http.ListenAndServe(":5058", nil); err != nil {
 		log.Fatal(err)
 	}

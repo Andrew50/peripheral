@@ -202,20 +202,20 @@ func GetTimeframeData(securityId int, timeframe int, extendedHours bool) ([][]fl
 // InitAggregatesAsync starts the initialization process in a goroutine
 func InitAggregatesAsync(conn *data.Conn) {
 	setAggsInitialized(false)
-	fmt.Println("Starting aggregates initialization in background...")
+	////fmt.Println("Starting aggregates initialization in background...")
 	go func() {
 		if err := initAggregatesInternal(conn); err != nil {
-			fmt.Printf("Error initializing aggregates: %v\n", err)
+			////fmt.Printf("Error initializing aggregates: %v\n", err)
 			return
 		}
 		setAggsInitialized(true)
-		fmt.Println("✅ Aggregates initialization completed - Ready to process ticks")
+		////fmt.Println("✅ Aggregates initialization completed - Ready to process ticks")
 	}()
 }
 
 // Internal function that does the actual initialization work
 func initAggregatesInternal(conn *data.Conn) error {
-	fmt.Println("Loading historical data and initializing aggregates...")
+	////fmt.Println("Loading historical data and initializing aggregates...")
 	ctx := context.Background()
 
 	query := `
@@ -331,34 +331,34 @@ func processOneSecurity(sid int, conn *data.Conn) (*SecurityData, error) {
 // Helper function to validate initialized security data
 func validateSecurityData(sd *SecurityData) error {
 	if sd == nil {
-		fmt.Println("Security data is nil")
+		////fmt.Println("Security data is nil")
 		return fmt.Errorf("security data is nil")
 	}
 
 	if secondAggs {
 		if err := validateTimeframeData(&sd.SecondDataExtended, "second", true); err != nil {
-			fmt.Printf("Second data validation failed: %v\n", err)
+			////fmt.Printf("Second data validation failed: %v\n", err)
 			return fmt.Errorf("second data validation failed: %w", err)
 		}
 	}
 
 	if minuteAggs {
 		if err := validateTimeframeData(&sd.MinuteDataExtended, "minute", true); err != nil {
-			fmt.Printf("Minute data validation failed: %v\n", err)
+			////fmt.Printf("Minute data validation failed: %v\n", err)
 			return fmt.Errorf("minute data validation failed: %w", err)
 		}
 	}
 
 	if hourAggs {
 		if err := validateTimeframeData(&sd.HourData, "hour", false); err != nil {
-			fmt.Printf("Hour data validation failed: %v\n", err)
+			////fmt.Printf("Hour data validation failed: %v\n", err)
 			return fmt.Errorf("hour data validation failed: %w", err)
 		}
 	}
 
 	if dayAggs {
 		if err := validateTimeframeData(&sd.DayData, "day", false); err != nil {
-			fmt.Printf("Day data validation failed: %v\n", err)
+			////fmt.Printf("Day data validation failed: %v\n", err)
 			return fmt.Errorf("day data validation failed: %w", err)
 		}
 	}
@@ -416,23 +416,23 @@ func initTimeframeData(conn *data.Conn, securityId int, timeframe int, isExtende
 		tfStr = "day"
 		multiplier = 1
 	default:
-		fmt.Printf("Invalid timeframe: %d\n", timeframe)
+		////fmt.Printf("Invalid timeframe: %d\n", timeframe)
 		return td
 	}
 	fromMillis, toMillis, err := chart.GetRequestStartEndTime(time.Unix(0, 0), toTime, "backward", tfStr, multiplier, AggsLength)
 	if err != nil {
-		fmt.Printf("error g2io002")
+		////fmt.Printf("error g2io002")
 		return td
 	}
 	ticker, err := postgres.GetTicker(conn, securityId, toTime)
 	//ticker := obj.ticekr
 	if err != nil {
-		fmt.Printf("error getting hist data")
+		////fmt.Printf("error getting hist data")
 		return td
 	}
 	iter, err := polygon.GetAggsData(conn.Polygon, ticker, multiplier, tfStr, fromMillis, toMillis, AggsLength, "desc", true)
 	if err != nil {
-		fmt.Printf("Error getting historical data: %v\n", err)
+		////fmt.Printf("Error getting historical data: %v\n", err)
 		return td
 	}
 
@@ -465,7 +465,7 @@ func initTimeframeData(conn *data.Conn, securityId int, timeframe int, isExtende
 		lastTimestamp = time.Time(agg.Timestamp).Unix()
 	}
 	if err := iter.Err(); err != nil {
-		fmt.Printf("Error iterating historical data: %v\n", err)
+		////fmt.Printf("Error iterating historical data: %v\n", err)
 	}
 	//if td.rolloverTimestamp == -1 {
 	td.rolloverTimestamp = lastTimestamp + int64(timeframe) //if theres no data then this wont work but is extreme edge case

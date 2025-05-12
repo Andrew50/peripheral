@@ -98,15 +98,15 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 	rows.Close() // Close explicitly after successful iteration
 
 	if len(records) == 0 {
-		fmt.Printf("Warning: No security records found for securityId %d overlapping range %d-%d\n", securityID, fromMs, toMs)
+		////fmt.Printf("Warning: No security records found for securityId %d overlapping range %d-%d\n", securityID, fromMs, toMs)
 		// Attempt to find *any* ticker for the security ID as a fallback for fetching events
 		// This might be needed if the time range falls entirely outside known min/max dates
 		fallbackTicker, fallbackErr := postgres.GetTicker(conn, securityID, fromTime) // Use 'fromTime' for fallback
 		if fallbackErr != nil {
-			fmt.Printf("Warning: Could not find fallback ticker for securityId %d: %v\n", securityID, fallbackErr)
+			////fmt.Printf("Warning: Could not find fallback ticker for securityId %d: %v\n", securityID, fallbackErr)
 			return []ChartEvent{}, nil // Return empty if no records and no fallback
 		}
-		fmt.Printf("Using fallback ticker %s for securityId %d\n", fallbackTicker, securityID)
+		////fmt.Printf("Using fallback ticker %s for securityId %d\n", fallbackTicker, securityID)
 		tickersToFetch[fallbackTicker] = struct{}{}
 	}
 
@@ -146,7 +146,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 			res, err := edgar.GetStockEdgarFilings(conn, userId, optionsJSON)
 			if err != nil {
 				// Log the error but don't make it fatal for the whole function
-				fmt.Printf("Warning: error fetching SEC filings for securityId %d: %v\n", securityID, err)
+				////fmt.Printf("Warning: error fetching SEC filings for securityId %d: %v\n", securityID, err)
 				mutex.Lock()
 				// Store the error if needed, but don't overwrite a critical marshalling error
 				if secFilingErr == nil {
@@ -182,7 +182,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 			mutex.Lock()
 			if err != nil {
 				// Log error, potentially store it if we need ticker-specific errors
-				fmt.Printf("Warning: error fetching splits for ticker %s: %v\n", t, err)
+				////fmt.Printf("Warning: error fetching splits for ticker %s: %v\n", t, err)
 				if splitErr == nil { // Keep the first error encountered
 					splitErr = err
 				}
@@ -198,7 +198,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 			dividends, err := getStockDividends(conn, t) // Fetch all dividends for the ticker
 			mutex.Lock()
 			if err != nil {
-				fmt.Printf("Warning: error fetching dividends for ticker %s: %v\n", t, err)
+				////fmt.Printf("Warning: error fetching dividends for ticker %s: %v\n", t, err)
 				if dividendErr == nil {
 					dividendErr = err
 				}
@@ -215,14 +215,14 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 	// --- Error Handling (Post-Wait) ---
 	// Check for critical errors collected during fetch
 	if splitErr != nil {
-		fmt.Printf("Non-fatal error encountered during split fetching: %v\n", splitErr)
+		////fmt.Printf("Non-fatal error encountered during split fetching: %v\n", splitErr)
 		// Decide if this should be fatal - currently logged as warning
 	}
 	if dividendErr != nil {
-		fmt.Printf("Non-fatal error encountered during dividend fetching: %v\n", dividendErr)
+		////fmt.Printf("Non-fatal error encountered during dividend fetching: %v\n", dividendErr)
 	}
 	if secFilingErr != nil {
-		fmt.Printf("Non-fatal error encountered during SEC filing fetching: %v\n", secFilingErr)
+		////fmt.Printf("Non-fatal error encountered during SEC filing fetching: %v\n", secFilingErr)
 	}
 
 	// 4. Filter and Format Events based on the original time range [fromMs, toMs]
@@ -253,7 +253,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 			}
 			valueJSON, err := json.Marshal(valueMap)
 			if err != nil {
-				fmt.Printf("Warning: error creating split value JSON: %v\n", err)
+				////fmt.Printf("Warning: error creating split value JSON: %v\n", err)
 				continue // Skip this event
 			}
 			rawEvents = append(rawEvents, ChartEvent{
@@ -270,7 +270,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 	for _, dividend := range allDividends {
 		exDate, err := time.Parse("2006-01-02", dividend.ExDividendDate)
 		if err != nil {
-			fmt.Printf("Warning: error parsing dividend ex-date %s: %v\n", dividend.ExDividendDate, err)
+			////fmt.Printf("Warning: error parsing dividend ex-date %s: %v\n", dividend.ExDividendDate, err)
 			continue
 		}
 		// Align to 4 AM ET on the Ex-Dividend Date
@@ -293,7 +293,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 			}
 			valueJSON, err := json.Marshal(valueMap)
 			if err != nil {
-				fmt.Printf("Warning: error creating dividend value JSON: %v\n", err)
+				////fmt.Printf("Warning: error creating dividend value JSON: %v\n", err)
 				continue // Skip this event
 			}
 			rawEvents = append(rawEvents, ChartEvent{
@@ -334,7 +334,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 				}
 				valueJSON, err := json.Marshal(valueMap)
 				if err != nil {
-					fmt.Printf("Warning: error creating filing value JSON: %v\n", err)
+					////fmt.Printf("Warning: error creating filing value JSON: %v\n", err)
 					continue // Skip this event
 				}
 
@@ -347,7 +347,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 							shouldFilter = true
 						}
 					} else {
-						fmt.Printf("Warning: could not unmarshal filing value for filtering: %v\n", err)
+						////fmt.Printf("Warning: could not unmarshal filing value for filtering: %v\n", err)
 					}
 				}
 

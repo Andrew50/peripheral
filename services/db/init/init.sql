@@ -28,7 +28,7 @@ CREATE TABLE users (
 );
 CREATE INDEX idxUsers ON users (username, password);
 CREATE INDEX idxUserAuthType ON users(auth_type);
-CREATE TABLE securities (
+CREATE TABLE securities (init.sq
     securityid SERIAL,
     ticker varchar(10) not null,
     figi varchar(12) not null,
