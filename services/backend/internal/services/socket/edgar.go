@@ -2,6 +2,7 @@ package socket
 
 import (
 	"backend/internal/data"
+	"backend/internal/data/edgar"
 	"backend/internal/services/marketData"
 	"encoding/json"
 	"fmt"
@@ -64,4 +65,43 @@ func (c *Client) unsubscribeSECFilings() {
 			c.removeSubscribedChannel(channelName)
 		}
 	}
+}
+
+// SECFilingMessage represents a single SEC filing message to be sent over WebSocket
+type SECFilingMessage struct {
+	Type      string `json:"type"`      // Filing type (e.g., "10-K", "8-K")
+	Date      string `json:"date"`      // Filing date as string
+	URL       string `json:"url"`       // URL to the filing
+	Timestamp int64  `json:"timestamp"` // UTC timestamp in milliseconds
+	Ticker    string `json:"ticker"`    // The ticker symbol
+	Channel   string `json:"channel"`   // Channel name (always "sec-filings")
+}
+
+// BroadcastGlobalSECFiling sends a new global SEC filing to all clients subscribed to the sec-filings channel
+func BroadcastGlobalSECFiling(filing edgar.GlobalEDGARFiling) {
+	if !hasListeners("sec-filings") {
+		return
+	}
+	filingMessage := SECFilingMessage{
+		Type:      filing.Type,
+		Date:      filing.Date,
+		URL:       filing.URL,
+		Timestamp: filing.Timestamp,
+		Ticker:    filing.Ticker,
+		Channel:   "sec-filings",
+	}
+
+	// Create a wrapper with data property to match the expected format
+	wrapper := map[string]interface{}{
+		"channel": "sec-filings",
+		"data":    filingMessage,
+	}
+
+	jsonData, err := json.Marshal(wrapper)
+	if err != nil {
+		fmt.Println("Error marshaling global SEC filing:", err)
+		return
+	}
+
+	broadcastToChannel("sec-filings", string(jsonData))
 }
