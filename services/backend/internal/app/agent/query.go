@@ -67,11 +67,12 @@ func GetQuery(conn *data.Conn, userID int, args json.RawMessage) (interface{}, e
 	ctx := context.Background()
 	success, message := conn.TestRedisConnectivity(ctx, userID)
 	if !success {
-        return nil, fmt.Errorf("%s\n", message)
+        return nil, fmt.Errorf("%s", message)
 		////fmt.Printf("WARNING: %s\n", message)
-	} else {
+	} 
+    //else {
 		////fmt.Println(message)
-	}
+	//}
 
 	var query Query
 	if err := json.Unmarshal(args, &query); err != nil {

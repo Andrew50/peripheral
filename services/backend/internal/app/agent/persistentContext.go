@@ -140,12 +140,13 @@ func getPersistentContext(ctx context.Context, conn *data.Conn, userID int) (*Pe
 	if needsResave {
 		data.Items = validItems
 		// Optional: Save the cleaned data back asynchronously
-		go func() {
+		//go func() {
 			bgCtx := context.Background()
 			if err := savePersistentContext(bgCtx, conn, userID, &data); err != nil {
+                return nil, err
 				////fmt.Printf("Error saving persistent context after filtering expired items during get for user %d: %v\n", userID, err)
 			}
-		}()
+		//}()
 	}
 
 	////fmt.Printf("Retrieved %d persistent context items from cache for user %d.\n", len(data.Items), userID)
@@ -217,10 +218,11 @@ func RemovePersistentContextItem(ctx context.Context, conn *data.Conn, userID in
 		if err := savePersistentContext(ctx, conn, userID, data); err != nil {
 			return fmt.Errorf("failed to save persistent context after removing key '%s': %w", key, err)
 		}
-	} else {
+	} 
+    //else {
 		////fmt.Printf("Persistent context item '%s' not found for removal for user %d\n", key, userID)
 		// Not an error if the item wasn't there
-	}
+	//}
 
 	return nil
 }
