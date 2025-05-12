@@ -1,12 +1,12 @@
 <script lang="ts">
 	export let hoveredCandleData;
-	import type { Instance } from '$lib/core/types';
+	import type { Instance } from '$lib/utils/types/types';
 	import { queryChart } from './interface';
 	import { writable } from 'svelte/store';
 	export let instance: Instance;
-	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
-	import { settings } from '$lib/core/stores';
-	import { UTCTimestampToESTString } from '$lib/core/timestamp';
+	import { queryInstanceInput } from '$lib/components/input.svelte';
+	import { settings } from '$lib/utils/stores/stores';
+	import { UTCTimestampToESTString } from '$lib/utils/helpers/timestamp';
 	import { onMount, onDestroy } from 'svelte';
 
 	// Add new props for chart dimensions
