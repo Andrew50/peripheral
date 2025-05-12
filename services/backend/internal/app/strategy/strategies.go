@@ -318,11 +318,9 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 			////fmt.Printf("ERROR: User %d: Failed to compile validated spec for strategy '%s' to SQL: %v\n", userId, name, compileErr)
 			// Optionally, you could add this error info back into the conversation history
 			// if you wanted Gemini to potentially fix the spec based on compilation failure.
-		} else {
-			////fmt.Printf("INFO: User %d: Successfully compiled spec for strategy '%s' to SQL:\n%s\n", userId, name, sqlQuery)
-			// You could potentially store this compiled SQL alongside the strategy spec if needed.
-		}
-		// --- End SQL Compilation ---
+            return nil, compileErr
+		} 
+        // --- End SQL Compilation ---
 
 		// If validation succeeds, create the strategy using the validated name and spec
 		strategyId, err := _newStrategy(conn, userId, name, spec)

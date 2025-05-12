@@ -230,14 +230,17 @@ func storeDailyOHLCVParallel(conn *data.Conn, ohlcvResponse *models.GetGroupedDa
 			}
 
 			// Ensure transaction is handled properly
-			committed := false
-			defer func() {
+			//committed := false
+            /*
+			//defer func() {
 				if !committed {
 					if rbErr := tx.Rollback(context.Background()); rbErr != nil {
 						////fmt.Printf("Error rolling back transaction: %v\n", rbErr)
+                        //return rbErr
 					}
 				}
-			}()
+			//}()
+            */
 
 			// Collect all security IDs first
 			recordsToProcess := make([]struct {

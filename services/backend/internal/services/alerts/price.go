@@ -27,8 +27,8 @@ func processPriceAlert(conn *data.Conn, alert Alert) error {
 				dispatchAlert(conn, alert)
 			}
 		}
-	} else {
-		////fmt.Println("no direction pointer")
-	}
-	return nil
+	}  else {
+        return fmt.Errorf("No direction pointer")
+    }
+    return nil
 }

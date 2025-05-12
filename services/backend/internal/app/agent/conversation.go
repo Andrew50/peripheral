@@ -159,13 +159,12 @@ func GetConversationFromCache(ctx context.Context, conn *data.Conn, userID int) 
 
 		// Save the updated conversation back to cache if we have at least one valid message
 		if len(validMessages) > 0 {
-			go func() {
-				// Create a new context for the goroutine
 				bgCtx := context.Background()
 				if err := saveConversationToCache(bgCtx, conn, userID, cacheKey, &conversationData); err != nil {
+                    return nil, err
+
 					////fmt.Printf("Failed to update cache after filtering expired messages: %v\n", err)
 				}
-			}()
 		} else if originalCount > 0 {
 			// All messages expired, so we should delete the conversation entirely
 			//go func() {
@@ -194,11 +193,8 @@ func GetUserConversation(conn *data.Conn, userID int, args json.RawMessage) (int
 	if !success {
         return nil, fmt.Errorf("%s",message)
 		////fmt.Printf("WARNING: %s\n", message)
-	} else {
-		////fmt.Println(message)
-	}
-
-	//conversationKey := fmt.Sprintf("user:%d:conversation", userID)
+	} 
+    //conversationKey := fmt.Sprintf("user:%d:conversation", userID)
 	////fmt.Println("GetUserConversation", conversationKey)
 
 	conversation, err := GetConversationFromCache(ctx, conn, userID)
