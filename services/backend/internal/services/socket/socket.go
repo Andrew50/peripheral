@@ -2,7 +2,6 @@ package socket
 
 import (
 	"backend/internal/data"
-	"backend/internal/data/edgar"
 	"backend/internal/data/utils"
 	"container/list"
 	"encoding/json"
@@ -39,6 +38,7 @@ type Client struct {
 	ws                    *websocket.Conn
 	mu                    sync.Mutex
 	send                  chan []byte
+	subscribedChannels    map[string]struct{}
 	done                  chan struct{}
 	replayActive          bool
 	replayPaused          bool
@@ -52,7 +52,6 @@ type Client struct {
 	simulatedTimeStart    int64
 	accumulatedActiveTime time.Duration
 	lastTickTime          time.Time
-	subscribedChannels    map[string]struct{}
 }
 
 /*
@@ -85,42 +84,6 @@ type AlertMessage struct {
 	Message    string `json:"message"`
 	Channel    string `json:"channel"`
 	Ticker     string `json:"ticker"`
-}
-
-// SECFilingMessage represents a single SEC filing message to be sent over WebSocket
-type SECFilingMessage struct {
-	Type      string `json:"type"`      // Filing type (e.g., "10-K", "8-K")
-	Date      string `json:"date"`      // Filing date as string
-	URL       string `json:"url"`       // URL to the filing
-	Timestamp int64  `json:"timestamp"` // UTC timestamp in milliseconds
-	Ticker    string `json:"ticker"`    // The ticker symbol
-	Channel   string `json:"channel"`   // Channel name (always "sec-filings")
-}
-
-// BroadcastGlobalSECFiling sends a new global SEC filing to all clients subscribed to the sec-filings channel
-func BroadcastGlobalSECFiling(filing edgar.GlobalEDGARFiling) {
-	filingMessage := SECFilingMessage{
-		Type:      filing.Type,
-		Date:      filing.Date,
-		URL:       filing.URL,
-		Timestamp: filing.Timestamp,
-		Ticker:    filing.Ticker,
-		Channel:   "sec-filings",
-	}
-
-	// Create a wrapper with data property to match the expected format
-	wrapper := map[string]interface{}{
-		"channel": "sec-filings",
-		"data":    filingMessage,
-	}
-
-	jsonData, err := json.Marshal(wrapper)
-	if err != nil {
-		fmt.Println("Error marshaling global SEC filing:", err)
-		return
-	}
-
-	broadcastToChannel("sec-filings", string(jsonData))
 }
 
 // SendAlertToUser performs operations related to SendAlertToUser functionality.
@@ -268,10 +231,8 @@ func (c *Client) readPump(conn *data.Conn) {
 		//fmt.Printf("clientMsg.Action: %v %v\n", clientMsg.Action, clientMsg.ChannelName)
 		switch clientMsg.Action {
 		case "subscribe-sec-filings":
-			// Special handler for SEC filings subscription
 			c.subscribeSECFilings(conn)
 		case "unsubscribe-sec-filings":
-			// Special handler for SEC filings unsubscription
 			c.unsubscribeSECFilings()
 		case "subscribe":
 			if c.replayActive {
@@ -367,7 +328,6 @@ func (c *Client) close() {
 	default:
 		// Not closing yet, signal it
 		close(c.done)
-		fmt.Println("Closed done channel in close()")
 	}
 
 	// Stop replay if it's active (moved unlock after potential stopReplay which might lock/unlock)

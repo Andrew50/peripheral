@@ -139,6 +139,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				channelNameType := getChannelNameType(msg.Timestamp)
 				fastChannelName := fmt.Sprintf("%d-fast-%s", securityId, channelNameType)
 				allChannelName := fmt.Sprintf("%d-all", securityId)
+				slowChannelName := fmt.Sprintf("%d-slow-%s", securityId, channelNameType)
 
 				data := TradeData{
 					//					Ticker:     msg.Symbol,
@@ -153,7 +154,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				if useAlerts {
 					appendTick(conn, securityId, data.Timestamp, data.Price, data.Size)
 				}
-				if !hasListeners(fastChannelName) && !hasListeners(allChannelName) {
+				if !hasListeners(fastChannelName) && !hasListeners(allChannelName) && !hasListeners(slowChannelName) {
 					break
 				}
 				jsonData, err := json.Marshal(data)
@@ -177,7 +178,6 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 
 				//}
 				if !exists || now.After(nextDispatch) {
-					slowChannelName := fmt.Sprintf("%d-slow-%s", securityId, channelNameType)
 					data.Channel = slowChannelName
 					jsonData, err = json.Marshal(data)
 					if err != nil {
