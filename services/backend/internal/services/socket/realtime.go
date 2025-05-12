@@ -10,9 +10,11 @@ import (
 
 // Subscribes the client WebSocket to the requested channel in "realtime" mode
 func (c *Client) subscribeRealtime(conn *data.Conn, channelName string) {
+	if _, exists := c.subscribedChannels[channelName]; exists {
+		return
+	}
 	channelsMutex.Lock()
 	os.Stdout.Sync()
-
 	subscribers, exists := channelSubscribers[channelName]
 	if !exists {
 		subscribers = make(map[*Client]bool)
