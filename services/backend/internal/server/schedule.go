@@ -588,7 +588,7 @@ func startPolygonWebSocket(conn *data.Conn) error {
 	if !polygonInitialized {
 		err := socket.StartPolygonWS(conn, useBS)
 		if err != nil {
-			log.Printf("Failed to start Polygon WebSocket: %v", err)
+			//log.Printf("Failed to start Polygon WebSocket: %v", err)
 			return err
 		}
 		polygonInitialized = true
@@ -619,7 +619,7 @@ func stopPolygonWebSocket() {
 
 	if polygonInitialized {
 		if err := socket.StopPolygonWS(); err != nil {
-			log.Printf("Failed to stop Polygon WebSocket: %v", err)
+			//log.Printf("Failed to stop Polygon WebSocket: %v", err)
 		} else {
 			polygonInitialized = false
 			////fmt.Println("Polygon WebSocket stopped successfully")
