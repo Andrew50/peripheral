@@ -342,7 +342,7 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 							log.Printf("Error scanning row: %v", err)
 							continue
 						}
-						var minDtStr string
+/*						var minDtStr string
 						var maxDtStr string
 						if minDate.Valid {
 							minDtStr = minDate.Time.Format(dateFormat)
@@ -354,7 +354,7 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 						} else {
 
 							maxDtStr = "NULL"
-						}
+						}*/
 					}
 					rows.Close()
 				} else {
