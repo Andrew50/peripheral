@@ -112,14 +112,11 @@ func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []mode
 //lint:ignore U1000 kept for future use
 func dataExists(client *_polygon.Client, ticker string, fromDate string, toDate string) bool {
 	timespan := models.Timespan("day")
-	fromMillis, err := utils.MillisFromDatetimeString(fromDate)
-	if err != nil {
-		return false
-	}
+	fromMillis, _ := utils.MillisFromDatetimeString(fromDate)
 	//if err != nil {
 	////fmt.Println(fromDate)
 	//}
-	toMillis, err := utils.MillisFromDatetimeString(toDate)
+	toMillis, _ := utils.MillisFromDatetimeString(toDate)
 	//if err != nil {
 	////fmt.Println(toDate)
 	//}
@@ -230,8 +227,6 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 				//logAction(test, i, sec.Ticker, "", sec.CompositeFIGI, currentDateString, "figi change 1", err)
 			} else if cmdTag.RowsAffected() == 0 {
 				//logAction(test, i, sec.Ticker, "", sec.CompositeFIGI, currentDateString, "figi change 1", fmt.Errorf("no rows affected"))
-			} else if test {
-				//logAction(test, i, sec.Ticker, "", sec.CompositeFIGI, currentDateString, "figi change 1", nil)
 			}
 		}
 		for _, sec := range additions {
@@ -275,8 +270,6 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 								//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "false delist and ticker change", nil)
 								diagnoses = append(diagnoses, "false delist")
 							}
-						} else {
-							//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "skipped dupe listing", nil)
 						}
 					}
 				} else if err == nil { //figi doesnt exist in db
@@ -294,8 +287,6 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 					} else if err == pgx.ErrNoRows {
 						diagnoses = append(diagnoses, "listing")
 						//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "listing 2", nil)
-					} else {
-						//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "db err 3", err)
 					}
 				} else { //valid error
 					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "db err 4", err)
@@ -316,8 +307,6 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 				} else if err == pgx.ErrNoRows {
 					diagnoses = append(diagnoses, "listing")
 					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "listing 4", nil)
-				} else {
-					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "db err 5", nil)
 				}
 			}
 			if contains(diagnoses, "false delist") {
@@ -354,8 +343,6 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 
 					}
 					rows.Close()
-				} else {
-					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "remove prev exec", err)
 				}
 				_, err = conn.DB.Exec(context.Background(), "INSERT INTO securities (securityId, figi, ticker, minDate) SELECT securityID, figi, $1, $2 from securities where figi = $3", sec.Ticker, currentDateString, sec.CompositeFIGI)
 				//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "ticker change exec", err)
@@ -366,12 +353,10 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "figi change exec", err)
 				} else if cmdTag.RowsAffected() == 0 {
 					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "figi change exec", fmt.Errorf("no rows affected"))
-				} else {
-					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "figi change exec", err)
 				}
 			}
 			if contains(diagnoses, "listing") {
-				_, err = conn.DB.Exec(context.Background(), "INSERT INTO securities (figi, ticker, minDate) values ($1,$2,$3)", sec.CompositeFIGI, sec.Ticker, currentDateString)
+				_, _ = conn.DB.Exec(context.Background(), "INSERT INTO securities (figi, ticker, minDate) values ($1,$2,$3)", sec.CompositeFIGI, sec.Ticker, currentDateString)
 
 				//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "listing exec", err)
 			}
@@ -400,9 +385,7 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 							//logAction(test, i, sec.Ticker, "", sec.CompositeFIGI, currentDateString, "query error", err)
 							continue
 						}
-						if targetTicker == sec.Ticker {
-							////fmt.Printf("23kniv %s %s %s\n", sec.Ticker, sec.CompositeFIGI, currentDateString)
-						} else {
+						if targetTicker != sec.Ticker {
 							for rows.Next() {
 								var ticker string
 								var date sql.NullTime
@@ -415,8 +398,6 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 									if date.Valid {
 										ok = true
 										break
-									} else {
-										////fmt.Printf("23kn1n9div %s %s %s\n", sec.Ticker, sec.CompositeFIGI, currentDateString)
 									}
 								}
 							}

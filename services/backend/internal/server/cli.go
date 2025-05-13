@@ -287,9 +287,8 @@ func runJob(jobName string) {
 	if err != nil {
 		////fmt.Printf("\nJob failed after %v: %v\n", duration, err)
 		return
-	} else {
-		////fmt.Printf("\nJob completed successfully in %v\n", duration)
 	}
+	////fmt.Printf("\nJob completed successfully in %v\n", duration)
 
 	// Update last run time
 	job.LastRun = time.Now()
@@ -492,7 +491,8 @@ func monitorTasksAndWait(conn *data.Conn, taskIDs []string) bool {
 			return false
 		}
 	}
-	return false
+	// This line should be unreachable due to the loop condition, but Go requires a return statement.
+	return false // Added default return
 }
 
 // monitorTasks polls the status of tasks and displays their progress
@@ -627,17 +627,17 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 								level, _ := logMap["level"].(string)
 								_ = level // Prevent unused error due to commented out debug line
 
-								////fmt.Printf("DEBUG: Log %d - timestamp: %v, message: %v, level: %v\n", i, timestamp != "", message != "", level != "")
+								////fmt.Printf("DEBUG: Log %d - timestamp: %v, message: %v, level: %v\\n", i, timestamp != "", message != "", level != "")
 
 								if message != "" {
 									// Format timestamp
-									shortTimestamp := timestamp
-									_ = shortTimestamp // Prevent unused error due to commented out debug line
-									if len(timestamp) > 19 {
+									_ = timestamp // Assign to blank identifier
+									//_ = shortTimestamp // Prevent unused error due to commented out debug line
+									/*if len(timestamp) > 19 {
 										shortTimestamp = timestamp[:19] // Get just the YYYY-MM-DDTHH:MM:SS part
-									}
+									}*/
 
-									////fmt.Printf("[%s][%s] %s\n", shortTimestamp, level, message)
+									////fmt.Printf("[%s][%s] %s\\n", shortTimestamp, level, message)
 								}
 							}
 							////fmt.Println("=================")
@@ -820,10 +820,10 @@ func printUsage() {
 	}
 	sort.Strings(cmdNames)
 
-	//for _, name := range cmdNames {
-	//cmd := commands[name]
-	////fmt.Printf("  %-10s %s\n", cmd.usage, cmd.description)
-	//}
+	for _, name := range cmdNames {
+		_ = commands[name] // Assign to blank identifier
+		////fmt.Printf("  %-10s %s\\n", cmd.usage, cmd.description)
+	}
 }
 func StartCLI() {
 	// Check if we're running in a container

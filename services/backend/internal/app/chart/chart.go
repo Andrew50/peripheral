@@ -47,7 +47,7 @@ type GetChartDataResponse struct {
 }
 
 // var debug = false // Flip to `true` to enable verbose debugging output
-// MaxDivisorOf30 returns the largest integer `k` such that `k` divides `n` and `k` also divides 30.
+// MaxDivisorOf30 returns the largest integer k such that k divides n and k also divides 30.
 func MaxDivisorOf30(n int) int {
 	for k := n; k >= 1; k-- {
 		if 30%k == 0 && n%k == 0 {

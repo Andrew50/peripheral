@@ -510,7 +510,6 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 		////fmt.Printf("Duration: %v\n", duration)
 		////fmt.Printf("Error: %v\n", err)
 	} else if isQueued {
-		return
 		// Job was queued (currently unused path)
 		////fmt.Printf("\n=== JOB QUEUED: %s ===\n", jobName)
 		////fmt.Printf("Duration: %v\n", duration)

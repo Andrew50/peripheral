@@ -35,12 +35,14 @@
 	export let expandedContent: (item: ExtendedInstance) => any = () => null;
 	export let displayNames: { [key: string]: string } = {};
 	export let rowClass: (item: ExtendedInstance) => string = () => '';
+	export let actionButtons: ActionButton[] = [];
+	// export let linkColumns: LinkColumn[] = []; // Commented out - unused export
+	export let defaultSortColumn: string | null = null;
 
 	// Add sorting state variables
 	let sortColumn: string | null = null;
 	let sortDirection: 'asc' | 'desc' = 'asc';
 	let isSorting = false;
-	export let linkColumns: string[] = [];
 	let selectedRowIndex = -1;
 	let expandedRows = new Set<number>();
 
@@ -1023,11 +1025,5 @@
     tr:hover th:last-child, tr:hover td:last-child {
         background-color: var(--ui-bg-hover);
     }
-     tr.selected th:last-child, tr.selected td:last-child {
-        background-color: var(--ui-bg-selected, var(--ui-bg-hover));
-    }
-     tr.selected:hover th:last-child, tr.selected:hover td:last-child {
-        background-color: var(--ui-bg-selected-hover, var(--ui-bg-selected, var(--ui-bg-hover)));
-     }
     /* ---- END DELETE BUTTON / STICKY COLUMN STYLES ---- */
 </style>
