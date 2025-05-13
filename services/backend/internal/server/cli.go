@@ -243,7 +243,7 @@ func getAllJobsStatus() {
 	table.Render()
 }
 
-func runJob(jobName string) {
+func runJob(jobName string) error {
 	// Create a new scheduler to get the job list
 	inContainer := os.Getenv("IN_CONTAINER") == "true"
 	conn, cleanup := data.InitConn(inContainer)
@@ -252,7 +252,7 @@ func runJob(jobName string) {
 	scheduler, err := NewScheduler(conn)
 	if err != nil {
 		////fmt.Printf("Error creating scheduler: %v\n", err)
-		return
+		return err
 	}
 
 	// Find the job
@@ -266,7 +266,7 @@ func runJob(jobName string) {
 
 	if job == nil {
 		////fmt.Printf("Job '%s' not found\n", jobName)
-		return
+		return fmt.Errorf("Job not found")
 	}
 
 	// Run the job
@@ -286,7 +286,7 @@ func runJob(jobName string) {
 	//duration := time.Since(startTime).Round(time.Millisecond)
 	if err != nil {
 		////fmt.Printf("\nJob failed after %v: %v\n", duration, err)
-		return
+		return err
 	}
 	////fmt.Printf("\nJob completed successfully in %v\n", duration)
 
@@ -300,7 +300,7 @@ func runJob(jobName string) {
 	currentQueueLen, err := conn.Cache.LLen(context.Background(), "queue").Result()
 	if err != nil {
 		////fmt.Printf("Warning: Could not get current queue length: %v\n", err)
-		return
+		return err
 	}
 
 	// If new items were added to the queue, monitor them
@@ -311,7 +311,7 @@ func runJob(jobName string) {
 		queueItems, err := conn.Cache.LRange(context.Background(), "queue", 0, currentQueueLen-1).Result()
 		if err != nil {
 			////fmt.Printf("Error getting queue items: %v\n", err)
-			return
+			return err
 		}
 
 		// Extract task IDs for monitoring
@@ -353,9 +353,10 @@ func runJob(jobName string) {
 		lastCompletionStr := completionTime.Format(time.RFC3339)
 		err = conn.Cache.Set(context.Background(), getJobLastCompletionKey(job.Name), lastCompletionStr, 0).Err()
 		if err != nil {
-		} else {
+            return err
 		}
-	}
+    }
+    return nil
 }
 
 // monitorTasksAndWait polls the status of tasks, displays their progress, and returns whether all tasks completed successfully
@@ -757,7 +758,10 @@ func printUsage() {
 					printUsage()
 					return
 				}
-				runJob(args[0])
+                err := runJob(args[0])
+                if err != nil {
+                    fmt.Println("%v", err)
+                }
 			},
 		},
 		"status": {
