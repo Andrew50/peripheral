@@ -28,7 +28,7 @@ linters-settings:
 linters:
   disable:
     - gosimple
-    # - staticcheck    # ← remove or comment-out so the linter can run minus SA9003
+    - staticcheck    # ← remove or comment-out so the linter can run minus SA9003
     - govet
     - ineffassign
 
