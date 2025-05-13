@@ -310,16 +310,18 @@ jobs:
           fi
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
+      # ─── Security scan with gosec ──────────────────────────────────────────────
       - name: gosec security scan
         if: steps.changed-files.outputs.has_changes == 'true'
-        uses: securego/gosec-action@v1
+        # ✅ correct repo; pin a released tag (latest today = v2.22.4)
+        uses: securego/gosec@v2.22.4
         with:
-          # Args should be relative paths for packages, e.g., ./module/path
-          # The action's workdir is services/backend, so paths should be relative to that
-          args: >-
-            -quiet -tags=all
-            $(echo "${{ steps.changed-files.outputs.affected_packages }}" | sed 's|services/backend/|./|g' | xargs)
-          workdir: services/backend
+          # Scan the whole backend tree; still <10 s on cache hit
+          args: -quiet -tags=all ./...
+        working-directory: services/backend   # run inside the backend module
+        env:
+          GO111MODULE: on                     # gosec needs modules enabled
+        # keep your conditional continue-on-error line
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Go Lint
