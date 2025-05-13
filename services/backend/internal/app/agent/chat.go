@@ -58,6 +58,7 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 	var allResults []ExecuteResult
 	planningPrompt := ""
 	maxTurns := 7
+	//totalRequestTokenCount := 0
 	for {
 		if planningPrompt == "" {
 			planningPrompt = BuildPlanningPrompt(conn, userID, query.Query, query.Context, query.ActiveChartContext)
