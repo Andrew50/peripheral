@@ -37,12 +37,10 @@ import (
 //lint:ignore U1000 kept for debugging and future use
 func logAction(test bool, loop int, ticker string, targetTicker string, figi string, currentDate string, action string, err error) {
 	if test {
-		if err != nil {
-			fmt.Printf("loop %-5d | time %s | ticker %-10s | targetTicker %-12s | figi %-20s | date %-10s | action %-20s | error %v\n",
-				loop, time.Now().Format("2006-01-02 15:04:05"), ticker, targetTicker, figi, currentDate, action, err)
-		}
-		log.Printf("loop %-5d | ticker %-10s | targetTicker %-12s | figi %-20s | date %-10s | action %-35s | error %v\n",
-			loop, ticker, targetTicker, figi, currentDate, action, err)
+		/*if err != nil {
+			fmt.Printf("loop %-5d | time %s | ticker %-10s | targetTicker %-12s | figi %-20s | date %-10s | action %-20s | error %v\n", loop, time.Now().Format("2006-01-02 15:04:05"), ticker, targetTicker, figi, currentDate, action, err)
+		}*/
+		log.Printf("loop %-5d | ticker %-10s | targetTicker %-12s | figi %-20s | date %-10s | action %-35s | error %v\n", loop, ticker, targetTicker, figi, currentDate, action, err)
 	}
 }
 
@@ -115,11 +113,11 @@ func dataExists(client *_polygon.Client, ticker string, fromDate string, toDate 
 	timespan := models.Timespan("day")
 	fromMillis, err := utils.MillisFromDatetimeString(fromDate)
 	if err != nil {
-		fmt.Println(fromDate)
+        return false
 	}
 	toMillis, err := utils.MillisFromDatetimeString(toDate)
 	if err != nil {
-		fmt.Println(toDate)
+        return false
 	}
 	params := models.ListAggsParams{
 		Ticker:     ticker,
@@ -168,7 +166,6 @@ func contains(slice []string, item string) bool {
 //lint:ignore U1000 kept for future use
 func UpdateSecurities(conn *data.Conn, test bool) error {
 	var startDate time.Time
-	//fmt.Print(dataExists(conn.Polygon,"VBR","2003-09-24","2004-01-29"))
 	//return nil
 	if test {
 		shouldClearLog := true // Set this based on your requirements
@@ -243,7 +240,6 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 					err = rows.Scan(&targetTicker, &maxDate)
 					if err != nil {
 						logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "db error 1", err)
-						fmt.Printf("v2n92 %v\n", err)
 						continue
 					}
 					if targetTicker == sec.Ticker {
@@ -293,13 +289,9 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 						diagnoses = append(diagnoses, "listing")
 						logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "listing 2", nil)
 					} else {
-						fmt.Printf("n9i0v2 %v\n", err)
-						fmt.Println(sec.Ticker)
 						logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "db err 3", err)
 					}
 				} else { //valid error
-					fmt.Println(sec.Ticker, " ", sec.CompositeFIGI, " ", currentDateString)
-					fmt.Printf("32gerf %v \n", err)
 					logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "db err 4", err)
 				}
 				rows.Close()
@@ -363,7 +355,6 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 
 							maxDtStr = "NULL"
 						}
-						fmt.Printf("%s %d %s %s %s\n", ticker, secID, figi, minDtStr, maxDtStr)
 					}
 					rows.Close()
 				} else {
@@ -401,7 +392,6 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 				if sec.CompositeFIGI != "" { //if figi exists
 					rows, err := conn.DB.Query(context.Background(), "SELECT ticker, maxDate FROM securities where figi = $1 order by COALESCE(maxDate, '2200-01-01') DESC", sec.CompositeFIGI) //.Scan(&tickerInDB,&maxDate)
 					if err != nil {
-						fmt.Printf("Query error: %v\n", err)
 						logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "query error", err)
 						continue
 					}
@@ -410,29 +400,22 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 					if rows.Next() {
 						err = rows.Scan(&targetTicker, &maxDate)
 						if err != nil {
-							fmt.Printf("Query error: %v\n", err)
 							logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "query error", err)
 							continue
 						}
-						if targetTicker == sec.Ticker {
-							fmt.Printf("23kniv %s %s %s\n", sec.Ticker, sec.CompositeFIGI, currentDateString)
-						} else {
+						if targetTicker != sec.Ticker {
 							for rows.Next() {
 								var ticker string
 								var date sql.NullTime
 								err = rows.Scan(&ticker, &date)
 								if err != nil {
-									fmt.Printf("02200iv %v\n", err)
 									break
 								}
 								if ticker == sec.Ticker {
 									if date.Valid {
 										ok = true
 										break
-									} else {
-										fmt.Printf("23kn1n9div %s %s %s\n", sec.Ticker, sec.CompositeFIGI, currentDateString)
-									}
-								}
+									} 								}
 							}
 						}
 					}
@@ -453,7 +436,6 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 
 func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 	// Query active securities (where maxDate is null)
-	fmt.Println("Updating security details")
 
 	// First, count how many securities need updating
 	var count int
@@ -465,11 +447,9 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 		return fmt.Errorf("failed to count securities needing updates: %v", err)
 	}
 
-	fmt.Printf("Found %d securities that need logo/icon updates\n", count)
 
 	// If no securities need updating, return success
 	if count == 0 {
-		fmt.Println("No securities need logo/icon updates, job completed successfully")
 		return nil
 	}
 
@@ -669,7 +649,6 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 	if len(errors) > 0 {
 		return fmt.Errorf("encountered %d errors during update: %v", len(errors), errors)
 	}
-	fmt.Println("Security details updated successfully")
 
 	return nil
 }
