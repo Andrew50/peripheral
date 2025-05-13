@@ -14,6 +14,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v4/pgxpool"
 	polygon "github.com/polygon-io/client-go/rest"
+    "github.com/go-resty/resty/v2"
 )
 
 // Conn represents a structure for handling Conn data.
@@ -123,6 +124,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		}
 	}
 
+
 	// Configure the HTTP client with better timeout settings
 	httpClient := &http.Client{
 		Timeout: 120 * time.Second,
@@ -140,6 +142,9 @@ func InitConn(inContainer bool) (*Conn, func()) {
 
 	// Create Polygon client with custom HTTP client
 	polygonClient := polygon.NewWithClient(polygonKey, httpClient)
+    polygonClient.HTTP.SetDisableWarn(true)
+    
+
 
 	// Initialize Gemini API key pool
 	geminiPool := initGeminiKeyPool()
@@ -345,3 +350,11 @@ func (c *Conn) TestRedisConnectivity(ctx context.Context, userID int) (bool, str
 
 	return true, "Redis connection test successful"
 }
+
+
+
+
+
+type NoOp struct{}
+
+func (NoOp) Printf(string, ...interface{}) {} // swallow logs
