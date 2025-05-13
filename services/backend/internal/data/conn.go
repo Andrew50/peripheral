@@ -3,7 +3,8 @@ package data
 import (
 	"context"
 	"fmt"
-//	"log"
+
+	//	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -123,7 +124,6 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		}
 	}
 
-
 	// Configure the HTTP client with better timeout settings
 	httpClient := &http.Client{
 		Timeout: 120 * time.Second,
@@ -141,9 +141,8 @@ func InitConn(inContainer bool) (*Conn, func()) {
 
 	// Create Polygon client with custom HTTP client
 	polygonClient := polygon.NewWithClient(polygonKey, httpClient)
-    polygonClient.HTTP.SetDisableWarn(true)
-    
-
+	polygonClient.HTTP.SetDisableWarn(true)
+	polygonClient.HTTP.SetLogger(NoOp{})
 
 	// Initialize Gemini API key pool
 	geminiPool := initGeminiKeyPool()
@@ -350,10 +349,9 @@ func (c *Conn) TestRedisConnectivity(ctx context.Context, userID int) (bool, str
 	return true, "Redis connection test successful"
 }
 
-
-
-
-
 type NoOp struct{}
 
 func (NoOp) Printf(string, ...interface{}) {} // swallow logs
+func (NoOp) Errorf(string, ...interface{}) {} // Add Errorf
+func (NoOp) Warnf(string, ...interface{})  {} // Add Warnf
+func (NoOp) Debugf(string, ...interface{}) {} // Add Debugf
