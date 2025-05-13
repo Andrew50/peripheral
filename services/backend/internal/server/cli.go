@@ -295,8 +295,6 @@ func runJob(jobName string) {
 	// We can't access the unexported method directly, so we'll update Redis manually
 	lastRunStr := job.LastRun.Format(time.RFC3339)
 	err = conn.Cache.Set(context.Background(), getJobLastRunKey(job.Name), lastRunStr, 0).Err()
-		////fmt.Printf("Error saving last run time: %v\n", err)
-	}
 
 	// Check if the job added items to the queue
 	currentQueueLen, err := conn.Cache.LLen(context.Background(), "queue").Result()
