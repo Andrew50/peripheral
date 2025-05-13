@@ -2,20 +2,19 @@ package socket
 
 import (
 	"backend/internal/data"
-	"context"
 	"fmt"
 	"os"
-	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/websocket"
 )
 
 // Subscribes the client WebSocket to the requested channel in "realtime" mode
 func (c *Client) subscribeRealtime(conn *data.Conn, channelName string) {
+	if _, exists := c.subscribedChannels[channelName]; exists {
+		return
+	}
 	channelsMutex.Lock()
 	os.Stdout.Sync()
-
 	subscribers, exists := channelSubscribers[channelName]
 	if !exists {
 		subscribers = make(map[*Client]bool)
@@ -23,39 +22,21 @@ func (c *Client) subscribeRealtime(conn *data.Conn, channelName string) {
 	}
 	subscribers[c] = true
 	channelsMutex.Unlock()
-
+	c.addSubscribedChannel(channelName)
+	incListeners(channelName)
 	go func() {
-		// 1) Check Redis for cached initial value
-		cacheKey := "channelCache:" + channelName
-		ctx := context.Background()
-		cachedValue, err := conn.Cache.Get(ctx, cacheKey).Result()
-		if err == nil && cachedValue != "" {
-			// Cache hit -> send to client
-			c.mu.Lock()
-			_ = c.ws.WriteMessage(websocket.TextMessage, []byte(cachedValue))
-			c.mu.Unlock()
-			return
-		} else if err != nil && err != redis.Nil {
-			// Only log real errors. redis.Nil just means "not found."
-			fmt.Println("Error reading Redis cache:", err)
-		}
-
-		// 2) Cache miss -> fetch from Polygon / DB
+		// EVENTUALLY: SHOULD USE A IN MEMORY CACHE INSTEAD OF REDIS
 		initialValue, fetchErr := getInitialStreamValue(conn, channelName, 0)
+		//fmt.Println("\n\ninitialValue", initialValue, string(initialValue))
 		if fetchErr != nil {
 			fmt.Println("Error fetching initial value from API:", fetchErr)
 			return
-		}
-		// 3) Store in Redis so next subscription can get it quickly
-		setErr := conn.Cache.Set(ctx, cacheKey, string(initialValue), 5*time.Minute).Err()
-		if setErr != nil {
-			fmt.Println("Error writing Redis cache:", setErr)
 		}
 
 		// 4) Send to the client
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		err = c.ws.WriteMessage(websocket.TextMessage, initialValue)
+		err := c.ws.WriteMessage(websocket.TextMessage, initialValue)
 		if err != nil {
 			fmt.Println("WebSocket write error while sending initial value:", err)
 		}
@@ -72,10 +53,16 @@ func (c *Client) unsubscribeRealtime(channelName string) {
 			delete(channelSubscribers, channelName)
 		}
 	}
+	decListeners(channelName)
+	c.removeSubscribedChannel(channelName)
 }
 
 // Broadcast a message to all clients subscribed to the given channelName
 func broadcastToChannel(channelName string, message string) {
+
+	if !hasListeners(channelName) {
+		return
+	}
 	channelsMutex.RLock()
 	defer channelsMutex.RUnlock()
 
