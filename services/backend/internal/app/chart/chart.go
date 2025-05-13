@@ -2,7 +2,7 @@ package chart
 
 import (
 	"backend/internal/data"
-    "backend/internal/data/utils"
+	"backend/internal/data/utils"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,9 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"backend/internal/data/polygon"
+
 	"github.com/polygon-io/client-go/rest/iter"
 	"github.com/polygon-io/client-go/rest/models"
-    "backend/internal/data/polygon"
 )
 
 // GetChartDataArgs represents a structure for handling GetChartDataArgs data.
@@ -45,8 +46,8 @@ type GetChartDataResponse struct {
 	IsEarliestData bool                  `json:"isEarliestData"`
 }
 
-//var debug = false // Flip to `true` to enable verbose debugging output
-// MaxDivisorOf30 performs operations related to MaxDivisorOf30 functionality.
+// var debug = false // Flip to `true` to enable verbose debugging output
+// MaxDivisorOf30 returns the largest integer `k` such that `k` divides `n` and `k` also divides 30.
 func MaxDivisorOf30(n int) int {
 	for k := n; k >= 1; k-- {
 		if 30%k == 0 && n%k == 0 {
@@ -62,16 +63,16 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-//	if debug {
-		////fmt.Printf("[DEBUG] GetChartData: SecurityID=%d, Timeframe=%s, Direction=%s\n", args.SecurityID, args.Timeframe, args.Direction)
-//	}
+	//	if debug {
+	////fmt.Printf("[DEBUG] GetChartData: SecurityID=%d, Timeframe=%s, Direction=%s\n", args.SecurityID, args.Timeframe, args.Direction)
+	//	}
 
 	multiplier, timespan, _, _, err := GetTimeFrame(args.Timeframe)
 	if err != nil {
 		return nil, fmt.Errorf("invalid timeframe: %v", err)
 	}
 	//if debug {
-		////fmt.Printf("[DEBUG] Parsed timeframe => multiplier=%d, timespan=%s\n", multiplier, timespan)
+	////fmt.Printf("[DEBUG] Parsed timeframe => multiplier=%d, timespan=%s\n", multiplier, timespan)
 	//}
 	// Determine if we must build a higher TF from a lower TF
 	var queryTimespan string
@@ -159,7 +160,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	rows, err := conn.DB.Query(ctx, query, queryParams...)
 	if err != nil {
 		//if debug {
-			////fmt.Printf("[DEBUG] Database query failed: %v\n", err)
+		////fmt.Printf("[DEBUG] Database query failed: %v\n", err)
 		//}
 		if ctx.Err() == context.DeadlineExceeded {
 			return nil, fmt.Errorf("query timed out: %w", err)
@@ -181,7 +182,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		var record securityRecord
 		if err := rows.Scan(&record.ticker, &record.minDateFromSQL, &record.maxDateFromSQL); err != nil {
 			//if debug {
-				////fmt.Printf("[DEBUG] Error scanning security record row: %v\n", err)
+			////fmt.Printf("[DEBUG] Error scanning security record row: %v\n", err)
 			//}
 			return nil, fmt.Errorf("error scanning security data: %w", err)
 		}
@@ -198,7 +199,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	numBarsRemaining := args.Bars
 
 	//if debug {
-		////fmt.Printf("[DEBUG] Processing %d security record(s) from DB...\n", len(securityRecords))
+	////fmt.Printf("[DEBUG] Processing %d security record(s) from DB...\n", len(securityRecords))
 	//}
 
 	// Now iterate over the fetched security records
@@ -257,13 +258,13 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		)
 		if err != nil {
 			//if debug {
-				////fmt.Printf("[DEBUG] GetRequestStartEndTime failed: %v\n", err)
+			////fmt.Printf("[DEBUG] GetRequestStartEndTime failed: %v\n", err)
 			//}
 			return nil, fmt.Errorf("dkn0 %v", err)
 		}
 
 		//if debug {
-			////fmt.Printf("[DEBUG] Polygon request for %s: start=%v end=%v aggregator=%v\n", ticker, date1, date2, haveToAggregate)
+		////fmt.Printf("[DEBUG] Polygon request for %s: start=%v end=%v aggregator=%v\n", ticker, date1, date2, haveToAggregate)
 		//}
 
 		// If we have to aggregate (e.g., second->minute, or minute->hour), do so
@@ -309,7 +310,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			)
 			if err != nil {
 				//if debug {
-					////fmt.Printf("[DEBUG] Polygon API error: %v\n", err)
+				////fmt.Printf("[DEBUG] Polygon API error: %v\n", err)
 				//}
 				return nil, fmt.Errorf("error fetching data from Polygon: %v", err)
 			}
@@ -317,8 +318,8 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			for it.Next() {
 				item := it.Item()
 				if it.Err() != nil {
-				//	if debug {
-						////fmt.Printf("[DEBUG] Iterator error: %v\n", it.Err())
+					//	if debug {
+					////fmt.Printf("[DEBUG] Iterator error: %v\n", it.Err())
 					//}
 					return nil, fmt.Errorf("dkn0w")
 				}
@@ -432,13 +433,13 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		reverse(barDataList)
 
 		// Possibly append incomplete bar
-		marketStatus, err :=polygon.GetMarketStatus(conn)
+		marketStatus, err := polygon.GetMarketStatus(conn)
 		if err != nil {
 			return nil, fmt.Errorf("issue with market status")
 		}
 		if (args.Timestamp == 0 && marketStatus != "closed") || args.IsReplay {
 			//if debug {
-				////fmt.Printf("\n\nrequesting incomplete bar\n\n")
+			////fmt.Printf("\n\nrequesting incomplete bar\n\n")
 			//}
 			incompleteAgg, err := requestIncompleteBar(
 				conn,
@@ -451,7 +452,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 				easternLocation,
 			)
 			//if debug {
-				////fmt.Printf("\n\nincompleteAgg: %v\n\n", incompleteAgg)
+			////fmt.Printf("\n\nincompleteAgg: %v\n\n", incompleteAgg)
 			//}
 			if err != nil {
 				return nil, fmt.Errorf("issue with incomplete aggregate: %v", err)
@@ -478,7 +479,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	}
 
 	//if debug {
-		////fmt.Printf("[DEBUG] No data found. numBarsRemaining=%d\n", numBarsRemaining)
+	////fmt.Printf("[DEBUG] No data found. numBarsRemaining=%d\n", numBarsRemaining)
 	//}
 	return nil, fmt.Errorf("no data found")
 }
