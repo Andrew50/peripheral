@@ -760,7 +760,7 @@ func printUsage() {
 				}
                 err := runJob(args[0])
                 if err != nil {
-                    fmt.Println("%v", err)
+                    fmt.Printf("%v\n", err)
                 }
 			},
 		},
