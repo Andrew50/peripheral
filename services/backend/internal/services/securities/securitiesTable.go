@@ -325,15 +325,17 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 				}
 			}
 			if contains(diagnoses, "false delist") {
-				conn.DB.Exec(context.Background(), "UPDATE securities set maxDate = NULL where ticker = $1 AND (maxDate is null or maxDate = (SELECT max(maxDate) FROM securities WHERE ticker = $1))", targetTicker)
-				//cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE securities set maxDate = NULL where ticker = $1 AND (maxDate is null or maxDate = (SELECT max(maxDate) FROM securities WHERE ticker = $1))", targetTicker)
-				/*if err != nil {
+				cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE securities set maxDate = NULL where ticker = $1 AND (maxDate is null or maxDate = (SELECT max(maxDate) FROM securities WHERE ticker = $1))", targetTicker)
+				if err != nil {
+                    continue
 					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "false delist exec", err)
 				} else if cmdTag.RowsAffected() == 0 {
+                    continue
 					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "false delist exec", fmt.Errorf("no rows affected"))
 				} else {
+                    continue
 					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "false delist exec", err)
-				}*/
+				}
 				continue
 			}
 			if contains(diagnoses, "ticker change") {
