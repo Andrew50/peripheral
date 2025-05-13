@@ -197,6 +197,22 @@ jobs:
         run: |
           mkdir -p ~/.cache/go-build
           mkdir -p ~/go/pkg/mod
+
+      # ─── Cache Go build + module cache ────────────────────────────────────────────
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod          # module cache
+            ~/.cache/go-build     # compiled object cache
+          key: ${{ runner.os }}-go-${{ hashFiles('services/backend/go.sum') }}
+          restore-keys: ${{ runner.os }}-go-
+
+      # ─── Cache GolangCI-Lint’s internal DB (huge speed-up) ───────────────────────
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/golangci-lint
+          key: ${{ runner.os }}-golangci-${{ hashFiles('services/backend/go.sum') }}
+          restore-keys: ${{ runner.os }}-golangci-
       
       - name: Identify changed Go files
         id: changed-files
@@ -262,6 +278,49 @@ jobs:
           cd services/backend
           go mod download
           go install honnef.co/go/tools/cmd/staticcheck@latest
+
+      - name: Enforce go mod tidy & verify
+        if: steps.changed-files.outputs.has_changes == 'true'
+        run: |
+          cd services/backend
+          go mod tidy
+          # Fails if go mod tidy changed go.mod or go.sum
+          git diff --exit-code go.mod go.sum
+          # Verifies checksum integrity
+          go mod verify
+        # This step should fail the job if not tidy, regardless of continue_on_error for the job
+
+      - name: go vet
+        if: steps.changed-files.outputs.has_changes == 'true'
+        run: |
+          cd services/backend
+          # Ensure affected_packages are correctly formatted for go vet (space separated ./path)
+          AFFECTED_PACKAGES_VET=""
+          for pkg_path in ${{ steps.changed-files.outputs.affected_packages }}; do
+            # Convert full path like services/backend/foo to ./foo
+            relative_pkg_path="./$(echo "$pkg_path" | sed 's|^services/backend/||')"
+            AFFECTED_PACKAGES_VET="$AFFECTED_PACKAGES_VET $relative_pkg_path"
+          done
+          if [ -n "$AFFECTED_PACKAGES_VET" ]; then
+            echo "Running go vet on: $AFFECTED_PACKAGES_VET"
+            # The paths should be relative to services/backend directory
+            go vet -tags=all $AFFECTED_PACKAGES_VET
+          else
+            echo "No affected Go packages to vet."
+          fi
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+
+      - name: gosec security scan
+        if: steps.changed-files.outputs.has_changes == 'true'
+        uses: securego/gosec-action@v1
+        with:
+          # Args should be relative paths for packages, e.g., ./module/path
+          # The action's workdir is services/backend, so paths should be relative to that
+          args: >-
+            -quiet -tags=all
+            $(echo "${{ steps.changed-files.outputs.affected_packages }}" | sed 's|services/backend/|./|g' | xargs)
+          workdir: services/backend
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
 
       - name: Go Lint
         if: steps.changed-files.outputs.has_changes == 'true'
@@ -367,6 +426,29 @@ jobs:
           fi
         # Individual step can continue on error for ben/aj branches
         continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+
+      - name: Unit tests with race detector
+        if: |
+          steps.changed-files.outputs.has_changes == 'true' &&
+          github.event_name == 'pull_request' &&
+          github.base_ref == 'main'
+        run: |
+          cd services/backend
+          # Ensure affected_packages are correctly formatted for go test (space separated ./path)
+          AFFECTED_PACKAGES_TEST=""
+          for pkg_path in ${{ steps.changed-files.outputs.affected_packages }}; do
+            # Convert full path like services/backend/foo to ./foo
+            relative_pkg_path="./$(echo "$pkg_path" | sed 's|^services/backend/||')"
+            AFFECTED_PACKAGES_TEST="$AFFECTED_PACKAGES_TEST $relative_pkg_path"
+          done
+          if [ -n "$AFFECTED_PACKAGES_TEST" ]; then
+            echo "Running go test -race on: $AFFECTED_PACKAGES_TEST"
+            # The paths should be relative to services/backend directory
+            go test -race -count=1 -tags=all $AFFECTED_PACKAGES_TEST
+          else
+            echo "No affected Go packages to test."
+          fi
+        # This step runs only on PRs to main where continue_on_error is false, so it will fail the build on test failure.
 
       # Add summary step to create job summary and record last successful state
       - name: Create job summary
