@@ -125,7 +125,9 @@ func fetchEdgarFilings(cik string) ([]edgar.EDGARFiling, error) {
 
 		// Check for rate limiting (429)
 		if resp.StatusCode == 429 {
-			resp.Body.Close()
+			if errClose := resp.Body.Close(); errClose != nil {
+				// log.Printf("Error closing response body on 429: %v", errClose)
+			}
 
 			// Exponential backoff
 			waitTime := retryDelay * time.Duration(1<<attempt)
@@ -135,9 +137,18 @@ func fetchEdgarFilings(cik string) ([]edgar.EDGARFiling, error) {
 
 		// Check for other non-success status codes
 		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			return nil, fmt.Errorf("SEC API returned status %d: %s", resp.StatusCode, string(body[:100])) // Show first 100 chars
+			body, readErr := io.ReadAll(resp.Body)
+			if errClose := resp.Body.Close(); errClose != nil {
+				// log.Printf("Error closing response body on non-OK status: %v", errClose)
+			}
+			if readErr != nil {
+				return nil, fmt.Errorf("SEC API returned status %d and failed to read body: %v", resp.StatusCode, readErr)
+			}
+			previewLength := 100
+			if len(body) < previewLength {
+				previewLength = len(body)
+			}
+			return nil, fmt.Errorf("SEC API returned status %d: %s", resp.StatusCode, string(body[:previewLength]))
 		}
 
 		// If we get here, we have a successful response
@@ -794,13 +805,24 @@ func httpGet(url string) (*http.Response, error) {
 			return resp, nil
 		}
 		if resp.StatusCode == 429 {
-			resp.Body.Close()
+			if errClose := resp.Body.Close(); errClose != nil {
+				// log.Printf("Error closing response body on 429 for exhibit: %v", errClose)
+			}
 			time.Sleep(time.Duration(1<<i) * time.Second)
 			continue
 		}
-		b, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		return nil, fmt.Errorf("status %d: %.120s", resp.StatusCode, b)
+		b, readErr := io.ReadAll(resp.Body)
+		if errClose := resp.Body.Close(); errClose != nil {
+			// log.Printf("Error closing response body for exhibit on non-OK/429 status: %v", errClose)
+		}
+		if readErr != nil {
+			return nil, fmt.Errorf("status %d and failed to read body for exhibit: %v", resp.StatusCode, readErr)
+		}
+		previewLength := 120
+		if len(b) < previewLength {
+			previewLength = len(b)
+		}
+		return nil, fmt.Errorf("status %d: %.120s", resp.StatusCode, b[:previewLength])
 	}
 	return nil, fmt.Errorf("rate-limited after %d tries: %s", maxRetries, url)
 }

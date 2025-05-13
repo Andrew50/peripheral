@@ -28,7 +28,7 @@ type TradeData struct {
 	Price      float64 `json:"price"`
 	Size       int64   `json:"size"`
 	Timestamp  int64   `json:"timestamp"`
-	ExchangeID int32   `json:"exchange"`
+	ExchangeID int     `json:"exchange"`
 	Conditions []int32 `json:"conditions"`
 	Channel    string  `json:"channel"`
 }
@@ -174,7 +174,7 @@ func getTradeData(conn *data.Conn, securityId int, timestamp int64, lengthOfTime
 				Price:      iter.Item().Price,
 				Size:       int64(iter.Item().Size),
 				Timestamp:  time.Time(iter.Item().ParticipantTimestamp).UnixNano() / 1e6,
-				ExchangeID: int32(iter.Item().Exchange),
+				ExchangeID: iter.Item().Exchange,
 				Conditions: iter.Item().Conditions,
 				Channel:    "",
 			})
@@ -450,7 +450,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 			Size:       size,
 			Timestamp:  tradeTimestamp,
 			Conditions: conditions,
-			ExchangeID: int32(trade.Exchange),
+			ExchangeID: trade.Exchange,
 			Channel:    channelName,
 		}
 		return json.Marshal(data)

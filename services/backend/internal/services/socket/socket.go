@@ -152,7 +152,10 @@ func (c *Client) writePump() {
 	// ticker := time.NewTicker(pingPeriod) // Keep connection alive if needed
 	defer func() {
 		// ticker.Stop() // Stop the ticker if used
-		c.ws.Close() // Ensure connection is closed ONLY here on exit
+		if err := c.ws.Close(); err != nil {
+			// Log error, connection might already be closed or in a bad state
+			// fmt.Printf("Error closing websocket in writePump defer: %v\n", err)
+		}
 		////fmt.Println("writePump exiting, connection closed")
 	}()
 	for {
@@ -162,7 +165,10 @@ func (c *Client) writePump() {
 			if !ok {
 				// The send channel was closed. Tell the client.
 				////fmt.Println("send channel closed, sending close message")
-				c.ws.WriteMessage(websocket.CloseMessage, []byte{})
+				if err := c.ws.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
+					// Log error, client might already be gone
+					// fmt.Printf("Error writing close message: %v\n", err)
+				}
 				return // Exit writePump
 			}
 
@@ -220,7 +226,10 @@ func (c *Client) readPump(conn *data.Conn) {
 			////fmt.Println("Invalid message format", err)
 			continue
 		}
-		os.Stdout.Sync()
+		if err := os.Stdout.Sync(); err != nil {
+			// Log error, but it's often non-critical for Stdout.Sync
+			// fmt.Printf("Error syncing stdout: %v\n", err)
+		}
 		//////fmt.Printf("clientMsg.Action: %v %v\n", clientMsg.Action, clientMsg.ChannelName)
 		switch clientMsg.Action {
 		case "subscribe-sec-filings":
