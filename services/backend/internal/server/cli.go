@@ -658,13 +658,13 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 			////fmt.Printf("%d/%d tasks completed.\n", len(completedTasks), len(taskIDs))
 
 			// List incomplete tasks
-			if len(completedTasks) < len(taskIDs) {
+			/*if len(completedTasks) < len(taskIDs) {
 				////fmt.Println("\nIncomplete tasks:")
 				for _, taskID := range taskIDs {
 					if !completedTasks[taskID] {
 					}
 				}
-			}
+			}*/
 
 			return
 		}
