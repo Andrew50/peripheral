@@ -794,6 +794,7 @@
 <div
 	class="page"
 	role="application"
+	tabindex="-1"
 	on:keydown={(e) => {
 		if (e.key === 'Escape') {
 			minimizeBottomWindow();

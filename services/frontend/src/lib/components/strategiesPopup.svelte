@@ -4,7 +4,7 @@
 	import { writable, type Writable } from 'svelte/store';
 	import { strategies } from '$lib/utils/stores/stores';
 	import type { Strategy as CoreStrategy } from '$lib/utils/types/types';
-	import { eventDispatcher } from '$lib/features/strategies/interface';   // 🆕 dispatch “new”
+	import { eventDispatcher } from '$lib/features/strategies/interface';   // 🆕 dispatch "new"
 
 	/* ─────────────── Menu State ─────────────── */
 	interface StrategyMenuState {
@@ -127,6 +127,7 @@
 		on:mousedown|preventDefault={down}
 		role="dialog"
 		aria-label="Strategy Menu"
+		tabindex="0"
 	>
 		<div class="content-container content-padding">
 			<table>

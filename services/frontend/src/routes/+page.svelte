@@ -136,19 +136,6 @@
 		font-weight: 600; /* Slightly bolder */
 	}
 
-    h2 {
-		/* Use secondary font color */
-        color: var(--f2, #9ca3af);
-        font-family: var(--font-primary, 'Fira Sans', sans-serif);
-        font-size: clamp(1.1rem, 2.8vw, 1.6rem);
-        font-weight: 400;
-        margin-top: 0; /* Reduced margin */
-        margin-bottom: var(--space-md, 1.5rem);
-        text-transform: uppercase;
-        letter-spacing: 0.15em; /* Wider spacing */
-    }
-
-
 	.tagline {
 		/* Use primary font color */
 		color: var(--f1, #f9fafb);
