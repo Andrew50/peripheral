@@ -26,7 +26,6 @@
 	let unchanged = '';   // left part that didn't move
 	let changed   = '';   // right part that changed
 	let lastPriceStr: string | undefined;
-	let flash
   function updateSlices(newPrice: number) {
       const next = newPrice.toFixed(2);
       const prev = lastPriceStr ?? '';
@@ -49,13 +48,13 @@
 
 	// Reactive flags for class logic
 	$: hasPriceAndPrevClose = $changeStore.price != null && $changeStore.prevClose != null;
-	$: priceDecreased = hasPriceAndPrevClose && ($changeStore.price! - $changeStore.prevClose! < 0);
+	$: diff = ($changeStore.price ?? 0) - ($changeStore.prevClose ?? 0);
 	// $: priceIncreasedOrSame = hasPriceAndPrevClose && ($changeStore.price! - $changeStore.prevClose! >= 0); // Not strictly needed if using !priceDecreased
 	$: isPlaceholder = $changeStore.change === '--';
 
-	$: isRedForChange = type === 'change' && priceDecreased;
-	$: isWhiteForChange = type === 'change' && !priceDecreased && isPlaceholder;
-	$: isGreenForChange = type === 'change' && !priceDecreased && !isPlaceholder;
+	$: isRedForChange = type === 'change'  && diff < 0;
+	$: isWhiteForChange = type === 'change' && diff === null;
+	$: isGreenForChange = type === 'change' && diff > 0;
 
 	$: isRedForChangePercent = (type === 'change %' || type === 'change % extended') && $changeStore.change.includes('-');
 	$: isGreenForChangePercent = (type === 'change %' || type === 'change % extended') && !$changeStore.change.includes('-') && !isPlaceholder && $changeStore.change !== '--';
@@ -121,6 +120,7 @@
 						// Calculate raw change and store it
 						if (price && prevClose) {
 							(instance as any)['change'] = price - prevClose;
+							s.change = (price - prevClose).toFixed(2);
 						}
 					} else if (type === 'change %') {
 						// Calculate percentage change and store it
