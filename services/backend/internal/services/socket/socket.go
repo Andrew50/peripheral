@@ -201,7 +201,6 @@ func (c *Client) readPump(conn *data.Conn) {
 	for {
 		_, message, err := c.ws.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				////fmt.Println("4kltyvk, WebSocket read error:", err)
 			}
 			break // Exit readPump loop on any error
