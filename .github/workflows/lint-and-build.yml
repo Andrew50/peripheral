@@ -188,7 +188,7 @@ jobs:
     needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_backend_changes == 'true' }}
     container:
-      image: dokcer.io/billing19/ci-image:latest
+      image: docker.io/billin19/ci-image:latest
     runs-on: ubuntu-latest # Still specify runs-on for runner selection, container runs on this
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     permissions:
@@ -288,7 +288,7 @@ jobs:
     needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_frontend_changes == 'true' }}
     container:
-      image: ghcr.io/your-github-organization/your-ci-image:latest # Replace with your actual image
+      image: docker.io/billin19/ci-image:latest
     runs-on: ubuntu-latest # Still specify runs-on for runner selection
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     # outputs: # Original workflow had this, but it wasn't used. Removing for now.
