@@ -1,8 +1,8 @@
 package alerts
 
 import (
-	"backend/internal/services/socket"
 	"backend/internal/data"
+	"backend/internal/services/socket"
 	"fmt"
 )
 
@@ -27,8 +27,8 @@ func processPriceAlert(conn *data.Conn, alert Alert) error {
 				dispatchAlert(conn, alert)
 			}
 		}
-	}  else {
-        return fmt.Errorf("No direction pointer")
-    }
-    return nil
+	} else {
+		return fmt.Errorf("no direction pointer")
+	}
+	return nil
 }

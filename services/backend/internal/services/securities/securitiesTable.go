@@ -5,8 +5,8 @@ package securities
 
 import (
 	"backend/internal/data"
-    "backend/internal/data/utils"
-    "backend/internal/data/polygon"
+	"backend/internal/data/polygon"
+	"backend/internal/data/utils"
 
 	"context"
 	"fmt"
@@ -113,15 +113,15 @@ func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []mode
 func dataExists(client *_polygon.Client, ticker string, fromDate string, toDate string) bool {
 	timespan := models.Timespan("day")
 	fromMillis, err := utils.MillisFromDatetimeString(fromDate)
-    if err != nil {
-        return false
-    }
+	if err != nil {
+		return false
+	}
 	//if err != nil {
-		////fmt.Println(fromDate)
+	////fmt.Println(fromDate)
 	//}
 	toMillis, err := utils.MillisFromDatetimeString(toDate)
 	//if err != nil {
-		////fmt.Println(toDate)
+	////fmt.Println(toDate)
 	//}
 	params := models.ListAggsParams{
 		Ticker:     ticker,
@@ -295,13 +295,9 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 						diagnoses = append(diagnoses, "listing")
 						//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "listing 2", nil)
 					} else {
-						////fmt.Printf("n9i0v2 %v\n", err)
-						////fmt.Println(sec.Ticker)
 						//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "db err 3", err)
 					}
 				} else { //valid error
-					////fmt.Println(sec.Ticker, " ", sec.CompositeFIGI, " ", currentDateString)
-					////fmt.Printf("32gerf %v \n", err)
 					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "db err 4", err)
 				}
 				rows.Close()
@@ -327,20 +323,20 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 			if contains(diagnoses, "false delist") {
 				cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE securities set maxDate = NULL where ticker = $1 AND (maxDate is null or maxDate = (SELECT max(maxDate) FROM securities WHERE ticker = $1))", targetTicker)
 				if err != nil {
-                    continue
+					continue
 					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "false delist exec", err)
 				} else if cmdTag.RowsAffected() == 0 {
-                    continue
+					continue
 					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "false delist exec", fmt.Errorf("no rows affected"))
 				} else {
-                    continue
+					continue
 					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "false delist exec", err)
 				}
 			}
 			if contains(diagnoses, "ticker change") {
 				cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE securities SET maxDate = $1 where figi = $2 and maxDate is NULL", currentDateString, sec.CompositeFIGI)
 				if err != nil {
-                    
+
 					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "remove prev exec", err)
 				} else if cmdTag.RowsAffected() != 1 {
 					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "remove prev exec", fmt.Errorf("%d rows affected", cmdTag.RowsAffected()))
@@ -355,23 +351,7 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 							//log.Printf("Error scanning row: %v", err)
 							continue
 						}
-                        /*
-						var minDtStr string
-						var maxDtStr string
-						if minDate.Valid {
-							minDtStr = minDate.Time.Format(dateFormat)
-						} else {
-							minDtStr = "NULL"
-						}
-						if maxDate.Valid {
-							maxDtStr = maxDate.Time.Format(dateFormat)
-						} else {
 
-							maxDtStr = "NULL"
-						}
-						////fmt.Printf("%s %d %s %s %s\n", ticker, secID, figi, minDtStr, maxDtStr)
-                        */
-                        
 					}
 					rows.Close()
 				} else {
@@ -409,8 +389,7 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 				if sec.CompositeFIGI != "" { //if figi exists
 					rows, err := conn.DB.Query(context.Background(), "SELECT ticker, maxDate FROM securities where figi = $1 order by COALESCE(maxDate, '2200-01-01') DESC", sec.CompositeFIGI) //.Scan(&tickerInDB,&maxDate)
 					if err != nil {
-						////fmt.Printf("Query error: %v\n", err)
-						//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "query error", err)
+						//logAction(test, i, sec.Ticker, "", sec.CompositeFIGI, currentDateString, "query error", err)
 						continue
 					}
 					var targetTicker string
@@ -418,8 +397,7 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 					if rows.Next() {
 						err = rows.Scan(&targetTicker, &maxDate)
 						if err != nil {
-							////fmt.Printf("Query error: %v\n", err)
-							//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "query error", err)
+							//logAction(test, i, sec.Ticker, "", sec.CompositeFIGI, currentDateString, "query error", err)
 							continue
 						}
 						if targetTicker == sec.Ticker {
@@ -430,7 +408,7 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 								var date sql.NullTime
 								err = rows.Scan(&ticker, &date)
 								if err != nil {
-									////fmt.Printf("02200iv %v\n", err)
+									//logAction(test, i, sec.Ticker, "", sec.CompositeFIGI, currentDateString, "query error", err)
 									break
 								}
 								if ticker == sec.Ticker {
@@ -447,9 +425,9 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 					rows.Close()
 				}
 				if !ok {
-					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "remove valid skip", nil)
+					//logAction(test, i, sec.Ticker, "", sec.CompositeFIGI, currentDateString, "remove valid skip", nil)
 				} else {
-					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "remove invalid skip", nil)
+					//logAction(test, i, sec.Ticker, "", sec.CompositeFIGI, currentDateString, "remove invalid skip", nil)
 				}
 			}
 		}
@@ -582,22 +560,22 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 		}
 
 		// Fetch both logo and icon
-		logoBase64, err := fetchImage(details.Branding.LogoURL, conn.PolygonKey)
-		if err != nil {
-			//log.Printf("Failed to fetch logo for %s: %v", ticker, err)
+		logoBase64, errLogo := fetchImage(details.Branding.LogoURL, conn.PolygonKey)
+		if errLogo != nil {
+			//log.Printf("Failed to fetch logo for %s: %v", ticker, errLogo)
 		}
-		iconBase64, err := fetchImage(details.Branding.IconURL, conn.PolygonKey)
-		if err != nil {
-			//log.Printf("Failed to fetch icon for %s: %v", ticker, err)
+		iconBase64, errIcon := fetchImage(details.Branding.IconURL, conn.PolygonKey)
+		if errIcon != nil {
+			//log.Printf("Failed to fetch icon for %s: %v", ticker, errIcon)
 		}
-		currentPrice, err := polygon.GetMostRecentRegularClose(conn.Polygon, ticker, time.Now())
-		if err != nil {
-			////log.Printf("Failed to get current price for %s: %v", ticker, err)
+		currentPrice, errPrice := polygon.GetMostRecentRegularClose(conn.Polygon, ticker, time.Now())
+		if errPrice != nil {
+			////log.Printf("Failed to get current price for %s: %v", ticker, errPrice)
 			return
 		}
 
 		// Update the security record with all details
-		_, err = conn.DB.Exec(context.Background(),
+		_, updateErr := conn.DB.Exec(context.Background(),
 			`UPDATE securities 
 			 SET name = NULLIF($1, ''),
 				 market = NULLIF($2, ''),
@@ -628,15 +606,15 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 			securityID,
 			currentPrice)
 
-		if err != nil {
+		if updateErr != nil {
 			if test {
-				//log.Printf("Failed to update details for %s: Column error - market_cap=%v, share_class_shares_outstanding=%v - Error: %v", ticker, details.MarketCap, details.ShareClassSharesOutstanding, err)
+				//log.Printf("Failed to update details for %s: Column error - market_cap=%v, share_class_shares_outstanding=%v - Error: %v", ticker, details.MarketCap, details.ShareClassSharesOutstanding, updateErr)
 			}
 			errChan <- fmt.Errorf("failed to update %s: Column error - market_cap=%v, share_class_shares_outstanding=%v - Error: %v",
 				ticker,
 				details.MarketCap,
 				details.ShareClassSharesOutstanding,
-				err)
+				updateErr)
 			return
 		}
 
