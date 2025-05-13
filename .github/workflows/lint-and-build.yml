@@ -204,6 +204,10 @@ jobs:
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
           fetch-depth: 0
 
+      - name: Mark the Git workspace as safe
+        run: git config --global --add safe.directory "${GITHUB_WORKSPACE:-$(pwd)}"
+
+
       - name: Cache Go modules and build tools
         uses: actions/cache@v4
         with:
