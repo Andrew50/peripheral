@@ -19,7 +19,7 @@
 		change: string;
 		shares?: number;
 	}
-	let changeStore = writable<ChangeStore>({ change: '--' });
+	let changeStore = writable<ChangeStore>({ change: '' });
 	
 	let lastPrice: number | undefined;
 	let pulseClass = '';         // '' | 'flash-up' | 'flash-down'
@@ -50,14 +50,14 @@
 	$: hasPriceAndPrevClose = $changeStore.price != null && $changeStore.prevClose != null;
 	$: diff = ($changeStore.price ?? 0) - ($changeStore.prevClose ?? 0);
 	// $: priceIncreasedOrSame = hasPriceAndPrevClose && ($changeStore.price! - $changeStore.prevClose! >= 0); // Not strictly needed if using !priceDecreased
-	$: isPlaceholder = $changeStore.change === '--';
+	$: isPlaceholder = $changeStore.change === '';
 
 	$: isRedForChange = type === 'change'  && diff < 0;
 	$: isWhiteForChange = type === 'change' && diff === null;
 	$: isGreenForChange = type === 'change' && diff > 0;
 
 	$: isRedForChangePercent = (type === 'change %' || type === 'change % extended') && $changeStore.change.includes('-');
-	$: isGreenForChangePercent = (type === 'change %' || type === 'change % extended') && !$changeStore.change.includes('-') && !isPlaceholder && $changeStore.change !== '--';
+	$: isGreenForChangePercent = (type === 'change %' || type === 'change % extended') && !$changeStore.change.includes('-') && !isPlaceholder && $changeStore.change !== '';
 
 	function setupStreams() {
 		// Only setup streams if security ID changed
@@ -73,9 +73,9 @@
 
 		// Reset the store with shares if market cap type
 		if (type === 'market cap' && instance.totalShares) {
-			changeStore.set({ change: '--', shares: instance.totalShares });
+			changeStore.set({ change: '', shares: instance.totalShares });
 		} else {
-			changeStore.set({ change: '--' });
+			changeStore.set({ change: '' });
 		}
 
 		// Decide which streams to use based on type
@@ -99,7 +99,7 @@
 				return {
 					...s,
 					prevClose,
-					change: s.price && prevClose ? getChange(s.price, prevClose) : '--'
+					change: s.price && prevClose ? getChange(s.price, prevClose) : ''
 				};
 			});
 		});
@@ -160,7 +160,7 @@
 						...s,
 						price,
 						prevClose,
-						change: price && prevClose ? getChange(price, prevClose) : '--'
+						change: price && prevClose ? getChange(price, prevClose) : ''
 					};
 				});
 			}
@@ -179,7 +179,7 @@
 
 	function getChange(price: number, prevClose: number): string {
 		// Removing frequent console logs for performance
-		if (!price || !prevClose) return '--';
+		if (!price || !prevClose) return '';
 		return ((price / prevClose - 1) * 100).toFixed(2) + '%';
 	}
 
@@ -220,13 +220,13 @@
 	{:else if type === 'change'}
 		{$changeStore.price != null && $changeStore.prevClose != null
 			? ($changeStore.price - $changeStore.prevClose).toFixed(2)
-			: '--'}
+			: ''}
 	{:else if type === 'change %' || type === 'change % extended'}
 		{$changeStore.change}
 	{:else if type === 'market cap'}
 		{formatMarketCap($changeStore.price, $changeStore.shares)}
 	{:else}
-		{'--'}
+		{''}
 	{/if}
 </div>
 
