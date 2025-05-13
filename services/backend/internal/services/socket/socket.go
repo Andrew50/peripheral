@@ -2,14 +2,13 @@ package socket
 
 import (
 	"backend/internal/data"
-    "backend/internal/data/utils"
-    "backend/internal/data/edgar"
-    "backend/internal/services/marketData"
-    "container/list"
+	"backend/internal/data/utils"
+	"container/list"
 	"encoding/json"
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -19,7 +18,7 @@ import (
 
 var (
 	channelsMutex           sync.RWMutex
-	channelSubscriberCounts = make(map[string]int)
+	channelSubscriberCounts sync.Map // key = channelName, value = *atomic.Int64 (num subscribers)
 	channelSubscribers      = make(map[string]map[*Client]bool)
 	UserToClient            = make(map[int]*Client)
 	UserToClientMutex       sync.RWMutex
@@ -39,6 +38,7 @@ type Client struct {
 	ws                    *websocket.Conn
 	mu                    sync.Mutex
 	send                  chan []byte
+	subscribedChannels    map[string]struct{}
 	done                  chan struct{}
 	replayActive          bool
 	replayPaused          bool
@@ -84,43 +84,6 @@ type AlertMessage struct {
 	Message    string `json:"message"`
 	Channel    string `json:"channel"`
 	Ticker     string `json:"ticker"`
-}
-
-// SECFilingMessage represents a single SEC filing message to be sent over WebSocket
-type SECFilingMessage struct {
-	Type      string `json:"type"`      // Filing type (e.g., "10-K", "8-K")
-	Date      string `json:"date"`      // Filing date as string
-	URL       string `json:"url"`       // URL to the filing
-	Timestamp int64  `json:"timestamp"` // UTC timestamp in milliseconds
-	Ticker    string `json:"ticker"`    // The ticker symbol
-	Channel   string `json:"channel"`   // Channel name (always "sec-filings")
-}
-
-
-// BroadcastGlobalSECFiling sends a new global SEC filing to all clients subscribed to the sec-filings channel
-func BroadcastGlobalSECFiling(filing edgar.GlobalEDGARFiling) {
-	filingMessage := SECFilingMessage{
-		Type:      filing.Type,
-		Date:      filing.Date,
-		URL:       filing.URL,
-		Timestamp: filing.Timestamp,
-		Ticker:    filing.Ticker,
-		Channel:   "sec-filings",
-	}
-
-	// Create a wrapper with data property to match the expected format
-	wrapper := map[string]interface{}{
-		"channel": "sec-filings",
-		"data":    filingMessage,
-	}
-
-	jsonData, err := json.Marshal(wrapper)
-	if err != nil {
-		fmt.Println("Error marshaling global SEC filing:", err)
-		return
-	}
-
-	broadcastToChannel("sec-filings", string(jsonData))
 }
 
 // SendAlertToUser performs operations related to SendAlertToUser functionality.
@@ -268,10 +231,8 @@ func (c *Client) readPump(conn *data.Conn) {
 		//fmt.Printf("clientMsg.Action: %v %v\n", clientMsg.Action, clientMsg.ChannelName)
 		switch clientMsg.Action {
 		case "subscribe-sec-filings":
-			// Special handler for SEC filings subscription
 			c.subscribeSECFilings(conn)
 		case "unsubscribe-sec-filings":
-			// Special handler for SEC filings unsubscription
 			c.unsubscribeSECFilings()
 		case "subscribe":
 			if c.replayActive {
@@ -367,7 +328,6 @@ func (c *Client) close() {
 	default:
 		// Not closing yet, signal it
 		close(c.done)
-		fmt.Println("Closed done channel in close()")
 	}
 
 	// Stop replay if it's active (moved unlock after potential stopReplay which might lock/unlock)
@@ -387,10 +347,18 @@ func (c *Client) close() {
 	c.simulatedTime = 0
 	c.mu.Unlock()
 
-	// Remove the client from all channel subscribers and close Redis subscriptions if needed
-	// Assuming unsubscribeRealtime/unsubscribeReplay called by readPump/stopReplay handle this.
-	// If not, the logic needs to be here or called explicitly.
-	// Let's simplify and assume the specific unsubscribe calls handle channelSubscribers map.
+	for channelName := range c.subscribedChannels {
+		channelsMutex.Lock()
+		if subs, ok := channelSubscribers[channelName]; ok {
+			delete(subs, c)
+			if len(subs) == 0 {
+				delete(channelSubscribers, channelName)
+			}
+		}
+		channelsMutex.Unlock()
+		decListeners(channelName)
+		c.removeSubscribedChannel(channelName)
+	}
 
 	// Remove the client from the UserToClient map
 	UserToClientMutex.Lock()
@@ -419,6 +387,7 @@ func HandleWebSocket(conn *data.Conn, ws *websocket.Conn, userID int) {
 		conn:                conn,
 		buffer:              10000,
 		loopRunning:         false,
+		subscribedChannels:  make(map[string]struct{}),
 	}
 
 	// Store the client in the userToClient map
@@ -431,77 +400,31 @@ func HandleWebSocket(conn *data.Conn, ws *websocket.Conn, userID int) {
 	client.readPump(conn)
 }
 
-
-// subscribeSECFilings handles subscription to the SEC filings feed
-func (c *Client) subscribeSECFilings(conn *data.Conn) {
-	channelName := "sec-filings"
-	fmt.Printf("\nGot subscription to SEC filings feed\n")
-
-	// Add client to the channel subscribers
-	channelsMutex.Lock()
-	if _, exists := channelSubscribers[channelName]; !exists {
-		channelSubscribers[channelName] = make(map[*Client]bool)
-	}
-	channelSubscribers[channelName][c] = true
-	channelSubscriberCounts[channelName]++
-	channelsMutex.Unlock()
-
-	// Get the latest filings from the cache
-	if conn != nil {
-		// Get the latest filings from the cache
-		latestFilings := marketData.GetLatestEdgarFilings()
-
-		// Limit to 50 filings if there are more
-		if len(latestFilings) > 50 {
-			latestFilings = latestFilings[:50]
-		}
-
-		if len(latestFilings) > 0 {
-			fmt.Printf("Found %d SEC filings to send initially\n", len(latestFilings))
-
-			// Debug: Print the first filing's timestamp
-			if len(latestFilings) > 0 {
-				fmt.Printf("First filing timestamp: %d\n", latestFilings[0].Timestamp)
-			}
-
-			// Create a message with channel information
-			message := map[string]interface{}{
-				"channel": channelName,
-				"data":    latestFilings,
-			}
-
-			// Send the initial data
-			jsonData, err := json.Marshal(message)
-			if err == nil {
-				c.send <- jsonData
-				fmt.Printf("Sent %d initial SEC filings to client\n", len(latestFilings))
-			} else {
-				fmt.Println("Error marshaling SEC filings:", err)
-			}
-		} else {
-			fmt.Println("No SEC filings available to send initially")
-		}
-	}
-
-	fmt.Printf("Client subscribed to SEC filings feed, %d subscribers\n",
-		channelSubscriberCounts[channelName])
+func (c *Client) addSubscribedChannel(channelName string) {
+	c.subscribedChannels[channelName] = struct{}{}
 }
-
-// unsubscribeSECFilings handles unsubscription from the SEC filings feed
-func (c *Client) unsubscribeSECFilings() {
-	channelName := "sec-filings"
-
-	channelsMutex.Lock()
-	defer channelsMutex.Unlock()
-
-	if subscribers, exists := channelSubscribers[channelName]; exists {
-		if _, ok := subscribers[c]; ok {
-			delete(subscribers, c)
-			channelSubscriberCounts[channelName]--
-			fmt.Printf("Client unsubscribed from SEC filings feed, %d subscribers remaining\n",
-				channelSubscriberCounts[channelName])
+func (c *Client) removeSubscribedChannel(channelName string) {
+	delete(c.subscribedChannels, channelName)
+}
+func incListeners(channelName string) {
+	v, _ := channelSubscriberCounts.LoadOrStore(channelName, &atomic.Int64{})
+	v.(*atomic.Int64).Add(1)
+	fmt.Printf("incListeners: %s, %d\n", channelName, v.(*atomic.Int64).Load())
+}
+func decListeners(channelName string) {
+	fmt.Printf("decListeners: %s\n", channelName)
+	if v, ok := channelSubscriberCounts.Load(channelName); ok {
+		if v.(*atomic.Int64).Add(-1) <= 0 {
+			channelSubscriberCounts.Delete(channelName)
 		}
 	}
+
+}
+func hasListeners(channelName string) bool {
+	if v, ok := channelSubscriberCounts.Load(channelName); ok {
+		return v.(*atomic.Int64).Load() > 0
+	}
+	return false
 }
 
 // /socket.go
