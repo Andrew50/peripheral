@@ -418,7 +418,8 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 
 	// First, count how many securities need updating
 	var count int
-	_ = conn.DB.QueryRow(context.Background(),
+	var err error
+	err = conn.DB.QueryRow(context.Background(),
 		`SELECT COUNT(*) 
 		 FROM securities 
 		 WHERE maxDate IS NULL AND (logo IS NULL OR icon IS NULL)`).Scan(&count)
@@ -536,9 +537,11 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 
 		// Fetch both logo and icon
 		logoBase64, errLogo := fetchImage(details.Branding.LogoURL, conn.PolygonKey)
+		if errLogo != nil {
 			//log.Printf("Failed to fetch logo for %s: %v", ticker, errLogo)
 		}
 		iconBase64, errIcon := fetchImage(details.Branding.IconURL, conn.PolygonKey)
+		if errIcon != nil {
 			//log.Printf("Failed to fetch icon for %s: %v", ticker, errIcon)
 		}
 		currentPrice, errPrice := polygon.GetMostRecentRegularClose(conn.Polygon, ticker, time.Now())
@@ -580,8 +583,7 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 			currentPrice)
 
 		if updateErr != nil {
-				//log.Printf("Failed to update details for %s: Column error - market_cap=%v, share_class_shares_outstanding=%v - Error: %v", ticker, details.MarketCap, details.ShareClassSharesOutstanding, updateErr)
-			}
+			//log.Printf("Failed to update details for %s: Column error - market_cap=%v, share_class_shares_outstanding=%v - Error: %v", ticker, details.MarketCap, details.ShareClassSharesOutstanding, updateErr)
 			errChan <- fmt.Errorf("failed to update %s: Column error - market_cap=%v, share_class_shares_outstanding=%v - Error: %v",
 				ticker,
 				details.MarketCap,

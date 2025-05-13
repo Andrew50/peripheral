@@ -155,10 +155,12 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				broadcastToChannel(fastChannelName, string(jsonData))
 				data.Channel = allChannelName
 				jsonData, err = json.Marshal(data)
+				if err != nil {
 					//fmt.Println("Error marshling JSON:", err)
+				} else {
+					//conn.Cache.Publish(context.Background(), channelName, string(jsonData))
+					broadcastToChannel(allChannelName, string(jsonData))
 				}
-				//conn.Cache.Publish(context.Background(), channelName, string(jsonData))
-				broadcastToChannel(allChannelName, string(jsonData))
 				now := time.Now()
 				nextDispatchTimes.RLock()
 				nextDispatch, exists := nextDispatchTimes.times[msg.Symbol]
