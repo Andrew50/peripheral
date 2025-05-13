@@ -270,6 +270,9 @@ func clearJobCache(conn *data.Conn) error {
 	} else if len(lastRunKeys) > 0 {
 		// Delete all last run keys
 		err = conn.Cache.Del(ctx, lastRunKeys...).Err()
+        if err != nil {
+            return err 
+        }
 	}
 
 	// Get all keys with the job last completion prefix
