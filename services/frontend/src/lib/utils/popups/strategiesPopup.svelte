@@ -4,7 +4,7 @@
 	import { writable, type Writable } from 'svelte/store';
 	import { strategies } from '$lib/core/stores';
 	import type { Strategy as CoreStrategy } from '$lib/core/types';
-	import { eventDispatcher } from '$lib/features/strategies/interface';   // 🆕 dispatch “new”
+	import { eventDispatcher } from '$lib/features/strategies/interface';   // 🆕 dispatch "new"
 
 	/* ─────────────── Menu State ─────────────── */
 	interface StrategyMenuState {
@@ -40,7 +40,7 @@
 				if (s.status === 'inactive') {
 					unsub();
 
-					if (s.strategy === 'new') {            // 🆕 “create new” clicked
+					if (s.strategy === 'new') {            // 🆕 "create new" clicked
 						eventDispatcher.set('new');
 						reject('new');
 					} else if (s.strategy) {
@@ -125,6 +125,8 @@
 		bind:this={menu}
 		style="top: {$menuState.y}px; left: {$menuState.x}px;"
 		on:mousedown|preventDefault={down}
+		role="dialog"
+		aria-label="Strategy Menu"
 	>
 		<div class="content-container content-padding">
 			<table>
@@ -134,7 +136,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					<!-- 🆕 “Create new” entry -->
+					<!-- 🆕 "Create new" entry -->
 					<tr class="item-row new-row" on:click={() => close('new')}>
 						<td>＋ New strategy</td>
 					</tr>
