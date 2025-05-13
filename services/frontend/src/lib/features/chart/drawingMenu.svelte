@@ -345,6 +345,7 @@
 	<div
 		bind:this={menuElement}
 		role="menu"
+		tabindex="0"
 		on:mousedown={handleClickOutside}
 		on:keydown={handleKeyDown}
 		class="drawing-menu"

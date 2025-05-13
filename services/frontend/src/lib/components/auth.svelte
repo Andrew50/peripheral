@@ -280,7 +280,6 @@
 						bind:value={email}
 						required
 						on:keydown={handleKeydown}
-						autofocus
 						placeholder="your.email@example.com"
 						class="responsive-border"
 					/>
@@ -518,49 +517,6 @@
 		width: 100%;
 		max-width: 300px;
 		min-width: min-content;
-	}
-
-	.guest-button {
-		-moz-user-select: none;
-		-webkit-user-select: none;
-		-ms-user-select: none;
-		-webkit-appearance: none;
-		background-color: var(--ui-bg-element, #333a45);
-		border: 1px solid var(--ui-border, #4c5361);
-		border-radius: clamp(4px, 0.5vw, 6px);
-		box-sizing: border-box;
-		color: var(--text-primary, #e3e3e3);
-		cursor: pointer;
-		font-family: 'Roboto', arial, sans-serif;
-		font-weight: 500;
-		height: clamp(36px, 5vh, 40px);
-		letter-spacing: 0.25px;
-		outline: none;
-		overflow: hidden;
-		padding: 0 clamp(8px, 1vw, 12px);
-		position: relative;
-		text-align: center;
-		transition:
-			background-color 0.218s,
-			border-color 0.218s,
-			box-shadow 0.218s;
-		vertical-align: middle;
-		white-space: nowrap;
-		width: 100%;
-		max-width: 300px;
-		min-width: min-content;
-	}
-
-	.guest-button:hover:not(:disabled) {
-		background-color: var(--ui-bg-element-darker, #3f4652);
-		box-shadow:
-			0 1px 2px 0 rgba(0, 0, 0, 0.1),
-			0 1px 3px 1px rgba(0, 0, 0, 0.08);
-	}
-
-	.guest-button:disabled {
-		opacity: 0.6;
-		cursor: not-allowed;
 	}
 
 	.gsi-material-button .gsi-material-button-icon {

@@ -2110,11 +2110,6 @@
 		color: #fff;
 		font-weight: 500;
 	}
-	.event-link {
-		color: #4caf50;
-		font-weight: 600;
-		font-size: 0.85rem;
-	}
 	.dividend-date {
 		font-size: 0.85rem;
 		color: #ccc;
@@ -2123,19 +2118,6 @@
 	.event-actions {
 		display: flex;
 		gap: 0.5rem;
-	}
-	.add-context-btn {
-		background: var(--ui-bg-element, #333);
-		border: 1px solid var(--ui-border, #444);
-		color: var(--text-secondary, #aaa);
-		padding: 0.3rem 0.6rem;
-		font-size: 0.8rem;
-		border-radius: 0.25rem;
-		cursor: pointer;
-		transition: all 0.2s ease;
-	}	.add-context-btn:hover {
-		border-color: var(--accent-color, #3a8bf7);
-		color: var(--text-primary, #fff);
 	}
 	/* Sleek button and filing styles */
 	.btn {
@@ -2148,9 +2130,6 @@
 		font-weight: 600;
 		text-decoration: none;
 		transition: background-color 0.2s ease, color 0.2s ease;
-	}
-	.btn svg {
-		margin-right: 0.25rem;
 	}
 	.btn-primary {
 		background-color: var(--accent-color, #3a8bf7);

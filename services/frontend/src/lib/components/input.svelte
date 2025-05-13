@@ -373,8 +373,6 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { ESTStringToUTCTimestamp, UTCTimestampToESTString } from '$lib/utils/helpers/timestamp';
 	let prevFocusedElement: HTMLElement | null = null;
-	// flag to indicate that an async validation (ticker lookup) is in progress
-	//let secQueryActive = false;
 
 	async function enterInput(iQ: InputQuery, tickerIndex: number = 0): Promise<InputQuery> {
 		if (iQ.inputType === 'ticker') {
@@ -918,7 +916,18 @@
 									</div>
 								{:else}
 									<!-- Render standard row for other keys -->
-									<div class="span-row">
+									<button type="button" 
+										class="span-row"
+										on:click={() => {
+											// Logic to select the key
+											manualInputType = key;
+											inputQuery.update((v) => ({
+												...v,
+												inputType: manualInputType,
+												inputValid: true // Reset validity when manually changing type
+											}));
+										}}
+									>
 										<span
 											class={Array.isArray($inputQuery.requiredKeys) &&
 											$inputQuery.requiredKeys.includes(key) &&
@@ -931,7 +940,7 @@
 										<span class="value">
 											{displayValue($inputQuery, key)}
 										</span>
-									</div>
+									</button>
 								{/if}
 							{/each}
 						{/if}
@@ -1352,18 +1361,6 @@
 		100% {
 			transform: rotate(360deg);
 		}
-	}
-
-	.field-select {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		margin-left: auto;
-	}
-
-	.field-select span {
-		color: var(--text-secondary);
-		font-size: 14px;
 	}
 
 	/* Added styles for extended hours buttons */
