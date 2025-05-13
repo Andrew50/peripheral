@@ -1,3 +1,4 @@
+// <planner.go>
 package agent
 
 import (
@@ -12,18 +13,21 @@ import (
 
 type DirectAnswer struct {
 	ContentChunks []ContentChunk `json:"content_chunks"`
+	TokenCount    int32          `json:"token_count"`
 }
 type Round struct {
 	Parallel bool           `json:"parallel"`
 	Calls    []FunctionCall `json:"calls"`
 }
 type Plan struct {
-	Stage  Stage   `json:"stage"`
-	Rounds []Round `json:"rounds,omitempty"`
+	Stage      Stage   `json:"stage"`
+	Rounds     []Round `json:"rounds,omitempty"`
+	TokenCount int32   `json:"token_count"`
 }
 
 type FinalResponse struct {
 	ContentChunks []ContentChunk `json:"content_chunks"`
+	TokenCount    int32          `json:"token_count"`
 }
 
 const planningModel = "gemini-2.5-flash-preview-04-17"
@@ -108,12 +112,14 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	var directAns DirectAnswer
 	// Try unmarshalling the extracted block if it's not empty
 	if jsonBlock != "" && json.Unmarshal([]byte(jsonBlock), &directAns) == nil && len(directAns.ContentChunks) > 0 {
+		directAns.TokenCount = candidate.TokenCount
 		return directAns, nil
 	}
 
 	var plan Plan
 	// Try unmarshalling the extracted block if it's not empty
 	if jsonBlock != "" && json.Unmarshal([]byte(jsonBlock), &plan) == nil {
+		plan.TokenCount = candidate.TokenCount
 		return plan, nil
 	}
 
@@ -163,6 +169,7 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 
 	resultText := ""
 	candidate := result.Candidates[0]
+	tokenCount := candidate.TokenCount
 	if candidate.Content != nil {
 		for _, part := range candidate.Content.Parts {
 			if part.Text != "" {
@@ -177,6 +184,7 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 
 	// First try direct unmarshaling
 	if err := json.Unmarshal([]byte(resultText), &finalResponse); err == nil && len(finalResponse.ContentChunks) > 0 {
+		finalResponse.TokenCount = tokenCount
 		return &finalResponse, nil
 	}
 
@@ -186,6 +194,7 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 	if jsonStartIdx != -1 && jsonEndIdx != -1 && jsonEndIdx > jsonStartIdx {
 		jsonBlock := resultText[jsonStartIdx : jsonEndIdx+1]
 		if err := json.Unmarshal([]byte(jsonBlock), &finalResponse); err == nil && len(finalResponse.ContentChunks) > 0 {
+			finalResponse.TokenCount = tokenCount
 			return &finalResponse, nil
 		}
 	}
@@ -193,5 +202,8 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 	// Fallback: Treat the text as a single text chunk
 	return &FinalResponse{
 		ContentChunks: []ContentChunk{{Type: "text", Content: resultText}},
+		TokenCount:    tokenCount,
 	}, nil
 }
+
+// </planner.go>
