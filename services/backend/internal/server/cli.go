@@ -344,9 +344,8 @@ func runJob(jobName string) {
 			lastCompletionStr := completionTime.Format(time.RFC3339)
 			err = conn.Cache.Set(context.Background(), getJobLastCompletionKey(job.Name), lastCompletionStr, 0).Err()
 			if err != nil {
-			} else {
+				return err
 			}
-		} else {
 		}
 	} else {
 		// For directly executed jobs with no queued tasks, update completion time immediately
