@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 )
 
 // GetScreensaversResults represents a structure for handling GetScreensaversResults data.
@@ -34,11 +35,18 @@ type GetInstancesByTickersArgs struct {
 
 // Fetch the snapshot from Polygon.io, attaching the API key
 func fetchPolygonSnapshot(endpoint string, apiKey string) ([]string, error) {
-	// Append the API key to the endpoint
-	fullEndpoint := fmt.Sprintf("%s?apiKey=%s", endpoint, apiKey)
+	// Safely construct the URL
+	parsedURL, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("invalid endpoint URL: %v", err)
+	}
+	query := parsedURL.Query()
+	query.Set("apiKey", apiKey)
+	parsedURL.RawQuery = query.Encode()
+	fullEndpointStr := parsedURL.String()
 
 	// Make the request to Polygon.io
-	resp, err := http.Get(fullEndpoint)
+	resp, err := http.Get(fullEndpointStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Polygon snapshot: %v", err)
 	}
