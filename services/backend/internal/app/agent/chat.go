@@ -1,3 +1,4 @@
+// <chat.go>
 package agent
 
 import (
@@ -49,6 +50,9 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 	if err := json.Unmarshal(args, &query); err != nil {
 		return nil, fmt.Errorf("error parsing request: %w", err)
 	}
+	if defaultSystemPromptTokenCount == 0 {
+		getDefaultSystemPromptTokenCount(conn)
+	}
 
 	var executor *Executor
 	var allResults []ExecuteResult
@@ -65,7 +69,7 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 		switch v := result.(type) {
 		case DirectAnswer:
 			processedChunks := processContentChunksForTables(ctx, conn, userID, v.ContentChunks)
-			saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, []ExecuteResult{})
+			saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, []ExecuteResult{}, v.TokenCount)
 			return QueryResponse{
 				Type:          "mixed_content",
 				ContentChunks: processedChunks,
@@ -103,7 +107,7 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 
 				// Process any table instructions in the content chunks
 				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
-				saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, allResults)
+				saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, allResults, finalResponse.TokenCount)
 				return QueryResponse{
 					Type:          "mixed_content",
 					ContentChunks: processedChunks,
@@ -117,3 +121,5 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 	}
 
 }
+
+// </chat.go>

@@ -755,7 +755,7 @@ func GetTickerDailySnapshot(conn *data.Conn, userId int, rawArgs json.RawMessage
 	currPrice := snapshot.Day.Close
 	lastClose := snapshot.PrevDay.Close
 	results.TodayChange = currPrice - lastClose
-	results.TodayChangePercent = ((currPrice - lastClose) / lastClose) * 100
+	results.TodayChangePercent = math.Round(((currPrice-lastClose)/lastClose)*100*100) / 100
 	results.Timestamp = int64(time.Time(snapshot.Updated).Unix())
 	results.Volume = snapshot.Day.Volume
 	results.Vwap = snapshot.Day.VolumeWeightedAverage

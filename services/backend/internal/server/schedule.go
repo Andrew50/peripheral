@@ -1,11 +1,11 @@
 package server
 
 import (
-	"backend/internal/services/alerts"
 	"backend/internal/data"
-    "backend/internal/services/securities"
-    "backend/internal/services/marketData"
-    "backend/internal/services/socket"
+	"backend/internal/services/alerts"
+	"backend/internal/services/marketData"
+	"backend/internal/services/securities"
+	"backend/internal/services/socket"
 	"context"
 	"fmt"
 	"log"
@@ -331,7 +331,6 @@ func (s *JobScheduler) Start() chan struct{} {
 	// Run jobs marked for initialization
 	s.runInitJobs()
 
-
 	// Start the Edgar Filings Service
 	fmt.Printf("\n\nStarting EdgarFilingsService\n\n")
 	marketData.StartEdgarFilingsService(s.Conn)
@@ -504,7 +503,7 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	fmt.Printf("\n=== JOB START: %s ===\n", jobName)
 	fmt.Printf("Time: %s\n", now.Format("2006-01-02 15:04:05"))
 
-    err = job.Function(s.Conn)
+	err = job.Function(s.Conn)
 
 	// Update job status
 	duration := time.Since(startTime).Round(time.Millisecond)
@@ -540,8 +539,6 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	}
 
 }
-
-
 
 // initAggregates initializes the aggregates
 func initAggregates(conn *data.Conn) error {
