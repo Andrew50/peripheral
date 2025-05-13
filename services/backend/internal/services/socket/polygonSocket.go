@@ -140,7 +140,10 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 			              alerts.appendAggregate(securityId,msg.Open,msg.High,msg.Low,msg.Close,msg.Volume)*/
 			case models.EquityTrade:
 				channelNameType := getChannelNameType(msg.Timestamp)
-				channelName := fmt.Sprintf("%d-fast-%s", securityId, channelNameType)
+				fastChannelName := fmt.Sprintf("%d-fast-%s", securityId, channelNameType)
+				allChannelName := fmt.Sprintf("%d-all", securityId)
+				slowChannelName := fmt.Sprintf("%d-slow-%s", securityId, channelNameType)
+
 				data := TradeData{
 					//					Ticker:     msg.Symbol,
 					Price:      msg.Price,
@@ -148,21 +151,27 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 					Timestamp:  msg.Timestamp,
 					Conditions: msg.Conditions,
 					ExchangeID: msg.Exchange,
-					Channel:    channelName,
+					Channel:    fastChannelName,
+				}
+				//if alerts.IsAggsInitialized() {
+				if useAlerts {
+					appendTick(conn, securityId, data.Timestamp, data.Price, data.Size)
+				}
+				if !hasListeners(fastChannelName) && !hasListeners(allChannelName) && !hasListeners(slowChannelName) {
+					break
 				}
 				jsonData, err := json.Marshal(data)
-	//			if err != nil {
-					////fmt.Println("Error marshling JSON:", err)
-	//			}
-				broadcastToChannel(channelName, string(jsonData))
-				channelName = fmt.Sprintf("%d-all", securityId)
-				data.Channel = channelName
+				if err != nil {
+					fmt.Println("Error marshling JSON:", err)
+				}
+				broadcastToChannel(fastChannelName, string(jsonData))
+				data.Channel = allChannelName
 				jsonData, err = json.Marshal(data)
 				if err != nil {
 					////fmt.Println("Error marshling JSON:", err)
 				}
 				//conn.Cache.Publish(context.Background(), channelName, string(jsonData))
-				broadcastToChannel(channelName, string(jsonData))
+				broadcastToChannel(allChannelName, string(jsonData))
 				now := time.Now()
 				nextDispatchTimes.RLock()
 				nextDispatch, exists := nextDispatchTimes.times[msg.Symbol]
@@ -170,13 +179,8 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				// Only append tick if aggregates are initialized
 				//////fmt.Println("debug: alerts.IsAggsInitialized()", alerts.IsAggsInitialized())
 
-				//if alerts.IsAggsInitialized() {
-				if useAlerts {
-					appendTick(conn, securityId, data.Timestamp, data.Price, data.Size)
-				}
 				//}
 				if !exists || now.After(nextDispatch) {
-					slowChannelName := fmt.Sprintf("%d-slow-%s", securityId, channelNameType)
 					data.Channel = slowChannelName
 					jsonData, err = json.Marshal(data)
 //					if err != nil {
@@ -190,6 +194,9 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				}
 			case models.EquityQuote:
 				channelName := fmt.Sprintf("%d-quote", securityId)
+				if !hasListeners(channelName) {
+					break
+				}
 				data := QuoteData{
 					Timestamp: msg.Timestamp,
 					BidPrice:  msg.BidPrice,

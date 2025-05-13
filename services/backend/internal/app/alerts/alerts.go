@@ -2,8 +2,8 @@ package alerts
 
 import (
 	"backend/internal/data"
-    "backend/internal/data/polygon"
-    "backend/internal/services/alerts"
+	"backend/internal/data/polygon"
+	"backend/internal/services/alerts"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -145,7 +145,7 @@ func NewAlert(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}
 	}
 
 	// Determine direction relative to the last trade
-	lastTrade, err := polygon.GetLastTrade(conn.Polygon, *args.Ticker)
+	lastTrade, err := polygon.GetLastTrade(conn.Polygon, *args.Ticker, true)
 	if err != nil {
 		return nil, fmt.Errorf("fetching last trade: %w", err)
 	}
