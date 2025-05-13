@@ -50,10 +50,10 @@ type TimeframeData struct {
 
 // SecurityData represents a structure for handling SecurityData data.
 type SecurityData struct {
-	SecondDataExtended TimeframeData
-	MinuteDataExtended TimeframeData
-	HourData           TimeframeData
-	DayData            TimeframeData
+	SecondDataExtended *TimeframeData
+	MinuteDataExtended *TimeframeData
+	HourData           *TimeframeData
+	DayData            *TimeframeData
 	Dolvol             float64
 	Mcap               float64
 	Adr                float64
@@ -133,19 +133,19 @@ func appendTick(conn *data.Conn, securityId int, timestamp int64, price float64,
 
 	if utils.IsTimestampRegularHours(time.Unix(timestamp, timestamp*int64(time.Millisecond))) {
 		if hourAggs {
-			updateTimeframe(&sd.HourData, timestamp, price, volume, Hour)
+			updateTimeframe(sd.HourData, timestamp, price, volume, Hour)
 		}
 		if dayAggs {
-			updateTimeframe(&sd.DayData, timestamp, price, volume, Day)
+			updateTimeframe(sd.DayData, timestamp, price, volume, Day)
 		}
 	}
 
 	if secondAggs {
-		updateTimeframe(&sd.SecondDataExtended, timestamp, price, volume, Second)
+		updateTimeframe(sd.SecondDataExtended, timestamp, price, volume, Second)
 	}
 
 	if minuteAggs {
-		updateTimeframe(&sd.MinuteDataExtended, timestamp, price, volume, Minute)
+		updateTimeframe(sd.MinuteDataExtended, timestamp, price, volume, Minute)
 	}
 
 	return nil
@@ -173,16 +173,16 @@ func GetTimeframeData(securityId int, timeframe int, extendedHours bool) ([][]fl
 	switch timeframe {
 	case Second:
 		if extendedHours {
-			td = &sd.SecondDataExtended
+			td = sd.SecondDataExtended
 		}
 	case Minute:
 		if extendedHours {
-			td = &sd.MinuteDataExtended
+			td = sd.MinuteDataExtended
 		}
 	case Hour:
-		td = &sd.HourData
+		td = sd.HourData
 	case Day:
-		td = &sd.DayData
+		td = sd.DayData
 	default:
 		return nil, errors.New("invalid timeframe")
 	}
@@ -336,28 +336,28 @@ func validateSecurityData(sd *SecurityData) error {
 	}
 
 	if secondAggs {
-		if err := validateTimeframeData(&sd.SecondDataExtended, "second", true); err != nil {
+		if err := validateTimeframeData(sd.SecondDataExtended, "second", true); err != nil {
 			////fmt.Printf("Second data validation failed: %v\n", err)
 			return fmt.Errorf("second data validation failed: %w", err)
 		}
 	}
 
 	if minuteAggs {
-		if err := validateTimeframeData(&sd.MinuteDataExtended, "minute", true); err != nil {
+		if err := validateTimeframeData(sd.MinuteDataExtended, "minute", true); err != nil {
 			////fmt.Printf("Minute data validation failed: %v\n", err)
 			return fmt.Errorf("minute data validation failed: %w", err)
 		}
 	}
 
 	if hourAggs {
-		if err := validateTimeframeData(&sd.HourData, "hour", false); err != nil {
+		if err := validateTimeframeData(sd.HourData, "hour", false); err != nil {
 			////fmt.Printf("Hour data validation failed: %v\n", err)
 			return fmt.Errorf("hour data validation failed: %w", err)
 		}
 	}
 
 	if dayAggs {
-		if err := validateTimeframeData(&sd.DayData, "day", false); err != nil {
+		if err := validateTimeframeData(sd.DayData, "day", false); err != nil {
 			////fmt.Printf("Day data validation failed: %v\n", err)
 			return fmt.Errorf("day data validation failed: %w", err)
 		}
@@ -388,15 +388,15 @@ func validateTimeframeData(td *TimeframeData, timeframeName string, extendedHour
 	return nil
 }
 
-func initTimeframeData(conn *data.Conn, securityId int, timeframe int, isExtendedHours bool) TimeframeData {
+func initTimeframeData(conn *data.Conn, securityId int, timeframe int, isExtendedHours bool) *TimeframeData {
 	aggs := make([][]float64, AggsLength)
 	for i := range aggs {
 		aggs[i] = make([]float64, OHLCV)
 	}
-	td := TimeframeData{
+	td := &TimeframeData{ // Initialize as a pointer
 		Aggs:              aggs,
 		Size:              0,
-		rolloverTimestamp: -1,
+		rolloverTimestamp: -1, // Mark as not properly initialized until data is loaded
 		extendedHours:     isExtendedHours,
 	}
 	toTime := time.Now()
