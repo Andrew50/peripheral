@@ -90,7 +90,11 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 			}
 		}
 	}
-	fmt.Println("\n TOKEN COUNT: ", candidate.TokenCount)
+	CountTokensResponse, err := client.Models.CountTokens(ctx, planningModel, genai.Text(resultText), &genai.CountTokensConfig{})
+	if err != nil {
+		return Plan{}, fmt.Errorf("error counting tokens: %w", err)
+	}
+	fmt.Println("CountTokensResponse", CountTokensResponse.TotalTokens)
 	fmt.Println("groundingMetadata", candidate.GroundingMetadata)
 	fmt.Println("citationMetadata", candidate.CitationMetadata)
 	fmt.Println("\n\n\n\n\nresultText", resultText)
