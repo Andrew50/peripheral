@@ -177,13 +177,14 @@ var (
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 		},
-		{
+        //TODO: FIX THIS SHIT
+		/*{
 			Name:           "StartAlertLoop",
 			Function:       startAlertLoop,
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 57}}, // Run before market open
 			RunOnInit:      true,
 			SkipOnWeekends: true,
-		},
+		},*/
 		{
 			Name:           "StartPolygonWebSocket",
 			Function:       startPolygonWebSocket,

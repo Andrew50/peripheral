@@ -50,9 +50,9 @@ import (
 // --------------------------- data types ---------------------------------- //
 
 type security struct {
-	Ticker           string
-	CurrentSector    sql.NullString
-	CurrentIndustry  sql.NullString
+	Ticker          string
+	CurrentSector   sql.NullString
+	CurrentIndustry sql.NullString
 }
 
 type statBlock struct {
@@ -218,14 +218,14 @@ func fetchTickerInfo(ctx context.Context, s security) result {
 
 func queryYahoo(ctx context.Context, ticker string) (sector, industry string, err error) {
 	url := fmt.Sprintf("https://query2.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=assetProfile", ticker)
-	
+
 	// Retry configuration
 	maxRetries := 3
 	initialBackoff := 3 * time.Second
-	
+
 	var resp *http.Response
 	var lastErr error
-	
+
 	// Retry loop with exponential backoff
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
@@ -234,9 +234,6 @@ func queryYahoo(ctx context.Context, ticker string) (sector, industry string, er
 			jitterRange := int(backoff / 4)
 			jitter := time.Duration(rand.Intn(jitterRange))
 			waitTime := backoff + jitter
-			
-			//log.Printf("Retrying %s (attempt %d/%d) after %v due to: %v", ticker, attempt, maxRetries, waitTime, lastErr)
-			
 			// Wait before retrying
 			select {
 			case <-time.After(waitTime):
@@ -245,32 +242,32 @@ func queryYahoo(ctx context.Context, ticker string) (sector, industry string, er
 				return "", "", fmt.Errorf("context cancelled during retry: %w", ctx.Err())
 			}
 		}
-		
+
 		// Create a new request for each attempt
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		req.Header.Set("User-Agent", "Go-http-client/1.1")
-		
+
 		resp, lastErr = http.DefaultClient.Do(req)
 		if lastErr != nil {
 			continue // Network error, retry
 		}
-		
+
 		// Check if we got a retryable status code (429 or 5xx)
 		if resp.StatusCode == 429 || (resp.StatusCode >= 500 && resp.StatusCode < 600) {
 			resp.Body.Close() // Important: close the body before retrying
 			lastErr = fmt.Errorf("retryable status: %s", resp.Status)
 			continue // Retryable status code, retry
 		}
-		
+
 		// If we get here, we either have a successful response or a non-retryable error
 		break
 	}
-	
+
 	// Handle final error state
 	if lastErr != nil {
 		return "", "", lastErr
 	}
-	
+
 	// Handle non-200 responses that weren't retried or still failed after retries
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
@@ -354,4 +351,3 @@ func max(a int, rest ...int) int {
 	}
 	return m
 }
-

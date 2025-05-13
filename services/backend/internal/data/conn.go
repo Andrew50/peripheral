@@ -14,7 +14,6 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v4/pgxpool"
 	polygon "github.com/polygon-io/client-go/rest"
-    "github.com/go-resty/resty/v2"
 )
 
 // Conn represents a structure for handling Conn data.
