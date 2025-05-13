@@ -336,7 +336,6 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
                     continue
 					//logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "false delist exec", err)
 				}
-				continue
 			}
 			if contains(diagnoses, "ticker change") {
 				cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE securities SET maxDate = $1 where figi = $2 and maxDate is NULL", currentDateString, sec.CompositeFIGI)
