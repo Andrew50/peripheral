@@ -33,8 +33,10 @@ func (c *Client) subscribeRealtime(conn *data.Conn, channelName string) {
 		// 4) Send to the client
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		//err := 
-        c.ws.WriteMessage(websocket.TextMessage, initialValue)
+		err := c.ws.WriteMessage(websocket.TextMessage, initialValue)
+        if err != nil {
+            return
+        }
 	}()
 }
 
