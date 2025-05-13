@@ -535,7 +535,6 @@ func initAggregates(conn *data.Conn) error {
 	if useBS {
 		socket.InitAggregatesAsync(conn)
 		////fmt.Println("Aggregates initialized successfully")
-	} else {
 		////fmt.Println("Skipping aggregates initialization (useBS is false)")
 	}
 	return nil
