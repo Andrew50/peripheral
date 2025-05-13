@@ -1126,12 +1126,6 @@
 		overflow-x: auto;
 	}
 
-	.function-result-data pre {
-		margin: 0;
-		font-family: monospace;
-		white-space: pre-wrap;
-	}
-
 	/* Suggested queries styling */
 	.suggested-queries {
 		display: flex;

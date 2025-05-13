@@ -77,14 +77,6 @@
 		align-items: center;
 	}
 
-	.logo-text {
-		color: #3b82f6;
-		font-family: 'Space Mono', monospace;
-		font-weight: bold;
-		font-size: 1.5rem;
-		letter-spacing: 2px;
-	}
-
 	.logo-image {
 		height: 80px;
 		width: auto;
