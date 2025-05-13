@@ -792,51 +792,6 @@
 		font-size: 1.1em;
 	}
 
-	.trade-list table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.9em;
-		table-layout: fixed;
-		min-width: 350px;
-	}
-
-	.trade-list th {
-		text-align: left;
-		padding: 8px;
-		border-bottom: 1px solid #444;
-		color: #888;
-	}
-
-	.trade-list th:nth-child(1),
-	.trade-list td:nth-child(1) {
-		width: 33%;
-	}
-
-	.trade-list th:nth-child(2),
-	.trade-list td:nth-child(2) {
-		width: 17%;
-	}
-
-	.trade-list th:nth-child(3),
-	.trade-list td:nth-child(3) {
-		width: 17%;
-	}
-
-	.trade-list th:nth-child(4),
-	.trade-list td:nth-child(4) {
-		width: 33%;
-		text-align: right;
-		padding-right: 12px;
-	}
-
-	.trade-list td {
-		padding: 8px;
-		border-bottom: 1px solid #444;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
 	.trade-list tr:last-child td {
 		border-bottom: none;
 	}
@@ -904,60 +859,8 @@
 		margin-bottom: 15px;
 	}
 
-	.ticker-stats-table {
-		width: 100%;
-		min-width: 600px;
-		max-width: 100%;
-		border-collapse: collapse;
-		font-size: 0.9em;
-	}
-
-	.ticker-stats-table th {
-		text-align: left;
-		padding: 8px;
-		border-bottom: 1px solid #444;
-		color: #888;
-		background-color: #333;
-	}
-
-	.ticker-stats-table td {
-		padding: 8px;
-		border-bottom: 1px solid #444;
-	}
-
-	.ticker-stats-table tr:hover {
-		background-color: #2a2a2a;
-	}
-
-	.ticker-stats-table tr.profitable {
-		background-color: rgba(76, 175, 80, 0.1);
-	}
-
-	.ticker-stats-table tr:not(.profitable) {
-		background-color: rgba(244, 67, 54, 0.1);
-	}
-
 	:global(.profitable) {
 		background: rgba(76, 175, 80, 0.1) !important;
-	}
-
-	:global(.unprofitable) {
-		background: rgba(244, 67, 54, 0.1) !important;
-	}
-
-	:global(.profitable:hover) {
-		background: rgba(76, 175, 80, 0.2) !important;
-	}
-
-	:global(.unprofitable:hover) {
-		background: rgba(244, 67, 54, 0.2) !important;
-	}
-
-	/* Make tables more responsive */
-	table {
-		width: 100%;
-		min-width: 600px; /* Minimum width before horizontal scroll */
-		max-width: 100%;
 	}
 
 	.delete-button {
