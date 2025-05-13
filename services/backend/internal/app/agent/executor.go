@@ -1,8 +1,9 @@
+// <executor.go>
 package agent
 
 import (
 	"backend/internal/data"
-    "backend/internal/services/socket"
+	"backend/internal/services/socket"
 	"context"
 
 	"encoding/json"
@@ -122,3 +123,5 @@ func formatStatusMessage(message string, argsMap map[string]interface{}) string 
 	})
 	return formattedMessage
 }
+
+// </executor.go>
