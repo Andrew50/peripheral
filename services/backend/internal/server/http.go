@@ -10,9 +10,11 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"time"
+
 	"github.com/gorilla/websocket"
 
-    "backend/internal/app/account"
+	"backend/internal/app/account"
     "backend/internal/app/agent"
     "backend/internal/app/alerts"
     "backend/internal/app/chart"
@@ -509,8 +511,18 @@ func StartServer(conn *data.Conn) {
 	http.HandleFunc("/ws", WSHandler(conn))
 	http.HandleFunc("/upload", privateUploadHandler(conn))
 	http.HandleFunc("/healthz", HealthCheck())
-	//////fmt.Println("debug: Server running on port 5058 ----------------------------------------------------------")
-	if err := http.ListenAndServe(":5058", nil); err != nil {
+
+	server := &http.Server{
+		Addr:    ":5058",
+		Handler: http.DefaultServeMux, // Use DefaultServeMux since HandleFunc registers globally
+		// Good practice to set timeouts to prevent resource exhaustion.
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	log.Println("debug: Server running on port 5058")
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }
