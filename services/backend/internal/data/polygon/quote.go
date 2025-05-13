@@ -1,12 +1,12 @@
 package polygon
 
 import (
+	"backend/internal/data"
+	"backend/internal/data/postgres"
+	"backend/internal/data/utils"
 	"context"
 	"fmt"
 //	"log"
-    "backend/internal/data/postgres"
-    "backend/internal/data"
-    "backend/internal/data/utils"
 	"time"
 
 	polygon "github.com/polygon-io/client-go/rest"
@@ -209,31 +209,73 @@ func GetQuote(client *polygon.Client, ticker string, nanoTimestamp models.Nanos,
 	return client.ListQuotes(context.Background(), params)
 }
 
-// GetLastTrade performs operations related to GetLastTrade functionality.
-func GetLastTrade(client *polygon.Client, ticker string) (models.LastTrade, error) {
+type GetLastTradeResponse struct {
+	Ticker     string
+	Conditions []int32
+	Timestamp  models.Nanos
+	Price      float64
+	Size       float64
+	Exchange   int
+	Tape       int32
+}
+
+// GetLastTrade gets the last trade for a ticker. The atLeastFullLot flag is used if we want to grab the last trade that was at least a full lot (100 shares).
+func GetLastTrade(client *polygon.Client, ticker string, atLeastFullLot bool) (GetLastTradeResponse, error) {
 	params := &models.GetLastTradeParams{
 		Ticker: ticker,
 	}
-	maxRetries := 3
-	var lastErr error
-	var result models.LastTrade
+	if !atLeastFullLot {
+		maxRetries := 3
+		var lastErr error
+		var result models.LastTrade
 
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		// Execute directly without withSilentOutput
-		resp, err := client.GetLastTrade(context.Background(), params)
-		if err == nil {
-			result = resp.Results
-			return result, nil
-		}
-		lastErr = err
+		for attempt := 1; attempt <= maxRetries; attempt++ {
+			// Execute directly without withSilentOutput
+			resp, err := client.GetLastTrade(context.Background(), params)
+			if err == nil {
+				result = resp.Results
+				return GetLastTradeResponse{
+					Ticker:     ticker,
+					Conditions: result.Conditions,
+					Timestamp:  result.Timestamp,
+					Price:      result.Price,
+					Size:       result.Size,
+					Exchange:   int(result.Exchange),
+					Tape:       result.Tape,
+				}, nil
+			}
+			lastErr = err
 
-		if attempt < maxRetries {
-			backoffTime := time.Duration(attempt*2) * time.Second
-			time.Sleep(backoffTime)
+			if attempt < maxRetries {
+				backoffTime := time.Duration(attempt*2) * time.Second
+				time.Sleep(backoffTime)
+			}
 		}
+
+		return GetLastTradeResponse{}, fmt.Errorf("failed to get last trade after %d attempts: %v", maxRetries, lastErr)
+	} else {
+		params := models.ListTradesParams{
+			Ticker: ticker,
+		}.WithOrder(models.Desc).WithSort(models.Timestamp).WithLimit(1000)
+		iter := client.ListTrades(context.Background(), params)
+		for iter.Next() {
+			trade := iter.Item()
+			if trade.Size >= 100 {
+				return GetLastTradeResponse{
+					Ticker:     ticker,
+					Conditions: trade.Conditions,
+					Timestamp:  trade.ParticipantTimestamp,
+					Price:      trade.Price,
+					Size:       trade.Size,
+					Exchange:   trade.Exchange,
+					Tape:       trade.Tape,
+				}, nil
+			}
+		}
+
 	}
 
-	return result, fmt.Errorf("failed to get last trade after %d attempts: %v", maxRetries, lastErr)
+	return GetLastTradeResponse{}, fmt.Errorf("failed to get last trade for %s", ticker)
 }
 
 // GetTrade performs operations related to GetTrade functionality.

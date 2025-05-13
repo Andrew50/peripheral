@@ -1,10 +1,10 @@
 package marketData
 
 import (
+	"backend/internal/data"
+	"backend/internal/data/edgar"
 	"sync"
 	"time"
-    "backend/internal/data/edgar"
-    "backend/internal/data"
 )
 
 var (
@@ -69,7 +69,6 @@ func StartEdgarFilingsService(conn *data.Conn) {
 			latestFilingsMutex.Lock()
 			latestFilings = newFilings
 			latestFilingsMutex.Unlock()
-
 			// Send new filings to channel
 			for _, filing := range newOnes {
 				select {
