@@ -952,6 +952,13 @@
 											const updatedQuery = await enterInput($inputQuery, i);
 											inputQuery.set(updatedQuery);
 										}}
+										role="button"
+										tabindex="0"
+										on:keydown={(e) => {
+											if (e.key === 'Enter' || e.key === ' ') {
+												e.currentTarget.click();
+											}
+										}}
 									>
 										<div class="security-icon-flex">
 											{#if sec.icon}
@@ -1156,13 +1163,6 @@
 		width: 100%;
 	}
 
-	/* Fix for the select dropdown */
-	.default-select {
-		position: relative;
-		z-index: 10;
-		pointer-events: auto !important;
-	}
-
 	.span-container {
 		display: flex;
 		flex-direction: column;
@@ -1223,92 +1223,6 @@
 		color: var(--text-primary);
 		border-radius: 4px;
 		font-size: 14px; /* Ensure consistent font size */
-	}
-
-	.search-icon {
-		color: var(--text-secondary);
-	}
-
-	.filters {
-		padding: 4px 8px;
-		display: flex;
-		gap: 4px;
-		flex-wrap: wrap;
-		border-bottom: 1px solid var(--ui-border);
-		height: auto;
-		max-height: 80px;
-		overflow-y: auto;
-	}
-
-	.filter-bubble {
-		background: transparent;
-		border: 1px solid var(--ui-border);
-		color: var(--text-secondary);
-		padding: 2px 8px;
-		border-radius: 8px;
-		font-size: 10px;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-
-	.filter-bubble.active {
-		background: var(--ui-accent);
-		border-color: var(--ui-accent);
-		color: var(--text-primary);
-	}
-
-	.results {
-		padding: 0;
-		flex: 1;
-		overflow-y: auto;
-	}
-
-	.securities-list {
-		/* Remove if no longer needed */
-	}
-
-	.security-item {
-		/* Remove if no longer needed */
-	}
-
-	.security-item:hover {
-		/* Remove if no longer needed */
-	}
-
-	.security-icon {
-		/* Remove if no longer needed */
-	}
-
-	.security-icon img {
-		/* Remove if no longer needed */
-	}
-
-	.security-info {
-		/* Remove if no longer needed */
-	}
-
-	.security-main {
-		/* Remove if no longer needed */
-	}
-
-	.ticker {
-		/* Remove if no longer needed */
-	}
-
-	.name {
-		/* Remove if no longer needed */
-	}
-
-	.security-details {
-		/* Remove if no longer needed */
-	}
-
-	.sector {
-		/* Remove if no longer needed */
-	}
-
-	.exchange {
-		/* Remove if no longer needed */
 	}
 
 	/* Styles for Flexbox security list */
@@ -1393,13 +1307,6 @@
 		flex-shrink: 0; /* Don't shrink timestamp */
 		margin-left: auto; /* Push timestamp to the right */
 		padding-left: 10px; /* Add padding */
-	}
-
-	.date {
-		color: var(--text-secondary);
-		align-items: center;
-		justify-content: center;
-		padding: 20px;
 	}
 
 	.loading-spinner {

@@ -195,7 +195,6 @@
 <button
 	class="ticker-info-container"
 	bind:this={container}
-	role="region"
 	aria-label="Ticker Information"
 	on:click={handleClick}
 	on:touchstart={handleClick}
@@ -574,11 +573,5 @@
 		font-size: 0.85em;
 		line-height: 1.5;
 		color: var(--text-secondary);
-	}
-
-	/* Remove old styles no longer needed */
-	.ticker-display, .ticker-container, .stream-cells, .stream-cell-container, .info-row, .quotes-section {
-		/* These selectors are replaced or styles are handled by new structure */
-		/* Add display: none; if needed, but removing them is cleaner */
 	}
 </style>
