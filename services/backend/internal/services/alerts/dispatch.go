@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"gopkg.in/telebot.v3"
@@ -19,7 +20,12 @@ var bot *telebot.Bot
 
 // InitTelegramBot performs operations related to InitTelegramBot functionality.
 func InitTelegramBot() error {
-	botToken := "7500247744:AAGNsmjWYfb97XzppT2E0_8qoArgxLOz7e0"
+	botToken := os.Getenv("TELEGRAM_BOT_TOKEN")
+	if botToken == "" {
+		log.Println("Warning: TELEGRAM_BOT_TOKEN environment variable not set.")
+		// Depending on policy, you might return an error or allow the bot to fail initialization
+		// return errors.New("TELEGRAM_BOT_TOKEN not set")
+	}
 	var err error
 
 	bot, err = telebot.NewBot(telebot.Settings{
