@@ -295,7 +295,6 @@ func runJob(jobName string) {
 	// We can't access the unexported method directly, so we'll update Redis manually
 	lastRunStr := job.LastRun.Format(time.RFC3339)
 	err = conn.Cache.Set(context.Background(), getJobLastRunKey(job.Name), lastRunStr, 0).Err()
-	if err != nil {
 		////fmt.Printf("Error saving last run time: %v\n", err)
 	}
 
@@ -327,7 +326,7 @@ func runJob(jobName string) {
 				continue
 			}
 			taskIDs = append(taskIDs, queueArgs.ID)
-			taskFuncs = append(taskFuncs, queueArgs.Func)
+			_ = append(taskFuncs, queueArgs.Func)
 		}
 
 		// Print task information
@@ -347,12 +346,9 @@ func runJob(jobName string) {
 			lastCompletionStr := completionTime.Format(time.RFC3339)
 			err = conn.Cache.Set(context.Background(), getJobLastCompletionKey(job.Name), lastCompletionStr, 0).Err()
 			if err != nil {
-				////fmt.Printf("Error saving last completion time: %v\n", err)
 			} else {
-				////fmt.Printf("\nAll queued tasks completed successfully. Updated last completion time to %s\n", completionTime.Format("2006-01-02 15:04:05"))
 			}
 		} else {
-			////fmt.Println("\nNot all tasks completed successfully. Last completion time was not updated.")
 		}
 	} else {
 		// For directly executed jobs with no queued tasks, update completion time immediately
@@ -360,9 +356,7 @@ func runJob(jobName string) {
 		lastCompletionStr := completionTime.Format(time.RFC3339)
 		err = conn.Cache.Set(context.Background(), getJobLastCompletionKey(job.Name), lastCompletionStr, 0).Err()
 		if err != nil {
-			////fmt.Printf("Error saving last completion time: %v\n", err)
 		} else {
-			////fmt.Printf("Updated last completion time to %s\n", completionTime.Format("2006-01-02 15:04:05"))
 		}
 	}
 }
@@ -464,7 +458,6 @@ func monitorTasksAndWait(conn *data.Conn, taskIDs []string) bool {
 				////fmt.Println("\nFailed tasks:")
 				for _, taskID := range taskIDs {
 					if failedTasks[taskID] {
-						////fmt.Printf("  - %s (Status: %s)\n", taskID, previousStatuses[taskID])
 					}
 				}
 			}
@@ -483,7 +476,6 @@ func monitorTasksAndWait(conn *data.Conn, taskIDs []string) bool {
 				////fmt.Println("\nIncomplete or failed tasks:")
 				for _, taskID := range taskIDs {
 					if !completedTasks[taskID] {
-						////fmt.Printf("  - %s (Last status: %s)\n", taskID, previousStatuses[taskID])
 					}
 				}
 			}
@@ -584,7 +576,6 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 
 						// If there's an error, print it
 						if errMsg, ok := result["error"].(string); ok && errMsg != "" {
-							////fmt.Printf("Error: %s\n", errMsg)
 						}
 
 						// Display logs if available - check both in result and at root level
@@ -595,7 +586,6 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 							logs = rootLogs
 							////fmt.Printf("\nDEBUG: Found %d logs at root level\n", len(rootLogs))
 						} else {
-							////fmt.Printf("\nDEBUG: No logs found at root level\n")
 						}
 
 						// If no logs found at root level, try within result field
@@ -605,10 +595,8 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 									logs = resultLogs
 									////fmt.Printf("\nDEBUG: Found %d logs in result field\n", len(resultLogs))
 								} else {
-									////fmt.Printf("\nDEBUG: No logs found in result field\n")
 								}
 							} else {
-								////fmt.Printf("\nDEBUG: No result field or not a map\n")
 							}
 						}
 
@@ -673,7 +661,6 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 				////fmt.Println("\nIncomplete tasks:")
 				for _, taskID := range taskIDs {
 					if !completedTasks[taskID] {
-						////fmt.Printf("  - %s (Last status: %s)\n", taskID, previousStatuses[taskID])
 					}
 				}
 			}
@@ -734,13 +721,11 @@ func getQueueStatus() {
 		table.Render()
 
 		if queueLen > 10 {
-			////fmt.Printf("... and %d more items\n", queueLen-10)
 		}
 
 		// Add a hint about the monitor command
 		////fmt.Println("\nTip: Use 'jobctl monitor <task_id>' to monitor a specific task's execution.")
 	} else {
-		////fmt.Println("Queue is empty")
 	}
 }
 
@@ -822,7 +807,7 @@ func printUsage() {
 
 	for _, name := range cmdNames {
 		_ = commands[name] // Assign to blank identifier
-		////fmt.Printf("  %-10s %s\\n", cmd.usage, cmd.description)
+		////fmt.Printf("  %-10s %s\n", cmd.usage, cmd.description)
 	}
 }
 func StartCLI() {
