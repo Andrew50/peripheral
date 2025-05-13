@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 )
+
 type QueueArgs struct {
 	ID   string      `json:"id"`
 	Func string      `json:"func"`
@@ -135,15 +136,6 @@ func formatSchedule(schedule []TimeOfDay) string {
 		times[i] = fmt.Sprintf("%02d:%02d", t.Hour, t.Minute)
 	}
 	return strings.Join(times, ", ")
-}
-
-// getKeys returns a slice of string keys from a map[string]interface{}
-func getKeys(m map[string]interface{}) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
 }
 
 func getJobStatus(jobName string) {
@@ -342,7 +334,7 @@ func runJob(jobName string) {
 		// Print task information
 		////fmt.Println("\nQueued tasks:")
 		//for i, id := range taskIDs {
-			////fmt.Printf("  %d: %s (ID: %s)\n", i+1, taskFuncs[i], id)
+		////fmt.Printf("  %d: %s (ID: %s)\n", i+1, taskFuncs[i], id)
 		//}
 
 		// Monitor task status and wait for completion
@@ -439,7 +431,7 @@ func monitorTasksAndWait(conn *data.Conn, taskIDs []string) bool {
 				// DEBUG: Print the structure of the result
 				////fmt.Printf("\nDEBUG: Task data structure keys: %v\n", getKeys(result))
 				//if resultObj, ok := result["result"].(map[string]interface{}); ok {
-					////fmt.Printf("DEBUG: Result field keys: %v\n", getKeys(resultObj))
+				////fmt.Printf("DEBUG: Result field keys: %v\n", getKeys(resultObj))
 				//}
 
 				// Check if it has an error field
@@ -571,7 +563,7 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 				// DEBUG: Print the structure of the result
 				////fmt.Printf("\nDEBUG: Task data structure keys: %v\n", getKeys(result))
 				//if resultObj, ok := result["result"].(map[string]interface{}); ok {
-					////fmt.Printf("DEBUG: Result field keys: %v\n", getKeys(resultObj))
+				////fmt.Printf("DEBUG: Result field keys: %v\n", getKeys(resultObj))
 				//}
 
 				// Check status field
@@ -585,10 +577,10 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 						////fmt.Printf("\n=== TASK %s DETAILS ===\n", taskID)
 
 						// If there's a result, print it
-				//		if result, ok := result["result"]; ok {
-				//			resultJSON, _ := json.MarshalIndent(result, "", "  ")
-							////fmt.Printf("Result:\n%s\n", string(resultJSON))
-				//		}
+						//		if result, ok := result["result"]; ok {
+						//			resultJSON, _ := json.MarshalIndent(result, "", "  ")
+						////fmt.Printf("Result:\n%s\n", string(resultJSON))
+						//		}
 
 						// If there's an error, print it
 						if errMsg, ok := result["error"].(string); ok && errMsg != "" {
@@ -622,7 +614,8 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 
 						if len(logs) > 0 {
 							////fmt.Println("\n=== TASK LOGS ===")
-							for _, logEntry := range logs {
+							for i, logEntry := range logs {
+								_ = i // Prevent unused error due to commented out debug line
 								logMap, ok := logEntry.(map[string]interface{})
 								if !ok {
 									////fmt.Printf("DEBUG: Log entry %d is not a map: %v\n", i, logEntry)
@@ -631,15 +624,17 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 
 								timestamp, _ := logMap["timestamp"].(string)
 								message, _ := logMap["message"].(string)
-								//level, _ := logMap["level"].(string)
+								level, _ := logMap["level"].(string)
+								_ = level // Prevent unused error due to commented out debug line
 
 								////fmt.Printf("DEBUG: Log %d - timestamp: %v, message: %v, level: %v\n", i, timestamp != "", message != "", level != "")
 
 								if message != "" {
 									// Format timestamp
-									//shortTimestamp := timestamp
+									shortTimestamp := timestamp
+									_ = shortTimestamp // Prevent unused error due to commented out debug line
 									if len(timestamp) > 19 {
-										//shortTimestamp = timestamp[:19] // Get just the YYYY-MM-DDTHH:MM:SS part
+										shortTimestamp = timestamp[:19] // Get just the YYYY-MM-DDTHH:MM:SS part
 									}
 
 									////fmt.Printf("[%s][%s] %s\n", shortTimestamp, level, message)
@@ -660,7 +655,8 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 		}
 
 		if len(completedTasks) == len(taskIDs) {
-			//duration := time.Since(startTime).Round(time.Millisecond)
+			duration := time.Since(startTime).Round(time.Millisecond)
+			_ = duration // Prevent unused error due to commented out debug line
 			////fmt.Printf("\n=== MONITORING COMPLETE ===\n")
 			////fmt.Printf("All %d tasks completed in %v\n", len(taskIDs), duration)
 			return
@@ -825,8 +821,8 @@ func printUsage() {
 	sort.Strings(cmdNames)
 
 	//for _, name := range cmdNames {
-		//cmd := commands[name]
-		////fmt.Printf("  %-10s %s\n", cmd.usage, cmd.description)
+	//cmd := commands[name]
+	////fmt.Printf("  %-10s %s\n", cmd.usage, cmd.description)
 	//}
 }
 func StartCLI() {

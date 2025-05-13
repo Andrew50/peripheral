@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	//"log"
 	"sync"
 	"time"
@@ -70,27 +71,16 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 		//log.Println("niv0: ", err)
 		return
 	}
-    //else {
-		////fmt.Println("✅ Connected to Polygon Quotes stream")
-	//}
 	err = polygonWS.Subscribe(polygonws.StocksTrades)
 	if err != nil {
 		//log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	}
-    //else {
-		////fmt.Println("✅ Connected to Polygon Trades stream")
-	//}
 	err = polygonWS.Subscribe(polygonws.StocksMinAggs)
 	if err != nil {
 		//log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	}
-    //else {
-		////fmt.Println("✅ Connected to Polygon Minute Aggregates stream")
-	//}
-
-	////fmt.Println("🚀 All Polygon streams initialized and ready to process data")
 
 	// Add timestamp ticker
 	timestampTicker := time.NewTicker(TimestampUpdateInterval)
@@ -100,8 +90,6 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 		select {
 		case <-timestampTicker.C:
 			broadcastTimestamp()
-//		case err := <-polygonWS.Error():
-			////fmt.Printf("PolygonWS Error: %v", err)
 		case out := <-polygonWS.Output():
 			var symbol string
 			var timestamp int64
@@ -132,7 +120,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 			securityId, exists := tickerToSecurityId[symbol]
 			tickerToSecurityIdLock.RUnlock()
 			if !exists {
-				////log.Printf("Symbol %s not found in tickerToSecurityId map\n", symbol)
+				//log.Printf("Symbol %s not found in tickerToSecurityId map\n", symbol)
 				continue
 			}
 			switch msg := out.(type) {
@@ -168,7 +156,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				data.Channel = allChannelName
 				jsonData, err = json.Marshal(data)
 				if err != nil {
-					////fmt.Println("Error marshling JSON:", err)
+					//fmt.Println("Error marshling JSON:", err)
 				}
 				//conn.Cache.Publish(context.Background(), channelName, string(jsonData))
 				broadcastToChannel(allChannelName, string(jsonData))
@@ -182,10 +170,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				//}
 				if !exists || now.After(nextDispatch) {
 					data.Channel = slowChannelName
-					jsonData, err = json.Marshal(data)
-//					if err != nil {
-						////fmt.Println("E2fi200e2e0rror marshling JSON:", err)
-					//}
+					jsonData, _ = json.Marshal(data) // Handle potential error, though unlikely
 					//conn.Cache.Publish(context.Background(), slowChannelName, string(jsonData))
 					broadcastToChannel(slowChannelName, string(jsonData))
 					nextDispatchTimes.Lock()
@@ -207,7 +192,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				}
 				jsonData, err := json.Marshal(data)
 				if err != nil {
-					////fmt.Printf("io1nv %v\n", err)
+					//fmt.Printf("io1nv %v\n", err)
 					continue
 				}
 				broadcastToChannel(channelName, string(jsonData))

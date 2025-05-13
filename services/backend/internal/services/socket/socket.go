@@ -97,10 +97,7 @@ func SendAlertToUser(userID int, alert AlertMessage) {
 			return
 		}
 		client.send <- jsonData
-	} 
-    //else {
-		////fmt.Println("Error marshaling alert:", err)
-	//}
+	}
 }
 
 // FunctionStatusUpdate represents a status update message sent to the client
@@ -206,9 +203,9 @@ func (c *Client) readPump(conn *data.Conn) {
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				////fmt.Println("4kltyvk, WebSocket read error:", err)
-			} 
-            //else {
-				////fmt.Println("WebSocket read error (expected close?):", err)
+			}
+			//else {
+			////fmt.Println("WebSocket read error (expected close?):", err)
 			//}
 			break // Exit readPump loop on any error
 		}
