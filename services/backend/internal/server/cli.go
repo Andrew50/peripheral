@@ -678,7 +678,7 @@ func getQueueStatus() {
 	defer cleanup()
 
 	// Get the queue length
-	queueLen, err := conn.Cache.LLen(context.Background(), "queue").Result()
+	_, err := conn.Cache.LLen(context.Background(), "queue").Result()
 	if err != nil {
 		////fmt.Printf("Error getting queue length: %v\n", err)
 		return
