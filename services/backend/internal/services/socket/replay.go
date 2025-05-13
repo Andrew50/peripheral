@@ -67,9 +67,9 @@ func (c *Client) subscribeReplay(channelName string) {
 
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		err = c.ws.WriteMessage(websocket.TextMessage, []byte(initialValue))
-//		if err != nil {
-			////fmt.Println("WebSocket write error while sending initial value in replay:", err)
+		_ = c.ws.WriteMessage(websocket.TextMessage, []byte(initialValue)) // Ignore error for now
+		// if err != nil {
+		////fmt.Println("WebSocket write error while sending initial value in replay:", err)
 		//}
 	}()
 
