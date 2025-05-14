@@ -2,21 +2,21 @@
 	import L1 from './l1.svelte';
 	import TimeAndSales from './timeAndSales.svelte';
 	import { get, writable, type Writable } from 'svelte/store';
-	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
-	import type { Instance } from '$lib/core/types';
+	import { queryInstanceInput } from '$lib/components/input.svelte';
+	import type { Instance } from '$lib/utils/types/types';
 	import { activeChartInstance, queryChart } from '$lib/features/chart/interface';
 	import StreamCell from '$lib/utils/stream/streamCell.svelte';
-	import { streamInfo, formatTimestamp } from '$lib/core/stores';
+	import { streamInfo, formatTimestamp } from '$lib/utils/stores/stores';
 	import { onMount, onDestroy } from 'svelte';
-	import { privateRequest } from '$lib/core/backend';
+	import { privateRequest } from '$lib/utils/helpers/backend';
 	import {
 		UTCSecondstoESTSeconds,
 		ESTSecondstoUTCSeconds,
 		ESTSecondstoUTCMillis,
 		getReferenceStartTimeForDateMilliseconds,
 		timeframeToSeconds
-	} from '$lib/core/timestamp';
-	import { getExchangeName } from '$lib/core/exchanges';
+	} from '$lib/utils/helpers/timestamp';
+	import { getExchangeName } from '$lib/utils/helpers/exchanges';
 
 	let instance: Writable<Instance> = writable({});
 	let container: HTMLButtonElement;

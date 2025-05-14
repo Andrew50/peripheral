@@ -5,8 +5,10 @@ import (
 	"backend/internal/data/edgar"
 	"backend/internal/data/postgres"
 	"backend/internal/services/marketData"
+	"backend/internal/services/securities"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"html"
 	"io"
@@ -17,10 +19,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 // GetLatestEdgarFilings returns the most recent SEC filings across all companies
-func GetLatestEdgarFilings(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetLatestEdgarFilings(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	// Get the latest filings from the cache
 	filings := marketData.GetLatestEdgarFilings()
 
@@ -35,13 +39,15 @@ func GetLatestEdgarFilings(conn *data.Conn, userId int, rawArgs json.RawMessage)
 
 // EdgarFilingOptions represents optional parameters for fetching EDGAR filings
 type EdgarFilingOptions struct {
-	Start      int64 `json:"start,omitempty"`
-	End        int64 `json:"end,omitempty"`
-	SecurityID int   `json:"securityId"`
+	Start      int64  `json:"start,omitempty"`
+	End        int64  `json:"end,omitempty"`
+	SecurityID int    `json:"securityId"`
+	Ticker     *string `json:"ticker,omitempty"`
+	Form       *string `json:"form,omitempty"`
 }
 
 // GetStockEdgarFilings retrieves SEC filings for a security with optional filters
-func GetStockEdgarFilings(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetStockEdgarFilings(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args EdgarFilingOptions
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -68,9 +74,9 @@ func GetStockEdgarFilings(conn *data.Conn, userId int, rawArgs json.RawMessage) 
 	}
 
 	// Filter filings based on options
-	var filteredFilings []edgar.EDGARFiling
+	var filteredFilings []edgar.Filing
 	for _, filing := range filings {
-		filingTime := time.UnixMilli(filing.Timestamp)
+		filingTime := time.UnixMilli(filing.FiledAt)
 
 		if filingTime.Before(start) || filingTime.After(end) {
 			continue
@@ -81,14 +87,14 @@ func GetStockEdgarFilings(conn *data.Conn, userId int, rawArgs json.RawMessage) 
 
 	// Sort filings by timestamp in ascending order (oldest first)
 	sort.Slice(filteredFilings, func(i, j int) bool {
-		return filteredFilings[i].Timestamp < filteredFilings[j].Timestamp
+		return filteredFilings[i].FiledAt < filteredFilings[j].FiledAt
 	})
 
 	return filteredFilings, nil
 }
 
 // fetchEdgarFilings fetches filings for a specific CIK
-func fetchEdgarFilings(cik string) ([]edgar.EDGARFiling, error) {
+func fetchEdgarFilings(cik string) ([]edgar.Filing, error) {
 
 	// Format CIK with leading zeros to make it 10 digits long
 	paddedCik := cik
@@ -125,7 +131,7 @@ func fetchEdgarFilings(cik string) ([]edgar.EDGARFiling, error) {
 
 		// Check for rate limiting (429)
 		if resp.StatusCode == 429 {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			// Exponential backoff
 			waitTime := retryDelay * time.Duration(1<<attempt)
@@ -136,7 +142,7 @@ func fetchEdgarFilings(cik string) ([]edgar.EDGARFiling, error) {
 		// Check for other non-success status codes
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			return nil, fmt.Errorf("SEC API returned status %d: %s", resp.StatusCode, string(body[:100])) // Show first 100 chars
 		}
 
@@ -171,7 +177,7 @@ func fetchEdgarFilings(cik string) ([]edgar.EDGARFiling, error) {
 }
 
 // parseEdgarFilingsResponse parses the JSON response from SEC EDGAR API
-func parseEdgarFilingsResponse(body []byte, cik string) ([]edgar.EDGARFiling, error) {
+func parseEdgarFilingsResponse(body []byte, cik string) ([]edgar.Filing, error) {
 	var result struct {
 		Filings struct {
 			Recent struct {
@@ -190,7 +196,7 @@ func parseEdgarFilingsResponse(body []byte, cik string) ([]edgar.EDGARFiling, er
 
 	recent := result.Filings.Recent
 	if recent.AccessionNumber == nil || recent.FilingDate == nil || recent.Form == nil || recent.PrimaryDocument == nil {
-		return []edgar.EDGARFiling{}, nil
+		return []edgar.Filing{}, nil
 	}
 
 	minLen := len(recent.AccessionNumber)
@@ -206,7 +212,7 @@ func parseEdgarFilingsResponse(body []byte, cik string) ([]edgar.EDGARFiling, er
 
 	// Create a map to track seen accession numbers to avoid duplicates
 	seen := make(map[string]bool)
-	filings := make([]edgar.EDGARFiling, 0, minLen)
+	filings := make([]edgar.Filing, 0, minLen)
 
 	for i := 0; i < minLen; i++ {
 		// Skip Form 4 filings and duplicates
@@ -258,11 +264,11 @@ func parseEdgarFilingsResponse(body []byte, cik string) ([]edgar.EDGARFiling, er
 		htmlURL := fmt.Sprintf("https://www.sec.gov/Archives/edgar/data/%s/%s/%s",
 			cik, accessionNumber, recent.PrimaryDocument[i])
 
-		filings = append(filings, edgar.EDGARFiling{
+		filings = append(filings, edgar.Filing{
 			Type:      recent.Form[i],
 			Date:      date,
 			URL:       htmlURL,
-			Timestamp: utcMillis,
+			FiledAt:   utcMillis,
 		})
 	}
 
@@ -288,7 +294,7 @@ type EarningsTextResponse struct {
 }
 
 // getFilingQuarter extracts the quarter and year from a filing
-func getFilingQuarter(filing edgar.EDGARFiling) (string, int) {
+func getFilingQuarter(filing edgar.Filing) (string, int) {
 	// Get year from the filing date
 	year := filing.Date.Year()
 
@@ -321,7 +327,7 @@ func getFilingQuarter(filing edgar.EDGARFiling) (string, int) {
 }
 
 // GetEarningsText fetches the latest 10-K or 10-Q filing for a security and extracts the text content
-func GetEarningsText(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetEarningsText(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetEarningsTextArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -350,7 +356,7 @@ func GetEarningsText(conn *data.Conn, userId int, rawArgs json.RawMessage) (inte
 	}
 
 	// Filter filings to find the specified quarter/year or the latest
-	var targetFiling *edgar.EDGARFiling
+	var targetFiling *edgar.Filing
 
 	// If quarter is specified, filter by quarter and year
 	if args.Quarter != "" {
@@ -362,7 +368,7 @@ func GetEarningsText(conn *data.Conn, userId int, rawArgs json.RawMessage) (inte
 		}
 
 		// Filter filings based on quarter and year
-		var matchingFilings []edgar.EDGARFiling
+		var matchingFilings []edgar.Filing
 		for _, filing := range filings {
 			// Skip non 10-K/10-Q filings
 			if filing.Type != "10-K" && filing.Type != "10-Q" {
@@ -384,7 +390,7 @@ func GetEarningsText(conn *data.Conn, userId int, rawArgs json.RawMessage) (inte
 
 		// Find the latest matching filing
 		for i, filing := range matchingFilings {
-			if i == 0 || filing.Timestamp > targetFiling.Timestamp {
+			if i == 0 || filing.FiledAt > targetFiling.FiledAt {
 				targetFiling = &matchingFilings[i]
 			}
 		}
@@ -401,7 +407,7 @@ func GetEarningsText(conn *data.Conn, userId int, rawArgs json.RawMessage) (inte
 		for _, filing := range filings {
 			// Check if this is a 10-K or 10-Q filing
 			if filing.Type == "10-K" || filing.Type == "10-Q" {
-				if targetFiling == nil || filing.Timestamp > targetFiling.Timestamp {
+				if targetFiling == nil || filing.FiledAt > targetFiling.FiledAt {
 					targetFiling = &filing
 				}
 			}
@@ -433,7 +439,7 @@ func GetEarningsText(conn *data.Conn, userId int, rawArgs json.RawMessage) (inte
 		URL:       targetFiling.URL,
 		Date:      targetFiling.Date.Format("2006-01-02"),
 		Text:      text,
-		Timestamp: targetFiling.Timestamp,
+		Timestamp: targetFiling.FiledAt,
 		Quarter:   displayQuarter,
 		Year:      year,
 	}
@@ -448,7 +454,7 @@ type GetFilingTextResponse struct {
 	Text string `json:"text"`
 }
 
-func GetFilingText(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetFilingText(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetFilingTextArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -491,7 +497,7 @@ func fetchFilingText(url string) (string, error) {
 
 		// Check for rate limiting (429)
 		if resp.StatusCode == 429 {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			// Exponential backoff
 			waitTime := retryDelay * time.Duration(1<<attempt)
@@ -502,7 +508,7 @@ func fetchFilingText(url string) (string, error) {
 		// Check for other non-success status codes
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			return "", fmt.Errorf("SEC API returned status %d: %s", resp.StatusCode, string(body[:100])) // Show first 100 chars
 		}
 
@@ -573,7 +579,7 @@ type ExhibitStub struct {
 	DocType  string `json:"docType,omitempty"` // EX-99.1, EX-2.1… (empty if not requested / unknown)
 }
 
-func GetExhibitList(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetExhibitList(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetExhibitListArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -589,7 +595,6 @@ func GetExhibitList(conn *data.Conn, userId int, rawArgs json.RawMessage) (inter
 
 	sort.Slice(stubs, func(i, j int) bool { return stubs[i].FileName < stubs[j].FileName })
 	return stubs, nil
-
 }
 
 // splitSECURL extracts cik, accession and base directory URL from a filing page
@@ -670,7 +675,7 @@ type Base64Image struct {
 	DataURI  string `json:"dataUri"`  // "data:image/png;base64,AAAA…"
 }
 
-func GetExhibitContent(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetExhibitContent(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetExhibitContentArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -794,13 +799,189 @@ func httpGet(url string) (*http.Response, error) {
 			return resp, nil
 		}
 		if resp.StatusCode == 429 {
-			resp.Body.Close()
+			_ = resp.Body.Close() // Close the body before continuing
 			time.Sleep(time.Duration(1<<i) * time.Second)
 			continue
 		}
-		b, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		return nil, fmt.Errorf("status %d: %.120s", resp.StatusCode, b)
+		b, readErr := io.ReadAll(resp.Body)
+		_ = resp.Body.Close() // Close the body after reading or if read fails
+		if readErr != nil {
+			return nil, fmt.Errorf("status %d and failed to read body for exhibit: %v", resp.StatusCode, readErr)
+		}
+		previewLength := 120
+		if len(b) < previewLength {
+			previewLength = len(b)
+		}
+		return nil, fmt.Errorf("status %d: %.120s", resp.StatusCode, b[:previewLength])
 	}
 	return nil, fmt.Errorf("rate-limited after %d tries: %s", maxRetries, url)
+}
+
+// filterAndSortFilings filters and sorts filings based on the provided arguments.
+func filterAndSortFilings(allFilings []edgar.Filing, args EdgarFilingOptions) ([]edgar.Filing, error) {
+	var filteredFilings []edgar.Filing
+
+	// Create a security service client
+	service := securities.New()
+
+	for _, filing := range allFilings {
+		// Apply filters
+		if args.Ticker != nil && *args.Ticker != "" {
+			// Get CIK for the ticker
+			cik, err := service.GetCIK(*args.Ticker)
+			if err != nil {
+				// Try to get from backup
+				cik, err = securities.GetCIKFromBackup(*args.Ticker)
+				if err != nil {
+					return nil, fmt.Errorf("error getting CIK for ticker %s: %v", *args.Ticker, err)
+				}
+			}
+			if filing.CIK != cik {
+				continue
+			}
+		}
+		if args.Form != nil && *args.Form != "" && !strings.Contains(filing.Type, *args.Form) {
+			continue
+		}
+		if args.Start > 0 && filing.FiledAt < args.Start {
+			continue
+		}
+		if args.End > 0 && filing.FiledAt > args.End {
+			continue
+		}
+		filteredFilings = append(filteredFilings, filing)
+	}
+
+	// Sort by date descending
+	sort.Slice(filteredFilings, func(i, j int) bool {
+		return filteredFilings[i].FiledAt > filteredFilings[j].FiledAt
+	})
+
+	return filteredFilings, nil
+}
+
+// GetTextFromURL fetches text content from a given URL.
+func GetTextFromURL(url string) (string, error) {
+	// Make HTTP GET request
+	response, err := http.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("error making HTTP request: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("bad status: %s", response.Status)
+	}
+
+	// Read the response body
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return "", fmt.Errorf("error reading response body: %w", err)
+	}
+
+	// Convert body to string and return
+	return string(body), nil
+}
+
+// findLatestFiling finds the latest filing of a specific form type.
+func findLatestFiling(filings []edgar.Filing, formType string) *edgar.Filing {
+	var latestFiling *edgar.Filing
+	latestTimestamp := int64(0)
+
+	for i, filing := range filings {
+		// Check if the filing is of the desired form type and is more recent
+		if strings.HasPrefix(filing.Type, formType) && filing.FiledAt > latestTimestamp {
+			latestTimestamp = filing.FiledAt
+			latestFiling = &filings[i] // Store the address of the filing
+		}
+	}
+	return latestFiling
+}
+
+// findFilingByQuarter finds a filing for a specific quarter and year.
+func findFilingByQuarter(filings []edgar.Filing, formType string, targetQuarter string, targetYear int) *edgar.Filing {
+	for i, filing := range filings {
+		if strings.HasPrefix(filing.Type, formType) {
+			q, y := getFilingQuarter(filing) // Assuming getFilingQuarter is defined elsewhere or needs to be
+			if q == targetQuarter && y == targetYear {
+				return &filings[i]
+			}
+		}
+	}
+	return nil
+}
+
+// processFilingText processes the raw HTML of a filing to extract clean text.
+func processFilingText(htmlContent string, formType string) (string, error) {
+	// Use goquery to parse HTML
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlContent))
+	if err != nil {
+		return "", fmt.Errorf("error parsing HTML: %w", err)
+	}
+
+	var textContent strings.Builder
+
+	// Generic text extraction logic
+	doc.Find("body").Each(func(i int, s *goquery.Selection) {
+		// Attempt to get all text, then clean it up
+		rawText := s.Text()
+		cleanedText := strings.Join(strings.Fields(rawText), " ") // Normalize whitespace
+		textContent.WriteString(cleanedText + "\n")
+	})
+
+	// Form-specific extraction can be added here if needed
+	// For example, for 10-K or 10-Q, you might look for specific sections
+
+	// Return the extracted text, ensuring it's not excessively long
+	MAX_LENGTH := 500000 // Define a max length for the text
+	extractedStr := textContent.String()
+	if len(extractedStr) > MAX_LENGTH {
+		extractedStr = extractedStr[:MAX_LENGTH] + "... (truncated)"
+	}
+
+	return extractedStr, nil
+}
+
+// GetEarningsText fetches the latest 10-K or 10-Q filing for a security and extracts the text content
+// ... existing code ...
+	return result, nil
+}
+
+// extractExhibits parses the filing summary XML to find exhibit links.
+func extractExhibits(xmlData []byte) ([]map[string]string, error) {
+	var summary FilingSummary
+	if err := xml.Unmarshal(xmlData, &summary); err != nil {
+		return nil, fmt.Errorf("error unmarshaling filing summary: %w", err)
+	}
+
+	var exhibits []map[string]string
+	for _, report := range summary.MyReports.Report {
+		if strings.Contains(report.ShortName, "EXHIBIT") {
+			exhibit := make(map[string]string)
+			exhibit["shortName"] = report.ShortName
+			exhibit["htmlFileName"] = report.HtmlFileName // URL to the exhibit
+			exhibit["longName"] = report.LongName
+			exhibits = append(exhibits, exhibit)
+		}
+	}
+	return exhibits, nil
+}
+
+// GetFilingText fetches and returns the text content of a specific SEC filing URL.
+func GetFilingText(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	var args struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+
+	// Security check: Validate URL format if necessary (e.g., ensure it's an SEC URL)
+	// For example: if !isValidSECUrl(args.URL) { return nil, errors.New("invalid URL") }
+
+	text, err := edgar.GetFilingTextFromURL(args.URL) // Use the function from the edgar package
+	if err != nil {
+		return nil, fmt.Errorf("error fetching filing text: %v", err)
+	}
+	return text, nil
 }

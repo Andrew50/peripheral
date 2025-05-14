@@ -4,6 +4,9 @@ services:
       context: ../../services/backend
       dockerfile: Dockerfile.dev
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "5058:5058"
     volumes:
@@ -55,6 +58,9 @@ services:
       context: ../../services/frontend
       dockerfile: Dockerfile.dev
     platform: ${PLATFORM:-linux/amd64}
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
       - ../../services/frontend:/app
       - /app/node_modules
@@ -71,6 +77,9 @@ services:
       context: ../../services/cache
       dockerfile: Dockerfile
     platform: ${PLATFORM:-linux/amd64}
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - 6379:6379
     networks:

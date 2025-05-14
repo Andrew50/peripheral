@@ -41,7 +41,7 @@ log "Temporary PostgreSQL PID: $PG_PID"
 # appropriately if defaults (localhost, current user) aren't sufficient.
 # The official postgres images often set PGUSER=postgres.
 log "Waiting for temporary PostgreSQL instance to become available..."
-WAIT_TIMEOUT=60 # Maximum wait time in seconds
+WAIT_TIMEOUT=180 # Maximum wait time in seconds
 WAIT_INTERVAL=1 # Check interval
 SECONDS=0 # Start timer
 

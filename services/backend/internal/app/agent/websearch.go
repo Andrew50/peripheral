@@ -77,9 +77,9 @@ func _geminiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (inte
 			}
 		}
 	}
-	if candidate.GroundingMetadata != nil {
-		fmt.Println("groundingMetadata", candidate.GroundingMetadata)
-	}
+	//if candidate.GroundingMetadata != nil {
+		////fmt.Println("groundingMetadata", candidate.GroundingMetadata)
+	//}
 	return WebSearchResult{
 		ResultText: resultText,
 	}, nil

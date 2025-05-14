@@ -31,12 +31,12 @@ const tradeConditionsToCheckVolume = new Set([15, 16, 38])
 func (c *Client) subscribeReplay(channelName string) {
 	securityId, baseDataType, channelType, err := getInfoFromChannelName(channelName)
 	if err != nil {
-		fmt.Println("Error getting info from channel name:", err)
+		////fmt.Println("Error getting info from channel name:", err)
 		return
 	}
 	securityIdInt, err := strconv.Atoi(securityId)
 	if err != nil {
-		fmt.Printf("do021 %v\n", err)
+		////fmt.Printf("do021 %v\n", err)
 		return
 	}
 	c.mu.Lock()
@@ -61,16 +61,16 @@ func (c *Client) subscribeReplay(channelName string) {
 	go func() {
 		initialValue, err := getInitialStreamValue(c.conn, channelName, c.simulatedTime)
 		if err != nil {
-			fmt.Println("Error fetching initial value for replay:", err)
+			////fmt.Println("Error fetching initial value for replay:", err)
 			return
 		}
 
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		err = c.ws.WriteMessage(websocket.TextMessage, []byte(initialValue))
-		if err != nil {
-			fmt.Println("WebSocket write error while sending initial value in replay:", err)
-		}
+		_ = c.ws.WriteMessage(websocket.TextMessage, []byte(initialValue)) // Ignore error for now
+		// if err != nil {
+		////fmt.Println("WebSocket write error while sending initial value in replay:", err)
+		//}
 	}()
 
 	if !c.loopRunning {
@@ -127,7 +127,7 @@ func (c *Client) unsubscribeReplay(channelName string) {
 	// Determine the base data type
 	securityId, baseDataType, channelType, err := getInfoFromChannelName(channelName)
 	if err != nil {
-		fmt.Println("Error getting info from channel name:", err)
+		////fmt.Println("Error getting info from channel name:", err)
 		return
 	}
 	key := fmt.Sprintf("%s-%s", securityId, baseDataType)
@@ -198,7 +198,7 @@ func (c *Client) StartLoop() {
 									select {
 									case c.send <- jsonMarshalTick(tick, replayData.securityId, channelType):
 									default:
-										fmt.Println("Warning: Failed to send data. Channel might be closed.")
+										////fmt.Println("Warning: Failed to send data. Channel might be closed.")
 									}
 								}
 							case "slow-regular", "slow-extended":
@@ -245,7 +245,7 @@ func (c *Client) jumpToNextMarketOpen() {
 	location, _ := time.LoadLocation("America/New_York")
 	simulatedTime := time.Unix(c.simulatedTime/1000, 0).In(location) // Convert milliseconds to time.Time in New York timezone
 	simulatedTime = simulatedTime.Add(24 * time.Hour)
-	fmt.Printf("\n %v %v", simulatedTime, simulatedTime.Weekday())
+	////fmt.Printf("\n %v %v", simulatedTime, simulatedTime.Weekday())
 	if simulatedTime.Weekday() == time.Saturday {
 		simulatedTime = simulatedTime.Add(48 * time.Hour) // Skip to Monday
 	} else if simulatedTime.Weekday() == time.Sunday {
@@ -266,7 +266,7 @@ func jsonMarshalTick(tick TickData, securityId int, channelType string) []byte {
 	tick.SetChannel(fmt.Sprintf("%d-%s", securityId, channelType))
 	data, err := json.Marshal(tick)
 	if err != nil {
-		fmt.Println("Error marshaling tick:", err)
+		////fmt.Println("Error marshaling tick:", err)
 		return nil
 	}
 	return data
@@ -280,12 +280,12 @@ func (c *Client) fetchMoreData(replayData *ReplayData) {
 	} else {
 		tick, ok := replayData.data.Back().Value.(TickData)
 		if !ok {
-			fmt.Println("ERR ------- type assertion")
+			////fmt.Println("ERR ------- type assertion")
 			return
 		}
 		timestamp = tick.GetTimestamp()
 	}
-	//fmt.Println(timestamp,replayData.baseDataType, "---------------")
+	//////fmt.Println(timestamp,replayData.baseDataType, "---------------")
 	switch replayData.baseDataType {
 
 	case "trade":
@@ -295,12 +295,12 @@ func (c *Client) fetchMoreData(replayData *ReplayData) {
 	case "close":
 		newTicks, err = getPrevCloseData(c.conn, replayData.securityId, timestamp)
 	default:
-		fmt.Println("kn0-------------------")
+		////fmt.Println("kn0-------------------")
 		return
 	}
-	//fmt.Println(len(newTicks))
+	//////fmt.Println(len(newTicks))
 	if err != nil {
-		fmt.Printf("idohn02io2 %v\n", err)
+		////fmt.Printf("idohn02io2 %v\n", err)
 		return
 	}
 	c.mu.Lock()
@@ -345,7 +345,7 @@ func (c *Client) stopReplay() {
 	c.replayPaused = false
 	c.simulatedTime = 0
 	c.replayData = make(map[string]*ReplayData)
-	fmt.Println("------closing----")
+	////fmt.Println("------closing----")
 	select {
 	case <-c.send:
 	default:

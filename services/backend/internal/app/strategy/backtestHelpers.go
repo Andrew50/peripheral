@@ -20,7 +20,7 @@ func SaveBacktestToCache(ctx context.Context, conn *data.Conn, userID int, strat
 	// Serialize the results to JSON
 	serializedResults, err := json.Marshal(results)
 	if err != nil {
-		fmt.Printf("Failed to serialize backtest results for strategy %d: %v\n", strategyID, err)
+		////fmt.Printf("Failed to serialize backtest results for strategy %d: %v\n", strategyID, err)
 		return fmt.Errorf("failed to serialize backtest results: %w", err)
 	}
 
@@ -28,13 +28,13 @@ func SaveBacktestToCache(ctx context.Context, conn *data.Conn, userID int, strat
 	expiration := 24 * time.Hour
 
 	// Save to Redis
-	fmt.Printf("Saving backtest results for strategy %d to cache key: %s\n", strategyID, cacheKey)
+	////fmt.Printf("Saving backtest results for strategy %d to cache key: %s\n", strategyID, cacheKey)
 	err = conn.Cache.Set(ctx, cacheKey, serializedResults, expiration).Err()
 	if err != nil {
-		fmt.Printf("Failed to save backtest results to Redis for strategy %d: %v\n", strategyID, err)
+		////fmt.Printf("Failed to save backtest results to Redis for strategy %d: %v\n", strategyID, err)
 		return fmt.Errorf("failed to save backtest results to cache: %w", err)
 	}
 
-	fmt.Printf("Successfully saved backtest results for strategy %d to Redis.\n", strategyID)
+	////fmt.Printf("Successfully saved backtest results for strategy %d to Redis.\n", strategyID)
 	return nil
 }

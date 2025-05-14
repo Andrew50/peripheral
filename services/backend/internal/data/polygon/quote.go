@@ -6,7 +6,7 @@ import (
 	"backend/internal/data/utils"
 	"context"
 	"fmt"
-	"log"
+//	"log"
 	"time"
 
 	polygon "github.com/polygon-io/client-go/rest"
@@ -52,9 +52,9 @@ func retryWithBackoff[T any](operation string, ticker string, maxRetries int, sh
 		lastErr = err
 
 		// Only log on the final attempt if logging is enabled
-		if shouldLog && attempt == maxRetries {
-			log.Printf("ERROR Failed to %s for %s after %d attempts: %v", operation, ticker, maxRetries, lastErr)
-		}
+		//if shouldLog && attempt == maxRetries {
+			//log.Printf("ERROR Failed to %s for %s after %d attempts: %v", operation, ticker, maxRetries, lastErr)
+		//}
 
 		if attempt < maxRetries {
 			backoffTime := time.Duration(attempt*2) * time.Second

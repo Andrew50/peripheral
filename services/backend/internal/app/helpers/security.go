@@ -12,6 +12,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -24,7 +25,7 @@ type GetCurrentTickerArgs struct {
 }
 
 // GetCurrentTicker performs operations related to GetCurrentTicker functionality.
-func GetCurrentTicker(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetCurrentTicker(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetCurrentTickerArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("di1n0fni0: %v", err)
@@ -50,7 +51,7 @@ type GetMarketCapResults struct {
 }
 
 // GetMarketCap performs operations related to GetMarketCap functionality.
-func GetMarketCap(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetMarketCap(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetMarketCapArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("di1n0fni0: %v", err)
@@ -79,7 +80,7 @@ type PolygonBar struct {
 }
 
 // GetPrevClose performs operations related to GetPrevClose functionality.
-func GetPrevClose(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetPrevClose(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetPrevCloseArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("getPrevClose invalid args: %v", err)
@@ -111,8 +112,36 @@ func GetPrevClose(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		}
 
 		// Make a request to Polygon's API for that date and ticker
-		endpoint := fmt.Sprintf("https://api.polygon.io/v1/open-close/%s/%s?adjusted=true&apiKey=%s", ticker, date, conn.PolygonKey)
-		resp, err := http.Get(endpoint)
+		baseURL := "https://api.polygon.io/v1/open-close"
+
+		// Create URL with query parameters using url.Parse and url.Values
+		parsedURL, err := url.Parse(baseURL + "/" + ticker + "/" + date)
+		if err != nil {
+			return nil, fmt.Errorf("invalid URL: %v", err)
+		}
+
+		params := url.Values{}
+		params.Add("adjusted", "true")
+		params.Add("apiKey", conn.PolygonKey)
+		parsedURL.RawQuery = params.Encode()
+
+		// Validate the URL is for the correct domain
+		finalURL := parsedURL.String()
+		if !strings.HasPrefix(finalURL, "https://api.polygon.io/") {
+			return nil, fmt.Errorf("invalid API URL domain")
+		}
+
+		// Make the request with the safely constructed URL using http.Client
+		client := &http.Client{
+			Timeout: 30 * time.Second,
+		}
+
+		req, err := http.NewRequest("GET", finalURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %v", err)
+		}
+
+		resp, err := client.Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch Polygon snapshot: %v", err)
 		}
@@ -131,7 +160,7 @@ func GetPrevClose(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 
 		// If the close price is found, return it
 		if bar.Close != 0 {
-			fmt.Println(currentDay)
+			////fmt.Println(currentDay)
 			return bar.Close, nil
 		}
 
@@ -391,7 +420,7 @@ func GetTickerDetails(conn *data.Conn, userId int, rawArgs json.RawMessage) (int
 	}
 	details, err := polygon.GetTickerDetails(conn.Polygon, ticker, "now")
 	if err != nil {
-		fmt.Printf("failed to get ticker details: %v\n", err)
+		////fmt.Printf("failed to get ticker details: %v\n", err)
 		return nil, nil
 		//return nil, fmt.Errorf("failed to get ticker details: %v", err)
 	}
@@ -472,13 +501,13 @@ func GetTickerDetails(conn *data.Conn, userId int, rawArgs json.RawMessage) (int
 	// Fetch both logo and icon with proper error handling
 	logoBase64, logoErr := fetchImage(details.Branding.LogoURL)
 	if logoErr != nil {
-		fmt.Printf("Warning: Failed to fetch logo: %v\n", logoErr)
+		////fmt.Printf("Warning: Failed to fetch logo: %v\n", logoErr)
 		logoBase64 = "" // Set to empty string on error
 	}
 
 	iconBase64, iconErr := fetchImage(details.Branding.IconURL)
 	if iconErr != nil {
-		fmt.Printf("Warning: Failed to fetch icon: %v\n", iconErr)
+		////fmt.Printf("Warning: Failed to fetch icon: %v\n", iconErr)
 		iconBase64 = "" // Set to empty string on error
 	}
 
@@ -765,7 +794,7 @@ func GetTickerDailySnapshot(conn *data.Conn, userId int, rawArgs json.RawMessage
 	results.TodayClose = snapshot.Day.Close
 	results.PreviousClose = lastClose
 	results.Ticker = ticker
-	fmt.Println(results)
+	////fmt.Println(results)
 	return results, nil
 }
 
