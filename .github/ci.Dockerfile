@@ -33,6 +33,7 @@ RUN apt-get update \
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs \
  && rm -rf /var/lib/apt/lists/*
+RUN npm install -g pnpm@8
 
 # 2. Prep workspace and install frontend deps **in the GitHub Actions mount path**
 WORKDIR /github/workspace/services/frontend
