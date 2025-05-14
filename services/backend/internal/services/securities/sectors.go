@@ -2,8 +2,8 @@
 //
 // A faithful Go rewrite of the original Python `update_sectors` script.
 // – Keeps identical batching / worker‑count logic.
-// – Randomised jitter + extra 200 ms pause to respect Yahoo’s informal rate‑limit.
-// – Uses the unofficial “quoteSummary?modules=assetProfile” endpoint directly
+// – Randomised jitter + extra 200 ms pause to respect Yahoo's informal rate‑limit.
+// – Uses the unofficial "quoteSummary?modules=assetProfile" endpoint directly
 //   instead of `yfinance`; no external Go Yahoo‑Finance wrapper required.
 //
 // Requirements
@@ -35,6 +35,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+
 	// "log"
 	"net/http"
 	"os"
@@ -273,10 +274,7 @@ func queryYahoo(ctx context.Context, ticker string) (sector, industry string, er
 
 		// Check if we got a retryable status code (429 or 5xx)
 		if resp.StatusCode == 429 || (resp.StatusCode >= 500 && resp.StatusCode < 600) {
-			if errClose := resp.Body.Close(); errClose != nil {
-				// Log this error, as it might indicate issues, but proceed with retry logic
-				// log.Printf("Error closing response body during retry: %v", errClose)
-			}
+			resp.Body.Close() // Close the body before continuing
 			lastErr = fmt.Errorf("retryable status: %s", resp.Status)
 			continue // Retryable status code, retry
 		}
