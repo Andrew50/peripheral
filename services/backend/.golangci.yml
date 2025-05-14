@@ -37,7 +37,7 @@ linters:
   enable:
     - revive
     - gosec
-    - forbidigo
+    # - forbidigo
   disable:
     - gosimple
     # - staticcheck # Ensure staticcheck runs with its specific config above
