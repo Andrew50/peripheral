@@ -138,7 +138,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 					Size:       msg.Size,
 					Timestamp:  msg.Timestamp,
 					Conditions: msg.Conditions,
-					ExchangeID: msg.Exchange,
+					ExchangeID: int(msg.Exchange),
 					Channel:    fastChannelName,
 				}
 				//if alerts.IsAggsInitialized() {

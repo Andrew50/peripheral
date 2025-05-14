@@ -193,13 +193,6 @@ func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFilin
 			continue
 		}
 
-		// If we get here, we have a non-429 response
-			// Exponential backoff
-			waitTime := retryDelay * time.Duration(1<<attempt)
-			////fmt.Printf("Rate limited by SEC API (429). Retrying in %v...\n", waitTime)
-			time.Sleep(waitTime)
-			continue
-		}
 
 		// If we get here, we have a non-429 response
 		break
