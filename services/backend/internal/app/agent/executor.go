@@ -19,9 +19,9 @@ import (
 
 // ExecuteResult represents the result of executing a function
 type ExecuteResult struct {
-	FunctionName string      `json:"function_name"`
-	Result       interface{} `json:"result"`
-	Error        string      `json:"error,omitempty"`
+	FunctionName string      `json:"fn"`
+	Result       interface{} `json:"res"`
+	Error        string      `json:"err,omitempty"`
 	Args         interface{} `json:"args,omitempty"`
 }
 
