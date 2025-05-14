@@ -54,9 +54,10 @@ RUN apt-get update \
 COPY --from=builder /usr/local/go /usr/local/go
 COPY --from=builder /go /go
 
-# 3. Copy Node + npm + **baked frontend deps** into the workspace path
+# 3. Copy Node + npm + pnpm + **baked frontend deps** into the workspace path
 COPY --from=frontend-builder /usr/bin/node  /usr/bin/node
 COPY --from=frontend-builder /usr/bin/npm   /usr/bin/npm
+COPY --from=frontend-builder /usr/local/bin/pnpm /usr/local/bin/pnpm
 COPY --from=frontend-builder /github/workspace/services/frontend \
                                /github/workspace/services/frontend
 
