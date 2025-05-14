@@ -153,7 +153,7 @@ func FetchLatestEdgarFilings(conn *data.Conn) ([]GlobalEDGARFiling, error) {
 // nolint:unused
 //
 //lint:ignore U1000 kept for future SEC filing pagination
-func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFiling, error) {
+func fetchEdgarFilingsTickerPage(cik string, _ int, count int) ([]EDGARFiling, error) {
 	url := fmt.Sprintf("https://data.sec.gov/submissions/CIK%s.json", cik)
 
 	// Create HTTP client with reasonable timeout

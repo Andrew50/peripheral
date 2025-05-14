@@ -48,25 +48,25 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	polygonKey := getEnv("POLYGON_API_KEY", "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm")
 	perplexityKey := getEnv("PERPLEXITY_API_KEY", "")
 
-	var dbUrl string
-	var cacheUrl string
+	var dbURL string
+	var cacheURL string
 
 	// URL encode the password to handle special characters
 	encodedPassword := url.QueryEscape(dbPassword)
 
 	if inContainer {
-		dbUrl = fmt.Sprintf("postgres://%s:%s@%s:%s", dbUser, encodedPassword, dbHost, dbPort)
-		cacheUrl = fmt.Sprintf("%s:%s", redisHost, redisPort)
+		dbURL = fmt.Sprintf("postgres://%s:%s@%s:%s", dbUser, encodedPassword, dbHost, dbPort)
+		cacheURL = fmt.Sprintf("%s:%s", redisHost, redisPort)
 	} else {
-		dbUrl = fmt.Sprintf("postgres://%s:%s@localhost:%s", dbUser, encodedPassword, dbPort)
-		cacheUrl = fmt.Sprintf("localhost:%s", redisPort)
+		dbURL = fmt.Sprintf("postgres://%s:%s@localhost:%s", dbUser, encodedPassword, dbPort)
+		cacheURL = fmt.Sprintf("localhost:%s", redisPort)
 	}
 
 	var dbConn *pgxpool.Pool
 	var err error
 	for {
 		// Create a connection pool configuration
-		poolConfig, err := pgxpool.ParseConfig(dbUrl)
+		poolConfig, err := pgxpool.ParseConfig(dbURL)
 		if err != nil {
 			//log.Printf("Unable to parse pool config: %v\n", err)
 			time.Sleep(5 * time.Second)
@@ -95,7 +95,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	for {
 		// Use Redis password if provided
 		opts := &redis.Options{
-			Addr: cacheUrl,
+			Addr: cacheURL,
 			// Add connection pool settings
 			PoolSize:     20,               // Increased from 10
 			MinIdleConns: 10,               // Increased from 5
