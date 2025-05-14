@@ -274,7 +274,7 @@ func queryYahoo(ctx context.Context, ticker string) (sector, industry string, er
 
 		// Check if we got a retryable status code (429 or 5xx)
 		if resp.StatusCode == 429 || (resp.StatusCode >= 500 && resp.StatusCode < 600) {
-			resp.Body.Close() // Close the body before continuing
+			_ = resp.Body.Close() // Close the body before continuing
 			lastErr = fmt.Errorf("retryable status: %s", resp.Status)
 			continue // Retryable status code, retry
 		}

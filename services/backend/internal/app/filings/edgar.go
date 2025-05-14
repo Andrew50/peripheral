@@ -125,9 +125,7 @@ func fetchEdgarFilings(cik string) ([]edgar.EDGARFiling, error) {
 
 		// Check for rate limiting (429)
 		if resp.StatusCode == 429 {
-			if err := resp.Body.Close(); err != nil {
-				return nil, fmt.Errorf("error closing response body: %v", err)
-			}
+			_ = resp.Body.Close()
 
 			// Exponential backoff
 			waitTime := retryDelay * time.Duration(1<<attempt)
@@ -138,9 +136,7 @@ func fetchEdgarFilings(cik string) ([]edgar.EDGARFiling, error) {
 		// Check for other non-success status codes
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
-			if err := resp.Body.Close(); err != nil {
-				return nil, fmt.Errorf("SEC API returned status %d and error closing response: %v", resp.StatusCode, err)
-			}
+			_ = resp.Body.Close()
 			return nil, fmt.Errorf("SEC API returned status %d: %s", resp.StatusCode, string(body[:100])) // Show first 100 chars
 		}
 
@@ -495,9 +491,7 @@ func fetchFilingText(url string) (string, error) {
 
 		// Check for rate limiting (429)
 		if resp.StatusCode == 429 {
-			if err := resp.Body.Close(); err != nil {
-				return "", fmt.Errorf("error closing response body: %v", err)
-			}
+			_ = resp.Body.Close()
 
 			// Exponential backoff
 			waitTime := retryDelay * time.Duration(1<<attempt)
@@ -508,9 +502,7 @@ func fetchFilingText(url string) (string, error) {
 		// Check for other non-success status codes
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
-			if err := resp.Body.Close(); err != nil {
-				return "", fmt.Errorf("SEC API returned status %d and error closing response: %v", resp.StatusCode, err)
-			}
+			_ = resp.Body.Close()
 			return "", fmt.Errorf("SEC API returned status %d: %s", resp.StatusCode, string(body[:100])) // Show first 100 chars
 		}
 
@@ -802,12 +794,12 @@ func httpGet(url string) (*http.Response, error) {
 			return resp, nil
 		}
 		if resp.StatusCode == 429 {
-			resp.Body.Close() // Close the body before continuing
+			_ = resp.Body.Close() // Close the body before continuing
 			time.Sleep(time.Duration(1<<i) * time.Second)
 			continue
 		}
 		b, readErr := io.ReadAll(resp.Body)
-		resp.Body.Close() // Close the body after reading or if read fails
+		_ = resp.Body.Close() // Close the body after reading or if read fails
 		if readErr != nil {
 			return nil, fmt.Errorf("status %d and failed to read body for exhibit: %v", resp.StatusCode, readErr)
 		}
