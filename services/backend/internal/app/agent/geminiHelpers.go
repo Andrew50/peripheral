@@ -83,7 +83,7 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 }
 
 // ClearConversationHistory deletes the conversation for a user
-func ClearConversationHistory(conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
+func ClearConversationHistory(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
 	ctx := context.Background()
 	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
 	////fmt.Printf("Attempting to delete conversation for key: %s\n", conversationKey)
@@ -91,12 +91,12 @@ func ClearConversationHistory(conn *data.Conn, userID int, args json.RawMessage)
 	// Delete the conversation history key from Redis
 	err := conn.Cache.Del(ctx, conversationKey).Err()
 	if err != nil {
-        return nil, err
+		return nil, err
 		////fmt.Printf("Failed to delete conversation from Redis: %v\n", err)
 		// Don't return immediately, still try to delete persistent context
-	} 
-    //else {
-		////fmt.Printf("Successfully deleted conversation for key: %s\n", conversationKey)
+	}
+	//else {
+	////fmt.Printf("Successfully deleted conversation for key: %s\n", conversationKey)
 	//}
 
 	// Also delete the persistent context key
@@ -110,8 +110,8 @@ func ClearConversationHistory(conn *data.Conn, userID int, args json.RawMessage)
 			return nil, fmt.Errorf("failed to clear persistent context: %w", pErr)
 		}
 	}
-    //else {
-		////fmt.Printf("Successfully deleted persistent context for key: %s\n", persistentContextKey)
+	//else {
+	////fmt.Printf("Successfully deleted persistent context for key: %s\n", persistentContextKey)
 	//}
 
 	// If the conversation deletion failed initially, return that error now

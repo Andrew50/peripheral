@@ -15,7 +15,10 @@ import (
 
 	"github.com/polygon-io/client-go/rest/iter"
 	"github.com/polygon-io/client-go/rest/models"
+	"github.com/sirupsen/logrus"
 )
+
+var Logger *logrus.Logger
 
 // GetChartDataArgs represents a structure for handling GetChartDataArgs data.
 type GetChartDataArgs struct {
@@ -31,13 +34,13 @@ type GetChartDataArgs struct {
 
 // GetChartDataResults represents a structure for handling GetChartDataResults data.
 type GetChartDataResults struct {
-	Timestamp float64      `json:"time"`
-	Open      float64      `json:"open"`
-	High      float64      `json:"high"`
-	Low       float64      `json:"low"`
-	Close     float64      `json:"close"`
-	Volume    float64      `json:"volume"`
-	Events    []ChartEvent `json:"events"`
+	Timestamp float64 `json:"time"`
+	Open      float64 `json:"open"`
+	High      float64 `json:"high"`
+	Low       float64 `json:"low"`
+	Close     float64 `json:"close"`
+	Volume    float64 `json:"volume"`
+	Events    []Event `json:"events"`
 }
 
 // GetChartDataResponse represents a structure for handling GetChartDataResponse data.
@@ -57,7 +60,7 @@ func MaxDivisorOf30(n int) int {
 }
 
 // GetChartData performs operations related to GetChartData functionality.
-func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetChartDataArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -421,7 +424,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 				}
 			}
 			// Integrate events just before returning for the aggregate/forward case
-			integrateChartEvents(&barDataList, conn, userId, args.SecurityID, args.IncludeSECFilings, multiplier, timespan, args.ExtendedHours, easternLocation)
+			integrateChartEvents(&barDataList, conn, userID, args.SecurityID, args.IncludeSECFilings, multiplier, timespan, args.ExtendedHours, easternLocation)
 			return GetChartDataResponse{
 				Bars:           barDataList,
 				IsEarliestData: isEarliestData,
@@ -470,7 +473,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			}
 		}
 		// Integrate events just before returning for the backward case
-		integrateChartEvents(&barDataList, conn, userId, args.SecurityID, args.IncludeSECFilings, multiplier, timespan, args.ExtendedHours, easternLocation)
+		integrateChartEvents(&barDataList, conn, userID, args.SecurityID, args.IncludeSECFilings, multiplier, timespan, args.ExtendedHours, easternLocation)
 		return GetChartDataResponse{
 			Bars:           barDataList,
 			IsEarliestData: isEarliestData,
@@ -500,7 +503,7 @@ func requestIncompleteBar(
 	multiplier int,
 	timespan string,
 	extendedHours bool,
-	isReplay bool,
+	isReplayArg bool,
 	easternLocation *time.Location,
 ) (GetChartDataResults, error) {
 
@@ -620,8 +623,6 @@ func requestIncompleteBar(
 			conn, ticker,
 			1, "day",
 			timestampStart, dailyEnd,
-			isReplay,
-			// We do NOT filter extended hours for daily bars. They're daily lumps anyway.
 			false,
 			easternLocation,
 		)
@@ -632,8 +633,7 @@ func requestIncompleteBar(
 			conn, ticker,
 			1, "minute",
 			dailyEnd, minuteEnd,
-			isReplay,
-			!extendedHours, // pass a "filterRegularHours" argument (inverse of extended)
+			false,
 			easternLocation,
 		)
 	}()
@@ -643,8 +643,7 @@ func requestIncompleteBar(
 			conn, ticker,
 			1, "second",
 			minuteEnd, secondEnd,
-			isReplay,
-			!extendedHours,
+			false,
 			easternLocation,
 		)
 	}()
@@ -654,7 +653,7 @@ func requestIncompleteBar(
 			conn, ticker,
 			secondEnd, tradeEnd,
 			extendedHours,
-			isReplay,
+			isReplayArg,
 			easternLocation,
 		)
 	}()
@@ -832,7 +831,6 @@ func fetchAggData(
 	multiplier int,
 	timespan string,
 	startMs, endMs int64,
-	isReplay bool,
 	filterRegularOnly bool,
 	easternLocation *time.Location,
 ) ([]models.Agg, error) {
@@ -843,7 +841,7 @@ func fetchAggData(
 	start := models.Millis(time.Unix(0, startMs*int64(time.Millisecond)).UTC())
 	end := models.Millis(time.Unix(0, endMs*int64(time.Millisecond)).UTC())
 
-	it, err := polygon.GetAggsData(conn.Polygon, ticker, multiplier, timespan, start, end, 10000, "asc", !isReplay)
+	it, err := polygon.GetAggsData(conn.Polygon, ticker, multiplier, timespan, start, end, 10000, "asc", !filterRegularOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -869,7 +867,7 @@ func fetchTrades(
 	ticker string,
 	startMs, endMs int64,
 	extendedHours bool,
-	isReplay bool,
+	isReplayArg bool,
 	easternLocation *time.Location,
 ) ([]models.Trade, error) {
 
@@ -1050,7 +1048,7 @@ func alignTimestampToStartOfBar(eventMs int64, multiplier int, timespan string, 
 func integrateChartEvents(
 	barDataList *[]GetChartDataResults, // Pointer to modify the slice
 	conn *data.Conn,
-	userId int,
+	userID int,
 	securityID int,
 	includeSECFilings bool,
 	multiplier int,
@@ -1104,7 +1102,7 @@ func integrateChartEvents(
 	toMs := int64((maxTsSec + float64(chartTimeframeInSeconds)) * 1000)
 
 	// 2. Fetch Events
-	chartEvents, err := fetchChartEventsInRange(conn, userId, securityID, fromMs, toMs, includeSECFilings, true)
+	chartEvents, err := fetchChartEventsInRange(conn, userID, securityID, fromMs, toMs, includeSECFilings, true)
 	if err != nil {
 		// Log the error but don't fail the whole chart request
 		////fmt.Printf("Warning: Failed to fetch chart events for secId %d between %d and %d: %v. Returning bars without events.\\n", securityID, fromMs, toMs, err)
@@ -1116,7 +1114,7 @@ func integrateChartEvents(
 	}
 
 	// 3. Map Events to Bar Timestamps (using Unix seconds as key)
-	eventsByTimestamp := make(map[int64][]ChartEvent)
+	eventsByTimestamp := make(map[int64][]Event)
 	for _, event := range chartEvents {
 		// Align the event timestamp (UTC ms) to its corresponding bar's start time (Unix seconds)
 		barStartTimeSec := alignTimestampToStartOfBar(event.Timestamp, multiplier, timespan, extendedHours, easternLocation)
@@ -1131,7 +1129,7 @@ func integrateChartEvents(
 			// Ensure the Events slice is initialized before appending
 			if bars[i].Events == nil {
 				// Pre-allocate with approximate capacity if possible
-				bars[i].Events = make([]ChartEvent, 0, len(eventsToAdd))
+				bars[i].Events = make([]Event, 0, len(eventsToAdd))
 			}
 			bars[i].Events = append(bars[i].Events, eventsToAdd...)
 		}
