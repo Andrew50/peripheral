@@ -8,13 +8,13 @@ import (
 	"strings"
 )
 
-func BuildPlanningPrompt(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}) string {
+func BuildPlanningPrompt(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}) (string, error) {
 	ctx := context.Background()
 	var sb strings.Builder
 	// Call the exported function with the cache key
 	conversationData, err := GetConversationFromCache(ctx, conn, userID)
 	if err != nil {
-		fmt.Printf("Error getting user conversation: %v\n", err)
+        return "", err
 	}
 	if conversationData != nil && len(conversationData.Messages) > 0 {
 		conversationContext := _buildConversationContext(conversationData.Messages)
@@ -39,13 +39,17 @@ func BuildPlanningPrompt(conn *data.Conn, userID int, query string, contextItems
 	sb.WriteString(query)
 	sb.WriteString("\n</UserQuery>\n")
 
-	return sb.String()
+	return sb.String(), nil
 }
 
-func BuildPlanningPromptWithResults(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, results []ExecuteResult) string {
+func BuildPlanningPromptWithResults(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, results []ExecuteResult) (string, error) {
 	// Start with the basic planning prompt
 	sb := strings.Builder{}
-	sb.WriteString(BuildPlanningPrompt(conn, userID, query, contextItems, activeChartContext))
+    planningPrompt, err := BuildPlanningPrompt(conn, userID, query, contextItems, activeChartContext)
+    if err != nil {
+        return "", err
+    }
+	sb.WriteString(planningPrompt)
 
 	// Add execution results
 	if len(results) > 0 {
@@ -61,7 +65,7 @@ func BuildPlanningPromptWithResults(conn *data.Conn, userID int, query string, c
 		sb.WriteString("</ExecutionResults>\n")
 	}
 
-	return sb.String()
+	return sb.String(), nil
 }
 
 func _buildContextItems(contextItems []map[string]interface{}) string {
@@ -132,10 +136,14 @@ func _buildConversationContext(messages []ChatMessage) string {
 	return context.String()
 }
 
-func BuildFinalResponsePrompt(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, allResults []ExecuteResult) string {
+func BuildFinalResponsePrompt(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, allResults []ExecuteResult) (string, error) {
 	// Start with the basic planning prompt
 	sb := strings.Builder{}
-	sb.WriteString(BuildPlanningPrompt(conn, userID, query, contextItems, activeChartContext))
+    planningPrompt, err := BuildPlanningPrompt(conn, userID, query, contextItems, activeChartContext)
+    if err != nil {
+        return "", err
+    }
+	sb.WriteString(planningPrompt)
 
 	// Add execution results
 	if len(allResults) > 0 {
@@ -150,5 +158,5 @@ func BuildFinalResponsePrompt(conn *data.Conn, userID int, query string, context
 		}
 		sb.WriteString("</ExecutionResults>\n")
 	}
-	return sb.String()
+	return sb.String(), nil
 }
