@@ -1,6 +1,6 @@
 <script>
-	import Header from '$lib/utils/modules/header.svelte';
-	import '$lib/core/global.css';
+	import Header from '$lib/components/header.svelte';
+	import '$lib/styles/global.css';
 	import { browser } from '$app/environment';
 
 	if (browser) {
@@ -135,19 +135,6 @@
 		font-size: clamp(2.8rem, 6vw, 4.5rem);
 		font-weight: 600; /* Slightly bolder */
 	}
-
-    h2 {
-		/* Use secondary font color */
-        color: var(--f2, #9ca3af);
-        font-family: var(--font-primary, 'Fira Sans', sans-serif);
-        font-size: clamp(1.1rem, 2.8vw, 1.6rem);
-        font-weight: 400;
-        margin-top: 0; /* Reduced margin */
-        margin-bottom: var(--space-md, 1.5rem);
-        text-transform: uppercase;
-        letter-spacing: 0.15em; /* Wider spacing */
-    }
-
 
 	.tagline {
 		/* Use primary font color */

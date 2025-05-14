@@ -14,8 +14,8 @@ type GetWatchlistsResult struct {
 }
 
 // GetWatchlists performs operations related to GetWatchlists functionality.
-func GetWatchlists(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	rows, err := conn.DB.Query(context.Background(), ` SELECT watchlistId, watchlistName FROM watchlists where userId = $1 `, userId)
+func GetWatchlists(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	rows, err := conn.DB.Query(context.Background(), ` SELECT watchlistId, watchlistName FROM watchlists where userId = $1 `, userID)
 	if err != nil {
 		return nil, fmt.Errorf("[pvk %v", err)
 	}
@@ -38,14 +38,14 @@ type NewWatchlistArgs struct {
 }
 
 // NewWatchlist performs operations related to NewWatchlist functionality.
-func NewWatchlist(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func NewWatchlist(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args NewWatchlistArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
 		return nil, fmt.Errorf("3og9 invalid args: %v", err)
 	}
 	var watchlistID int
-	err = conn.DB.QueryRow(context.Background(), "INSERT INTO watchlists (watchlistName,userId) values ($1,$2) RETURNING watchlistId", args.WatchlistName, userId).Scan(&watchlistID)
+	err = conn.DB.QueryRow(context.Background(), "INSERT INTO watchlists (watchlistName,userId) values ($1,$2) RETURNING watchlistId", args.WatchlistName, userID).Scan(&watchlistID)
 	if err != nil {
 		return nil, fmt.Errorf("0n8912")
 	}
@@ -55,17 +55,17 @@ func NewWatchlist(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 
 // DeleteWatchlistArgs represents a structure for handling DeleteWatchlistArgs data.
 type DeleteWatchlistArgs struct {
-	Id int `json:"watchlistId"`
+	ID int `json:"watchlistId"`
 }
 
 // DeleteWatchlist performs operations related to DeleteWatchlist functionality.
-func DeleteWatchlist(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func DeleteWatchlist(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteWatchlistArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
 		return nil, fmt.Errorf("GetCik invalid args: %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), "DELETE FROM watchlists WHERE watchlistId = $1 AND userId = $2", args.Id, userId)
+	cmdTag, err := conn.DB.Exec(context.Background(), "DELETE FROM watchlists WHERE watchlistId = $1 AND userId = $2", args.ID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ type GetWatchlistEntriesResult struct {
 }
 
 // GetWatchlistItems performs operations related to GetWatchlistItems functionality.
-func GetWatchlistItems(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetWatchlistItems(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetWatchlistEntriesArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
@@ -99,7 +99,7 @@ func GetWatchlistItems(conn *data.Conn, userId int, rawArgs json.RawMessage) (in
 	var watchlistExists bool
 	err = conn.DB.QueryRow(context.Background(),
 		`SELECT EXISTS(SELECT 1 FROM watchlists WHERE watchlistId = $1 AND userId = $2)`,
-		args.WatchlistID, userId).Scan(&watchlistExists)
+		args.WatchlistID, userID).Scan(&watchlistExists)
 	if err != nil {
 		return nil, fmt.Errorf("error verifying watchlist ownership: %v", err)
 	}
@@ -136,7 +136,7 @@ type DeleteWatchlistItemArgs struct {
 }
 
 // DeleteWatchlistItem performs operations related to DeleteWatchlistItem functionality.
-func DeleteWatchlistItem(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func DeleteWatchlistItem(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteWatchlistItemArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
@@ -146,7 +146,7 @@ func DeleteWatchlistItem(conn *data.Conn, userId int, rawArgs json.RawMessage) (
 		DELETE FROM watchlistItems 
 		WHERE watchlistItemId = $1 
 		AND watchlistId IN (SELECT watchlistId FROM watchlists WHERE userId = $2)`,
-		args.WatchlistItemID, userId)
+		args.WatchlistItemID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("niv02 %v", err)
 	}
@@ -163,7 +163,7 @@ type NewWatchlistItemArgs struct {
 }
 
 // NewWatchlistItem performs operations related to NewWatchlistItem functionality.
-func NewWatchlistItem(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func NewWatchlistItem(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args NewWatchlistItemArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
@@ -174,7 +174,7 @@ func NewWatchlistItem(conn *data.Conn, userId int, rawArgs json.RawMessage) (int
 	var watchlistExists bool
 	err = conn.DB.QueryRow(context.Background(),
 		`SELECT EXISTS(SELECT 1 FROM watchlists WHERE watchlistId = $1 AND userId = $2)`,
-		args.WatchlistID, userId).Scan(&watchlistExists)
+		args.WatchlistID, userID).Scan(&watchlistExists)
 	if err != nil {
 		return nil, fmt.Errorf("error verifying watchlist ownership: %v", err)
 	}
