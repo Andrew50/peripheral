@@ -131,8 +131,17 @@ func GetPrevClose(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			return nil, fmt.Errorf("invalid API URL domain")
 		}
 
-		// Make the request with the safely constructed URL
-		resp, err := http.Get(finalURL)
+		// Make the request with the safely constructed URL using http.Client
+		client := &http.Client{
+			Timeout: 30 * time.Second,
+		}
+
+		req, err := http.NewRequest("GET", finalURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %v", err)
+		}
+
+		resp, err := client.Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch Polygon snapshot: %v", err)
 		}

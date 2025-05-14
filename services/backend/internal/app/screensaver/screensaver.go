@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // GetScreensaversResults represents a structure for handling GetScreensaversResults data.
@@ -51,8 +52,17 @@ func fetchPolygonSnapshot(endpoint string, apiKey string) ([]string, error) {
 		return nil, fmt.Errorf("invalid endpoint domain, only polygon.io is allowed")
 	}
 
-	// Make the request to Polygon.io with validated URL
-	resp, err := http.Get(fullEndpointStr)
+	// Make the request to Polygon.io with validated URL using http.Client
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	req, err := http.NewRequest("GET", fullEndpointStr, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Polygon snapshot: %v", err)
 	}

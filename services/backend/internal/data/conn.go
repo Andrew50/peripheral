@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"fmt"
+	"log"
 
 	//	"log"
 	"net/http"
@@ -161,7 +162,9 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		conn.DB.Close()
 
 		// Close the Redis cache connection
-		conn.Cache.Close()
+		if err := conn.Cache.Close(); err != nil {
+			log.Printf("Error closing Redis cache connection: %v", err)
+		}
 	}
 	return conn, cleanup
 }
