@@ -152,10 +152,7 @@ func (c *Client) writePump() {
 	// ticker := time.NewTicker(pingPeriod) // Keep connection alive if needed
 	defer func() {
 		// ticker.Stop() // Stop the ticker if used
-		if err := c.ws.Close(); err != nil {
-			// Log error, connection might already be closed or in a bad state
-			// fmt.Printf("Error closing websocket in writePump defer: %v\n", err)
-		}
+		c.ws.Close()
 		////fmt.Println("writePump exiting, connection closed")
 	}()
 	for {
@@ -165,10 +162,7 @@ func (c *Client) writePump() {
 			if !ok {
 				// The send channel was closed. Tell the client.
 				////fmt.Println("send channel closed, sending close message")
-				if err := c.ws.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
-					// Log error, client might already be gone
-					// fmt.Printf("Error writing close message: %v\n", err)
-				}
+				c.ws.WriteMessage(websocket.CloseMessage, []byte{})
 				return // Exit writePump
 			}
 
