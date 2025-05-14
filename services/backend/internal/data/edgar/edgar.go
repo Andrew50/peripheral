@@ -184,16 +184,16 @@ func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFilin
 
 		// Check for rate limiting (429)
 		if resp.StatusCode == 429 {
-<<<<<<< HEAD
 			resp.Body.Close()
-=======
-			if errClose := resp.Body.Close(); errClose != nil {
-				// log.Printf("Error closing response body on 429: %v", errClose)
-			}
-			if errClose := resp.Body.Close(); errClose != nil {
-				// log.Printf("Error closing response body on 429: %v", errClose)
-			}
 
+			// Exponential backoff
+			waitTime := retryDelay * time.Duration(1<<attempt)
+			////fmt.Printf("Rate limited by SEC API (429). Retrying in %v...\n", waitTime)
+			time.Sleep(waitTime)
+			continue
+		}
+
+		// If we get here, we have a non-429 response
 			// Exponential backoff
 			waitTime := retryDelay * time.Duration(1<<attempt)
 			////fmt.Printf("Rate limited by SEC API (429). Retrying in %v...\n", waitTime)
@@ -204,13 +204,6 @@ func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFilin
 		// If we get here, we have a non-429 response
 		break
 	}
-
-	// Check if all retries failed
-	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("SEC API rate limit exceeded after %d retries", maxRetries)
-	}
-
-	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -337,9 +330,7 @@ func fetchEdgarFilingsPage(conn *data.Conn,page int, perPage int) ([]GlobalEDGAR
 
 		// Check for rate limiting
 		if resp.StatusCode == 429 {
-			if errClose := resp.Body.Close(); errClose != nil {
-				// log.Printf("Error closing response body on 429 (page %d): %v", page, errClose)
-			}
+			resp.Body.Close()
 			waitTime := retryDelay * time.Duration(1<<attempt)
 			////fmt.Printf("Rate limited by SEC API (429). Retrying in %v (page %d)...\n", waitTime, page)
 			time.Sleep(waitTime)
@@ -584,25 +575,17 @@ func fetchEdgarFilings(cik string) ([]EDGARFiling, error) {
 			continue
 		}
 
-		// Check for other non-success status codes
-		if resp.StatusCode != http.StatusOK {
-			body, readErr := io.ReadAll(resp.Body)
+		// Check for rate limiting (429)
+		if resp.StatusCode == 429 {
 			if errClose := resp.Body.Close(); errClose != nil {
-				// log.Printf("Error closing response body on non-OK status: %v", errClose)
+				// log.Printf("Error closing response body on 429: %v", errClose)
 			}
-			if readErr != nil {
-				return nil, fmt.Errorf("SEC API returned status %d and failed to read body: %v", resp.StatusCode, readErr)
-			}
-			// Ensure body is not too short before slicing
-			previewLength := 100
-			if len(body) < previewLength {
-				previewLength = len(body)
-			}
-			return nil, fmt.Errorf("SEC API returned status %d: %s", resp.StatusCode, string(body[:previewLength]))
-		}
 
-		// If we get here, we have a successful response
-		break
+			// Exponential backoff
+			waitTime := retryDelay * time.Duration(1<<attempt)
+			time.Sleep(waitTime)
+			continue
+		}
 	}
 
 	// Check if all retries failed
