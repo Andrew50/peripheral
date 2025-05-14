@@ -802,16 +802,12 @@ func httpGet(url string) (*http.Response, error) {
 			return resp, nil
 		}
 		if resp.StatusCode == 429 {
-			if errClose := resp.Body.Close(); errClose != nil {
-				// log.Printf("Error closing response body on 429 for exhibit: %v", errClose)
-			}
+			resp.Body.Close() // Close the body before continuing
 			time.Sleep(time.Duration(1<<i) * time.Second)
 			continue
 		}
 		b, readErr := io.ReadAll(resp.Body)
-		if errClose := resp.Body.Close(); errClose != nil {
-			// log.Printf("Error closing response body for exhibit on non-OK/429 status: %v", errClose)
-		}
+		resp.Body.Close() // Close the body after reading or if read fails
 		if readErr != nil {
 			return nil, fmt.Errorf("status %d and failed to read body for exhibit: %v", resp.StatusCode, readErr)
 		}

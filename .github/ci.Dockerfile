@@ -16,9 +16,9 @@ ENV GOPATH=/go \
     PATH=/usr/local/go/bin:/go/bin:$PATH
 
 # 3. Install Go CI tools into $GOPATH/bin
-RUN go install honnef.co/go/tools/cmd/staticcheck@latest \
- && go install github.com/securego/gosec/v2/cmd/gosec@latest \
- && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+RUN CGO_ENABLED=0 go install honnef.co/go/tools/cmd/staticcheck@latest \
+ && CGO_ENABLED=0 go install github.com/securego/gosec/v2/cmd/gosec@latest \
+ && CGO_ENABLED=0 go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 # ==================================================
 # Stage 2: install Node.js and frontend dependencies
@@ -33,7 +33,6 @@ RUN apt-get update \
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs \
  && rm -rf /var/lib/apt/lists/*
-RUN npm install -g pnpm@8
 
 # 2. Prep workspace and install frontend deps **in the GitHub Actions mount path**
 WORKDIR /github/workspace/services/frontend
@@ -54,16 +53,18 @@ RUN apt-get update \
 COPY --from=builder /usr/local/go /usr/local/go
 COPY --from=builder /go /go
 
-# 3. Copy Node + npm + pnpm + **baked frontend deps** into the workspace path
+# 3. Copy Node + npm + **baked frontend deps** into the workspace path
 COPY --from=frontend-builder /usr/bin/node  /usr/bin/node
 COPY --from=frontend-builder /usr/bin/npm   /usr/bin/npm
-COPY --from=frontend-builder /usr/local/bin/pnpm /usr/local/bin/pnpm
 COPY --from=frontend-builder /github/workspace/services/frontend \
                                /github/workspace/services/frontend
 
 # 4. Set environment
 ENV GOPATH=/go \
     PATH=/usr/local/go/bin:/go/bin:/usr/bin:$PATH
+
+# Install pnpm globally in the final image
+RUN npm install -g pnpm@8
 
 # 5. Default workdir
 WORKDIR /github/workspace
