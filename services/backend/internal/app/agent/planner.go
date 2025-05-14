@@ -13,21 +13,28 @@ import (
 
 type DirectAnswer struct {
 	ContentChunks []ContentChunk `json:"content_chunks"`
-	TokenCount    int32          `json:"token_count"`
+	TokenCounts   TokenCounts    `json:"token_counts,omitempty"`
 }
 type Round struct {
 	Parallel bool           `json:"parallel"`
 	Calls    []FunctionCall `json:"calls"`
 }
 type Plan struct {
-	Stage      Stage   `json:"stage"`
-	Rounds     []Round `json:"rounds,omitempty"`
-	TokenCount int32   `json:"token_count"`
+	Stage       Stage       `json:"stage"`
+	Rounds      []Round     `json:"rounds,omitempty"`
+	TokenCounts TokenCounts `json:"token_counts,omitempty"`
 }
 
 type FinalResponse struct {
 	ContentChunks []ContentChunk `json:"content_chunks"`
-	TokenCount    int32          `json:"token_count"`
+	TokenCounts   TokenCounts    `json:"token_counts,omitempty"`
+}
+
+type TokenCounts struct {
+	InputTokenCount    int32 `json:"input_token_count,omitempty"`
+	OutputTokenCount   int32 `json:"output_token_count,omitempty"`
+	ThoughtsTokenCount int32 `json:"thoughts_token_count,omitempty"`
+	TotalTokenCount    int32 `json:"total_token_count,omitempty"`
 }
 
 const planningModel = "gemini-2.5-flash-preview-04-17"
@@ -90,11 +97,10 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 			}
 		}
 	}
-	CountTokensResponse, err := client.Models.CountTokens(ctx, planningModel, genai.Text(resultText), &genai.CountTokensConfig{})
-	if err != nil {
-		return Plan{}, fmt.Errorf("error counting tokens: %w", err)
-	}
-	fmt.Println("CountTokensResponse", CountTokensResponse.TotalTokens)
+	fmt.Println("Prompt Token Count", result.UsageMetadata.PromptTokenCount)
+	fmt.Println("Candidates Token Count", result.UsageMetadata.CandidatesTokenCount)
+	fmt.Println("Thoughts Token Count", result.UsageMetadata.ThoughtsTokenCount)
+	fmt.Println("Total Token Count", result.UsageMetadata.TotalTokenCount)
 	fmt.Println("groundingMetadata", candidate.GroundingMetadata)
 	fmt.Println("citationMetadata", candidate.CitationMetadata)
 	fmt.Println("\n\n\n\n\nresultText", resultText)
@@ -116,14 +122,24 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	var directAns DirectAnswer
 	// Try unmarshalling the extracted block if it's not empty
 	if jsonBlock != "" && json.Unmarshal([]byte(jsonBlock), &directAns) == nil && len(directAns.ContentChunks) > 0 {
-		directAns.TokenCount = candidate.TokenCount
+		directAns.TokenCounts = TokenCounts{
+			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
+			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
+			ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
+			TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+		}
 		return directAns, nil
 	}
 
 	var plan Plan
 	// Try unmarshalling the extracted block if it's not empty
 	if jsonBlock != "" && json.Unmarshal([]byte(jsonBlock), &plan) == nil {
-		plan.TokenCount = candidate.TokenCount
+		plan.TokenCounts = TokenCounts{
+			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
+			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
+			ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
+			TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+		}
 		return plan, nil
 	}
 
@@ -173,7 +189,6 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 
 	resultText := ""
 	candidate := result.Candidates[0]
-	tokenCount := candidate.TokenCount
 	if candidate.Content != nil {
 		for _, part := range candidate.Content.Parts {
 			if part.Text != "" {
@@ -188,7 +203,12 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 
 	// First try direct unmarshaling
 	if err := json.Unmarshal([]byte(resultText), &finalResponse); err == nil && len(finalResponse.ContentChunks) > 0 {
-		finalResponse.TokenCount = tokenCount
+		finalResponse.TokenCounts = TokenCounts{
+			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
+			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
+			ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
+			TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+		}
 		return &finalResponse, nil
 	}
 
@@ -198,7 +218,12 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 	if jsonStartIdx != -1 && jsonEndIdx != -1 && jsonEndIdx > jsonStartIdx {
 		jsonBlock := resultText[jsonStartIdx : jsonEndIdx+1]
 		if err := json.Unmarshal([]byte(jsonBlock), &finalResponse); err == nil && len(finalResponse.ContentChunks) > 0 {
-			finalResponse.TokenCount = tokenCount
+			finalResponse.TokenCounts = TokenCounts{
+				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
+				OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
+				ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
+				TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+			}
 			return &finalResponse, nil
 		}
 	}
@@ -206,7 +231,7 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 	// Fallback: Treat the text as a single text chunk
 	return &FinalResponse{
 		ContentChunks: []ContentChunk{{Type: "text", Content: resultText}},
-		TokenCount:    tokenCount,
+		TokenCounts:   TokenCounts{},
 	}, nil
 }
 

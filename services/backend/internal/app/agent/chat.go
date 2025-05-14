@@ -58,7 +58,10 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 	var allResults []ExecuteResult
 	planningPrompt := ""
 	maxTurns := 7
-	//totalRequestTokenCount := 0
+	totalRequestOutputTokenCount := int32(0)
+	totalRequestInputTokenCount := int32(0)
+	totalRequestThoughtsTokenCount := int32(0)
+	totalRequestTokenCount := int32(0)
 	for {
 		if planningPrompt == "" {
 			planningPrompt = BuildPlanningPrompt(conn, userID, query.Query, query.Context, query.ActiveChartContext)
@@ -70,7 +73,11 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 		switch v := result.(type) {
 		case DirectAnswer:
 			processedChunks := processContentChunksForTables(ctx, conn, userID, v.ContentChunks)
-			saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, []ExecuteResult{}, v.TokenCount)
+			totalRequestOutputTokenCount += v.TokenCounts.OutputTokenCount
+			totalRequestInputTokenCount += v.TokenCounts.InputTokenCount
+			totalRequestThoughtsTokenCount += v.TokenCounts.ThoughtsTokenCount
+			totalRequestTokenCount += v.TokenCounts.TotalTokenCount
+			saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, []ExecuteResult{}, totalRequestTokenCount)
 			return QueryResponse{
 				Type:          "mixed_content",
 				ContentChunks: processedChunks,
@@ -105,10 +112,13 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 				if err != nil {
 					return nil, fmt.Errorf("error generating final response: %w", err)
 				}
-
+				totalRequestOutputTokenCount += finalResponse.TokenCounts.OutputTokenCount
+				totalRequestInputTokenCount += finalResponse.TokenCounts.InputTokenCount
+				totalRequestThoughtsTokenCount += finalResponse.TokenCounts.ThoughtsTokenCount
+				totalRequestTokenCount += finalResponse.TokenCounts.TotalTokenCount
 				// Process any table instructions in the content chunks
 				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
-				saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, allResults, finalResponse.TokenCount)
+				saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, allResults, totalRequestTokenCount)
 				return QueryResponse{
 					Type:          "mixed_content",
 					ContentChunks: processedChunks,
