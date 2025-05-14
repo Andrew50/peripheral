@@ -14,6 +14,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -113,11 +114,11 @@ func dataExists(client *_polygon.Client, ticker string, fromDate string, toDate 
 	timespan := models.Timespan("day")
 	fromMillis, err := utils.MillisFromDatetimeString(fromDate)
 	if err != nil {
-        return false
+		return false
 	}
 	toMillis, err := utils.MillisFromDatetimeString(toDate)
 	if err != nil {
-        return false
+		return false
 	}
 	params := models.ListAggsParams{
 		Ticker:     ticker,
@@ -176,7 +177,17 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 			flags |= os.O_APPEND
 		}
 
-		file, err := os.OpenFile("app.log", flags, 0666)
+		logDir := os.Getenv("LOG_DIR")
+		if logDir == "" {
+			logDir = "logs"
+		}
+		// Ensure log directory exists
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			log.Fatalf("Failed to create log directory: %v", err)
+		}
+		logPath := filepath.Join(logDir, "securities.log")
+
+		file, err := os.OpenFile(logPath, flags, 0600)
 		if err != nil {
 			log.Fatalf("Failed to open log file: %v", err)
 		}
@@ -342,19 +353,19 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 							log.Printf("Error scanning row: %v", err)
 							continue
 						}
-/*						var minDtStr string
-						var maxDtStr string
-						if minDate.Valid {
-							minDtStr = minDate.Time.Format(dateFormat)
-						} else {
-							minDtStr = "NULL"
-						}
-						if maxDate.Valid {
-							maxDtStr = maxDate.Time.Format(dateFormat)
-						} else {
+						/*						var minDtStr string
+												var maxDtStr string
+												if minDate.Valid {
+													minDtStr = minDate.Time.Format(dateFormat)
+												} else {
+													minDtStr = "NULL"
+												}
+												if maxDate.Valid {
+													maxDtStr = maxDate.Time.Format(dateFormat)
+												} else {
 
-							maxDtStr = "NULL"
-						}*/
+													maxDtStr = "NULL"
+												}*/
 					}
 					rows.Close()
 				} else {
@@ -415,7 +426,8 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 									if date.Valid {
 										ok = true
 										break
-									} 								}
+									}
+								}
 							}
 						}
 					}
@@ -446,7 +458,6 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 	if err != nil {
 		return fmt.Errorf("failed to count securities needing updates: %v", err)
 	}
-
 
 	// If no securities need updating, return success
 	if count == 0 {
