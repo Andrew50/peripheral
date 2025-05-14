@@ -125,8 +125,8 @@ func fetchEdgarFilings(cik string) ([]edgar.EDGARFiling, error) {
 
 		// Check for rate limiting (429)
 		if resp.StatusCode == 429 {
-			if errClose := resp.Body.Close(); errClose != nil {
-				// log.Printf("Error closing response body on 429: %v", errClose)
+			if err := resp.Body.Close(); err != nil {
+				return nil, fmt.Errorf("error closing response body: %v", err)
 			}
 
 			// Exponential backoff
@@ -137,18 +137,11 @@ func fetchEdgarFilings(cik string) ([]edgar.EDGARFiling, error) {
 
 		// Check for other non-success status codes
 		if resp.StatusCode != http.StatusOK {
-			body, readErr := io.ReadAll(resp.Body)
-			if errClose := resp.Body.Close(); errClose != nil {
-				// log.Printf("Error closing response body on non-OK status: %v", errClose)
+			body, _ := io.ReadAll(resp.Body)
+			if err := resp.Body.Close(); err != nil {
+				return nil, fmt.Errorf("SEC API returned status %d and error closing response: %v", resp.StatusCode, err)
 			}
-			if readErr != nil {
-				return nil, fmt.Errorf("SEC API returned status %d and failed to read body: %v", resp.StatusCode, readErr)
-			}
-			previewLength := 100
-			if len(body) < previewLength {
-				previewLength = len(body)
-			}
-			return nil, fmt.Errorf("SEC API returned status %d: %s", resp.StatusCode, string(body[:previewLength]))
+			return nil, fmt.Errorf("SEC API returned status %d: %s", resp.StatusCode, string(body[:100])) // Show first 100 chars
 		}
 
 		// If we get here, we have a successful response
@@ -502,7 +495,9 @@ func fetchFilingText(url string) (string, error) {
 
 		// Check for rate limiting (429)
 		if resp.StatusCode == 429 {
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				return "", fmt.Errorf("error closing response body: %v", err)
+			}
 
 			// Exponential backoff
 			waitTime := retryDelay * time.Duration(1<<attempt)
@@ -513,7 +508,9 @@ func fetchFilingText(url string) (string, error) {
 		// Check for other non-success status codes
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				return "", fmt.Errorf("SEC API returned status %d and error closing response: %v", resp.StatusCode, err)
+			}
 			return "", fmt.Errorf("SEC API returned status %d: %s", resp.StatusCode, string(body[:100])) // Show first 100 chars
 		}
 

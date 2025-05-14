@@ -292,7 +292,9 @@ func clearJobCache(conn *data.Conn) error {
 // StartScheduler initializes and starts the job scheduler
 func StartScheduler(conn *data.Conn) chan struct{} {
 	// Clear job cache on server initialization
-	clearJobCache(conn)
+	if err := clearJobCache(conn); err != nil {
+		log.Printf("Error clearing job cache: %v", err)
+	}
 
 	scheduler, err := NewScheduler(conn)
 	if err != nil {
@@ -500,7 +502,9 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	job.IsRunning = false
 	job.LastRun = now
 	job.ExecutionMutex.Unlock()
-	s.saveJobLastRunTime(job)
+	if err := s.saveJobLastRunTime(job); err != nil {
+		log.Printf("Error saving job last run time for %s: %v", job.Name, err)
+	}
 
 	// Handle completion logging based on execution method and result
 	if err != nil {
@@ -525,7 +529,9 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 		job.ExecutionMutex.Lock()
 		job.LastCompletionTime = completionTime
 		job.ExecutionMutex.Unlock()
-		s.saveJobLastCompletionTime(job)
+		if err := s.saveJobLastCompletionTime(job); err != nil {
+			log.Printf("Error saving job completion time for %s: %v", job.Name, err)
+		}
 	}
 
 }
