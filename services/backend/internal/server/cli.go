@@ -814,7 +814,10 @@ func StartCLI() {
 	// Check if we're running in a container
 	if os.Getenv("IN_CONTAINER") == "" {
 		// If not explicitly set, default to false when running on host
-		os.Setenv("IN_CONTAINER", "false")
+		err := os.Setenv("IN_CONTAINER", "false")
+		if err != nil {
+			fmt.Printf("Warning: Failed to set IN_CONTAINER environment variable: %v\n", err)
+		}
 	}
 
 	if len(os.Args) < 2 {
