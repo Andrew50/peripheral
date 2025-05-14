@@ -616,7 +616,7 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 								level, _ := logMap["level"].(string)
 								_ = level // Prevent unused error due to commented out debug line
 
-								////fmt.Printf("DEBUG: Log %d - timestamp: %v, message: %v, level: %v\\n", i, timestamp != "", message != "", level != "")
+								////fmt.Printf("DEBUG: Log %d - timestamp: %v, message: %v, level: %v\n", i, timestamp != "", message != "", level != "")
 
 								if message != "" {
 									// Format timestamp
@@ -626,7 +626,7 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 										shortTimestamp = timestamp[:19] // Get just the YYYY-MM-DDTHH:MM:SS part
 									}*/
 
-									////fmt.Printf("[%s][%s] %s\\n", shortTimestamp, level, message)
+									////fmt.Printf("[%s][%s] %s\n", shortTimestamp, level, message)
 								}
 							}
 							////fmt.Println("=================")

@@ -12,9 +12,11 @@ type UpdateProfilePictureArgs struct {
 	ProfilePicture string `json:"profilePicture"`
 }
 
-// UpdateProfilePicture performs operations related to UpdateProfilePicture functionality.
-func UpdateProfilePicture(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var args UpdateProfilePictureArgs
+// UpdateProfilePicture updates the user's profile picture.
+func UpdateProfilePicture(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	var args struct {
+		ProfilePicture string `json:"profilePicture"`
+	}
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
@@ -24,7 +26,7 @@ func UpdateProfilePicture(conn *data.Conn, userId int, rawArgs json.RawMessage) 
 		context.Background(),
 		"UPDATE users SET profile_picture = $1 WHERE userId = $2",
 		args.ProfilePicture,
-		userId,
+		userID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update profile picture: %v", err)

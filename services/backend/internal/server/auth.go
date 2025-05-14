@@ -1,6 +1,5 @@
 package server
 
-
 import (
 	"backend/internal/data"
 	"context"
@@ -9,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+
 	//"log"
 	"os"
 	"time"
@@ -274,10 +274,10 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	return resp, nil
 }
 
-func createToken(userId int) (string, error) {
+func createToken(userID int) (string, error) {
 	expirationTime := time.Now().Add(1 * time.Hour)
 	claims := &Claims{
-		UserID: userId,
+		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 		},
@@ -291,7 +291,7 @@ func validateToken(tokenString string) (int, error) {
 
 	// Default profile pic is empty (frontend will generate initial)
 
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(_ *jwt.Token) (interface{}, error) {
 		return privateKey, nil // Adjust this to match your token's signing method
 	})
 	if err != nil {
@@ -320,7 +320,7 @@ type GoogleLoginResponse struct {
 }
 
 // GoogleLogin performs operations related to GoogleLogin functionality.
-func GoogleLogin(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
+func GoogleLogin(_ *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var args struct {
 		RedirectOrigin string `json:"redirectOrigin"`
 	}
@@ -499,7 +499,7 @@ func DeleteAccount(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error
 	// Delete watchlists
 	_, err = tx.Exec(ctx, "DELETE FROM watchlists WHERE userId = $1", userID)
 	if err != nil {
-        return nil, err
+		return nil, err
 		////fmt.Printf("ERROR: Failed to delete watchlists: %v\n", err)
 		// Continue despite error
 	}
@@ -509,7 +509,7 @@ func DeleteAccount(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error
 	if err != nil {
 		////fmt.Printf("ERROR: Failed to delete setups: %v\n", err)
 		// Continue despite error
-        return nil, err
+		return nil, err
 	}
 
 	// Delete the user

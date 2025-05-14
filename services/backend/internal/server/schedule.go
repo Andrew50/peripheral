@@ -263,10 +263,7 @@ func clearJobCache(conn *data.Conn) error {
 
 	// Get all keys with the job last run prefix
 	lastRunKeys, err := conn.Cache.Keys(ctx, jobLastRunKeyPrefix+"*").Result()
-	if err != nil {
-		// Log error getting job last run keys
-		////fmt.Printf("Error getting job last run keys: %v\n", err)
-	} else if len(lastRunKeys) > 0 {
+	if err == nil && len(lastRunKeys) > 0 {
 		// Delete all last run keys
 		err = conn.Cache.Del(ctx, lastRunKeys...).Err()
 		if err != nil {
@@ -518,7 +515,6 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 		////fmt.Printf("\n=== JOB QUEUED: %s ===\n", jobName)
 		////fmt.Printf("Duration: %v\n", duration)
 		////fmt.Printf("Task ID: %s\n", taskID)
-
 	} else {
 		// Job completed directly
 		////fmt.Printf("\n=== JOB COMPLETED: %s ===\n", jobName)
@@ -558,7 +554,6 @@ func startPolygonWebSocket(conn *data.Conn) error {
 			return err
 		}
 		polygonInitialized = true
-		// Log successful start
 		////fmt.Println("Polygon WebSocket started successfully")
 	}
 	// Log that websocket is already running
@@ -587,15 +582,14 @@ func stopPolygonWebSocket() {
 	if polygonInitialized {
 		if err := socket.StopPolygonWS(); err != nil {
 			//log.Printf("Failed to stop Polygon WebSocket: %v", err)
-		} else {
-			polygonInitialized = false
-			////fmt.Println("Polygon WebSocket stopped successfully")
 		}
+		polygonInitialized = false
+		////fmt.Println("Polygon WebSocket stopped successfully")
 	}
 }
 
 // stopServicesJob stops alert loop and polygon websocket as a scheduled job
-func stopServicesJob(conn *data.Conn) error {
+func stopServicesJob(_ *data.Conn) error {
 	////fmt.Println("Stopping services for the night - alert loop and polygon websocket...")
 	stopAlertLoop()
 	stopPolygonWebSocket()
