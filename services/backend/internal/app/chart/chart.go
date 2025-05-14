@@ -503,7 +503,7 @@ func requestIncompleteBar(
 	multiplier int,
 	timespan string,
 	extendedHours bool,
-	isReplayArg bool,
+	_ bool,
 	easternLocation *time.Location,
 ) (GetChartDataResults, error) {
 
@@ -653,7 +653,7 @@ func requestIncompleteBar(
 			conn, ticker,
 			secondEnd, tradeEnd,
 			extendedHours,
-			isReplayArg,
+			false,
 			easternLocation,
 		)
 	}()
@@ -867,7 +867,7 @@ func fetchTrades(
 	ticker string,
 	startMs, endMs int64,
 	extendedHours bool,
-	isReplayArg bool,
+	_ bool,
 	easternLocation *time.Location,
 ) ([]models.Trade, error) {
 
