@@ -142,7 +142,7 @@ func BuildFinalResponsePrompt(conn *data.Conn, userID int, query string, context
 
 	// Add execution results
 	if len(allResults) > 0 {
-		sb.WriteString("\n<ExecutionResults>\n")
+		sb.WriteString("\n<ExecRes>\n")
 		resultsJSON, err := json.Marshal(allResults)
 		if err != nil {
 			sb.WriteString(fmt.Sprintf("Error marshaling results: %v\n", err))
@@ -151,7 +151,7 @@ func BuildFinalResponsePrompt(conn *data.Conn, userID int, query string, context
 			sb.WriteString(string(resultsJSON))
 			sb.WriteString("\n```\n")
 		}
-		sb.WriteString("</ExecutionResults>\n")
+		sb.WriteString("</ExecRes>\n")
 	}
 	return sb.String()
 }
