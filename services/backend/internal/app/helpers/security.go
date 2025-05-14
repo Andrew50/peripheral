@@ -25,7 +25,7 @@ type GetCurrentTickerArgs struct {
 }
 
 // GetCurrentTicker performs operations related to GetCurrentTicker functionality.
-func GetCurrentTicker(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetCurrentTicker(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetCurrentTickerArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("di1n0fni0: %v", err)
@@ -51,7 +51,7 @@ type GetMarketCapResults struct {
 }
 
 // GetMarketCap performs operations related to GetMarketCap functionality.
-func GetMarketCap(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetMarketCap(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetMarketCapArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("di1n0fni0: %v", err)
@@ -80,7 +80,7 @@ type PolygonBar struct {
 }
 
 // GetPrevClose performs operations related to GetPrevClose functionality.
-func GetPrevClose(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetPrevClose(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetPrevCloseArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("getPrevClose invalid args: %v", err)

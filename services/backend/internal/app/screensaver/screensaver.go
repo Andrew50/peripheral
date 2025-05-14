@@ -90,7 +90,7 @@ func fetchPolygonSnapshot(endpoint string, apiKey string) ([]string, error) {
 }
 
 // GetInstancesByTickers retrieves security instances for a list of tickers
-func GetInstancesByTickers(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetInstancesByTickers(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetInstancesByTickersArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
@@ -132,7 +132,7 @@ func GetInstancesByTickers(conn *data.Conn, userId int, rawArgs json.RawMessage)
 }
 
 // GetScreensavers performs operations related to GetScreensavers functionality.
-func GetScreensavers(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetScreensavers(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	// Define Polygon.io endpoints for gainers and losers
 	gainersEndpoint := "https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/gainers"
 	losersEndpoint := "https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/losers"
