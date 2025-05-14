@@ -1,11 +1,11 @@
 package socket
 
 import (
+	"backend/internal/app/chart"
 	"backend/internal/data"
-    "backend/internal/data/utils"
-    "backend/internal/data/postgres"
-    "backend/internal/data/polygon"
-    "backend/internal/app/chart"
+	"backend/internal/data/polygon"
+	"backend/internal/data/postgres"
+	"backend/internal/data/utils"
 
 	"context"
 	"errors"
@@ -50,10 +50,10 @@ type TimeframeData struct {
 
 // SecurityData represents a structure for handling SecurityData data.
 type SecurityData struct {
-	SecondDataExtended TimeframeData
-	MinuteDataExtended TimeframeData
-	HourData           TimeframeData
-	DayData            TimeframeData
+	SecondDataExtended *TimeframeData
+	MinuteDataExtended *TimeframeData
+	HourData           *TimeframeData
+	DayData            *TimeframeData
 	Dolvol             float64
 	Mcap               float64
 	Adr                float64
@@ -133,19 +133,19 @@ func appendTick(conn *data.Conn, securityId int, timestamp int64, price float64,
 
 	if utils.IsTimestampRegularHours(time.Unix(timestamp, timestamp*int64(time.Millisecond))) {
 		if hourAggs {
-			updateTimeframe(&sd.HourData, timestamp, price, volume, Hour)
+			updateTimeframe(sd.HourData, timestamp, price, volume, Hour)
 		}
 		if dayAggs {
-			updateTimeframe(&sd.DayData, timestamp, price, volume, Day)
+			updateTimeframe(sd.DayData, timestamp, price, volume, Day)
 		}
 	}
 
 	if secondAggs {
-		updateTimeframe(&sd.SecondDataExtended, timestamp, price, volume, Second)
+		updateTimeframe(sd.SecondDataExtended, timestamp, price, volume, Second)
 	}
 
 	if minuteAggs {
-		updateTimeframe(&sd.MinuteDataExtended, timestamp, price, volume, Minute)
+		updateTimeframe(sd.MinuteDataExtended, timestamp, price, volume, Minute)
 	}
 
 	return nil
@@ -173,16 +173,16 @@ func GetTimeframeData(securityId int, timeframe int, extendedHours bool) ([][]fl
 	switch timeframe {
 	case Second:
 		if extendedHours {
-			td = &sd.SecondDataExtended
+			td = sd.SecondDataExtended
 		}
 	case Minute:
 		if extendedHours {
-			td = &sd.MinuteDataExtended
+			td = sd.MinuteDataExtended
 		}
 	case Hour:
-		td = &sd.HourData
+		td = sd.HourData
 	case Day:
-		td = &sd.DayData
+		td = sd.DayData
 	default:
 		return nil, errors.New("invalid timeframe")
 	}
@@ -202,20 +202,20 @@ func GetTimeframeData(securityId int, timeframe int, extendedHours bool) ([][]fl
 // InitAggregatesAsync starts the initialization process in a goroutine
 func InitAggregatesAsync(conn *data.Conn) {
 	setAggsInitialized(false)
-	fmt.Println("Starting aggregates initialization in background...")
+	////fmt.Println("Starting aggregates initialization in background...")
 	go func() {
 		if err := initAggregatesInternal(conn); err != nil {
-			fmt.Printf("Error initializing aggregates: %v\n", err)
+			////fmt.Printf("Error initializing aggregates: %v\n", err)
 			return
 		}
 		setAggsInitialized(true)
-		fmt.Println("✅ Aggregates initialization completed - Ready to process ticks")
+		////fmt.Println("✅ Aggregates initialization completed - Ready to process ticks")
 	}()
 }
 
 // Internal function that does the actual initialization work
 func initAggregatesInternal(conn *data.Conn) error {
-	fmt.Println("Loading historical data and initializing aggregates...")
+	////fmt.Println("Loading historical data and initializing aggregates...")
 	ctx := context.Background()
 
 	query := `
@@ -331,34 +331,34 @@ func processOneSecurity(sid int, conn *data.Conn) (*SecurityData, error) {
 // Helper function to validate initialized security data
 func validateSecurityData(sd *SecurityData) error {
 	if sd == nil {
-		fmt.Println("Security data is nil")
+		////fmt.Println("Security data is nil")
 		return fmt.Errorf("security data is nil")
 	}
 
 	if secondAggs {
-		if err := validateTimeframeData(&sd.SecondDataExtended, "second", true); err != nil {
-			fmt.Printf("Second data validation failed: %v\n", err)
+		if err := validateTimeframeData(sd.SecondDataExtended, "second", true); err != nil {
+			////fmt.Printf("Second data validation failed: %v\n", err)
 			return fmt.Errorf("second data validation failed: %w", err)
 		}
 	}
 
 	if minuteAggs {
-		if err := validateTimeframeData(&sd.MinuteDataExtended, "minute", true); err != nil {
-			fmt.Printf("Minute data validation failed: %v\n", err)
+		if err := validateTimeframeData(sd.MinuteDataExtended, "minute", true); err != nil {
+			////fmt.Printf("Minute data validation failed: %v\n", err)
 			return fmt.Errorf("minute data validation failed: %w", err)
 		}
 	}
 
 	if hourAggs {
-		if err := validateTimeframeData(&sd.HourData, "hour", false); err != nil {
-			fmt.Printf("Hour data validation failed: %v\n", err)
+		if err := validateTimeframeData(sd.HourData, "hour", false); err != nil {
+			////fmt.Printf("Hour data validation failed: %v\n", err)
 			return fmt.Errorf("hour data validation failed: %w", err)
 		}
 	}
 
 	if dayAggs {
-		if err := validateTimeframeData(&sd.DayData, "day", false); err != nil {
-			fmt.Printf("Day data validation failed: %v\n", err)
+		if err := validateTimeframeData(sd.DayData, "day", false); err != nil {
+			////fmt.Printf("Day data validation failed: %v\n", err)
 			return fmt.Errorf("day data validation failed: %w", err)
 		}
 	}
@@ -388,15 +388,15 @@ func validateTimeframeData(td *TimeframeData, timeframeName string, extendedHour
 	return nil
 }
 
-func initTimeframeData(conn *data.Conn, securityId int, timeframe int, isExtendedHours bool) TimeframeData {
+func initTimeframeData(conn *data.Conn, securityID int, timeframe int, isExtendedHours bool) *TimeframeData {
 	aggs := make([][]float64, AggsLength)
 	for i := range aggs {
 		aggs[i] = make([]float64, OHLCV)
 	}
-	td := TimeframeData{
+	td := &TimeframeData{ // Initialize as a pointer
 		Aggs:              aggs,
 		Size:              0,
-		rolloverTimestamp: -1,
+		rolloverTimestamp: -1, // Mark as not properly initialized until data is loaded
 		extendedHours:     isExtendedHours,
 	}
 	toTime := time.Now()
@@ -416,23 +416,23 @@ func initTimeframeData(conn *data.Conn, securityId int, timeframe int, isExtende
 		tfStr = "day"
 		multiplier = 1
 	default:
-		fmt.Printf("Invalid timeframe: %d\n", timeframe)
+		////fmt.Printf("Invalid timeframe: %d\n", timeframe)
 		return td
 	}
 	fromMillis, toMillis, err := chart.GetRequestStartEndTime(time.Unix(0, 0), toTime, "backward", tfStr, multiplier, AggsLength)
 	if err != nil {
-		fmt.Printf("error g2io002")
+		////fmt.Printf("error g2io002")
 		return td
 	}
-	ticker, err := postgres.GetTicker(conn, securityId, toTime)
+	ticker, err := postgres.GetTicker(conn, securityID, toTime)
 	//ticker := obj.ticekr
 	if err != nil {
-		fmt.Printf("error getting hist data")
+		////fmt.Printf("error getting hist data")
 		return td
 	}
 	iter, err := polygon.GetAggsData(conn.Polygon, ticker, multiplier, tfStr, fromMillis, toMillis, AggsLength, "desc", true)
 	if err != nil {
-		fmt.Printf("Error getting historical data: %v\n", err)
+		////fmt.Printf("Error getting historical data: %v\n", err)
 		return td
 	}
 
@@ -464,9 +464,9 @@ func initTimeframeData(conn *data.Conn, securityId int, timeframe int, isExtende
 		idx++
 		lastTimestamp = time.Time(agg.Timestamp).Unix()
 	}
-	if err := iter.Err(); err != nil {
-		fmt.Printf("Error iterating historical data: %v\n", err)
-	}
+	//	if err := iter.Err(); err != nil {
+	////fmt.Printf("Error iterating historical data: %v\n", err)
+	//}
 	//if td.rolloverTimestamp == -1 {
 	td.rolloverTimestamp = lastTimestamp + int64(timeframe) //if theres no data then this wont work but is extreme edge case
 	//}
@@ -534,23 +534,23 @@ func slidingWindowStats(bars []models.Agg, startTime, endTime time.Time) (float6
 
 	return totalVol, totalPct, count
 }*/
-func initSecurityData(conn *data.Conn, securityId int) *SecurityData {
+func initSecurityData(conn *data.Conn, securityID int) *SecurityData {
 	sd := &SecurityData{}
 
 	if secondAggs {
-		sd.SecondDataExtended = initTimeframeData(conn, securityId, Second, true)
+		sd.SecondDataExtended = initTimeframeData(conn, securityID, Second, true)
 	}
 
 	if minuteAggs {
-		sd.MinuteDataExtended = initTimeframeData(conn, securityId, Minute, true)
+		sd.MinuteDataExtended = initTimeframeData(conn, securityID, Minute, true)
 	}
 
 	if hourAggs {
-		sd.HourData = initTimeframeData(conn, securityId, Hour, false)
+		sd.HourData = initTimeframeData(conn, securityID, Hour, false)
 	}
 
 	if dayAggs {
-		sd.DayData = initTimeframeData(conn, securityId, Day, false)
+		sd.DayData = initTimeframeData(conn, securityID, Day, false)
 	}
 	return sd
 }

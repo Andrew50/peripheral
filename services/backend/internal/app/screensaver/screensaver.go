@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
+	"time"
 )
 
 // GetScreensaversResults represents a structure for handling GetScreensaversResults data.
@@ -34,11 +37,32 @@ type GetInstancesByTickersArgs struct {
 
 // Fetch the snapshot from Polygon.io, attaching the API key
 func fetchPolygonSnapshot(endpoint string, apiKey string) ([]string, error) {
-	// Append the API key to the endpoint
-	fullEndpoint := fmt.Sprintf("%s?apiKey=%s", endpoint, apiKey)
+	// Safely construct the URL
+	parsedURL, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("invalid endpoint URL: %v", err)
+	}
+	query := parsedURL.Query()
+	query.Set("apiKey", apiKey)
+	parsedURL.RawQuery = query.Encode()
+	fullEndpointStr := parsedURL.String()
 
-	// Make the request to Polygon.io
-	resp, err := http.Get(fullEndpoint)
+	// Validate the URL is for an allowed domain (polygon.io)
+	if !strings.HasPrefix(fullEndpointStr, "https://api.polygon.io/") {
+		return nil, fmt.Errorf("invalid endpoint domain, only polygon.io is allowed")
+	}
+
+	// Make the request to Polygon.io with validated URL using http.Client
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	req, err := http.NewRequest("GET", fullEndpointStr, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Polygon snapshot: %v", err)
 	}
@@ -66,7 +90,7 @@ func fetchPolygonSnapshot(endpoint string, apiKey string) ([]string, error) {
 }
 
 // GetInstancesByTickers retrieves security instances for a list of tickers
-func GetInstancesByTickers(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetInstancesByTickers(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetInstancesByTickersArgs
 	err := json.Unmarshal(rawArgs, &args)
 	if err != nil {
@@ -108,7 +132,7 @@ func GetInstancesByTickers(conn *data.Conn, userId int, rawArgs json.RawMessage)
 }
 
 // GetScreensavers performs operations related to GetScreensavers functionality.
-func GetScreensavers(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetScreensavers(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	// Define Polygon.io endpoints for gainers and losers
 	gainersEndpoint := "https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/gainers"
 	losersEndpoint := "https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/losers"
@@ -122,7 +146,7 @@ func GetScreensavers(conn *data.Conn, userId int, rawArgs json.RawMessage) (inte
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch losers: %v", err)
 	}
-	fmt.Println(losers)
+	////fmt.Println(losers)
 
 	// Combine gainers and losers
 	tickers := append(gainers, losers...)

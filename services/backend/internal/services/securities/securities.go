@@ -76,7 +76,7 @@ func stringArgs(ss []string) []interface{} {
 // and updates the securities table with CIK values for active securities.
 func UpdateSecurityCik(conn *data.Conn) error {
 	// Create a client and request with appropriate headers
-	fmt.Println("🟢 fetching sec company tickers")
+	////fmt.Println("🟢 fetching sec company tickers")
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "https://www.sec.gov/files/company_tickers.json", nil)
 	if err != nil {
@@ -125,6 +125,6 @@ func UpdateSecurityCik(conn *data.Conn) error {
 		}
 	}
 
-	fmt.Println("🟢 Securities CIK values updated successfully.")
+	////fmt.Println("🟢 Securities CIK values updated successfully.")
 	return nil
 }
