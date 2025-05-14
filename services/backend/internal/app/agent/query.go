@@ -2,14 +2,14 @@ package agent
 
 import (
 	"backend/internal/data"
+	"backend/internal/services/socket"
 	"context"
-    "backend/internal/services/socket"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
-
 
 	"google.golang.org/genai"
 )
@@ -67,11 +67,11 @@ func GetQuery(conn *data.Conn, userID int, args json.RawMessage) (interface{}, e
 	ctx := context.Background()
 	success, message := conn.TestRedisConnectivity(ctx, userID)
 	if !success {
-        return nil, fmt.Errorf("%s", message)
+		return nil, fmt.Errorf("%s", message)
 		////fmt.Printf("WARNING: %s\n", message)
-	} 
-    //else {
-		////fmt.Println(message)
+	}
+	//else {
+	////fmt.Println(message)
 	//}
 
 	var query Query
@@ -206,7 +206,7 @@ func GetQuery(conn *data.Conn, userID int, args json.RawMessage) (interface{}, e
 			conversationData.Messages = append(conversationData.Messages, newMessage)
 			conversationData.Timestamp = time.Now()
 			if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-                return nil, err
+				return nil, err
 				////fmt.Printf("Error saving updated conversation: %v\n", err)
 			}
 
@@ -237,7 +237,7 @@ func GetQuery(conn *data.Conn, userID int, args json.RawMessage) (interface{}, e
 			conversationData.Messages = append(conversationData.Messages, newMessage)
 			conversationData.Timestamp = time.Now()
 			if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-                return nil, err
+				return nil, err
 				////fmt.Printf("Error saving updated conversation: %v\n", err)
 			}
 
@@ -267,7 +267,7 @@ func GetQuery(conn *data.Conn, userID int, args json.RawMessage) (interface{}, e
 				conversationData.Messages = append(conversationData.Messages, newMessage)
 				conversationData.Timestamp = time.Now()
 				if err := saveConversationToCache(ctx, conn, userID, conversationKey, conversationData); err != nil {
-                    return nil, err
+					return nil, err
 					////fmt.Printf("Error saving updated conversation: %v\n", err)
 				}
 
@@ -277,7 +277,10 @@ func GetQuery(conn *data.Conn, userID int, args json.RawMessage) (interface{}, e
 				}, nil
 			}
 			if !thinkingResp.RequiresFurtherPlanning {
-				GetQuery(conn, userID, json.RawMessage(fmt.Sprintf(`{"query": "%s"}`, userQuery)))
+				_, callErr := GetQuery(conn, userID, json.RawMessage(fmt.Sprintf(`{"query": "%s"}`, userQuery)))
+				if callErr != nil {
+					log.Printf("Error in GetQuery call: %v", callErr)
+				}
 			}
 			allResults = append(allResults, thinkingResults...)
 			allThinkingResults = append(allThinkingResults, thinkingResp)
