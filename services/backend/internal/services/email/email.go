@@ -91,6 +91,7 @@ func SendEmail(to, subject, body string) error {
 	// Create SSL connection
 	conn, err := tls.Dial("tcp", smtpHost+":"+smtpPort, &tls.Config{
 		ServerName: smtpHost,
+		MinVersion: tls.VersionTLS12,
 	})
 	if err != nil {
 		return fmt.Errorf("TLS connection error: %v", err)

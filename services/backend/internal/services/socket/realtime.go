@@ -2,7 +2,9 @@ package socket
 
 import (
 	"backend/internal/data"
+	"log"
 	"os"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -12,7 +14,10 @@ func (c *Client) subscribeRealtime(conn *data.Conn, channelName string) {
 		return
 	}
 	channelsMutex.Lock()
-	os.Stdout.Sync()
+	if err := os.Stdout.Sync(); err != nil {
+		// Log the error but don't fail the subscription
+		log.Printf("Error syncing stdout: %v", err)
+	}
 	subscribers, exists := channelSubscribers[channelName]
 	if !exists {
 		subscribers = make(map[*Client]bool)
@@ -34,9 +39,9 @@ func (c *Client) subscribeRealtime(conn *data.Conn, channelName string) {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		err := c.ws.WriteMessage(websocket.TextMessage, initialValue)
-        if err != nil {
-            return
-        }
+		if err != nil {
+			return
+		}
 	}()
 }
 

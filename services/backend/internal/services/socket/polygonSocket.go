@@ -143,7 +143,10 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				}
 				//if alerts.IsAggsInitialized() {
 				if useAlerts {
-					appendTick(conn, securityId, data.Timestamp, data.Price, data.Size)
+					if err := appendTick(conn, securityId, data.Timestamp, data.Price, data.Size); err != nil {
+						// Log the error but continue processing
+						fmt.Printf("Error appending tick: %v\n", err)
+					}
 				}
 				if !hasListeners(fastChannelName) && !hasListeners(allChannelName) && !hasListeners(slowChannelName) {
 					break

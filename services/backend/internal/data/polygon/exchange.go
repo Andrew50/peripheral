@@ -1,14 +1,13 @@
 package polygon
 
 import (
-    "fmt"
-    "net/http"
-    "backend/internal/data"
-    "io"
-    "encoding/json"
-
+	"backend/internal/data"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 )
-
 
 // Exchange represents a structure for handling Exchange data.
 type Exchange struct {
@@ -20,9 +19,23 @@ type Exchange struct {
 type Response struct {
 	Results []Exchange `json:"results"`
 }
-func GetExchanges(conn *data.Conn) (map[int]string,error){
-	url := fmt.Sprintf("https://api.polygon.io/v3/reference/exchanges?asset_class=stocks&apiKey=%s", conn.PolygonKey)
-	resp, err := http.Get(url)
+
+func GetExchanges(conn *data.Conn) (map[int]string, error) {
+	baseURL := "https://api.polygon.io/v3/reference/exchanges"
+
+	// Create URL with query parameters using url.Parse and url.Values
+	parsedURL, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("w0ig01 invalid URL: %v", err)
+	}
+
+	params := url.Values{}
+	params.Add("asset_class", "stocks")
+	params.Add("apiKey", conn.PolygonKey)
+	parsedURL.RawQuery = params.Encode()
+
+	// Make the request with the safely constructed URL
+	resp, err := http.Get(parsedURL.String())
 	if err != nil {
 		return nil, fmt.Errorf("w0ig00 %v", err)
 	}
@@ -42,5 +55,5 @@ func GetExchanges(conn *data.Conn) (map[int]string,error){
 	for _, exchange := range apiResponse.Results {
 		exchangeMap[exchange.ID] = exchange.MIC
 	}
-    return exchangeMap, nil
+	return exchangeMap, nil
 }

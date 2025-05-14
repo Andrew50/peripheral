@@ -157,7 +157,10 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	}
 
 	cleanup := func() {
+		// Close the database connection
 		conn.DB.Close()
+
+		// Close the Redis cache connection
 		conn.Cache.Close()
 	}
 	return conn, cleanup

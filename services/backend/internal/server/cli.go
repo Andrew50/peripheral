@@ -295,9 +295,9 @@ func runJob(jobName string) error {
 	// We can't access the unexported method directly, so we'll update Redis manually
 	lastRunStr := job.LastRun.Format(time.RFC3339)
 	err = conn.Cache.Set(context.Background(), getJobLastRunKey(job.Name), lastRunStr, 0).Err()
-    if err != nil {
-        return err
-    }
+	if err != nil {
+		return err
+	}
 
 	// Check if the job added items to the queue
 	currentQueueLen, err := conn.Cache.LLen(context.Background(), "queue").Result()
@@ -356,10 +356,10 @@ func runJob(jobName string) error {
 		lastCompletionStr := completionTime.Format(time.RFC3339)
 		err = conn.Cache.Set(context.Background(), getJobLastCompletionKey(job.Name), lastCompletionStr, 0).Err()
 		if err != nil {
-            return err
+			return err
 		}
-    }
-    return nil
+	}
+	return nil
 }
 
 // monitorTasksAndWait polls the status of tasks, displays their progress, and returns whether all tasks completed successfully
@@ -455,14 +455,14 @@ func monitorTasksAndWait(conn *data.Conn, taskIDs []string) bool {
 			////fmt.Printf("%d/%d tasks completed successfully.\n", len(completedTasks), len(taskIDs))
 
 			// List failed tasks if any
-            /*
-			if len(failedTasks) > 0 {
-				////fmt.Println("\nFailed tasks:")
-				for _, taskID := range taskIDs {
-					if failedTasks[taskID] {
+			/*
+				if len(failedTasks) > 0 {
+					////fmt.Println("\nFailed tasks:")
+					for _, taskID := range taskIDs {
+						if failedTasks[taskID] {
+						}
 					}
-				}
-			}*/
+				}*/
 
 			// Return true only if all tasks completed successfully
 			return len(completedTasks) == len(taskIDs)
@@ -474,15 +474,15 @@ func monitorTasksAndWait(conn *data.Conn, taskIDs []string) bool {
 			////fmt.Printf("%d/%d tasks completed successfully.\n", len(completedTasks), len(taskIDs))
 
 			// List incomplete and failed tasks
-            /*
-			if len(completedTasks) < len(taskIDs) {
-				////fmt.Println("\nIncomplete or failed tasks:")
-				for _, taskID := range taskIDs {
-					if !completedTasks[taskID] {
+			/*
+				if len(completedTasks) < len(taskIDs) {
+					////fmt.Println("\nIncomplete or failed tasks:")
+					for _, taskID := range taskIDs {
+						if !completedTasks[taskID] {
+						}
 					}
 				}
-			}
-            */
+			*/
 
 			return false
 		}
@@ -579,8 +579,8 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 						//		}
 
 						// If there's an error, print it
-			//			if errMsg, ok := result["error"].(string); ok && errMsg != "" {
-			//			}
+						//			if errMsg, ok := result["error"].(string); ok && errMsg != "" {
+						//			}
 
 						// Display logs if available - check both in result and at root level
 						var logs []interface{}
@@ -589,7 +589,7 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 						if rootLogs, ok := result["logs"].([]interface{}); ok && len(rootLogs) > 0 {
 							logs = rootLogs
 							////fmt.Printf("\nDEBUG: Found %d logs at root level\n", len(rootLogs))
-						} 
+						}
 
 						// If no logs found at root level, try within result field
 						if len(logs) == 0 {
@@ -598,8 +598,8 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 									logs = resultLogs
 									////fmt.Printf("\nDEBUG: Found %d logs in result field\n", len(resultLogs))
 								}
-							} 
-                        }
+							}
+						}
 
 						if len(logs) > 0 {
 							////fmt.Println("\n=== TASK LOGS ===")
@@ -721,7 +721,6 @@ func getQueueStatus() {
 
 		table.Render()
 
-
 		// Add a hint about the monitor command
 		////fmt.Println("\nTip: Use 'jobctl monitor <task_id>' to monitor a specific task's execution.")
 	}
@@ -758,10 +757,10 @@ func printUsage() {
 					printUsage()
 					return
 				}
-                err := runJob(args[0])
-                if err != nil {
-                    fmt.Printf("%v\n", err)
-                }
+				err := runJob(args[0])
+				if err != nil {
+					fmt.Printf("Error running job: %v\n", err)
+				}
 			},
 		},
 		"status": {
@@ -842,7 +841,10 @@ func StartCLI() {
 					printUsage()
 					return
 				}
-				runJob(args[0])
+				err := runJob(args[0])
+				if err != nil {
+					fmt.Printf("Error running job: %v\n", err)
+				}
 			},
 		},
 		"status": {

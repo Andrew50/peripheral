@@ -1,24 +1,24 @@
 package edgar
 
 import (
-    "backend/internal/data/postgres"
+	"backend/internal/data/postgres"
+	"bytes"
+	"context"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
 	"regexp"
 	"sort"
 	"strings"
-	"time"
-	"bytes"
-	"context"
-	"encoding/xml"
 	"sync"
+	"time"
+
+	"backend/internal/data"
 
 	"golang.org/x/net/html/charset"
-    "backend/internal/data"
 )
-
 
 // EDGARFiling represents a single SEC filing
 type EDGARFiling struct {
@@ -124,7 +124,7 @@ func FetchLatestEdgarFilings(conn *data.Conn) ([]GlobalEDGARFiling, error) {
 	perPage := 100     // Number of results per API request
 
 	for page := 1; len(allFilings) < maxResults; page++ {
-		filings, err := fetchEdgarFilingsPage(conn,page, perPage)
+		filings, err := fetchEdgarFilingsPage(conn, page, perPage)
 		if err != nil {
 			// Return what we've fetched so far along with the error
 			return allFilings, fmt.Errorf("error fetching page %d: %w", page, err)
@@ -148,7 +148,6 @@ func FetchLatestEdgarFilings(conn *data.Conn) ([]GlobalEDGARFiling, error) {
 
 	return allFilings, nil
 }
-
 
 // fetchEdgarFilingsTickerPage fetches a single page of SEC filings with pagination
 // nolint:unused
@@ -192,7 +191,6 @@ func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFilin
 			time.Sleep(waitTime)
 			continue
 		}
-
 
 		// If we get here, we have a non-429 response
 		break
@@ -290,7 +288,7 @@ func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFilin
 	return filings, nil
 }
 
-func fetchEdgarFilingsPage(conn *data.Conn,page int, perPage int) ([]GlobalEDGARFiling, error) {
+func fetchEdgarFilingsPage(conn *data.Conn, page int, perPage int) ([]GlobalEDGARFiling, error) {
 	// Assuming the SEC API supports a page parameter
 	url := fmt.Sprintf("https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&owner=include&count=%d&start=%d&output=atom",
 		perPage, (page-1)*perPage)
@@ -346,11 +344,11 @@ func fetchEdgarFilingsPage(conn *data.Conn,page int, perPage int) ([]GlobalEDGAR
 		return nil, fmt.Errorf("failed to read response body: %v", err)
 	}
 
-	return parseEdgarXMLFeed(conn,body)
+	return parseEdgarXMLFeed(conn, body)
 }
 
 // parseEdgarXMLFeed parses the SEC EDGAR Atom XML feed
-func parseEdgarXMLFeed(conn *data.Conn,body []byte) ([]GlobalEDGARFiling, error) {
+func parseEdgarXMLFeed(conn *data.Conn, body []byte) ([]GlobalEDGARFiling, error) {
 	decoder := xml.NewDecoder(bytes.NewReader(body))
 	decoder.CharsetReader = charset.NewReaderLabel
 
@@ -467,7 +465,6 @@ func parseFilingDate(updated string) string {
 	return t.Format("2006-01-02")
 }
 
-
 // EdgarFilingOptions represents optional parameters for fetching EDGAR filings
 type EdgarFilingOptions struct {
 	Start      int64 `json:"start,omitempty"`
@@ -560,7 +557,9 @@ func fetchEdgarFilings(cik string) ([]EDGARFiling, error) {
 
 		// Check for rate limiting (429)
 		if resp.StatusCode == 429 {
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				return nil, fmt.Errorf("error closing response body: %v", err)
+			}
 
 			// Exponential backoff
 			waitTime := retryDelay * time.Duration(1<<attempt)
@@ -570,8 +569,8 @@ func fetchEdgarFilings(cik string) ([]EDGARFiling, error) {
 
 		// Check for rate limiting (429)
 		if resp.StatusCode == 429 {
-			if errClose := resp.Body.Close(); errClose != nil {
-				// log.Printf("Error closing response body on 429: %v", errClose)
+			if err := resp.Body.Close(); err != nil {
+				return nil, fmt.Errorf("error closing response body: %v", err)
 			}
 
 			// Exponential backoff
@@ -939,7 +938,10 @@ func fetchFilingText(url string) (string, error) {
 		// Check for other non-success status codes
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				// Log the error but return the primary error
+				return "", fmt.Errorf("SEC API returned status %d and error closing response: %v", resp.StatusCode, err)
+			}
 			return "", fmt.Errorf("SEC API returned status %d: %s", resp.StatusCode, string(body[:100])) // Show first 100 chars
 		}
 
@@ -1000,4 +1002,3 @@ func normalizeWhitespace(text string) string {
 
 	return strings.TrimSpace(text)
 }
-

@@ -12,6 +12,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -111,8 +112,27 @@ func GetPrevClose(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		}
 
 		// Make a request to Polygon's API for that date and ticker
-		endpoint := fmt.Sprintf("https://api.polygon.io/v1/open-close/%s/%s?adjusted=true&apiKey=%s", ticker, date, conn.PolygonKey)
-		resp, err := http.Get(endpoint)
+		baseURL := "https://api.polygon.io/v1/open-close"
+
+		// Create URL with query parameters using url.Parse and url.Values
+		parsedURL, err := url.Parse(baseURL + "/" + ticker + "/" + date)
+		if err != nil {
+			return nil, fmt.Errorf("invalid URL: %v", err)
+		}
+
+		params := url.Values{}
+		params.Add("adjusted", "true")
+		params.Add("apiKey", conn.PolygonKey)
+		parsedURL.RawQuery = params.Encode()
+
+		// Validate the URL is for the correct domain
+		finalURL := parsedURL.String()
+		if !strings.HasPrefix(finalURL, "https://api.polygon.io/") {
+			return nil, fmt.Errorf("invalid API URL domain")
+		}
+
+		// Make the request with the safely constructed URL
+		resp, err := http.Get(finalURL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch Polygon snapshot: %v", err)
 		}

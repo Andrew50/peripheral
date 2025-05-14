@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // GetScreensaversResults represents a structure for handling GetScreensaversResults data.
@@ -45,7 +46,12 @@ func fetchPolygonSnapshot(endpoint string, apiKey string) ([]string, error) {
 	parsedURL.RawQuery = query.Encode()
 	fullEndpointStr := parsedURL.String()
 
-	// Make the request to Polygon.io
+	// Validate the URL is for an allowed domain (polygon.io)
+	if !strings.HasPrefix(fullEndpointStr, "https://api.polygon.io/") {
+		return nil, fmt.Errorf("invalid endpoint domain, only polygon.io is allowed")
+	}
+
+	// Make the request to Polygon.io with validated URL
 	resp, err := http.Get(fullEndpointStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Polygon snapshot: %v", err)
