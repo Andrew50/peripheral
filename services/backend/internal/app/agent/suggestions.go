@@ -16,17 +16,17 @@ type GetSuggestedQueriesResponse struct {
 	Suggestions []string `json:"suggestions"`
 }
 
-func GetSuggestedQueries(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+func GetSuggestedQueries(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
 
 	// Use the standardized Redis connectivity test
 	ctx := context.Background()
 	success, message := conn.TestRedisConnectivity(ctx, userID)
 	if !success {
-        return nil, fmt.Errorf("%s",message)
+		return nil, fmt.Errorf("%s", message)
 		////fmt.Printf("WARNING: %s\n", message)
 	}
-    //else {
-		////fmt.Println(message)
+	//else {
+	////fmt.Println(message)
 	//}
 	conversationData, err := GetConversationFromCache(ctx, conn, userID)
 	if err != nil || conversationData == nil {
@@ -111,7 +111,7 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 	// Add DateString to each bar
 	easternLocation, err := time.LoadLocation("America/New_York")
 	if err != nil {
-        return nil, err
+		return nil, err
 		// Handle error, perhaps log and continue without date strings
 		////fmt.Printf("Warning: could not load America/New_York timezone: %v\n", err)
 	}

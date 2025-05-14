@@ -558,7 +558,7 @@ func processRoundWithGemini(ctx context.Context, conn *data.Conn, prompt string)
 }
 
 // executeGeminiFunctionCalls executes the function calls returned by Gemini
-func executeGeminiFunctionCalls(ctx context.Context, conn *data.Conn, userID int, functionCalls []FunctionCall) ([]ExecuteResult, error) {
+func executeGeminiFunctionCalls(_ context.Context, conn *data.Conn, userID int, functionCalls []FunctionCall) ([]ExecuteResult, error) {
 	var results []ExecuteResult
 
 	for _, fc := range functionCalls {
