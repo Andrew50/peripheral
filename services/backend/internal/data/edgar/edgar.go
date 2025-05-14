@@ -183,7 +183,9 @@ func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFilin
 
 		// Check for rate limiting (429)
 		if resp.StatusCode == 429 {
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				return nil, fmt.Errorf("error closing response body: %v", err)
+			}
 
 			// Exponential backoff
 			waitTime := retryDelay * time.Duration(1<<attempt)
@@ -321,7 +323,9 @@ func fetchEdgarFilingsPage(conn *data.Conn, page int, perPage int) ([]GlobalEDGA
 
 		// Check for rate limiting
 		if resp.StatusCode == 429 {
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				return nil, fmt.Errorf("error closing response body: %v", err)
+			}
 			waitTime := retryDelay * time.Duration(1<<attempt)
 			////fmt.Printf("Rate limited by SEC API (429). Retrying in %v (page %d)...\n", waitTime, page)
 			time.Sleep(waitTime)
@@ -927,7 +931,9 @@ func fetchFilingText(url string) (string, error) {
 
 		// Check for rate limiting (429)
 		if resp.StatusCode == 429 {
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				return "", fmt.Errorf("error closing response body: %v", err)
+			}
 
 			// Exponential backoff
 			waitTime := retryDelay * time.Duration(1<<attempt)
