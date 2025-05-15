@@ -409,10 +409,8 @@ func (c *Client) removeSubscribedChannel(channelName string) {
 func incListeners(channelName string) {
 	v, _ := channelSubscriberCounts.LoadOrStore(channelName, &atomic.Int64{})
 	v.(*atomic.Int64).Add(1)
-	fmt.Printf("incListeners: %s, %d\n", channelName, v.(*atomic.Int64).Load())
 }
 func decListeners(channelName string) {
-	fmt.Printf("decListeners: %s\n", channelName)
 	if v, ok := channelSubscriberCounts.Load(channelName); ok {
 		if v.(*atomic.Int64).Add(-1) <= 0 {
 			channelSubscriberCounts.Delete(channelName)
