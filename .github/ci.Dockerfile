@@ -63,9 +63,6 @@ COPY --from=frontend-builder /github/workspace/services/frontend \
 ENV GOPATH=/go \
     PATH=/usr/local/go/bin:/go/bin:/usr/bin:$PATH
 
-# Install pnpm globally in the final image
-RUN npm install -g pnpm@8
-
 # 5. Default workdir
 WORKDIR /github/workspace
 
