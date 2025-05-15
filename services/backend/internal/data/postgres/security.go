@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	"backend/internal/data"
+
 	polygon "github.com/polygon-io/client-go/rest"
 	"github.com/polygon-io/client-go/rest/iter"
 	"github.com/polygon-io/client-go/rest/models"
-    "backend/internal/data"
 )
 
 // GetSecurityID performs operations related to GetSecurityID functionality.
@@ -22,9 +23,9 @@ func GetSecurityID(conn *data.Conn, ticker string, timestamp time.Time) (int, er
 }
 
 // GetTicker performs operations related to GetTicker functionality.
-func GetTicker(conn *data.Conn, securityId int, timestamp time.Time) (string, error) {
+func GetTicker(conn *data.Conn, securityID int, timestamp time.Time) (string, error) {
 	var ticker string
-	err := conn.DB.QueryRow(context.Background(), "SELECT ticker from securities where securityId = $1 and minDate <= $2 and (maxDate >= $2 or maxDate is NULL)", securityId, timestamp).Scan(&ticker)
+	err := conn.DB.QueryRow(context.Background(), "SELECT ticker from securities where securityId = $1 and minDate <= $2 and (maxDate >= $2 or maxDate is NULL)", securityID, timestamp).Scan(&ticker)
 	if err != nil {
 		return "", fmt.Errorf("igw0ngb %v", err)
 	}

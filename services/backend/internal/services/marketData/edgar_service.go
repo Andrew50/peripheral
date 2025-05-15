@@ -1,9 +1,8 @@
-package marketData
+package marketdata
 
 import (
 	"backend/internal/data"
 	"backend/internal/data/edgar"
-	"fmt"
 	"sync"
 	"time"
 )
@@ -21,22 +20,22 @@ func StartEdgarFilingsService(conn *data.Conn) {
 	edgarServiceMutex.Lock()
 	defer edgarServiceMutex.Unlock()
 	if edgarServiceRunning {
-		fmt.Println("EdgarFilingsService already running")
+		////fmt.Println("EdgarFilingsService already running")
 		return
 	}
 
-	fmt.Println("Starting EdgarFilingsService")
+	////fmt.Println("Starting EdgarFilingsService")
 	edgarServiceRunning = true
 
 	// Initial fetch
 	filings, err := edgar.FetchLatestEdgarFilings(conn)
 	if err != nil {
-		fmt.Printf("Error fetching initial SEC filings: %v\n", err)
-	} else {
-		latestFilingsMutex.Lock()
-		latestFilings = filings
-		latestFilingsMutex.Unlock()
+		////fmt.Printf("Error fetching initial SEC filings: %v\n", err)
+		return
 	}
+	latestFilingsMutex.Lock()
+	latestFilings = filings
+	latestFilingsMutex.Unlock()
 
 	// Start periodic fetching
 	go func() {
@@ -46,7 +45,7 @@ func StartEdgarFilingsService(conn *data.Conn) {
 		for range ticker.C {
 			newFilings, err := edgar.FetchLatestEdgarFilings(conn)
 			if err != nil {
-				fmt.Printf("Error fetching SEC filings: %v\n", err)
+				////fmt.Printf("Error fetching SEC filings: %v\n", err)
 				continue
 			}
 
@@ -74,15 +73,15 @@ func StartEdgarFilingsService(conn *data.Conn) {
 			for _, filing := range newOnes {
 				select {
 				case NewFilingsChannel <- filing:
-					fmt.Printf("Sent new filing to channel: %s\n", filing.URL)
+					////fmt.Printf("Sent new filing to channel: %s\n", filing.URL)
 				default:
-					fmt.Println("Warning: NewFilingsChannel is full, dropping filing")
+					////fmt.Println("Warning: NewFilingsChannel is full, dropping filing")
 				}
 			}
 		}
 	}()
 
-	fmt.Println("EdgarFilingsService started")
+	////fmt.Println("EdgarFilingsService started")
 }
 
 // GetLatestEdgarFilings returns a copy of the cached latest SEC filings
