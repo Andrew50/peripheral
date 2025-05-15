@@ -326,11 +326,6 @@
 		cursor: not-allowed;
 	}
 
-	.message {
-		margin: 10px 0;
-		color: #ddd;
-	}
-
 	.loading-container {
 		display: flex;
 		flex-direction: column;
