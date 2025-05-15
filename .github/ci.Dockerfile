@@ -53,9 +53,13 @@ RUN apt-get update \
 COPY --from=builder /usr/local/go /usr/local/go
 COPY --from=builder /go /go
 
-# 3. Copy Node + npm + **baked frontend deps** into the workspace path
-COPY --from=frontend-builder /usr/bin/node  /usr/bin/node
-COPY --from=frontend-builder /usr/bin/npm   /usr/bin/npm
+# 3. Copy Node.js, npm, npx, and Node modules from frontend-builder stage
+COPY --from=frontend-builder /usr/bin/node /usr/bin/node
+COPY --from=frontend-builder /usr/bin/npm /usr/bin/npm
+COPY --from=frontend-builder /usr/bin/npx /usr/bin/npx
+COPY --from=frontend-builder /usr/lib/node_modules /usr/lib/node_modules
+
+# Copy pre-built frontend dependencies (optional, but was in original)
 COPY --from=frontend-builder /github/workspace/services/frontend \
                                /github/workspace/services/frontend
 
