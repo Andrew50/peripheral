@@ -11,8 +11,9 @@ import (
 
 // ConversationData represents the data structure for storing conversation context
 type ConversationData struct {
-	Messages  []ChatMessage `json:"messages"`
-	Timestamp time.Time     `json:"timestamp"`
+	Messages   []ChatMessage `json:"messages"`
+	TokenCount int32         `json:"token_count"`
+	Timestamp  time.Time     `json:"timestamp"`
 }
 
 // ChatMessage represents a single message in the conversation
@@ -26,15 +27,17 @@ type ChatMessage struct {
 	Timestamp     time.Time                `json:"timestamp"`
 	ExpiresAt     time.Time                `json:"expires_at"` // When this message should expire
 	Citations     []Citation               `json:"citations,omitempty"`
+	TokenCount    int32                    `json:"token_count"`
 }
 
-func saveMessageToConversation(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult) error {
+func saveMessageToConversation(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult, tokenCount int32) error {
 	message := ChatMessage{
 		Query:         query,
 		ContextItems:  contextItems,
 		ContentChunks: contentChunks,
 		FunctionCalls: functionCalls,
 		ToolResults:   toolResults,
+		TokenCount:    tokenCount,
 		Timestamp:     time.Now(),
 		ExpiresAt:     time.Now().Add(24 * time.Hour),
 	}
@@ -137,6 +140,7 @@ func GetConversationFromCache(ctx context.Context, conn *data.Conn, userID int) 
 		return nil, fmt.Errorf("failed to deserialize conversation data: %w", err)
 	}
 
+	var tokenCount int32
 	// Filter out expired messages
 	now := time.Now()
 	originalCount := len(conversationData.Messages)
@@ -145,6 +149,7 @@ func GetConversationFromCache(ctx context.Context, conn *data.Conn, userID int) 
 	for _, msg := range conversationData.Messages {
 		if msg.ExpiresAt.After(now) {
 			validMessages = append(validMessages, msg)
+			tokenCount += msg.TokenCount
 		} // else {
 		////fmt.Printf("Filtering out expired message from %s during retrieval\n", msg.Timestamp.Format(time.RFC3339))
 		//}
@@ -152,6 +157,7 @@ func GetConversationFromCache(ctx context.Context, conn *data.Conn, userID int) 
 
 	// Update with only valid messages
 	conversationData.Messages = validMessages
+	conversationData.TokenCount = tokenCount
 
 	// If we filtered out messages, update the cache
 	if len(validMessages) < originalCount {
@@ -204,8 +210,9 @@ func GetUserConversation(conn *data.Conn, userID int, _ json.RawMessage) (interf
 			////fmt.Println("No conversation found in cache, returning empty history")
 			// Return empty conversation history instead of error
 			return &ConversationData{
-				Messages:  []ChatMessage{},
-				Timestamp: time.Now(),
+				Messages:   []ChatMessage{},
+				TokenCount: 0,
+				Timestamp:  time.Now(),
 			}, nil
 		}
 		return nil, fmt.Errorf("failed to get user conversation: %w", err)
@@ -221,8 +228,9 @@ func GetUserConversation(conn *data.Conn, userID int, _ json.RawMessage) (interf
 	if conversation == nil || len(conversation.Messages) == 0 {
 		////fmt.Println("Conversation was retrieved but has no messages, returning empty history")
 		return &ConversationData{
-			Messages:  []ChatMessage{},
-			Timestamp: time.Now(),
+			Messages:   []ChatMessage{},
+			TokenCount: 0,
+			Timestamp:  time.Now(),
 		}, nil
 	}
 
