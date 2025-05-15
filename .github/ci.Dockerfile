@@ -46,7 +46,7 @@ FROM ubuntu:22.04
 # 1. System deps for runtime
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      ca-certificates git curl \
+      ca-certificates git curl build-essential \
  && rm -rf /var/lib/apt/lists/*
 
 # 2. Copy Go toolchain + tools from builder
