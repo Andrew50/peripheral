@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
-import { settings } from '$lib/core/stores';
-import { privateRequest } from '$lib/core/backend';
+import { settings } from '$lib/utils/stores/stores';
+import { privateRequest } from '$lib/utils/helpers/backend';
 import type { BarData } from '$lib/features/chart/interface';
 import type {
 	IChartApi,

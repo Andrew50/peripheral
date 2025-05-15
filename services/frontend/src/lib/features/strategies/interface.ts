@@ -1,7 +1,7 @@
-import type { Instance } from '$lib/core/types';
-import { privateRequest } from '$lib/core/backend';
+import type { Instance } from '$lib/utils/types/types';
+import { privateRequest } from '$lib/utils/helpers/backend';
 import { writable } from 'svelte/store';
-import { dispatchMenuChange } from '$lib/core/stores';
+import { dispatchMenuChange } from '$lib/utils/stores/stores';
 export type SetupEvent = 'new' | 'save' | 'cancel' | number;
 export let eventDispatcher = writable<SetupEvent>();
 export function setSample(setupId: number, instance: Instance): void {

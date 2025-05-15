@@ -60,7 +60,7 @@ type FunctionResponse struct {
 
 type Citation struct {
 	Title string `json:"title"`
-	Url   string `json:"url"`
+	URL   string `json:"url"`
 }
 
 type GeminiFunctionResponse struct {
@@ -131,7 +131,7 @@ func getGeminiFunctionThinking(ctx context.Context, conn *data.Conn, systemPromp
 				}
 			}
 		}
-		fmt.Println("Grounding:", candidate.GroundingMetadata)
+		////fmt.Println("Grounding:", candidate.GroundingMetadata)
 		// Collect all indices first
 		// More efficient deduplication: collect and check uniqueness in one pass
 		seen := make(map[int]bool)
@@ -158,18 +158,18 @@ func getGeminiFunctionThinking(ctx context.Context, conn *data.Conn, systemPromp
 			if groundingChunk.Web != nil {
 				citations = append(citations, Citation{
 					Title: groundingChunk.Web.Title,
-					Url:   groundingChunk.Web.URI,
+					URL:   groundingChunk.Web.URI,
 				})
 			}
 			if groundingChunk.RetrievedContext != nil {
 				citations = append(citations, Citation{
 					Title: groundingChunk.RetrievedContext.Title,
-					Url:   groundingChunk.RetrievedContext.URI,
+					URL:   groundingChunk.RetrievedContext.URI,
 				})
 			}
 		}
 	}
-	fmt.Println("Citations:", citations)
+	////fmt.Println("Citations:", citations)
 	response := &GeminiFunctionResponse{
 		FunctionCalls: []FunctionCall{},
 		Text:          responseText,
@@ -290,7 +290,7 @@ func getGeminiFunctionResponse(ctx context.Context, conn *data.Conn, query strin
 	}
 
 	// Print the response for debugging
-	fmt.Println("Gemini response:", responseText)
+	////fmt.Println("Gemini response:", responseText)
 
 	// Extract function calls from response
 	var functionCalls []FunctionCall

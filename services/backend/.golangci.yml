@@ -1,56 +1,68 @@
----
 # golangci-lint configuration file for temporarily disabling some linters
 # The goal is to get the CI pipeline to pass while addressing issues gradually
 
 run:
-  # Timeout for running linters, e.g. 30s, 5m, default is 1m
   timeout: 5m
-  # Enable build tags support
   build-tags:
     - all
     - !test
 
-# Configuration for specific linters
 linters-settings:
   errcheck:
-    # Disable checking for unchecked errors in type assertions
     check-type-assertions: false
-    # Disable checking for unchecked error in calls of certain functions
     exclude-functions:
       - (*github.com/polygon-io/client-go/websocket.Client).Subscribe
       - (*github.com/polygon-io/client-go/websocket.Client).Close
       - (*sql.Rows).Scan
       - (io.Reader).Read
+
   unused:
-    # Consider build tags when checking for unused code
     check-exported: false
 
-# List of enabled or disabled linters
+  # ⬇️  NEW: keep staticcheck but drop SA9003 (empty branch)
+  staticcheck:
+    checks:
+      - all            # keep every other check …
+      - '-SA9003'      # … except the empty-branch rule
+
+  forbidigo:
+    # Block debug prints & accidental panics in library code
+    forbid:
+      - name: "fmt\\.Print.*"     # disallow fmt.Print, Printf, Println, …
+        message: "use a structured logger, not fmt.Print*"
+      - name: "log\\.Printf"      # same for std log
+      - name: "^panic\\("         # panic only in main() or tests
+
 linters:
+  enable:
+    - revive
+    - gosec
+    # - forbidigo
   disable:
-    - gosimple # Disable checking for code simplification for now
-    - staticcheck # Disable static analysis checks for now
-    - govet # Disable vet checks for now
-    - ineffassign # Disable ineffectual assignment checks for now
+    - gosimple
+    # - staticcheck # Ensure staticcheck runs with its specific config above
+    - govet
+    - ineffassign
 
 issues:
-  # Exclude some common issues to make the lint pass
   exclude-rules:
-    - linters:
-        - errcheck
+    - linters: [errcheck]
       text: "Error return value is not checked"
-    - linters:
-        - govet
+
+    - linters: [govet]
       text: "copylocks"
-    - linters:
-        - govet
+
+    - linters: [govet]
       text: "printf"
-    - linters:
-        - unused
+
+    - linters: [unused]
       text: "func .* is unused"
       source: "^//go:build !test"
 
-  # Maximum issues count per one linter
+    # ⬇️  NEW: belt-and-suspenders rule—filters any stray SA9003 hits
+    - linters: [staticcheck]
+      text: "empty branch (SA9003)"
+
   max-issues-per-linter: 0
-  # Maximum count of issues with the same text
   max-same-issues: 0
+
