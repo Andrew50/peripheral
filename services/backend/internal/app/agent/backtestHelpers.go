@@ -140,13 +140,8 @@ type TableInstructionData struct {
 }
 
 // GenerateBacktestTableFromInstruction retrieves cached backtest results and formats it
-<<<<<<< HEAD:services/backend/tools/backtestHelpers.go
-// into a table query.ContentChunk based on LLM instructions.
-func GenerateBacktestTableFromInstruction(ctx context.Context, conn *utils.Conn, userID int, instruction TableInstructionData) (*ContentChunk, error) {
-=======
 // into a table ContentChunk based on LLM instructions.
 func GenerateBacktestTableFromInstruction(ctx context.Context, conn *data.Conn, userID int, instruction TableInstructionData) (*ContentChunk, error) {
->>>>>>> 95850a05026dfece2bea6f98bd278424ab195b89:services/backend/internal/app/agent/backtestHelpers.go
 
 	cacheKey := fmt.Sprintf("user:%d:backtest:%d:results", userID, instruction.StrategyID)
 

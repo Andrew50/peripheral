@@ -22,37 +22,6 @@ type Tool struct {
 
 var (
 	Tools = map[string]Tool{
-<<<<<<< HEAD:services/backend/tools/tools.go
-		"getQuery": {
-			FunctionDeclaration: nil,
-			Function:            GetQuery,
-			Query:               false,
-			Api:                 true,
-			StatusMessage:       "",
-		},
-		"getSimilarInstances": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getSimilarInstances",
-				Description: "Get a list of securities related to a specified security at the current time.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The security ID of the security",
-						},
-					},
-					Required: []string{"securityId"},
-				},
-			},
-			Function:      GetSimilarInstances,
-
-			Query:         false,
-			Api:           true,
-			StatusMessage: "Finding similar securities...",
-		},
-=======
->>>>>>> 95850a05026dfece2bea6f98bd278424ab195b89:services/backend/internal/app/agent/tools.go
 		"getCurrentSecurityID": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getCurrentSecurityID",

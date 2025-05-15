@@ -1,16 +1,8 @@
 package server
 
 import (
-<<<<<<< HEAD:services/backend/server/api.go
-	"backend/jobs"
-	"backend/socket"
-	"backend/tools"
-	"backend/utils"
-	"context" // Added for initialization context
-=======
 	"backend/internal/data"
 	"backend/internal/services/socket"
->>>>>>> 95850a05026dfece2bea6f98bd278424ab195b89:services/backend/internal/server/http.go
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -513,28 +505,7 @@ func HealthCheck() http.HandlerFunc {
 }
 
 // StartServer performs operations related to StartServer functionality.
-<<<<<<< HEAD:services/backend/server/api.go
-func StartServer() {
-	conn, cleanup := utils.InitConn(true)
-	defer cleanup()
-
-	// --- Initialize dynamic validation sets ---
-	// Must run after DB connection is ready and before scheduler/handlers start.
-	// Use context.Background() for startup initialization.
-	ctx := context.Background() // Or a context with a timeout if preferred
-	if err := tools.InitializeDynamicValidationSets(ctx, conn); err != nil {
-
-		// Decide how to handle this error. Log and continue? Fatal?
-		log.Fatalf("CRITICAL: Failed to initialize dynamic validation sets: %v. Proceeding with potentially incomplete validation.", err)
-		// Or use log.Fatalf("...") to stop the application if these sets are absolutely critical
-	}
-	// -----------------------------------------
-
-	stopScheduler := jobs.StartScheduler(conn)
-	defer close(stopScheduler)
-=======
 func StartServer(conn *data.Conn) {
->>>>>>> 95850a05026dfece2bea6f98bd278424ab195b89:services/backend/internal/server/http.go
 	http.HandleFunc("/public", publicHandler(conn))
 	http.HandleFunc("/private", privateHandler(conn))
 	http.HandleFunc("/ws", WSHandler(conn))

@@ -490,5 +490,4 @@ func GetUserConversation(conn *data.Conn, userID int, _ json.RawMessage) (interf
 	}
 
 	return conversation, nil
->>>>>>> 95850a05026dfece2bea6f98bd278424ab195b89:services/backend/internal/app/agent/conversation.go
 }
