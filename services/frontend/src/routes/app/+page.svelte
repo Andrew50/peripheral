@@ -6,7 +6,7 @@
 	import StrategiesPopup from '$lib/utils/popups/strategiesPopup.svelte';
 	import Input from '$lib/utils/popups/input.svelte';
 	//import Similar from '$lib/features/similar/similar.svelte';
-	import Study from '$lib/features/study.svelte';
+	//import Study from '$lib/features/study.svelte';
 	import Watchlist from '$lib/features/watchlist.svelte';
 	//import TickerInfo from '$lib/features/quotes/tickerInfo.svelte';
 	import Quote from '$lib/features/quotes/quote.svelte';
@@ -58,11 +58,13 @@
 
 	import { requestChatOpen } from '$lib/features/chat/interface'; // Import the store
 
-	type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
+	//type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
+	type Menu = 'none' | 'watchlist' | 'alerts'  | 'news';
 
 	let lastSidebarMenu: Menu | null = null;
 	let sidebarWidth = 0;
-	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'news'];
+	//const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'news'];
+	const sidebarMenus: Menu[] = ['watchlist', 'alerts',  'news'];
 
 	// Initialize chartWidth with a default value
 	let chartWidth = 0;
@@ -889,8 +891,8 @@
 								<Watchlist />
 							{:else if $activeMenu === 'alerts'}
 								<Alerts />
-							{:else if $activeMenu === 'study'}
-								<Study />
+							<!--{:else if $activeMenu === 'study'}
+								<Study />-->
 							{:else if $activeMenu === 'news'}
 								<News />
 							{/if}
@@ -1234,30 +1236,6 @@
 		padding: 0 4px;
 	}
 
-	.draggable-window {
-		position: fixed;
-		border: 1px solid var(--c2);
-		background-color: var(--c1);
-		z-index: 999;
-		min-width: 200px;
-		min-height: 100px;
-		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-		overflow: hidden;
-	}
-
-	.window-header {
-		background-color: var(--c2);
-		color: #fff;
-		padding: 5px;
-		display: flex;
-		justify-content: space-between;
-		cursor: move;
-	}
-
-	.window-title {
-		font-weight: bold;
-	}
-
 	.close-btn {
 		background: transparent;
 		border: none;
@@ -1450,21 +1428,6 @@
 
 	.sidebar-resize-handle:hover {
 		background: var(--c3);
-	}
-
-	.screensaver-overlay {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background-color: var(--c1);
-		z-index: 1000;
-		cursor: pointer;
-		border: none;
-		padding: 0;
-		width: 100%;
-		height: 100%;
 	}
 
 	.profile-button {

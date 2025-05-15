@@ -1,6 +1,7 @@
 <!-- streamCell.svelte -->
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { cubicOut } from 'svelte/easing';
 	import { writable } from 'svelte/store';
 	import { addStream } from '$lib/utils/stream/interface';
 	import type { TradeData, Instance, CloseData } from '$lib/core/types';
@@ -11,14 +12,52 @@
 	let releaseSlow: Function = () => {};
 	let releaseClose: Function = () => {};
 	let currentSecurityId: number | null = null;
-
+	
 	interface ChangeStore {
 		price?: number;
 		prevClose?: number;
 		change: string;
 		shares?: number;
 	}
-	let changeStore = writable<ChangeStore>({ change: '--' });
+	let changeStore = writable<ChangeStore>({ change: '' });
+	
+	let lastPrice: number | undefined;
+	let pulseClass = '';         // '' | 'flash-up' | 'flash-down'
+	let unchanged = '';   // left part that didn't move
+	let changed   = '';   // right part that changed
+	let lastPriceStr: string | undefined;
+  function updateSlices(newPrice: number) {
+      const next = newPrice.toFixed(2);
+      const prev = lastPriceStr ?? '';
+
+      // find the first differing character
+      let idx = 0;
+      while (idx < next.length && next[idx] === prev[idx]) idx++;
+
+      unchanged = next.slice(0, idx);
+      changed   = next.slice(idx);
+      lastPriceStr = next;
+  }
+
+  function firePulse(dir: 1 | -1) {
+      pulseClass = '';
+      requestAnimationFrame(() => {
+          pulseClass = dir === 1 ? 'flash-up' : 'flash-down';
+      });
+  }
+
+	// Reactive flags for class logic
+	$: hasPriceAndPrevClose = $changeStore.price != null && $changeStore.prevClose != null;
+	$: diff = ($changeStore.price ?? 0) - ($changeStore.prevClose ?? 0);
+	// $: priceIncreasedOrSame = hasPriceAndPrevClose && ($changeStore.price! - $changeStore.prevClose! >= 0); // Not strictly needed if using !priceDecreased
+	$: isPlaceholder = $changeStore.change === '';
+
+	$: isRedForChange = type === 'change'  && diff < 0;
+	$: isWhiteForChange = type === 'change' && diff === null;
+	$: isGreenForChange = type === 'change' && diff > 0;
+
+	$: isRedForChangePercent = (type === 'change %' || type === 'change % extended') && $changeStore.change.includes('-');
+	$: isGreenForChangePercent = (type === 'change %' || type === 'change % extended') && !$changeStore.change.includes('-') && !isPlaceholder && $changeStore.change !== '';
 
 	function setupStreams() {
 		// Only setup streams if security ID changed
@@ -34,9 +73,9 @@
 
 		// Reset the store with shares if market cap type
 		if (type === 'market cap' && instance.totalShares) {
-			changeStore.set({ change: '--', shares: instance.totalShares });
+			changeStore.set({ change: '', shares: instance.totalShares });
 		} else {
-			changeStore.set({ change: '--' });
+			changeStore.set({ change: '' });
 		}
 
 		// Decide which streams to use based on type
@@ -60,7 +99,7 @@
 				return {
 					...s,
 					prevClose,
-					change: s.price && prevClose ? getChange(s.price, prevClose) : '--'
+					change: s.price && prevClose ? getChange(s.price, prevClose) : ''
 				};
 			});
 		});
@@ -68,9 +107,11 @@
 		releaseSlow = addStream<TradeData>(instance, slowStreamName, (v: TradeData) => {
 			if (v && v.price) {
 				changeStore.update((s: ChangeStore) => {
+					if(v.size < 100) {
+						return s;
+					}
 					const price = v.price;
 					const prevClose = s.prevClose;
-
 					// Update the instance with the price
 					(instance as any)['price'] = price;
 
@@ -79,6 +120,7 @@
 						// Calculate raw change and store it
 						if (price && prevClose) {
 							(instance as any)['change'] = price - prevClose;
+							s.change = (price - prevClose).toFixed(2);
 						}
 					} else if (type === 'change %') {
 						// Calculate percentage change and store it
@@ -102,11 +144,23 @@
 							prevClose
 						};
 					}
+					if (type === 'price' && v?.price) {
+						const dir = lastPrice === undefined
+							? 0
+							: v.price > lastPrice ? 1
+							: v.price < lastPrice ? -1
+							: 0;
+
+						updateSlices(v.price);
+						lastPrice = v.price;
+
+						if (dir) firePulse(dir);
+					}
 					return {
 						...s,
 						price,
 						prevClose,
-						change: price && prevClose ? getChange(price, prevClose) : '--'
+						change: price && prevClose ? getChange(price, prevClose) : ''
 					};
 				});
 			}
@@ -125,7 +179,7 @@
 
 	function getChange(price: number, prevClose: number): string {
 		// Removing frequent console logs for performance
-		if (!price || !prevClose) return '--';
+		if (!price || !prevClose) return '';
 		return ((price / prevClose - 1) * 100).toFixed(2) + '%';
 	}
 
@@ -145,31 +199,65 @@
 </script>
 
 <div
-	class={type === 'change'
-		? $changeStore.price != null &&
-			$changeStore.prevClose != null &&
-			$changeStore.price - $changeStore.prevClose < 0
-			? 'red'
-			: $changeStore.change === '--'
-				? 'white'
-				: 'green'
-		: type === 'change %' || type === 'change % extended'
-			? $changeStore.change.includes('-')
-				? 'red'
-				: 'green'
-			: ''}
+	class:red={isRedForChange || isRedForChangePercent}
+	class:white={isWhiteForChange}
+	class:green={isGreenForChange || isGreenForChangePercent}
+	class="price-cell {pulseClass}"
 >
-	{#if type === 'change'}
+
+
+    {#if type === 'price'}
+		{#if changed === ''}           <!-- first print, nothing to colour -->
+		{unchanged}
+		{:else}
+			{unchanged}<span
+				class="diff"
+				class:up  ={pulseClass === 'flash-up'}
+				class:down={pulseClass === 'flash-down'}>
+				{changed}
+			</span>
+		{/if}
+	{:else if type === 'change'}
 		{$changeStore.price != null && $changeStore.prevClose != null
 			? ($changeStore.price - $changeStore.prevClose).toFixed(2)
-			: '--'}
-	{:else if type === 'price'}
-		{$changeStore.price?.toFixed(2) ?? '--'}
+			: ''}
 	{:else if type === 'change %' || type === 'change % extended'}
 		{$changeStore.change}
 	{:else if type === 'market cap'}
 		{formatMarketCap($changeStore.price, $changeStore.shares)}
 	{:else}
-		{'--'}
+		{''}
 	{/if}
 </div>
+
+<style>
+	@keyframes flashGreen {
+		0% { color: var(--positive, rgb(72, 225, 72)); }
+		/* Using ease-out, so 100% to currentColor should provide a smooth transition */
+		100% { color: currentColor; }
+	}
+	@keyframes flashRed {
+		0% { color: var(--negative, rgb(225, 72, 72)); }
+		100% { color: currentColor; }
+	}
+	.flash-up   { animation: flashGreen .5s ease-out forwards;}
+	.flash-down { animation: flashRed   .5s ease-out forwards;}
+
+	/* Sticky colour for the changed digits */
+	.diff.up   { color: var(--positive, rgb(72, 225, 72)); }
+	.diff.down { color: var(--negative, rgb(225, 72, 72)); }
+
+	/* Styles for change and change % consistency */
+	.red {
+	  color: var(--negative, rgb(225, 72, 72));
+	}
+	.green {
+	  color: var(--positive, rgb(72, 225, 72));
+	}
+	.white {
+	  color: var(--neutral-placeholder-text, #888); /* Neutral color for placeholders */
+	}
+
+	/* basic cell padding so the flash fills the whole box */
+	.price-cell { padding: 0 4px; }
+</style>

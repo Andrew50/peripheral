@@ -1,8 +1,7 @@
 # .air.toml
 
-# Configuring the air tool
 [build]
-  cmd = "go build -o ./tmp/main ."
+  cmd = "go build -o ./tmp/main ./cmd/server"
   bin = "./tmp/main"
   include_ext = ["go", "tpl", "tmpl", "html"]
   exclude_dir = ["tmp", "vendor", "testdata"]
@@ -19,4 +18,3 @@
   watch_delay = 1000
   grace_time = 1000
   output = "air.log"
-
