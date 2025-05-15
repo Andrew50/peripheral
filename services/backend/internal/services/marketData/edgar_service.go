@@ -1,4 +1,4 @@
-package marketData
+package marketdata
 
 import (
 	"backend/internal/data"
@@ -31,11 +31,11 @@ func StartEdgarFilingsService(conn *data.Conn) {
 	filings, err := edgar.FetchLatestEdgarFilings(conn)
 	if err != nil {
 		////fmt.Printf("Error fetching initial SEC filings: %v\n", err)
-	} else {
-		latestFilingsMutex.Lock()
-		latestFilings = filings
-		latestFilingsMutex.Unlock()
+		return
 	}
+	latestFilingsMutex.Lock()
+	latestFilings = filings
+	latestFilingsMutex.Unlock()
 
 	// Start periodic fetching
 	go func() {

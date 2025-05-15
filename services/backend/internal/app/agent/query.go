@@ -52,9 +52,9 @@ func buildContextPrompt(contextItems []map[string]interface{}) string {
 		} else if _, ok := item["timestamp"]; ok {
 			// Then treat instance contexts
 			ticker, _ := item["ticker"].(string)
-			secId := fmt.Sprint(item["securityId"])
+			secID := fmt.Sprint(item["securityId"])
 			tsStr := fmt.Sprint(item["timestamp"])
-			sb.WriteString(fmt.Sprintf("Instance - Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secId, tsStr))
+			sb.WriteString(fmt.Sprintf("Instance - Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secID, tsStr))
 		}
 	}
 	return sb.String()
@@ -142,10 +142,10 @@ func GetQuery(conn *data.Conn, userID int, args json.RawMessage) (interface{}, e
 		// Add active chart context if present
 		if query.ActiveChartContext != nil {
 			ticker, _ := query.ActiveChartContext["ticker"].(string)
-			secId := fmt.Sprint(query.ActiveChartContext["securityId"])
+			secID := fmt.Sprint(query.ActiveChartContext["securityId"])
 			tsStr := fmt.Sprint(query.ActiveChartContext["timestamp"])
 			prompt.WriteString("<UserActiveChart>\n")
-			prompt.WriteString(fmt.Sprintf("- Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secId, tsStr))
+			prompt.WriteString(fmt.Sprintf("- Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secID, tsStr))
 			prompt.WriteString("</UserActiveChart>\n\n")
 		}
 		if contextSection != "" {

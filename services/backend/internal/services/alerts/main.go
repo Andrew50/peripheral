@@ -2,10 +2,11 @@ package alerts
 
 import (
 	"backend/internal/data"
-    "backend/internal/data/postgres"
-    "backend/internal/services/socket"
+	"backend/internal/data/postgres"
+	"backend/internal/services/socket"
 	"context"
 	"fmt"
+
 	//"log"
 	"sync"
 	"time"
@@ -30,6 +31,7 @@ var (
 	alerts    sync.Map
 	ctx       context.Context
 	cancel    context.CancelFunc
+	mu        sync.Mutex
 )
 
 // AddAlert performs operations related to AddAlert functionality.
@@ -45,9 +47,11 @@ func AddAlert(conn *data.Conn, alert Alert) {
 	alerts.Store(alert.AlertID, alert)
 }
 
-// RemoveAlert performs operations related to RemoveAlert functionality.
-func RemoveAlert(alertId int) {
-	alerts.Delete(alertId)
+// RemoveAlert removes an alert from the in-memory store
+func RemoveAlert(alertID int) {
+	mu.Lock()
+	defer mu.Unlock()
+	alerts.Delete(alertID)
 }
 
 // StartAlertLoop performs operations related to StartAlertLoop functionality.
@@ -88,7 +92,7 @@ func alertLoop(ctx context.Context, conn *data.Conn) {
 
 func processAlerts(conn *data.Conn) {
 	var wg sync.WaitGroup
-	alerts.Range(func(key, value interface{}) bool {
+	alerts.Range(func(_, value interface{}) bool {
 		alert := value.(Alert)
 		wg.Add(1)
 		go func(a Alert) {
@@ -99,8 +103,8 @@ func processAlerts(conn *data.Conn) {
 				err = processPriceAlert(conn, a)
 			case "news":
 				err = processNewsAlert(conn, a)
-            case "strategy":
-                err = processStrategyAlert(conn,a)
+			case "strategy":
+				err = processStrategyAlert(conn, a)
 			default:
 				//log.Printf("Unknown alert type: %s", a.AlertType)
 				return
@@ -177,7 +181,7 @@ func initAlerts(conn *data.Conn) error {
 
 	// Validate alert securities exist in data map
 	var alertErrors []error
-	alerts.Range(func(key, value interface{}) bool {
+	alerts.Range(func(_, value interface{}) bool {
 		alert := value.(Alert)
 		if alert.SecurityID != nil {
 			if _, exists := socket.AggData[*alert.SecurityID]; !exists {

@@ -23,8 +23,8 @@ var useAlerts bool
 
 const slowRedisTimeout = 1 * time.Second // Adjust the timeout as needed
 
-var tickerToSecurityId map[string]int
-var tickerToSecurityIdLock sync.RWMutex
+var tickerToSecurityID map[string]int
+var tickerToSecurityIDLock sync.RWMutex
 
 var polygonWSConn *polygonws.Client
 
@@ -116,11 +116,11 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 			}
 			tickTimestampMutex.Unlock()
 
-			tickerToSecurityIdLock.RLock()
-			securityId, exists := tickerToSecurityId[symbol]
-			tickerToSecurityIdLock.RUnlock()
+			tickerToSecurityIDLock.RLock()
+			securityID, exists := tickerToSecurityID[symbol]
+			tickerToSecurityIDLock.RUnlock()
 			if !exists {
-				//log.Printf("Symbol %s not found in tickerToSecurityId map\n", symbol)
+				//log.Printf("Symbol %s not found in tickerToSecurityID map\n", symbol)
 				continue
 			}
 			switch msg := out.(type) {
@@ -128,9 +128,9 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 			              alerts.appendAggregate(securityId,msg.Open,msg.High,msg.Low,msg.Close,msg.Volume)*/
 			case models.EquityTrade:
 				channelNameType := getChannelNameType(msg.Timestamp)
-				fastChannelName := fmt.Sprintf("%d-fast-%s", securityId, channelNameType)
-				allChannelName := fmt.Sprintf("%d-all", securityId)
-				slowChannelName := fmt.Sprintf("%d-slow-%s", securityId, channelNameType)
+				fastChannelName := fmt.Sprintf("%d-fast-%s", securityID, channelNameType)
+				allChannelName := fmt.Sprintf("%d-all", securityID)
+				slowChannelName := fmt.Sprintf("%d-slow-%s", securityID, channelNameType)
 
 				data := TradeData{
 					//					Ticker:     msg.Symbol,
@@ -143,7 +143,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				}
 				//if alerts.IsAggsInitialized() {
 				if useAlerts {
-					if err := appendTick(conn, securityId, data.Timestamp, data.Price, data.Size); err != nil {
+					if err := appendTick(conn, securityID, data.Timestamp, data.Price, data.Size); err != nil {
 						// Log the error but continue processing
 						fmt.Printf("Error appending tick: %v\n", err)
 					}
@@ -159,7 +159,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				data.Channel = allChannelName
 				jsonData, err = json.Marshal(data)
 				if err != nil {
-					//fmt.Println("Error marshling JSON:", err)
+					fmt.Println("Error marshling JSON:", err)
 				} else {
 					//conn.Cache.Publish(context.Background(), channelName, string(jsonData))
 					broadcastToChannel(allChannelName, string(jsonData))
@@ -182,7 +182,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 					nextDispatchTimes.Unlock()
 				}
 			case models.EquityQuote:
-				channelName := fmt.Sprintf("%d-quote", securityId)
+				channelName := fmt.Sprintf("%d-quote", securityID)
 				if !hasListeners(channelName) {
 					break
 				}
@@ -219,7 +219,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 // StartPolygonWS performs operations related to StartPolygonWS functionality.
 func StartPolygonWS(conn *data.Conn, _useAlerts bool) error {
 	useAlerts = _useAlerts
-	if err := initTickerToSecurityIdMap(conn); err != nil {
+	if err := initTickerToSecurityIDMap(conn); err != nil {
 		return fmt.Errorf("failed to initialize ticker to security ID map: %v", err)
 	}
 
@@ -251,11 +251,11 @@ func StopPolygonWS() error {
 	return nil
 }
 
-// initTickerToSecurityIdMap initializes the map of ticker symbols to security IDs
-func initTickerToSecurityIdMap(conn *data.Conn) error {
-	tickerToSecurityIdLock.Lock()
-	defer tickerToSecurityIdLock.Unlock()
-	tickerToSecurityId = make(map[string]int)
+// initTickerToSecurityIDMap initializes the map of ticker symbols to security IDs
+func initTickerToSecurityIDMap(conn *data.Conn) error {
+	tickerToSecurityIDLock.Lock()
+	defer tickerToSecurityIDLock.Unlock()
+	tickerToSecurityID = make(map[string]int)
 	rows, err := conn.DB.Query(context.Background(), "SELECT ticker, securityId FROM securities where maxDate is NULL")
 	if err != nil {
 		return err
@@ -263,11 +263,11 @@ func initTickerToSecurityIdMap(conn *data.Conn) error {
 	defer rows.Close()
 	for rows.Next() {
 		var ticker string
-		var securityId int
-		if err := rows.Scan(&ticker, &securityId); err != nil {
+		var securityID int
+		if err := rows.Scan(&ticker, &securityID); err != nil {
 			return err
 		}
-		tickerToSecurityId[ticker] = securityId
+		tickerToSecurityID[ticker] = securityID
 	}
 	if err := rows.Err(); err != nil {
 		return err

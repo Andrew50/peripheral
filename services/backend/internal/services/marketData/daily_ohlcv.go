@@ -1,9 +1,9 @@
-package marketData
+package marketdata
 
 import (
 	"backend/internal/data"
-    "backend/internal/data/polygon"
-    "backend/internal/data/postgres"
+	"backend/internal/data/polygon"
+	"backend/internal/data/postgres"
 	"context"
 	"fmt"
 	"math"
@@ -116,14 +116,14 @@ func UpdateDailyOHLCV(conn *data.Conn) error {
 			}()
 			defer wg.Done()
 			defer sem.Release(1)
-dateStr := date.Format("2006-01-02")
+			dateStr := date.Format("2006-01-02")
 
 			// Create context with timeout for this date's processing
 			ctx, cancel := context.WithTimeout(globalCtx, 20*time.Second)
 			defer cancel()
 
 			// Get OHLCV data for this date
-			ohlcvResponse, err := polygon.GetDailyOHLCV(conn.Polygon, dateStr, ctx)
+			ohlcvResponse, err := polygon.GetDailyOHLCV(ctx, conn.Polygon, dateStr)
 			if err != nil {
 				errorCh <- fmt.Errorf("error getting OHLCV for %s: %w", dateStr, err)
 				return
@@ -231,16 +231,16 @@ func storeDailyOHLCVParallel(conn *data.Conn, ohlcvResponse *models.GetGroupedDa
 
 			// Ensure transaction is handled properly
 			//committed := false
-            /*
-			//defer func() {
-				if !committed {
-					if rbErr := tx.Rollback(context.Background()); rbErr != nil {
-						////fmt.Printf("Error rolling back transaction: %v\n", rbErr)
-                        //return rbErr
-					}
-				}
-			//}()
-            */
+			/*
+							//defer func() {
+								if !committed {
+									if rbErr := tx.Rollback(context.Background()); rbErr != nil {
+										////fmt.Printf("Error rolling back transaction: %v\n", rbErr)
+				                        //return rbErr
+									}
+								}
+							//}()
+			*/
 
 			// Collect all security IDs first
 			recordsToProcess := make([]struct {
