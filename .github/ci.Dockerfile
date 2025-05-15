@@ -71,4 +71,3 @@ WORKDIR /github/workspace
 
 # 6. Entrypoint
 ENTRYPOINT ["/bin/bash", "-lc"]
-
