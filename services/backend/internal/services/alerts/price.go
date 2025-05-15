@@ -1,8 +1,8 @@
 package alerts
 
 import (
-	"backend/internal/services/socket"
 	"backend/internal/data"
+	"backend/internal/services/socket"
 	"fmt"
 )
 
@@ -20,15 +20,19 @@ func processPriceAlert(conn *data.Conn, alert Alert) error {
 		price := ds.SecondDataExtended.Aggs[socket.AggsLength-1][1]
 		if *directionPtr {
 			if price >= *alert.Price {
-				dispatchAlert(conn, alert)
+				if err := dispatchAlert(conn, alert); err != nil {
+					return fmt.Errorf("failed to dispatch alert: %v", err)
+				}
 			}
 		} else {
 			if price <= *alert.Price {
-				dispatchAlert(conn, alert)
+				if err := dispatchAlert(conn, alert); err != nil {
+					return fmt.Errorf("failed to dispatch alert: %v", err)
+				}
 			}
 		}
 	} else {
-		fmt.Println("no direction pointer")
+		return fmt.Errorf("no direction pointer")
 	}
 	return nil
 }

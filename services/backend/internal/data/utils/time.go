@@ -57,7 +57,6 @@ func StringToTime(datetimeStr string) (time.Time, error) {
 
 }
 
-
 // MillisFromDatetimeString performs operations related to MillisFromDatetimeString functionality.
 func MillisFromDatetimeString(datetime string) (models.Millis, error) {
 	layouts := []string{
@@ -99,16 +98,14 @@ func NanosFromDatetimeString(datetime string) (models.Nanos, error) {
 	return models.Nanos(time.Now()), nil
 }
 
-
 // getStartOfTimeWindow calculates the start of a time window based on the given parameters
 // nolint:unused
 //
 //lint:ignore U1000 kept for future time window calculations
-func getStartOfTimeWindow(timestamp time.Time, multiplier int, timespan string, extendedHours bool, location *time.Location) (time.Time, error) {
-
-	timestamp = timestamp.In(location)
-
+func getStartOfTimeWindow(timestamp time.Time, multiplier int, timespan string, _ bool, location *time.Location) (time.Time, error) {
 	switch timespan {
+	case "minute":
+		return timestamp.Add(time.Duration(-multiplier) * time.Minute).In(location), nil
 	case "s":
 		// Seconds
 		duration := time.Duration(multiplier) * time.Second

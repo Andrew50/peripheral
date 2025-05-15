@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { publicRequest } from '$lib/core/backend';
+	import { publicRequest } from '$lib/utils/helpers/backend';
 
 	interface GoogleCallbackResponse {
 		token: string;

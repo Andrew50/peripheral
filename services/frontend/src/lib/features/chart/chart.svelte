@@ -3,19 +3,19 @@
 	import Legend from './legend.svelte';
 	import Shift from './shift.svelte';
 	import DrawingMenu from './drawingMenu.svelte';
-	import { privateRequest } from '$lib/core/backend';
+	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { type DrawingMenuProps, addHorizontalLine, drawingMenuProps } from './drawingMenu.svelte';
-	import type { Instance as CoreInstance, TradeData, QuoteData } from '$lib/core/types';
+	import type { Instance as CoreInstance, TradeData, QuoteData } from '$lib/utils/types/types';
 	import {
 		setActiveChart,
 		chartQueryDispatcher,
 		chartEventDispatcher,
 		queryChart
 	} from './interface';
-	import { streamInfo, settings, activeAlerts } from '$lib/core/stores';
+	import { streamInfo, settings, activeAlerts } from '$lib/utils/stores/stores';
 	import type { ShiftOverlay, ChartEventDispatch, BarData, ChartQueryDispatch } from './interface';
-	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
-	import { queryInstanceRightClick } from '$lib/utils/popups/rightClick.svelte';
+	import { queryInstanceInput } from '$lib/components/input.svelte';
+	import { queryInstanceRightClick } from '$lib/components/rightClick.svelte';
 	import { createChart, ColorType, CrosshairMode } from 'lightweight-charts';
 	import type {
 		IChartApi,
@@ -50,7 +50,7 @@
 		ESTSecondstoUTCMillis,
 		getReferenceStartTimeForDateMilliseconds,
 		timeframeToSeconds
-	} from '$lib/core/timestamp';
+	} from '$lib/utils/helpers/timestamp';
 	import { addStream } from '$lib/utils/stream/interface';
 	import { ArrowMarkersPaneView, type ArrowMarker } from './arrowMarkers';
 	import { EventMarkersPaneView, type EventMarker } from './eventMarkers';
@@ -2110,11 +2110,6 @@
 		color: #fff;
 		font-weight: 500;
 	}
-	.event-link {
-		color: #4caf50;
-		font-weight: 600;
-		font-size: 0.85rem;
-	}
 	.dividend-date {
 		font-size: 0.85rem;
 		color: #ccc;
@@ -2123,19 +2118,6 @@
 	.event-actions {
 		display: flex;
 		gap: 0.5rem;
-	}
-	.add-context-btn {
-		background: var(--ui-bg-element, #333);
-		border: 1px solid var(--ui-border, #444);
-		color: var(--text-secondary, #aaa);
-		padding: 0.3rem 0.6rem;
-		font-size: 0.8rem;
-		border-radius: 0.25rem;
-		cursor: pointer;
-		transition: all 0.2s ease;
-	}	.add-context-btn:hover {
-		border-color: var(--accent-color, #3a8bf7);
-		color: var(--text-primary, #fff);
 	}
 	/* Sleek button and filing styles */
 	.btn {
@@ -2148,9 +2130,6 @@
 		font-weight: 600;
 		text-decoration: none;
 		transition: background-color 0.2s ease, color 0.2s ease;
-	}
-	.btn svg {
-		margin-right: 0.25rem;
 	}
 	.btn-primary {
 		background-color: var(--accent-color, #3a8bf7);
