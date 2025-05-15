@@ -1,9 +1,9 @@
-package marketData
+package marketdata
 
 import (
 	"backend/internal/data"
-    "backend/internal/data/polygon"
-    "backend/internal/data/postgres"
+	"backend/internal/data/polygon"
+	"backend/internal/data/postgres"
 	"context"
 	"fmt"
 	"math"
@@ -15,13 +15,14 @@ import (
 )
 
 func UpdateDailyOHLCV(conn *data.Conn) error {
-	start := time.Now()
+	//start := time.Now()
+
 	defer func() {
-		fmt.Printf("OHLCV update completed in %v\n", time.Since(start))
+		////fmt.Printf("OHLCV update completed in %v\n", time.Since(start))
 	}()
 
 	today := time.Now().Format("2006-01-02")
-	fmt.Println("Starting daily ohlcv update for today:", today)
+	////fmt.Println("Starting daily ohlcv update for today:", today)
 	if time.Now().Hour() < 17 {
 		today = time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	}
@@ -32,7 +33,7 @@ func UpdateDailyOHLCV(conn *data.Conn) error {
 
 	maxDateRows, err := conn.DB.Query(ctx, "SELECT MAX(timestamp) FROM ohlcv_1d")
 	if err != nil {
-		fmt.Println("Error getting max date in ohlcv table:", err)
+		////fmt.Println("Error getting max date in ohlcv table:", err)
 		return err
 	}
 	defer maxDateRows.Close()
@@ -45,7 +46,7 @@ func UpdateDailyOHLCV(conn *data.Conn) error {
 		hasRows = true
 		err = maxDateRows.Scan(&nullableMaxDate)
 		if err != nil {
-			fmt.Println("Error getting max date in ohlcv table:", err)
+			////fmt.Println("Error getting max date in ohlcv table:", err)
 			return err
 		}
 		if nullableMaxDate != nil {
@@ -56,11 +57,11 @@ func UpdateDailyOHLCV(conn *data.Conn) error {
 	// Set default date if no valid max date was found
 	if !hasRows || nullableMaxDate == nil || maxDate.IsZero() {
 		maxDate = time.Date(2003, 10, 1, 0, 0, 0, 0, time.UTC)
-		fmt.Println("No existing data found, starting from default date:", maxDate.Format("2006-01-02"))
+		////fmt.Println("No existing data found, starting from default date:", maxDate.Format("2006-01-02"))
 	}
 
 	if maxDate.Format("2006-01-02") == today {
-		fmt.Println("Max date in ohlcv table is today, skipping update")
+		////fmt.Println("Max date in ohlcv table is today, skipping update")
 		return nil
 	}
 
@@ -77,14 +78,11 @@ func UpdateDailyOHLCV(conn *data.Conn) error {
 	}
 
 	if len(dates) == 0 {
-		fmt.Println("No dates to process")
+		////fmt.Println("No dates to process")
 		return nil
 	}
 
-	fmt.Printf("Processing %d dates from %s to %s\n",
-		len(dates),
-		dates[0].Format("2006-01-02"),
-		dates[len(dates)-1].Format("2006-01-02"))
+	////fmt.Printf("Processing %d dates from %s to %s\n", len(dates), dates[0].Format("2006-01-02"), dates[len(dates)-1].Format("2006-01-02"))
 
 	// Use a sync.Map for thread-safe access to the security cache
 	var securityCache sync.Map
@@ -102,7 +100,7 @@ func UpdateDailyOHLCV(conn *data.Conn) error {
 	for _, date := range dates {
 		// Acquire semaphore
 		if err := sem.Acquire(globalCtx, 1); err != nil {
-			fmt.Printf("Failed to acquire semaphore: %v\n", err)
+			////fmt.Printf("Failed to acquire semaphore: %v\n", err)
 			break
 		}
 
@@ -111,29 +109,28 @@ func UpdateDailyOHLCV(conn *data.Conn) error {
 			// Add panic recovery
 			defer func() {
 				if r := recover(); r != nil {
-					fmt.Printf("Recovered from panic processing date %s: %v\n",
-						date.Format("2006-01-02"), r)
+					////fmt.Printf("Recovered from panic processing date %s: %v\n", date.Format("2006-01-02"), r)
 					errorCh <- fmt.Errorf("panic processing date %s: %v",
 						date.Format("2006-01-02"), r)
 				}
 			}()
 			defer wg.Done()
 			defer sem.Release(1)
-dateStr := date.Format("2006-01-02")
+			dateStr := date.Format("2006-01-02")
 
 			// Create context with timeout for this date's processing
 			ctx, cancel := context.WithTimeout(globalCtx, 20*time.Second)
 			defer cancel()
 
 			// Get OHLCV data for this date
-			ohlcvResponse, err := polygon.GetDailyOHLCV(conn.Polygon, dateStr, ctx)
+			ohlcvResponse, err := polygon.GetDailyOHLCV(ctx, conn.Polygon, dateStr)
 			if err != nil {
 				errorCh <- fmt.Errorf("error getting OHLCV for %s: %w", dateStr, err)
 				return
 			}
 
 			if ohlcvResponse == nil || ohlcvResponse.ResultsCount == 0 {
-				fmt.Printf("No data found for date: %s\n", dateStr)
+				////fmt.Printf("No data found for date: %s\n", dateStr)
 				return
 			}
 
@@ -152,7 +149,7 @@ dateStr := date.Format("2006-01-02")
 
 	// Check if any errors occurred
 	for err := range errorCh {
-		fmt.Println(err)
+		////fmt.Println(err)
 		return err // Return first error
 	}
 
@@ -233,14 +230,17 @@ func storeDailyOHLCVParallel(conn *data.Conn, ohlcvResponse *models.GetGroupedDa
 			}
 
 			// Ensure transaction is handled properly
-			committed := false
-			defer func() {
-				if !committed {
-					if rbErr := tx.Rollback(context.Background()); rbErr != nil {
-						fmt.Printf("Error rolling back transaction: %v\n", rbErr)
-					}
-				}
-			}()
+			//committed := false
+			/*
+							//defer func() {
+								if !committed {
+									if rbErr := tx.Rollback(context.Background()); rbErr != nil {
+										////fmt.Printf("Error rolling back transaction: %v\n", rbErr)
+				                        //return rbErr
+									}
+								}
+							//}()
+			*/
 
 			// Collect all security IDs first
 			recordsToProcess := make([]struct {
@@ -341,7 +341,7 @@ func storeDailyOHLCVParallel(conn *data.Conn, ohlcvResponse *models.GetGroupedDa
 					startIdx, endIdx, err)
 				return
 			}
-			committed = true
+			//committed = true
 
 		}(i)
 	}
@@ -388,7 +388,7 @@ func batchPreloadTickers(conn *data.Conn, tickers map[string]bool, date time.Tim
 
 	rows, err := conn.DB.Query(ctx, query, tickerList, dateStr)
 	if err != nil {
-		fmt.Printf("Warning: Failed to batch preload securities: %v\n", err)
+		////fmt.Printf("Warning: Failed to batch preload securities: %v\n", err)
 		return
 	}
 	defer rows.Close()
@@ -398,7 +398,7 @@ func batchPreloadTickers(conn *data.Conn, tickers map[string]bool, date time.Tim
 		var ticker string
 		var id int
 		if err := rows.Scan(&ticker, &id); err != nil {
-			fmt.Printf("Warning: Error scanning security: %v\n", err)
+			////fmt.Printf("Warning: Error scanning security: %v\n", err)
 			continue
 		}
 

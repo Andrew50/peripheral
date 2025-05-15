@@ -5,8 +5,6 @@ import (
 	"backend/internal/data/utils"
 	"container/list"
 	"encoding/json"
-	"fmt"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,7 +28,7 @@ type ReplayData struct {
 	data         *list.List
 	refilling    bool
 	baseDataType string
-	securityId   int
+	securityID   int
 }
 
 // Client represents a structure for handling Client data.
@@ -71,9 +69,8 @@ func getChannelNameType(timestamp int64) string {
 
 	if utils.IsTimestampRegularHours(time.Unix(timestamp/1000, 0)) { //might not need / 1000
 		return "regular"
-	} else {
-		return "extended"
 	}
+	return "extended"
 }
 
 // AlertMessage represents a structure for handling AlertMessage data.
@@ -94,12 +91,10 @@ func SendAlertToUser(userID int, alert AlertMessage) {
 		client, ok := UserToClient[userID]
 		UserToClientMutex.RUnlock()
 		if !ok {
-			fmt.Println("client not found")
+			////fmt.Println("client not found")
 			return
 		}
 		client.send <- jsonData
-	} else {
-		fmt.Println("Error marshaling alert:", err)
 	}
 }
 
@@ -127,7 +122,7 @@ func SendFunctionStatus(userID int, userMessage string) {
 
 	jsonData, err := json.Marshal(statusUpdate)
 	if err != nil {
-		fmt.Printf("Error marshaling function status update: %v\n", err)
+		////fmt.Printf("Error marshaling function status update: %v\n", err)
 		return
 	}
 
@@ -136,18 +131,18 @@ func SendFunctionStatus(userID int, userMessage string) {
 	UserToClientMutex.RUnlock()
 
 	if !ok {
-		fmt.Printf("SendFunctionStatus: client not found for userID: %d\n", userID)
+		////fmt.Printf("SendFunctionStatus: client not found for userID: %d\n", userID)
 		return
 	}
 
 	// Send the update non-blockingly
 	select {
 	case client.send <- jsonData:
-		fmt.Printf("Sent status message to user %d: '%s'\n", userID, messageToSend)
+		////fmt.Printf("Sent status message to user %d: '%s'\n", userID, messageToSend)
 	default:
 		// This might happen if the client's send buffer is full or the connection is closing.
 		// It's usually okay to just drop the status update in this case.
-		fmt.Printf("SendFunctionStatus: send channel blocked or closed for userID: %d. Dropping status update.\n", userID)
+		////fmt.Printf("SendFunctionStatus: send channel blocked or closed for userID: %d. Dropping status update.\n", userID)
 	}
 }
 
@@ -155,8 +150,8 @@ func (c *Client) writePump() {
 	// ticker := time.NewTicker(pingPeriod) // Keep connection alive if needed
 	defer func() {
 		// ticker.Stop() // Stop the ticker if used
-		c.ws.Close() // Ensure connection is closed ONLY here on exit
-		fmt.Println("writePump exiting, connection closed")
+		_ = c.ws.Close()
+		////fmt.Println("writePump exiting, connection closed")
 	}()
 	for {
 		select {
@@ -164,25 +159,25 @@ func (c *Client) writePump() {
 			// c.ws.SetWriteDeadline(time.Now().Add(writeWait)) // Set deadline if needed
 			if !ok {
 				// The send channel was closed. Tell the client.
-				fmt.Println("send channel closed, sending close message")
-				c.ws.WriteMessage(websocket.CloseMessage, []byte{})
+				////fmt.Println("send channel closed, sending close message")
+				_ = c.ws.WriteMessage(websocket.CloseMessage, []byte{})
 				return // Exit writePump
 			}
 
 			if err := c.ws.WriteMessage(websocket.TextMessage, message); err != nil {
-				fmt.Println("writePump error:", err)
+				////fmt.Println("writePump error:", err)
 				return // Exit writePump on write error
 			}
 		/* // Example ping logic if needed
 		case <-ticker.C:
 			// c.ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.ws.WriteMessage(websocket.PingMessage, nil); err != nil {
-				fmt.Println("writePump ping error:", err)
+				////fmt.Println("writePump ping error:", err)
 				return // Exit writePump on ping error
 			}
 		*/
 		case <-c.done: // Add a way to explicitly stop writePump if needed elsewhere
-			fmt.Println("writePump received done signal")
+			////fmt.Println("writePump received done signal")
 			return
 		}
 	}
@@ -204,11 +199,7 @@ func (c *Client) readPump(conn *data.Conn) {
 	for {
 		_, message, err := c.ws.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				fmt.Println("4kltyvk, WebSocket read error:", err)
-			} else {
-				fmt.Println("WebSocket read error (expected close?):", err)
-			}
+			////fmt.Println("4kltyvk, WebSocket read error:", err)
 			break // Exit readPump loop on any error
 		}
 
@@ -224,11 +215,10 @@ func (c *Client) readPump(conn *data.Conn) {
 			ExtendedHours *bool    `json:"extendedHours,omitempty"`
 		}
 		if err := json.Unmarshal(message, &clientMsg); err != nil {
-			fmt.Println("Invalid message format", err)
+			////fmt.Println("Invalid message format", err)
 			continue
 		}
-		os.Stdout.Sync()
-		//fmt.Printf("clientMsg.Action: %v %v\n", clientMsg.Action, clientMsg.ChannelName)
+		//////fmt.Printf("clientMsg.Action: %v %v\n", clientMsg.Action, clientMsg.ChannelName)
 		switch clientMsg.Action {
 		case "subscribe-sec-filings":
 			c.subscribeSECFilings(conn)
@@ -247,11 +237,9 @@ func (c *Client) readPump(conn *data.Conn) {
 				c.unsubscribeRealtime(clientMsg.ChannelName)
 			}
 		case "replay":
-			fmt.Println("replay request")
+			////fmt.Println("replay request")
 			if !c.replayActive {
-				if clientMsg.Timestamp == nil {
-					fmt.Println("ERR-------------------------nil timestamp")
-				} else {
+				if clientMsg.Timestamp != nil {
 					c.simulatedTime = *(clientMsg.Timestamp)
 					c.realtimeToReplay()
 				}
@@ -263,7 +251,7 @@ func (c *Client) readPump(conn *data.Conn) {
 		case "speed":
 			c.setReplaySpeed(*(clientMsg.Speed))
 		case "realtime":
-			fmt.Println("realtime request")
+			////fmt.Println("realtime request")
 			if c.replayActive {
 				c.replayToRealtime()
 			}
@@ -276,13 +264,13 @@ func (c *Client) readPump(conn *data.Conn) {
 				c.replayExtendedHours = *(clientMsg.ExtendedHours)
 			}
 		default:
-			fmt.Println("Unknown Action:", clientMsg.Action)
+			////fmt.Println("Unknown Action:", clientMsg.Action)
 		}
 	}
 }
 
 func (c *Client) realtimeToReplay() {
-	fmt.Printf("replay started at %v\n", c.simulatedTime)
+	////fmt.Printf("replay started at %v\n", c.simulatedTime)
 	c.mu.Lock()
 	c.replayActive = true
 	c.replayPaused = false
@@ -291,7 +279,7 @@ func (c *Client) realtimeToReplay() {
 	c.lastTickTime = time.Now()
 	c.mu.Unlock()
 	for channelName := range channelSubscribers {
-		fmt.Println(channelName)
+		////fmt.Println(channelName)
 		if _, isSubscribed := channelSubscribers[channelName][c]; isSubscribed {
 			c.unsubscribeRealtime(channelName)
 			c.subscribeReplay(channelName)
@@ -409,10 +397,8 @@ func (c *Client) removeSubscribedChannel(channelName string) {
 func incListeners(channelName string) {
 	v, _ := channelSubscriberCounts.LoadOrStore(channelName, &atomic.Int64{})
 	v.(*atomic.Int64).Add(1)
-	fmt.Printf("incListeners: %s, %d\n", channelName, v.(*atomic.Int64).Load())
 }
 func decListeners(channelName string) {
-	fmt.Printf("decListeners: %s\n", channelName)
 	if v, ok := channelSubscriberCounts.Load(channelName); ok {
 		if v.(*atomic.Int64).Add(-1) <= 0 {
 			channelSubscriberCounts.Delete(channelName)
