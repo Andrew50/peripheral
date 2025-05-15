@@ -68,7 +68,6 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		// Create a connection pool configuration
 		poolConfig, err := pgxpool.ParseConfig(dbURL)
 		if err != nil {
-			//log.Printf("Unable to parse pool config: %v\n", err)
 			time.Sleep(5 * time.Second)
 			continue
 		}
