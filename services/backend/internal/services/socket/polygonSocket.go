@@ -169,6 +169,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				nextDispatch, exists := nextDispatchTimes.times[msg.Symbol]
 				nextDispatchTimes.RUnlock()
 				// Only append tick if aggregates are initialized
+				//////fmt.Println("debug: alerts.IsAggsInitialized()", alerts.IsAggsInitialized())
 
 				//}
 				if !exists || now.After(nextDispatch) {
