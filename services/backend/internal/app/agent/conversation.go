@@ -140,7 +140,7 @@ func GetConversationFromCache(ctx context.Context, conn *data.Conn, userID int) 
 		return nil, fmt.Errorf("failed to deserialize conversation data: %w", err)
 	}
 
-	var tokenCount int32 = 0
+	var tokenCount int32
 	// Filter out expired messages
 	now := time.Now()
 	originalCount := len(conversationData.Messages)
