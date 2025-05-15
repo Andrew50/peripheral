@@ -1,0 +1,393 @@
+// File: update_sectors.go
+//
+// A faithful Go rewrite of the original Python `update_sectors` script.
+// – Keeps identical batching / worker‑count logic.
+// – Randomised jitter + extra 200 ms pause to respect Yahoo's informal rate‑limit.
+// – Uses the unofficial "quoteSummary?modules=assetProfile" endpoint directly
+//   instead of `yfinance`; no external Go Yahoo‑Finance wrapper required.
+//
+// Requirements
+// ---------------------------------------------------------------------------
+// • Go 1.21+
+// • A `conn` package (conn.go) exposing:
+//
+//      type Conn struct {
+//          DB *sql.DB
+//      }
+//
+//   pointing at a PostgreSQL database that contains a `securities` table
+//   with columns: ticker (text), sector (text), industry (text), maxDate (date).
+//
+// Usage
+// ---------------------------------------------------------------------------
+//    stats, err := UpdateSectors(context.Background(), myConn)
+//    if err != nil { log.Fatal(err) }
+//    ////fmt.Printf("%+v\n", stats)
+// ---------------------------------------------------------------------------
+
+package securities
+
+import (
+	"context"
+	"crypto/rand"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math/big"
+
+	// "log"
+	"net/http"
+	"os"
+	"runtime"
+	"strings"
+	"sync"
+	"time"
+
+	"backend/internal/data" // adjust import path to where conn.go lives
+
+	"github.com/jackc/pgx/v4/pgxpool"
+)
+
+// --------------------------- data types ---------------------------------- //
+
+type security struct {
+	Ticker          string
+	CurrentSector   sql.NullString
+	CurrentIndustry sql.NullString
+}
+
+// StatBlock defines a structure for holding statistics.
+type StatBlock struct {
+	CurrentRecords   int
+	NewRecords       int
+	UpdatedRecords   int
+	FailedRecords    int
+	UnchangedRecords int
+}
+
+type result struct {
+	Ticker, NewSector, NewIndustry string
+	Err                            error
+}
+
+// --------------------------- public entry -------------------------------- //
+
+func UpdateSectors(ctx context.Context, c *data.Conn) (StatBlock, error) {
+	var stats StatBlock
+	var newSectorIDs []string
+	var updatedSectorIDs []string
+
+	// ------------------------------------------------------------------ //
+	// 1. Fetch distinct active tickers whose maxDate IS NULL              //
+	// ------------------------------------------------------------------ //
+	rows, err := c.DB.Query(ctx, `
+		SELECT DISTINCT ticker, sector, industry
+		FROM securities
+		WHERE maxDate IS NULL`)
+	if err != nil {
+		return stats, fmt.Errorf("query securities: %w", err)
+	}
+	defer rows.Close()
+
+	var all []security
+	for rows.Next() {
+		var s security
+		if err := rows.Scan(&s.Ticker, &s.CurrentSector, &s.CurrentIndustry); err != nil {
+			return stats, fmt.Errorf("scan row: %w", err)
+		}
+		all = append(all, s)
+	}
+	if err := rows.Err(); err != nil {
+		return stats, err
+	}
+
+	stats.CurrentRecords = len(all)
+	if stats.CurrentRecords == 0 {
+		//log.Println("update_sectors: nothing to do")
+		return stats, nil
+	}
+
+	// ------------------------------------------------------------------ //
+	// 2. Optional batch‑size truncation (env: UPDATE_SECTORS_BATCH_SIZE) //
+	// ------------------------------------------------------------------ //
+	batch := envInt("UPDATE_SECTORS_BATCH_SIZE", 100)
+	if len(all) > batch {
+		//log.Printf("Processing %d securities in batches of %d\n", len(all), batch)
+		all = all[:batch]
+		stats.CurrentRecords = batch
+	}
+
+	// ------------------------------------------------------------------ //
+	// 3. Worker‑pool configuration                                       //
+	// ------------------------------------------------------------------ //
+	// Reduce maximum concurrent workers to 2 (or even 1 for sequential processing)
+	workerCount := minInt(
+		2, // <-- Reduced from 4
+		runtime.NumCPU(),
+		maxInt(1, len(all)/2),
+	)
+
+	//log.Printf("Starting update_sectors with %d workers for %d securities\n", workerCount, len(all))
+
+	jobs := make(chan security)
+	results := make(chan result)
+
+	var wg sync.WaitGroup
+	wg.Add(workerCount)
+	for i := 0; i < workerCount; i++ {
+		go worker(ctx, &wg, jobs, results)
+	}
+
+	// Pump jobs
+	go func() {
+		for _, s := range all {
+			jobs <- s
+		}
+		close(jobs)
+	}()
+
+	// Collect results
+	done := make(chan struct{})
+	go func() {
+		for r := range results {
+			if r.Err != nil {
+				//log.Printf("Failed to update %s: %v\n", r.Ticker, r.Err)
+				stats.FailedRecords++
+				continue
+			}
+			curr := findCurrent(all, r.Ticker)
+			if shouldUpdate(curr, r) {
+				if err := applyUpdate(ctx, c.DB, r); err != nil {
+					//log.Printf("DB update error for %s: %v\n", r.Ticker, err)
+					stats.FailedRecords++
+				} else {
+					stats.UpdatedRecords++
+					newSectorIDs = append(newSectorIDs, r.Ticker)
+				}
+			} else {
+				stats.UnchangedRecords++
+				updatedSectorIDs = append(updatedSectorIDs, r.Ticker)
+			}
+		}
+		done <- struct{}{}
+	}()
+
+	// Wait for workers, then close results channel
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+
+	// After processing all tickers, update the dynamic validation sets in strategies
+	// Use a background context as this is part of the job's cleanup/finalization
+	updateCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // Add a timeout
+	defer cancel()
+
+	if err := strategies.UpdateDynamicSet(updateCtx, c, "sectors"); err != nil {
+        return err
+	}
+	if err := strategies.UpdateDynamicSet(updateCtx, c, "industries"); err != nil {
+        return err
+	}
+
+	return stats, nil
+}
+
+// --------------------------- worker logic -------------------------------- //
+
+func worker(ctx context.Context, wg *sync.WaitGroup, jobs <-chan security, out chan<- result) {
+	defer wg.Done()
+
+	for s := range jobs {
+		out <- fetchTickerInfo(ctx, s)
+	}
+}
+
+func fetchTickerInfo(ctx context.Context, s security) result {
+	// Initial jitter delay before first request attempt
+	// Increase base jitter delay, e.g., 500ms - 900ms
+	var jitter time.Duration
+	n, errCryptoRand := rand.Int(rand.Reader, big.NewInt(400))
+	if errCryptoRand != nil {
+		// Fallback or log error - using a default jitter for simplicity here
+		jitter = time.Duration(500+200) * time.Millisecond // Default: 500 + (400/2)
+		// log.Printf("Error generating crypto/rand jitter, using default: %v", errCryptoRand)
+	} else {
+		jitter = time.Duration(n.Int64()+500) * time.Millisecond
+	}
+	time.Sleep(jitter) // <-- Base increased from 100 to 500
+
+	sector, industry, err := queryYahoo(ctx, s.Ticker)
+	// Only sleep after successful requests or non-retryable errors
+	// This avoids unnecessary waits when the retry mechanism already includes backoff delays
+	if err == nil || !strings.Contains(err.Error(), "retryable status") {
+		// Increase sleep significantly, e.g., to 2 seconds (total average delay ~2.3s with jitter)
+		time.Sleep(2000 * time.Millisecond) // <-- Increased from 800
+	}
+
+	if err != nil {
+		// Return current values on error, mirroring Python behaviour
+		if s.CurrentSector.Valid {
+			sector = s.CurrentSector.String
+		}
+		if s.CurrentIndustry.Valid {
+			industry = s.CurrentIndustry.String
+		}
+	}
+	return result{
+		Ticker:      s.Ticker,
+		NewSector:   sector,
+		NewIndustry: industry,
+		Err:         err,
+	}
+}
+
+// --------------------------- Yahoo Finance ------------------------------- //
+
+func queryYahoo(ctx context.Context, ticker string) (sector, industry string, err error) {
+	url := fmt.Sprintf("https://query2.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=assetProfile", ticker)
+
+	// Retry configuration
+	maxRetries := 3
+	initialBackoff := 3 * time.Second
+
+	var resp *http.Response
+	var lastErr error
+
+	// Retry loop with exponential backoff
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// Calculate backoff duration with exponential increase and some jitter
+			backoff := initialBackoff * time.Duration(1<<(attempt-1))
+			jitterRange := int64(backoff / 4)
+			var currentJitter time.Duration
+			if jitterRange > 0 {
+				nJitter, errCryptoRand := rand.Int(rand.Reader, big.NewInt(jitterRange))
+				if errCryptoRand != nil {
+					// Fallback or log error
+					currentJitter = time.Duration(jitterRange / 2)
+					// log.Printf("Error generating crypto/rand jitter for backoff, using default: %v", errCryptoRand)
+				} else {
+					currentJitter = time.Duration(nJitter.Int64())
+				}
+			}
+			waitTime := backoff + currentJitter
+			// Wait before retrying
+			select {
+			case <-time.After(waitTime):
+				// Continue with retry
+			case <-ctx.Done():
+				return "", "", fmt.Errorf("context cancelled during retry: %w", ctx.Err())
+			}
+		}
+
+		// Create a new request for each attempt
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		req.Header.Set("User-Agent", "Go-http-client/1.1")
+
+		resp, lastErr = http.DefaultClient.Do(req)
+		if lastErr != nil {
+			continue // Network error, retry
+		}
+
+		// Check if we got a retryable status code (429 or 5xx)
+		if resp.StatusCode == 429 || (resp.StatusCode >= 500 && resp.StatusCode < 600) {
+			_ = resp.Body.Close() // Close the body before continuing
+			lastErr = fmt.Errorf("retryable status: %s", resp.Status)
+			continue // Retryable status code, retry
+		}
+
+		// If we get here, we either have a successful response or a non-retryable error
+		break
+	}
+
+	// Handle final error state
+	if lastErr != nil {
+		return "", "", lastErr
+	}
+
+	// Handle non-200 responses that weren't retried or still failed after retries
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", "", fmt.Errorf("non‑200 status: %s", resp.Status)
+	}
+
+	var body struct {
+		QuoteSummary struct {
+			Result []struct {
+				AssetProfile struct {
+					Sector   string `json:"sector"`
+					Industry string `json:"industry"`
+				} `json:"assetProfile"`
+			} `json:"result"`
+			Error json.RawMessage `json:"error"`
+		} `json:"quoteSummary"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return "", "", err
+	}
+	if len(body.QuoteSummary.Result) == 0 {
+		return "", "", errors.New("empty result set")
+	}
+	ap := body.QuoteSummary.Result[0].AssetProfile
+	return ap.Sector, ap.Industry, nil
+}
+
+// --------------------------- DB helpers ---------------------------------- //
+
+func shouldUpdate(curr security, res result) bool {
+	sectorChanged := !curr.CurrentSector.Valid || curr.CurrentSector.String != res.NewSector
+	industryChanged := !curr.CurrentIndustry.Valid || curr.CurrentIndustry.String != res.NewIndustry
+	return sectorChanged || industryChanged
+}
+
+func applyUpdate(ctx context.Context, db *pgxpool.Pool, r result) error {
+	_, err := db.Exec(ctx, `
+		UPDATE securities
+		SET sector = $1, industry = $2
+		WHERE ticker = $3`, r.NewSector, r.NewIndustry, r.Ticker)
+	return err
+}
+
+func findCurrent(list []security, ticker string) security {
+	for _, s := range list {
+		if s.Ticker == ticker {
+			return s
+		}
+	}
+	return security{Ticker: ticker} // should not happen
+}
+
+// --------------------------- utilities ----------------------------------- //
+
+func envInt(key string, def int) int {
+	if v, ok := os.LookupEnv(key); ok {
+		var i int
+		if _, err := fmt.Sscanf(v, "%d", &i); err == nil && i > 0 {
+			return i
+		}
+	}
+	return def
+}
+
+func minInt(a int, rest ...int) int {
+	m := a
+	for _, v := range rest {
+		if v < m {
+			m = v
+		}
+	}
+	return m
+}
+
+func maxInt(a int, rest ...int) int {
+	m := a
+	for _, v := range rest {
+		if v > m {
+			m = v
+		}
+	}
+	return m
+}

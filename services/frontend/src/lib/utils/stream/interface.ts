@@ -3,28 +3,29 @@ import type { SubscriptionRequest, StreamCallback } from './socket'
 
 import { DateTime } from 'luxon';
 import { eventChart } from '$lib/features/chart/interface';
-import { streamInfo } from '$lib/core/stores';
+import { streamInfo } from '$lib/utils/stores/stores';
 import { chartEventDispatcher } from '$lib/features/chart/interface';
 import {
 	getReferenceStartTimeForDateMilliseconds,
 	isOutsideMarketHours,
 	ESTSecondstoUTCMillis,
 	getRealTimeTime
-} from '$lib/core/timestamp';
-import type { ReplayInfo } from '$lib/core/stores';
-import { type Instance } from '$lib/core/types';
+} from '$lib/utils/helpers/timestamp';
+import type { ReplayInfo } from '$lib/utils/stores/stores';
+import { type Instance } from '$lib/utils/types/types';
 import { get } from 'svelte/store';
 import type { StreamData, ChannelType, TimeType } from './socket';
+import { latestValue } from './socket';
 export function releaseStream(channelName: string, callback: StreamCallback) {
 	let callbacks = activeChannels.get(channelName);
-	if (callbacks) {
-		callbacks = callbacks.filter((v) => v !== callback);
-		if (callbacks.length === 0) {
+	if (!callbacks) { return; }
+	callbacks = callbacks.filter((v) => v !== callback);
+	if (callbacks.length === 0) {
 			activeChannels.delete(channelName);
+			latestValue.delete(channelName);
 			unsubscribe(channelName);
 		} else {
-			activeChannels.set(channelName, callbacks);
-		}
+		activeChannels.set(channelName, callbacks);
 	}
 }
 
@@ -36,18 +37,21 @@ export function addStream<T extends StreamData>(
 	if (!instance.securityId) return () => { };
 	const channelName = `${instance.securityId}-${channelType}`;
 	const callbacks = activeChannels.get(channelName);
-
+	const add = () => {
+		const list = activeChannels.get(channelName); 
+		if(!list?.includes(callback as StreamCallback)) list?.push(callback as StreamCallback);
+	};
 	// If callbacks exist, this channel is already active
 	if (callbacks) {
-		if (!callbacks.includes(callback as StreamCallback)) {
-			callbacks.push(callback as StreamCallback);
-			// Always try to subscribe - the socket.ts will handle pending subscriptions
-			subscribe(channelName);
-		}
+		add();
 	} else {
 		// New channel, set up normally
 		activeChannels.set(channelName, [callback as StreamCallback]);
 		subscribe(channelName);
+	}
+	const cached = latestValue.get(channelName);
+	if (cached) {
+		queueMicrotask(() => callback(cached as T));
 	}
 
 	return () => releaseStream(channelName, callback as StreamCallback);
@@ -194,5 +198,5 @@ export function releaseGlobalSECFilingsStream(callback: StreamCallback) {
 	const channelName = 'sec-filings';
 	releaseStream(channelName, callback);
 }
-
 // /streamInterface.ts
+
