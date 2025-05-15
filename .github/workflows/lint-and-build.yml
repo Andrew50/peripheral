@@ -188,8 +188,8 @@ jobs:
     needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_backend_changes == 'true' }}
     container:
-      image: golang:1.24 # Changed to standard Go image
-    runs-on: ubuntu-latest # Still specify runs-on for runner selection, container runs on this
+      image: billin19/ci-image:latest # Use custom Docker image
+    runs-on: ubuntu-latest
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     permissions:
       contents: write
@@ -206,13 +206,6 @@ jobs:
 
       - name: Mark the Git workspace as safe
         run: git config --global --add safe.directory "${GITHUB_WORKSPACE:-$(pwd)}"
-
-      - name: Install Go CI tools
-        run: |
-          CGO_ENABLED=0 go install honnef.co/go/tools/cmd/staticcheck@latest
-          CGO_ENABLED=0 go install github.com/securego/gosec/v2/cmd/gosec@latest
-          CGO_ENABLED=0 go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-          echo "/go/bin" >> $GITHUB_PATH # Ensure installed tools are in PATH
 
       - name: Cache Go modules and build tools
         uses: actions/cache@v4
@@ -296,8 +289,8 @@ jobs:
     needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_frontend_changes == 'true' }}
     container:
-      image: node:18
-    runs-on: ubuntu-latest # Still specify runs-on for runner selection
+      image: billin19/ci-image:latest # Use custom Docker image
+    runs-on: ubuntu-latest
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     steps:
       - uses: actions/checkout@v3
@@ -305,32 +298,23 @@ jobs:
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
           fetch-depth: 0
 
-      - name: Install pnpm
-        run: npm install -g pnpm@8
-
-      # Assuming pnpm is installed in the container image.
-      # Node and project dependencies might also be pre-installed in the image.
-      # If pnpm needs to manage its store, cache it:
-      - name: Cache pnpm store
+      - name: Cache npm packages
         uses: actions/cache@v4
         with:
-          path: ~/.pnpm-store # Default pnpm store path
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('services/frontend/pnpm-lock.yaml') }}
+          path: ~/.npm # Cache npm's global cache directory
+          key: ${{ runner.os }}-npm-cache-${{ hashFiles('services/frontend/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+            ${{ runner.os }}-npm-cache-
 
       - name: Install frontend dependencies
         working-directory: services/frontend
         run: |
-          # Assuming pnpm is pre-installed in the container
-          # Use --frozen-lockfile for CI, similar to npm ci
-          pnpm install --frozen-lockfile
+          # Using npm ci for reliable installs from package-lock.json
+          npm ci
           
           # Install additional test dependencies if not already in package.json as devDependencies
-          # If they are in package.json, the above `pnpm install` handles them.
-          # The original script installed these explicitly:
           echo "Ensuring testing libraries are available..."
-          pnpm add --save-dev jest@29 @types/jest ts-jest@29 svelte-jester@2 @testing-library/svelte @testing-library/jest-dom jsdom
+          npm install --save-dev jest@29 @types/jest ts-jest@29 svelte-jester@2 @testing-library/svelte @testing-library/jest-dom jsdom
 
           # Create Jest config if it doesn't exist (original logic)
           if [ ! -f jest.config.js ] && [ ! -f jest.config.cjs ]; then # Check for both
@@ -380,10 +364,9 @@ jobs:
       - name: Run frontend tests
         working-directory: services/frontend
         run: |
-          echo "Running frontend tests with pnpm..."
-          # Assuming 'test' script in package.json runs jest, or run jest directly
-          # pnpm test OR pnpm exec jest
-          pnpm exec jest --config jest.config.cjs # Explicitly use the cjs config
+          echo "Running frontend tests with npm/npx..."
+          # Assuming 'test' script in package.json runs jest, or run jest directly via npx
+          npx jest --config jest.config.cjs # Explicitly use the cjs config
         # continue-on-error for this step is handled by job's continue-on-error
 
       - name: Create job summary for Frontend
