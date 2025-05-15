@@ -272,6 +272,8 @@ jobs:
           github.base_ref == 'main' &&
           needs.check-workflow-conditions.outputs.continue_on_error == 'false'
         working-directory: services/backend
+        env:
+          CGO_ENABLED: "1"
         run: |
           echo "Running go test -race..."
           go test -race -count=1 -tags=all ./...
@@ -321,25 +323,22 @@ jobs:
           echo "Ensuring testing libraries are available..."
           npm install --save-dev jest@29 @types/jest ts-jest@29 svelte-jester@2 @testing-library/svelte @testing-library/jest-dom jsdom
 
-          # Create Jest config if it doesn't exist (original logic)
-          if [ ! -f jest.config.js ] && [ ! -f jest.config.cjs ]; then # Check for both
-            echo "Creating Jest configuration file (jest.config.cjs)..."
-            # Using cjs version from original simplified step
-            echo "/** @type {import('jest').Config} */" > jest.config.cjs
-            echo "module.exports = {" >> jest.config.cjs
-            echo "  preset: 'ts-jest'," >> jest.config.cjs
-            echo "  testEnvironment: 'jsdom'," >> jest.config.cjs
-            echo "  setupFilesAfterEnv: ['<rootDir>/jest.setup.cjs']," >> jest.config.cjs # Assuming jest.setup.cjs will be created
-            echo "  transform: {" >> jest.config.cjs
-            echo "    '^.+\\.svelte$': 'svelte-jester'," >> jest.config.cjs
-            echo "    '^.+\\.(ts|js)$': 'ts-jest'" >> jest.config.cjs
-            echo "  }," >> jest.config.cjs
-            echo "  moduleNameMapper: {" >> jest.config.cjs
-            echo "    '^\\$lib/(.*)$': '<rootDir>/src/lib/$1'" >> jest.config.cjs
-            echo "  }," >> jest.config.cjs
-            echo "  moduleFileExtensions: ['js', 'ts', 'svelte']" >> jest.config.cjs
-            echo "};" >> jest.config.cjs
-          fi
+          # Always create the Jest configuration file to ensure consistency
+          echo "Creating Jest configuration file (jest.config.cjs)..."
+          echo "/** @type {import('jest').Config} */" > jest.config.cjs
+          echo "module.exports = {" >> jest.config.cjs
+          echo "  preset: 'ts-jest'," >> jest.config.cjs
+          echo "  testEnvironment: 'jsdom'," >> jest.config.cjs
+          echo "  setupFilesAfterEnv: ['<rootDir>/jest.setup.cjs']," >> jest.config.cjs
+          echo "  transform: {" >> jest.config.cjs
+          echo "    '^.+\.svelte$': 'svelte-jester'," >> jest.config.cjs
+          echo "    '^.+\.(ts|js)$': 'ts-jest'" >> jest.config.cjs
+          echo "  }," >> jest.config.cjs
+          echo "  moduleNameMapper: {" >> jest.config.cjs
+          echo "    '^\$lib/(.*)$': '<rootDir>/src/lib/$1'" >> jest.config.cjs
+          echo "  }," >> jest.config.cjs
+          echo "  moduleFileExtensions: ['js', 'ts', 'svelte']" >> jest.config.cjs
+          echo "};" >> jest.config.cjs
 
       - name: Create simplified Jest configuration and setup
         working-directory: services/frontend
