@@ -46,20 +46,19 @@ FROM ubuntu:22.04
 # 1. System deps for runtime
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      ca-certificates git \
+      ca-certificates git curl \
  && rm -rf /var/lib/apt/lists/*
 
 # 2. Copy Go toolchain + tools from builder
 COPY --from=builder /usr/local/go /usr/local/go
 COPY --from=builder /go /go
 
-# 3. Copy Node.js, npm, npx, and Node modules from frontend-builder stage
-COPY --from=frontend-builder /usr/bin/node /usr/bin/node
-COPY --from=frontend-builder /usr/bin/npm /usr/bin/npm
-COPY --from=frontend-builder /usr/bin/npx /usr/bin/npx
-COPY --from=frontend-builder /usr/lib/node_modules /usr/lib/node_modules
+# 3. Install Node.js directly in the final image
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nodejs \
+ && rm -rf /var/lib/apt/lists/*
 
-# Copy pre-built frontend dependencies (optional, but was in original)
+# Copy pre-built frontend dependencies (from frontend-builder stage)
 COPY --from=frontend-builder /github/workspace/services/frontend \
                                /github/workspace/services/frontend
 
