@@ -50,7 +50,6 @@ func GetStockEdgarFilings(conn *data.Conn, _ int, rawArgs json.RawMessage) (inte
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
-	// Get ticker for the security
 	start := time.UnixMilli(args.Start)
 	end := time.UnixMilli(args.End)
 
