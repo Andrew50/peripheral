@@ -60,7 +60,7 @@ type FunctionResponse struct {
 
 type Citation struct {
 	Title string `json:"title"`
-	Url   string `json:"url"`
+	URL   string `json:"url"`
 }
 
 type GeminiFunctionResponse struct {
@@ -158,13 +158,13 @@ func getGeminiFunctionThinking(ctx context.Context, conn *data.Conn, systemPromp
 			if groundingChunk.Web != nil {
 				citations = append(citations, Citation{
 					Title: groundingChunk.Web.Title,
-					Url:   groundingChunk.Web.URI,
+					URL:   groundingChunk.Web.URI,
 				})
 			}
 			if groundingChunk.RetrievedContext != nil {
 				citations = append(citations, Citation{
 					Title: groundingChunk.RetrievedContext.Title,
-					Url:   groundingChunk.RetrievedContext.URI,
+					URL:   groundingChunk.RetrievedContext.URI,
 				})
 			}
 		}

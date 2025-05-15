@@ -480,7 +480,7 @@ type FilingOptions struct {
 }
 
 // GetStockEdgarFilings retrieves SEC filings for a security with optional filters
-func GetStockEdgarFilings(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+func GetStockEdgarFilings(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args FilingOptions
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -764,7 +764,7 @@ func getFilingQuarter(filing Filing) (string, int) {
 }
 
 // GetEarningsText fetches the latest 10-K or 10-Q filing for a security and extracts the text content
-func GetEarningsText(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+func GetEarningsText(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetEarningsTextArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -887,11 +887,13 @@ func GetEarningsText(conn *data.Conn, userID int, rawArgs json.RawMessage) (inte
 type GetFilingTextArgs struct {
 	URL string `json:"url"`
 }
+
 type GetFilingTextResponse struct {
 	Text string `json:"text"`
 }
 
-func GetFilingText(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+// GetFilingText performs operations related to GetFilingText functionality.
+func GetFilingText(_ *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetFilingTextArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)

@@ -1,9 +1,9 @@
 package strategy
 
 import (
+	"backend/internal/app/chart"
 	"backend/internal/data"
 	"context"
-    "backend/internal/app/chart"
 	"database/sql"
 	"embed"
 	"encoding/json"
@@ -32,7 +32,7 @@ type AnalyzeInstanceFeaturesArgs struct {
 }
 
 // AnalyzeInstanceFeatures analyzes chart data for a specific security and returns Gemini's analysis
-func AnalyzeInstanceFeatures(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func AnalyzeInstanceFeatures(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 
 	/* 1. Parse args */
 	var args AnalyzeInstanceFeaturesArgs
@@ -55,7 +55,7 @@ func AnalyzeInstanceFeatures(conn *data.Conn, userId int, rawArgs json.RawMessag
 	}
 	reqBytes, _ := json.Marshal(chartReq)
 
-	rawResp, err := chart.GetChartData(conn, userId, reqBytes)
+	rawResp, err := chart.GetChartData(conn, userID, reqBytes)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching chart data: %v", err)
 	}
@@ -172,20 +172,20 @@ func AnalyzeInstanceFeatures(conn *data.Conn, userId int, rawArgs json.RawMessag
 
 type CreateStrategyFromNaturalLanguageArgs struct {
 	Query      string `json:"query"`
-	StrategyId int    `json:"strategyId,omitempty"`
+	StrategyID int    `json:"strategyId,omitempty"`
 }
 
-func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json.RawMessage) (any, error) {
+func CreateStrategyFromNaturalLanguage(conn *data.Conn, userID int, rawArgs json.RawMessage) (any, error) {
 	var args CreateStrategyFromNaturalLanguageArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
-	////fmt.Printf("INFO: Starting CreateStrategyFromNaturalLanguage for user %d with query: %q\n", userId, args.Query)
+	////fmt.Printf("INFO: Starting CreateStrategyFromNaturalLanguage for user %d with query: %q\n", userID, args.Query)
 
 	apikey, err := conn.GetGeminiKey()
 	if err != nil {
-		////fmt.Printf("ERROR: Error getting Gemini key for user %d: %v\n", userId, err)
+		////fmt.Printf("ERROR: Error getting Gemini key for user %d: %v\n", userID, err)
 		return nil, fmt.Errorf("error getting gemini key: %v", err)
 	}
 
@@ -231,7 +231,7 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 		result, err := client.Models.GenerateContent(context.Background(), "gemini-2.5-flash-preview-04-17", conversationHistory, config)
 		if err != nil {
 			lastErr = fmt.Errorf("error generating content (attempt %d): %w", attempt+1, err)
-			////fmt.Printf("WARN: Attempt %d/%d for user %d: Gemini content generation failed: %v\n", attempt+1, maxRetries, userId, err)
+			////fmt.Printf("WARN: Attempt %d/%d for user %d: Gemini content generation failed: %v\n", attempt+1, maxRetries, userID, err)
 			// Append error as user message for context? Maybe too noisy. Let's just retry.
 			continue // Retry the API call
 		}
@@ -248,7 +248,7 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 			}
 		} else {
 			lastErr = fmt.Errorf("gemini returned no response candidates (attempt %d)", attempt+1)
-			////fmt.Printf("WARN: Attempt %d/%d for user %d: Gemini returned no response candidates.\n", attempt+1, maxRetries, userId)
+			////fmt.Printf("WARN: Attempt %d/%d for user %d: Gemini returned no response candidates.\n", attempt+1, maxRetries, userID)
 			// Append error message as user turn
 			errorMsg := fmt.Sprintf("Attempt %d failed: Gemini returned no response. Please try again.", attempt+1)
 			// Parts expects []*genai.Part, and we need to create a Part directly
@@ -256,7 +256,7 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 			continue
 		}
 
-		////fmt.Printf("DEBUG: Attempt %d/%d for user %d: Raw Gemini response: %s\n", attempt+1, maxRetries, userId, responseText)
+		////fmt.Printf("DEBUG: Attempt %d/%d for user %d: Raw Gemini response: %s\n", attempt+1, maxRetries, userID, responseText)
 
 		// Extract JSON block
 		jsonBlock := ""
@@ -268,13 +268,13 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 			if jsonCodeBlockEnd != -1 {
 				// Found the closing ```
 				jsonBlock = responseText[jsonCodeBlockStart : jsonCodeBlockStart+jsonCodeBlockEnd]
-				////fmt.Printf("DEBUG: Attempt %d/%d for user %d: Extracted JSON from code block.\n", attempt+1, maxRetries, userId)
+				////fmt.Printf("DEBUG: Attempt %d/%d for user %d: Extracted JSON from code block.\n", attempt+1, maxRetries, userID)
 			}
 		}
 
 		// If not found in code block, fall back to searching for first { and last }
 		if jsonBlock == "" {
-			////fmt.Printf("DEBUG: Attempt %d/%d for user %d: JSON code block not found, falling back to {} search.\n", attempt+1, maxRetries, userId)
+			////fmt.Printf("DEBUG: Attempt %d/%d for user %d: JSON code block not found, falling back to {} search.\n", attempt+1, maxRetries, userID)
 			jsonStartIdx := strings.Index(responseText, "{")
 			jsonEndIdx := strings.LastIndex(responseText, "}")
 			if jsonStartIdx != -1 && jsonEndIdx != -1 && jsonEndIdx > jsonStartIdx {
@@ -284,7 +284,7 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 
 		if jsonBlock == "" {
 			lastErr = fmt.Errorf("no valid JSON block found in Gemini response (attempt %d): %s", attempt+1, responseText)
-			////fmt.Printf("WARN: Attempt %d/%d for user %d: No valid JSON block found in Gemini response.\n", attempt+1, maxRetries, userId)
+			////fmt.Printf("WARN: Attempt %d/%d for user %d: No valid JSON block found in Gemini response.\n", attempt+1, maxRetries, userID)
 			// Append error message as user turn
 			errorMsg := fmt.Sprintf("Attempt %d failed: Could not find a JSON block (neither in ```json ... ``` nor between '{' and '}') in the response. Please ensure the response contains a single, valid JSON object. The response received was:\n%s", attempt+1, responseText)
 			// Parts expects []*genai.Part, and we need to create a Part directly
@@ -293,14 +293,14 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 		}
 
 		// Log the raw JSON block returned by Gemini
-		////fmt.Printf("DEBUG: Attempt %d/%d for user %d: Extracted JSON block: \n%s\n", attempt+1, maxRetries, userId, jsonBlock)
+		////fmt.Printf("DEBUG: Attempt %d/%d for user %d: Extracted JSON block: \n%s\n", attempt+1, maxRetries, userID, jsonBlock)
 
 		jsonBlock = strings.TrimSpace(jsonBlock)
 		// Use the new helper function to unmarshal and validate the entire JSON block
 		name, spec, err := UnmarshalAndValidateNewStrategyInput([]byte(jsonBlock))
 		if err != nil {
 			lastErr = fmt.Errorf("failed to unmarshal or validate Gemini JSON response (attempt %d): %w", attempt+1, err)
-			////fmt.Printf("WARN: Attempt %d/%d for user %d: Failed to unmarshal/validate JSON: %v\n", attempt+1, maxRetries, userId, err)
+			////fmt.Printf("WARN: Attempt %d/%d for user %d: Failed to unmarshal/validate JSON: %v\n", attempt+1, maxRetries, userID, err)
 			// Format error message for the next prompt
 			errorMsg := fmt.Sprintf("Attempt %d failed: Could not parse or validate the JSON structure. Ensure the response is a single JSON object with 'name' (string) and 'spec' (object) fields, and that the spec is valid. Error: %v\nReceived JSON:\n%s\nPlease fix the JSON based on the error and the original query.", attempt+1, err, jsonBlock)
 			// Parts expects []*genai.Part, and we need to create a Part directly
@@ -308,22 +308,22 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 			continue
 		}
 
-		////fmt.Printf("INFO: Attempt %d/%d for user %d: Successfully validated name '%s' and spec.\n", attempt+1, maxRetries, userId, name)
+		////fmt.Printf("INFO: Attempt %d/%d for user %d: Successfully validated name '%s' and spec.\n", attempt+1, maxRetries, userID, name)
 
 		// --- Compile the validated spec to SQL ---
 		_, compileErr := CompileSpecToSQL(spec)
 		if compileErr != nil {
 			// Log the error but proceed with saving the strategy for now.
 			// The user might want to fix the spec manually later.
-			////fmt.Printf("ERROR: User %d: Failed to compile validated spec for strategy '%s' to SQL: %v\n", userId, name, compileErr)
+			////fmt.Printf("ERROR: User %d: Failed to compile validated spec for strategy '%s' to SQL: %v\n", userID, name, compileErr)
 			// Optionally, you could add this error info back into the conversation history
 			// if you wanted Gemini to potentially fix the spec based on compilation failure.
-            return nil, compileErr
-		} 
-        // --- End SQL Compilation ---
+			return nil, compileErr
+		}
+		// --- End SQL Compilation ---
 
 		// If validation succeeds, create the strategy using the validated name and spec
-		strategyId, err := _newStrategy(conn, userId, name, spec)
+		strategyID, err := _newStrategy(conn, userID, name, spec)
 		if err != nil {
 			// This is an internal error, not Gemini's fault, so return directly
 			////fmt.Printf("ie20hifi0: %v\n", err)
@@ -332,35 +332,35 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userId int, rawArgs json
 
 		// Return the successful result
 		return map[string]interface{}{
-			"strategyId": strategyId,
+			"strategyId": strategyID,
 			"name":       name,
 			//"spec":       spec, // Return the validated spec object
 		}, nil
 	}
 
 	// If loop finishes without success
-	////fmt.Printf("ERROR: User %d: Failed to create valid strategy from query %q after %d attempts. Last error: %v\n", userId, args.Query, maxRetries, lastErr)
+	////fmt.Printf("ERROR: User %d: Failed to create valid strategy from query %q after %d attempts. Last error: %v\n", userID, args.Query, maxRetries, lastErr)
 	return nil, fmt.Errorf("failed to create valid strategy after %d attempts: %w", maxRetries, lastErr)
 }
 
 type GetStrategySpecArgs struct {
-	StrategyId int `json:"strategyId"`
+	StrategyID int `json:"strategyId"`
 }
 
-func GetStrategySpec(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetStrategySpec(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetStrategySpecArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-	return _getStrategySpec(conn, args.StrategyId, userId)
+	return _getStrategySpec(conn, args.StrategyID, userID)
 }
 
-func _getStrategySpec(conn *data.Conn, strategyId int, userId int) (json.RawMessage, error) {
+func _getStrategySpec(conn *data.Conn, strategyID int, userID int) (json.RawMessage, error) {
 	var strategyCriteria json.RawMessage
-	////fmt.Println(userId)
+	////fmt.Println(userID)
 	err := conn.DB.QueryRow(context.Background(), `
     SELECT spec
-    FROM strategies WHERE strategyId = $1 and userId = $2`, strategyId, userId).Scan(&strategyCriteria)
+    FROM strategies WHERE strategyId = $1 and userId = $2`, strategyID, userID).Scan(&strategyCriteria)
 	if err != nil {
 		return nil, err
 	}
@@ -369,10 +369,10 @@ func _getStrategySpec(conn *data.Conn, strategyId int, userId int) (json.RawMess
 }
 
 // GetStrategies performs operations related to GetStrategies functionality.
-func GetStrategies(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(), `
     SELECT strategyId, name
-    FROM strategies WHERE userId = $1`, userId)
+    FROM strategies WHERE userId = $1`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -382,7 +382,7 @@ func GetStrategies(conn *data.Conn, userId int, rawArgs json.RawMessage) (interf
 	for rows.Next() {
 		var strategy Strategy
 
-		if err := rows.Scan(&strategy.StrategyId, &strategy.Name); err != nil {
+		if err := rows.Scan(&strategy.StrategyID, &strategy.Name); err != nil {
 			return nil, fmt.Errorf("error scanning strategy: %v", err)
 		}
 
@@ -391,7 +391,7 @@ func GetStrategies(conn *data.Conn, userId int, rawArgs json.RawMessage) (interf
 		err := conn.DB.QueryRow(context.Background(), `
 			SELECT COUNT(*) FROM studies 
 			WHERE userId = $1 AND strategyId = $2 AND completed = true`,
-			userId, strategy.StrategyId).Scan(&score)
+			userID, strategy.StrategyID).Scan(&score)
 
 		if err == nil && score.Valid {
 			strategy.Score = int(score.Int32)
@@ -407,12 +407,12 @@ func GetStrategies(conn *data.Conn, userId int, rawArgs json.RawMessage) (interf
 // type NewStrategyArgs struct { ... }
 
 // _newStrategy saves a validated strategy spec to the database.
-// It now takes userId, name, and the validated Spec object directly.
-func _newStrategy(conn *data.Conn, userId int, name string, spec Spec) (int, error) {
+// It now takes userID, name, and the validated Spec object directly.
+func _newStrategy(conn *data.Conn, userID int, name string, spec Spec) (int, error) {
 	if name == "" {
 		return -1, fmt.Errorf("strategy name cannot be empty")
 	}
-	// userId is assumed to be validated by the caller function's context
+	// userID is assumed to be validated by the caller function's context
 
 	// Convert the validated spec object back to JSON for database storage
 	specJSON, err := json.Marshal(spec)
@@ -422,24 +422,24 @@ func _newStrategy(conn *data.Conn, userId int, name string, spec Spec) (int, err
 	}
 
 	var strategyID int
-	// Ensure the userId from the function argument is used
+	// Ensure the userID from the function argument is used
 	err = conn.DB.QueryRow(context.Background(), `
 		INSERT INTO strategies (name, spec, userId)
 		VALUES ($1, $2, $3) RETURNING strategyId`,
-		name, specJSON, userId, // Use the passed userId
+		name, specJSON, userID, // Use the passed userID
 	).Scan(&strategyID)
 
 	if err != nil {
 		// Consider checking for specific DB errors (e.g., unique constraint violation) if needed
 		return -1, fmt.Errorf("error inserting strategy into database: %w", err)
 	}
-	////fmt.Printf("Successfully created strategy with ID: %d for user %d\n", strategyID, userId)
+	////fmt.Printf("Successfully created strategy with ID: %d for user %d\n", strategyID, userID)
 	return strategyID, nil
 }
 
 // NewStrategy performs operations related to NewStrategy functionality.
 // It expects a JSON object with "name" and "spec" fields.
-func NewStrategy(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func NewStrategy(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	// Use the new helper function to unmarshal and validate the input
 	name, spec, err := UnmarshalAndValidateNewStrategyInput(rawArgs)
 	if err != nil {
@@ -448,15 +448,15 @@ func NewStrategy(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfac
 	}
 
 	// Call _newStrategy with validated data
-	strategyId, err := _newStrategy(conn, userId, name, spec)
+	strategyID, err := _newStrategy(conn, userID, name, spec)
 	if err != nil {
 		return nil, err // _newStrategy already formats the error
 	}
 
 	// Return the created strategy details using the main Strategy struct
 	return Strategy{
-		StrategyId: strategyId,
-		UserId:     userId, // Reflect the correct user ID
+		StrategyID: strategyID,
+		UserID:     userID, // Reflect the correct user ID
 		Name:       name,
 		Spec:       spec, // Return the validated spec
 		Score:      0,    // New strategy has no score yet
@@ -470,7 +470,7 @@ type DeleteStrategyArgs struct {
 }
 
 // DeleteStrategy performs operations related to DeleteStrategy functionality.
-func DeleteStrategy(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func DeleteStrategy(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteStrategyArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, err
@@ -478,7 +478,7 @@ func DeleteStrategy(conn *data.Conn, userId int, rawArgs json.RawMessage) (inter
 
 	result, err := conn.DB.Exec(context.Background(), `
 		DELETE FROM strategies 
-		WHERE strategyId = $1 AND userId = $2`, args.StrategyID, userId)
+		WHERE strategyId = $1 AND userId = $2`, args.StrategyID, userID)
 
 	if err != nil {
 		return nil, fmt.Errorf("error deleting strategy: %v", err)
@@ -502,11 +502,11 @@ func DeleteStrategy(conn *data.Conn, userId int, rawArgs json.RawMessage) (inter
 // }
 
 // _setStrategy updates an existing strategy in the database after validation.
-func _setStrategy(conn *data.Conn, userId int, strategyId int, name string, spec Spec) error {
+func _setStrategy(conn *data.Conn, userID int, strategyID int, name string, spec Spec) error {
 	if name == "" {
 		return fmt.Errorf("strategy name cannot be empty")
 	}
-	if strategyId <= 0 {
+	if strategyID <= 0 {
 		return fmt.Errorf("invalid strategy ID")
 	}
 
@@ -516,44 +516,44 @@ func _setStrategy(conn *data.Conn, userId int, strategyId int, name string, spec
 		return fmt.Errorf("internal error marshaling validated spec: %w", err)
 	}
 
-	// Update the strategy, ensuring the userId matches for authorization
+	// Update the strategy, ensuring the userID matches for authorization
 	cmdTag, err := conn.DB.Exec(context.Background(), `
 		UPDATE strategies
 		SET name = $1, spec = $2
 		WHERE strategyId = $3 AND userId = $4`,
-		name, specJSON, strategyId, userId) // Use userId from context
+		name, specJSON, strategyID, userID) // Use userID from context
 
 	if err != nil {
 		return fmt.Errorf("error updating strategy in database: %w", err)
 	}
 	if cmdTag.RowsAffected() != 1 {
-		// This means either the strategyId didn't exist or it didn't belong to the user
+		// This means either the strategyID didn't exist or it didn't belong to the user
 		return fmt.Errorf("strategy not found or permission denied")
 	}
-	////fmt.Printf("Successfully updated strategy ID: %d for user %d\n", strategyId, userId)
+	////fmt.Printf("Successfully updated strategy ID: %d for user %d\n", strategyID, userID)
 	return nil
 }
 
 // SetStrategy performs operations related to SetStrategy functionality.
-// It expects a JSON object containing the strategyId, new Name, and new Spec.
-func SetStrategy(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+// It expects a JSON object containing the strategyID, new Name, and new Spec.
+func SetStrategy(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	// Use the new helper function to unmarshal and validate the input
-	strategyId, name, spec, err := UnmarshalAndValidateSetStrategyInput(rawArgs)
+	strategyID, name, spec, err := UnmarshalAndValidateSetStrategyInput(rawArgs)
 	if err != nil {
 		// Error message from helper is already descriptive
 		return nil, fmt.Errorf("invalid set strategy input: %w", err)
 	}
 
-	// Call _setStrategy with validated data and userId from context
-	err = _setStrategy(conn, userId, strategyId, name, spec)
+	// Call _setStrategy with validated data and userID from context
+	err = _setStrategy(conn, userID, strategyID, name, spec)
 	if err != nil {
 		return nil, err // _setStrategy already formats the error
 	}
 
 	// Return the updated strategy details using the main Strategy struct
 	return Strategy{
-		StrategyId: strategyId,
-		UserId:     userId, // Reflect the correct user ID
+		StrategyID: strategyID,
+		UserID:     userID, // Reflect the correct user ID
 		Name:       name,
 		Spec:       spec, // Return the validated spec
 		// Score is not updated here, would need separate logic/query if needed

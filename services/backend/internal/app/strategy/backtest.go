@@ -16,15 +16,17 @@ import (
 	"github.com/jackc/pgtype"
 )
 
-type RunBacktestArgs struct {
-	StrategyId        int   `json:"strategyId"`
-	ReturnFullResults bool  `json:"returnFullResults,omitempty"`
-	ReturnWindows     []int `json:"returnWindows"` // Changed to slice of ints
+type BacktestArgs struct {
+	StrategyID    int   `json:"strategyId"`
+	Securities    []int `json:"securities"`
+	Start         int64 `json:"start"`
+	ReturnWindows []int `json:"returnWindows"` // Changed to slice of ints
+	FullResults   bool  `json:"fullResults"`   // New field to control output type
 }
 
 // RunBacktest executes a backtest for the given strategy and calculates future returns for multiple windows
-func RunBacktest(conn *data.Conn, userId int, rawArgs json.RawMessage) (any, error) {
-	var args RunBacktestArgs
+func RunBacktest(conn *data.Conn, userID int, rawArgs json.RawMessage) (any, error) {
+	var args BacktestArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
@@ -36,7 +38,7 @@ func RunBacktest(conn *data.Conn, userId int, rawArgs json.RawMessage) (any, err
 			if w > 0 {
 				validWindows = append(validWindows, w) // Keep only positive windows
 			} //else {
-				////fmt.Printf("Warning: Skipping non-positive return window: %d\n", w)
+			////fmt.Printf("Warning: Skipping non-positive return window: %d\n", w)
 			//}
 		}
 		// Remove duplicates (optional)
@@ -52,12 +54,12 @@ func RunBacktest(conn *data.Conn, userId int, rawArgs json.RawMessage) (any, err
 		args.ReturnWindows = validWindows // Use the filtered list
 	}
 
-	////fmt.Println("backtesting strategyId:", args.StrategyId)
+	////fmt.Println("backtesting strategyId:", args.StrategyID)
 	//if len(args.ReturnWindows) > 0 {
-		////fmt.Printf("Will calculate future returns for windows (days): %v\n", args.ReturnWindows)
+	////fmt.Printf("Will calculate future returns for windows (days): %v\n", args.ReturnWindows)
 	//}
 
-	backtestJSON, err := _getStrategySpec(conn, args.StrategyId, userId) // get spec from db using helper
+	backtestJSON, err := _getStrategySpec(conn, args.StrategyID, userID) // get spec from db using helper
 	if err != nil {
 		return nil, fmt.Errorf("ERR vdi0s: failed to fetch strategy: %v", err)
 	}
@@ -126,10 +128,10 @@ func RunBacktest(conn *data.Conn, userId int, rawArgs json.RawMessage) (any, err
 
 		for _, record := range records {
 			// Extract necessary info once per record
-			secIdAny, okSecId := record["securityid"]
+			secIDAny, okSecID := record["securityid"]
 			tsAny, okTs := record["timestamp"]
 
-			if !okSecId || !okTs {
+			if !okSecID || !okTs {
 				////fmt.Println("Warning: Skipping return calculation for a record due to missing securityid or timestamp.")
 				// Set all potential return columns to nil for this record
 				for _, window := range args.ReturnWindows {
@@ -139,19 +141,19 @@ func RunBacktest(conn *data.Conn, userId int, rawArgs json.RawMessage) (any, err
 				continue
 			}
 
-			// Convert securityId once per record
-			var securityId int
-			switch v := secIdAny.(type) {
+			// Convert securityID once per record
+			var securityID int
+			switch v := secIDAny.(type) {
 			case int:
-				securityId = v
+				securityID = v
 			case int32:
-				securityId = int(v)
+				securityID = int(v)
 			case int64:
-				securityId = int(v) // Potential overflow if original is large int64
+				securityID = int(v) // Potential overflow if original is large int64
 			case float64: // Handle if ID comes as float
-				securityId = int(v)
+				securityID = int(v)
 			default:
-				////fmt.Printf("Warning: Skipping return calculation for a record due to unexpected securityid type: %T. Value: %v\n", secIdAny, secIdAny)
+				////fmt.Printf("Warning: Skipping return calculation for a record due to unexpected securityid type: %T. Value: %v\n", secIDAny, secIDAny)
 				for _, window := range args.ReturnWindows {
 					returnColumnName := fmt.Sprintf("%d Day Return %%", window)
 					record[returnColumnName] = nil
@@ -172,14 +174,14 @@ func RunBacktest(conn *data.Conn, userId int, rawArgs json.RawMessage) (any, err
 				if err == nil && !parsedTime.IsZero() {
 					startTime = parsedTime
 				} else if err != nil {
-					////fmt.Printf("Warning: Could not parse timestamp string '%s' for secId %d: %v\n", t, securityId, err)
+					////fmt.Printf("Warning: Could not parse timestamp string '%s' for secID %d: %v\n", t, securityID, err)
 					for _, window := range args.ReturnWindows {
 						returnColumnName := fmt.Sprintf("%d Day Return %%", window)
 						record[returnColumnName] = nil
 					}
 					continue
 				} else { // Handle zero time after parsing
-					////fmt.Printf("Warning: Parsed timestamp is zero for secId %d. Original string: %s\n", securityId, t)
+					////fmt.Printf("Warning: Parsed timestamp is zero for secID %d. Original string: %s\n", securityID, t)
 					for _, window := range args.ReturnWindows {
 						returnColumnName := fmt.Sprintf("%d Day Return %%", window)
 						record[returnColumnName] = nil
@@ -187,14 +189,14 @@ func RunBacktest(conn *data.Conn, userId int, rawArgs json.RawMessage) (any, err
 					continue
 				}
 			case nil:
-				////fmt.Printf("Warning: Skipping return calculation for record with securityid %d due to nil timestamp.\n", securityId)
+				////fmt.Printf("Warning: Skipping return calculation for record with securityID %d due to nil timestamp.\n", securityID)
 				for _, window := range args.ReturnWindows {
 					returnColumnName := fmt.Sprintf("%d Day Return %%", window)
 					record[returnColumnName] = nil
 				}
 				continue
 			default:
-				////fmt.Printf("Warning: Skipping return calculation for record with securityid %d due to unexpected timestamp type: %T. Value: %v\n", securityId, tsAny, tsAny)
+				////fmt.Printf("Warning: Skipping return calculation for record with securityID %d due to unexpected timestamp type: %T. Value: %v\n", securityID, tsAny, tsAny)
 				for _, window := range args.ReturnWindows {
 					returnColumnName := fmt.Sprintf("%d Day Return %%", window)
 					record[returnColumnName] = nil
@@ -204,7 +206,7 @@ func RunBacktest(conn *data.Conn, userId int, rawArgs json.RawMessage) (any, err
 
 			// Final check for zero time (should be redundant if parsing logic is correct, but safe)
 			if startTime.IsZero() {
-				////fmt.Printf("Warning: Skipping return calculation for record with securityid %d due to zero timestamp after processing.\n", securityId)
+				////fmt.Printf("Warning: Skipping return calculation for record with securityID %d due to zero timestamp after processing.\n", securityID)
 				for _, window := range args.ReturnWindows {
 					returnColumnName := fmt.Sprintf("%d Day Return %%", window)
 					record[returnColumnName] = nil
@@ -219,17 +221,17 @@ func RunBacktest(conn *data.Conn, userId int, rawArgs json.RawMessage) (any, err
 				// --- Execute query to get start and end prices for this specific window ---
 				var startClose, endClose sql.NullFloat64 // Use NullFloat64 for safety
 
-				err := conn.DB.QueryRow(ctx, returnQuery, securityId, startTime, window).Scan(&startClose, &endClose)
+				err := conn.DB.QueryRow(ctx, returnQuery, securityID, startTime, window).Scan(&startClose, &endClose)
 
 				if err != nil {
 					if err == pgx.ErrNoRows {
 						// This usually means start_data or future_price CTE returned no rows.
 						// Check if start price exists separately for better debugging if needed.
-						////fmt.Printf("Warning: No price data found (start or %d days later) for securityId %d at %v. Setting '%s' to nil.\n", window, securityId, startTime, returnColumnName)
+						////fmt.Printf("Warning: No price data found (start or %d days later) for securityID %d at %v. Setting '%s' to nil.\n", window, securityID, startTime, returnColumnName)
 						record[returnColumnName] = nil
 					} else {
 						// Other potential errors (DB connection, query syntax)
-						////fmt.Printf("Error fetching %d-day return data for securityId %d at %v: %v. Setting '%s' to nil.\n", window, securityId, startTime, err, returnColumnName)
+						////fmt.Printf("Error fetching %d-day return data for securityID %d at %v: %v. Setting '%s' to nil.\n", window, securityID, startTime, err, returnColumnName)
 						record[returnColumnName] = nil
 					}
 					continue // Continue to the next window for this record
@@ -245,13 +247,13 @@ func RunBacktest(conn *data.Conn, userId int, rawArgs json.RawMessage) (any, err
 					// Handle cases: start price missing, end price missing, or start price is 0
 					// Log specific reason for nil result for this window
 					//if !startClose.Valid {
-						// This is less likely if the cross join query succeeded without pgx.ErrNoRows, but check anyway.
-						////fmt.Printf("Info: Start price missing for securityId %d at %v. Return '%s' set to nil.\n", securityId, startTime, returnColumnName)
-					//} 
-                    /*else if !endClose.Valid {
-						////fmt.Printf("Info: End price missing (%d days later) for securityId %d at %v. Return '%s' set to nil.\n", window, securityId, startTime, returnColumnName)
+					// This is less likely if the cross join query succeeded without pgx.ErrNoRows, but check anyway.
+					////fmt.Printf("Info: Start price missing for securityID %d at %v. Return '%s' set to nil.\n", securityID, startTime, returnColumnName)
+					//}
+					/*else if !endClose.Valid {
+						////fmt.Printf("Info: End price missing (%d days later) for securityID %d at %v. Return '%s' set to nil.\n", window, securityID, startTime, returnColumnName)
 					} else if startClose.Float64 == 0 {
-						////fmt.Printf("Info: Start price is 0 for securityId %d at %v. Cannot calculate %d-day return, setting '%s' to nil.\n", securityId, startTime, window, returnColumnName)
+						////fmt.Printf("Info: Start price is 0 for securityID %d at %v. Cannot calculate %d-day return, setting '%s' to nil.\n", securityID, startTime, window, returnColumnName)
 					}*/
 					record[returnColumnName] = nil // Assign nil if calculation cannot be done
 				}
@@ -282,12 +284,12 @@ func RunBacktest(conn *data.Conn, userId int, rawArgs json.RawMessage) (any, err
 
 	// Save the full formatted results (including instances and return columns) to cache
 	//go func() { // Run in a goroutine to avoid blocking the main response
-		bgCtx := context.Background() // Use a background context for the goroutine
-		if err := SaveBacktestToCache(bgCtx, conn, userId, args.StrategyId, formattedResults); err != nil {
-			////fmt.Printf("Warning: Failed to save backtest results to cache for strategy %d: %v\n", args.StrategyId, err)
-			// We log the error but don't fail the main operation
-            return nil, err
-		}
+	bgCtx := context.Background() // Use a background context for the goroutine
+	if err := SaveBacktestToCache(bgCtx, conn, userID, args.StrategyID, formattedResults); err != nil {
+		////fmt.Printf("Warning: Failed to save backtest results to cache for strategy %d: %v\n", args.StrategyID, err)
+		// We log the error but don't fail the main operation
+		return nil, err
+	}
 	//}()
 
 	// Extract only the summary to return to the LLM
@@ -298,11 +300,11 @@ func RunBacktest(conn *data.Conn, userId int, rawArgs json.RawMessage) (any, err
 	}
 	////fmt.Println("\n\n SUMMARY: ", summary)
 
-	if args.ReturnFullResults {
+	if args.FullResults {
 		return formattedResults, nil // Return full results (potentially with multiple return columns)
-	} else {
-		return summary, nil // Return only the summary
 	}
+	// else, return only the summary
+	return summary, nil // Return only the summary
 }
 
 // ScanRows converts pgx.Rows to a slice of maps
@@ -371,7 +373,7 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 	featureMap := make(map[string]string) // Maps "f0", "f1" to actual feature names
 	if spec != nil {
 		for _, feature := range spec.Features {
-			featureKey := fmt.Sprintf("f%d", feature.FeatureId)
+			featureKey := fmt.Sprintf("f%d", feature.FeatureID)
 			featureMap[featureKey] = feature.Name
 		}
 	}
@@ -390,8 +392,8 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 		if ticker, exists := recordMap["ticker"]; exists {
 			instance["ticker"] = ticker
 		}
-		if securityId, exists := recordMap["securityid"]; exists {
-			instance["securityId"] = securityId // Use consistent casing
+		if securityID, exists := recordMap["securityid"]; exists {
+			instance["securityID"] = securityID // Use consistent casing
 		}
 		if timestampValue, exists := recordMap["timestamp"]; exists {
 			// Convert timestamp logic
@@ -400,9 +402,9 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 			case time.Time:
 				if !t.IsZero() {
 					timestampMs = t.UnixMilli()
-				} 
-                //else {
-					////fmt.Printf("Warning format: Encountered zero timestamp value for securityId %v\n", instance["securityId"])
+				}
+				//else {
+				////fmt.Printf("Warning format: Encountered zero timestamp value for securityID %v\n", instance["securityID"])
 				//}
 			case string:
 				parsedTime, err := time.Parse(time.RFC3339Nano, t)
@@ -418,7 +420,7 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 			case int64: // Handle if timestamp is already processed to ms
 				timestampMs = t
 			case nil:
-				////fmt.Printf("Warning format: Encountered nil timestamp for securityId %v\n", instance["securityId"])
+				////fmt.Printf("Warning format: Encountered nil timestamp for securityID %v\n", instance["securityID"])
 			default:
 				////fmt.Printf("Warning format: Unhandled timestamp type: %T for value %v\n", timestampValue, timestampValue)
 				instance["timestamp"] = timestampValue // Keep original if unhandled
@@ -488,7 +490,7 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 	summary["columnSamples"] = columnSamples
 	if len(instances) > 0 {
 		var minTimeMs int64 = math.MaxInt64
-		var maxTimeMs int64 = 0
+		var maxTimeMs int64
 		var startTimeStr, endTimeStr string
 		foundValidTime := false
 
@@ -514,9 +516,9 @@ func formatBacktestResults(records []any, spec *Spec) (map[string]any, error) {
 				"start":    startTimeStr,
 				"end":      endTimeStr,
 			}
-		} 
-        //else {
-			////fmt.Println("Warning format: No valid, positive timestamps found in instances to calculate date range.")
+		}
+		//else {
+		////fmt.Println("Warning format: No valid, positive timestamps found in instances to calculate date range.")
 		//}
 	}
 

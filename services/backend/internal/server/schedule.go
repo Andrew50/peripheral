@@ -3,7 +3,7 @@ package server
 import (
 	"backend/internal/data"
 	"backend/internal/services/alerts"
-	"backend/internal/services/marketData"
+	"backend/internal/services/marketdata"
 	"backend/internal/services/securities"
 	"backend/internal/services/socket"
 	"context"
@@ -164,7 +164,7 @@ var (
 	JobList = []*Job{
 		{
 			Name:           "UpdateDailyOHLCV",
-			Function:       marketData.UpdateDailyOHLCV,
+			Function:       marketdata.UpdateDailyOHLCV,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
@@ -321,9 +321,9 @@ func (s *JobScheduler) Start() chan struct{} {
 
 	// Start the Edgar Filings Service
 	////fmt.Printf("\n\nStarting EdgarFilingsService\n\n")
-	marketData.StartEdgarFilingsService(s.Conn)
+	marketdata.StartEdgarFilingsService(s.Conn)
 	go func() {
-		for filing := range marketData.NewFilingsChannel {
+		for filing := range marketdata.NewFilingsChannel {
 			socket.BroadcastGlobalSECFiling(filing)
 		}
 	}()
@@ -484,7 +484,7 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	//jobName := job.Name
 	//startTime := time.Now()
 
-	isQueued := false
+	// isQueued := false // Removed as it's no longer used after the `else if isQueued` block was removed.
 	//var taskID string
 
 	// Log job start
@@ -510,26 +510,19 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 		////fmt.Printf("\n=== JOB FAILED: %s ===\n", jobName)
 		////fmt.Printf("Duration: %v\n", duration)
 		////fmt.Printf("Error: %v\n", err)
-	} else if isQueued {
-		// Job was queued (currently unused path)
-		////fmt.Printf("\n=== JOB QUEUED: %s ===\n", jobName)
-		////fmt.Printf("Duration: %v\n", duration)
-		////fmt.Printf("Task ID: %s\n", taskID)
-	} else {
-		// Job completed directly
-		////fmt.Printf("\n=== JOB COMPLETED: %s ===\n", jobName)
-		////fmt.Printf("Duration: %v\n", duration)
-
-		// Update completion time
-		completionTime := time.Now()
-		job.ExecutionMutex.Lock()
-		job.LastCompletionTime = completionTime
-		job.ExecutionMutex.Unlock()
-		if err := s.saveJobLastCompletionTime(job); err != nil {
-			log.Printf("Error saving job completion time for %s: %v", job.Name, err)
-		}
 	}
+	// Job completed directly
+	////fmt.Printf("\n=== JOB COMPLETED: %s ===\n", jobName)
+	////fmt.Printf("Duration: %v\n", duration)
 
+	// Update completion time
+	completionTime := time.Now()
+	job.ExecutionMutex.Lock()
+	job.LastCompletionTime = completionTime
+	job.ExecutionMutex.Unlock()
+	if err := s.saveJobLastCompletionTime(job); err != nil {
+		log.Printf("Error saving job completion time for %s: %v", job.Name, err)
+	}
 }
 
 // initAggregates initializes the aggregates
@@ -580,9 +573,10 @@ func stopPolygonWebSocket() {
 	defer polygonInitMutex.Unlock()
 
 	if polygonInitialized {
-		if err := socket.StopPolygonWS(); err != nil {
-			//log.Printf("Failed to stop Polygon WebSocket: %v", err)
-		}
+		// if err := socket.StopPolygonWS(); err != nil {
+		// 	//log.Printf("Failed to stop Polygon WebSocket: %v", err)
+		// }
+		_ = socket.StopPolygonWS() // Assign to blank identifier if error is intentionally ignored
 		polygonInitialized = false
 		////fmt.Println("Polygon WebSocket stopped successfully")
 	}

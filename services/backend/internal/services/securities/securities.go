@@ -1,76 +1,78 @@
 package securities
 
 import (
+	"backend/internal/data/polygon"
 	"context"
-    "strings"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
-    "backend/internal/data/polygon"
 
 	"backend/internal/data"
 
-	_ "github.com/lib/pq"
+	//lint:ignore U1000 external package
+	_ "github.com/lib/pq" // Register postgres driver
 )
 
+// SecurityDetail represents a structure for handling SecurityDetail data.
+
 func SimpleUpdateSecurities(conn *data.Conn) error {
-    ctx := context.Background()
-    today := time.Now().Format("2006-01-02")
+	ctx := context.Background()
+	today := time.Now().Format("2006-01-02")
 
-    // 1) Fetch the tickers from Polygon
-    poly, err := polygon.AllTickers(conn.Polygon, today)
-    if err != nil {
-        return fmt.Errorf("fetch polygon tickers: %w", err)
-    }
+	// 1) Fetch the tickers from Polygon
+	poly, err := polygon.AllTickers(conn.Polygon, today)
+	if err != nil {
+		return fmt.Errorf("fetch polygon tickers: %w", err)
+	}
 
-    // collect just the symbols
-    tickers := make([]string, len(poly))
-    for i, s := range poly {
-        tickers[i] = s.Ticker
-    }
+	// collect just the symbols
+	tickers := make([]string, len(poly))
+	for i, s := range poly {
+		tickers[i] = s.Ticker
+	}
 
-    // 2) Mark as DELISTED any ticker NOT in today's list
-    if _, err := conn.DB.Exec(ctx, `
+	// 2) Mark as DELISTED any ticker NOT in today's list
+	if _, err := conn.DB.Exec(ctx, `
         UPDATE securities
            SET maxDate = CURRENT_DATE
          WHERE maxDate IS NULL
-           AND ticker NOT IN (` + placeholders(len(tickers)) + `)
+           AND ticker NOT IN (`+placeholders(len(tickers))+`)
     `, stringArgs(tickers)...); err != nil {
-        return fmt.Errorf("delist tickers: %w", err)
-    }
+		return fmt.Errorf("delist tickers: %w", err)
+	}
 
-    // 3) REACTIVATE any ticker IN today's list
-    if _, err := conn.DB.Exec(ctx, `
+	// 3) REACTIVATE any ticker IN today's list
+	if _, err := conn.DB.Exec(ctx, `
         UPDATE securities
            SET maxDate = NULL
          WHERE maxDate IS NOT NULL
-           AND ticker IN (` + placeholders(len(tickers)) + `)
+           AND ticker IN (`+placeholders(len(tickers))+`)
     `, stringArgs(tickers)...); err != nil {
-        return fmt.Errorf("reactivate tickers: %w", err)
-    }
+		return fmt.Errorf("reactivate tickers: %w", err)
+	}
 
-    return nil
+	return nil
 }
 
 // placeholders(n) returns "$1,$2,…,$n"
 func placeholders(n int) string {
-    ps := make([]string, n)
-    for i := range ps {
-        ps[i] = fmt.Sprintf("$%d", i+1)
-    }
-    return strings.Join(ps, ",")
+	ps := make([]string, n)
+	for i := range ps {
+		ps[i] = fmt.Sprintf("$%d", i+1)
+	}
+	return strings.Join(ps, ",")
 }
 
 // stringArgs converts []string to []interface{} for Exec()
 func stringArgs(ss []string) []interface{} {
-    out := make([]interface{}, len(ss))
-    for i, s := range ss {
-        out[i] = s
-    }
-    return out
+	out := make([]interface{}, len(ss))
+	for i, s := range ss {
+		out[i] = s
+	}
+	return out
 }
-
 
 // UpdateSecurityCik fetches the latest CIK (Central Index Key) data from the SEC API
 // and updates the securities table with CIK values for active securities.

@@ -26,10 +26,12 @@ import (
 
 	"encoding/base64"
 
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // Register postgres driver
 	_polygon "github.com/polygon-io/client-go/rest"
 	"github.com/polygon-io/client-go/rest/models"
 )
+
+// Security represents a structure for handling Security data.
 
 // logAction logs security-related actions for debugging and auditing purposes.
 // Currently unused but kept for debugging and future use.

@@ -1,6 +1,7 @@
 package chart
 
 import (
+	"backend/internal/app/filings"
 	"backend/internal/data"
 	"backend/internal/data/edgar"
 	"backend/internal/data/postgres"
@@ -114,7 +115,7 @@ func fetchChartEventsInRange(conn *data.Conn, userID int, securityID int, fromMs
 	var mutex sync.Mutex // Protect shared slices
 	var allSplits []models.Split
 	var allDividends []models.Dividend
-	var secFilings []edgar.EDGARFiling // Fetched separately
+	var secFilings []edgar.Filing // Fetched separately
 
 	var splitErr, dividendErr, secFilingErr error // Collect errors from goroutines
 
@@ -129,7 +130,7 @@ func fetchChartEventsInRange(conn *data.Conn, userID int, securityID int, fromMs
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			options := edgar.EdgarFilingOptions{
+			options := filings.EdgarFilingOptions{
 				Start:      fromMs,
 				End:        toMs,
 				SecurityID: securityID,
@@ -142,7 +143,7 @@ func fetchChartEventsInRange(conn *data.Conn, userID int, securityID int, fromMs
 				return
 			}
 
-			res, err := edgar.GetStockEdgarFilings(conn, userID, optionsJSON)
+			res, err := filings.GetStockEdgarFilings(conn, userID, optionsJSON)
 			if err != nil {
 				// Log the error but don't make it fatal for the whole function
 				////fmt.Printf("Warning: error fetching SEC filings for securityId %d: %v\n", securityID, err)
@@ -155,7 +156,7 @@ func fetchChartEventsInRange(conn *data.Conn, userID int, securityID int, fromMs
 				return
 			}
 
-			filingsResult, ok := res.([]edgar.EDGARFiling)
+			filingsResult, ok := res.([]edgar.Filing)
 			if !ok {
 				mutex.Lock()
 				secFilingErr = fmt.Errorf("unexpected type returned from GetStockEdgarFilings: %T", res)

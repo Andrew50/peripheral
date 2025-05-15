@@ -5,7 +5,6 @@ import (
 	"backend/internal/data/utils"
 	"container/list"
 	"encoding/json"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,7 +28,7 @@ type ReplayData struct {
 	data         *list.List
 	refilling    bool
 	baseDataType string
-	securityId   int
+	securityID   int
 }
 
 // Client represents a structure for handling Client data.
@@ -70,9 +69,8 @@ func getChannelNameType(timestamp int64) string {
 
 	if utils.IsTimestampRegularHours(time.Unix(timestamp/1000, 0)) { //might not need / 1000
 		return "regular"
-	} else {
-		return "extended"
 	}
+	return "extended"
 }
 
 // AlertMessage represents a structure for handling AlertMessage data.
@@ -220,10 +218,6 @@ func (c *Client) readPump(conn *data.Conn) {
 			////fmt.Println("Invalid message format", err)
 			continue
 		}
-		if err := os.Stdout.Sync(); err != nil {
-			// Log error, but it's often non-critical for Stdout.Sync
-			// fmt.Printf("Error syncing stdout: %v\n", err)
-		}
 		//////fmt.Printf("clientMsg.Action: %v %v\n", clientMsg.Action, clientMsg.ChannelName)
 		switch clientMsg.Action {
 		case "subscribe-sec-filings":
@@ -245,9 +239,7 @@ func (c *Client) readPump(conn *data.Conn) {
 		case "replay":
 			////fmt.Println("replay request")
 			if !c.replayActive {
-				if clientMsg.Timestamp == nil {
-					////fmt.Println("ERR-------------------------nil timestamp")
-				} else {
+				if clientMsg.Timestamp != nil {
 					c.simulatedTime = *(clientMsg.Timestamp)
 					c.realtimeToReplay()
 				}
