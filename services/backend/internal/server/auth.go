@@ -8,7 +8,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"log"
+
+	//"log"
 	"os"
 	"time"
 
@@ -68,20 +69,16 @@ type SignupArgs struct {
 
 // Signup performs operations related to Signup functionality.
 func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
-	fmt.Println("=== SIGNUP ATTEMPT STARTED ===")
-	fmt.Printf("Connection pool stats - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
-		conn.DB.Stat().MaxConns(),
-		conn.DB.Stat().TotalConns(),
-		conn.DB.Stat().IdleConns(),
-		conn.DB.Stat().AcquiredConns())
+	////fmt.Println("=== SIGNUP ATTEMPT STARTED ===")
+	////fmt.Printf("Connection pool stats - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", conn.DB.Stat().MaxConns(), conn.DB.Stat().TotalConns(), conn.DB.Stat().IdleConns(), conn.DB.Stat().AcquiredConns())
 
 	var a SignupArgs
 	if err := json.Unmarshal(rawArgs, &a); err != nil {
-		fmt.Printf("ERROR: Failed to unmarshal signup args: %v\n", err)
+		////fmt.Printf("ERROR: Failed to unmarshal signup args: %v\n", err)
 		return nil, fmt.Errorf("Signup invalid args: %v", err)
 	}
 
-	fmt.Printf("Attempting to create account for email: %s, username: %s\n", a.Email, a.Username)
+	////fmt.Printf("Attempting to create account for email: %s, username: %s\n", a.Email, a.Username)
 
 	// Create a timeout context to prevent hanging
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -90,7 +87,7 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	// Start a transaction for the signup process
 	tx, err := conn.DB.Begin(ctx)
 	if err != nil {
-		fmt.Printf("ERROR: Failed to start transaction: %v\n", err)
+		////fmt.Printf("ERROR: Failed to start transaction: %v\n", err)
 		return nil, fmt.Errorf("error starting transaction: %v", err)
 	}
 
@@ -98,85 +95,81 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var txClosed bool
 	defer func() {
 		if !txClosed && tx != nil {
-			fmt.Println("Rolling back transaction due to error or incomplete process")
+			////fmt.Println("Rolling back transaction due to error or incomplete process")
 			_ = tx.Rollback(context.Background())
 		}
 	}()
 
 	// Check if email already exists
 	var count int
-	fmt.Println("Checking if email exists...")
+	////fmt.Println("Checking if email exists...")
 	err = tx.QueryRow(ctx, "SELECT COUNT(*) FROM users WHERE email=$1", a.Email).Scan(&count)
 	if err != nil {
-		fmt.Printf("ERROR: Database query failed while checking email: %v\n", err)
+		////fmt.Printf("ERROR: Database query failed while checking email: %v\n", err)
 		return nil, fmt.Errorf("error checking email: %v", err)
 	}
 
 	if count > 0 {
-		fmt.Printf("Email already registered: %s\n", a.Email)
+		////fmt.Printf("Email already registered: %s\n", a.Email)
 		return nil, fmt.Errorf("email already registered")
 	}
 
 	// Check if username already exists
-	fmt.Println("Checking if username exists...")
+	////fmt.Println("Checking if username exists...")
 	err = tx.QueryRow(ctx, "SELECT COUNT(*) FROM users WHERE username=$1", a.Username).Scan(&count)
 	if err != nil {
-		fmt.Printf("ERROR: Database query failed while checking username: %v\n", err)
+		////fmt.Printf("ERROR: Database query failed while checking username: %v\n", err)
 		return nil, fmt.Errorf("error checking username: %v", err)
 	}
 	if count > 0 {
-		fmt.Printf("Username already taken: %s\n", a.Username)
+		////fmt.Printf("Username already taken: %s\n", a.Username)
 		return nil, fmt.Errorf("username already taken")
 	}
 
 	// Insert new user with auth_type='password'
 	var userID int
-	fmt.Println("Inserting new user record...")
+	////fmt.Println("Inserting new user record...")
 	err = tx.QueryRow(ctx,
 		"INSERT INTO users (username, email, password, auth_type) VALUES ($1, $2, $3, $4) RETURNING userId",
 		a.Username, a.Email, a.Password, "password").Scan(&userID)
 	if err != nil {
-		fmt.Printf("ERROR: Failed to create user: %v\n", err)
+		////fmt.Printf("ERROR: Failed to create user: %v\n", err)
 		return nil, fmt.Errorf("error creating user: %v", err)
 	}
 
-	fmt.Printf("User created successfully with ID: %d\n", userID)
+	////fmt.Printf("User created successfully with ID: %d\n", userID)
 
 	// Commit the transaction
 	if err := tx.Commit(ctx); err != nil {
-		fmt.Printf("ERROR: Failed to commit transaction: %v\n", err)
+		////fmt.Printf("ERROR: Failed to commit transaction: %v\n", err)
 		return nil, fmt.Errorf("error committing signup transaction: %v", err)
 	}
 	txClosed = true
-	fmt.Println("Signup transaction committed successfully")
+	////fmt.Println("Signup transaction committed successfully")
 
 	// Create modified login args with the email
-	fmt.Println("Preparing login...")
+	////fmt.Println("Preparing login...")
 	loginArgs, err := json.Marshal(map[string]string{
 		"email":    a.Email,
 		"password": a.Password,
 	})
 	if err != nil {
-		fmt.Printf("ERROR: Failed to prepare login: %v\n", err)
+		////fmt.Printf("ERROR: Failed to prepare login: %v\n", err)
 		return nil, fmt.Errorf("error preparing login: %v", err)
 	}
 
 	// Log in the new user
-	fmt.Println("Attempting to log in new user...")
+	////fmt.Println("Attempting to log in new user...")
 	result, err := Login(conn, loginArgs)
-	if err != nil {
-		fmt.Printf("ERROR: Login after signup failed: %v\n", err)
+	/*if err != nil {
+		////fmt.Printf("ERROR: Login after signup failed: %v\n", err)
 	} else {
-		fmt.Println("Login successful")
-	}
+		////fmt.Println("Login successful")
+	}*/
 
 	// Print final connection pool stats
-	fmt.Printf("Connection pool stats at end of signup - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
-		conn.DB.Stat().MaxConns(),
-		conn.DB.Stat().TotalConns(),
-		conn.DB.Stat().IdleConns(),
-		conn.DB.Stat().AcquiredConns())
-	fmt.Println("=== SIGNUP ATTEMPT COMPLETED ===")
+	////fmt.Printf("Connection pool stats at end of signup - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", conn.DB.Stat().MaxConns(), conn.DB.Stat().TotalConns(), conn.DB.Stat().IdleConns(), conn.DB.Stat().AcquiredConns())
+	////fmt.Println("=== SIGNUP ATTEMPT COMPLETED ===")
 
 	return result, err
 }
@@ -189,20 +182,16 @@ type LoginArgs struct {
 
 // Login performs operations related to Login functionality.
 func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
-	fmt.Println("=== LOGIN ATTEMPT STARTED ===")
-	fmt.Printf("Connection pool stats - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
-		conn.DB.Stat().MaxConns(),
-		conn.DB.Stat().TotalConns(),
-		conn.DB.Stat().IdleConns(),
-		conn.DB.Stat().AcquiredConns())
+	////fmt.Println("=== LOGIN ATTEMPT STARTED ===")
+	////fmt.Printf("Connection pool stats - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", conn.DB.Stat().MaxConns(), conn.DB.Stat().TotalConns(), conn.DB.Stat().IdleConns(), conn.DB.Stat().AcquiredConns())
 
 	var a LoginArgs
 	if err := json.Unmarshal(rawArgs, &a); err != nil {
-		fmt.Printf("ERROR: Failed to unmarshal login args: %v\n", err)
+		////fmt.Printf("ERROR: Failed to unmarshal login args: %v\n", err)
 		return nil, fmt.Errorf("login invalid args: %v", err)
 	}
 
-	fmt.Printf("Login attempt for email: %s\n", a.Email)
+	////fmt.Printf("Login attempt for email: %s\n", a.Email)
 
 	// Create a timeout context to prevent hanging
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -215,7 +204,7 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var profilePicture sql.NullString
 
 	// 1) Does the email exist? Get user details.
-	fmt.Println("Querying user info...")
+	////fmt.Println("Querying user info...")
 	err := conn.DB.QueryRow(ctx,
 		`SELECT userId, username, password, profile_picture, auth_type
 		 FROM users WHERE email=$1`,
@@ -223,88 +212,72 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 
 	switch {
 	case err == pgx.ErrNoRows:
-		fmt.Printf("ERROR: No user found for email: %s\n", a.Email)
+		////fmt.Printf("ERROR: No user found for email: %s\n", a.Email)
 		// Print connection pool stats after error
-		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
-			conn.DB.Stat().MaxConns(),
-			conn.DB.Stat().TotalConns(),
-			conn.DB.Stat().IdleConns(),
-			conn.DB.Stat().AcquiredConns())
+		////fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", conn.DB.Stat().MaxConns(), conn.DB.Stat().TotalConns(), conn.DB.Stat().IdleConns(), conn.DB.Stat().AcquiredConns())
 		return nil, fmt.Errorf("incorrect email") // <-- NEW specific error
 	case err != nil:
-		fmt.Printf("ERROR: Database query failed while checking email: %v\n", err)
+		////fmt.Printf("ERROR: Database query failed while checking email: %v\n", err)
 		// Print connection pool stats after error
-		fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
-			conn.DB.Stat().MaxConns(),
-			conn.DB.Stat().TotalConns(),
-			conn.DB.Stat().IdleConns(),
-			conn.DB.Stat().AcquiredConns())
+		////fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", conn.DB.Stat().MaxConns(), conn.DB.Stat().TotalConns(), conn.DB.Stat().IdleConns(), conn.DB.Stat().AcquiredConns())
 		return nil, fmt.Errorf("database error: %v", err)
 	}
 
-	fmt.Printf("Found user with ID: %d, username: %s, auth_type: %s\n", userID, resp.Username, authType)
+	////fmt.Printf("Found user with ID: %d, username: %s, auth_type: %s\n", userID, resp.Username, authType)
 
 	// 2) Is this a Google-only account?
 	if authType == "google" {
-		fmt.Println("ERROR: Google-only user attempting password login")
+		////fmt.Println("ERROR: Google-only user attempting password login")
 		errorMessage := "This account uses Google Sign-In. Please login with Google."
 		return nil, fmt.Errorf("%s", errorMessage)
 	}
 
 	// 3) Wrong password? (Only check for 'password' or 'both' auth types)
 	if authType == "password" || authType == "both" {
-		fmt.Println("Verifying password...")
+		////fmt.Println("Verifying password...")
 		if storedPw != a.Password {
-			fmt.Println("ERROR: Password mismatch")
+			////fmt.Println("ERROR: Password mismatch")
 			// Print connection pool stats after error
-			fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
-				conn.DB.Stat().MaxConns(),
-				conn.DB.Stat().TotalConns(),
-				conn.DB.Stat().IdleConns(),
-				conn.DB.Stat().AcquiredConns())
+			////fmt.Printf("Connection pool stats after error - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", conn.DB.Stat().MaxConns(), conn.DB.Stat().TotalConns(), conn.DB.Stat().IdleConns(), conn.DB.Stat().AcquiredConns())
 			return nil, fmt.Errorf("incorrect password") // <-- NEW specific error
 		}
-		fmt.Println("Password verified.")
+		////fmt.Println("Password verified.")
 	} else {
 		// This case should ideally not be reached if authType logic is correct,
 		// but added for robustness.
-		fmt.Printf("ERROR: Unexpected auth_type '%s' encountered for password login attempt.\n", authType)
+		////fmt.Printf("ERROR: Unexpected auth_type '%s' encountered for password login attempt.\n", authType)
 		return nil, fmt.Errorf("invalid account state")
 	}
 
-	fmt.Println("Creating authentication token...")
+	////fmt.Println("Creating authentication token...")
 	token, err := createToken(userID)
 	if err != nil {
-		fmt.Printf("ERROR: Token creation failed: %v\n", err)
+		////fmt.Printf("ERROR: Token creation failed: %v\n", err)
 		return nil, err
 	}
 	resp.Token = token
-	fmt.Println("Token created successfully")
+	////fmt.Println("Token created successfully")
 
 	// Set profile picture if it exists, otherwise empty string
 	if profilePicture.Valid {
 		resp.ProfilePic = profilePicture.String
-		fmt.Println("Using stored profile picture")
+		////fmt.Println("Using stored profile picture")
 	} else {
 		resp.ProfilePic = ""
-		fmt.Println("No profile picture found")
+		////fmt.Println("No profile picture found")
 	}
 
 	// Print final connection pool stats
-	fmt.Printf("Connection pool stats at end of login - Max: %d, Total: %d, Idle: %d, Acquired: %d\n",
-		conn.DB.Stat().MaxConns(),
-		conn.DB.Stat().TotalConns(),
-		conn.DB.Stat().IdleConns(),
-		conn.DB.Stat().AcquiredConns())
-	fmt.Println("=== LOGIN ATTEMPT COMPLETED ===")
+	////fmt.Printf("Connection pool stats at end of login - Max: %d, Total: %d, Idle: %d, Acquired: %d\n", conn.DB.Stat().MaxConns(), conn.DB.Stat().TotalConns(), conn.DB.Stat().IdleConns(), conn.DB.Stat().AcquiredConns())
+	////fmt.Println("=== LOGIN ATTEMPT COMPLETED ===")
 
 	return resp, nil
 }
 
-func createToken(userId int) (string, error) {
+func createToken(userID int) (string, error) {
 	expirationTime := time.Now().Add(1 * time.Hour)
 	claims := &Claims{
-		UserID: userId,
+		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 		},
@@ -318,7 +291,7 @@ func validateToken(tokenString string) (int, error) {
 
 	// Default profile pic is empty (frontend will generate initial)
 
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(_ *jwt.Token) (interface{}, error) {
 		return privateKey, nil // Adjust this to match your token's signing method
 	})
 	if err != nil {
@@ -347,7 +320,7 @@ type GoogleLoginResponse struct {
 }
 
 // GoogleLogin performs operations related to GoogleLogin functionality.
-func GoogleLogin(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
+func GoogleLogin(_ *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var args struct {
 		RedirectOrigin string `json:"redirectOrigin"`
 	}
@@ -361,7 +334,7 @@ func GoogleLogin(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) 
 	}
 
 	// Print debug information
-	fmt.Printf("Received redirectOrigin: %s\n", args.RedirectOrigin)
+	////fmt.Printf("Received redirectOrigin: %s\n", args.RedirectOrigin)
 
 	// Update the redirect URL based on the origin if no environment variable is set
 	if os.Getenv("GOOGLE_REDIRECT_URL") == "" {
@@ -369,7 +342,7 @@ func GoogleLogin(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) 
 	}
 
 	// Print the configured redirect URL for debugging
-	fmt.Printf("Using RedirectURL: %s\n", googleOauthConfig.RedirectURL)
+	////fmt.Printf("Using RedirectURL: %s\n", googleOauthConfig.RedirectURL)
 
 	state := generateState()
 	url := googleOauthConfig.AuthCodeURL(state)
@@ -449,7 +422,7 @@ func generateState() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		// If there's an error reading random bytes, log it and return a fallback value
-		log.Printf("Error generating random state: %v", err)
+		//log.Printf("Error generating random state: %v", err)
 		// Use current time as fallback for some randomness
 		return base64.URLEncoding.EncodeToString([]byte(time.Now().String()))
 	}
@@ -458,7 +431,7 @@ func generateState() string {
 
 // DeleteAccount deletes a user account and all associated data
 func DeleteAccount(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
-	fmt.Println("=== DELETE ACCOUNT ATTEMPT STARTED ===")
+	////fmt.Println("=== DELETE ACCOUNT ATTEMPT STARTED ===")
 
 	// Parse arguments to get confirmation
 	var args struct {
@@ -468,13 +441,13 @@ func DeleteAccount(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error
 	}
 
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		fmt.Printf("ERROR: Failed to unmarshal delete account args: %v\n", err)
+		////fmt.Printf("ERROR: Failed to unmarshal delete account args: %v\n", err)
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
 	// Check confirmation string for regular delete account
 	if args.Confirmation != "DELETE" {
-		fmt.Println("ERROR: Missing confirmation text")
+		////fmt.Println("ERROR: Missing confirmation text")
 		return nil, fmt.Errorf("confirmation must be 'DELETE' to delete account")
 	}
 
@@ -499,7 +472,7 @@ func DeleteAccount(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error
 	// Start a transaction
 	tx, err := conn.DB.Begin(ctx)
 	if err != nil {
-		fmt.Printf("ERROR: Failed to start transaction: %v\n", err)
+		////fmt.Printf("ERROR: Failed to start transaction: %v\n", err)
 		return nil, fmt.Errorf("error starting transaction: %v", err)
 	}
 
@@ -507,7 +480,7 @@ func DeleteAccount(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error
 	var txClosed bool
 	defer func() {
 		if !txClosed && tx != nil {
-			fmt.Println("Rolling back transaction due to error or incomplete process")
+			////fmt.Println("Rolling back transaction due to error or incomplete process")
 			_ = tx.Rollback(context.Background())
 		}
 	}()
@@ -516,43 +489,45 @@ func DeleteAccount(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error
 	if authType == "" {
 		err = tx.QueryRow(ctx, "SELECT auth_type FROM users WHERE userId = $1", userID).Scan(&authType)
 		if err != nil {
-			fmt.Printf("ERROR: Failed to get user account type: %v\n", err)
+			////fmt.Printf("ERROR: Failed to get user account type: %v\n", err)
 			return nil, fmt.Errorf("failed to get user account: %v", err)
 		}
 	}
 
-	fmt.Printf("Deleting account with ID: %d, type: %s\n", userID, authType)
+	////fmt.Printf("Deleting account with ID: %d, type: %s\n", userID, authType)
 
 	// Delete watchlists
 	_, err = tx.Exec(ctx, "DELETE FROM watchlists WHERE userId = $1", userID)
 	if err != nil {
-		fmt.Printf("ERROR: Failed to delete watchlists: %v\n", err)
+		return nil, err
+		////fmt.Printf("ERROR: Failed to delete watchlists: %v\n", err)
 		// Continue despite error
 	}
 
 	// Delete setups
 	_, err = tx.Exec(ctx, "DELETE FROM setups WHERE userId = $1", userID)
 	if err != nil {
-		fmt.Printf("ERROR: Failed to delete setups: %v\n", err)
+		////fmt.Printf("ERROR: Failed to delete setups: %v\n", err)
 		// Continue despite error
+		return nil, err
 	}
 
 	// Delete the user
 	_, err = tx.Exec(ctx, "DELETE FROM users WHERE userId = $1", userID)
 	if err != nil {
-		fmt.Printf("ERROR: Failed to delete user: %v\n", err)
+		////fmt.Printf("ERROR: Failed to delete user: %v\n", err)
 		return nil, fmt.Errorf("failed to delete user: %v", err)
 	}
 
 	// Commit the transaction
 	if err := tx.Commit(ctx); err != nil {
-		fmt.Printf("ERROR: Failed to commit transaction: %v\n", err)
+		////fmt.Printf("ERROR: Failed to commit transaction: %v\n", err)
 		return nil, fmt.Errorf("error committing transaction: %v", err)
 	}
 	txClosed = true
 
-	fmt.Printf("Successfully deleted account with ID: %d\n", userID)
-	fmt.Println("=== DELETE ACCOUNT COMPLETED ===")
+	////fmt.Printf("Successfully deleted account with ID: %d\n", userID)
+	////fmt.Println("=== DELETE ACCOUNT COMPLETED ===")
 
 	return map[string]string{"status": "success"}, nil
 }

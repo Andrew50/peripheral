@@ -2,11 +2,12 @@ package alerts
 
 import (
 	"backend/internal/data"
-    "backend/internal/data/postgres"
-    "backend/internal/services/socket"
+	"backend/internal/data/postgres"
+	"backend/internal/services/socket"
 	"context"
 	"fmt"
-	"log"
+
+	//"log"
 	"sync"
 	"time"
 )
@@ -30,6 +31,7 @@ var (
 	alerts    sync.Map
 	ctx       context.Context
 	cancel    context.CancelFunc
+	mu        sync.Mutex
 )
 
 // AddAlert performs operations related to AddAlert functionality.
@@ -37,7 +39,7 @@ func AddAlert(conn *data.Conn, alert Alert) {
 	if alert.AlertType == "price" {
 		ticker, err := postgres.GetTicker(conn, *alert.SecurityID, time.Now())
 		if err != nil {
-			fmt.Println("error getting ticker: %w", err)
+			////fmt.Println("error getting ticker: %w", err)
 			return
 		}
 		alert.Ticker = &ticker
@@ -45,9 +47,11 @@ func AddAlert(conn *data.Conn, alert Alert) {
 	alerts.Store(alert.AlertID, alert)
 }
 
-// RemoveAlert performs operations related to RemoveAlert functionality.
-func RemoveAlert(alertId int) {
-	alerts.Delete(alertId)
+// RemoveAlert removes an alert from the in-memory store
+func RemoveAlert(alertID int) {
+	mu.Lock()
+	defer mu.Unlock()
+	alerts.Delete(alertID)
 }
 
 // StartAlertLoop performs operations related to StartAlertLoop functionality.
@@ -57,7 +61,7 @@ func StartAlertLoop(conn *data.Conn) error { //entrypoint
 		return err
 	}
 	if err := initAlerts(conn); err != nil {
-		fmt.Println("error : god0ws")
+		////fmt.Println("error : god0ws")
 		return err
 	}
 
@@ -88,7 +92,7 @@ func alertLoop(ctx context.Context, conn *data.Conn) {
 
 func processAlerts(conn *data.Conn) {
 	var wg sync.WaitGroup
-	alerts.Range(func(key, value interface{}) bool {
+	alerts.Range(func(_, value interface{}) bool {
 		alert := value.(Alert)
 		wg.Add(1)
 		go func(a Alert) {
@@ -99,14 +103,14 @@ func processAlerts(conn *data.Conn) {
 				err = processPriceAlert(conn, a)
 			case "news":
 				err = processNewsAlert(conn, a)
-            case "strategy":
-                err = processStrategyAlert(conn,a)
+			case "strategy":
+				err = processStrategyAlert(conn, a)
 			default:
-				log.Printf("Unknown alert type: %s", a.AlertType)
+				//log.Printf("Unknown alert type: %s", a.AlertType)
 				return
 			}
 			if err != nil {
-				log.Printf("Error processing alert %d: %v", a.AlertID, err)
+				//log.Printf("Error processing alert %d: %v", a.AlertID, err)
 				return
 			}
 		}(alert)
@@ -148,7 +152,7 @@ func initAlerts(conn *data.Conn) error {
 		if alert.AlertType == "price" {
 			ticker, err := postgres.GetTicker(conn, *alert.SecurityID, time.Now())
 			if err != nil {
-				fmt.Println("error getting ticker: %w", err)
+				////fmt.Println("error getting ticker: %w", err)
 				return fmt.Errorf("getting ticker: %w", err)
 			}
 			alert.Ticker = &ticker
@@ -173,11 +177,11 @@ func initAlerts(conn *data.Conn) error {
 		Ticker:     nil, // Not needed for algo alerts
 	}
 	alerts.Store(algoAlert.AlertID, algoAlert)
-	fmt.Println("Added manual algo alert for testing")
+	////fmt.Println("Added manual algo alert for testing")
 
 	// Validate alert securities exist in data map
 	var alertErrors []error
-	alerts.Range(func(key, value interface{}) bool {
+	alerts.Range(func(_, value interface{}) bool {
 		alert := value.(Alert)
 		if alert.SecurityID != nil {
 			if _, exists := socket.AggData[*alert.SecurityID]; !exists {
@@ -201,6 +205,6 @@ func initAlerts(conn *data.Conn) error {
 		return fmt.Errorf("errors validating alerts: %s", errMsg)
 	}
 
-	fmt.Println("Finished initializing alerts")
+	////fmt.Println("Finished initializing alerts")
 	return nil
 }

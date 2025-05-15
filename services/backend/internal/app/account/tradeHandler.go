@@ -58,7 +58,7 @@ func HandleTradeUpload(conn *data.Conn, userID int, rawArgs json.RawMessage) (in
 	if err != nil {
 		return nil, fmt.Errorf("error reading CSV data: %v", err)
 	}
-	fmt.Println("debug: records", records)
+	////fmt.Println("debug: records", records)
 	// Add a check to identify and skip the column headers row
 	// Usually column headers contain non-numeric text in fields that should be numeric
 	for i := 0; i < len(records); i++ {

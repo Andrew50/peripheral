@@ -1,9 +1,9 @@
 <script lang="ts">
 import { onMount } from 'svelte';
 import { writable, get, derived } from 'svelte/store';
-import { strategies } from '$lib/core/stores';
-import { privateRequest } from '$lib/core/backend';
-import '$lib/core/global.css';
+import { strategies } from '$lib/utils/stores/stores';
+import { privateRequest } from '$lib/utils/helpers/backend';
+import '$lib/styles/global.css';
 
 // --- Interfaces ---
 type StrategyId = number | 'new' | null;
@@ -1008,12 +1008,12 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
 						<div class="layout-grid cols-2">
 							<div class="pill-group">
 								<h5>Include Tickers <span class="help-icon" title={helpText.universeTickerInclude}>?</span></h5>
-								{#each uFilter.include as ticker, i (ticker)} <span class="pill" on:click={() => removeUniverseInclude(uIndex, i)}>{ticker} ✕</span> {/each}
+								{#each uFilter.include as ticker, i (ticker)} <button type="button" class="pill" on:click={() => removeUniverseInclude(uIndex, i)}>{ticker} ✕</button> {/each}
 								<input class="small" placeholder="Add Ticker (Enter)" on:keydown={(e) => { if (e.key === 'Enter' && e.currentTarget.value.trim()) { addUniverseInclude(uIndex, e.currentTarget.value); e.currentTarget.value = ''; e.preventDefault(); } }} />
 							</div>
 							<div class="pill-group">
 								<h5>Exclude Tickers <span class="help-icon" title={helpText.universeTickerExclude}>?</span></h5>
-								{#each uFilter.exclude as ticker, i (ticker)} <span class="pill" on:click={() => removeUniverseExclude(uIndex, i)}>{ticker} ✕</span> {/each}
+								{#each uFilter.exclude as ticker, i (ticker)} <button type="button" class="pill" on:click={() => removeUniverseExclude(uIndex, i)}>{ticker} ✕</button> {/each}
 								<input class="small" placeholder="Add Ticker (Enter)" on:keydown={(e) => { if (e.key === 'Enter' && e.currentTarget.value.trim()) { addUniverseExclude(uIndex, e.currentTarget.value); e.currentTarget.value = ''; e.preventDefault(); } }} />
 							</div>
 						</div>
@@ -1173,8 +1173,8 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
 	input.small { font-size: 0.8rem; padding: 0.25rem 0.5rem; }
 	input.tiny { font-size: 0.75rem; padding: 0.1rem 0.3rem; width: 55px; }
 	/* Style for invalid input */
-	input.invalid, textarea.invalid { border-color: var(--color-down, #dc3545); background-color: var(--accent-red-light, #f8d7da); }
-	input.invalid:focus, textarea.invalid:focus { border-color: var(--color-down-dark, #a71d2a); box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.25); }
+	input.invalid { border-color: var(--color-down, #dc3545); background-color: var(--accent-red-light, #f8d7da); }
+	input.invalid:focus { border-color: var(--color-down-dark, #a71d2a); box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.25); }
 
 	label { display: block; font-weight: 500; margin-bottom: 0.25rem; font-size: 0.85rem; color: var(--text-secondary, #555); }
 	label.inline-label { display: inline-flex; align-items: center; margin-bottom: 0.5rem; }
