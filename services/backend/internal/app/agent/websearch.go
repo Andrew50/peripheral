@@ -19,11 +19,11 @@ type WebSearchResult struct {
 	Citations  []string `json:"citations,omitempty"`
 }
 
-func RunWebSearch(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-
+// RunWebSearch performs a web search using the Tavily API.
+func RunWebSearch(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args WebSearchArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		return nil, fmt.Errorf("error unmarshalling web search args: %w", err)
+		return nil, fmt.Errorf("error unmarshalling args: %w", err)
 	}
 	systemPrompt, err := getSystemInstruction("webSearchPrompt")
 	if err != nil {
@@ -77,9 +77,9 @@ func _geminiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (inte
 			}
 		}
 	}
-	if candidate.GroundingMetadata != nil {
-		fmt.Println("groundingMetadata", candidate.GroundingMetadata)
-	}
+	//if candidate.GroundingMetadata != nil {
+	////fmt.Println("groundingMetadata", candidate.GroundingMetadata)
+	//}
 	return WebSearchResult{
 		ResultText: resultText,
 	}, nil

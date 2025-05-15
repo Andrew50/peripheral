@@ -11,13 +11,13 @@ import (
 	"google.golang.org/genai"
 )
 
-func BuildPlanningPrompt(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}) string {
+func BuildPlanningPrompt(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}) (string, error) {
 	ctx := context.Background()
 	var sb strings.Builder
 	// Call the exported function with the cache key
 	conversationData, err := GetConversationFromCache(ctx, conn, userID)
 	if err != nil {
-		fmt.Printf("Error getting user conversation: %v\n", err)
+		return "", err
 	}
 	if conversationData != nil && len(conversationData.Messages) > 0 {
 		conversationContext := _buildConversationContext(conversationData.Messages)
@@ -33,22 +33,26 @@ func BuildPlanningPrompt(conn *data.Conn, userID int, query string, contextItems
 	if activeChartContext != nil {
 		sb.WriteString("<UserActiveChart>\n")
 		ticker, _ := activeChartContext["ticker"].(string)
-		secId := fmt.Sprint(activeChartContext["securityId"])
+		secID := fmt.Sprint(activeChartContext["securityId"])
 		tsStr := fmt.Sprint(activeChartContext["timestamp"])
-		sb.WriteString(fmt.Sprintf("Instance - Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secId, tsStr))
+		sb.WriteString(fmt.Sprintf("Instance - Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secID, tsStr))
 		sb.WriteString("\n</UserActiveChart>\n")
 	}
 	sb.WriteString("<UserQuery>\n")
 	sb.WriteString(query)
 	sb.WriteString("\n</UserQuery>\n")
 
-	return sb.String()
+	return sb.String(), nil
 }
 
-func BuildPlanningPromptWithResults(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, results []ExecuteResult) string {
+func BuildPlanningPromptWithResults(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, results []ExecuteResult) (string, error) {
 	// Start with the basic planning prompt
 	sb := strings.Builder{}
-	sb.WriteString(BuildPlanningPrompt(conn, userID, query, contextItems, activeChartContext))
+	planningPrompt, err := BuildPlanningPrompt(conn, userID, query, contextItems, activeChartContext)
+	if err != nil {
+		return "", err
+	}
+	sb.WriteString(planningPrompt)
 
 	// Add execution results
 	if len(results) > 0 {
@@ -64,7 +68,7 @@ func BuildPlanningPromptWithResults(conn *data.Conn, userID int, query string, c
 		sb.WriteString("</ExecutionResults>\n")
 	}
 
-	return sb.String()
+	return sb.String(), nil
 }
 
 func _buildContextItems(contextItems []map[string]interface{}) string {
@@ -79,9 +83,9 @@ func _buildContextItems(contextItems []map[string]interface{}) string {
 		} else if _, ok := item["timestamp"]; ok {
 			// Then treat instance contexts
 			ticker, _ := item["ticker"].(string)
-			secId := fmt.Sprint(item["securityId"])
+			secID := fmt.Sprint(item["securityId"])
 			tsStr := fmt.Sprint(item["timestamp"])
-			context.WriteString(fmt.Sprintf("Instance - Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secId, tsStr))
+			context.WriteString(fmt.Sprintf("Instance - Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secID, tsStr))
 		}
 	}
 	return context.String()
@@ -135,10 +139,14 @@ func _buildConversationContext(messages []ChatMessage) string {
 	return context.String()
 }
 
-func BuildFinalResponsePrompt(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, allResults []ExecuteResult) string {
+func BuildFinalResponsePrompt(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, allResults []ExecuteResult) (string, error) {
 	// Start with the basic planning prompt
 	sb := strings.Builder{}
-	sb.WriteString(BuildPlanningPrompt(conn, userID, query, contextItems, activeChartContext))
+	planningPrompt, err := BuildPlanningPrompt(conn, userID, query, contextItems, activeChartContext)
+	if err != nil {
+		return "", err
+	}
+	sb.WriteString(planningPrompt)
 
 	// Add execution results
 	if len(allResults) > 0 {
@@ -153,7 +161,7 @@ func BuildFinalResponsePrompt(conn *data.Conn, userID int, query string, context
 		}
 		sb.WriteString("</ExecRes>\n")
 	}
-	return sb.String()
+	return sb.String(), nil
 }
 
 var defaultSystemPromptTokenCount int32
