@@ -2,7 +2,7 @@ package socket
 
 import (
 	"backend/internal/data"
-	"fmt"
+	"log"
 	"os"
 
 	"github.com/gorilla/websocket"
@@ -14,7 +14,10 @@ func (c *Client) subscribeRealtime(conn *data.Conn, channelName string) {
 		return
 	}
 	channelsMutex.Lock()
-	os.Stdout.Sync()
+	if err := os.Stdout.Sync(); err != nil {
+		// Log the error but don't fail the subscription
+		log.Printf("Error syncing stdout: %v", err)
+	}
 	subscribers, exists := channelSubscribers[channelName]
 	if !exists {
 		subscribers = make(map[*Client]bool)
@@ -25,11 +28,10 @@ func (c *Client) subscribeRealtime(conn *data.Conn, channelName string) {
 	c.addSubscribedChannel(channelName)
 	incListeners(channelName)
 	go func() {
-		// EVENTUALLY: SHOULD USE A IN MEMORY CACHE INSTEAD OF REDIS
 		initialValue, fetchErr := getInitialStreamValue(conn, channelName, 0)
 		//fmt.Println("\n\ninitialValue", initialValue, string(initialValue))
 		if fetchErr != nil {
-			fmt.Println("Error fetching initial value from API:", fetchErr)
+			////fmt.Println("Error fetching initial value from API:", fetchErr)
 			return
 		}
 
@@ -38,7 +40,7 @@ func (c *Client) subscribeRealtime(conn *data.Conn, channelName string) {
 		defer c.mu.Unlock()
 		err := c.ws.WriteMessage(websocket.TextMessage, initialValue)
 		if err != nil {
-			fmt.Println("WebSocket write error while sending initial value:", err)
+			return
 		}
 	}()
 }

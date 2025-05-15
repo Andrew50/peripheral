@@ -2,8 +2,8 @@
 //
 // A faithful Go rewrite of the original Python `update_sectors` script.
 // – Keeps identical batching / worker‑count logic.
-// – Randomised jitter + extra 200 ms pause to respect Yahoo’s informal rate‑limit.
-// – Uses the unofficial “quoteSummary?modules=assetProfile” endpoint directly
+// – Randomised jitter + extra 200 ms pause to respect Yahoo's informal rate‑limit.
+// – Uses the unofficial "quoteSummary?modules=assetProfile" endpoint directly
 //   instead of `yfinance`; no external Go Yahoo‑Finance wrapper required.
 //
 // Requirements
@@ -22,19 +22,21 @@
 // ---------------------------------------------------------------------------
 //    stats, err := UpdateSectors(context.Background(), myConn)
 //    if err != nil { log.Fatal(err) }
-//    fmt.Printf("%+v\n", stats)
+//    ////fmt.Printf("%+v\n", stats)
 // ---------------------------------------------------------------------------
 
 package securities
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
-	"math/rand"
+	"math/big"
+
+	// "log"
 	"net/http"
 	"os"
 	"runtime"
@@ -55,8 +57,13 @@ type security struct {
 	CurrentIndustry sql.NullString
 }
 
-type statBlock struct {
-	Total, Updated, Failed, Unchanged int
+// StatBlock defines a structure for holding statistics.
+type StatBlock struct {
+	CurrentRecords   int
+	NewRecords       int
+	UpdatedRecords   int
+	FailedRecords    int
+	UnchangedRecords int
 }
 
 type result struct {
@@ -66,8 +73,10 @@ type result struct {
 
 // --------------------------- public entry -------------------------------- //
 
-func UpdateSectors(ctx context.Context, c *data.Conn) (statBlock, error) {
-	stats := statBlock{}
+func UpdateSectors(ctx context.Context, c *data.Conn) (StatBlock, error) {
+	var stats StatBlock
+	var newSectorIDs []string
+	var updatedSectorIDs []string
 
 	// ------------------------------------------------------------------ //
 	// 1. Fetch distinct active tickers whose maxDate IS NULL              //
@@ -93,9 +102,9 @@ func UpdateSectors(ctx context.Context, c *data.Conn) (statBlock, error) {
 		return stats, err
 	}
 
-	stats.Total = len(all)
-	if stats.Total == 0 {
-		log.Println("update_sectors: nothing to do")
+	stats.CurrentRecords = len(all)
+	if stats.CurrentRecords == 0 {
+		//log.Println("update_sectors: nothing to do")
 		return stats, nil
 	}
 
@@ -104,23 +113,22 @@ func UpdateSectors(ctx context.Context, c *data.Conn) (statBlock, error) {
 	// ------------------------------------------------------------------ //
 	batch := envInt("UPDATE_SECTORS_BATCH_SIZE", 100)
 	if len(all) > batch {
-		log.Printf("Processing %d securities in batches of %d\n", len(all), batch)
+		//log.Printf("Processing %d securities in batches of %d\n", len(all), batch)
 		all = all[:batch]
-		stats.Total = batch
+		stats.CurrentRecords = batch
 	}
 
 	// ------------------------------------------------------------------ //
 	// 3. Worker‑pool configuration                                       //
 	// ------------------------------------------------------------------ //
 	// Reduce maximum concurrent workers to 2 (or even 1 for sequential processing)
-	workerCount := min(
+	workerCount := minInt(
 		2, // <-- Reduced from 4
 		runtime.NumCPU(),
-		max(1, len(all)/2),
+		maxInt(1, len(all)/2),
 	)
 
-	log.Printf("Starting update_sectors with %d workers for %d securities\n",
-		workerCount, len(all))
+	//log.Printf("Starting update_sectors with %d workers for %d securities\n", workerCount, len(all))
 
 	jobs := make(chan security)
 	results := make(chan result)
@@ -144,20 +152,22 @@ func UpdateSectors(ctx context.Context, c *data.Conn) (statBlock, error) {
 	go func() {
 		for r := range results {
 			if r.Err != nil {
-				log.Printf("Failed to update %s: %v\n", r.Ticker, r.Err)
-				stats.Failed++
+				//log.Printf("Failed to update %s: %v\n", r.Ticker, r.Err)
+				stats.FailedRecords++
 				continue
 			}
 			curr := findCurrent(all, r.Ticker)
 			if shouldUpdate(curr, r) {
 				if err := applyUpdate(ctx, c.DB, r); err != nil {
-					log.Printf("DB update error for %s: %v\n", r.Ticker, err)
-					stats.Failed++
+					//log.Printf("DB update error for %s: %v\n", r.Ticker, err)
+					stats.FailedRecords++
 				} else {
-					stats.Updated++
+					stats.UpdatedRecords++
+					newSectorIDs = append(newSectorIDs, r.Ticker)
 				}
 			} else {
-				stats.Unchanged++
+				stats.UnchangedRecords++
+				updatedSectorIDs = append(updatedSectorIDs, r.Ticker)
 			}
 		}
 		done <- struct{}{}
@@ -170,7 +180,7 @@ func UpdateSectors(ctx context.Context, c *data.Conn) (statBlock, error) {
 	}()
 
 	<-done
-	log.Printf("update_sectors completed: %+v\n", stats)
+	//log.Printf("update_sectors completed: %+v\n", stats)
 	return stats, nil
 }
 
@@ -187,8 +197,16 @@ func worker(ctx context.Context, wg *sync.WaitGroup, jobs <-chan security, out c
 func fetchTickerInfo(ctx context.Context, s security) result {
 	// Initial jitter delay before first request attempt
 	// Increase base jitter delay, e.g., 500ms - 900ms
-	jitter := time.Duration(rand.Intn(400)+500) * time.Millisecond // <-- Base increased from 100 to 500
-	time.Sleep(jitter)
+	var jitter time.Duration
+	n, errCryptoRand := rand.Int(rand.Reader, big.NewInt(400))
+	if errCryptoRand != nil {
+		// Fallback or log error - using a default jitter for simplicity here
+		jitter = time.Duration(500+200) * time.Millisecond // Default: 500 + (400/2)
+		// log.Printf("Error generating crypto/rand jitter, using default: %v", errCryptoRand)
+	} else {
+		jitter = time.Duration(n.Int64()+500) * time.Millisecond
+	}
+	time.Sleep(jitter) // <-- Base increased from 100 to 500
 
 	sector, industry, err := queryYahoo(ctx, s.Ticker)
 	// Only sleep after successful requests or non-retryable errors
@@ -232,13 +250,19 @@ func queryYahoo(ctx context.Context, ticker string) (sector, industry string, er
 		if attempt > 0 {
 			// Calculate backoff duration with exponential increase and some jitter
 			backoff := initialBackoff * time.Duration(1<<(attempt-1))
-			jitterRange := int(backoff / 4)
-			jitter := time.Duration(rand.Intn(jitterRange))
-			waitTime := backoff + jitter
-
-			//log.Printf("Retrying %s (attempt %d/%d) after %v due to: %v",
-			//	ticker, attempt, maxRetries, waitTime, lastErr)
-
+			jitterRange := int64(backoff / 4)
+			var currentJitter time.Duration
+			if jitterRange > 0 {
+				nJitter, errCryptoRand := rand.Int(rand.Reader, big.NewInt(jitterRange))
+				if errCryptoRand != nil {
+					// Fallback or log error
+					currentJitter = time.Duration(jitterRange / 2)
+					// log.Printf("Error generating crypto/rand jitter for backoff, using default: %v", errCryptoRand)
+				} else {
+					currentJitter = time.Duration(nJitter.Int64())
+				}
+			}
+			waitTime := backoff + currentJitter
 			// Wait before retrying
 			select {
 			case <-time.After(waitTime):
@@ -259,7 +283,7 @@ func queryYahoo(ctx context.Context, ticker string) (sector, industry string, er
 
 		// Check if we got a retryable status code (429 or 5xx)
 		if resp.StatusCode == 429 || (resp.StatusCode >= 500 && resp.StatusCode < 600) {
-			resp.Body.Close() // Important: close the body before retrying
+			_ = resp.Body.Close() // Close the body before continuing
 			lastErr = fmt.Errorf("retryable status: %s", resp.Status)
 			continue // Retryable status code, retry
 		}
@@ -337,7 +361,7 @@ func envInt(key string, def int) int {
 	return def
 }
 
-func min(a int, rest ...int) int {
+func minInt(a int, rest ...int) int {
 	m := a
 	for _, v := range rest {
 		if v < m {
@@ -347,7 +371,7 @@ func min(a int, rest ...int) int {
 	return m
 }
 
-func max(a int, rest ...int) int {
+func maxInt(a int, rest ...int) int {
 	m := a
 	for _, v := range rest {
 		if v > m {
