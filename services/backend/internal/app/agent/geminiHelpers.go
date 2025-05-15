@@ -39,7 +39,7 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 
 	// Start with the base prompt
 	toolsDescription.WriteString(basePrompt)
-	toolsDescription.WriteString("\n\nHere are the functions you can use:\n\n")
+	toolsDescription.WriteString("\n\nHere are the available tools. '?' indicates an optional parameter.\n")
 
 	// Sort tool names for consistent output
 	var toolNames []string
@@ -57,7 +57,7 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 
 		// Add parameters if they exist
 		if tool.FunctionDeclaration.Parameters != nil && len(tool.FunctionDeclaration.Parameters.Properties) > 0 {
-			toolsDescription.WriteString("  Parameters:\n")
+			toolsDescription.WriteString("  Params:\n")
 
 			// Get required parameters
 			required := make(map[string]bool)
@@ -68,17 +68,17 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 			// Add each parameter with its description
 			for paramName, paramSchema := range tool.FunctionDeclaration.Parameters.Properties {
 				isReq := ""
-				if required[paramName] {
-					isReq = " (REQUIRED)"
+				if !required[paramName] {
+					isReq = "?"
 				}
-				toolsDescription.WriteString(fmt.Sprintf("  - %s: %s%s\n", paramName, paramSchema.Description, isReq))
+				toolsDescription.WriteString(fmt.Sprintf("  - %s%s: %s\n", paramName, isReq, paramSchema.Description))
 			}
 		}
 
 		// Add spacing between functions
 		toolsDescription.WriteString("\n")
 	}
-
+	fmt.Printf("toolsDescription: %s\n", toolsDescription.String())
 	return toolsDescription.String()
 }
 
