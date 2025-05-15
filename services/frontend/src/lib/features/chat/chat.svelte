@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount, tick, onDestroy } from 'svelte';
-	import { privateRequest } from '$lib/core/backend';
+	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { marked } from 'marked'; // Import the markdown parser
 	import { queryChart } from '$lib/features/chart/interface'; // Import queryChart
-	import type { Instance } from '$lib/core/types';
+	import type { Instance } from '$lib/utils/types/types';
 	import { browser } from '$app/environment'; // Import browser
 	import { derived, writable } from 'svelte/store';
 	import {
@@ -1124,12 +1124,6 @@
 		padding: 0.75rem;
 		font-size: 0.75rem;
 		overflow-x: auto;
-	}
-
-	.function-result-data pre {
-		margin: 0;
-		font-family: monospace;
-		white-space: pre-wrap;
 	}
 
 	/* Suggested queries styling */

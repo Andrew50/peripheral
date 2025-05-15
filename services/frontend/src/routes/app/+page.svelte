@@ -1,26 +1,26 @@
 <script lang="ts">
-	import '$lib/core/global.css';
+	import '$lib/styles/global.css';
 	import ChartContainer from '$lib/features/chart/chartContainer.svelte';
 	import Alerts from '$lib/features/alerts/alert.svelte';
-	import RightClick from '$lib/utils/popups/rightClick.svelte';
-	import StrategiesPopup from '$lib/utils/popups/strategiesPopup.svelte';
-	import Input from '$lib/utils/popups/input.svelte';
+	import RightClick from '$lib/components/rightClick.svelte';
+	import StrategiesPopup from '$lib/components/strategiesPopup.svelte';
+	import Input from '$lib/components/input.svelte';
 	//import Similar from '$lib/features/similar/similar.svelte';
 	//import Study from '$lib/features/study.svelte';
-	import Watchlist from '$lib/features/watchlist.svelte';
+	import Watchlist from '$lib/features/watchlist/watchlist.svelte';
 	//import TickerInfo from '$lib/features/quotes/tickerInfo.svelte';
 	import Quote from '$lib/features/quotes/quote.svelte';
-	import Algo from '$lib/utils/popups/algo.svelte';
-	import { activeMenu, changeMenu } from '$lib/core/stores';
+	//import Algo from '$lib/components/algo.svelte';
+	import { activeMenu, changeMenu } from '$lib/utils/stores/stores';
 
 	// Windows that will be opened in draggable divs
-	import Screener from '$lib/features/screen.svelte';
-	import Account from '$lib/features/account.svelte';
+	import Screener from '$lib/features/screener/screener.svelte';
+	import Account from '$lib/features/account/account.svelte';
 	import Strategies from '$lib/features/strategies/strategies.svelte';
-	import Settings from '$lib/features/settings.svelte';
-	import News from '$lib/features/news.svelte';
-    import Deploy from '$lib/features/deploy.svelte'
-    import Backtest from '$lib/features/backtest.svelte'
+	import Settings from '$lib/features/settings/settings.svelte';
+	import News from '$lib/features/news/news.svelte';
+    import Deploy from '$lib/features/deploy/deploy.svelte'
+    import Backtest from '$lib/features/backtest/backtest.svelte'
 
 	// Replay logic
 	import {
@@ -31,10 +31,10 @@
 		changeSpeed,
 		nextDay
 	} from '$lib/utils/stream/interface';
-	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
+	import { queryInstanceInput } from '$lib/components/input.svelte';
 	import { browser } from '$app/environment';
 	import { onMount, onDestroy } from 'svelte';
-	import { privateRequest } from '$lib/core/backend';
+	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { goto } from '$app/navigation';
 	import {
 		initStores,
@@ -43,15 +43,15 @@
 		dispatchMenuChange,
 		menuWidth,
 		settings
-	} from '$lib/core/stores';
+	} from '$lib/utils/stores/stores';
 	import { writable, type Writable } from 'svelte/store';
-	import { colorSchemes, applyColorScheme } from '$lib/core/styles/colorSchemes';
+	import { colorSchemes, applyColorScheme } from '$lib/styles/colorSchemes';
 
 	// Import Instance from types
-	import type { Instance } from '$lib/core/types';
+	import type { Instance } from '$lib/utils/types/types';
 
 	// Add import near the top with other imports
-	import Screensaver from '$lib/features/screensaver.svelte';
+	import Screensaver from '$lib/features/screensaver/screensaver.svelte';
 
 	// Add new import for Query component
 	import Query from '$lib/features/chat/chat.svelte';
@@ -794,6 +794,7 @@
 <div
 	class="page"
 	role="application"
+	tabindex="-1"
 	on:keydown={(e) => {
 		if (e.key === 'Escape') {
 			minimizeBottomWindow();
@@ -804,7 +805,7 @@
 	<Input />
 	<RightClick />
 	<StrategiesPopup />
-	<Algo />
+	<!--<Algo />-->
 	<!-- Main area wrapper -->
 	<div class="app-container">
 		<div class="content-wrapper">
