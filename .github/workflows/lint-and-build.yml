@@ -232,12 +232,10 @@ jobs:
           go mod tidy
           go mod verify
           if ! git diff --quiet go.mod go.sum; then
-            echo "go.mod or go.sum changed. Committing and pushing changes..."
-            git config --global user.name 'github-actions[bot]'
-            git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-            git add go.mod go.sum
-            git commit -m "chore: go mod tidy"
-            git push origin HEAD:${{ github.head_ref || github.ref_name }}
+            echo "::error file=services/backend/go.mod,title=go.mod/go.sum outdated::'go mod tidy' resulted in changes. Please run 'go mod tidy' locally and commit the changes."
+            echo "Diff:"
+            git diff --color=always go.mod go.sum # Adding color and specifying files for clarity
+            exit 1
           else
             echo "go.mod and go.sum are already tidy."
           fi
