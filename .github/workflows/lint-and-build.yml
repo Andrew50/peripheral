@@ -280,6 +280,7 @@ jobs:
 
       - name: Create job summary for Backend
         if: always() # Run even if previous steps failed, to provide a summary
+        shell: bash
         run: |
           if [[ "${{ job.status }}" == "success" || ("${{ job.status }}" == "failure" && "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" == "true") ]]; then
             echo "### Backend CI Results ✅" >> $GITHUB_STEP_SUMMARY
@@ -375,6 +376,7 @@ jobs:
 
       - name: Create job summary for Frontend
         if: always()
+        shell: bash
         run: |
           if [[ "${{ job.status }}" == "success" || ("${{ job.status }}" == "failure" && "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" == "true") ]]; then
             echo "### Frontend CI Results ✅" >> $GITHUB_STEP_SUMMARY
