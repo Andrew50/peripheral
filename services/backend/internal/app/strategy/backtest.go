@@ -141,7 +141,6 @@ func RunBacktest(conn *data.Conn, userID int, rawArgs json.RawMessage) (any, err
 				continue
 			}
 
-			// Convert securityID once per record
 			var securityID int
 			switch v := secIDAny.(type) {
 			case int:
