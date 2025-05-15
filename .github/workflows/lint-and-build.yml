@@ -188,7 +188,7 @@ jobs:
     needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_backend_changes == 'true' }}
     container:
-      image: docker.io/billin19/ci-image:latest
+      image: golang:1.24 # Changed to standard Go image
     runs-on: ubuntu-latest # Still specify runs-on for runner selection, container runs on this
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     permissions:
@@ -207,6 +207,12 @@ jobs:
       - name: Mark the Git workspace as safe
         run: git config --global --add safe.directory "${GITHUB_WORKSPACE:-$(pwd)}"
 
+      - name: Install Go CI tools
+        run: |
+          CGO_ENABLED=0 go install honnef.co/go/tools/cmd/staticcheck@latest
+          CGO_ENABLED=0 go install github.com/securego/gosec/v2/cmd/gosec@latest
+          CGO_ENABLED=0 go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          echo "/go/bin" >> $GITHUB_PATH # Ensure installed tools are in PATH
 
       - name: Cache Go modules and build tools
         uses: actions/cache@v4
@@ -292,16 +298,17 @@ jobs:
     needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_frontend_changes == 'true' }}
     container:
-      image: docker.io/billin19/ci-image:latest
+      image: node:18
     runs-on: ubuntu-latest # Still specify runs-on for runner selection
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
-    # outputs: # Original workflow had this, but it wasn't used. Removing for now.
-    #   has_changes: ${{ steps.check-frontend-changes.outputs.has_changes }}
     steps:
       - uses: actions/checkout@v3
         with:
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
           fetch-depth: 0
+
+      - name: Install pnpm
+        run: npm install -g pnpm@8
 
       # Assuming pnpm is installed in the container image.
       # Node and project dependencies might also be pre-installed in the image.
