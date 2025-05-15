@@ -236,6 +236,11 @@ jobs:
       - name: Vet, Lint, Staticcheck, Gosec, Build
         working-directory: services/backend
         run: |
+          echo "Cleaning Go caches..."
+          go clean -cache
+          go clean -modcache
+          echo "Re-tidying modules..."
+          go mod tidy
           echo "Running go vet..."
           go vet ./...
 
