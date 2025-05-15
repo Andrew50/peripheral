@@ -16,7 +16,7 @@ type GetWatchlistsResult struct {
 // GetWatchlists performs operations related to GetWatchlists functionality.
 func GetWatchlists(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(),
-		`SELECT watchlistId, name, items
+		`SELECT watchlistId, watchlistName
 		FROM watchlists
 		WHERE userId = $1`, userID)
 	if err != nil {

@@ -1,3 +1,4 @@
+// <prompt.go>
 package agent
 
 import (
@@ -6,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"google.golang.org/genai"
 )
 
 func BuildPlanningPrompt(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}) (string, error) {
@@ -147,7 +150,7 @@ func BuildFinalResponsePrompt(conn *data.Conn, userID int, query string, context
 
 	// Add execution results
 	if len(allResults) > 0 {
-		sb.WriteString("\n<ExecutionResults>\n")
+		sb.WriteString("\n<ExecRes>\n")
 		resultsJSON, err := json.Marshal(allResults)
 		if err != nil {
 			sb.WriteString(fmt.Sprintf("Error marshaling results: %v\n", err))
@@ -156,7 +159,40 @@ func BuildFinalResponsePrompt(conn *data.Conn, userID int, query string, context
 			sb.WriteString(string(resultsJSON))
 			sb.WriteString("\n```\n")
 		}
-		sb.WriteString("</ExecutionResults>\n")
+		sb.WriteString("</ExecRes>\n")
 	}
 	return sb.String(), nil
 }
+
+var defaultSystemPromptTokenCount int32
+
+func getDefaultSystemPromptTokenCount(conn *data.Conn) {
+	apiKey, err := conn.GetGeminiKey()
+	if err != nil {
+		return
+	}
+
+	client, err := genai.NewClient(context.Background(), &genai.ClientConfig{
+		APIKey:  apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		return
+	}
+	systemPrompt, err := getSystemInstruction("defaultSystemPrompt")
+	if err != nil {
+		return
+	}
+	enhancedSystemPrompt := enhanceSystemPromptWithTools(systemPrompt)
+
+	CountTokensResponse, err := client.Models.CountTokens(context.Background(), planningModel, genai.Text(enhancedSystemPrompt), &genai.CountTokensConfig{})
+	if err != nil {
+		return
+	}
+	if CountTokensResponse != nil {
+		defaultSystemPromptTokenCount = CountTokensResponse.TotalTokens
+		fmt.Printf("defaultSystemPromptTokenCount: %d\n", defaultSystemPromptTokenCount)
+	}
+}
+
+// </prompt.go>

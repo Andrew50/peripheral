@@ -532,10 +532,10 @@ func fetchFilingText(url string) (string, error) {
 }
 
 // extractTextFromHTML extracts readable text content from HTML
-func extractTextFromHTML(html string) string {
+func extractTextFromHTML(htmlContent string) string {
 	// Remove HTML tags
-	textContent := removeHTMLTags(html)
-
+	textContent := removeHTMLTags(htmlContent)
+	textContent = html.UnescapeString(textContent)
 	// Remove extra whitespace and normalize
 	textContent = normalizeWhitespace(textContent)
 
