@@ -541,9 +541,8 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 
 				if status != "completed" && status != "error" {
 					continue
-				} else {
-					completedTasks[taskID] = true
 				}
+				completedTasks[taskID] = true
 			} else {
 				// Try to parse as response object
 				err = json.Unmarshal([]byte(statusJSON), &result)
@@ -746,7 +745,7 @@ func printUsage() {
 		"list": {
 			usage:       "list",
 			description: "List all available jobs",
-			execute:     func(args []string) { listJobs() },
+			execute:     func(_ []string) { listJobs() },
 		},
 		"run": {
 			usage:       "run [job_name]",
@@ -777,7 +776,7 @@ func printUsage() {
 		"queue": {
 			usage:       "queue",
 			description: "Get status of the job queue",
-			execute:     func(args []string) { getQueueStatus() },
+			execute:     func(_ []string) { getQueueStatus() },
 		},
 		"monitor": {
 			usage:       "monitor [task_id]",
@@ -794,7 +793,7 @@ func printUsage() {
 		"help": {
 			usage:       "help",
 			description: "Show this help message",
-			execute:     func(args []string) { printUsage() },
+			execute:     func(_ []string) { printUsage() },
 		},
 	}
 
@@ -833,7 +832,7 @@ func StartCLI() {
 		"list": {
 			usage:       "list",
 			description: "List all available jobs",
-			execute:     func(args []string) { listJobs() },
+			execute:     func(_ []string) { listJobs() },
 		},
 		"run": {
 			usage:       "run [job_name]",
@@ -864,7 +863,7 @@ func StartCLI() {
 		"queue": {
 			usage:       "queue",
 			description: "Get status of the job queue",
-			execute:     func(args []string) { getQueueStatus() },
+			execute:     func(_ []string) { getQueueStatus() },
 		},
 		"monitor": {
 			usage:       "monitor [task_id]",
@@ -881,7 +880,7 @@ func StartCLI() {
 		"help": {
 			usage:       "help",
 			description: "Show this help message",
-			execute:     func(args []string) { printUsage() },
+			execute:     func(_ []string) { printUsage() },
 		},
 	}
 

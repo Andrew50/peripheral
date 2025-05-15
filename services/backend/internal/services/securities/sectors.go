@@ -57,8 +57,13 @@ type security struct {
 	CurrentIndustry sql.NullString
 }
 
-type statBlock struct {
-	Total, Updated, Failed, Unchanged int
+// StatBlock defines a structure for holding statistics.
+type StatBlock struct {
+	CurrentRecords   int
+	NewRecords       int
+	UpdatedRecords   int
+	FailedRecords    int
+	UnchangedRecords int
 }
 
 type result struct {
@@ -68,8 +73,10 @@ type result struct {
 
 // --------------------------- public entry -------------------------------- //
 
-func UpdateSectors(ctx context.Context, c *data.Conn) (statBlock, error) {
-	stats := statBlock{}
+func UpdateSectors(ctx context.Context, c *data.Conn) (StatBlock, error) {
+	var stats StatBlock
+	var newSectorIDs []string
+	var updatedSectorIDs []string
 
 	// ------------------------------------------------------------------ //
 	// 1. Fetch distinct active tickers whose maxDate IS NULL              //
@@ -95,8 +102,8 @@ func UpdateSectors(ctx context.Context, c *data.Conn) (statBlock, error) {
 		return stats, err
 	}
 
-	stats.Total = len(all)
-	if stats.Total == 0 {
+	stats.CurrentRecords = len(all)
+	if stats.CurrentRecords == 0 {
 		//log.Println("update_sectors: nothing to do")
 		return stats, nil
 	}
@@ -108,17 +115,17 @@ func UpdateSectors(ctx context.Context, c *data.Conn) (statBlock, error) {
 	if len(all) > batch {
 		//log.Printf("Processing %d securities in batches of %d\n", len(all), batch)
 		all = all[:batch]
-		stats.Total = batch
+		stats.CurrentRecords = batch
 	}
 
 	// ------------------------------------------------------------------ //
 	// 3. Worker‑pool configuration                                       //
 	// ------------------------------------------------------------------ //
 	// Reduce maximum concurrent workers to 2 (or even 1 for sequential processing)
-	workerCount := min(
+	workerCount := minInt(
 		2, // <-- Reduced from 4
 		runtime.NumCPU(),
-		max(1, len(all)/2),
+		maxInt(1, len(all)/2),
 	)
 
 	//log.Printf("Starting update_sectors with %d workers for %d securities\n", workerCount, len(all))
@@ -146,19 +153,21 @@ func UpdateSectors(ctx context.Context, c *data.Conn) (statBlock, error) {
 		for r := range results {
 			if r.Err != nil {
 				//log.Printf("Failed to update %s: %v\n", r.Ticker, r.Err)
-				stats.Failed++
+				stats.FailedRecords++
 				continue
 			}
 			curr := findCurrent(all, r.Ticker)
 			if shouldUpdate(curr, r) {
 				if err := applyUpdate(ctx, c.DB, r); err != nil {
 					//log.Printf("DB update error for %s: %v\n", r.Ticker, err)
-					stats.Failed++
+					stats.FailedRecords++
 				} else {
-					stats.Updated++
+					stats.UpdatedRecords++
+					newSectorIDs = append(newSectorIDs, r.Ticker)
 				}
 			} else {
-				stats.Unchanged++
+				stats.UnchangedRecords++
+				updatedSectorIDs = append(updatedSectorIDs, r.Ticker)
 			}
 		}
 		done <- struct{}{}
@@ -352,7 +361,7 @@ func envInt(key string, def int) int {
 	return def
 }
 
-func min(a int, rest ...int) int {
+func minInt(a int, rest ...int) int {
 	m := a
 	for _, v := range rest {
 		if v < m {
@@ -362,7 +371,7 @@ func min(a int, rest ...int) int {
 	return m
 }
 
-func max(a int, rest ...int) int {
+func maxInt(a int, rest ...int) int {
 	m := a
 	for _, v := range rest {
 		if v > m {

@@ -2,7 +2,7 @@ package alerts
 
 import (
 	"backend/internal/data"
-    "backend/internal/services/socket"
+	"backend/internal/services/socket"
 	"context"
 	"fmt"
 	"log"
@@ -43,10 +43,11 @@ func InitTelegramBot() error {
 func SendTelegramMessage(msg string, chatID int64) error {
 	recipient := telebot.ChatID(chatID)
 	_, err := bot.Send(recipient, msg)
-    return err
-//	if err != nil {
-		//log.Printf("Failed to send message to chat ID %d: %v", chatID, err)
-	//}
+	return err
+	//	if err != nil {
+	//
+	// log.Printf("Failed to send message to chat ID %d: %v", chatID, err)
+	// }
 }
 
 func writeAlertMessage(alert Alert) string {
@@ -70,9 +71,8 @@ func writeAlertMessage(alert Alert) string {
 		}
 		if *alert.Direction {
 			return fmt.Sprintf("%s price above %f", *alert.Ticker, *alert.Price)
-		} else {
-			return fmt.Sprintf("%s price below %f", *alert.Ticker, *alert.Price)
 		}
+		return fmt.Sprintf("%s price below %f", *alert.Ticker, *alert.Price)
 	} else if alert.AlertType == "algo" {
 		return fmt.Sprintf("Algo alert triggered (ID: %d)", *alert.AlgoID)
 	}
@@ -84,10 +84,10 @@ func dispatchAlert(conn *data.Conn, alert Alert) error {
 	////fmt.Println("dispatching alert", alert)
 	alertMessage := writeAlertMessage(alert)
 	timestamp := time.Now()
-    err := SendTelegramMessage(alertMessage, ChatID)
-    if err != nil {
-        return err
-    }
+	err := SendTelegramMessage(alertMessage, ChatID)
+	if err != nil {
+		return err
+	}
 	socket.SendAlertToUser(alert.UserID, socket.AlertMessage{
 		AlertID:    alert.AlertID,
 		Timestamp:  timestamp.Unix() * 1000,

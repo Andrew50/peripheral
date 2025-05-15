@@ -8,7 +8,7 @@ import (
 )
 
 // GetSettings performs operations related to GetSettings functionality.
-func GetSettings(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+func GetSettings(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
 	var settings json.RawMessage
 	err := conn.DB.QueryRow(context.Background(), "SELECT settings from users where userId = $1", userID).Scan(&settings)
 	if err != nil {

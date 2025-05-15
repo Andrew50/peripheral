@@ -3,7 +3,7 @@ package socket
 import (
 	"backend/internal/data"
 	"backend/internal/data/edgar"
-	"backend/internal/services/marketData"
+	"backend/internal/services/marketdata"
 	"encoding/json"
 	"fmt"
 )
@@ -25,7 +25,7 @@ func (c *Client) subscribeSECFilings(conn *data.Conn) {
 	// Get the latest filings from the cache
 	if conn != nil {
 		// Get the latest filings from the cache
-		latestFilings := marketData.GetLatestEdgarFilings()
+		latestFilings := marketdata.GetLatestEdgarFilings()
 		if len(latestFilings) <= 0 {
 			fmt.Println("No SEC filings available to send initially")
 			return
