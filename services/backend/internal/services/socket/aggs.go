@@ -65,7 +65,7 @@ func updateTimeframe(td *TimeframeData, timestamp int64, price float64, volume f
 
 	if timestamp >= td.rolloverTimestamp { // if out of order ticks
 		if td.Size > 0 {
-			copy(td.Aggs[1:], td.Aggs[0:min(td.Size, AggsLength-1)])
+			copy(td.Aggs[1:], td.Aggs[0:minIntsAggs(td.Size, AggsLength-1)])
 		}
 		td.Aggs[0] = []float64{price, price, price, price, volume}
 		td.rolloverTimestamp = nextPeriodStart(timestamp, timeframe)
@@ -73,21 +73,21 @@ func updateTimeframe(td *TimeframeData, timestamp int64, price float64, volume f
 			td.Size++
 		}
 	} else {
-		td.Aggs[0][1] = max(td.Aggs[0][1], price)   // High
-		td.Aggs[0][2] = min64(td.Aggs[0][2], price) // Low
-		td.Aggs[0][3] = price                       // Close
-		td.Aggs[0][4] += float64(volume)            // Volume
+		td.Aggs[0][1] = maxFloat64Aggs(td.Aggs[0][1], price) // High
+		td.Aggs[0][2] = min64(td.Aggs[0][2], price)          // Low
+		td.Aggs[0][3] = price                                // Close
+		td.Aggs[0][4] += float64(volume)                     // Volume
 	}
 }
 
-func min(a, b int) int {
+func minIntsAggs(a, b int) int {
 	if a < b {
 		return a
 	}
 	return b
 }
 
-func max(a, b float64) float64 {
+func maxFloat64Aggs(a, b float64) float64 {
 	if a > b {
 		return a
 	}
@@ -115,7 +115,7 @@ func setAggsInitialized(value bool) {
 	aggsInitialized = value
 }
 
-func appendTick(conn *data.Conn, securityId int, timestamp int64, price float64, intVolume int64) error {
+func appendTick(_ *data.Conn, securityID int, timestamp int64, price float64, intVolume int64) error {
 	// Check if aggs are initialized
 	if !areAggsInitialized() {
 		return fmt.Errorf("aggregates not yet initialized")
@@ -124,7 +124,7 @@ func appendTick(conn *data.Conn, securityId int, timestamp int64, price float64,
 	volume := float64(intVolume)
 
 	AggDataMutex.RLock() // Acquire read lock
-	sd, exists := AggData[securityId]
+	sd, exists := AggData[securityID]
 	AggDataMutex.RUnlock() // Release read lock
 
 	if !exists {
@@ -161,9 +161,9 @@ func nextPeriodStart(timestamp int64, tf int) int64 {
 }
 
 // GetTimeframeData performs operations related to GetTimeframeData functionality.
-func GetTimeframeData(securityId int, timeframe int, extendedHours bool) ([][]float64, error) {
+func GetTimeframeData(securityID int, timeframe int, extendedHours bool) ([][]float64, error) {
 	AggDataMutex.RLock() // Acquire read lock
-	sd, exists := AggData[securityId]
+	sd, exists := AggData[securityID]
 	AggDataMutex.RUnlock() // Release read lock
 
 	if !exists {
@@ -229,13 +229,13 @@ func initAggregatesInternal(conn *data.Conn) error {
 	}
 
 	defer rows.Close()
-	var securityIds []int
+	var securityIDs []int
 	for rows.Next() {
-		var securityId int
-		if err := rows.Scan(&securityId); err != nil {
+		var securityID int
+		if err := rows.Scan(&securityID); err != nil {
 			return fmt.Errorf("scanning security ID: %w", err)
 		}
-		securityIds = append(securityIds, securityId)
+		securityIDs = append(securityIDs, securityID)
 	}
 
 	if err = rows.Err(); err != nil {
@@ -243,7 +243,7 @@ func initAggregatesInternal(conn *data.Conn) error {
 	}
 
 	// Process securities with a capped number of goroutines
-	results := processSecuritiesConcurrently(securityIds, concurrency, conn)
+	results := processSecuritiesConcurrently(securityIDs, concurrency, conn)
 
 	// Process results and collect errors
 	data := make(map[int]*SecurityData)
@@ -253,7 +253,7 @@ func initAggregatesInternal(conn *data.Conn) error {
 		if res.err != nil {
 			loadErrors = append(loadErrors, res.err)
 		} else {
-			data[res.securityId] = res.data
+			data[res.securityID] = res.data
 		}
 	}
 
@@ -278,34 +278,34 @@ func initAggregatesInternal(conn *data.Conn) error {
 
 // Function to process securities concurrently with a fixed number of workers
 type result struct {
-	securityId int
+	securityID int
 	data       *SecurityData
 	err        error
 }
 
-func processSecuritiesConcurrently(securityIds []int, concurrency int, conn *data.Conn) []result {
-	resultsChan := make(chan result, len(securityIds))
-	jobChan := make(chan int, len(securityIds))
+func processSecuritiesConcurrently(securityIDs []int, concurrency int, conn *data.Conn) []result {
+	resultsChan := make(chan result, len(securityIDs))
+	jobChan := make(chan int, len(securityIDs))
 
 	// Spawn a fixed number of workers
 	for w := 0; w < concurrency; w++ {
 		go func() {
 			for sid := range jobChan {
 				sd, err := processOneSecurity(sid, conn)
-				resultsChan <- result{securityId: sid, data: sd, err: err}
+				resultsChan <- result{securityID: sid, data: sd, err: err}
 			}
 		}()
 	}
 
 	// Feed all security IDs into the job channel
-	for _, sid := range securityIds {
+	for _, sid := range securityIDs {
 		jobChan <- sid
 	}
 	close(jobChan)
 
 	// Collect all results
 	var results []result
-	for i := 0; i < len(securityIds); i++ {
+	for i := 0; i < len(securityIDs); i++ {
 		r := <-resultsChan
 		results = append(results, r)
 	}
@@ -367,7 +367,7 @@ func validateSecurityData(sd *SecurityData) error {
 }
 
 // Helper function to validate timeframe data
-func validateTimeframeData(td *TimeframeData, timeframeName string, extendedHours bool) error {
+func validateTimeframeData(td *TimeframeData, timeframeName string, _ bool) error {
 	if td == nil {
 		return fmt.Errorf("%s timeframe data is nil", timeframeName)
 	}

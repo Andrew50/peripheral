@@ -75,18 +75,28 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 	}
 
 	// --- Data Fetching ---
-	securityIdFloat, secIdOk := args.ActiveChartInstance["securityId"].(float64)
+	securityIDFloat, secIDOk := args.ActiveChartInstance["securityId"].(float64)
+	//timestampFloat, tsOk := args.ActiveChartInstance["timestamp"].(float64)
+	//ticker, tickerOk := args.ActiveChartInstance["ticker"].(string)
 	barsToFetch := 10 // Fetch a decent number for context/plotting
 
-	if !secIdOk {
-		////fmt.Println("Warning: Could not extract securityId for fetching chart data.")
-		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, nil // Cannot proceed without these
+	if !secIDOk {
+		return nil, fmt.Errorf("invalid activeChartInstance format: missing or wrong type for securityId")
 	}
 
-	securityId := int(securityIdFloat)
+	securityID := int(securityIDFloat)
+	//timestamp := int64(timestampFloat)
 
+	// Fetch recent price bars
+	/*jjjpriceBars, err := postgres.GetLatestBarsForSecurity(conn, securityID, barsToFetch, timestamp)
+	if err != nil {
+		////fmt.Printf("Warning: Could not fetch price bars for %s: %v\n", ticker, err)
+		// Don't fail, just won't have price context
+	}*/
+
+	// Fetch recent news
 	chartReq := chart.GetChartDataArgs{
-		SecurityID:    securityId,
+		SecurityID:    securityID,
 		Timeframe:     "1d",
 		Timestamp:     0,
 		Direction:     "backward",
