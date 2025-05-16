@@ -80,11 +80,13 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 			ThinkingBudget:  &thinkingBudget,
 		},
 	}
+	fmt.Println("\n\nprompt", prompt)
 	result, err := client.Models.GenerateContent(ctx, planningModel, genai.Text(prompt), config)
 	if err != nil {
 		return Plan{}, fmt.Errorf("gemini had an error generating plan : %w", err)
 	}
-	resultText := ""
+	// Concatenate the text from *all* parts to ensure we don't miss the JSON payload
+	var sb strings.Builder
 	if len(result.Candidates) <= 0 {
 		return Plan{}, fmt.Errorf("no candidates found in result")
 	}
@@ -92,11 +94,12 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	if candidate.Content != nil {
 		for _, part := range candidate.Content.Parts {
 			if part.Text != "" {
-				resultText = part.Text
-				break
+				sb.WriteString(part.Text)
+				sb.WriteString("\n")
 			}
 		}
 	}
+	resultText := strings.TrimSpace(sb.String())
 	fmt.Println("Prompt Token Count", result.UsageMetadata.PromptTokenCount)
 	fmt.Println("Candidates Token Count", result.UsageMetadata.CandidatesTokenCount)
 	fmt.Println("Thoughts Token Count", result.UsageMetadata.ThoughtsTokenCount)
@@ -112,13 +115,6 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	if jsonStartIdx != -1 && jsonEndIdx != -1 && jsonEndIdx > jsonStartIdx {
 		jsonBlock = resultText[jsonStartIdx : jsonEndIdx+1]
 	}
-	//else {
-	// If no JSON block found, we can't parse it as Plan or DirectAnswer
-	// Depending on expected behavior, you might return an error or default
-	// For now, let the unmarshal attempts fail below, which leads to the final error
-	////fmt.Println("Warning: No JSON block found in planner response")
-	//}
-	// --- Extract JSON block --- END
 
 	var directAns DirectAnswer
 	// Try unmarshalling the extracted block if it's not empty
@@ -188,16 +184,18 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 		return nil, fmt.Errorf("no candidates found in result")
 	}
 
-	resultText := ""
+	// Concatenate the text from *all* parts to ensure we capture the full response
+	var frSB strings.Builder
 	candidate := result.Candidates[0]
 	if candidate.Content != nil {
 		for _, part := range candidate.Content.Parts {
 			if part.Text != "" {
-				resultText = part.Text
-				break
+				frSB.WriteString(part.Text)
+				frSB.WriteString("\n")
 			}
 		}
 	}
+	resultText := strings.TrimSpace(frSB.String())
 
 	// Try to parse as JSON
 	var finalResponse FinalResponse
