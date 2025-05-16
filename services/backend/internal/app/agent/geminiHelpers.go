@@ -78,7 +78,6 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 		// Add spacing between functions
 		toolsDescription.WriteString("\n")
 	}
-	fmt.Printf("toolsDescription: %s\n", toolsDescription.String())
 	return toolsDescription.String()
 }
 

@@ -191,7 +191,6 @@ func getDefaultSystemPromptTokenCount(conn *data.Conn) {
 	}
 	if CountTokensResponse != nil {
 		defaultSystemPromptTokenCount = CountTokensResponse.TotalTokens
-		fmt.Printf("defaultSystemPromptTokenCount: %d\n", defaultSystemPromptTokenCount)
 	}
 }
 
