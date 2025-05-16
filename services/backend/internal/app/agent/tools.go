@@ -734,5 +734,23 @@ var (
 			Function:      RunWebSearch,
 			StatusMessage: "Searching the web...",
 		},
+		"dateToMS": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "dateToMS",
+				Description: "Convert a date to milliseconds since epoch.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"date":   {Type: genai.TypeString, Description: "The date in 2006-01-02 format to convert to milliseconds since epoch."},
+						"hour":   {Type: genai.TypeInteger, Description: "The hour (24 hour format)on date."},
+						"minute": {Type: genai.TypeInteger, Description: "The minute on date."},
+						"second": {Type: genai.TypeInteger, Description: "The second on date."},
+					},
+					Required: []string{"date", "hour", "minute", "second"},
+				},
+			},
+			Function:      DateToMS,
+			StatusMessage: "Figuring out date range...",
+		},
 	}
 )
