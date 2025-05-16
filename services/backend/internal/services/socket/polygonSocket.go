@@ -145,7 +145,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				if useAlerts {
 					if err := appendTick(conn, securityID, data.Timestamp, data.Price, data.Size); err != nil {
 						// Log the error but continue processing
-						//fmt.Printf("Error appending tick: %v\n", err)
+						fmt.Printf("Error appending tick: %v\n", err)
 					}
 				}
 				if !hasListeners(fastChannelName) && !hasListeners(allChannelName) && !hasListeners(slowChannelName) {
