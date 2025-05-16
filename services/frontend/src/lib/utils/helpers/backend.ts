@@ -118,6 +118,7 @@ export async function privateRequest<T>(
         headers: headers,
         body: JSON.stringify(payload),
         keepalive: keepalive
+        
     }).catch((e) => {
         return Promise.reject(e);
     });
