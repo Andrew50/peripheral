@@ -1,12 +1,12 @@
 <script lang="ts">
 	export let hoveredCandleData;
-	import type { Instance } from '$lib/core/types';
+	import type { Instance } from '$lib/utils/types/types';
 	import { queryChart } from './interface';
 	import { writable } from 'svelte/store';
 	export let instance: Instance;
-	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
-	import { settings } from '$lib/core/stores';
-	import { UTCTimestampToESTString } from '$lib/core/timestamp';
+	import { queryInstanceInput } from '$lib/components/input.svelte';
+	import { settings } from '$lib/utils/stores/stores';
+	import { UTCTimestampToESTString } from '$lib/utils/helpers/timestamp';
 	import { onMount, onDestroy } from 'svelte';
 
 	// Add new props for chart dimensions
@@ -323,7 +323,14 @@
 		{/if}
 	{/if}
 
-	<div class="collapse-row" on:click|stopPropagation={toggleCollapse}>
+	<div 
+		class="collapse-row" 
+		on:click|stopPropagation={toggleCollapse}
+		role="button"
+		tabindex="0"
+		on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { toggleCollapse(); e.preventDefault(); } }}
+		aria-expanded={!isCollapsed}
+	>
 		<div class="divider"></div>
 		<button class="utility-button" aria-label="Toggle legend">
 			<svg
@@ -375,10 +382,6 @@
 	.legend.compact .metadata {
 		flex-wrap: nowrap;
 		max-width: 100px !important;
-	}
-
-	.legend.compact .timeframe {
-		max-width: 100% !important;
 	}
 
 	/* Ensure compact state is maintained even on hover */
@@ -625,7 +628,6 @@
 	}
 
 	/* Adjust original span styles to target buttons */
-	.timeframe.metadata-button,
 	.timestamp.metadata-button,
 	.session-type.metadata-button {
 		/* Styles previously applied to .timeframe, .timestamp, .session-type spans now applied via .metadata-button base class */

@@ -1,8 +1,9 @@
+// <executor.go>
 package agent
 
 import (
 	"backend/internal/data"
-    "backend/internal/services/socket"
+	"backend/internal/services/socket"
 	"context"
 
 	"encoding/json"
@@ -18,34 +19,39 @@ import (
 
 // ExecuteResult represents the result of executing a function
 type ExecuteResult struct {
-	FunctionName string      `json:"function_name"`
-	Result       interface{} `json:"result"`
-	Error        string      `json:"error,omitempty"`
+	FunctionName string      `json:"fn"`
+	Result       interface{} `json:"res"`
+	Error        string      `json:"err,omitempty"`
 	Args         interface{} `json:"args,omitempty"`
 }
 
+// Executor manages the execution of tasks in a queue
 type Executor struct {
 	conn       *data.Conn
-	userId     int
+	userID     int
 	tools      map[string]Tool
 	log        *zap.Logger
 	tracer     trace.Tracer
 	maxWorkers int
+	limiter    chan struct{}
 }
 
-func NewExecutor(conn *data.Conn, userId int, maxWorkers int, lg *zap.Logger) *Executor {
+// NewExecutor creates a new Executor
+func NewExecutor(conn *data.Conn, userID int, maxWorkers int, lg *zap.Logger) *Executor {
 	if maxWorkers <= 0 {
 		maxWorkers = 3
 	}
 	return &Executor{
 		conn:       conn,
-		userId:     userId,
+		userID:     userID,
 		tools:      Tools,
 		log:        lg,
 		tracer:     otel.Tracer("agent-executor"),
 		maxWorkers: maxWorkers,
+		limiter:    make(chan struct{}, maxWorkers),
 	}
 }
+
 func (e *Executor) Execute(ctx context.Context, functionCalls []FunctionCall, parallel bool) ([]ExecuteResult, error) {
 
 	if !parallel || len(functionCalls) == 1 {
@@ -95,12 +101,12 @@ func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (Execut
 	var argsMap map[string]interface{}
 	_ = json.Unmarshal(fc.Args, &argsMap)
 	if tool.StatusMessage != "" {
-		socket.SendFunctionStatus(e.userId, formatStatusMessage(tool.StatusMessage, argsMap))
+		socket.SendFunctionStatus(e.userID, formatStatusMessage(tool.StatusMessage, argsMap))
 	}
 	_, span := e.tracer.Start(ctx, fc.Name, trace.WithAttributes(attribute.String("agent.tool", fc.Name)))
 	defer span.End()
 
-	result, err := tool.Function(e.conn, e.userId, fc.Args)
+	result, err := tool.Function(e.conn, e.userID, fc.Args)
 	if err != nil {
 		span.RecordError(err)
 		e.log.Warn("Error executing function", zap.String("function", fc.Name), zap.Error(err))
@@ -122,3 +128,5 @@ func formatStatusMessage(message string, argsMap map[string]interface{}) string 
 	})
 	return formattedMessage
 }
+
+// </executor.go>

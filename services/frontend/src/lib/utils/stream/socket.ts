@@ -1,11 +1,11 @@
 // socket.ts
 import { writable } from 'svelte/store';
-import { streamInfo, handleTimestampUpdate } from '$lib/core/stores';
-import type { StreamInfo, TradeData, QuoteData, CloseData } from '$lib/core/types';
-import { base_url } from '$lib/core/backend';
+import { streamInfo, handleTimestampUpdate } from '$lib/utils/stores/stores';
+import type { StreamInfo, TradeData, QuoteData, CloseData } from '$lib/utils/types/types';
+import { base_url } from '$lib/utils/helpers/backend';
 import { browser } from '$app/environment';
 import { handleAlert } from './alert';
-import type { AlertData } from '$lib/core/types';
+import type { AlertData } from '$lib/utils/types/types';
 
 // Define the type for function status updates from backend (simplified)
 export type FunctionStatusUpdate = {
@@ -50,6 +50,8 @@ const maxReconnectInterval: number = 30000;
 let reconnectAttempts: number = 0;
 const maxReconnectAttempts: number = 5;
 let shouldReconnect: boolean = true;
+
+export const latestValue = new Map<string, StreamData>(); 
 connect();
 
 function connect() {
@@ -94,7 +96,6 @@ function connect() {
 		// Check message type first
 		if (data && data.type === 'function_status') {
 			const statusUpdate = data as FunctionStatusUpdate;
-			console.log('Received function status:', statusUpdate);
 			functionStatusStore.set(statusUpdate);
 			return; // Handled function status update
 		}
@@ -107,6 +108,7 @@ function connect() {
 			} else if (channelName === 'timestamp') {
 				handleTimestampUpdate(data.timestamp);
 			} else {
+				latestValue.set(channelName, data);
 				const callbacks = activeChannels.get(channelName);
 				if (callbacks) {
 					callbacks.forEach((callback) => callback(data));
