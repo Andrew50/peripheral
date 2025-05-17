@@ -386,10 +386,12 @@
 			includeSECFilings: get(settings).showFilings
 		})
 			.then((response) => {
-				const barDataList = response.bars;
-				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
-					return;
-				}
+                                const barDataList = response.bars;
+                                if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
+                                        isLoadingChartData = false;
+                                        queuedLoad = null;
+                                        return;
+                                }
 				let newCandleData = barDataList.map((bar) => ({
 					time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
 					open: bar.open,
