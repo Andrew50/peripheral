@@ -155,7 +155,7 @@ func simpleSecuritiesUpdateJob(conn *data.Conn) error {
 // Wrapper for UpdateSectors to match JobFunc signature
 func updateSectorsJob(conn *data.Conn) error {
 	////fmt.Println("Starting sector update - fetching latest sector/industry data...")
-	_, err := securities.UpdateSectors(context.Background(), conn) // Discard the statBlock
+	err := securities.UpdateSectors(context.Background(), conn) // Discard the statBlock
 	return err                                                     // Return the error, if any
 }
 
