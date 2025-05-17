@@ -1,29 +1,16 @@
 FROM timescale/timescaledb-ha:pg17
 USER root
-# Password will be provided via environment variables
 RUN apt-get update && apt-get install -y cron
-
-# Environment variables to control PostgreSQL initialization
 ENV PGDATA /var/lib/postgresql/data
-
-# Create an SQL init directory that will be processed after PostgreSQL initializes
 EXPOSE 5432
 COPY init/ /docker-entrypoint-initdb.d/
 COPY config/dev.conf /etc/postgresql/postgresql.conf
-
-# Create migrations directory and copy migrations
 RUN mkdir -p /migrations
 COPY migrations/*.sql /migrations/
-
-# Copy the migrations script
 COPY scripts/migrate.sh /app/migrate.sh
 RUN chmod +x /app/migrate.sh
-# Copy migration runner for development
 COPY scripts/migrate.sh /app/migrate.sh
 RUN chmod +x /app/migrate.sh
-# Create a startup script that runs both PostgreSQL and the watcher
 COPY scripts/start.sh /app/start.sh
 RUN chmod +x /app/start.sh
-
-# Start PostgreSQL using our custom entrypoint
 ENTRYPOINT ["/app/start.sh"]
