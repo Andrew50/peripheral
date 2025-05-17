@@ -2,9 +2,9 @@ package socket
 
 import (
 	"backend/internal/data"
-    "backend/internal/data/utils"
-    "backend/internal/data/polygon"
-    "backend/internal/data/postgres"
+	"backend/internal/data/polygon"
+	"backend/internal/data/postgres"
+	"backend/internal/data/utils"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,6 +14,7 @@ import (
 
 	"github.com/polygon-io/client-go/rest/models"
 )
+
 // TickData represents a structure for handling TickData data.
 type TickData interface {
 	GetTimestamp() int64
@@ -21,12 +22,13 @@ type TickData interface {
 	GetChannel() string
 	SetChannel(channel string)
 }
+
 // TradeData represents a structure for handling TradeData data.
 type TradeData struct {
 	Price      float64 `json:"price"`
 	Size       int64   `json:"size"`
 	Timestamp  int64   `json:"timestamp"`
-	ExchangeID int32   `json:"exchange"`
+	ExchangeID int     `json:"exchange"`
 	Conditions []int32 `json:"conditions"`
 	Channel    string  `json:"channel"`
 }
@@ -43,6 +45,7 @@ func (t TradeData) GetChannel() string {
 func (t *TradeData) SetChannel(channel string) {
 	t.Channel = channel
 }
+
 // QuoteData represents a structure for handling QuoteData data.
 type QuoteData struct {
 	BidPrice  float64 `json:"bidPrice"`
@@ -110,7 +113,7 @@ func aggregateTicks(ticks []TickData, baseDataType string) TickData {
 	}
 }
 
-func getTradeData(conn *data.Conn, securityId int, timestamp int64, lengthOfTime int64, extendedHours bool) ([]TickData, error) {
+func getTradeData(conn *data.Conn, securityID int, timestamp int64, lengthOfTime int64, _ bool) ([]TickData, error) {
 	easternLocation, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		return nil, fmt.Errorf("issue loading eastern location: %v", err)
@@ -121,7 +124,7 @@ func getTradeData(conn *data.Conn, securityId int, timestamp int64, lengthOfTime
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	rows, err := conn.DB.Query(ctx, query, securityId, inputTime.In(easternLocation).Format(time.DateTime))
+	rows, err := conn.DB.Query(ctx, query, securityID, inputTime.In(easternLocation).Format(time.DateTime))
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return nil, fmt.Errorf("query timed out: %w", err)
@@ -159,19 +162,14 @@ func getTradeData(conn *data.Conn, securityId int, timestamp int64, lengthOfTime
 			if tradeTsMillis > windowEndTime {
 				return tradeDataList, nil
 			}
-			if !extendedHours {
-				tsET := time.Time(iter.Item().ParticipantTimestamp).In(easternLocation)
-				hour := tsET.Hour()
-				minute := tsET.Minute()
-				if hour < 9 || (hour == 9 && minute < 30) || hour >= 16 {
-					continue
-				}
+			if !utils.IsTimestampRegularHours(time.Time(iter.Item().ParticipantTimestamp)) {
+				continue
 			}
 			tradeDataList = append(tradeDataList, &TradeData{
 				Price:      iter.Item().Price,
 				Size:       int64(iter.Item().Size),
 				Timestamp:  time.Time(iter.Item().ParticipantTimestamp).UnixNano() / 1e6,
-				ExchangeID: int32(iter.Item().Exchange),
+				ExchangeID: iter.Item().Exchange,
 				Conditions: iter.Item().Conditions,
 				Channel:    "",
 			})
@@ -188,7 +186,7 @@ func getTradeData(conn *data.Conn, securityId int, timestamp int64, lengthOfTime
 	return nil, fmt.Errorf("no data found for the specified range")
 }
 
-func getQuoteData(conn *data.Conn, securityId int, timestamp int64, lengthOfTime int64, extendedHours bool) ([]TickData, error) {
+func getQuoteData(conn *data.Conn, securityID int, timestamp int64, lengthOfTime int64, _ bool) ([]TickData, error) {
 	// Very similar logic to getTradeData, skipping some debug prints
 	easternLocation, err := time.LoadLocation("America/New_York")
 	if err != nil {
@@ -200,7 +198,7 @@ func getQuoteData(conn *data.Conn, securityId int, timestamp int64, lengthOfTime
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	rows, err := conn.DB.Query(ctx, query, securityId, inputTime.In(easternLocation).Format(time.DateTime))
+	rows, err := conn.DB.Query(ctx, query, securityID, inputTime.In(easternLocation).Format(time.DateTime))
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return nil, fmt.Errorf("query timed out: %w", err)
@@ -253,13 +251,13 @@ func getQuoteData(conn *data.Conn, securityId int, timestamp int64, lengthOfTime
 	return nil, fmt.Errorf("no data found for the specified range")
 }
 
-func getPrevCloseData(conn *data.Conn, securityId int, timestamp int64) ([]TickData, error) {
+func getPrevCloseData(conn *data.Conn, securityID int, timestamp int64) ([]TickData, error) {
 	easternLocation, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		return nil, fmt.Errorf("issue loading eastern location: %v", err)
 	}
 	inputTime := time.Unix(timestamp/1000, (timestamp%1000)*1e6).In(easternLocation)
-	ticker, err := postgres.GetTicker(conn, securityId, inputTime)
+	ticker, err := postgres.GetTicker(conn, securityID, inputTime)
 	if err != nil {
 		return nil, fmt.Errorf("error getting ticker: %v", err)
 	}
@@ -327,7 +325,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 	if len(parts) < 2 {
 		return nil, fmt.Errorf("invalid channel name format: %s", channelName)
 	}
-	securityId, err := strconv.Atoi(parts[0])
+	securityID, err := strconv.Atoi(parts[0])
 	if err != nil {
 		return nil, fmt.Errorf("invalid securityId in channelName: %v", err)
 	}
@@ -343,7 +341,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 	} else {
 		queryTime = time.Unix(timestamp/1000, (timestamp%1000)*1e6).UTC()
 	}
-	ticker, err := postgres.GetTicker(conn, securityId, queryTime)
+	ticker, err := postgres.GetTicker(conn, securityID, queryTime)
 	if err != nil {
 		return nil, fmt.Errorf("error getting ticker: %v", err)
 	}
@@ -368,7 +366,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 			quoteTimestamp = time.Time(quote.SipTimestamp).UnixNano() / 1e6
 		} else {
 			// Historical quote
-			quote, err := polygon.GetQuoteAtTimestamp(conn, securityId, queryTime)
+			quote, err := polygon.GetQuoteAtTimestamp(conn, securityID, queryTime)
 			if err != nil {
 				return nil, fmt.Errorf("could not get quote at timestamp: %v", err)
 			}
@@ -398,7 +396,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 
 		var trade models.Trade
 		if timestamp == 0 {
-			latestTrade, err := polygon.GetLastTrade(conn.Polygon, ticker)
+			latestTrade, err := polygon.GetLastTrade(conn.Polygon, ticker, true)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get last trade: %v", err)
 			}
@@ -407,23 +405,23 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 				Size:         latestTrade.Size,
 				SipTimestamp: latestTrade.Timestamp,
 				Conditions:   latestTrade.Conditions,
-				Exchange:     int(latestTrade.Exchange),
+				Exchange:     latestTrade.Exchange,
 			}
 		} else {
-			fetchedTrade, err := polygon.GetTradeAtTimestamp(conn, securityId, queryTime)
+			fetchedTrade, err := polygon.GetTradeAtTimestamp(conn, securityID, queryTime)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get trade at timestamp: %v", err)
 			}
 			trade = fetchedTrade
 		}
 		tradeTime := time.Time(trade.SipTimestamp)
+		size = int64(trade.Size)
 		if !extendedHours && !utils.IsTimestampRegularHours(tradeTime) {
 			closePrice, err := polygon.GetMostRecentRegularClose(conn.Polygon, ticker, tradeTime)
 			if err != nil {
 				return nil, fmt.Errorf("error getting close price: %v", err)
 			}
 			price = closePrice
-			size = 0
 			conditions = []int32{}
 			tradeTimestamp = tradeTime.UnixNano() / 1e6
 		} else if extendedHours && utils.IsTimestampRegularHours(tradeTime) {
@@ -435,12 +433,10 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 				return nil, fmt.Errorf("error getting daily open: %v", err)
 			}
 			price = dailyOpen
-			size = 0
 			conditions = []int32{}
 			tradeTimestamp = tradeTime.UnixNano() / 1e6
 		} else {
 			price = trade.Price
-			size = int64(trade.Size)
 			conditions = trade.Conditions
 			tradeTimestamp = tradeTime.UnixNano() / 1e6
 		}
@@ -449,6 +445,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 			Size:       size,
 			Timestamp:  tradeTimestamp,
 			Conditions: conditions,
+			ExchangeID: trade.Exchange,
 			Channel:    channelName,
 		}
 		return json.Marshal(data)
@@ -460,7 +457,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 	case "close":
 		// ...
 		if !extendedHours {
-			prevCloseSlice, err := getPrevCloseData(conn, securityId, queryTime.UnixNano()/1e6)
+			prevCloseSlice, err := getPrevCloseData(conn, securityID, queryTime.UnixNano()/1e6)
 			if err != nil {
 				return nil, err
 			}
@@ -472,59 +469,58 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 				Channel: channelName,
 			}
 			return json.Marshal(out)
-		} else {
-			// Extended hours close - for extended hours calculations
-			// During regular hours: use the previous day's close
-			// During extended hours: use the daily open price
-			var referencePrice float64
-			if utils.IsTimestampRegularHours(queryTime) {
-				// During regular hours, use previous day's close for extended hours calculation
-				prevCloseSlice, err := getPrevCloseData(conn, securityId, queryTime.UnixNano()/1e6)
-				if err != nil {
-					return nil, err
-				}
-				referencePrice = prevCloseSlice[0].GetPrice()
-			} else {
-				// Check if we're in after-hours (post 4:00 PM) or pre-market
-				easternLocation, err := time.LoadLocation("America/New_York")
-				if err != nil {
-					return nil, fmt.Errorf("issue loading eastern location: %v", err)
-				}
-
-				queryTimeET := queryTime.In(easternLocation)
-				currentHour := queryTimeET.Hour()
-
-				// After market hours (after 16:00 / 4:00 PM)
-				if currentHour >= 16 {
-					// Get the current day's regular market close price (4:00 PM close)
-					today := time.Date(queryTimeET.Year(), queryTimeET.Month(), queryTimeET.Day(), 0, 0, 0, 0, easternLocation)
-					marketCloseTime := time.Date(today.Year(), today.Month(), today.Day(), 16, 0, 0, 0, easternLocation)
-
-					// Get the closing price at 4:00 PM
-					closePrice, err := polygon.GetMostRecentRegularClose(conn.Polygon, ticker, marketCloseTime)
-					if err != nil {
-						return nil, fmt.Errorf("error getting today's close price: %v", err)
-					}
-					referencePrice = closePrice
-				} else {
-					// Pre-market, use daily open
-					dailyOpen, err := polygon.GetDailyOpen(conn.Polygon, ticker, queryTime)
-					if err != nil {
-						return nil, fmt.Errorf("error getting daily open: %v", err)
-					}
-					referencePrice = dailyOpen
-				}
-			}
-
-			out := struct {
-				Price   float64 `json:"price"`
-				Channel string  `json:"channel"`
-			}{
-				Price:   referencePrice,
-				Channel: channelName,
-			}
-			return json.Marshal(out)
 		}
+		// Extended hours close - for extended hours calculations
+		// During regular hours: use the previous day's close
+		// During extended hours: use the daily open price
+		var referencePrice float64
+		if utils.IsTimestampRegularHours(queryTime) {
+			// During regular hours, use previous day's close for extended hours calculation
+			prevCloseSlice, err := getPrevCloseData(conn, securityID, queryTime.UnixNano()/1e6)
+			if err != nil {
+				return nil, err
+			}
+			referencePrice = prevCloseSlice[0].GetPrice()
+		} else {
+			// Check if we're in after-hours (post 4:00 PM) or pre-market
+			easternLocation, err := time.LoadLocation("America/New_York")
+			if err != nil {
+				return nil, fmt.Errorf("issue loading eastern location: %v", err)
+			}
+
+			queryTimeET := queryTime.In(easternLocation)
+			currentHour := queryTimeET.Hour()
+
+			// After market hours (after 16:00 / 4:00 PM)
+			if currentHour >= 16 {
+				// Get the current day's regular market close price (4:00 PM close)
+				today := time.Date(queryTimeET.Year(), queryTimeET.Month(), queryTimeET.Day(), 0, 0, 0, 0, easternLocation)
+				marketCloseTime := time.Date(today.Year(), today.Month(), today.Day(), 16, 0, 0, 0, easternLocation)
+
+				// Get the closing price at 4:00 PM
+				closePrice, err := polygon.GetMostRecentRegularClose(conn.Polygon, ticker, marketCloseTime)
+				if err != nil {
+					return nil, fmt.Errorf("error getting today's close price: %v", err)
+				}
+				referencePrice = closePrice
+			} else {
+				// Pre-market, use daily open
+				dailyOpen, err := polygon.GetDailyOpen(conn.Polygon, ticker, queryTime)
+				if err != nil {
+					return nil, fmt.Errorf("error getting daily open: %v", err)
+				}
+				referencePrice = dailyOpen
+			}
+		}
+
+		out := struct {
+			Price   float64 `json:"price"`
+			Channel string  `json:"channel"`
+		}{
+			Price:   referencePrice,
+			Channel: channelName,
+		}
+		return json.Marshal(out)
 	case "all":
 		// Return empty or no data for "all" on initial
 		return nil, nil

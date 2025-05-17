@@ -1,219 +1,84 @@
 package securities
 
 import (
+	"backend/internal/data/polygon"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
-    "backend/internal/data/polygon"
 
 	"backend/internal/data"
 
-	_ "github.com/lib/pq"
+	//lint:ignore U1000 external package
+	_ "github.com/lib/pq" // Register postgres driver
 )
 
-// SimpleUpdateSecurities fetches the latest tickers from Polygon, checks if AAPL is present,
-// and if so, updates the securities table by marking missing tickers as delisted
-// (maxDate = now) and inserting brand-new tickers (keeping the same securityId for existing ones).
+// SecurityDetail represents a structure for handling SecurityDetail data.
+
 func SimpleUpdateSecurities(conn *data.Conn) error {
-	// 1) Fetch current list of Polygon tickers (use "today" or whichever date you prefer).
+	ctx := context.Background()
 	today := time.Now().Format("2006-01-02")
-	fmt.Println("running simpleUpdateSecurities")
-	polyTickers, err := polygon.AllTickers(conn.Polygon, today)
-	fmt.Println("polyTickers", len(polyTickers))
+
+	// 1) Fetch the tickers from Polygon
+	poly, err := polygon.AllTickers(conn.Polygon, today)
 	if err != nil {
-		return fmt.Errorf("failed to fetch Polygon tickers: %w", err)
+		return fmt.Errorf("fetch polygon tickers: %w", err)
 	}
 
-	// 2) Check if AAPL is in the list. If not, do nothing and return.
-	aaplExists := false
-	tickerSet := make(map[string]struct{}, len(polyTickers))
-	for _, sec := range polyTickers {
-		tickerSet[sec.Ticker] = struct{}{}
-		if sec.Ticker == "AAPL" {
-			aaplExists = true
-		}
-	}
-	if !aaplExists {
-		fmt.Println("AAPL not found in Polygon tickers; skipping updates.")
-		return nil
+	// collect just the symbols
+	tickers := make([]string, len(poly))
+	for i, s := range poly {
+		tickers[i] = s.Ticker
 	}
 
-	// 3) Fetch all currently active (maxDate IS NULL) tickers from the db.
-	rows, err := conn.DB.Query(context.Background(),
-		"SELECT securityId, ticker FROM securities WHERE maxDate IS NULL",
-	)
-	if err != nil {
-		return fmt.Errorf("failed to query active securities: %w", err)
-	}
-	defer rows.Close()
-
-	dbActiveTickers := make(map[string]int)
-	for rows.Next() {
-		var (
-			sid    int
-			ticker string
-		)
-		if err := rows.Scan(&sid, &ticker); err != nil {
-			return fmt.Errorf("failed to scan security row: %w", err)
-		}
-		dbActiveTickers[ticker] = sid
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("row iteration error: %w", err)
+	// 2) Mark as DELISTED any ticker NOT in today's list
+	if _, err := conn.DB.Exec(ctx, `
+        UPDATE securities
+           SET maxDate = CURRENT_DATE
+         WHERE maxDate IS NULL
+           AND ticker NOT IN (`+placeholders(len(tickers))+`)
+    `, stringArgs(tickers)...); err != nil {
+		return fmt.Errorf("delist tickers: %w", err)
 	}
 
-	// 4) For tickers in DB but not in Polygon -> mark them delisted (set maxDate = now()).
-	for ticker := range dbActiveTickers {
-		if _, found := tickerSet[ticker]; !found {
-			_, err := conn.DB.Exec(context.Background(),
-				`UPDATE securities 
-                 SET maxDate = CURRENT_DATE 
-                 WHERE ticker = $1 
-                   AND maxDate IS NULL`,
-				ticker,
-			)
-			if err != nil {
-				return fmt.Errorf("failed to update maxDate for ticker %s: %w", ticker, err)
-			}
-		}
+	// 3) REACTIVATE any ticker IN today's list
+	if _, err := conn.DB.Exec(ctx, `
+        UPDATE securities
+           SET maxDate = NULL
+         WHERE maxDate IS NOT NULL
+           AND ticker IN (`+placeholders(len(tickers))+`)
+    `, stringArgs(tickers)...); err != nil {
+		return fmt.Errorf("reactivate tickers: %w", err)
 	}
 
-	// 5) For tickers in Polygon but not in DB -> insert a new row (preserving old ones).
-	for _, sec := range polyTickers {
-		if _, found := dbActiveTickers[sec.Ticker]; !found {
-			// Check if the ticker exists at all, regardless of maxDate
-			var exists bool
-			err := conn.DB.QueryRow(context.Background(),
-				`SELECT EXISTS (
-					SELECT 1 FROM securities 
-					WHERE ticker = $1 
-					AND minDate = '2003-10-01'
-				)`,
-				sec.Ticker,
-			).Scan(&exists)
-			if err != nil {
-				return fmt.Errorf("failed to check ticker existence %s: %w", sec.Ticker, err)
-			}
-
-			if exists {
-				// Skip if we already have an entry for this ticker today
-				continue
-			}
-
-			// Check if there's a delisted version
-			var hasDelisted bool
-			err = conn.DB.QueryRow(context.Background(),
-				`SELECT EXISTS (
-					SELECT 1 FROM securities 
-					WHERE ticker = $1 
-					AND maxDate IS NOT NULL
-				)`,
-				sec.Ticker,
-			).Scan(&hasDelisted)
-			if err != nil {
-				return fmt.Errorf("failed to check delisted ticker %s: %w", sec.Ticker, err)
-			}
-
-			if hasDelisted {
-				// First check if there's already an active record with this ticker
-				var activeExists bool
-				err := conn.DB.QueryRow(context.Background(),
-					`SELECT EXISTS(
-						SELECT 1 FROM securities 
-						WHERE ticker = $1 
-						AND maxDate IS NULL
-					)`,
-					sec.Ticker,
-				).Scan(&activeExists)
-
-				if err != nil {
-					return fmt.Errorf("failed to check active ticker %s: %w", sec.Ticker, err)
-				}
-
-				if activeExists {
-					// Skip this ticker as it's already active
-					fmt.Printf("Skipping reactivation of %s as it's already active\n", sec.Ticker)
-					continue
-				}
-
-				// Check if there's a record with the same ticker and minDate
-				var duplicateExists bool
-				err = conn.DB.QueryRow(context.Background(),
-					`SELECT EXISTS(
-						SELECT 1 FROM securities 
-						WHERE ticker = $1 
-						AND minDate = '2003-10-01'
-						AND maxDate IS NOT NULL
-					)`,
-					sec.Ticker,
-				).Scan(&duplicateExists)
-
-				if err != nil {
-					return fmt.Errorf("failed to check duplicate ticker %s: %w", sec.Ticker, err)
-				}
-
-				if duplicateExists {
-					// If a duplicate exists, use a different approach - update the most recent record
-					_, err := conn.DB.Exec(context.Background(),
-						`UPDATE securities 
-						SET maxDate = NULL,
-							figi = $2
-						WHERE ticker = $1 
-						AND maxDate IS NOT NULL
-						ORDER BY maxDate DESC
-						LIMIT 1`,
-						sec.Ticker, sec.CompositeFIGI,
-					)
-					if err != nil {
-						// Log error but continue with other tickers
-						fmt.Printf("Warning: Failed to reactivate ticker %s with alternative approach: %v\n", sec.Ticker, err)
-						continue
-					}
-				} else {
-					// If it exists but was delisted and no duplicate exists, update the existing row
-					_, err := conn.DB.Exec(context.Background(),
-						`UPDATE securities 
-						SET maxDate = NULL,
-							minDate = '2003-10-01',
-							figi = $2
-						WHERE ticker = $1 
-						AND maxDate IS NOT NULL`,
-						sec.Ticker, sec.CompositeFIGI,
-					)
-					if err != nil {
-						// Log error but continue with other tickers
-						//fmt.Printf("Warning: Failed to reactivate ticker %s: %v\n", sec.Ticker, err)
-						continue
-					}
-				}
-			} else {
-				// If it's completely new, insert it
-				_, err := conn.DB.Exec(context.Background(),
-					`INSERT INTO securities (ticker, minDate, figi) 
-					VALUES ($1, '2003-10-01', $2)`,
-					sec.Ticker, sec.CompositeFIGI,
-				)
-				if err != nil {
-					// Log error but continue with other tickers
-					fmt.Printf("Warning: Failed to insert new ticker %s: %v\n", sec.Ticker, err)
-					continue
-				}
-			}
-		}
-	}
-
-	fmt.Println("Securities table updated successfully.")
 	return nil
+}
 
+// placeholders(n) returns "$1,$2,…,$n"
+func placeholders(n int) string {
+	ps := make([]string, n)
+	for i := range ps {
+		ps[i] = fmt.Sprintf("$%d", i+1)
+	}
+	return strings.Join(ps, ",")
+}
+
+// stringArgs converts []string to []interface{} for Exec()
+func stringArgs(ss []string) []interface{} {
+	out := make([]interface{}, len(ss))
+	for i, s := range ss {
+		out[i] = s
+	}
+	return out
 }
 
 // UpdateSecurityCik fetches the latest CIK (Central Index Key) data from the SEC API
 // and updates the securities table with CIK values for active securities.
 func UpdateSecurityCik(conn *data.Conn) error {
 	// Create a client and request with appropriate headers
-	fmt.Println("🟢 fetching sec company tickers")
+	////fmt.Println("🟢 fetching sec company tickers")
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "https://www.sec.gov/files/company_tickers.json", nil)
 	if err != nil {
@@ -262,6 +127,6 @@ func UpdateSecurityCik(conn *data.Conn) error {
 		}
 	}
 
-	fmt.Println("🟢 Securities CIK values updated successfully.")
+	////fmt.Println("🟢 Securities CIK values updated successfully.")
 	return nil
 }

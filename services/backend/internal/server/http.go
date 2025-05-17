@@ -2,26 +2,28 @@ package server
 
 import (
 	"backend/internal/data"
+	"backend/internal/services/socket"
 	"encoding/base64"
-    "backend/internal/services/socket"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"regexp"
+	"time"
+
 	"github.com/gorilla/websocket"
 
-    "backend/internal/app/account"
-    "backend/internal/app/agent"
-    "backend/internal/app/alerts"
-    "backend/internal/app/chart"
-    "backend/internal/app/helpers"
-    "backend/internal/app/screensaver"
-    "backend/internal/app/settings"
-    "backend/internal/app/strategy"
-    "backend/internal/app/watchlist"
-    "backend/internal/app/filings"
+	"backend/internal/app/account"
+	"backend/internal/app/agent"
+	"backend/internal/app/alerts"
+	"backend/internal/app/chart"
+	"backend/internal/app/filings"
+	"backend/internal/app/helpers"
+	"backend/internal/app/screensaver"
+	"backend/internal/app/settings"
+	"backend/internal/app/strategy"
+	"backend/internal/app/watchlist"
 )
 
 var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, error){
@@ -35,22 +37,22 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 
 	// --- chat / conversation --------------------------------------------------
 	//"getSimilarInstances": helpers.GetSimilarInstances,
-	"getInstancesByTickers": screensaver.GetInstancesByTickers,
-	"getCurrentSecurityID":           helpers.GetCurrentSecurityID,
+	"getInstancesByTickers":            screensaver.GetInstancesByTickers,
+	"getCurrentSecurityID":             helpers.GetCurrentSecurityID,
 	"getSecurityIDFromTickerTimestamp": helpers.GetSecurityIDFromTickerTimestamp,
-	"getSecuritiesFromTicker":        helpers.GetSecuritiesFromTicker,
-	"getCurrentTicker":               helpers.GetCurrentTicker,
-	"getTickerMenuDetails":           helpers.GetTickerMenuDetails,
-	"getIcons":                       helpers.GetIcons,
-	"getPrevClose":                   helpers.GetPrevClose,
-	"getExchanges":                   helpers.GetExchanges,
-	"getSecurityClassifications":     helpers.GetSecurityClassifications,
+	"getSecuritiesFromTicker":          helpers.GetSecuritiesFromTicker,
+	"getCurrentTicker":                 helpers.GetCurrentTicker,
+	"getTickerMenuDetails":             helpers.GetTickerMenuDetails,
+	"getIcons":                         helpers.GetIcons,
+	"getPrevClose":                     helpers.GetPrevClose,
+	"getExchanges":                     helpers.GetExchanges,
+	"getSecurityClassifications":       helpers.GetSecurityClassifications,
 
-	"getLatestEdgarFilings":          filings.GetLatestEdgarFilings,
-	"getStockEdgarFilings":           filings.GetStockEdgarFilings,
-	"getEarningsText":                filings.GetEarningsText,
-	"getFilingText":                  filings.GetFilingText,
-	"getChartData":      chart.GetChartData,
+	"getLatestEdgarFilings": filings.GetLatestEdgarFilings,
+	"getStockEdgarFilings":  filings.GetStockEdgarFilings,
+	"getEarningsText":       filings.GetEarningsText,
+	"getFilingText":         filings.GetFilingText,
+	"getChartData":          chart.GetChartData,
 	/*"getStudies":        chart.GetStudies,
 	"newStudy":          chart.NewStudy,
 	"saveStudy":         chart.SaveStudy,
@@ -58,9 +60,9 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"getStudyEntry":     chart.GetStudyEntry,
 	"completeStudy":     chart.CompleteStudy,
 	"setStudyStrategy":  chart.SetStudyStrategy,*/
-	"getChartEvents":    chart.GetChartEvents,
-	"setHorizontalLine":  chart.SetHorizontalLine,
-	"getHorizontalLines": chart.GetHorizontalLines,
+	"getChartEvents":       chart.GetChartEvents,
+	"setHorizontalLine":    chart.SetHorizontalLine,
+	"getHorizontalLines":   chart.GetHorizontalLines,
 	"deleteHorizontalLine": chart.DeleteHorizontalLine,
 	"updateHorizontalLine": chart.UpdateHorizontalLine,
 
@@ -68,23 +70,23 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"getScreensavers": screensaver.GetScreensavers,
 
 	// --- watchlists -----------------------------------------------------------
-	"getWatchlists":     watchlist.GetWatchlists,
-	"deleteWatchlist":   watchlist.DeleteWatchlist,
-	"newWatchlist":      watchlist.NewWatchlist,
-	"getWatchlistItems": watchlist.GetWatchlistItems,
+	"getWatchlists":       watchlist.GetWatchlists,
+	"deleteWatchlist":     watchlist.DeleteWatchlist,
+	"newWatchlist":        watchlist.NewWatchlist,
+	"getWatchlistItems":   watchlist.GetWatchlistItems,
 	"deleteWatchlistItem": watchlist.DeleteWatchlistItem,
 	"newWatchlistItem":    watchlist.NewWatchlistItem,
 
 	// --- user settings / profile ---------------------------------------------
-	"getSettings":         settings.GetSettings,
-	"setSettings":         settings.SetSettings,
+	"getSettings":          settings.GetSettings,
+	"setSettings":          settings.SetSettings,
 	"updateProfilePicture": settings.UpdateProfilePicture,
 
 	// --- alerts ---------------------------------------------------------------
-	"getAlerts":          alerts.GetAlerts,
-	"getAlertLogs":       alerts.GetAlertLogs,
-	"newAlert":           alerts.NewAlert,
-	"deleteAlert":        alerts.DeleteAlert,
+	"getAlerts":    alerts.GetAlerts,
+	"getAlertLogs": alerts.GetAlertLogs,
+	"newAlert":     alerts.NewAlert,
+	"deleteAlert":  alerts.DeleteAlert,
 
 	// --- trades / statistics --------------------------------------------------
 	"grab_user_trades":       account.GrabUserTrades,
@@ -95,24 +97,24 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"get_daily_trade_stats":  account.GetDailyTradeStats,
 
 	// --- strategy / back-testing ---------------------------------------------
-	"run_backtest":                    strategy.RunBacktest,
-	"getStrategies":                   strategy.GetStrategies,
-	"newStrategy":                     strategy.NewStrategy,
-	"setStrategy":                     strategy.SetStrategy,
-	"deleteStrategy":                  strategy.DeleteStrategy,
-	"getStrategyFromNaturalLanguage":  strategy.CreateStrategyFromNaturalLanguage,
-	"getStrategySpec":                 strategy.GetStrategySpec,
+	"run_backtest":                   strategy.RunBacktest,
+	"getStrategies":                  strategy.GetStrategies,
+	"newStrategy":                    strategy.NewStrategy,
+	"setStrategy":                    strategy.SetStrategy,
+	"deleteStrategy":                 strategy.DeleteStrategy,
+	"getStrategyFromNaturalLanguage": strategy.CreateStrategyFromNaturalLanguage,
+	"getStrategySpec":                strategy.GetStrategySpec,
 
 	// --- misc / auth helpers --------------------------------------------------
 	"verifyAuth": func(*data.Conn, int, json.RawMessage) (interface{}, error) {
 		// TODO: replace with real auth logic
 		return nil, nil
 	},
-	"getUserConversation":       agent.GetUserConversation,
-	"clearConversationHistory":  agent.ClearConversationHistory,
-	"getSuggestedQueries":       agent.GetSuggestedQueries,
+	"getUserConversation":        agent.GetUserConversation,
+	"clearConversationHistory":   agent.ClearConversationHistory,
+	"getSuggestedQueries":        agent.GetSuggestedQueries,
 	"getInitialQuerySuggestions": agent.GetInitialQuerySuggestions,
-	"getQuery":            agent.GetChatRequest,
+	"getQuery":                   agent.GetChatRequest,
 }
 
 // Request represents a structure for handling Request data.
@@ -146,7 +148,7 @@ func publicHandler(conn *data.Conn) http.HandlerFunc {
 		if r.Method == "OPTIONS" {
 			return
 		}
-		fmt.Println("debug: got public request")
+		////fmt.Println("debug: got public request")
 		// Validate content type to prevent content-type sniffing attacks
 		contentType := r.Header.Get("Content-Type")
 		if contentType != "application/json" {
@@ -185,7 +187,7 @@ func publicHandler(conn *data.Conn) http.HandlerFunc {
 		result, err := publicFunc[req.Function](conn, req.Arguments)
 		if err != nil {
 			// Log the detailed error on the server
-			log.Printf("public_handler error: %s - %v", req.Function, err)
+			//log.Printf("public_handler error: %s - %v", req.Function, err)
 			// Send the specific error message back to the client
 			// Use StatusBadRequest for general input/logic errors from Login/Signup
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -214,8 +216,8 @@ func privateUploadHandler(conn *data.Conn) http.HandlerFunc {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		token_string := r.Header.Get("Authorization")
-		userId, err := validateToken(token_string)
+		tokenString := r.Header.Get("Authorization")
+		userID, err := validateToken(tokenString)
 		if handleError(w, err, "auth") {
 			return
 		}
@@ -268,7 +270,7 @@ func privateUploadHandler(conn *data.Conn) http.HandlerFunc {
 			}
 
 			// Call the Go implementation directly
-			result, err := account.HandleTradeUpload(conn, userId, argsBytes)
+			result, err := account.HandleTradeUpload(conn, userID, argsBytes)
 			if handleError(w, err, "processing trade upload") {
 				return
 			}
@@ -291,8 +293,8 @@ func privateHandler(conn *data.Conn) http.HandlerFunc {
 			return
 		}
 
-		token_string := r.Header.Get("Authorization")
-		_, err := validateToken(token_string)
+		tokenString := r.Header.Get("Authorization")
+		_, err := validateToken(tokenString)
 		if handleError(w, err, "auth") {
 			return
 		}
@@ -336,13 +338,13 @@ func privateHandler(conn *data.Conn) http.HandlerFunc {
 		}
 
 		// Get user ID from token
-		userId, err := validateToken(token_string)
+		userID, err := validateToken(tokenString)
 		if handleError(w, err, "private_handler: validateToken") {
 			return
 		}
 
 		// Execute the requested function with sanitized input
-		result, err := privateFunc[req.Function](conn, userId, req.Arguments)
+		result, err := privateFunc[req.Function](conn, userID, req.Arguments)
 		if handleError(w, err, fmt.Sprintf("private_handler: %s", req.Function)) {
 			return
 		}
@@ -456,7 +458,7 @@ func containsInjectionPattern(s string) bool {
 // WSHandler performs operations related to WSHandler functionality.
 func WSHandler(conn *data.Conn) http.HandlerFunc {
 	upgrader := websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool {
+		CheckOrigin: func(_ *http.Request) bool {
 			return true // Allow all origins
 		},
 	}
@@ -481,7 +483,7 @@ func WSHandler(conn *data.Conn) http.HandlerFunc {
 		// Upgrade the connection to a WebSocket
 		ws, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-	//		fmt.Println("Failed to upgrade to WebSocket:", err)
+			//		////fmt.Println("Failed to upgrade to WebSocket:", err)
 			return
 		}
 
@@ -495,7 +497,7 @@ func HealthCheck() http.HandlerFunc {
 		OK bool `json:"ok"`
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		// If you need DB ping logic, insert it here and flip OK accordingly.
 		_ = json.NewEncoder(w).Encode(status{OK: true})
@@ -509,8 +511,18 @@ func StartServer(conn *data.Conn) {
 	http.HandleFunc("/ws", WSHandler(conn))
 	http.HandleFunc("/upload", privateUploadHandler(conn))
 	http.HandleFunc("/healthz", HealthCheck())
-	//fmt.Println("debug: Server running on port 5058 ----------------------------------------------------------")
-	if err := http.ListenAndServe(":5058", nil); err != nil {
+
+	server := &http.Server{
+		Addr:    ":5058",
+		Handler: http.DefaultServeMux, // Use DefaultServeMux since HandleFunc registers globally
+		// Good practice to set timeouts to prevent resource exhaustion.
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 90 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	log.Println("debug: Server running on port 5058")
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }

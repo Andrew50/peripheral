@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount, tick, onDestroy } from 'svelte';
-	import { privateRequest } from '$lib/core/backend';
+	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { marked } from 'marked'; // Import the markdown parser
 	import { queryChart } from '$lib/features/chart/interface'; // Import queryChart
-	import type { Instance } from '$lib/core/types';
+	import type { Instance } from '$lib/utils/types/types';
 	import { browser } from '$app/environment'; // Import browser
 	import { derived, writable } from 'svelte/store';
 	import {
@@ -301,95 +301,99 @@
 	}
 
 	async function handleSubmit() {
-		if (!$inputValue.trim()) return;
+		if (!$inputValue.trim() || isLoading) return;
+		isLoading = true;
+		try { 
+			const userMessage: Message = {
+				id: generateId(),
+				content: $inputValue,
+				sender: 'user',
+				timestamp: new Date(),
+				contextItems: [...$contextItems]
+			};
 
-		const userMessage: Message = {
-			id: generateId(),
-			content: $inputValue,
-			sender: 'user',
-			timestamp: new Date(),
-			contextItems: [...$contextItems]
-		};
+			messagesStore.update(current => [...current, userMessage]);
 
-		messagesStore.update(current => [...current, userMessage]);
-
-		// Create loading message placeholder
-		const loadingMessage: Message = {
-			id: generateId(),
-			content: '', // Content is now handled by the store
-			sender: 'assistant',
-			timestamp: new Date(),
-			isLoading: true
-		};
-		messagesStore.update(current => [...current, loadingMessage]);
-		
-		// <-- Set initial status immediately -->
-		functionStatusStore.set({
-			type: 'function_status',
-			userMessage: 'Processing request...'
-		});
-
-		scrollToBottom();
-
-		const queryText = $inputValue;
-		inputValue.set('');
-		// We already set an initial status, no need to clear here
-		await tick(); // Wait for DOM update
-		adjustTextareaHeight(); // Reset height after clearing input and waiting for tick
-
-		// Prepend if backtest mode is active
-		const finalQuery = isBacktestMode ? `[RUN BACKTEST] ${queryText}` : queryText;
-		const currentActiveChart = $activeChartInstance; // Get current active chart instance
-		privateRequest('getQuery', {
-			query: finalQuery,
-			context: $contextItems, // Send only manually added context items
-			activeChartContext: currentActiveChart // Send active chart separately
-		})
-			.then((response) => {
-				console.log('response', response);
-				// Type assertion to handle the response type
-				const typedResponse = response as unknown as QueryResponse;
-				console.log('Response:', typedResponse);
-
-				messagesStore.update(current => current.filter(m => m.id !== loadingMessage.id));
-				functionStatusStore.set(null); // Clear status store on success
-
-				const expiresAt = new Date();
-				expiresAt.setHours(expiresAt.getHours() + 24); 
-
-				const assistantMessage: Message = {
-					id: generateId(),
-					content: typedResponse.text || "Error processing request.",
-					sender: 'assistant',
-					timestamp: new Date(),
-					expiresAt: expiresAt,
-					responseType: typedResponse.response_type,
-					contentChunks: typedResponse.content_chunks
-				};
-
-				messagesStore.update(current => [...current, assistantMessage]);
-				// scrollToBottom(); // Removed this call
-				
-				fetchSuggestedQueries();
-			})
-			.catch((error) => {
-				console.error('Error fetching response:', error);
-
-				// Remove loading message and add error message
-				messagesStore.update(current => current.filter(m => m.id !== loadingMessage.id));
-				functionStatusStore.set(null); // Clear status store on error
-
-				const errorMessage: Message = {
-					id: generateId(),
-					content: `Error: ${error.message || 'Failed to get response'}`,
-					sender: 'assistant',
-					timestamp: new Date(),
-					responseType: 'error'
-				};
-
-				messagesStore.update(current => [...current, errorMessage]);
-				// scrollToBottom(); // Removed this call
+			// Create loading message placeholder
+			const loadingMessage: Message = {
+				id: generateId(),
+				content: '', // Content is now handled by the store
+				sender: 'assistant',
+				timestamp: new Date(),
+				isLoading: true
+			};
+			messagesStore.update(current => [...current, loadingMessage]);
+			
+			// <-- Set initial status immediately -->
+			functionStatusStore.set({
+				type: 'function_status',
+				userMessage: 'Processing request...'
 			});
+
+			scrollToBottom();
+
+			const queryText = $inputValue;
+			inputValue.set('');
+			// We already set an initial status, no need to clear here
+			await tick(); // Wait for DOM update
+			adjustTextareaHeight(); // Reset height after clearing input and waiting for tick
+
+			// Prepend if backtest mode is active
+			const finalQuery = isBacktestMode ? `[RUN BACKTEST] ${queryText}` : queryText;
+			const currentActiveChart = $activeChartInstance; // Get current active chart instance
+			privateRequest('getQuery', {
+				query: finalQuery,
+				context: $contextItems, // Send only manually added context items
+				activeChartContext: currentActiveChart // Send active chart separately
+			})
+				.then((response) => {
+					// Type assertion to handle the response type
+					const typedResponse = response as unknown as QueryResponse;
+					console.log('Response:', typedResponse);
+
+					messagesStore.update(current => current.filter(m => m.id !== loadingMessage.id));
+					functionStatusStore.set(null); // Clear status store on success
+
+					const expiresAt = new Date();
+					expiresAt.setHours(expiresAt.getHours() + 24); 
+
+					const assistantMessage: Message = {
+						id: generateId(),
+						content: typedResponse.text || "Error processing request.",
+						sender: 'assistant',
+						timestamp: new Date(),
+						expiresAt: expiresAt,
+						responseType: typedResponse.response_type,
+						contentChunks: typedResponse.content_chunks
+					};
+
+					messagesStore.update(current => [...current, assistantMessage]);
+					// scrollToBottom(); // Removed this call
+					
+					fetchSuggestedQueries();
+				})
+				.catch((error) => {
+					console.error('Error fetching response:', error);
+
+					// Remove loading message and add error message
+					messagesStore.update(current => current.filter(m => m.id !== loadingMessage.id));
+					functionStatusStore.set(null); // Clear status store on error
+
+					const errorMessage: Message = {
+						id: generateId(),
+						content: `Error: ${error.message || 'Failed to get response'}`,
+						sender: 'assistant',
+						timestamp: new Date(),
+						responseType: 'error'
+					};
+
+					messagesStore.update(current => [...current, errorMessage]);
+					});
+		} catch (error) {
+			isLoading = false;
+		} finally {
+			isLoading = false;
+		}
 	}
 
 	// Function to adjust textarea height dynamically
@@ -1124,12 +1128,6 @@
 		padding: 0.75rem;
 		font-size: 0.75rem;
 		overflow-x: auto;
-	}
-
-	.function-result-data pre {
-		margin: 0;
-		font-family: monospace;
-		white-space: pre-wrap;
 	}
 
 	/* Suggested queries styling */
