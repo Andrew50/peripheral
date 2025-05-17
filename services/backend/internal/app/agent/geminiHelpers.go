@@ -39,7 +39,7 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 
 	// Start with the base prompt
 	toolsDescription.WriteString(basePrompt)
-	toolsDescription.WriteString("\n\nHere are the available tools. '?' indicates an optional parameter.\n")
+	toolsDescription.WriteString("\n\nAvailable tools (JSON in, JSON out). '?' marks optional args. Use getCurrentSecurityID or getSecuritiesFromTicker to obtain a securityId for other calls. Outputs can be chained as inputs for later tools.\n")
 
 	// Sort tool names for consistent output
 	var toolNames []string
@@ -52,8 +52,13 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 	for _, name := range toolNames {
 		tool := Tools[name]
 
-		// Add function name and description
-		toolsDescription.WriteString(fmt.Sprintf("- %s: %s\n", name, tool.FunctionDeclaration.Description))
+		// Add function name, description and return info
+		ret := ToolReturnDesc[name]
+		if ret != "" {
+			toolsDescription.WriteString(fmt.Sprintf("- %s: %s Returns %s.\n", name, tool.FunctionDeclaration.Description, ret))
+		} else {
+			toolsDescription.WriteString(fmt.Sprintf("- %s: %s\n", name, tool.FunctionDeclaration.Description))
+		}
 
 		// Add parameters if they exist
 		if tool.FunctionDeclaration.Parameters != nil && len(tool.FunctionDeclaration.Parameters.Properties) > 0 {
