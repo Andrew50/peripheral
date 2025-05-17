@@ -51,6 +51,9 @@ const editedStrategy = writable<EditableStrategy | null>(null);
 const viewedStrategyId = writable<number | null>(null);
 const detailViewError = writable<string | null>(null); // For errors loading spec
 
+// --- Editor Tab State ---
+let activeTab: 'universe' | 'features' | 'filters' | 'sort' = 'universe';
+
 // Derived store to get the currently viewed strategy object from the main list
 // Note: This might initially lack the 'spec' until it's fetched.
 const viewedStrategyBase = derived(
@@ -964,13 +967,21 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
 	{#if $loading}<div class="loading-overlay">Preparing editor...</div>{/if}
 	{#if $detailViewError}<div class="error-message">Error preparing editor: {$detailViewError}</div>{/if}
 
-	<div class="form-block">
-		<label for="strategy-name">Strategy Name</label>
-		<input id="strategy-name" type="text" placeholder="e.g., Daily Momentum Breakout" bind:value={$editedStrategy.name} />
-	</div>
+        <div class="form-block">
+                <label for="strategy-name">Strategy Name</label>
+                <input id="strategy-name" type="text" placeholder="e.g., Daily Momentum Breakout" bind:value={$editedStrategy.name} />
+        </div>
 
-	<fieldset class="section">
-		<legend>Universe Definition</legend>
+        <nav class="editor-tabs">
+                <button on:click={() => activeTab = 'universe'} class:active={activeTab === 'universe'}>Universe</button>
+                <button on:click={() => activeTab = 'features'} class:active={activeTab === 'features'}>Features</button>
+                <button on:click={() => activeTab = 'filters'} class:active={activeTab === 'filters'}>Filters</button>
+                <button on:click={() => activeTab = 'sort'} class:active={activeTab === 'sort'}>Sort &amp; Save</button>
+        </nav>
+
+        <div class="tab-panel" hidden={activeTab !== 'universe'}>
+        <fieldset class="section">
+                <legend>Universe Definition</legend>
 		<div class="layout-grid cols-3 items-end">
 			<label>
 				Timeframe <span class="help-icon" title={helpText.universeTimeframe}>?</span>
@@ -1032,10 +1043,12 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
 			{/each}
 			<button type="button" on:click={addUniverseFilter}>＋ Add Universe Filter</button>
 		</div>
-	</fieldset>
+        </fieldset>
+        </div>
 
-	<fieldset class="section">
-		<legend>Features <span class="help-icon" title={helpText.features}>?</span></legend>
+        <div class="tab-panel" hidden={activeTab !== 'features'}>
+        <fieldset class="section">
+                <legend>Features <span class="help-icon" title={helpText.features}>?</span></legend>
 		<p class="help-text">{helpText.featureExpr}</p>
 		{#each $editedStrategy.spec.features as feature, fIndex (feature.featureId)}
 			<div class="feature-row">
@@ -1094,10 +1107,12 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
 			</div>
 		{/each}
 		<button type="button" on:click={addFeature}>＋ Add Feature</button>
-	</fieldset>
+        </fieldset>
+        </div>
 
-	<fieldset class="section">
-		<legend>Filters (Conditions) <span class="help-icon" title={helpText.filters}>?</span></legend>
+        <div class="tab-panel" hidden={activeTab !== 'filters'}>
+        <fieldset class="section">
+                <legend>Filters (Conditions) <span class="help-icon" title={helpText.filters}>?</span></legend>
 		<p class="help-text">Define conditions comparing Features to constants or other Features.</p>
 		{#if $availableFeatures.length === 0}
 			<p class="warning-text">You need to define at least one Feature before adding Filters.</p>
@@ -1130,10 +1145,12 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
 			{/each}
 			<button type="button" on:click={addFilter} disabled={$availableFeatures.length === 0}>＋ Add Filter</button>
 		{/if}
-	</fieldset>
+        </fieldset>
+        </div>
 
-	<fieldset class="section">
-		<legend>Sort Results By <span class="help-icon" title={helpText.sortBy}>?</span></legend>
+        <div class="tab-panel" hidden={activeTab !== 'sort'}>
+        <fieldset class="section">
+                <legend>Sort Results By <span class="help-icon" title={helpText.sortBy}>?</span></legend>
 		{#if $availableFeatures.length === 0}
 			<p class="warning-text">You need to define at least one Feature before setting Sort criteria.</p>
 		{:else}
@@ -1150,16 +1167,17 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
 				</label>
 			</div>
 		{/if}
-	</fieldset>
-
-	<div class="actions">
-		<button class="primary" on:click={saveStrategy} disabled={$loading || $loadingSpec}>💾 Save Strategy</button>
-		<button type="button" on:click={cancelEdit} disabled={$loading || $loadingSpec}>Cancel</button>
-		{#if typeof $editedStrategy.strategyId === 'number'}
-			<button type="button" class="danger" on:click={() => deleteStrategyConfirm($editedStrategy.strategyId)} disabled={$loading || $loadingSpec}>Delete Strategy</button>
-		{/if}
-			{#if $loading}<span class="loading-indicator"> Saving...</span>{/if}
-	</div>
+        </fieldset>
+        
+        <div class="actions">
+                <button class="primary" on:click={saveStrategy} disabled={$loading || $loadingSpec}>💾 Save Strategy</button>
+                <button type="button" on:click={cancelEdit} disabled={$loading || $loadingSpec}>Cancel</button>
+                {#if typeof $editedStrategy.strategyId === 'number'}
+                        <button type="button" class="danger" on:click={() => deleteStrategyConfirm($editedStrategy.strategyId)} disabled={$loading || $loadingSpec}>Delete Strategy</button>
+                {/if}
+                        {#if $loading}<span class="loading-indicator"> Saving...</span>{/if}
+        </div>
+        </div>
 {/if}
 
 
@@ -1272,8 +1290,12 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
 	.filter-name { display: block; margin-bottom: 0.25rem; }
 	.filter-condition code { display: block; padding: 0.5rem; border-radius: 4px; white-space: normal; } /* Keep this code block styled */
 
-	/* --- Edit View Specific --- */
-	.pill-group { margin-bottom: 0.5rem; }
+        /* --- Edit View Specific --- */
+        .editor-tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+        .editor-tabs button { padding: 0.4rem 0.75rem; border-radius: 4px; border: 1px solid var(--ui-border); background: var(--ui-bg-element); cursor: pointer; }
+        .editor-tabs button.active { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
+        .tab-panel[hidden] { display: none; }
+        .pill-group { margin-bottom: 0.5rem; }
 	.pill-group input.small { margin-top: 0.5rem; }
 	.pill { background: var(--ui-bg-hover, #e9ecef); color: var(--text-primary, #333); display: inline-block; padding: 0.25rem 0.75rem; border-radius: 16px; margin: 0.25rem 0.25rem 0.25rem 0; cursor: pointer; font-size: 0.8rem; border: 1px solid var(--ui-border-light, #dee2e6); transition: background-color 0.15s ease-in-out; }
 	.pill:hover { background: var(--accent-red-light, #f8d7da); border-color: var(--accent-red, #dc3545); color: var(--accent-red-dark, #721c24); }
