@@ -6,7 +6,8 @@
 	import { onMount, tick } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { queryInstanceInput } from '$lib/components/input.svelte';
-	import { flagWatchlistId, watchlists, flagWatchlist } from '$lib/utils/stores/stores';
+        import { flagWatchlistId, watchlists, flagWatchlist } from '$lib/utils/stores/stores';
+        import { openWatchlistId } from './interface';
 	import '$lib/styles/global.css';
 
 	// Extended Instance type to include watchlistItemId
@@ -300,7 +301,7 @@
 		return name.charAt(0).toUpperCase();
 	}
 
-	function handleWatchlistChange(event: Event) {
+        function handleWatchlistChange(event: Event) {
 		const target = event.target as HTMLSelectElement;
 		const value = target.value;
 
@@ -321,10 +322,15 @@
 		}
 
 		// For regular watchlist selections
-		previousWatchlistId = parseInt(value, 10);
-		currentWatchlistId = parseInt(value, 10);
-		selectWatchlist(value);
-	}
+                previousWatchlistId = parseInt(value, 10);
+                currentWatchlistId = parseInt(value, 10);
+                selectWatchlist(value);
+        }
+
+        $: if ($openWatchlistId !== null) {
+                selectWatchlist(String($openWatchlistId));
+                openWatchlistId.set(null);
+        }
 
 </script>
 

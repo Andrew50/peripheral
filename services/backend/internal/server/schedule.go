@@ -1,6 +1,7 @@
 package server
 
 import (
+	"backend/internal/app/strategy"
 	"backend/internal/data"
 	"backend/internal/services/alerts"
 	"backend/internal/services/marketdata"
@@ -156,7 +157,14 @@ func simpleSecuritiesUpdateJob(conn *data.Conn) error {
 func updateSectorsJob(conn *data.Conn) error {
 	////fmt.Println("Starting sector update - fetching latest sector/industry data...")
 	err := securities.UpdateSectors(context.Background(), conn) // Discard the statBlock
-	return err                                                     // Return the error, if any
+	if err != nil {
+		return err
+	}
+	// Refresh in-memory validation maps for strategy specs
+	if err := strategy.RefreshSectorIndustryMaps(conn); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Define all jobs and their schedules
@@ -296,6 +304,11 @@ func StartScheduler(conn *data.Conn) chan struct{} {
 	scheduler, err := NewScheduler(conn)
 	if err != nil {
 		log.Fatalf("Failed to create scheduler: %v", err)
+	}
+
+	// Ensure sector/industry maps are loaded before jobs run
+	if err := strategy.RefreshSectorIndustryMaps(conn); err != nil {
+		log.Printf("Failed to refresh sector/industry maps: %v", err)
 	}
 
 	// Start the scheduler

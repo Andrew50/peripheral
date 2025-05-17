@@ -2,6 +2,7 @@
 import { onMount } from 'svelte';
 import { writable, get, derived } from 'svelte/store';
 import { strategies } from '$lib/utils/stores/stores';
+import { openStrategyId } from './interface';
 import { privateRequest } from '$lib/utils/helpers/backend';
 import '$lib/styles/global.css';
 
@@ -775,10 +776,15 @@ function removeFilter(index: number) { updateEditedStrategy(s => { s.spec.filter
 
 // Derived store for Edit View dropdowns - remains the same
 const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
-	if (!$editedStrategy || !$editedStrategy.spec?.features) return [];
-	// Filter out features with errors? Maybe not, allow fixing them.
-	return $editedStrategy.spec.features.map(f => ({ id: f.featureId, name: f.name || `Feature ${f.featureId}` }));
+        if (!$editedStrategy || !$editedStrategy.spec?.features) return [];
+        // Filter out features with errors? Maybe not, allow fixing them.
+        return $editedStrategy.spec.features.map(f => ({ id: f.featureId, name: f.name || `Feature ${f.featureId}` }));
 });
+
+$: if ($openStrategyId !== null) {
+        viewedStrategyId.set($openStrategyId);
+        openStrategyId.set(null);
+}
 
 </script>
 

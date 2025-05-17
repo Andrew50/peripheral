@@ -3,6 +3,7 @@
   import StrategyDropdown from '$lib/components/strategyDropdown.svelte';
   import List from '$lib/components/list.svelte';
   import { privateRequest } from '$lib/utils/helpers/backend';
+  import { backtestRunRequest } from './interface';
   
   /***********************
    *     ─ Types ─       *
@@ -155,6 +156,12 @@
     } finally {
       running.set(false);
     }
+  }
+
+  $: if ($backtestRunRequest !== null) {
+    selectedId = $backtestRunRequest;
+    runBacktest();
+    backtestRunRequest.set(null);
   }
 </script>
 

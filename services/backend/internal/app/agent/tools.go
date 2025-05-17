@@ -734,6 +734,85 @@ var (
 			Function:      RunWebSearch,
 			StatusMessage: "Searching the web...",
 		},
+		"ui_open_watchlist": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "ui_open_watchlist",
+				Description: "Open the watchlist sidebar and select a watchlist by id.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"watchlistId": {Type: genai.TypeInteger, Description: "The watchlist id to open."},
+					},
+					Required: []string{"watchlistId"},
+				},
+			},
+			Function: OpenWatchlist,
+		},
+		"ui_open_alerts": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "ui_open_alerts",
+				Description: "Open the alerts sidebar.",
+				Parameters:  &genai.Schema{Type: genai.TypeObject, Properties: map[string]*genai.Schema{}, Required: []string{}},
+			},
+			Function: OpenAlerts,
+		},
+		"ui_open_news": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "ui_open_news",
+				Description: "Open the news sidebar to a specific event id (optional).",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"eventId": {Type: genai.TypeInteger, Description: "Optional news event id."},
+					},
+				},
+			},
+			Function: OpenNews,
+		},
+		"ui_open_strategy": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "ui_open_strategy",
+				Description: "Open the strategy editor to a given strategy id.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"strategyId": {Type: genai.TypeInteger, Description: "The strategy id to open."},
+					},
+					Required: []string{"strategyId"},
+				},
+			},
+			Function: OpenStrategy,
+		},
+		"ui_open_backtest": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "ui_open_backtest",
+				Description: "Open the backtest window and run a backtest for the given strategy id.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"strategyId": {Type: genai.TypeInteger, Description: "The strategy id to backtest."},
+					},
+					Required: []string{"strategyId"},
+				},
+			},
+			Function: OpenBacktest,
+		},
+		"ui_query_chart": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "ui_query_chart",
+				Description: "Change the active chart to the specified query parameters.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"ticker":     {Type: genai.TypeString, Description: "Ticker symbol to load."},
+						"securityId": {Type: genai.TypeInteger, Description: "Security ID to load."},
+						"timeframe":  {Type: genai.TypeString, Description: "Chart timeframe, e.g. '1d', '1h'."},
+						"timestamp":  {Type: genai.TypeInteger, Description: "Starting timestamp in ms."},
+					},
+				},
+			},
+			Function: QueryChartUI,
+		},
 	}
 )
 

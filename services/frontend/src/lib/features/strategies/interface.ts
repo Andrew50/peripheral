@@ -1,7 +1,8 @@
 import type { Instance } from '$lib/utils/types/types';
 import { privateRequest } from '$lib/utils/helpers/backend';
 import { writable } from 'svelte/store';
-import { dispatchMenuChange } from '$lib/utils/stores/stores';
+import { dispatchMenuChange, bottomWindowRequest } from '$lib/utils/stores/stores';
+export const openStrategyId = writable<number | null>(null);
 export type SetupEvent = 'new' | 'save' | 'cancel' | number;
 export let eventDispatcher = writable<SetupEvent>();
 export function setSample(setupId: number, instance: Instance): void {
@@ -23,6 +24,11 @@ export async function newSetup(): Promise<number | null> {
 				unsub();
 				resolve(v); // Resolve with setupId
 			}
-		});
-	});
+                });
+        });
+}
+
+export function openStrategy(id: number) {
+        bottomWindowRequest.set('strategies');
+        openStrategyId.set(id);
 }

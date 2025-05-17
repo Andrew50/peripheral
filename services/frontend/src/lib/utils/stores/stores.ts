@@ -43,6 +43,24 @@ export const systemClockOffset = 0;
 export const dispatchMenuChange = writable('');
 export const algos: Writable<Algo[]> = writable([]);
 
+export type BottomWindowType =
+  | 'screener'
+  | 'account'
+  | 'strategies'
+  | 'settings'
+  | 'deploy'
+  | 'backtest'
+  | 'query';
+
+export const bottomWindowRequest = writable<BottomWindowType | null>(null);
+
+export type UIAction = {
+  action: string;
+  params?: Record<string, any>;
+};
+
+export const uiAction = writable<UIAction | null>(null);
+
 // Add constants for menu width
 export const MIN_MENU_WIDTH = 200;
 const DEFAULT_MENU_WIDTH = 300;

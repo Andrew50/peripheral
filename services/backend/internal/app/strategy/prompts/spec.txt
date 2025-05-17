@@ -64,18 +64,18 @@ You will create JSON objects with the following structure:
 ### Universe
 - **filters**: Array of filters to define the universe of securities
   - **securityFeature**: Type of security feature to filter on
-    - Valid values: "SecurityId", "Ticker", "Locale", "Market", "PrimaryExchange", "Active", "Sector", "Industry"
+    - Valid values: {{ SECURITY_FEATURES }}
     - Locale values: "US", "EU", "APAC", etc.
     - Market values: "stocks", "otc", "futures", "forex", etc.
     - PrimaryExchange values: "XNAS" (NASDAQ), "XNYS" (NYSE), "XASE" (AMEX), "BATS", "ARCX" (NYSE Arca), etc.
-    - Sector values: "Technology", "Healthcare", "Energy", "Financials", etc.
-    - Industry values: "Semiconductors", "Software", "Gold", "Banking", etc.
+    - Sector values: {{ SECTORS }}
+    - Industry values: {{ INDUSTRIES }}
   - **include**: Array of values to include for the securityFeature
   - **exclude**: Array of values to exclude for the securityFeature
   - IMPORTANT: Only add locale, market, or other universe filters when explicitly specified in the query
 
 - **timeframe**: Resolution of price data
-  - Valid values: "1" (1 minute), "1h" (1 hour), "1d" (1 day), "1w" (1 week)
+  - Valid values: {{ TIMEFRAMES }}
 
 - **extendedHours**: Whether to include pre-market and after-hours trading
   - Only applicable when timeframe is "1" (1 minute)
@@ -89,24 +89,21 @@ You will create JSON objects with the following structure:
 - **featureId**: Unique identifier for the feature (integer starting from 0)
 - **source**: Where the feature data comes from
   - **field**: Type of security feature to reference
-    - Valid values: "SecurityId", "Ticker", "Locale", "Market", "PrimaryExchange", "Active", "Sector", "Industry"
+    - Valid values: {{ SECURITY_FEATURES }}
   - **value**: Specific value for the field or "relative" to use the current security
 
 - **output**: Output format of the feature
-  - Valid values:
-    - "raw": Raw calculated value
-    - "rankn": Normalized rank (0-1)
-    - "rankp": Percentile rank (0-100)
+  - Valid values: {{ OUTPUT_TYPES }}
 
 - **expr**: Array of expression elements that make up the feature calculation in Reverse Polish Notation (postfix)
   - **type**: The type of expression element
-    - Valid values: "column", "operator"
+    - Valid values: "column", "operator"
   - **value**: The actual value of the expression element
     - For type "column": Any valid column name
-      - OHLCV Features: "open", "high", "low", "close", "volume"
-      - Fundamental Features: "market_cap", "shares_outstanding", "eps", "revenue", "dividend", "social_sentiment", "fear_greed", "short_interest", "borrow_fee"
+      - OHLCV Features: {{ OHLCV_FEATURES }}
+      - Fundamental Features: {{ FUNDAMENTAL_FEATURES }}
     - For type "operator": Any valid arithmetic operator
-      - Valid values: "+", "-", "*", "/", "^"
+      - Valid values: {{ EXPR_OPERATORS }}
    - **offset**: (Only for type="column") Non-negative integer specifying how many time steps back to look for the column's value (e.g., `1` means the previous period's value, `0` means the current period's value). Default is `0`. Must be `0` for `type="operator"`.
     - IMPORTANT: Numeric constants are NOT allowed as columns, use filter scaling instead
 
@@ -117,7 +114,7 @@ You will create JSON objects with the following structure:
 - **name**: Descriptive name of the filter
 - **lhs**: Left-hand side feature ID
 - **operator**: Comparison operator
-  - Valid values: "<", "<=", ">=", ">", "!=", "=="
+  - Valid values: {{ COMPARISON_OPERATORS }}
 
 - **rhs**: Right-hand side of the comparison
   - **featureId**: ID of feature to compare against (0 if using constant)
@@ -128,7 +125,7 @@ You will create JSON objects with the following structure:
 
 - **feature**: Feature ID to sort results by
 - **direction**: Sorting direction
-  - Valid values: "asc" (ascending), "desc" (descending)
+  - Valid values: {{ DIRECTIONS }}
 
 ## Expression Format
 

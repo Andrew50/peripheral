@@ -36,14 +36,21 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { goto } from '$app/navigation';
-	import {
-		initStores,
-		streamInfo,
-		formatTimestamp,
-		dispatchMenuChange,
-		menuWidth,
-		settings
-	} from '$lib/utils/stores/stores';
+        import {
+                initStores,
+                streamInfo,
+                formatTimestamp,
+                dispatchMenuChange,
+                menuWidth,
+                settings,
+                bottomWindowRequest,
+                uiAction
+        } from '$lib/utils/stores/stores';
+        import { openWatchlistId } from '$lib/features/watchlist/interface';
+        import { openStrategyId } from '$lib/features/strategies/interface';
+        import { backtestRunRequest } from '$lib/features/backtest/interface';
+        import { openNewsEventId } from '$lib/features/news/interface';
+        import { queryChart } from '$lib/features/chart/interface';
 	import { writable, type Writable } from 'svelte/store';
 	import { colorSchemes, applyColorScheme } from '$lib/styles/colorSchemes';
 
@@ -778,17 +785,44 @@
 	}
 
 	// Subscribe to the requestChatOpen store
-	$: if ($requestChatOpen && browser) {
-		if (leftMenuWidth === 0) {
-			toggleLeftPane(); // Open the left pane if closed
-		}
-		// Reset the trigger after handling
-		// Use setTimeout to ensure the pane opens before resetting,
-		// although direct reset might work fine with Svelte's reactivity.
-		setTimeout(() => {
-			requestChatOpen.set(false);
-		}, 0);
-	}
+        $: if ($requestChatOpen && browser) {
+                if (leftMenuWidth === 0) {
+                        toggleLeftPane(); // Open the left pane if closed
+                }
+                // Reset the trigger after handling
+                // Use setTimeout to ensure the pane opens before resetting,
+                // although direct reset might work fine with Svelte's reactivity.
+                setTimeout(() => {
+                        requestChatOpen.set(false);
+                }, 0);
+        }
+
+        $: if ($bottomWindowRequest) {
+                openBottomWindow($bottomWindowRequest);
+                bottomWindowRequest.set(null);
+        }
+
+        $: if ($uiAction) {
+                const a = $uiAction;
+                if (a.action === 'open_watchlist' && a.params?.watchlistId !== undefined) {
+                        dispatchMenuChange.set('watchlist');
+                        openWatchlistId.set(a.params.watchlistId);
+                } else if (a.action === 'open_alerts') {
+                        dispatchMenuChange.set('alerts');
+                } else if (a.action === 'open_news') {
+                        dispatchMenuChange.set('news');
+                        if (a.params?.eventId !== undefined) openNewsEventId.set(a.params.eventId);
+                } else if (a.action === 'open_strategy' && a.params?.strategyId !== undefined) {
+                        bottomWindowRequest.set('strategies');
+                        openStrategyId.set(a.params.strategyId);
+                } else if (a.action === 'open_backtest' && a.params?.strategyId !== undefined) {
+                        bottomWindowRequest.set('backtest');
+                        backtestRunRequest.set(a.params.strategyId);
+                } else if (a.action === 'query_chart') {
+                        queryChart(a.params || {});
+                }
+                uiAction.set(null);
+        }
 </script>
 
 <div
