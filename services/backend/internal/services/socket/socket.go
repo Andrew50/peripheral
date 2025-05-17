@@ -5,6 +5,7 @@ import (
 	"backend/internal/data/utils"
 	"container/list"
 	"encoding/json"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -128,6 +129,7 @@ func SendFunctionStatus(userID int, userMessage string) {
 		Type:        "function_status",
 		UserMessage: messageToSend,
 	}
+	log.Printf("sending status to %d: %s", userID, messageToSend)
 
 	jsonData, err := json.Marshal(statusUpdate)
 	if err != nil {

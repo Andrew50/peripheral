@@ -100,6 +100,7 @@ func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (Execut
 	}
 	var argsMap map[string]interface{}
 	_ = json.Unmarshal(fc.Args, &argsMap)
+	e.log.Info("agent executing tool", zap.String("function", fc.Name), zap.Any("args", argsMap))
 	if tool.StatusMessage != "" {
 		socket.SendFunctionStatus(e.userID, formatStatusMessage(tool.StatusMessage, argsMap))
 	}
@@ -112,6 +113,7 @@ func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (Execut
 		e.log.Warn("Error executing function", zap.String("function", fc.Name), zap.Error(err))
 		return ExecuteResult{FunctionName: fc.Name, Error: err.Error(), Args: argsMap}, nil
 	}
+	e.log.Info("agent tool completed", zap.String("function", fc.Name))
 	return ExecuteResult{FunctionName: fc.Name, Result: result, Args: argsMap}, nil
 
 }

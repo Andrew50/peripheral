@@ -395,8 +395,9 @@
 	}
 
 	// Bottom windows
-	function openBottomWindow(type: BottomWindowType) {
-		const existing = bottomWindows.find((w) => w.type === type);
+       function openBottomWindow(type: BottomWindowType) {
+               console.log('openBottomWindow', type);
+               const existing = bottomWindows.find((w) => w.type === type);
 		// Close if same window is clicked
 		if (existing) {
 			bottomWindowsHeight = 0;

@@ -94,15 +94,16 @@ function connect() {
 		}
 
 		// Check message type first
-                if (data && data.type === 'function_status') {
-                        const statusUpdate = data as FunctionStatusUpdate;
-                        functionStatusStore.set(statusUpdate);
-                        return; // Handled function status update
-                }
                 if (data && data.type === 'ui_action') {
                         uiAction.set({ action: data.action, params: data.params });
                         return;
                 }
+               if (data && data.type === 'function_status') {
+                       const statusUpdate = data as FunctionStatusUpdate;
+                       console.log('function status', statusUpdate.userMessage);
+                       functionStatusStore.set(statusUpdate);
+                       return; // Handled function status update
+               }
 
 		// Handle other message types (based on channel)
 		const channelName = data.channel;

@@ -196,6 +196,7 @@ type ExprPart struct {
 
 // Feature represents a calculated metric used for filtering.
 type Feature struct {
+
 	Name      string        `json:"name"`
 	FeatureID FeatureID     `json:"featureId"`
 	Source    FeatureSource `json:"source"` // "security", "sector", "industry", "related_stocks" (proprietary), "market", specific ticker like "AAPL" // NEW
@@ -751,9 +752,12 @@ func quoteJoin(vals []string) string {
 
 // toSet converts a slice of strings to a set. The dummy generic parameter allows
 // callers to specify the target type when casting.
-func toSet[T comparable](dummy T, vals []string) map[T]struct{} {
+// The [T ~string] constraint ensures T has an underlying type of string,
+// which is true for all current usages (e.g., Timeframe, OutputType).
+func toSet[T ~string](dummy T, vals []string) map[T]struct{} {
 	out := make(map[T]struct{}, len(vals))
 	for _, v := range vals {
+
 		out[T(v)] = struct{}{}
 	}
 	return out

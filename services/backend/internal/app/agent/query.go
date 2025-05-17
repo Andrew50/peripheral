@@ -562,7 +562,7 @@ func executeGeminiFunctionCalls(_ context.Context, conn *data.Conn, userID int, 
 	var results []ExecuteResult
 
 	for _, fc := range functionCalls {
-		////fmt.Printf("Executing function %s with args: %s\n", fc.Name, string(fc.Args))
+		log.Printf("agent planning: calling %s", fc.Name)
 
 		// Parse arguments into a map for storage and formatting
 		var argsMap map[string]interface{}
@@ -602,6 +602,7 @@ func executeGeminiFunctionCalls(_ context.Context, conn *data.Conn, userID int, 
 				Error:        err.Error(),
 				Args:         argsMap, // Log the parsed map
 			})
+			log.Printf("agent planning: %s error: %v", fc.Name, err)
 		} else {
 			////fmt.Printf("Function %s executed successfully\n", fc.Name)
 			results = append(results, ExecuteResult{
@@ -609,6 +610,7 @@ func executeGeminiFunctionCalls(_ context.Context, conn *data.Conn, userID int, 
 				Result:       result,
 				Args:         argsMap, // Log the parsed map
 			})
+			log.Printf("agent planning: %s completed", fc.Name)
 		}
 	}
 
