@@ -1,4 +1,4 @@
-import { type Instance } from '$lib/core/types';
+import { type Instance } from '$lib/utils/types/types';
 import { writable, get, type Writable } from "svelte/store"
 
 // Define a type for SEC Filing context items

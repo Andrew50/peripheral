@@ -1,3 +1,4 @@
+// <chat.go>
 package agent
 
 import (
@@ -5,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"go.uber.org/zap"
 )
@@ -40,23 +42,32 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 	ctx := context.Background()
 	success, message := conn.TestRedisConnectivity(ctx, userID)
 	if !success {
-		fmt.Printf("WARNING: %s\n", message)
-	} else {
-		fmt.Println(message)
+		return nil, fmt.Errorf("%s", message)
 	}
 
 	var query ChatRequest
 	if err := json.Unmarshal(args, &query); err != nil {
 		return nil, fmt.Errorf("error parsing request: %w", err)
 	}
+	if defaultSystemPromptTokenCount == 0 {
+		getDefaultSystemPromptTokenCount(conn)
+	}
 
 	var executor *Executor
 	var allResults []ExecuteResult
 	planningPrompt := ""
 	maxTurns := 7
+	totalRequestOutputTokenCount := int32(0)
+	totalRequestInputTokenCount := int32(0)
+	totalRequestThoughtsTokenCount := int32(0)
+	totalRequestTokenCount := int32(0)
 	for {
 		if planningPrompt == "" {
-			planningPrompt = BuildPlanningPrompt(conn, userID, query.Query, query.Context, query.ActiveChartContext)
+			var err error
+			planningPrompt, err = BuildPlanningPrompt(conn, userID, query.Query, query.Context, query.ActiveChartContext)
+			if err != nil {
+				return nil, err
+			}
 		}
 		result, err := RunPlanner(ctx, conn, planningPrompt)
 		if err != nil {
@@ -65,7 +76,13 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 		switch v := result.(type) {
 		case DirectAnswer:
 			processedChunks := processContentChunksForTables(ctx, conn, userID, v.ContentChunks)
-			saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, []ExecuteResult{})
+			totalRequestOutputTokenCount += v.TokenCounts.OutputTokenCount
+			totalRequestInputTokenCount += v.TokenCounts.InputTokenCount
+			totalRequestThoughtsTokenCount += v.TokenCounts.ThoughtsTokenCount
+			totalRequestTokenCount += v.TokenCounts.TotalTokenCount
+			if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, []ExecuteResult{}, totalRequestTokenCount); err != nil {
+				log.Printf("Error saving message to conversation: %v", err)
+			}
 			return QueryResponse{
 				Type:          "mixed_content",
 				ContentChunks: processedChunks,
@@ -90,20 +107,31 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 				}
 				// Update query with results for next planning iteration
 				// The planner will process these results to either plan more or finalize
-				planningPrompt = BuildPlanningPromptWithResults(conn, userID, query.Query, query.Context, query.ActiveChartContext, allResults)
+				planningPrompt, err = BuildPlanningPromptWithResults(conn, userID, query.Query, query.Context, query.ActiveChartContext, allResults)
+				if err != nil {
+					return nil, err
+				}
 			case StageFinishedExecuting:
 				// Generate final response based on execution results
-				finalPrompt := BuildFinalResponsePrompt(conn, userID, query.Query, query.Context, query.ActiveChartContext, allResults)
+				finalPrompt, err := BuildFinalResponsePrompt(conn, userID, query.Query, query.Context, query.ActiveChartContext, allResults)
+				if err != nil {
+					return nil, err
+				}
 
 				// Get the final response from the model
 				finalResponse, err := GetFinalResponse(ctx, conn, finalPrompt)
 				if err != nil {
 					return nil, fmt.Errorf("error generating final response: %w", err)
 				}
-
+				totalRequestOutputTokenCount += finalResponse.TokenCounts.OutputTokenCount
+				totalRequestInputTokenCount += finalResponse.TokenCounts.InputTokenCount
+				totalRequestThoughtsTokenCount += finalResponse.TokenCounts.ThoughtsTokenCount
+				totalRequestTokenCount += finalResponse.TokenCounts.TotalTokenCount
 				// Process any table instructions in the content chunks
 				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
-				saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, allResults)
+				if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, allResults, totalRequestTokenCount); err != nil {
+					log.Printf("Error saving message to conversation: %v", err)
+				}
 				return QueryResponse{
 					Type:          "mixed_content",
 					ContentChunks: processedChunks,
@@ -117,3 +145,5 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 	}
 
 }
+
+// </chat.go>

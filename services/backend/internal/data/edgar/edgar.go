@@ -1,27 +1,27 @@
 package edgar
 
 import (
-    "backend/internal/data/postgres"
+	"backend/internal/data/postgres"
+	"bytes"
+	"context"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
 	"regexp"
 	"sort"
 	"strings"
-	"time"
-	"bytes"
-	"context"
-	"encoding/xml"
 	"sync"
+	"time"
+
+	"backend/internal/data"
 
 	"golang.org/x/net/html/charset"
-    "backend/internal/data"
 )
 
-
-// EDGARFiling represents a single SEC filing
-type EDGARFiling struct {
+// Filing represents a single SEC filing
+type Filing struct {
 	Type      string    `json:"type"` // e.g., "10-K", "8-K", "13F"
 	Date      time.Time `json:"date"`
 	URL       string    `json:"url"`
@@ -124,7 +124,7 @@ func FetchLatestEdgarFilings(conn *data.Conn) ([]GlobalEDGARFiling, error) {
 	perPage := 100     // Number of results per API request
 
 	for page := 1; len(allFilings) < maxResults; page++ {
-		filings, err := fetchEdgarFilingsPage(conn,page, perPage)
+		filings, err := fetchEdgarFilingsPage(conn, page, perPage)
 		if err != nil {
 			// Return what we've fetched so far along with the error
 			return allFilings, fmt.Errorf("error fetching page %d: %w", page, err)
@@ -149,12 +149,11 @@ func FetchLatestEdgarFilings(conn *data.Conn) ([]GlobalEDGARFiling, error) {
 	return allFilings, nil
 }
 
-
 // fetchEdgarFilingsTickerPage fetches a single page of SEC filings with pagination
 // nolint:unused
 //
 //lint:ignore U1000 kept for future SEC filing pagination
-func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFiling, error) {
+func fetchEdgarFilingsTickerPage(cik string, _ int, _ int) ([]Filing, error) {
 	url := fmt.Sprintf("https://data.sec.gov/submissions/CIK%s.json", cik)
 
 	// Create HTTP client with reasonable timeout
@@ -184,11 +183,13 @@ func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFilin
 
 		// Check for rate limiting (429)
 		if resp.StatusCode == 429 {
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				return nil, fmt.Errorf("error closing response body: %v", err)
+			}
 
 			// Exponential backoff
 			waitTime := retryDelay * time.Duration(1<<attempt)
-			fmt.Printf("Rate limited by SEC API (429). Retrying in %v...\n", waitTime)
+			////fmt.Printf("Rate limited by SEC API (429). Retrying in %v...\n", waitTime)
 			time.Sleep(waitTime)
 			continue
 		}
@@ -196,13 +197,6 @@ func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFilin
 		// If we get here, we have a non-429 response
 		break
 	}
-
-	// Check if all retries failed
-	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("SEC API rate limit exceeded after %d retries", maxRetries)
-	}
-
-	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -227,7 +221,7 @@ func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFilin
 
 	recent := result.Filings.Recent
 	if recent.AccessionNumber == nil || recent.FilingDate == nil || recent.Form == nil || recent.PrimaryDocument == nil {
-		return []EDGARFiling{}, nil
+		return []Filing{}, nil
 	}
 
 	minLen := len(recent.AccessionNumber)
@@ -241,7 +235,7 @@ func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFilin
 		minLen = len(recent.PrimaryDocument)
 	}
 
-	filings := make([]EDGARFiling, 0, minLen)
+	filings := make([]Filing, 0, minLen)
 	for i := 0; i < minLen; i++ {
 		date, err := time.Parse("2006-01-02", recent.FilingDate[i])
 		if err != nil {
@@ -284,7 +278,7 @@ func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFilin
 			cik, accessionNumber, recent.PrimaryDocument[i])
 
 		if recent.Form[i] != "4" { // Only append non-Form 4 filings
-			filings = append(filings, EDGARFiling{
+			filings = append(filings, Filing{
 				Type:      recent.Form[i],
 				Date:      date,
 				URL:       htmlURL,
@@ -296,7 +290,7 @@ func fetchEdgarFilingsTickerPage(cik string, start int, count int) ([]EDGARFilin
 	return filings, nil
 }
 
-func fetchEdgarFilingsPage(conn *data.Conn,page int, perPage int) ([]GlobalEDGARFiling, error) {
+func fetchEdgarFilingsPage(conn *data.Conn, page int, perPage int) ([]GlobalEDGARFiling, error) {
 	// Assuming the SEC API supports a page parameter
 	url := fmt.Sprintf("https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&owner=include&count=%d&start=%d&output=atom",
 		perPage, (page-1)*perPage)
@@ -329,9 +323,11 @@ func fetchEdgarFilingsPage(conn *data.Conn,page int, perPage int) ([]GlobalEDGAR
 
 		// Check for rate limiting
 		if resp.StatusCode == 429 {
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				return nil, fmt.Errorf("error closing response body: %v", err)
+			}
 			waitTime := retryDelay * time.Duration(1<<attempt)
-			fmt.Printf("Rate limited by SEC API (429). Retrying in %v (page %d)...\n", waitTime, page)
+			////fmt.Printf("Rate limited by SEC API (429). Retrying in %v (page %d)...\n", waitTime, page)
 			time.Sleep(waitTime)
 			continue
 		}
@@ -352,11 +348,11 @@ func fetchEdgarFilingsPage(conn *data.Conn,page int, perPage int) ([]GlobalEDGAR
 		return nil, fmt.Errorf("failed to read response body: %v", err)
 	}
 
-	return parseEdgarXMLFeed(conn,body)
+	return parseEdgarXMLFeed(conn, body)
 }
 
 // parseEdgarXMLFeed parses the SEC EDGAR Atom XML feed
-func parseEdgarXMLFeed(conn *data.Conn,body []byte) ([]GlobalEDGARFiling, error) {
+func parseEdgarXMLFeed(conn *data.Conn, body []byte) ([]GlobalEDGARFiling, error) {
 	decoder := xml.NewDecoder(bytes.NewReader(body))
 	decoder.CharsetReader = charset.NewReaderLabel
 
@@ -370,7 +366,7 @@ func parseEdgarXMLFeed(conn *data.Conn,body []byte) ([]GlobalEDGARFiling, error)
 		// Extract date and time from the updated field
 		updatedTime, err := time.Parse(time.RFC3339, entry.Updated)
 		if err != nil {
-			fmt.Printf("Error parsing time %s: %v\n", entry.Updated, err)
+			////fmt.Printf("Error parsing time %s: %v\n", entry.Updated, err)
 			// Use current time as fallback instead of skipping
 			updatedTime = time.Now()
 		}
@@ -473,17 +469,19 @@ func parseFilingDate(updated string) string {
 	return t.Format("2006-01-02")
 }
 
-
-// EdgarFilingOptions represents optional parameters for fetching EDGAR filings
-type EdgarFilingOptions struct {
-	Start      int64 `json:"start,omitempty"`
-	End        int64 `json:"end,omitempty"`
-	SecurityID int   `json:"securityId"`
+// FilingOptions represents options for fetching EDGAR filings
+type FilingOptions struct {
+	Start      int64   `json:"start,omitempty"`
+	End        int64   `json:"end,omitempty"`
+	SecurityID int     `json:"securityId"`
+	Ticker     *string `json:"ticker,omitempty"`
+	CIK        *string `json:"cik,omitempty"`
+	Form       *string `json:"form,omitempty"` // e.g. "10-K", "8-K"
 }
 
 // GetStockEdgarFilings retrieves SEC filings for a security with optional filters
-func GetStockEdgarFilings(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var args EdgarFilingOptions
+func GetStockEdgarFilings(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
+	var args FilingOptions
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
@@ -509,7 +507,7 @@ func GetStockEdgarFilings(conn *data.Conn, userId int, rawArgs json.RawMessage) 
 	}
 
 	// Filter filings based on options
-	var filteredFilings []EDGARFiling
+	var filteredFilings []Filing
 	for _, filing := range filings {
 		filingTime := time.UnixMilli(filing.Timestamp)
 
@@ -529,7 +527,7 @@ func GetStockEdgarFilings(conn *data.Conn, userId int, rawArgs json.RawMessage) 
 }
 
 // fetchEdgarFilings fetches filings for a specific CIK
-func fetchEdgarFilings(cik string) ([]EDGARFiling, error) {
+func fetchEdgarFilings(cik string) ([]Filing, error) {
 
 	// Format CIK with leading zeros to make it 10 digits long
 	paddedCik := cik
@@ -566,7 +564,9 @@ func fetchEdgarFilings(cik string) ([]EDGARFiling, error) {
 
 		// Check for rate limiting (429)
 		if resp.StatusCode == 429 {
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				return nil, fmt.Errorf("error closing response body: %v", err)
+			}
 
 			// Exponential backoff
 			waitTime := retryDelay * time.Duration(1<<attempt)
@@ -574,15 +574,17 @@ func fetchEdgarFilings(cik string) ([]EDGARFiling, error) {
 			continue
 		}
 
-		// Check for other non-success status codes
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			return nil, fmt.Errorf("SEC API returned status %d: %s", resp.StatusCode, string(body[:100])) // Show first 100 chars
-		}
+		// Check for rate limiting (429)
+		if resp.StatusCode == 429 {
+			if err := resp.Body.Close(); err != nil {
+				return nil, fmt.Errorf("error closing response body: %v", err)
+			}
 
-		// If we get here, we have a successful response
-		break
+			// Exponential backoff
+			waitTime := retryDelay * time.Duration(1<<attempt)
+			time.Sleep(waitTime)
+			continue
+		}
 	}
 
 	// Check if all retries failed
@@ -612,7 +614,7 @@ func fetchEdgarFilings(cik string) ([]EDGARFiling, error) {
 }
 
 // parseEdgarFilingsResponse parses the JSON response from SEC EDGAR API
-func parseEdgarFilingsResponse(body []byte, cik string) ([]EDGARFiling, error) {
+func parseEdgarFilingsResponse(body []byte, cik string) ([]Filing, error) {
 	var result struct {
 		Filings struct {
 			Recent struct {
@@ -631,7 +633,7 @@ func parseEdgarFilingsResponse(body []byte, cik string) ([]EDGARFiling, error) {
 
 	recent := result.Filings.Recent
 	if recent.AccessionNumber == nil || recent.FilingDate == nil || recent.Form == nil || recent.PrimaryDocument == nil {
-		return []EDGARFiling{}, nil
+		return []Filing{}, nil
 	}
 
 	minLen := len(recent.AccessionNumber)
@@ -647,7 +649,7 @@ func parseEdgarFilingsResponse(body []byte, cik string) ([]EDGARFiling, error) {
 
 	// Create a map to track seen accession numbers to avoid duplicates
 	seen := make(map[string]bool)
-	filings := make([]EDGARFiling, 0, minLen)
+	filings := make([]Filing, 0, minLen)
 
 	for i := 0; i < minLen; i++ {
 		// Skip Form 4 filings and duplicates
@@ -699,7 +701,7 @@ func parseEdgarFilingsResponse(body []byte, cik string) ([]EDGARFiling, error) {
 		htmlURL := fmt.Sprintf("https://www.sec.gov/Archives/edgar/data/%s/%s/%s",
 			cik, accessionNumber, recent.PrimaryDocument[i])
 
-		filings = append(filings, EDGARFiling{
+		filings = append(filings, Filing{
 			Type:      recent.Form[i],
 			Date:      date,
 			URL:       htmlURL,
@@ -729,7 +731,7 @@ type EarningsTextResponse struct {
 }
 
 // getFilingQuarter extracts the quarter and year from a filing
-func getFilingQuarter(filing EDGARFiling) (string, int) {
+func getFilingQuarter(filing Filing) (string, int) {
 	// Get year from the filing date
 	year := filing.Date.Year()
 
@@ -762,7 +764,7 @@ func getFilingQuarter(filing EDGARFiling) (string, int) {
 }
 
 // GetEarningsText fetches the latest 10-K or 10-Q filing for a security and extracts the text content
-func GetEarningsText(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetEarningsText(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetEarningsTextArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -791,7 +793,7 @@ func GetEarningsText(conn *data.Conn, userId int, rawArgs json.RawMessage) (inte
 	}
 
 	// Filter filings to find the specified quarter/year or the latest
-	var targetFiling *EDGARFiling
+	var targetFiling *Filing
 
 	// If quarter is specified, filter by quarter and year
 	if args.Quarter != "" {
@@ -803,7 +805,7 @@ func GetEarningsText(conn *data.Conn, userId int, rawArgs json.RawMessage) (inte
 		}
 
 		// Filter filings based on quarter and year
-		var matchingFilings []EDGARFiling
+		var matchingFilings []Filing
 		for _, filing := range filings {
 			// Skip non 10-K/10-Q filings
 			if filing.Type != "10-K" && filing.Type != "10-Q" {
@@ -885,11 +887,13 @@ func GetEarningsText(conn *data.Conn, userId int, rawArgs json.RawMessage) (inte
 type GetFilingTextArgs struct {
 	URL string `json:"url"`
 }
+
 type GetFilingTextResponse struct {
 	Text string `json:"text"`
 }
 
-func GetFilingText(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+// GetFilingText performs operations related to GetFilingText functionality.
+func GetFilingText(_ *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetFilingTextArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -932,7 +936,9 @@ func fetchFilingText(url string) (string, error) {
 
 		// Check for rate limiting (429)
 		if resp.StatusCode == 429 {
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				return "", fmt.Errorf("error closing response body: %v", err)
+			}
 
 			// Exponential backoff
 			waitTime := retryDelay * time.Duration(1<<attempt)
@@ -943,7 +949,10 @@ func fetchFilingText(url string) (string, error) {
 		// Check for other non-success status codes
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				// Log the error but return the primary error
+				return "", fmt.Errorf("SEC API returned status %d and error closing response: %v", resp.StatusCode, err)
+			}
 			return "", fmt.Errorf("SEC API returned status %d: %s", resp.StatusCode, string(body[:100])) // Show first 100 chars
 		}
 
@@ -1004,4 +1013,3 @@ func normalizeWhitespace(text string) string {
 
 	return strings.TrimSpace(text)
 }
-
