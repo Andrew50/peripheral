@@ -9,7 +9,7 @@ import (
 
 // HorizontalLine represents a structure for handling HorizontalLine data.
 type HorizontalLine struct {
-	Id         int     `json:"id"`
+	ID         int     `json:"id"`
 	SecurityID int     `json:"securityId"`
 	Price      float64 `json:"price"`
 	Color      string  `json:"color"`
@@ -22,7 +22,7 @@ type GetHorizontalLinesArgs struct {
 }
 
 // GetHorizontalLines performs operations related to GetHorizontalLines functionality.
-func GetHorizontalLines(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetHorizontalLines(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetHorizontalLinesArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error parsing args: %v", err)
@@ -31,7 +31,7 @@ func GetHorizontalLines(conn *data.Conn, userId int, rawArgs json.RawMessage) (i
 		SELECT id, securityId, price, color, line_width
 		FROM horizontal_lines
 		WHERE securityId = $1
-		AND userId = $2`, args.SecurityID, userId)
+		AND userId = $2`, args.SecurityID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("error querying horizontal lines: %v", err)
 	}
@@ -40,7 +40,7 @@ func GetHorizontalLines(conn *data.Conn, userId int, rawArgs json.RawMessage) (i
 	var lines []HorizontalLine
 	for rows.Next() {
 		var line HorizontalLine
-		if err := rows.Scan(&line.Id, &line.SecurityID, &line.Price, &line.Color, &line.LineWidth); err != nil {
+		if err := rows.Scan(&line.ID, &line.SecurityID, &line.Price, &line.Color, &line.LineWidth); err != nil {
 			return nil, fmt.Errorf("error scanning horizontal line: %v", err)
 		}
 		lines = append(lines, line)
@@ -51,16 +51,16 @@ func GetHorizontalLines(conn *data.Conn, userId int, rawArgs json.RawMessage) (i
 
 // DeleteHorizontalLineArgs represents a structure for handling DeleteHorizontalLineArgs data.
 type DeleteHorizontalLineArgs struct {
-	Id int `json:"id"`
+	ID int `json:"id"`
 }
 
 // DeleteHorizontalLine performs operations related to DeleteHorizontalLine functionality.
-func DeleteHorizontalLine(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func DeleteHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteHorizontalLineArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error parsing args: %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), `DELETE FROM horizontal_lines WHERE id = $1 AND userId = $2`, args.Id, userId)
+	cmdTag, err := conn.DB.Exec(context.Background(), `DELETE FROM horizontal_lines WHERE id = $1 AND userId = $2`, args.ID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("error deleting horizontal line: %v", err)
 	}
@@ -71,25 +71,25 @@ func DeleteHorizontalLine(conn *data.Conn, userId int, rawArgs json.RawMessage) 
 }
 
 // SetHorizontalLine performs operations related to SetHorizontalLine functionality.
-func SetHorizontalLine(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	var args HorizontalLine // won't have id
-	if err := json.Unmarshal(rawArgs, &args); err != nil {
+func SetHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	var line HorizontalLine // Reuse the HorizontalLine struct for request body
+	if err := json.Unmarshal(rawArgs, &line); err != nil {
 		return nil, fmt.Errorf("error parsing args: %v", err)
 	}
 
 	// Set default values if not provided
-	if args.Color == "" {
-		args.Color = "#FFFFFF" // Default to white
+	if line.Color == "" {
+		line.Color = "#FFFFFF" // Default to white
 	}
-	if args.LineWidth == 0 {
-		args.LineWidth = 1 // Default to 1px
+	if line.LineWidth == 0 {
+		line.LineWidth = 1 // Default to 1px
 	}
 
 	var id int
 	err := conn.DB.QueryRow(context.Background(), `
 		INSERT INTO horizontal_lines (securityId, price, userId, color, line_width)
 		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id`, args.SecurityID, args.Price, userId, args.Color, args.LineWidth).Scan(&id)
+		RETURNING id`, line.SecurityID, line.Price, userID, line.Color, line.LineWidth).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("error inserting horizontal line: %v", err)
 	}
@@ -98,7 +98,7 @@ func SetHorizontalLine(conn *data.Conn, userId int, rawArgs json.RawMessage) (in
 
 // UpdateHorizontalLineArgs represents a structure for handling UpdateHorizontalLineArgs data.
 type UpdateHorizontalLineArgs struct {
-	Id         int     `json:"id"`
+	ID         int     `json:"id"`
 	SecurityID int     `json:"securityId"`
 	Price      float64 `json:"price"`
 	Color      string  `json:"color"`
@@ -106,7 +106,7 @@ type UpdateHorizontalLineArgs struct {
 }
 
 // UpdateHorizontalLine performs operations related to UpdateHorizontalLine functionality.
-func UpdateHorizontalLine(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func UpdateHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args UpdateHorizontalLineArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error parsing args: %v", err)
@@ -116,14 +116,14 @@ func UpdateHorizontalLine(conn *data.Conn, userId int, rawArgs json.RawMessage) 
 		UPDATE horizontal_lines
 		SET price = $1, color = $2, line_width = $3
 		WHERE id = $4 AND userId = $5 AND securityId = $6`,
-		args.Price, args.Color, args.LineWidth, args.Id, userId, args.SecurityID)
+		args.Price, args.Color, args.LineWidth, args.ID, userID, args.SecurityID)
 
 	if err != nil {
 		return nil, fmt.Errorf("error updating horizontal line: %v", err)
 	}
 
 	if cmdTag.RowsAffected() == 0 {
-		return nil, fmt.Errorf("no horizontal line found with id %d", args.Id)
+		return nil, fmt.Errorf("no horizontal line found with id %d", args.ID)
 	}
 
 	return nil, nil

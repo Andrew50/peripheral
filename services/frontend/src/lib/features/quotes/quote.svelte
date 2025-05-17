@@ -2,21 +2,21 @@
 	import L1 from './l1.svelte';
 	import TimeAndSales from './timeAndSales.svelte';
 	import { get, writable, type Writable } from 'svelte/store';
-	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
-	import type { Instance } from '$lib/core/types';
+	import { queryInstanceInput } from '$lib/components/input.svelte';
+	import type { Instance } from '$lib/utils/types/types';
 	import { activeChartInstance, queryChart } from '$lib/features/chart/interface';
 	import StreamCell from '$lib/utils/stream/streamCell.svelte';
-	import { streamInfo, formatTimestamp } from '$lib/core/stores';
+	import { streamInfo, formatTimestamp } from '$lib/utils/stores/stores';
 	import { onMount, onDestroy } from 'svelte';
-	import { privateRequest } from '$lib/core/backend';
+	import { privateRequest } from '$lib/utils/helpers/backend';
 	import {
 		UTCSecondstoESTSeconds,
 		ESTSecondstoUTCSeconds,
 		ESTSecondstoUTCMillis,
 		getReferenceStartTimeForDateMilliseconds,
 		timeframeToSeconds
-	} from '$lib/core/timestamp';
-	import { getExchangeName } from '$lib/core/exchanges';
+	} from '$lib/utils/helpers/timestamp';
+	import { getExchangeName } from '$lib/utils/helpers/exchanges';
 
 	let instance: Writable<Instance> = writable({});
 	let container: HTMLButtonElement;
@@ -195,7 +195,6 @@
 <button
 	class="ticker-info-container"
 	bind:this={container}
-	role="region"
 	aria-label="Ticker Information"
 	on:click={handleClick}
 	on:touchstart={handleClick}
@@ -574,11 +573,5 @@
 		font-size: 0.85em;
 		line-height: 1.5;
 		color: var(--text-secondary);
-	}
-
-	/* Remove old styles no longer needed */
-	.ticker-display, .ticker-container, .stream-cells, .stream-cell-container, .info-row, .quotes-section {
-		/* These selectors are replaced or styles are handled by new structure */
-		/* Add display: none; if needed, but removing them is cleaner */
 	}
 </style>

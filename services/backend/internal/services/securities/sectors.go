@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool" // postgres
 )
 
+
 // ------------------------------------------------------------------- //
 //  Types                                                              //
 // ------------------------------------------------------------------- //
@@ -37,7 +38,6 @@ type listing struct {
 	Industry string `json:"industry"` // e.g. "Consumer Electronics"
 }
 
-type statBlock struct{ Total, Updated, Unchanged, Failed int }
 
 // map[ticker] = (sector, industry)
 type meta struct{ Sector, Industry string }
@@ -46,15 +46,13 @@ type meta struct{ Sector, Industry string }
 //  Public entry-point                                                 //
 // ------------------------------------------------------------------- //
 
-func UpdateSectors(ctx context.Context, c *data.Conn) (statBlock, error) {
-	stats := statBlock{}
-
+func UpdateSectors(ctx context.Context, c *data.Conn) error {
 	// ---------------------------------------------------------------- //
 	// 1. Load sector / industry map once                               //
 	// ---------------------------------------------------------------- //
 	m, err := buildMetaMap(ctx)
 	if err != nil {
-		return stats, fmt.Errorf("load github data: %w", err)
+		return fmt.Errorf("load github data: %w", err)
 	}
 
 	// ---------------------------------------------------------------- //
@@ -65,20 +63,18 @@ func UpdateSectors(ctx context.Context, c *data.Conn) (statBlock, error) {
 	      FROM securities
 	     WHERE maxDate IS NULL`)
 	if err != nil {
-		return stats, fmt.Errorf("query securities: %w", err)
+		return fmt.Errorf("query securities: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var s security
 		if err := rows.Scan(&s.Ticker, &s.CurrentSector, &s.CurrentIndustry); err != nil {
-			return stats, err
+			return err
 		}
-		stats.Total++
 
 		meta, ok := m[strings.ToUpper(s.Ticker)]
 		if !ok { // ticker not in GitHub files
-			stats.Unchanged++
 			continue
 		}
 
@@ -86,21 +82,21 @@ func UpdateSectors(ctx context.Context, c *data.Conn) (statBlock, error) {
 			(!s.CurrentIndustry.Valid || s.CurrentIndustry.String != meta.Industry)
 
 		if !needsUpdate {
-			stats.Unchanged++
 			continue
 		}
 
 		if err := applyUpdate(ctx, c.DB, s.Ticker, meta); err != nil {
-			stats.Failed++
-			continue
+			// Log or handle failed update, but continue processing other securities
+			// For now, we'll just return the error, stopping the process.
+			// Depending on requirements, you might want to collect errors and continue.
+			return fmt.Errorf("applyUpdate for %s: %w", s.Ticker, err)
 		}
-		stats.Updated++
 	}
 
 	if err := rows.Err(); err != nil {
-		return stats, err
+		return err
 	}
-	return stats, nil
+	return nil
 }
 
 // ------------------------------------------------------------------- //
