@@ -15,7 +15,7 @@ type DateToMSArgs struct {
 	Second int    `json:"second,omitempty"`
 }
 
-func DateToMS(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+func DateToMS(_ *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DateToMSArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return 0, err
