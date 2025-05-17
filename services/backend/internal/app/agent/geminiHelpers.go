@@ -22,9 +22,14 @@ func getSystemInstruction(name string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("reading prompt: %w", err)
 	}
+	constraints, err := fs.ReadFile("prompts/commonConstraints.txt")
+	if err != nil {
+		return "", fmt.Errorf("reading common constraints: %w", err)
+	}
 	const rfc3339Seconds = "2006-01-02T15:04:05Z07:00"
 	now := time.Now()
-	s := strings.ReplaceAll(string(raw), "{{CURRENT_TIME}}",
+	s := strings.ReplaceAll(string(raw), "{{COMMON_CONSTRAINTS}}", string(constraints))
+	s = strings.ReplaceAll(s, "{{CURRENT_TIME}}",
 		now.Format(rfc3339Seconds))
 	s = strings.ReplaceAll(s, "{{CURRENT_TIME_MILLISECONDS}}",
 		strconv.FormatInt(now.UnixMilli(), 10))
