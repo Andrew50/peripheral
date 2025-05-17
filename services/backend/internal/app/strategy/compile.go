@@ -101,7 +101,8 @@ FROM    features
 
 // Updated to use the new standard table naming convention
 var timeframeToTable = map[string]string{
-	"1":  "ohlcv_1m",
+	"1s": "ohlcv_1s",
+	"1":  "ohlcv_1",
 	"1h": "ohlcv_1h",
 	"1d": "ohlcv_1d",
 	"1w": "ohlcv_1w",

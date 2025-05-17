@@ -93,7 +93,7 @@ questions:
 /*
 table layout:
 
-ohlcv tables: ohlcv_1, ohlcv_1h, ohlcv_1d, ohlcv_1w
+ohlcv tables: ohlcv_1s, ohlcv_1, ohlcv_1h, ohlcv_1d, ohlcv_1w
 - timestamp: timestamp
 - open: decimal
 - high: decimal
@@ -128,7 +128,7 @@ var (
 	SecurityFeatures    = []string{"SecurityId", "Ticker", "Locale", "Market", "PrimaryExchange", "Active", "Sector", "Industry"}
 	OHLCVFeatures       = []string{"open", "high", "low", "close", "volume"}
 	FundamentalFeatures = []string{"market_cap", "shares_outstanding", "eps", "revenue", "dividend", "social_sentiment", "fear_greed", "short_interest", "borrow_fee"}
-	Timeframes          = []string{"1", "1h", "1d", "1w"}
+	Timeframes          = []string{"1s", "1", "1h", "1d", "1w"}
 	OutputTypes         = []string{"raw", "rankn", "rankp"}
 	ComparisonOperators = []string{"<", "<=", ">", ">=", "==", "!="}
 	ExprOperators       = []string{"+", "-", "*", "/", "^"}
@@ -177,7 +177,7 @@ type UniverseFilter struct { //applied using FundamentalFeatures
 // Universe defines the scope over which features are calculated.
 type Universe struct {
 	Filters       []UniverseFilter `json:"filters"`
-	Timeframe     Timeframe        `json:"timeframe"`     // "1", "1h", "1d", "1w"
+	Timeframe     Timeframe        `json:"timeframe"`     // "1s", "1", "1h", "1d", "1w"
 	ExtendedHours bool             `json:"extendedHours"` // Only applies to 1-minute data
 	StartTime     time.Time        `json:"startTime"`     // Intraday start time for the strategy
 	EndTime       time.Time        `json:"endTime"`       // Intraday end time for the strategy
@@ -240,12 +240,14 @@ const (
 	minFeatureID    = 0
 
 	// Timeframe identifiers
+	timeframe1Sec  = "1s"
 	timeframe1Min  = "1"
 	timeframe1Hour = "1h"
 	timeframe1Day  = "1d"
 	timeframe1Week = "1w"
 
 	// Maximum window sizes per timeframe
+	maxWindow1Sec  = 60000
 	maxWindow1Min  = 20000
 	maxWindow1Hour = 2000
 
@@ -352,8 +354,8 @@ func validateUniverse(u *Universe) error {
 		}
 	}
 	if !validTimeframeFound {
-		errs = append(errs, fmt.Sprintf("universe.timeframe must be one of %s, %s, %s, %s",
-			timeframe1Min, timeframe1Hour, timeframe1Day, timeframe1Week))
+		errs = append(errs, fmt.Sprintf("universe.timeframe must be one of %s, %s, %s, %s, %s",
+			timeframe1Sec, timeframe1Min, timeframe1Hour, timeframe1Day, timeframe1Week))
 	}
 
 	// Validate extended hours
@@ -774,6 +776,7 @@ func toStringSet(vals []string) map[string]struct{} {
 
 func checkWindowSize(window int, timeframe string) error {
 	maxWindows := map[string]int{
+		timeframe1Sec:  maxWindow1Sec,
 		timeframe1Min:  maxWindow1Min,
 		timeframe1Hour: maxWindow1Hour,
 		timeframe1Day:  maxWindow1Day,

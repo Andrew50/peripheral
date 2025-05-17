@@ -169,10 +169,38 @@ func updateSectorsJob(conn *data.Conn) error {
 
 // Define all jobs and their schedules
 var (
-	JobList = []*Job{
-		{
-			Name:           "UpdateDailyOHLCV",
-			Function:       marketdata.UpdateDailyOHLCV,
+        JobList = []*Job{
+               {
+                       Name:           "UpdateSecondOHLCV",
+                       Function:       marketdata.UpdateSecondOHLCV,
+                       Schedule:       []TimeOfDay{{Hour: 21, Minute: 30}},
+                       RunOnInit:      true,
+                       SkipOnWeekends: true,
+               },
+               {
+                       Name:           "UpdateMinuteOHLCV",
+                       Function:       marketdata.UpdateMinuteOHLCV,
+                       Schedule:       []TimeOfDay{{Hour: 21, Minute: 32}},
+                       RunOnInit:      true,
+                       SkipOnWeekends: true,
+               },
+               {
+                       Name:           "UpdateHourlyOHLCV",
+                       Function:       marketdata.UpdateHourlyOHLCV,
+                       Schedule:       []TimeOfDay{{Hour: 21, Minute: 35}},
+                       RunOnInit:      true,
+                       SkipOnWeekends: true,
+               },
+               {
+                       Name:           "UpdateWeeklyOHLCV",
+                       Function:       marketdata.UpdateWeeklyOHLCV,
+                       Schedule:       []TimeOfDay{{Hour: 21, Minute: 40}},
+                       RunOnInit:      true,
+                       SkipOnWeekends: true,
+               },
+                {
+                        Name:           "UpdateDailyOHLCV",
+                        Function:       marketdata.UpdateDailyOHLCV,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,

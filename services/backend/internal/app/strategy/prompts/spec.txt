@@ -78,7 +78,7 @@ You will create JSON objects with the following structure:
   - Valid values: {{ TIMEFRAMES }}
 
 - **extendedHours**: Whether to include pre-market and after-hours trading
-  - Only applicable when timeframe is "1" (1 minute)
+  - Only applicable when timeframe is "1" (1 minute)
 
 - **startTime**: For intraday strategies, when to start applying the strategy (time.Time format)
 - **endTime**: For intraday strategies, when to stop applying the strategy (time.Time format)
@@ -406,7 +406,7 @@ Response:
     "spec": {
       "universe": {
         "filters": [], // Inherits from the first part ideally
-        "timeframe": "1", // Change to 1-minute
+      "timeframe": "1", // Change to 1-minute
         "extendedHours": false,
         "startTime": null, // Can specify market hours if needed, e.g., 09:30:00
         "endTime": null   // e.g., 16:00:00

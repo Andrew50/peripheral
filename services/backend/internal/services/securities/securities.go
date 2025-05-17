@@ -1,13 +1,14 @@
 package securities
 
 import (
-	"backend/internal/data/polygon"
-	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"strings"
-	"time"
+        "backend/internal/data/polygon"
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "net/http"
+        "strings"
+        "time"
 
 	"backend/internal/data"
 
@@ -18,42 +19,63 @@ import (
 // SecurityDetail represents a structure for handling SecurityDetail data.
 
 func SimpleUpdateSecurities(conn *data.Conn) error {
-	ctx := context.Background()
-	today := time.Now().Format("2006-01-02")
+        ctx := context.Background()
+        today := time.Now().Format("2006-01-02")
 
-	// 1) Fetch the tickers from Polygon
-	poly, err := polygon.AllTickers(conn.Polygon, today)
-	if err != nil {
-		return fmt.Errorf("fetch polygon tickers: %w", err)
-	}
+        // 1) Fetch the tickers from Polygon
+        poly, err := polygon.AllTickers(conn.Polygon, today)
+        if err != nil {
+                return fmt.Errorf("fetch polygon tickers: %w", err)
+        }
 
-	// collect just the symbols
-	tickers := make([]string, len(poly))
-	for i, s := range poly {
-		tickers[i] = s.Ticker
-	}
+        // sanitize and deduplicate the symbols
+        tickerSet := make(map[string]struct{})
+        tickers := make([]string, 0, len(poly))
+        for _, s := range poly {
+                t := strings.ToUpper(strings.TrimSpace(s.Ticker))
+                if t == "" {
+                        continue
+                }
+                if _, exists := tickerSet[t]; exists {
+                        continue
+                }
+                tickerSet[t] = struct{}{}
+                tickers = append(tickers, t)
+        }
+        if len(tickers) == 0 {
+                return fmt.Errorf("no tickers returned from polygon")
+        }
 
-	// 2) Mark as DELISTED any ticker NOT in today's list
-	if _, err := conn.DB.Exec(ctx, `
-        UPDATE securities
+        var errs []error
+
+        // 2) Mark as DELISTED any ticker NOT in today's list. Skip tickers that would violate unique constraints.
+        if _, err := conn.DB.Exec(ctx, `
+        UPDATE securities s
            SET maxDate = CURRENT_DATE
          WHERE maxDate IS NULL
            AND ticker NOT IN (`+placeholders(len(tickers))+`)
+           AND NOT EXISTS (
+                   SELECT 1 FROM securities s2
+                    WHERE s2.ticker = s.ticker AND s2.maxDate = CURRENT_DATE
+           )
     `, stringArgs(tickers)...); err != nil {
-		return fmt.Errorf("delist tickers: %w", err)
-	}
+                errs = append(errs, fmt.Errorf("delist tickers: %w", err))
+        }
 
-	// 3) REACTIVATE any ticker IN today's list
-	if _, err := conn.DB.Exec(ctx, `
+        // 3) REACTIVATE any ticker IN today's list
+        if _, err := conn.DB.Exec(ctx, `
         UPDATE securities
            SET maxDate = NULL
          WHERE maxDate IS NOT NULL
            AND ticker IN (`+placeholders(len(tickers))+`)
     `, stringArgs(tickers)...); err != nil {
-		return fmt.Errorf("reactivate tickers: %w", err)
-	}
+                errs = append(errs, fmt.Errorf("reactivate tickers: %w", err))
+        }
 
-	return nil
+        if len(errs) > 0 {
+                return errors.Join(errs...)
+        }
+        return nil
 }
 
 // placeholders(n) returns "$1,$2,…,$n"
