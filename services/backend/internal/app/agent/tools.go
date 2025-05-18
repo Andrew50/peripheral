@@ -25,13 +25,13 @@ var (
 		"getCurrentSecurityID": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getCurrentSecurityID",
-				Description: "Return the integer securityId for a ticker symbol.",
+				Description: "Look up the internal securityId for the given ticker symbol.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"ticker": {
 							Type:        genai.TypeString,
-							Description: "The security ticker symbol, e.g. NVDA, AAPL, etc",
+							Description: "Ticker symbol to resolve (e.g., AAPL).",
 						},
 					},
 					Required: []string{"ticker"},
@@ -43,13 +43,13 @@ var (
 		"getSecuritiesFromTicker": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getSecuritiesFromTicker",
-				Description: "Search a partial ticker string and return up to 10 matching tickers with securityId, name and icon.",
+				Description: "Search by partial ticker and return up to 10 matches with securityId, name and icon.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"ticker": {
 							Type:        genai.TypeString,
-							Description: "string input to retrieve the list based on.",
+							Description: "Partial ticker text to search for.",
 						},
 					},
 					Required: []string{"ticker"},
@@ -61,13 +61,13 @@ var (
 		"getCurrentTicker": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getCurrentTicker",
-				Description: "Return the current ticker symbol for a given securityId.",
+				Description: "Return the active ticker symbol for the provided securityId.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"securityId": {
 							Type:        genai.TypeInteger,
-							Description: "The security ID of the security to get the current ticker for.",
+							Description: "SecurityId to resolve to a ticker symbol.",
 						},
 					},
 					Required: []string{"securityId"},
@@ -79,7 +79,7 @@ var (
 		"getTickerMenuDetails": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getTickerMenuDetails",
-				Description: "Return company information such as name, market, market cap, industry and more for a ticker or securityId.",
+				Description: "Return key company details (name, market, market cap, industry, etc.) for a ticker or securityId.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -101,7 +101,7 @@ var (
 		"getInstancesByTickers": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getInstancesByTickers",
-				Description: "Return securityIds for a list of ticker symbols.",
+				Description: "Resolve each ticker in the list to its securityId.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -123,7 +123,7 @@ var (
 		"getWatchlists": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getWatchlists",
-				Description: "Return all watchlist names and their IDs.",
+				Description: "List all watchlists for the current user with their IDs.",
 				Parameters: &genai.Schema{
 					Type:       genai.TypeObject,
 					Properties: map[string]*genai.Schema{}, // Empty map indicates no properties/arguments
@@ -136,7 +136,7 @@ var (
 		"deleteWatchlist": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "deleteWatchlist",
-				Description: "Delete a watchlist by ID. Returns null on success.",
+				Description: "Delete the specified watchlist. Returns null on success.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -154,7 +154,7 @@ var (
 		"newWatchlist": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "newWatchlist",
-				Description: "Create a new watchlist and return the new watchlistId",
+				Description: "Create a watchlist and return its new watchlistId.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -172,7 +172,7 @@ var (
 		"getWatchlistItems": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getWatchlistItems",
-				Description: "Return the securityIds contained in a watchlist.",
+				Description: "List the securityIds stored in the specified watchlist.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -190,7 +190,7 @@ var (
 		"deleteWatchlistItem": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "deleteWatchlistItem",
-				Description: "Delete a watchlist item by id. Returns null on success.",
+				Description: "Remove a security from a watchlist. Returns null on success.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -208,7 +208,7 @@ var (
 		"newWatchlistItem": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "newWatchlistItem",
-				Description: "Add a security to a watchlist and return the new watchlistItemId.",
+				Description: "Add a security to a watchlist, returning the new watchlistItemId.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -231,7 +231,7 @@ var (
 		"getPrevClose": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getPrevClose",
-				Description: "Return the previous closing price for a securityId. Uses the most recent price if the market is closed.",
+				Description: "Get the previous closing price for the security. If markets are closed today, use the last available price.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -249,7 +249,7 @@ var (
 		"getLastPrice": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getLastPrice",
-				Description: "Return the last trade price for a ticker symbol.",
+				Description: "Fetch the most recent trade price for the given ticker symbol.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -721,7 +721,7 @@ var (
 		"runWebSearch": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runWebSearch",
-				Description: "Run a Google search and return a search result object.",
+				Description: "Perform a Google search and return structured results.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -758,7 +758,7 @@ var (
 		"ui_open_news": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "ui_open_news",
-				Description: "Open the news sidebar to an optional eventId. Returns 'ok'.",
+				Description: "Open the news sidebar, optionally focusing on a specific eventId. Returns 'ok'.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -799,7 +799,7 @@ var (
 		"ui_query_chart": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "ui_query_chart",
-				Description: "Change the active chart using the provided parameters. Returns 'ok'.",
+				Description: "Change the active chart to the provided parameters. Returns 'ok'.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -811,18 +811,18 @@ var (
 				},
 			},
 			Function: QueryChartUI,
-        },
+		},
 		"dateToMS": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "dateToMS",
-				Description: "Convert a date to milliseconds since epoch.",
+				Description: "Convert the given date and time to milliseconds since the Unix epoch.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"date":   {Type: genai.TypeString, Description: "The date in 2006-01-02 format to convert to milliseconds since epoch."},
-						"hour":   {Type: genai.TypeInteger, Description: "The hour (24 hour format)on date."},
-						"minute": {Type: genai.TypeInteger, Description: "The minute on date."},
-						"second": {Type: genai.TypeInteger, Description: "The second on date."},
+						"hour":   {Type: genai.TypeInteger, Description: "Hour of the day in 24h format."},
+						"minute": {Type: genai.TypeInteger, Description: "Minute value."},
+						"second": {Type: genai.TypeInteger, Description: "Second value."},
 					},
 					Required: []string{"date", "hour", "minute", "second"},
 				},
