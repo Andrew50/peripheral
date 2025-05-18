@@ -2,26 +2,71 @@ package agent
 
 
 import (
-	"backend/internal/data"
-	"backend/internal/services/socket"
-	"encoding/json"
+        "backend/internal/data"
+        "backend/internal/services/socket"
+        "context"
+        "encoding/json"
+        "strings"
 )
 
 type uiOpenArgs struct {
-	WatchlistID int    `json:"watchlistId,omitempty"`
-	AlertID     int    `json:"alertId,omitempty"`
-	EventID     int    `json:"eventId,omitempty"`
-	StrategyID  int    `json:"strategyId,omitempty"`
-	Ticker      string `json:"ticker,omitempty"`
+        WatchlistID int    `json:"watchlistId,omitempty"`
+        WatchlistName string `json:"watchlistName,omitempty"`
+        AlertID     int    `json:"alertId,omitempty"`
+        EventID     int    `json:"eventId,omitempty"`
+       StrategyID   int    `json:"strategyId,omitempty"`
+       StrategyName string `json:"strategyName,omitempty"`
+        Ticker      string `json:"ticker,omitempty"`
 	SecurityID  int    `json:"securityId,omitempty"`
 	Timeframe   string `json:"timeframe,omitempty"`
 	Timestamp   int64  `json:"timestamp,omitempty"`
 }
 
+func lookupWatchlistID(conn *data.Conn, userID int, name string) (int, error) {
+       if name == "" {
+               return 0, nil
+       }
+       var id int
+       err := conn.DB.QueryRow(context.Background(),
+               `SELECT watchlistId FROM watchlists WHERE userId = $1 AND watchlistName ILIKE $2 LIMIT 1`,
+               userID, name).Scan(&id)
+       if err != nil {
+               return 0, err
+       }
+       return id, nil
+}
+
+func lookupStrategyID(conn *data.Conn, userID int, name string) (int, error) {
+       if name == "" {
+               return 0, nil
+       }
+       var id int
+       err := conn.DB.QueryRow(context.Background(),
+               `SELECT strategyId FROM strategies WHERE userId = $1 AND name ILIKE $2 LIMIT 1`,
+               userID, name).Scan(&id)
+       if err != nil {
+               return 0, err
+       }
+       return id, nil
+}
+
 func uiOpen(conn *data.Conn, userID int, raw json.RawMessage, action string) (interface{}, error) {
-	var args uiOpenArgs
-	_ = json.Unmarshal(raw, &args)
-	params := make(map[string]interface{})
+        var args uiOpenArgs
+        _ = json.Unmarshal(raw, &args)
+       // Look up IDs by name if needed
+       if args.WatchlistID == 0 && args.WatchlistName != "" {
+               id, err := lookupWatchlistID(conn, userID, strings.TrimSpace(args.WatchlistName))
+               if err == nil && id != 0 {
+                       args.WatchlistID = id
+               }
+       }
+       if args.StrategyID == 0 && args.StrategyName != "" {
+               id, err := lookupStrategyID(conn, userID, strings.TrimSpace(args.StrategyName))
+               if err == nil && id != 0 {
+                       args.StrategyID = id
+               }
+       }
+        params := make(map[string]interface{})
 	if args.WatchlistID != 0 {
 		params["watchlistId"] = args.WatchlistID
 	}

@@ -733,18 +733,18 @@ var (
 			Function:      RunWebSearch,
 			StatusMessage: "Searching the web...",
 		},
-		"ui_open_watchlist": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "ui_open_watchlist",
-				Description: "Open the watchlist sidebar to the given watchlistId. Returns 'ok'.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"watchlistId": {Type: genai.TypeInteger, Description: "The watchlist id to open."},
-					},
-					Required: []string{"watchlistId"},
-				},
-			},
+                "ui_open_watchlist": {
+                        FunctionDeclaration: &genai.FunctionDeclaration{
+                                Name:        "ui_open_watchlist",
+                                Description: "Open the watchlist sidebar to the given watchlist. Returns 'ok'.",
+                                Parameters: &genai.Schema{
+                                        Type: genai.TypeObject,
+                                        Properties: map[string]*genai.Schema{
+                                                "watchlistId":   {Type: genai.TypeInteger, Description: "The watchlist id to open."},
+                                                "watchlistName": {Type: genai.TypeString, Description: "The watchlist name to open if id not known."},
+                                        },
+                                },
+                        },
 			Function: OpenWatchlist,
 		},
 		"ui_open_alerts": {
@@ -768,32 +768,32 @@ var (
 			},
 			Function: OpenNews,
 		},
-		"ui_open_strategy": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "ui_open_strategy",
-				Description: "Open the strategy editor to a strategyId. Returns 'ok'.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"strategyId": {Type: genai.TypeInteger, Description: "The strategy id to open."},
-					},
-					Required: []string{"strategyId"},
-				},
-			},
+                "ui_open_strategy": {
+                        FunctionDeclaration: &genai.FunctionDeclaration{
+                                Name:        "ui_open_strategy",
+                                Description: "Open the strategy editor to a strategy. Returns 'ok'.",
+                                Parameters: &genai.Schema{
+                                        Type: genai.TypeObject,
+                                        Properties: map[string]*genai.Schema{
+                                                "strategyId":   {Type: genai.TypeInteger, Description: "The strategy id to open."},
+                                                "strategyName": {Type: genai.TypeString, Description: "The strategy name to open if id not known."},
+                                        },
+                                },
+                        },
 			Function: OpenStrategy,
 		},
-		"ui_open_backtest": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "ui_open_backtest",
-				Description: "Open the backtest window for a strategyId and run the test. Returns 'ok'.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"strategyId": {Type: genai.TypeInteger, Description: "The strategy id to backtest."},
-					},
-					Required: []string{"strategyId"},
-				},
-			},
+                "ui_open_backtest": {
+                        FunctionDeclaration: &genai.FunctionDeclaration{
+                                Name:        "ui_open_backtest",
+                                Description: "Open the backtest window for a strategy and run the test. Returns 'ok'.",
+                                Parameters: &genai.Schema{
+                                        Type: genai.TypeObject,
+                                        Properties: map[string]*genai.Schema{
+                                                "strategyId":   {Type: genai.TypeInteger, Description: "The strategy id to backtest."},
+                                                "strategyName": {Type: genai.TypeString, Description: "The strategy name to backtest if id not known."},
+                                        },
+                                },
+                        },
 			Function: OpenBacktest,
 		},
 		"ui_query_chart": {

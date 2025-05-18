@@ -1,7 +1,7 @@
-import type { Instance } from '$lib/utils/types/types';
+import type { Instance, Strategy } from '$lib/utils/types/types';
 import { privateRequest } from '$lib/utils/helpers/backend';
-import { writable } from 'svelte/store';
-import { dispatchMenuChange, bottomWindowRequest } from '$lib/utils/stores/stores';
+import { writable, get } from 'svelte/store';
+import { dispatchMenuChange, bottomWindowRequest, strategies } from '$lib/utils/stores/stores';
 export const openStrategyId = writable<number | null>(null);
 export type SetupEvent = 'new' | 'save' | 'cancel' | number;
 export let eventDispatcher = writable<SetupEvent>();
@@ -28,7 +28,26 @@ export async function newSetup(): Promise<number | null> {
         });
 }
 
-export function openStrategy(id: number) {
+export async function openStrategy(idOrName: number | string) {
         bottomWindowRequest.set('strategies');
-        openStrategyId.set(id);
+        if (typeof idOrName === 'number') {
+                openStrategyId.set(idOrName);
+                return;
+        }
+        let list = get(strategies);
+        let match = Array.isArray(list)
+                ? list.find((s) => s.name.toLowerCase() === idOrName.toLowerCase())
+                : undefined;
+        if (!match) {
+                try {
+                        const refreshed = await privateRequest<Strategy[]>('getStrategies', {});
+                        strategies.set(refreshed || []);
+                        match = refreshed?.find((s) => s.name.toLowerCase() === idOrName.toLowerCase());
+                } catch {
+                        // ignore errors
+                }
+        }
+        if (match) {
+                openStrategyId.set(match.strategyId);
+        }
 }
