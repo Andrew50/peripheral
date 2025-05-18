@@ -116,6 +116,20 @@ type UIActionMessage struct {
 	Params map[string]interface{} `json:"params,omitempty"`
 }
 
+// BacktestRowMessage is sent when a single backtest row is available.
+type BacktestRowMessage struct {
+	Type       string         `json:"type"`
+	StrategyID int            `json:"strategyId"`
+	Data       map[string]any `json:"data"`
+}
+
+// BacktestSummaryMessage is sent once a backtest completes.
+type BacktestSummaryMessage struct {
+	Type       string         `json:"type"`
+	StrategyID int            `json:"strategyId"`
+	Summary    map[string]any `json:"summary"`
+}
+
 // SendFunctionStatus sends a status update about a running function to a specific user.
 func SendFunctionStatus(userID int, userMessage string) {
 	// Use a default message if the specific one is empty
@@ -163,6 +177,52 @@ func SendUIAction(userID int, action string, params map[string]interface{}) {
 		Type:   "ui_action",
 		Action: action,
 		Params: params,
+	}
+	jsonData, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+	if !ok {
+		return
+	}
+	select {
+	case client.send <- jsonData:
+	default:
+	}
+}
+
+// SendBacktestRow sends an individual backtest result row to a user.
+func SendBacktestRow(userID int, strategyID int, row map[string]any) {
+	msg := BacktestRowMessage{
+		Type:       "backtest_row",
+		StrategyID: strategyID,
+		Data:       row,
+	}
+	jsonData, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+	if !ok {
+		return
+	}
+	select {
+	case client.send <- jsonData:
+	default:
+	}
+}
+
+// SendBacktestSummary sends the backtest summary to a user when finished.
+func SendBacktestSummary(userID int, strategyID int, summary map[string]any) {
+	msg := BacktestSummaryMessage{
+		Type:       "backtest_summary",
+		StrategyID: strategyID,
+		Summary:    summary,
 	}
 	jsonData, err := json.Marshal(msg)
 	if err != nil {

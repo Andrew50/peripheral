@@ -36,7 +36,7 @@ func updateOHLCVGeneric(conn *data.Conn, table, timespan string) error {
 		}
 		for iter.Next() {
 			agg := iter.Item()
-			ts := time.UnixMilli(int64(agg.Timestamp))
+			ts := time.Time(agg.Timestamp)
 			_, _ = conn.DB.Exec(ctx,
 				fmt.Sprintf(`INSERT INTO %s (timestamp, securityid, open, high, low, close, volume)
                 VALUES ($1,$2,$3,$4,$5,$6,$7)
@@ -47,6 +47,8 @@ func updateOHLCVGeneric(conn *data.Conn, table, timespan string) error {
 			continue
 		}
 	}
+
+
 	return nil
 }
 

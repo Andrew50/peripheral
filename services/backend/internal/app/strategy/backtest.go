@@ -86,30 +86,25 @@ func RunBacktest(conn *data.Conn, userID int, rawArgs json.RawMessage) (any, err
 	}
 	defer rows.Close() // Ensure rows are closed even if ScanRows errors
 
-	// Process the results
-	// ScanRows will return an empty slice if there are no rows, and a nil error.
-	records, err := ScanRows(rows)
-	if err != nil {
-		// Handle errors during row scanning (data type mismatches, etc.)
-		return nil, fmt.Errorf("error scanning backtest results: %v", err)
+	// Prepare to stream results as they are scanned
+	fieldDescriptions := rows.FieldDescriptions()
+	columns := make([]string, len(fieldDescriptions))
+	for i, fd := range fieldDescriptions {
+		columns[i] = string(fd.Name)
 	}
 
-	// --- BEGIN: Calculate N-Day Returns for Multiple Windows ---
-	if len(args.ReturnWindows) > 0 && len(records) > 0 {
-		////fmt.Printf("Calculating returns for %d results across %d windows...\n", len(records), len(args.ReturnWindows))
-
-		// Prepare the query once (remains the same structure)
-		returnQuery := `
+	var records []map[string]any
+	var returnQuery string
+	if len(args.ReturnWindows) > 0 {
+		returnQuery = `
             WITH start_data AS (
                 SELECT timestamp, close
                 FROM ohlcv_1d
                 WHERE securityid = $1 AND timestamp = $2
                 LIMIT 1
             ), target_date AS (
-                -- Calculate the date ReturnWindow days after the start timestamp
                 SELECT ($2::timestamp + $3 * interval '1 day')::date AS date
             ), future_price AS (
-                -- Find the first closing price on or after the target date
                 SELECT close
                 FROM ohlcv_1d
                 WHERE securityid = $1
@@ -121,146 +116,34 @@ func RunBacktest(conn *data.Conn, userID int, rawArgs json.RawMessage) (any, err
                 sd.close AS start_close,
                 fp.close AS end_close
             FROM start_data sd
-            CROSS JOIN future_price fp; -- Use CROSS JOIN as future_price returns at most one row
-        `
-
-		// Loop through each result from the initial backtest
-
-		for _, record := range records {
-			// Extract necessary info once per record
-			secIDAny, okSecID := record["securityid"]
-			tsAny, okTs := record["timestamp"]
-
-			if !okSecID || !okTs {
-				////fmt.Println("Warning: Skipping return calculation for a record due to missing securityid or timestamp.")
-				// Set all potential return columns to nil for this record
-				for _, window := range args.ReturnWindows {
-					returnColumnName := fmt.Sprintf("%d Day Return %%", window)
-					record[returnColumnName] = nil
-				}
-				continue
-			}
-
-			var securityID int
-			switch v := secIDAny.(type) {
-			case int:
-				securityID = v
-			case int32:
-				securityID = int(v)
-			case int64:
-				securityID = int(v) // Potential overflow if original is large int64
-			case float64: // Handle if ID comes as float
-				securityID = int(v)
-			default:
-				////fmt.Printf("Warning: Skipping return calculation for a record due to unexpected securityid type: %T. Value: %v\n", secIDAny, secIDAny)
-				for _, window := range args.ReturnWindows {
-					returnColumnName := fmt.Sprintf("%d Day Return %%", window)
-					record[returnColumnName] = nil
-				}
-				continue
-			}
-
-			// Convert timestamp once per record
-			var startTime time.Time
-			switch t := tsAny.(type) {
-			case time.Time:
-				startTime = t
-			case string: // Handle potential string timestamp from initial query
-				parsedTime, err := time.Parse(time.RFC3339Nano, t)
-				if err != nil {
-					parsedTime, err = time.Parse(time.RFC3339, t)
-				}
-				if err == nil && !parsedTime.IsZero() {
-					startTime = parsedTime
-				} else if err != nil {
-					////fmt.Printf("Warning: Could not parse timestamp string '%s' for secID %d: %v\n", t, securityID, err)
-					for _, window := range args.ReturnWindows {
-						returnColumnName := fmt.Sprintf("%d Day Return %%", window)
-						record[returnColumnName] = nil
-					}
-					continue
-				} else { // Handle zero time after parsing
-					////fmt.Printf("Warning: Parsed timestamp is zero for secID %d. Original string: %s\n", securityID, t)
-					for _, window := range args.ReturnWindows {
-						returnColumnName := fmt.Sprintf("%d Day Return %%", window)
-						record[returnColumnName] = nil
-					}
-					continue
-				}
-			case nil:
-				////fmt.Printf("Warning: Skipping return calculation for record with securityID %d due to nil timestamp.\n", securityID)
-				for _, window := range args.ReturnWindows {
-					returnColumnName := fmt.Sprintf("%d Day Return %%", window)
-					record[returnColumnName] = nil
-				}
-				continue
-			default:
-				////fmt.Printf("Warning: Skipping return calculation for record with securityID %d due to unexpected timestamp type: %T. Value: %v\n", securityID, tsAny, tsAny)
-				for _, window := range args.ReturnWindows {
-					returnColumnName := fmt.Sprintf("%d Day Return %%", window)
-					record[returnColumnName] = nil
-				}
-				continue
-			}
-
-			// Final check for zero time (should be redundant if parsing logic is correct, but safe)
-			if startTime.IsZero() {
-				////fmt.Printf("Warning: Skipping return calculation for record with securityID %d due to zero timestamp after processing.\n", securityID)
-				for _, window := range args.ReturnWindows {
-					returnColumnName := fmt.Sprintf("%d Day Return %%", window)
-					record[returnColumnName] = nil
-				}
-				continue
-			}
-
-			// Now, loop through each requested return window for the current record
-			for _, window := range args.ReturnWindows {
-				returnColumnName := fmt.Sprintf("%d Day Return %%", window)
-
-				// --- Execute query to get start and end prices for this specific window ---
-				var startClose, endClose sql.NullFloat64 // Use NullFloat64 for safety
-
-				err := conn.DB.QueryRow(ctx, returnQuery, securityID, startTime, window).Scan(&startClose, &endClose)
-
-				if err != nil {
-					if err == pgx.ErrNoRows {
-						// This usually means start_data or future_price CTE returned no rows.
-						// Check if start price exists separately for better debugging if needed.
-						////fmt.Printf("Warning: No price data found (start or %d days later) for securityID %d at %v. Setting '%s' to nil.\n", window, securityID, startTime, returnColumnName)
-						record[returnColumnName] = nil
-					} else {
-						// Other potential errors (DB connection, query syntax)
-						////fmt.Printf("Error fetching %d-day return data for securityID %d at %v: %v. Setting '%s' to nil.\n", window, securityID, startTime, err, returnColumnName)
-						record[returnColumnName] = nil
-					}
-					continue // Continue to the next window for this record
-				}
-
-				// --- Calculate percentage change for this window ---
-				if startClose.Valid && endClose.Valid && startClose.Float64 != 0 {
-					// Calculate the change as a decimal
-					decimalChange := (endClose.Float64 - startClose.Float64) / startClose.Float64
-					// Store as decimal, rounded to 4 places for reasonable precision
-					record[returnColumnName] = math.Round(decimalChange*10000) / 10000
-				} else {
-					// Handle cases: start price missing, end price missing, or start price is 0
-					// Log specific reason for nil result for this window
-					//if !startClose.Valid {
-					// This is less likely if the cross join query succeeded without pgx.ErrNoRows, but check anyway.
-					////fmt.Printf("Info: Start price missing for securityID %d at %v. Return '%s' set to nil.\n", securityID, startTime, returnColumnName)
-					//}
-					/*else if !endClose.Valid {
-						////fmt.Printf("Info: End price missing (%d days later) for securityID %d at %v. Return '%s' set to nil.\n", window, securityID, startTime, returnColumnName)
-					} else if startClose.Float64 == 0 {
-						////fmt.Printf("Info: Start price is 0 for securityID %d at %v. Cannot calculate %d-day return, setting '%s' to nil.\n", securityID, startTime, window, returnColumnName)
-					}*/
-					record[returnColumnName] = nil // Assign nil if calculation cannot be done
-				}
-			} // End loop over windows
-		} // End loop over records
-		////fmt.Println("Finished calculating returns for all windows.")
+            CROSS JOIN future_price fp;`
 	}
-	// --- END: Calculate N-Day Returns ---
+
+	for rows.Next() {
+		values := make([]any, len(columns))
+		valuePtrs := make([]any, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return nil, fmt.Errorf("error scanning row: %v", err)
+		}
+		rowMap := make(map[string]any)
+		for i, col := range columns {
+			rowMap[col] = values[i]
+		}
+
+		if len(args.ReturnWindows) > 0 {
+			calculateReturnColumns(ctx, conn, rowMap, returnQuery, args.ReturnWindows)
+		}
+
+		records = append(records, rowMap)
+		socket.SendBacktestRow(userID, args.StrategyID, rowMap)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over rows: %v", err)
+	}
 
 	// Convert to interface slice for formatBacktestResults
 	// This correctly handles an empty records slice, resulting in an empty recordsInterface slice.
@@ -298,6 +181,8 @@ func RunBacktest(conn *data.Conn, userID int, rawArgs json.RawMessage) (any, err
 		return nil, fmt.Errorf("failed to extract summary from formatted backtest results (internal error)")
 	}
 	////fmt.Println("\n\n SUMMARY: ", summary)
+
+	socket.SendBacktestSummary(userID, args.StrategyID, summary)
 
 	if args.FullResults {
 		return formattedResults, nil // Return full results (potentially with multiple return columns)
@@ -600,4 +485,80 @@ func processNumericValue(value any) any {
 
 	// Pass through non-numeric values
 	return value
+}
+
+// calculateReturnColumns calculates forward returns for the provided record.
+func calculateReturnColumns(ctx context.Context, conn *data.Conn, record map[string]any, query string, windows []int) {
+	secIDAny, okSecID := record["securityid"]
+	tsAny, okTs := record["timestamp"]
+	if !okSecID || !okTs {
+		for _, window := range windows {
+			record[fmt.Sprintf("%d Day Return %%", window)] = nil
+		}
+		return
+	}
+
+	var securityID int
+	switch v := secIDAny.(type) {
+	case int:
+		securityID = v
+	case int32:
+		securityID = int(v)
+	case int64:
+		securityID = int(v)
+	case float64:
+		securityID = int(v)
+	default:
+		for _, window := range windows {
+			record[fmt.Sprintf("%d Day Return %%", window)] = nil
+		}
+		return
+	}
+
+	var startTime time.Time
+	switch t := tsAny.(type) {
+	case time.Time:
+		startTime = t
+	case string:
+		parsedTime, err := time.Parse(time.RFC3339Nano, t)
+		if err != nil {
+			parsedTime, err = time.Parse(time.RFC3339, t)
+		}
+		if err == nil && !parsedTime.IsZero() {
+			startTime = parsedTime
+		} else {
+			for _, window := range windows {
+				record[fmt.Sprintf("%d Day Return %%", window)] = nil
+			}
+			return
+		}
+	default:
+		for _, window := range windows {
+			record[fmt.Sprintf("%d Day Return %%", window)] = nil
+		}
+		return
+	}
+
+	if startTime.IsZero() {
+		for _, window := range windows {
+			record[fmt.Sprintf("%d Day Return %%", window)] = nil
+		}
+		return
+	}
+
+	for _, window := range windows {
+		colName := fmt.Sprintf("%d Day Return %%", window)
+		var startClose, endClose sql.NullFloat64
+		err := conn.DB.QueryRow(ctx, query, securityID, startTime, window).Scan(&startClose, &endClose)
+		if err != nil {
+			record[colName] = nil
+			continue
+		}
+		if startClose.Valid && endClose.Valid && startClose.Float64 != 0 {
+			decimalChange := (endClose.Float64 - startClose.Float64) / startClose.Float64
+			record[colName] = math.Round(decimalChange*10000) / 10000
+		} else {
+			record[colName] = nil
+		}
+	}
 }

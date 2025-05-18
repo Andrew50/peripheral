@@ -4,6 +4,7 @@
   import List from '$lib/components/list.svelte';
   import { privateRequest } from '$lib/utils/helpers/backend';
   import { backtestRunRequest } from './interface';
+  import { addBacktestRowListener, addBacktestSummaryListener } from '$lib/utils/stream/interface';
   
   /***********************
    *     ─ Types ─       *
@@ -78,27 +79,37 @@
     errorMsg = null;
     list.set([]);
     summary = null;
-    
+    const results: Instance[] = [];
+    const offRow = addBacktestRowListener(selectedId as number, (row) => {
+      results.push(row);
+      list.set([...results]);
+      if (results.length === 1) {
+        let allColumns = Object.keys(row).filter(col => col !== 'securityId');
+        let ordered: string[] = [];
+        if (allColumns.includes('ticker')) {
+          ordered.push('ticker');
+          allColumns = allColumns.filter(c => c !== 'ticker');
+        }
+        if (allColumns.includes('timestamp')) {
+          ordered.push('timestamp');
+          allColumns = allColumns.filter(c => c !== 'timestamp');
+        }
+        columns = [...ordered, ...allColumns];
+      }
+    });
+    const offSummary = addBacktestSummaryListener(selectedId as number, (s) => {
+      summary = s;
+    });
+
     try {
       console.log("running")
-      const res = await privateRequest<any>('run_backtest', { strategyId: selectedId, returnResults: true }, true);
+      const res = await privateRequest<any>('run_backtest', { strategyId: selectedId, returnResults: false }, true);
       console.log(res)
-      
-      // Extract instances and summary
-      const instances: Instance[] = res?.instances ?? [];
-      summary = res?.summary || null;
-      
-      // Update the list with the instances data, null if none
-      if (instances.length === 0){
-          list.set(null)
-      }else{
-          list.set(instances);
-      }
-      
+
   // Get column names from the first instance or from summary.columns if available
-  if (instances.length) {
+  if (results.length) {
     // Get all column names from the first instance
-    let allColumns = Object.keys(instances[0]);
+    let allColumns = Object.keys(results[0]);
     
     // Filter out securityId which we don't want to display
     allColumns = allColumns.filter(col => col !== 'securityId');
@@ -154,6 +165,8 @@
     } catch (err: any) {
       errorMsg = err?.message || 'Failed to run backtest.';
     } finally {
+      offRow();
+      offSummary();
       running.set(false);
     }
   }
