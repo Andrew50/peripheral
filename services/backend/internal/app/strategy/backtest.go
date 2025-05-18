@@ -2,6 +2,7 @@ package strategy
 
 import (
 	"backend/internal/data"
+    "backend/internal/services/socket"
 	"context"
 	"database/sql" // <-- Added for sql.NullFloat64
 	"encoding/json"

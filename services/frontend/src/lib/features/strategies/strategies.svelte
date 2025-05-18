@@ -1324,4 +1324,10 @@ $: if ($openStrategyId !== null) {
 	.filter-name-label { grid-column: 1 / -1; margin-top: 0.5rem; font-size: 0.75rem; font-weight: normal; display: flex; align-items: center; gap: 0.5rem; }
 	.filter-name-label input.small { flex-grow: 1; margin-bottom: 0; }
 
+	/* Ensure dropdown options are readable by using system default colors */
+	/* This helps if the browser renders a light dropdown panel while the app theme uses light text */
+	select option {
+		color: initial;
+		background-color: initial;
+	}
 </style>
