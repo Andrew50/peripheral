@@ -42,9 +42,8 @@
                 formatTimestamp,
                 dispatchMenuChange,
                 menuWidth,
-                settings,
-                bottomWindowRequest,
-                uiAction
+               settings,
+               bottomWindowRequest
         } from '$lib/utils/stores/stores';
         import { openWatchlistId, openWatchlist } from '$lib/features/watchlist/interface';
         import { openStrategyId, openStrategy } from '$lib/features/strategies/interface';
@@ -801,40 +800,6 @@
         $: if ($bottomWindowRequest) {
                 openBottomWindow($bottomWindowRequest);
                 bottomWindowRequest.set(null);
-        }
-
-        $: if ($uiAction) {
-                const a = $uiAction;
-                if (a.action === 'open_watchlist') {
-                        dispatchMenuChange.set('watchlist');
-                        if (a.params?.watchlistId !== undefined) {
-                                openWatchlistId.set(a.params.watchlistId);
-                        } else if (a.params?.watchlistName) {
-                                openWatchlist(a.params.watchlistName);
-                        }
-                } else if (a.action === 'open_alerts') {
-                        dispatchMenuChange.set('alerts');
-                } else if (a.action === 'open_news') {
-                        dispatchMenuChange.set('news');
-                        if (a.params?.eventId !== undefined) openNewsEventId.set(a.params.eventId);
-                } else if (a.action === 'open_strategy') {
-                        bottomWindowRequest.set('strategies');
-                        if (a.params?.strategyId !== undefined) {
-                                openStrategyId.set(a.params.strategyId);
-                        } else if (a.params?.strategyName) {
-                                openStrategy(a.params.strategyName);
-                        }
-                } else if (a.action === 'open_backtest') {
-                        bottomWindowRequest.set('backtest');
-                        if (a.params?.strategyId !== undefined) {
-                                backtestRunRequest.set(a.params.strategyId);
-                        } else if (a.params?.strategyName) {
-                                openBacktest(a.params.strategyName);
-                        }
-                } else if (a.action === 'query_chart') {
-                        queryChart(a.params || {});
-                }
-                uiAction.set(null);
         }
 </script>
 

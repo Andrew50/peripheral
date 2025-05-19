@@ -1,6 +1,6 @@
 // socket.ts
 import { writable } from 'svelte/store';
-import { streamInfo, handleTimestampUpdate, uiAction } from '$lib/utils/stores/stores';
+import { streamInfo, handleTimestampUpdate } from '$lib/utils/stores/stores';
 import type { StreamInfo, TradeData, QuoteData, CloseData } from '$lib/utils/types/types';
 import { base_url } from '$lib/utils/helpers/backend';
 import { browser } from '$app/environment';
@@ -122,10 +122,6 @@ function connect() {
                         functionStatusStore.set(statusUpdate);
                         return;
                 }
-               if (data && data.type === 'ui_action') {
-                       uiAction.set({ action: data.action, params: data.params });
-                       return;
-               }
                if (data && data.type === 'store_refresh') {
                        storeRefresh.set(data as StoreRefreshMessage);
                        return;

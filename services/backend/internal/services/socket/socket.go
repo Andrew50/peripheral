@@ -107,15 +107,6 @@ type FunctionStatusUpdate struct {
 	UserMessage string `json:"userMessage"`
 }
 
-// UIActionMessage represents an instruction for the frontend UI.
-// `Action` specifies what the UI should do and `Params` provides any
-// additional data needed.
-type UIActionMessage struct {
-	Type   string                 `json:"type"` // Will be "ui_action"
-	Action string                 `json:"action"`
-	Params map[string]interface{} `json:"params,omitempty"`
-}
-
 // StoreRefreshMessage instructs the frontend to refresh a specific store.
 type StoreRefreshMessage struct {
 	Type   string                 `json:"type"` // Will be "store_refresh"
@@ -175,29 +166,6 @@ func SendFunctionStatus(userID int, userMessage string) {
 		// This might happen if the client's send buffer is full or the connection is closing.
 		// It's usually okay to just drop the status update in this case.
 		////fmt.Printf("SendFunctionStatus: send channel blocked or closed for userID: %d. Dropping status update.\n", userID)
-	}
-}
-
-// SendUIAction sends a UI action instruction to a specific user over the websocket.
-func SendUIAction(userID int, action string, params map[string]interface{}) {
-	msg := UIActionMessage{
-		Type:   "ui_action",
-		Action: action,
-		Params: params,
-	}
-	jsonData, err := json.Marshal(msg)
-	if err != nil {
-		return
-	}
-	UserToClientMutex.RLock()
-	client, ok := UserToClient[userID]
-	UserToClientMutex.RUnlock()
-	if !ok {
-		return
-	}
-	select {
-	case client.send <- jsonData:
-	default:
 	}
 }
 

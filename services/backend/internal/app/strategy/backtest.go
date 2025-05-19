@@ -18,11 +18,12 @@ import (
 )
 
 type BacktestArgs struct {
-	StrategyID    int   `json:"strategyId"`
-	Securities    []int `json:"securities"`
-	Start         int64 `json:"start"`
-	ReturnWindows []int `json:"returnWindows"` // Changed to slice of ints
-	FullResults   bool  `json:"fullResults"`   // New field to control output type
+        StrategyID    int   `json:"strategyId"`
+        Securities    []int `json:"securities"`
+        Start         int64 `json:"start"` // Start timestamp in milliseconds
+        End           int64 `json:"end"`   // End timestamp in milliseconds
+        ReturnWindows []int `json:"returnWindows"` // Changed to slice of ints
+        FullResults   bool  `json:"fullResults"`   // New field to control output type
 }
 
 // RunBacktest executes a backtest for the given strategy and calculates future returns for multiple windows
@@ -120,27 +121,43 @@ func RunBacktest(conn *data.Conn, userID int, rawArgs json.RawMessage) (any, err
             CROSS JOIN future_price fp;`
 	}
 
-	for rows.Next() {
-		values := make([]any, len(columns))
-		valuePtrs := make([]any, len(columns))
-		for i := range values {
-			valuePtrs[i] = &values[i]
-		}
-		if err := rows.Scan(valuePtrs...); err != nil {
-			return nil, fmt.Errorf("error scanning row: %v", err)
-		}
-		rowMap := make(map[string]any)
-		for i, col := range columns {
-			rowMap[col] = values[i]
-		}
+       for rows.Next() {
+               values := make([]any, len(columns))
+               valuePtrs := make([]any, len(columns))
+               for i := range values {
+                       valuePtrs[i] = &values[i]
+               }
+               if err := rows.Scan(valuePtrs...); err != nil {
+                       return nil, fmt.Errorf("error scanning row: %v", err)
+               }
+               rowMap := make(map[string]any)
+               for i, col := range columns {
+                       rowMap[col] = values[i]
+               }
 
-		if len(args.ReturnWindows) > 0 {
-			calculateReturnColumns(ctx, conn, rowMap, returnQuery, args.ReturnWindows)
-		}
+               // Extract timestamp and convert to milliseconds
+               var tsMs int64
+               if ts, ok := rowMap["timestamp"].(time.Time); ok {
+                       tsMs = ts.UnixMilli()
+                       rowMap["timestamp"] = tsMs
+               }
 
-		records = append(records, rowMap)
-		socket.SendBacktestRow(userID, args.StrategyID, rowMap)
-	}
+               // Skip rows before the requested start time
+               if args.Start > 0 && tsMs < args.Start {
+                       continue
+               }
+               // Stop once we pass the end time
+               if args.End > 0 && tsMs > args.End {
+                       break
+               }
+
+               if len(args.ReturnWindows) > 0 {
+                       calculateReturnColumns(ctx, conn, rowMap, returnQuery, args.ReturnWindows)
+               }
+
+               records = append(records, rowMap)
+               socket.SendBacktestRow(userID, args.StrategyID, rowMap)
+       }
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating over rows: %v", err)

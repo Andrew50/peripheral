@@ -55,12 +55,6 @@ export type BottomWindowType =
 
 export const bottomWindowRequest = writable<BottomWindowType | null>(null);
 
-export type UIAction = {
-  action: string;
-  params?: Record<string, any>;
-};
-
-export const uiAction = writable<UIAction | null>(null);
 
 // Add constants for menu width
 export const MIN_MENU_WIDTH = 200;
