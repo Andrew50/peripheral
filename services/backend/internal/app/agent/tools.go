@@ -44,7 +44,7 @@ var (
 		"getSecuritiesFromTicker": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getSecuritiesFromTicker",
-				Description: "Search by partial ticker and return up to 10 matches with securityId, name and icon.",
+				Description: "Search by partial ticker and return up to 10 matches with securityId, ticker and name.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -56,7 +56,7 @@ var (
 					Required: []string{"ticker"},
 				},
 			},
-			Function:      helpers.GetSecuritiesFromTicker,
+			Function:      GetSecuritiesFromTickerLight,
 			StatusMessage: "Searching for matching tickers...",
 		},
 		"getCurrentTicker": {
@@ -80,7 +80,7 @@ var (
 		"getTickerMenuDetails": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getTickerMenuDetails",
-				Description: "Return key company details (name, market, market cap, industry, etc.) for a ticker or securityId.",
+				Description: "Return key company details for a ticker or securityId. Image data is omitted.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -96,7 +96,7 @@ var (
 					Required: []string{"ticker", "securityId"},
 				},
 			},
-			Function:      helpers.GetTickerMenuDetails,
+			Function:      GetTickerMenuSummary,
 			StatusMessage: "Getting {ticker} details...",
 		},
 		"getInstancesByTickers": {
@@ -764,9 +764,9 @@ var (
 // ToolReturnDesc provides a brief description of what each tool returns.
 var ToolReturnDesc = map[string]string{
 	"getCurrentSecurityID":           "integer securityId",
-	"getSecuritiesFromTicker":        "list of ticker matches with securityId",
+	"getSecuritiesFromTicker":        "list of ticker matches with securityId and name",
 	"getCurrentTicker":               "string ticker symbol",
-	"getTickerMenuDetails":           "object with company info",
+	"getTickerMenuDetails":           "object with company info (no images)",
 	"getInstancesByTickers":          "list of securityIds",
 	"getWatchlists":                  "list of watchlists",
 	"deleteWatchlist":                "null on success",
