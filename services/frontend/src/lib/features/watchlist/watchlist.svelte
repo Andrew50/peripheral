@@ -6,7 +6,9 @@
 	import { onMount, tick } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { queryInstanceInput } from '$lib/components/input.svelte';
-	import { flagWatchlistId, watchlists, flagWatchlist } from '$lib/utils/stores/stores';
+import { flagWatchlistId, watchlists, flagWatchlist } from '$lib/utils/stores/stores';
+import { storeRefresh } from '$lib/utils/stream/socket';
+        import { openWatchlistId } from './interface';
 	import '$lib/styles/global.css';
 
 	// Extended Instance type to include watchlistItemId
@@ -94,16 +96,32 @@
 		}
 
 		// Subscribe to watchlists store to select initial watchlist when list arrives
-		const unsubscribeWatchlists = watchlists.subscribe((list) => {
-			if (Array.isArray(list) && list.length > 0 && (currentWatchlistId === undefined || isNaN(currentWatchlistId))) {
-				selectWatchlist(String(list[0].watchlistId));
-			}
-		});
-		// Cleanup the subscription when component unmounts
-		return () => {
-			unsubscribeWatchlists();
-		};
-	});
+               const unsubscribeWatchlists = watchlists.subscribe((list) => {
+                       if (Array.isArray(list) && list.length > 0 && (currentWatchlistId === undefined || isNaN(currentWatchlistId))) {
+                               selectWatchlist(String(list[0].watchlistId));
+                       }
+               });
+               const unsubscribeRefresh = storeRefresh.subscribe((msg) => {
+                       if (msg && msg.store === 'watchlist_items' && msg.params?.watchlistId) {
+                               const id = Number(msg.params.watchlistId);
+                               if (id === currentWatchlistId) {
+                                       privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: id }).then((items) => {
+                                               activeList.set(items || []);
+                                       });
+                               }
+                               if (id === flagWatchlistId) {
+                                       privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: id }).then((items) => {
+                                               flagWatchlist.set(items || []);
+                                       });
+                               }
+                       }
+               });
+               // Cleanup the subscription when component unmounts
+               return () => {
+                       unsubscribeWatchlists();
+                       unsubscribeRefresh();
+               };
+       });
 
 	function addInstance() {
 		const inst = { ticker: '', timestamp: 0 };
@@ -300,7 +318,7 @@
 		return name.charAt(0).toUpperCase();
 	}
 
-	function handleWatchlistChange(event: Event) {
+        function handleWatchlistChange(event: Event) {
 		const target = event.target as HTMLSelectElement;
 		const value = target.value;
 
@@ -321,10 +339,15 @@
 		}
 
 		// For regular watchlist selections
-		previousWatchlistId = parseInt(value, 10);
-		currentWatchlistId = parseInt(value, 10);
-		selectWatchlist(value);
-	}
+                previousWatchlistId = parseInt(value, 10);
+                currentWatchlistId = parseInt(value, 10);
+                selectWatchlist(value);
+        }
+
+        $: if ($openWatchlistId !== null) {
+                selectWatchlist(String($openWatchlistId));
+                openWatchlistId.set(null);
+        }
 
 </script>
 

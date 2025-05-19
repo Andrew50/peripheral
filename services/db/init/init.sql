@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS schema_versions (
 -------------
 INSERT INTO schema_versions (version, description)
 VALUES (
-        16, 
-        'Initial schema version'
+        19,
+        'Initial schema version reflecting migrations up to 19.sql'
     ) ON CONFLICT (version) DO NOTHING;
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
@@ -28,7 +28,7 @@ CREATE TABLE users (
 );
 CREATE INDEX idxUsers ON users (username, password);
 CREATE INDEX idxUserAuthType ON users(auth_type);
-CREATE TABLE securities (init.sq
+CREATE TABLE securities (
     securityid SERIAL,
     ticker varchar(10) not null,
     figi varchar(12) not null,
@@ -150,7 +150,86 @@ CREATE TABLE trade_executions (
     tradeId INT REFERENCES trades(tradeId)
 );
 CREATE INDEX idxUserIdSecurityIdPrice on horizontal_lines(userId, securityId, price);
--- Create the daily OHLCV table for storing time-series market data
+
+-- Create the ohlcv_1s table
+CREATE TABLE IF NOT EXISTS ohlcv_1s (
+    timestamp TIMESTAMP NOT NULL,
+    securityid INTEGER NOT NULL,
+    open DECIMAL(25, 6) NOT NULL,
+    high DECIMAL(25, 6) NOT NULL,
+    low DECIMAL(25, 6) NOT NULL,
+    close DECIMAL(25, 6) NOT NULL,
+    volume BIGINT NOT NULL,
+    PRIMARY KEY (securityid, timestamp)
+);
+
+SELECT create_hypertable('ohlcv_1s', 'timestamp',
+                         'securityid', number_partitions => 16,
+                         chunk_time_interval => INTERVAL '1 day',
+                         if_not_exists => TRUE);
+
+CREATE INDEX IF NOT EXISTS idx_ohlcv_1s_securityid ON ohlcv_1s(securityid);
+CREATE INDEX IF NOT EXISTS idx_ohlcv_1s_timestamp ON ohlcv_1s(timestamp DESC);
+
+-- Create the ohlcv_1 table
+CREATE TABLE IF NOT EXISTS ohlcv_1 (
+    timestamp TIMESTAMP NOT NULL,
+    securityid INTEGER NOT NULL,
+    open DECIMAL(25, 6) NOT NULL,
+    high DECIMAL(25, 6) NOT NULL,
+    low DECIMAL(25, 6) NOT NULL,
+    close DECIMAL(25, 6) NOT NULL,
+    volume BIGINT NOT NULL,
+    PRIMARY KEY (securityid, timestamp)
+);
+
+SELECT create_hypertable('ohlcv_1', 'timestamp',
+                         'securityid', number_partitions => 16,
+                         chunk_time_interval => INTERVAL '1 day',
+                         if_not_exists => TRUE);
+
+CREATE INDEX IF NOT EXISTS idx_ohlcv_1_securityid ON ohlcv_1(securityid);
+CREATE INDEX IF NOT EXISTS idx_ohlcv_1_timestamp ON ohlcv_1(timestamp DESC);
+
+-- Create the ohlcv_1h table
+CREATE TABLE IF NOT EXISTS ohlcv_1h (
+    timestamp TIMESTAMP NOT NULL,
+    securityid INTEGER NOT NULL,
+    open DECIMAL(25, 6) NOT NULL,
+    high DECIMAL(25, 6) NOT NULL,
+    low DECIMAL(25, 6) NOT NULL,
+    close DECIMAL(25, 6) NOT NULL,
+    volume BIGINT NOT NULL,
+    PRIMARY KEY (securityid, timestamp)
+);
+
+SELECT create_hypertable('ohlcv_1h', 'timestamp',
+                         'securityid', number_partitions => 16,
+                         chunk_time_interval => INTERVAL '1 month',
+                         if_not_exists => TRUE);
+
+CREATE INDEX IF NOT EXISTS idx_ohlcv_1h_securityid ON ohlcv_1h(securityid);
+CREATE INDEX IF NOT EXISTS idx_ohlcv_1h_timestamp ON ohlcv_1h(timestamp DESC);
+
+-- Create the ohlcv_1w table
+CREATE TABLE IF NOT EXISTS ohlcv_1w (
+    timestamp TIMESTAMP NOT NULL,
+    securityid INTEGER NOT NULL,
+    open DECIMAL(25, 6) NOT NULL,
+    high DECIMAL(25, 6) NOT NULL,
+    low DECIMAL(25, 6) NOT NULL,
+    close DECIMAL(25, 6) NOT NULL,
+    volume BIGINT NOT NULL,
+    PRIMARY KEY (securityid, timestamp)
+);
+
+SELECT create_hypertable('ohlcv_1w', 'timestamp',
+                         'securityid', number_partitions => 16,
+                         chunk_time_interval => INTERVAL '1 month',
+                         if_not_exists => TRUE);
+
+CREATE INDEX IF NOT EXISTS idx_ohlcv_1w_securityid ON ohlcv_1w(securityid);
+CREATE INDEX IF NOT EXISTS idx_ohlcv_1w_timestamp ON ohlcv_1w(timestamp DESC);
 
 
 -- Create the ohlcv_1d table

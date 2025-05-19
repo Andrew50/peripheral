@@ -1,6 +1,7 @@
 package server
 
 import (
+	"backend/internal/app/strategy"
 	"backend/internal/data"
 	"backend/internal/services/alerts"
 	"backend/internal/services/marketdata"
@@ -156,15 +157,50 @@ func simpleSecuritiesUpdateJob(conn *data.Conn) error {
 func updateSectorsJob(conn *data.Conn) error {
 	////fmt.Println("Starting sector update - fetching latest sector/industry data...")
 	err := securities.UpdateSectors(context.Background(), conn) // Discard the statBlock
-	return err                                                     // Return the error, if any
+	if err != nil {
+		return err
+	}
+	// Refresh in-memory validation maps for strategy specs
+	if err := strategy.RefreshSectorIndustryMaps(conn); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Define all jobs and their schedules
 var (
-	JobList = []*Job{
-		{
-			Name:           "UpdateDailyOHLCV",
-			Function:       marketdata.UpdateDailyOHLCV,
+        JobList = []*Job{
+               {
+                       Name:           "UpdateSecondOHLCV",
+                       Function:       marketdata.UpdateSecondOHLCV,
+                       Schedule:       []TimeOfDay{{Hour: 21, Minute: 30}},
+                       RunOnInit:      true,
+                       SkipOnWeekends: true,
+               },
+               {
+                       Name:           "UpdateMinuteOHLCV",
+                       Function:       marketdata.UpdateMinuteOHLCV,
+                       Schedule:       []TimeOfDay{{Hour: 21, Minute: 32}},
+                       RunOnInit:      true,
+                       SkipOnWeekends: true,
+               },
+               {
+                       Name:           "UpdateHourlyOHLCV",
+                       Function:       marketdata.UpdateHourlyOHLCV,
+                       Schedule:       []TimeOfDay{{Hour: 21, Minute: 35}},
+                       RunOnInit:      true,
+                       SkipOnWeekends: true,
+               },
+               {
+                       Name:           "UpdateWeeklyOHLCV",
+                       Function:       marketdata.UpdateWeeklyOHLCV,
+                       Schedule:       []TimeOfDay{{Hour: 21, Minute: 40}},
+                       RunOnInit:      true,
+                       SkipOnWeekends: true,
+               },
+                {
+                        Name:           "UpdateDailyOHLCV",
+                        Function:       marketdata.UpdateDailyOHLCV,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
@@ -296,6 +332,11 @@ func StartScheduler(conn *data.Conn) chan struct{} {
 	scheduler, err := NewScheduler(conn)
 	if err != nil {
 		log.Fatalf("Failed to create scheduler: %v", err)
+	}
+
+	// Ensure sector/industry maps are loaded before jobs run
+	if err := strategy.RefreshSectorIndustryMaps(conn); err != nil {
+		log.Printf("Failed to refresh sector/industry maps: %v", err)
 	}
 
 	// Start the scheduler

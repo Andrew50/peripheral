@@ -65,7 +65,8 @@ export const requestChatOpen = writable(false);
 export const pendingChatQuery = writable<{ context: (Instance | FilingContext)[]; query: string } | null>(null);
 
 export function openChatAndQuery(context: FilingContext | Instance, query: string) {
-	pendingChatQuery.set({ context: [context], query }); // Context is always an array
-	requestChatOpen.set(true); // Signal the page to open the chat
+       console.log('openChatAndQuery', context, query);
+       pendingChatQuery.set({ context: [context], query }); // Context is always an array
+       requestChatOpen.set(true); // Signal the page to open the chat
 }
 

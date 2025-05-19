@@ -12,6 +12,7 @@ import type {
 } from '$lib/utils/types/types';
 import type { Writable } from 'svelte/store';
 import { privateRequest } from '$lib/utils/helpers/backend';
+import { storeRefresh } from '$lib/utils/stream/socket';
 
 // Define the Algo interface
 export interface Algo {
@@ -42,6 +43,18 @@ export const streamInfo = writable<StreamInfo>({
 export const systemClockOffset = 0;
 export const dispatchMenuChange = writable('');
 export const algos: Writable<Algo[]> = writable([]);
+
+export type BottomWindowType =
+  | 'screener'
+  | 'account'
+  | 'strategies'
+  | 'settings'
+  | 'deploy'
+  | 'backtest'
+  | 'query';
+
+export const bottomWindowRequest = writable<BottomWindowType | null>(null);
+
 
 // Add constants for menu width
 export const MIN_MENU_WIDTH = 200;
@@ -161,6 +174,41 @@ export function initStores() {
     }
     setInterval(updateTime, 250);
 }
+
+export function refreshStore(name: string, params: any = {}) {
+    if (name === 'watchlists') {
+        privateRequest<Watchlist[]>('getWatchlists', {}).then((list) => {
+            watchlists.set(list || []);
+        });
+    } else if (name === 'watchlist_items') {
+        const id = params?.watchlistId;
+        if (id === flagWatchlistId) {
+            privateRequest<Instance[]>('getWatchlistItems', { watchlistId: id }).then((items) => {
+                flagWatchlist.set(items || []);
+            });
+        }
+    } else if (name === 'strategies') {
+        privateRequest<Strategy[]>('getStrategies', {}).then((v) => {
+            strategies.set(v || []);
+        });
+    } else if (name === 'alerts') {
+        privateRequest<Alert[]>('getAlerts', {}).then((v) => {
+            const inactive = v?.filter((a) => a.active === false) || [];
+            inactiveAlerts.set(inactive);
+            const active = v?.filter((a) => a.active === true) || [];
+            activeAlerts.set(active);
+        });
+        privateRequest<AlertLog[]>('getAlertLogs', {}).then((v) => {
+            alertLogs.set(v || []);
+        });
+    }
+}
+
+storeRefresh.subscribe((msg) => {
+    if (msg) {
+        refreshStore(msg.store, msg.params);
+    }
+});
 
 export type Menu = 'none' | 'watchlist' | 'alerts' | 'study' ;
 

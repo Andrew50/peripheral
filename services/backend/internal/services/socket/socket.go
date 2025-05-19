@@ -5,6 +5,7 @@ import (
 	"backend/internal/data/utils"
 	"container/list"
 	"encoding/json"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -106,6 +107,27 @@ type FunctionStatusUpdate struct {
 	UserMessage string `json:"userMessage"`
 }
 
+// StoreRefreshMessage instructs the frontend to refresh a specific store.
+type StoreRefreshMessage struct {
+	Type   string                 `json:"type"` // Will be "store_refresh"
+	Store  string                 `json:"store"`
+	Params map[string]interface{} `json:"params,omitempty"`
+}
+
+// BacktestRowMessage is sent when a single backtest row is available.
+type BacktestRowMessage struct {
+	Type       string         `json:"type"`
+	StrategyID int            `json:"strategyId"`
+	Data       map[string]any `json:"data"`
+}
+
+// BacktestSummaryMessage is sent once a backtest completes.
+type BacktestSummaryMessage struct {
+	Type       string         `json:"type"`
+	StrategyID int            `json:"strategyId"`
+	Summary    map[string]any `json:"summary"`
+}
+
 // SendFunctionStatus sends a status update about a running function to a specific user.
 func SendFunctionStatus(userID int, userMessage string) {
 	// Use a default message if the specific one is empty
@@ -119,6 +141,7 @@ func SendFunctionStatus(userID int, userMessage string) {
 		Type:        "function_status",
 		UserMessage: messageToSend,
 	}
+	log.Printf("sending status to %d: %s", userID, messageToSend)
 
 	jsonData, err := json.Marshal(statusUpdate)
 	if err != nil {
@@ -143,6 +166,75 @@ func SendFunctionStatus(userID int, userMessage string) {
 		// This might happen if the client's send buffer is full or the connection is closing.
 		// It's usually okay to just drop the status update in this case.
 		////fmt.Printf("SendFunctionStatus: send channel blocked or closed for userID: %d. Dropping status update.\n", userID)
+	}
+}
+
+// SendStoreRefresh notifies the client to refresh a specific store.
+func SendStoreRefresh(userID int, store string, params map[string]interface{}) {
+	msg := StoreRefreshMessage{
+		Type:   "store_refresh",
+		Store:  store,
+		Params: params,
+	}
+	jsonData, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+	if !ok {
+		return
+	}
+	select {
+	case client.send <- jsonData:
+	default:
+	}
+}
+
+// SendBacktestRow sends an individual backtest result row to a user.
+func SendBacktestRow(userID int, strategyID int, row map[string]any) {
+	msg := BacktestRowMessage{
+		Type:       "backtest_row",
+		StrategyID: strategyID,
+		Data:       row,
+	}
+	jsonData, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+	if !ok {
+		return
+	}
+	select {
+	case client.send <- jsonData:
+	default:
+	}
+}
+
+// SendBacktestSummary sends the backtest summary to a user when finished.
+func SendBacktestSummary(userID int, strategyID int, summary map[string]any) {
+	msg := BacktestSummaryMessage{
+		Type:       "backtest_summary",
+		StrategyID: strategyID,
+		Summary:    summary,
+	}
+	jsonData, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+	if !ok {
+		return
+	}
+	select {
+	case client.send <- jsonData:
+	default:
 	}
 }
 

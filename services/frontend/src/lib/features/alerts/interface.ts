@@ -1,7 +1,7 @@
 import type { Alert, AlertLog, Instance } from '$lib/utils/types/types';
 import { writable } from 'svelte/store';
 import { privateRequest } from '$lib/utils/helpers/backend';
-import { activeAlerts, inactiveAlerts } from '$lib/utils/stores/stores';
+import { activeAlerts, inactiveAlerts, dispatchMenuChange } from '$lib/utils/stores/stores';
 
 export type { Alert, AlertLog };
 
@@ -31,7 +31,12 @@ export function newAlert(alert: Alert) {
 				} else {
 					return [createdAlert];
 				}
-			});
-		}
-	});
+        });
+        }
+    })
+        
+}
+
+export function openAlerts() {
+        dispatchMenuChange.set('alerts');
 }

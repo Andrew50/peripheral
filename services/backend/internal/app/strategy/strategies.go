@@ -577,5 +577,12 @@ func getSystemInstruction(name string) (string, error) {
 		now.Format(time.RFC3339))
 	s = strings.ReplaceAll(s, "{{CURRENT_TIME_MILLISECONDS}}",
 		strconv.FormatInt(now.UnixMilli(), 10))
+
+	if name == "spec" {
+		for k, v := range SpecPromptVars {
+			placeholder := "{{ " + k + " }}"
+			s = strings.ReplaceAll(s, placeholder, v)
+		}
+	}
 	return s, nil
 }

@@ -18,6 +18,7 @@ type Tool struct {
 	FunctionDeclaration *genai.FunctionDeclaration
 	Function            func(*data.Conn, int, json.RawMessage) (interface{}, error)
 	StatusMessage       string
+	RefreshStore        string
 }
 
 var (
@@ -25,13 +26,13 @@ var (
 		"getCurrentSecurityID": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getCurrentSecurityID",
-				Description: "Get the current security ID from a security ticker symbol.",
+				Description: "Look up the internal securityId for the given ticker symbol.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"ticker": {
 							Type:        genai.TypeString,
-							Description: "The security ticker symbol, e.g. NVDA, AAPL, etc",
+							Description: "Ticker symbol to resolve (e.g., AAPL).",
 						},
 					},
 					Required: []string{"ticker"},
@@ -43,31 +44,31 @@ var (
 		"getSecuritiesFromTicker": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getSecuritiesFromTicker",
-				Description: "Get a list of the closest 10 security ticker symbols to an input string.",
+				Description: "Search by partial ticker and return up to 10 matches with securityId, ticker and name.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"ticker": {
 							Type:        genai.TypeString,
-							Description: "string input to retrieve the list based on.",
+							Description: "Partial ticker text to search for.",
 						},
 					},
 					Required: []string{"ticker"},
 				},
 			},
-			Function:      helpers.GetSecuritiesFromTicker,
+			Function:      GetSecuritiesFromTickerLight,
 			StatusMessage: "Searching for matching tickers...",
 		},
 		"getCurrentTicker": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getCurrentTicker",
-				Description: "Get the current security ticker symbol for a security ID.",
+				Description: "Return the active ticker symbol for the provided securityId.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"securityId": {
 							Type:        genai.TypeInteger,
-							Description: "The security ID of the security to get the current ticker for.",
+							Description: "SecurityId to resolve to a ticker symbol.",
 						},
 					},
 					Required: []string{"securityId"},
@@ -79,7 +80,7 @@ var (
 		"getTickerMenuDetails": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getTickerMenuDetails",
-				Description: "Get company name, market, locale, primary exchange, active status, market cap, description, logo, shares outstanding, industry, sector and total shares for a given security.",
+				Description: "Return key company details for a ticker or securityId. Image data is omitted.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -95,13 +96,13 @@ var (
 					Required: []string{"ticker", "securityId"},
 				},
 			},
-			Function:      helpers.GetTickerMenuDetails,
+			Function:      GetTickerMenuSummary,
 			StatusMessage: "Getting {ticker} details...",
 		},
 		"getInstancesByTickers": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getInstancesByTickers",
-				Description: "Get security IDs for a list of security ticker symbols.",
+				Description: "Resolve each ticker in the list to its securityId.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -123,7 +124,7 @@ var (
 		"getWatchlists": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getWatchlists",
-				Description: "Get all watchlist names and IDs.",
+				Description: "List all watchlists for the current user with their IDs.",
 				Parameters: &genai.Schema{
 					Type:       genai.TypeObject,
 					Properties: map[string]*genai.Schema{}, // Empty map indicates no properties/arguments
@@ -136,7 +137,7 @@ var (
 		"deleteWatchlist": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "deleteWatchlist",
-				Description: "Delete a watchlist.",
+				Description: "Delete the specified watchlist. Returns null on success.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -150,11 +151,12 @@ var (
 			},
 			Function:      watchlist.DeleteWatchlist,
 			StatusMessage: "Deleting watchlist...",
+			RefreshStore:  "watchlists",
 		},
 		"newWatchlist": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "newWatchlist",
-				Description: "Create a new empty watchlist",
+				Description: "Create a watchlist and return its new watchlistId.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -168,11 +170,12 @@ var (
 			},
 			Function:      watchlist.NewWatchlist,
 			StatusMessage: "Creating new watchlist...",
+			RefreshStore:  "watchlists",
 		},
 		"getWatchlistItems": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getWatchlistItems",
-				Description: "Retrieves the security ID's of the securities in a specified watchlist.",
+				Description: "List the securityIds stored in the specified watchlist.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -190,7 +193,7 @@ var (
 		"deleteWatchlistItem": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "deleteWatchlistItem",
-				Description: "Removes a security from a watchlist using a given watchlist item ID.",
+				Description: "Remove a security from a watchlist. Returns null on success.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -204,11 +207,12 @@ var (
 			},
 			Function:      watchlist.DeleteWatchlistItem,
 			StatusMessage: "Removing item from watchlist...",
+			RefreshStore:  "watchlists",
 		},
 		"newWatchlistItem": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "newWatchlistItem",
-				Description: "Add a security to a watchlist.",
+				Description: "Add a security to a watchlist, returning the new watchlistItemId.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -226,12 +230,13 @@ var (
 			},
 			Function:      watchlist.NewWatchlistItem,
 			StatusMessage: "Adding item to watchlist...",
+			RefreshStore:  "watchlists",
 		},
 		//singles
 		"getPrevClose": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getPrevClose",
-				Description: "Retrieves the previous closing price for a specified security ticker symbol. This also gets the most recent price if the market is closed or in after hours.",
+				Description: "Get the previous closing price for the security. If markets are closed today, use the last available price.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -249,7 +254,7 @@ var (
 		"getLastPrice": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getLastPrice",
-				Description: "Retrieves the last price for a specified security ticker symbol.",
+				Description: "Fetch the most recent trade price for the given ticker symbol.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -267,7 +272,7 @@ var (
 		"setHorizontalLine": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "setHorizontalLine",
-				Description: "Create a new horizontal line on the chart of a specified security ID at a specificed price.",
+				Description: "Create a horizontal line on a chart and return the new lineId.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -297,7 +302,7 @@ var (
 		"getHorizontalLines": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getHorizontalLines",
-				Description: "Retrieves all horizontal lines for a specific security",
+				Description: "Return all horizontal lines for a securityId.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -315,7 +320,7 @@ var (
 		"deleteHorizontalLine": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "deleteHorizontalLine",
-				Description: "Delete a horizontal line on the chart of a specified security ID.",
+				Description: "Delete a horizontal line by id and return null on success.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -333,7 +338,7 @@ var (
 		"updateHorizontalLine": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "updateHorizontalLine",
-				Description: "Update an existing horizontal line on the chart of a specified security ID.",
+				Description: "Update a horizontal line's parameters and return null on success.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -367,7 +372,7 @@ var (
 		"getStockEdgarFilings": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStockEdgarFilings",
-				Description: "Retrieve a list of urls and filing types for all SEC filings for a specified security within a specified time range.",
+				Description: "Return URLs and filing types for a securityId within a date range.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -393,7 +398,7 @@ var (
 		"getChartEvents": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getChartEvents",
-				Description: "Retrieves splits, dividends and possibly SEC filings for a specified security ID within a date range",
+				Description: "Return splits, dividends and optional filing events for a securityId within a date range.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -423,7 +428,7 @@ var (
 		"getEarningsText": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getEarningsText",
-				Description: "Get the plain text content of the earnings SEC filing for a specified quarter, year, and security.",
+				Description: "Return the plain text of the earnings filing for a securityId, optionally for a specific quarter and year.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -449,7 +454,7 @@ var (
 		"getFilingText": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getFilingText",
-				Description: "Retrieves the text content of a SEC filing from a specified url.",
+				Description: "Return the text content of an SEC filing from its URL.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -467,7 +472,7 @@ var (
 		"getExhibitList": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getExhibitList",
-				Description: "Retrieves the list of exhibits for a specified SEC filing URL.",
+				Description: "Return the list of exhibits for a filing URL.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -482,7 +487,7 @@ var (
 		"getExhibitContent": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getExhibitContent",
-				Description: "Retrieves the content of a specific exhibit from a SEC filing. Use this after getExhibitList to get the content of an exhibit.",
+				Description: "Return the text content for a specific exhibit URL. Call after getExhibitList.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -498,7 +503,7 @@ var (
 		"grab_user_trades": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "grab_user_trades",
-				Description: "Get user trades with optional filters.",
+				Description: "Return the user's trades, optionally filtered by ticker and date range.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -524,7 +529,7 @@ var (
 		"get_trade_statistics": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "get_trade_statistics",
-				Description: "Get user trading performance statistics.",
+				Description: "Return overall trading statistics, optionally filtered by ticker and date range.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -550,7 +555,7 @@ var (
 		"get_ticker_performance": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "get_ticker_performance",
-				Description: "Retrieves the user's trade performance statistics for a specific ticker (p/l, win rate, average gain/loss, etc)",
+				Description: "Return trade performance metrics for a ticker or securityId.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -572,7 +577,7 @@ var (
 		"get_daily_trade_stats": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "get_daily_trade_stats",
-				Description: "Retrieves user trading statistics for a specified year and month.",
+				Description: "Return daily trading statistics for a given year and month.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -594,7 +599,7 @@ var (
 		"run_backtest": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "run_backtest",
-				Description: "Backtest a specified strategy, which is based on stock conditions, patterns, and indicators. Can optionally calculate future returns for specified N-day windows.",
+				Description: "Run a strategy backtest and return a summary object. Optionally calculate forward returns for specific windows.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -619,7 +624,7 @@ var (
 		"getTickerDailySnapshot": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getTickerDailySnapshot",
-				Description: "Get the current price, change, percent change, volume, vwap price, and open, high, low and close for a specified security.",
+				Description: "Return the latest daily snapshot values for a securityId.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -637,7 +642,7 @@ var (
 		"getAllTickerSnapshots": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getAllTickerSnapshots",
-				Description: "Get a list of the current bid, ask, price, change, percent change, volume, vwap price, and daily open, high, low and close for all securities.",
+				Description: "Return daily snapshot information for all securities.",
 				Parameters: &genai.Schema{
 					Type:       genai.TypeObject,
 					Properties: map[string]*genai.Schema{},
@@ -651,7 +656,7 @@ var (
 		"getStrategies": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStrategies",
-				Description: "Retrieves all strategy names and ids for the current user. Use this to fetch unknown strategy ids.",
+				Description: "Return all strategy names and their ids for the current user.",
 				Parameters: &genai.Schema{
 					Type:       genai.TypeObject,
 					Properties: map[string]*genai.Schema{},
@@ -664,7 +669,7 @@ var (
 		"deleteStrategy": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "deleteStrategy",
-				Description: "Deletes a strategy configuration",
+				Description: "Delete a strategy by id. Returns null on success.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -675,12 +680,12 @@ var (
 			},
 			Function:      strategy.DeleteStrategy,
 			StatusMessage: "Deleting strategy...",
+			RefreshStore:  "strategies",
 		},
 		"getStrategyFromNaturalLanguage": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name: "getStrategyFromNaturalLanguage",
-				Description: "IF YOU USE THIS FUNCTION TO CREATE A NEW STRATEGY, USE THE USER'S ORIGINAL QUERY AS IS. Create (or overwrite) a strategy from a natural‑language description. " +
-					"Pass strategyId = -1 to create a new strategy.",
+				Name:        "getStrategyFromNaturalLanguage",
+				Description: "Create or overwrite a strategy from a natural language query. Pass strategyId=-1 to create a new strategy.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -692,11 +697,12 @@ var (
 			},
 			Function:      strategy.CreateStrategyFromNaturalLanguage,
 			StatusMessage: "Building strategy...",
+			RefreshStore:  "strategies",
 		},
 		"calculateBacktestStatistic": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "calculateBacktestStatistic",
-				Description: "Calculates a statistic for a specific column from cached backtest results. Use this instead of requesting raw backtest data for simple calculations.",
+				Description: "Calculate a statistic from cached backtest results and return the numeric value.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -722,7 +728,7 @@ var (
 		"runWebSearch": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runWebSearch",
-				Description: "Run a web search using Google Search.",
+				Description: "Perform a Google search and return structured results.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -737,14 +743,14 @@ var (
 		"dateToMS": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "dateToMS",
-				Description: "Convert a date to milliseconds since epoch.",
+				Description: "Convert the given date and time to milliseconds since the Unix epoch.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"date":   {Type: genai.TypeString, Description: "The date in 2006-01-02 format to convert to milliseconds since epoch."},
-						"hour":   {Type: genai.TypeInteger, Description: "The hour (24 hour format)on date."},
-						"minute": {Type: genai.TypeInteger, Description: "The minute on date."},
-						"second": {Type: genai.TypeInteger, Description: "The second on date."},
+						"hour":   {Type: genai.TypeInteger, Description: "Hour of the day in 24h format."},
+						"minute": {Type: genai.TypeInteger, Description: "Minute value."},
+						"second": {Type: genai.TypeInteger, Description: "Second value."},
 					},
 					Required: []string{"date", "hour", "minute", "second"},
 				},
@@ -754,3 +760,42 @@ var (
 		},
 	}
 )
+
+// ToolReturnDesc provides a brief description of what each tool returns.
+var ToolReturnDesc = map[string]string{
+	"getCurrentSecurityID":           "integer securityId",
+	"getSecuritiesFromTicker":        "list of ticker matches with securityId and name",
+	"getCurrentTicker":               "string ticker symbol",
+	"getTickerMenuDetails":           "object with company info (no images)",
+	"getInstancesByTickers":          "list of securityIds",
+	"getWatchlists":                  "list of watchlists",
+	"deleteWatchlist":                "null on success",
+	"newWatchlist":                   "new watchlistId",
+	"getWatchlistItems":              "list of watchlist entries",
+	"deleteWatchlistItem":            "null on success",
+	"newWatchlistItem":               "new watchlistItemId",
+	"getPrevClose":                   "float price",
+	"getLastPrice":                   "float price",
+	"setHorizontalLine":              "new lineId",
+	"getHorizontalLines":             "list of horizontal lines",
+	"deleteHorizontalLine":           "null on success",
+	"updateHorizontalLine":           "null on success",
+	"getStockEdgarFilings":           "list of filing summaries",
+	"getChartEvents":                 "list of events",
+	"getEarningsText":                "string text",
+	"getFilingText":                  "string text",
+	"getExhibitList":                 "list of exhibits",
+	"getExhibitContent":              "string text",
+	"grab_user_trades":               "list of trades",
+	"get_trade_statistics":           "object with statistics",
+	"get_ticker_performance":         "object with performance stats",
+	"get_daily_trade_stats":          "object with daily stats",
+	"run_backtest":                   "backtest summary object",
+	"getTickerDailySnapshot":         "snapshot object",
+	"getAllTickerSnapshots":          "list of snapshots",
+	"getStrategies":                  "list of strategies",
+	"deleteStrategy":                 "null on success",
+	"getStrategyFromNaturalLanguage": "strategy info",
+	"calculateBacktestStatistic":     "numeric result",
+       "runWebSearch":                   "search result object",
+}

@@ -9,12 +9,32 @@ import type { AlertData } from '$lib/utils/types/types';
 
 // Define the type for function status updates from backend (simplified)
 export type FunctionStatusUpdate = {
-	type: 'function_status';
-	userMessage: string;
+        type: 'function_status';
+        userMessage: string;
+};
+
+export type BacktestRowMessage = {
+        type: 'backtest_row';
+        strategyId: number;
+        data: any;
+};
+
+export type BacktestSummaryMessage = {
+        type: 'backtest_summary';
+        strategyId: number;
+        summary: any;
 };
 
 // Store to hold the current function status message
 export const functionStatusStore = writable<FunctionStatusUpdate | null>(null);
+
+export type StoreRefreshMessage = {
+       type: 'store_refresh';
+       store: string;
+       params?: Record<string, any>;
+};
+
+export const storeRefresh = writable<StoreRefreshMessage | null>(null);
 
 export type TimeType = 'regular' | 'extended';
 export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
@@ -36,6 +56,9 @@ export const activeChannels: Map<string, StreamCallback[]> = new Map();
 export const connectionStatus = writable<'connected' | 'disconnected' | 'connecting'>('connecting');
 export const pendingSubscriptions = new Set<string>();
 
+const backtestRowCallbacks: Map<number, ((row: any) => void)[]> = new Map();
+const backtestSummaryCallbacks: Map<number, ((summary: any) => void)[]> = new Map();
+
 export type SubscriptionRequest = {
 	action: 'subscribe' | 'unsubscribe' | 'replay' | 'pause' | 'play' | 'realtime' | 'speed';
 	channelName?: string;
@@ -51,7 +74,7 @@ let reconnectAttempts: number = 0;
 const maxReconnectAttempts: number = 5;
 let shouldReconnect: boolean = true;
 
-export const latestValue = new Map<string, StreamData>(); 
+export const latestValue = new Map<string, StreamData>();
 connect();
 
 function connect() {
@@ -93,12 +116,28 @@ function connect() {
 			return;
 		}
 
-		// Check message type first
-		if (data && data.type === 'function_status') {
-			const statusUpdate = data as FunctionStatusUpdate;
-			functionStatusStore.set(statusUpdate);
-			return; // Handled function status update
-		}
+                // Check message type first
+                if (data && data.type === 'function_status') {
+                        const statusUpdate = data as FunctionStatusUpdate;
+                        functionStatusStore.set(statusUpdate);
+                        return;
+                }
+               if (data && data.type === 'store_refresh') {
+                       storeRefresh.set(data as StoreRefreshMessage);
+                       return;
+               }
+                if (data && data.type === 'backtest_row') {
+                        const msg = data as BacktestRowMessage;
+                        const cbs = backtestRowCallbacks.get(msg.strategyId);
+                        cbs?.forEach((cb) => cb(msg.data));
+                        return;
+                }
+                if (data && data.type === 'backtest_summary') {
+                        const msg = data as BacktestSummaryMessage;
+                        const cbs = backtestSummaryCallbacks.get(msg.strategyId);
+                        cbs?.forEach((cb) => cb(msg.summary));
+                        return;
+                }
 
 		// Handle other message types (based on channel)
 		const channelName = data.channel;
@@ -141,6 +180,32 @@ function reconnect() {
 		const reconnectDelay = Math.min(reconnectInterval * reconnectAttempts, maxReconnectInterval);
 		setTimeout(connect, reconnectDelay);
 	}
+}
+
+export function addBacktestRowListener(strategyId: number, cb: (row: any) => void): () => void {
+        let arr = backtestRowCallbacks.get(strategyId);
+        if (!arr) { arr = []; backtestRowCallbacks.set(strategyId, arr); }
+        arr.push(cb);
+        return () => {
+                const a = backtestRowCallbacks.get(strategyId);
+                if (!a) return;
+                const i = a.indexOf(cb);
+                if (i !== -1) a.splice(i, 1);
+                if (a.length === 0) backtestRowCallbacks.delete(strategyId);
+        };
+}
+
+export function addBacktestSummaryListener(strategyId: number, cb: (sum: any) => void): () => void {
+        let arr = backtestSummaryCallbacks.get(strategyId);
+        if (!arr) { arr = []; backtestSummaryCallbacks.set(strategyId, arr); }
+        arr.push(cb);
+        return () => {
+                const a = backtestSummaryCallbacks.get(strategyId);
+                if (!a) return;
+                const i = a.indexOf(cb);
+                if (i !== -1) a.splice(i, 1);
+                if (a.length === 0) backtestSummaryCallbacks.delete(strategyId);
+        };
 }
 
 export function subscribe(channelName: string) {

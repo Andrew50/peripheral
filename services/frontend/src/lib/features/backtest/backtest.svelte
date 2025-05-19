@@ -3,6 +3,8 @@
   import StrategyDropdown from '$lib/components/strategyDropdown.svelte';
   import List from '$lib/components/list.svelte';
   import { privateRequest } from '$lib/utils/helpers/backend';
+  import { backtestRunRequest } from './interface';
+  import { addBacktestRowListener, addBacktestSummaryListener } from '$lib/utils/stream/interface';
   
   /***********************
    *     ─ Types ─       *
@@ -33,10 +35,16 @@
   let summary: Summary | null = null;
   const running = writable(false);
   let errorMsg: string | null = null;
-  
+
   // Date range filters (for future implementation)
   let startDate: string = '';
   let endDate: string = '';
+
+  // Progress tracking
+  let progress = 0;
+  let progressTimestamp = '';
+  let startMs = 0;
+  let endMs = 0;
   
   /***********************
    *     ─ Helpers ─     *
@@ -70,6 +78,13 @@
       day: 'numeric'
     });
   }
+
+  function updateProgress(ts: number) {
+    if (startMs && endMs && endMs > startMs) {
+      progress = Math.min(100, Math.max(0, ((ts - startMs) / (endMs - startMs)) * 100));
+    }
+    progressTimestamp = new Date(ts).toLocaleString();
+  }
   
   async function runBacktest() {
     if (selectedId === null || selectedId === 'new') return;
@@ -77,27 +92,45 @@
     errorMsg = null;
     list.set([]);
     summary = null;
-    
+    const results: Instance[] = [];
+    const offRow = addBacktestRowListener(selectedId as number, (row) => {
+      results.push(row);
+      list.set([...results]);
+      if (row.timestamp) {
+        const ts = typeof row.timestamp === 'string' ? Date.parse(row.timestamp) : row.timestamp;
+        if (typeof ts === 'number' && !isNaN(ts)) updateProgress(ts);
+      }
+      if (results.length === 1) {
+        let allColumns = Object.keys(row).filter(col => col !== 'securityId');
+        let ordered: string[] = [];
+        if (allColumns.includes('ticker')) {
+          ordered.push('ticker');
+          allColumns = allColumns.filter(c => c !== 'ticker');
+        }
+        if (allColumns.includes('timestamp')) {
+          ordered.push('timestamp');
+          allColumns = allColumns.filter(c => c !== 'timestamp');
+        }
+        columns = [...ordered, ...allColumns];
+      }
+    });
+    const offSummary = addBacktestSummaryListener(selectedId as number, (s) => {
+      summary = s;
+    });
+
     try {
       console.log("running")
-      const res = await privateRequest<any>('run_backtest', { strategyId: selectedId, returnResults: true }, true);
+      startMs = startDate ? new Date(startDate).getTime() : 0;
+      endMs = endDate ? new Date(endDate).getTime() + 86400000 - 1 : 0;
+      progress = 0;
+      progressTimestamp = '';
+      const res = await privateRequest<any>('run_backtest', { strategyId: selectedId, start: startMs, end: endMs, returnResults: false }, true);
       console.log(res)
-      
-      // Extract instances and summary
-      const instances: Instance[] = res?.instances ?? [];
-      summary = res?.summary || null;
-      
-      // Update the list with the instances data, null if none
-      if (instances.length === 0){
-          list.set(null)
-      }else{
-          list.set(instances);
-      }
-      
+
   // Get column names from the first instance or from summary.columns if available
-  if (instances.length) {
+  if (results.length) {
     // Get all column names from the first instance
-    let allColumns = Object.keys(instances[0]);
+    let allColumns = Object.keys(results[0]);
     
     // Filter out securityId which we don't want to display
     allColumns = allColumns.filter(col => col !== 'securityId');
@@ -152,9 +185,18 @@
       }
     } catch (err: any) {
       errorMsg = err?.message || 'Failed to run backtest.';
-    } finally {
-      running.set(false);
-    }
+  } finally {
+    offRow();
+    offSummary();
+    running.set(false);
+    progress = 100;
+  }
+  }
+
+  $: if ($backtestRunRequest !== null) {
+    selectedId = $backtestRunRequest;
+    runBacktest();
+    backtestRunRequest.set(null);
   }
 </script>
 
@@ -203,11 +245,23 @@
       </div>
     </div>
   </div>
-  
+
   <!-- Display error messages -->
   {#if errorMsg}
     <div class="error-container">
       <p class="error-message">{errorMsg}</p>
+    </div>
+  {/if}
+
+  {#if $running}
+    <div class="progress-container">
+      <progress max="100" value={progress}></progress>
+      <div class="progress-info">
+        <span>{progress.toFixed(1)}%</span>
+        {#if progressTimestamp}
+          <span class="timestamp">{progressTimestamp}</span>
+        {/if}
+      </div>
     </div>
   {/if}
   
@@ -473,6 +527,24 @@
     color: var(--c5); /* Ensure red color */
     margin: 0; /* Remove default margins */
     font-size: 0.9rem;
+  }
+
+  .progress-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+
+  .progress-container progress {
+    flex: 1;
+    height: 8px;
+  }
+
+  .progress-info {
+    display: flex;
+    gap: 0.5rem;
+    font-size: 0.85rem;
   }
   
   /* Hint text styling */

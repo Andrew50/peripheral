@@ -2,6 +2,7 @@ package watchlist
 
 import (
 	"backend/internal/data"
+	"backend/internal/services/socket"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -145,17 +146,17 @@ func DeleteWatchlistItem(conn *data.Conn, userID int, rawArgs json.RawMessage) (
 	if err != nil {
 		return nil, fmt.Errorf("m0ivn0d %v", err)
 	}
-	cmdTag, err := conn.DB.Exec(context.Background(), `
-		DELETE FROM watchlistItems 
-		WHERE watchlistItemId = $1 
-		AND watchlistId IN (SELECT watchlistId FROM watchlists WHERE userId = $2)`,
-		args.WatchlistItemID, userID)
+	var watchlistID int
+	err = conn.DB.QueryRow(context.Background(), `
+               DELETE FROM watchlistItems
+               WHERE watchlistItemId = $1
+               AND watchlistId IN (SELECT watchlistId FROM watchlists WHERE userId = $2)
+               RETURNING watchlistId`,
+		args.WatchlistItemID, userID).Scan(&watchlistID)
 	if err != nil {
 		return nil, fmt.Errorf("niv02 %v", err)
 	}
-	if cmdTag.RowsAffected() == 0 {
-		return nil, fmt.Errorf("watchlist item not found or you don't have permission to delete it")
-	}
+	socket.SendStoreRefresh(userID, "watchlist_items", map[string]interface{}{"watchlistId": watchlistID})
 	return nil, nil
 }
 
@@ -192,5 +193,6 @@ func NewWatchlistItem(conn *data.Conn, userID int, rawArgs json.RawMessage) (int
 	if err != nil {
 		return nil, err
 	}
+	socket.SendStoreRefresh(userID, "watchlist_items", map[string]interface{}{"watchlistId": args.WatchlistID})
 	return watchlistID, err
 }

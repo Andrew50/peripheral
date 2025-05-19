@@ -128,7 +128,8 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 				totalRequestThoughtsTokenCount += finalResponse.TokenCounts.ThoughtsTokenCount
 				totalRequestTokenCount += finalResponse.TokenCounts.TotalTokenCount
 				// Process any table instructions in the content chunks
-				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
+                               processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
+                               processedChunks = appendActionButtons(processedChunks, allResults)
 				if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, allResults, totalRequestTokenCount); err != nil {
 					log.Printf("Error saving message to conversation: %v", err)
 				}

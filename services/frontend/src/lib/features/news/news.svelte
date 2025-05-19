@@ -4,12 +4,14 @@
 	import { writable } from 'svelte/store';
 	import List from '$lib/components/list.svelte';
 	import { UTCTimestampToESTString } from '$lib/utils/helpers/timestamp';
-	import { activeChartInstance } from '$lib/utils/stores/stores';
-	import {
-		addGlobalSECFilingsStream,
-		releaseGlobalSECFilingsStream
-	} from '$lib/utils/stream/interface';
-	import { subscribeSECFilings, unsubscribeSECFilings } from '$lib/utils/stream/socket';
+import { activeChartInstance } from '$lib/utils/stores/stores';
+import { openNewsEventId } from './interface';
+import {
+                addGlobalSECFilingsStream,
+                releaseGlobalSECFilingsStream
+        } from '$lib/utils/stream/interface';
+import { subscribeSECFilings, unsubscribeSECFilings } from '$lib/utils/stream/socket';
+import { dispatchMenuChange } from '$lib/utils/stores/stores';
 	import type { StreamCallback, StreamData } from '$lib/utils/stream/socket';
 	import type { Filing } from '$lib/utils/stream/secfilings';
 
@@ -73,7 +75,7 @@
 	}
 
 	// Function to handle incoming global SEC filing messages
-	function handleGlobalSECFilingMessage(message: StreamData) {
+        function handleGlobalSECFilingMessage(message: StreamData) {
 		// Check if the message has a data property that is an array
 		if (typeof message === 'object' && 'data' in message && message.data) {
 			if (Array.isArray(message.data)) {
@@ -154,7 +156,13 @@
 			secFilingsSubscribeFn();
 			unsubscribeSECFilings();
 		}
-	});
+        });
+
+        $: if ($openNewsEventId !== null) {
+                // Currently we just load the filings tab; further logic could scroll to the event
+                dispatchMenuChange.set('news');
+                openNewsEventId.set(null);
+        }
 </script>
 
 <div class="newsfeed-container">

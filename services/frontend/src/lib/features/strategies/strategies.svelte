@@ -2,6 +2,7 @@
 import { onMount } from 'svelte';
 import { writable, get, derived } from 'svelte/store';
 import { strategies } from '$lib/utils/stores/stores';
+import { openStrategyId } from './interface';
 import { privateRequest } from '$lib/utils/helpers/backend';
 import '$lib/styles/global.css';
 
@@ -13,14 +14,15 @@ interface SourceSpec { field: "SecurityId" | "Ticker" | "Locale" | "Market" | "P
 // MODIFIED: Added offset to ExprElement
 interface ExprElement { type: "column" | "operator"; value: string; offset: number; } // offset added
 interface FeatureSpec {
-	name: string;
-	featureId: number;
-	source: SourceSpec;
-	output: "raw" | "rankn" | "rankp";
-	expr: ExprElement[]; // RPN representation for backend/internal use
-	infixExpr: string; // User-facing infix expression for editing
-	exprError?: string; // To store parsing errors during edit
-	window: number;
+        name: string;
+        featureId: number;
+        source: SourceSpec;
+        output: "raw" | "rankn" | "rankp";
+        expr: ExprElement[]; // RPN representation for backend/internal use
+        infixExpr: string; // User-facing infix expression for editing
+        exprError?: string; // To store parsing errors during edit
+        sourceError?: string; // Validation error for source value
+        window: number;
 }
 interface RhsSpec { featureId: number; const: number; scale: number; }
 interface FilterSpec { name: string; lhs: number; operator: "<" | "<=" | ">=" | ">" | "!=" | "=="; rhs: RhsSpec; }
@@ -51,6 +53,9 @@ const editedStrategy = writable<EditableStrategy | null>(null);
 const viewedStrategyId = writable<number | null>(null);
 const detailViewError = writable<string | null>(null); // For errors loading spec
 
+// --- Editor Tab State ---
+let activeTab: 'universe' | 'features' | 'filters' | 'sort' = 'universe';
+
 // Derived store to get the currently viewed strategy object from the main list
 // Note: This might initially lack the 'spec' until it's fetched.
 const viewedStrategyBase = derived(
@@ -63,13 +68,28 @@ const viewedStrategyBase = derived(
 
 // --- Constants & Options ---
 const timeframeOptions = [ { value: '1', label: '1 Minute' }, { value: '1h', label: '1 Hour' }, { value: '1d', label: '1 Day' }, { value: '1w', label: '1 Week' } ];
-const securityFeatureOptions = ["SecurityId", "Ticker", "Locale", "Market", "PrimaryExchange", "Active", "Sector", "Industry"];
+// SecurityId is supported internally but hidden from dropdowns
+const securityFeatureOptions = ["Ticker", "Locale", "Market", "PrimaryExchange", "Active", "Sector", "Industry"];
 const operatorOptions = ["<", "<=", ">=", ">", "!=", "=="];
-const outputOptions = ["raw", "rankn", "rankp"];
+const outputOptions = [
+    { value: "raw", label: "Raw" },
+    { value: "rankn", label: "Rank" },
+    { value: "rankp", label: "Percentile" }
+];
 const sortDirectionOptions = ["asc", "desc"];
 const baseColumnOptions = ["open", "high", "low", "close", "volume", "market_cap", "shares_outstanding", "eps", "revenue", "dividend", "social_sentiment", "fear_greed", "short_interest", "borrow_fee"];
 const operatorChars = ["+", "-", "*", "/", "^"];
 const operatorPrecedence: { [key: string]: number } = { '+': 1, '-': 1, '*': 2, '/': 2, '^': 3 };
+
+// Classification option stores
+const sectorOptions = writable<string[]>([]);
+const industryOptions = writable<string[]>([]);
+const marketOptions = writable<string[]>([]);
+const localeOptions = writable<string[]>([]);
+const exchangeOptions = writable<string[]>([]);
+let tickerSuggestions: Record<number, any[]> = {};
+const iconCache = new Map<string, string>();
+const BLACK_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
 
 // --- Help Text ---
@@ -109,6 +129,52 @@ function formatExprInfix(expr: ExprElement[] | undefined): string {
 function formatTimeframe(tf: string | undefined): string { return timeframeOptions.find(opt => opt.value === tf)?.label ?? tf ?? 'N/A'; }
 function formatFilterCondition(filter: FilterSpec, features: FeatureSpec[]): string { const lhsFeature = features.find(f => f.featureId === filter.lhs); const lhsName = formatName(lhsFeature?.name); let rhsDesc: string; if (filter.rhs.featureId !== 0) { const rhsFeature = features.find(f => f.featureId === filter.rhs.featureId); rhsDesc = formatName(rhsFeature?.name); if (filter.rhs.scale !== 1.0) { rhsDesc += ` * ${filter.rhs.scale}`; } } else { rhsDesc = `${filter.rhs.const}`; if (filter.rhs.scale !== 1.0) { rhsDesc = `${filter.rhs.const * filter.rhs.scale} (${filter.rhs.const} * ${filter.rhs.scale})`; } } return `${lhsName} ${filter.operator} ${rhsDesc}`; }
 function formatUniverseFilter(uFilter: UniverseFilterSpec): string { let desc = `${uFilter.securityFeature}`; if (uFilter.include.length > 0) desc += ` includes [${uFilter.include.join(', ')}]`; if (uFilter.exclude.length > 0) desc += `${uFilter.include.length > 0 ? ' and' : ''} excludes [${uFilter.exclude.join(', ')}]`; return desc; }
+
+function getStaticOptions(feature: string): string[] {
+        switch (feature) {
+                case 'Sector': return get(sectorOptions);
+                case 'Industry': return get(industryOptions);
+                case 'Market': return get(marketOptions);
+                case 'Locale': return get(localeOptions);
+                case 'PrimaryExchange': return get(exchangeOptions);
+                case 'Active': return ['true', 'false'];
+                default: return [];
+        }
+}
+
+async function loadTickerIcon(ticker: string) {
+        if (!ticker || iconCache.has(ticker)) return;
+        try {
+                const resp = await privateRequest<any[]>('getIcons', { tickers: [ticker] });
+                if (Array.isArray(resp) && resp.length > 0) {
+                        const ir = resp[0];
+                        const raw = ir.icon || '';
+                        const url = raw.startsWith('data:')
+                                ? raw
+                                : raw.startsWith('/9j/')
+                                        ? `data:image/jpeg;base64,${raw}`
+                                        : `data:image/png;base64,${raw}`;
+                        iconCache.set(ir.ticker, url);
+                } else {
+                        iconCache.set(ticker, BLACK_PIXEL);
+                }
+        } catch (e) {
+                console.error('Error fetching icon:', e);
+                iconCache.set(ticker, BLACK_PIXEL);
+        }
+}
+
+async function isValidFeatureValue(feature: string, value: string): Promise<boolean> {
+        const v = value.trim();
+        if (!v) return false;
+        if (feature === 'Ticker') {
+                const res = await privateRequest<any[]>('getSecurityFeatureValues', { field: 'Ticker', search: v });
+                if (!Array.isArray(res)) return false;
+                return res.some((s: any) => s.ticker?.toUpperCase() === v.toUpperCase());
+        }
+        const opts = getStaticOptions(feature).map(o => o.toUpperCase());
+        return opts.includes(v.toUpperCase());
+}
 
 
 // --- Expression Parsing (Infix to RPN) ---
@@ -229,15 +295,16 @@ function blankSpec(): NewStrategySpec {
 	const parseResult = parseInfixToRPN(defaultInfix); // Parses to { type: "column", value: "close", offset: 0 }
 	return {
 		universe: { filters: [], timeframe: '1d', extendedHours: false, startTime: null, endTime: null },
-		features: [ {
-			name: "close_price",
-			featureId: defaultFeatureId,
-			source: { field: "SecurityId", value: "relative" },
-			output: "raw",
-			infixExpr: defaultInfix, // Store default infix
-			expr: parseResult.rpn ?? [], // Use parsed RPN (includes offset: 0)
-			window: 1
-		} ],
+                features: [ {
+                        name: "close_price",
+                        featureId: defaultFeatureId,
+                        source: { field: "SecurityId", value: "relative" },
+                        output: "raw",
+                        infixExpr: defaultInfix, // Store default infix
+                        expr: parseResult.rpn ?? [], // Use parsed RPN (includes offset: 0)
+                        window: 1,
+                        sourceError: undefined
+                } ],
 		filters: [],
 		sortBy: { feature: defaultFeatureId, direction: 'desc' }
 	};
@@ -322,10 +389,17 @@ function ensureValidSpec(spec: any): NewStrategySpec {
 				 console.warn(`Feature '${name}' (ID: ${featureId}) has no expression defined.`);
 			}
 
-			tempFeatures.push({
-				name, featureId, source, output, window,
-				infixExpr, expr, exprError // Store all derived values
-			});
+                        tempFeatures.push({
+                                name,
+                                featureId,
+                                source,
+                                output,
+                                window,
+                                infixExpr,
+                                expr,
+                                exprError,
+                                sourceError: undefined
+                        });
 		});
 		validSpec.features = tempFeatures;
 	} else {
@@ -396,6 +470,13 @@ async function loadStrategies() {
 }
 
 onMount(loadStrategies);
+onMount(() => {
+    privateRequest<string[]>('getSecurityFeatureValues', { field: 'Sector' }).then(sectorOptions.set);
+    privateRequest<string[]>('getSecurityFeatureValues', { field: 'Industry' }).then(industryOptions.set);
+    privateRequest<string[]>('getSecurityFeatureValues', { field: 'Market' }).then(marketOptions.set);
+    privateRequest<string[]>('getSecurityFeatureValues', { field: 'Locale' }).then(localeOptions.set);
+    privateRequest<string[]>('getSecurityFeatureValues', { field: 'PrimaryExchange' }).then(exchangeOptions.set);
+});
 
 // Function to fetch spec for a given strategy ID and update the store
 async function fetchAndStoreSpec(id: number) {
@@ -630,10 +711,10 @@ async function saveStrategy() {
 	detailViewError.set(null);
 
 	// Prepare spec for backend: RPN 'expr' now includes offset. Remove UI fields.
-	const cleanSpecForBackend: Omit<NewStrategySpec, 'features'> & { features: Omit<FeatureSpec, 'infixExpr' | 'exprError'>[] } = {
-		...currentStrategy.spec,
-		features: currentStrategy.spec.features.map(({ infixExpr, exprError, ...rest }) => rest) // Remove UI-specific fields
-	};
+        const cleanSpecForBackend: Omit<NewStrategySpec, 'features'> & { features: Omit<FeatureSpec, 'infixExpr' | 'exprError' | 'sourceError'>[] } = {
+                ...currentStrategy.spec,
+                features: currentStrategy.spec.features.map(({ infixExpr, exprError, sourceError, ...rest }) => rest) // Remove UI-specific fields
+        };
 
 	// Payload only needs name and the cleaned spec
 	const payload = {
@@ -709,10 +790,70 @@ function updateEditedStrategy(updater: (strategy: EditableStrategy) => void) { e
 // Universe filter functions remain the same
 function addUniverseFilter() { updateEditedStrategy(s => { s.spec.universe.filters.push({ securityFeature: 'Ticker', include: [], exclude: [] }); }); }
 function removeUniverseFilter(index: number) { updateEditedStrategy(s => { s.spec.universe.filters.splice(index, 1); }); }
-function addUniverseInclude(filterIndex: number, value: string) { if (!value.trim()) return; updateEditedStrategy(s => { const filter = s.spec.universe.filters[filterIndex]; const upperVal = value.trim().toUpperCase(); if (filter && !filter.include.includes(upperVal)) { filter.include.push(upperVal); filter.exclude = filter.exclude.filter(ex => ex !== upperVal); } }); }
+async function addUniverseInclude(filterIndex: number, value: string) {
+        if (!value.trim()) return;
+        const current = get(editedStrategy);
+        if (!current) return;
+        const filter = current.spec.universe.filters[filterIndex];
+        if (!filter) return;
+        const upperVal = value.trim().toUpperCase();
+        if (!(await isValidFeatureValue(filter.securityFeature, upperVal))) {
+                alert(`Invalid ${filter.securityFeature} value: ${upperVal}`);
+                return;
+        }
+        await loadTickerIcon(upperVal);
+        updateEditedStrategy(s => {
+                const f = s.spec.universe.filters[filterIndex];
+                if (f && !f.include.includes(upperVal)) {
+                        f.include.push(upperVal);
+                        f.exclude = f.exclude.filter(ex => ex !== upperVal);
+                }
+        });
+}
 function removeUniverseInclude(filterIndex: number, valueIndex: number) { updateEditedStrategy(s => { s.spec.universe.filters[filterIndex]?.include.splice(valueIndex, 1); }); }
-function addUniverseExclude(filterIndex: number, value: string) { if (!value.trim()) return; updateEditedStrategy(s => { const filter = s.spec.universe.filters[filterIndex]; const upperVal = value.trim().toUpperCase(); if (filter && !filter.exclude.includes(upperVal)) { filter.exclude.push(upperVal); filter.include = filter.include.filter(inc => inc !== upperVal); } }); }
+async function addUniverseExclude(filterIndex: number, value: string) {
+        if (!value.trim()) return;
+        const current = get(editedStrategy);
+        if (!current) return;
+        const filter = current.spec.universe.filters[filterIndex];
+        if (!filter) return;
+        const upperVal = value.trim().toUpperCase();
+        if (!(await isValidFeatureValue(filter.securityFeature, upperVal))) {
+                alert(`Invalid ${filter.securityFeature} value: ${upperVal}`);
+                return;
+        }
+        await loadTickerIcon(upperVal);
+        updateEditedStrategy(s => {
+                const f = s.spec.universe.filters[filterIndex];
+                if (f && !f.exclude.includes(upperVal)) {
+                        f.exclude.push(upperVal);
+                        f.include = f.include.filter(inc => inc !== upperVal);
+                }
+        });
+}
 function removeUniverseExclude(filterIndex: number, valueIndex: number) { updateEditedStrategy(s => { s.spec.universe.filters[filterIndex]?.exclude.splice(valueIndex, 1); }); }
+
+async function fetchTickerSuggestions(filterIndex: number, q: string) {
+        if (!q) { tickerSuggestions[filterIndex] = []; return; }
+        const res = await privateRequest<any[]>('getSecurityFeatureValues', { field: 'Ticker', search: q });
+        tickerSuggestions[filterIndex] = res || [];
+}
+
+async function validateSourceValue(featureIndex: number) {
+        const current = get(editedStrategy);
+        if (!current) return;
+        const feature = current.spec.features[featureIndex];
+        if (!feature) return;
+        const valid = await isValidFeatureValue(feature.source.field, feature.source.value);
+        if (feature.source.field === 'Ticker') {
+                await loadTickerIcon(feature.source.value.toUpperCase());
+        }
+        updateEditedStrategy(s => {
+                const f = s.spec.features[featureIndex];
+                if (!f) return;
+                f.sourceError = valid ? undefined : `Invalid ${feature.source.field} value`;
+        });
+}
 
 // MODIFIED: AddFeature ensures default offset 0 in RPN
 function addFeature() {
@@ -726,7 +867,8 @@ function addFeature() {
 			infixExpr: "", // Start with empty infix
 			expr: [],	   // and empty RPN (parser will add offset:0 when populated)
 			window: 1,
-			exprError: "Expression is required." // Initial error state
+			exprError: "Expression is required.", // Initial error state
+                        sourceError: undefined
 		});
 		// Update sortby if it was pointing to a removed feature or if this is the first feature
 		if (s.spec.features.length === 1 || !s.spec.features.some(f => f.featureId === s.spec.sortBy.feature)) {
@@ -772,10 +914,15 @@ function removeFilter(index: number) { updateEditedStrategy(s => { s.spec.filter
 
 // Derived store for Edit View dropdowns - remains the same
 const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
-	if (!$editedStrategy || !$editedStrategy.spec?.features) return [];
-	// Filter out features with errors? Maybe not, allow fixing them.
-	return $editedStrategy.spec.features.map(f => ({ id: f.featureId, name: f.name || `Feature ${f.featureId}` }));
+        if (!$editedStrategy || !$editedStrategy.spec?.features) return [];
+        // Filter out features with errors? Maybe not, allow fixing them.
+        return $editedStrategy.spec.features.map(f => ({ id: f.featureId, name: f.name || `Feature ${f.featureId}` }));
 });
+
+$: if ($openStrategyId !== null) {
+        viewedStrategyId.set($openStrategyId);
+        openStrategyId.set(null);
+}
 
 </script>
 
@@ -964,13 +1111,21 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
 	{#if $loading}<div class="loading-overlay">Preparing editor...</div>{/if}
 	{#if $detailViewError}<div class="error-message">Error preparing editor: {$detailViewError}</div>{/if}
 
-	<div class="form-block">
-		<label for="strategy-name">Strategy Name</label>
-		<input id="strategy-name" type="text" placeholder="e.g., Daily Momentum Breakout" bind:value={$editedStrategy.name} />
-	</div>
+        <div class="form-block">
+                <label for="strategy-name">Strategy Name</label>
+                <input id="strategy-name" type="text" placeholder="e.g., Daily Momentum Breakout" bind:value={$editedStrategy.name} />
+        </div>
 
-	<fieldset class="section">
-		<legend>Universe Definition</legend>
+        <nav class="editor-tabs">
+                <button on:click={() => activeTab = 'universe'} class:active={activeTab === 'universe'}>Universe</button>
+                <button on:click={() => activeTab = 'features'} class:active={activeTab === 'features'}>Features</button>
+                <button on:click={() => activeTab = 'filters'} class:active={activeTab === 'filters'}>Filters</button>
+                <button on:click={() => activeTab = 'sort'} class:active={activeTab === 'sort'}>Sort &amp; Save</button>
+        </nav>
+
+        <div class="tab-panel" hidden={activeTab !== 'universe'}>
+        <fieldset class="section">
+                <legend>Universe Definition</legend>
 		<div class="layout-grid cols-3 items-end">
 			<label>
 				Timeframe <span class="help-icon" title={helpText.universeTimeframe}>?</span>
@@ -999,53 +1154,75 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
 			{#each $editedStrategy.spec.universe.filters as uFilter, uIndex (uIndex)}
 				<div class="universe-filter-row">
 					<div class="universe-filter-header">
-						<select bind:value={uFilter.securityFeature}>
-							{#each securityFeatureOptions as sf} <option value={sf}>{sf}</option> {/each}
-						</select>
+                                                <select bind:value={uFilter.securityFeature}>
+                                                        {#if !securityFeatureOptions.includes(uFilter.securityFeature)}
+                                                                <option value={uFilter.securityFeature}>{uFilter.securityFeature}</option>
+                                                        {/if}
+                                                        {#each securityFeatureOptions as sf}
+                                                                <option value={sf}>{sf}</option>
+                                                        {/each}
+                                                </select>
 						<button type="button" class="danger-text" on:click={() => removeUniverseFilter(uIndex)}>✕ Remove</button>
 					</div>
 					{#if uFilter.securityFeature === 'Ticker' || uFilter.securityFeature === 'SecurityId'}
 						<div class="layout-grid cols-2">
-							<div class="pill-group">
-								<h5>Include Tickers <span class="help-icon" title={helpText.universeTickerInclude}>?</span></h5>
-								{#each uFilter.include as ticker, i (ticker)} <button type="button" class="pill" on:click={() => removeUniverseInclude(uIndex, i)}>{ticker} ✕</button> {/each}
-								<input class="small" placeholder="Add Ticker (Enter)" on:keydown={(e) => { if (e.key === 'Enter' && e.currentTarget.value.trim()) { addUniverseInclude(uIndex, e.currentTarget.value); e.currentTarget.value = ''; e.preventDefault(); } }} />
-							</div>
-							<div class="pill-group">
-								<h5>Exclude Tickers <span class="help-icon" title={helpText.universeTickerExclude}>?</span></h5>
-								{#each uFilter.exclude as ticker, i (ticker)} <button type="button" class="pill" on:click={() => removeUniverseExclude(uIndex, i)}>{ticker} ✕</button> {/each}
-								<input class="small" placeholder="Add Ticker (Enter)" on:keydown={(e) => { if (e.key === 'Enter' && e.currentTarget.value.trim()) { addUniverseExclude(uIndex, e.currentTarget.value); e.currentTarget.value = ''; e.preventDefault(); } }} />
-							</div>
-						</div>
-					{:else}
-						<div class="layout-grid cols-2">
-							<label>Include Values
-								<input type="text" bind:value={uFilter.include[0]} placeholder="Comma-separated values" title="Enter comma-separated values for {uFilter.securityFeature} include" />
-							</label>
-							<label>Exclude Values
-								<input type="text" bind:value={uFilter.exclude[0]} placeholder="Comma-separated values" title="Enter comma-separated values for {uFilter.securityFeature} exclude" />
-							</label>
-						</div>
-						<p class="hint">Enter comma-separated values for Include/Exclude.</p>
+                                                        <div class="pill-group">
+                                                                <h5>Include Tickers <span class="help-icon" title={helpText.universeTickerInclude}>?</span></h5>
+                                                                {#each uFilter.include as ticker, i (ticker)}
+                                                                        <button type="button" class="pill" on:click={() => removeUniverseInclude(uIndex, i)}>
+                                                                                <img class="pill-icon" src={iconCache.get(ticker) || BLACK_PIXEL} alt={ticker} />{ticker} ✕
+                                                                        </button>
+                                                                {/each}
+                                                                <input class="small" list={`tick-sugg-inc-${uIndex}`} placeholder="Add Ticker" on:input={(e) => fetchTickerSuggestions(uIndex, e.currentTarget.value)} on:keydown={(e) => { if (e.key === 'Enter' && e.currentTarget.value.trim()) { addUniverseInclude(uIndex, e.currentTarget.value); e.currentTarget.value = ''; e.preventDefault(); } }} />
+                                                                <datalist id={`tick-sugg-inc-${uIndex}`}>{#each tickerSuggestions[uIndex] || [] as s}<option value={s.ticker}>{s.ticker}</option>{/each}</datalist>
+                                                        </div>
+                                                        <div class="pill-group">
+                                                                <h5>Exclude Tickers <span class="help-icon" title={helpText.universeTickerExclude}>?</span></h5>
+                                                                {#each uFilter.exclude as ticker, i (ticker)}
+                                                                        <button type="button" class="pill" on:click={() => removeUniverseExclude(uIndex, i)}>
+                                                                                <img class="pill-icon" src={iconCache.get(ticker) || BLACK_PIXEL} alt={ticker} />{ticker} ✕
+                                                                        </button>
+                                                                {/each}
+                                                                <input class="small" list={`tick-sugg-exc-${uIndex}`} placeholder="Add Ticker" on:input={(e) => fetchTickerSuggestions(uIndex, e.currentTarget.value)} on:keydown={(e) => { if (e.key === 'Enter' && e.currentTarget.value.trim()) { addUniverseExclude(uIndex, e.currentTarget.value); e.currentTarget.value = ''; e.preventDefault(); } }} />
+                                                                <datalist id={`tick-sugg-exc-${uIndex}`}>{#each tickerSuggestions[uIndex] || [] as s}<option value={s.ticker}>{s.ticker}</option>{/each}</datalist>
+                                                        </div>
+                                                </div>
+                                        {:else}
+                                                <div class="layout-grid cols-2">
+                                                        <div class="pill-group">
+                                                                <h5>Include Values</h5>
+                                                                {#each uFilter.include as val, i (val)} <button type="button" class="pill" on:click={() => removeUniverseInclude(uIndex, i)}>{val} ✕</button> {/each}
+                                                                <input class="small" list={`suggest-inc-${uIndex}`} placeholder="Add Value" on:keydown={(e) => { if (e.key === 'Enter' && e.currentTarget.value.trim()) { addUniverseInclude(uIndex, e.currentTarget.value); e.currentTarget.value=''; e.preventDefault(); } }} />
+                                                                <datalist id={`suggest-inc-${uIndex}`}>{#each getStaticOptions(uFilter.securityFeature) as opt}<option value={opt}></option>{/each}</datalist>
+                                                        </div>
+                                                        <div class="pill-group">
+                                                                <h5>Exclude Values</h5>
+                                                                {#each uFilter.exclude as val, i (val)} <button type="button" class="pill" on:click={() => removeUniverseExclude(uIndex, i)}>{val} ✕</button> {/each}
+                                                                <input class="small" list={`suggest-exc-${uIndex}`} placeholder="Add Value" on:keydown={(e) => { if (e.key === 'Enter' && e.currentTarget.value.trim()) { addUniverseExclude(uIndex, e.currentTarget.value); e.currentTarget.value=''; e.preventDefault(); } }} />
+                                                                <datalist id={`suggest-exc-${uIndex}`}>{#each getStaticOptions(uFilter.securityFeature) as opt}<option value={opt}></option>{/each}</datalist>
+                                                        </div>
+                                                </div>
 					{/if}
 				</div>
 			{/each}
 			<button type="button" on:click={addUniverseFilter}>＋ Add Universe Filter</button>
 		</div>
-	</fieldset>
+        </fieldset>
+        </div>
 
-	<fieldset class="section">
-		<legend>Features <span class="help-icon" title={helpText.features}>?</span></legend>
+        <div class="tab-panel" hidden={activeTab !== 'features'}>
+        <fieldset class="section">
+                <legend>Features <span class="help-icon" title={helpText.features}>?</span></legend>
 		<p class="help-text">{helpText.featureExpr}</p>
 		{#each $editedStrategy.spec.features as feature, fIndex (feature.featureId)}
 			<div class="feature-row">
 				<div class="layout-grid cols-3 items-center">
 					<label>Name <input type="text" bind:value={feature.name} placeholder="e.g., daily_range" /></label>
-					<label>Output Type
-						<select bind:value={feature.output}>
-							{#each outputOptions as o} <option value={o}>{o}</option> {/each}
-						</select>
-					</label>
+                                        <label>Output Type
+                                                <select bind:value={feature.output}>
+                                                        {#each outputOptions as o} <option value={o.value}>{o.label}</option> {/each}
+                                                </select>
+                                        </label>
 					<div class="feature-id-remove">
 						<span class="feature-id-display">ID: {feature.featureId}</span>
 						{#if $editedStrategy.spec.features.length > 1}
@@ -1058,13 +1235,27 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
 						<input type="number" min="1" step="1" bind:value={feature.window} />
 					</label>
 					<label>Source Field
-						<select bind:value={feature.source.field}>
-							{#each securityFeatureOptions as sf} <option value={sf}>{sf}</option> {/each}
-						</select>
+                                                <select bind:value={feature.source.field}>
+                                                        {#if !securityFeatureOptions.includes(feature.source.field)}
+                                                                <option value={feature.source.field}>{feature.source.field}</option>
+                                                        {/if}
+                                                        {#each securityFeatureOptions as sf}
+                                                                <option value={sf}>{sf}</option>
+                                                        {/each}
+                                                </select>
 					</label>
-					<label>Source Value
-						<input type="text" bind:value={feature.source.value} placeholder='"relative" or specific value' />
-					</label>
+                                       <label>Source Value
+                                                <input
+                                                        type="text"
+                                                        list={`source-val-${feature.featureId}`}
+                                                        bind:value={feature.source.value}
+                                                        on:input={(e)=>{if(feature.source.field==='Ticker'){fetchTickerSuggestions(feature.featureId, e.currentTarget.value);}}}
+                                                        on:blur={() => validateSourceValue(fIndex)}
+                                                        class:invalid={feature.sourceError}
+                                                        placeholder='"relative" or specific value' />
+                                                <datalist id={`source-val-${feature.featureId}`}>{#if feature.source.field === 'Ticker'}{#each tickerSuggestions[feature.featureId] || [] as s}<option value={s.ticker}>{s.ticker}</option>{/each}{:else}{#each getStaticOptions(feature.source.field) as opt}<option value={opt}></option>{/each}{/if}</datalist>
+                                                {#if feature.sourceError}<small class="error-text">{feature.sourceError}</small>{/if}
+                                       </label>
 				</div>
 
 				<div class="expr-builder">
@@ -1094,10 +1285,12 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
 			</div>
 		{/each}
 		<button type="button" on:click={addFeature}>＋ Add Feature</button>
-	</fieldset>
+        </fieldset>
+        </div>
 
-	<fieldset class="section">
-		<legend>Filters (Conditions) <span class="help-icon" title={helpText.filters}>?</span></legend>
+        <div class="tab-panel" hidden={activeTab !== 'filters'}>
+        <fieldset class="section">
+                <legend>Filters (Conditions) <span class="help-icon" title={helpText.filters}>?</span></legend>
 		<p class="help-text">Define conditions comparing Features to constants or other Features.</p>
 		{#if $availableFeatures.length === 0}
 			<p class="warning-text">You need to define at least one Feature before adding Filters.</p>
@@ -1130,10 +1323,12 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
 			{/each}
 			<button type="button" on:click={addFilter} disabled={$availableFeatures.length === 0}>＋ Add Filter</button>
 		{/if}
-	</fieldset>
+        </fieldset>
+        </div>
 
-	<fieldset class="section">
-		<legend>Sort Results By <span class="help-icon" title={helpText.sortBy}>?</span></legend>
+        <div class="tab-panel" hidden={activeTab !== 'sort'}>
+        <fieldset class="section">
+                <legend>Sort Results By <span class="help-icon" title={helpText.sortBy}>?</span></legend>
 		{#if $availableFeatures.length === 0}
 			<p class="warning-text">You need to define at least one Feature before setting Sort criteria.</p>
 		{:else}
@@ -1150,16 +1345,17 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
 				</label>
 			</div>
 		{/if}
-	</fieldset>
-
-	<div class="actions">
-		<button class="primary" on:click={saveStrategy} disabled={$loading || $loadingSpec}>💾 Save Strategy</button>
-		<button type="button" on:click={cancelEdit} disabled={$loading || $loadingSpec}>Cancel</button>
-		{#if typeof $editedStrategy.strategyId === 'number'}
-			<button type="button" class="danger" on:click={() => deleteStrategyConfirm($editedStrategy.strategyId)} disabled={$loading || $loadingSpec}>Delete Strategy</button>
-		{/if}
-			{#if $loading}<span class="loading-indicator"> Saving...</span>{/if}
-	</div>
+        </fieldset>
+        
+        <div class="actions">
+                <button class="primary" on:click={saveStrategy} disabled={$loading || $loadingSpec}>💾 Save Strategy</button>
+                <button type="button" on:click={cancelEdit} disabled={$loading || $loadingSpec}>Cancel</button>
+                {#if typeof $editedStrategy.strategyId === 'number'}
+                        <button type="button" class="danger" on:click={() => deleteStrategyConfirm($editedStrategy.strategyId)} disabled={$loading || $loadingSpec}>Delete Strategy</button>
+                {/if}
+                        {#if $loading}<span class="loading-indicator"> Saving...</span>{/if}
+        </div>
+        </div>
 {/if}
 
 
@@ -1272,11 +1468,16 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
 	.filter-name { display: block; margin-bottom: 0.25rem; }
 	.filter-condition code { display: block; padding: 0.5rem; border-radius: 4px; white-space: normal; } /* Keep this code block styled */
 
-	/* --- Edit View Specific --- */
-	.pill-group { margin-bottom: 0.5rem; }
+        /* --- Edit View Specific --- */
+        .editor-tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+        .editor-tabs button { padding: 0.4rem 0.75rem; border-radius: 4px; border: 1px solid var(--ui-border); background: var(--ui-bg-element); cursor: pointer; }
+        .editor-tabs button.active { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
+        .tab-panel[hidden] { display: none; }
+        .pill-group { margin-bottom: 0.5rem; }
 	.pill-group input.small { margin-top: 0.5rem; }
-	.pill { background: var(--ui-bg-hover, #e9ecef); color: var(--text-primary, #333); display: inline-block; padding: 0.25rem 0.75rem; border-radius: 16px; margin: 0.25rem 0.25rem 0.25rem 0; cursor: pointer; font-size: 0.8rem; border: 1px solid var(--ui-border-light, #dee2e6); transition: background-color 0.15s ease-in-out; }
-	.pill:hover { background: var(--accent-red-light, #f8d7da); border-color: var(--accent-red, #dc3545); color: var(--accent-red-dark, #721c24); }
+        .pill { background: var(--ui-bg-hover, #e9ecef); color: var(--text-primary, #333); display: inline-block; padding: 0.25rem 0.75rem; border-radius: 16px; margin: 0.25rem 0.25rem 0.25rem 0; cursor: pointer; font-size: 0.8rem; border: 1px solid var(--ui-border-light, #dee2e6); transition: background-color 0.15s ease-in-out; }
+        .pill:hover { background: var(--accent-red-light, #f8d7da); border-color: var(--accent-red, #dc3545); color: var(--accent-red-dark, #721c24); }
+        .pill-icon { width: 16px; height: 16px; margin-right: 4px; vertical-align: middle; border-radius: 50%; }
 	.universe-filter-row { border: 1px solid var(--ui-border-light, #e9ecef); padding: 1rem; margin-bottom: 1rem; border-radius: 6px; background-color: var(--ui-bg-element, #fff); }
 	.universe-filter-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
 	.universe-filter-header select { flex-grow: 1; margin-right: 1rem; margin-bottom: 0; }
@@ -1296,4 +1497,10 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
 	.filter-name-label { grid-column: 1 / -1; margin-top: 0.5rem; font-size: 0.75rem; font-weight: normal; display: flex; align-items: center; gap: 0.5rem; }
 	.filter-name-label input.small { flex-grow: 1; margin-bottom: 0; }
 
+	/* Ensure dropdown options are readable by using system default colors */
+	/* This helps if the browser renders a light dropdown panel while the app theme uses light text */
+	select option {
+		color: initial;
+		background-color: initial;
+	}
 </style>

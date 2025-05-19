@@ -36,14 +36,20 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { goto } from '$app/navigation';
-	import {
-		initStores,
-		streamInfo,
-		formatTimestamp,
-		dispatchMenuChange,
-		menuWidth,
-		settings
-	} from '$lib/utils/stores/stores';
+        import {
+                initStores,
+                streamInfo,
+                formatTimestamp,
+                dispatchMenuChange,
+                menuWidth,
+               settings,
+               bottomWindowRequest
+        } from '$lib/utils/stores/stores';
+        import { openWatchlistId, openWatchlist } from '$lib/features/watchlist/interface';
+        import { openStrategyId, openStrategy } from '$lib/features/strategies/interface';
+        import { backtestRunRequest, openBacktest } from '$lib/features/backtest/interface';
+        import { openNewsEventId } from '$lib/features/news/interface';
+        import { queryChart } from '$lib/features/chart/interface';
 	import { writable, type Writable } from 'svelte/store';
 	import { colorSchemes, applyColorScheme } from '$lib/styles/colorSchemes';
 
@@ -388,8 +394,9 @@
 	}
 
 	// Bottom windows
-	function openBottomWindow(type: BottomWindowType) {
-		const existing = bottomWindows.find((w) => w.type === type);
+       function openBottomWindow(type: BottomWindowType) {
+               console.log('openBottomWindow', type);
+               const existing = bottomWindows.find((w) => w.type === type);
 		// Close if same window is clicked
 		if (existing) {
 			bottomWindowsHeight = 0;
@@ -778,17 +785,22 @@
 	}
 
 	// Subscribe to the requestChatOpen store
-	$: if ($requestChatOpen && browser) {
-		if (leftMenuWidth === 0) {
-			toggleLeftPane(); // Open the left pane if closed
-		}
-		// Reset the trigger after handling
-		// Use setTimeout to ensure the pane opens before resetting,
-		// although direct reset might work fine with Svelte's reactivity.
-		setTimeout(() => {
-			requestChatOpen.set(false);
-		}, 0);
-	}
+        $: if ($requestChatOpen && browser) {
+                if (leftMenuWidth === 0) {
+                        toggleLeftPane(); // Open the left pane if closed
+                }
+                // Reset the trigger after handling
+                // Use setTimeout to ensure the pane opens before resetting,
+                // although direct reset might work fine with Svelte's reactivity.
+                setTimeout(() => {
+                        requestChatOpen.set(false);
+                }, 0);
+        }
+
+        $: if ($bottomWindowRequest) {
+                openBottomWindow($bottomWindowRequest);
+                bottomWindowRequest.set(null);
+        }
 </script>
 
 <div

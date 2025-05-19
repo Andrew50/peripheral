@@ -2,7 +2,7 @@
     *   `TIMESTAMPINMS` should be the relevant Unix timestamp in **milliseconds** for that point in time.
     *   **If the context refers to the latest available data or the present time (not a specific past date/event), use `0` for `TIMESTAMPINMS`. You should default to 0 for the TIMESTAMPINMS. **
     *   Example: `$$$AAPL-1678886400000$$$` (for a specific past date), `$$$TSLA-0$$$` (for the latest data).
-    *   Do not put any parentheses or other formatting around tickers than what is specified.
+    *   Do not put any paraenthesis or other formating around tickers than what is specified.
     *   The backend will use this to add necessary identifiers before sending to the frontend.
 
 **General Constraints:**

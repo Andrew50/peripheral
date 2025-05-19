@@ -1,12 +1,15 @@
 package strategy
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
+
+	"backend/internal/data"
 )
 
 /*cant do old
@@ -90,7 +93,7 @@ questions:
 /*
 table layout:
 
-ohlcv tables: ohlcv_1, ohlcv_1h, ohlcv_1d, ohlcv_1w
+ohlcv tables: ohlcv_1s, ohlcv_1, ohlcv_1h, ohlcv_1d, ohlcv_1w
 - timestamp: timestamp
 - open: decimal
 - high: decimal
@@ -118,6 +121,38 @@ markets: otc, stocks
 primary_exchange: XNAS, XASE, BATS, XNYS, ARCX
 */
 
+// --- Option Lists -------------------------------------------------------
+// These slices define the valid values for each field of a strategy spec.
+// They are exported so other packages (and prompts) can reference them.
+var (
+	SecurityFeatures    = []string{"SecurityId", "Ticker", "Locale", "Market", "PrimaryExchange", "Active", "Sector", "Industry"}
+	OHLCVFeatures       = []string{"open", "high", "low", "close", "volume"}
+	FundamentalFeatures = []string{"market_cap", "shares_outstanding", "eps", "revenue", "dividend", "social_sentiment", "fear_greed", "short_interest", "borrow_fee"}
+	Timeframes          = []string{"1s", "1", "1h", "1d", "1w"}
+	OutputTypes         = []string{"raw", "rankn", "rankp"}
+	ComparisonOperators = []string{"<", "<=", ">", ">=", "==", "!="}
+	ExprOperators       = []string{"+", "-", "*", "/", "^"}
+	Directions          = []string{"asc", "desc"}
+)
+
+// SpecPromptVars holds pre-formatted strings for injecting option lists into
+// the strategy system prompt. Keys correspond to the placeholder names used in
+// prompts (e.g. {{ SECURITY_FEATURES }}).
+var SpecPromptVars map[string]string
+
+func init() {
+	SpecPromptVars = map[string]string{
+		"SECURITY_FEATURES":    quoteJoin(SecurityFeatures),
+		"OHLCV_FEATURES":       quoteJoin(OHLCVFeatures),
+		"FUNDAMENTAL_FEATURES": quoteJoin(FundamentalFeatures),
+		"TIMEFRAMES":           quoteJoin(Timeframes),
+		"OUTPUT_TYPES":         quoteJoin(OutputTypes),
+		"COMPARISON_OPERATORS": quoteJoin(ComparisonOperators),
+		"EXPR_OPERATORS":       quoteJoin(ExprOperators),
+		"DIRECTIONS":           quoteJoin(Directions),
+	}
+}
+
 // Strategy represents a stock strategy with relevant metadata.
 type Strategy struct {
 	Name              string    `json:"name"`
@@ -142,7 +177,7 @@ type UniverseFilter struct { //applied using FundamentalFeatures
 // Universe defines the scope over which features are calculated.
 type Universe struct {
 	Filters       []UniverseFilter `json:"filters"`
-	Timeframe     Timeframe        `json:"timeframe"`     // "1", "1h", "1d", "1w"
+	Timeframe     Timeframe        `json:"timeframe"`     // "1s", "1", "1h", "1d", "1w"
 	ExtendedHours bool             `json:"extendedHours"` // Only applies to 1-minute data
 	StartTime     time.Time        `json:"startTime"`     // Intraday start time for the strategy
 	EndTime       time.Time        `json:"endTime"`       // Intraday end time for the strategy
@@ -161,6 +196,7 @@ type ExprPart struct {
 
 // Feature represents a calculated metric used for filtering.
 type Feature struct {
+
 	Name      string        `json:"name"`
 	FeatureID FeatureID     `json:"featureId"`
 	Source    FeatureSource `json:"source"` // "security", "sector", "industry", "related_stocks" (proprietary), "market", specific ticker like "AAPL" // NEW
@@ -204,12 +240,14 @@ const (
 	minFeatureID    = 0
 
 	// Timeframe identifiers
+	timeframe1Sec  = "1s"
 	timeframe1Min  = "1"
 	timeframe1Hour = "1h"
 	timeframe1Day  = "1d"
 	timeframe1Week = "1w"
 
 	// Maximum window sizes per timeframe
+	maxWindow1Sec  = 60000
 	maxWindow1Min  = 20000
 	maxWindow1Hour = 2000
 
@@ -221,71 +259,14 @@ const (
 
 // Define valid values for enum types
 var (
-	validTimeframes = map[Timeframe]struct{}{
-		Timeframe(timeframe1Min):  {},
-		Timeframe(timeframe1Hour): {},
-		Timeframe(timeframe1Day):  {},
-		Timeframe(timeframe1Week): {},
-	}
-
-	validOutputTypes = map[OutputType]struct{}{
-		"raw":   {},
-		"rankn": {},
-		"rankp": {},
-	}
-
-	validComparisonOperators = map[ComparisonOperator]struct{}{
-		"<":  {},
-		"<=": {},
-		">":  {},
-		">=": {},
-		"==": {},
-		"!=": {},
-	}
-
-	validExprOperators = map[ExprOperator]struct{}{
-		"+": {},
-		"-": {},
-		"*": {},
-		"/": {},
-		"^": {},
-	}
-
-	validDirections = map[Direction]struct{}{
-		Direction(sortAsc):  {},
-		Direction(sortDesc): {},
-	}
-
-	validSecurityFeatures = map[SecurityFeature]struct{}{
-		"SecurityId":      {},
-		"Ticker":          {},
-		"Locale":          {},
-		"Market":          {},
-		"PrimaryExchange": {},
-		"Active":          {},
-		"Sector":          {},
-		"Industry":        {},
-	}
-
-	validOHLCVFeatures = map[string]struct{}{
-		"open":   {},
-		"high":   {},
-		"low":    {},
-		"close":  {},
-		"volume": {},
-	}
-
-	validFundamentalFeatures = map[string]struct{}{
-		"market_cap":         {},
-		"shares_outstanding": {},
-		"eps":                {},
-		"revenue":            {},
-		"dividend":           {},
-		"social_sentiment":   {},
-		"fear_greed":         {},
-		"short_interest":     {},
-		"borrow_fee":         {},
-	}
+	validTimeframes          = toSet(Timeframe(""), Timeframes)
+	validOutputTypes         = toSet(OutputType(""), OutputTypes)
+	validComparisonOperators = toSet(ComparisonOperator(""), ComparisonOperators)
+	validExprOperators       = toSet(ExprOperator(""), ExprOperators)
+	validDirections          = toSet(Direction(""), Directions)
+	validSecurityFeatures    = toSet(SecurityFeature(""), SecurityFeatures)
+	validOHLCVFeatures       = toStringSet(OHLCVFeatures)
+	validFundamentalFeatures = toStringSet(FundamentalFeatures)
 
 	// Ticker validation regex
 	tickerRegex = regexp.MustCompile(`^[A-Z]{1,5}(\.[A-Z])?$`)
@@ -306,6 +287,12 @@ var (
 		"UNION": {}, "INTERSECT": {}, "EXCEPT": {}, "HAVING": {}, "LIMIT": {}, "OFFSET": {},
 		"AS": {}, "ASC": {}, "DESC": {}, "DISTINCT": {}, "CAST": {}, "CONVERT": {},
 	}
+
+	// Dynamic sets loaded from the database
+	ValidSectors     map[string]int
+	ValidIndustries  map[string]int
+	ValidSectorIds   map[int]string
+	ValidIndustryIds map[int]string
 )
 
 // Main validation function
@@ -367,8 +354,8 @@ func validateUniverse(u *Universe) error {
 		}
 	}
 	if !validTimeframeFound {
-		errs = append(errs, fmt.Sprintf("universe.timeframe must be one of %s, %s, %s, %s",
-			timeframe1Min, timeframe1Hour, timeframe1Day, timeframe1Week))
+		errs = append(errs, fmt.Sprintf("universe.timeframe must be one of %s, %s, %s, %s, %s",
+			timeframe1Sec, timeframe1Min, timeframe1Hour, timeframe1Day, timeframe1Week))
 	}
 
 	// Validate extended hours
@@ -753,8 +740,43 @@ func contiguousFeatureIDs(ids map[int]struct{}, count int) error {
 	return nil
 }
 
+// quoteJoin joins items with quotes for prompt injection.
+func quoteJoin(vals []string) string {
+	if len(vals) == 0 {
+		return ""
+	}
+	out := make([]string, len(vals))
+	for i, v := range vals {
+		out[i] = fmt.Sprintf("%q", v)
+	}
+	return strings.Join(out, ", ")
+}
+
+// toSet converts a slice of strings to a set. The dummy generic parameter allows
+// callers to specify the target type when casting.
+// The [T ~string] constraint ensures T has an underlying type of string,
+// which is true for all current usages (e.g., Timeframe, OutputType).
+func toSet[T ~string](dummy T, vals []string) map[T]struct{} {
+	out := make(map[T]struct{}, len(vals))
+	for _, v := range vals {
+
+		out[T(v)] = struct{}{}
+	}
+	return out
+}
+
+// toStringSet converts a slice of strings to a map set.
+func toStringSet(vals []string) map[string]struct{} {
+	out := make(map[string]struct{}, len(vals))
+	for _, v := range vals {
+		out[v] = struct{}{}
+	}
+	return out
+}
+
 func checkWindowSize(window int, timeframe string) error {
 	maxWindows := map[string]int{
+		timeframe1Sec:  maxWindow1Sec,
 		timeframe1Min:  maxWindow1Min,
 		timeframe1Hour: maxWindow1Hour,
 		timeframe1Day:  maxWindow1Day,
@@ -835,4 +857,71 @@ func UnmarshalAndValidateSetStrategyInput(rawInput json.RawMessage) (strategyID 
 	}
 
 	return strategyID, name, spec, nil
+}
+
+// RefreshSectorIndustryMaps loads valid sector and industry values from the
+// database and updates the in-memory validation sets. It also updates the
+// corresponding prompt variables used for strategy generation.
+func RefreshSectorIndustryMaps(conn *data.Conn) error {
+	const sectorQuery = `SELECT DISTINCT sector FROM securities WHERE sector IS NOT NULL AND sector != '' AND maxDate IS NULL ORDER BY sector`
+	const industryQuery = `SELECT DISTINCT industry FROM securities WHERE industry IS NOT NULL AND industry != '' AND maxDate IS NULL ORDER BY industry`
+
+	ctx := context.Background()
+
+	sectorRows, err := conn.DB.Query(ctx, sectorQuery)
+	if err != nil {
+		return err
+	}
+	defer sectorRows.Close()
+
+	sectors := []string{}
+	for sectorRows.Next() {
+		var s string
+		if err := sectorRows.Scan(&s); err != nil {
+			return err
+		}
+		sectors = append(sectors, s)
+	}
+	if err := sectorRows.Err(); err != nil {
+		return err
+	}
+
+	industryRows, err := conn.DB.Query(ctx, industryQuery)
+	if err != nil {
+		return err
+	}
+	defer industryRows.Close()
+
+	industries := []string{}
+	for industryRows.Next() {
+		var i string
+		if err := industryRows.Scan(&i); err != nil {
+			return err
+		}
+		industries = append(industries, i)
+	}
+	if err := industryRows.Err(); err != nil {
+		return err
+	}
+
+	ValidSectors = make(map[string]int, len(sectors))
+	ValidSectorIds = make(map[int]string, len(sectors))
+	for idx, s := range sectors {
+		id := idx + 1
+		ValidSectors[strings.ToLower(s)] = id
+		ValidSectorIds[id] = s
+	}
+
+	ValidIndustries = make(map[string]int, len(industries))
+	ValidIndustryIds = make(map[int]string, len(industries))
+	for idx, i := range industries {
+		id := idx + 1
+		ValidIndustries[strings.ToLower(i)] = id
+		ValidIndustryIds[id] = i
+	}
+
+	SpecPromptVars["SECTORS"] = quoteJoin(sectors)
+	SpecPromptVars["INDUSTRIES"] = quoteJoin(industries)
+
+	return nil
 }
