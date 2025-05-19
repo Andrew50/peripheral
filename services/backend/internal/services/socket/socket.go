@@ -116,6 +116,13 @@ type UIActionMessage struct {
 	Params map[string]interface{} `json:"params,omitempty"`
 }
 
+// StoreRefreshMessage instructs the frontend to refresh a specific store.
+type StoreRefreshMessage struct {
+	Type   string                 `json:"type"` // Will be "store_refresh"
+	Store  string                 `json:"store"`
+	Params map[string]interface{} `json:"params,omitempty"`
+}
+
 // BacktestRowMessage is sent when a single backtest row is available.
 type BacktestRowMessage struct {
 	Type       string         `json:"type"`
@@ -176,6 +183,29 @@ func SendUIAction(userID int, action string, params map[string]interface{}) {
 	msg := UIActionMessage{
 		Type:   "ui_action",
 		Action: action,
+		Params: params,
+	}
+	jsonData, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+	if !ok {
+		return
+	}
+	select {
+	case client.send <- jsonData:
+	default:
+	}
+}
+
+// SendStoreRefresh notifies the client to refresh a specific store.
+func SendStoreRefresh(userID int, store string, params map[string]interface{}) {
+	msg := StoreRefreshMessage{
+		Type:   "store_refresh",
+		Store:  store,
 		Params: params,
 	}
 	jsonData, err := json.Marshal(msg)

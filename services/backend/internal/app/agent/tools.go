@@ -18,6 +18,7 @@ type Tool struct {
 	FunctionDeclaration *genai.FunctionDeclaration
 	Function            func(*data.Conn, int, json.RawMessage) (interface{}, error)
 	StatusMessage       string
+	RefreshStore        string
 }
 
 var (
@@ -150,6 +151,7 @@ var (
 			},
 			Function:      watchlist.DeleteWatchlist,
 			StatusMessage: "Deleting watchlist...",
+			RefreshStore:  "watchlists",
 		},
 		"newWatchlist": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -168,6 +170,7 @@ var (
 			},
 			Function:      watchlist.NewWatchlist,
 			StatusMessage: "Creating new watchlist...",
+			RefreshStore:  "watchlists",
 		},
 		"getWatchlistItems": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -204,6 +207,7 @@ var (
 			},
 			Function:      watchlist.DeleteWatchlistItem,
 			StatusMessage: "Removing item from watchlist...",
+			RefreshStore:  "watchlists",
 		},
 		"newWatchlistItem": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -226,6 +230,7 @@ var (
 			},
 			Function:      watchlist.NewWatchlistItem,
 			StatusMessage: "Adding item to watchlist...",
+			RefreshStore:  "watchlists",
 		},
 		//singles
 		"getPrevClose": {
@@ -675,6 +680,7 @@ var (
 			},
 			Function:      strategy.DeleteStrategy,
 			StatusMessage: "Deleting strategy...",
+			RefreshStore:  "strategies",
 		},
 		"getStrategyFromNaturalLanguage": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -691,6 +697,7 @@ var (
 			},
 			Function:      strategy.CreateStrategyFromNaturalLanguage,
 			StatusMessage: "Building strategy...",
+			RefreshStore:  "strategies",
 		},
 		"calculateBacktestStatistic": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -732,85 +739,6 @@ var (
 			},
 			Function:      RunWebSearch,
 			StatusMessage: "Searching the web...",
-		},
-                "ui_open_watchlist": {
-                        FunctionDeclaration: &genai.FunctionDeclaration{
-                                Name:        "ui_open_watchlist",
-                                Description: "Open the watchlist sidebar to the given watchlist. Returns 'ok'.",
-                                Parameters: &genai.Schema{
-                                        Type: genai.TypeObject,
-                                        Properties: map[string]*genai.Schema{
-                                                "watchlistId":   {Type: genai.TypeInteger, Description: "The watchlist id to open."},
-                                                "watchlistName": {Type: genai.TypeString, Description: "The watchlist name to open if id not known."},
-                                        },
-                                },
-                        },
-			Function: OpenWatchlist,
-		},
-		"ui_open_alerts": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "ui_open_alerts",
-				Description: "Open the alerts sidebar. Returns 'ok'.",
-				Parameters:  &genai.Schema{Type: genai.TypeObject, Properties: map[string]*genai.Schema{}, Required: []string{}},
-			},
-			Function: OpenAlerts,
-		},
-		"ui_open_news": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "ui_open_news",
-				Description: "Open the news sidebar, optionally focusing on a specific eventId. Returns 'ok'.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"eventId": {Type: genai.TypeInteger, Description: "Optional news event id."},
-					},
-				},
-			},
-			Function: OpenNews,
-		},
-                "ui_open_strategy": {
-                        FunctionDeclaration: &genai.FunctionDeclaration{
-                                Name:        "ui_open_strategy",
-                                Description: "Open the strategy editor to a strategy. Returns 'ok'.",
-                                Parameters: &genai.Schema{
-                                        Type: genai.TypeObject,
-                                        Properties: map[string]*genai.Schema{
-                                                "strategyId":   {Type: genai.TypeInteger, Description: "The strategy id to open."},
-                                                "strategyName": {Type: genai.TypeString, Description: "The strategy name to open if id not known."},
-                                        },
-                                },
-                        },
-			Function: OpenStrategy,
-		},
-                "ui_open_backtest": {
-                        FunctionDeclaration: &genai.FunctionDeclaration{
-                                Name:        "ui_open_backtest",
-                                Description: "Open the backtest window for a strategy and run the test. Returns 'ok'.",
-                                Parameters: &genai.Schema{
-                                        Type: genai.TypeObject,
-                                        Properties: map[string]*genai.Schema{
-                                                "strategyId":   {Type: genai.TypeInteger, Description: "The strategy id to backtest."},
-                                                "strategyName": {Type: genai.TypeString, Description: "The strategy name to backtest if id not known."},
-                                        },
-                                },
-                        },
-			Function: OpenBacktest,
-		},
-		"ui_query_chart": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "ui_query_chart",
-				Description: "Change the active chart to the provided parameters. Returns 'ok'.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"ticker":     {Type: genai.TypeString, Description: "Ticker symbol to load."},
-						"securityId": {Type: genai.TypeInteger, Description: "Security ID to load."},
-						"timeframe":  {Type: genai.TypeString, Description: "Chart timeframe, e.g. '1d', '1h'."},
-						"timestamp":  {Type: genai.TypeInteger, Description: "Starting timestamp in ms."},
-					},
-				},
-			},
-			Function: QueryChartUI,
 		},
 		"dateToMS": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -869,11 +797,5 @@ var ToolReturnDesc = map[string]string{
 	"deleteStrategy":                 "null on success",
 	"getStrategyFromNaturalLanguage": "strategy info",
 	"calculateBacktestStatistic":     "numeric result",
-	"runWebSearch":                   "search result object",
-	"ui_open_watchlist":              "ok",
-	"ui_open_alerts":                 "ok",
-	"ui_open_news":                   "ok",
-	"ui_open_strategy":               "ok",
-	"ui_open_backtest":               "ok",
-	"ui_query_chart":                 "ok",
+       "runWebSearch":                   "search result object",
 }

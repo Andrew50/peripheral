@@ -15,8 +15,10 @@
 		type FilingContext, // Import the new type
 		pendingChatQuery // Import the new store
 	} from './interface'
-	import { activeChartInstance } from '$lib/features/chart/interface';
-	import { functionStatusStore, type FunctionStatusUpdate } from '$lib/utils/stream/socket'; // <-- Import the status store and FunctionStatusUpdate type
+       import { activeChartInstance } from '$lib/features/chart/interface';
+       import { openWatchlist } from '$lib/features/watchlist/interface';
+       import { openBacktest } from '$lib/features/backtest/interface';
+       import { functionStatusStore, type FunctionStatusUpdate } from '$lib/utils/stream/socket'; // <-- Import the status store and FunctionStatusUpdate type
 
 	// Set default options for the markdown parser (optional)
 	marked.setOptions({
@@ -89,10 +91,10 @@
 		rows: any[][];
 	};
 
-	type ContentChunk = {
-		type: 'text' | 'table';
-		content: string | TableData;
-	};
+       type ContentChunk = {
+               type: 'text' | 'table' | 'action_button';
+               content: string | TableData | any;
+       };
 
 	type QueryResponse = {
 		response_type: 'text' | 'mixed_content';
@@ -486,7 +488,7 @@
 	}
 
 	// Function to handle clicks on ticker buttons
-	async function handleTickerButtonClick(event: MouseEvent) {
+async function handleTickerButtonClick(event: MouseEvent) {
 		const target = event.target as HTMLButtonElement; // Assert as Button Element
 		if (target && target.classList.contains('ticker-button')) {
 			const ticker = target.dataset.ticker;
@@ -495,10 +497,10 @@
 			if (ticker && timestampMsStr) {
 				const timestampMs = parseInt(timestampMsStr, 10); // Parse the timestamp
 
-				if (isNaN(timestampMs)) {
-					console.error('Invalid timestampMs on ticker button');
-					return; // Don't proceed if timestamp is invalid
-				}
+                               if (isNaN(timestampMs)) {
+                                       console.error('Invalid timestampMs on ticker button');
+                                       return; // Don't proceed if timestamp is invalid
+                               }
 
 				try {
 					target.disabled = true;
@@ -541,16 +543,25 @@
 				console.error('Missing data attributes on ticker button');
 			}
 		}
-	}
+        }
 
-	// Function to toggle table expansion state
-	function toggleTableExpansion(tableKey: string) {
-		if (!(tableKey in tableExpansionStates)) {
-			tableExpansionStates[tableKey] = false; // Default to collapsed if not set
-		}
-		tableExpansionStates[tableKey] = !tableExpansionStates[tableKey];
-		tableExpansionStates = { ...tableExpansionStates }; // Trigger reactivity
-	}
+        // Function to toggle table expansion state
+        function toggleTableExpansion(tableKey: string) {
+                if (!(tableKey in tableExpansionStates)) {
+                        tableExpansionStates[tableKey] = false; // Default to collapsed if not set
+                }
+                tableExpansionStates[tableKey] = !tableExpansionStates[tableKey];
+                tableExpansionStates = { ...tableExpansionStates }; // Trigger reactivity
+        }
+
+       function handleActionButtonClick(data: any) {
+               const action = data?.action;
+               if (action === 'open_watchlist' && data.watchlistId !== undefined) {
+                       openWatchlist(data.watchlistId);
+               } else if (action === 'open_backtest' && data.strategyId !== undefined) {
+                       openBacktest(data.strategyId);
+               }
+       }
 
 	// Function to sort table data
 	function sortTable(tableKey: string, columnIndex: number, tableData: TableData) {
@@ -719,11 +730,11 @@
 								{#if message.contentChunks && message.contentChunks.length > 0}
 									<div class="content-chunks">
 										{#each message.contentChunks as chunk, index}
-											{#if chunk.type === 'text'}
-												<div class="chunk-text">
-													{@html parseMarkdown(typeof chunk.content === 'string' ? chunk.content : String(chunk.content))}
-												</div>
-											{:else if chunk.type === 'table'}
+                                                                       {#if chunk.type === 'text'}
+                                                                               <div class="chunk-text">
+                                                                                       {@html parseMarkdown(typeof chunk.content === 'string' ? chunk.content : String(chunk.content))}
+                                                                               </div>
+                                                                       {:else if chunk.type === 'table'}
 												{#if isTableData(chunk.content)}
 													{@const tableData = getTableData(chunk.content)}
 													{@const tableKey = message.id + '-' + index}
@@ -782,9 +793,19 @@
 													{:else}
 														<div class="chunk-error">Invalid table data structure</div>
 													{/if}
-												{:else}
-													<div class="chunk-error">Invalid table data format</div>
-												{/if}
+                                                                       {:else if chunk.type === 'action_button'}
+                                                                               {#if typeof chunk.content === 'object'}
+                                                                               <button
+                                                                                       class="ui-action-button"
+                                                                                       on:click={() => handleActionButtonClick(chunk.content)}>
+                                                                                       {chunk.content.label}
+                                                                               </button>
+                                                                               {:else}
+                                                                               <div class="chunk-error">Invalid action button</div>
+                                                                               {/if}
+                                                                       {:else}
+                                                                               <div class="chunk-error">Invalid table data format</div>
+                                                                       {/if}
 											{/if}
 										{/each}
 									</div>
@@ -1468,11 +1489,34 @@
 		display: inline-block;
 	}
 
-	.message-content :global(.ticker-button:hover) {
-		background: var(--ui-bg-element, #333);
-		border-color: var(--ui-accent, #3a8bf7);
-		color: var(--text-primary, #fff);
-	}
+        .message-content :global(.ticker-button:hover) {
+                background: var(--ui-bg-element, #333);
+                border-color: var(--ui-accent, #3a8bf7);
+                color: var(--text-primary, #fff);
+        }
+
+        .message-content :global(.ui-action-button) {
+                background: var(--ui-bg-element-darker, #2a2a2a);
+                border: 1px solid var(--ui-border, #444);
+                color: var(--text-primary, #fff);
+                padding: 0.4rem 1rem;
+                border-radius: 0.25rem;
+                font-size: 0.75rem;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                margin: 0 0.2rem;
+                vertical-align: middle;
+                line-height: 1;
+                text-decoration: none;
+                display: inline-block;
+        }
+
+        .message-content :global(.ui-action-button:hover) {
+                background: var(--ui-bg-element, #333);
+                border-color: var(--ui-accent, #3a8bf7);
+                color: var(--text-primary, #fff);
+        }
 
 	/* Custom Scrollbar Styles */
 	.chat-messages::-webkit-scrollbar {

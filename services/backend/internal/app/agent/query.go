@@ -545,6 +545,48 @@ func processContentChunksForTables(ctx context.Context, conn *data.Conn, userID 
 	return processedChunks
 }
 
+// appendActionButtons inspects tool results and appends UI action buttons for the frontend
+func appendActionButtons(chunks []ContentChunk, results []ExecuteResult) []ContentChunk {
+       for _, r := range results {
+               switch r.FunctionName {
+               case "newWatchlist":
+                       if id, ok := r.Result.(float64); ok {
+                               chunks = append(chunks, ContentChunk{
+                                       Type: "action_button",
+                                       Content: map[string]any{
+                                               "label":       "Open Watchlist",
+                                               "action":      "open_watchlist",
+                                               "watchlistId": int(id),
+                                       },
+                               })
+                       }
+               case "run_backtest":
+                       var sid int
+                       if m, ok := r.Args.(map[string]any); ok {
+                               if v, ok := m["strategyId"]; ok {
+                                       switch t := v.(type) {
+                                       case float64:
+                                               sid = int(t)
+                                       case int:
+                                               sid = t
+                                       }
+                               }
+                       }
+                       if sid != 0 {
+                               chunks = append(chunks, ContentChunk{
+                                       Type: "action_button",
+                                       Content: map[string]any{
+                                               "label":      "Open Backtest",
+                                               "action":     "open_backtest",
+                                               "strategyId": sid,
+                                       },
+                               })
+                       }
+               }
+       }
+       return chunks
+}
+
 // processRoundWithGemini sends a round to Gemini for processing and gets back the functions to execute
 func processRoundWithGemini(ctx context.Context, conn *data.Conn, prompt string) ([]FunctionCall, error) {
 	// Get a response from Gemini with the processed functions

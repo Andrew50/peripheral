@@ -28,6 +28,14 @@ export type BacktestSummaryMessage = {
 // Store to hold the current function status message
 export const functionStatusStore = writable<FunctionStatusUpdate | null>(null);
 
+export type StoreRefreshMessage = {
+       type: 'store_refresh';
+       store: string;
+       params?: Record<string, any>;
+};
+
+export const storeRefresh = writable<StoreRefreshMessage | null>(null);
+
 export type TimeType = 'regular' | 'extended';
 export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
 
@@ -114,10 +122,14 @@ function connect() {
                         functionStatusStore.set(statusUpdate);
                         return;
                 }
-                if (data && data.type === 'ui_action') {
-                        uiAction.set({ action: data.action, params: data.params });
-                        return;
-                }
+               if (data && data.type === 'ui_action') {
+                       uiAction.set({ action: data.action, params: data.params });
+                       return;
+               }
+               if (data && data.type === 'store_refresh') {
+                       storeRefresh.set(data as StoreRefreshMessage);
+                       return;
+               }
                 if (data && data.type === 'backtest_row') {
                         const msg = data as BacktestRowMessage;
                         const cbs = backtestRowCallbacks.get(msg.strategyId);

@@ -113,6 +113,9 @@ func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (Execut
 		e.log.Warn("Error executing function", zap.String("function", fc.Name), zap.Error(err))
 		return ExecuteResult{FunctionName: fc.Name, Error: err.Error(), Args: argsMap}, nil
 	}
+	if tool.RefreshStore != "" {
+		socket.SendStoreRefresh(e.userID, tool.RefreshStore, nil)
+	}
 	e.log.Info("agent tool completed", zap.String("function", fc.Name))
 	return ExecuteResult{FunctionName: fc.Name, Result: result, Args: argsMap}, nil
 
