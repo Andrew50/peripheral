@@ -37,8 +37,8 @@ type TokenCounts struct {
 	TotalTokenCount    int32 `json:"total_token_count,omitempty"`
 }
 
-const planningModel = "gemini-2.5-flash-preview-04-17"
-const finalResponseModel = "gemini-2.5-flash-preview-04-17"
+const planningModel = "gemini-2.5-flash-preview-05-20"
+const finalResponseModel = "gemini-2.5-flash-preview-05-20"
 
 func RunPlanner(ctx context.Context, conn *data.Conn, prompt string) (interface{}, error) {
 	systemPrompt, err := getSystemInstruction("defaultSystemPrompt")
