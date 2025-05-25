@@ -47,7 +47,7 @@ CREATE TEMP TABLE tmp_major_groups (
 );
 
 COPY tmp_major_groups
-FROM '/docker-entrypoint-initdb.d/sic_major_groups.csv'
+FROM '/docker-entrypoint-initdb.d/major_groups.csv'
 WITH (FORMAT csv, HEADER true);
 
 -- 5. Stage & load Industry-group names (3-digit) ----------------------------
@@ -58,7 +58,7 @@ CREATE TEMP TABLE tmp_industry_groups (
 );
 
 COPY tmp_industry_groups
-FROM '/docker-entrypoint-initdb.d/sic_industry_groups.csv'
+FROM '/docker-entrypoint-initdb.d/industry_groups.csv'
 WITH (FORMAT csv, HEADER true);
 
 -- 6. Enrich the main table from the staging tables -------------------------
