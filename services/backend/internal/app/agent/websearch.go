@@ -2,14 +2,19 @@ package agent
 
 import (
 	"backend/internal/data"
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
+	"time"
 
 	"google.golang.org/genai"
 )
 
 const geminiWebSearchModel = "gemini-2.5-flash-preview-05-20"
+const grokModel = "grok-3-mini-latest"
 
 type WebSearchArgs struct {
 	Query string `json:"query"`
@@ -83,4 +88,114 @@ func _geminiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (inte
 	return WebSearchResult{
 		ResultText: resultText,
 	}, nil
+}
+
+type GrokMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+type GrokSources struct {
+	Type     string   `json:"type"`
+	XHandles []string `json:"x_handles,omitempty"`
+}
+type GrokSearchParameters struct {
+	Mode            string      `json:"mode"`
+	ReturnCitations bool        `json:"return_citations"`
+	From            string      `json:"from_date,omitempty"`
+	To              string      `json:"to_date,omitempty"`
+	Sources         GrokSources `json:"sources,omitempty"`
+}
+type GrokChatCompletionsRequest struct {
+	Messages         []GrokMessage        `json:"messages"`
+	Model            string               `json:"model"`
+	SearchParameters GrokSearchParameters `json:"search_parameters"`
+}
+type GrokChatCompletionsResponse struct {
+	Choices []struct {
+		Message GrokMessage `json:"message"`
+	} `json:"choices"`
+}
+type TwitterSearchArgs struct {
+	Prompt   string   `json:"prompt"`
+	Handles  []string `json:"handles,omitempty"`
+	FromDate string   `json:"from_date,omitempty"`
+	ToDate   string   `json:"to_date,omitempty"`
+}
+
+type TwitterSearchResult struct {
+	ResultText string   `json:"result_text"`
+	Citations  []string `json:"citations,omitempty"`
+}
+
+func RunTwitterSearch(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
+	var args TwitterSearchArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("error unmarshalling args: %w", err)
+	}
+	systemPrompt, err := _getTwitterSearchSystemPrompt()
+	if err != nil {
+		return nil, fmt.Errorf("error getting twitter search system prompt: %w", err)
+	}
+	model := grokModel
+	searchParameters := GrokSearchParameters{
+		Mode:            "on",
+		ReturnCitations: true,
+		Sources: GrokSources{
+			Type:     "x",
+			XHandles: args.Handles,
+		},
+	}
+	grokRequestBody := GrokChatCompletionsRequest{
+		Messages: []GrokMessage{
+			{
+				Role:    "system",
+				Content: systemPrompt,
+			},
+			{
+				Role:    "user",
+				Content: args.Prompt,
+			},
+		},
+		Model:            model,
+		SearchParameters: searchParameters,
+	}
+	bodyBytes, _ := json.Marshal(grokRequestBody)
+	httpReq, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"https://api.x.ai/v1/chat/completions",
+		bytes.NewReader(bodyBytes),
+	)
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+conn.XApiKey)
+	cli := &http.Client{Timeout: 60 * time.Second}
+	resp, err := cli.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("error sending request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New("grok: non-200 response: " + resp.Status)
+	}
+	var output GrokChatCompletionsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&output); err != nil {
+		return nil, fmt.Errorf("error decoding response: %w", err)
+	}
+	if len(output.Choices) == 0 {
+		return nil, errors.New("grok: no choices in response")
+	}
+	return output.Choices[0].Message.Content, nil
+
+}
+
+func _getTwitterSearchSystemPrompt() (string, error) {
+	prompt, err := getSystemInstruction("twitterSearchPrompt")
+	if err != nil {
+		return "", fmt.Errorf("error getting twitter search system prompt: %w", err)
+	}
+	return prompt, nil
+
 }
