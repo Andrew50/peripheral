@@ -9,7 +9,7 @@ import (
 	"google.golang.org/genai"
 )
 
-const geminiWebSearchModel = "gemini-2.5-flash-preview-04-17"
+const geminiWebSearchModel = "gemini-2.5-flash-preview-05-20"
 
 type WebSearchArgs struct {
 	Query string `json:"query"`

@@ -228,7 +228,7 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userID int, rawArgs json
 		////fmt.Printf("Attempt %d/%d to generate and validate strategy spec...\n", attempt+1, maxRetries)
 
 		// Generate content using the current conversation history
-		result, err := client.Models.GenerateContent(context.Background(), "gemini-2.5-flash-preview-04-17", conversationHistory, config)
+		result, err := client.Models.GenerateContent(context.Background(), "gemini-2.5-flash-preview-05-20", conversationHistory, config)
 		if err != nil {
 			lastErr = fmt.Errorf("error generating content (attempt %d): %w", attempt+1, err)
 			////fmt.Printf("WARN: Attempt %d/%d for user %d: Gemini content generation failed: %v\n", attempt+1, maxRetries, userID, err)
