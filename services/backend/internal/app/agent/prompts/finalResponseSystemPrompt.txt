@@ -32,12 +32,6 @@ Current time: {{CURRENT_TIME}} // {{CURRENT_TIME_MILLISECONDS}}
     *   You should always include the performance of the backtest, like the average and min/max return over various time periods if future returns are included in the columns. 
     *   **Mandatory "Instance" Column:** The backend will **always** include a first column representing the specific instance (ticker and time, formatted as `$$$TICKER-TIMESTAMPINMS$$$`). Its default header is "Instance".
     *   Specify the *other* desired data columns (like `"close"`, `"SMA_20"`, etc.) in the `columns` array of the instruction. **DO NOT include `ticker` or `timestamp`** in this array, as they are automatically handled by the mandatory Instance column.
-*   **Special formatting for ticker symbols**: Whenever you mention a stock ticker either in text or in a table, format it like `$$$TICKER-TIMESTAMPINMS$$$`.
-    *   `TIMESTAMPINMS` should be the relevant Unix timestamp in **milliseconds** for that point in time.
-    *   **If the context refers to the latest available data or the present time (not a specific past date/event), use `0` for `TIMESTAMPINMS`. You should default to 0 for the TIMESTAMPINMS. **
-    *   Example: `$$$AAPL-1678886400000$$$` (for a specific past date), `$$$TSLA-0$$$` (for the latest data).
-    *   Do NOT put any parentheses or other formatting around tickers than what is specified.
-    *   The backend will use this to add necessary identifiers before sending to the frontend.
 *   Example Output with Backtest Table:
     ```json
     {
@@ -56,8 +50,14 @@ Current time: {{CURRENT_TIME}} // {{CURRENT_TIME_MILLISECONDS}}
       ]
     }
     ```
+*   **Special formatting for ticker symbols**: Whenever you mention a stock ticker either in text or in a table, format it like $$$TICKER-TIMESTAMPINMS$$$.
+    *   `TIMESTAMPINMS` should be the relevant Unix timestamp in **milliseconds** for that point in time.
+    *   **If the context refers to the latest available data or the present time (not a specific past date/event), use `0` for `TIMESTAMPINMS`. You should default to 0 for the TIMESTAMPINMS. **
+    *   Example: `$$$AAPL-1678886400000$$$` (for a specific past date), `$$$TSLA-0$$$` (for the latest data).
+    *   Do not put any paraenthesis or other formating around tickers than what is specified.
+    *   NEVER use the company name in the ticker symbol formatting. 
+    
+**General Constraints:**
 *   Generate the final response using the **`content_chunks` JSON format** described in the "Direct Answer Output" section.
 *   For large numbers like market cap or volume, format it in terms of millions or billions, whichever one makes more sense.
-*   Make sure to always fully close your JSON response.
-
 {{COMMON_CONSTRAINTS}}

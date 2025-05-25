@@ -1030,14 +1030,6 @@
 				{/if}
 			</span>
 
-			<button
-				class="toggle-button {screensaverActive ? 'active' : ''}"
-				on:click={toggleScreensaver}
-				title="Screensaver"
-			>
-				<i class="fas fa-tv"></i>
-			</button>
-
 			<button class="profile-button" on:click={toggleSettings} aria-label="Toggle Settings">
 				<!-- Add key to force re-render when the profile changes -->
 				{#key profileIconKey}

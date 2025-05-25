@@ -10,49 +10,6 @@ import (
 	"google.golang.org/genai"
 )
 
-/*
-func getTextResponseFromGemini(ctx context.Context, conn *data.Conn, model string, systemPrompt string, query string) (string, error) {
-	apiKey, err := conn.GetGeminiKey()
-	if err != nil {
-		return "", fmt.Errorf("error getting gemini key: %w", err)
-	}
-
-	// Create a new client using the API key
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return "", fmt.Errorf("error creating gemini client: %w", err)
-	}
-
-	systemInstruction, err := getSystemInstruction(systemPrompt)
-	if err != nil {
-		return "", fmt.Errorf("error getting system instruction: %w", err)
-	}
-
-	config := &genai.GenerateContentConfig{
-		SystemInstruction: &genai.Content{
-			Parts: []*genai.Part{
-				{Text: systemInstruction},
-			},
-		},
-	}
-	result, err := client.Models.GenerateContent(ctx, model, genai.Text(query), config)
-	if err != nil {
-		return "", fmt.Errorf("error generating content: %w", err)
-	}
-
-	// Extract the response text
-	if len(result.Candidates) == 0 || len(result.Candidates[0].Content.Parts) == 0 {
-		return "", fmt.Errorf("no response from Gemini")
-	}
-
-	// Get the text from the response
-	text := fmt.Sprintf("%v", result.Candidates[0].Content.Parts[0].Text)
-	return text, nil
-}*/
-
 // FunctionResponse represents the response from the LLM with function calls
 type FunctionResponse struct {
 	FunctionCalls []FunctionCall `json:"function_calls"`
@@ -131,9 +88,6 @@ func getGeminiFunctionThinking(ctx context.Context, conn *data.Conn, systemPromp
 				}
 			}
 		}
-		////fmt.Println("Grounding:", candidate.GroundingMetadata)
-		// Collect all indices first
-		// More efficient deduplication: collect and check uniqueness in one pass
 		seen := make(map[int]bool)
 		usedGroundingChunkIndices := []int{} // This will store the unique indices
 		if candidate.GroundingMetadata != nil {

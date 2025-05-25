@@ -3,7 +3,7 @@ DROP TABLE IF EXISTS sic_codes CASCADE;
 
 CREATE TABLE sic_codes (
     sic_code             CHAR(4)  PRIMARY KEY,   -- 4-digit SIC
-    division             CHAR(1)  NOT NULL,      -- A…J
+    division             CHAR(2)  NOT NULL,      -- A…J
     major_group_code     INT       NOT NULL,     -- 2-digit
     industry_group_code  INT       NOT NULL,     -- 3-digit
     industry_description TEXT      NOT NULL,     -- 4-digit description
@@ -16,12 +16,12 @@ CREATE TABLE sic_codes (
 
 -- 2. Load the raw 4-digit file ---------------------------------------------
 -- csv header must match the first five columns above
-COPY sic_codes (sic_code,
-                division,
+COPY sic_codes (division,
                 major_group_code,
                 industry_group_code,
+                sic_code,
                 industry_description)
-FROM '/absolute/path/to/sic_codes.csv'
+FROM '/docker-entrypoint-initdb.d/sic_codes.csv'
 WITH (FORMAT csv, HEADER true);
 
 -- 3. Hard-code Division → Sector mapping -----------------------------------
@@ -47,7 +47,7 @@ CREATE TEMP TABLE tmp_major_groups (
 );
 
 COPY tmp_major_groups
-FROM '/absolute/path/to/sic_major_groups.csv'
+FROM '/docker-entrypoint-initdb.d/sic_major_groups.csv'
 WITH (FORMAT csv, HEADER true);
 
 -- 5. Stage & load Industry-group names (3-digit) ----------------------------
@@ -58,7 +58,7 @@ CREATE TEMP TABLE tmp_industry_groups (
 );
 
 COPY tmp_industry_groups
-FROM '/absolute/path/to/sic_industry_groups.csv'
+FROM '/docker-entrypoint-initdb.d/sic_industry_groups.csv'
 WITH (FORMAT csv, HEADER true);
 
 -- 6. Enrich the main table from the staging tables -------------------------
