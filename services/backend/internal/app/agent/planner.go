@@ -93,6 +93,9 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	candidate := result.Candidates[0]
 	if candidate.Content != nil {
 		for _, part := range candidate.Content.Parts {
+			if part.Thought {
+				continue
+			}
 			if part.Text != "" {
 				sb.WriteString(part.Text)
 				sb.WriteString("\n")
