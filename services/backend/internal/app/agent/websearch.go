@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -99,16 +100,16 @@ type GrokSources struct {
 	XHandles []string `json:"x_handles,omitempty"`
 }
 type GrokSearchParameters struct {
-	Mode            string      `json:"mode"`
-	ReturnCitations bool        `json:"return_citations"`
-	From            string      `json:"from_date,omitempty"`
-	To              string      `json:"to_date,omitempty"`
-	Sources         GrokSources `json:"sources,omitempty"`
+	Mode            string        `json:"mode"`
+	ReturnCitations bool          `json:"return_citations,omitempty"`
+	FromDate        string        `json:"from_date,omitempty"`
+	ToDate          string        `json:"to_date,omitempty"`
+	Sources         []GrokSources `json:"sources,omitempty"`
 }
 type GrokChatCompletionsRequest struct {
 	Messages         []GrokMessage        `json:"messages"`
 	Model            string               `json:"model"`
-	SearchParameters GrokSearchParameters `json:"search_parameters"`
+	SearchParameters GrokSearchParameters `json:"search_parameters,omitempty"`
 }
 type GrokChatCompletionsResponse struct {
 	Choices []struct {
@@ -140,11 +141,27 @@ func RunTwitterSearch(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 	searchParameters := GrokSearchParameters{
 		Mode:            "on",
 		ReturnCitations: true,
-		Sources: GrokSources{
-			Type:     "x",
-			XHandles: args.Handles,
-		},
 	}
+
+	// Only add sources if handles are specifically provided
+	// This might be causing the 422 error if empty
+	if len(args.Handles) > 0 {
+		searchParameters.Sources = []GrokSources{
+			{
+				Type:     "x",
+				XHandles: args.Handles,
+			},
+		}
+	}
+
+	// Add date filters if provided
+	if args.FromDate != "" {
+		searchParameters.FromDate = args.FromDate
+	}
+	if args.ToDate != "" {
+		searchParameters.ToDate = args.ToDate
+	}
+
 	grokRequestBody := GrokChatCompletionsRequest{
 		Messages: []GrokMessage{
 			{
@@ -178,7 +195,16 @@ func RunTwitterSearch(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("grok: non-200 response: " + resp.Status)
+		// Read the response body to get error details
+		errorBodyBytes, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			errorBodyBytes = []byte("failed to read error response")
+		}
+		requestBodyBytes, _ := json.Marshal(grokRequestBody)
+		fmt.Printf("Request body: %s\n", string(requestBodyBytes))
+		fmt.Printf("Response status: %s\n", resp.Status)
+		fmt.Printf("Response body: %s\n", string(errorBodyBytes))
+		return nil, fmt.Errorf("grok: non-200 response: %s", resp.Status)
 	}
 	var output GrokChatCompletionsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&output); err != nil {

@@ -742,7 +742,7 @@ var (
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"prompt":   {Type: genai.TypeString, Description: "The query to search for."},
+						"prompt":   {Type: genai.TypeString, Description: "The query to search for. Be specific and detailed."},
 						"handles":  {Type: genai.TypeArray, Description: "A list of Twitter handles to search for tweets. If omitted, the search will be global."},
 						"fromDate": {Type: genai.TypeString, Description: "The date YYYY-MM-DD to start searching from."},
 						"toDate":   {Type: genai.TypeString, Description: "The date YYYY-MM-DD to stop searching at."},
