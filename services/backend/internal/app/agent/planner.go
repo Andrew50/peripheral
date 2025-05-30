@@ -192,6 +192,9 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 	candidate := result.Candidates[0]
 	if candidate.Content != nil {
 		for _, part := range candidate.Content.Parts {
+			if part.Thought {
+				continue
+			}
 			if part.Text != "" {
 				frSB.WriteString(part.Text)
 				frSB.WriteString("\n")
