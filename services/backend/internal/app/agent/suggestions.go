@@ -198,7 +198,7 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 	// Use GenerateContent with []*genai.Content input
 	result, err := client.Models.GenerateContent(
 		ctx,
-		"gemini-2.0-flash-thinking-exp-01-21",
+		"gemini-2.5-flash-preview-05-20",
 		[]*genai.Content{userContent},
 		cfg,
 	)
@@ -212,6 +212,9 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 	llmResponseText := ""
 	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
 		for _, p := range result.Candidates[0].Content.Parts {
+			if p.Thought {
+				continue
+			}
 			if p.Text != "" {
 				llmResponseText = p.Text
 				break
