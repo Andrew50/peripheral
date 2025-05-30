@@ -77,6 +77,9 @@ func _geminiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (inte
 	candidate := result.Candidates[0]
 	if candidate.Content != nil {
 		for _, part := range candidate.Content.Parts {
+			if part.Thought {
+				continue
+			}
 			if part.Text != "" {
 				resultText = part.Text
 				break
