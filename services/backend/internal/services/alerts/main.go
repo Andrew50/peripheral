@@ -48,12 +48,10 @@ var (
 
 // AddAlert adds an alert to the in memory store, updating price shard info when needed
 func AddAlert(conn *data.Conn, alert Alert) {
-	println("entry")
 
 	if alert.AlertType == "price" {
 		if alert.SecurityID == nil {
 			// log the error
-			println("nil security ID")
 			return
 		}
 		ticker, err := postgres.GetTicker(conn, *alert.SecurityID, time.Now())
@@ -103,7 +101,6 @@ func AddAlert(conn *data.Conn, alert Alert) {
 	} else {
 		nonPriceAlerts.Store(alert.AlertID, alert)
 	}
-	println("ur mom")
 
 }
 
@@ -375,7 +372,6 @@ func batchCleanupAlerts(conn *data.Conn, alerts []Alert) error {
 
 		if err != nil {
 			//log.Printf("Failed to log alert to database: %v", err)
-			fmt.Printf("wowow %v", err)
 			return fmt.Errorf("failed to log alert: %v", err)
 		}
 
@@ -459,7 +455,6 @@ func initAlerts(conn *data.Conn) error {
 	nonPriceAlerts = sync.Map{}
 	priceAlertShards = map[int]*PriceAlertShard{}
 
-	println("created maps")
 	for rows.Next() {
 		var alert Alert
 		err := rows.Scan(
