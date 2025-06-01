@@ -27,6 +27,7 @@ type Conn struct {
 	PolygonKey    string
 	GeminiPool    *GeminiKeyPool
 	PerplexityKey string
+	XAPIKey       string
 }
 
 var conn *Conn
@@ -47,7 +48,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	// Get API keys from environment variables
 	polygonKey := getEnv("POLYGON_API_KEY", "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm")
 	perplexityKey := getEnv("PERPLEXITY_API_KEY", "")
-
+	XAPIKey := getEnv("X_API_KEY", "")
 	var dbURL string
 	var cacheURL string
 
@@ -154,6 +155,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		PolygonKey:    polygonKey,
 		GeminiPool:    geminiPool,
 		PerplexityKey: perplexityKey,
+		XAPIKey:       XAPIKey,
 	}
 
 	cleanup := func() {

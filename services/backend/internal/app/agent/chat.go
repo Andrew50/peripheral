@@ -86,6 +86,7 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 			return QueryResponse{
 				Type:          "mixed_content",
 				ContentChunks: processedChunks,
+				Suggestions:   v.Suggestions, // Include suggestions from direct answer
 			}, nil
 		case Plan:
 			switch v.Stage {
@@ -118,23 +119,28 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 					return nil, err
 				}
 
-				// Get the final response from the model
+				// Get the final response from the model (now includes suggestions)
 				finalResponse, err := GetFinalResponse(ctx, conn, finalPrompt)
 				if err != nil {
 					return nil, fmt.Errorf("error generating final response: %w", err)
 				}
+
 				totalRequestOutputTokenCount += finalResponse.TokenCounts.OutputTokenCount
 				totalRequestInputTokenCount += finalResponse.TokenCounts.InputTokenCount
 				totalRequestThoughtsTokenCount += finalResponse.TokenCounts.ThoughtsTokenCount
 				totalRequestTokenCount += finalResponse.TokenCounts.TotalTokenCount
+
 				// Process any table instructions in the content chunks
 				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
+
 				if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, allResults, totalRequestTokenCount); err != nil {
 					log.Printf("Error saving message to conversation: %v", err)
 				}
+
 				return QueryResponse{
 					Type:          "mixed_content",
 					ContentChunks: processedChunks,
+					Suggestions:   finalResponse.Suggestions, // Include suggestions from final response
 				}, nil
 			}
 		}
@@ -143,7 +149,6 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 			return nil, fmt.Errorf("model took too many turns to run")
 		}
 	}
-
 }
 
 // </chat.go>

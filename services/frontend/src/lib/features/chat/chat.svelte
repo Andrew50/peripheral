@@ -98,6 +98,7 @@
 		response_type: 'text' | 'mixed_content';
 		text?: string;
 		content_chunks?: ContentChunk[];
+		suggestions?: string[];
 	};
 
 	// Conversation history type
@@ -364,13 +365,12 @@
 						timestamp: new Date(),
 						expiresAt: expiresAt,
 						responseType: typedResponse.response_type,
-						contentChunks: typedResponse.content_chunks
+						contentChunks: typedResponse.content_chunks,
+						suggestedQueries: typedResponse.suggestions || []
 					};
 
 					messagesStore.update(current => [...current, assistantMessage]);
 					// scrollToBottom(); // Removed this call
-					
-					fetchSuggestedQueries();
 				})
 				.catch((error) => {
 					console.error('Error fetching response:', error);
