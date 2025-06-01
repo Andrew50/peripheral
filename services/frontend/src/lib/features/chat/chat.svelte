@@ -95,7 +95,7 @@
 	};
 
 	type QueryResponse = {
-		response_type: 'text' | 'mixed_content';
+		type: 'text' | 'mixed_content';
 		text?: string;
 		content_chunks?: ContentChunk[];
 		suggestions?: string[];
@@ -364,7 +364,7 @@
 						sender: 'assistant',
 						timestamp: new Date(),
 						expiresAt: expiresAt,
-						responseType: typedResponse.response_type,
+						responseType: typedResponse.type,
 						contentChunks: typedResponse.content_chunks,
 						suggestedQueries: typedResponse.suggestions || []
 					};
