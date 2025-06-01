@@ -85,13 +85,14 @@ func alertLoop(ctx context.Context, conn *data.Conn) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			processAlerts(conn)
+			processAlerts(conn, createPriceSnapshot())
 		}
 	}
 }
 
-func processAlerts(conn *data.Conn) {
+func processAlerts(conn *data.Conn, priceSnapshot map[int]float64) {
 	var wg sync.WaitGroup
+
 	alerts.Range(func(_, value interface{}) bool {
 		alert := value.(Alert)
 		wg.Add(1)
@@ -100,7 +101,7 @@ func processAlerts(conn *data.Conn) {
 			var err error
 			switch a.AlertType {
 			case "price":
-				err = processPriceAlert(conn, a)
+				err = processPriceAlert(conn, a, priceSnapshot)
 			case "news":
 				err = processNewsAlert(conn, a)
 			case "strategy":
