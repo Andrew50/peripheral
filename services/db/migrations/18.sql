@@ -42,23 +42,26 @@ END;
 -- 4. Stage & load Major-group names (2-digit) -------------------------------
 DROP TABLE IF EXISTS tmp_major_groups;
 CREATE TEMP TABLE tmp_major_groups (
-    major_group_code INT PRIMARY KEY,
-    industry_name    TEXT
+    division             CHAR(2),
+    major_group_code     INT PRIMARY KEY,
+    industry_name        TEXT
 );
 
-COPY tmp_major_groups
-FROM '/docker-entrypoint-initdb.d/sic_major_groups.csv'
+COPY tmp_major_groups (division, major_group_code, industry_name)
+FROM '/docker-entrypoint-initdb.d/major_groups.csv'
 WITH (FORMAT csv, HEADER true);
 
 -- 5. Stage & load Industry-group names (3-digit) ----------------------------
 DROP TABLE IF EXISTS tmp_industry_groups;
 CREATE TEMP TABLE tmp_industry_groups (
-    industry_group_code INT PRIMARY KEY,
-    minor_industry_name TEXT
+    division             CHAR(2),
+    major_group_code     INT,
+    industry_group_code  INT PRIMARY KEY,
+    minor_industry_name  TEXT
 );
 
-COPY tmp_industry_groups
-FROM '/docker-entrypoint-initdb.d/sic_industry_groups.csv'
+COPY tmp_industry_groups (division, major_group_code, industry_group_code, minor_industry_name)
+FROM '/docker-entrypoint-initdb.d/industry_groups.csv'
 WITH (FORMAT csv, HEADER true);
 
 -- 6. Enrich the main table from the staging tables -------------------------

@@ -13,6 +13,7 @@ import (
 
 type DirectAnswer struct {
 	ContentChunks []ContentChunk `json:"content_chunks"`
+	Suggestions   []string       `json:"suggestions,omitempty"`
 	TokenCounts   TokenCounts    `json:"token_counts,omitempty"`
 }
 type Round struct {
@@ -27,6 +28,7 @@ type Plan struct {
 
 type FinalResponse struct {
 	ContentChunks []ContentChunk `json:"content_chunks"`
+	Suggestions   []string       `json:"suggestions,omitempty"`
 	TokenCounts   TokenCounts    `json:"token_counts,omitempty"`
 }
 
@@ -93,6 +95,9 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	candidate := result.Candidates[0]
 	if candidate.Content != nil {
 		for _, part := range candidate.Content.Parts {
+			if part.Thought {
+				continue
+			}
 			if part.Text != "" {
 				sb.WriteString(part.Text)
 				sb.WriteString("\n")
@@ -189,6 +194,9 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 	candidate := result.Candidates[0]
 	if candidate.Content != nil {
 		for _, part := range candidate.Content.Parts {
+			if part.Thought {
+				continue
+			}
 			if part.Text != "" {
 				frSB.WriteString(part.Text)
 				frSB.WriteString("\n")
