@@ -6,6 +6,26 @@ import (
 	"fmt"
 )
 
+func getCurrentPriceSnapshot() map[int]float64 {
+	snapshot := make(map[int]float64)
+
+	socket.AggDataMutex.RLock()
+	defer socket.AggDataMutex.RUnlock()
+
+	for securityID, ds := range socket.AggData {
+		if ds != nil && ds.SecondDataExtended != nil {
+			ds.SecondDataExtended.Mutex.RLock()
+			if len(ds.SecondDataExtended.Aggs) >= socket.AggsLength {
+				snapshot[securityID] = ds.SecondDataExtended.Aggs[socket.AggsLength-1][1]
+			}
+			ds.SecondDataExtended.Mutex.RUnlock()
+		}
+	}
+
+	return snapshot
+}
+
+// depricated?!?!?!?!?!?!?!?!???
 func processPriceAlert(conn *data.Conn, alert Alert) error {
 	socket.AggDataMutex.RLock()         // Acquire read lock
 	defer socket.AggDataMutex.RUnlock() // Release read lock
@@ -20,13 +40,13 @@ func processPriceAlert(conn *data.Conn, alert Alert) error {
 		price := ds.SecondDataExtended.Aggs[socket.AggsLength-1][1]
 		if *directionPtr {
 			if price >= *alert.Price {
-				if err := dispatchAlert(conn, alert); err != nil {
+				if err := dispatchAlert(alert); err != nil {
 					return fmt.Errorf("failed to dispatch alert: %v", err)
 				}
 			}
 		} else {
 			if price <= *alert.Price {
-				if err := dispatchAlert(conn, alert); err != nil {
+				if err := dispatchAlert(alert); err != nil {
 					return fmt.Errorf("failed to dispatch alert: %v", err)
 				}
 			}

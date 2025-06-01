@@ -205,6 +205,6 @@ func DeleteAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfac
 		return nil, fmt.Errorf("alert not found or permission denied")
 	}
 
-	alerts.RemoveAlert(args.AlertID)
+	alerts.RemoveAlertFromID(args.AlertID)
 	return nil, nil
 }
