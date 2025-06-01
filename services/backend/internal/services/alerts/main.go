@@ -123,8 +123,10 @@ func initAlerts(conn *data.Conn) error {
 	ctx := context.Background()
 
 	// Load active alerts
+
+	// FORNOW: because alertType doesnt exist i think this is failing
 	query := `
-        SELECT alertId, userId, alertType, setupId, price, direction, securityId
+        SELECT alertId, userId, setupId, price, direction, securityId
         FROM alerts
         WHERE active = true
     `
@@ -140,7 +142,7 @@ func initAlerts(conn *data.Conn) error {
 		err := rows.Scan(
 			&alert.AlertID,
 			&alert.UserID,
-			&alert.AlertType,
+			// &alert.AlertType, // i dont think this currently exists
 			&alert.SetupID,
 			&alert.Price,
 			&alert.Direction,
@@ -149,7 +151,7 @@ func initAlerts(conn *data.Conn) error {
 		if err != nil {
 			return fmt.Errorf("scanning alert row: %w", err)
 		}
-		if alert.AlertType == "price" {
+		if alert.SecurityID != nil {
 			ticker, err := postgres.GetTicker(conn, *alert.SecurityID, time.Now())
 			if err != nil {
 				////fmt.Println("error getting ticker: %w", err)
