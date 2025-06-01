@@ -719,6 +719,7 @@ var (
 			Function:      CalculateBacktestStatistic,
 			StatusMessage: "Calculating backtest statistics...",
 		},
+		// [SEARCH TOOLS]
 		"runWebSearch": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runWebSearch",
@@ -734,6 +735,26 @@ var (
 			Function:      RunWebSearch,
 			StatusMessage: "Searching the web...",
 		},
+		"runTwitterSearch": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "runTwitterSearch",
+				Description: "Run a search on Twitter using Grok.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"prompt":   {Type: genai.TypeString, Description: "The query to search for. Be specific and detailed. Do NOT leave this field as an empty string."},
+						"handles":  {Type: genai.TypeArray, Description: "A list of Twitter handles. If omitted, the search will search the entirety of Twitter."},
+						"fromDate": {Type: genai.TypeString, Description: "The date YYYY-MM-DD to start searching from."},
+						"toDate":   {Type: genai.TypeString, Description: "The date YYYY-MM-DD to stop searching at."},
+					},
+					Required: []string{"prompt"},
+				},
+			},
+			Function:      RunTwitterSearch,
+			StatusMessage: "Searching Twitter...",
+		},
+		// [END SEARCH TOOLS]
+		// [MODEL HELPERS]
 		"dateToMS": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "dateToMS",

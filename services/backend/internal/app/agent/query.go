@@ -25,6 +25,7 @@ type QueryResponse struct {
 	ContentChunks []ContentChunk `json:"content_chunks,omitempty"`
 	Text          string         `json:"text,omitempty"`
 	Citations     []Citation     `json:"citations,omitempty"`
+	Suggestions   []string       `json:"suggestions,omitempty"`
 }
 
 // ThinkingResponse represents the JSON output from the thinking model with rounds
