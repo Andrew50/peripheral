@@ -1,9 +1,7 @@
 package alerts
 
 import (
-	"backend/internal/data"
 	"backend/internal/services/socket"
-	"context"
 	"fmt"
 	"log"
 	"os"
@@ -79,7 +77,7 @@ func writeAlertMessage(alert Alert) string {
 	return ""
 }
 
-func dispatchAlert(conn *data.Conn, alert Alert) error {
+var dispatchAlert = func(alert Alert) error {
 	//log.Printf("DEBUG: Dispatching alert: %+v", alert)
 	////fmt.Println("dispatching alert", alert)
 	alertMessage := writeAlertMessage(alert)
@@ -96,34 +94,6 @@ func dispatchAlert(conn *data.Conn, alert Alert) error {
 		Channel:    "alert",
 		Ticker:     *alert.Ticker,
 	})
-	query := `
-        INSERT INTO alertLogs (alertId, timestamp, securityId)
-        VALUES ($1, $2, $3)
-    `
-
-	_, err = conn.DB.Exec(context.Background(),
-		query,
-		alert.AlertID,
-		timestamp,
-		*alert.SecurityID,
-	)
-	if err != nil {
-		//log.Printf("Failed to log alert to database: %v", err)
-		return fmt.Errorf("failed to log alert: %v", err)
-	}
-
-	// Disable the alert by setting its active status to false
-	updateQuery := `
-        UPDATE alerts
-        SET active = false
-        WHERE alertId = $1
-    `
-	_, err = conn.DB.Exec(context.Background(), updateQuery, alert.AlertID)
-	if err != nil {
-		//log.Printf("Failed to disable alert with ID %d: %v", alert.AlertID, err)
-		return fmt.Errorf("failed to disable alert: %v", err)
-	}
-	RemoveAlert(alert.AlertID)
 
 	return nil
 }
