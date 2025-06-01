@@ -13,6 +13,7 @@ import (
 
 type DirectAnswer struct {
 	ContentChunks []ContentChunk `json:"content_chunks"`
+	Suggestions   []string       `json:"suggestions,omitempty"`
 	TokenCounts   TokenCounts    `json:"token_counts,omitempty"`
 }
 type Round struct {
@@ -27,6 +28,7 @@ type Plan struct {
 
 type FinalResponse struct {
 	ContentChunks []ContentChunk `json:"content_chunks"`
+	Suggestions   []string       `json:"suggestions,omitempty"`
 	TokenCounts   TokenCounts    `json:"token_counts,omitempty"`
 }
 
