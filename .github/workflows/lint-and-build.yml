@@ -324,35 +324,41 @@ jobs:
           echo "Ensuring testing libraries are available..."
           npm install --save-dev jest@29 @types/jest ts-jest@29 svelte-jester@2 @testing-library/svelte @testing-library/jest-dom jsdom
 
-          # Always create the Jest configuration file to ensure consistency
-          echo "Creating Jest configuration file (jest.config.cjs)..."
-          echo "/** @type {import('jest').Config} */" > jest.config.cjs
-          echo "module.exports = {" >> jest.config.cjs
-          echo "  preset: 'ts-jest'," >> jest.config.cjs
-          echo "  testEnvironment: 'jsdom'," >> jest.config.cjs
-          echo "  setupFilesAfterEnv: ['<rootDir>/jest.setup.cjs']," >> jest.config.cjs
-          echo "  transform: {" >> jest.config.cjs
-          echo "    '^.+\.svelte$': 'svelte-jester'," >> jest.config.cjs
-          echo "    '^.+\.(ts|js)$': 'ts-jest'" >> jest.config.cjs
-          echo "  }," >> jest.config.cjs
-          echo "  moduleNameMapper: {" >> jest.config.cjs
-          echo "    '^\$lib/(.*)$': '<rootDir>/src/lib/$1'" >> jest.config.cjs
-          echo "  }," >> jest.config.cjs
-          echo "  moduleFileExtensions: ['js', 'ts', 'svelte']" >> jest.config.cjs
-          echo "};" >> jest.config.cjs
+          # Check if jest.config.cjs already exists - if so, use the existing one
+          if [ -f "jest.config.cjs" ]; then
+            echo "Using existing Jest configuration file (jest.config.cjs)..."
+          else
+            echo "Creating Jest configuration file (jest.config.cjs)..."
+            echo "/** @type {import('jest').Config} */" > jest.config.cjs
+            echo "module.exports = {" >> jest.config.cjs
+            echo "  preset: 'ts-jest'," >> jest.config.cjs
+            echo "  testEnvironment: 'jsdom'," >> jest.config.cjs
+            echo "  setupFilesAfterEnv: ['<rootDir>/jest.setup.cjs']," >> jest.config.cjs
+            echo "  transform: {" >> jest.config.cjs
+            echo "    '^.+\.svelte$': 'svelte-jester'," >> jest.config.cjs
+            echo "    '^.+\.(ts|js)$': 'ts-jest'" >> jest.config.cjs
+            echo "  }," >> jest.config.cjs
+            echo "  moduleNameMapper: {" >> jest.config.cjs
+            echo "    '^\$lib/(.*)$': '<rootDir>/src/lib/$1'" >> jest.config.cjs
+            echo "  }," >> jest.config.cjs
+            echo "  moduleFileExtensions: ['js', 'ts', 'svelte']" >> jest.config.cjs
+            echo "};" >> jest.config.cjs
+          fi
 
       - name: Create simplified Jest configuration and setup
         working-directory: services/frontend
         run: |
           echo "Ensuring Jest setup (jest.setup.cjs)..."
-          # Create a CommonJS version of the setup file for compatibility
-          if [ -f "jest.setup.js" ] && [ ! -f "jest.setup.cjs" ]; then # Original exists, cjs doesn't
+          # Check if jest.setup.cjs already exists - if so, use the existing one
+          if [ -f "jest.setup.cjs" ]; then
+            echo "Using existing Jest setup file (jest.setup.cjs)..."
+          elif [ -f "jest.setup.js" ]; then # Original exists, cjs doesn't
             echo "Creating CommonJS version of jest.setup.js as jest.setup.cjs..."
             cp jest.setup.js jest.setup.js.original # Backup original
             echo "// CommonJS version of the Jest setup file (auto-converted)" > jest.setup.cjs
             echo "// Original file preserved as jest.setup.js.original" >> jest.setup.cjs
             echo "require('@testing-library/jest-dom');" >> jest.setup.cjs
-          elif [ ! -f "jest.setup.cjs" ]; then # Neither cjs nor js exists for setup
+          else # Neither cjs nor js exists for setup
              echo "// Jest setup file - CommonJS format" > jest.setup.cjs
              echo "require('@testing-library/jest-dom');" >> jest.setup.cjs
           fi
@@ -365,6 +371,12 @@ jobs:
             echo "declare global { namespace App {} }" >> src/app.d.ts
             echo "export {};" >> src/app.d.ts
           fi
+
+      - name: Run SvelteKit sync
+        working-directory: services/frontend
+        run: |
+          echo "Running SvelteKit sync to generate .svelte-kit directory and type definitions..."
+          npx svelte-kit sync
 
       - name: Run frontend tests
         working-directory: services/frontend
