@@ -95,7 +95,7 @@
 	};
 
 	type QueryResponse = {
-		response_type: 'text' | 'mixed_content';
+		type: 'text' | 'mixed_content';
 		text?: string;
 		content_chunks?: ContentChunk[];
 		suggestions?: string[];
@@ -110,6 +110,7 @@
 			timestamp: string | Date;
 			expires_at?: string | Date;
 			context_items?: (Instance | FilingContext)[];
+			suggested_queries?: string[];
 		}>;
 		timestamp: string | Date;
 	};
@@ -154,6 +155,7 @@
 	// Chat history
 	let messagesStore = writable<Message[]>([]); // Wrap messages in a writable store
 	let historyLoaded = false; // Add state variable
+	let isInitialLoad = true; // Track if this is the initial load
 
 	// Derived store to control initial chip visibility
 	const showChips = derived([inputValue, messagesStore], ([$val, $msgs]) => $msgs.length === 0 && $val.trim() === '');
@@ -215,10 +217,17 @@
 						contentChunks: msg.content_chunks || [],
 						timestamp: new Date(msg.timestamp),
 						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
+						suggestedQueries: msg.suggested_queries || []
 					}]);
 				});
 
-				scrollToBottom();
+				// Position at bottom after DOM is updated
+				await tick();
+				if (messagesContainer) {
+					messagesContainer.style.scrollBehavior = 'auto';
+					messagesContainer.scrollTop = messagesContainer.scrollHeight;
+					messagesContainer.style.scrollBehavior = 'smooth';
+				}
 			}
 		} catch (error) {
 			console.error('Error loading conversation history:', error);
@@ -364,7 +373,7 @@
 						sender: 'assistant',
 						timestamp: new Date(),
 						expiresAt: expiresAt,
-						responseType: typedResponse.response_type,
+						responseType: typedResponse.type,
 						contentChunks: typedResponse.content_chunks,
 						suggestedQueries: typedResponse.suggestions || []
 					};
@@ -448,6 +457,9 @@
 
 			// Clear local messages
 			messagesStore.set([]);
+
+			// Reset initial load flag for next conversation
+			isInitialLoad = true;
 
 			// Fetch initial suggestions now that history is cleared and confirmed
 			fetchInitialSuggestions(); // <-- Call the new helper function

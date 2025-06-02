@@ -38,6 +38,24 @@ type ContentChunk struct {
 	Content interface{} `json:"content"` // string for "text", TableData for "table"
 }
 
+// Citation represents a citation/source reference
+type Citation struct {
+	Title       string `json:"title"`
+	URL         string `json:"url"`
+	StartIndex  int    `json:"start_index,omitempty"`
+	EndIndex    int    `json:"end_index,omitempty"`
+	PublishDate string `json:"publish_date,omitempty"`
+}
+
+// QueryResponse represents the response to a user query
+type QueryResponse struct {
+	Type          string         `json:"type"` //"mixed_content", "function_calls", "simple_text"
+	ContentChunks []ContentChunk `json:"content_chunks,omitempty"`
+	Text          string         `json:"text,omitempty"`
+	Citations     []Citation     `json:"citations,omitempty"`
+	Suggestions   []string       `json:"suggestions,omitempty"`
+}
+
 func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
 	ctx := context.Background()
 	success, message := conn.TestRedisConnectivity(ctx, userID)
@@ -80,7 +98,7 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 			totalRequestInputTokenCount += v.TokenCounts.InputTokenCount
 			totalRequestThoughtsTokenCount += v.TokenCounts.ThoughtsTokenCount
 			totalRequestTokenCount += v.TokenCounts.TotalTokenCount
-			if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, []ExecuteResult{}, totalRequestTokenCount); err != nil {
+			if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, []ExecuteResult{}, v.Suggestions, totalRequestTokenCount); err != nil {
 				log.Printf("Error saving message to conversation: %v", err)
 			}
 			return QueryResponse{
@@ -133,7 +151,7 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 				// Process any table instructions in the content chunks
 				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
 
-				if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, allResults, totalRequestTokenCount); err != nil {
+				if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalRequestTokenCount); err != nil {
 					log.Printf("Error saving message to conversation: %v", err)
 				}
 
