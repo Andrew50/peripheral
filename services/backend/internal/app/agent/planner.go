@@ -115,15 +115,10 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 
 	// --- Extract JSON block --- START
 	jsonBlock := ""
-	jsonStartIdx := strings.Index(resultText, "{")
-	jsonEndIdx := strings.LastIndex(resultText, "}")
-	if jsonStartIdx != -1 && jsonEndIdx != -1 && jsonEndIdx > jsonStartIdx {
-		jsonBlock = resultText[jsonStartIdx : jsonEndIdx+1]
-	}
 
+	// First try direct parsing of the entire resultText
 	var directAns DirectAnswer
-	// Try unmarshalling the extracted block if it's not empty
-	if jsonBlock != "" && json.Unmarshal([]byte(jsonBlock), &directAns) == nil && len(directAns.ContentChunks) > 0 {
+	if json.Unmarshal([]byte(resultText), &directAns) == nil && len(directAns.ContentChunks) > 0 {
 		directAns.TokenCounts = TokenCounts{
 			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
 			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
@@ -134,6 +129,36 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	}
 
 	var plan Plan
+	if json.Unmarshal([]byte(resultText), &plan) == nil {
+		plan.TokenCounts = TokenCounts{
+			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
+			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
+			ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
+			TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+		}
+		return plan, nil
+	}
+
+	// If direct parsing fails, try to extract JSON block
+	jsonStartIdx := strings.Index(resultText, "{")
+	jsonEndIdx := strings.LastIndex(resultText, "}")
+	if jsonStartIdx != -1 && jsonEndIdx != -1 && jsonEndIdx > jsonStartIdx {
+		jsonBlock = resultText[jsonStartIdx : jsonEndIdx+1]
+	}
+
+	// Try unmarshalling the extracted block if it's not empty
+	directAns = DirectAnswer{} // Reset the struct
+	if jsonBlock != "" && json.Unmarshal([]byte(jsonBlock), &directAns) == nil && len(directAns.ContentChunks) > 0 {
+		directAns.TokenCounts = TokenCounts{
+			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
+			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
+			ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
+			TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+		}
+		return directAns, nil
+	}
+
+	plan = Plan{} // Reset the struct
 	// Try unmarshalling the extracted block if it's not empty
 	if jsonBlock != "" && json.Unmarshal([]byte(jsonBlock), &plan) == nil {
 		plan.TokenCounts = TokenCounts{

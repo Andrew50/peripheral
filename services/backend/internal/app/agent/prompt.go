@@ -35,7 +35,7 @@ func BuildPlanningPrompt(conn *data.Conn, userID int, query string, contextItems
 		ticker, _ := activeChartContext["ticker"].(string)
 		secID := fmt.Sprint(activeChartContext["securityId"])
 		tsStr := fmt.Sprint(activeChartContext["timestamp"])
-		sb.WriteString(fmt.Sprintf("Instance - Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secID, tsStr))
+		sb.WriteString(fmt.Sprintf("Instance - Ticker: %s, SecurityId: %s, TimestampMs: %s", ticker, secID, tsStr))
 		sb.WriteString("\n</UserActiveChart>\n")
 	}
 	sb.WriteString("<UserQuery>\n")
@@ -101,6 +101,11 @@ func _buildConversationContext(messages []ChatMessage) string {
 	}
 
 	for i := startIdx; i < len(messages); i++ {
+		// Skip pending messages to avoid empty Assistant responses
+		if messages[i].Status == "pending" {
+			continue
+		}
+
 		context.WriteString("User: ")
 		context.WriteString(messages[i].Query)
 		context.WriteString("\n")
