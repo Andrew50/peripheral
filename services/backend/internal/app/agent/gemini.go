@@ -15,11 +15,6 @@ type FunctionResponse struct {
 	FunctionCalls []FunctionCall `json:"function_calls"`
 }
 
-type Citation struct {
-	Title string `json:"title"`
-	URL   string `json:"url"`
-}
-
 type GeminiFunctionResponse struct {
 	FunctionCalls []FunctionCall `json:"function_calls"`
 	Text          string         `json:"text"`

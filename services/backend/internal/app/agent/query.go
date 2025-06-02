@@ -509,7 +509,6 @@ func processContentChunksForTables(ctx context.Context, conn *data.Conn, userID 
 			// Attempt to parse the instruction content
 			instructionBytes, err := json.Marshal(chunk.Content)
 			if err != nil {
-				////fmt.Printf("Error marshaling table instruction content: %v\n", err)
 				// Replace with an error chunk
 				processedChunks = append(processedChunks, ContentChunk{
 					Type:    "text",
@@ -520,7 +519,6 @@ func processContentChunksForTables(ctx context.Context, conn *data.Conn, userID 
 
 			var instructionData TableInstructionData
 			if err := json.Unmarshal(instructionBytes, &instructionData); err != nil {
-				////fmt.Printf("Error unmarshaling table instruction: %v. Raw content: %s\n", err, string(instructionBytes))
 				// Replace with an error chunk
 				processedChunks = append(processedChunks, ContentChunk{
 					Type:    "text",
@@ -532,7 +530,6 @@ func processContentChunksForTables(ctx context.Context, conn *data.Conn, userID 
 			// Generate the actual table chunk
 			tableChunk, err := GenerateBacktestTableFromInstruction(ctx, conn, userID, instructionData)
 			if err != nil {
-				////fmt.Printf("Error generating table from instruction: %v\n", err)
 				// Replace with an error chunk
 				processedChunks = append(processedChunks, ContentChunk{
 					Type:    "text",
