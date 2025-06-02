@@ -241,6 +241,9 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userID int, rawArgs json
 			// Append assistant's response to history for the next turn
 			conversationHistory = append(conversationHistory, result.Candidates[0].Content)
 			for _, part := range result.Candidates[0].Content.Parts {
+				if part.Thought {
+					continue
+				}
 				if part.Text != "" {
 					responseText = part.Text
 					break
