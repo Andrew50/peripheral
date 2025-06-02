@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/gorilla/websocket"
 )
 
 const (
@@ -65,12 +63,13 @@ func (c *Client) subscribeReplay(channelName string) {
 			return
 		}
 
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		_ = c.ws.WriteMessage(websocket.TextMessage, []byte(initialValue)) // Ignore error for now
-		// if err != nil {
-		////fmt.Println("WebSocket write error while sending initial value in replay:", err)
-		//}
+		// Send to the client via the send channel (thread-safe)
+		select {
+		case c.send <- []byte(initialValue):
+			// Successfully sent
+		default:
+			// Channel is full or closed, skip this message
+		}
 	}()
 
 	if !c.loopRunning {

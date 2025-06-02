@@ -4,8 +4,6 @@ import (
 	"backend/internal/data"
 	"log"
 	"os"
-
-	"github.com/gorilla/websocket"
 )
 
 // Subscribes the client WebSocket to the requested channel in "realtime" mode
@@ -35,12 +33,12 @@ func (c *Client) subscribeRealtime(conn *data.Conn, channelName string) {
 			return
 		}
 
-		// 4) Send to the client
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		err := c.ws.WriteMessage(websocket.TextMessage, initialValue)
-		if err != nil {
-			return
+		// Send to the client via the send channel (thread-safe)
+		select {
+		case c.send <- initialValue:
+			// Successfully sent
+		default:
+			// Channel is full or closed, skip this message
 		}
 	}()
 }
