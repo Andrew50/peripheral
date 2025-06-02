@@ -433,28 +433,6 @@
 		}, 100);
 	}
 
-	// Function to fetch suggested queries
-	async function fetchSuggestedQueries() {
-		try {
-			const response = await privateRequest('getSuggestedQueries', {});
-			const queriesResponse = response as SuggestedQueriesResponse;
-			
-			if (queriesResponse && queriesResponse.suggestions && queriesResponse.suggestions.length > 0) {
-				// Find the last assistant message and add suggested queries to it
-				messagesStore.update(current => {
-					for (let i = current.length - 1; i >= 0; i--) {
-						if (current[i].sender === 'assistant' && !current[i].isLoading) {
-							current[i].suggestedQueries = queriesResponse.suggestions;
-							break;
-						}
-					}
-					return [...current]; // Return new array to trigger update
-				});
-			}
-		} catch (error) {
-			console.error('Error fetching suggested queries:', error);
-		}
-	}
 
 	// Function to handle clicking on a suggested query
 	function handleSuggestedQueryClick(query: string) {
