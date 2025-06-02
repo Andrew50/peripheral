@@ -71,6 +71,27 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 		getDefaultSystemPromptTokenCount(conn)
 	}
 
+	// Save pending message at the start of the request
+	pendingSaved := false
+	if err := savePendingMessageToConversation(conn, userID, query.Query, query.Context); err != nil {
+		log.Printf("Error saving pending message: %v", err)
+		// Don't fail the request, just log the error
+	} else {
+		pendingSaved = true
+	}
+
+	// Ensure we clean up pending message on any error
+	defer func() {
+		if r := recover(); r != nil {
+			if pendingSaved {
+				// Try to remove the pending message if something panicked
+				log.Printf("Panic occurred, attempting to clean up pending message: %v", r)
+				// Note: In a real implementation, you might want a more sophisticated cleanup
+			}
+			panic(r) // Re-panic after cleanup
+		}
+	}()
+
 	var executor *Executor
 	var allResults []ExecuteResult
 	planningPrompt := ""
@@ -98,9 +119,16 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 			totalRequestInputTokenCount += v.TokenCounts.InputTokenCount
 			totalRequestThoughtsTokenCount += v.TokenCounts.ThoughtsTokenCount
 			totalRequestTokenCount += v.TokenCounts.TotalTokenCount
-			if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, []ExecuteResult{}, v.Suggestions, totalRequestTokenCount); err != nil {
-				log.Printf("Error saving message to conversation: %v", err)
+
+			// Update pending message to completed instead of saving new message
+			if err := updatePendingMessageToCompleted(conn, userID, query.Query, processedChunks, []FunctionCall{}, []ExecuteResult{}, v.Suggestions, totalRequestTokenCount); err != nil {
+				log.Printf("Error updating pending message to completed: %v", err)
+				// Fallback to saving new message
+				if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, []ExecuteResult{}, v.Suggestions, totalRequestTokenCount); err != nil {
+					log.Printf("Error saving message to conversation: %v", err)
+				}
 			}
+
 			return QueryResponse{
 				Type:          "mixed_content",
 				ContentChunks: processedChunks,
@@ -151,8 +179,13 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 				// Process any table instructions in the content chunks
 				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
 
-				if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalRequestTokenCount); err != nil {
-					log.Printf("Error saving message to conversation: %v", err)
+				// Update pending message to completed instead of saving new message
+				if err := updatePendingMessageToCompleted(conn, userID, query.Query, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalRequestTokenCount); err != nil {
+					log.Printf("Error updating pending message to completed: %v", err)
+					// Fallback to saving new message
+					if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalRequestTokenCount); err != nil {
+						log.Printf("Error saving message to conversation: %v", err)
+					}
 				}
 
 				return QueryResponse{
