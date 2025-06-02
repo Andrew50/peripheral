@@ -20,14 +20,6 @@ type Query struct {
 	ActiveChartContext map[string]interface{}   `json:"activeChartContext,omitempty"`
 }
 
-type QueryResponse struct {
-	Type          string         `json:"type"` //"mixed_content", "function_calls", "simple_text"
-	ContentChunks []ContentChunk `json:"content_chunks,omitempty"`
-	Text          string         `json:"text,omitempty"`
-	Citations     []Citation     `json:"citations,omitempty"`
-	Suggestions   []string       `json:"suggestions,omitempty"`
-}
-
 // ThinkingResponse represents the JSON output from the thinking model with rounds
 type ThinkingResponse struct {
 	Rounds                  [][]FunctionCall `json:"rounds"`

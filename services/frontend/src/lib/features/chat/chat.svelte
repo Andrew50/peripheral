@@ -111,6 +111,8 @@
 			expires_at?: string | Date;
 			context_items?: (Instance | FilingContext)[];
 			suggested_queries?: string[];
+			completed_at?: string | Date;
+			status?: string;
 		}>;
 		timestamp: string | Date;
 	};
@@ -127,6 +129,9 @@
 		isLoading?: boolean;
 		suggestedQueries?: string[];
 		contextItems?: (Instance | FilingContext)[];
+		status?: string;        // "pending", "completed", "error"
+		completedAt?: Date;     // When the response was completed
+		isNewResponse?: boolean; // Flag to indicate if this is a new unseen response
 	};
 
 	// Type for suggested queries response
@@ -138,6 +143,9 @@
 	let isLoading = false;
 	let messagesContainer: HTMLDivElement;
 	let initialSuggestions: string[] = [];
+	let pollInterval: ReturnType<typeof setInterval> | null = null;
+	let pollAttempts = 0;
+	let maxPollAttempts = 3;
 
 	// Backtest mode state
 	let isBacktestMode = false;
@@ -198,28 +206,90 @@
 			// Check if we have a valid conversation history
 			const conversation = response as ConversationData;
 			if (conversation && conversation.messages && conversation.messages.length > 0) {
+				// Clear existing messages to avoid duplicates during polling updates
+				messagesStore.set([]);
+				
+				// Get the last seen timestamp from localStorage
+				const lastSeenKey = 'chat_last_seen_timestamp';
+				const lastSeenStr = localStorage.getItem(lastSeenKey);
+				const lastSeenTimestamp = lastSeenStr ? new Date(lastSeenStr) : null;
+				
+				// Track if we found any new responses
+				let hasNewResponses = false;
+				let latestCompletedTimestamp: Date | null = null;
+
 				// Process each message in the conversation history
 				conversation.messages.forEach((msg) => {
+					const msgTimestamp = new Date(msg.timestamp);
+					const msgCompletedAt = msg.completed_at ? new Date(msg.completed_at) : undefined;
+					const isCompleted = msg.status === 'completed';
+					const isPending = msg.status === 'pending';
+					
+					// Check if this is a new response (completed after last seen timestamp)
+					const isNewResponse = isCompleted && msgCompletedAt && lastSeenTimestamp && msgCompletedAt > lastSeenTimestamp ? true : undefined;
+					
+					if (isNewResponse) {
+						hasNewResponses = true;
+					}
+
+					// Track the latest completed timestamp
+					if (isCompleted && msgCompletedAt && (!latestCompletedTimestamp || msgCompletedAt > latestCompletedTimestamp)) {
+						latestCompletedTimestamp = msgCompletedAt;
+					}
+
 					// Add user message
 					messagesStore.update(current => [...current, {
 						id: generateId(),
 						content: msg.query,
 						sender: 'user',
-						timestamp: new Date(msg.timestamp),
+						timestamp: msgTimestamp,
 						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
-						contextItems: msg.context_items || []
+						contextItems: msg.context_items || [],
+						status: msg.status,
+						completedAt: msgCompletedAt,
+						isNewResponse: isNewResponse
 					}]);
 
-					messagesStore.update(current => [...current, {
-						id: generateId(),
-						sender: 'assistant',
-						content: msg.response_text,
-						contentChunks: msg.content_chunks || [],
-						timestamp: new Date(msg.timestamp),
-						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
-						suggestedQueries: msg.suggested_queries || []
-					}]);
+					// Only add assistant message if it's completed (has content)
+					if (isCompleted && (msg.content_chunks || msg.response_text)) {
+						messagesStore.update(current => [...current, {
+							id: generateId(),
+							sender: 'assistant',
+							content: msg.response_text || '',
+							contentChunks: msg.content_chunks || [],
+							timestamp: msgTimestamp,
+							expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
+							suggestedQueries: msg.suggested_queries || [],
+							status: msg.status,
+							completedAt: msgCompletedAt,
+							isNewResponse: isNewResponse
+						}]);
+					} else if (isPending) {
+						// Add a loading message for pending requests
+						messagesStore.update(current => [...current, {
+							id: generateId(),
+							sender: 'assistant',
+							content: '',
+							timestamp: msgTimestamp,
+							isLoading: true,
+							status: 'pending'
+						}]);
+					}
 				});
+
+				// Update last seen timestamp if we have new responses
+				if (hasNewResponses && latestCompletedTimestamp) {
+					localStorage.setItem(lastSeenKey, latestCompletedTimestamp.toISOString());
+				} else if (!lastSeenTimestamp && latestCompletedTimestamp) {
+					// First time loading, set the timestamp
+					localStorage.setItem(lastSeenKey, latestCompletedTimestamp.toISOString());
+				}
+
+				// Show notification for new responses if tab wasn't focused
+				if (hasNewResponses && document.hidden) {
+					console.log('New chat responses arrived while tab was closed');
+					// You could add a notification here
+				}
 
 				// Position at bottom after DOM is updated
 				await tick();
@@ -228,6 +298,9 @@
 					messagesContainer.scrollTop = messagesContainer.scrollHeight;
 					messagesContainer.style.scrollBehavior = 'smooth';
 				}
+			} else {
+				// No conversation history, clear messages
+				messagesStore.set([]);
 			}
 		} catch (error) {
 			console.error('Error loading conversation history:', error);
@@ -243,11 +316,87 @@
 		}
 	}
 
+	// Function to check for conversation updates (for polling)
+	async function checkForUpdates() {
+		if (isLoading) return; // Don't check if we're already loading
+		if (document.hidden) return; // Don't poll when tab is not visible
+		
+		try {
+			const response = await privateRequest('getUserConversation', {});
+			const conversation = response as ConversationData;
+			
+			if (conversation && conversation.messages && conversation.messages.length > 0) {
+				const lastSeenKey = 'chat_last_seen_timestamp';
+				const lastSeenStr = localStorage.getItem(lastSeenKey);
+				const lastSeenTimestamp = lastSeenStr ? new Date(lastSeenStr) : null;
+				
+				let hasUpdates = false;
+				
+				// Check if there are any new completed messages or status changes
+				for (const msg of conversation.messages) {
+					const msgCompletedAt = msg.completed_at ? new Date(msg.completed_at) : null;
+					const isCompleted = msg.status === 'completed';
+					
+					if (isCompleted && msgCompletedAt && lastSeenTimestamp && msgCompletedAt > lastSeenTimestamp) {
+						hasUpdates = true;
+						break;
+					}
+					
+					// Check if we have pending messages that might have been completed
+					const existingMessage = $messagesStore.find(m => m.content === msg.query && m.sender === 'user');
+					if (existingMessage && isCompleted && (!existingMessage.status || existingMessage.status === 'pending')) {
+						hasUpdates = true;
+						break;
+					}
+				}
+				
+				if (hasUpdates) {
+					// Incrementally update instead of full reload when possible
+					await loadConversationHistory();
+				}
+			}
+			
+			// Reset poll attempts on success
+			pollAttempts = 0;
+		} catch (error) {
+			console.error('Error checking for updates:', error);
+			pollAttempts++;
+			
+			// Stop polling after max attempts to avoid spamming
+			if (pollAttempts >= maxPollAttempts) {
+				console.warn('Stopped polling due to repeated failures');
+				if (pollInterval) {
+					clearInterval(pollInterval);
+					pollInterval = null;
+				}
+			}
+		}
+	}
+
 	onMount(() => {
 		if (queryInput) {
 			setTimeout(() => queryInput.focus(), 100);
 		}
 		loadConversationHistory();
+
+		// Set up periodic polling for updates (every 10 seconds)
+		pollInterval = setInterval(checkForUpdates, 10000);
+
+		// Resume polling when tab becomes visible and check for updates immediately
+		const handleVisibilityChange = () => {
+			if (!document.hidden) {
+				// Reset poll attempts when tab becomes visible
+				pollAttempts = 0;
+				// Restart polling if it was stopped due to errors
+				if (!pollInterval) {
+					pollInterval = setInterval(checkForUpdates, 10000);
+				}
+				// Check for updates immediately when tab becomes visible
+				checkForUpdates();
+			}
+		};
+		
+		document.addEventListener('visibilitychange', handleVisibilityChange);
 
 		// Add delegated event listener for ticker buttons
 		if (messagesContainer) {
@@ -256,10 +405,18 @@
 
 		// Cleanup listener on component destroy
 		return () => {
+			document.removeEventListener('visibilitychange', handleVisibilityChange);
 			if (messagesContainer) {
 				messagesContainer.removeEventListener('click', handleTickerButtonClick);
 			}
 		};
+	});
+
+	onDestroy(() => {
+		// Clean up polling interval
+		if (pollInterval) {
+			clearInterval(pollInterval);
+		}
 	});
 
 	// Generate unique IDs for messages
@@ -276,28 +433,6 @@
 		}, 100);
 	}
 
-	// Function to fetch suggested queries
-	async function fetchSuggestedQueries() {
-		try {
-			const response = await privateRequest('getSuggestedQueries', {});
-			const queriesResponse = response as SuggestedQueriesResponse;
-			
-			if (queriesResponse && queriesResponse.suggestions && queriesResponse.suggestions.length > 0) {
-				// Find the last assistant message and add suggested queries to it
-				messagesStore.update(current => {
-					for (let i = current.length - 1; i >= 0; i--) {
-						if (current[i].sender === 'assistant' && !current[i].isLoading) {
-							current[i].suggestedQueries = queriesResponse.suggestions;
-							break;
-						}
-					}
-					return [...current]; // Return new array to trigger update
-				});
-			}
-		} catch (error) {
-			console.error('Error fetching suggested queries:', error);
-		}
-	}
 
 	// Function to handle clicking on a suggested query
 	function handleSuggestedQueryClick(query: string) {
@@ -312,7 +447,10 @@
 
 	async function handleSubmit() {
 		if (!$inputValue.trim() || isLoading) return;
+		
 		isLoading = true;
+		let loadingMessage: Message | null = null;
+		
 		try { 
 			const userMessage: Message = {
 				id: generateId(),
@@ -325,7 +463,7 @@
 			messagesStore.update(current => [...current, userMessage]);
 
 			// Create loading message placeholder
-			const loadingMessage: Message = {
+			loadingMessage = {
 				id: generateId(),
 				content: '', // Content is now handled by the store
 				sender: 'assistant',
@@ -351,56 +489,83 @@
 			// Prepend if backtest mode is active
 			const finalQuery = isBacktestMode ? `[RUN BACKTEST] ${queryText}` : queryText;
 			const currentActiveChart = $activeChartInstance; // Get current active chart instance
-			privateRequest('getQuery', {
-				query: finalQuery,
-				context: $contextItems, // Send only manually added context items
-				activeChartContext: currentActiveChart // Send active chart separately
-			})
-				.then((response) => {
-					// Type assertion to handle the response type
-					const typedResponse = response as unknown as QueryResponse;
-					console.log('Response:', typedResponse);
+			
+			try {
+				const response = await privateRequest('getQuery', {
+					query: finalQuery,
+					context: $contextItems, // Send only manually added context items
+					activeChartContext: currentActiveChart // Send active chart separately
+				});
 
-					messagesStore.update(current => current.filter(m => m.id !== loadingMessage.id));
-					functionStatusStore.set(null); // Clear status store on success
+				// Type assertion to handle the response type
+				const typedResponse = response as unknown as QueryResponse;
+				console.log('Response:', typedResponse);
 
-					const expiresAt = new Date();
-					expiresAt.setHours(expiresAt.getHours() + 24); 
+				// Clear status store on success
+				functionStatusStore.set(null);
 
-					const assistantMessage: Message = {
-						id: generateId(),
-						content: typedResponse.text || "Error processing request.",
-						sender: 'assistant',
-						timestamp: new Date(),
-						expiresAt: expiresAt,
-						responseType: typedResponse.type,
-						contentChunks: typedResponse.content_chunks,
-						suggestedQueries: typedResponse.suggestions || []
-					};
+				const expiresAt = new Date();
+				expiresAt.setHours(expiresAt.getHours() + 24); 
+				const now = new Date();
 
-					messagesStore.update(current => [...current, assistantMessage]);
-					// scrollToBottom(); // Removed this call
-				})
-				.catch((error) => {
-					console.error('Error fetching response:', error);
+				const assistantMessage: Message = {
+					id: generateId(),
+					content: typedResponse.text || "Error processing request.",
+					sender: 'assistant',
+					timestamp: now,
+					expiresAt: expiresAt,
+					responseType: typedResponse.type,
+					contentChunks: typedResponse.content_chunks,
+					suggestedQueries: typedResponse.suggestions || [],
+					status: 'completed',
+					completedAt: now
+				};
 
-					// Remove loading message and add error message
-					messagesStore.update(current => current.filter(m => m.id !== loadingMessage.id));
-					functionStatusStore.set(null); // Clear status store on error
+				messagesStore.update(current => [...current, assistantMessage]);
+				
+				// Update last seen timestamp since we just saw this response
+				const lastSeenKey = 'chat_last_seen_timestamp';
+				localStorage.setItem(lastSeenKey, now.toISOString());
+				
+			} catch (error) {
+				console.error('Error fetching response:', error);
 
-					const errorMessage: Message = {
-						id: generateId(),
-						content: `Error: ${error.message || 'Failed to get response'}`,
-						sender: 'assistant',
-						timestamp: new Date(),
-						responseType: 'error'
-					};
+				// Clear status store on error
+				functionStatusStore.set(null);
 
-					messagesStore.update(current => [...current, errorMessage]);
-					});
+				const errorMessage: Message = {
+					id: generateId(),
+					content: `Error: ${error.message || 'Failed to get response'}`,
+					sender: 'assistant',
+					timestamp: new Date(),
+					responseType: 'error'
+				};
+
+				messagesStore.update(current => [...current, errorMessage]);
+			}
 		} catch (error) {
-			isLoading = false;
+			console.error('Error in handleSubmit:', error);
+			
+			// Clear status store on any error
+			functionStatusStore.set(null);
+			
+			// Add error message if we have a loading message
+			if (loadingMessage) {
+				const errorMessage: Message = {
+					id: generateId(),
+					content: `Error: ${error.message || 'An unexpected error occurred'}`,
+					sender: 'assistant',
+					timestamp: new Date(),
+					responseType: 'error'
+				};
+
+				messagesStore.update(current => [...current, errorMessage]);
+			}
 		} finally {
+			// Always clean up loading message and reset state
+			if (loadingMessage) {
+				messagesStore.update(current => current.filter(m => m.id !== loadingMessage.id));
+			}
 			isLoading = false;
 		}
 	}
@@ -457,6 +622,10 @@
 
 			// Clear local messages
 			messagesStore.set([]);
+			
+			// Clear last seen timestamp
+			const lastSeenKey = 'chat_last_seen_timestamp';
+			localStorage.removeItem(lastSeenKey);
 
 			// Reset initial load flag for next conversation
 			isInitialLoad = true;
@@ -705,12 +874,19 @@
 					<div
 						class="message {message.sender} {message.responseType === 'error'
 							? 'error'
-							: ''} {isNearExpiration(message) ? 'expiring' : ''}"
+							: ''} {isNearExpiration(message) ? 'expiring' : ''} {message.isNewResponse ? 'new-response' : ''}"
 					>
 						{#if message.isLoading}
 							<!-- Always display status text when loading, as we set an initial one -->
 							<p class="loading-status">{$functionStatusStore?.userMessage || 'Processing...'}</p> 
 						{:else}
+							<!-- Show new response indicator -->
+							{#if message.isNewResponse && message.sender === 'assistant'}
+								<div class="new-response-indicator">
+									<span class="new-badge">New</span>
+								</div>
+							{/if}
+							
 							<!-- Display context chips for user messages -->
 							{#if message.sender === 'user' && message.contextItems && message.contextItems.length > 0}
 								<div class="message-context-chips">
@@ -1670,6 +1846,39 @@
 	@keyframes fadeIn {
 		from { opacity: 0; transform: translateY(-5px); }
 		to { opacity: 1; transform: translateY(0); }
+	}
+
+	/* New response indicator styles */
+	.new-response-indicator {
+		display: flex;
+		justify-content: flex-end;
+		margin-bottom: 0.5rem;
+	}
+
+	.new-badge {
+		background: var(--accent-color, #3a8bf7);
+		color: white;
+		padding: 0.2rem 0.5rem;
+		border-radius: 1rem;
+		font-size: 0.7rem;
+		font-weight: 500;
+		animation: newResponsePulse 2s ease-in-out;
+	}
+
+	.message.new-response {
+		border-left: 3px solid var(--accent-color, #3a8bf7);
+		background: rgba(58, 139, 247, 0.05);
+	}
+
+	@keyframes newResponsePulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.7; }
+	}
+
+	/* Pending message styles */
+	.message.assistant[data-status="pending"] {
+		border-left: 3px solid var(--warning-color, #ff9800);
+		background: rgba(255, 152, 0, 0.05);
 	}
 
 </style>

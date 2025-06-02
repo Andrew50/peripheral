@@ -353,7 +353,7 @@
 		position: absolute;
 		top: 10px;
 		left: 10px;
-		background-color: var(--ui-bg-primary);
+		background-color: rgba(255, 255, 255, 0.1);
 		border: 1px solid var(--ui-border);
 		padding: 8px;
 		border-radius: 4px;
@@ -370,7 +370,7 @@
 
 	/* Update hover styles to not affect width/layout */
 	.legend:hover {
-		background-color: var(--ui-bg-primary);
+		background-color: rgba(255, 255, 255, 0.1);
 		border-color: var(--ui-border);
 	}
 
