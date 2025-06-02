@@ -4,7 +4,6 @@
 	import { onMount } from 'svelte';
 
 	let isScrolled = false;
-	let isMobileMenuOpen = false;
 
 	onMount(() => {
 		window.addEventListener('scroll', () => {
@@ -14,32 +13,14 @@
 
 	function navigateTo(page: string) {
 		goto(page);
-		isMobileMenuOpen = false;
-	}
-
-	function toggleMobileMenu() {
-		isMobileMenuOpen = !isMobileMenuOpen;
 	}
 </script>
 
 <header class="header" class:scrolled={isScrolled}>
 	<div class="header-content">
-		<div class="left">
-			<a href="/" class="logo" on:click={() => navigateTo('/')}>
-				<img src="/atlantis_logo_transparent.png" alt="Atlantis Logo" class="logo-image" />
-			</a>
-		</div>
-
-		<button class="mobile-menu-button" on:click={toggleMobileMenu}>
-			<span class="hamburger"></span>
-		</button>
-
-		<nav class="right" class:active={isMobileMenuOpen}>
-			<!--<a href="/features">Features</a>
-			<a href="/pricing">Pricing</a>-->
-			<a href="/login" on:click={() => navigateTo('/login')}>Sign In</a>
-			<a href="/signup" class="cta-button" on:click={() => navigateTo('/signup')}>Get Started</a>
-		</nav>
+		<a href="/" class="logo" on:click={() => navigateTo('/')}>
+			<img src="/atlantis_logo_transparent.png" alt="Atlantis Logo" class="logo-image" />
+		</a>
 	</div>
 </header>
 
@@ -68,11 +49,11 @@
 		padding: 0 2rem;
 		height: 100%;
 		display: flex;
-		justify-content: space-between;
+		justify-content: center;
 		align-items: center;
 	}
 
-	.left {
+	.logo {
 		display: flex;
 		align-items: center;
 	}
@@ -91,98 +72,5 @@
 
 	.header.scrolled .logo-image {
 		height: 60px;
-	}
-
-	.right {
-		display: flex;
-		align-items: center;
-		gap: 2rem;
-	}
-
-	.right a {
-		color: white;
-		text-decoration: none;
-		font-weight: 500;
-		transition: color 0.3s ease;
-	}
-
-	.right a:hover {
-		color: #3b82f6;
-	}
-
-	.cta-button {
-		background: #3b82f6;
-		padding: 0.5rem 1.5rem;
-		border-radius: 6px;
-		color: white !important;
-		transition: all 0.3s ease !important;
-	}
-
-	.cta-button:hover {
-		background: #2563eb;
-		transform: translateY(-2px);
-	}
-
-	.mobile-menu-button {
-		display: none;
-		background: none;
-		border: none;
-		cursor: pointer;
-		padding: 0.5rem;
-	}
-
-	.hamburger {
-		display: block;
-		width: 24px;
-		height: 2px;
-		background: white;
-		position: relative;
-		transition: all 0.3s ease;
-	}
-
-	.hamburger::before,
-	.hamburger::after {
-		content: '';
-		position: absolute;
-		width: 24px;
-		height: 2px;
-		background: white;
-		transition: all 0.3s ease;
-	}
-
-	.hamburger::before {
-		top: -6px;
-	}
-
-	.hamburger::after {
-		bottom: -6px;
-	}
-
-	@media (max-width: 768px) {
-		.mobile-menu-button {
-			display: block;
-		}
-
-		.right {
-			position: absolute;
-			top: 100%;
-			left: 0;
-			right: 0;
-			background: rgba(0, 0, 0, 0.95);
-			padding: 1rem;
-			flex-direction: column;
-			align-items: center;
-			gap: 1rem;
-			transform: translateY(-100%);
-			opacity: 0;
-			pointer-events: none;
-			transition: all 0.3s ease;
-		}
-
-		.right.active {
-			transform: translateY(0);
-			opacity: 1;
-			pointer-events: all;
-		}
 	}
 </style>
