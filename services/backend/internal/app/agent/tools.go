@@ -738,7 +738,7 @@ var (
 		"runTwitterSearch": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runTwitterSearch",
-				Description: "Run a search on Twitter using Grok.",
+				Description: "Run a search on X using Grok.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -751,6 +751,21 @@ var (
 				},
 			},
 			Function:      RunTwitterSearch,
+			StatusMessage: "Searching Twitter...",
+		},
+		"getLatestTweets": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getLatestTweets",
+				Description: "Get the latest tweets from a list of Twitter handles.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"handles": {Type: genai.TypeArray, Description: "A list of Twitter handles to search for."},
+					},
+					Required: []string{"handles"},
+				},
+			},
+			Function:      GetLatestTweets,
 			StatusMessage: "Searching Twitter...",
 		},
 		// [END SEARCH TOOLS]
