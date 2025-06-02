@@ -198,7 +198,7 @@
 	}
 
 	// Load any existing conversation history from the server
-	async function loadConversationHistory() {
+	async function loadConversationHistory(shouldAutoScroll: boolean = true) {
 		try {
 			isLoading = true;
 			const response = await privateRequest('getUserConversation', {});
@@ -291,12 +291,15 @@
 					// You could add a notification here
 				}
 
-				// Position at bottom after DOM is updated
-				await tick();
-				if (messagesContainer) {
-					messagesContainer.style.scrollBehavior = 'auto';
-					messagesContainer.scrollTop = messagesContainer.scrollHeight;
-					messagesContainer.style.scrollBehavior = 'smooth';
+				// Only auto-scroll if explicitly requested (e.g., on initial load)
+				if (shouldAutoScroll) {
+					// Position at bottom after DOM is updated
+					await tick();
+					if (messagesContainer) {
+						messagesContainer.style.scrollBehavior = 'auto';
+						messagesContainer.scrollTop = messagesContainer.scrollHeight;
+						messagesContainer.style.scrollBehavior = 'smooth';
+					}
 				}
 			} else {
 				// No conversation history, clear messages
@@ -352,7 +355,8 @@
 				
 				if (hasUpdates) {
 					// Incrementally update instead of full reload when possible
-					await loadConversationHistory();
+					// Don't auto-scroll during polling updates to preserve user's reading position
+					await loadConversationHistory(false);
 				}
 			}
 			
@@ -424,7 +428,7 @@
 		return Date.now().toString(36) + Math.random().toString(36).substring(2);
 	}
 
-	// Scroll to bottom of chat
+	// Scroll to bottom of chat (for user-initiated actions)
 	function scrollToBottom() {
 		setTimeout(() => {
 			if (messagesContainer) {
@@ -432,7 +436,6 @@
 			}
 		}, 100);
 	}
-
 
 	// Function to handle clicking on a suggested query
 	function handleSuggestedQueryClick(query: string) {
@@ -478,6 +481,7 @@
 				userMessage: 'Processing request...'
 			});
 
+			// Scroll to show the user's message and loading state
 			scrollToBottom();
 
 			const queryText = $inputValue;
