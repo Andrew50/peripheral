@@ -22,10 +22,10 @@ type Tool struct {
 
 var (
 	Tools = map[string]Tool{
-		"getCurrentSecurityID": {
+		"getSecurityID": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getCurrentSecurityID",
-				Description: "Get the current security ID from a security ticker symbol.",
+				Name:        "getSecurityID",
+				Description: "Get the security ID from a security ticker symbol.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -92,7 +92,7 @@ var (
 							Description: "The securityID of the security to get details for",
 						},
 					},
-					Required: []string{"ticker", "securityId"},
+					Required: []string{"securityID"},
 				},
 			},
 			Function:      helpers.GetTickerMenuDetails,
