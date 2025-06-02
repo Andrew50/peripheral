@@ -101,6 +101,11 @@ func _buildConversationContext(messages []ChatMessage) string {
 	}
 
 	for i := startIdx; i < len(messages); i++ {
+		// Skip pending messages to avoid empty Assistant responses
+		if messages[i].Status == "pending" {
+			continue
+		}
+
 		context.WriteString("User: ")
 		context.WriteString(messages[i].Query)
 		context.WriteString("\n")
