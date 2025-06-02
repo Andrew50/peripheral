@@ -18,28 +18,30 @@ type ConversationData struct {
 
 // ChatMessage represents a single message in the conversation
 type ChatMessage struct {
-	Query         string                   `json:"query"`
-	ContentChunks []ContentChunk           `json:"content_chunks,omitempty"`
-	ResponseText  string                   `json:"response_text,omitempty"`
-	FunctionCalls []FunctionCall           `json:"function_calls"`
-	ToolResults   []ExecuteResult          `json:"tool_results"`
-	ContextItems  []map[string]interface{} `json:"context_items,omitempty"` // Store context sent with user message
-	Timestamp     time.Time                `json:"timestamp"`
-	ExpiresAt     time.Time                `json:"expires_at"` // When this message should expire
-	Citations     []Citation               `json:"citations,omitempty"`
-	TokenCount    int32                    `json:"token_count"`
+	Query            string                   `json:"query"`
+	ContentChunks    []ContentChunk           `json:"content_chunks,omitempty"`
+	ResponseText     string                   `json:"response_text,omitempty"`
+	FunctionCalls    []FunctionCall           `json:"function_calls"`
+	ToolResults      []ExecuteResult          `json:"tool_results"`
+	ContextItems     []map[string]interface{} `json:"context_items,omitempty"`     // Store context sent with user message
+	SuggestedQueries []string                 `json:"suggested_queries,omitempty"` // Store suggested queries from LLM
+	Timestamp        time.Time                `json:"timestamp"`
+	ExpiresAt        time.Time                `json:"expires_at"` // When this message should expire
+	Citations        []Citation               `json:"citations,omitempty"`
+	TokenCount       int32                    `json:"token_count"`
 }
 
-func saveMessageToConversation(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult, tokenCount int32) error {
+func saveMessageToConversation(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult, suggestedQueries []string, tokenCount int32) error {
 	message := ChatMessage{
-		Query:         query,
-		ContextItems:  contextItems,
-		ContentChunks: contentChunks,
-		FunctionCalls: functionCalls,
-		ToolResults:   toolResults,
-		TokenCount:    tokenCount,
-		Timestamp:     time.Now(),
-		ExpiresAt:     time.Now().Add(24 * time.Hour),
+		Query:            query,
+		ContextItems:     contextItems,
+		ContentChunks:    contentChunks,
+		FunctionCalls:    functionCalls,
+		ToolResults:      toolResults,
+		SuggestedQueries: suggestedQueries,
+		TokenCount:       tokenCount,
+		Timestamp:        time.Now(),
+		ExpiresAt:        time.Now().Add(24 * time.Hour),
 	}
 
 	conversation, err := GetConversationFromCache(context.Background(), conn, userID)

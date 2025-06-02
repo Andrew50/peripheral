@@ -193,14 +193,15 @@ func GetQuery(conn *data.Conn, userID int, args json.RawMessage) (interface{}, e
 		////fmt.Println("thinking response ", thinkingResp)
 		if len(thinkingResp.Rounds) == 0 && len(thinkingResp.ContentChunks) == 0 {
 			newMessage := ChatMessage{
-				Query:         query.Query,
-				ResponseText:  responseText,
-				FunctionCalls: []FunctionCall{},
-				ToolResults:   []ExecuteResult{},
-				ContextItems:  query.Context, // Store context with the user query message
-				Timestamp:     time.Now(),
-				ExpiresAt:     time.Now().Add(24 * time.Hour),
-				Citations:     citations,
+				Query:            query.Query,
+				ResponseText:     responseText,
+				FunctionCalls:    []FunctionCall{},
+				ToolResults:      []ExecuteResult{},
+				ContextItems:     query.Context, // Store context with the user query message
+				SuggestedQueries: []string{},    // No suggestions for this response type
+				Timestamp:        time.Now(),
+				ExpiresAt:        time.Now().Add(24 * time.Hour),
+				Citations:        citations,
 			}
 
 			// Add new message to conversation history
@@ -224,14 +225,15 @@ func GetQuery(conn *data.Conn, userID int, args json.RawMessage) (interface{}, e
 			processedInitialChunks := processContentChunksForTables(ctx, conn, userID, thinkingResp.ContentChunks)
 
 			newMessage := ChatMessage{
-				Query:         query.Query,
-				ContentChunks: processedInitialChunks, // Use processed chunks
-				FunctionCalls: []FunctionCall{},
-				ToolResults:   []ExecuteResult{},
-				ContextItems:  query.Context, // Store context with the user query message
-				Timestamp:     time.Now(),
-				ExpiresAt:     time.Now().Add(24 * time.Hour),
-				Citations:     citations,
+				Query:            query.Query,
+				ContentChunks:    processedInitialChunks, // Use processed chunks
+				FunctionCalls:    []FunctionCall{},
+				ToolResults:      []ExecuteResult{},
+				ContextItems:     query.Context, // Store context with the user query message
+				SuggestedQueries: []string{},    // No suggestions for this response type
+				Timestamp:        time.Now(),
+				ExpiresAt:        time.Now().Add(24 * time.Hour),
+				Citations:        citations,
 			}
 
 			// Add new message to conversation history
@@ -257,13 +259,14 @@ func GetQuery(conn *data.Conn, userID int, args json.RawMessage) (interface{}, e
 			if len(contentChunks) > 0 {
 				// Create new message with the content chunks response
 				newMessage := ChatMessage{
-					Query:         query.Query,
-					ContentChunks: contentChunks,
-					FunctionCalls: []FunctionCall{},
-					ToolResults:   []ExecuteResult{},
-					ContextItems:  query.Context, // Store context with the user query message
-					Timestamp:     time.Now(),
-					ExpiresAt:     time.Now().Add(24 * time.Hour),
+					Query:            query.Query,
+					ContentChunks:    contentChunks,
+					FunctionCalls:    []FunctionCall{},
+					ToolResults:      []ExecuteResult{},
+					ContextItems:     query.Context, // Store context with the user query message
+					SuggestedQueries: []string{},    // No suggestions for this response type
+					Timestamp:        time.Now(),
+					ExpiresAt:        time.Now().Add(24 * time.Hour),
 				}
 				conversationData.Messages = append(conversationData.Messages, newMessage)
 				conversationData.Timestamp = time.Now()

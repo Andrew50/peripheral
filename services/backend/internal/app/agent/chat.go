@@ -80,7 +80,7 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 			totalRequestInputTokenCount += v.TokenCounts.InputTokenCount
 			totalRequestThoughtsTokenCount += v.TokenCounts.ThoughtsTokenCount
 			totalRequestTokenCount += v.TokenCounts.TotalTokenCount
-			if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, []ExecuteResult{}, totalRequestTokenCount); err != nil {
+			if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, []ExecuteResult{}, v.Suggestions, totalRequestTokenCount); err != nil {
 				log.Printf("Error saving message to conversation: %v", err)
 			}
 			return QueryResponse{
@@ -133,7 +133,7 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 				// Process any table instructions in the content chunks
 				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
 
-				if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, allResults, totalRequestTokenCount); err != nil {
+				if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalRequestTokenCount); err != nil {
 					log.Printf("Error saving message to conversation: %v", err)
 				}
 
