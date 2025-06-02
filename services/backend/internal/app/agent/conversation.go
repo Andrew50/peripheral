@@ -29,9 +29,12 @@ type ChatMessage struct {
 	ExpiresAt        time.Time                `json:"expires_at"` // When this message should expire
 	Citations        []Citation               `json:"citations,omitempty"`
 	TokenCount       int32                    `json:"token_count"`
+	CompletedAt      time.Time                `json:"completed_at,omitempty"` // When the response was completed
+	Status           string                   `json:"status,omitempty"`       // "pending", "completed", "error"
 }
 
 func saveMessageToConversation(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult, suggestedQueries []string, tokenCount int32) error {
+	now := time.Now()
 	message := ChatMessage{
 		Query:            query,
 		ContextItems:     contextItems,
@@ -40,8 +43,10 @@ func saveMessageToConversation(conn *data.Conn, userID int, query string, contex
 		ToolResults:      toolResults,
 		SuggestedQueries: suggestedQueries,
 		TokenCount:       tokenCount,
-		Timestamp:        time.Now(),
-		ExpiresAt:        time.Now().Add(24 * time.Hour),
+		Timestamp:        now,
+		ExpiresAt:        now.Add(24 * time.Hour),
+		CompletedAt:      now,         // Mark as completed when saving
+		Status:           "completed", // Mark as completed
 	}
 
 	conversation, err := GetConversationFromCache(context.Background(), conn, userID)
@@ -52,7 +57,54 @@ func saveMessageToConversation(conn *data.Conn, userID int, query string, contex
 	conversation.Timestamp = time.Now()
 
 	return saveConversationToCache(context.Background(), conn, userID, fmt.Sprintf("user:%d:conversation", userID), conversation)
+}
 
+// savePendingMessageToConversation saves a pending message when a request starts
+func savePendingMessageToConversation(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}) error {
+	now := time.Now()
+	message := ChatMessage{
+		Query:        query,
+		ContextItems: contextItems,
+		Timestamp:    now,
+		ExpiresAt:    now.Add(24 * time.Hour),
+		Status:       "pending", // Mark as pending
+	}
+
+	conversation, err := GetConversationFromCache(context.Background(), conn, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get user conversation: %w", err)
+	}
+	conversation.Messages = append(conversation.Messages, message)
+	conversation.Timestamp = time.Now()
+
+	return saveConversationToCache(context.Background(), conn, userID, fmt.Sprintf("user:%d:conversation", userID), conversation)
+}
+
+// updatePendingMessageToCompleted updates a pending message to completed status
+func updatePendingMessageToCompleted(conn *data.Conn, userID int, query string, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult, suggestedQueries []string, tokenCount int32) error {
+	conversation, err := GetConversationFromCache(context.Background(), conn, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get user conversation: %w", err)
+	}
+
+	// Find the pending message with the matching query and update it
+	for i := len(conversation.Messages) - 1; i >= 0; i-- {
+		msg := &conversation.Messages[i]
+		if msg.Query == query && msg.Status == "pending" {
+			now := time.Now()
+			msg.ContentChunks = contentChunks
+			msg.FunctionCalls = functionCalls
+			msg.ToolResults = toolResults
+			msg.SuggestedQueries = suggestedQueries
+			msg.TokenCount = tokenCount
+			msg.CompletedAt = now
+			msg.Status = "completed"
+			break
+		}
+	}
+
+	conversation.Timestamp = time.Now()
+	return saveConversationToCache(context.Background(), conn, userID, fmt.Sprintf("user:%d:conversation", userID), conversation)
 }
 
 // saveConversationToCache saves the conversation data to Redis
