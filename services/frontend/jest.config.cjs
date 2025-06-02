@@ -1,7 +1,10 @@
-export default {
+module.exports = {
+    preset: 'ts-jest/presets/default-esm',
+    testEnvironment: 'jsdom',
+    extensionsToTreatAsEsm: ['.ts', '.svelte'],
     transform: {
-        "^.+\\.svelte$": "svelte-jester",
-        "^.+\\.ts$": ["ts-jest", {
+        '^.+\\.svelte$': 'svelte-jester',
+        '^.+\\.ts$': ['ts-jest', {
             useESM: true,
             tsconfig: {
                 allowJs: true,
@@ -22,12 +25,13 @@ export default {
             }
         }]
     },
-    moduleFileExtensions: ["js", "ts", "svelte"],
-    testEnvironment: "jsdom",
-    setupFilesAfterEnv: ["<rootDir>/jest.setup.js"],
-    testMatch: ["**/*.test.ts", "**/*.test.js"],
+    moduleFileExtensions: ['js', 'ts', 'svelte'],
+    setupFilesAfterEnv: ['<rootDir>/jest.setup.cjs'],
+    testMatch: ['**/*.test.ts', '**/*.test.js'],
     moduleNameMapper: {
-        "^\\$lib/(.*)$": "<rootDir>/src/lib/$1"
+        '^\\$lib/(.*)$': '<rootDir>/src/lib/$1'
     },
-    extensionsToTreatAsEsm: ['.ts', '.svelte']
+    transformIgnorePatterns: [
+        'node_modules/(?!(@testing-library/jest-dom|.*\\.esm\\.js$))'
+    ]
 }; 
