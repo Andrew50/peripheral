@@ -31,7 +31,7 @@ var (
 					Properties: map[string]*genai.Schema{
 						"ticker": {
 							Type:        genai.TypeString,
-							Description: "The security ticker symbol, e.g. NVDA, AAPL, etc",
+							Description: "The ticker symbol, e.g. NVDA, AAPL, etc",
 						},
 					},
 					Required: []string{"ticker"},
