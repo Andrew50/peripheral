@@ -28,6 +28,11 @@ func getSystemInstruction(name string) (string, error) {
 	}
 	const rfc3339Seconds = "2006-01-02T15:04:05Z07:00"
 	now := time.Now()
+
+	// Get current date in EST timezone
+	estLocation, _ := time.LoadLocation("America/New_York")
+	estTime := now.In(estLocation)
+
 	s := strings.ReplaceAll(string(raw), "{{COMMON_CONSTRAINTS}}", string(constraints))
 	s = strings.ReplaceAll(s, "{{CURRENT_TIME}}",
 		now.Format(rfc3339Seconds))
@@ -35,6 +40,8 @@ func getSystemInstruction(name string) (string, error) {
 		strconv.FormatInt(now.UnixMilli(), 10))
 	s = strings.ReplaceAll(s, "{{CURRENT_YEAR}}",
 		strconv.Itoa(now.Year()))
+	s = strings.ReplaceAll(s, "{{CURRENT_DATE_EST}}",
+		estTime.Format("01-02-2006"))
 	return s, nil
 }
 
