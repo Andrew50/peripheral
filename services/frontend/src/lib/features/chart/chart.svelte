@@ -239,6 +239,7 @@
 
 	let keyBuffer: string[] = []; // This is for catching key presses from the keyboard before the input system is active
 	let isInputActive = false; // Track if input window is active/initializing
+	let isChartSwitching = false; // Track chart switching overlay state
 	// Add type definitions at the top
 	interface Alert {
 		alertType: string;
@@ -698,6 +699,11 @@
 						releaseQuote = addStream(inst, 'quote', updateLatestQuote) as () => void;
 					}
 					isLoadingChartData = false; // Ensure this runs after data is loaded
+					
+					// Hide chart switching overlay when loading completes
+					if (inst.requestType === 'loadNewTicker') {
+						isChartSwitching = false;
+					}
 				};
 				if (
 					inst.direction == 'backward' ||
@@ -728,6 +734,11 @@
 				console.error(error);
 
 				isLoadingChartData = false; // Ensure this runs after data is loaded
+				
+				// Hide overlay on error
+				if (inst.requestType === 'loadNewTicker') {
+					isChartSwitching = false;
+				}
 			});
 	}
 	function updateLatestQuote(data: QuoteData) {
@@ -1159,6 +1170,11 @@
 		pendingBarUpdate = null;
 		pendingVolumeUpdate = null;
 		lastUpdateTime = 0;
+		
+		// Show overlay for new ticker changes
+		if (newReq.requestType === 'loadNewTicker') {
+			isChartSwitching = true;
+		}
 		
 		const securityId =
 			typeof newReq.securityId === 'string'
@@ -1950,6 +1966,11 @@
 	<Legend instance={currentChartInstance} {hoveredCandleData} {width} />
 	<Shift {shiftOverlay} />
 	<DrawingMenu {drawingMenuProps} />
+	
+	<!-- Chart switching overlay -->
+	{#if isChartSwitching}
+		<div class="chart-switching-overlay"></div>
+	{/if}
 </div>
 
 <!-- Replace the filing info overlay with a more generic event info overlay -->
@@ -2182,5 +2203,38 @@
 		padding: 0.15rem 0.3rem;
 		font-size: 0.7rem;
 		height: 1.3rem;
+	}
+	
+	.chart-switching-overlay {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.4);
+		z-index: 500; /* Above chart but below legend and UI elements */
+		opacity: 0;
+		animation: fadeInOverlay 0.2s ease-out forwards;
+		pointer-events: none; /* Allow clicks to pass through */
+	}
+	
+	@keyframes fadeInOverlay {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
+	
+	@keyframes fadeInDown {
+		from {
+			opacity: 0;
+			transform: translate(-50%, calc(-100% - 5px)); /* Start slightly lower than final */
+		}
+		to {
+			opacity: 1;
+			transform: translate(-50%, calc(-100% - 15px)); /* End in final position */
+		}
 	}
 </style>
