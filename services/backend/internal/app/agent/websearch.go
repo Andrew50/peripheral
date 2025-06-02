@@ -228,3 +228,135 @@ func _getTwitterSearchSystemPrompt() (string, error) {
 	return prompt, nil
 
 }
+
+type TwitterAPITweet struct {
+	URL       string `json:"url"`
+	Text      string `json:"text"`
+	CreatedAt string `json:"createdAt"`
+	Author    struct {
+		UserName string `json:"userName"`
+		Name     string `json:"name"`
+	} `json:"author"`
+}
+
+type TwitterAPIResponse struct {
+	Tweets      []TwitterAPITweet `json:"tweets"`
+	HasNextPage bool              `json:"has_next_page"`
+	NextCursor  string            `json:"next_cursor"`
+}
+
+type LatestTweetsResult struct {
+	URL       string `json:"url"`
+	Text      string `json:"text"`
+	CreatedAt string `json:"created_at"`
+	Name      string `json:"name"`
+}
+
+func GetLatestTweets(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
+	var args TwitterSearchArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("error unmarshalling args: %w", err)
+	}
+	handles := args.Handles
+	if len(handles) == 0 {
+		return nil, errors.New("no handles provided")
+	}
+
+	// Get API key - assuming you have a method to get Twitter API key
+	apiKey := conn.TwitterAPIioKey // You may need to add this field to your Conn struct
+	if apiKey == "" {
+		return nil, errors.New("twitter api io key not found")
+	}
+
+	// Construct the search query: "from:user1 OR from:user2 OR ..."
+	query := ""
+	for i, handle := range handles {
+		// Remove @ if present
+		if len(handle) > 0 && handle[0] == '@' {
+			handle = handle[1:]
+		}
+
+		if i > 0 {
+			query += " OR "
+		}
+		query += "from:" + handle
+	}
+
+	// Create the HTTP request
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"https://api.twitterapi.io/twitter/tweet/advanced_search",
+		nil,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %w", err)
+	}
+
+	// Set query parameters
+	q := req.URL.Query()
+	q.Add("query", query)
+	q.Add("queryType", "Latest")
+	q.Add("cursor", "") // First page
+	req.URL.RawQuery = q.Encode()
+
+	// Set headers
+	req.Header.Set("X-API-Key", apiKey)
+
+	// Make the request
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error making request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check response status
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	// Parse the response
+	var apiResponse TwitterAPIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+		return nil, fmt.Errorf("error decoding response: %w", err)
+	}
+
+	// Load EST timezone
+	estLocation, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return nil, fmt.Errorf("error loading EST timezone: %w", err)
+	}
+
+	// Convert to our result format
+	results := make([]LatestTweetsResult, 0, len(apiResponse.Tweets))
+	for _, tweet := range apiResponse.Tweets {
+		// Parse and format the timestamp
+		formattedTime := tweet.CreatedAt // Default fallback
+
+		// Try to parse the timestamp and convert to EST
+		if parsedTime, parseErr := time.Parse(time.RFC3339, tweet.CreatedAt); parseErr == nil {
+			// Convert to EST and format nicely
+			estTime := parsedTime.In(estLocation)
+			formattedTime = estTime.Format("01/02/2006 3:04 PM MST")
+		} else if parsedTime, parseErr := time.Parse("2006-01-02T15:04:05.000Z", tweet.CreatedAt); parseErr == nil {
+			// Try alternative format
+			estTime := parsedTime.In(estLocation)
+			formattedTime = estTime.Format("01/02/2006 3:04 PM MST")
+		} else if parsedTime, parseErr := time.Parse("Mon Jan 02 15:04:05 +0000 2006", tweet.CreatedAt); parseErr == nil {
+			// Try Twitter's classic format
+			estTime := parsedTime.In(estLocation)
+			formattedTime = estTime.Format("01/02/2006 3:04 PM MST")
+		}
+
+		results = append(results, LatestTweetsResult{
+			URL:       tweet.URL,
+			Text:      tweet.Text,
+			CreatedAt: formattedTime,
+			Name:      tweet.Author.Name,
+		})
+	}
+
+	return results, nil
+}
