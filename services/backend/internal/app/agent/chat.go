@@ -56,8 +56,13 @@ type QueryResponse struct {
 	Suggestions   []string       `json:"suggestions,omitempty"`
 }
 
-func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
-	ctx := context.Background()
+// GetChatRequest is the main context-aware chat request handler
+func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
+	// Check if context is already cancelled
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	success, message := conn.TestRedisConnectivity(ctx, userID)
 	if !success {
 		return nil, fmt.Errorf("%s", message)
@@ -101,6 +106,11 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 	totalRequestThoughtsTokenCount := int32(0)
 	totalRequestTokenCount := int32(0)
 	for {
+		// Check if context is cancelled during the planning loop
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
 		if planningPrompt == "" {
 			var err error
 			planningPrompt, err = BuildPlanningPrompt(conn, userID, query.Query, query.Context, query.ActiveChartContext)
@@ -145,7 +155,7 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 					executor = NewExecutor(conn, userID, 3, logger)
 				}
 				for _, round := range v.Rounds {
-					// Execute all function calls in this round
+					// Execute all function calls in this round with context
 					results, err := executor.Execute(ctx, round.Calls, round.Parallel)
 					if err != nil {
 						return nil, fmt.Errorf("error executing function calls: %w", err)
@@ -200,6 +210,76 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 			return nil, fmt.Errorf("model took too many turns to run")
 		}
 	}
+}
+
+// ClearConversationHistoryWithContext is a context-aware wrapper
+func ClearConversationHistoryWithContext(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	return ClearConversationHistory(conn, userID, args)
+}
+
+// GetUserConversationWithContext is a context-aware wrapper
+func GetUserConversationWithContext(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	return GetUserConversation(conn, userID, args)
+}
+
+// GetInitialQuerySuggestionsWithContext is a context-aware wrapper
+func GetInitialQuerySuggestionsWithContext(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	return GetInitialQuerySuggestions(conn, userID, args)
+}
+
+// processContentChunksForTables iterates through chunks and generates tables for "backtest_table" type.
+func processContentChunksForTables(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
+	processedChunks := make([]ContentChunk, 0, len(inputChunks))
+	for _, chunk := range inputChunks {
+		// Check for the type "backtest_table"
+		if chunk.Type == "backtest_table" {
+			// Attempt to parse the instruction content
+			instructionBytes, err := json.Marshal(chunk.Content)
+			if err != nil {
+				// Replace with an error chunk
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: fmt.Sprintf("[Internal Error: Could not process table instruction: %v]", err),
+				})
+				continue
+			}
+
+			var instructionData TableInstructionData
+			if err := json.Unmarshal(instructionBytes, &instructionData); err != nil {
+				// Replace with an error chunk
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: fmt.Sprintf("[Internal Error: Could not parse table instruction: %v]", err),
+				})
+				continue
+			}
+
+			// Generate the actual table chunk
+			tableChunk, err := GenerateBacktestTableFromInstruction(ctx, conn, userID, instructionData)
+			if err != nil {
+				// Replace with an error chunk
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: fmt.Sprintf("[Internal Error: Could not generate table: %v]", err),
+				})
+			} else {
+				processedChunks = append(processedChunks, *tableChunk)
+			}
+		} else {
+			// Keep non-instruction chunks as they are
+			processedChunks = append(processedChunks, chunk)
+		}
+	}
+	return processedChunks
 }
 
 // </chat.go>

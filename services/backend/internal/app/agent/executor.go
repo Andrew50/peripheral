@@ -98,6 +98,12 @@ func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (Execut
 	if !exists {
 		return ExecuteResult{FunctionName: fc.Name, Error: fmt.Sprintf("function '%s' not found", fc.Name), Args: fc.Args}, nil
 	}
+
+	// Check if context is cancelled before executing
+	if ctx.Err() != nil {
+		return ExecuteResult{FunctionName: fc.Name, Error: "request was cancelled", Args: fc.Args}, nil
+	}
+
 	var argsMap map[string]interface{}
 	_ = json.Unmarshal(fc.Args, &argsMap)
 	if tool.StatusMessage != "" {
@@ -106,14 +112,13 @@ func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (Execut
 	_, span := e.tracer.Start(ctx, fc.Name, trace.WithAttributes(attribute.String("agent.tool", fc.Name)))
 	defer span.End()
 
-	result, err := tool.Function(e.conn, e.userID, fc.Args)
+	result, err := tool.Function(ctx, e.conn, e.userID, fc.Args)
 	if err != nil {
 		span.RecordError(err)
 		e.log.Warn("Error executing function", zap.String("function", fc.Name), zap.Error(err))
 		return ExecuteResult{FunctionName: fc.Name, Error: err.Error(), Args: argsMap}, nil
 	}
 	return ExecuteResult{FunctionName: fc.Name, Result: result, Args: argsMap}, nil
-
 }
 
 // formatStatusMessage replaces placeholders like {key} with values from the args map.
