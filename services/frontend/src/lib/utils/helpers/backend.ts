@@ -92,7 +92,8 @@ export async function privateRequest<T>(
     func: string,
     args: Record<string, unknown>,
     verbose = false,
-    keepalive = false
+    keepalive = false,
+    signal?: AbortSignal
 ): Promise<T> {
     // Skip API calls during SSR to prevent crashes
     if (typeof window === 'undefined') {
@@ -117,7 +118,8 @@ export async function privateRequest<T>(
         method: 'POST',
         headers: headers,
         body: JSON.stringify(payload),
-        keepalive: keepalive
+        keepalive: keepalive,
+        signal: signal
         
     }).catch((e) => {
         return Promise.reject(e);
@@ -128,6 +130,15 @@ export async function privateRequest<T>(
         throw new Error('Authentication failed');
     } else if (response.ok) {
         const result = (await response.json()) as T;
+        
+        // Check if this is a cancellation response
+        if (typeof result === 'object' && result !== null && 'type' in result && (result as any).type === 'cancelled') {
+            // Throw a special cancellation error that can be handled differently
+            const cancelError = new Error('Request was cancelled');
+            (cancelError as any).cancelled = true;
+            throw cancelError;
+        }
+        
         if (verbose) {
             // Removed console.log(payload)
         }
