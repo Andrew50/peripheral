@@ -897,9 +897,9 @@
 		{#if $messagesStore.length > 0}
 			<button class="clear-button" on:click={clearConversation} disabled={isLoading}>
 				<svg viewBox="0 0 24 24" width="16" height="16">
-					<path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z" fill="currentColor" />
+					<path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor" />
 				</svg>
-				Clear History
+				New Chat
 			</button>
 		{/if}
 	</div>
