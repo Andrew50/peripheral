@@ -201,6 +201,7 @@
 	// Add abort controller for cancelling requests
 	let currentAbortController: AbortController | null = null;
 	let requestCancelled = false;
+	let currentProcessingQuery = ''; // Track the query currently being processed
 
 	// Function to fetch initial suggestions based on active chart
 	async function fetchInitialSuggestions() {
@@ -412,7 +413,6 @@
 
 				// Show notification for new responses if tab wasn't focused
 				if (hasNewResponses && document.hidden) {
-					console.log('New chat responses arrived while tab was closed');
 					// You could add a notification here
 				}
 
@@ -602,6 +602,7 @@
 		
 		isLoading = true;
 		let loadingMessage: Message | null = null;
+		let backendConversationId = ''; // Track the conversation ID from backend
 		
 		// Create new abort controller for this request
 		currentAbortController = new AbortController();
@@ -636,14 +637,14 @@
 			// Scroll to show the user's message and loading state
 			scrollToBottom();
 
-			const queryText = $inputValue;
+			currentProcessingQuery = $inputValue; // Store the query before clearing input
 			inputValue.set('');
 			// We already set an initial status, no need to clear here
 			await tick(); // Wait for DOM update
 			adjustTextareaHeight(); // Reset height after clearing input and waiting for tick
 
 			// Prepend if backtest mode is active
-			const finalQuery = isBacktestMode ? `[RUN BACKTEST] ${queryText}` : queryText;
+			const finalQuery = isBacktestMode ? `[RUN BACKTEST] ${currentProcessingQuery}` : currentProcessingQuery;
 			const currentActiveChart = $activeChartInstance; // Get current active chart instance
 			
 			try {
@@ -656,14 +657,19 @@
 
 				// Check if request was cancelled while awaiting
 				if (requestCancelled) {
-					console.log('Request was cancelled by user');
 					functionStatusStore.set(null);
+					// Try to clean up pending message on backend
+					await cleanupPendingMessage(currentProcessingQuery);
 					return;
 				}
 
 				// Type assertion to handle the response type
 				const typedResponse = response as unknown as QueryResponse;
-				console.log('Response:', typedResponse);
+
+				// Store the conversation ID for potential cleanup
+				if (typedResponse.conversation_id) {
+					backendConversationId = typedResponse.conversation_id;
+				}
 
 				// Clear status store on success
 				functionStatusStore.set(null);
@@ -705,8 +711,9 @@
 			} catch (error: any) {
 				// Check if the request was cancelled (either by AbortController or by our cancellation response)
 				if (requestCancelled || (error.cancelled === true)) {
-					console.log('Request was cancelled by user');
 					functionStatusStore.set(null);
+					// Try to clean up pending message on backend
+					await cleanupPendingMessage(currentProcessingQuery);
 					return;
 				}
 				
@@ -714,6 +721,9 @@
 
 				// Clear status store on error
 				functionStatusStore.set(null);
+
+				// Try to clean up pending message on backend for network errors
+				await cleanupPendingMessage(currentProcessingQuery);
 
 				const errorMessage: Message = {
 					id: generateId(),
@@ -730,6 +740,9 @@
 			
 			// Clear status store on any error
 			functionStatusStore.set(null);
+			
+			// Try to clean up pending message on backend
+			await cleanupPendingMessage(currentProcessingQuery);
 			
 			// Add error message if we have a loading message
 			if (loadingMessage) {
@@ -751,11 +764,28 @@
 			isLoading = false;
 			currentAbortController = null;
 			requestCancelled = false;
+			currentProcessingQuery = ''; // Clear the processing query
+		}
+	}
+
+	// Helper function to clean up pending messages on the backend
+	async function cleanupPendingMessage(query: string) {
+		try {
+			const conversationIdToUse = currentConversationId || '';
+			if (conversationIdToUse && query) {
+				await privateRequest('cancelPendingMessage', {
+					conversation_id: conversationIdToUse,
+					query: query
+				});
+			}
+		} catch (cleanupError) {
+			console.warn('Failed to cleanup pending message on backend:', cleanupError);
+			// Don't throw - this is a cleanup operation that shouldn't affect the main flow
 		}
 	}
 
 	// Function to cancel/pause the current request
-	function handleCancelRequest() {
+	async function handleCancelRequest() {
 		if (isLoading) {
 			requestCancelled = true;
 			functionStatusStore.set(null);
@@ -763,6 +793,11 @@
 			// Abort the HTTP request - this will cancel the backend processing
 			if (currentAbortController) {
 				currentAbortController.abort();
+			}
+			
+			// Clean up pending message on backend using the tracked query
+			if (currentProcessingQuery) {
+				await cleanupPendingMessage(currentProcessingQuery);
 			}
 			
 			// Remove any loading messages
@@ -1424,7 +1459,7 @@
 	}
 
 	.conversation-list {
-		max-height: 300px;
+		max-height: 200px; /* Reduced from 300px to fit exactly 4 items */
 		overflow-y: auto;
 	}
 
@@ -1432,7 +1467,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 0.75rem 1rem;
+		padding: 0.5rem 0.75rem; /* Reduced from 0.75rem 1rem */
 		cursor: pointer;
 		transition: background-color 0.2s;
 		border-bottom: 1px solid var(--ui-border-darker, #2a2a2a);
@@ -1453,17 +1488,17 @@
 	}
 
 	.conversation-title {
-		font-size: 0.85rem;
+		font-size: 0.8rem; /* Reduced from 0.85rem */
 		font-weight: 500;
 		color: var(--text-primary, #fff);
-		margin-bottom: 0.2rem;
+		margin-bottom: 0.15rem; /* Reduced from 0.2rem */
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 
 	.conversation-meta {
-		font-size: 0.7rem;
+		font-size: 0.65rem; /* Reduced from 0.7rem */
 		color: var(--text-secondary, #aaa);
 		white-space: nowrap;
 		overflow: hidden;
