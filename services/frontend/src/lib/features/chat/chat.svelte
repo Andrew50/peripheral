@@ -177,6 +177,10 @@
 	// Manage active chart context: subscribe to add new and remove old chart contexts
 	let previousChartInstance: Instance | null = null;
 
+	// Add abort controller for cancelling requests
+	let currentAbortController: AbortController | null = null;
+	let requestCancelled = false;
+
 	// Function to fetch initial suggestions based on active chart
 	async function fetchInitialSuggestions() {
 		initialSuggestions = []; // Clear previous suggestions first
@@ -216,7 +220,7 @@
 				
 				// Track if we found any new responses
 				let hasNewResponses = false;
-				let latestCompletedTimestamp: Date | null = null;
+				let latestCompletedTimestamp: Date | undefined = undefined;
 
 				// Process each message in the conversation history
 				conversation.messages.forEach((msg) => {
@@ -278,9 +282,9 @@
 				});
 
 				// Update last seen timestamp if we have new responses
-				if (hasNewResponses && latestCompletedTimestamp) {
+				if (hasNewResponses && latestCompletedTimestamp !== undefined) {
 					localStorage.setItem(lastSeenKey, latestCompletedTimestamp.toISOString());
-				} else if (!lastSeenTimestamp && latestCompletedTimestamp) {
+				} else if (!lastSeenTimestamp && latestCompletedTimestamp !== undefined) {
 					// First time loading, set the timestamp
 					localStorage.setItem(lastSeenKey, latestCompletedTimestamp.toISOString());
 				}
@@ -454,6 +458,9 @@
 		isLoading = true;
 		let loadingMessage: Message | null = null;
 		
+		// Create new abort controller for this request
+		currentAbortController = new AbortController();
+		
 		try { 
 			const userMessage: Message = {
 				id: generateId(),
@@ -473,7 +480,7 @@
 				timestamp: new Date(),
 				isLoading: true
 			};
-			messagesStore.update(current => [...current, loadingMessage]);
+			messagesStore.update(current => [...current, loadingMessage as Message]);
 			
 			// <-- Set initial status immediately -->
 			functionStatusStore.set({
@@ -499,7 +506,14 @@
 					query: finalQuery,
 					context: $contextItems, // Send only manually added context items
 					activeChartContext: currentActiveChart // Send active chart separately
-				});
+				}, false, false, currentAbortController?.signal);
+
+				// Check if request was cancelled while awaiting
+				if (requestCancelled) {
+					console.log('Request was cancelled by user');
+					functionStatusStore.set(null);
+					return;
+				}
 
 				// Type assertion to handle the response type
 				const typedResponse = response as unknown as QueryResponse;
@@ -531,7 +545,14 @@
 				const lastSeenKey = 'chat_last_seen_timestamp';
 				localStorage.setItem(lastSeenKey, now.toISOString());
 				
-			} catch (error) {
+			} catch (error: any) {
+				// Check if the request was cancelled
+				if (requestCancelled) {
+					console.log('Request was cancelled by user');
+					functionStatusStore.set(null);
+					return;
+				}
+				
 				console.error('Error fetching response:', error);
 
 				// Clear status store on error
@@ -547,7 +568,7 @@
 
 				messagesStore.update(current => [...current, errorMessage]);
 			}
-		} catch (error) {
+		} catch (error: any) {
 			console.error('Error in handleSubmit:', error);
 			
 			// Clear status store on any error
@@ -568,9 +589,30 @@
 		} finally {
 			// Always clean up loading message and reset state
 			if (loadingMessage) {
-				messagesStore.update(current => current.filter(m => m.id !== loadingMessage.id));
+				messagesStore.update(current => current.filter(m => m.id !== loadingMessage!.id));
 			}
 			isLoading = false;
+			currentAbortController = null;
+			requestCancelled = false;
+		}
+	}
+
+	// Function to cancel/pause the current request
+	function handleCancelRequest() {
+		if (isLoading) {
+			requestCancelled = true;
+			functionStatusStore.set(null);
+			
+			// Abort the HTTP request - this will cancel the backend processing
+			if (currentAbortController) {
+				currentAbortController.abort();
+			}
+			
+			// Remove any loading messages
+			messagesStore.update(current => current.filter(m => !m.isLoading));
+			
+			isLoading = false;
+			currentAbortController = null;
 		}
 	}
 
@@ -1102,14 +1144,20 @@
 					}}
 				></textarea>
 				<button
-					class="send-button"
-					on:click={handleSubmit}
-					aria-label="Send message"
-					disabled={!$inputValue.trim() || isLoading}
+					class="send-button {isLoading ? 'loading' : ''}"
+					on:click={isLoading ? handleCancelRequest : handleSubmit}
+					aria-label={isLoading ? "Cancel request" : "Send message"}
+					disabled={!isLoading && !$inputValue.trim()}
 				>
-					<svg viewBox="0 0 24 24" class="send-icon">
-						<path d="M2,21L23,12L2,3V10L17,12L2,14V21Z" />
-					</svg>
+					{#if isLoading}
+						<svg viewBox="0 0 24 24" class="send-icon pause-icon">
+							<path d="M6,6H18V18H6V6Z" />
+						</svg>
+					{:else}
+						<svg viewBox="0 0 24 24" class="send-icon">
+							<path d="M2,21L23,12L2,3V10L17,12L2,14V21Z" />
+						</svg>
+					{/if}
 				</button>
 			</div>
 		</div>
@@ -1432,7 +1480,7 @@
 		border: 1px solid var(--ui-border, #444);
 		color: var(--text-primary, #fff);
 		border-radius: 0.25rem;
-		padding-right: clamp(3rem, 5vw, 3.5rem); /* Keep padding for the button */
+		padding-right: 3rem; /* Adjusted for the new button size */
 		resize: none; /* Disable manual resizing */
 		overflow-y: hidden; /* Hide scrollbar during resize and when content fits */
 		line-height: 1.4; /* Adjust line height for better readability in textarea */
@@ -1444,34 +1492,75 @@
 	}
 
 	.send-button {
+		padding: 0; 
+		line-height: 0;
+		width: 32px;
+		height: 32px;
 		position: absolute;
-		right: 0.75rem;
-		bottom: 0.75rem; /* Adjusted for better vertical alignment */
-		background: transparent;
+		right: 0.5rem;
+		bottom: 0.5rem;
+		background: white; /* White background */
 		border: none;
+		border-radius: 50%; /* Perfect circle */
 		cursor: pointer;
-		color: var(--text-secondary, #aaa);
-		width: clamp(2rem, 4vw, 2.25rem);
-		height: clamp(2rem, 4vw, 2.25rem);
+		min-width: 32px; /* Prevent shrinking */
+		min-height: 32px; /* Prevent shrinking */
+		max-width: 32px; /* Prevent growing */
+		max-height: 32px; /* Prevent growing */
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		transition: color 0.2s;
+		transition: all 0.2s ease;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+		z-index: 100; /* Much higher z-index to ensure it's on top */
+		flex-shrink: 0; /* Prevent flexbox from shrinking the button */
+		box-sizing: border-box; /* Include border in size calculations */
 	}
 
 	.send-button:hover:not(:disabled) {
-		color: var(--text-primary, #fff);
+		background: #f5f5f5; /* Light gray on hover */
+		transform: translateY(-1px);
+		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+	}
+
+	.send-button:hover:not(:disabled):not(.loading) {
+		background: #f5f5f5; /* Light gray on hover for send button only */
+		transform: translateY(-1px);
+		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 	}
 
 	.send-button:disabled {
+		background: #444; /* Use solid color instead of CSS variable */
+		color: #aaa; /* Use solid color instead of CSS variable */
 		cursor: not-allowed;
 		opacity: 0.6;
+		transform: none;
+		box-shadow: none;
+	}
+
+	.send-button.loading {
+		background: white; /* Keep white background when loading */
+		color: #000; /* Black icon when loading */
+	}
+
+	.send-button.loading:hover {
+		background: white; /* No hover effect for pause button */
+		transform: none; /* No transform for pause button */
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Keep original shadow */
+	}
+
+	.pause-icon {
+		fill: white;
 	}
 
 	.send-icon {
-		width: clamp(1rem, 2vw, 1.25rem);
-		height: clamp(1rem, 2vw, 1.25rem);
+		width: 1rem;
+		height: 1rem;
 		fill: currentColor;
+	}
+
+	.send-icon path {
+		fill: #000;
 	}
 
 	.typing-indicator {
