@@ -122,18 +122,21 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 		return nil, nil
 	},
 	"getUserConversation":        agent.GetUserConversation,
-	"clearConversationHistory":   agent.ClearConversationHistory,
 	"getSuggestedQueries":        agent.GetSuggestedQueries,
 	"getInitialQuerySuggestions": agent.GetInitialQuerySuggestions,
 	"getQuery":                   wrapContextFunc(agent.GetChatRequest),
+
+	// Multiple conversations management
+	"getUserConversations": agent.GetUserConversations,
+
+	"createConversation": agent.NewConversation,
+	"switchConversation": agent.SwitchConversation,
+	"deleteConversation": agent.DeleteConversation,
 }
 
 // Private functions that support context cancellation
 var privateFuncWithContext = map[string]func(context.Context, *data.Conn, int, json.RawMessage) (interface{}, error){
-	"getQuery":                   agent.GetChatRequest,
-	"clearConversationHistory":   agent.ClearConversationHistoryWithContext,
-	"getUserConversation":        agent.GetUserConversationWithContext,
-	"getInitialQuerySuggestions": agent.GetInitialQuerySuggestionsWithContext,
+	"getQuery": agent.GetChatRequest,
 }
 
 // Request represents a structure for handling Request data.

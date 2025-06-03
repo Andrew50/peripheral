@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 
 	"go.uber.org/zap"
 )
@@ -30,6 +29,7 @@ type ChatRequest struct {
 	Query              string                   `json:"query"`
 	Context            []map[string]interface{} `json:"context,omitempty"`
 	ActiveChartContext map[string]interface{}   `json:"activeChartContext,omitempty"`
+	ConversationID     string                   `json:"conversation_id,omitempty"`
 }
 
 // ContentChunk represents a piece of content in the response sequence
@@ -49,11 +49,12 @@ type Citation struct {
 
 // QueryResponse represents the response to a user query
 type QueryResponse struct {
-	Type          string         `json:"type"` //"mixed_content", "function_calls", "simple_text"
-	ContentChunks []ContentChunk `json:"content_chunks,omitempty"`
-	Text          string         `json:"text,omitempty"`
-	Citations     []Citation     `json:"citations,omitempty"`
-	Suggestions   []string       `json:"suggestions,omitempty"`
+	Type           string         `json:"type"` //"mixed_content", "function_calls", "simple_text"
+	ContentChunks  []ContentChunk `json:"content_chunks,omitempty"`
+	Text           string         `json:"text,omitempty"`
+	Citations      []Citation     `json:"citations,omitempty"`
+	Suggestions    []string       `json:"suggestions,omitempty"`
+	ConversationID string         `json:"conversation_id,omitempty"`
 }
 
 // GetChatRequest is the main context-aware chat request handler
@@ -76,26 +77,11 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		getDefaultSystemPromptTokenCount(conn)
 	}
 
-	// Save pending message at the start of the request
-	pendingSaved := false
-	if err := savePendingMessageToConversation(conn, userID, query.Query, query.Context); err != nil {
-		log.Printf("Error saving pending message: %v", err)
-		// Don't fail the request, just log the error
-	} else {
-		pendingSaved = true
+	// Save pending message using the provided conversation ID
+	conversationID, err := SavePendingMessageToConversation(ctx, conn, userID, query.ConversationID, query.Query, query.Context)
+	if err != nil {
+		return nil, fmt.Errorf("error saving pending message: %w", err)
 	}
-
-	// Ensure we clean up pending message on any error
-	defer func() {
-		if r := recover(); r != nil {
-			if pendingSaved {
-				// Try to remove the pending message if something panicked
-				log.Printf("Panic occurred, attempting to clean up pending message: %v", r)
-				// Note: In a real implementation, you might want a more sophisticated cleanup
-			}
-			panic(r) // Re-panic after cleanup
-		}
-	}()
 
 	var executor *Executor
 	var allResults []ExecuteResult
@@ -113,7 +99,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 
 		if planningPrompt == "" {
 			var err error
-			planningPrompt, err = BuildPlanningPrompt(conn, userID, query.Query, query.Context, query.ActiveChartContext)
+			planningPrompt, err = BuildPlanningPromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext)
 			if err != nil {
 				return nil, err
 			}
@@ -130,19 +116,16 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			totalRequestThoughtsTokenCount += v.TokenCounts.ThoughtsTokenCount
 			totalRequestTokenCount += v.TokenCounts.TotalTokenCount
 
-			// Update pending message to completed instead of saving new message
-			if err := updatePendingMessageToCompleted(conn, userID, query.Query, processedChunks, []FunctionCall{}, []ExecuteResult{}, v.Suggestions, totalRequestTokenCount); err != nil {
-				log.Printf("Error updating pending message to completed: %v", err)
-				// Fallback to saving new message
-				if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, []ExecuteResult{}, v.Suggestions, totalRequestTokenCount); err != nil {
-					log.Printf("Error saving message to conversation: %v", err)
-				}
+			// Update pending message to completed
+			if err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, []ExecuteResult{}, v.Suggestions, totalRequestTokenCount); err != nil {
+				return nil, fmt.Errorf("error updating pending message to completed: %w", err)
 			}
 
 			return QueryResponse{
-				Type:          "mixed_content",
-				ContentChunks: processedChunks,
-				Suggestions:   v.Suggestions, // Include suggestions from direct answer
+				Type:           "mixed_content",
+				ContentChunks:  processedChunks,
+				Suggestions:    v.Suggestions, // Include suggestions from direct answer
+				ConversationID: conversationID,
 			}, nil
 		case Plan:
 			switch v.Stage {
@@ -164,13 +147,13 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				}
 				// Update query with results for next planning iteration
 				// The planner will process these results to either plan more or finalize
-				planningPrompt, err = BuildPlanningPromptWithResults(conn, userID, query.Query, query.Context, query.ActiveChartContext, allResults)
+				planningPrompt, err = BuildPlanningPromptWithResultsAndConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, allResults)
 				if err != nil {
 					return nil, err
 				}
 			case StageFinishedExecuting:
 				// Generate final response based on execution results
-				finalPrompt, err := BuildFinalResponsePrompt(conn, userID, query.Query, query.Context, query.ActiveChartContext, allResults)
+				finalPrompt, err := BuildFinalResponsePromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, allResults)
 				if err != nil {
 					return nil, err
 				}
@@ -189,19 +172,16 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				// Process any table instructions in the content chunks
 				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
 
-				// Update pending message to completed instead of saving new message
-				if err := updatePendingMessageToCompleted(conn, userID, query.Query, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalRequestTokenCount); err != nil {
-					log.Printf("Error updating pending message to completed: %v", err)
-					// Fallback to saving new message
-					if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalRequestTokenCount); err != nil {
-						log.Printf("Error saving message to conversation: %v", err)
-					}
+				// Update pending message to completed
+				if err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalRequestTokenCount); err != nil {
+					return nil, fmt.Errorf("error updating pending message to completed: %w", err)
 				}
 
 				return QueryResponse{
-					Type:          "mixed_content",
-					ContentChunks: processedChunks,
-					Suggestions:   finalResponse.Suggestions, // Include suggestions from final response
+					Type:           "mixed_content",
+					ContentChunks:  processedChunks,
+					Suggestions:    finalResponse.Suggestions, // Include suggestions from final response
+					ConversationID: conversationID,
 				}, nil
 			}
 		}
@@ -212,28 +192,9 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 	}
 }
 
-// ClearConversationHistoryWithContext is a context-aware wrapper
-func ClearConversationHistoryWithContext(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-	return ClearConversationHistory(conn, userID, args)
-}
-
-// GetUserConversationWithContext is a context-aware wrapper
-func GetUserConversationWithContext(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-	return GetUserConversation(conn, userID, args)
-}
-
-// GetInitialQuerySuggestionsWithContext is a context-aware wrapper
-func GetInitialQuerySuggestionsWithContext(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-	return GetInitialQuerySuggestions(conn, userID, args)
+// GetUserConversation gets the active conversation
+func GetUserConversation(conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
+	return GetActiveConversationWithCache(context.Background(), conn, userID)
 }
 
 // processContentChunksForTables iterates through chunks and generates tables for "backtest_table" type.
