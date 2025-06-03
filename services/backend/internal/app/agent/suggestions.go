@@ -51,13 +51,43 @@ func GetSuggestedQueries(conn *data.Conn, userID int, _ json.RawMessage) (interf
 	//else {
 	////fmt.Println(message)
 	//}
-	conversationData, err := GetConversationFromCache(ctx, conn, userID)
-	if err != nil || conversationData == nil {
-		return GetSuggestedQueriesResponse{}, nil
-	}
+
+	// Get the active conversation using the new system
 	var conversationHistory string
-	if len(conversationData.Messages) > 0 {
-		conversationHistory = _buildConversationContext(conversationData.Messages)
+	activeConversationID, err := GetActiveConversationIDCached(ctx, conn, userID)
+	if err == nil && activeConversationID != "" {
+		// Load conversation messages from database
+		messagesInterface, err := GetConversationMessages(ctx, conn, activeConversationID, userID)
+		if err == nil && messagesInterface != nil {
+			// Type assert to get the actual messages
+			if dbMessages, ok := messagesInterface.([]DBConversationMessage); ok && len(dbMessages) > 0 {
+				// Convert DB messages to ChatMessage format for context building
+				chatMessages := make([]ChatMessage, len(dbMessages))
+				for i, msg := range dbMessages {
+					chatMessages[i] = ChatMessage{
+						Query:            msg.Query,
+						ContentChunks:    msg.ContentChunks,
+						ResponseText:     msg.ResponseText,
+						FunctionCalls:    msg.FunctionCalls,
+						ToolResults:      msg.ToolResults,
+						ContextItems:     msg.ContextItems,
+						SuggestedQueries: msg.SuggestedQueries,
+						Citations:        msg.Citations,
+						Timestamp:        msg.CreatedAt,
+						TokenCount:       int32(msg.TokenCount),
+						Status:           msg.Status,
+					}
+					if msg.CompletedAt != nil {
+						chatMessages[i].CompletedAt = *msg.CompletedAt
+					}
+				}
+				conversationHistory = _buildConversationContext(chatMessages)
+			}
+		}
+	}
+
+	if conversationHistory == "" {
+		return GetSuggestedQueriesResponse{}, nil
 	}
 
 	geminiRes, err := getGeminiFunctionThinking(ctx, conn, "suggestedQueriesPrompt", conversationHistory, thinkingModel)

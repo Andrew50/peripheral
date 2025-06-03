@@ -1,0 +1,531 @@
+package agent
+
+import (
+	"backend/internal/data"
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// ConversationSummary represents a conversation in the list view
+type ConversationSummary struct {
+	ConversationID   string    `json:"conversation_id"`
+	Title            string    `json:"title"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+	MessageCount     int       `json:"message_count"`
+	TotalTokenCount  int       `json:"total_token_count"`
+	LastMessageQuery string    `json:"last_message_query,omitempty"`
+}
+
+// DBConversationMessage represents a message stored in the database
+type DBConversationMessage struct {
+	MessageID        string                   `json:"message_id"`
+	ConversationID   string                   `json:"conversation_id"`
+	Query            string                   `json:"query"`
+	ResponseText     string                   `json:"response_text"`
+	ContentChunks    []ContentChunk           `json:"content_chunks"`
+	FunctionCalls    []FunctionCall           `json:"function_calls"`
+	ToolResults      []ExecuteResult          `json:"tool_results"`
+	ContextItems     []map[string]interface{} `json:"context_items"`
+	SuggestedQueries []string                 `json:"suggested_queries"`
+	Citations        []Citation               `json:"citations"`
+	CreatedAt        time.Time                `json:"created_at"`
+	CompletedAt      *time.Time               `json:"completed_at"`
+	Status           string                   `json:"status"`
+	TokenCount       int                      `json:"token_count"`
+	MessageOrder     int                      `json:"message_order"`
+}
+
+// CreateConversation creates a new conversation in the database
+func CreateConversationInDB(ctx context.Context, conn *data.Conn, userID int, title string) (string, error) {
+	conversationID := uuid.New().String()
+
+	query := `
+		INSERT INTO conversations (conversation_id, user_id, title, created_at, updated_at, metadata, total_token_count, message_count)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING conversation_id`
+
+	now := time.Now()
+	var returnedID string
+
+	err := conn.DB.QueryRow(ctx, query,
+		conversationID, userID, title, now, now, "{}", 0, 0,
+	).Scan(&returnedID)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to create conversation: %w", err)
+	}
+
+	return returnedID, nil
+}
+
+// GetUserConversations retrieves all conversations for a user
+func GetUserConversations(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
+	query := `
+		SELECT 
+			c.conversation_id,
+			c.title,
+			c.created_at,
+			c.updated_at,
+			c.message_count,
+			c.total_token_count,
+			(
+				SELECT cm.query 
+				FROM conversation_messages cm 
+				WHERE cm.conversation_id = c.conversation_id 
+				ORDER BY cm.message_order DESC 
+				LIMIT 1
+			) as last_message_query
+		FROM conversations c
+		WHERE c.user_id = $1
+		ORDER BY c.updated_at DESC`
+
+	rows, err := conn.DB.Query(context.Background(), query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query conversations: %w", err)
+	}
+	defer rows.Close()
+
+	var conversations []ConversationSummary
+	for rows.Next() {
+		var conv ConversationSummary
+		var lastMessageQuery sql.NullString
+
+		err := rows.Scan(
+			&conv.ConversationID,
+			&conv.Title,
+			&conv.CreatedAt,
+			&conv.UpdatedAt,
+			&conv.MessageCount,
+			&conv.TotalTokenCount,
+			&lastMessageQuery,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan conversation row: %w", err)
+		}
+
+		if lastMessageQuery.Valid {
+			conv.LastMessageQuery = lastMessageQuery.String
+		}
+
+		conversations = append(conversations, conv)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating conversation rows: %w", err)
+	}
+
+	return conversations, nil
+}
+
+// GetConversationMessages retrieves all messages for a conversation
+func GetConversationMessages(ctx context.Context, conn *data.Conn, conversationID string, userID int) (interface{}, error) {
+	// First verify the user owns this conversation
+	var ownerID int
+	err := conn.DB.QueryRow(ctx, "SELECT user_id FROM conversations WHERE conversation_id = $1", conversationID).Scan(&ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("conversation not found: %w", err)
+	}
+	if ownerID != userID {
+		return nil, fmt.Errorf("unauthorized access to conversation")
+	}
+
+	query := `
+		SELECT 
+			message_id,
+			conversation_id,
+			query,
+			response_text,
+			content_chunks,
+			function_calls,
+			tool_results,
+			context_items,
+			suggested_queries,
+			citations,
+			created_at,
+			completed_at,
+			status,
+			token_count,
+			message_order
+		FROM conversation_messages
+		WHERE conversation_id = $1 
+		ORDER BY message_order ASC`
+
+	rows, err := conn.DB.Query(ctx, query, conversationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query conversation messages: %w", err)
+	}
+	defer rows.Close()
+
+	var messages []DBConversationMessage
+	for rows.Next() {
+		var msg DBConversationMessage
+		var contentChunksJSON, functionCallsJSON, toolResultsJSON []byte
+		var contextItemsJSON, suggestedQueriesJSON, citationsJSON []byte
+		var completedAt sql.NullTime
+
+		err := rows.Scan(
+			&msg.MessageID,
+			&msg.ConversationID,
+			&msg.Query,
+			&msg.ResponseText,
+			&contentChunksJSON,
+			&functionCallsJSON,
+			&toolResultsJSON,
+			&contextItemsJSON,
+			&suggestedQueriesJSON,
+			&citationsJSON,
+			&msg.CreatedAt,
+			&completedAt,
+			&msg.Status,
+			&msg.TokenCount,
+			&msg.MessageOrder,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan message row: %w", err)
+		}
+
+		// Parse JSON fields
+		if len(contentChunksJSON) > 0 {
+			if err := json.Unmarshal(contentChunksJSON, &msg.ContentChunks); err != nil {
+				return nil, fmt.Errorf("failed to parse content_chunks: %w", err)
+			}
+		}
+		if len(functionCallsJSON) > 0 {
+			if err := json.Unmarshal(functionCallsJSON, &msg.FunctionCalls); err != nil {
+				return nil, fmt.Errorf("failed to parse function_calls: %w", err)
+			}
+		}
+		if len(toolResultsJSON) > 0 {
+			if err := json.Unmarshal(toolResultsJSON, &msg.ToolResults); err != nil {
+				return nil, fmt.Errorf("failed to parse tool_results: %w", err)
+			}
+		}
+		if len(contextItemsJSON) > 0 {
+			if err := json.Unmarshal(contextItemsJSON, &msg.ContextItems); err != nil {
+				return nil, fmt.Errorf("failed to parse context_items: %w", err)
+			}
+		}
+		if len(suggestedQueriesJSON) > 0 {
+			if err := json.Unmarshal(suggestedQueriesJSON, &msg.SuggestedQueries); err != nil {
+				return nil, fmt.Errorf("failed to parse suggested_queries: %w", err)
+			}
+		}
+		if len(citationsJSON) > 0 {
+			if err := json.Unmarshal(citationsJSON, &msg.Citations); err != nil {
+				return nil, fmt.Errorf("failed to parse citations: %w", err)
+			}
+		}
+
+		if completedAt.Valid {
+			msg.CompletedAt = &completedAt.Time
+		}
+
+		messages = append(messages, msg)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating message rows: %w", err)
+	}
+
+	return messages, nil
+}
+
+// SaveConversationMessage saves a message to the database
+func SaveConversationMessage(ctx context.Context, conn *data.Conn, conversationID string, userID int, message ChatMessage) error {
+	// First verify the user owns this conversation
+	var ownerID int
+	err := conn.DB.QueryRow(ctx, "SELECT user_id FROM conversations WHERE conversation_id = $1", conversationID).Scan(&ownerID)
+	if err != nil {
+		return fmt.Errorf("conversation not found: %w", err)
+	}
+	if ownerID != userID {
+		return fmt.Errorf("unauthorized access to conversation")
+	}
+
+	// Marshal JSON fields
+	contentChunksJSON, err := json.Marshal(message.ContentChunks)
+	if err != nil {
+		return fmt.Errorf("failed to marshal content_chunks: %w", err)
+	}
+	functionCallsJSON, err := json.Marshal(message.FunctionCalls)
+	if err != nil {
+		return fmt.Errorf("failed to marshal function_calls: %w", err)
+	}
+	toolResultsJSON, err := json.Marshal(message.ToolResults)
+	if err != nil {
+		return fmt.Errorf("failed to marshal tool_results: %w", err)
+	}
+	contextItemsJSON, err := json.Marshal(message.ContextItems)
+	if err != nil {
+		return fmt.Errorf("failed to marshal context_items: %w", err)
+	}
+	suggestedQueriesJSON, err := json.Marshal(message.SuggestedQueries)
+	if err != nil {
+		return fmt.Errorf("failed to marshal suggested_queries: %w", err)
+	}
+	citationsJSON, err := json.Marshal(message.Citations)
+	if err != nil {
+		return fmt.Errorf("failed to marshal citations: %w", err)
+	}
+
+	messageID := uuid.New().String()
+
+	// Get the next message order for this conversation
+	var maxOrder int
+	err = conn.DB.QueryRow(ctx, "SELECT COALESCE(MAX(message_order), 0) FROM conversation_messages WHERE conversation_id = $1", conversationID).Scan(&maxOrder)
+	if err != nil {
+		return fmt.Errorf("failed to get max message order: %w", err)
+	}
+	nextOrder := maxOrder + 1
+
+	query := `
+		INSERT INTO conversation_messages (
+			message_id, conversation_id, query, response_text, content_chunks, 
+			function_calls, tool_results, context_items, suggested_queries, citations,
+			created_at, completed_at, status, token_count, message_order
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`
+
+	_, err = conn.DB.Exec(ctx, query,
+		messageID,
+		conversationID,
+		message.Query,
+		message.ResponseText,
+		contentChunksJSON,
+		functionCallsJSON,
+		toolResultsJSON,
+		contextItemsJSON,
+		suggestedQueriesJSON,
+		citationsJSON,
+		message.Timestamp,
+		message.CompletedAt,
+		message.Status,
+		message.TokenCount,
+		nextOrder,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to save conversation message: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteConversationInDB deletes a conversation and all its messages
+func DeleteConversationInDB(conn *data.Conn, conversationID string, userID int) error {
+	// Verify ownership before deletion
+	var ownerID int
+	err := conn.DB.QueryRow(context.Background(), "SELECT user_id FROM conversations WHERE conversation_id = $1", conversationID).Scan(&ownerID)
+	if err != nil {
+		return fmt.Errorf("conversation not found: %w", err)
+	}
+	if ownerID != userID {
+		return fmt.Errorf("unauthorized access to conversation")
+	}
+
+	// Delete the conversation (messages will be deleted via CASCADE)
+	query := `DELETE FROM conversations WHERE conversation_id = $1 AND user_id = $2`
+
+	result, err := conn.DB.Exec(context.Background(), query, conversationID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete conversation: %w", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("conversation not found or unauthorized")
+	}
+
+	return nil
+}
+
+// SetActiveConversationID sets the user's currently active conversation in Redis
+func SetActiveConversationID(ctx context.Context, conn *data.Conn, userID int, conversationID string) error {
+	// Update the ID
+	if err := SetActiveConversationIDCached(ctx, conn, userID, conversationID); err != nil {
+		return err
+	}
+
+	// Invalidate the conversation data cache since we're switching conversations
+	if err := InvalidateActiveConversationCache(ctx, conn, userID); err != nil {
+		fmt.Printf("Warning: failed to invalidate conversation cache: %v\n", err)
+	}
+
+	return nil
+}
+
+// AutoGenerateConversationTitle generates a title from the first message
+func AutoGenerateConversationTitle(query string) string {
+	const maxLength = 50
+
+	if len(query) <= maxLength {
+		return query
+	}
+
+	// Truncate and add ellipsis
+	truncated := query[:maxLength-3]
+	// Find the last space to avoid cutting words
+	if lastSpace := findLastSpace(truncated); lastSpace > 0 {
+		truncated = truncated[:lastSpace]
+	}
+
+	return truncated + "..."
+}
+
+func findLastSpace(s string) int {
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] == ' ' {
+			return i
+		}
+	}
+	return -1
+}
+
+// SavePendingMessageToActiveConversation saves a pending message when a request starts
+func SavePendingMessageToActiveConversation(ctx context.Context, conn *data.Conn, userID int, query string, contextItems []map[string]interface{}) error {
+	// Create pending message
+	now := time.Now()
+	message := ChatMessage{
+		Query:        query,
+		ContextItems: contextItems,
+		Timestamp:    now,
+		Status:       "pending",
+	}
+
+	// Use cached save function
+	return SaveMessageToActiveConversationWithCache(ctx, conn, userID, message)
+}
+
+// SavePendingMessageToConversation saves a pending message to a specific conversation ID
+func SavePendingMessageToConversation(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, contextItems []map[string]interface{}) (string, error) {
+	// Create pending message
+	now := time.Now()
+	message := ChatMessage{
+		Query:        query,
+		ContextItems: contextItems,
+		Timestamp:    now,
+		Status:       "pending",
+	}
+
+	// If conversationID is empty, create a new conversation
+	if conversationID == "" {
+		title := AutoGenerateConversationTitle(query)
+		newConversationID, err := CreateConversationInDB(ctx, conn, userID, title)
+		if err != nil {
+			return "", fmt.Errorf("failed to create new conversation: %w", err)
+		}
+		conversationID = newConversationID
+	}
+
+	// Save to database
+	if err := SaveConversationMessage(ctx, conn, conversationID, userID, message); err != nil {
+		return "", fmt.Errorf("failed to save message to database: %w", err)
+	}
+
+	return conversationID, nil
+}
+
+// UpdatePendingMessageToCompleted updates a pending message to completed status
+func UpdatePendingMessageToCompleted(ctx context.Context, conn *data.Conn, userID int, query string, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult, suggestedQueries []string, tokenCount int32) error {
+	activeConversationID, err := GetActiveConversationIDCached(ctx, conn, userID)
+	if err != nil || activeConversationID == "" {
+		return fmt.Errorf("no active conversation found")
+	}
+
+	// Update the database first
+	query_sql := `
+		UPDATE conversation_messages 
+		SET content_chunks = $1, function_calls = $2, tool_results = $3, 
+			suggested_queries = $4, token_count = $5, completed_at = $6, status = $7
+		WHERE conversation_id = $8 AND query = $9 AND status = 'pending'`
+
+	// Marshal JSON fields
+	contentChunksJSON, _ := json.Marshal(contentChunks)
+	functionCallsJSON, _ := json.Marshal(functionCalls)
+	toolResultsJSON, _ := json.Marshal(toolResults)
+	suggestedQueriesJSON, _ := json.Marshal(suggestedQueries)
+
+	now := time.Now()
+	result, err := conn.DB.Exec(ctx, query_sql,
+		contentChunksJSON,
+		functionCallsJSON,
+		toolResultsJSON,
+		suggestedQueriesJSON,
+		tokenCount,
+		now,
+		"completed",
+		activeConversationID,
+		query,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to update pending message: %w", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("no pending message found with query: %s", query)
+	}
+
+	// Update the cache
+	updateFunc := func(msg *ChatMessage) {
+		msg.ContentChunks = contentChunks
+		msg.FunctionCalls = functionCalls
+		msg.ToolResults = toolResults
+		msg.SuggestedQueries = suggestedQueries
+		msg.TokenCount = tokenCount
+		msg.CompletedAt = now
+		msg.Status = "completed"
+	}
+
+	if err := UpdateMessageInActiveConversationCache(ctx, conn, userID, query, updateFunc); err != nil {
+		fmt.Printf("Warning: failed to update message in cache: %v\n", err)
+	}
+
+	return nil
+}
+
+// UpdatePendingMessageToCompletedInConversation updates a pending message to completed status in a specific conversation
+func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult, suggestedQueries []string, tokenCount int32) error {
+	// Update the database first
+	query_sql := `
+		UPDATE conversation_messages 
+		SET content_chunks = $1, function_calls = $2, tool_results = $3, 
+			suggested_queries = $4, token_count = $5, completed_at = $6, status = $7
+		WHERE conversation_id = $8 AND query = $9 AND status = 'pending'`
+
+	// Marshal JSON fields
+	contentChunksJSON, _ := json.Marshal(contentChunks)
+	functionCallsJSON, _ := json.Marshal(functionCalls)
+	toolResultsJSON, _ := json.Marshal(toolResults)
+	suggestedQueriesJSON, _ := json.Marshal(suggestedQueries)
+
+	now := time.Now()
+	result, err := conn.DB.Exec(ctx, query_sql,
+		contentChunksJSON,
+		functionCallsJSON,
+		toolResultsJSON,
+		suggestedQueriesJSON,
+		tokenCount,
+		now,
+		"completed",
+		conversationID,
+		query,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to update pending message: %w", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("no pending message found with query: %s in conversation: %s", query, conversationID)
+	}
+
+	return nil
+}
