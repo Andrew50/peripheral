@@ -118,18 +118,37 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 
 	// First try direct parsing of the entire resultText
 	var directAns DirectAnswer
-	if json.Unmarshal([]byte(resultText), &directAns) == nil && len(directAns.ContentChunks) > 0 {
-		directAns.TokenCounts = TokenCounts{
-			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
-			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
-			ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
-			TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+	directParseErr := json.Unmarshal([]byte(resultText), &directAns)
+	fmt.Printf("DEBUG: Direct DirectAnswer parse - error: %v, contentChunks length: %d\n", directParseErr, len(directAns.ContentChunks))
+	if directParseErr == nil && len(directAns.ContentChunks) > 0 {
+		// Additional check: make sure at least one content chunk has actual content
+		hasValidContent := false
+		for _, chunk := range directAns.ContentChunks {
+			if chunk.Content != nil && fmt.Sprintf("%v", chunk.Content) != "" {
+				hasValidContent = true
+				break
+			}
 		}
-		return directAns, nil
+		fmt.Printf("DEBUG: DirectAnswer has valid content: %t\n", hasValidContent)
+		if hasValidContent {
+			fmt.Printf("DEBUG: DirectAnswer parsing SUCCESS, returning DirectAnswer\n")
+			directAns.TokenCounts = TokenCounts{
+				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
+				OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
+				ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
+				TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+			}
+			return directAns, nil
+		} else {
+			fmt.Printf("DEBUG: DirectAnswer has empty content chunks, skipping\n")
+		}
 	}
 
 	var plan Plan
-	if json.Unmarshal([]byte(resultText), &plan) == nil {
+	planParseErr := json.Unmarshal([]byte(resultText), &plan)
+	fmt.Printf("DEBUG: Direct Plan parse - error: %v, stage: %s\n", planParseErr, plan.Stage)
+	if planParseErr == nil {
+		fmt.Printf("DEBUG: Plan parsing SUCCESS, returning Plan\n")
 		plan.TokenCounts = TokenCounts{
 			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
 			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
@@ -142,35 +161,63 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	// If direct parsing fails, try to extract JSON block
 	jsonStartIdx := strings.Index(resultText, "{")
 	jsonEndIdx := strings.LastIndex(resultText, "}")
+	fmt.Printf("DEBUG: JSON extraction - start: %d, end: %d\n", jsonStartIdx, jsonEndIdx)
 	if jsonStartIdx != -1 && jsonEndIdx != -1 && jsonEndIdx > jsonStartIdx {
 		jsonBlock = resultText[jsonStartIdx : jsonEndIdx+1]
+		fmt.Printf("DEBUG: Extracted JSON block length: %d\n", len(jsonBlock))
+		fmt.Printf("DEBUG: First 200 chars of extracted JSON: %.200s\n", jsonBlock)
 	}
 
 	// Try unmarshalling the extracted block if it's not empty
 	directAns = DirectAnswer{} // Reset the struct
-	if jsonBlock != "" && json.Unmarshal([]byte(jsonBlock), &directAns) == nil && len(directAns.ContentChunks) > 0 {
-		directAns.TokenCounts = TokenCounts{
-			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
-			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
-			ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
-			TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+	if jsonBlock != "" {
+		blockDirectParseErr := json.Unmarshal([]byte(jsonBlock), &directAns)
+		fmt.Printf("DEBUG: Block DirectAnswer parse - error: %v, contentChunks length: %d\n", blockDirectParseErr, len(directAns.ContentChunks))
+		if blockDirectParseErr == nil && len(directAns.ContentChunks) > 0 {
+			// Additional check: make sure at least one content chunk has actual content
+			hasValidContent := false
+			for _, chunk := range directAns.ContentChunks {
+				if chunk.Content != nil && fmt.Sprintf("%v", chunk.Content) != "" {
+					hasValidContent = true
+					break
+				}
+			}
+			fmt.Printf("DEBUG: Block DirectAnswer has valid content: %t\n", hasValidContent)
+			if hasValidContent {
+				fmt.Printf("DEBUG: Block DirectAnswer parsing SUCCESS, returning DirectAnswer\n")
+				directAns.TokenCounts = TokenCounts{
+					InputTokenCount:    result.UsageMetadata.PromptTokenCount,
+					OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
+					ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
+					TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+				}
+				return directAns, nil
+			} else {
+				fmt.Printf("DEBUG: Block DirectAnswer has empty content chunks, skipping\n")
+			}
 		}
-		return directAns, nil
 	}
 
 	plan = Plan{} // Reset the struct
 	// Try unmarshalling the extracted block if it's not empty
-	if jsonBlock != "" && json.Unmarshal([]byte(jsonBlock), &plan) == nil {
-		plan.TokenCounts = TokenCounts{
-			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
-			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
-			ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
-			TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+	if jsonBlock != "" {
+		blockPlanParseErr := json.Unmarshal([]byte(jsonBlock), &plan)
+		fmt.Printf("DEBUG: Block Plan parse - error: %v, stage: %s\n", blockPlanParseErr, plan.Stage)
+		if blockPlanParseErr == nil {
+			fmt.Printf("DEBUG: Block Plan parsing SUCCESS, returning Plan\n")
+			plan.TokenCounts = TokenCounts{
+				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
+				OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
+				ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
+				TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+			}
+			return plan, nil
 		}
-		return plan, nil
 	}
 
 	// If parsing failed or no JSON block found, return error
+	fmt.Printf("DEBUG: All parsing attempts failed - resultText length: %d\n", len(resultText))
+	fmt.Printf("DEBUG: resultText (truncated to 500 chars): %.500s\n", resultText)
 	return nil, fmt.Errorf("no valid plan or direct answer found in response: %s", resultText)
 }
 

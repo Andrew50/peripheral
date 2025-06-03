@@ -83,6 +83,16 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		return nil, fmt.Errorf("error saving pending message: %w", err)
 	}
 
+	// Set up cleanup function to remove pending message on error or cancellation
+	defer func() {
+		if ctx.Err() != nil {
+			// Context was cancelled, clean up the pending message
+			if cleanupErr := DeletePendingMessageInConversation(context.Background(), conn, userID, conversationID, query.Query); cleanupErr != nil {
+				fmt.Printf("Warning: failed to cleanup pending message after cancellation: %v\n", cleanupErr)
+			}
+		}
+	}()
+
 	var executor *Executor
 	var allResults []ExecuteResult
 	planningPrompt := ""
@@ -101,11 +111,19 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			var err error
 			planningPrompt, err = BuildPlanningPromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext)
 			if err != nil {
+				// Mark as error instead of deleting for debugging
+				if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Failed to build planning prompt: %v", err)); markErr != nil {
+					fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
+				}
 				return nil, err
 			}
 		}
 		result, err := RunPlanner(ctx, conn, planningPrompt)
 		if err != nil {
+			// Mark as error instead of deleting for debugging
+			if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Planner error: %v", err)); markErr != nil {
+				fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
+			}
 			return nil, fmt.Errorf("error running planner: %w", err)
 		}
 		switch v := result.(type) {
@@ -141,6 +159,10 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 					// Execute all function calls in this round with context
 					results, err := executor.Execute(ctx, round.Calls, round.Parallel)
 					if err != nil {
+						// Mark as error instead of deleting for debugging
+						if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Execution error: %v", err)); markErr != nil {
+							fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
+						}
 						return nil, fmt.Errorf("error executing function calls: %w", err)
 					}
 					allResults = append(allResults, results...)
@@ -149,18 +171,30 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				// The planner will process these results to either plan more or finalize
 				planningPrompt, err = BuildPlanningPromptWithResultsAndConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, allResults)
 				if err != nil {
+					// Mark as error instead of deleting for debugging
+					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Failed to build prompt with results: %v", err)); markErr != nil {
+						fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
+					}
 					return nil, err
 				}
 			case StageFinishedExecuting:
 				// Generate final response based on execution results
 				finalPrompt, err := BuildFinalResponsePromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, allResults)
 				if err != nil {
+					// Mark as error instead of deleting for debugging
+					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Failed to build final response prompt: %v", err)); markErr != nil {
+						fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
+					}
 					return nil, err
 				}
 
 				// Get the final response from the model (now includes suggestions)
 				finalResponse, err := GetFinalResponse(ctx, conn, finalPrompt)
 				if err != nil {
+					// Mark as error instead of deleting for debugging
+					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Final response error: %v", err)); markErr != nil {
+						fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
+					}
 					return nil, fmt.Errorf("error generating final response: %w", err)
 				}
 
@@ -187,6 +221,10 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		}
 		maxTurns--
 		if maxTurns <= 0 {
+			// Mark as error instead of deleting for debugging
+			if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, "Model took too many turns to run"); markErr != nil {
+				fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
+			}
 			return nil, fmt.Errorf("model took too many turns to run")
 		}
 	}
