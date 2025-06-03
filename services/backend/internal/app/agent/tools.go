@@ -9,6 +9,7 @@ import (
 	"backend/internal/app/strategy"
 	"backend/internal/app/watchlist"
 	"backend/internal/data"
+	"context"
 	"encoding/json"
 
 	"google.golang.org/genai"
@@ -16,8 +17,19 @@ import (
 
 type Tool struct {
 	FunctionDeclaration *genai.FunctionDeclaration
-	Function            func(*data.Conn, int, json.RawMessage) (interface{}, error)
+	Function            func(context.Context, *data.Conn, int, json.RawMessage) (interface{}, error)
 	StatusMessage       string
+}
+
+// Wrapper function to adapt existing functions to context-aware signatures
+func wrapWithContext(fn func(*data.Conn, int, json.RawMessage) (interface{}, error)) func(context.Context, *data.Conn, int, json.RawMessage) (interface{}, error) {
+	return func(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
+		// Check if context is cancelled before calling the function
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return fn(conn, userID, args)
+	}
 }
 
 var (
@@ -37,7 +49,7 @@ var (
 					Required: []string{"ticker"},
 				},
 			},
-			Function:      helpers.GetCurrentSecurityID,
+			Function:      wrapWithContext(helpers.GetCurrentSecurityID),
 			StatusMessage: "Looking up {ticker}...",
 		},
 		"getSecuritiesFromTicker": {
@@ -55,7 +67,7 @@ var (
 					Required: []string{"ticker"},
 				},
 			},
-			Function:      helpers.GetSecuritiesFromTicker,
+			Function:      wrapWithContext(helpers.GetSecuritiesFromTicker),
 			StatusMessage: "Searching for matching tickers...",
 		},
 		"getCurrentTicker": {
@@ -73,7 +85,7 @@ var (
 					Required: []string{"securityId"},
 				},
 			},
-			Function:      helpers.GetCurrentTicker,
+			Function:      wrapWithContext(helpers.GetCurrentTicker),
 			StatusMessage: "Looking up {ticker}...",
 		},
 		"getTickerMenuDetails": {
@@ -95,7 +107,7 @@ var (
 					Required: []string{"securityID"},
 				},
 			},
-			Function:      helpers.GetTickerMenuDetails,
+			Function:      wrapWithContext(helpers.GetTickerMenuDetails),
 			StatusMessage: "Getting {ticker} details...",
 		},
 		"getInstancesByTickers": {
@@ -116,7 +128,7 @@ var (
 					Required: []string{"tickers"},
 				},
 			},
-			Function:      screensaver.GetInstancesByTickers,
+			Function:      wrapWithContext(screensaver.GetInstancesByTickers),
 			StatusMessage: "Looking up tickers...",
 		},
 		//watchlist
@@ -130,7 +142,7 @@ var (
 					Required:   []string{},
 				},
 			},
-			Function:      watchlist.GetWatchlists,
+			Function:      wrapWithContext(watchlist.GetWatchlists),
 			StatusMessage: "Fetching watchlists...",
 		},
 		"deleteWatchlist": {
@@ -148,7 +160,7 @@ var (
 					Required: []string{"watchlistId"},
 				},
 			},
-			Function:      watchlist.DeleteWatchlist,
+			Function:      wrapWithContext(watchlist.DeleteWatchlist),
 			StatusMessage: "Deleting watchlist...",
 		},
 		"newWatchlist": {
@@ -166,7 +178,7 @@ var (
 					Required: []string{"watchlistName"},
 				},
 			},
-			Function:      watchlist.NewWatchlist,
+			Function:      wrapWithContext(watchlist.NewWatchlist),
 			StatusMessage: "Creating new watchlist...",
 		},
 		"getWatchlistItems": {
@@ -184,7 +196,7 @@ var (
 					Required: []string{"watchlistId"},
 				},
 			},
-			Function:      watchlist.GetWatchlistItems,
+			Function:      wrapWithContext(watchlist.GetWatchlistItems),
 			StatusMessage: "Getting watchlist items...",
 		},
 		"deleteWatchlistItem": {
@@ -202,7 +214,7 @@ var (
 					Required: []string{"watchlistItemId"},
 				},
 			},
-			Function:      watchlist.DeleteWatchlistItem,
+			Function:      wrapWithContext(watchlist.DeleteWatchlistItem),
 			StatusMessage: "Removing item from watchlist...",
 		},
 		"newWatchlistItem": {
@@ -224,7 +236,7 @@ var (
 					Required: []string{"watchlistId", "securityId"},
 				},
 			},
-			Function:      watchlist.NewWatchlistItem,
+			Function:      wrapWithContext(watchlist.NewWatchlistItem),
 			StatusMessage: "Adding item to watchlist...",
 		},
 		//singles
@@ -243,7 +255,7 @@ var (
 					Required: []string{"securityId"},
 				},
 			},
-			Function:      helpers.GetPrevClose,
+			Function:      wrapWithContext(helpers.GetPrevClose),
 			StatusMessage: "Getting previous closing price...",
 		},
 		"getLastPrice": {
@@ -261,7 +273,7 @@ var (
 					Required: []string{"ticker"},
 				},
 			},
-			Function:      helpers.GetLastPrice,
+			Function:      wrapWithContext(helpers.GetLastPrice),
 			StatusMessage: "Getting current price of {ticker}...",
 		},
 		"setHorizontalLine": {
@@ -291,7 +303,7 @@ var (
 					Required: []string{"securityId", "price"},
 				},
 			},
-			Function:      chart.SetHorizontalLine,
+			Function:      wrapWithContext(chart.SetHorizontalLine),
 			StatusMessage: "Adding horizontal line...",
 		},
 		"getHorizontalLines": {
@@ -309,7 +321,7 @@ var (
 					Required: []string{"securityId"},
 				},
 			},
-			Function:      chart.GetHorizontalLines,
+			Function:      wrapWithContext(chart.GetHorizontalLines),
 			StatusMessage: "Fetching horizontal lines...",
 		},
 		"deleteHorizontalLine": {
@@ -327,7 +339,7 @@ var (
 					Required: []string{"id"},
 				},
 			},
-			Function:      chart.DeleteHorizontalLine,
+			Function:      wrapWithContext(chart.DeleteHorizontalLine),
 			StatusMessage: "Deleting horizontal line...",
 		},
 		"updateHorizontalLine": {
@@ -361,7 +373,7 @@ var (
 					Required: []string{"id", "securityId", "price"},
 				},
 			},
-			Function:      chart.UpdateHorizontalLine,
+			Function:      wrapWithContext(chart.UpdateHorizontalLine),
 			StatusMessage: "Updating horizontal line...",
 		},
 		"getStockEdgarFilings": {
@@ -387,7 +399,7 @@ var (
 					Required: []string{"start", "end", "securityId"},
 				},
 			},
-			Function:      filings.GetStockEdgarFilings,
+			Function:      wrapWithContext(filings.GetStockEdgarFilings),
 			StatusMessage: "Searching SEC filings...",
 		},
 		"getChartEvents": {
@@ -417,7 +429,7 @@ var (
 					Required: []string{"securityId", "from", "to"},
 				},
 			},
-			Function:      chart.GetChartEvents,
+			Function:      wrapWithContext(chart.GetChartEvents),
 			StatusMessage: "Fetching chart events...",
 		},
 		"getEarningsText": {
@@ -443,7 +455,7 @@ var (
 					Required: []string{"securityId"},
 				},
 			},
-			Function:      filings.GetEarningsText,
+			Function:      wrapWithContext(filings.GetEarningsText),
 			StatusMessage: "Getting earnings transcript...",
 		},
 		"getFilingText": {
@@ -461,7 +473,7 @@ var (
 					Required: []string{"url"},
 				},
 			},
-			Function:      filings.GetFilingText,
+			Function:      wrapWithContext(filings.GetFilingText),
 			StatusMessage: "Reading filing...",
 		},
 		"getExhibitList": {
@@ -476,7 +488,7 @@ var (
 					Required: []string{"url"},
 				},
 			},
-			Function:      filings.GetExhibitList,
+			Function:      wrapWithContext(filings.GetExhibitList),
 			StatusMessage: "Reading Exhibits in SEC Filing...",
 		},
 		"getExhibitContent": {
@@ -491,7 +503,7 @@ var (
 					Required: []string{"url"},
 				},
 			},
-			Function:      filings.GetExhibitContent,
+			Function:      wrapWithContext(filings.GetExhibitContent),
 			StatusMessage: "Reading Exhibit Content...",
 		},
 		// Account / User Trades
@@ -518,7 +530,7 @@ var (
 					Required: []string{},
 				},
 			},
-			Function:      account.GrabUserTrades,
+			Function:      wrapWithContext(account.GrabUserTrades),
 			StatusMessage: "Fetching trades...",
 		},
 		"get_trade_statistics": {
@@ -544,7 +556,7 @@ var (
 					Required: []string{},
 				},
 			},
-			Function:      account.GetTradeStatistics,
+			Function:      wrapWithContext(account.GetTradeStatistics),
 			StatusMessage: "Calculating trade statistics...",
 		},
 		"get_ticker_performance": {
@@ -566,7 +578,7 @@ var (
 					Required: []string{"ticker", "securityId"},
 				},
 			},
-			Function:      account.GetTickerPerformance,
+			Function:      wrapWithContext(account.GetTickerPerformance),
 			StatusMessage: "Analyzing ticker performance for {ticker}...",
 		},
 		"get_daily_trade_stats": {
@@ -588,7 +600,7 @@ var (
 					Required: []string{"year", "month"},
 				},
 			},
-			Function:      account.GetDailyTradeStats,
+			Function:      wrapWithContext(account.GetDailyTradeStats),
 			StatusMessage: "Getting daily trade stats...",
 		},
 		"run_backtest": {
@@ -631,7 +643,7 @@ var (
 					Required: []string{"securityId"},
 				},
 			},
-			Function:      helpers.GetTickerDailySnapshot,
+			Function:      wrapWithContext(helpers.GetTickerDailySnapshot),
 			StatusMessage: "Getting daily market data...",
 		},
 		"getAllTickerSnapshots": {
@@ -644,7 +656,7 @@ var (
 					Required:   []string{},
 				},
 			},
-			Function:      helpers.GetAllTickerSnapshots,
+			Function:      wrapWithContext(helpers.GetAllTickerSnapshots),
 			StatusMessage: "Scanning market data...",
 		},
 		// ────────────────────────────────────────────────────────────────────
@@ -658,7 +670,7 @@ var (
 					Required:   []string{},
 				},
 			},
-			Function:      strategy.GetStrategies,
+			Function:      wrapWithContext(strategy.GetStrategies),
 			StatusMessage: "Fetching strategies...",
 		},
 		"deleteStrategy": {
@@ -673,7 +685,7 @@ var (
 					Required: []string{"strategyId"},
 				},
 			},
-			Function:      strategy.DeleteStrategy,
+			Function:      wrapWithContext(strategy.DeleteStrategy),
 			StatusMessage: "Deleting strategy...",
 		},
 		"getStrategyFromNaturalLanguage": {
@@ -690,7 +702,7 @@ var (
 					Required: []string{"query", "strategyId"},
 				},
 			},
-			Function:      strategy.CreateStrategyFromNaturalLanguage,
+			Function:      wrapWithContext(strategy.CreateStrategyFromNaturalLanguage),
 			StatusMessage: "Building strategy...",
 		},
 		"calculateBacktestStatistic": {
@@ -716,7 +728,7 @@ var (
 					Required: []string{"strategyId", "columnName", "calculationType"},
 				},
 			},
-			Function:      CalculateBacktestStatistic,
+			Function:      wrapWithContext(CalculateBacktestStatistic),
 			StatusMessage: "Calculating backtest statistics...",
 		},
 		// [SEARCH TOOLS]
@@ -732,7 +744,7 @@ var (
 					Required: []string{"query"},
 				},
 			},
-			Function:      RunWebSearch,
+			Function:      wrapWithContext(RunWebSearch),
 			StatusMessage: "Searching the web...",
 		},
 		"runTwitterSearch": {
@@ -750,7 +762,7 @@ var (
 					Required: []string{"prompt"},
 				},
 			},
-			Function:      RunTwitterSearch,
+			Function:      wrapWithContext(RunTwitterSearch),
 			StatusMessage: "Searching Twitter...",
 		},
 		"getLatestTweets": {
@@ -765,7 +777,7 @@ var (
 					Required: []string{"handles"},
 				},
 			},
-			Function:      GetLatestTweets,
+			Function:      wrapWithContext(GetLatestTweets),
 			StatusMessage: "Searching Twitter...",
 		},
 		// [END SEARCH TOOLS]
@@ -785,7 +797,7 @@ var (
 					Required: []string{"date", "hour", "minute", "second"},
 				},
 			},
-			Function:      DateToMS,
+			Function:      wrapWithContext(DateToMS),
 			StatusMessage: "Figuring out date range...",
 		},
 	}
