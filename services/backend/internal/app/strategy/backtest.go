@@ -25,7 +25,12 @@ type BacktestArgs struct {
 }
 
 // RunBacktest executes a backtest for the given strategy and calculates future returns for multiple windows
-func RunBacktest(conn *data.Conn, userID int, rawArgs json.RawMessage) (any, error) {
+func RunBacktest(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (any, error) {
+	// Check if context is cancelled before starting
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	var args BacktestArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -77,8 +82,12 @@ func RunBacktest(conn *data.Conn, userID int, rawArgs json.RawMessage) (any, err
 	}
 	////fmt.Println("Generated SQL:", sqlQuery)
 
-	// Execute the query
-	ctx := context.Background()
+	// Check if context is cancelled before executing query
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	// Execute the query with context
 	rows, err := conn.DB.Query(ctx, sqlQuery)
 	if err != nil {
 		// Handle potential query errors (syntax errors, connection issues, etc.)
@@ -92,6 +101,11 @@ func RunBacktest(conn *data.Conn, userID int, rawArgs json.RawMessage) (any, err
 	if err != nil {
 		// Handle errors during row scanning (data type mismatches, etc.)
 		return nil, fmt.Errorf("error scanning backtest results: %v", err)
+	}
+
+	// Check if context is cancelled before processing return windows
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 
 	// --- BEGIN: Calculate N-Day Returns for Multiple Windows ---
@@ -125,8 +139,12 @@ func RunBacktest(conn *data.Conn, userID int, rawArgs json.RawMessage) (any, err
         `
 
 		// Loop through each result from the initial backtest
-
 		for _, record := range records {
+			// Check if context is cancelled during processing
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+
 			// Extract necessary info once per record
 			secIDAny, okSecID := record["securityid"]
 			tsAny, okTs := record["timestamp"]
@@ -215,6 +233,11 @@ func RunBacktest(conn *data.Conn, userID int, rawArgs json.RawMessage) (any, err
 
 			// Now, loop through each requested return window for the current record
 			for _, window := range args.ReturnWindows {
+				// Check if context is cancelled during return calculations
+				if ctx.Err() != nil {
+					return nil, ctx.Err()
+				}
+
 				returnColumnName := fmt.Sprintf("%d Day Return %%", window)
 
 				// --- Execute query to get start and end prices for this specific window ---
@@ -262,6 +285,11 @@ func RunBacktest(conn *data.Conn, userID int, rawArgs json.RawMessage) (any, err
 	}
 	// --- END: Calculate N-Day Returns ---
 
+	// Check if context is cancelled before final processing
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	// Convert to interface slice for formatBacktestResults
 	// This correctly handles an empty records slice, resulting in an empty recordsInterface slice.
 	recordsInterface := make([]any, len(records))
@@ -283,8 +311,7 @@ func RunBacktest(conn *data.Conn, userID int, rawArgs json.RawMessage) (any, err
 
 	// Save the full formatted results (including instances and return columns) to cache
 	//go func() { // Run in a goroutine to avoid blocking the main response
-	bgCtx := context.Background() // Use a background context for the goroutine
-	if err := SaveBacktestToCache(bgCtx, conn, userID, args.StrategyID, formattedResults); err != nil {
+	if err := SaveBacktestToCache(ctx, conn, userID, args.StrategyID, formattedResults); err != nil {
 		////fmt.Printf("Warning: Failed to save backtest results to cache for strategy %d: %v\n", args.StrategyID, err)
 		// We log the error but don't fail the main operation
 		return nil, err

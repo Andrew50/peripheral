@@ -220,7 +220,7 @@
 				
 				// Track if we found any new responses
 				let hasNewResponses = false;
-				let latestCompletedTimestamp: Date | undefined = undefined;
+				let latestCompletedTimestamp: Date | null = null;
 
 				// Process each message in the conversation history
 				conversation.messages.forEach((msg) => {
@@ -282,11 +282,11 @@
 				});
 
 				// Update last seen timestamp if we have new responses
-				if (hasNewResponses && latestCompletedTimestamp !== undefined) {
-					localStorage.setItem(lastSeenKey, latestCompletedTimestamp.toISOString());
-				} else if (!lastSeenTimestamp && latestCompletedTimestamp !== undefined) {
+				if (hasNewResponses && latestCompletedTimestamp) {
+					localStorage.setItem(lastSeenKey, (latestCompletedTimestamp as Date).toISOString());
+				} else if (!lastSeenTimestamp && latestCompletedTimestamp) {
 					// First time loading, set the timestamp
-					localStorage.setItem(lastSeenKey, latestCompletedTimestamp.toISOString());
+					localStorage.setItem(lastSeenKey, (latestCompletedTimestamp as Date).toISOString());
 				}
 
 				// Show notification for new responses if tab wasn't focused
@@ -546,8 +546,8 @@
 				localStorage.setItem(lastSeenKey, now.toISOString());
 				
 			} catch (error: any) {
-				// Check if the request was cancelled
-				if (requestCancelled) {
+				// Check if the request was cancelled (either by AbortController or by our cancellation response)
+				if (requestCancelled || (error.cancelled === true)) {
 					console.log('Request was cancelled by user');
 					functionStatusStore.set(null);
 					return;
