@@ -529,3 +529,91 @@ func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *da
 
 	return nil
 }
+
+// DeletePendingMessageInConversation deletes a pending message when a request is cancelled or fails
+func DeletePendingMessageInConversation(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string) error {
+	// Delete the pending message from database
+	query_sql := `
+		DELETE FROM conversation_messages 
+		WHERE conversation_id = $1 AND query = $2 AND status = 'pending'`
+
+	result, err := conn.DB.Exec(ctx, query_sql, conversationID, query)
+	if err != nil {
+		return fmt.Errorf("failed to delete pending message: %w", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		// Message might not exist or already completed, which is fine
+		return nil
+	}
+
+	// Update conversation metadata (decrease message count if needed)
+	updateQuery := `
+		UPDATE conversations 
+		SET message_count = (
+			SELECT COUNT(*) FROM conversation_messages 
+			WHERE conversation_id = $1
+		),
+		updated_at = $2
+		WHERE conversation_id = $1 AND user_id = $3`
+
+	_, err = conn.DB.Exec(ctx, updateQuery, conversationID, time.Now(), userID)
+	if err != nil {
+		// Log error but don't fail - the main goal (deleting pending message) succeeded
+		fmt.Printf("Warning: failed to update conversation metadata after deleting pending message: %v\n", err)
+	}
+
+	return nil
+}
+
+// MarkPendingMessageAsError marks a pending message as error status instead of deleting it
+func MarkPendingMessageAsError(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, errorMessage string) error {
+	// Update the database to mark as error
+	query_sql := `
+		UPDATE conversation_messages 
+		SET response_text = $1, completed_at = $2, status = $3
+		WHERE conversation_id = $4 AND query = $5 AND status = 'pending'`
+
+	now := time.Now()
+	result, err := conn.DB.Exec(ctx, query_sql,
+		fmt.Sprintf("Error: %s", errorMessage),
+		now,
+		"error",
+		conversationID,
+		query,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to mark pending message as error: %w", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("no pending message found with query: %s in conversation: %s", query, conversationID)
+	}
+
+	return nil
+}
+
+// CancelPendingMessage is the endpoint handler for cancelling pending messages
+func CancelPendingMessage(conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
+	var request struct {
+		ConversationID string `json:"conversation_id"`
+		Query          string `json:"query"`
+	}
+
+	if err := json.Unmarshal(args, &request); err != nil {
+		return nil, fmt.Errorf("error parsing request: %w", err)
+	}
+
+	// Delete the pending message
+	if err := DeletePendingMessageInConversation(context.Background(), conn, userID, request.ConversationID, request.Query); err != nil {
+		return nil, fmt.Errorf("error cancelling pending message: %w", err)
+	}
+
+	return map[string]interface{}{
+		"success": true,
+		"message": "Pending message cancelled successfully",
+	}, nil
+}
