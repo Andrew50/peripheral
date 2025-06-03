@@ -12,6 +12,29 @@ import (
 	"google.golang.org/genai"
 )
 
+var thinkingModel = "gemini-2.5-flash-preview-05-20"
+
+// buildContextPrompt formats incoming chart/filing context for the model
+func buildContextPrompt(contextItems []map[string]interface{}) string {
+	var sb strings.Builder
+	for _, item := range contextItems {
+		// Treat filing contexts first
+		if _, ok := item["link"]; ok {
+			ticker, _ := item["ticker"].(string)
+			fType, _ := item["filingType"].(string)
+			link, _ := item["link"].(string)
+			sb.WriteString(fmt.Sprintf("Filing - Ticker: %s, Type: %s, Link: %s\n", ticker, fType, link))
+		} else if _, ok := item["timestamp"]; ok {
+			// Then treat instance contexts
+			ticker, _ := item["ticker"].(string)
+			secID := fmt.Sprint(item["securityId"])
+			tsStr := fmt.Sprint(item["timestamp"])
+			sb.WriteString(fmt.Sprintf("Instance - Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secID, tsStr))
+		}
+	}
+	return sb.String()
+}
+
 type GetSuggestedQueriesResponse struct {
 	Suggestions []string `json:"suggestions"`
 }
