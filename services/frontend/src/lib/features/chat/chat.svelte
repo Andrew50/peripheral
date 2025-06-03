@@ -18,6 +18,28 @@
 	import { activeChartInstance } from '$lib/features/chart/interface';
 	import { functionStatusStore, type FunctionStatusUpdate } from '$lib/utils/stream/socket'; // <-- Import the status store and FunctionStatusUpdate type
 
+	// Conversation management types
+	type ConversationSummary = {
+		conversation_id: string;
+		title: string;
+		created_at: string;
+		updated_at: string;
+		last_message_query?: string;
+	};
+
+	type ConversationCreateResponse = {
+		conversation_id: string;
+		title: string;
+	};
+
+	// Conversation management state
+	let conversations: ConversationSummary[] = [];
+	let currentConversationId = '';
+	let currentConversationTitle = 'Chat';
+	let showConversationDropdown = false;
+	let conversationDropdown: HTMLDivElement;
+	let loadingConversations = false;
+
 	// Set default options for the markdown parser (optional)
 	marked.setOptions({
 		breaks: true, // Adds support for GitHub-flavored markdown line breaks
@@ -99,6 +121,7 @@
 		text?: string;
 		content_chunks?: ContentChunk[];
 		suggestions?: string[];
+		conversation_id?: string;
 	};
 
 	// Conversation history type
@@ -108,7 +131,6 @@
 			content_chunks?: ContentChunk[];
 			response_text: string;
 			timestamp: string | Date;
-			expires_at?: string | Date;
 			context_items?: (Instance | FilingContext)[];
 			suggested_queries?: string[];
 			completed_at?: string | Date;
@@ -123,7 +145,6 @@
 		content: string;
 		sender: 'user' | 'assistant' | 'system';
 		timestamp: Date;
-		expiresAt?: Date;
 		contentChunks?: ContentChunk[];
 		responseType?: string;
 		isLoading?: boolean;
@@ -201,6 +222,108 @@
 		}
 	}
 
+	// Conversation management functions
+	async function loadConversations() {
+		try {
+			loadingConversations = true;
+			const response = await privateRequest<ConversationSummary[]>('getUserConversations', {});
+			conversations = response || [];
+		} catch (error) {
+			console.error('Error loading conversations:', error);
+			conversations = [];
+		} finally {
+			loadingConversations = false;
+		}
+	}
+
+	async function createNewConversation() {
+		// Clear current conversation state - new conversation will be created when first message is sent
+		currentConversationId = '';
+		currentConversationTitle = 'New Chat';
+		
+		// Clear current chat
+		messagesStore.set([]);
+		
+		// Clear any pending query that might be set
+		pendingChatQuery.set(null);
+		
+		// Close dropdown
+		showConversationDropdown = false;
+		
+		// Focus on input
+		if (queryInput) {
+			setTimeout(() => queryInput.focus(), 100);
+		}
+		
+		// Clear initial suggestions and fetch new ones for empty chat
+		initialSuggestions = [];
+		fetchInitialSuggestions();
+	}
+
+	async function switchToConversation(conversationId: string, title: string) {
+		if (conversationId === currentConversationId) {
+			showConversationDropdown = false;
+			return;
+		}
+
+		try {
+			const response = await privateRequest('switchConversation', {
+				conversation_id: conversationId
+			});
+			
+			if (response) {
+				currentConversationId = conversationId;
+				currentConversationTitle = title;
+				
+				// Clear current messages and load the selected conversation
+				messagesStore.set([]);
+				await loadConversationHistory();
+				
+				showConversationDropdown = false;
+			}
+		} catch (error) {
+			console.error('Error switching conversation:', error);
+		}
+	}
+
+	async function deleteConversation(conversationId: string, event: MouseEvent) {
+		event.stopPropagation(); // Prevent switching to the conversation
+		
+		if (!confirm('Are you sure you want to delete this conversation?')) {
+			return;
+		}
+
+		try {
+			await privateRequest('deleteConversation', {
+				conversation_id: conversationId
+			});
+			
+			// If we deleted the current conversation, start a new one
+			if (conversationId === currentConversationId) {
+				createNewConversation(); // This will clear the UI state
+			} else {
+				// Just refresh the conversation list
+				await loadConversations();
+			}
+		} catch (error) {
+			console.error('Error deleting conversation:', error);
+		}
+	}
+
+	function toggleConversationDropdown() {
+		showConversationDropdown = !showConversationDropdown;
+		if (showConversationDropdown) {
+			loadConversations();
+		}
+	}
+
+	// Close dropdown when clicking outside
+	function handleClickOutside(event: MouseEvent) {
+		if (showConversationDropdown && conversationDropdown && !conversationDropdown.contains(event.target as Node)) {
+			showConversationDropdown = false;
+		}
+	}
+
 	// Load any existing conversation history from the server
 	async function loadConversationHistory(shouldAutoScroll: boolean = true) {
 		try {
@@ -247,7 +370,6 @@
 						content: msg.query,
 						sender: 'user',
 						timestamp: msgTimestamp,
-						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
 						contextItems: msg.context_items || [],
 						status: msg.status,
 						completedAt: msgCompletedAt,
@@ -262,7 +384,6 @@
 							content: msg.response_text || '',
 							contentChunks: msg.content_chunks || [],
 							timestamp: msgTimestamp,
-							expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
 							suggestedQueries: msg.suggested_queries || [],
 							status: msg.status,
 							completedAt: msgCompletedAt,
@@ -293,6 +414,27 @@
 				if (hasNewResponses && document.hidden) {
 					console.log('New chat responses arrived while tab was closed');
 					// You could add a notification here
+				}
+
+				// If we were in a new conversation state (no conversation ID), 
+				// we need to get the conversation details
+				if (!currentConversationId && conversation.messages.length > 0) {
+					try {
+						// Get all conversations to find the active one
+						const conversationsResponse = await privateRequest<ConversationSummary[]>('getUserConversations', {});
+						const conversations = conversationsResponse || [];
+						
+						// The most recent conversation should be the active one
+						if (conversations.length > 0) {
+							const latestConversation = conversations[0]; // They're ordered by updated_at DESC
+							currentConversationId = latestConversation.conversation_id;
+							currentConversationTitle = latestConversation.title;
+						}
+					} catch (error) {
+						console.error('Error getting conversation details:', error);
+						// Fallback to generic title
+						currentConversationTitle = 'New Chat';
+					}
 				}
 
 				// Only auto-scroll if explicitly requested (e.g., on initial load)
@@ -386,6 +528,7 @@
 			setTimeout(() => queryInput.focus(), 100);
 		}
 		loadConversationHistory();
+		loadConversations(); // Load conversations on mount
 
 		// Set up periodic polling for updates (every 10 seconds)
 		pollInterval = setInterval(checkForUpdates, 10000);
@@ -405,6 +548,7 @@
 		};
 		
 		document.addEventListener('visibilitychange', handleVisibilityChange);
+		document.addEventListener('click', handleClickOutside); // Add click outside listener
 
 		// Add delegated event listener for ticker buttons
 		if (messagesContainer) {
@@ -414,6 +558,7 @@
 		// Cleanup listener on component destroy
 		return () => {
 			document.removeEventListener('visibilitychange', handleVisibilityChange);
+			document.removeEventListener('click', handleClickOutside); // Clean up click outside listener
 			if (messagesContainer) {
 				messagesContainer.removeEventListener('click', handleTickerButtonClick);
 			}
@@ -505,7 +650,8 @@
 				const response = await privateRequest('getQuery', {
 					query: finalQuery,
 					context: $contextItems, // Send only manually added context items
-					activeChartContext: currentActiveChart // Send active chart separately
+					activeChartContext: currentActiveChart, // Send active chart separately
+					conversation_id: currentConversationId || '' // Send empty string for new chats
 				}, false, false, currentAbortController?.signal);
 
 				// Check if request was cancelled while awaiting
@@ -522,8 +668,13 @@
 				// Clear status store on success
 				functionStatusStore.set(null);
 
-				const expiresAt = new Date();
-				expiresAt.setHours(expiresAt.getHours() + 24); 
+				// Update conversation ID if this was a new chat
+				if (typedResponse.conversation_id && !currentConversationId) {
+					currentConversationId = typedResponse.conversation_id;
+					// Load conversations to get the title
+					await loadConversations();
+				}
+
 				const now = new Date();
 
 				const assistantMessage: Message = {
@@ -531,7 +682,6 @@
 					content: typedResponse.text || "Error processing request.",
 					sender: 'assistant',
 					timestamp: now,
-					expiresAt: expiresAt,
 					responseType: typedResponse.type,
 					contentChunks: typedResponse.content_chunks,
 					suggestedQueries: typedResponse.suggestions || [],
@@ -544,6 +694,13 @@
 				// Update last seen timestamp since we just saw this response
 				const lastSeenKey = 'chat_last_seen_timestamp';
 				localStorage.setItem(lastSeenKey, now.toISOString());
+				
+				// If we didn't have a conversation ID before, we should have one now
+				// Load conversation history to get the new conversation ID
+				if (!currentConversationId) {
+					await loadConversationHistory(false); // Don't scroll since we just added the message
+					await loadConversations(); // Refresh conversation list
+				}
 				
 			} catch (error: any) {
 				// Check if the request was cancelled (either by AbortController or by our cancellation response)
@@ -629,71 +786,14 @@
 		return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 	}
 
-	// Function to determine if a message is near expiration (less than 6 hours)
-	function isNearExpiration(message: Message): boolean {
-		if (!message.expiresAt) return false;
-		const now = new Date();
-		const sixHoursMs = 6 * 60 * 60 * 1000;
-		return message.expiresAt.getTime() - now.getTime() < sixHoursMs;
-	}
 
-	// Function to format expiration time
-	function formatExpiration(expiresAt: Date): string {
-		const now = new Date();
-		const diff = expiresAt.getTime() - now.getTime();
 
-		// Less than an hour
-		if (diff < 60 * 60 * 1000) {
-			const mins = Math.max(1, Math.floor(diff / (60 * 1000)));
-			return `Expires in ${mins} minute${mins !== 1 ? 's' : ''}`;
-		}
 
-		// Hours
-		if (diff < 24 * 60 * 60 * 1000) {
-			const hours = Math.floor(diff / (60 * 60 * 1000));
-			return `Expires in ${hours} hour${hours !== 1 ? 's' : ''}`;
-		}
-
-		// Days
-		const days = Math.floor(diff / (24 * 60 * 60 * 1000));
-		return `Expires in ${days} day${days !== 1 ? 's' : ''}`;
-	}
 
 	// Function to clear conversation history
 	async function clearConversation() {
-		try {
-			isLoading = true;
-			// Wait for backend confirmation before clearing locally and fetching suggestions
-			await privateRequest('clearConversationHistory', {});
-
-			// Clear local messages
-			messagesStore.set([]);
-			
-			// Clear last seen timestamp
-			const lastSeenKey = 'chat_last_seen_timestamp';
-			localStorage.removeItem(lastSeenKey);
-
-			// Reset initial load flag for next conversation
-			isInitialLoad = true;
-
-			// Fetch initial suggestions now that history is cleared and confirmed
-			fetchInitialSuggestions(); // <-- Call the new helper function
-			
-		} catch (error) {
-			console.error('Error clearing conversation history:', error);
-			
-			// Show error message
-			const errorMessage: Message = {
-				id: generateId(),
-				content: `Error: Failed to clear conversation history`,
-				sender: 'assistant', // Or 'system'? Let's keep 'assistant' for consistency with other errors
-				timestamp: new Date(),
-				responseType: 'error'
-			};
-			messagesStore.set([errorMessage]); // Show error on empty background
-		} finally {
-			isLoading = false;
-		}
+		// Instead of clearing the current conversation, create a new one
+		createNewConversation();
 	}
 
 	// Function to safely access table data properties
@@ -893,15 +993,73 @@
 
 <div class="chat-container">
 	<div class="chat-header">
-		<h3>Chat</h3>
-		{#if $messagesStore.length > 0}
-			<button class="clear-button" on:click={clearConversation} disabled={isLoading}>
-				<svg viewBox="0 0 24 24" width="16" height="16">
-					<path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor" />
-				</svg>
-				New Chat
-			</button>
-		{/if}
+		<div class="header-left">
+			<div class="conversation-dropdown-container" bind:this={conversationDropdown}>
+				<button class="hamburger-button" on:click={toggleConversationDropdown} aria-label="Open conversations menu">
+					<svg viewBox="0 0 24 24" width="20" height="20">
+						<path d="M3,6H21V8H3V6M3,11H21V13H3V11M3,16H21V18H3V16Z" fill="currentColor" />
+					</svg>
+				</button>
+				
+				{#if showConversationDropdown}
+					<div class="conversation-dropdown">
+						<div class="dropdown-header">
+							<h4>Conversations</h4>
+							<button class="new-conversation-btn" on:click={createNewConversation}>
+								<svg viewBox="0 0 24 24" width="16" height="16">
+									<path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor" />
+								</svg>
+								New Chat
+							</button>
+						</div>
+						
+						<div class="conversation-list">
+							{#if loadingConversations}
+								<div class="loading-conversations">Loading...</div>
+							{:else if conversations.length === 0}
+								<div class="no-conversations">No conversations yet</div>
+							{:else}
+								{#each conversations as conversation (conversation.conversation_id)}
+									<div 
+										class="conversation-item {conversation.conversation_id === currentConversationId ? 'active' : ''}"
+										on:click={() => switchToConversation(conversation.conversation_id, conversation.title)}
+									>
+										<div class="conversation-info">
+											<div class="conversation-title">{conversation.title}</div>
+											<div class="conversation-meta">
+												{new Date(conversation.updated_at).toLocaleDateString()}
+											</div>
+										</div>
+										<button 
+											class="delete-conversation-btn"
+											on:click={(e) => deleteConversation(conversation.conversation_id, e)}
+											aria-label="Delete conversation"
+										>
+											<svg viewBox="0 0 24 24" width="14" height="14">
+												<path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" fill="currentColor" />
+											</svg>
+										</button>
+									</div>
+								{/each}
+							{/if}
+						</div>
+					</div>
+				{/if}
+			</div>
+			
+			<h3>{currentConversationTitle}</h3>
+		</div>
+		
+		<div class="header-right">
+			{#if $messagesStore.length > 0}
+				<button class="clear-button" on:click={clearConversation} disabled={isLoading}>
+					<svg viewBox="0 0 24 24" width="16" height="16">
+						<path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor" />
+					</svg>
+					New Chat
+				</button>
+			{/if}
+		</div>
 	</div>
 
 	<div class="chat-messages" bind:this={messagesContainer}>
@@ -920,7 +1078,7 @@
 					<div
 						class="message {message.sender} {message.responseType === 'error'
 							? 'error'
-							: ''} {isNearExpiration(message) ? 'expiring' : ''} {message.isNewResponse ? 'new-response' : ''}"
+							: ''} {message.isNewResponse ? 'new-response' : ''}"
 					>
 						{#if message.isLoading}
 							<!-- Always display status text when loading, as we set an initial one -->
@@ -1044,11 +1202,6 @@
 								<div class="message-timestamp">
 									{formatTimestamp(message.timestamp)}
 								</div>
-								{#if message.expiresAt}
-									<div class="message-expiration {isNearExpiration(message) ? 'expiring' : ''}">
-										{formatExpiration(message.expiresAt)}
-									</div>
-								{/if}
 							</div>
 						{/if}
 					</div>
@@ -1181,6 +1334,193 @@
 		background: var(--ui-bg-primary); /* Use theme background */
 	}
 
+	.header-left {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.header-right {
+		display: flex;
+		align-items: center;
+	}
+
+	.conversation-dropdown-container {
+		position: relative;
+		display: flex;
+		align-items: center;
+	}
+
+	.hamburger-button {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.5rem;
+		background: transparent;
+		border: 1px solid transparent;
+		border-radius: 0.25rem;
+		color: var(--text-secondary, #aaa);
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.hamburger-button:hover {
+		background: var(--ui-bg-hover, rgba(255, 255, 255, 0.1));
+		color: var(--text-primary, #fff);
+		border-color: var(--ui-border, #444);
+	}
+
+	.conversation-dropdown {
+		position: absolute;
+		top: 100%;
+		left: 0;
+		width: 350px;
+		max-height: 400px;
+		background: #333;
+		background-color: #333;
+		border: 1px solid var(--ui-border, #444);
+		border-radius: 0.5rem;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+		z-index: 1000;
+		margin-top: 0.5rem;
+		overflow: hidden;
+	}
+
+	.dropdown-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 1rem;
+		border-bottom: 1px solid var(--ui-border, #444);
+		background: #2a2a2a;
+		background-color: #2a2a2a;
+	}
+
+	.dropdown-header h4 {
+		margin: 0;
+		font-size: 0.9rem;
+		font-weight: 500;
+		color: var(--text-primary, #fff);
+	}
+
+	.new-conversation-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.3rem 0.6rem;
+		background: var(--accent-color, #3a8bf7);
+		color: white;
+		border: none;
+		border-radius: 0.25rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.new-conversation-btn:hover {
+		background: var(--accent-color-hover, #2c7ae0);
+		transform: translateY(-1px);
+	}
+
+	.conversation-list {
+		max-height: 300px;
+		overflow-y: auto;
+	}
+
+	.conversation-item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.75rem 1rem;
+		cursor: pointer;
+		transition: background-color 0.2s;
+		border-bottom: 1px solid var(--ui-border-darker, #2a2a2a);
+	}
+
+	.conversation-item:hover {
+		background: var(--ui-bg-hover, rgba(255, 255, 255, 0.05));
+	}
+
+	.conversation-item.active {
+		background: var(--accent-color-faded, rgba(58, 139, 247, 0.1));
+		border-left: 3px solid var(--accent-color, #3a8bf7);
+	}
+
+	.conversation-info {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.conversation-title {
+		font-size: 0.85rem;
+		font-weight: 500;
+		color: var(--text-primary, #fff);
+		margin-bottom: 0.2rem;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.conversation-meta {
+		font-size: 0.7rem;
+		color: var(--text-secondary, #aaa);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.delete-conversation-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.3rem;
+		background: transparent;
+		border: 1px solid transparent;
+		border-radius: 0.25rem;
+		color: var(--text-secondary, #aaa);
+		cursor: pointer;
+		transition: all 0.2s;
+		opacity: 0;
+		margin-left: 0.5rem;
+	}
+
+	.conversation-item:hover .delete-conversation-btn {
+		opacity: 1;
+	}
+
+	.delete-conversation-btn:hover {
+		background: var(--error-color-faded, rgba(244, 67, 54, 0.1));
+		border-color: var(--error-color, #f44336);
+		color: var(--error-color, #f44336);
+	}
+
+	.loading-conversations,
+	.no-conversations {
+		padding: 2rem 1rem;
+		text-align: center;
+		color: var(--text-secondary, #aaa);
+		font-size: 0.8rem;
+	}
+
+	/* Custom scrollbar for conversation list */
+	.conversation-list::-webkit-scrollbar {
+		width: 6px;
+	}
+
+	.conversation-list::-webkit-scrollbar-track {
+		background: var(--ui-bg-element-darker, #2a2a2a);
+	}
+
+	.conversation-list::-webkit-scrollbar-thumb {
+		background-color: var(--ui-border, #444);
+		border-radius: 3px;
+	}
+
+	.conversation-list::-webkit-scrollbar-thumb:hover {
+		background-color: var(--ui-accent, #3a8bf7);
+	}
+
 	.chat-header h3 {
 		margin: 0;
 		font-size: 1rem;
@@ -1308,16 +1648,6 @@
 		margin-top: 0.5rem;
 		font-size: 0.65rem;
 		opacity: 0.7;
-	}
-
-	.message-expiration {
-		font-style: italic;
-	}
-
-	.message-expiration.expiring {
-		color: orange;
-		font-weight: 500;
-		opacity: 1;
 	}
 
 	.function-tools {
