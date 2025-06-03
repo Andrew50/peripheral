@@ -848,8 +848,8 @@
 									<Screener />
 								{:else if w.type === 'strategies'}
 									<Strategies />
-								{:else if w.type === 'account'}
-									<Account />
+								<!-- {:else if w.type === 'account'}
+									<Account /> -->
 								{:else if w.type === 'settings'}
 									<Settings />
 								{:else if w.type === 'backtest'}
@@ -964,12 +964,12 @@
 			>
 				Deploy
 			</button>
-			<button
+			<!-- <button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'account') ? 'active' : ''}"
 				on:click={() => openBottomWindow('account')}
 			>
 				Account
-			</button>
+			</button> -->
 
 		</div>
 
