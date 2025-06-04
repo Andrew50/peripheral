@@ -4,7 +4,6 @@ import (
 	"backend/internal/app/chart"
 	"backend/internal/app/filings"
 	"backend/internal/app/helpers"
-	"backend/internal/app/screensaver"
 	"backend/internal/app/strategy"
 	"backend/internal/app/watchlist"
 	"backend/internal/data"
@@ -69,27 +68,9 @@ var (
 			Function:      wrapWithContext(helpers.GetSecuritiesFromTicker),
 			StatusMessage: "Searching for matching tickers...",
 		},
-		"getCurrentTicker": {
+		"getStockDetails": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getCurrentTicker",
-				Description: "Get the current security ticker symbol for a security ID.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The security ID of the security to get the current ticker for.",
-						},
-					},
-					Required: []string{"securityId"},
-				},
-			},
-			Function:      wrapWithContext(helpers.GetCurrentTicker),
-			StatusMessage: "Looking up {ticker}...",
-		},
-		"getTickerMenuDetails": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getTickerMenuDetails",
+				Name:        "getStockDetails",
 				Description: "Get company name, market, locale, primary exchange, active status, market cap, description, logo, shares outstanding, industry, sector and total shares for a given security.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
@@ -108,27 +89,6 @@ var (
 			},
 			Function:      wrapWithContext(helpers.GetTickerMenuDetails),
 			StatusMessage: "Getting {ticker} details...",
-		},
-		"getInstancesByTickers": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getInstancesByTickers",
-				Description: "Get security IDs for a list of security ticker symbols.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"tickers": {
-							Type:        genai.TypeArray,
-							Description: "List of security ticker symbols.",
-							Items: &genai.Schema{
-								Type: genai.TypeString,
-							},
-						},
-					},
-					Required: []string{"tickers"},
-				},
-			},
-			Function:      wrapWithContext(screensaver.GetInstancesByTickers),
-			StatusMessage: "Looking up tickers...",
 		},
 		//watchlist
 		"getWatchlists": {
@@ -375,32 +335,6 @@ var (
 			Function:      wrapWithContext(chart.UpdateHorizontalLine),
 			StatusMessage: "Updating horizontal line...",
 		},
-		"getStockEdgarFilings": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getStockEdgarFilings",
-				Description: "Retrieve a list of urls and filing types for all SEC filings for a specified security within a specified time range.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"start": {
-							Type:        genai.TypeInteger,
-							Description: "The start of the date range in milliseconds.",
-						},
-						"end": {
-							Type:        genai.TypeInteger,
-							Description: "The end of the date range in milliseconds.",
-						},
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the security to get filings for.",
-						},
-					},
-					Required: []string{"start", "end", "securityId"},
-				},
-			},
-			Function:      wrapWithContext(filings.GetStockEdgarFilings),
-			StatusMessage: "Searching SEC filings...",
-		},
 		"getChartEvents": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getChartEvents",
@@ -430,6 +364,33 @@ var (
 			},
 			Function:      wrapWithContext(chart.GetChartEvents),
 			StatusMessage: "Fetching chart events...",
+		},
+		// SEC Filing Tools
+		"getStockEdgarFilings": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getStockEdgarFilings",
+				Description: "Retrieve a list of urls and filing types for all SEC filings for a specified security within a specified time range.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"start": {
+							Type:        genai.TypeInteger,
+							Description: "The start of the date range in milliseconds.",
+						},
+						"end": {
+							Type:        genai.TypeInteger,
+							Description: "The end of the date range in milliseconds.",
+						},
+						"securityId": {
+							Type:        genai.TypeInteger,
+							Description: "The ID of the security to get filings for.",
+						},
+					},
+					Required: []string{"start", "end", "securityId"},
+				},
+			},
+			Function:      wrapWithContext(filings.GetStockEdgarFilings),
+			StatusMessage: "Searching SEC filings...",
 		},
 		"getEarningsText": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -505,6 +466,8 @@ var (
 			Function:      wrapWithContext(filings.GetExhibitContent),
 			StatusMessage: "Reading Exhibit Content...",
 		},
+		// <End SEC Filing Tools>
+		// <Backtest Tools>
 		"run_backtest": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "run_backtest",
