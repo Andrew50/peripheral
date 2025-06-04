@@ -90,6 +90,10 @@
 	let requestCancelled = false;
 	let currentProcessingQuery = ''; // Track the query currently being processed
 
+	// Message editing state
+	let editingMessageId = '';
+	let editingContent = '';
+
 	// Function to fetch initial suggestions based on active chart
 	async function fetchInitialSuggestions() {
 		initialSuggestions = []; // Clear previous suggestions first
@@ -129,8 +133,9 @@
 		currentConversationId = '';
 		currentConversationTitle = 'New Chat';
 		
-		// Clear current chat
+		// Clear current chat and context items
 		messagesStore.set([]);
+		contextItems.set([]); // Clear context items when creating new conversation
 		
 		// Clear any pending query that might be set
 		pendingChatQuery.set(null);
@@ -163,8 +168,10 @@
 				currentConversationId = conversationId;
 				currentConversationTitle = title;
 				
-				// Clear current messages and load the selected conversation
+				// Clear current messages and context items to prevent leakage
 				messagesStore.set([]);
+				contextItems.set([]); // Clear context items when switching conversations
+				
 				await loadConversationHistory();
 				
 				showConversationDropdown = false;
@@ -259,9 +266,16 @@
 						latestCompletedTimestamp = msgCompletedAt;
 					}
 
-					// Add user message
+					// Only process messages that have backend message IDs
+					if (!msg.message_id) {
+						console.warn('Skipping message without backend message_id:', msg);
+						return;
+					}
+
+					// Now we know msg.message_id is defined (TypeScript will recognize this)
+					const messageId = msg.message_id;
 					messagesStore.update(current => [...current, {
-						id: generateId(),
+						message_id: messageId, // Use backend ID 
 						content: msg.query,
 						sender: 'user',
 						timestamp: msgTimestamp,
@@ -273,8 +287,10 @@
 
 					// Only add assistant message if it's completed (has content)
 					if (isCompleted && (msg.content_chunks || msg.response_text)) {
+						// Assistant messages use a different ID pattern since they're not editable
+						const assistantMessageId = messageId + '_response';
 						messagesStore.update(current => [...current, {
-							id: generateId(),
+							message_id: assistantMessageId,
 							sender: 'assistant',
 							content: msg.response_text || '',
 							contentChunks: msg.content_chunks || [],
@@ -286,8 +302,9 @@
 						}]);
 					} else if (isPending) {
 						// Add a loading message for pending requests
+						const loadingMessageId = messageId + '_loading';
 						messagesStore.update(current => [...current, {
-							id: generateId(),
+							message_id: loadingMessageId,
 							sender: 'assistant',
 							content: '',
 							timestamp: msgTimestamp,
@@ -305,30 +322,12 @@
 					localStorage.setItem(lastSeenKey, (latestCompletedTimestamp as Date).toISOString());
 				}
 
-				// Show notification for new responses if tab wasn't focused
-				if (hasNewResponses && document.hidden) {
-					// You could add a notification here
+				// Update conversation details from backend response
+				if (conversation.conversation_id) {
+					currentConversationId = conversation.conversation_id;
 				}
-
-				// If we were in a new conversation state (no conversation ID), 
-				// we need to get the conversation details
-				if (!currentConversationId && conversation.messages.length > 0) {
-					try {
-						// Get all conversations to find the active one
-						const conversationsResponse = await privateRequest<ConversationSummary[]>('getUserConversations', {});
-						const conversations = conversationsResponse || [];
-						
-						// The most recent conversation should be the active one
-						if (conversations.length > 0) {
-							const latestConversation = conversations[0]; // They're ordered by updated_at DESC
-							currentConversationId = latestConversation.conversation_id;
-							currentConversationTitle = latestConversation.title;
-						}
-					} catch (error) {
-						console.error('Error getting conversation details:', error);
-						// Fallback to generic title
-						currentConversationTitle = 'New Chat';
-					}
+				if (conversation.title) {
+					currentConversationTitle = conversation.title;
 				}
 
 				// Only auto-scroll if explicitly requested (e.g., on initial load)
@@ -342,8 +341,10 @@
 					}
 				}
 			} else {
-				// No conversation history, clear messages
+				// No conversation history, clear messages and reset state
 				messagesStore.set([]);
+				currentConversationId = '';
+				currentConversationTitle = 'Chat';
 			}
 		} catch (error) {
 			console.error('Error loading conversation history:', error);
@@ -466,11 +467,6 @@
 		}
 	});
 
-	// Generate unique IDs for messages
-	function generateId(): string {
-		return Date.now().toString(36) + Math.random().toString(36).substring(2);
-	}
-
 	// Scroll to bottom of chat (for user-initiated actions)
 	function scrollToBottom() {
 		setTimeout(() => {
@@ -497,8 +493,10 @@
 		currentAbortController = new AbortController();
 		
 		try { 
+			// Note: Create a temporary user message for immediate UI feedback
+			// The backend will provide the actual message ID, but we need something for the UI
 			const userMessage: Message = {
-				id: generateId(),
+				message_id: 'temp_' + Date.now(), // Temporary ID for UI only
 				content: $inputValue,
 				sender: 'user',
 				timestamp: new Date(),
@@ -509,7 +507,7 @@
 
 			// Create loading message placeholder
 			loadingMessage = {
-				id: generateId(),
+				message_id: 'temp_loading_' + Date.now(),
 				content: '', // Content is now handled by the store
 				sender: 'assistant',
 				timestamp: new Date(),
@@ -554,7 +552,6 @@
 
 				// Type assertion to handle the response type
 				const typedResponse = response as unknown as QueryResponse;
-
 				// Store the conversation ID for potential cleanup
 				if (typedResponse.conversation_id) {
 					backendConversationId = typedResponse.conversation_id;
@@ -570,10 +567,21 @@
 					await loadConversations();
 				}
 
+				// Update the temporary user message with the real backend message ID
+				if (typedResponse.message_id) {
+					messagesStore.update(current => 
+						current.map(msg => 
+							msg.message_id === userMessage.message_id 
+								? { ...msg, message_id: typedResponse.message_id! }
+								: msg
+						)
+					);
+				}
+
 				const now = new Date();
 
 				const assistantMessage: Message = {
-					id: generateId(),
+					message_id: typedResponse.message_id  + '_response' || '',
 					content: typedResponse.text || "Error processing request.",
 					sender: 'assistant',
 					timestamp: now,
@@ -615,7 +623,7 @@
 				await cleanupPendingMessage(currentProcessingQuery);
 
 				const errorMessage: Message = {
-					id: generateId(),
+					message_id: 'temp_error_' + Date.now(),
 					content: `Error: ${error.message || 'Failed to get response'}`,
 					sender: 'assistant',
 					timestamp: new Date(),
@@ -636,7 +644,7 @@
 			// Add error message if we have a loading message
 			if (loadingMessage) {
 				const errorMessage: Message = {
-					id: generateId(),
+					message_id: 'temp_error_' + Date.now(),
 					content: `Error: ${error.message || 'An unexpected error occurred'}`,
 					sender: 'assistant',
 					timestamp: new Date(),
@@ -648,7 +656,7 @@
 		} finally {
 			// Always clean up loading message and reset state
 			if (loadingMessage) {
-				messagesStore.update(current => current.filter(m => m.id !== loadingMessage!.id));
+				messagesStore.update(current => current.filter(m => m.message_id !== loadingMessage!.message_id));
 			}
 			isLoading = false;
 			currentAbortController = null;
@@ -706,9 +714,6 @@
 		queryInput.style.height = `${queryInput.scrollHeight}px`; // Set height to content height
 	}
 
-	function formatTimestamp(date: Date): string {
-		return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-	}
 
 
 
@@ -854,7 +859,7 @@
 		messagesStore.update(current => current.map(msg => {
 			if (msg.contentChunks) {
 				msg.contentChunks = msg.contentChunks.map((chunk, idx) => {
-					const currentTableKey = msg.id + '-' + idx;
+					const currentTableKey = msg.message_id + '-' + idx;
 					if (currentTableKey === tableKey && chunk.type === 'table' && isTableData(chunk.content)) {
 						// Return a new chunk object with the sorted rows
 						return {
@@ -896,6 +901,116 @@
 		tick().then(() => {
 			handleSubmit();
 		});
+	}
+
+	// Message editing functions
+	function startEditing(message: Message) {
+		if (message.sender !== 'user') return; // Only allow editing user messages
+		editingMessageId = message.message_id;
+		editingContent = message.content;
+	}
+
+	function cancelEditing() {
+		editingMessageId = '';
+		editingContent = '';
+	}
+
+	async function saveMessageEdit() {
+		if (!editingMessageId || !editingContent.trim()) {
+			return;
+		}
+		
+		try {
+			// Find the message being edited
+			const editingMessage = $messagesStore.find(msg => msg.message_id === editingMessageId);
+			
+			if (!editingMessage) {
+				console.error('Message to edit not found');
+				return;
+			}
+
+			// Use the message ID directly (it should be the backend message ID)
+			const backendMessageId = editingMessage.message_id;
+			
+			if (!backendMessageId) {
+				console.error('No backend message ID found for editing');
+				return;
+			}
+
+			// Store the new content before clearing editing state
+			const newContent = editingContent.trim();
+
+			// Only proceed if the content actually changed
+			if (editingMessage.content === newContent) {
+				// No changes, just exit editing mode
+				editingMessageId = '';
+				editingContent = '';
+				return;
+			}
+
+			// Clear editing state early
+			editingMessageId = '';
+			editingContent = '';
+
+			// Call backend to edit the message using the backend message ID
+			const requestPayload = {
+				conversation_id: currentConversationId,
+				message_id: backendMessageId,
+				new_query: newContent
+			};
+
+			const response = await privateRequest('editMessage', requestPayload);
+
+			if (response && (response as any).success) {
+				console.log('Edit response received:', response);
+				
+				// Update conversation ID first before any other operations
+				if ((response as any).conversation_id) {
+					currentConversationId = (response as any).conversation_id;
+				}
+				
+				console.log('Current messages before reload:', $messagesStore.length);
+				
+				// Reload conversation history to reflect the archived state
+				await loadConversationHistory(false);
+				
+				console.log('Current messages after reload:', $messagesStore.length);
+				
+				// Wait a moment for the UI to fully update
+				await tick();
+
+				// Now automatically send the edited message as a new chat request
+				// Set the input value and context from the edit response
+				inputValue.set(newContent);
+				
+				// Always clear existing context and set only the ones from the edited message
+				contextItems.update(currentItems => {
+					// Set context items from the edit response, or empty array if none
+					return (response as any).context_items || [];
+				});
+
+				// Use tick to ensure input value is updated before submitting
+				await tick();
+				
+				console.log('About to submit edited message:', newContent);
+				
+				// Submit the message using existing logic
+				handleSubmit();
+			} else {
+				console.error('Backend edit failed or success=false');
+				// Reload conversation to get current state
+				await loadConversationHistory(false);
+			}
+		} catch (error) {
+			console.error('Error saving message edit:', error);
+			
+			// Clear editing state on error
+			editingMessageId = '';
+			editingContent = '';
+			
+			// Reload conversation to get current state
+			await loadConversationHistory(false);
+		}
 	}
 </script>
 
@@ -1009,16 +1124,42 @@
 
 			</div>
 		{:else}
-			{#each $messagesStore as message (message.id)}
+			{#each $messagesStore as message (message.message_id)}
 				<div class="message-wrapper {message.sender}">
 					<div
 						class="message {message.sender} {message.responseType === 'error'
 							? 'error'
-							: ''} {message.isNewResponse ? 'new-response' : ''}"
+							: ''} {message.isNewResponse ? 'new-response' : ''} {editingMessageId === message.message_id ? 'editing' : ''}"
 					>
 						{#if message.isLoading}
 							<!-- Always display status text when loading, as we set an initial one -->
 							<p class="loading-status">{$functionStatusStore?.userMessage || 'Processing...'}</p> 
+						{:else if editingMessageId === message.message_id}
+							<!-- Editing interface - using CSS classes -->
+							<div class="edit-container">
+								<textarea
+									class="edit-textarea"
+									bind:value={editingContent}
+									placeholder="Edit your message..."
+									on:keydown={(e) => {
+										if (e.key === 'Enter' && e.ctrlKey) {
+											e.preventDefault();
+											saveMessageEdit();
+										} else if (e.key === 'Escape') {
+											e.preventDefault();
+											cancelEditing();
+										}
+									}}
+								></textarea>
+								<div class="edit-actions">
+									<button class="edit-cancel-btn" on:click={cancelEditing}>
+										Cancel
+									</button>
+									<button class="edit-save-btn" on:click={saveMessageEdit}>
+										Send
+									</button>
+								</div>
+							</div>
 						{:else}
 							<!-- Show new response indicator -->
 							{#if message.isNewResponse && message.sender === 'assistant'}
@@ -1054,7 +1195,7 @@
 											{:else if chunk.type === 'table'}
 												{#if isTableData(chunk.content)}
 													{@const tableData = getTableData(chunk.content)}
-													{@const tableKey = message.id + '-' + index}
+													{@const tableKey = message.message_id + '-' + index}
 													{@const isLongTable = tableData && tableData.rows.length > 5}
 													{@const isExpanded = tableExpansionStates[tableKey] === true}
 													{@const currentSort = tableSortStates[tableKey] || { columnIndex: null, direction: null }}
@@ -1135,13 +1276,23 @@
 							{/if}
 						{/if}
 					</div>
+
+					<!-- Edit button for user messages - outside the message div -->
+					{#if message.sender === 'user' && editingMessageId !== message.message_id}
+						<div class="message-edit-button">
+							<button class="edit-btn" on:click={() => startEditing(message)}>
+								<svg viewBox="0 0 24 24" width="14" height="14">
+									<path d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z" fill="currentColor" />
+								</svg>
+							</button>
+						</div>
+					{/if}
 				</div>
 			{/each}
 		{/if}
 	</div>
 
 	<div class="chat-input-wrapper">
-		<!-- Moved Initial Suggestions Here -->
 		{#if $showChips && topChips.length}
 		  <div class="chip-row">
 		    {#each initialSuggestions as q, i}

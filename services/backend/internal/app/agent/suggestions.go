@@ -74,7 +74,7 @@ func GetSuggestedQueries(conn *data.Conn, userID int, _ json.RawMessage) (interf
 						SuggestedQueries: msg.SuggestedQueries,
 						Citations:        msg.Citations,
 						Timestamp:        msg.CreatedAt,
-						TokenCount:       int32(msg.TokenCount),
+						TokenCount:       msg.TokenCount,
 						Status:           msg.Status,
 					}
 					if msg.CompletedAt != nil {

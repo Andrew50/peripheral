@@ -55,6 +55,7 @@ type QueryResponse struct {
 	Citations      []Citation     `json:"citations,omitempty"`
 	Suggestions    []string       `json:"suggestions,omitempty"`
 	ConversationID string         `json:"conversation_id,omitempty"`
+	MessageID      string         `json:"message_id"`
 }
 
 // GetChatRequest is the main context-aware chat request handler
@@ -78,7 +79,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 	}
 
 	// Save pending message using the provided conversation ID
-	conversationID, err := SavePendingMessageToConversation(ctx, conn, userID, query.ConversationID, query.Query, query.Context)
+	conversationID, messageID, err := SavePendingMessageToConversation(ctx, conn, userID, query.ConversationID, query.Query, query.Context)
 	if err != nil {
 		return nil, fmt.Errorf("error saving pending message: %w", err)
 	}
@@ -97,10 +98,10 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 	var allResults []ExecuteResult
 	planningPrompt := ""
 	maxTurns := 7
-	totalRequestOutputTokenCount := int32(0)
-	totalRequestInputTokenCount := int32(0)
-	totalRequestThoughtsTokenCount := int32(0)
-	totalRequestTokenCount := int32(0)
+	totalRequestOutputTokenCount := 0
+	totalRequestInputTokenCount := 0
+	totalRequestThoughtsTokenCount := 0
+	totalRequestTokenCount := 0
 	for {
 		// Check if context is cancelled during the planning loop
 		if ctx.Err() != nil {
@@ -129,13 +130,14 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		switch v := result.(type) {
 		case DirectAnswer:
 			processedChunks := processContentChunksForTables(ctx, conn, userID, v.ContentChunks)
-			totalRequestOutputTokenCount += v.TokenCounts.OutputTokenCount
-			totalRequestInputTokenCount += v.TokenCounts.InputTokenCount
-			totalRequestThoughtsTokenCount += v.TokenCounts.ThoughtsTokenCount
-			totalRequestTokenCount += v.TokenCounts.TotalTokenCount
+			totalRequestOutputTokenCount += int(v.TokenCounts.OutputTokenCount)
+			totalRequestInputTokenCount += int(v.TokenCounts.InputTokenCount)
+			totalRequestThoughtsTokenCount += int(v.TokenCounts.ThoughtsTokenCount)
+			totalRequestTokenCount += int(v.TokenCounts.TotalTokenCount)
 
-			// Update pending message to completed
-			if err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, []ExecuteResult{}, v.Suggestions, totalRequestTokenCount); err != nil {
+			// Update pending message to completed and get assistant message ID
+			_, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, []ExecuteResult{}, v.Suggestions, totalRequestTokenCount)
+			if err != nil {
 				return nil, fmt.Errorf("error updating pending message to completed: %w", err)
 			}
 
@@ -144,6 +146,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				ContentChunks:  processedChunks,
 				Suggestions:    v.Suggestions, // Include suggestions from direct answer
 				ConversationID: conversationID,
+				MessageID:      messageID,
 			}, nil
 		case Plan:
 			switch v.Stage {
@@ -198,24 +201,25 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 					return nil, fmt.Errorf("error generating final response: %w", err)
 				}
 
-				totalRequestOutputTokenCount += finalResponse.TokenCounts.OutputTokenCount
-				totalRequestInputTokenCount += finalResponse.TokenCounts.InputTokenCount
-				totalRequestThoughtsTokenCount += finalResponse.TokenCounts.ThoughtsTokenCount
-				totalRequestTokenCount += finalResponse.TokenCounts.TotalTokenCount
+				totalRequestOutputTokenCount += int(finalResponse.TokenCounts.OutputTokenCount)
+				totalRequestInputTokenCount += int(finalResponse.TokenCounts.InputTokenCount)
+				totalRequestThoughtsTokenCount += int(finalResponse.TokenCounts.ThoughtsTokenCount)
+				totalRequestTokenCount += int(finalResponse.TokenCounts.TotalTokenCount)
 
 				// Process any table instructions in the content chunks
 				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
 
-				// Update pending message to completed
-				if err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalRequestTokenCount); err != nil {
+				// Update pending message to completed and get assistant message ID
+				_, err = UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalRequestTokenCount)
+				if err != nil {
 					return nil, fmt.Errorf("error updating pending message to completed: %w", err)
 				}
-
 				return QueryResponse{
 					Type:           "mixed_content",
 					ContentChunks:  processedChunks,
 					Suggestions:    finalResponse.Suggestions, // Include suggestions from final response
 					ConversationID: conversationID,
+					MessageID:      messageID,
 				}, nil
 			}
 		}

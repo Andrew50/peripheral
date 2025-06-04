@@ -15,7 +15,7 @@ type ActiveConversationCache struct {
 	ConversationID string        `json:"conversation_id"`
 	Title          string        `json:"title"`
 	Messages       []ChatMessage `json:"messages"`
-	TokenCount     int32         `json:"token_count"`
+	TokenCount     int           `json:"token_count"`
 	MessageCount   int           `json:"message_count"`
 	LastAccessed   time.Time     `json:"last_accessed"`
 	UpdatedAt      time.Time     `json:"updated_at"`
@@ -99,6 +99,24 @@ func GetActiveConversationIDCached(ctx context.Context, conn *data.Conn, userID 
 	return conversationID, nil
 }
 
+// InvalidateConversationCache invalidates cache for a specific conversation
+func InvalidateConversationCache(ctx context.Context, conn *data.Conn, userID int, conversationID string) error {
+	// Get the currently active conversation ID
+	activeConversationID, err := GetActiveConversationIDCached(ctx, conn, userID)
+	if err != nil {
+		// If we can't get the active conversation ID, just clear all cache
+		return ClearActiveConversationCache(ctx, conn, userID)
+	}
+
+	// If the conversation being edited is the active one, clear its cache
+	if activeConversationID == conversationID {
+		return InvalidateActiveConversationCache(ctx, conn, userID)
+	}
+
+	// If it's not the active conversation, no cache to invalidate
+	return nil
+}
+
 // SetActiveConversationIDCached sets the active conversation ID in Redis
 func SetActiveConversationIDCached(ctx context.Context, conn *data.Conn, userID int, conversationID string) error {
 	cacheKey := fmt.Sprintf(activeConversationIDKey, userID)
@@ -133,6 +151,16 @@ func GetActiveConversationWithCache(ctx context.Context, conn *data.Conn, userID
 	// Convert DB messages to chat messages
 	conversationData := convertDBMessagesToConversationData(messages)
 
+	// Set conversation ID
+	conversationData.ConversationID = activeConversationID
+
+	// Get conversation title from database
+	var title string
+	err = conn.DB.QueryRow(ctx, "SELECT title FROM conversations WHERE conversation_id = $1", activeConversationID).Scan(&title)
+	if err == nil {
+		conversationData.Title = title
+	}
+
 	// Cache the conversation for future access
 	cachedConv := &ActiveConversationCache{
 		ConversationID: activeConversationID,
@@ -141,13 +169,7 @@ func GetActiveConversationWithCache(ctx context.Context, conn *data.Conn, userID
 		MessageCount:   len(conversationData.Messages),
 		UpdatedAt:      conversationData.Timestamp,
 		LastAccessed:   time.Now(),
-	}
-
-	// Get conversation title from database
-	var title string
-	err = conn.DB.QueryRow(ctx, "SELECT title FROM conversations WHERE conversation_id = $1", activeConversationID).Scan(&title)
-	if err == nil {
-		cachedConv.Title = title
+		Title:          title,
 	}
 
 	// Store in cache (best effort - don't fail if caching fails)
@@ -157,6 +179,21 @@ func GetActiveConversationWithCache(ctx context.Context, conn *data.Conn, userID
 	}
 
 	return conversationData, nil
+}
+
+// SetActiveConversationID sets the user's currently active conversation in Redis
+func SetActiveConversationID(ctx context.Context, conn *data.Conn, userID int, conversationID string) error {
+	// Update the ID
+	if err := SetActiveConversationIDCached(ctx, conn, userID, conversationID); err != nil {
+		return err
+	}
+
+	// Invalidate the conversation data cache since we're switching conversations
+	if err := InvalidateActiveConversationCache(ctx, conn, userID); err != nil {
+		fmt.Printf("Warning: failed to invalidate conversation cache: %v\n", err)
+	}
+
+	return nil
 }
 
 // SaveMessageToActiveConversationWithCache saves a message and updates cache
@@ -182,7 +219,8 @@ func SaveMessageToActiveConversationWithCache(ctx context.Context, conn *data.Co
 	}
 
 	// Save to database
-	if err := SaveConversationMessage(ctx, conn, activeConversationID, userID, message); err != nil {
+	_, err = SaveConversationMessage(ctx, conn, activeConversationID, userID, message)
+	if err != nil {
 		return fmt.Errorf("failed to save message to database: %w", err)
 	}
 
@@ -201,7 +239,9 @@ func SaveMessageToActiveConversationWithCache(ctx context.Context, conn *data.Co
 		}
 	} else {
 		// Cache miss or error - invalidate to force reload next time
-		InvalidateActiveConversationCache(ctx, conn, userID)
+		if err := InvalidateActiveConversationCache(ctx, conn, userID); err != nil {
+			fmt.Printf("Warning: failed to invalidate active conversation cache: %v\n", err)
+		}
 	}
 
 	return nil
@@ -264,6 +304,16 @@ func SwitchActiveConversationWithCache(ctx context.Context, conn *data.Conn, use
 	// Convert DB messages to the format expected by frontend
 	conversationData := convertDBMessagesToConversationData(messages)
 
+	// Set conversation ID
+	conversationData.ConversationID = conversationID
+
+	// Get conversation title
+	var title string
+	err = conn.DB.QueryRow(ctx, "SELECT title FROM conversations WHERE conversation_id = $1", conversationID).Scan(&title)
+	if err == nil {
+		conversationData.Title = title
+	}
+
 	// Cache the new active conversation
 	cachedConv := &ActiveConversationCache{
 		ConversationID: conversationID,
@@ -272,13 +322,7 @@ func SwitchActiveConversationWithCache(ctx context.Context, conn *data.Conn, use
 		MessageCount:   len(conversationData.Messages),
 		UpdatedAt:      conversationData.Timestamp,
 		LastAccessed:   time.Now(),
-	}
-
-	// Get conversation title
-	var title string
-	err = conn.DB.QueryRow(ctx, "SELECT title FROM conversations WHERE conversation_id = $1", conversationID).Scan(&title)
-	if err == nil {
-		cachedConv.Title = title
+		Title:          title,
 	}
 
 	// Store in cache (best effort)

@@ -36,7 +36,7 @@ func BuildPlanningPrompt(conn *data.Conn, userID int, query string, contextItems
 						SuggestedQueries: msg.SuggestedQueries,
 						Citations:        msg.Citations,
 						Timestamp:        msg.CreatedAt,
-						TokenCount:       int32(msg.TokenCount),
+						TokenCount:       msg.TokenCount,
 						Status:           msg.Status,
 					}
 					if msg.CompletedAt != nil {
@@ -222,7 +222,7 @@ func BuildFinalResponsePromptWithConversationID(conn *data.Conn, userID int, con
 	return sb.String(), nil
 }
 
-var defaultSystemPromptTokenCount int32
+var defaultSystemPromptTokenCount int
 
 func getDefaultSystemPromptTokenCount(conn *data.Conn) {
 	apiKey, err := conn.GetGeminiKey()
@@ -248,7 +248,7 @@ func getDefaultSystemPromptTokenCount(conn *data.Conn) {
 		return
 	}
 	if CountTokensResponse != nil {
-		defaultSystemPromptTokenCount = CountTokensResponse.TotalTokens
+		defaultSystemPromptTokenCount = int(CountTokensResponse.TotalTokens)
 	}
 }
 
@@ -276,7 +276,7 @@ func BuildPlanningPromptWithConversationID(conn *data.Conn, userID int, conversa
 						SuggestedQueries: msg.SuggestedQueries,
 						Citations:        msg.Citations,
 						Timestamp:        msg.CreatedAt,
-						TokenCount:       int32(msg.TokenCount),
+						TokenCount:       msg.TokenCount,
 						Status:           msg.Status,
 					}
 					if msg.CompletedAt != nil {
