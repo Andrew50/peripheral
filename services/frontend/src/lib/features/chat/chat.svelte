@@ -1140,12 +1140,6 @@
 									{/each}
 								</div>
 							{/if}
-
-							<div class="message-footer">
-								<div class="message-timestamp">
-									{formatTimestamp(message.timestamp)}
-								</div>
-							</div>
 						{/if}
 					</div>
 				</div>
