@@ -21,13 +21,14 @@ import (
 // Conn represents a structure for handling Conn data.
 type Conn struct {
 	//Cache *redis.Client
-	DB            *pgxpool.Pool
-	Polygon       *polygon.Client
-	Cache         *redis.Client
-	PolygonKey    string
-	GeminiPool    *GeminiKeyPool
-	PerplexityKey string
-	XAPIKey       string
+	DB              *pgxpool.Pool
+	Polygon         *polygon.Client
+	Cache           *redis.Client
+	PolygonKey      string
+	GeminiPool      *GeminiKeyPool
+	PerplexityKey   string
+	XAPIKey         string
+	TwitterAPIioKey string
 }
 
 var conn *Conn
@@ -49,6 +50,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	polygonKey := getEnv("POLYGON_API_KEY", "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm")
 	perplexityKey := getEnv("PERPLEXITY_API_KEY", "")
 	XAPIKey := getEnv("X_API_KEY", "")
+	twitterAPIioKey := getEnv("TWITTER_API_IO_KEY", "")
 	var dbURL string
 	var cacheURL string
 
@@ -149,13 +151,14 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	geminiPool := initGeminiKeyPool()
 
 	conn = &Conn{
-		DB:            dbConn,
-		Cache:         cache,
-		Polygon:       polygonClient,
-		PolygonKey:    polygonKey,
-		GeminiPool:    geminiPool,
-		PerplexityKey: perplexityKey,
-		XAPIKey:       XAPIKey,
+		DB:              dbConn,
+		Cache:           cache,
+		Polygon:         polygonClient,
+		PolygonKey:      polygonKey,
+		GeminiPool:      geminiPool,
+		PerplexityKey:   perplexityKey,
+		XAPIKey:         XAPIKey,
+		TwitterAPIioKey: twitterAPIioKey,
 	}
 
 	cleanup := func() {

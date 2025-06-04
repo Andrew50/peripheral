@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 
 	"go.uber.org/zap"
 )
@@ -30,6 +29,7 @@ type ChatRequest struct {
 	Query              string                   `json:"query"`
 	Context            []map[string]interface{} `json:"context,omitempty"`
 	ActiveChartContext map[string]interface{}   `json:"activeChartContext,omitempty"`
+	ConversationID     string                   `json:"conversation_id,omitempty"`
 }
 
 // ContentChunk represents a piece of content in the response sequence
@@ -49,15 +49,22 @@ type Citation struct {
 
 // QueryResponse represents the response to a user query
 type QueryResponse struct {
-	Type          string         `json:"type"` //"mixed_content", "function_calls", "simple_text"
-	ContentChunks []ContentChunk `json:"content_chunks,omitempty"`
-	Text          string         `json:"text,omitempty"`
-	Citations     []Citation     `json:"citations,omitempty"`
-	Suggestions   []string       `json:"suggestions,omitempty"`
+	Type           string         `json:"type"` //"mixed_content", "function_calls", "simple_text"
+	ContentChunks  []ContentChunk `json:"content_chunks,omitempty"`
+	Text           string         `json:"text,omitempty"`
+	Citations      []Citation     `json:"citations,omitempty"`
+	Suggestions    []string       `json:"suggestions,omitempty"`
+	ConversationID string         `json:"conversation_id,omitempty"`
+	MessageID      string         `json:"message_id"`
 }
 
-func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
-	ctx := context.Background()
+// GetChatRequest is the main context-aware chat request handler
+func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
+	// Check if context is already cancelled
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	success, message := conn.TestRedisConnectivity(ctx, userID)
 	if !success {
 		return nil, fmt.Errorf("%s", message)
@@ -71,24 +78,19 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 		getDefaultSystemPromptTokenCount(conn)
 	}
 
-	// Save pending message at the start of the request
-	pendingSaved := false
-	if err := savePendingMessageToConversation(conn, userID, query.Query, query.Context); err != nil {
-		log.Printf("Error saving pending message: %v", err)
-		// Don't fail the request, just log the error
-	} else {
-		pendingSaved = true
+	// Save pending message using the provided conversation ID
+	conversationID, messageID, err := SavePendingMessageToConversation(ctx, conn, userID, query.ConversationID, query.Query, query.Context)
+	if err != nil {
+		return nil, fmt.Errorf("error saving pending message: %w", err)
 	}
 
-	// Ensure we clean up pending message on any error
+	// Set up cleanup function to remove pending message on error or cancellation
 	defer func() {
-		if r := recover(); r != nil {
-			if pendingSaved {
-				// Try to remove the pending message if something panicked
-				log.Printf("Panic occurred, attempting to clean up pending message: %v", r)
-				// Note: In a real implementation, you might want a more sophisticated cleanup
+		if ctx.Err() != nil {
+			// Context was cancelled, clean up the pending message
+			if cleanupErr := DeletePendingMessageInConversation(context.Background(), conn, userID, conversationID, query.Query); cleanupErr != nil {
+				fmt.Printf("Warning: failed to cleanup pending message after cancellation: %v\n", cleanupErr)
 			}
-			panic(r) // Re-panic after cleanup
 		}
 	}()
 
@@ -96,43 +98,55 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 	var allResults []ExecuteResult
 	planningPrompt := ""
 	maxTurns := 7
-	totalRequestOutputTokenCount := int32(0)
-	totalRequestInputTokenCount := int32(0)
-	totalRequestThoughtsTokenCount := int32(0)
-	totalRequestTokenCount := int32(0)
+	totalRequestOutputTokenCount := 0
+	totalRequestInputTokenCount := 0
+	totalRequestThoughtsTokenCount := 0
+	totalRequestTokenCount := 0
 	for {
+		// Check if context is cancelled during the planning loop
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
 		if planningPrompt == "" {
 			var err error
-			planningPrompt, err = BuildPlanningPrompt(conn, userID, query.Query, query.Context, query.ActiveChartContext)
+			planningPrompt, err = BuildPlanningPromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext)
 			if err != nil {
+				// Mark as error instead of deleting for debugging
+				if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Failed to build planning prompt: %v", err)); markErr != nil {
+					fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
+				}
 				return nil, err
 			}
 		}
 		result, err := RunPlanner(ctx, conn, planningPrompt)
 		if err != nil {
+			// Mark as error instead of deleting for debugging
+			if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Planner error: %v", err)); markErr != nil {
+				fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
+			}
 			return nil, fmt.Errorf("error running planner: %w", err)
 		}
 		switch v := result.(type) {
 		case DirectAnswer:
 			processedChunks := processContentChunksForTables(ctx, conn, userID, v.ContentChunks)
-			totalRequestOutputTokenCount += v.TokenCounts.OutputTokenCount
-			totalRequestInputTokenCount += v.TokenCounts.InputTokenCount
-			totalRequestThoughtsTokenCount += v.TokenCounts.ThoughtsTokenCount
-			totalRequestTokenCount += v.TokenCounts.TotalTokenCount
+			totalRequestOutputTokenCount += int(v.TokenCounts.OutputTokenCount)
+			totalRequestInputTokenCount += int(v.TokenCounts.InputTokenCount)
+			totalRequestThoughtsTokenCount += int(v.TokenCounts.ThoughtsTokenCount)
+			totalRequestTokenCount += int(v.TokenCounts.TotalTokenCount)
 
-			// Update pending message to completed instead of saving new message
-			if err := updatePendingMessageToCompleted(conn, userID, query.Query, processedChunks, []FunctionCall{}, []ExecuteResult{}, v.Suggestions, totalRequestTokenCount); err != nil {
-				log.Printf("Error updating pending message to completed: %v", err)
-				// Fallback to saving new message
-				if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, []ExecuteResult{}, v.Suggestions, totalRequestTokenCount); err != nil {
-					log.Printf("Error saving message to conversation: %v", err)
-				}
+			// Update pending message to completed and get assistant message ID
+			_, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, []ExecuteResult{}, v.Suggestions, totalRequestTokenCount)
+			if err != nil {
+				return nil, fmt.Errorf("error updating pending message to completed: %w", err)
 			}
 
 			return QueryResponse{
-				Type:          "mixed_content",
-				ContentChunks: processedChunks,
-				Suggestions:   v.Suggestions, // Include suggestions from direct answer
+				Type:           "mixed_content",
+				ContentChunks:  processedChunks,
+				Suggestions:    v.Suggestions, // Include suggestions from direct answer
+				ConversationID: conversationID,
+				MessageID:      messageID,
 			}, nil
 		case Plan:
 			switch v.Stage {
@@ -145,61 +159,130 @@ func GetChatRequest(conn *data.Conn, userID int, args json.RawMessage) (interfac
 					executor = NewExecutor(conn, userID, 3, logger)
 				}
 				for _, round := range v.Rounds {
-					// Execute all function calls in this round
+					// Execute all function calls in this round with context
 					results, err := executor.Execute(ctx, round.Calls, round.Parallel)
 					if err != nil {
+						// Mark as error instead of deleting for debugging
+						if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Execution error: %v", err)); markErr != nil {
+							fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
+						}
 						return nil, fmt.Errorf("error executing function calls: %w", err)
 					}
 					allResults = append(allResults, results...)
 				}
 				// Update query with results for next planning iteration
 				// The planner will process these results to either plan more or finalize
-				planningPrompt, err = BuildPlanningPromptWithResults(conn, userID, query.Query, query.Context, query.ActiveChartContext, allResults)
+				planningPrompt, err = BuildPlanningPromptWithResultsAndConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, allResults)
 				if err != nil {
+					// Mark as error instead of deleting for debugging
+					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Failed to build prompt with results: %v", err)); markErr != nil {
+						fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
+					}
 					return nil, err
 				}
 			case StageFinishedExecuting:
 				// Generate final response based on execution results
-				finalPrompt, err := BuildFinalResponsePrompt(conn, userID, query.Query, query.Context, query.ActiveChartContext, allResults)
+				finalPrompt, err := BuildFinalResponsePromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, allResults)
 				if err != nil {
+					// Mark as error instead of deleting for debugging
+					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Failed to build final response prompt: %v", err)); markErr != nil {
+						fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
+					}
 					return nil, err
 				}
 
 				// Get the final response from the model (now includes suggestions)
 				finalResponse, err := GetFinalResponse(ctx, conn, finalPrompt)
 				if err != nil {
+					// Mark as error instead of deleting for debugging
+					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Final response error: %v", err)); markErr != nil {
+						fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
+					}
 					return nil, fmt.Errorf("error generating final response: %w", err)
 				}
 
-				totalRequestOutputTokenCount += finalResponse.TokenCounts.OutputTokenCount
-				totalRequestInputTokenCount += finalResponse.TokenCounts.InputTokenCount
-				totalRequestThoughtsTokenCount += finalResponse.TokenCounts.ThoughtsTokenCount
-				totalRequestTokenCount += finalResponse.TokenCounts.TotalTokenCount
+				totalRequestOutputTokenCount += int(finalResponse.TokenCounts.OutputTokenCount)
+				totalRequestInputTokenCount += int(finalResponse.TokenCounts.InputTokenCount)
+				totalRequestThoughtsTokenCount += int(finalResponse.TokenCounts.ThoughtsTokenCount)
+				totalRequestTokenCount += int(finalResponse.TokenCounts.TotalTokenCount)
 
 				// Process any table instructions in the content chunks
 				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
 
-				// Update pending message to completed instead of saving new message
-				if err := updatePendingMessageToCompleted(conn, userID, query.Query, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalRequestTokenCount); err != nil {
-					log.Printf("Error updating pending message to completed: %v", err)
-					// Fallback to saving new message
-					if err := saveMessageToConversation(conn, userID, query.Query, query.Context, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalRequestTokenCount); err != nil {
-						log.Printf("Error saving message to conversation: %v", err)
-					}
+				// Update pending message to completed and get assistant message ID
+				_, err = UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalRequestTokenCount)
+				if err != nil {
+					return nil, fmt.Errorf("error updating pending message to completed: %w", err)
 				}
-
 				return QueryResponse{
-					Type:          "mixed_content",
-					ContentChunks: processedChunks,
-					Suggestions:   finalResponse.Suggestions, // Include suggestions from final response
+					Type:           "mixed_content",
+					ContentChunks:  processedChunks,
+					Suggestions:    finalResponse.Suggestions, // Include suggestions from final response
+					ConversationID: conversationID,
+					MessageID:      messageID,
 				}, nil
 			}
 		}
 		maxTurns--
 		if maxTurns <= 0 {
+			// Mark as error instead of deleting for debugging
+			if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, "Model took too many turns to run"); markErr != nil {
+				fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
+			}
 			return nil, fmt.Errorf("model took too many turns to run")
 		}
 	}
+}
+
+// GetUserConversation gets the active conversation
+func GetUserConversation(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
+	return GetActiveConversationWithCache(context.Background(), conn, userID)
+}
+
+// processContentChunksForTables iterates through chunks and generates tables for "backtest_table" type.
+func processContentChunksForTables(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
+	processedChunks := make([]ContentChunk, 0, len(inputChunks))
+	for _, chunk := range inputChunks {
+		// Check for the type "backtest_table"
+		if chunk.Type == "backtest_table" {
+			// Attempt to parse the instruction content
+			instructionBytes, err := json.Marshal(chunk.Content)
+			if err != nil {
+				// Replace with an error chunk
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: fmt.Sprintf("[Internal Error: Could not process table instruction: %v]", err),
+				})
+				continue
+			}
+
+			var instructionData TableInstructionData
+			if err := json.Unmarshal(instructionBytes, &instructionData); err != nil {
+				// Replace with an error chunk
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: fmt.Sprintf("[Internal Error: Could not parse table instruction: %v]", err),
+				})
+				continue
+			}
+
+			// Generate the actual table chunk
+			tableChunk, err := GenerateBacktestTableFromInstruction(ctx, conn, userID, instructionData)
+			if err != nil {
+				// Replace with an error chunk
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: fmt.Sprintf("[Internal Error: Could not generate table: %v]", err),
+				})
+			} else {
+				processedChunks = append(processedChunks, *tableChunk)
+			}
+		} else {
+			// Keep non-instruction chunks as they are
+			processedChunks = append(processedChunks, chunk)
+		}
+	}
+	return processedChunks
 }
 
 // </chat.go>
