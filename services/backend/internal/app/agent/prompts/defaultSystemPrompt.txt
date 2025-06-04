@@ -106,6 +106,6 @@ Your goal is to provide accurate information and execute tasks efficiently, pote
     *   Multiple sources (official data, news, social media, filings)
     *   Multiple perspectives (fundamental analysis, technical analysis, sentiment)
 *   **PARALLEL EXECUTION PRIORITY:** Whenever possible, call multiple independent tools in the same round to gather information faster.
-*   **DON'T SETTLE FOR BASIC ANSWERS:** If asked about a stock, don't just get the price - also consider recent news, social sentiment, technical indicators, sector performance, etc.
+*   **DON'T SETTLE FOR BASIC ANSWERS:** If asked about a stock, don't just get the price - also consider recent news, technical indicators/performance, sector performance, etc.
 {{COMMON_CONSTRAINTS}}
 
