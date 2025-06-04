@@ -81,6 +81,7 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	var queryMultiplier int
 	var queryBars int
 	var tickerForIncompleteAggregate string
+	var numBarsRequestedPolygon int
 	haveToAggregate := false
 
 	// Special logic for second/minute frames with 30-based constraints
@@ -132,21 +133,25 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 
 	switch {
 	case args.Timestamp == 0:
-		query = `SELECT ticker, minDate, maxDate 
+		query = `SELECT ticker, minDate, maxDate, false as has_earlier_data
                  FROM securities 
                  WHERE securityid = $1
                  ORDER BY minDate DESC NULLS FIRST`
 		queryParams = []interface{}{args.SecurityID}
 		polyResultOrder = "desc"
 	case args.Direction == "backward":
-		query = `SELECT ticker, minDate, maxDate
+		// Use a conservative buffer to account for potential gaps between input timestamp
+		// and actual bar data (market hours, holidays, etc.)
+		bufferTime := inputTimestamp.Add(-72 * time.Hour) // 24-hour buffer for safety
+		query = `SELECT ticker, minDate, maxDate,
+                        EXISTS(SELECT 1 FROM securities s2 WHERE s2.securityid = $1 AND s2.minDate < $2) as has_earlier_data
                  FROM securities 
-                 WHERE securityid = $1 AND (maxDate > $2 OR maxDate IS NULL)
+                 WHERE securityid = $1 AND (maxDate > $3 OR maxDate IS NULL)
                  ORDER BY minDate DESC NULLS FIRST LIMIT 1`
-		queryParams = []interface{}{args.SecurityID, inputTimestamp}
+		queryParams = []interface{}{args.SecurityID, bufferTime, inputTimestamp}
 		polyResultOrder = "desc"
 	case args.Direction == "forward":
-		query = `SELECT ticker, minDate, maxDate
+		query = `SELECT ticker, minDate, maxDate, false as has_earlier_data
                  FROM securities 
                  WHERE securityid = $1 AND (minDate < $2 OR minDate IS NULL)
                  ORDER BY minDate ASC NULLS LAST`
@@ -176,13 +181,14 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 		ticker         string
 		minDateFromSQL *time.Time
 		maxDateFromSQL *time.Time
+		hasEarlierData bool
 	}
 
 	// Read all security records into a slice to get the count first
 	var securityRecords []securityRecord
 	for rows.Next() {
 		var record securityRecord
-		if err := rows.Scan(&record.ticker, &record.minDateFromSQL, &record.maxDateFromSQL); err != nil {
+		if err := rows.Scan(&record.ticker, &record.minDateFromSQL, &record.maxDateFromSQL, &record.hasEarlierData); err != nil {
 			//if debug {
 			////fmt.Printf("[DEBUG] Error scanning security record row: %v\n", err)
 			//}
@@ -199,6 +205,12 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	// Preallocate capacity for bar data. We'll at most fetch up to args.Bars + small overhead
 	barDataList := make([]GetChartDataResults, 0, args.Bars+10)
 	numBarsRemaining := args.Bars
+
+	// Track whether earlier data exists (from the first record, since they're ordered)
+	var isEarliestData bool
+	if len(securityRecords) > 0 && args.Direction == "backward" {
+		isEarliestData = !securityRecords[0].hasEarlierData
+	}
 
 	//if debug {
 	////fmt.Printf("[DEBUG] Processing %d security record(s) from DB...\n", len(securityRecords))
@@ -271,13 +283,14 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 
 		// If we have to aggregate (e.g., second->minute, or minute->hour), do so
 		if haveToAggregate {
+			numBarsRequestedPolygon = int(math.Ceil(float64(queryBars*multiplier)/float64(queryMultiplier))) + 10 // 10 bars margin
 			it, err := polygon.GetAggsData(
 				conn.Polygon,
 				ticker,
 				queryMultiplier,
 				queryTimespan,
 				date1, date2,
-				50000,
+				numBarsRequestedPolygon,
 				// For intraday backward queries we typically want ascending data
 				// to handle reaggregation easily (original code used "asc" for aggregator).
 				"asc",
@@ -299,6 +312,7 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 			}
 		} else {
 			// Otherwise, we can directly pull from Polygon at the desired timeframe
+			numBarsRequestedPolygon = queryBars + 10 // 10 bars margin
 			it, err := polygon.GetAggsData(
 				conn.Polygon,
 				ticker,
@@ -306,7 +320,7 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 				queryTimespan,
 				date1,
 				date2,
-				50000,
+				numBarsRequestedPolygon,
 				polyResultOrder,
 				!args.IsReplay,
 			)
@@ -320,9 +334,6 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 			for it.Next() {
 				item := it.Item()
 				if it.Err() != nil {
-					//	if debug {
-					////fmt.Printf("[DEBUG] Iterator error: %v\n", it.Err())
-					//}
 					return nil, fmt.Errorf("dkn0w")
 				}
 
@@ -355,39 +366,6 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 
 	// If we have some bars, reverse them if needed, then optionally fetch incomplete bar
 	if len(barDataList) > 0 {
-		// Check if we're actually at the earliest data by looking at the earliest timestamp
-		var isEarliestData bool
-		if args.Direction == "backward" {
-			earliestBar := barDataList[0]
-
-			// Create a separate context with a shorter timeout for this quick check
-			checkCtx, checkCancel := context.WithTimeout(context.Background(), 1*time.Second)
-			defer checkCancel()
-
-			// Add index hint and optimize query
-			row := conn.DB.QueryRow(checkCtx, `
-				SELECT EXISTS (
-					SELECT 1 FROM securities 
-					WHERE securityid = $1 
-					AND minDate < $2
-					LIMIT 1
-				)
-			`, args.SecurityID, time.Unix(int64(earliestBar.Timestamp), 0))
-
-			var exists bool
-			err := row.Scan(&exists)
-			if err != nil {
-				if checkCtx.Err() == context.DeadlineExceeded {
-					// If timeout occurs, assume there might be earlier data
-					////fmt.Printf("[DEBUG] Timeout occurred while checking earliest data\n")
-					isEarliestData = false
-				} else {
-					return nil, fmt.Errorf("error checking earliest data: %w", err)
-				}
-			} else {
-				isEarliestData = !exists
-			}
-		}
 		// For aggregator logic or forward queries, we skip reversing.
 		if haveToAggregate || args.Direction == "forward" {
 			if args.Direction == "backward" {
