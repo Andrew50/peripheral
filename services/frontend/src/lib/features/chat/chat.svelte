@@ -39,6 +39,7 @@
 	let showConversationDropdown = false;
 	let conversationDropdown: HTMLDivElement;
 	let loadingConversations = false;
+	let conversationToDelete = ''; // Add state to track which conversation is being deleted
 
 	// Set default options for the markdown parser (optional)
 	marked.setOptions({
@@ -290,10 +291,11 @@
 	async function deleteConversation(conversationId: string, event: MouseEvent) {
 		event.stopPropagation(); // Prevent switching to the conversation
 		
-		if (!confirm('Are you sure you want to delete this conversation?')) {
-			return;
-		}
+		// Instead of confirm dialog, set the conversation to delete mode
+		conversationToDelete = conversationId;
+	}
 
+	async function confirmDeleteConversation(conversationId: string) {
 		try {
 			await privateRequest('deleteConversation', {
 				conversation_id: conversationId
@@ -308,7 +310,13 @@
 			}
 		} catch (error) {
 			console.error('Error deleting conversation:', error);
+		} finally {
+			conversationToDelete = ''; // Clear delete mode
 		}
+	}
+
+	function cancelDeleteConversation() {
+		conversationToDelete = ''; // Clear delete mode
 	}
 
 	function toggleConversationDropdown() {
@@ -1065,20 +1073,48 @@
 												{new Date(conversation.updated_at).toLocaleDateString()}
 											</div>
 										</div>
-										<button 
-											class="delete-conversation-btn"
-											on:click={(e) => deleteConversation(conversation.conversation_id, e)}
-											aria-label="Delete conversation"
-										>
-											<svg viewBox="0 0 24 24" width="14" height="14">
-												<path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" fill="currentColor" />
-											</svg>
-										</button>
+										
+										{#if conversationToDelete === conversation.conversation_id}
+											<!-- Show Yes/No buttons when in delete mode -->
+											<div class="delete-confirmation-buttons">
+												<button 
+													class="confirm-delete-btn yes"
+													on:click={(e) => {
+														e.stopPropagation();
+														confirmDeleteConversation(conversation.conversation_id);
+													}}
+													aria-label="Confirm delete"
+												>
+													Delete
+												</button>
+												<button 
+													class="confirm-delete-btn no"
+													on:click={(e) => {
+														e.stopPropagation();
+														cancelDeleteConversation();
+													}}
+													aria-label="Cancel delete"
+												>
+													Cancel
+												</button>
+											</div>
+										{:else}
+											<!-- Show normal delete button -->
+											<button 
+												class="delete-conversation-btn"
+												on:click={(e) => deleteConversation(conversation.conversation_id, e)}
+												aria-label="Delete conversation"
+											>
+												<svg viewBox="0 0 24 24" width="14" height="14">
+													<path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" fill="currentColor" />
+												</svg>
+											</button>
+										{/if}
 									</div>
 								{/each}
 							{/if}
 						</div>
-					</div>
+					</div>	
 				{/if}
 			</div>
 			
@@ -1528,6 +1564,49 @@
 		background: var(--error-color-faded, rgba(244, 67, 54, 0.1));
 		border-color: var(--error-color, #f44336);
 		color: var(--error-color, #f44336);
+	}
+
+	.delete-confirmation-buttons {
+		display: flex;
+		gap: 0.3rem;
+		margin-left: 0.5rem;
+	}
+
+	.confirm-delete-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.25rem 0.5rem;
+		border: 1px solid transparent;
+		border-radius: 0.25rem;
+		font-size: 0.7rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s;
+		min-width: 2rem;
+	}
+
+	.confirm-delete-btn.yes {
+		background: var(--error-color, #f44336);
+		color: white;
+		border-color: var(--error-color, #f44336);
+	}
+
+	.confirm-delete-btn.yes:hover {
+		background: #d32f2f;
+		border-color: #d32f2f;
+	}
+
+	.confirm-delete-btn.no {
+		background: var(--ui-bg-element, #333);
+		color: var(--text-secondary, #aaa);
+		border-color: var(--ui-border, #444);
+	}
+
+	.confirm-delete-btn.no:hover {
+		background: var(--ui-bg-hover, rgba(255, 255, 255, 0.1));
+		color: var(--text-primary, #fff);
+		border-color: var(--text-secondary, #aaa);
 	}
 
 	.loading-conversations,
