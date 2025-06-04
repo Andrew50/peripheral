@@ -2061,10 +2061,10 @@
 <style>
 	.event-info {
 		position: absolute;
-		background: #252525;
+		background: rgba(37, 37, 37, 0.8);
 		border: none;
 		border-radius: 8px;
-		padding: 10px;
+		padding: 8px 10px 10px 10px;
 		z-index: 1000;
 		width: 220px;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
@@ -2098,9 +2098,9 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 8px;
-		padding-bottom: 10px;
+		padding-bottom: 8px;
 		border-bottom: 1px solid #444;
-		margin-bottom: 10px;
+		margin-bottom: 8px;
 		position: relative;
 	}
 	.close-button {
