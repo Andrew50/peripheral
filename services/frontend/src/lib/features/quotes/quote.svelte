@@ -334,26 +334,26 @@
 		text-align: left;
 		border: none;
 		cursor: pointer;
-		display: flex; /* Changed to flex */
-		flex-direction: column; /* Stack content vertically */
+		display: flex;
+		flex-direction: column;
 	}
 
 	.content {
-		padding: 12px; /* Slightly reduced padding */
+		padding: 12px;
 		overflow-y: auto;
-		scrollbar-width: thin; /* Use thin scrollbar */
-		scrollbar-color: var(--ui-border) transparent; /* Style scrollbar */
+		scrollbar-width: thin;
+		scrollbar-color: var(--ui-border) transparent;
 		-ms-overflow-style: none;
-		flex-grow: 1; /* Allow content to fill available space */
+		flex-grow: 1;
 		color: var(--text-primary);
 	}
 
 	.content::-webkit-scrollbar {
-		width: 5px; /* Use thin scrollbar */
+		width: 4px;
 	}
 	.content::-webkit-scrollbar-thumb {
 		background-color: var(--ui-border);
-		border-radius: 3px;
+		border-radius: 2px;
 	}
 	.content::-webkit-scrollbar-track {
 		background: transparent;
@@ -365,9 +365,11 @@
 		align-items: center;
 		justify-content: flex-start;
 		gap: 10px;
-		margin-bottom: 15px;
-		padding-bottom: 10px;
-		border-bottom: 1px solid var(--ui-border);
+		margin-bottom: 16px;
+		padding: 12px;
+		background: var(--ui-bg-secondary);
+		border-radius: 6px;
+		border: 1px solid var(--ui-border);
 	}
 
 	.logo-container {
@@ -376,10 +378,10 @@
 		align-items: center;
 		justify-content: center;
 		background: white;
-		padding: 5px;
-		border-radius: 6px;
-		width: 40px;
-		height: 40px;
+		padding: 4px;
+		border-radius: 4px;
+		width: 32px;
+		height: 32px;
 	}
 
 	.company-logo {
@@ -392,6 +394,7 @@
 	.fallback-logo {
 		background: var(--ui-bg-secondary);
 		color: var(--text-primary);
+		border: 1px solid var(--ui-border);
 	}
 
 	.ticker-logo {
@@ -401,13 +404,15 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-size: 18px;
+		font-size: 14px;
 		font-weight: bold;
 		text-transform: uppercase;
+		background: var(--ui-bg-primary);
+		color: var(--text-primary);
 	}
 
 	.ticker {
-		font-size: 1.6em;
+		font-size: 1.4em;
 		font-weight: 700;
 		color: var(--text-primary);
 		text-transform: uppercase;
@@ -423,61 +428,66 @@
 	}
 
 	.name {
-		font-size: 0.95em;
+		font-size: 0.85em;
 		color: var(--text-secondary);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		line-height: 1.2;
+		font-weight: 500;
 	}
 
 	/* Key Metrics */
 	.quote-key-metrics {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-		gap: 10px;
-		margin-bottom: 15px;
+		grid-template-columns: repeat(auto-fit, minmax(75px, 1fr));
+		gap: 8px;
+		margin-bottom: 16px;
 	}
 
 	.metric-item {
 		background: var(--ui-bg-secondary);
-		padding: 8px;
+		padding: 8px 6px;
 		border-radius: 4px;
 		text-align: center;
 		border: 1px solid var(--ui-border);
 	}
 
 	.metric-item .label {
-		font-size: 0.75em;
+		font-size: 0.7em;
 		color: var(--text-secondary);
 		display: block;
 		margin-bottom: 4px;
 		text-transform: uppercase;
+		font-weight: 500;
 	}
 
 	.metric-item :global(.value) {
-		font-size: 1.1em;
-		font-weight: 500;
+		font-size: 0.95em;
+		font-weight: 600;
 		display: block;
+		line-height: 1.1;
 	}
 
 	/* Market Data */
 	.quote-market-data {
-		margin-bottom: 15px;
-		padding-top: 10px;
-		border-top: 1px solid var(--ui-border);
+		margin-bottom: 16px;
+		padding: 12px;
+		background: var(--ui-bg-secondary);
+		border-radius: 6px;
+		border: 1px solid var(--ui-border);
 	}
 
 	.time-sales-button {
-		background: var(--ui-bg-secondary);
+		background: var(--ui-bg-primary);
 		color: var(--text-primary);
 		border: 1px solid var(--ui-border);
-		border-radius: 6px;
+		border-radius: 4px;
 		padding: 6px 10px;
 		font-size: 0.8em;
 		cursor: pointer;
-		transition: all 0.2s ease;
-		margin: 10px 0;
+		transition: background-color 0.15s ease;
+		margin: 8px 0;
 		width: 100%;
 		font-weight: 500;
 		display: flex;
@@ -492,18 +502,20 @@
 	/* Details */
 	.quote-details {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-		gap: 8px 15px;
-		margin-bottom: 15px;
-		padding-top: 10px;
-		border-top: 1px solid var(--ui-border);
+		grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+		gap: 8px 12px;
+		margin-bottom: 16px;
+		padding: 12px;
+		background: var(--ui-bg-secondary);
+		border-radius: 6px;
+		border: 1px solid var(--ui-border);
 	}
 
 	.detail-item {
 		display: flex;
 		justify-content: space-between;
 		align-items: baseline;
-		font-size: 0.9em;
+		font-size: 0.8em;
 		padding: 4px 0;
 	}
 
@@ -511,6 +523,7 @@
 		color: var(--text-secondary);
 		margin-right: 8px;
 		white-space: nowrap;
+		font-weight: 500;
 	}
 
 	.detail-item .value {
@@ -521,57 +534,75 @@
 
 	/* Countdown */
 	.countdown-section {
-		margin-top: 10px;
-		padding-top: 10px;
-		border-top: 1px solid var(--ui-border);
+		margin-top: 12px;
+		padding: 12px;
+		background: var(--ui-bg-secondary);
+		border-radius: 6px;
+		border: 1px solid var(--ui-border);
 	}
 
 	.countdown-container {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 8px;
-		background: var(--ui-bg-secondary);
+		padding: 8px 12px;
+		background: var(--ui-bg-primary);
 		border-radius: 4px;
 		border: 1px solid var(--ui-border);
 	}
 
 	.countdown-label {
 		color: var(--text-secondary);
-		font-size: 0.85em;
+		font-size: 0.75em;
 		font-weight: 500;
+		text-transform: uppercase;
 	}
 
 	.countdown-value {
 		font-family: var(--font-primary);
 		font-weight: 600;
-		font-size: 0.85em;
+		font-size: 0.8em;
 		color: var(--text-primary);
 		padding: 4px 8px;
-		background: var(--ui-bg-primary);
-		border-radius: 4px;
-		min-width: 70px;
+		background: var(--ui-bg-secondary);
+		border-radius: 3px;
+		min-width: 60px;
 		text-align: center;
+		border: 1px solid var(--ui-border);
 	}
 
 	/* Description */
 	.description {
-		margin-top: 15px;
-		padding-top: 10px;
-		border-top: 1px solid var(--ui-border);
+		margin-top: 16px;
+		padding: 12px;
+		background: var(--ui-bg-secondary);
+		border-radius: 6px;
+		border: 1px solid var(--ui-border);
 	}
 
 	.description .label {
 		display: block;
 		color: var(--text-secondary);
-		font-size: 0.9em;
-		margin-bottom: 5px;
+		font-size: 0.8em;
+		margin-bottom: 6px;
 		font-weight: 500;
+		text-transform: uppercase;
 	}
 
 	.description-text {
-		font-size: 0.85em;
-		line-height: 1.5;
+		font-size: 0.8em;
+		line-height: 1.4;
 		color: var(--text-secondary);
+	}
+
+	/* Responsive adjustments */
+	@media (max-width: 400px) {
+		.quote-key-metrics {
+			grid-template-columns: repeat(2, 1fr);
+		}
+		
+		.quote-details {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>

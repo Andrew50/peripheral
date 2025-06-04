@@ -118,18 +118,36 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 
 	// First try direct parsing of the entire resultText
 	var directAns DirectAnswer
-	if json.Unmarshal([]byte(resultText), &directAns) == nil && len(directAns.ContentChunks) > 0 {
-		directAns.TokenCounts = TokenCounts{
-			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
-			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
-			ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
-			TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+	directParseErr := json.Unmarshal([]byte(resultText), &directAns)
+	fmt.Printf("DEBUG: Direct DirectAnswer parse - error: %v, contentChunks length: %d\n", directParseErr, len(directAns.ContentChunks))
+	if directParseErr == nil && len(directAns.ContentChunks) > 0 {
+		// Additional check: make sure at least one content chunk has actual content
+		hasValidContent := false
+		for _, chunk := range directAns.ContentChunks {
+			if chunk.Content != nil && fmt.Sprintf("%v", chunk.Content) != "" {
+				hasValidContent = true
+				break
+			}
 		}
-		return directAns, nil
+		fmt.Printf("DEBUG: DirectAnswer has valid content: %t\n", hasValidContent)
+		if hasValidContent {
+			fmt.Printf("DEBUG: DirectAnswer parsing SUCCESS, returning DirectAnswer\n")
+			directAns.TokenCounts = TokenCounts{
+				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
+				OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
+				ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
+				TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+			}
+			return directAns, nil
+		}
+		fmt.Printf("DEBUG: DirectAnswer has empty content chunks, skipping\n")
 	}
 
 	var plan Plan
-	if json.Unmarshal([]byte(resultText), &plan) == nil {
+	planParseErr := json.Unmarshal([]byte(resultText), &plan)
+	fmt.Printf("DEBUG: Direct Plan parse - error: %v, stage: %s\n", planParseErr, plan.Stage)
+	if planParseErr == nil && plan.Stage != "" {
+		fmt.Printf("DEBUG: Plan parsing SUCCESS, returning Plan\n")
 		plan.TokenCounts = TokenCounts{
 			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
 			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
@@ -139,39 +157,105 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 		return plan, nil
 	}
 
-	// If direct parsing fails, try to extract JSON block
-	jsonStartIdx := strings.Index(resultText, "{")
-	jsonEndIdx := strings.LastIndex(resultText, "}")
-	if jsonStartIdx != -1 && jsonEndIdx != -1 && jsonEndIdx > jsonStartIdx {
-		jsonBlock = resultText[jsonStartIdx : jsonEndIdx+1]
+	// If direct parsing fails, try to extract JSON from markdown code blocks first
+	fmt.Printf("DEBUG: Attempting markdown code block extraction\n")
+
+	// Look for ```json ... ``` blocks
+	jsonCodeBlockStart := strings.Index(resultText, "```json")
+	if jsonCodeBlockStart != -1 {
+		jsonCodeBlockStart += len("```json")
+		// Skip any whitespace after ```json
+		for jsonCodeBlockStart < len(resultText) && (resultText[jsonCodeBlockStart] == '\n' || resultText[jsonCodeBlockStart] == '\r' || resultText[jsonCodeBlockStart] == ' ' || resultText[jsonCodeBlockStart] == '\t') {
+			jsonCodeBlockStart++
+		}
+
+		jsonCodeBlockEnd := strings.Index(resultText[jsonCodeBlockStart:], "```")
+		if jsonCodeBlockEnd != -1 {
+			jsonBlock = resultText[jsonCodeBlockStart : jsonCodeBlockStart+jsonCodeBlockEnd]
+			jsonBlock = strings.TrimSpace(jsonBlock)
+			fmt.Printf("DEBUG: Extracted JSON from markdown code block, length: %d\n", len(jsonBlock))
+			fmt.Printf("DEBUG: First 200 chars of extracted JSON: %.200s\n", jsonBlock)
+		}
+	}
+
+	// If no markdown code block found, try to extract JSON block using { } method
+	if jsonBlock == "" {
+		jsonStartIdx := strings.Index(resultText, "{")
+
+		if jsonStartIdx != -1 {
+			// Try to find the matching closing brace by counting braces
+			braceCount := 0
+			jsonEndIdx := -1
+
+			for i := jsonStartIdx; i < len(resultText); i++ {
+				if resultText[i] == '{' {
+					braceCount++
+				} else if resultText[i] == '}' {
+					braceCount--
+					if braceCount == 0 {
+						jsonEndIdx = i
+						break
+					}
+				}
+			}
+
+			if jsonEndIdx != -1 {
+				jsonBlock = resultText[jsonStartIdx : jsonEndIdx+1]
+				jsonBlock = strings.TrimSpace(jsonBlock)
+			}
+		}
 	}
 
 	// Try unmarshalling the extracted block if it's not empty
 	directAns = DirectAnswer{} // Reset the struct
-	if jsonBlock != "" && json.Unmarshal([]byte(jsonBlock), &directAns) == nil && len(directAns.ContentChunks) > 0 {
-		directAns.TokenCounts = TokenCounts{
-			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
-			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
-			ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
-			TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+	if jsonBlock != "" {
+		blockDirectParseErr := json.Unmarshal([]byte(jsonBlock), &directAns)
+		fmt.Printf("DEBUG: Block DirectAnswer parse - error: %v, contentChunks length: %d\n", blockDirectParseErr, len(directAns.ContentChunks))
+		if blockDirectParseErr == nil && len(directAns.ContentChunks) > 0 {
+			// Additional check: make sure at least one content chunk has actual content
+			hasValidContent := false
+			for _, chunk := range directAns.ContentChunks {
+				if chunk.Content != nil && fmt.Sprintf("%v", chunk.Content) != "" {
+					hasValidContent = true
+					break
+				}
+			}
+			fmt.Printf("DEBUG: Block DirectAnswer has valid content: %t\n", hasValidContent)
+			if hasValidContent {
+				fmt.Printf("DEBUG: Block DirectAnswer parsing SUCCESS, returning DirectAnswer\n")
+				directAns.TokenCounts = TokenCounts{
+					InputTokenCount:    result.UsageMetadata.PromptTokenCount,
+					OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
+					ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
+					TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+				}
+				return directAns, nil
+			}
+			fmt.Printf("DEBUG: Block DirectAnswer has empty content chunks, skipping\n")
 		}
-		return directAns, nil
 	}
 
 	plan = Plan{} // Reset the struct
 	// Try unmarshalling the extracted block if it's not empty
-	if jsonBlock != "" && json.Unmarshal([]byte(jsonBlock), &plan) == nil {
-		plan.TokenCounts = TokenCounts{
-			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
-			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
-			ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
-			TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+	if jsonBlock != "" {
+		blockPlanParseErr := json.Unmarshal([]byte(jsonBlock), &plan)
+		fmt.Printf("DEBUG: Block Plan parse - error: %v, stage: %s\n", blockPlanParseErr, plan.Stage)
+		if blockPlanParseErr == nil && plan.Stage != "" {
+			fmt.Printf("DEBUG: Block Plan parsing SUCCESS, returning Plan\n")
+			plan.TokenCounts = TokenCounts{
+				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
+				OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
+				ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
+				TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+			}
+			return plan, nil
 		}
-		return plan, nil
 	}
 
 	// If parsing failed or no JSON block found, return error
-	return nil, fmt.Errorf("no valid plan or direct answer found in response: %s", resultText)
+	fmt.Printf("DEBUG: All parsing attempts failed - resultText length: %d\n", len(resultText))
+	fmt.Printf("DEBUG: resultText (truncated to 500 chars): %.500s\n", resultText)
+	return nil, fmt.Errorf("no valid plan or direct answer found in response")
 }
 
 func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*FinalResponse, error) {
@@ -244,11 +328,55 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 		return &finalResponse, nil
 	}
 
-	// Try to find JSON block in the text
-	jsonStartIdx := strings.Index(resultText, "{")
-	jsonEndIdx := strings.LastIndex(resultText, "}")
-	if jsonStartIdx != -1 && jsonEndIdx != -1 && jsonEndIdx > jsonStartIdx {
-		jsonBlock := resultText[jsonStartIdx : jsonEndIdx+1]
+	// Try to extract JSON from markdown code blocks first
+	var jsonBlock string
+
+	// Look for ```json ... ``` blocks
+	jsonCodeBlockStart := strings.Index(resultText, "```json")
+	if jsonCodeBlockStart != -1 {
+		jsonCodeBlockStart += len("```json")
+		// Skip any whitespace after ```json
+		for jsonCodeBlockStart < len(resultText) && (resultText[jsonCodeBlockStart] == '\n' || resultText[jsonCodeBlockStart] == '\r' || resultText[jsonCodeBlockStart] == ' ' || resultText[jsonCodeBlockStart] == '\t') {
+			jsonCodeBlockStart++
+		}
+
+		jsonCodeBlockEnd := strings.Index(resultText[jsonCodeBlockStart:], "```")
+		if jsonCodeBlockEnd != -1 {
+			jsonBlock = resultText[jsonCodeBlockStart : jsonCodeBlockStart+jsonCodeBlockEnd]
+			jsonBlock = strings.TrimSpace(jsonBlock)
+		}
+	}
+
+	// If no markdown code block found, try to extract JSON block using { } method
+	if jsonBlock == "" {
+		jsonStartIdx := strings.Index(resultText, "{")
+
+		if jsonStartIdx != -1 {
+			// Try to find the matching closing brace by counting braces
+			braceCount := 0
+			jsonEndIdx := -1
+
+			for i := jsonStartIdx; i < len(resultText); i++ {
+				if resultText[i] == '{' {
+					braceCount++
+				} else if resultText[i] == '}' {
+					braceCount--
+					if braceCount == 0 {
+						jsonEndIdx = i
+						break
+					}
+				}
+			}
+
+			if jsonEndIdx != -1 {
+				jsonBlock = resultText[jsonStartIdx : jsonEndIdx+1]
+				jsonBlock = strings.TrimSpace(jsonBlock)
+			}
+		}
+	}
+
+	// Try parsing the extracted JSON block
+	if jsonBlock != "" {
 		if err := json.Unmarshal([]byte(jsonBlock), &finalResponse); err == nil && len(finalResponse.ContentChunks) > 0 {
 			finalResponse.TokenCounts = TokenCounts{
 				InputTokenCount:    result.UsageMetadata.PromptTokenCount,

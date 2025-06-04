@@ -822,7 +822,7 @@
 {#if $inputQuery.status === 'active' || $inputQuery.status === 'initializing'}
 	<div class="popup-container" id="input-window" tabindex="-1" on:click|stopPropagation>
 		<div class="header">
-			<div class="title">{capitalize($inputQuery.inputType)} Input</div>
+			<div class="title">{capitalize($inputQuery.inputType)} Search</div>
 			<div class="field-buttons">
 				<button
 					class="toggle-button {manualInputType === 'auto' && $inputQuery.inputType === ''
