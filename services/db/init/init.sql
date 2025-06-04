@@ -248,6 +248,7 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
     -- Status and metadata
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'error')),
     token_count INTEGER DEFAULT 0,
+    archived BOOLEAN NOT NULL DEFAULT FALSE,
     
     -- Ordering within conversation
     message_order INTEGER NOT NULL,
@@ -320,11 +321,13 @@ BEGIN
             SELECT COALESCE(SUM(token_count), 0) 
             FROM conversation_messages 
             WHERE conversation_id = COALESCE(NEW.conversation_id, OLD.conversation_id)
+            AND archived = FALSE
         ),
         message_count = (
             SELECT COUNT(*) 
             FROM conversation_messages 
             WHERE conversation_id = COALESCE(NEW.conversation_id, OLD.conversation_id)
+            AND archived = FALSE
         )
     WHERE conversation_id = COALESCE(NEW.conversation_id, OLD.conversation_id);
     
