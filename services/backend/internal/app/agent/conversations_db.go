@@ -77,7 +77,7 @@ func GetUserConversations(conn *data.Conn, userID int, _ json.RawMessage) (inter
 			(
 				SELECT cm.query 
 				FROM conversation_messages cm 
-				WHERE cm.conversation_id = c.conversation_id 
+				WHERE cm.conversation_id = c.conversation_id AND archived = FALSE
 				ORDER BY cm.message_order DESC 
 				LIMIT 1
 			) as last_message_query
@@ -153,7 +153,7 @@ func GetConversationMessages(ctx context.Context, conn *data.Conn, conversationI
 			token_count,
 			message_order
 		FROM conversation_messages
-		WHERE conversation_id = $1 
+		WHERE conversation_id = $1 AND archived = FALSE
 		ORDER BY message_order ASC`
 
 	rows, err := conn.DB.Query(ctx, query, conversationID)
@@ -237,41 +237,41 @@ func GetConversationMessages(ctx context.Context, conn *data.Conn, conversationI
 }
 
 // SaveConversationMessage saves a message to the database
-func SaveConversationMessage(ctx context.Context, conn *data.Conn, conversationID string, userID int, message ChatMessage) error {
+func SaveConversationMessage(ctx context.Context, conn *data.Conn, conversationID string, userID int, message ChatMessage) (string, error) {
 	// First verify the user owns this conversation
 	var ownerID int
 	err := conn.DB.QueryRow(ctx, "SELECT user_id FROM conversations WHERE conversation_id = $1", conversationID).Scan(&ownerID)
 	if err != nil {
-		return fmt.Errorf("conversation not found: %w", err)
+		return "", fmt.Errorf("conversation not found: %w", err)
 	}
 	if ownerID != userID {
-		return fmt.Errorf("unauthorized access to conversation")
+		return "", fmt.Errorf("unauthorized access to conversation")
 	}
 
 	// Marshal JSON fields
 	contentChunksJSON, err := json.Marshal(message.ContentChunks)
 	if err != nil {
-		return fmt.Errorf("failed to marshal content_chunks: %w", err)
+		return "", fmt.Errorf("failed to marshal content_chunks: %w", err)
 	}
 	functionCallsJSON, err := json.Marshal(message.FunctionCalls)
 	if err != nil {
-		return fmt.Errorf("failed to marshal function_calls: %w", err)
+		return "", fmt.Errorf("failed to marshal function_calls: %w", err)
 	}
 	toolResultsJSON, err := json.Marshal(message.ToolResults)
 	if err != nil {
-		return fmt.Errorf("failed to marshal tool_results: %w", err)
+		return "", fmt.Errorf("failed to marshal tool_results: %w", err)
 	}
 	contextItemsJSON, err := json.Marshal(message.ContextItems)
 	if err != nil {
-		return fmt.Errorf("failed to marshal context_items: %w", err)
+		return "", fmt.Errorf("failed to marshal context_items: %w", err)
 	}
 	suggestedQueriesJSON, err := json.Marshal(message.SuggestedQueries)
 	if err != nil {
-		return fmt.Errorf("failed to marshal suggested_queries: %w", err)
+		return "", fmt.Errorf("failed to marshal suggested_queries: %w", err)
 	}
 	citationsJSON, err := json.Marshal(message.Citations)
 	if err != nil {
-		return fmt.Errorf("failed to marshal citations: %w", err)
+		return "", fmt.Errorf("failed to marshal citations: %w", err)
 	}
 
 	messageID := uuid.New().String()
@@ -280,7 +280,7 @@ func SaveConversationMessage(ctx context.Context, conn *data.Conn, conversationI
 	var maxOrder int
 	err = conn.DB.QueryRow(ctx, "SELECT COALESCE(MAX(message_order), 0) FROM conversation_messages WHERE conversation_id = $1", conversationID).Scan(&maxOrder)
 	if err != nil {
-		return fmt.Errorf("failed to get max message order: %w", err)
+		return "", fmt.Errorf("failed to get max message order: %w", err)
 	}
 	nextOrder := maxOrder + 1
 
@@ -310,10 +310,10 @@ func SaveConversationMessage(ctx context.Context, conn *data.Conn, conversationI
 	)
 
 	if err != nil {
-		return fmt.Errorf("failed to save conversation message: %w", err)
+		return "", fmt.Errorf("failed to save conversation message: %w", err)
 	}
 
-	return nil
+	return messageID, nil
 }
 
 // DeleteConversationInDB deletes a conversation and all its messages
@@ -339,21 +339,6 @@ func DeleteConversationInDB(conn *data.Conn, conversationID string, userID int) 
 	rowsAffected := result.RowsAffected()
 	if rowsAffected == 0 {
 		return fmt.Errorf("conversation not found or unauthorized")
-	}
-
-	return nil
-}
-
-// SetActiveConversationID sets the user's currently active conversation in Redis
-func SetActiveConversationID(ctx context.Context, conn *data.Conn, userID int, conversationID string) error {
-	// Update the ID
-	if err := SetActiveConversationIDCached(ctx, conn, userID, conversationID); err != nil {
-		return err
-	}
-
-	// Invalidate the conversation data cache since we're switching conversations
-	if err := InvalidateActiveConversationCache(ctx, conn, userID); err != nil {
-		fmt.Printf("Warning: failed to invalidate conversation cache: %v\n", err)
 	}
 
 	return nil
@@ -386,6 +371,29 @@ func findLastSpace(s string) int {
 	return -1
 }
 
+// GetMessageContextItems retrieves context items from a specific message
+func GetMessageContextItems(ctx context.Context, conn *data.Conn, conversationID string, messageOrder int) ([]map[string]interface{}, error) {
+	query_sql := `SELECT context_items FROM conversation_messages WHERE conversation_id = $1 AND message_order = $2 AND archived = FALSE`
+
+	var contextItemsJSON []byte
+	err := conn.DB.QueryRow(ctx, query_sql, conversationID, messageOrder).Scan(&contextItemsJSON)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return []map[string]interface{}{}, nil // No context items
+		}
+		return nil, fmt.Errorf("failed to get context items: %w", err)
+	}
+
+	var contextItems []map[string]interface{}
+	if len(contextItemsJSON) > 0 {
+		if err := json.Unmarshal(contextItemsJSON, &contextItems); err != nil {
+			return nil, fmt.Errorf("failed to parse context items: %w", err)
+		}
+	}
+
+	return contextItems, nil
+}
+
 // SavePendingMessageToActiveConversation saves a pending message when a request starts
 func SavePendingMessageToActiveConversation(ctx context.Context, conn *data.Conn, userID int, query string, contextItems []map[string]interface{}) error {
 	// Create pending message
@@ -402,7 +410,7 @@ func SavePendingMessageToActiveConversation(ctx context.Context, conn *data.Conn
 }
 
 // SavePendingMessageToConversation saves a pending message to a specific conversation ID
-func SavePendingMessageToConversation(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, contextItems []map[string]interface{}) (string, error) {
+func SavePendingMessageToConversation(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, contextItems []map[string]interface{}) (string, string, error) {
 	// Create pending message
 	now := time.Now()
 	message := ChatMessage{
@@ -417,21 +425,22 @@ func SavePendingMessageToConversation(ctx context.Context, conn *data.Conn, user
 		title := AutoGenerateConversationTitle(query)
 		newConversationID, err := CreateConversationInDB(ctx, conn, userID, title)
 		if err != nil {
-			return "", fmt.Errorf("failed to create new conversation: %w", err)
+			return "", "", fmt.Errorf("failed to create new conversation: %w", err)
 		}
 		conversationID = newConversationID
 	}
 
 	// Save to database
-	if err := SaveConversationMessage(ctx, conn, conversationID, userID, message); err != nil {
-		return "", fmt.Errorf("failed to save message to database: %w", err)
+	messageID, err := SaveConversationMessage(ctx, conn, conversationID, userID, message)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to save message to database: %w", err)
 	}
 
-	return conversationID, nil
+	return conversationID, messageID, nil
 }
 
 // UpdatePendingMessageToCompleted updates a pending message to completed status
-func UpdatePendingMessageToCompleted(ctx context.Context, conn *data.Conn, userID int, query string, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult, suggestedQueries []string, tokenCount int32) error {
+func UpdatePendingMessageToCompleted(ctx context.Context, conn *data.Conn, userID int, query string, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult, suggestedQueries []string, tokenCount int) error {
 	activeConversationID, err := GetActiveConversationIDCached(ctx, conn, userID)
 	if err != nil || activeConversationID == "" {
 		return fmt.Errorf("no active conversation found")
@@ -491,8 +500,20 @@ func UpdatePendingMessageToCompleted(ctx context.Context, conn *data.Conn, userI
 }
 
 // UpdatePendingMessageToCompletedInConversation updates a pending message to completed status in a specific conversation
-func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult, suggestedQueries []string, tokenCount int32) error {
-	// Update the database first
+func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult, suggestedQueries []string, tokenCount int) (string, error) {
+	// First get the message ID before updating
+	var messageID string
+	getMessageIDQuery := `
+		SELECT message_id 
+		FROM conversation_messages 
+		WHERE conversation_id = $1 AND query = $2 AND status = 'pending'`
+
+	err := conn.DB.QueryRow(ctx, getMessageIDQuery, conversationID, query).Scan(&messageID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get message ID: %w", err)
+	}
+
+	// Update the database
 	query_sql := `
 		UPDATE conversation_messages 
 		SET content_chunks = $1, function_calls = $2, tool_results = $3, 
@@ -519,15 +540,20 @@ func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *da
 	)
 
 	if err != nil {
-		return fmt.Errorf("failed to update pending message: %w", err)
+		return "", fmt.Errorf("failed to update pending message: %w", err)
 	}
 
 	rowsAffected := result.RowsAffected()
 	if rowsAffected == 0 {
-		return fmt.Errorf("no pending message found with query: %s in conversation: %s", query, conversationID)
+		return "", fmt.Errorf("no pending message found with query: %s in conversation: %s", query, conversationID)
 	}
 
-	return nil
+	// Invalidate cache for this conversation since the message was updated
+	if err := InvalidateConversationCache(ctx, conn, userID, conversationID); err != nil {
+		fmt.Printf("Warning: failed to invalidate conversation cache after completing message: %v\n", err)
+	}
+
+	return messageID, nil
 }
 
 // DeletePendingMessageInConversation deletes a pending message when a request is cancelled or fails
@@ -553,7 +579,7 @@ func DeletePendingMessageInConversation(ctx context.Context, conn *data.Conn, us
 		UPDATE conversations 
 		SET message_count = (
 			SELECT COUNT(*) FROM conversation_messages 
-			WHERE conversation_id = $1
+			WHERE conversation_id = $1 AND archived = FALSE
 		),
 		updated_at = $2
 		WHERE conversation_id = $1 AND user_id = $3`
@@ -593,6 +619,11 @@ func MarkPendingMessageAsError(ctx context.Context, conn *data.Conn, userID int,
 		return fmt.Errorf("no pending message found with query: %s in conversation: %s", query, conversationID)
 	}
 
+	// Invalidate cache for this conversation since the message was updated
+	if err := InvalidateConversationCache(ctx, conn, userID, conversationID); err != nil {
+		fmt.Printf("Warning: failed to invalidate conversation cache after marking message as error: %v\n", err)
+	}
+
 	return nil
 }
 
@@ -616,4 +647,113 @@ func CancelPendingMessage(conn *data.Conn, userID int, args json.RawMessage) (in
 		"success": true,
 		"message": "Pending message cancelled successfully",
 	}, nil
+}
+
+// FindMessageToEdit finds a message to edit by message ID and returns its order and original query
+func FindMessageToEdit(ctx context.Context, conn *data.Conn, conversationID string, messageID string) (int, string, error) {
+	if messageID == "" {
+		return 0, "", fmt.Errorf("message_id is required")
+	}
+
+	var foundOrder int
+	var foundQuery string
+
+	query_sql := `SELECT message_order, query FROM conversation_messages WHERE conversation_id = $1 AND message_id = $2 AND archived = FALSE`
+	err := conn.DB.QueryRow(ctx, query_sql, conversationID, messageID).Scan(&foundOrder, &foundQuery)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, "", fmt.Errorf("message not found")
+		}
+		return 0, "", fmt.Errorf("failed to find message: %w", err)
+	}
+
+	return foundOrder, foundQuery, nil
+}
+
+// PruneMessagesAfterOrder archives all messages after the specified order instead of deleting them
+func PruneMessagesAfterOrder(ctx context.Context, conn *data.Conn, conversationID string, messageOrder int) error {
+	query_sql := `UPDATE conversation_messages SET archived = TRUE WHERE conversation_id = $1 AND message_order >= $2 AND archived = FALSE`
+
+	_, err := conn.DB.Exec(ctx, query_sql, conversationID, messageOrder)
+	if err != nil {
+		return fmt.Errorf("failed to archive messages: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateMessageContentAndStatus updates a message's content and status
+func UpdateMessageContentAndStatus(ctx context.Context, conn *data.Conn, conversationID string, messageOrder int, newContent string, status string) error {
+	query_sql := `
+		UPDATE conversation_messages 
+		SET query = $1, status = $2, completed_at = NULL, response_text = '', 
+		    content_chunks = '[]', function_calls = '[]', tool_results = '[]', 
+		    suggested_queries = '[]', citations = '[]', token_count = 0
+		WHERE conversation_id = $3 AND message_order = $4`
+
+	result, err := conn.DB.Exec(ctx, query_sql, newContent, status, conversationID, messageOrder)
+	if err != nil {
+		return fmt.Errorf("failed to update message: %w", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("no message found with order %d in conversation %s", messageOrder, conversationID)
+	}
+
+	return nil
+}
+
+// UpdateConversationAfterEdit updates conversation metadata after editing
+func UpdateConversationAfterEdit(ctx context.Context, conn *data.Conn, conversationID string) error {
+	query_sql := `
+		UPDATE conversations 
+		SET message_count = (
+			SELECT COUNT(*) FROM conversation_messages 
+			WHERE conversation_id = $1 AND archived = FALSE
+		),
+		total_token_count = (
+			SELECT COALESCE(SUM(token_count), 0) FROM conversation_messages 
+			WHERE conversation_id = $1 AND archived = FALSE
+		),
+		updated_at = $2
+		WHERE conversation_id = $1`
+
+	_, err := conn.DB.Exec(ctx, query_sql, conversationID, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to update conversation metadata: %w", err)
+	}
+
+	return nil
+}
+
+// ValidateMessageForEdit ensures the message can be edited
+func ValidateMessageForEdit(ctx context.Context, conn *data.Conn, conversationID string, messageOrder int) error {
+	// Check if message exists and get its details
+	var query, status string
+	var completedAt sql.NullTime
+
+	query_sql := `
+		SELECT query, status, completed_at 
+		FROM conversation_messages 
+		WHERE conversation_id = $1 AND message_order = $2 AND archived = FALSE`
+
+	err := conn.DB.QueryRow(ctx, query_sql, conversationID, messageOrder).Scan(&query, &status, &completedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("message not found")
+		}
+		return fmt.Errorf("failed to validate message: %w", err)
+	}
+
+	// Only allow editing if message is not currently pending
+	if status == "pending" {
+		return fmt.Errorf("cannot edit a message that is currently being processed")
+	}
+
+	// Additional validation can be added here
+	// For example, checking if it's a user message vs assistant message
+	// or if it's too old to edit, etc.
+
+	return nil
 }

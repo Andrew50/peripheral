@@ -128,11 +128,10 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 
 	// Multiple conversations management
 	"getUserConversations": agent.GetUserConversations,
-
-	"createConversation":   agent.NewConversation,
 	"switchConversation":   agent.SwitchConversation,
 	"deleteConversation":   agent.DeleteConversation,
 	"cancelPendingMessage": agent.CancelPendingMessage,
+	"editMessage":          agent.EditMessage,
 }
 
 // Private functions that support context cancellation
