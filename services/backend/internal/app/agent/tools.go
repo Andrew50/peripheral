@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"backend/internal/app/account"
 	"backend/internal/app/chart"
 	"backend/internal/app/filings"
 	"backend/internal/app/helpers"
@@ -505,103 +504,6 @@ var (
 			},
 			Function:      wrapWithContext(filings.GetExhibitContent),
 			StatusMessage: "Reading Exhibit Content...",
-		},
-		// Account / User Trades
-		"grab_user_trades": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "grab_user_trades",
-				Description: "Get user trades with optional filters.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "Ticker symbol to grab trades for.",
-						},
-						"startDate": {
-							Type:        genai.TypeString,
-							Description: "Date range start to filter trades by (format: YYYY-MM-DD).",
-						},
-						"endDate": {
-							Type:        genai.TypeString,
-							Description: "Date range end to filter trades by (format: YYYY-MM-DD).",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function:      wrapWithContext(account.GrabUserTrades),
-			StatusMessage: "Fetching trades...",
-		},
-		"get_trade_statistics": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "get_trade_statistics",
-				Description: "Get user trading performance statistics.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "Security ticker symbol to filter trades by.",
-						},
-						"startDate": {
-							Type:        genai.TypeString,
-							Description: "Date range start to filter trades by (format: YYYY-MM-DD).",
-						},
-						"endDate": {
-							Type:        genai.TypeString,
-							Description: "Date range end to filter trades by (format: YYYY-MM-DD).",
-						},
-					},
-					Required: []string{},
-				},
-			},
-			Function:      wrapWithContext(account.GetTradeStatistics),
-			StatusMessage: "Calculating trade statistics...",
-		},
-		"get_ticker_performance": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "get_ticker_performance",
-				Description: "Retrieves the user's trade performance statistics for a specific ticker (p/l, win rate, average gain/loss, etc)",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "The security ticker symbol to get performance statistics for.",
-						},
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The security ID to get performance statistics for.",
-						},
-					},
-					Required: []string{"ticker", "securityId"},
-				},
-			},
-			Function:      wrapWithContext(account.GetTickerPerformance),
-			StatusMessage: "Analyzing ticker performance for {ticker}...",
-		},
-		"get_daily_trade_stats": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "get_daily_trade_stats",
-				Description: "Retrieves user trading statistics for a specified year and month.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"year": {
-							Type:        genai.TypeInteger,
-							Description: "The year part of the date to get statistics for.",
-						},
-						"month": {
-							Type:        genai.TypeInteger,
-							Description: "The month part of the date to get statistics for.",
-						},
-					},
-					Required: []string{"year", "month"},
-				},
-			},
-			Function:      wrapWithContext(account.GetDailyTradeStats),
-			StatusMessage: "Getting daily trade stats...",
 		},
 		"run_backtest": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
