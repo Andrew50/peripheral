@@ -386,35 +386,6 @@
 		gap: 0.5rem;
 	}
 
-	.input-actions {
-		display: flex;
-		gap: 0.5rem;
-		align-items: center;
-	}
-
-	.action-toggle-button {
-		padding: 0.4rem 0.8rem;
-		font-size: 0.75rem;
-		border-radius: 1rem;
-		border: 1px solid var(--ui-border, #444);
-		background: var(--ui-bg-element, #333);
-		color: var(--text-secondary, #aaa);
-		cursor: pointer;
-		transition: all 0.2s ease;
-		font-weight: 500;
-	}
-
-	.action-toggle-button:hover {
-		border-color: var(--text-secondary, #aaa);
-		color: var(--text-primary, #fff);
-	}
-
-	.action-toggle-button.active {
-		background: var(--accent-color, #3a8bf7);
-		border-color: var(--accent-color, #3a8bf7);
-		color: white;
-	}
-
 	.input-field-container {
 		position: relative;
 		display: flex;
