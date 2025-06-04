@@ -845,4 +845,126 @@
 	.message.assistant[data-status="pending"] {
 		border-left: 3px solid var(--warning-color, #ff9800);
 		background: rgba(255, 152, 0, 0.05);
+	}
+
+	/* Message editing styles */
+	.message-edit-button {
+		display: flex;
+		justify-content: flex-end;
+		margin-top: 0.5rem;
+		opacity: 0;
+		transition: opacity 0.2s ease;
+	}
+
+	.message-wrapper:hover .message-edit-button {
+		opacity: 1;
+	}
+
+	.edit-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.4rem;
+		background: var(--ui-bg-element, #333);
+		border: 1px solid var(--ui-border, #444);
+		border-radius: 0.25rem;
+		color: var(--text-secondary, #aaa);
+		cursor: pointer;
+		transition: all 0.2s ease;
+		font-size: 0.75rem;
+	}
+
+	.edit-btn:hover {
+		background: var(--ui-bg-hover, rgba(255, 255, 255, 0.1));
+		border-color: var(--accent-color, #3a8bf7);
+		color: var(--text-primary, #fff);
+	}
+
+	.edit-btn svg {
+		width: 0.875rem;
+		height: 0.875rem;
+	}
+
+	/* Message editing state */
+	.message.editing {
+		max-width: 100% !important;
+		width: 100% !important;
+		background: var(--ui-bg-element-darker, #2a2a2a) !important;
+		border: 1px solid var(--accent-color, #3a8bf7) !important;
+		border-radius: 0.5rem !important;
+		padding: 1rem !important;
+	}
+
+	.edit-container {
+		width: 100%;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.edit-textarea {
+		width: 100%;
+		min-height: 80px;
+		padding: 0;
+		background: transparent;
+		border: none;
+		border-radius: 0;
+		color: inherit;
+		font-family: inherit;
+		font-size: 0.875rem;
+		line-height: inherit;
+		resize: none;
+		box-sizing: border-box;
+		outline: none;
+	}
+
+	.edit-textarea:focus {
+		outline: none;
+		border: none;
+		box-shadow: none;
+	}
+
+	.edit-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.5rem;
+	}
+
+	.edit-save-btn,
+	.edit-cancel-btn {
+		padding: 0.4rem 0.8rem;
+		border-radius: 0.25rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		border: 1px solid transparent;
+	}
+
+	.edit-save-btn {
+		background: var(--accent-color, #3a8bf7);
+		color: white;
+		border-color: var(--accent-color, #3a8bf7);
+	}
+
+	.edit-save-btn:hover {
+		background: var(--accent-color-hover, #2c7ae0);
+		border-color: var(--accent-color-hover, #2c7ae0);
+	}
+
+	.edit-cancel-btn {
+		background: transparent;
+		color: var(--text-secondary, #aaa);
+		border-color: var(--ui-border, #444);
+	}
+
+	.edit-cancel-btn:hover {
+		background: var(--ui-bg-hover, rgba(255, 255, 255, 0.1));
+		color: var(--text-primary, #fff);
+		border-color: var(--text-secondary, #aaa);
+	}
+
+	/* Adjust message wrapper layout when editing */
+	.message-wrapper .message.editing {
+		border-bottom-right-radius: 0.5rem !important;
 	} 
