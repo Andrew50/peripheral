@@ -24,6 +24,7 @@ import (
 	"backend/internal/app/settings"
 	"backend/internal/app/strategy"
 	"backend/internal/app/watchlist"
+	"context"
 )
 
 var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, error){
@@ -33,6 +34,16 @@ var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, erro
 	"googleCallback": GoogleCallback,
 }
 
+// Wrapper functions to adapt existing functions to the old signature for HTTP handlers
+func wrapContextFunc(fn func(context.Context, *data.Conn, int, json.RawMessage) (interface{}, error)) func(*data.Conn, int, json.RawMessage) (interface{}, error) {
+	return func(conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
+		// Create a background context for non-cancellable functions
+		ctx := context.Background()
+		return fn(ctx, conn, userID, args)
+	}
+}
+
+// Private functions for /private endpoint that use the old signature
 var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}, error){
 
 	// --- chat / conversation --------------------------------------------------
@@ -97,7 +108,7 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"get_daily_trade_stats":  account.GetDailyTradeStats,
 
 	// --- strategy / back-testing ---------------------------------------------
-	"run_backtest":                   strategy.RunBacktest,
+	"run_backtest":                   wrapContextFunc(strategy.RunBacktest),
 	"getStrategies":                  strategy.GetStrategies,
 	"newStrategy":                    strategy.NewStrategy,
 	"setStrategy":                    strategy.SetStrategy,
@@ -111,10 +122,21 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 		return nil, nil
 	},
 	"getUserConversation":        agent.GetUserConversation,
-	"clearConversationHistory":   agent.ClearConversationHistory,
 	"getSuggestedQueries":        agent.GetSuggestedQueries,
 	"getInitialQuerySuggestions": agent.GetInitialQuerySuggestions,
-	"getQuery":                   agent.GetChatRequest,
+	"getQuery":                   wrapContextFunc(agent.GetChatRequest),
+
+	// Multiple conversations management
+	"getUserConversations": agent.GetUserConversations,
+	"switchConversation":   agent.SwitchConversation,
+	"deleteConversation":   agent.DeleteConversation,
+	"cancelPendingMessage": agent.CancelPendingMessage,
+	"editMessage":          agent.EditMessage,
+}
+
+// Private functions that support context cancellation
+var privateFuncWithContext = map[string]func(context.Context, *data.Conn, int, json.RawMessage) (interface{}, error){
+	"getQuery": agent.GetChatRequest,
 }
 
 // Request represents a structure for handling Request data.
@@ -294,7 +316,7 @@ func privateHandler(conn *data.Conn) http.HandlerFunc {
 		}
 
 		tokenString := r.Header.Get("Authorization")
-		_, err := validateToken(tokenString)
+		userID, err := validateToken(tokenString)
 		if handleError(w, err, "auth") {
 			return
 		}
@@ -332,19 +354,41 @@ func privateHandler(conn *data.Conn) http.HandlerFunc {
 		req.Arguments = sanitizedArgs
 
 		// Validate the function name
-		if _, exists := privateFunc[req.Function]; !exists {
+		if _, exists := privateFunc[req.Function]; !exists && privateFuncWithContext[req.Function] == nil {
 			http.Error(w, "Unknown function", http.StatusBadRequest)
 			return
 		}
 
-		// Get user ID from token
-		userID, err := validateToken(tokenString)
-		if handleError(w, err, "private_handler: validateToken") {
+		// Execute the requested function with sanitized input and request context
+		var result interface{}
+
+		// Try context-aware function first
+		if contextFunc, exists := privateFuncWithContext[req.Function]; exists {
+			result, err = contextFunc(r.Context(), conn, userID, req.Arguments)
+
+			// Handle context cancellation gracefully
+			if err != nil && r.Context().Err() == context.Canceled {
+				// Return a structured cancellation response instead of an error
+				cancelResponse := map[string]interface{}{
+					"type":    "cancelled",
+					"message": "Request was cancelled by user",
+				}
+				w.Header().Set("Content-Type", "application/json")
+				encoder := json.NewEncoder(w)
+				encoder.SetEscapeHTML(true)
+				if err := encoder.Encode(cancelResponse); err != nil {
+					http.Error(w, fmt.Sprintf("Error encoding cancellation response: %v", err), http.StatusInternalServerError)
+				}
+				return
+			}
+		} else if regularFunc, exists := privateFunc[req.Function]; exists {
+			// Fallback to regular function for functions not yet updated
+			result, err = regularFunc(conn, userID, req.Arguments)
+		} else {
+			http.Error(w, "Unknown function", http.StatusBadRequest)
 			return
 		}
 
-		// Execute the requested function with sanitized input
-		result, err := privateFunc[req.Function](conn, userID, req.Arguments)
 		if handleError(w, err, fmt.Sprintf("private_handler: %s", req.Function)) {
 			return
 		}

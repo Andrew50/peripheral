@@ -211,13 +211,9 @@ func GetSecuritiesFromTicker(conn *data.Conn, _ int, rawArgs json.RawMessage) (i
 				WHEN UPPER(ticker) LIKE '%' || UPPER($1) || '%' THEN 3
 				ELSE 4
 			END as match_type,
-			similarity(UPPER(ticker), UPPER($1)) as sim_score,
-			CASE 
-				WHEN maxDate IS NULL THEN 0
-				ELSE 1
-			END as is_delisted
+			similarity(UPPER(ticker), UPPER($1)) as sim_score
 		FROM securities s
-		WHERE (
+		WHERE maxDate IS NULL AND (
 			UPPER(ticker) = UPPER($1) OR
 			UPPER(ticker) LIKE UPPER($1) || '%' OR 
 			UPPER(ticker) LIKE '%' || UPPER($1) || '%' OR
@@ -227,7 +223,7 @@ func GetSecuritiesFromTicker(conn *data.Conn, _ int, rawArgs json.RawMessage) (i
 	)
 	SELECT securityId, ticker, name, icon, maxDate
 	FROM ranked_results
-	ORDER BY match_type, is_delisted, sim_score DESC
+	ORDER BY match_type, sim_score DESC
 	LIMIT 10
 	`
 

@@ -315,10 +315,10 @@
 					<span class="label">ADR</span>
 					<span class="value">{$hoveredCandleData.adr?.toFixed(2) ?? 'NA'}</span>
 				</div>
-				<div class="metric">
+				<!-- <div class="metric">
 					<span class="label">RVOL</span>
 					<span class="value">{$hoveredCandleData.rvol?.toFixed(2) ?? 'NA'}</span>
-				</div>
+				</div> -->
 			</div>
 		{/if}
 	{/if}
