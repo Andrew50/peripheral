@@ -364,26 +364,6 @@
 		font-size: 0.875rem;
 	}
 
-	.function-tools {
-		margin-top: 0.75rem;
-		margin-bottom: 0.5rem;
-	}
-
-	.function-tool {
-		background: var(--ui-bg-element-darker, #2a2a2a);
-		border-radius: 0.5rem;
-		overflow: hidden;
-		margin-bottom: 0.5rem;
-		border: 1px solid var(--ui-border, #444);
-	}
-
-	.function-tool.error {
-		border-color: var(--error-color, #f44336);
-	}
-
-	.function-tool.success {
-		border-color: var(--success-color, #4caf50);
-	}
 
 	.function-header {
 		display: flex;
@@ -646,11 +626,6 @@
 			transform: translateY(-0.5rem);
 		}
 	}
-
-	.message.expiring {
-		border-color: rgba(255, 165, 0, 0.7); /* Orange border for expiring messages */
-	}
-
 	/* Add styles for markdown elements */
 	.message-content :global(p) {
 		margin: 0 0 0.5rem 0;
