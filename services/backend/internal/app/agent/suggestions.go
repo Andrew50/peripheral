@@ -12,6 +12,29 @@ import (
 	"google.golang.org/genai"
 )
 
+var thinkingModel = "gemini-2.5-flash-preview-05-20"
+
+// buildContextPrompt formats incoming chart/filing context for the model
+func buildContextPrompt(contextItems []map[string]interface{}) string {
+	var sb strings.Builder
+	for _, item := range contextItems {
+		// Treat filing contexts first
+		if _, ok := item["link"]; ok {
+			ticker, _ := item["ticker"].(string)
+			fType, _ := item["filingType"].(string)
+			link, _ := item["link"].(string)
+			sb.WriteString(fmt.Sprintf("Filing - Ticker: %s, Type: %s, Link: %s\n", ticker, fType, link))
+		} else if _, ok := item["timestamp"]; ok {
+			// Then treat instance contexts
+			ticker, _ := item["ticker"].(string)
+			secID := fmt.Sprint(item["securityId"])
+			tsStr := fmt.Sprint(item["timestamp"])
+			sb.WriteString(fmt.Sprintf("Instance - Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secID, tsStr))
+		}
+	}
+	return sb.String()
+}
+
 type GetSuggestedQueriesResponse struct {
 	Suggestions []string `json:"suggestions"`
 }
@@ -28,13 +51,43 @@ func GetSuggestedQueries(conn *data.Conn, userID int, _ json.RawMessage) (interf
 	//else {
 	////fmt.Println(message)
 	//}
-	conversationData, err := GetConversationFromCache(ctx, conn, userID)
-	if err != nil || conversationData == nil {
-		return GetSuggestedQueriesResponse{}, nil
-	}
+
+	// Get the active conversation using the new system
 	var conversationHistory string
-	if len(conversationData.Messages) > 0 {
-		conversationHistory = _buildConversationContext(conversationData.Messages)
+	activeConversationID, err := GetActiveConversationIDCached(ctx, conn, userID)
+	if err == nil && activeConversationID != "" {
+		// Load conversation messages from database
+		messagesInterface, err := GetConversationMessages(ctx, conn, activeConversationID, userID)
+		if err == nil && messagesInterface != nil {
+			// Type assert to get the actual messages
+			if dbMessages, ok := messagesInterface.([]DBConversationMessage); ok && len(dbMessages) > 0 {
+				// Convert DB messages to ChatMessage format for context building
+				chatMessages := make([]ChatMessage, len(dbMessages))
+				for i, msg := range dbMessages {
+					chatMessages[i] = ChatMessage{
+						Query:            msg.Query,
+						ContentChunks:    msg.ContentChunks,
+						ResponseText:     msg.ResponseText,
+						FunctionCalls:    msg.FunctionCalls,
+						ToolResults:      msg.ToolResults,
+						ContextItems:     msg.ContextItems,
+						SuggestedQueries: msg.SuggestedQueries,
+						Citations:        msg.Citations,
+						Timestamp:        msg.CreatedAt,
+						TokenCount:       msg.TokenCount,
+						Status:           msg.Status,
+					}
+					if msg.CompletedAt != nil {
+						chatMessages[i].CompletedAt = *msg.CompletedAt
+					}
+				}
+				conversationHistory = _buildConversationContext(chatMessages)
+			}
+		}
+	}
+
+	if conversationHistory == "" {
+		return GetSuggestedQueriesResponse{}, nil
 	}
 
 	geminiRes, err := getGeminiFunctionThinking(ctx, conn, "suggestedQueriesPrompt", conversationHistory, thinkingModel)
