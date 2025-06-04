@@ -364,15 +364,6 @@
 		font-size: 0.875rem;
 	}
 
-	.message-footer {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-top: 0.5rem;
-		font-size: 0.65rem;
-		opacity: 0.7;
-	}
-
 	.function-tools {
 		margin-top: 0.75rem;
 		margin-bottom: 0.5rem;
@@ -463,7 +454,7 @@
 		color: var(--text-primary, #fff);
 		padding: 0.25rem 0.8rem; /* Adjusted vertical padding */
 		border-radius: 0.25rem; /* Match border-radius */
-		font-size: 0.75rem; /* Match font-size */
+		font-size: 0.8rem; /* Slightly smaller than chat message font size */
 		font-weight: 500;
 		cursor: pointer;
 		transition: all 0.2s ease;
@@ -784,25 +775,34 @@
 		font-size: 0.8rem;
 	}
 
-	/* Style for the ticker buttons */
-	.message-content :global(.ticker-button) {
+	/* Style for the ticker buttons - using specific selectors to override global button styles */
+	button[data-ticker].ticker-button,
+	.message-content button[data-ticker],
+	.chunk-text button[data-ticker] {
+		/* Reset all inherited styles and apply our own */
+		all: unset;
+		display: inline-block;
 		background: var(--ui-bg-element-darker, #2a2a2a);
 		border: 1px solid var(--ui-border, #444);
 		color: var(--text-primary, #fff);
-		padding: 0.4rem 1rem;
+		padding: 0.2rem 0.5rem;
 		border-radius: 0.25rem;
-		font-size: 0.75rem;
+		font-size: 0.8rem; /* Slightly smaller than chat message font size */
 		font-weight: 500;
+		font-family: inherit;
 		cursor: pointer;
 		transition: all 0.2s ease;
 		margin: 0 0.2rem;
 		vertical-align: middle;
-		line-height: 1;
+		line-height: 1.2;
 		text-decoration: none;
-		display: inline-block;
+		box-sizing: border-box;
+		white-space: nowrap;
 	}
 
-	.message-content :global(.ticker-button:hover) {
+	button[data-ticker].ticker-button:hover,
+	.message-content button[data-ticker]:hover,
+	.chunk-text button[data-ticker]:hover {
 		background: var(--ui-bg-element, #333);
 		border-color: var(--ui-accent, #3a8bf7);
 		color: var(--text-primary, #fff);
