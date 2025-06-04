@@ -147,7 +147,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	var plan Plan
 	planParseErr := json.Unmarshal([]byte(resultText), &plan)
 	fmt.Printf("DEBUG: Direct Plan parse - error: %v, stage: %s\n", planParseErr, plan.Stage)
-	if planParseErr == nil {
+	if planParseErr == nil && plan.Stage != "" {
 		fmt.Printf("DEBUG: Plan parsing SUCCESS, returning Plan\n")
 		plan.TokenCounts = TokenCounts{
 			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
@@ -158,14 +158,53 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 		return plan, nil
 	}
 
-	// If direct parsing fails, try to extract JSON block
-	jsonStartIdx := strings.Index(resultText, "{")
-	jsonEndIdx := strings.LastIndex(resultText, "}")
-	fmt.Printf("DEBUG: JSON extraction - start: %d, end: %d\n", jsonStartIdx, jsonEndIdx)
-	if jsonStartIdx != -1 && jsonEndIdx != -1 && jsonEndIdx > jsonStartIdx {
-		jsonBlock = resultText[jsonStartIdx : jsonEndIdx+1]
-		fmt.Printf("DEBUG: Extracted JSON block length: %d\n", len(jsonBlock))
-		fmt.Printf("DEBUG: First 200 chars of extracted JSON: %.200s\n", jsonBlock)
+	// If direct parsing fails, try to extract JSON from markdown code blocks first
+	fmt.Printf("DEBUG: Attempting markdown code block extraction\n")
+
+	// Look for ```json ... ``` blocks
+	jsonCodeBlockStart := strings.Index(resultText, "```json")
+	if jsonCodeBlockStart != -1 {
+		jsonCodeBlockStart += len("```json")
+		// Skip any whitespace after ```json
+		for jsonCodeBlockStart < len(resultText) && (resultText[jsonCodeBlockStart] == '\n' || resultText[jsonCodeBlockStart] == '\r' || resultText[jsonCodeBlockStart] == ' ' || resultText[jsonCodeBlockStart] == '\t') {
+			jsonCodeBlockStart++
+		}
+
+		jsonCodeBlockEnd := strings.Index(resultText[jsonCodeBlockStart:], "```")
+		if jsonCodeBlockEnd != -1 {
+			jsonBlock = resultText[jsonCodeBlockStart : jsonCodeBlockStart+jsonCodeBlockEnd]
+			jsonBlock = strings.TrimSpace(jsonBlock)
+			fmt.Printf("DEBUG: Extracted JSON from markdown code block, length: %d\n", len(jsonBlock))
+			fmt.Printf("DEBUG: First 200 chars of extracted JSON: %.200s\n", jsonBlock)
+		}
+	}
+
+	// If no markdown code block found, try to extract JSON block using { } method
+	if jsonBlock == "" {
+		jsonStartIdx := strings.Index(resultText, "{")
+
+		if jsonStartIdx != -1 {
+			// Try to find the matching closing brace by counting braces
+			braceCount := 0
+			jsonEndIdx := -1
+
+			for i := jsonStartIdx; i < len(resultText); i++ {
+				if resultText[i] == '{' {
+					braceCount++
+				} else if resultText[i] == '}' {
+					braceCount--
+					if braceCount == 0 {
+						jsonEndIdx = i
+						break
+					}
+				}
+			}
+
+			if jsonEndIdx != -1 {
+				jsonBlock = resultText[jsonStartIdx : jsonEndIdx+1]
+				jsonBlock = strings.TrimSpace(jsonBlock)
+			}
+		}
 	}
 
 	// Try unmarshalling the extracted block if it's not empty
@@ -203,7 +242,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	if jsonBlock != "" {
 		blockPlanParseErr := json.Unmarshal([]byte(jsonBlock), &plan)
 		fmt.Printf("DEBUG: Block Plan parse - error: %v, stage: %s\n", blockPlanParseErr, plan.Stage)
-		if blockPlanParseErr == nil {
+		if blockPlanParseErr == nil && plan.Stage != "" {
 			fmt.Printf("DEBUG: Block Plan parsing SUCCESS, returning Plan\n")
 			plan.TokenCounts = TokenCounts{
 				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
@@ -218,7 +257,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	// If parsing failed or no JSON block found, return error
 	fmt.Printf("DEBUG: All parsing attempts failed - resultText length: %d\n", len(resultText))
 	fmt.Printf("DEBUG: resultText (truncated to 500 chars): %.500s\n", resultText)
-	return nil, fmt.Errorf("no valid plan or direct answer found in response: %s", resultText)
+	return nil, fmt.Errorf("no valid plan or direct answer found in response")
 }
 
 func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*FinalResponse, error) {
@@ -291,11 +330,55 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 		return &finalResponse, nil
 	}
 
-	// Try to find JSON block in the text
-	jsonStartIdx := strings.Index(resultText, "{")
-	jsonEndIdx := strings.LastIndex(resultText, "}")
-	if jsonStartIdx != -1 && jsonEndIdx != -1 && jsonEndIdx > jsonStartIdx {
-		jsonBlock := resultText[jsonStartIdx : jsonEndIdx+1]
+	// Try to extract JSON from markdown code blocks first
+	var jsonBlock string
+
+	// Look for ```json ... ``` blocks
+	jsonCodeBlockStart := strings.Index(resultText, "```json")
+	if jsonCodeBlockStart != -1 {
+		jsonCodeBlockStart += len("```json")
+		// Skip any whitespace after ```json
+		for jsonCodeBlockStart < len(resultText) && (resultText[jsonCodeBlockStart] == '\n' || resultText[jsonCodeBlockStart] == '\r' || resultText[jsonCodeBlockStart] == ' ' || resultText[jsonCodeBlockStart] == '\t') {
+			jsonCodeBlockStart++
+		}
+
+		jsonCodeBlockEnd := strings.Index(resultText[jsonCodeBlockStart:], "```")
+		if jsonCodeBlockEnd != -1 {
+			jsonBlock = resultText[jsonCodeBlockStart : jsonCodeBlockStart+jsonCodeBlockEnd]
+			jsonBlock = strings.TrimSpace(jsonBlock)
+		}
+	}
+
+	// If no markdown code block found, try to extract JSON block using { } method
+	if jsonBlock == "" {
+		jsonStartIdx := strings.Index(resultText, "{")
+
+		if jsonStartIdx != -1 {
+			// Try to find the matching closing brace by counting braces
+			braceCount := 0
+			jsonEndIdx := -1
+
+			for i := jsonStartIdx; i < len(resultText); i++ {
+				if resultText[i] == '{' {
+					braceCount++
+				} else if resultText[i] == '}' {
+					braceCount--
+					if braceCount == 0 {
+						jsonEndIdx = i
+						break
+					}
+				}
+			}
+
+			if jsonEndIdx != -1 {
+				jsonBlock = resultText[jsonStartIdx : jsonEndIdx+1]
+				jsonBlock = strings.TrimSpace(jsonBlock)
+			}
+		}
+	}
+
+	// Try parsing the extracted JSON block
+	if jsonBlock != "" {
 		if err := json.Unmarshal([]byte(jsonBlock), &finalResponse); err == nil && len(finalResponse.ContentChunks) > 0 {
 			finalResponse.TokenCounts = TokenCounts{
 				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
