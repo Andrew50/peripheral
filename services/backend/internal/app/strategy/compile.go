@@ -81,6 +81,7 @@ func CompileSpecToSQL(spec Spec) (string, error) {
 SELECT  features.timestamp,
         features.securityid,
         features.ticker,
+        features.close,
         %s
 FROM    features
 %s

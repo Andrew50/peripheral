@@ -19,6 +19,18 @@ export type BacktestRowMessage = {
         data: any;
 };
 
+export type BacktestRowsMessage = {
+        type: 'backtest_rows';
+        strategyId: number;
+        rows: any[];
+};
+
+export type BacktestProgressMessage = {
+        type: 'backtest_progress';
+        strategyId: number;
+        percent: number;
+};
+
 export type BacktestSummaryMessage = {
         type: 'backtest_summary';
         strategyId: number;
@@ -35,6 +47,8 @@ export type StoreRefreshMessage = {
 };
 
 export const storeRefresh = writable<StoreRefreshMessage | null>(null);
+
+export const backtestProgress = writable<BacktestProgressMessage | null>(null);
 
 export type TimeType = 'regular' | 'extended';
 export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
@@ -58,6 +72,7 @@ export const pendingSubscriptions = new Set<string>();
 
 const backtestRowCallbacks: Map<number, ((row: any) => void)[]> = new Map();
 const backtestSummaryCallbacks: Map<number, ((summary: any) => void)[]> = new Map();
+const backtestProgressCallbacks: Map<number, ((p: BacktestProgressMessage) => void)[]> = new Map();
 
 export type SubscriptionRequest = {
 	action: 'subscribe' | 'unsubscribe' | 'replay' | 'pause' | 'play' | 'realtime' | 'speed';
@@ -130,6 +145,17 @@ function connect() {
                         const msg = data as BacktestRowMessage;
                         const cbs = backtestRowCallbacks.get(msg.strategyId);
                         cbs?.forEach((cb) => cb(msg.data));
+                        return;
+                }
+                if (data && data.type === 'backtest_rows') {
+                        const msg = data as BacktestRowsMessage;
+                        const cbs = backtestRowCallbacks.get(msg.strategyId);
+                        cbs?.forEach((cb) => msg.rows.forEach((r) => cb(r)));
+                        return;
+                }
+                if (data && data.type === 'backtest_progress') {
+                        const msg = data as BacktestProgressMessage;
+                        backtestProgress.set(msg);
                         return;
                 }
                 if (data && data.type === 'backtest_summary') {
@@ -205,6 +231,19 @@ export function addBacktestSummaryListener(strategyId: number, cb: (sum: any) =>
                 const i = a.indexOf(cb);
                 if (i !== -1) a.splice(i, 1);
                 if (a.length === 0) backtestSummaryCallbacks.delete(strategyId);
+        };
+}
+
+export function addBacktestProgressListener(strategyId: number, cb: (p: BacktestProgressMessage) => void): () => void {
+        let arr = backtestProgressCallbacks.get(strategyId);
+        if (!arr) { arr = []; backtestProgressCallbacks.set(strategyId, arr); }
+        arr.push(cb);
+        return () => {
+                const a = backtestProgressCallbacks.get(strategyId);
+                if (!a) return;
+                const i = a.indexOf(cb);
+                if (i !== -1) a.splice(i, 1);
+                if (a.length === 0) backtestProgressCallbacks.delete(strategyId);
         };
 }
 

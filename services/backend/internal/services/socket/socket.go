@@ -121,6 +121,20 @@ type BacktestRowMessage struct {
 	Data       map[string]any `json:"data"`
 }
 
+// BacktestRowsMessage batches multiple backtest rows.
+type BacktestRowsMessage struct {
+	Type       string           `json:"type"`
+	StrategyID int              `json:"strategyId"`
+	Rows       []map[string]any `json:"rows"`
+}
+
+// BacktestProgressMessage reports job progress percentage.
+type BacktestProgressMessage struct {
+	Type       string `json:"type"`
+	StrategyID int    `json:"strategyId"`
+	Percent    int    `json:"percent"`
+}
+
 // BacktestSummaryMessage is sent once a backtest completes.
 type BacktestSummaryMessage struct {
 	Type       string         `json:"type"`
@@ -198,6 +212,52 @@ func SendBacktestRow(userID int, strategyID int, row map[string]any) {
 		Type:       "backtest_row",
 		StrategyID: strategyID,
 		Data:       row,
+	}
+	jsonData, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+	if !ok {
+		return
+	}
+	select {
+	case client.send <- jsonData:
+	default:
+	}
+}
+
+// SendBacktestRows sends a batch of backtest rows.
+func SendBacktestRows(userID int, strategyID int, rows []map[string]any) {
+	msg := BacktestRowsMessage{
+		Type:       "backtest_rows",
+		StrategyID: strategyID,
+		Rows:       rows,
+	}
+	jsonData, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+	if !ok {
+		return
+	}
+	select {
+	case client.send <- jsonData:
+	default:
+	}
+}
+
+// SendBacktestProgress sends progress percentage updates for a backtest job.
+func SendBacktestProgress(userID int, strategyID int, pct int) {
+	msg := BacktestProgressMessage{
+		Type:       "backtest_progress",
+		StrategyID: strategyID,
+		Percent:    pct,
 	}
 	jsonData, err := json.Marshal(msg)
 	if err != nil {

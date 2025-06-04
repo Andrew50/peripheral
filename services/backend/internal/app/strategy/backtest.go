@@ -2,7 +2,7 @@ package strategy
 
 import (
 	"backend/internal/data"
-    "backend/internal/services/socket"
+	"backend/internal/services/socket"
 	"context"
 	"database/sql" // <-- Added for sql.NullFloat64
 	"encoding/json"
@@ -18,12 +18,12 @@ import (
 )
 
 type BacktestArgs struct {
-        StrategyID    int   `json:"strategyId"`
-        Securities    []int `json:"securities"`
-        Start         int64 `json:"start"` // Start timestamp in milliseconds
-        End           int64 `json:"end"`   // End timestamp in milliseconds
-        ReturnWindows []int `json:"returnWindows"` // Changed to slice of ints
-        FullResults   bool  `json:"fullResults"`   // New field to control output type
+	StrategyID    int   `json:"strategyId"`
+	Securities    []int `json:"securities"`
+	Start         int64 `json:"start"`         // Start timestamp in milliseconds
+	End           int64 `json:"end"`           // End timestamp in milliseconds
+	ReturnWindows []int `json:"returnWindows"` // Changed to slice of ints
+	FullResults   bool  `json:"fullResults"`   // New field to control output type
 }
 
 // RunBacktest executes a backtest for the given strategy and calculates future returns for multiple windows
@@ -73,91 +73,105 @@ func RunBacktest(conn *data.Conn, userID int, rawArgs json.RawMessage) (any, err
 
 	// *** New approach using CompileSpecToSQL ***
 	// Generate SQL from the spec
-	sqlQuery, err := CompileSpecToSQL(spec) // Renamed 'sql' to 'sqlQuery' to avoid conflict
+	sqlQuery, err := CompileSpecToSQL(spec)
 	if err != nil {
 		return nil, fmt.Errorf("error compiling SQL for backtest: %v", err)
 	}
-	////fmt.Println("Generated SQL:", sqlQuery)
 
-	// Execute the query
-	ctx := context.Background()
-	rows, err := conn.DB.Query(ctx, sqlQuery)
-	if err != nil {
-		// Handle potential query errors (syntax errors, connection issues, etc.)
-		return nil, fmt.Errorf("error executing backtest query: %v", err)
+	// Append return columns using window functions if requested
+	if len(args.ReturnWindows) > 0 {
+		var parts []string
+		for _, w := range args.ReturnWindows {
+			col := fmt.Sprintf("ROUND(100.0 * (LEAD(close,%d) OVER w - close) / close, 4) AS \"%d Day Return %%\"", w, w)
+			parts = append(parts, col)
+		}
+		sqlQuery = fmt.Sprintf(`WITH base AS (%s)
+SELECT base.*, %s
+FROM base
+WINDOW w AS (PARTITION BY securityid ORDER BY timestamp)`, sqlQuery, strings.Join(parts, ",\n       "))
 	}
-	defer rows.Close() // Ensure rows are closed even if ScanRows errors
 
-	// Prepare to stream results as they are scanned
-	fieldDescriptions := rows.FieldDescriptions()
-	columns := make([]string, len(fieldDescriptions))
-	for i, fd := range fieldDescriptions {
-		columns[i] = string(fd.Name)
+	ctx := context.Background()
+
+	// Calculate total rows for progress tracking
+	var totalRows int
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM (%s) AS c", sqlQuery)
+	if err := conn.DB.QueryRow(ctx, countQuery).Scan(&totalRows); err != nil {
+		return nil, fmt.Errorf("error counting rows: %v", err)
+	}
+
+	// Create a backtest job record
+	var jobID int
+	err = conn.DB.QueryRow(ctx, `INSERT INTO backtest_jobs(user_id, strategy_id, rows_total, rows_done)
+                                 VALUES ($1,$2,$3,0) RETURNING job_id`, userID, args.StrategyID, totalRows).Scan(&jobID)
+	if err != nil {
+		return nil, fmt.Errorf("error creating backtest job: %v", err)
+	}
+
+	tx, err := conn.DB.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, "DECLARE mycur CURSOR WITH HOLD FOR "+sqlQuery); err != nil {
+		return nil, err
 	}
 
 	var records []map[string]any
-	var returnQuery string
-	if len(args.ReturnWindows) > 0 {
-		returnQuery = `
-            WITH start_data AS (
-                SELECT timestamp, close
-                FROM ohlcv_1d
-                WHERE securityid = $1 AND timestamp = $2
-                LIMIT 1
-            ), target_date AS (
-                SELECT ($2::timestamp + $3 * interval '1 day')::date AS date
-            ), future_price AS (
-                SELECT close
-                FROM ohlcv_1d
-                WHERE securityid = $1
-                  AND timestamp::date >= (SELECT date FROM target_date)
-                ORDER BY timestamp ASC
-                LIMIT 1
-            )
-            SELECT
-                sd.close AS start_close,
-                fp.close AS end_close
-            FROM start_data sd
-            CROSS JOIN future_price fp;`
+	var rowBuffer []map[string]any
+	lastFlush := time.Now()
+	lastProgress := time.Now()
+	rowsDone := 0
+
+	for {
+		r, err := tx.Query(ctx, "FETCH 10000 FROM mycur")
+		if err != nil {
+			return nil, err
+		}
+		batch, err := ScanRows(r)
+		r.Close()
+		if err != nil {
+			return nil, err
+		}
+		if len(batch) == 0 {
+			break
+		}
+		rowsDone += len(batch)
+		records = append(records, batch...)
+		rowBuffer = append(rowBuffer, batch...)
+
+		if time.Since(lastFlush) > 100*time.Millisecond || len(rowBuffer) >= 100 {
+			socket.SendBacktestRows(userID, args.StrategyID, rowBuffer)
+			rowBuffer = rowBuffer[:0]
+			lastFlush = time.Now()
+		}
+
+		if time.Since(lastProgress) > 500*time.Millisecond || rowsDone*100/totalRows >= 1 {
+			pct := int(float64(rowsDone) / float64(totalRows) * 100)
+			socket.SendBacktestProgress(userID, args.StrategyID, pct)
+			lastProgress = time.Now()
+		}
+
+		if _, err := tx.Exec(ctx, "UPDATE backtest_jobs SET rows_done = rows_done + $1, updated_at=now() WHERE job_id=$2", len(batch), jobID); err != nil {
+			return nil, err
+		}
+
+		if len(batch) < 10000 {
+			break
+		}
 	}
 
-       for rows.Next() {
-               values := make([]any, len(columns))
-               valuePtrs := make([]any, len(columns))
-               for i := range values {
-                       valuePtrs[i] = &values[i]
-               }
-               if err := rows.Scan(valuePtrs...); err != nil {
-                       return nil, fmt.Errorf("error scanning row: %v", err)
-               }
-               rowMap := make(map[string]any)
-               for i, col := range columns {
-                       rowMap[col] = values[i]
-               }
+	if len(rowBuffer) > 0 {
+		socket.SendBacktestRows(userID, args.StrategyID, rowBuffer)
+	}
 
-               // Extract timestamp and convert to milliseconds
-               var tsMs int64
-               if ts, ok := rowMap["timestamp"].(time.Time); ok {
-                       tsMs = ts.UnixMilli()
-                       rowMap["timestamp"] = tsMs
-               }
-
-               // Skip rows before the requested start time
-               if args.Start > 0 && tsMs < args.Start {
-                       continue
-               }
-               // Stop once we pass the end time
-               if args.End > 0 && tsMs > args.End {
-                       break
-               }
-
-               if len(args.ReturnWindows) > 0 {
-                       calculateReturnColumns(ctx, conn, rowMap, returnQuery, args.ReturnWindows)
-               }
-
-               records = append(records, rowMap)
-               socket.SendBacktestRow(userID, args.StrategyID, rowMap)
-       }
+	if _, err := tx.Exec(ctx, "CLOSE mycur"); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating over rows: %v", err)

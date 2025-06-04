@@ -1,4 +1,4 @@
-import { socket, subscribe, unsubscribe, activeChannels, subscribeSECFilings, addBacktestRowListener, addBacktestSummaryListener } from './socket'
+import { socket, subscribe, unsubscribe, activeChannels, subscribeSECFilings, addBacktestRowListener, addBacktestSummaryListener, addBacktestProgressListener } from './socket'
 import type { SubscriptionRequest, StreamCallback } from './socket'
 
 import { DateTime } from 'luxon';
@@ -199,6 +199,6 @@ export function releaseGlobalSECFilingsStream(callback: StreamCallback) {
         releaseStream(channelName, callback);
 }
 
-export { addBacktestRowListener, addBacktestSummaryListener };
+export { addBacktestRowListener, addBacktestSummaryListener, addBacktestProgressListener };
 // /streamInterface.ts
 
