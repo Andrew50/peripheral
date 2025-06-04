@@ -58,8 +58,6 @@
 	let pollInterval: ReturnType<typeof setInterval> | null = null;
 	let pollAttempts = 0;
 	let maxPollAttempts = 3;
-	// Backtest mode state
-	let isBacktestMode = false;
 
 	// State for table expansion
 	let tableExpansionStates: { [key: string]: boolean } = {};
@@ -488,11 +486,6 @@
 		handleSubmit();
 	}
 
-	// Function to toggle backtest mode
-	function toggleBacktestMode() {
-		isBacktestMode = !isBacktestMode;
-	}
-
 	async function handleSubmit() {
 		if (!$inputValue.trim() || isLoading) return;
 		
@@ -539,8 +532,8 @@
 			await tick(); // Wait for DOM update
 			adjustTextareaHeight(); // Reset height after clearing input and waiting for tick
 
-			// Prepend if backtest mode is active
-			const finalQuery = isBacktestMode ? `[RUN BACKTEST] ${currentProcessingQuery}` : currentProcessingQuery;
+			// Remove backtest mode logic - use query directly without prepending
+			const finalQuery = currentProcessingQuery;
 			const currentActiveChart = $activeChartInstance; // Get current active chart instance
 			
 			try {
@@ -1164,17 +1157,6 @@
 		  </div>
 		{/if}
 
-		<div class="input-actions">
-			<button
-				class="action-toggle-button {isBacktestMode ? 'active' : ''}"
-				on:click={toggleBacktestMode}
-				aria-label="Toggle Backtest Mode"
-				title="Toggle Backtest Mode"
-			>
-				Backtest
-			</button>
-		</div>
-
 		<div class="input-area-wrapper">
 			{#if $contextItems.length > 0}
 				<div class="context-chips">
@@ -1208,7 +1190,7 @@
 			<div class="input-field-container">
 				<textarea
 					class="chat-input"
-					placeholder="Ask about anything..."
+					placeholder="Ask anything..."
 					bind:value={$inputValue}
 					bind:this={queryInput}
 					rows="1"
