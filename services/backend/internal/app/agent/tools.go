@@ -199,7 +199,7 @@ var (
 			StatusMessage: "Adding item to watchlist...",
 		},
 		//singles
-		"getPrevClose": {
+		/*"getPrevClose": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getPrevClose",
 				Description: "Retrieves the previous closing price for a specified security ticker symbol. This also gets the most recent price if the market is closed or in after hours.",
@@ -216,7 +216,7 @@ var (
 			},
 			Function:      wrapWithContext(helpers.GetPrevClose),
 			StatusMessage: "Getting previous closing price...",
-		},
+		},*/ // We can get prev close using daily snapshot
 		"getLastPrice": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getLastPrice",
@@ -335,9 +335,9 @@ var (
 			Function:      wrapWithContext(chart.UpdateHorizontalLine),
 			StatusMessage: "Updating horizontal line...",
 		},
-		"getChartEvents": {
+		"getStockEvents": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getChartEvents",
+				Name:        "getStockEvents",
 				Description: "Retrieves splits, dividends and possibly SEC filings for a specified security ID within a date range",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
@@ -493,23 +493,23 @@ var (
 			Function:      strategy.RunBacktest,
 			StatusMessage: "Running backtest...",
 		},
-		"getTickerDailySnapshot": {
+		"getDailySnapshot": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getTickerDailySnapshot",
-				Description: "Get the current price, change, percent change, volume, vwap price, and open, high, low and close for a specified security.",
+				Name:        "getDailySnapshot",
+				Description: "Get the current price, change, volume, OHLC, previous close for a specified stock.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"securityId": {
 							Type:        genai.TypeInteger,
-							Description: "The security ID to get the information for.",
+							Description: "The security ID of the stock.",
 						},
 					},
 					Required: []string{"securityId"},
 				},
 			},
 			Function:      wrapWithContext(helpers.GetTickerDailySnapshot),
-			StatusMessage: "Getting daily market data...",
+			StatusMessage: "Getting market data...",
 		},
 		"getAllTickerSnapshots": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
