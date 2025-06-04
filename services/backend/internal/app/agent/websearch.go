@@ -366,7 +366,7 @@ func updateTwitterCache(conn *data.Conn, handleToData map[string]TwitterCacheDat
 }
 
 // mergeTweets merges existing and new tweets, avoiding duplicates and sorting by timestamp
-func mergeTweets(existing, new []LatestTweetsResult) []LatestTweetsResult {
+func mergeTweets(existing, newTweets []LatestTweetsResult) []LatestTweetsResult {
 	// Create a map to track existing tweets by URL to avoid duplicates
 	tweetMap := make(map[string]LatestTweetsResult)
 
@@ -376,7 +376,7 @@ func mergeTweets(existing, new []LatestTweetsResult) []LatestTweetsResult {
 	}
 
 	// Add new tweets, overwriting if URL already exists (newer data)
-	for _, tweet := range new {
+	for _, tweet := range newTweets {
 		tweetMap[tweet.URL] = tweet
 	}
 

@@ -139,9 +139,8 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 				TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
 			}
 			return directAns, nil
-		} else {
-			fmt.Printf("DEBUG: DirectAnswer has empty content chunks, skipping\n")
 		}
+		fmt.Printf("DEBUG: DirectAnswer has empty content chunks, skipping\n")
 	}
 
 	var plan Plan
@@ -231,9 +230,8 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 					TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
 				}
 				return directAns, nil
-			} else {
-				fmt.Printf("DEBUG: Block DirectAnswer has empty content chunks, skipping\n")
 			}
+			fmt.Printf("DEBUG: Block DirectAnswer has empty content chunks, skipping\n")
 		}
 	}
 

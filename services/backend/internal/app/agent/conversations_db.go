@@ -373,10 +373,10 @@ func findLastSpace(s string) int {
 
 // GetMessageContextItems retrieves context items from a specific message
 func GetMessageContextItems(ctx context.Context, conn *data.Conn, conversationID string, messageOrder int) ([]map[string]interface{}, error) {
-	query_sql := `SELECT context_items FROM conversation_messages WHERE conversation_id = $1 AND message_order = $2 AND archived = FALSE`
+	querySQL := `SELECT context_items FROM conversation_messages WHERE conversation_id = $1 AND message_order = $2 AND archived = FALSE`
 
 	var contextItemsJSON []byte
-	err := conn.DB.QueryRow(ctx, query_sql, conversationID, messageOrder).Scan(&contextItemsJSON)
+	err := conn.DB.QueryRow(ctx, querySQL, conversationID, messageOrder).Scan(&contextItemsJSON)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return []map[string]interface{}{}, nil // No context items
@@ -447,7 +447,7 @@ func UpdatePendingMessageToCompleted(ctx context.Context, conn *data.Conn, userI
 	}
 
 	// Update the database first
-	query_sql := `
+	querySQL := `
 		UPDATE conversation_messages 
 		SET content_chunks = $1, function_calls = $2, tool_results = $3, 
 			suggested_queries = $4, token_count = $5, completed_at = $6, status = $7
@@ -460,7 +460,7 @@ func UpdatePendingMessageToCompleted(ctx context.Context, conn *data.Conn, userI
 	suggestedQueriesJSON, _ := json.Marshal(suggestedQueries)
 
 	now := time.Now()
-	result, err := conn.DB.Exec(ctx, query_sql,
+	result, err := conn.DB.Exec(ctx, querySQL,
 		contentChunksJSON,
 		functionCallsJSON,
 		toolResultsJSON,
@@ -514,7 +514,7 @@ func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *da
 	}
 
 	// Update the database
-	query_sql := `
+	querySQL := `
 		UPDATE conversation_messages 
 		SET content_chunks = $1, function_calls = $2, tool_results = $3, 
 			suggested_queries = $4, token_count = $5, completed_at = $6, status = $7
@@ -527,7 +527,7 @@ func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *da
 	suggestedQueriesJSON, _ := json.Marshal(suggestedQueries)
 
 	now := time.Now()
-	result, err := conn.DB.Exec(ctx, query_sql,
+	result, err := conn.DB.Exec(ctx, querySQL,
 		contentChunksJSON,
 		functionCallsJSON,
 		toolResultsJSON,
@@ -559,11 +559,11 @@ func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *da
 // DeletePendingMessageInConversation deletes a pending message when a request is cancelled or fails
 func DeletePendingMessageInConversation(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string) error {
 	// Delete the pending message from database
-	query_sql := `
+	querySQL := `
 		DELETE FROM conversation_messages 
 		WHERE conversation_id = $1 AND query = $2 AND status = 'pending'`
 
-	result, err := conn.DB.Exec(ctx, query_sql, conversationID, query)
+	result, err := conn.DB.Exec(ctx, querySQL, conversationID, query)
 	if err != nil {
 		return fmt.Errorf("failed to delete pending message: %w", err)
 	}
@@ -596,13 +596,13 @@ func DeletePendingMessageInConversation(ctx context.Context, conn *data.Conn, us
 // MarkPendingMessageAsError marks a pending message as error status instead of deleting it
 func MarkPendingMessageAsError(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, errorMessage string) error {
 	// Update the database to mark as error
-	query_sql := `
+	querySQL := `
 		UPDATE conversation_messages 
 		SET response_text = $1, completed_at = $2, status = $3
 		WHERE conversation_id = $4 AND query = $5 AND status = 'pending'`
 
 	now := time.Now()
-	result, err := conn.DB.Exec(ctx, query_sql,
+	result, err := conn.DB.Exec(ctx, querySQL,
 		fmt.Sprintf("Error: %s", errorMessage),
 		now,
 		"error",
@@ -658,8 +658,8 @@ func FindMessageToEdit(ctx context.Context, conn *data.Conn, conversationID stri
 	var foundOrder int
 	var foundQuery string
 
-	query_sql := `SELECT message_order, query FROM conversation_messages WHERE conversation_id = $1 AND message_id = $2 AND archived = FALSE`
-	err := conn.DB.QueryRow(ctx, query_sql, conversationID, messageID).Scan(&foundOrder, &foundQuery)
+	querySQL := `SELECT message_order, query FROM conversation_messages WHERE conversation_id = $1 AND message_id = $2 AND archived = FALSE`
+	err := conn.DB.QueryRow(ctx, querySQL, conversationID, messageID).Scan(&foundOrder, &foundQuery)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return 0, "", fmt.Errorf("message not found")
@@ -672,9 +672,9 @@ func FindMessageToEdit(ctx context.Context, conn *data.Conn, conversationID stri
 
 // PruneMessagesAfterOrder archives all messages after the specified order instead of deleting them
 func PruneMessagesAfterOrder(ctx context.Context, conn *data.Conn, conversationID string, messageOrder int) error {
-	query_sql := `UPDATE conversation_messages SET archived = TRUE WHERE conversation_id = $1 AND message_order >= $2 AND archived = FALSE`
+	querySQL := `UPDATE conversation_messages SET archived = TRUE WHERE conversation_id = $1 AND message_order >= $2 AND archived = FALSE`
 
-	_, err := conn.DB.Exec(ctx, query_sql, conversationID, messageOrder)
+	_, err := conn.DB.Exec(ctx, querySQL, conversationID, messageOrder)
 	if err != nil {
 		return fmt.Errorf("failed to archive messages: %w", err)
 	}
@@ -684,14 +684,14 @@ func PruneMessagesAfterOrder(ctx context.Context, conn *data.Conn, conversationI
 
 // UpdateMessageContentAndStatus updates a message's content and status
 func UpdateMessageContentAndStatus(ctx context.Context, conn *data.Conn, conversationID string, messageOrder int, newContent string, status string) error {
-	query_sql := `
+	querySQL := `
 		UPDATE conversation_messages 
 		SET query = $1, status = $2, completed_at = NULL, response_text = '', 
 		    content_chunks = '[]', function_calls = '[]', tool_results = '[]', 
 		    suggested_queries = '[]', citations = '[]', token_count = 0
 		WHERE conversation_id = $3 AND message_order = $4`
 
-	result, err := conn.DB.Exec(ctx, query_sql, newContent, status, conversationID, messageOrder)
+	result, err := conn.DB.Exec(ctx, querySQL, newContent, status, conversationID, messageOrder)
 	if err != nil {
 		return fmt.Errorf("failed to update message: %w", err)
 	}
@@ -706,7 +706,7 @@ func UpdateMessageContentAndStatus(ctx context.Context, conn *data.Conn, convers
 
 // UpdateConversationAfterEdit updates conversation metadata after editing
 func UpdateConversationAfterEdit(ctx context.Context, conn *data.Conn, conversationID string) error {
-	query_sql := `
+	querySQL := `
 		UPDATE conversations 
 		SET message_count = (
 			SELECT COUNT(*) FROM conversation_messages 
@@ -719,7 +719,7 @@ func UpdateConversationAfterEdit(ctx context.Context, conn *data.Conn, conversat
 		updated_at = $2
 		WHERE conversation_id = $1`
 
-	_, err := conn.DB.Exec(ctx, query_sql, conversationID, time.Now())
+	_, err := conn.DB.Exec(ctx, querySQL, conversationID, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to update conversation metadata: %w", err)
 	}
@@ -733,12 +733,12 @@ func ValidateMessageForEdit(ctx context.Context, conn *data.Conn, conversationID
 	var query, status string
 	var completedAt sql.NullTime
 
-	query_sql := `
+	querySQL := `
 		SELECT query, status, completed_at 
 		FROM conversation_messages 
 		WHERE conversation_id = $1 AND message_order = $2 AND archived = FALSE`
 
-	err := conn.DB.QueryRow(ctx, query_sql, conversationID, messageOrder).Scan(&query, &status, &completedAt)
+	err := conn.DB.QueryRow(ctx, querySQL, conversationID, messageOrder).Scan(&query, &status, &completedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return fmt.Errorf("message not found")

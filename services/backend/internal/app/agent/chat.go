@@ -235,7 +235,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 }
 
 // GetUserConversation gets the active conversation
-func GetUserConversation(conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
+func GetUserConversation(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
 	return GetActiveConversationWithCache(context.Background(), conn, userID)
 }
 
