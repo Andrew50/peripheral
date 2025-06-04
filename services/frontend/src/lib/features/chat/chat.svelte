@@ -915,6 +915,57 @@
 		editingContent = '';
 	}
 
+	// Function to copy message content to clipboard
+	async function copyMessageToClipboard(message: Message) {
+		try {
+			let textToCopy = '';
+			
+			if (message.contentChunks && message.contentChunks.length > 0) {
+				// For messages with content chunks, extract text from each chunk
+				textToCopy = message.contentChunks.map(chunk => {
+					if (chunk.type === 'text') {
+						return typeof chunk.content === 'string' ? chunk.content : String(chunk.content);
+					} else if (chunk.type === 'table' && isTableData(chunk.content)) {
+						// For tables, create a simple text representation
+						const tableData = chunk.content;
+						let tableText = '';
+						if (tableData.caption) {
+							tableText += tableData.caption + '\n\n';
+						}
+						// Add headers
+						tableText += tableData.headers.join('\t') + '\n';
+						// Add rows
+						tableText += tableData.rows.map(row => row.join('\t')).join('\n');
+						return tableText;
+					}
+					return '';
+				}).join('\n\n');
+			} else {
+				// For simple text messages
+				textToCopy = message.content;
+			}
+			
+			await navigator.clipboard.writeText(textToCopy);
+			
+			// Optional: Show a brief success indicator
+			// You could add a toast notification here if desired
+			
+		} catch (error) {
+			console.error('Failed to copy message to clipboard:', error);
+			// Fallback for older browsers
+			try {
+				const textArea = document.createElement('textarea');
+				textArea.value = message.content;
+				document.body.appendChild(textArea);
+				textArea.select();
+				document.execCommand('copy');
+				document.body.removeChild(textArea);
+			} catch (fallbackError) {
+				console.error('Fallback copy method also failed:', fallbackError);
+			}
+		}
+	}
+
 	async function saveMessageEdit() {
 		if (!editingMessageId || !editingContent.trim()) {
 			return;
@@ -1261,7 +1312,15 @@
 									<p>{@html parseMarkdown(message.content)}</p>
 								{/if}
 							</div>
-
+							{#if message.sender === 'assistant'}
+								<div class="message-actions">
+									<button class="copy-btn" on:click={() => copyMessageToClipboard(message)}>
+										<svg viewBox="0 0 24 24" width="14" height="14">
+											<path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" fill="currentColor" />
+										</svg>
+									</button>
+								</div>
+							{/if}
 							{#if message.suggestedQueries && message.suggestedQueries.length > 0}
 								<div class="suggested-queries">
 									{#each message.suggestedQueries as query}
@@ -1279,7 +1338,12 @@
 
 					<!-- Edit button for user messages - outside the message div -->
 					{#if message.sender === 'user' && editingMessageId !== message.message_id}
-						<div class="message-edit-button">
+						<div class="message-actions">
+							<button class="copy-btn" on:click={() => copyMessageToClipboard(message)}>
+								<svg viewBox="0 0 24 24" width="14" height="14">
+									<path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" fill="currentColor" />
+								</svg>
+							</button>
 							<button class="edit-btn" on:click={() => startEditing(message)}>
 								<svg viewBox="0 0 24 24" width="14" height="14">
 									<path d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z" fill="currentColor" />
