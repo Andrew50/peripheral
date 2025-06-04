@@ -88,11 +88,15 @@ export type QueryResponse = {
 	content_chunks?: ContentChunk[];
 	suggestions?: string[];
 	conversation_id?: string;
+	message_id?: string;
 };
 
 // Conversation history type
 export type ConversationData = {
+	conversation_id?: string;       // Active conversation ID
+	title?: string;                 // Conversation title
 	messages: Array<{
+		message_id?: string;        // Backend message ID (UUID)
 		query: string;
 		content_chunks?: ContentChunk[];
 		response_text: string;
@@ -107,7 +111,7 @@ export type ConversationData = {
 
 // Message type for chat history
 export type Message = {
-	id: string;
+	message_id: string;                     // Use backend message_id directly
 	content: string;
 	sender: 'user' | 'assistant' | 'system';
 	timestamp: Date;
@@ -118,7 +122,7 @@ export type Message = {
 	contextItems?: (Instance | FilingContext)[];
 	status?: string;        // "pending", "completed", "error"
 	completedAt?: Date;     // When the response was completed
-	isNewResponse?: boolean; // Flag to indicate if this is a new unseen response
+	isNewResponse?: boolean; // Flag to indicate this is a new response since last seen
 };
 
 // Type for suggested queries response
