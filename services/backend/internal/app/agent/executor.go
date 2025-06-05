@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sync/atomic"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -19,6 +20,7 @@ import (
 
 // ExecuteResult represents the result of executing a function
 type ExecuteResult struct {
+	FunctionID   int64       `json:"fn_id"`
 	FunctionName string      `json:"fn"`
 	Result       interface{} `json:"res"`
 	Error        string      `json:"err,omitempty"`
@@ -27,13 +29,14 @@ type ExecuteResult struct {
 
 // Executor manages the execution of tasks in a queue
 type Executor struct {
-	conn       *data.Conn
-	userID     int
-	tools      map[string]Tool
-	log        *zap.Logger
-	tracer     trace.Tracer
-	maxWorkers int
-	limiter    chan struct{}
+	conn            *data.Conn
+	userID          int
+	tools           map[string]Tool
+	log             *zap.Logger
+	tracer          trace.Tracer
+	maxWorkers      int
+	limiter         chan struct{}
+	functionCounter int64 // Thread-safe counter for result IDs
 }
 
 // NewExecutor creates a new Executor
@@ -42,13 +45,14 @@ func NewExecutor(conn *data.Conn, userID int, maxWorkers int, lg *zap.Logger) *E
 		maxWorkers = 3
 	}
 	return &Executor{
-		conn:       conn,
-		userID:     userID,
-		tools:      Tools,
-		log:        lg,
-		tracer:     otel.Tracer("agent-executor"),
-		maxWorkers: maxWorkers,
-		limiter:    make(chan struct{}, maxWorkers),
+		conn:            conn,
+		userID:          userID,
+		tools:           Tools,
+		log:             lg,
+		tracer:          otel.Tracer("agent-executor"),
+		maxWorkers:      maxWorkers,
+		limiter:         make(chan struct{}, maxWorkers),
+		functionCounter: 0,
 	}
 }
 
@@ -94,14 +98,27 @@ func (e *Executor) Execute(ctx context.Context, functionCalls []FunctionCall, pa
 }
 
 func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (ExecuteResult, error) {
+	// Generate unique result ID using atomic increment
+	functionID := atomic.AddInt64(&e.functionCounter, 1)
+
 	tool, exists := e.tools[fc.Name]
 	if !exists {
-		return ExecuteResult{FunctionName: fc.Name, Error: fmt.Sprintf("function '%s' not found", fc.Name), Args: fc.Args}, nil
+		return ExecuteResult{
+			FunctionID:   functionID,
+			FunctionName: fc.Name,
+			Error:        fmt.Sprintf("function '%s' not found", fc.Name),
+			Args:         fc.Args,
+		}, nil
 	}
 
 	// Check if context is cancelled before executing
 	if ctx.Err() != nil {
-		return ExecuteResult{FunctionName: fc.Name, Error: "request was cancelled", Args: fc.Args}, nil
+		return ExecuteResult{
+			FunctionID:   functionID,
+			FunctionName: fc.Name,
+			Error:        "request was cancelled",
+			Args:         fc.Args,
+		}, nil
 	}
 
 	var argsMap map[string]interface{}
@@ -116,9 +133,19 @@ func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (Execut
 	if err != nil {
 		span.RecordError(err)
 		e.log.Warn("Error executing function", zap.String("function", fc.Name), zap.Error(err))
-		return ExecuteResult{FunctionName: fc.Name, Error: err.Error(), Args: argsMap}, nil
+		return ExecuteResult{
+			FunctionID:   functionID,
+			FunctionName: fc.Name,
+			Error:        err.Error(),
+			Args:         argsMap,
+		}, nil
 	}
-	return ExecuteResult{FunctionName: fc.Name, Result: result, Args: argsMap}, nil
+	return ExecuteResult{
+		FunctionID:   functionID,
+		FunctionName: fc.Name,
+		Result:       result,
+		Args:         argsMap,
+	}, nil
 }
 
 // formatStatusMessage replaces placeholders like {key} with values from the args map.
