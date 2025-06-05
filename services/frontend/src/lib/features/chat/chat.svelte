@@ -739,7 +739,8 @@
 		return typeof content === 'object' && 
 			content !== null && 
 			Array.isArray(content.headers) && 
-			Array.isArray(content.rows);
+			Array.isArray(content.rows) &&
+			content.rows.every((row: any) => Array.isArray(row)); // Ensure each row is also an array
 	}
 	
 	// Function to get table data safely
@@ -833,6 +834,10 @@
 
 		// Sort the rows
 		tableData.rows.sort((a, b) => {
+			// Skip sorting if rows are not arrays
+			if (!Array.isArray(a) || !Array.isArray(b)) {
+				return 0;
+			}
 			const valA = a[columnIndex];
 			const valB = b[columnIndex];
 
@@ -972,9 +977,13 @@
 						// Add headers
 						tableText += tableData.headers.join('\t') + '\n';
 						// Add rows (also clean ticker formatting from table cells)
-						tableText += tableData.rows.map(row => 
-							row.map(cell => cleanHtmlContent(String(cell))).join('\t')
-						).join('\n');
+						tableText += tableData.rows.map(row => {
+							if (Array.isArray(row)) {
+								return row.map(cell => cleanHtmlContent(String(cell))).join('\t');
+							} else {
+								return cleanHtmlContent(String(row));
+							}
+						}).join('\n');
 						return tableText;
 					}
 					return '';
@@ -1341,9 +1350,13 @@
 																		{#each tableData.rows as row, rowIndex}
 																			{#if rowIndex < 5 || isExpanded}
 																			<tr>
-																				{#each row as cell}
-																				<td>{@html parseMarkdown(typeof cell === 'string' ? cell : String(cell))}</td>
-																				{/each}
+																				{#if Array.isArray(row)}
+																					{#each row as cell}
+																					<td>{@html parseMarkdown(typeof cell === 'string' ? cell : String(cell))}</td>
+																					{/each}
+																				{:else}
+																					<td colspan="{tableData.headers.length}">Invalid row data: {typeof row === 'string' ? row : String(row)}</td>
+																				{/if}
 																			</tr>
 																			{/if}
 																		{/each}
