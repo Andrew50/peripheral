@@ -22,7 +22,7 @@ type WebSearchArgs struct {
 	Query string `json:"query"`
 }
 type WebSearchResult struct {
-	ResultText string   `json:"result_text"`
+	ResultText string   `json:"result"`
 	Citations  []string `json:"citations,omitempty"`
 }
 
