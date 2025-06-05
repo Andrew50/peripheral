@@ -79,7 +79,7 @@ func NewColumnFilter(columns []string) *ColumnFilter {
 }
 
 // AppendToResponse adds a bar's data to the columnar response arrays
-func (cf *ColumnFilter) AppendToResponse(response *GetOHLCVDataResponse, timestamp time.Time, open, high, low, close, volume float64) {
+func (cf *ColumnFilter) AppendToResponse(response *GetOHLCVDataResponse, timestamp time.Time, open, high, low, closePrice, volume float64) {
 	response.T = append(response.T, float64(timestamp.Unix()))
 
 	if cf.includeOpen {
@@ -92,14 +92,14 @@ func (cf *ColumnFilter) AppendToResponse(response *GetOHLCVDataResponse, timesta
 		response.L = append(response.L, low)
 	}
 	if cf.includeClose {
-		response.C = append(response.C, close)
+		response.C = append(response.C, closePrice)
 	}
 	if cf.includeVolume {
 		response.V = append(response.V, volume)
 	}
 }
 
-func GetOHLCVData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+func GetOHLCVData(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetOHLCVDataArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -434,3 +434,4 @@ func buildColumnarAggregation(
 
 	return nil
 }
+func RunIntradayAgent()
