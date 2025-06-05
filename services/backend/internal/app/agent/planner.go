@@ -40,6 +40,39 @@ type TokenCounts struct {
 	TotalTokenCount    int32 `json:"total_token_count,omitempty"`
 }
 
+func replySchema() *genai.Schema {
+	return &genai.Schema{
+		Type:     genai.TypeObject,
+		Required: []string{"content_chunks", "suggestions"},
+		Properties: map[string]*genai.Schema{
+			"content_chunks": {
+				Type:  genai.TypeArray,
+				Items: contentChunkSchema(),
+			},
+			"suggestions": {
+				Type:  genai.TypeArray,
+				Items: &genai.Schema{Type: genai.TypeString},
+			},
+		},
+		Title:       "AtlantisReply",
+		Description: "A valid Atlantis agent response",
+	}
+}
+
+func contentChunkSchema() *genai.Schema {
+	return &genai.Schema{
+		Type:     genai.TypeObject,
+		Required: []string{"type", "content"},
+		Properties: map[string]*genai.Schema{
+			"type": {
+				Type: genai.TypeString,
+				Enum: []string{"text", "table", "backtest_table"},
+			},
+			"content": {}, // allow any type - no Type restriction
+		},
+	}
+}
+
 const planningModel = "gemini-2.5-flash-preview-05-20"
 const finalResponseModel = "gemini-2.5-flash-preview-05-20"
 
@@ -82,6 +115,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 			IncludeThoughts: true,
 			ThinkingBudget:  &thinkingBudget,
 		},
+		ResponseMIMEType: "application/json",
 	}
 	fmt.Println("\n\nprompt", prompt)
 	result, err := client.Models.GenerateContent(ctx, planningModel, genai.Text(prompt), config)
@@ -285,6 +319,8 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 			IncludeThoughts: true,
 			ThinkingBudget:  &thinkingBudget,
 		},
+		ResponseMIMEType: "application/json",
+		ResponseSchema:   replySchema(),
 	}
 
 	result, err := client.Models.GenerateContent(ctx, finalResponseModel, genai.Text(prompt), config)
@@ -311,7 +347,7 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 		}
 	}
 	resultText := strings.TrimSpace(frSB.String())
-
+	fmt.Println("resultText", resultText)
 	// Try to parse as JSON
 	var finalResponse FinalResponse
 
