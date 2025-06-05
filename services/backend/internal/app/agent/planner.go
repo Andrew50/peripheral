@@ -16,6 +16,13 @@ type DirectAnswer struct {
 	Suggestions   []string       `json:"suggestions,omitempty"`
 	TokenCounts   TokenCounts    `json:"token_counts,omitempty"`
 }
+
+// ContentChunk represents a piece of content in the response sequence
+type ContentChunk struct {
+	Type    string      `json:"type"`    // "text" or "table" (or others later, e.g., "image")
+	Content interface{} `json:"content"` // string for "text", TableData for "table"
+}
+
 type Round struct {
 	Parallel bool           `json:"parallel"`
 	Calls    []FunctionCall `json:"calls"`
@@ -60,16 +67,87 @@ func replySchema() *genai.Schema {
 }
 
 func contentChunkSchema() *genai.Schema {
-	return &genai.Schema{
+	// helper: any scalar allowed in a table cell
+	scalar := &genai.Schema{
+		AnyOf: []*genai.Schema{
+			{Type: genai.TypeString},
+			{Type: genai.TypeNumber},
+			{Type: genai.TypeBoolean},
+		},
+	}
+
+	// text chunk
+	textSchema := &genai.Schema{
 		Type:     genai.TypeObject,
 		Required: []string{"type", "content"},
 		Properties: map[string]*genai.Schema{
-			"type": {
-				Type: genai.TypeString,
-				Enum: []string{"text", "table", "backtest_table"},
-			},
-			"content": {}, // allow any type - no Type restriction
+			"type":    {Type: genai.TypeString, Enum: []string{"text"}},
+			"content": {Type: genai.TypeString},
 		},
+	}
+
+	// table chunk
+	tableSchema := &genai.Schema{
+		Type:     genai.TypeObject,
+		Required: []string{"type", "content"},
+		Properties: map[string]*genai.Schema{
+			"type": {Type: genai.TypeString, Enum: []string{"table"}},
+			"content": {
+				Type:     genai.TypeObject,
+				Required: []string{"headers", "rows"},
+				Properties: map[string]*genai.Schema{
+					"caption": {Type: genai.TypeString},
+					"headers": {Type: genai.TypeArray, Items: &genai.Schema{Type: genai.TypeString}},
+					"rows": {
+						Type: genai.TypeArray,
+						Items: &genai.Schema{
+							Type:  genai.TypeArray,
+							Items: scalar,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// backtest_table chunk
+	// columnMapping / columnFormat are arrays of {k,v} objects instead of maps
+	keyValSchema := &genai.Schema{
+		Type:     genai.TypeObject,
+		Required: []string{"k", "v"},
+		Properties: map[string]*genai.Schema{
+			"k": {Type: genai.TypeString},
+			"v": {Type: genai.TypeString},
+		},
+	}
+
+	backtestSchema := &genai.Schema{
+		Type:     genai.TypeObject,
+		Required: []string{"type", "content"},
+		Properties: map[string]*genai.Schema{
+			"type": {Type: genai.TypeString, Enum: []string{"backtest_table"}},
+			"content": {
+				Type:     genai.TypeObject,
+				Required: []string{"strategyId", "columns"},
+				Properties: map[string]*genai.Schema{
+					"strategyId": {Type: genai.TypeInteger},
+					"columns":    {Type: genai.TypeArray, Items: &genai.Schema{Type: genai.TypeString}},
+					"columnMapping": {
+						Type:  genai.TypeArray,
+						Items: keyValSchema,
+					},
+					"columnFormat": {
+						Type:  genai.TypeArray,
+						Items: keyValSchema,
+					},
+				},
+			},
+		},
+	}
+
+	// final union
+	return &genai.Schema{
+		AnyOf: []*genai.Schema{textSchema, tableSchema, backtestSchema},
 	}
 }
 
@@ -154,9 +232,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	// First try direct parsing of the entire resultText
 	var directAns DirectAnswer
 	directParseErr := json.Unmarshal([]byte(resultText), &directAns)
-	//fmt.Printf("DEBUG: Direct DirectAnswer parse - error: %v, contentChunks length: %d\n", directParseErr, len(directAns.ContentChunks))
 	if directParseErr == nil && len(directAns.ContentChunks) > 0 {
-		// Additional check: make sure at least one content chunk has actual content
 		hasValidContent := false
 		for _, chunk := range directAns.ContentChunks {
 			if chunk.Content != nil && fmt.Sprintf("%v", chunk.Content) != "" {
@@ -164,9 +240,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 				break
 			}
 		}
-		//fmt.Printf("DEBUG: DirectAnswer has valid content: %t\n", hasValidContent)
 		if hasValidContent {
-			//fmt.Printf("DEBUG: DirectAnswer parsing SUCCESS, returning DirectAnswer\n")
 			directAns.TokenCounts = TokenCounts{
 				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
 				OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
@@ -175,14 +249,11 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 			}
 			return directAns, nil
 		}
-		//fmt.Printf("DEBUG: DirectAnswer has empty content chunks, skipping\n")
 	}
 
 	var plan Plan
 	planParseErr := json.Unmarshal([]byte(resultText), &plan)
-	//fmt.Printf("DEBUG: Direct Plan parse - error: %v, stage: %s\n", planParseErr, plan.Stage)
 	if planParseErr == nil && plan.Stage != "" {
-		//fmt.Printf("DEBUG: Plan parsing SUCCESS, returning Plan\n")
 		plan.TokenCounts = TokenCounts{
 			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
 			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
@@ -193,7 +264,6 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	}
 
 	// If direct parsing fails, try to extract JSON from markdown code blocks first
-	//fmt.Printf("DEBUG: Attempting markdown code block extraction\n")
 
 	// Look for ```json ... ``` blocks
 	jsonCodeBlockStart := strings.Index(resultText, "```json")
@@ -208,8 +278,6 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 		if jsonCodeBlockEnd != -1 {
 			jsonBlock = resultText[jsonCodeBlockStart : jsonCodeBlockStart+jsonCodeBlockEnd]
 			jsonBlock = strings.TrimSpace(jsonBlock)
-			//fmt.Printf("DEBUG: Extracted JSON from markdown code block, length: %d\n", len(jsonBlock))
-			//fmt.Printf("DEBUG: First 200 chars of extracted JSON: %.200s\n", jsonBlock)
 		}
 	}
 
@@ -245,9 +313,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	directAns = DirectAnswer{} // Reset the struct
 	if jsonBlock != "" {
 		blockDirectParseErr := json.Unmarshal([]byte(jsonBlock), &directAns)
-		//fmt.Printf("DEBUG: Block DirectAnswer parse - error: %v, contentChunks length: %d\n", blockDirectParseErr, len(directAns.ContentChunks))
 		if blockDirectParseErr == nil && len(directAns.ContentChunks) > 0 {
-			// Additional check: make sure at least one content chunk has actual content
 			hasValidContent := false
 			for _, chunk := range directAns.ContentChunks {
 				if chunk.Content != nil && fmt.Sprintf("%v", chunk.Content) != "" {
@@ -255,9 +321,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 					break
 				}
 			}
-			//fmt.Printf("DEBUG: Block DirectAnswer has valid content: %t\n", hasValidContent)
 			if hasValidContent {
-				//fmt.Printf("DEBUG: Block DirectAnswer parsing SUCCESS, returning DirectAnswer\n")
 				directAns.TokenCounts = TokenCounts{
 					InputTokenCount:    result.UsageMetadata.PromptTokenCount,
 					OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
@@ -266,7 +330,6 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 				}
 				return directAns, nil
 			}
-			//fmt.Printf("DEBUG: Block DirectAnswer has empty content chunks, skipping\n")
 		}
 	}
 
