@@ -117,7 +117,9 @@ func GetOHLCVData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	var queryBars int
 	var numBarsRequestedPolygon int
 	haveToAggregate := false
-
+	if args.Bars > 300 {
+		args.Bars = 300
+	}
 	// Special logic for second/minute frames with 30-based constraints
 	if (timespan == "second" || timespan == "minute") && (30%multiplier != 0) {
 		queryTimespan = timespan

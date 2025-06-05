@@ -535,7 +535,7 @@ var (
 						"timeframe":  {Type: genai.TypeString, Description: "The timeframe. This is of the form 'n' + 'time_unit'. Minute data has no time unit, hour data is 'h', day data is 'd'. Supports second, minute, hour, day, week, and month."},
 						"from":       {Type: genai.TypeInteger, Description: "The start of the date range in milliseconds."},
 						"to":         {Type: genai.TypeInteger, Description: "Optional. The end of the date range in milliseconds."},
-						"bars":       {Type: genai.TypeInteger, Description: "Required. The number of bars to get. Max is 500."},
+						"bars":       {Type: genai.TypeInteger, Description: "Required. The number of bars to get. Max is 300."},
 						"extended":   {Type: genai.TypeBoolean, Description: "Optional. Whether to include extended hours data. Defaults to false."},
 						"columns":    {Type: genai.TypeArray, Description: "Optional. The columns to include in the OHLCV data. Use 'o' for open, 'h' for high, 'v' for volume, etc. Defaults to all columns."},
 					},
