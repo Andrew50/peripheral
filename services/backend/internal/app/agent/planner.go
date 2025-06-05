@@ -21,9 +21,10 @@ type Round struct {
 	Calls    []FunctionCall `json:"calls"`
 }
 type Plan struct {
-	Stage       Stage       `json:"stage"`
-	Rounds      []Round     `json:"rounds,omitempty"`
-	TokenCounts TokenCounts `json:"token_counts,omitempty"`
+	Stage          Stage       `json:"stage"`
+	Rounds         []Round     `json:"rounds,omitempty"`
+	DiscardResults []int64     `json:"discard_results,omitempty"`
+	TokenCounts    TokenCounts `json:"token_counts,omitempty"`
 }
 
 type FinalResponse struct {
@@ -68,7 +69,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 		return Plan{}, fmt.Errorf("error creating gemini client: %w", err)
 	}
 	////fmt.Println("prompt", prompt)
-	thinkingBudget := int32(1000)
+	thinkingBudget := int32(10000)
 	// Enhance the system instruction with tool descriptions
 	enhancedSystemInstruction := enhanceSystemPromptWithTools(systemPrompt)
 	config := &genai.GenerateContentConfig{
@@ -119,7 +120,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	// First try direct parsing of the entire resultText
 	var directAns DirectAnswer
 	directParseErr := json.Unmarshal([]byte(resultText), &directAns)
-	fmt.Printf("DEBUG: Direct DirectAnswer parse - error: %v, contentChunks length: %d\n", directParseErr, len(directAns.ContentChunks))
+	//fmt.Printf("DEBUG: Direct DirectAnswer parse - error: %v, contentChunks length: %d\n", directParseErr, len(directAns.ContentChunks))
 	if directParseErr == nil && len(directAns.ContentChunks) > 0 {
 		// Additional check: make sure at least one content chunk has actual content
 		hasValidContent := false
@@ -129,9 +130,9 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 				break
 			}
 		}
-		fmt.Printf("DEBUG: DirectAnswer has valid content: %t\n", hasValidContent)
+		//fmt.Printf("DEBUG: DirectAnswer has valid content: %t\n", hasValidContent)
 		if hasValidContent {
-			fmt.Printf("DEBUG: DirectAnswer parsing SUCCESS, returning DirectAnswer\n")
+			//fmt.Printf("DEBUG: DirectAnswer parsing SUCCESS, returning DirectAnswer\n")
 			directAns.TokenCounts = TokenCounts{
 				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
 				OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
@@ -140,14 +141,14 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 			}
 			return directAns, nil
 		}
-		fmt.Printf("DEBUG: DirectAnswer has empty content chunks, skipping\n")
+		//fmt.Printf("DEBUG: DirectAnswer has empty content chunks, skipping\n")
 	}
 
 	var plan Plan
 	planParseErr := json.Unmarshal([]byte(resultText), &plan)
-	fmt.Printf("DEBUG: Direct Plan parse - error: %v, stage: %s\n", planParseErr, plan.Stage)
+	//fmt.Printf("DEBUG: Direct Plan parse - error: %v, stage: %s\n", planParseErr, plan.Stage)
 	if planParseErr == nil && plan.Stage != "" {
-		fmt.Printf("DEBUG: Plan parsing SUCCESS, returning Plan\n")
+		//fmt.Printf("DEBUG: Plan parsing SUCCESS, returning Plan\n")
 		plan.TokenCounts = TokenCounts{
 			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
 			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
@@ -158,7 +159,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	}
 
 	// If direct parsing fails, try to extract JSON from markdown code blocks first
-	fmt.Printf("DEBUG: Attempting markdown code block extraction\n")
+	//fmt.Printf("DEBUG: Attempting markdown code block extraction\n")
 
 	// Look for ```json ... ``` blocks
 	jsonCodeBlockStart := strings.Index(resultText, "```json")
@@ -173,8 +174,8 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 		if jsonCodeBlockEnd != -1 {
 			jsonBlock = resultText[jsonCodeBlockStart : jsonCodeBlockStart+jsonCodeBlockEnd]
 			jsonBlock = strings.TrimSpace(jsonBlock)
-			fmt.Printf("DEBUG: Extracted JSON from markdown code block, length: %d\n", len(jsonBlock))
-			fmt.Printf("DEBUG: First 200 chars of extracted JSON: %.200s\n", jsonBlock)
+			//fmt.Printf("DEBUG: Extracted JSON from markdown code block, length: %d\n", len(jsonBlock))
+			//fmt.Printf("DEBUG: First 200 chars of extracted JSON: %.200s\n", jsonBlock)
 		}
 	}
 
@@ -210,7 +211,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	directAns = DirectAnswer{} // Reset the struct
 	if jsonBlock != "" {
 		blockDirectParseErr := json.Unmarshal([]byte(jsonBlock), &directAns)
-		fmt.Printf("DEBUG: Block DirectAnswer parse - error: %v, contentChunks length: %d\n", blockDirectParseErr, len(directAns.ContentChunks))
+		//fmt.Printf("DEBUG: Block DirectAnswer parse - error: %v, contentChunks length: %d\n", blockDirectParseErr, len(directAns.ContentChunks))
 		if blockDirectParseErr == nil && len(directAns.ContentChunks) > 0 {
 			// Additional check: make sure at least one content chunk has actual content
 			hasValidContent := false
@@ -220,9 +221,9 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 					break
 				}
 			}
-			fmt.Printf("DEBUG: Block DirectAnswer has valid content: %t\n", hasValidContent)
+			//fmt.Printf("DEBUG: Block DirectAnswer has valid content: %t\n", hasValidContent)
 			if hasValidContent {
-				fmt.Printf("DEBUG: Block DirectAnswer parsing SUCCESS, returning DirectAnswer\n")
+				//fmt.Printf("DEBUG: Block DirectAnswer parsing SUCCESS, returning DirectAnswer\n")
 				directAns.TokenCounts = TokenCounts{
 					InputTokenCount:    result.UsageMetadata.PromptTokenCount,
 					OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
@@ -231,7 +232,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 				}
 				return directAns, nil
 			}
-			fmt.Printf("DEBUG: Block DirectAnswer has empty content chunks, skipping\n")
+			//fmt.Printf("DEBUG: Block DirectAnswer has empty content chunks, skipping\n")
 		}
 	}
 
@@ -239,9 +240,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	// Try unmarshalling the extracted block if it's not empty
 	if jsonBlock != "" {
 		blockPlanParseErr := json.Unmarshal([]byte(jsonBlock), &plan)
-		fmt.Printf("DEBUG: Block Plan parse - error: %v, stage: %s\n", blockPlanParseErr, plan.Stage)
 		if blockPlanParseErr == nil && plan.Stage != "" {
-			fmt.Printf("DEBUG: Block Plan parsing SUCCESS, returning Plan\n")
 			plan.TokenCounts = TokenCounts{
 				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
 				OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
@@ -253,8 +252,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	}
 
 	// If parsing failed or no JSON block found, return error
-	fmt.Printf("DEBUG: All parsing attempts failed - resultText length: %d\n", len(resultText))
-	fmt.Printf("DEBUG: resultText (truncated to 500 chars): %.500s\n", resultText)
+
 	return nil, fmt.Errorf("no valid plan or direct answer found in response")
 }
 
@@ -276,7 +274,7 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 	if err != nil {
 		return nil, fmt.Errorf("error creating gemini client: %w", err)
 	}
-	thinkingBudget := int32(2000)
+	thinkingBudget := int32(10000)
 	config := &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{
 			Parts: []*genai.Part{
