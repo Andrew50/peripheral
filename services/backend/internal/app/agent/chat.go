@@ -95,9 +95,10 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 	}()
 
 	var executor *Executor
-	var allResults []ExecuteResult
+	var activeResults []ExecuteResult
+	var discardedResults []ExecuteResult
 	planningPrompt := ""
-	maxTurns := 7
+	maxTurns := 15
 	totalRequestOutputTokenCount := 0
 	totalRequestInputTokenCount := 0
 	totalRequestThoughtsTokenCount := 0
@@ -135,8 +136,11 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			totalRequestThoughtsTokenCount += int(v.TokenCounts.ThoughtsTokenCount)
 			totalRequestTokenCount += int(v.TokenCounts.TotalTokenCount)
 
+			// For DirectAnswer, combine all results for storage
+			allResults := append(activeResults, discardedResults...)
+
 			// Update pending message to completed and get assistant message ID
-			_, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, []ExecuteResult{}, v.Suggestions, totalRequestTokenCount)
+			_, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, v.Suggestions, totalRequestTokenCount)
 			if err != nil {
 				return nil, fmt.Errorf("error updating pending message to completed: %w", err)
 			}
@@ -149,6 +153,28 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				MessageID:      messageID,
 			}, nil
 		case Plan:
+			// Handle result discarding if specified in the plan
+			if len(v.DiscardResults) > 0 {
+				// Create a map for quick lookup of IDs to discard
+				discardMap := make(map[int64]bool)
+				for _, id := range v.DiscardResults {
+					discardMap[id] = true
+				}
+
+				// Separate active results into kept and discarded
+				var newActiveResults []ExecuteResult
+				for _, result := range activeResults {
+					if discardMap[result.FunctionID] {
+						// Move to discarded
+						discardedResults = append(discardedResults, result)
+					} else {
+						// Keep active
+						newActiveResults = append(newActiveResults, result)
+					}
+				}
+				activeResults = newActiveResults
+			}
+
 			switch v.Stage {
 			case StagePlanMore:
 
@@ -168,11 +194,11 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 						}
 						return nil, fmt.Errorf("error executing function calls: %w", err)
 					}
-					allResults = append(allResults, results...)
+					activeResults = append(activeResults, results...)
 				}
-				// Update query with results for next planning iteration
-				// The planner will process these results to either plan more or finalize
-				planningPrompt, err = BuildPlanningPromptWithResultsAndConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, allResults)
+				// Update query with active results for next planning iteration
+				// Only pass active results to avoid context bloat
+				planningPrompt, err = BuildPlanningPromptWithResultsAndConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, activeResults)
 				if err != nil {
 					// Mark as error instead of deleting for debugging
 					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Failed to build prompt with results: %v", err)); markErr != nil {
@@ -181,8 +207,8 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 					return nil, err
 				}
 			case StageFinishedExecuting:
-				// Generate final response based on execution results
-				finalPrompt, err := BuildFinalResponsePromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, allResults)
+				// Generate final response based on active execution results
+				finalPrompt, err := BuildFinalResponsePromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, activeResults)
 				if err != nil {
 					// Mark as error instead of deleting for debugging
 					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Failed to build final response prompt: %v", err)); markErr != nil {
@@ -208,6 +234,9 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 
 				// Process any table instructions in the content chunks
 				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
+
+				// For final response, combine all results for storage
+				allResults := append(activeResults, discardedResults...)
 
 				// Update pending message to completed and get assistant message ID
 				_, err = UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalRequestTokenCount)
