@@ -32,12 +32,6 @@ type ChatRequest struct {
 	ConversationID     string                   `json:"conversation_id,omitempty"`
 }
 
-// ContentChunk represents a piece of content in the response sequence
-type ContentChunk struct {
-	Type    string      `json:"type"`    // "text" or "table" (or others later, e.g., "image")
-	Content interface{} `json:"content"` // string for "text", TableData for "table"
-}
-
 // Citation represents a citation/source reference
 type Citation struct {
 	Title       string `json:"title"`

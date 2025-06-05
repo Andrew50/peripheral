@@ -169,11 +169,11 @@ func GenerateBacktestTableFromInstruction(ctx context.Context, conn *data.Conn, 
 	}
 
 	// --- Process Instructions ---
-//	if len(instruction.Columns) == 0 {
-		// Even if no specific columns requested, we still need the mandatory instance column
-		// return nil, fmt.Errorf("no columns specified in table instruction")
-		////fmt.Println("Warning: No specific columns requested in backtest_table instruction, defaulting to Instance column only.")
-//	}
+	//	if len(instruction.Columns) == 0 {
+	// Even if no specific columns requested, we still need the mandatory instance column
+	// return nil, fmt.Errorf("no columns specified in table instruction")
+	////fmt.Println("Warning: No specific columns requested in backtest_table instruction, defaulting to Instance column only.")
+	//	}
 
 	var tableHeaders []string
 	var finalRows [][]interface{}
