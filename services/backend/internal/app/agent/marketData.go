@@ -26,17 +26,16 @@ type GetOHLCVDataArgs struct {
 	Columns       []string `json:"columns,omitempty"`
 }
 
-type GetOHLCVDataResults struct {
-	Timestamp float64 `json:"t"`
-	Open      float64 `json:"o,omitempty"`
-	High      float64 `json:"h,omitempty"`
-	Low       float64 `json:"l,omitempty"`
-	Close     float64 `json:"c,omitempty"`
-	Volume    float64 `json:"v,omitempty"`
-}
-
+// Columnar response format for better token efficiency
 type GetOHLCVDataResponse struct {
-	Bars []GetOHLCVDataResults `json:"bars"`
+	Ticker    string    `json:"ticker,omitempty"`
+	Timeframe string    `json:"tf,omitempty"`
+	T         []float64 `json:"t"`           // timestamps
+	O         []float64 `json:"o,omitempty"` // open
+	H         []float64 `json:"h,omitempty"` // high
+	L         []float64 `json:"l,omitempty"` // low
+	C         []float64 `json:"c,omitempty"` // close
+	V         []float64 `json:"v,omitempty"` // volume
 }
 
 // ColumnFilter handles which columns should be included in the response
@@ -79,29 +78,25 @@ func NewColumnFilter(columns []string) *ColumnFilter {
 	return cf
 }
 
-// CreateResult creates a GetOHLCVDataResults with only the requested columns
-func (cf *ColumnFilter) CreateResult(timestamp time.Time, open, high, low, close, volume float64) GetOHLCVDataResults {
-	result := GetOHLCVDataResults{
-		Timestamp: float64(timestamp.Unix()), // Always include timestamp
-	}
+// AppendToResponse adds a bar's data to the columnar response arrays
+func (cf *ColumnFilter) AppendToResponse(response *GetOHLCVDataResponse, timestamp time.Time, open, high, low, close, volume float64) {
+	response.T = append(response.T, float64(timestamp.Unix()))
 
 	if cf.includeOpen {
-		result.Open = open
+		response.O = append(response.O, open)
 	}
 	if cf.includeHigh {
-		result.High = high
+		response.H = append(response.H, high)
 	}
 	if cf.includeLow {
-		result.Low = low
+		response.L = append(response.L, low)
 	}
 	if cf.includeClose {
-		result.Close = close
+		response.C = append(response.C, close)
 	}
 	if cf.includeVolume {
-		result.Volume = volume
+		response.V = append(response.V, volume)
 	}
-
-	return result
 }
 
 func GetOHLCVData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
@@ -203,8 +198,29 @@ func GetOHLCVData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	}
 	rows.Close()
 
-	// Preallocate capacity for bar data
-	barDataList := make([]GetOHLCVDataResults, 0, args.Bars+10)
+	// Initialize columnar response
+	response := &GetOHLCVDataResponse{
+		Timeframe: args.Timeframe,
+		T:         make([]float64, 0, args.Bars+10),
+	}
+
+	// Initialize arrays based on column filter
+	if columnFilter.includeOpen {
+		response.O = make([]float64, 0, args.Bars+10)
+	}
+	if columnFilter.includeHigh {
+		response.H = make([]float64, 0, args.Bars+10)
+	}
+	if columnFilter.includeLow {
+		response.L = make([]float64, 0, args.Bars+10)
+	}
+	if columnFilter.includeClose {
+		response.C = make([]float64, 0, args.Bars+10)
+	}
+	if columnFilter.includeVolume {
+		response.V = make([]float64, 0, args.Bars+10)
+	}
+
 	numBarsRemaining := args.Bars
 
 	// Process security records chronologically
@@ -214,6 +230,8 @@ func GetOHLCVData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 		}
 
 		ticker := record.ticker
+		response.Ticker = ticker
+
 		minDateFromSQL := record.minDateFromSQL
 		maxDateFromSQL := record.maxDateFromSQL
 
@@ -271,15 +289,12 @@ func GetOHLCVData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 				return nil, fmt.Errorf("error fetching data from Polygon: %v", err)
 			}
 
-			aggregatedData, err := buildSimpleAggregation(
-				it, multiplier, timespan, args.ExtendedHours, easternLocation, &numBarsRemaining, columnFilter,
+			err = buildColumnarAggregation(
+				it, multiplier, timespan, args.ExtendedHours, easternLocation, &numBarsRemaining, columnFilter, response,
 			)
 			if err != nil {
 				return nil, err
 			}
-
-			// Convert aggregated results to OHLCV results
-			barDataList = append(barDataList, aggregatedData...)
 		} else {
 			// Direct fetch at desired timeframe
 			numBarsRequestedPolygon = queryBars + 10
@@ -311,14 +326,7 @@ func GetOHLCVData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 					continue
 				}
 
-				barDataList = append(barDataList, columnFilter.CreateResult(
-					ts,
-					item.Open,
-					item.High,
-					item.Low,
-					item.Close,
-					item.Volume,
-				))
+				columnFilter.AppendToResponse(response, ts, item.Open, item.High, item.Low, item.Close, item.Volume)
 
 				numBarsRemaining--
 				if numBarsRemaining <= 0 {
@@ -329,17 +337,15 @@ func GetOHLCVData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	}
 
 	// Return chronological data
-	if len(barDataList) > 0 {
-		return GetOHLCVDataResponse{
-			Bars: barDataList,
-		}, nil
+	if len(response.T) > 0 {
+		return response, nil
 	}
 
 	return nil, fmt.Errorf("no data found")
 }
 
-// buildSimpleAggregation creates higher timeframe bars from lower timeframe data
-func buildSimpleAggregation(
+// buildColumnarAggregation creates higher timeframe bars from lower timeframe data in columnar format
+func buildColumnarAggregation(
 	it *iter.Iter[models.Agg],
 	multiplier int,
 	timespan string,
@@ -347,10 +353,9 @@ func buildSimpleAggregation(
 	easternLocation *time.Location,
 	numBarsRemaining *int,
 	columnFilter *ColumnFilter,
-) ([]GetOHLCVDataResults, error) {
+	response *GetOHLCVDataResponse,
+) error {
 
-	var barDataList []GetOHLCVDataResults
-	var currentBar GetOHLCVDataResults
 	var currentBarValues struct {
 		timestamp time.Time
 		open      float64
@@ -368,7 +373,7 @@ func buildSimpleAggregation(
 	for it.Next() {
 		agg := it.Item()
 		if it.Err() != nil {
-			return nil, fmt.Errorf("iterator error: %v", it.Err())
+			return fmt.Errorf("iterator error: %v", it.Err())
 		}
 		timestamp := time.Time(agg.Timestamp).In(easternLocation)
 
@@ -384,15 +389,7 @@ func buildSimpleAggregation(
 		if barStartTime.IsZero() || diff >= requiredDuration {
 			// If we have a bar in progress, store it
 			if !barStartTime.IsZero() {
-				currentBar = columnFilter.CreateResult(
-					currentBarValues.timestamp,
-					currentBarValues.open,
-					currentBarValues.high,
-					currentBarValues.low,
-					currentBarValues.close,
-					currentBarValues.volume,
-				)
-				barDataList = append(barDataList, currentBar)
+				columnFilter.AppendToResponse(response, currentBarValues.timestamp, currentBarValues.open, currentBarValues.high, currentBarValues.low, currentBarValues.close, currentBarValues.volume)
 				*numBarsRemaining--
 				if *numBarsRemaining <= 0 {
 					break
@@ -430,16 +427,8 @@ func buildSimpleAggregation(
 
 	// Add the last bar if we have one in progress
 	if !barStartTime.IsZero() && *numBarsRemaining > 0 {
-		currentBar = columnFilter.CreateResult(
-			currentBarValues.timestamp,
-			currentBarValues.open,
-			currentBarValues.high,
-			currentBarValues.low,
-			currentBarValues.close,
-			currentBarValues.volume,
-		)
-		barDataList = append(barDataList, currentBar)
+		columnFilter.AppendToResponse(response, currentBarValues.timestamp, currentBarValues.open, currentBarValues.high, currentBarValues.low, currentBarValues.close, currentBarValues.volume)
 	}
 
-	return barDataList, nil
+	return nil
 }
