@@ -75,7 +75,7 @@ func BuildPlanningPrompt(conn *data.Conn, userID int, query string, contextItems
 func BuildPlanningPromptWithResults(conn *data.Conn, userID int, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, results []ExecuteResult) (string, error) {
 	// Start with the basic planning prompt
 	sb := strings.Builder{}
-	planningPrompt, err := BuildPlanningPrompt(conn, userID, query, contextItems, activeChartContext)
+	planningPrompt, err := BuildPlanningPrompt(conn, userID, query, contextItems, activeChartContext, false)
 	if err != nil {
 		return "", err
 	}
@@ -112,7 +112,7 @@ func _buildContextItems(contextItems []map[string]interface{}) string {
 			ticker, _ := item["ticker"].(string)
 			secID := fmt.Sprint(item["securityId"])
 			tsStr := fmt.Sprint(item["timestamp"])
-			context.WriteString(fmt.Sprintf("Instance - Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secID, tsStr))
+			context.WriteString(fmt.Sprintf("%s, SecurityId: %s, TimestampMs: %s\n", ticker, secID, tsStr))
 		}
 	}
 	return context.String()
