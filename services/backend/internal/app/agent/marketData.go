@@ -5,6 +5,8 @@ import (
 	"backend/internal/data"
 	"backend/internal/data/polygon"
 	"backend/internal/data/utils"
+	"backend/internal/postgres"
+	"strings"
 
 	"context"
 	"encoding/json"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/polygon-io/client-go/rest/iter"
 	"github.com/polygon-io/client-go/rest/models"
+	"google.golang.org/genai"
 )
 
 type GetOHLCVDataArgs struct {
@@ -23,6 +26,7 @@ type GetOHLCVDataArgs struct {
 	To            int64    `json:"to,omitempty"`
 	Bars          int      `json:"bars"`
 	ExtendedHours bool     `json:"extended"`
+	SplitAdjusted *bool    `json:"splitAdjusted,omitempty"`
 	Columns       []string `json:"columns,omitempty"`
 }
 
@@ -103,6 +107,12 @@ func GetOHLCVData(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{},
 	var args GetOHLCVDataArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+
+	// Default SplitAdjusted to true if not provided
+	splitAdjustedValue := true
+	if args.SplitAdjusted != nil {
+		splitAdjustedValue = *args.SplitAdjusted
 	}
 
 	columnFilter := NewColumnFilter(args.Columns)
@@ -285,7 +295,7 @@ func GetOHLCVData(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{},
 				date1, date2,
 				numBarsRequestedPolygon,
 				"asc", // Always ascending for chronological data
-				true,
+				splitAdjustedValue,
 			)
 			if err != nil {
 				return nil, fmt.Errorf("error fetching data from Polygon: %v", err)
@@ -309,7 +319,7 @@ func GetOHLCVData(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{},
 				date2,
 				numBarsRequestedPolygon,
 				"asc", // Always ascending for chronological data
-				true,
+				splitAdjustedValue,
 			)
 			if err != nil {
 				return nil, fmt.Errorf("error fetching data from Polygon: %v", err)
@@ -434,4 +444,134 @@ func buildColumnarAggregation(
 
 	return nil
 }
-func RunIntradayAgent()
+
+type RunIntradayAgentArgs struct {
+	SecurityID       int    `json:"securityId"`
+	Timeframe        string `json:"timeframe"`
+	From             int64  `json:"from"`
+	To               int64  `json:"to"`
+	ExtendedHours    bool   `json:"extended"`
+	SplitAdjusted    *bool  `json:"splitAdjusted,omitempty"`
+	AdditionalPrompt string `json:"additionalPrompt,omitempty"`
+}
+type RunIntradayAgentResponse struct {
+	Analysis string `json:"analysis"`
+}
+
+func RunIntradayAgent(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
+	var args RunIntradayAgentArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+
+	// Default SplitAdjusted to true if not provided
+	splitAdjustedValue := true
+	if args.SplitAdjusted != nil {
+		splitAdjustedValue = *args.SplitAdjusted
+	}
+
+	// Create the args for GetOHLCVData
+	ohlcvArgs := GetOHLCVDataArgs{
+		SecurityID:    args.SecurityID,
+		Timeframe:     args.Timeframe,
+		From:          args.From,
+		To:            args.To,
+		ExtendedHours: args.ExtendedHours,
+		SplitAdjusted: &splitAdjustedValue,
+	}
+
+	// Marshal to JSON bytes
+	ohlcvArgsBytes, err := json.Marshal(ohlcvArgs)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling OHLCV args: %v", err)
+	}
+
+	ohlcvData, err := GetOHLCVData(conn, 0, json.RawMessage(ohlcvArgsBytes))
+	if err != nil {
+		return nil, fmt.Errorf("error getting OHLCV data: %v", err)
+	}
+	// Convert timestamp to date and get ticker from OHLCV response
+	fromTime := time.Unix(args.From/1000, (args.From%1000)*1e6).UTC()
+	dateStr := fromTime.Format("2006-01-02")
+
+	ohlcvResponse, ok := ohlcvData.(*GetOHLCVDataResponse)
+	if !ok || ohlcvResponse.Ticker == "" {
+		return nil, fmt.Errorf("unable to get ticker from OHLCV response")
+	}
+
+	dailyData, err := polygon.GetDailyOHLCVForTicker(context.Background(), conn.Polygon, postgres.GetTicker(conn.DB, args.SecurityID, fromTime), dateStr, splitAdjustedValue)
+	if err != nil {
+		return nil, fmt.Errorf("error getting daily data: %v", err)
+	}
+
+	apiKey, err := conn.GetGeminiKey()
+	if err != nil {
+		return nil, fmt.Errorf("error getting gemini key: %v", err)
+	}
+	client, err := genai.NewClient(context.Background(), &genai.ClientConfig{
+		APIKey:  apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		return Plan{}, fmt.Errorf("error creating gemini client: %w", err)
+	}
+	systemPrompt, err := getSystemInstruction("IntradayAgentPrompt")
+	if err != nil {
+		return nil, fmt.Errorf("error getting system instruction: %v", err)
+	}
+	thinkingBudget := int32(10000)
+	config := &genai.GenerateContentConfig{
+		SystemInstruction: &genai.Content{
+			Parts: []*genai.Part{
+				{Text: systemPrompt},
+			},
+		},
+		ThinkingConfig: &genai.ThinkingConfig{
+			IncludeThoughts: true,
+			ThinkingBudget:  &thinkingBudget,
+		},
+		ResponseMIMEType: "application/json",
+	}
+
+	// Convert OHLCV data to JSON string for the prompt
+	ohlcvDataBytes, err := json.Marshal(ohlcvData)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling OHLCV data: %v", err)
+	}
+
+	// Add daily data to the prompt
+	dailyDataBytes, err := json.Marshal(dailyData)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling daily data: %v", err)
+	}
+
+	// Create the full prompt with OHLCV data, daily data, and additional prompt
+	fullPrompt := fmt.Sprintf("Intraday Data:\n%s\n\nDaily Data:\n%s", string(ohlcvDataBytes), string(dailyDataBytes))
+	if args.AdditionalPrompt != "" {
+		fullPrompt += "\n\nAdditional Prompt/Context from model:\n" + args.AdditionalPrompt
+	}
+	result, err := client.Models.GenerateContent(context.Background(), planningModel, genai.Text(fullPrompt), config)
+	if err != nil {
+		return Plan{}, fmt.Errorf("gemini had an error generating plan : %w", err)
+	}
+	var sb strings.Builder
+	if len(result.Candidates) <= 0 {
+		return Plan{}, fmt.Errorf("no candidates found in result")
+	}
+	candidate := result.Candidates[0]
+	if candidate.Content != nil {
+		for _, part := range candidate.Content.Parts {
+			if part.Thought {
+				continue
+			}
+			if part.Text != "" {
+				sb.WriteString(part.Text)
+				sb.WriteString("\n")
+			}
+		}
+	}
+	return RunIntradayAgentResponse{
+		Analysis: sb.String(),
+	}, nil
+
+}
