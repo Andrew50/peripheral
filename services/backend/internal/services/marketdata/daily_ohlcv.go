@@ -123,7 +123,7 @@ func UpdateDailyOHLCV(conn *data.Conn) error {
 			defer cancel()
 
 			// Get OHLCV data for this date
-			ohlcvResponse, err := polygon.GetDailyOHLCV(ctx, conn.Polygon, dateStr)
+			ohlcvResponse, err := polygon.GetAllStocksDailyOHLCV(ctx, conn.Polygon, dateStr)
 			if err != nil {
 				errorCh <- fmt.Errorf("error getting OHLCV for %s: %w", dateStr, err)
 				return
