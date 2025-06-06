@@ -561,8 +561,8 @@ func StartServer(conn *data.Conn) {
 		Handler: http.DefaultServeMux, // Use DefaultServeMux since HandleFunc registers globally
 		// Good practice to set timeouts to prevent resource exhaustion.
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 90 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		WriteTimeout: 240 * time.Second,
+		IdleTimeout:  240 * time.Second,
 	}
 
 	log.Println("debug: Server running on port 5058")

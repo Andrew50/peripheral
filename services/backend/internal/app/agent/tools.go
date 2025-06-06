@@ -524,6 +524,47 @@ var (
 			Function:      wrapWithContext(helpers.GetAllTickerSnapshots),
 			StatusMessage: "Scanning market data...",
 		},
+		"getOHLCVData": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getOHLCVData",
+				Description: "Get OHLCV data for a stock",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"securityId":    {Type: genai.TypeInteger, Description: "The security ID to get OHLCV data."},
+						"timeframe":     {Type: genai.TypeString, Description: "The timeframe. This is of the form 'n' + 'time_unit'. Minute data has no time unit, hour data is 'h', day data is 'd'. Supports second, minute, hour, day, week, and month."},
+						"from":          {Type: genai.TypeInteger, Description: "The start of the date range in milliseconds."},
+						"to":            {Type: genai.TypeInteger, Description: "Optional. The end of the date range in milliseconds."},
+						"bars":          {Type: genai.TypeInteger, Description: "Required. The number of bars to get. Max is 300."},
+						"extended":      {Type: genai.TypeBoolean, Description: "Optional. Whether to include extended hours data. Defaults to false."},
+						"splitAdjusted": {Type: genai.TypeBoolean, Description: "Optional. Whether the data should be split-adjusted. Defaults to true."},
+						"columns":       {Type: genai.TypeArray, Description: "Optional. The columns to include in the OHLCV data. Use 'o' for open, 'h' for high, 'v' for volume, etc. Defaults to all columns."},
+					},
+					Required: []string{"securityId", "timeframe", "from", "bars"},
+				},
+			},
+			Function:      wrapWithContext(GetOHLCVData),
+			StatusMessage: "Getting Market data...",
+		},
+		"runIntradayAgent": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "runIntradayAgent",
+				Description: "Run an intraday agent to analyze the intraday price action of a specified stock.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"securityId":       {Type: genai.TypeInteger, Description: "The security ID to analyze."},
+						"timeframe":        {Type: genai.TypeString, Description: "The timeframe to analyze. This is of the form 'n' + 'time_unit'. Minute data has no time unit, hour data is 'h', day data is 'd'. Supports second, minute, hour, day, week, and month."},
+						"from":             {Type: genai.TypeInteger, Description: "The start of the date range in milliseconds."},
+						"to":               {Type: genai.TypeInteger, Description: "The end of the date range in milliseconds."},
+						"extended":         {Type: genai.TypeBoolean, Description: "Optional. Whether to include extended hours data. Defaults to false."},
+						"splitAdjusted":    {Type: genai.TypeBoolean, Description: "Optional. Whether the data should be split-adjusted. Defaults to true."},
+						"additionalPrompt": {Type: genai.TypeString, Description: "Optional. Additional prompt or context to pass to the intraday agent."},
+					},
+					Required: []string{"securityId", "timeframe", "from", "to"},
+				},
+			},
+		},
 		// ────────────────────────────────────────────────────────────────────
 		"getStrategies": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -650,20 +691,30 @@ var (
 		"dateToMS": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "dateToMS",
-				Description: "Convert a date to milliseconds since epoch.",
+				Description: "Convert one or more dates to milliseconds since epoch (Unix timestamp in milliseconds). Pass an array of date objects. Example: {\"dates\": [{\"date\": \"2024-01-01\", \"hour\": 9, \"minute\": 30}, {\"date\": \"2024-01-02\"}]}",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"date":   {Type: genai.TypeString, Description: "The date in 2006-01-02 format to convert to milliseconds since epoch."},
-						"hour":   {Type: genai.TypeInteger, Description: "The hour (24 hour format)on date."},
-						"minute": {Type: genai.TypeInteger, Description: "The minute on date."},
-						"second": {Type: genai.TypeInteger, Description: "The second on date."},
+						"dates": {
+							Type:        genai.TypeArray,
+							Description: "Array of date objects. Each object must have a 'date' field in YYYY-MM-DD format. Hour, minute, and second are optional and default to 0.",
+							Items: &genai.Schema{
+								Type: genai.TypeObject,
+								Properties: map[string]*genai.Schema{
+									"date":   {Type: genai.TypeString, Description: "Date in YYYY-MM-DD format (required)"},
+									"hour":   {Type: genai.TypeInteger, Description: "Hour in 24-hour format (0-23), defaults to 0"},
+									"minute": {Type: genai.TypeInteger, Description: "Minute (0-59), defaults to 0"},
+									"second": {Type: genai.TypeInteger, Description: "Second (0-59), defaults to 0"},
+								},
+								Required: []string{"date"},
+							},
+						},
 					},
-					Required: []string{"date", "hour", "minute", "second"},
+					Required: []string{"dates"},
 				},
 			},
 			Function:      wrapWithContext(DateToMS),
-			StatusMessage: "Figuring out date range...",
+			StatusMessage: "Converting dates to timestamps...",
 		},
 	}
 )
