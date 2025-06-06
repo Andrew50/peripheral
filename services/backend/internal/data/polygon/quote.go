@@ -26,15 +26,6 @@ type silentLogger struct{}
 // Printf is a no-op to satisfy the logger interface if needed elsewhere.
 func (l *silentLogger) Printf(_ string, _ ...interface{}) {}
 
-// configurePolygonClient creates a new Polygon client with silent logging
-// nolint:unused
-//
-//lint:ignore U1000 kept for future client configuration
-func configurePolygonClient(apiKey string) *polygon.Client {
-	// Create a new client with the API key
-	return polygon.New(apiKey)
-}
-
 // retryWithBackoff is a generic utility function to retry an operation with exponential backoff.
 // operation: name of the operation for logging.
 // ticker: ticker symbol, used for logging if shouldLog is true.
@@ -440,7 +431,6 @@ func GetDailyOpen(client *polygon.Client, ticker string, referenceTime time.Time
 	if err := iter.Err(); err != nil {
 		return 0, fmt.Errorf("error iterating daily data: %v", err)
 	}
-
 	// If no data for today, try getting the first minute bar of the day
 	minuteIter, err := GetAggsData(client, ticker, 1, "minute", startMillis, endMillis, 1, "asc", true)
 	if err != nil {
@@ -459,7 +449,7 @@ func GetDailyOpen(client *polygon.Client, ticker string, referenceTime time.Time
 	return GetMostRecentRegularClose(client, ticker, startOfDay.Add(-time.Nanosecond))
 }
 
-func GetDailyOHLCV(ctx context.Context, client *polygon.Client, date string) (*models.GetGroupedDailyAggsResponse, error) {
+func GetAllStocksDailyOHLCV(ctx context.Context, client *polygon.Client, date string) (*models.GetGroupedDailyAggsResponse, error) {
 	on, err := time.Parse("2006-01-02", date)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing date: %v", err)
@@ -501,4 +491,34 @@ func GetPolygonAllTickerSnapshots(ctx context.Context, client *polygon.Client) (
 	return res, nil
 }
 
-// /quote.go
+type GetDailyOHLCVForTickerResponse struct {
+	Open   float64 `json:"open"`
+	High   float64 `json:"high"`
+	Low    float64 `json:"low"`
+	Close  float64 `json:"close"`
+	Volume float64 `json:"volume"`
+	Date   string  `json:"date"`
+}
+
+func GetDailyOHLCVForTicker(ctx context.Context, client *polygon.Client, ticker string, date string, splitAdjusted bool) (GetDailyOHLCVForTickerResponse, error) {
+	on, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return GetDailyOHLCVForTickerResponse{}, fmt.Errorf("error parsing date: %v", err)
+	}
+	params := models.GetDailyOpenCloseAggParams{
+		Ticker: ticker,
+		Date:   models.Date(on),
+	}.WithAdjusted(splitAdjusted)
+	res, err := client.GetDailyOpenCloseAgg(ctx, params)
+	if err != nil {
+		return GetDailyOHLCVForTickerResponse{}, fmt.Errorf("error getting daily open close: %v", err)
+	}
+	return GetDailyOHLCVForTickerResponse{
+		Open:   res.Open,
+		High:   res.High,
+		Low:    res.Low,
+		Close:  res.Close,
+		Volume: res.Volume,
+		Date:   res.From,
+	}, nil
+}

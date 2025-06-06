@@ -531,19 +531,39 @@ var (
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"securityId": {Type: genai.TypeInteger, Description: "The security ID to get OHLCV data."},
-						"timeframe":  {Type: genai.TypeString, Description: "The timeframe. This is of the form 'n' + 'time_unit'. Minute data has no time unit, hour data is 'h', day data is 'd'. Supports second, minute, hour, day, week, and month."},
-						"from":       {Type: genai.TypeInteger, Description: "The start of the date range in milliseconds."},
-						"to":         {Type: genai.TypeInteger, Description: "Optional. The end of the date range in milliseconds."},
-						"bars":       {Type: genai.TypeInteger, Description: "Required. The number of bars to get. Max is 300."},
-						"extended":   {Type: genai.TypeBoolean, Description: "Optional. Whether to include extended hours data. Defaults to false."},
-						"columns":    {Type: genai.TypeArray, Description: "Optional. The columns to include in the OHLCV data. Use 'o' for open, 'h' for high, 'v' for volume, etc. Defaults to all columns."},
+						"securityId":    {Type: genai.TypeInteger, Description: "The security ID to get OHLCV data."},
+						"timeframe":     {Type: genai.TypeString, Description: "The timeframe. This is of the form 'n' + 'time_unit'. Minute data has no time unit, hour data is 'h', day data is 'd'. Supports second, minute, hour, day, week, and month."},
+						"from":          {Type: genai.TypeInteger, Description: "The start of the date range in milliseconds."},
+						"to":            {Type: genai.TypeInteger, Description: "Optional. The end of the date range in milliseconds."},
+						"bars":          {Type: genai.TypeInteger, Description: "Required. The number of bars to get. Max is 300."},
+						"extended":      {Type: genai.TypeBoolean, Description: "Optional. Whether to include extended hours data. Defaults to false."},
+						"splitAdjusted": {Type: genai.TypeBoolean, Description: "Optional. Whether the data should be split-adjusted. Defaults to true."},
+						"columns":       {Type: genai.TypeArray, Description: "Optional. The columns to include in the OHLCV data. Use 'o' for open, 'h' for high, 'v' for volume, etc. Defaults to all columns."},
 					},
 					Required: []string{"securityId", "timeframe", "from", "bars"},
 				},
 			},
 			Function:      wrapWithContext(GetOHLCVData),
 			StatusMessage: "Getting Market data...",
+		},
+		"runIntradayAgent": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "runIntradayAgent",
+				Description: "Run an intraday agent to analyze the intraday price action of a specified stock.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"securityId":       {Type: genai.TypeInteger, Description: "The security ID to analyze."},
+						"timeframe":        {Type: genai.TypeString, Description: "The timeframe to analyze. This is of the form 'n' + 'time_unit'. Minute data has no time unit, hour data is 'h', day data is 'd'. Supports second, minute, hour, day, week, and month."},
+						"from":             {Type: genai.TypeInteger, Description: "The start of the date range in milliseconds."},
+						"to":               {Type: genai.TypeInteger, Description: "The end of the date range in milliseconds."},
+						"extended":         {Type: genai.TypeBoolean, Description: "Optional. Whether to include extended hours data. Defaults to false."},
+						"splitAdjusted":    {Type: genai.TypeBoolean, Description: "Optional. Whether the data should be split-adjusted. Defaults to true."},
+						"additionalPrompt": {Type: genai.TypeString, Description: "Optional. Additional prompt or context to pass to the intraday agent."},
+					},
+					Required: []string{"securityId", "timeframe", "from", "to"},
+				},
+			},
 		},
 		// ────────────────────────────────────────────────────────────────────
 		"getStrategies": {
