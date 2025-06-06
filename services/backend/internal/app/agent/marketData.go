@@ -127,8 +127,8 @@ func GetOHLCVData(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{},
 	var queryBars int
 	var numBarsRequestedPolygon int
 	haveToAggregate := false
-	if args.Bars > 300 {
-		args.Bars = 300
+	if args.Bars > 500 {
+		args.Bars = 500
 	}
 	// Special logic for second/minute frames with 30-based constraints
 	if (timespan == "second" || timespan == "minute") && (30%multiplier != 0) {
@@ -476,6 +476,7 @@ func RunIntradayAgent(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 		Timeframe:     args.Timeframe,
 		From:          args.From,
 		To:            args.To,
+		Bars:          500,
 		ExtendedHours: args.ExtendedHours,
 		SplitAdjusted: &splitAdjustedValue,
 	}
@@ -535,7 +536,6 @@ func RunIntradayAgent(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 			IncludeThoughts: true,
 			ThinkingBudget:  &thinkingBudget,
 		},
-		ResponseMIMEType: "application/json",
 	}
 
 	// Convert OHLCV data to JSON string for the prompt
@@ -555,6 +555,7 @@ func RunIntradayAgent(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 	if args.AdditionalPrompt != "" {
 		fullPrompt += "\n\nAdditional Prompt/Context from model:\n" + args.AdditionalPrompt
 	}
+	fmt.Println("full prompt:", fullPrompt)
 	result, err := client.Models.GenerateContent(context.Background(), planningModel, genai.Text(fullPrompt), config)
 	if err != nil {
 		return Plan{}, fmt.Errorf("gemini had an error generating plan : %w", err)
@@ -575,6 +576,7 @@ func RunIntradayAgent(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 			}
 		}
 	}
+	fmt.Println("result", sb)
 	return RunIntradayAgentResponse{
 		Analysis: sb.String(),
 	}, nil
