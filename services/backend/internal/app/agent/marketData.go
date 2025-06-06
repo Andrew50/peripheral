@@ -536,7 +536,6 @@ func RunIntradayAgent(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 			IncludeThoughts: true,
 			ThinkingBudget:  &thinkingBudget,
 		},
-		ResponseMIMEType: "application/json",
 	}
 
 	// Convert OHLCV data to JSON string for the prompt
