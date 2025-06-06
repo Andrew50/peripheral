@@ -20,6 +20,13 @@ import (
 
 var Logger *logrus.Logger
 
+func init() {
+	if Logger == nil {
+		Logger = logrus.New()
+		Logger.SetLevel(logrus.InfoLevel)
+	}
+}
+
 // GetChartDataArgs represents a structure for handling GetChartDataArgs data.
 type GetChartDataArgs struct {
 	SecurityID        int    `json:"securityId"`
@@ -61,10 +68,24 @@ func MaxDivisorOf30(n int) int {
 
 // GetChartData performs operations related to GetChartData functionality.
 func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	startTime := time.Now()
 	var args GetChartDataArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
+	if Logger == nil {
+		Logger = logrus.New()
+		Logger.SetLevel(logrus.InfoLevel)
+	}
+	Logger.WithFields(logrus.Fields{
+		"securityId": args.SecurityID,
+		"timeframe":  args.Timeframe,
+		"direction":  args.Direction,
+		"bars":       args.Bars,
+	}).Info("GetChartData started")
+	defer func() {
+		Logger.WithField("duration", time.Since(startTime)).Info("GetChartData completed")
+	}()
 	//	if debug {
 	////fmt.Printf("[DEBUG] GetChartData: SecurityID=%d, Timeframe=%s, Direction=%s\n", args.SecurityID, args.Timeframe, args.Direction)
 	//	}
@@ -164,6 +185,7 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 
+	dbStart := time.Now()
 	rows, err := conn.DB.Query(ctx, query, queryParams...)
 	if err != nil {
 		//if debug {
@@ -176,6 +198,8 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	}
 	defer rows.Close()
 
+	Logger.WithField("duration", time.Since(dbStart)).Info("database query completed")
+
 	// Define a struct to hold the security data from the initial query
 	type securityRecord struct {
 		ticker         string
@@ -186,6 +210,7 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 
 	// Read all security records into a slice to get the count first
 	var securityRecords []securityRecord
+	scanStart := time.Now()
 	for rows.Next() {
 		var record securityRecord
 		if err := rows.Scan(&record.ticker, &record.minDateFromSQL, &record.maxDateFromSQL, &record.hasEarlierData); err != nil {
@@ -201,6 +226,7 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 		return nil, fmt.Errorf("error iterating security data rows: %w", err)
 	}
 	rows.Close() // Close rows immediately after reading
+	Logger.WithField("duration", time.Since(scanStart)).Info("scanned security records")
 
 	// Preallocate capacity for bar data. We'll at most fetch up to args.Bars + small overhead
 	barDataList := make([]GetChartDataResults, 0, args.Bars+10)
@@ -284,6 +310,7 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 		// If we have to aggregate (e.g., second->minute, or minute->hour), do so
 		if haveToAggregate {
 			numBarsRequestedPolygon = int(math.Ceil(float64(queryBars*multiplier)/float64(queryMultiplier))) + 10 // 10 bars margin
+			polyStart := time.Now()
 			it, err := polygon.GetAggsData(
 				conn.Polygon,
 				ticker,
@@ -299,6 +326,7 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 			if err != nil {
 				return nil, fmt.Errorf("error fetching data from Polygon: %v", err)
 			}
+			Logger.WithFields(logrus.Fields{"ticker": ticker, "duration": time.Since(polyStart)}).Info("polygon aggs fetch")
 
 			aggregatedData, err := buildHigherTimeframeFromLower(
 				it, multiplier, timespan, args.ExtendedHours, easternLocation, &numBarsRemaining, args.Direction,
@@ -313,6 +341,7 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 		} else {
 			// Otherwise, we can directly pull from Polygon at the desired timeframe
 			numBarsRequestedPolygon = queryBars + 10 // 10 bars margin
+			polyStart := time.Now()
 			it, err := polygon.GetAggsData(
 				conn.Polygon,
 				ticker,
@@ -330,6 +359,7 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 				//}
 				return nil, fmt.Errorf("error fetching data from Polygon: %v", err)
 			}
+			Logger.WithFields(logrus.Fields{"ticker": ticker, "duration": time.Since(polyStart)}).Info("polygon aggs fetch")
 
 			for it.Next() {
 				item := it.Item()
@@ -484,6 +514,13 @@ func requestIncompleteBar(
 	_ bool,
 	easternLocation *time.Location,
 ) (GetChartDataResults, error) {
+
+	start := time.Now()
+	defer Logger.WithFields(logrus.Fields{
+		"ticker":     ticker,
+		"timespan":   timespan,
+		"multiplier": multiplier,
+	}).Infof("requestIncompleteBar completed in %v", time.Since(start))
 
 	// --------------------------
 	// 1) Compute time boundaries
@@ -813,6 +850,13 @@ func fetchAggData(
 	easternLocation *time.Location,
 ) ([]models.Agg, error) {
 
+	timerStart := time.Now()
+	defer Logger.WithFields(logrus.Fields{
+		"ticker":     ticker,
+		"timespan":   timespan,
+		"multiplier": multiplier,
+	}).Infof("fetchAggData completed in %v", time.Since(timerStart))
+
 	if endMs <= startMs {
 		return nil, nil
 	}
@@ -848,6 +892,11 @@ func fetchTrades(
 	_ bool,
 	easternLocation *time.Location,
 ) ([]models.Trade, error) {
+
+	start := time.Now()
+	defer Logger.WithFields(logrus.Fields{
+		"ticker": ticker,
+	}).Infof("fetchTrades completed in %v", time.Since(start))
 
 	if endMs <= startMs {
 		return nil, nil
@@ -888,6 +937,12 @@ func buildHigherTimeframeFromLower(
 	numBarsRemaining *int,
 	direction string,
 ) ([]GetChartDataResults, error) {
+
+	start := time.Now()
+	defer Logger.WithFields(logrus.Fields{
+		"timespan":   timespan,
+		"multiplier": multiplier,
+	}).Infof("buildHigherTimeframeFromLower completed in %v", time.Since(start))
 
 	var barDataList []GetChartDataResults
 	barDataList = make([]GetChartDataResults, 0, *numBarsRemaining+10) // Prealloc
@@ -1034,6 +1089,8 @@ func integrateChartEvents(
 	extendedHours bool,
 	easternLocation *time.Location,
 ) {
+	start := time.Now()
+	defer Logger.WithField("duration", time.Since(start)).Info("integrateChartEvents completed")
 	// Ensure we have bars and necessary info to proceed
 	if barDataList == nil || len(*barDataList) == 0 {
 		return
