@@ -15,10 +15,7 @@ import (
 
 	"github.com/polygon-io/client-go/rest/iter"
 	"github.com/polygon-io/client-go/rest/models"
-	"github.com/sirupsen/logrus"
 )
-
-var Logger *logrus.Logger
 
 // GetChartDataArgs represents a structure for handling GetChartDataArgs data.
 type GetChartDataArgs struct {
