@@ -22,7 +22,7 @@
 	 * This approach prevents the input from capturing all keyboard events when it's not active.
 	 */
 
-	const allKeys = ['ticker', 'timestamp', 'timeframe', 'extendedHours', 'price'] as const;
+	const allKeys = ['ticker', 'timestamp', 'timeframe', 'extendedHours'] as const;
 	let currentSecurityResultRequest = 0;
 	let loadedSecurityResultRequest = -1;
 	let manualInputType: string = 'auto';
@@ -115,9 +115,6 @@
 				}
 			}
 			return { inputValid: false, securities: [] };
-		} else if (inputType === 'price') {
-			const price = parseFloat(inputString);
-			return { inputValid: !isNaN(price) && price > 0, securities: [] };
 		}
 		return { inputValid: false, securities: [] };
 	}
@@ -354,8 +351,6 @@
 		// Test for ticker - check for uppercase letters
 		if (possibleKeys.includes('ticker') && /^[A-Z]+$/.test(inputString)) {
 			return 'ticker';
-		} else if (possibleKeys.includes('price') && /^(?:\d*\.\d+|\d{3,})$/.test(inputString)) {
-			return 'price';
 		} else if (possibleKeys.includes('timeframe') && /^\d{1,2}[hdwmqs]?$/i.test(inputString)) {
 			return 'timeframe';
 		} else if (possibleKeys.includes('timestamp') && /^[\d-]+$/.test(inputString)) {
@@ -401,8 +396,6 @@
 			iQ.instance.timeframe = iQ.inputString;
 		} else if (iQ.inputType === 'timestamp') {
 			iQ.instance.timestamp = ESTStringToUTCTimestamp(iQ.inputString);
-		} else if (iQ.inputType === 'price') {
-			iQ.instance.price = parseFloat(iQ.inputString);
 		}
 
 		// Always clear the input string when a field is entered successfully
@@ -462,104 +455,53 @@
 		});
 	}
 
-	// Mark handleKeyDown as async so we can await the validate call if needed.
+	// Handle input changes (typing, pasting, etc.)
+	function handleInputChange(event: Event) {
+		const target = event.target as HTMLInputElement;
+		const newValue = target.value;
+		
+		// Update the input string in the store
+		inputQuery.update((v) => ({
+			...v,
+			inputString: newValue
+		}));
+		
+		// Determine input type based on new value
+		determineInputType(newValue);
+	}
+
+	// Handle special keys (Enter, Tab, Escape)
 	async function handleKeyDown(event: KeyboardEvent): Promise<void> {
-		// Get current state directly from the store to ensure we have latest state
 		const currentState = get(inputQuery);
-		if (browser) {
-			const hiddenInput = document.getElementById('hidden-input');
-
-			// Make sure we're in active state
-			if (currentState.status !== 'active') {
-				return;
-			}
-
-			// Ignore any keyboard events with Control or Alt modifiers
-			if (event.ctrlKey || event.altKey) {
-				return; // Allow the browser to handle these key combinations
-			}
-
-			// Allow Ctrl+R to reload the page
-			if (event.ctrlKey && event.key === 'r') {
-				return; // Don't prevent default, allow browser to handle the reload
-			}
-
-			// Always prevent default behavior for our captured keys to avoid browser handling
-			if (
-				event.key === 'Enter' ||
-				event.key === 'Tab' ||
-				event.key === 'Escape' ||
-				/^[a-zA-Z0-9]$/.test(event.key) ||
-				/[-:.]/.test(event.key) ||
-				(event.key === ' ' && currentState.inputType === 'timestamp') ||
-				event.key === 'Backspace'
-			) {
-				event.preventDefault();
-			}
-
-			// Stop propagation to prevent double-handling
-			event.stopPropagation();
-
-			let iQ = { ...currentState };
-			if (event.key === 'Escape') {
-				inputQuery.update((q) => ({ ...q, status: 'cancelled' }));
-				return;
-			} else if (event.key === 'Enter') {
-				if (iQ.inputValid) {
-					const updatedQuery = await enterInput(iQ, 0);
-					inputQuery.set(updatedQuery);
-				}
-				return;
-			} else if (event.key === 'Tab') {
-				inputQuery.update((q) => ({
-					...q,
-					instance: { ...q.instance, extendedHours: !q.instance.extendedHours }
-				}));
-				return;
-			}
-
-			// Process input keys
-			if (
-				/^[a-zA-Z0-9]$/.test(event.key) ||
-				/[-:.]/.test(event.key) ||
-				(event.key === ' ' && iQ.inputType === 'timestamp')
-			) {
-				// Transform the key based on input type
-				let key;
-				if (iQ.inputType === 'ticker') {
-					// Always uppercase for tickers
-					key = event.key.toUpperCase();
-				} else if (iQ.inputType === 'timeframe') {
-					// Keep original case for timeframe
-					key = event.key;
-				} else {
-					// Default transformation based on context
-					key = event.key.toUpperCase();
-				}
-
-				const newInputString = iQ.inputString + key;
-
-				// Update inputString immediately
-				inputQuery.update((v) => ({
-					...v,
-					inputString: newInputString
-				}));
-
-				// Then determine input type
-				determineInputType(newInputString);
-			} else if (event.key === 'Backspace') {
-				const newInputString = iQ.inputString.slice(0, -1);
-
-				// Update inputString immediately
-				inputQuery.update((v) => ({
-					...v,
-					inputString: newInputString
-				}));
-
-				// Then determine input type
-				determineInputType(newInputString);
-			}
+		
+		// Make sure we're in active state
+		if (currentState.status !== 'active') {
+			return;
 		}
+
+		// Handle special keys
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			inputQuery.update((q) => ({ ...q, status: 'cancelled' }));
+			return;
+		} else if (event.key === 'Enter') {
+			event.preventDefault();
+			if (currentState.inputValid) {
+				const updatedQuery = await enterInput(currentState, 0);
+				inputQuery.set(updatedQuery);
+			}
+			return;
+		} else if (event.key === 'Tab') {
+			event.preventDefault();
+			inputQuery.update((q) => ({
+				...q,
+				instance: { ...q.instance, extendedHours: !q.instance.extendedHours }
+			}));
+			return;
+		}
+		
+		// For all other keys, let the normal input behavior handle it
+		// The handleInputChange function will be called automatically
 	}
 
 	// onTouch handler (if needed) now removes the UI by updating via update() too.
@@ -589,84 +531,36 @@
 					// Store the currently focused element before focusing the input
 					prevFocusedElement = document.activeElement as HTMLElement;
 
-					// Focus the hidden input (after a tick to allow rendering)
+					// Focus the search input after a tick to allow rendering
 					tick().then(() => {
-						const input = document.getElementById('hidden-input');
-						if (input) {
-							// Focus only during initialization
-							input.focus();
-
-							// Add listener directly on the input element
-							input.removeEventListener('keydown', keydownHandler); // Remove any existing listener first
-							input.addEventListener('keydown', keydownHandler);
-							input.setAttribute('data-has-listener', 'true');
-
+						const searchInput = document.querySelector('.search-input') as HTMLInputElement;
+						if (searchInput) {
+							searchInput.focus();
+							
 							// Process initial input string if present
 							if (v.inputString) {
 								// Ensure we're starting with auto detection for initial strings
 								manualInputType = 'auto';
-
-								// First, forcibly detect the input type without waiting
-								const initialType = detectInputTypeSync(v.inputString, v.possibleKeys);
-
-								// Update the store synchronously with the detected type
-								inputQuery.update((q) => ({
-									...q,
-									inputType: initialType,
-									// Mark as loading if it's likely a ticker
-									securities: initialType === 'ticker' ? [] : q.securities
-								}));
-
-								// If it looks like a ticker, explicitly set loading state
-								if (initialType === 'ticker') {
-									isLoadingSecurities = true;
-								}
-
-								// Then run the full determination with validation
 								determineInputType(v.inputString);
-
-								// For tickers, ensure we make multiple validation attempts
-								if (initialType === 'ticker' || /^[A-Za-z]+$/.test(v.inputString)) {
-									// First retry after a short delay
-									setTimeout(() => {
-										const currentInput = get(inputQuery).inputString;
-										if (currentInput && currentInput.length > 0) {
-											isLoadingSecurities = true;
-											determineInputType(currentInput);
-
-											// Second retry with longer delay for slow networks
-											setTimeout(() => {
-												const latestInput = get(inputQuery).inputString;
-												if (
-													latestInput &&
-													latestInput.length > 0 &&
-													loadedSecurityResultRequest !== currentSecurityResultRequest
-												) {
-													isLoadingSecurities = true;
-													determineInputType(latestInput);
-												}
-											}, 1000); // Increased to 1000ms for better network reliability
-										}
-									}, 250); // Increased for better timing
-								}
 							}
 						}
 
 						// Add a click handler to the document to detect clicks outside the popup
 						if (browser) {
-							document.body.removeEventListener('mousedown', handleOutsideClick); // Remove any existing listener first
+							document.body.removeEventListener('mousedown', handleOutsideClick);
 							document.body.addEventListener('mousedown', handleOutsideClick);
 							document.body.setAttribute('data-input-click-listener', 'true');
 						}
 					});
+					
 					// Use update() to mark that the UI is now active.
 					inputQuery.update((state) => ({ ...state, status: 'active' }));
 				} else if (v.status === 'shutdown') {
 					componentActive = false;
-					// Remove focus from the hidden input before restoring previous focus
-					const hiddenInput = document.getElementById('hidden-input');
-					if (hiddenInput && document.activeElement === hiddenInput) {
-						hiddenInput.blur();
+					// Remove focus from the search input before restoring previous focus
+					const searchInput = document.querySelector('.search-input') as HTMLInputElement;
+					if (searchInput && document.activeElement === searchInput) {
+						searchInput.blur();
 					}
 
 					// Remove document click handler when component is inactive
@@ -684,14 +578,14 @@
 					inputQuery.update((state) => ({
 						...state,
 						status: 'inactive',
-						inputString: '' // Reset only when fully shutting down
+						inputString: ''
 					}));
 				} else if (v.status === 'cancelled') {
 					componentActive = false;
-					// Remove focus from the hidden input when cancelled
-					const hiddenInput = document.getElementById('hidden-input');
-					if (hiddenInput && document.activeElement === hiddenInput) {
-						hiddenInput.blur();
+					// Remove focus from the search input when cancelled
+					const searchInput = document.querySelector('.search-input') as HTMLInputElement;
+					if (searchInput && document.activeElement === searchInput) {
+						searchInput.blur();
 					}
 
 					// Remove document click handler
@@ -739,12 +633,6 @@
 	onDestroy(() => {
 		if (browser) {
 			try {
-				// Remove the event listener from the hidden input instead of the document
-				const hiddenInput = document.getElementById('hidden-input');
-				if (hiddenInput) {
-					hiddenInput.removeEventListener('keydown', keydownHandler);
-				}
-
 				// Remove document click handler if it exists
 				document.body.removeEventListener('mousedown', handleOutsideClick);
 				document.body.removeAttribute('data-input-click-listener');
@@ -766,8 +654,6 @@
 				return UTCTimestampToESTString(q.instance.timestamp ?? 0);
 			} else if (key === 'extendedHours') {
 				return q.instance.extendedHours ? 'True' : 'False';
-			} else if (key === 'price') {
-				return '$' + String(q.instance.price);
 			} else {
 				return String(q.instance[key as keyof Instance]);
 			}
@@ -781,6 +667,7 @@
 
 	let sectors: string[] = [];
 	let industries: string[] = [];
+	
 	function capitalize(str: string, lower = false): string {
 		return (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, (match: string) =>
 			match.toUpperCase()
@@ -867,16 +754,12 @@
 			<input
 				type="text"
 				placeholder="Enter ticker, timestamp, timeframe..."
-				value={$inputQuery.inputString}
-				readonly
-				tabindex="-1"
-				on:click|stopPropagation={() => {
-					// Refocus hidden input when clicking the visible input
-					if (browser) {
-						const hiddenInput = document.getElementById('hidden-input');
-						if (hiddenInput) hiddenInput.focus();
-					}
-				}}
+				bind:value={$inputQuery.inputString}
+				on:input={handleInputChange}
+				on:keydown={handleKeyDown}
+				class="search-input"
+				autocomplete="off"
+				spellcheck="false"
 			/>
 		</div>
 		<div class="content-container">
@@ -1069,21 +952,6 @@
 				{/if}
 			{/if}
 		</div>
-		<input
-			autocomplete="off"
-			type="text"
-			id="hidden-input"
-			style="position: absolute; top: 0; left: 0; opacity: 0; pointer-events: none; height: 100%; width: 100%; z-index: 0;"
-			on:blur={() => {
-				// Refocus if we lose focus but component is still active
-				if (componentActive && browser) {
-					setTimeout(() => {
-						const hiddenInput = document.getElementById('hidden-input');
-						if (hiddenInput && componentActive) hiddenInput.focus();
-					}, 0);
-				}
-			}}
-		/>
 	</div>
 {/if}
 
@@ -1232,6 +1100,12 @@
 		color: var(--text-primary);
 		border-radius: 4px;
 		font-size: 14px; /* Ensure consistent font size */
+	}
+
+	.search-bar input:focus {
+		outline: none;
+		border-color: var(--ui-accent, #4a80f0);
+		box-shadow: 0 0 0 2px rgba(74, 128, 240, 0.2);
 	}
 
 	/* Styles for Flexbox security list */
@@ -1435,4 +1309,6 @@
 		display: flex;
 		gap: 8px;
 	}
+
+
 </style>
