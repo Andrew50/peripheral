@@ -877,6 +877,32 @@
 		height: 0.75rem;
 	}
 
+	/* Copied state styling */
+	.copy-btn.copied {
+		background: rgba(76, 175, 80, 0.2);
+		border-color: #4caf50;
+		color: #4caf50;
+		animation: copySuccess 0.3s ease;
+	}
+
+	.copy-btn.copied:hover {
+		background: rgba(76, 175, 80, 0.3);
+		border-color: #4caf50;
+		color: #4caf50;
+	}
+
+	@keyframes copySuccess {
+		0% {
+			transform: scale(1);
+		}
+		50% {
+			transform: scale(1.1);
+		}
+		100% {
+			transform: scale(1);
+		}
+	}
+
 	/* Message editing state */
 	.message.editing {
 		max-width: 100% !important;

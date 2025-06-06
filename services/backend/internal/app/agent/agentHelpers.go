@@ -8,33 +8,47 @@ import (
 	"time"
 )
 
-type DateToMSArgs struct {
+type DateToMSItem struct {
 	Date   string `json:"date"`
 	Hour   int    `json:"hour,omitempty"`
 	Minute int    `json:"minute,omitempty"`
 	Second int    `json:"second,omitempty"`
 }
 
+type DateToMSArgs struct {
+	Dates []DateToMSItem `json:"dates"`
+}
+
 func DateToMS(_ *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DateToMSArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		return 0, err
+		return nil, err
 	}
+
+	if len(args.Dates) == 0 {
+		return nil, errors.New("at least one date is required")
+	}
+
 	loc, err := time.LoadLocation("America/New_York")
 	if err != nil {
-		return 0, fmt.Errorf("unknown timezone %q", "America/New_York")
+		return nil, fmt.Errorf("unknown timezone %q", "America/New_York")
 	}
 
-	// Parse date
-	base, err := time.ParseInLocation("2006-01-02", args.Date, loc)
-	if err != nil {
-		return 0, errors.New("date must be YYYY-MM-DD")
+	results := make([]int64, len(args.Dates))
+
+	for i, dateItem := range args.Dates {
+		// Parse date
+		base, err := time.ParseInLocation("2006-01-02", dateItem.Date, loc)
+		if err != nil {
+			return nil, fmt.Errorf("date at index %d must be YYYY-MM-DD", i)
+		}
+
+		ts := time.Date(base.Year(), base.Month(), base.Day(),
+			dateItem.Hour, dateItem.Minute, dateItem.Second,
+			0, loc).UnixMilli()
+
+		results[i] = ts
 	}
 
-	ts := time.Date(base.Year(), base.Month(), base.Day(),
-		args.Hour, args.Minute, args.Second,
-		0, loc).UnixMilli()
-
-	return ts, nil
-
+	return results, nil
 }

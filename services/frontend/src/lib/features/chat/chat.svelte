@@ -94,6 +94,10 @@
 	let editingMessageId = '';
 	let editingContent = '';
 
+	// Copy feedback state
+	let copiedMessageId = '';
+	let copyTimeout: ReturnType<typeof setTimeout> | null = null;
+
 	// Function to fetch initial suggestions based on active chart
 	async function fetchInitialSuggestions() {
 		initialSuggestions = []; // Clear previous suggestions first
@@ -465,6 +469,11 @@
 		if (pollInterval) {
 			clearInterval(pollInterval);
 		}
+		
+		// Clean up copy timeout
+		if (copyTimeout) {
+			clearTimeout(copyTimeout);
+		}
 	});
 
 	// Scroll to bottom of chat (for user-initiated actions)
@@ -730,7 +739,8 @@
 		return typeof content === 'object' && 
 			content !== null && 
 			Array.isArray(content.headers) && 
-			Array.isArray(content.rows);
+			Array.isArray(content.rows) &&
+			content.rows.every((row: any) => Array.isArray(row)); // Ensure each row is also an array
 	}
 	
 	// Function to get table data safely
@@ -824,6 +834,10 @@
 
 		// Sort the rows
 		tableData.rows.sort((a, b) => {
+			// Skip sorting if rows are not arrays
+			if (!Array.isArray(a) || !Array.isArray(b)) {
+				return 0;
+			}
 			const valA = a[columnIndex];
 			const valB = b[columnIndex];
 
@@ -915,6 +929,32 @@
 		editingContent = '';
 	}
 
+	// Helper function to clean HTML content and extract plain text with ticker symbols
+	function cleanHtmlContent(htmlContent: string): string {
+		if (!htmlContent) return '';
+		
+		// First, handle the original $$$ ticker patterns before they're converted to buttons
+		// Pattern: $$$TICKER-TIMESTAMPINMS$$$
+		const dollarTickerRegex = /\$\$\$([A-Z]{1,5})-(\d+)\$\$\$/g;
+		let processedContent = htmlContent.replace(dollarTickerRegex, '$1');
+		
+		// Create a temporary DOM element to parse HTML
+		const tempDiv = document.createElement('div');
+		tempDiv.innerHTML = processedContent;
+		
+		// Find all ticker buttons and replace them with just the ticker symbol
+		const tickerButtons = tempDiv.querySelectorAll('button.ticker-button[data-ticker]');
+		tickerButtons.forEach(button => {
+			const ticker = button.getAttribute('data-ticker');
+			if (ticker) {
+				button.replaceWith(document.createTextNode(ticker));
+			}
+		});
+		
+		// Return the text content (automatically strips all HTML tags)
+		return tempDiv.textContent || '';
+	}
+
 	// Function to copy message content to clipboard
 	async function copyMessageToClipboard(message: Message) {
 		try {
@@ -924,42 +964,68 @@
 				// For messages with content chunks, extract text from each chunk
 				textToCopy = message.contentChunks.map(chunk => {
 					if (chunk.type === 'text') {
-						return typeof chunk.content === 'string' ? chunk.content : String(chunk.content);
+						const content = typeof chunk.content === 'string' ? chunk.content : String(chunk.content);
+						return cleanHtmlContent(content);
 					} else if (chunk.type === 'table' && isTableData(chunk.content)) {
 						// For tables, create a simple text representation
 						const tableData = chunk.content;
 						let tableText = '';
 						if (tableData.caption) {
-							tableText += tableData.caption + '\n\n';
+							const cleanCaption = cleanHtmlContent(tableData.caption);
+							tableText += cleanCaption + '\n\n';
 						}
 						// Add headers
 						tableText += tableData.headers.join('\t') + '\n';
-						// Add rows
-						tableText += tableData.rows.map(row => row.join('\t')).join('\n');
+						// Add rows (also clean ticker formatting from table cells)
+						tableText += tableData.rows.map(row => {
+							if (Array.isArray(row)) {
+								return row.map(cell => cleanHtmlContent(String(cell))).join('\t');
+							} else {
+								return cleanHtmlContent(String(row));
+							}
+						}).join('\n');
 						return tableText;
 					}
 					return '';
 				}).join('\n\n');
 			} else {
 				// For simple text messages
-				textToCopy = message.content;
+				textToCopy = cleanHtmlContent(message.content);
 			}
 			
 			await navigator.clipboard.writeText(textToCopy);
 			
-			// Optional: Show a brief success indicator
-			// You could add a toast notification here if desired
+			// Show success feedback
+			copiedMessageId = message.message_id;
+			if (copyTimeout) {
+				clearTimeout(copyTimeout);
+			}
+			copyTimeout = setTimeout(() => {
+				copiedMessageId = '';
+				copyTimeout = null;
+			}, 1000); // Show success state for 2 seconds
 			
 		} catch (error) {
 			console.error('Failed to copy message to clipboard:', error);
 			// Fallback for older browsers
 			try {
 				const textArea = document.createElement('textarea');
-				textArea.value = message.content;
+				const fallbackText = cleanHtmlContent(message.content);
+				textArea.value = fallbackText;
 				document.body.appendChild(textArea);
 				textArea.select();
 				document.execCommand('copy');
 				document.body.removeChild(textArea);
+				
+				// Show success feedback for fallback too
+				copiedMessageId = message.message_id;
+				if (copyTimeout) {
+					clearTimeout(copyTimeout);
+				}
+				copyTimeout = setTimeout(() => {
+					copiedMessageId = '';
+					copyTimeout = null;
+				}, 1000);
 			} catch (fallbackError) {
 				console.error('Fallback copy method also failed:', fallbackError);
 			}
@@ -1284,9 +1350,13 @@
 																		{#each tableData.rows as row, rowIndex}
 																			{#if rowIndex < 5 || isExpanded}
 																			<tr>
-																				{#each row as cell}
-																				<td>{@html parseMarkdown(typeof cell === 'string' ? cell : String(cell))}</td>
-																				{/each}
+																				{#if Array.isArray(row)}
+																					{#each row as cell}
+																					<td>{@html parseMarkdown(typeof cell === 'string' ? cell : String(cell))}</td>
+																					{/each}
+																				{:else}
+																					<td colspan="{tableData.headers.length}">Invalid row data: {typeof row === 'string' ? row : String(row)}</td>
+																				{/if}
 																			</tr>
 																			{/if}
 																		{/each}
@@ -1314,10 +1384,19 @@
 							</div>
 							{#if message.sender === 'assistant'}
 								<div class="message-actions">
-									<button class="copy-btn" on:click={() => copyMessageToClipboard(message)}>
-										<svg viewBox="0 0 24 24" width="14" height="14">
-											<path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" fill="currentColor" />
-										</svg>
+									<button 
+										class="copy-btn {copiedMessageId === message.message_id ? 'copied' : ''}" 
+										on:click={() => copyMessageToClipboard(message)}
+									>
+										{#if copiedMessageId === message.message_id}
+											<svg viewBox="0 0 24 24" width="14" height="14">
+												<path d="M9,20.42L2.79,14.21L5.62,11.38L9,14.77L18.88,4.88L21.71,7.71L9,20.42Z" fill="currentColor" />
+											</svg>
+										{:else}
+											<svg viewBox="0 0 24 24" width="14" height="14">
+												<path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" fill="currentColor" />
+											</svg>
+										{/if}
 									</button>
 								</div>
 							{/if}
@@ -1339,10 +1418,19 @@
 					<!-- Edit button for user messages - outside the message div -->
 					{#if message.sender === 'user' && editingMessageId !== message.message_id}
 						<div class="message-actions">
-							<button class="copy-btn" on:click={() => copyMessageToClipboard(message)}>
-								<svg viewBox="0 0 24 24" width="14" height="14">
-									<path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" fill="currentColor" />
-								</svg>
+							<button 
+								class="copy-btn {copiedMessageId === message.message_id ? 'copied' : ''}" 
+								on:click={() => copyMessageToClipboard(message)}
+							>
+								{#if copiedMessageId === message.message_id}
+									<svg viewBox="0 0 24 24" width="14" height="14">
+										<path d="M9,20.42L2.79,14.21L5.62,11.38L9,14.77L18.88,4.88L21.71,7.71L9,20.42Z" fill="currentColor" />
+									</svg>
+								{:else}
+									<svg viewBox="0 0 24 24" width="14" height="14">
+										<path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" fill="currentColor" />
+									</svg>
+								{/if}
 							</button>
 							<button class="edit-btn" on:click={() => startEditing(message)}>
 								<svg viewBox="0 0 24 24" width="14" height="14">
