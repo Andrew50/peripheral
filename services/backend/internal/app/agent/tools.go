@@ -554,7 +554,7 @@ var (
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"securityId":       {Type: genai.TypeInteger, Description: "The security ID to analyze."},
-						"timeframe":        {Type: genai.TypeString, Description: "The timeframe to analyze. This is of the form 'n' + 'time_unit'. Minute data has no time unit, hour data is 'h', day data is 'd'. Supports second, minute, hour, day, week, and month."},
+						"timeframe":        {Type: genai.TypeString, Description: "The timeframe to analyze. This is of the form 'n' + 'time_unit'. Minute data has no time unit e.g 1 minute is '1', hour data is 'h', day data is 'd'. Supports second, minute, hour, day, week."},
 						"from":             {Type: genai.TypeInteger, Description: "The start of the date range in milliseconds."},
 						"to":               {Type: genai.TypeInteger, Description: "The end of the date range in milliseconds."},
 						"extended":         {Type: genai.TypeBoolean, Description: "Optional. Whether to include extended hours data. Defaults to false."},
@@ -564,6 +564,8 @@ var (
 					Required: []string{"securityId", "timeframe", "from", "to"},
 				},
 			},
+			Function:      wrapWithContext(RunIntradayAgent),
+			StatusMessage: "Running intraday agent...",
 		},
 		// ────────────────────────────────────────────────────────────────────
 		"getStrategies": {
