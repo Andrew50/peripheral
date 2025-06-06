@@ -368,6 +368,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { ESTStringToUTCTimestamp, UTCTimestampToESTString } from '$lib/utils/helpers/timestamp';
 	let prevFocusedElement: HTMLElement | null = null;
+	let highlightedIndex = -1;
 
 	async function enterInput(iQ: InputQuery, tickerIndex: number = 0): Promise<InputQuery> {
 		if (iQ.inputType === 'ticker') {
@@ -460,6 +461,9 @@
 		const target = event.target as HTMLInputElement;
 		const newValue = target.value;
 		
+		// Reset highlighted index when input changes
+		highlightedIndex = -1;
+		
 		// Update the input string in the store
 		inputQuery.update((v) => ({
 			...v,
@@ -470,7 +474,7 @@
 		determineInputType(newValue);
 	}
 
-	// Handle special keys (Enter, Tab, Escape)
+	// Handle special keys (Enter, Tab, Escape, Arrow keys)
 	async function handleKeyDown(event: KeyboardEvent): Promise<void> {
 		const currentState = get(inputQuery);
 		
@@ -482,13 +486,29 @@
 		// Handle special keys
 		if (event.key === 'Escape') {
 			event.preventDefault();
+			highlightedIndex = -1;
 			inputQuery.update((q) => ({ ...q, status: 'cancelled' }));
 			return;
 		} else if (event.key === 'Enter') {
 			event.preventDefault();
 			if (currentState.inputValid) {
-				const updatedQuery = await enterInput(currentState, 0);
+				// Use highlighted index if one is selected, otherwise use 0
+				const selectedIndex = highlightedIndex >= 0 ? highlightedIndex : 0;
+				const updatedQuery = await enterInput(currentState, selectedIndex);
 				inputQuery.set(updatedQuery);
+				highlightedIndex = -1; // Reset after selection
+			}
+			return;
+		} else if (event.key === 'ArrowDown') {
+			event.preventDefault();
+			if (currentState.inputType === 'ticker' && currentState.securities && currentState.securities.length > 0) {
+				highlightedIndex = Math.min(highlightedIndex + 1, currentState.securities.length - 1);
+			}
+			return;
+		} else if (event.key === 'ArrowUp') {
+			event.preventDefault();
+			if (currentState.inputType === 'ticker' && currentState.securities && currentState.securities.length > 0) {
+				highlightedIndex = Math.max(highlightedIndex - 1, -1);
 			}
 			return;
 		} else if (event.key === 'Tab') {
@@ -750,18 +770,6 @@
 			<button class="utility-button" on:click|stopPropagation={closeWindow}>×</button>
 		</div>
 
-		<div class="search-bar">
-			<input
-				type="text"
-				placeholder="Enter ticker, timestamp, timeframe..."
-				bind:value={$inputQuery.inputString}
-				on:input={handleInputChange}
-				on:keydown={handleKeyDown}
-				class="search-input"
-				autocomplete="off"
-				spellcheck="false"
-			/>
-		</div>
 		<div class="content-container">
 			{#if true}
 				{#if $inputQuery.inputType === ''}
@@ -839,11 +847,12 @@
 							<div class="securities-list-flex">
 								{#each $inputQuery.securities as sec, i}
 									<div
-										class="security-item-flex"
+										class="security-item-flex {i === highlightedIndex ? 'highlighted' : ''}"
 										on:click={async () => {
 											const updatedQuery = await enterInput($inputQuery, i);
 											inputQuery.set(updatedQuery);
 										}}
+										on:mouseenter={() => highlightedIndex = i}
 										role="button"
 										tabindex="0"
 										on:keydown={(e) => {
@@ -866,11 +875,6 @@
 										<div class="security-info-flex">
 											<span class="ticker-flex">{sec.ticker}</span>
 											<span class="name-flex">{sec.name}</span>
-											<span class="timestamp-flex"
-												>{sec.timestamp !== undefined
-													? UTCTimestampToESTString(sec.timestamp)
-													: ''}</span
-											>
 										</div>
 									</div>
 								{/each}
@@ -952,262 +956,199 @@
 				{/if}
 			{/if}
 		</div>
+
+		<div class="search-bar">
+			<div class="search-icon">
+				<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+				</svg>
+			</div>
+			<input
+				type="text"
+				placeholder="Search"
+				bind:value={$inputQuery.inputString}
+				on:input={handleInputChange}
+				on:keydown={handleKeyDown}
+				class="search-input"
+				autocomplete="off"
+				spellcheck="false"
+			/>
+		</div>
 	</div>
 {/if}
 
 <style>
-	.popup-container {
-		/* Responsive sizing */
-		width: 90vw; /* Use viewport width */
-		max-width: 700px; /* Max width */
-		height: 85vh; /* Use viewport height */
-		max-height: 600px; /* Max height */
-		background: var(--ui-bg-primary);
-		border: 1px solid var(--ui-border);
-		border-radius: 8px;
-		display: flex;
-		flex-direction: column;
-		overflow: hidden; /* Keep hidden to manage internal scrolling */
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-		position: fixed;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
-		z-index: 10000; /* Ensure this is higher than the drawing menu */
-	}
-
-	/* Button styles for field selection */
-	.field-buttons {
-		display: flex;
-		gap: 4px;
-		flex-wrap: nowrap;
-		margin-left: auto;
-		/* Remove max-width: 75%; */
-		justify-content: flex-end;
-		overflow-x: auto; /* Allows horizontal scrolling */
-		white-space: nowrap;
-		padding-left: 10px; /* Keep padding */
-		/* Add scrollbar styling for better UX */
-		scrollbar-width: thin;
-		scrollbar-color: var(--ui-border) transparent;
-	}
-
-	.toggle-button {
-		margin-right: 0;
-		padding: 4px 8px;
-		min-width: 60px;
-		height: 26px;
-		font-weight: 500;
-		font-size: 11px;
-		text-transform: uppercase;
-		letter-spacing: 0.3px;
-		transition: all 0.2s ease;
-		border-radius: 4px;
-		position: relative;
-		overflow: hidden;
+	#input-window.popup-container {
+		width: 90vw;
+		max-width: 600px;
+		height: auto;
+		max-height: 70vh;
 		background: transparent;
-		border: 1px solid var(--ui-border);
-		color: var(--text-secondary);
-		cursor: pointer;
-	}
-
-	.toggle-button:after {
-		content: '';
-		position: absolute;
-		bottom: 0;
-		left: 0;
-		width: 0;
-		height: 2px;
-		background: var(--ui-accent, #4a80f0);
-		transition: width 0.2s ease;
-	}
-
-	.toggle-button:hover {
-		background: var(--ui-bg-hover);
-	}
-
-	.toggle-button:hover:after {
-		width: 100%;
-	}
-
-	.toggle-button.active {
-		background: var(--ui-bg-hover);
-		border-bottom: 2px solid var(--ui-accent, #4a80f0);
-		color: var(--text-primary);
-	}
-
-	.toggle-button.active:after {
-		width: 100%;
-	}
-
-	.span-container {
+		border: none;
+		border-radius: 0;
 		display: flex;
 		flex-direction: column;
+		overflow: visible;
+		box-shadow: none;
+		position: fixed !important;
+		bottom: 50px !important;
+		left: 50% !important;
+		top: auto !important;
+		transform: translateX(-50%) !important;
+		z-index: 99999 !important;
 		gap: 8px;
-		width: 100%;
-	}
-	.span-container span {
-		align-items: top;
-		display: block;
-		flex-direction: row;
-		width: 100%;
-		font-size: 30px;
-	}
-	.span-row {
-		/* Each row is a flex container, left label and right value */
-		display: flex;
-		flex-direction: row;
-		justify-content: space-between;
-		/* optionally align items on the baseline or center */
-		align-items: baseline;
-	}
-
-	.span-row span {
-		/* Let it inherit the global font instead of forcing a size */
-		font-size: inherit;
 	}
 
 	.header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 8px 12px;
-		border-bottom: 1px solid var(--ui-border);
-		height: 40px;
+		display: none;
 	}
 
-	.title {
-		font-size: 16px;
-		font-weight: 500;
-		color: var(--text-primary);
-	}
+
 
 	.search-bar {
-		padding: 8px 12px;
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		border-bottom: 1px solid var(--ui-border);
-		height: 48px;
+		height: 56px;
+		background: rgba(0, 0, 0, 0.4);
+		border: 1px solid rgba(255, 255, 255, 0.3);
+		border-radius: 28px;
+		padding: 0 4px;
 		position: relative;
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+		backdrop-filter: var(--backdrop-blur);
+	}
+
+	.search-icon {
+		padding: 12px 4px 12px 20px;
+		display: flex;
+		align-items: center;
+		color: #ffffff;
+		position: absolute;
+		left: 8px;
+		z-index: 1;
+		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
+	}
+
+	.search-icon svg {
+		width: 18px;
+		height: 18px;
+		opacity: 1;
 	}
 
 	.search-bar input {
 		flex: 1;
-		background: var(--ui-bg-element);
-		border: 1px solid var(--ui-border);
-		padding: 6px 10px;
-		color: var(--text-primary);
-		border-radius: 4px;
-		font-size: 14px; /* Ensure consistent font size */
+		background: transparent;
+		border: none;
+		border-radius: 24px;
+		padding: 12px 16px 12px 48px;
+		color: #ffffff;
+		font-size: 16px;
+		margin: 8px;
+		font-weight: 500;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
 	.search-bar input:focus {
 		outline: none;
-		border-color: var(--ui-accent, #4a80f0);
-		box-shadow: 0 0 0 2px rgba(74, 128, 240, 0.2);
 	}
 
-	/* Styles for Flexbox security list */
+	.search-bar input::placeholder {
+		color: rgba(255, 255, 255, 0.9);
+		opacity: 1;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+	}
+
 	.content-container {
-		flex: 1; /* Allow container to grow and shrink */
-		overflow-y: auto; /* Scroll within this container */
-		padding: 8px 12px; /* Add padding */
+		background: rgba(0, 0, 0, 0.5);
+		border: 1px solid rgba(255, 255, 255, 0.3);
+		border-radius: 12px;
+		overflow-y: auto;
+		padding: 8px;
+		height: 240px;
+		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+		backdrop-filter: var(--backdrop-blur);
+		scrollbar-width: thin;
+		scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
 	}
 
-	.table-container { /* Style the container for the flex list */
-		height: 100%;
-		display: flex;
-		flex-direction: column;
-	}
+
+
+
 
 	.securities-list-flex {
 		display: flex;
 		flex-direction: column;
-		gap: 4px; /* Spacing between items */
+		gap: 4px;
 	}
 
 	.security-item-flex {
 		display: flex;
 		align-items: center;
-		padding: 6px 8px;
+		padding: 4px 6px;
 		cursor: pointer;
-		border-radius: 4px;
-		border: 1px solid transparent; /* For hover effect */
+		border-radius: 6px;
+		border: 1px solid transparent;
 		transition: background-color 0.15s ease, border-color 0.15s ease;
-		gap: 12px; /* Space between icon and info */
+		gap: 8px;
+		min-height: 36px;
 	}
 
 	.security-item-flex:hover {
-		background-color: var(--ui-bg-hover);
-		border-color: var(--ui-border);
+		background-color: rgba(255, 255, 255, 0.1);
+		border-color: rgba(255, 255, 255, 0.4);
+		backdrop-filter: blur(8px);
+	}
+
+	.security-item-flex.highlighted {
+		background-color: rgba(74, 128, 240, 0.3);
+		border-color: #4a80f0;
+		backdrop-filter: blur(8px);
 	}
 
 	.security-icon-flex {
-		width: 60px; /* Fixed width for icon container */
-		height: 30px;
-		flex-shrink: 0; /* Prevent shrinking */
+		width: 32px;
+		height: 20px;
+		flex-shrink: 0;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		overflow: hidden; /* Hide overflow if icon is too large */
+		overflow: hidden;
 	}
 
 	.security-icon-flex img {
 		max-width: 100%;
 		max-height: 100%;
-		object-fit: contain; /* Scale icon while preserving aspect ratio */
+		object-fit: contain;
 	}
 
 	.security-info-flex {
-		flex: 1; /* Take remaining space */
+		flex: 1;
 		display: flex;
-		align-items: baseline; /* Align text baselines */
-		gap: 10px; /* Space between ticker, name, timestamp */
-		overflow: hidden; /* Prevent content from overflowing the item */
-		font-size: 13px; /* Base font size */
-		white-space: nowrap; /* Prevent wrapping within info */
+		align-items: baseline;
+		gap: 8px;
+		overflow: hidden;
+		font-size: 12px;
+		white-space: nowrap;
 	}
 
 	.ticker-flex {
 		font-weight: 600;
-		color: var(--text-primary);
-		flex-basis: 70px; /* Give ticker a base width */
-		flex-shrink: 0; /* Don't shrink ticker */
+		color: #ffffff;
+		flex-basis: 50px;
+		flex-shrink: 0;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
 	.name-flex {
-		color: var(--text-secondary);
-		flex-grow: 1; /* Allow name to take up available space */
-		overflow: hidden; /* Hide overflow */
-		text-overflow: ellipsis; /* Add ellipsis for long names */
-		min-width: 100px; /* Ensure name has some minimum width */
+		color: #ffffff;
+		flex-grow: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		min-width: 100px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
-	.timestamp-flex {
-		color: var(--text-secondary);
-		font-size: 0.9em; /* Slightly smaller timestamp */
-		flex-shrink: 0; /* Don't shrink timestamp */
-		margin-left: auto; /* Push timestamp to the right */
-		padding-left: 10px; /* Add padding */
-	}
 
-	.loading-spinner {
-		width: 30px;
-		height: 30px;
-		border: 3px solid var(--ui-border);
-		border-top: 3px solid var(--text-primary);
-		border-radius: 50%;
-		animation: spin 1s linear infinite;
-		margin-bottom: 10px;
-	}
-
-	.loading-text {
-		color: var(--text-secondary);
-		font-size: 14px;
-		text-align: center;
-		display: block;
-	}
 
 	.loading-container {
 		display: flex;
@@ -1218,97 +1159,38 @@
 		height: 200px;
 	}
 
+	.loading-spinner {
+		width: 30px;
+		height: 30px;
+		border: 3px solid rgba(255, 255, 255, 0.3);
+		border-top: 3px solid #ffffff;
+		border-radius: 50%;
+		animation: spin 1s linear infinite;
+		margin-bottom: 10px;
+	}
+
+	.loading-text {
+		color: #ffffff;
+		font-size: 14px;
+		text-align: center;
+		font-weight: 500;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+	}
+
 	.no-results {
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		height: 200px;
-		color: var(--text-secondary);
+		color: #ffffff;
 		font-size: 14px;
 		text-align: center;
+		font-weight: 500;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
 	@keyframes spin {
-		0% {
-			transform: rotate(0deg);
-		}
-		100% {
-			transform: rotate(360deg);
-		}
+		0% { transform: rotate(0deg); }
+		100% { transform: rotate(360deg); }
 	}
-
-	/* Added styles for extended hours buttons */
-	.extended-hours-container .span-row {
-		align-items: center; /* Center align items vertically */
-		justify-content: flex-start; /* Align items to the start */
-		gap: 15px; /* Add space between label and button group */
-	}
-
-	.extended-hours-container .hours-buttons {
-		display: flex;
-		gap: 8px; /* Space between buttons */
-	}
-
-	.extended-hours-container .hours-buttons .toggle-button {
-		/* Reuse existing toggle-button styles */
-		/* Add specific adjustments if needed */
-		min-width: 80px; /* Give buttons a bit more width */
-	}
-
-	.extended-hours-container .label .hint {
-		font-size: 0.8em; /* Smaller font size */
-		color: var(--text-secondary); /* Lighter color */
-		font-weight: 400; /* Normal weight */
-		margin-left: 4px; /* Small space from label */
-	}
-
-	.extended-hours-container .label .hint kbd {
-		background-color: var(--ui-bg-element);
-		border: 1px solid var(--ui-border);
-		border-radius: 3px;
-		padding: 1px 4px;
-		font-family: monospace;
-		font-size: 0.9em;
-		box-shadow: 1px 1px 1px rgba(0, 0, 0, 0.1);
-	}
-
-	/* Style the specific row in both Auto and dedicated views */
-	.extended-hours-container .span-row,
-	.span-container .extended-hours-row {
-		align-items: center; /* Keep vertical alignment */
-		justify-content: flex-start; /* Align label and button group to the start */
-		gap: 15px; /* Space between label and button group */
-	}
-
-	/* Style for the hint text and kbd */
-	.label .hint {
-		font-size: 0.8em; /* Smaller font size */
-		color: var(--text-secondary); /* Lighter color */
-		font-weight: 400; /* Normal weight */
-		margin-left: 4px; /* Small space from label */
-	}
-
-	.label .hint kbd {
-		background-color: var(--ui-bg-element);
-		border: 1px solid var(--ui-border);
-		border-radius: 3px;
-		padding: 1px 4px;
-		font-family: monospace;
-		font-size: 0.9em;
-		box-shadow: 1px 1px 1px rgba(0, 0, 0, 0.1);
-	}
-
-	/* Override layout for extended hours rows */
-	.span-row.extended-hours-row {
-		justify-content: flex-start !important;
-		gap: 8px;
-	}
-
-	/* Ensure buttons in extended-hours rows are inline and spaced */
-	.span-row.extended-hours-row .hours-buttons {
-		display: flex;
-		gap: 8px;
-	}
-
-
 </style>
