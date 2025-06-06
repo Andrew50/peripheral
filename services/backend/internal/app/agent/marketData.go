@@ -4,8 +4,8 @@ import (
 	"backend/internal/app/chart"
 	"backend/internal/data"
 	"backend/internal/data/polygon"
+	"backend/internal/data/postgres"
 	"backend/internal/data/utils"
-	"backend/internal/postgres"
 	"strings"
 
 	"context"
@@ -499,7 +499,12 @@ func RunIntradayAgent(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 		return nil, fmt.Errorf("unable to get ticker from OHLCV response")
 	}
 
-	dailyData, err := polygon.GetDailyOHLCVForTicker(context.Background(), conn.Polygon, postgres.GetTicker(conn.DB, args.SecurityID, fromTime), dateStr, splitAdjustedValue)
+	ticker, err := postgres.GetTicker(conn, args.SecurityID, fromTime)
+	if err != nil {
+		return nil, fmt.Errorf("error getting ticker: %v", err)
+	}
+
+	dailyData, err := polygon.GetDailyOHLCVForTicker(context.Background(), conn.Polygon, ticker, dateStr, splitAdjustedValue)
 	if err != nil {
 		return nil, fmt.Errorf("error getting daily data: %v", err)
 	}
