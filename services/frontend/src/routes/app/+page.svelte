@@ -939,7 +939,9 @@
 				on:click={toggleLeftPane}
 				title="AI Query"
 			>
-				<img src="query.png" alt="AI Query" class="menu-icon" />
+				<svg class="chat-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path d="M8 12H8.01M12 12H12.01M16 12H16.01M21 12C21 16.418 16.97 20 12 20C10.89 20 9.84 19.8 8.87 19.42L3 21L4.58 15.13C4.2 14.16 4 13.11 4 12C4 7.582 8.03 4 12 4C16.97 4 21 7.582 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+				</svg>
 			</button>
 			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'strategies') ? 'active' : ''}"
@@ -1453,22 +1455,13 @@
 
 	/* Query feature button styling */
 	.query-feature {
-		background-color: rgba(0, 123, 255, 0.2);
-		border: 1px solid rgba(0, 123, 255, 0.5) !important;
-		position: relative;
+		/* Remove special styling - use default button styles */
 	}
 
-	.query-feature:not(.active):hover {
-		background-color: rgba(0, 123, 255, 0.4);
-	}
-
-	.query-feature.active {
-		background-color: rgba(0, 123, 255, 0.6);
-		border-color: rgba(0, 123, 255, 0.9) !important;
-	}
-
-	.query-feature .menu-icon {
-		filter: drop-shadow(0 0 2px rgba(0, 123, 255, 0.8));
+	.chat-icon {
+		width: 20px;
+		height: 20px;
+		color: var(--f1);
 	}
 
 	/* Replay button styles */
