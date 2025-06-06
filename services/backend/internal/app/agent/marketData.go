@@ -28,43 +28,56 @@ type GetOHLCVDataArgs struct {
 	ExtendedHours bool     `json:"extended"`
 	SplitAdjusted *bool    `json:"splitAdjusted,omitempty"`
 	Columns       []string `json:"columns,omitempty"`
+	TimestampType string   `json:"timestampType,omitempty"` // "ts" (default) or "text"
 }
 
 // Columnar response format for better token efficiency
 type GetOHLCVDataResponse struct {
-	Ticker    string    `json:"ticker,omitempty"`
-	Timeframe string    `json:"tf,omitempty"`
-	T         []float64 `json:"t"`           // timestamps
-	O         []float64 `json:"o,omitempty"` // open
-	H         []float64 `json:"h,omitempty"` // high
-	L         []float64 `json:"l,omitempty"` // low
-	C         []float64 `json:"c,omitempty"` // close
-	V         []float64 `json:"v,omitempty"` // volume
+	Ticker    string      `json:"ticker,omitempty"`
+	Timeframe string      `json:"tf,omitempty"`
+	T         interface{} `json:"t"`           // timestamps (Unix float64 or text string array)
+	O         []float64   `json:"o,omitempty"` // open
+	H         []float64   `json:"h,omitempty"` // high
+	L         []float64   `json:"l,omitempty"` // low
+	C         []float64   `json:"c,omitempty"` // close
+	V         []float64   `json:"v,omitempty"` // volume
 }
 
 // ColumnFilter handles which columns should be included in the response
 type ColumnFilter struct {
-	includeOpen   bool
-	includeHigh   bool
-	includeLow    bool
-	includeClose  bool
-	includeVolume bool
+	includeOpen     bool
+	includeHigh     bool
+	includeLow      bool
+	includeClose    bool
+	includeVolume   bool
+	timestampType   string
+	easternLocation *time.Location
 }
 
 // NewColumnFilter creates a new ColumnFilter from the requested columns
-func NewColumnFilter(columns []string) *ColumnFilter {
+func NewColumnFilter(columns []string, timestampType string, easternLocation *time.Location) *ColumnFilter {
+	// Default timestampType to "ts" if not specified or invalid
+	if timestampType != "text" {
+		timestampType = "ts"
+	}
+
 	// If no columns specified, include all
 	if len(columns) == 0 {
 		return &ColumnFilter{
-			includeOpen:   true,
-			includeHigh:   true,
-			includeLow:    true,
-			includeClose:  true,
-			includeVolume: true,
+			includeOpen:     true,
+			includeHigh:     true,
+			includeLow:      true,
+			includeClose:    true,
+			includeVolume:   true,
+			timestampType:   timestampType,
+			easternLocation: easternLocation,
 		}
 	}
 
-	cf := &ColumnFilter{}
+	cf := &ColumnFilter{
+		timestampType:   timestampType,
+		easternLocation: easternLocation,
+	}
 	for _, col := range columns {
 		switch col {
 		case "o":
@@ -84,7 +97,31 @@ func NewColumnFilter(columns []string) *ColumnFilter {
 
 // AppendToResponse adds a bar's data to the columnar response arrays
 func (cf *ColumnFilter) AppendToResponse(response *GetOHLCVDataResponse, timestamp time.Time, open, high, low, closePrice, volume float64) {
-	response.T = append(response.T, float64(timestamp.Unix()))
+	// Handle timestamp based on type
+	if cf.timestampType == "text" {
+		// Convert to America/New_York timezone and format as text
+		easternTime := timestamp.In(cf.easternLocation)
+		timestampStr := easternTime.Format("2006-01-02T15:04:05")
+
+		// Ensure T is initialized as string slice
+		if response.T == nil {
+			response.T = []string{}
+		}
+		if timestamps, ok := response.T.([]string); ok {
+			response.T = append(timestamps, timestampStr)
+		}
+	} else {
+		// Default behavior - Unix timestamp
+		timestampFloat := float64(timestamp.Unix())
+
+		// Ensure T is initialized as float64 slice
+		if response.T == nil {
+			response.T = []float64{}
+		}
+		if timestamps, ok := response.T.([]float64); ok {
+			response.T = append(timestamps, timestampFloat)
+		}
+	}
 
 	if cf.includeOpen {
 		response.O = append(response.O, open)
@@ -115,7 +152,12 @@ func GetOHLCVData(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{},
 		splitAdjustedValue = *args.SplitAdjusted
 	}
 
-	columnFilter := NewColumnFilter(args.Columns)
+	easternLocation, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return nil, fmt.Errorf("issue loading eastern location: %v", err)
+	}
+
+	columnFilter := NewColumnFilter(args.Columns, args.TimestampType, easternLocation)
 
 	multiplier, timespan, _, _, err := chart.GetTimeFrame(args.Timeframe)
 	if err != nil {
@@ -153,11 +195,6 @@ func GetOHLCVData(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{},
 	// For timeframes above day, there's no extended hours
 	if timespan != "minute" && timespan != "second" && timespan != "hour" {
 		args.ExtendedHours = false
-	}
-
-	easternLocation, err := time.LoadLocation("America/New_York")
-	if err != nil {
-		return nil, fmt.Errorf("issue loading eastern location: %v", err)
 	}
 
 	// Convert timestamps to time.Time
@@ -213,7 +250,13 @@ func GetOHLCVData(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{},
 	// Initialize columnar response
 	response := &GetOHLCVDataResponse{
 		Timeframe: args.Timeframe,
-		T:         make([]float64, 0, args.Bars+10),
+	}
+
+	// Initialize timestamp array based on type
+	if args.TimestampType == "text" {
+		response.T = make([]string, 0, args.Bars+10)
+	} else {
+		response.T = make([]float64, 0, args.Bars+10)
 	}
 
 	// Initialize arrays based on column filter
@@ -349,7 +392,17 @@ func GetOHLCVData(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{},
 	}
 
 	// Return chronological data
-	if len(response.T) > 0 {
+	hasData := false
+	if response.T != nil {
+		switch t := response.T.(type) {
+		case []float64:
+			hasData = len(t) > 0
+		case []string:
+			hasData = len(t) > 0
+		}
+	}
+
+	if hasData {
 		return response, nil
 	}
 
@@ -454,6 +507,7 @@ type RunIntradayAgentArgs struct {
 	SplitAdjusted    *bool  `json:"splitAdjusted,omitempty"`
 	AdditionalPrompt string `json:"additionalPrompt,omitempty"`
 }
+
 type RunIntradayAgentResponse struct {
 	Analysis string `json:"analysis"`
 }
@@ -479,6 +533,7 @@ func RunIntradayAgent(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 		Bars:          500,
 		ExtendedHours: args.ExtendedHours,
 		SplitAdjusted: &splitAdjustedValue,
+		TimestampType: "text",
 	}
 
 	// Marshal to JSON bytes
@@ -580,5 +635,4 @@ func RunIntradayAgent(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 	return RunIntradayAgentResponse{
 		Analysis: sb.String(),
 	}, nil
-
 }
