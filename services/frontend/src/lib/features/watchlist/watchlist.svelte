@@ -431,35 +431,58 @@
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		padding: 4px;
-		background: var(--ui-bg-secondary);
-		border-radius: 6px;
-		border: 1px solid var(--ui-border);
+		padding: 12px;
+		background: rgba(0, 0, 0, 0.4);
+		border-radius: 12px;
+		border: 1px solid rgba(255, 255, 255, 0.3);
+		backdrop-filter: var(--backdrop-blur);
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 	}
 
 	.watchlist-selector select {
 		flex: 1;
 		min-width: 200px;
+		background: rgba(0, 0, 0, 0.3);
+		color: #ffffff;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 8px;
+		padding: 8px 12px;
+		font-size: 14px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		transition: all 0.2s ease;
+	}
+
+	.watchlist-selector select:hover {
+		border-color: rgba(255, 255, 255, 0.4);
+	}
+
+	.watchlist-selector select:focus {
+		border-color: rgba(255, 255, 255, 0.6);
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+		outline: none;
 	}
 
 	.watchlist-selector .utility-button {
-		background: var(--ui-bg-primary);
-		color: var(--text-primary);
-		border: 1px solid var(--ui-border);
-		border-radius: 4px;
-		width: 32px;
-		height: 32px;
+		background: rgba(0, 0, 0, 0.3);
+		color: #ffffff;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 8px;
+		width: 36px;
+		height: 36px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		font-size: 18px;
+		font-weight: 600;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		transition: all 0.2s ease;
 	}
 
 	.watchlist-selector .utility-button:hover {
-		background: var(--ui-bg-hover);
+		background: rgba(255, 255, 255, 0.1);
+		border-color: rgba(255, 255, 255, 0.4);
 		transform: translateY(-1px);
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 	}
 
 	.watchlist-selector .new-watchlist-button {
@@ -480,39 +503,48 @@
 	.new-watchlist-container {
 		margin-top: 12px;
 		padding: 16px;
-		background: var(--ui-bg-secondary);
-		border-radius: 8px;
-		border: 1px solid var(--ui-border);
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+		background: rgba(0, 0, 0, 0.5);
+		border-radius: 12px;
+		border: 1px solid rgba(255, 255, 255, 0.3);
+		backdrop-filter: var(--backdrop-blur);
+		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 		animation: slideDown 0.2s ease-out;
 	}
 
 	@keyframes slideDown {
 		from {
 			opacity: 0;
-			transform: translateY(-10px);
+			transform: translateY(-10px) scale(0.95);
 		}
 		to {
 			opacity: 1;
-			transform: translateY(0);
+			transform: translateY(0) scale(1);
 		}
 	}
 
 	.new-watchlist-container .input {
 		width: 100%;
 		margin-bottom: 12px;
-		padding: 10px 12px;
-		border-radius: 6px;
-		border: 1px solid var(--ui-border);
-		background: var(--ui-bg-primary);
-		color: var(--text-primary);
+		padding: 12px 16px;
+		border-radius: 8px;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgba(0, 0, 0, 0.3);
+		color: #ffffff;
 		font-size: 14px;
+		font-weight: 500;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		transition: all 0.2s ease;
 	}
 
 	.new-watchlist-container .input:focus {
-		border-color: var(--accent-color);
-		box-shadow: 0 0 0 2px rgba(var(--accent-color-rgb), 0.1);
+		border-color: rgba(255, 255, 255, 0.6);
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+		outline: none;
+	}
+
+	.new-watchlist-container .input::placeholder {
+		color: rgba(255, 255, 255, 0.6);
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
 	.new-watchlist-buttons {
@@ -523,11 +555,13 @@
 
 	.new-watchlist-buttons .utility-button {
 		padding: 8px 16px;
-		border-radius: 4px;
-		border: 1px solid var(--ui-border);
-		background: var(--ui-bg-primary);
-		color: var(--text-primary);
+		border-radius: 8px;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgba(0, 0, 0, 0.3);
+		color: #ffffff;
 		font-size: 14px;
+		font-weight: 600;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		transition: all 0.2s ease;
 		min-width: 40px;
 		display: flex;
@@ -536,28 +570,33 @@
 	}
 
 	.new-watchlist-buttons .utility-button:hover {
-		background: var(--ui-bg-hover);
+		background: rgba(255, 255, 255, 0.1);
+		border-color: rgba(255, 255, 255, 0.4);
 		transform: translateY(-1px);
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 	}
 
 	.shortcut-container {
 		display: flex;
 		gap: 8px;
-		padding: 12px 16px;
+		padding: 16px;
 		flex-wrap: wrap;
-		border-bottom: 1px solid var(--ui-border);
-		background: var(--ui-bg-secondary);
+		background: rgba(0, 0, 0, 0.3);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 12px;
+		backdrop-filter: var(--backdrop-blur);
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 	}
 
 	.shortcut-button {
 		padding: 8px 12px;
-		border-radius: 6px;
-		border: 1px solid var(--ui-border);
-		background: var(--ui-bg-primary);
-		color: var(--text-primary);
+		border-radius: 8px;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgba(0, 0, 0, 0.3);
+		color: #ffffff;
 		font-size: 14px;
-		font-weight: 500;
+		font-weight: 600;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		transition: all 0.2s ease;
 		min-width: 36px;
 		height: 36px;
@@ -567,64 +606,68 @@
 	}
 
 	.shortcut-button:hover {
-		background: var(--ui-bg-hover);
+		background: rgba(255, 255, 255, 0.1);
+		border-color: rgba(255, 255, 255, 0.4);
 		transform: translateY(-1px);
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 	}
 
 	.shortcut-button.active {
-		background: var(--accent-color);
-		color: var(--text-on-accent);
-		border-color: var(--accent-color);
+		background: rgba(255, 255, 255, 0.2);
+		color: #ffffff;
+		border-color: rgba(255, 255, 255, 0.6);
+		box-shadow: 0 4px 16px rgba(255, 255, 255, 0.2);
 	}
 
 	.feature-container {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: 12px;
 		height: 100%;
-		background: var(--ui-bg-primary);
-		border-radius: 8px;
+		background: transparent;
+		border-radius: 0;
 		overflow: visible;
+		padding: 16px;
 	}
 
 	.controls-container {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
-		padding: 16px;
-		background: var(--ui-bg-primary);
-		border-bottom: 1px solid var(--ui-border);
+		gap: 12px;
+		background: transparent;
 	}
 
 	:global(.default-select) {
 		padding: 8px 12px;
-		border-radius: 6px;
-		border: 1px solid var(--ui-border);
-		background: var(--ui-bg-primary);
-		color: var(--text-primary);
+		border-radius: 8px;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgba(0, 0, 0, 0.3);
+		color: #ffffff;
 		font-size: 14px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		transition: all 0.2s ease;
 	}
 
 	:global(.default-select:hover) {
-		border-color: var(--accent-color);
+		border-color: rgba(255, 255, 255, 0.4);
 	}
 
 	:global(.default-select:focus) {
-		border-color: var(--accent-color);
-		box-shadow: 0 0 0 2px rgba(var(--accent-color-rgb), 0.1);
+		border-color: rgba(255, 255, 255, 0.6);
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+		outline: none;
 	}
 
 	:global(.default-select option) {
-		background: var(--ui-bg-primary);
-		color: var(--text-primary);
+		background: rgba(0, 0, 0, 0.9);
+		color: #ffffff;
 		padding: 8px;
 	}
 
 	:global(.default-select optgroup) {
 		font-weight: 600;
-		color: var(--text-secondary);
+		color: rgba(255, 255, 255, 0.7);
+		background: rgba(0, 0, 0, 0.9);
 	}
 
 	/* New style for the list container */
@@ -632,6 +675,12 @@
 		flex-grow: 1; /* Take remaining vertical space */
 		overflow-y: auto; /* Allow vertical scrolling */
 		min-height: 0; /* Necessary for flex-grow in some cases */
+		background: rgba(0, 0, 0, 0.4);
+		border: 1px solid rgba(255, 255, 255, 0.3);
+		border-radius: 12px;
+		backdrop-filter: var(--backdrop-blur);
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+		padding: 8px;
 	}
 
 	/* Custom scrollbar for WebKit browsers */
@@ -640,18 +689,19 @@
 	}
 
 	.list-scroll-container::-webkit-scrollbar-track {
-		background: var(--ui-bg-primary); /* Match the primary background */
+		background: rgba(0, 0, 0, 0.2); /* Transparent background */
 		border-radius: 4px;
 	}
 
 	.list-scroll-container::-webkit-scrollbar-thumb {
-		background-color: var(--ui-border); /* Use border color for the thumb */
+		background-color: rgba(255, 255, 255, 0.3); /* Semi-transparent white */
 		border-radius: 4px;
-		border: 2px solid var(--ui-bg-primary); /* Creates padding around thumb */
+		border: 2px solid transparent; /* Creates padding around thumb */
+		background-clip: content-box;
 	}
 
 	.list-scroll-container::-webkit-scrollbar-thumb:hover {
-		background-color: var(--text-secondary); /* Slightly lighter on hover */
+		background-color: rgba(255, 255, 255, 0.5); /* Slightly more opaque on hover */
 	}
 
 	/* Shortcut flag icon styling */
@@ -663,6 +713,7 @@
 	.flag-shortcut-icon svg {
 		width: 14px;
 		height: 14px;
-		color: var(--accent-color);
+		color: #4a80f0;
+		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
 	}
 </style>
