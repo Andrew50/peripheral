@@ -2,7 +2,7 @@
 	import L1 from './l1.svelte';
 	import TimeAndSales from './timeAndSales.svelte';
 	import { get, writable, type Writable } from 'svelte/store';
-	import { queryInstanceInput } from '$lib/components/input.svelte';
+	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import type { Instance } from '$lib/utils/types/types';
 	import { activeChartInstance, queryChart } from '$lib/features/chart/interface';
 	import StreamCell from '$lib/utils/stream/streamCell.svelte';
