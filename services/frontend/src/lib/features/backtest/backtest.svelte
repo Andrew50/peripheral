@@ -243,7 +243,8 @@
         {#each Object.keys(item) as key}
           {@const processed = processNumericObject(item[key])}
           {#if processed !== item[key]}
-            {@const _ = item[key] = processed}
+            {@const _ = (item[key] = processed)}
+            <!-- Processed numeric object -->
           {/if}
         {/each}
       {/each}

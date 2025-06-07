@@ -1104,7 +1104,7 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
 		{:else}
 			{#each $editedStrategy.spec.filters as filter, fIndex (fIndex)}
 				<div class="filter-row">
-					<label class="filter-label">IF</label>
+					<span class="filter-label">IF</span>
 					<select bind:value={filter.lhs} title="Left Hand Side Feature">
 						{#each $availableFeatures as feat} <option value={feat.id}>{feat.name} (ID: {feat.id})</option> {/each}
 					</select>
@@ -1166,8 +1166,8 @@ const availableFeatures = derived(editedStrategy, ($editedStrategy) => {
 <style>
 	/* --- Base & General Styles --- */
 	:global(body) { background-color: var(--ui-bg-primary, #f4f7f9); color: var(--text-primary, #333); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"; font-size: 15px; line-height: 1.6; }
-	input, select, textarea { background: var(--ui-bg-element, #fff); color: var(--text-primary, #333); border: 1px solid var(--ui-border, #d1d9e0); padding: 0.5rem 0.75rem; border-radius: 6px; width: 100%; box-sizing: border-box; margin-bottom: 0.5rem; font-size: 0.9rem; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
-	input:focus, select:focus, textarea:focus { border-color: var(--accent-blue, #007bff); box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2); outline: none; }
+	input, select { background: var(--ui-bg-element, #fff); color: var(--text-primary, #333); border: 1px solid var(--ui-border, #d1d9e0); padding: 0.5rem 0.75rem; border-radius: 6px; width: 100%; box-sizing: border-box; margin-bottom: 0.5rem; font-size: 0.9rem; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+	input:focus, select:focus { border-color: var(--accent-blue, #007bff); box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2); outline: none; }
 	input[type="checkbox"] { width: auto; margin-right: 0.5rem; vertical-align: middle; }
 	input:disabled { background-color: var(--ui-bg-disabled, #e9ecef); cursor: not-allowed; }
 	input.small { font-size: 0.8rem; padding: 0.25rem 0.5rem; }
