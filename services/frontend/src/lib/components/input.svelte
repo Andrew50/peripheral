@@ -789,10 +789,13 @@
 			<button class="utility-button" on:click|stopPropagation={closeWindow}>×</button>
 		</div>
 
-		{#if $inputQuery.inputType !== 'timeframe'}
-			<div class="content-container">
-				{#if $inputQuery.inputType === ''}
-					<div class="span-container">
+		<div class="content-container">
+			{#if $inputQuery.inputType === 'timeframe'}
+				<div class="timeframe-header-container">
+					<div class="timeframe-title">Change Interval</div>
+				</div>
+			{:else if $inputQuery.inputType === ''}
+				<div class="span-container">
 						{#if Array.isArray($inputQuery.possibleKeys)}
 							{#each $inputQuery.possibleKeys as key}
 								{#if key === 'extendedHours'}
@@ -940,22 +943,7 @@
 							/>
 						</div>
 					</div>
-				{:else if $inputQuery.inputType === 'timeframe'}
-					<div class="timeframe-preview-container">
-						{#if $inputQuery.inputString}
-							<div class="timeframe-preview">
-								{#if $inputQuery.inputValid}
-									<span class="preview-text">{formatTimeframe($inputQuery.inputString)}</span>
-								{:else}
-									<span class="preview-text error">Invalid timeframe format</span>
-								{/if}
-							</div>
-						{:else}
-							<div class="timeframe-hint">
-								<span class="hint-text">Enter a number followed by a time unit (e.g., 1m, 5h, 1d)</span>
-							</div>
-						{/if}
-					</div>
+
 				{:else if $inputQuery.inputType === 'extendedHours'}
 					<div class="span-container extended-hours-container">
 						<div class="span-row extended-hours-row">
@@ -987,8 +975,7 @@
 						</div>
 					</div>
 				{/if}
-			</div>
-		{/if}
+		</div>
 
 		<div class="search-bar {$inputQuery.inputType === 'timeframe' && !$inputQuery.inputValid && $inputQuery.inputString ? 'error' : ''}">
 			<div class="search-icon">
@@ -998,7 +985,7 @@
 			</div>
 			<input
 				type="text"
-				placeholder={$inputQuery.inputType === 'timeframe' ? 'Enter Timeframe' : 'Search'}
+				placeholder={$inputQuery.inputType === 'timeframe' ? '' : 'Search'}
 				bind:value={$inputQuery.inputString}
 				on:input={handleInputChange}
 				on:keydown={handleKeyDown}
@@ -1012,15 +999,16 @@
 			<div class="timeframe-preview-below">
 				{#if $inputQuery.inputString}
 					{#if $inputQuery.inputValid}
-						<span class="preview-text-small">{formatTimeframe($inputQuery.inputString)}</span>
+						<span class="preview-text-below">{formatTimeframe($inputQuery.inputString)}</span>
 					{:else}
-						<span class="preview-text-small error">Invalid format</span>
+						<span class="preview-text-below error">Invalid format</span>
 					{/if}
 				{:else}
-					<span class="preview-text-small hint">e.g., 1m, 5h, 1d</span>
+					<span class="preview-text-below hint">e.g., 1m, 5h, 1d</span>
 				{/if}
 			</div>
 		{/if}
+
 	</div>
 {/if}
 
@@ -1050,7 +1038,16 @@
 		top: 50% !important;
 		bottom: auto !important;
 		transform: translate(-50%, -50%) !important;
-		max-width: 400px;
+		max-width: 280px;
+		width: auto;
+		min-width: 240px;
+	}
+
+	.timeframe-popup .content-container,
+	.timeframe-popup .search-bar {
+		width: 240px;
+		margin-left: auto;
+		margin-right: auto;
 	}
 
 	.header {
@@ -1058,24 +1055,6 @@
 	}
 
 	.timeframe-popup .header {
-		display: flex;
-		justify-content: center;
-		align-items: center;
-		padding: 16px 24px 8px;
-		background: rgba(0, 0, 0, 0.6);
-		border-radius: 12px 12px 0 0;
-		margin-bottom: -8px;
-	}
-
-	.timeframe-popup .header .title {
-		color: #ffffff;
-		font-size: 18px;
-		font-weight: 600;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-	}
-
-	.timeframe-popup .header .field-buttons,
-	.timeframe-popup .header .utility-button {
 		display: none;
 	}
 
@@ -1095,13 +1074,9 @@
 	}
 
 	.timeframe-popup .search-bar {
-		border: 1px solid #4a80f0;
-		border-radius: 8px;
-		height: 48px;
-		background: rgba(0, 0, 0, 0.6);
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
-		width: 200px;
-		margin: 0 auto;
+		border-radius: 0 0 12px 12px;
+		height: 56px;
+		margin-top: 0;
 	}
 
 	.search-icon {
@@ -1145,6 +1120,11 @@
 		font-weight: 600;
 	}
 
+	.timeframe-popup .search-bar:focus-within {
+		border-color: #4a80f0;
+		box-shadow: 0 0 0 2px rgba(74, 128, 240, 0.2), 0 8px 32px rgba(0, 0, 0, 0.5);
+	}
+
 	.search-bar input:focus {
 		outline: none;
 	}
@@ -1179,65 +1159,81 @@
 
 	.timeframe-popup .content-container {
 		height: auto;
-		min-height: 80px;
+		min-height: 60px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: 24px;
+		padding: 16px;
+		border-radius: 12px 12px 0 0;
+		margin-bottom: 0;
 	}
 
-	.timeframe-preview-container {
+	.timeframe-header-container {
 		width: 100%;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 16px;
+		gap: 8px;
 	}
 
-	.timeframe-preview {
-		text-align: center;
-	}
-
-	.preview-text {
+	.timeframe-popup .timeframe-title {
 		color: #ffffff;
-		font-size: 16px;
-		font-weight: 500;
+		font-size: 20px;
+		font-weight: 600;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
-	.preview-text.error {
-		color: #ff6b6b;
-	}
 
-	.timeframe-hint {
-		text-align: center;
-	}
-
-	.hint-text {
-		color: rgba(255, 255, 255, 0.7);
-		font-size: 14px;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-	}
 
 	.timeframe-preview-below {
 		text-align: center;
 		margin-top: 8px;
+		width: 240px;
+		margin-left: auto;
+		margin-right: auto;
 	}
 
-	.preview-text-small {
+	.preview-text-below {
 		color: rgba(255, 255, 255, 0.8);
 		font-size: 12px;
 		font-weight: 400;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
-	.preview-text-small.error {
+	.preview-text-below.error {
 		color: #ff6b6b;
 	}
 
-	.preview-text-small.hint {
+	.preview-text-below.hint {
 		color: rgba(255, 255, 255, 0.5);
 	}
+
+
+
+	.timeframe-preview-below {
+		text-align: center;
+		margin-top: 8px;
+		width: 240px;
+		margin-left: auto;
+		margin-right: auto;
+	}
+
+	.preview-text-below {
+		color: rgba(255, 255, 255, 0.8);
+		font-size: 12px;
+		font-weight: 400;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+	}
+
+	.preview-text-below.error {
+		color: #ff6b6b;
+	}
+
+	.preview-text-below.hint {
+		color: rgba(255, 255, 255, 0.5);
+	}
+
+
 
 
 
