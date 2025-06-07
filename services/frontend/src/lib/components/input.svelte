@@ -860,12 +860,7 @@
 					</div>
 				{:else if $inputQuery.inputType === 'ticker'}
 					<div class="table-container">
-						{#if isLoadingSecurities}
-							<div class="loading-container">
-								<div class="loading-spinner"></div>
-								<span class="loading-text">Loading securities...</span>
-							</div>
-						{:else if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
+						{#if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
 							<div class="securities-list-flex">
 								{#each $inputQuery.securities as sec, i}
 									<div
@@ -906,18 +901,10 @@
 									</div>
 								{/each}
 							</div>
-						{:else if $inputQuery.inputString && $inputQuery.inputString.length > 0}
-							<!-- Show initially blank loading state until load state is set -->
-							{#if loadedSecurityResultRequest === -1 || loadedSecurityResultRequest !== currentSecurityResultRequest}
-								<div class="loading-container">
-									<div class="loading-spinner"></div>
-									<span class="loading-text">Loading securities...</span>
-								</div>
-							{:else}
-								<div class="no-results">
-									<span>No matching securities found</span>
-								</div>
-							{/if}
+						{:else if $inputQuery.inputString && $inputQuery.inputString.length > 0 && loadedSecurityResultRequest !== -1 && loadedSecurityResultRequest === currentSecurityResultRequest}
+							<div class="no-results">
+								<span>No matching securities found</span>
+							</div>
 						{/if}
 					</div>
 				{:else if $inputQuery.inputType === 'timestamp'}
@@ -1307,33 +1294,6 @@
 
 
 
-	.loading-container {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		padding: 30px;
-		height: 200px;
-	}
-
-	.loading-spinner {
-		width: 30px;
-		height: 30px;
-		border: 3px solid rgba(255, 255, 255, 0.3);
-		border-top: 3px solid #ffffff;
-		border-radius: 50%;
-		animation: spin 1s linear infinite;
-		margin-bottom: 10px;
-	}
-
-	.loading-text {
-		color: #ffffff;
-		font-size: 14px;
-		text-align: center;
-		font-weight: 500;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-	}
-
 	.no-results {
 		display: flex;
 		align-items: center;
@@ -1344,10 +1304,5 @@
 		text-align: center;
 		font-weight: 500;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-	}
-
-	@keyframes spin {
-		0% { transform: rotate(0deg); }
-		100% { transform: rotate(360deg); }
 	}
 </style>
