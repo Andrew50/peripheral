@@ -961,7 +961,7 @@
 		border-radius: max(0.375rem, 0.75vh);
 		border: 1px solid transparent;
 		transition: background-color 0.15s ease, border-color 0.15s ease;
-		gap: max(0.5rem, 1vh);
+		gap: max(0.75rem, 1.5vh);
 		min-height: max(2.25rem, 4.5vh);
 	}
 
@@ -971,13 +971,14 @@
 	}
 
 	.security-icon-flex {
-		width: max(2rem, 4vh);
+		width: max(1.25rem, 2.5vh);
 		height: max(1.25rem, 2.5vh);
 		flex-shrink: 0;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		overflow: hidden;
+		border-radius: 50%;
 	}
 
 	.security-icon-flex img {
