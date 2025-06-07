@@ -411,12 +411,14 @@
 			event.preventDefault();
 			if (currentState.inputType === 'ticker' && currentState.securities && currentState.securities.length > 0) {
 				highlightedIndex = Math.min(highlightedIndex + 1, currentState.securities.length - 1);
+				scrollToHighlighted();
 			}
 			return;
 		} else if (event.key === 'ArrowUp') {
 			event.preventDefault();
 			if (currentState.inputType === 'ticker' && currentState.securities && currentState.securities.length > 0) {
 				highlightedIndex = Math.max(highlightedIndex - 1, 0);
+				scrollToHighlighted();
 			}
 			return;
 		} else if (event.key === 'Tab') {
@@ -585,6 +587,19 @@
 		return '';
 	}
 
+	// Scroll highlighted item into view
+	function scrollToHighlighted() {
+		setTimeout(() => {
+			const highlightedElement = document.querySelector('.security-item-flex.highlighted');
+			if (highlightedElement) {
+				highlightedElement.scrollIntoView({
+					behavior: 'smooth',
+					block: 'nearest'
+				});
+			}
+		}, 0);
+	}
+
 	let sectors: string[] = [];
 	let industries: string[] = [];
 	
@@ -663,8 +678,12 @@
 					</div>
 				{:else if $inputQuery.inputType === 'ticker'}
 					<div class="table-container">
+						<div class="search-header">
+							<span class="search-title">Search</span>
+						</div>
+						<div class="search-divider"></div>
 						{#if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
-							<div class="securities-list-flex">
+							<div class="securities-list-flex securities-scrollable">
 								{#each $inputQuery.securities as sec, i}
 									<div
 										class="security-item-flex {i === highlightedIndex ? 'highlighted' : ''}"
@@ -992,6 +1011,13 @@
 		gap: 4px;
 	}
 
+	.securities-scrollable {
+		max-height: 180px;
+		overflow-y: auto;
+		scrollbar-width: thin;
+		scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+	}
+
 	.security-item-flex {
 		display: flex;
 		align-items: center;
@@ -1062,6 +1088,26 @@
 		text-align: center;
 		font-weight: 500;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+	}
+
+	.search-header {
+		padding: 8px 12px 4px 12px;
+		display: flex;
+		align-items: center;
+	}
+
+	.search-title {
+		color: #ffffff;
+		font-size: 14px;
+		font-weight: 600;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		opacity: 0.9;
+	}
+
+	.search-divider {
+		height: 1px;
+		background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+		margin: 0 8px 8px 8px;
 	}
 
 
