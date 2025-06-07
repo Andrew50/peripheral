@@ -613,69 +613,7 @@
 				<div class="timeframe-header-container">
 					<div class="timeframe-title">Change Interval</div>
 				</div>
-			{:else if $inputQuery.inputType === ''}
-				<div class="span-container">
-						{#if Array.isArray($inputQuery.possibleKeys)}
-							{#each $inputQuery.possibleKeys as key}
-								{#if key === 'extendedHours'}
-									<!-- Render the specific row for extendedHours -->
-									<div class="span-row extended-hours-row">
-										<span class="label">Market Hours <span class="hint"><kbd>Tab</kbd> to toggle</span></span>
-										<div class="hours-buttons">
-											<button
-												class="toggle-button {!$inputQuery.instance.extendedHours ? 'active' : ''}"
-												on:click={() => {
-													inputQuery.update((q) => ({
-														...q,
-														instance: { ...q.instance, extendedHours: false }
-													}));
-												}}
-											>
-												Regular
-											</button>
-											<button
-												class="toggle-button {$inputQuery.instance.extendedHours ? 'active' : ''}"
-												on:click={() => {
-													inputQuery.update((q) => ({
-														...q,
-														instance: { ...q.instance, extendedHours: true }
-													}));
-												}}
-											>
-												Extended
-											</button>
-										</div>
-									</div>
-								{:else}
-									<!-- Render standard row for other keys -->
-									<button type="button" 
-										class="span-row"
-										on:click={() => {
-											// Set the input type and let auto-detection handle it
-											inputQuery.update((v) => ({
-												...v,
-												inputType: key,
-												inputValid: true
-											}));
-										}}
-									>
-										<span
-											class={Array.isArray($inputQuery.requiredKeys) &&
-											$inputQuery.requiredKeys.includes(key) &&
-											!$inputQuery.instance[key]
-												? 'red'
-												: ''}
-										>
-											{capitalize(key)}
-										</span>
-										<span class="value">
-											{displayValue($inputQuery, key)}
-										</span>
-									</button>
-								{/if}
-							{/each}
-						{/if}
-					</div>
+
 				{:else if $inputQuery.inputType === 'ticker'}
 					<div class="table-container">
 						<div class="search-header">
