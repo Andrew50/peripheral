@@ -186,6 +186,10 @@
 					// Reset loading state after validation completes
 					if (inputType === 'ticker') {
 						isLoadingSecurities = false;
+						// Set default highlight to first result if we have securities
+						if (validationResp.securities && validationResp.securities.length > 0) {
+							highlightedIndex = 0;
+						}
 					}
 				}
 			})
@@ -461,8 +465,13 @@
 		const target = event.target as HTMLInputElement;
 		const newValue = target.value;
 		
-		// Reset highlighted index when input changes
-		highlightedIndex = -1;
+		// Reset highlighted index when input changes, but set to 0 if we'll have securities
+		const currentState = get(inputQuery);
+		if (currentState.inputType === 'ticker' && newValue.length > 0) {
+			highlightedIndex = 0; // Highlight first result by default for tickers
+		} else {
+			highlightedIndex = -1;
+		}
 		
 		// Update the input string in the store
 		inputQuery.update((v) => ({
@@ -1100,8 +1109,7 @@
 	}
 
 	.security-item-flex.highlighted {
-		background-color: rgba(74, 128, 240, 0.3);
-		border-color: #4a80f0;
+		background-color: rgba(255, 255, 255, 0.2);
 		backdrop-filter: blur(8px);
 	}
 
