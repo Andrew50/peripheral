@@ -617,7 +617,7 @@
 				{:else if $inputQuery.inputType === 'ticker'}
 					<div class="table-container">
 						<div class="search-header">
-							<span class="search-title">Search</span>
+							<span class="search-title">Symbol Search</span>
 						</div>
 						<div class="search-divider"></div>
 						{#if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
