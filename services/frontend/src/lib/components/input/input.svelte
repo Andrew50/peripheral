@@ -857,6 +857,7 @@
 		width: 240px;
 		margin-left: auto;
 		margin-right: auto;
+		transform-origin: center;
 	}
 
 	.search-bar {
@@ -1112,9 +1113,20 @@
 
 
 
-	.box-expand {
-		animation: boxExpand 0.15s ease-out;
+	.box-expand,
+	.search-bar-expand {
+		animation-duration: 0.15s;
+		animation-timing-function: ease-out;
+		animation-fill-mode: both;
 		transform-origin: center;
+	}
+
+	.box-expand {
+		animation-name: boxExpand;
+	}
+
+	.search-bar-expand {
+		animation-name: searchBarExpand;
 	}
 
 	@keyframes boxExpand {
@@ -1126,11 +1138,6 @@
 			transform: scale(1);
 			opacity: 1;
 		}
-	}
-
-	.search-bar-expand {
-		animation: searchBarExpand 0.15s ease-out;
-		transform-origin: center;
 	}
 
 	@keyframes searchBarExpand {
