@@ -593,7 +593,7 @@
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 {#if $inputQuery.status === 'active' || $inputQuery.status === 'initializing'}
 	<div class="popup-container {$inputQuery.inputType === 'timeframe' ? 'timeframe-popup' : ''}" id="input-window" tabindex="-1" on:click|stopPropagation>
-		<div class="content-container">
+		<div class="content-container box-expand">
 			{#if $inputQuery.inputType === 'timeframe'}
 				<div class="timeframe-header-container">
 					<div class="timeframe-title">Change Interval</div>
@@ -767,7 +767,7 @@
 				{/if}
 		</div>
 
-		<div class="search-bar {$inputQuery.inputType === 'timeframe' && !$inputQuery.inputValid && $inputQuery.inputString ? 'error' : ''}">
+		<div class="search-bar search-bar-expand {$inputQuery.inputType === 'timeframe' && !$inputQuery.inputValid && $inputQuery.inputString ? 'error' : ''}">
 			<div class="search-icon">
 				<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 					<path d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1062,5 +1062,39 @@
 		text-align: center;
 		font-weight: 500;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+	}
+
+
+
+	.box-expand {
+		animation: boxExpand 0.15s ease-out;
+		transform-origin: center;
+	}
+
+	@keyframes boxExpand {
+		from {
+			transform: scale(0.85);
+			opacity: 0.6;
+		}
+		to {
+			transform: scale(1);
+			opacity: 1;
+		}
+	}
+
+	.search-bar-expand {
+		animation: searchBarExpand 0.15s ease-out;
+		transform-origin: center;
+	}
+
+	@keyframes searchBarExpand {
+		from {
+			transform: scaleX(0.3);
+			opacity: 0.4;
+		}
+		to {
+			transform: scaleX(1);
+			opacity: 1;
+		}
 	}
 </style>
