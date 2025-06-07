@@ -878,9 +878,7 @@
 		box-shadow: 0 0 8px rgba(255, 68, 68, 0.3);
 	}
 
-	.search-bar input.error::placeholder {
-		color: rgba(255, 255, 255, 0.7);
-	}
+
 
 	.content-container {
 		background: rgba(0, 0, 0, 0.5);

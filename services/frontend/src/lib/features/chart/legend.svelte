@@ -435,7 +435,6 @@
 		min-width: 0;
 	}
 
-	.timeframe,
 	.timestamp,
 	.session-type {
 		font-size: 13px;
