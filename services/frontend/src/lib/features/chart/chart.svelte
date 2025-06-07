@@ -14,7 +14,7 @@
 	} from './interface';
 	import { streamInfo, settings, activeAlerts } from '$lib/utils/stores/stores';
 	import type { ShiftOverlay, ChartEventDispatch, BarData, ChartQueryDispatch } from './interface';
-	import { queryInstanceInput } from '$lib/components/input.svelte';
+	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { queryInstanceRightClick } from '$lib/components/rightClick.svelte';
 	import { createChart, ColorType, CrosshairMode } from 'lightweight-charts';
 	import type {

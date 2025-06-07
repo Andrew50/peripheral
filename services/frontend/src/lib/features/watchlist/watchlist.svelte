@@ -5,7 +5,7 @@
 	import type { Instance, Watchlist } from '$lib/utils/types/types';
 	import { onMount, tick } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
-	import { queryInstanceInput } from '$lib/components/input.svelte';
+	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { flagWatchlistId, watchlists, flagWatchlist } from '$lib/utils/stores/stores';
 	import '$lib/styles/global.css';
 

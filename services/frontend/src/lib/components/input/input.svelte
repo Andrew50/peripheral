@@ -3,13 +3,12 @@
 	import '$lib/styles/global.css';
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { get, writable } from 'svelte/store';
-	// Ignore the date-fns import error for now as it's likely installed in the full environment
-	import { parse } from 'date-fns';
 	import { tick } from 'svelte';
 	import type { Writable } from 'svelte/store';
 	import type { Instance } from '$lib/utils/types/types';
 	// Ignore the $app/environment import error for now
 	import { browser } from '$app/environment';
+	import { capitalize, formatTimeframe, detectInputTypeSync, validateInput } from '$lib/components/input/utils/inputUtils';
 
 	/**
 	 * Focus Management Strategy:
@@ -22,34 +21,16 @@
 	 * This approach prevents the input from capturing all keyboard events when it's not active.
 	 */
 
-	const allKeys = ['ticker', 'timestamp', 'timeframe', 'extendedHours'] as const;
+	import { allKeys, type InstanceAttributes, type InputQuery } from '$lib/components/input/utils/inputTypes';
 	let currentSecurityResultRequest = 0;
 	let loadedSecurityResultRequest = -1;
-	let manualInputType: string = 'auto';
 	let isLoadingSecurities = false;
-
-	type InstanceAttributes = (typeof allKeys)[number];
 	let filterOptions = [];
 
+	let activePromiseReject: ((reason?: any) => void) | null = null;
 	privateRequest<[]>('getSecurityClassifications', {}).then((v: []) => {
 		filterOptions = v;
 	});
-	interface InputQuery {
-		// 'inactive': no UI shown
-		// 'initializing' setting up event handlers
-		// 'active': window is open waiting for input
-		// 'complete': one field completed (may still be active if more required)
-		// 'cancelled': user cancelled via Escape
-		// 'shutdown': about to close and reset to inactive
-		status: 'inactive' | 'initializing' | 'active' | 'complete' | 'cancelled' | 'shutdown';
-		inputString: string;
-		inputType: string;
-		inputValid: boolean;
-		instance: Instance;
-		requiredKeys: InstanceAttributes[] | 'any';
-		possibleKeys: InstanceAttributes[];
-		securities?: Instance[];
-	}
 
 	const inactiveInputQuery: InputQuery = {
 		status: 'inactive',
@@ -62,96 +43,34 @@
 	};
 	export const inputQuery: Writable<InputQuery> = writable({ ...inactiveInputQuery });
 
-	// Move validateInput here
-	async function validateInput(
-		inputString: string,
-		inputType: string
-	): Promise<{
-		inputValid: boolean;
-		securities: Instance[];
-	}> {
-		if (inputType === 'ticker') {
-			isLoadingSecurities = true;
-
-			try {
-				// Add a small delay to avoid too many rapid requests during typing
-				await new Promise((resolve) => setTimeout(resolve, 10));
-
-				const securities = await privateRequest<Instance[]>('getSecuritiesFromTicker', {
-					ticker: inputString
-				});
-
-				if (Array.isArray(securities) && securities.length > 0) {
-					return {
-						inputValid: true,
-						securities: securities
-					};
-				}
-				return { inputValid: false, securities: [] };
-			} catch (error) {
-				console.error('Error fetching securities:', error);
-				// Return empty results but mark as valid if we have some input
-				// This allows the UI to stay responsive even if backend request fails
-				return {
-					inputValid: inputString.length > 0,
-					securities: []
-				};
-			} finally {
-				isLoadingSecurities = false;
-			}
-		} else if (inputType === 'timeframe') {
-			const regex = /^\d{1,3}[yqmwhds]?$/i;
-			return { inputValid: regex.test(inputString), securities: [] };
-		} else if (inputType === 'timestamp') {
-			const formats = ['yyyy-MM-dd H:m:ss', 'yyyy-MM-dd H:m', 'yyyy-MM-dd H', 'yyyy-MM-dd'];
-			for (const format of formats) {
-				try {
-					const parsedDate = parse(inputString, format, new Date());
-					if (!isNaN(parsedDate.getTime())) {
-						return { inputValid: true, securities: [] };
-					}
-				} catch {
-					/* try next format */
-				}
-			}
-			return { inputValid: false, securities: [] };
-		}
-		return { inputValid: false, securities: [] };
-	}
-
 	// Define determineInputType at module level
 	export function determineInputType(inputString: string): void {
 		const iQ = get(inputQuery);
 		let inputType = iQ.inputType;
 
-		// Only auto-classify if manualInputType is set to 'auto'
-		if (manualInputType === 'auto') {
-			if (inputString !== '') {
-				// Use our sync detection function for consistency
-				inputType = detectInputTypeSync(inputString, iQ.possibleKeys);
+		// Always auto-classify input type
+		if (inputString !== '') {
+			// Use our sync detection function for consistency
+			inputType = detectInputTypeSync(inputString, iQ.possibleKeys);
 
-				// If we detect a ticker, but the input is lowercase, convert to uppercase
-				if (inputType === 'ticker' && inputString !== inputString.toUpperCase()) {
-					// Update the input string with uppercase version
-					setTimeout(() => {
-						inputQuery.update((q) => ({
-							...q,
-							inputString: inputString.toUpperCase()
-						}));
-					}, 0);
-				}
-			} else {
-				// If input is empty, keep the current inputType if it was already set
-				// Only reset to empty if we were in an empty state to begin with
-				if (iQ.inputType !== '') {
-					inputType = iQ.inputType; // Keep current type
-				} else {
-					inputType = '';
-				}
+			// If we detect a ticker, but the input is lowercase, convert to uppercase
+			if (inputType === 'ticker' && inputString !== inputString.toUpperCase()) {
+				// Update the input string with uppercase version
+				setTimeout(() => {
+					inputQuery.update((q) => ({
+						...q,
+						inputString: inputString.toUpperCase()
+					}));
+				}, 0);
 			}
 		} else {
-			// Use the manually selected input type
-			inputType = manualInputType;
+			// If input is empty, keep the current inputType if it was already set
+			// Only reset to empty if we were in an empty state to begin with
+			if (iQ.inputType !== '') {
+				inputType = iQ.inputType; // Keep current type
+			} else {
+				inputType = '';
+			}
 		}
 
 		// Update the input type immediately
@@ -201,8 +120,6 @@
 			});
 	}
 
-	// Hold the reject function of the currently active promise (if any)
-	let activePromiseReject: ((reason?: any) => void) | null = null;
 
 	// Modified queryInstanceInput: if called while another query is active,
 	// cancel the previous query (rejecting its promise) and reset the state.
@@ -342,32 +259,6 @@
 		});
 	}
 
-	// Add this new helper function above the existing determineInputType function
-	function detectInputTypeSync(
-		inputString: string,
-		possibleKeysArg: InstanceAttributes[] | 'any'
-	): string {
-		// Make sure we have a valid array of possible keys
-		const possibleKeys = Array.isArray(possibleKeysArg) ? possibleKeysArg : [...allKeys];
-
-		if (!inputString || inputString === '') {
-			return '';
-		}
-
-		// Test for timeframe first - if it starts with a number, it's likely a timeframe
-		if (possibleKeys.includes('timeframe') && /^\d/.test(inputString)) {
-			return 'timeframe';
-		} else if (possibleKeys.includes('ticker') && /^[A-Z]+$/.test(inputString)) {
-			return 'ticker';
-		} else if (possibleKeys.includes('timestamp') && /^[\d-]+$/.test(inputString)) {
-			return 'timestamp';
-		} else if (possibleKeys.includes('ticker') && /^[a-zA-Z]+$/.test(inputString)) {
-			// Default to ticker for any alphabetic input if ticker is possible
-			return 'ticker';
-		}
-
-		return '';
-	}
 </script>
 
 <script lang="ts">
@@ -435,8 +326,6 @@
 		if (iQ.status === 'complete') {
 			iQ.inputType = '';
 			iQ.inputValid = true;
-			// Reset manualInputType to auto after input is entered
-			manualInputType = 'auto';
 		}
 
 		return iQ;
@@ -522,12 +411,14 @@
 			event.preventDefault();
 			if (currentState.inputType === 'ticker' && currentState.securities && currentState.securities.length > 0) {
 				highlightedIndex = Math.min(highlightedIndex + 1, currentState.securities.length - 1);
+				scrollToHighlighted();
 			}
 			return;
 		} else if (event.key === 'ArrowUp') {
 			event.preventDefault();
 			if (currentState.inputType === 'ticker' && currentState.securities && currentState.securities.length > 0) {
 				highlightedIndex = Math.max(highlightedIndex - 1, 0);
+				scrollToHighlighted();
 			}
 			return;
 		} else if (event.key === 'Tab') {
@@ -539,8 +430,6 @@
 			return;
 		}
 		
-		// For all other keys, let the normal input behavior handle it
-		// The handleInputChange function will be called automatically
 	}
 
 	// onTouch handler (if needed) now removes the UI by updating via update() too.
@@ -578,8 +467,6 @@
 							
 							// Process initial input string if present
 							if (v.inputString) {
-								// Ensure we're starting with auto detection for initial strings
-								manualInputType = 'auto';
 								determineInputType(v.inputString);
 							}
 						}
@@ -700,99 +587,34 @@
 		return '';
 	}
 
-	function closeWindow() {
-		inputQuery.update((v) => ({ ...v, status: 'cancelled' }));
+	// Scroll highlighted item into view
+	function scrollToHighlighted() {
+		setTimeout(() => {
+			const highlightedElement = document.querySelector('.security-item-flex.highlighted');
+			if (highlightedElement) {
+				highlightedElement.scrollIntoView({
+					behavior: 'smooth',
+					block: 'nearest'
+				});
+			}
+		}, 0);
 	}
 
 	let sectors: string[] = [];
 	let industries: string[] = [];
 	
-	function capitalize(str: string, lower = false): string {
-		return (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, (match: string) =>
-			match.toUpperCase()
-		);
-	}
-
-	function formatTimeframe(timeframe: string): string {
-		const match = timeframe.match(/^(\d+)([dwmsh]?)$/i) ?? null;
-		let result = timeframe;
-		if (match) {
-			switch (match[2]) {
-				case 'd':
-					result = `${match[1]} days`;
-					break;
-				case 'w':
-					result = `${match[1]} weeks`;
-					break;
-				case 'm':
-					result = `${match[1]} months`;
-					break;
-				case 'h':
-					result = `${match[1]} hours`;
-					break;
-				case 's':
-					result = `${match[1]} seconds`;
-					break;
-				default:
-					result = `${match[1]} minutes`;
-					break;
-			}
-			if (match[1] === '1') {
-				result = result.slice(0, -1);
-			}
-		}
-		return result;
-	}
 </script>
-
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
 {#if $inputQuery.status === 'active' || $inputQuery.status === 'initializing'}
 	<div class="popup-container {$inputQuery.inputType === 'timeframe' ? 'timeframe-popup' : ''}" id="input-window" tabindex="-1" on:click|stopPropagation>
-		<div class="header">
-			<div class="title">{$inputQuery.inputType === 'timeframe' ? 'Change Interval' : capitalize($inputQuery.inputType) + ' Search'}</div>
-			<div class="field-buttons">
-				<button
-					class="toggle-button {manualInputType === 'auto' && $inputQuery.inputType === ''
-						? 'active'
-						: ''}"
-					on:click|stopPropagation={async () => {
-						manualInputType = 'auto';
-						inputQuery.update((v) => ({
-							...v,
-							inputType: '',
-							inputString: '',
-							inputValid: true
-						}));
-						await tick(); // Wait for next UI update cycle
-						console.log('After Auto click, inputType is:', get(inputQuery).inputType); // Log state
-					}}
-				>
-					Auto
-				</button>
-				{#if Array.isArray($inputQuery.possibleKeys)}
-					{#each $inputQuery.possibleKeys as key}
-						<button
-							class="toggle-button {manualInputType === key ? 'active' : ''}"
-							on:click|stopPropagation={() => {
-								manualInputType = key;
-								inputQuery.update((v) => ({
-									...v,
-									inputType: manualInputType,
-									inputValid: true // Reset validity when manually changing type
-								}));
-							}}
-						>
-							{capitalize(key)}
-						</button>
-					{/each}
-				{/if}
-			</div>
-			<button class="utility-button" on:click|stopPropagation={closeWindow}>×</button>
-		</div>
-
-		{#if $inputQuery.inputType !== 'timeframe'}
-			<div class="content-container">
-				{#if $inputQuery.inputType === ''}
-					<div class="span-container">
+		<div class="content-container box-expand">
+			{#if $inputQuery.inputType === 'timeframe'}
+				<div class="timeframe-header-container">
+					<div class="timeframe-title">Change Interval</div>
+				</div>
+			{:else if $inputQuery.inputType === ''}
+				<div class="span-container">
 						{#if Array.isArray($inputQuery.possibleKeys)}
 							{#each $inputQuery.possibleKeys as key}
 								{#if key === 'extendedHours'}
@@ -829,12 +651,11 @@
 									<button type="button" 
 										class="span-row"
 										on:click={() => {
-											// Logic to select the key
-											manualInputType = key;
+											// Set the input type and let auto-detection handle it
 											inputQuery.update((v) => ({
 												...v,
-												inputType: manualInputType,
-												inputValid: true // Reset validity when manually changing type
+												inputType: key,
+												inputValid: true
 											}));
 										}}
 									>
@@ -857,13 +678,12 @@
 					</div>
 				{:else if $inputQuery.inputType === 'ticker'}
 					<div class="table-container">
-						{#if isLoadingSecurities}
-							<div class="loading-container">
-								<div class="loading-spinner"></div>
-								<span class="loading-text">Loading securities...</span>
-							</div>
-						{:else if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
-							<div class="securities-list-flex">
+						<div class="search-header">
+							<span class="search-title">Search</span>
+						</div>
+						<div class="search-divider"></div>
+						{#if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
+							<div class="securities-list-flex securities-scrollable">
 								{#each $inputQuery.securities as sec, i}
 									<div
 										class="security-item-flex {i === highlightedIndex ? 'highlighted' : ''}"
@@ -903,18 +723,10 @@
 									</div>
 								{/each}
 							</div>
-						{:else if $inputQuery.inputString && $inputQuery.inputString.length > 0}
-							<!-- Show initially blank loading state until load state is set -->
-							{#if loadedSecurityResultRequest === -1 || loadedSecurityResultRequest !== currentSecurityResultRequest}
-								<div class="loading-container">
-									<div class="loading-spinner"></div>
-									<span class="loading-text">Loading securities...</span>
-								</div>
-							{:else}
-								<div class="no-results">
-									<span>No matching securities found</span>
-								</div>
-							{/if}
+						{:else if $inputQuery.inputString && $inputQuery.inputString.length > 0 && loadedSecurityResultRequest !== -1 && loadedSecurityResultRequest === currentSecurityResultRequest}
+							<div class="no-results">
+								<span>No matching securities found</span>
+							</div>
 						{/if}
 					</div>
 				{:else if $inputQuery.inputType === 'timestamp'}
@@ -940,22 +752,7 @@
 							/>
 						</div>
 					</div>
-				{:else if $inputQuery.inputType === 'timeframe'}
-					<div class="timeframe-preview-container">
-						{#if $inputQuery.inputString}
-							<div class="timeframe-preview">
-								{#if $inputQuery.inputValid}
-									<span class="preview-text">{formatTimeframe($inputQuery.inputString)}</span>
-								{:else}
-									<span class="preview-text error">Invalid timeframe format</span>
-								{/if}
-							</div>
-						{:else}
-							<div class="timeframe-hint">
-								<span class="hint-text">Enter a number followed by a time unit (e.g., 1m, 5h, 1d)</span>
-							</div>
-						{/if}
-					</div>
+
 				{:else if $inputQuery.inputType === 'extendedHours'}
 					<div class="span-container extended-hours-container">
 						<div class="span-row extended-hours-row">
@@ -987,10 +784,9 @@
 						</div>
 					</div>
 				{/if}
-			</div>
-		{/if}
+		</div>
 
-		<div class="search-bar {$inputQuery.inputType === 'timeframe' && !$inputQuery.inputValid && $inputQuery.inputString ? 'error' : ''}">
+		<div class="search-bar search-bar-expand {$inputQuery.inputType === 'timeframe' && !$inputQuery.inputValid && $inputQuery.inputString ? 'error' : ''}">
 			<div class="search-icon">
 				<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 					<path d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -998,7 +794,7 @@
 			</div>
 			<input
 				type="text"
-				placeholder={$inputQuery.inputType === 'timeframe' ? 'Enter Timeframe' : 'Search'}
+				placeholder={$inputQuery.inputType === 'timeframe' ? '' : 'Search'}
 				bind:value={$inputQuery.inputString}
 				on:input={handleInputChange}
 				on:keydown={handleKeyDown}
@@ -1012,15 +808,16 @@
 			<div class="timeframe-preview-below">
 				{#if $inputQuery.inputString}
 					{#if $inputQuery.inputValid}
-						<span class="preview-text-small">{formatTimeframe($inputQuery.inputString)}</span>
+						<span class="preview-text-below">{formatTimeframe($inputQuery.inputString)}</span>
 					{:else}
-						<span class="preview-text-small error">Invalid format</span>
+						<span class="preview-text-below error">Invalid format</span>
 					{/if}
 				{:else}
-					<span class="preview-text-small hint">e.g., 1m, 5h, 1d</span>
+					<span class="preview-text-below hint">e.g., 1m, 5h, 1d</span>
 				{/if}
 			</div>
 		{/if}
+
 	</div>
 {/if}
 
@@ -1050,36 +847,18 @@
 		top: 50% !important;
 		bottom: auto !important;
 		transform: translate(-50%, -50%) !important;
-		max-width: 400px;
+		max-width: 280px;
+		width: auto;
+		min-width: 240px;
 	}
 
-	.header {
-		display: none;
+	.timeframe-popup .content-container,
+	.timeframe-popup .search-bar {
+		width: 240px;
+		margin-left: auto;
+		margin-right: auto;
+		transform-origin: center;
 	}
-
-	.timeframe-popup .header {
-		display: flex;
-		justify-content: center;
-		align-items: center;
-		padding: 16px 24px 8px;
-		background: rgba(0, 0, 0, 0.6);
-		border-radius: 12px 12px 0 0;
-		margin-bottom: -8px;
-	}
-
-	.timeframe-popup .header .title {
-		color: #ffffff;
-		font-size: 18px;
-		font-weight: 600;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-	}
-
-	.timeframe-popup .header .field-buttons,
-	.timeframe-popup .header .utility-button {
-		display: none;
-	}
-
-
 
 	.search-bar {
 		display: flex;
@@ -1095,13 +874,9 @@
 	}
 
 	.timeframe-popup .search-bar {
-		border: 1px solid #4a80f0;
-		border-radius: 8px;
-		height: 48px;
-		background: rgba(0, 0, 0, 0.6);
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
-		width: 200px;
-		margin: 0 auto;
+		border-radius: 0 0 12px 12px;
+		height: 56px;
+		margin-top: 0;
 	}
 
 	.search-icon {
@@ -1145,6 +920,11 @@
 		font-weight: 600;
 	}
 
+	.timeframe-popup .search-bar:focus-within {
+		border-color: #4a80f0;
+		box-shadow: 0 0 0 2px rgba(74, 128, 240, 0.2), 0 8px 32px rgba(0, 0, 0, 0.5);
+	}
+
 	.search-bar input:focus {
 		outline: none;
 	}
@@ -1179,74 +959,64 @@
 
 	.timeframe-popup .content-container {
 		height: auto;
-		min-height: 80px;
+		min-height: 60px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: 24px;
+		padding: 16px;
+		border-radius: 12px 12px 0 0;
+		margin-bottom: 0;
 	}
 
-	.timeframe-preview-container {
+	.timeframe-header-container {
 		width: 100%;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 16px;
+		gap: 8px;
 	}
 
-	.timeframe-preview {
-		text-align: center;
-	}
-
-	.preview-text {
+	.timeframe-popup .timeframe-title {
 		color: #ffffff;
-		font-size: 16px;
-		font-weight: 500;
+		font-size: 20px;
+		font-weight: 600;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-	}
-
-	.preview-text.error {
-		color: #ff6b6b;
-	}
-
-	.timeframe-hint {
-		text-align: center;
-	}
-
-	.hint-text {
-		color: rgba(255, 255, 255, 0.7);
-		font-size: 14px;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
 	.timeframe-preview-below {
 		text-align: center;
 		margin-top: 8px;
+		width: 240px;
+		margin-left: auto;
+		margin-right: auto;
 	}
 
-	.preview-text-small {
+	.preview-text-below {
 		color: rgba(255, 255, 255, 0.8);
 		font-size: 12px;
 		font-weight: 400;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
-	.preview-text-small.error {
+	.preview-text-below.error {
 		color: #ff6b6b;
 	}
 
-	.preview-text-small.hint {
+	.preview-text-below.hint {
 		color: rgba(255, 255, 255, 0.5);
 	}
-
-
-
-
 
 	.securities-list-flex {
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
+	}
+
+	.securities-scrollable {
+		max-height: 180px;
+		overflow-y: auto;
+		scrollbar-width: thin;
+		scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
 	}
 
 	.security-item-flex {
@@ -1309,35 +1079,6 @@
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
-
-
-	.loading-container {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		padding: 30px;
-		height: 200px;
-	}
-
-	.loading-spinner {
-		width: 30px;
-		height: 30px;
-		border: 3px solid rgba(255, 255, 255, 0.3);
-		border-top: 3px solid #ffffff;
-		border-radius: 50%;
-		animation: spin 1s linear infinite;
-		margin-bottom: 10px;
-	}
-
-	.loading-text {
-		color: #ffffff;
-		font-size: 14px;
-		text-align: center;
-		font-weight: 500;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-	}
-
 	.no-results {
 		display: flex;
 		align-items: center;
@@ -1350,8 +1091,63 @@
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
-	@keyframes spin {
-		0% { transform: rotate(0deg); }
-		100% { transform: rotate(360deg); }
+	.search-header {
+		padding: 8px 12px 4px 12px;
+		display: flex;
+		align-items: center;
+	}
+
+	.search-title {
+		color: #ffffff;
+		font-size: 14px;
+		font-weight: 600;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		opacity: 0.9;
+	}
+
+	.search-divider {
+		height: 1px;
+		background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+		margin: 0 8px 8px 8px;
+	}
+
+
+
+	.box-expand,
+	.search-bar-expand {
+		animation-duration: 0.15s;
+		animation-timing-function: ease-out;
+		animation-fill-mode: both;
+		transform-origin: center;
+	}
+
+	.box-expand {
+		animation-name: boxExpand;
+	}
+
+	.search-bar-expand {
+		animation-name: searchBarExpand;
+	}
+
+	@keyframes boxExpand {
+		from {
+			transform: scale(0.85);
+			opacity: 0.6;
+		}
+		to {
+			transform: scale(1);
+			opacity: 1;
+		}
+	}
+
+	@keyframes searchBarExpand {
+		from {
+			transform: scaleX(0.3);
+			opacity: 0.4;
+		}
+		to {
+			transform: scaleX(1);
+			opacity: 1;
+		}
 	}
 </style>
