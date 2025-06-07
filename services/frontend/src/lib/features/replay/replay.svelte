@@ -8,7 +8,7 @@
 		resumeReplay,
 		nextDay
 	} from '$lib/utils/stream/interface';
-	import { queryInstanceInput } from '$lib/components/input.svelte';
+	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { UTCTimestampToESTString } from '$lib/utils/helpers/timestamp';
 	import { streamInfo } from '$lib/utils/stores/stores';
 	import type { StreamInfo } from '$lib/utils/stores/stores';

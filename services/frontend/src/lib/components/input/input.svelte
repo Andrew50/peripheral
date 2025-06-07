@@ -3,13 +3,12 @@
 	import '$lib/styles/global.css';
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { get, writable } from 'svelte/store';
-	// Ignore the date-fns import error for now as it's likely installed in the full environment
-	import { parse } from 'date-fns';
 	import { tick } from 'svelte';
 	import type { Writable } from 'svelte/store';
 	import type { Instance } from '$lib/utils/types/types';
 	// Ignore the $app/environment import error for now
 	import { browser } from '$app/environment';
+	import { capitalize, formatTimeframe, detectInputTypeSync, validateInput } from '$lib/components/input/utils/inputUtils';
 
 	/**
 	 * Focus Management Strategy:
@@ -22,34 +21,16 @@
 	 * This approach prevents the input from capturing all keyboard events when it's not active.
 	 */
 
-	const allKeys = ['ticker', 'timestamp', 'timeframe', 'extendedHours'] as const;
+	import { allKeys, type InstanceAttributes, type InputQuery } from '$lib/components/input/utils/inputTypes';
 	let currentSecurityResultRequest = 0;
 	let loadedSecurityResultRequest = -1;
-	let manualInputType: string = 'auto';
 	let isLoadingSecurities = false;
-
-	type InstanceAttributes = (typeof allKeys)[number];
 	let filterOptions = [];
 
+	let activePromiseReject: ((reason?: any) => void) | null = null;
 	privateRequest<[]>('getSecurityClassifications', {}).then((v: []) => {
 		filterOptions = v;
 	});
-	interface InputQuery {
-		// 'inactive': no UI shown
-		// 'initializing' setting up event handlers
-		// 'active': window is open waiting for input
-		// 'complete': one field completed (may still be active if more required)
-		// 'cancelled': user cancelled via Escape
-		// 'shutdown': about to close and reset to inactive
-		status: 'inactive' | 'initializing' | 'active' | 'complete' | 'cancelled' | 'shutdown';
-		inputString: string;
-		inputType: string;
-		inputValid: boolean;
-		instance: Instance;
-		requiredKeys: InstanceAttributes[] | 'any';
-		possibleKeys: InstanceAttributes[];
-		securities?: Instance[];
-	}
 
 	const inactiveInputQuery: InputQuery = {
 		status: 'inactive',
@@ -62,96 +43,34 @@
 	};
 	export const inputQuery: Writable<InputQuery> = writable({ ...inactiveInputQuery });
 
-	// Move validateInput here
-	async function validateInput(
-		inputString: string,
-		inputType: string
-	): Promise<{
-		inputValid: boolean;
-		securities: Instance[];
-	}> {
-		if (inputType === 'ticker') {
-			isLoadingSecurities = true;
-
-			try {
-				// Add a small delay to avoid too many rapid requests during typing
-				await new Promise((resolve) => setTimeout(resolve, 10));
-
-				const securities = await privateRequest<Instance[]>('getSecuritiesFromTicker', {
-					ticker: inputString
-				});
-
-				if (Array.isArray(securities) && securities.length > 0) {
-					return {
-						inputValid: true,
-						securities: securities
-					};
-				}
-				return { inputValid: false, securities: [] };
-			} catch (error) {
-				console.error('Error fetching securities:', error);
-				// Return empty results but mark as valid if we have some input
-				// This allows the UI to stay responsive even if backend request fails
-				return {
-					inputValid: inputString.length > 0,
-					securities: []
-				};
-			} finally {
-				isLoadingSecurities = false;
-			}
-		} else if (inputType === 'timeframe') {
-			const regex = /^\d{1,3}[yqmwhds]?$/i;
-			return { inputValid: regex.test(inputString), securities: [] };
-		} else if (inputType === 'timestamp') {
-			const formats = ['yyyy-MM-dd H:m:ss', 'yyyy-MM-dd H:m', 'yyyy-MM-dd H', 'yyyy-MM-dd'];
-			for (const format of formats) {
-				try {
-					const parsedDate = parse(inputString, format, new Date());
-					if (!isNaN(parsedDate.getTime())) {
-						return { inputValid: true, securities: [] };
-					}
-				} catch {
-					/* try next format */
-				}
-			}
-			return { inputValid: false, securities: [] };
-		}
-		return { inputValid: false, securities: [] };
-	}
-
 	// Define determineInputType at module level
 	export function determineInputType(inputString: string): void {
 		const iQ = get(inputQuery);
 		let inputType = iQ.inputType;
 
-		// Only auto-classify if manualInputType is set to 'auto'
-		if (manualInputType === 'auto') {
-			if (inputString !== '') {
-				// Use our sync detection function for consistency
-				inputType = detectInputTypeSync(inputString, iQ.possibleKeys);
+		// Always auto-classify input type
+		if (inputString !== '') {
+			// Use our sync detection function for consistency
+			inputType = detectInputTypeSync(inputString, iQ.possibleKeys);
 
-				// If we detect a ticker, but the input is lowercase, convert to uppercase
-				if (inputType === 'ticker' && inputString !== inputString.toUpperCase()) {
-					// Update the input string with uppercase version
-					setTimeout(() => {
-						inputQuery.update((q) => ({
-							...q,
-							inputString: inputString.toUpperCase()
-						}));
-					}, 0);
-				}
-			} else {
-				// If input is empty, keep the current inputType if it was already set
-				// Only reset to empty if we were in an empty state to begin with
-				if (iQ.inputType !== '') {
-					inputType = iQ.inputType; // Keep current type
-				} else {
-					inputType = '';
-				}
+			// If we detect a ticker, but the input is lowercase, convert to uppercase
+			if (inputType === 'ticker' && inputString !== inputString.toUpperCase()) {
+				// Update the input string with uppercase version
+				setTimeout(() => {
+					inputQuery.update((q) => ({
+						...q,
+						inputString: inputString.toUpperCase()
+					}));
+				}, 0);
 			}
 		} else {
-			// Use the manually selected input type
-			inputType = manualInputType;
+			// If input is empty, keep the current inputType if it was already set
+			// Only reset to empty if we were in an empty state to begin with
+			if (iQ.inputType !== '') {
+				inputType = iQ.inputType; // Keep current type
+			} else {
+				inputType = '';
+			}
 		}
 
 		// Update the input type immediately
@@ -201,8 +120,6 @@
 			});
 	}
 
-	// Hold the reject function of the currently active promise (if any)
-	let activePromiseReject: ((reason?: any) => void) | null = null;
 
 	// Modified queryInstanceInput: if called while another query is active,
 	// cancel the previous query (rejecting its promise) and reset the state.
@@ -342,32 +259,6 @@
 		});
 	}
 
-	// Add this new helper function above the existing determineInputType function
-	function detectInputTypeSync(
-		inputString: string,
-		possibleKeysArg: InstanceAttributes[] | 'any'
-	): string {
-		// Make sure we have a valid array of possible keys
-		const possibleKeys = Array.isArray(possibleKeysArg) ? possibleKeysArg : [...allKeys];
-
-		if (!inputString || inputString === '') {
-			return '';
-		}
-
-		// Test for timeframe first - if it starts with a number, it's likely a timeframe
-		if (possibleKeys.includes('timeframe') && /^\d/.test(inputString)) {
-			return 'timeframe';
-		} else if (possibleKeys.includes('ticker') && /^[A-Z]+$/.test(inputString)) {
-			return 'ticker';
-		} else if (possibleKeys.includes('timestamp') && /^[\d-]+$/.test(inputString)) {
-			return 'timestamp';
-		} else if (possibleKeys.includes('ticker') && /^[a-zA-Z]+$/.test(inputString)) {
-			// Default to ticker for any alphabetic input if ticker is possible
-			return 'ticker';
-		}
-
-		return '';
-	}
 </script>
 
 <script lang="ts">
@@ -435,8 +326,6 @@
 		if (iQ.status === 'complete') {
 			iQ.inputType = '';
 			iQ.inputValid = true;
-			// Reset manualInputType to auto after input is entered
-			manualInputType = 'auto';
 		}
 
 		return iQ;
@@ -539,8 +428,6 @@
 			return;
 		}
 		
-		// For all other keys, let the normal input behavior handle it
-		// The handleInputChange function will be called automatically
 	}
 
 	// onTouch handler (if needed) now removes the UI by updating via update() too.
@@ -578,8 +465,6 @@
 							
 							// Process initial input string if present
 							if (v.inputString) {
-								// Ensure we're starting with auto detection for initial strings
-								manualInputType = 'auto';
 								determineInputType(v.inputString);
 							}
 						}
@@ -700,95 +585,14 @@
 		return '';
 	}
 
-	function closeWindow() {
-		inputQuery.update((v) => ({ ...v, status: 'cancelled' }));
-	}
-
 	let sectors: string[] = [];
 	let industries: string[] = [];
 	
-	function capitalize(str: string, lower = false): string {
-		return (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, (match: string) =>
-			match.toUpperCase()
-		);
-	}
-
-	function formatTimeframe(timeframe: string): string {
-		const match = timeframe.match(/^(\d+)([dwmsh]?)$/i) ?? null;
-		let result = timeframe;
-		if (match) {
-			switch (match[2]) {
-				case 'd':
-					result = `${match[1]} days`;
-					break;
-				case 'w':
-					result = `${match[1]} weeks`;
-					break;
-				case 'm':
-					result = `${match[1]} months`;
-					break;
-				case 'h':
-					result = `${match[1]} hours`;
-					break;
-				case 's':
-					result = `${match[1]} seconds`;
-					break;
-				default:
-					result = `${match[1]} minutes`;
-					break;
-			}
-			if (match[1] === '1') {
-				result = result.slice(0, -1);
-			}
-		}
-		return result;
-	}
 </script>
-
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
 {#if $inputQuery.status === 'active' || $inputQuery.status === 'initializing'}
 	<div class="popup-container {$inputQuery.inputType === 'timeframe' ? 'timeframe-popup' : ''}" id="input-window" tabindex="-1" on:click|stopPropagation>
-		<div class="header">
-			<div class="title">{$inputQuery.inputType === 'timeframe' ? 'Change Interval' : capitalize($inputQuery.inputType) + ' Search'}</div>
-			<div class="field-buttons">
-				<button
-					class="toggle-button {manualInputType === 'auto' && $inputQuery.inputType === ''
-						? 'active'
-						: ''}"
-					on:click|stopPropagation={async () => {
-						manualInputType = 'auto';
-						inputQuery.update((v) => ({
-							...v,
-							inputType: '',
-							inputString: '',
-							inputValid: true
-						}));
-						await tick(); // Wait for next UI update cycle
-						console.log('After Auto click, inputType is:', get(inputQuery).inputType); // Log state
-					}}
-				>
-					Auto
-				</button>
-				{#if Array.isArray($inputQuery.possibleKeys)}
-					{#each $inputQuery.possibleKeys as key}
-						<button
-							class="toggle-button {manualInputType === key ? 'active' : ''}"
-							on:click|stopPropagation={() => {
-								manualInputType = key;
-								inputQuery.update((v) => ({
-									...v,
-									inputType: manualInputType,
-									inputValid: true // Reset validity when manually changing type
-								}));
-							}}
-						>
-							{capitalize(key)}
-						</button>
-					{/each}
-				{/if}
-			</div>
-			<button class="utility-button" on:click|stopPropagation={closeWindow}>×</button>
-		</div>
-
 		<div class="content-container">
 			{#if $inputQuery.inputType === 'timeframe'}
 				<div class="timeframe-header-container">
@@ -832,12 +636,11 @@
 									<button type="button" 
 										class="span-row"
 										on:click={() => {
-											// Logic to select the key
-											manualInputType = key;
+											// Set the input type and let auto-detection handle it
 											inputQuery.update((v) => ({
 												...v,
-												inputType: manualInputType,
-												inputValid: true // Reset validity when manually changing type
+												inputType: key,
+												inputValid: true
 											}));
 										}}
 									>
@@ -1037,16 +840,6 @@
 		margin-right: auto;
 	}
 
-	.header {
-		display: none;
-	}
-
-	.timeframe-popup .header {
-		display: none;
-	}
-
-
-
 	.search-bar {
 		display: flex;
 		align-items: center;
@@ -1170,8 +963,6 @@
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
-
-
 	.timeframe-preview-below {
 		text-align: center;
 		margin-top: 8px;
@@ -1194,37 +985,6 @@
 	.preview-text-below.hint {
 		color: rgba(255, 255, 255, 0.5);
 	}
-
-
-
-	.timeframe-preview-below {
-		text-align: center;
-		margin-top: 8px;
-		width: 240px;
-		margin-left: auto;
-		margin-right: auto;
-	}
-
-	.preview-text-below {
-		color: rgba(255, 255, 255, 0.8);
-		font-size: 12px;
-		font-weight: 400;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-	}
-
-	.preview-text-below.error {
-		color: #ff6b6b;
-	}
-
-	.preview-text-below.hint {
-		color: rgba(255, 255, 255, 0.5);
-	}
-
-
-
-
-
-
 
 	.securities-list-flex {
 		display: flex;
@@ -1291,8 +1051,6 @@
 		min-width: 100px;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
-
-
 
 	.no-results {
 		display: flex;

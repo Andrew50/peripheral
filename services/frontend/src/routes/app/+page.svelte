@@ -4,7 +4,7 @@
 	import Alerts from '$lib/features/alerts/alert.svelte';
 	import RightClick from '$lib/components/rightClick.svelte';
 	import StrategiesPopup from '$lib/components/strategiesPopup.svelte';
-	import Input from '$lib/components/input.svelte';
+	import Input from '$lib/components/input/input.svelte';
 	//import Similar from '$lib/features/similar/similar.svelte';
 	//import Study from '$lib/features/study.svelte';
 	import Watchlist from '$lib/features/watchlist/watchlist.svelte';
@@ -31,7 +31,7 @@
 		changeSpeed,
 		nextDay
 	} from '$lib/utils/stream/interface';
-	import { queryInstanceInput } from '$lib/components/input.svelte';
+	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { browser } from '$app/environment';
 	import { onMount, onDestroy } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
@@ -1070,12 +1070,6 @@
 		</div>
 	{/if}
 </div>
-
-<!--/+page.svelte-->
-
-<!--/+page.svelte-->
-
-<!--/+page.svelte-->
 
 <style>
 	.page {

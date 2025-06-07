@@ -4,7 +4,7 @@
 	import { queryChart } from './interface';
 	import { writable } from 'svelte/store';
 	export let instance: Instance;
-	import { queryInstanceInput } from '$lib/components/input.svelte';
+	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { settings } from '$lib/utils/stores/stores';
 	import { UTCTimestampToESTString } from '$lib/utils/helpers/timestamp';
 	import { onMount, onDestroy } from 'svelte';
