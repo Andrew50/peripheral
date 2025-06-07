@@ -186,10 +186,6 @@
 					// Reset loading state after validation completes
 					if (inputType === 'ticker') {
 						isLoadingSecurities = false;
-						// Set default highlight to first result if we have securities
-						if (validationResp.securities && validationResp.securities.length > 0) {
-							highlightedIndex = 0;
-						}
 					}
 				}
 			})
@@ -373,6 +369,14 @@
 	import { ESTStringToUTCTimestamp, UTCTimestampToESTString } from '$lib/utils/helpers/timestamp';
 	let prevFocusedElement: HTMLElement | null = null;
 	let highlightedIndex = -1;
+	
+	// Reactive statement to auto-highlight first result for ticker searches
+	$: if ($inputQuery.inputType === 'ticker' && 
+		  Array.isArray($inputQuery.securities) && 
+		  $inputQuery.securities.length > 0 && 
+		  highlightedIndex === -1) {
+		highlightedIndex = 0;
+	}
 
 	async function enterInput(iQ: InputQuery, tickerIndex: number = 0): Promise<InputQuery> {
 		if (iQ.inputType === 'ticker') {
@@ -517,7 +521,7 @@
 		} else if (event.key === 'ArrowUp') {
 			event.preventDefault();
 			if (currentState.inputType === 'ticker' && currentState.securities && currentState.securities.length > 0) {
-				highlightedIndex = Math.max(highlightedIndex - 1, -1);
+				highlightedIndex = Math.max(highlightedIndex - 1, 0);
 			}
 			return;
 		} else if (event.key === 'Tab') {
@@ -861,7 +865,12 @@
 											const updatedQuery = await enterInput($inputQuery, i);
 											inputQuery.set(updatedQuery);
 										}}
-										on:mouseenter={() => highlightedIndex = i}
+										on:mouseenter={() => {
+											highlightedIndex = i;
+										}}
+										on:mouseleave={() => {
+											// Keep the highlight on the current item, don't reset
+										}}
 										role="button"
 										tabindex="0"
 										on:keydown={(e) => {
@@ -1100,12 +1109,6 @@
 		transition: background-color 0.15s ease, border-color 0.15s ease;
 		gap: 8px;
 		min-height: 36px;
-	}
-
-	.security-item-flex:hover {
-		background-color: rgba(255, 255, 255, 0.1);
-		border-color: rgba(255, 255, 255, 0.4);
-		backdrop-filter: blur(8px);
 	}
 
 	.security-item-flex.highlighted {
