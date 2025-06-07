@@ -761,8 +761,7 @@
 
 <style>
 	#input-window.popup-container {
-		width: 90vw;
-		max-width: 600px;
+		width: min(90vw, 45rem);
 		height: auto;
 		max-height: 70vh;
 		background: transparent;
@@ -773,26 +772,25 @@
 		overflow: visible;
 		box-shadow: none;
 		position: fixed !important;
-		bottom: 50px !important;
+		bottom: max(3vh, 50px) !important;
 		left: 50% !important;
 		top: auto !important;
 		transform: translateX(-50%) !important;
 		z-index: 99999 !important;
-		gap: 8px;
+		gap: max(0.5vh, 8px);
 	}
 
 	#input-window.timeframe-popup {
 		top: 50% !important;
 		bottom: auto !important;
 		transform: translate(-50%, -50%) !important;
-		max-width: 280px;
-		width: auto;
-		min-width: 240px;
+		width: min(20vw, 250px);
+		min-width: 200px;
 	}
 
 	.timeframe-popup .content-container,
 	.timeframe-popup .search-bar {
-		width: 240px;
+		width: 100%;
 		margin-left: auto;
 		margin-right: auto;
 		transform-origin: center;
@@ -801,36 +799,36 @@
 	.search-bar {
 		display: flex;
 		align-items: center;
-		height: 56px;
+		height: max(3.5rem, 7vh);
 		background: rgba(0, 0, 0, 0.4);
 		border: 1px solid rgba(255, 255, 255, 0.3);
-		border-radius: 28px;
-		padding: 0 4px;
+		border-radius: max(1.75rem, 3.5vh);
+		padding: 0 max(0.25rem, 0.5vh);
 		position: relative;
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 		backdrop-filter: var(--backdrop-blur);
 	}
 
 	.timeframe-popup .search-bar {
-		border-radius: 0 0 12px 12px;
-		height: 56px;
+		border-radius: 0 0 max(0.75rem, 1.5vh) max(0.75rem, 1.5vh);
+		height: max(3.5rem, 7vh);
 		margin-top: 0;
 	}
 
 	.search-icon {
-		padding: 12px 4px 12px 20px;
+		padding: max(0.75rem, 1.5vh) max(0.25rem, 0.5vh) max(0.75rem, 1.5vh) max(1.25rem, 2.5vh);
 		display: flex;
 		align-items: center;
 		color: #ffffff;
 		position: absolute;
-		left: 8px;
+		left: max(0.5rem, 1vh);
 		z-index: 1;
 		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
 	}
 
 	.search-icon svg {
-		width: 18px;
-		height: 18px;
+		width: max(1.125rem, 2.25vh);
+		height: max(1.125rem, 2.25vh);
 		opacity: 1;
 	}
 
@@ -838,11 +836,11 @@
 		flex: 1;
 		background: transparent;
 		border: none;
-		border-radius: 24px;
-		padding: 12px 16px 12px 48px;
+		border-radius: max(1.5rem, 3vh);
+		padding: max(0.75rem, 1.5vh) max(1rem, 2vh) max(0.75rem, 1.5vh) max(3rem, 6vh);
 		color: #ffffff;
-		font-size: 16px;
-		margin: 8px;
+		font-size: max(1rem, 2vh);
+		margin: max(0.5rem, 1vh);
 		font-weight: 500;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
@@ -852,9 +850,9 @@
 	}
 
 	.timeframe-popup .search-bar input {
-		padding: 12px 16px;
+		padding: max(0.75rem, 1.5vh) max(1rem, 2vh);
 		text-align: center;
-		font-size: 18px;
+		font-size: max(1.125rem, 2.25vh);
 		font-weight: 600;
 	}
 
@@ -883,10 +881,10 @@
 	.content-container {
 		background: rgba(0, 0, 0, 0.5);
 		border: 1px solid rgba(255, 255, 255, 0.3);
-		border-radius: 12px;
+		border-radius: max(0.75rem, 1.5vh);
 		overflow-y: auto;
-		padding: 8px;
-		height: 240px;
+		padding: max(0.5rem, 1vh);
+		height: min(30vh, 15rem);
 		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 		backdrop-filter: var(--backdrop-blur);
 		scrollbar-width: thin;
@@ -895,12 +893,12 @@
 
 	.timeframe-popup .content-container {
 		height: auto;
-		min-height: 60px;
+		min-height: max(3.75rem, 7.5vh);
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: 16px;
-		border-radius: 12px 12px 0 0;
+		padding: max(1rem, 2vh);
+		border-radius: max(0.75rem, 1.5vh) max(0.75rem, 1.5vh) 0 0;
 		margin-bottom: 0;
 	}
 
@@ -909,27 +907,27 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 8px;
+		gap: max(0.5rem, 1vh);
 	}
 
 	.timeframe-popup .timeframe-title {
 		color: #ffffff;
-		font-size: 20px;
+		font-size: max(1.25rem, 2.5vh);
 		font-weight: 600;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
 	.timeframe-preview-below {
 		text-align: center;
-		margin-top: 8px;
-		width: 240px;
+		margin-top: max(0.5rem, 1vh);
+		width: 100%;
 		margin-left: auto;
 		margin-right: auto;
 	}
 
 	.preview-text-below {
 		color: rgba(255, 255, 255, 0.8);
-		font-size: 12px;
+		font-size: max(0.75rem, 1.5vh);
 		font-weight: 400;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
@@ -945,11 +943,11 @@
 	.securities-list-flex {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: max(0.25rem, 0.5vh);
 	}
 
 	.securities-scrollable {
-		max-height: 180px;
+		max-height: min(22.5vh, 11.25rem);
 		overflow-y: auto;
 		scrollbar-width: thin;
 		scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
@@ -958,13 +956,13 @@
 	.security-item-flex {
 		display: flex;
 		align-items: center;
-		padding: 4px 6px;
+		padding: max(0.25rem, 0.5vh) max(0.375rem, 0.75vh);
 		cursor: pointer;
-		border-radius: 6px;
+		border-radius: max(0.375rem, 0.75vh);
 		border: 1px solid transparent;
 		transition: background-color 0.15s ease, border-color 0.15s ease;
-		gap: 8px;
-		min-height: 36px;
+		gap: max(0.5rem, 1vh);
+		min-height: max(2.25rem, 4.5vh);
 	}
 
 	.security-item-flex.highlighted {
@@ -973,8 +971,8 @@
 	}
 
 	.security-icon-flex {
-		width: 32px;
-		height: 20px;
+		width: max(2rem, 4vh);
+		height: max(1.25rem, 2.5vh);
 		flex-shrink: 0;
 		display: flex;
 		align-items: center;
@@ -992,16 +990,16 @@
 		flex: 1;
 		display: flex;
 		align-items: baseline;
-		gap: 8px;
+		gap: max(0.5rem, 1vh);
 		overflow: hidden;
-		font-size: 12px;
+		font-size: max(0.75rem, 1.5vh);
 		white-space: nowrap;
 	}
 
 	.ticker-flex {
 		font-weight: 600;
 		color: #ffffff;
-		flex-basis: 50px;
+		flex-basis: max(3.125rem, 6.25vh);
 		flex-shrink: 0;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
@@ -1011,7 +1009,7 @@
 		flex-grow: 1;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		min-width: 100px;
+		min-width: max(6.25rem, 12.5vh);
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
@@ -1019,23 +1017,23 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		height: 200px;
+		height: min(25vh, 12.5rem);
 		color: #ffffff;
-		font-size: 14px;
+		font-size: max(0.875rem, 1.75vh);
 		text-align: center;
 		font-weight: 500;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
 	.search-header {
-		padding: 8px 12px 4px 12px;
+		padding: max(0.5rem, 1vh) max(0.75rem, 1.5vh) max(0.25rem, 0.5vh) max(0.75rem, 1.5vh);
 		display: flex;
 		align-items: center;
 	}
 
 	.search-title {
 		color: #ffffff;
-		font-size: 14px;
+		font-size: max(0.875rem, 1.75vh);
 		font-weight: 600;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		opacity: 0.9;
@@ -1044,7 +1042,7 @@
 	.search-divider {
 		height: 1px;
 		background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-		margin: 0 8px 8px 8px;
+		margin: 0 max(0.5rem, 1vh) max(0.5rem, 1vh) max(0.5rem, 1vh);
 	}
 
 
