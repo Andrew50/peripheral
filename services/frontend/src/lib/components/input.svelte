@@ -141,7 +141,13 @@
 					}, 0);
 				}
 			} else {
-				inputType = '';
+				// If input is empty, keep the current inputType if it was already set
+				// Only reset to empty if we were in an empty state to begin with
+				if (iQ.inputType !== '') {
+					inputType = iQ.inputType; // Keep current type
+				} else {
+					inputType = '';
+				}
 			}
 		} else {
 			// Use the manually selected input type
@@ -348,11 +354,11 @@
 			return '';
 		}
 
-		// Test for ticker - check for uppercase letters
-		if (possibleKeys.includes('ticker') && /^[A-Z]+$/.test(inputString)) {
-			return 'ticker';
-		} else if (possibleKeys.includes('timeframe') && /^\d{1,2}[hdwmqs]?$/i.test(inputString)) {
+		// Test for timeframe first - if it starts with a number, it's likely a timeframe
+		if (possibleKeys.includes('timeframe') && /^\d/.test(inputString)) {
 			return 'timeframe';
+		} else if (possibleKeys.includes('ticker') && /^[A-Z]+$/.test(inputString)) {
+			return 'ticker';
 		} else if (possibleKeys.includes('timestamp') && /^[\d-]+$/.test(inputString)) {
 			return 'timestamp';
 		} else if (possibleKeys.includes('ticker') && /^[a-zA-Z]+$/.test(inputString)) {
@@ -740,9 +746,9 @@
 </script>
 
 {#if $inputQuery.status === 'active' || $inputQuery.status === 'initializing'}
-	<div class="popup-container" id="input-window" tabindex="-1" on:click|stopPropagation>
+	<div class="popup-container {$inputQuery.inputType === 'timeframe' ? 'timeframe-popup' : ''}" id="input-window" tabindex="-1" on:click|stopPropagation>
 		<div class="header">
-			<div class="title">{capitalize($inputQuery.inputType)} Search</div>
+			<div class="title">{$inputQuery.inputType === 'timeframe' ? 'Change Interval' : capitalize($inputQuery.inputType) + ' Search'}</div>
 			<div class="field-buttons">
 				<button
 					class="toggle-button {manualInputType === 'auto' && $inputQuery.inputType === ''
@@ -783,8 +789,8 @@
 			<button class="utility-button" on:click|stopPropagation={closeWindow}>×</button>
 		</div>
 
-		<div class="content-container">
-			{#if true}
+		{#if $inputQuery.inputType !== 'timeframe'}
+			<div class="content-container">
 				{#if $inputQuery.inputType === ''}
 					<div class="span-container">
 						{#if Array.isArray($inputQuery.possibleKeys)}
@@ -935,11 +941,20 @@
 						</div>
 					</div>
 				{:else if $inputQuery.inputType === 'timeframe'}
-					<div class="span-container">
-						<div class="span-row">
-							<span class="label">Timeframe</span>
-							<span class="value">{formatTimeframe($inputQuery.inputString)}</span>
-						</div>
+					<div class="timeframe-preview-container">
+						{#if $inputQuery.inputString}
+							<div class="timeframe-preview">
+								{#if $inputQuery.inputValid}
+									<span class="preview-text">{formatTimeframe($inputQuery.inputString)}</span>
+								{:else}
+									<span class="preview-text error">Invalid timeframe format</span>
+								{/if}
+							</div>
+						{:else}
+							<div class="timeframe-hint">
+								<span class="hint-text">Enter a number followed by a time unit (e.g., 1m, 5h, 1d)</span>
+							</div>
+						{/if}
 					</div>
 				{:else if $inputQuery.inputType === 'extendedHours'}
 					<div class="span-container extended-hours-container">
@@ -972,10 +987,10 @@
 						</div>
 					</div>
 				{/if}
-			{/if}
-		</div>
+			</div>
+		{/if}
 
-		<div class="search-bar">
+		<div class="search-bar {$inputQuery.inputType === 'timeframe' && !$inputQuery.inputValid && $inputQuery.inputString ? 'error' : ''}">
 			<div class="search-icon">
 				<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 					<path d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -983,7 +998,7 @@
 			</div>
 			<input
 				type="text"
-				placeholder="Search"
+				placeholder={$inputQuery.inputType === 'timeframe' ? 'Enter Timeframe' : 'Search'}
 				bind:value={$inputQuery.inputString}
 				on:input={handleInputChange}
 				on:keydown={handleKeyDown}
@@ -992,6 +1007,20 @@
 				spellcheck="false"
 			/>
 		</div>
+
+		{#if $inputQuery.inputType === 'timeframe'}
+			<div class="timeframe-preview-below">
+				{#if $inputQuery.inputString}
+					{#if $inputQuery.inputValid}
+						<span class="preview-text-small">{formatTimeframe($inputQuery.inputString)}</span>
+					{:else}
+						<span class="preview-text-small error">Invalid format</span>
+					{/if}
+				{:else}
+					<span class="preview-text-small hint">e.g., 1m, 5h, 1d</span>
+				{/if}
+			</div>
+		{/if}
 	</div>
 {/if}
 
@@ -1017,7 +1046,36 @@
 		gap: 8px;
 	}
 
+	#input-window.timeframe-popup {
+		top: 50% !important;
+		bottom: auto !important;
+		transform: translate(-50%, -50%) !important;
+		max-width: 400px;
+	}
+
 	.header {
+		display: none;
+	}
+
+	.timeframe-popup .header {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		padding: 16px 24px 8px;
+		background: rgba(0, 0, 0, 0.6);
+		border-radius: 12px 12px 0 0;
+		margin-bottom: -8px;
+	}
+
+	.timeframe-popup .header .title {
+		color: #ffffff;
+		font-size: 18px;
+		font-weight: 600;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+	}
+
+	.timeframe-popup .header .field-buttons,
+	.timeframe-popup .header .utility-button {
 		display: none;
 	}
 
@@ -1034,6 +1092,16 @@
 		position: relative;
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 		backdrop-filter: var(--backdrop-blur);
+	}
+
+	.timeframe-popup .search-bar {
+		border: 1px solid #4a80f0;
+		border-radius: 8px;
+		height: 48px;
+		background: rgba(0, 0, 0, 0.6);
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+		width: 200px;
+		margin: 0 auto;
 	}
 
 	.search-icon {
@@ -1066,6 +1134,17 @@
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
+	.timeframe-popup .search-icon {
+		display: none;
+	}
+
+	.timeframe-popup .search-bar input {
+		padding: 12px 16px;
+		text-align: center;
+		font-size: 18px;
+		font-weight: 600;
+	}
+
 	.search-bar input:focus {
 		outline: none;
 	}
@@ -1074,6 +1153,15 @@
 		color: rgba(255, 255, 255, 0.9);
 		opacity: 1;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+	}
+
+	.timeframe-popup .search-bar.error {
+		border: 1px solid #ff4444 !important;
+		box-shadow: 0 0 8px rgba(255, 68, 68, 0.3);
+	}
+
+	.search-bar input.error::placeholder {
+		color: rgba(255, 255, 255, 0.7);
 	}
 
 	.content-container {
@@ -1087,6 +1175,68 @@
 		backdrop-filter: var(--backdrop-blur);
 		scrollbar-width: thin;
 		scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+	}
+
+	.timeframe-popup .content-container {
+		height: auto;
+		min-height: 80px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 24px;
+	}
+
+	.timeframe-preview-container {
+		width: 100%;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 16px;
+	}
+
+	.timeframe-preview {
+		text-align: center;
+	}
+
+	.preview-text {
+		color: #ffffff;
+		font-size: 16px;
+		font-weight: 500;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+	}
+
+	.preview-text.error {
+		color: #ff6b6b;
+	}
+
+	.timeframe-hint {
+		text-align: center;
+	}
+
+	.hint-text {
+		color: rgba(255, 255, 255, 0.7);
+		font-size: 14px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+	}
+
+	.timeframe-preview-below {
+		text-align: center;
+		margin-top: 8px;
+	}
+
+	.preview-text-small {
+		color: rgba(255, 255, 255, 0.8);
+		font-size: 12px;
+		font-weight: 400;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+	}
+
+	.preview-text-small.error {
+		color: #ff6b6b;
+	}
+
+	.preview-text-small.hint {
+		color: rgba(255, 255, 255, 0.5);
 	}
 
 
