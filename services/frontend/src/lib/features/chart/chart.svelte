@@ -768,8 +768,7 @@
 
 		// Update the line position visually
 		$drawingMenuProps.selectedLine.applyOptions({
-			price: price,
-			title: `Price: ${price.toFixed(2)}`
+			price: price
 		});
 
 		// Update the stored price in horizontalLines array
