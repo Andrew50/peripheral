@@ -158,12 +158,12 @@
 	function updateChartWidth() {
 		if (browser) {
 			const rightSidebarWidth = $menuWidth;
-			const maxRightSidebarWidth = Math.min(800, window.innerWidth - 60);
-			const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 60);
+			const maxRightSidebarWidth = Math.min(600, window.innerWidth - 45); // Restored to 600px
+			const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
 
 			// Only reduce chart width if sidebar widths are within bounds
 			if (rightSidebarWidth <= maxRightSidebarWidth && leftMenuWidth <= maxLeftSidebarWidth) {
-				chartWidth = window.innerWidth - rightSidebarWidth - leftMenuWidth - 60;
+				chartWidth = window.innerWidth - rightSidebarWidth - leftMenuWidth - 45;
 			}
 		}
 	}
@@ -320,7 +320,7 @@
 		} else {
 			// Open new menu
 			lastSidebarMenu = null;
-			menuWidth.set(300); // Or whatever your default width is
+			menuWidth.set(180); // Reduced from 225 to 180 (smaller sidebar)
 			changeMenu(menuName);
 		}
 
@@ -334,8 +334,8 @@
 
 	// Sidebar resizing
 	let resizing = false;
-	let minWidth = 200;
-	let maxWidth = 600;
+	let minWidth = 120; // Reduced from 150 to 120 (smaller minimum)
+	let maxWidth = 600; // Restored to 600px maximum
 
 	function startResize(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
@@ -358,8 +358,8 @@
 		}
 
 		// Calculate width from right edge of window, excluding the sidebar buttons width
-		let newWidth = window.innerWidth - clientX - 60; // 60px is the width of sidebar buttons
-		const maxSidebarWidth = Math.min(800, window.innerWidth - 60);
+		let newWidth = window.innerWidth - clientX - 45; // 45px is the width of sidebar buttons
+		const maxSidebarWidth = Math.min(600, window.innerWidth - 45); // Restored to 600px max
 
 		// Store state before closing
 		if (newWidth < minWidth && lastSidebarMenu !== null) {
@@ -758,7 +758,7 @@
 
 		// Calculate width from left edge of window
 		let newWidth = clientX;
-		const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 60);
+		const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
 
 		// Manage resize
 		if (newWidth < minWidth) {
@@ -1116,7 +1116,7 @@
 		height: 100%;
 		min-height: 0;
 		position: relative;
-		margin-right: 60px;
+		margin-right: 45px;
 	}
 
 	.main-content {
@@ -1158,7 +1158,7 @@
 		position: relative;
 		flex-shrink: 0;
 		border-left: 1px solid var(--ui-border);
-		max-width: min(800px, calc(100vw - 60px)); /* Reduce max width to 500px */
+		max-width: min(600px, calc(100vw - 45px)); /* 600px max sidebar with 45px button bar */
 	}
 
 	.sidebar-buttons {
@@ -1166,14 +1166,14 @@
 		top: 0;
 		right: 0;
 		height: 100vh;
-		width: 60px;
+		width: 45px;
 		display: flex;
 		flex-direction: column;
 		background-color: var(--c2);
 		z-index: 2;
 		flex-shrink: 0;
 		border-right: 1px solid var(--ui-border);
-		max-width: min(800px, calc(100vw - 60px));
+		max-width: min(600px, calc(100vw - 45px)); /* 600px max with 45px button bar */
 	}
 
 	.resize-handle {
@@ -1198,7 +1198,7 @@
 	}
 
 	.side-btn {
-		flex: 0 0 60px;
+		flex: 0 0 45px;
 	}
 
 	.menu-icon {
