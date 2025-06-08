@@ -98,6 +98,20 @@
 	let copiedMessageId = '';
 	let copyTimeout: ReturnType<typeof setTimeout> | null = null;
 
+	// Runtime calculation function
+	function formatRuntime(startTime: Date, endTime: Date): string {
+		const diffMs = endTime.getTime() - startTime.getTime();
+		const seconds = Math.floor(diffMs / 1000);
+		
+		if (seconds < 60) {
+			return `Thought for ${seconds}s`;
+		} else {
+			const minutes = Math.floor(seconds / 60);
+			const remainingSeconds = seconds % 60;
+			return `Thought for ${minutes}m ${remainingSeconds}s`;
+		}
+	}
+
 	// Function to fetch initial suggestions based on active chart
 	async function fetchInitialSuggestions() {
 		initialSuggestions = []; // Clear previous suggestions first
@@ -1302,6 +1316,11 @@
 								</div>
 							{/if}
 							<div class="message-content">
+								{#if message.sender === 'assistant' && message.completedAt && message.timestamp}
+									<div class="message-runtime">
+										{formatRuntime(message.timestamp, message.completedAt)}
+									</div>
+								{/if}
 								{#if message.contentChunks && message.contentChunks.length > 0}
 									<div class="content-chunks">
 										{#each message.contentChunks as chunk, index}
