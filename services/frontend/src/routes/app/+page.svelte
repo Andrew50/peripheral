@@ -1004,7 +1004,7 @@
 			</button>
 
 			<!-- Combined replay button -->
-			<button
+			<!---- <button
 				class="toggle-button replay-button { !$streamInfo.replayActive || $streamInfo.replayPaused ? 'play' : 'pause' }"
 				on:click={() => {
 					if (!$streamInfo.replayActive) {
@@ -1028,13 +1028,13 @@
 
 			{#if $streamInfo.replayActive}
 				<button class="toggle-button replay-button stop" on:click={handleStop} title="Stop Replay">
-					<svg viewBox="0 0 24 24"><path d="M18,18H6V6H18V18Z" /></svg> <!-- Stop Icon -->
+					<svg viewBox="0 0 24 24"><path d="M18,18H6V6H18V18Z" /></svg> 
 				</button>
 				<button class="toggle-button replay-button reset" on:click={handleReset} title="Reset Replay">
-					<svg viewBox="0 0 24 24"><path d="M12,5V1L7,6L12,11V8C15.31,8 18,10.69 18,14C18,17.31 15.31,20 12,20C8.69,20 6,17.31 6,14H4C4,18.42 7.58,22 12,22C16.42,22 20,18.42 20,14C20,9.58 16.42,6 12,6V5Z" /></svg> <!-- Reset Icon (e.g., refresh) -->
+					<svg viewBox="0 0 24 24"><path d="M12,5V1L7,6L12,11V8C15.31,8 18,10.69 18,14C18,17.31 15.31,20 12,20C8.69,20 6,17.31 6,14H4C4,18.42 7.58,22 12,22C16.42,22 20,18.42 20,14C20,9.58 16.42,6 12,6V5Z" /></svg> 
 				</button>
 				<button class="toggle-button replay-button next-day" on:click={handleNextDay} title="Next Day">
-					<svg viewBox="0 0 24 24"><path d="M14,19.14V4.86L11,7.86L9.59,6.45L15.14,0.89L20.7,6.45L19.29,7.86L16,4.86V19.14H14M5,19.14V4.86H3V19.14H5Z" /></svg> <!-- Next Day Icon (e.g., skip next track) -->
+					<svg viewBox="0 0 24 24"><path d="M14,19.14V4.86L11,7.86L9.59,6.45L15.14,0.89L20.7,6.45L19.29,7.86L16,4.86V19.14H14M5,19.14V4.86H3V19.14H5Z" /></svg>
 				</button>
 
 				<label class="speed-label">
@@ -1050,7 +1050,6 @@
 				</label>
 			{/if}
 
-			<!-- Current timestamp -->
 			<span class="value">
 				{#if $streamInfo.timestamp !== undefined}
 					{formatTimestamp($streamInfo.timestamp)}
@@ -1058,7 +1057,7 @@
 					Loading Time...
 				{/if}
 			</span>
-
+			-->
 			<button class="profile-button" on:click={toggleSettings} aria-label="Toggle Settings">
 				<!-- Add key to force re-render when the profile changes -->
 				{#key profileIconKey}
