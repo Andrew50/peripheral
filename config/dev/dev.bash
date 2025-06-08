@@ -21,7 +21,7 @@ chmod 777 ../../services/db/migrations
 
 # Start Docker Compose
 log "Starting Docker Compose environment..."
-docker-compose -f docker-compose.dev.yaml -p dev up -d --build --scale worker=5 
+docker-compose -f docker-compose.yaml -p dev up -d --build --scale worker=5 
 
 # Wait for the database to be ready
 log "Waiting for database to be ready..."
@@ -107,9 +107,9 @@ docker exec -e POSTGRES_PASSWORD=devpassword dev-db-1 psql -U postgres -d postgr
 "
 
 log "Development environment is ready!"
-log "To view logs: docker-compose -f docker-compose.dev.yaml logs -f"
-log "To stop: docker-compose -f docker-compose.dev.yaml down" 
+log "To view logs: docker-compose -f docker-compose.yaml logs -f"
+log "To stop: docker-compose -f docker-compose.yaml down" 
 
 # Enter the log stream automatically
 log "Entering log stream. Press Ctrl+C to exit..."
-docker-compose -f docker-compose.dev.yaml -p dev logs -f 
+docker-compose -f docker-compose.yaml -p dev logs -f 
