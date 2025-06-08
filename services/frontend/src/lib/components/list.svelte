@@ -1025,5 +1025,4 @@
     tr:hover th:last-child, tr:hover td:last-child {
         background-color: var(--ui-bg-hover);
     }
-    /* ---- END DELETE BUTTON / STICKY COLUMN STYLES ---- */
 </style>
