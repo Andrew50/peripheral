@@ -43,7 +43,7 @@
 	} from './indicators';
 	import type { Writable } from 'svelte/store';
 	import { writable, get } from 'svelte/store';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import {
 		UTCSecondstoESTSeconds,
 		ESTSecondstoUTCSeconds,
@@ -209,6 +209,10 @@
 
 	// Add new property to track alert lines
 	let alertLines: AlertLine[] = [];
+
+	// Measurement tool price lines
+	let measurementStartLine: any = null;
+	let measurementCurrentLine: any = null;
 
 	// State for quote line visibility
 	let isViewingLiveData = true; // Assume true initially
@@ -764,8 +768,7 @@
 
 		// Update the line position visually
 		$drawingMenuProps.selectedLine.applyOptions({
-			price: price,
-			title: `Price: ${price.toFixed(2)}`
+			price: price
 		});
 
 		// Update the stored price in horizontalLines array
@@ -854,6 +857,12 @@
 	}
 
 	function handleMouseDown(event: MouseEvent) {
+		// Ensure chart container has focus for keyboard events
+		const chartContainer = document.getElementById(`chart_container-${chartId}`);
+		if (chartContainer) {
+			chartContainer.focus();
+		}
+		
 		if (determineClickedLine(event)) {
 			('determineClickedLine');
 			mouseDownStartX = event.clientX;
@@ -899,37 +908,73 @@
 		}
 
 		setActiveChart(chartId, currentChartInstance);
-		isPanning = true;
+		
 		if (shiftDown || get(shiftOverlay).isActive) {
 			shiftOverlay.update((v: ShiftOverlay): ShiftOverlay => {
 				v.isActive = !v.isActive;
 				if (v.isActive) {
-					v.startX = event.clientX;
-					v.startY = event.clientY;
+					// Disable chart interactions while drawing
+					chart.applyOptions({
+						handleScroll: false,
+						handleScale: false,
+						kineticScroll: {
+							mouse: false,
+							touch: false
+						}
+					});
+					
+					// Get chart container position for relative coordinates
+					const chartContainer = document.getElementById(`chart_container-${chartId}`);
+					const rect = chartContainer?.getBoundingClientRect();
+					const offsetX = rect ? rect.left : 0;
+					const offsetY = rect ? rect.top : 0;
+					
+					v.startX = event.clientX - offsetX;
+					v.startY = event.clientY - offsetY;
 					v.width = 0;
 					v.height = 0;
 					v.x = v.startX;
 					v.y = v.startY;
-					v.startPrice = chartCandleSeries.coordinateToPrice(v.startY) || 0;
+					v.startPrice = chartCandleSeries.coordinateToPrice(event.clientY - offsetY) || 0;
 					document.addEventListener('mousemove', shiftOverlayTrack);
 					document.addEventListener('mouseup', handleShiftOverlayEnd);
 				} else {
+					// Re-enable chart interactions when drawing ends
+					chart.applyOptions({
+						handleScroll: true,
+						handleScale: true,
+						kineticScroll: {
+							mouse: true,
+							touch: true
+						}
+					});
 					document.removeEventListener('mousemove', shiftOverlayTrack);
 				}
 				return v;
 			});
+		} else {
+			isPanning = true;
 		}
 	}
 
 	function shiftOverlayTrack(event: MouseEvent): void {
 		shiftOverlay.update((v: ShiftOverlay): ShiftOverlay => {
+			// Get chart container position for relative coordinates
+			const chartContainer = document.getElementById(`chart_container-${chartId}`);
+			const rect = chartContainer?.getBoundingClientRect();
+			const offsetX = rect ? rect.left : 0;
+			const offsetY = rect ? rect.top : 0;
+			
+			const relativeX = event.clientX - offsetX;
+			const relativeY = event.clientY - offsetY;
+			
 			const overlay = {
 				...v,
-				width: Math.abs(event.clientX - v.startX),
-				height: Math.abs(event.clientY - v.startY),
-				x: Math.min(event.clientX, v.startX),
-				y: Math.min(event.clientY, v.startY),
-				currentPrice: chartCandleSeries.coordinateToPrice(event.clientY) || 0
+				width: Math.abs(relativeX - v.startX),
+				height: Math.abs(relativeY - v.startY),
+				x: Math.min(relativeX, v.startX),
+				y: Math.min(relativeY, v.startY),
+				currentPrice: chartCandleSeries.coordinateToPrice(relativeY) || 0
 			};
 			return overlay;
 		});
@@ -938,6 +983,16 @@
 	function handleShiftOverlayEnd(event: MouseEvent) {
 		shiftOverlay.update((v: ShiftOverlay): ShiftOverlay => {
 			if (v.isActive) {
+				// Re-enable chart interactions when drawing ends
+				chart.applyOptions({
+					handleScroll: true,
+					handleScale: true,
+					kineticScroll: {
+						mouse: true,
+						touch: true
+					}
+				});
+				
 				return {
 					...v,
 					isActive: false,
@@ -1336,6 +1391,22 @@
 				shiftDown = false;
 			}
 		});
+		
+		// Add global shift key listeners for more robust detection
+		const handleGlobalKeyDown = (event: KeyboardEvent) => {
+			if (event.key === 'Shift') {
+				shiftDown = true;
+			}
+		};
+		
+		const handleGlobalKeyUp = (event: KeyboardEvent) => {
+			if (event.key === 'Shift') {
+				shiftDown = false;
+			}
+		};
+		
+		document.addEventListener('keydown', handleGlobalKeyDown);
+		document.addEventListener('keyup', handleGlobalKeyUp);
 		chartContainer.addEventListener('mousedown', handleMouseDown);
 		chartContainer.addEventListener('mouseup', () => {
 			isPanning = false;
@@ -1849,6 +1920,10 @@
 				chartVolumeSeries.update(pendingVolumeUpdate);
 			}
 
+			// Clean up global shift key listeners
+			document.removeEventListener('keydown', handleGlobalKeyDown);
+			document.removeEventListener('keyup', handleGlobalKeyUp);
+
 			// ... any other cleanup code ...
 		};
 	});
@@ -1962,7 +2037,7 @@
 
 </script>
 
-<div class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
+<div class="chart" id="chart_container-{chartId}" style="width: {width}px; position: relative;" tabindex="-1">
 	<Legend instance={currentChartInstance} {hoveredCandleData} {width} />
 	<Shift {shiftOverlay} />
 	<DrawingMenu {drawingMenuProps} />
