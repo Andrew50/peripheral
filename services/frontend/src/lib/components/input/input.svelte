@@ -772,7 +772,7 @@
 		overflow: visible;
 		box-shadow: none;
 		position: fixed !important;
-		bottom: max(3vh, 50px) !important;
+		bottom: max(5vh, 60px) !important;
 		left: 50% !important;
 		top: auto !important;
 		transform: translateX(-50%) !important;
