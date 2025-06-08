@@ -218,7 +218,15 @@
 					</div>
 				</div>
 			{/if}
-			<div class="ticker">{$instance.ticker || '--'}</div>
+			<div class="ticker-wrapper">
+				<div class="ticker">{$instance.ticker || '--'}</div>
+				{#if ($instance?.active === false || currentDetails?.active === false)}
+					<div class="warning-triangle-container">
+						<div class="warning-triangle"></div>
+						<div class="tooltip">Delisted</div>
+					</div>
+				{/if}
+			</div>
 			<div class="company-info">
 				<div class="name">{$instance?.name || currentDetails?.name || 'N/A'}</div>
 			</div>
@@ -257,10 +265,6 @@
 
 		<!-- Details Section -->
 		<div class="quote-details">
-			<div class="detail-item">
-				<span class="label">Active:</span>
-				<span class="value">{$instance?.active || currentDetails?.active || 'N/A'}</span>
-			</div>
 			<div class="detail-item">
 				<span class="label">Market Cap:</span>
 				<span class="value">
@@ -411,13 +415,78 @@
 		color: var(--text-primary);
 	}
 
+	.ticker-wrapper {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		flex-shrink: 0;
+	}
+
 	.ticker {
 		font-size: 1.4em;
 		font-weight: 700;
 		color: var(--text-primary);
 		text-transform: uppercase;
 		line-height: 1.1;
-		flex-shrink: 0;
+	}
+
+	.warning-triangle-container {
+		position: relative;
+		display: flex;
+		align-items: center;
+	}
+
+	.warning-triangle {
+		width: 0;
+		height: 0;
+		border-left: 10px solid transparent;
+		border-right: 10px solid transparent;
+		border-bottom: 16px solid #ff4444;
+		cursor: pointer;
+		transition: transform 0.15s ease;
+		position: relative;
+	}
+
+	.warning-triangle::after {
+		content: '';
+		position: absolute;
+		top: 3px;
+		left: -7px;
+		width: 0;
+		height: 0;
+		border-left: 7px solid transparent;
+		border-right: 7px solid transparent;
+		border-bottom: 11px solid var(--ui-bg-primary);
+	}
+
+	.tooltip {
+		position: absolute;
+		bottom: 100%;
+		left: 50%;
+		transform: translateX(-50%);
+		background: var(--ui-bg-secondary);
+		color: var(--text-primary);
+		padding: 6px 8px;
+		border-radius: 4px;
+		font-size: 0.75em;
+		font-weight: 500;
+		white-space: nowrap;
+		border: 1px solid var(--ui-border);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+		opacity: 0;
+		visibility: hidden;
+		transition: opacity 0.2s ease, visibility 0.2s ease;
+		margin-bottom: 4px;
+		z-index: 1000;
+	}
+
+	.warning-triangle-container:hover .warning-triangle {
+		transform: scale(1.1);
+	}
+
+	.warning-triangle-container:hover .tooltip {
+		opacity: 1;
+		visibility: visible;
 	}
 
 	.company-info {
