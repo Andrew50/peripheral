@@ -11,8 +11,8 @@ tensorflow>=2.13.0
 torch>=2.0.0
 xgboost>=1.7.0
 
-# Financial libraries
-TA-Lib>=0.4.25
+# Financial libraries - using alternatives and specific versions
+TA-Lib==0.4.28
 yfinance>=0.2.0
 zipline-reloaded>=3.0.0
 pyfolio-reloaded>=0.9.5
@@ -29,12 +29,13 @@ matplotlib>=3.7.0
 seaborn>=0.12.0
 plotly>=5.15.0
 
-# Data processing (performance optimized)
+# Data processing (performance optimized) - using alternatives to vaex
 pyarrow>=12.0.0
 h5py>=3.9.0
 fastparquet>=2023.10.0
-vaex>=4.16.0
+# vaex>=4.16.0  # Commented out due to build issues - use polars/dask instead
 dask[dataframe]>=2023.12.0
+# Alternative: vaex-core can be replaced with polars for similar functionality
 
 # Time series
 tsfresh>=0.20.0
