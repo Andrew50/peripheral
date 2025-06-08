@@ -100,6 +100,25 @@ services:
           memory: 1g
           cpus: '1.0'
 
+  worker:
+    build:
+      context: ../../services/worker
+      dockerfile: Dockerfile
+    platform: ${PLATFORM:-linux/amd64}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - compose_network
+    restart: unless-stopped
+    volumes:
+      - ../../services/worker:/app
+    environment:
+      - DB_USER=postgres
+      - DB_PASSWORD=devpassword
+      - DB_HOST=db
+      - POSTGRES_DB=postgres
+
 volumes:
   db:
   cache:
