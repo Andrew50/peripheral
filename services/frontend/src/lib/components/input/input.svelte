@@ -668,9 +668,11 @@
 									</div>
 								{/each}
 							</div>
-						{:else if $inputQuery.inputString && $inputQuery.inputString.length > 0 && loadedSecurityResultRequest !== -1 && loadedSecurityResultRequest === currentSecurityResultRequest}
-							<div class="no-results">
-								<span>No matching securities found</span>
+						{:else if $inputQuery.inputString && $inputQuery.inputString.length > 0 && !isLoadingSecurities && loadedSecurityResultRequest !== -1 && loadedSecurityResultRequest === currentSecurityResultRequest}
+							<div class="search-results-container">
+								<div class="no-results">
+									<span>No matching securities found</span>
+								</div>
 							</div>
 						{/if}
 					</div>
@@ -996,6 +998,10 @@
 		text-overflow: ellipsis;
 		min-width: 0;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+	}
+
+	.search-results-container {
+		min-height: 8rem;
 	}
 
 	.no-results {
