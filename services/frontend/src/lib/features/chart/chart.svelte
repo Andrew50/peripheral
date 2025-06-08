@@ -2058,16 +2058,12 @@
 	>
 		<div class="event-header">
 			{#if selectedEvent.events[0]?.type === 'sec_filing'}
-				<div class="event-icon" style="color: #9C27B0;">📄</div>
 				<div class="event-title">SEC Filings</div>
 			{:else if selectedEvent.events[0]?.type === 'split'}
-				<div class="event-icon" style="color: #FFD700;">📊</div>
 				<div class="event-title">Stock Splits</div>
 			{:else if selectedEvent.events[0]?.type === 'dividend'}
-				<div class="event-icon" style="color: #2196F3;">💰</div>
 				<div class="event-title">Dividends</div>
 			{:else}
-				<div class="event-icon">📅</div>
 				<div class="event-title">Events</div>
 			{/if}
 			<button class="close-button" on:click={closeEventPopup}>×</button>
