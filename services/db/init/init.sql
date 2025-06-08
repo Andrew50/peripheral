@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS schema_versions (
 -------------
 INSERT INTO schema_versions (version, description)
 VALUES (
-        16, 
-        'Initial schema version'
+        20, 
+        'Initial schema version with conversations and archived messages'
     ) ON CONFLICT (version) DO NOTHING;
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
@@ -269,6 +269,9 @@ CREATE INDEX IF NOT EXISTS idx_conversation_messages_order ON conversation_messa
 -- GIN indexes for JSONB columns that might be searched
 CREATE INDEX IF NOT EXISTS idx_conversation_messages_context_items ON conversation_messages USING GIN(context_items);
 CREATE INDEX IF NOT EXISTS idx_conversation_messages_suggested_queries ON conversation_messages USING GIN(suggested_queries);
+
+-- Index for archived messages (from migration 20)
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_archived ON conversation_messages(conversation_id, archived) WHERE archived = FALSE;
 
 -- Function to update conversation updated_at timestamp when messages are modified
 CREATE OR REPLACE FUNCTION update_conversation_updated_at()

@@ -70,6 +70,7 @@ services:
       - /app/node_modules
     environment:
       - WATCHPACK_POLLING=true #enable polling
+      - BACKEND_URL=http://backend:5058
     ports:
       - "5173:5173"
     restart: unless-stopped
