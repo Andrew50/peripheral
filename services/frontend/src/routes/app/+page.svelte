@@ -168,7 +168,38 @@
 		}
 	}
 
-	let keydownHandler: (event: KeyboardEvent) => void;
+	// Define the keydown handler with a stable reference outside of onMount
+	const keydownHandler = (event: KeyboardEvent) => {
+		// Check if input window is active - don't handle keyboard events when input is active
+		const inputWindow = document.getElementById('input-window');
+		const hiddenInput = document.getElementById('hidden-input');
+
+		// Don't interfere with the input component's keyboard events
+		//if (inputWindow || hiddenInput === document.activeElement) {
+		if (hiddenInput === document.activeElement) {
+			return;
+		}
+
+		// Only handle events when no element is focused or body is focused
+		if (!document.activeElement || document.activeElement === document.body) {
+			const chartContainer = document.getElementById(`chart_container-0`); // Assuming first chart has ID 0
+
+			if (chartContainer) {
+				// Focus the chart container
+				chartContainer.focus();
+
+				// Get the native event handlers from the chart container
+				const nativeHandlers = (chartContainer as any)._svelte?.events?.keydown;
+
+				if (nativeHandlers) {
+					// Call each handler directly with the original event
+					nativeHandlers.forEach((handler: Function) => {
+						handler.call(chartContainer, event);
+					});
+				}
+			}
+		}
+	};
 
 	onMount(() => {
 		// Load profile data FIRST, before doing anything else
@@ -211,41 +242,7 @@
 			updateChartWidth();
 			window.addEventListener('resize', updateChartWidth);
 
-			// Define the keydown handler
-			keydownHandler = (event: KeyboardEvent) => {
-				// Check if input window is active - don't handle keyboard events when input is active
-				const inputWindow = document.getElementById('input-window');
-				const hiddenInput = document.getElementById('hidden-input');
-
-				// Don't interfere with the input component's keyboard events
-				//if (inputWindow || hiddenInput === document.activeElement) {
-				if (hiddenInput === document.activeElement) {
-					return;
-				}
-
-				// Only handle events when no element is focused or body is focused
-				if (!document.activeElement || document.activeElement === document.body) {
-					const chartContainer = document.getElementById(`chart_container-0`); // Assuming first chart has ID 0
-
-					if (chartContainer) {
-						// Focus the chart container
-						chartContainer.focus();
-
-						// Get the native event handlers from the chart container
-						const nativeHandlers = (chartContainer as any)._svelte?.events?.keydown;
-
-						if (nativeHandlers) {
-							// Call each handler directly with the original event
-							nativeHandlers.forEach((handler: Function) => {
-								handler.call(chartContainer, event);
-							});
-						}
-					}
-				}
-			};
-
-			// Add global keyboard event listener
-			document.removeEventListener('keydown', keydownHandler); // Remove any existing listener first
+			// Add global keyboard event listener with stable function reference
 			document.addEventListener('keydown', keydownHandler);
 		}
 		privateRequest<string>('verifyAuth', {}).catch(() => {
@@ -298,7 +295,7 @@
 		// Clean up all activity listeners
 		if (browser && document) {
 			window.removeEventListener('resize', updateChartWidth);
-			// Remove global keyboard event listener using the stored handler
+			// Remove global keyboard event listener using the stable function reference
 			document.removeEventListener('keydown', keydownHandler);
 			stopSidebarResize();
 			stopLeftResize();
