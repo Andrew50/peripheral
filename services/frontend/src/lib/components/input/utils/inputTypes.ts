@@ -2,7 +2,7 @@
 
 import type { Instance } from '$lib/utils/types/types';
 
-export const allKeys = ['ticker', 'timestamp', 'timeframe', 'extendedHours'] as const;
+export const allKeys = ['ticker', 'timeframe', 'extendedHours'] as const;
 export type InstanceAttributes = (typeof allKeys)[number];
 
 export interface InputQuery {
