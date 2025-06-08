@@ -58,9 +58,8 @@ let isLoadingSecurities = false;
             return 'timeframe';
         } else if (possibleKeys.includes('ticker') && /^[A-Z]+$/.test(inputString)) {
             return 'ticker';
-        } else if (possibleKeys.includes('timestamp') && /^[\d-]+$/.test(inputString)) {
-            return 'timestamp';
-        } else if (possibleKeys.includes('ticker') && /^[a-zA-Z]+$/.test(inputString)) {
+        } 
+        else if (possibleKeys.includes('ticker') && /^[a-zA-Z]+$/.test(inputString)) {
             // Default to ticker for any alphabetic input if ticker is possible
             return 'ticker';
         }
@@ -108,20 +107,6 @@ let isLoadingSecurities = false;
 		} else if (inputType === 'timeframe') {
 			const regex = /^\d{1,3}[yqmwhds]?$/i;
 			return { inputValid: regex.test(inputString), securities: [] };
-		} else if (inputType === 'timestamp') {
-			const formats = ['yyyy-MM-dd H:m:ss', 'yyyy-MM-dd H:m', 'yyyy-MM-dd H', 'yyyy-MM-dd'];
-			for (const format of formats) {
-				try {
-					const parsedDate = parse(inputString, format, new Date());
-					if (!isNaN(parsedDate.getTime())) {
-						return { inputValid: true, securities: [] };
-					}
-				} catch {
-					/* try next format */
-				}
-			}
-			return { inputValid: false, securities: [] };
-		}
-		return { inputValid: false, securities: [] };
+		} 
     }
     
