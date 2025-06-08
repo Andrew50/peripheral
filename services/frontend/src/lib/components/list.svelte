@@ -35,9 +35,9 @@
 	export let expandedContent: (item: ExtendedInstance) => any = () => null;
 	export let displayNames: { [key: string]: string } = {};
 	export let rowClass: (item: ExtendedInstance) => string = () => '';
-	export let actionButtons: ActionButton[] = [];
+	export const actionButtons: ActionButton[] = [];
 	// export let linkColumns: LinkColumn[] = []; // Commented out - unused export
-	export let defaultSortColumn: string | null = null;
+	export const defaultSortColumn: string | null = null;
 
 	// Add sorting state variables
 	let sortColumn: string | null = null;
@@ -1025,5 +1025,4 @@
     tr:hover th:last-child, tr:hover td:last-child {
         background-color: var(--ui-bg-hover);
     }
-    /* ---- END DELETE BUTTON / STICKY COLUMN STYLES ---- */
 </style>

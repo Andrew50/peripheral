@@ -98,6 +98,20 @@
 	let copiedMessageId = '';
 	let copyTimeout: ReturnType<typeof setTimeout> | null = null;
 
+	// Runtime calculation function
+	function formatRuntime(startTime: Date, endTime: Date): string {
+		const diffMs = endTime.getTime() - startTime.getTime();
+		const seconds = Math.floor(diffMs / 1000);
+		
+		if (seconds < 60) {
+			return `Thought for ${seconds}s`;
+		} else {
+			const minutes = Math.floor(seconds / 60);
+			const remainingSeconds = seconds % 60;
+			return `Thought for ${minutes}m ${remainingSeconds}s`;
+		}
+	}
+
 	// Function to fetch initial suggestions based on active chart
 	async function fetchInitialSuggestions() {
 		initialSuggestions = []; // Clear previous suggestions first
@@ -587,25 +601,27 @@
 					);
 				}
 
-				const now = new Date();
+				// Use timestamps from backend response if available, otherwise use current time
+				const messageTimestamp = typedResponse.timestamp ? new Date(typedResponse.timestamp) : new Date();
+				const messageCompletedAt = typedResponse.completed_at ? new Date(typedResponse.completed_at) : new Date();
 
 				const assistantMessage: Message = {
 					message_id: typedResponse.message_id  + '_response' || '',
 					content: typedResponse.text || "Error processing request.",
 					sender: 'assistant',
-					timestamp: now,
+					timestamp: messageTimestamp,
 					responseType: typedResponse.type,
 					contentChunks: typedResponse.content_chunks,
 					suggestedQueries: typedResponse.suggestions || [],
 					status: 'completed',
-					completedAt: now
+					completedAt: messageCompletedAt
 				};
 
 				messagesStore.update(current => [...current, assistantMessage]);
 				
 				// Update last seen timestamp since we just saw this response
 				const lastSeenKey = 'chat_last_seen_timestamp';
-				localStorage.setItem(lastSeenKey, now.toISOString());
+				localStorage.setItem(lastSeenKey, messageCompletedAt.toISOString());
 				
 				// If we didn't have a conversation ID before, we should have one now
 				// Load conversation history to get the new conversation ID
@@ -1302,6 +1318,11 @@
 								</div>
 							{/if}
 							<div class="message-content">
+								{#if message.sender === 'assistant' && message.completedAt && message.timestamp}
+									<div class="message-runtime">
+										{formatRuntime(message.timestamp, message.completedAt)}
+									</div>
+								{/if}
 								{#if message.contentChunks && message.contentChunks.length > 0}
 									<div class="content-chunks">
 										{#each message.contentChunks as chunk, index}
@@ -1529,8 +1550,8 @@
 							<path d="M6,6H18V18H6V6Z" />
 						</svg>
 					{:else}
-						<svg viewBox="0 0 24 24" class="send-icon">
-							<path d="M2,21L23,12L2,3V10L17,12L2,14V21Z" />
+						<svg viewBox="0 0 18 18" class="send-icon">
+							<path d="M7.99992 14.9993V5.41334L4.70696 8.70631C4.31643 9.09683 3.68342 9.09683 3.29289 8.70631C2.90237 8.31578 2.90237 7.68277 3.29289 7.29225L8.29289 2.29225L8.36906 2.22389C8.76184 1.90354 9.34084 1.92613 9.70696 2.29225L14.707 7.29225L14.7753 7.36842C15.0957 7.76119 15.0731 8.34019 14.707 8.70631C14.3408 9.07242 13.7618 9.09502 13.3691 8.77467L13.2929 8.70631L9.99992 5.41334V14.9993C9.99992 15.5516 9.55221 15.9993 8.99992 15.9993C8.44764 15.9993 7.99993 15.5516 7.99992 14.9993Z" />
 						</svg>
 					{/if}
 				</button>

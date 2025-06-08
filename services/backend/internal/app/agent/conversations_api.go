@@ -151,9 +151,8 @@ func convertDBMessagesToConversationData(dbMessages []DBConversationMessage) *Co
 	}
 
 	return &ConversationData{
-		Messages:   chatMessages,
-		TokenCount: totalTokenCount,
-		Timestamp:  timestamp,
+		Messages:  chatMessages,
+		Timestamp: timestamp,
 	}
 }
 
