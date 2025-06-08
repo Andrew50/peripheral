@@ -761,7 +761,7 @@
 
 <style>
 	#input-window.popup-container {
-		width: min(90vw, 45rem);
+		width: min(75vw, 70rem);
 		height: auto;
 		max-height: 70vh;
 		background: transparent;
@@ -777,7 +777,7 @@
 		top: auto !important;
 		transform: translateX(-50%) !important;
 		z-index: 99999 !important;
-		gap: max(0.5vh, 8px);
+		gap: 8px;
 	}
 
 	#input-window.timeframe-popup {
@@ -799,11 +799,11 @@
 	.search-bar {
 		display: flex;
 		align-items: center;
-		height: max(3.5rem, 7vh);
+		height: 3rem;
 		background: rgba(0, 0, 0, 0.4);
 		border: 1px solid rgba(255, 255, 255, 0.3);
-		border-radius: max(1.75rem, 3.5vh);
-		padding: 0 max(0.25rem, 0.5vh);
+		border-radius: 1.5rem;
+		padding: 0 0.25rem;
 		position: relative;
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 		backdrop-filter: var(--backdrop-blur);
@@ -816,19 +816,19 @@
 	}
 
 	.search-icon {
-		padding: max(0.75rem, 1.5vh) max(0.25rem, 0.5vh) max(0.75rem, 1.5vh) max(1.25rem, 2.5vh);
+		padding: 0.75rem 0.25rem 0.75rem 1rem;
 		display: flex;
 		align-items: center;
 		color: #ffffff;
 		position: absolute;
-		left: max(0.5rem, 1vh);
+		left: 0.5rem;
 		z-index: 1;
 		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
 	}
 
 	.search-icon svg {
-		width: max(1.125rem, 2.25vh);
-		height: max(1.125rem, 2.25vh);
+		width: 1.125rem;
+		height: 1.125rem;
 		opacity: 1;
 	}
 
@@ -836,11 +836,11 @@
 		flex: 1;
 		background: transparent;
 		border: none;
-		border-radius: max(1.5rem, 3vh);
-		padding: max(0.75rem, 1.5vh) max(1rem, 2vh) max(0.75rem, 1.5vh) max(3rem, 6vh);
+		border-radius: 1.5rem;
+		padding: 0.75rem 1rem 0.75rem 2.75rem;
 		color: #ffffff;
-		font-size: max(1rem, 2vh);
-		margin: max(0.5rem, 1vh);
+		font-size: clamp(0.9rem, 1.2vw, 1.1rem);
+		margin: 0.5rem;
 		font-weight: 500;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
@@ -881,10 +881,11 @@
 	.content-container {
 		background: rgba(0, 0, 0, 0.5);
 		border: 1px solid rgba(255, 255, 255, 0.3);
-		border-radius: max(0.75rem, 1.5vh);
+		border-radius: 0.75rem;
 		overflow-y: auto;
-		padding: max(0.5rem, 1vh);
-		height: min(30vh, 15rem);
+		padding: 0.5rem;
+		height: auto;
+		max-height: 15rem;
 		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 		backdrop-filter: var(--backdrop-blur);
 		scrollbar-width: thin;
@@ -947,7 +948,7 @@
 	}
 
 	.securities-scrollable {
-		max-height: min(22.5vh, 11.25rem);
+		max-height: 13rem;
 		overflow-y: auto;
 		scrollbar-width: thin;
 		scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
@@ -956,13 +957,13 @@
 	.security-item-flex {
 		display: flex;
 		align-items: center;
-		padding: max(0.25rem, 0.5vh) max(0.375rem, 0.75vh);
+		padding: clamp(0.5rem, 1vw, 0.75rem) clamp(0.75rem, 1.5vw, 1rem);
 		cursor: pointer;
-		border-radius: max(0.375rem, 0.75vh);
+		border-radius: 0.375rem;
 		border: 1px solid transparent;
 		transition: background-color 0.15s ease, border-color 0.15s ease;
-		gap: max(0.75rem, 1.5vh);
-		min-height: max(2.25rem, 4.5vh);
+		gap: clamp(0.75rem, 1.5vw, 1.25rem);
+		min-height: clamp(2.5rem, 4vw, 3rem);
 	}
 
 	.security-item-flex.highlighted {
@@ -971,8 +972,8 @@
 	}
 
 	.security-icon-flex {
-		width: max(1.25rem, 2.5vh);
-		height: max(1.25rem, 2.5vh);
+		width: clamp(1.25rem, 1.8vw, 1.5rem);
+		height: clamp(1.25rem, 1.8vw, 1.5rem);
 		flex-shrink: 0;
 		display: flex;
 		align-items: center;
@@ -991,16 +992,16 @@
 		flex: 1;
 		display: flex;
 		align-items: baseline;
-		gap: max(0.5rem, 1vh);
+		gap: clamp(0.5rem, 0.8vw, 0.75rem);
 		overflow: hidden;
-		font-size: max(0.75rem, 1.5vh);
+		font-size: clamp(0.875rem, 1.5vw, 1.125rem);
 		white-space: nowrap;
 	}
 
 	.ticker-flex {
 		font-weight: 600;
 		color: #ffffff;
-		flex-basis: max(3.125rem, 6.25vh);
+		flex-basis: clamp(4rem, 8vw, 6rem);
 		flex-shrink: 0;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
@@ -1010,7 +1011,7 @@
 		flex-grow: 1;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		min-width: max(6.25rem, 12.5vh);
+		min-width: clamp(8rem, 15vw, 20rem);
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
