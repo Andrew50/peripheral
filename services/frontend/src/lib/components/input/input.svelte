@@ -869,8 +869,7 @@
 		border-radius: 0.75rem;
 		overflow-y: auto;
 		padding: 0.5rem;
-		height: auto;
-		max-height: 15rem;
+		height: 15rem;
 		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 		backdrop-filter: var(--backdrop-blur);
 		scrollbar-width: thin;
@@ -933,7 +932,7 @@
 	}
 
 	.securities-scrollable {
-		max-height: 13rem;
+		height: 13rem;
 		overflow-y: auto;
 		scrollbar-width: thin;
 		scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
@@ -1001,14 +1000,13 @@
 	}
 
 	.search-results-container {
-		min-height: 8rem;
-	}
-
-	.no-results {
+		height: 13rem;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		height: 8rem;
+	}
+
+	.no-results {
 		color: #ffffff;
 		font-size: 0.875rem;
 		text-align: center;
