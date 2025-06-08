@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
 	import { browser } from '$app/environment';
-	import { inputQuery } from '$lib/components/input/input.svelte';
+	import { activeChartInstance } from '$lib/features/chart/interface';
+	import { queryChart } from '$lib/features/chart/interface';
 	import { get } from 'svelte/store';
 	
 	const dispatch = createEventDispatcher();
@@ -41,43 +42,41 @@
 	// Convert selected date and time to timestamp (treating input as EST)
 	function getSelectedTimestamp(): number {
 		if (selectedDate && selectedTime) {
-			// Create the datetime string and treat it as EST
-			const dateTimeString = `${selectedDate}T${selectedTime}:00`;
+			// Parse the date and time components
+			const [year, month, day] = selectedDate.split('-').map(Number);
+			const [hours, minutes] = selectedTime.split(':').map(Number);
 			
-			// Create date object and adjust for EST timezone
-			// EST is UTC-5 (or UTC-4 during daylight saving time)
-			const date = new Date(dateTimeString);
+			// Create date in EST/EDT using proper timezone handling
+			// This creates the time as if it were in EST, then converts to UTC
+			const estDate = new Date();
+			estDate.setFullYear(year, month - 1, day); // month is 0-based
+			estDate.setHours(hours, minutes, 0, 0);
 			
-			// Get the timezone offset for EST (accounting for daylight saving)
-			const estOffset = getESTOffset(date);
+			// Get the EST offset for this date (handles DST automatically)
+			const isDST = isDateInDST(estDate);
+			const offsetHours = isDST ? -4 : -5; // EDT is UTC-4, EST is UTC-5
 			
-			// Adjust the timestamp to represent the correct EST time
-			const timestamp = date.getTime() - (estOffset * 60 * 1000);
+			// Convert to UTC by subtracting the EST offset
+			const utcTimestamp = estDate.getTime() - (offsetHours * 60 * 60 * 1000);
 			
-			return timestamp;
+			return utcTimestamp;
 		}
 		return Date.now();
 	}
 	
-	// Helper function to get EST offset in minutes
-	function getESTOffset(date: Date): number {
-		// EST is UTC-5, EDT is UTC-4
-		// Daylight saving time in the US typically runs from second Sunday in March to first Sunday in November
+	// Helper function to determine if a date is in Daylight Saving Time
+	function isDateInDST(date: Date): boolean {
 		const year = date.getFullYear();
 		
-		// Calculate daylight saving time boundaries
+		// DST starts on second Sunday in March
 		const dstStart = new Date(year, 2, 1); // March 1st
-		dstStart.setDate(dstStart.getDate() + (7 - dstStart.getDay()) + 7); // Second Sunday
+		dstStart.setDate(dstStart.getDate() + (14 - dstStart.getDay()) % 7); // Second Sunday
 		
-		const dstEnd = new Date(year, 10, 1); // November 1st  
-		dstEnd.setDate(dstEnd.getDate() + (7 - dstEnd.getDay())); // First Sunday
+		// DST ends on first Sunday in November  
+		const dstEnd = new Date(year, 10, 1); // November 1st
+		dstEnd.setDate(dstEnd.getDate() + (7 - dstEnd.getDay()) % 7); // First Sunday
 		
-		// Check if the date falls within daylight saving time
-		if (date >= dstStart && date < dstEnd) {
-			return -240; // EDT (UTC-4) = -4 * 60 = -240 minutes
-		} else {
-			return -300; // EST (UTC-5) = -5 * 60 = -300 minutes
-		}
+		return date >= dstStart && date < dstEnd;
 	}
 	
 	function handleDateInput(event: Event) {
@@ -119,6 +118,13 @@
 		}
 	}
 	
+	function handleDateKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			handleConfirm();
+		}
+	}
+	
 	function handleTimeInput(event: Event) {
 		const target = event.target as HTMLInputElement;
 		let value = target.value;
@@ -148,6 +154,13 @@
 		}
 		
 		selectedTime = value;
+	}
+	
+	function handleTimeKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			handleConfirm();
+		}
 	}
 	
 	// Calendar navigation functions
@@ -185,7 +198,6 @@
 		} else if (calendarView === 'year') {
 			calendarView = 'decade';
 		}
-		// Don't go beyond decade view
 	}
 	
 	function getMonthName(month: number): string {
@@ -285,38 +297,23 @@
 	
 	async function handleConfirm() {
 		const timestamp = getSelectedTimestamp();
-		const currentQuery = get(inputQuery);
 		
-		// Update the inputQuery similar to how the input component handles it
-		let status: 'complete' | 'active' = 'complete';
-
-		// Check if further input is needed based on required keys
-		if (currentQuery.requiredKeys === 'any') {
-			if (Object.keys(currentQuery.instance).length === 0) {
-				status = 'active';
-			}
-		} else if (Array.isArray(currentQuery.requiredKeys)) {
-			for (const attribute of currentQuery.requiredKeys) {
-				if (!currentQuery.instance[attribute]) {
-					status = 'active';
-					break;
-				}
-			}
-		}
-
-		const updatedQuery = {
-			...currentQuery,
-			instance: {
-				...currentQuery.instance,
-				timestamp: timestamp
-			},
-			inputString: '',
-			inputValid: true,
-			inputType: '',
-			status: status
+		// Get current chart instance from the store
+		const currentChart = get(activeChartInstance);
+		if (!currentChart) return;
+		// Create new instance preserving everything except timestamp
+		const updatedInstance = {
+			...currentChart,
+			timestamp: timestamp,
+			// Explicitly preserve the key fields
+			ticker: currentChart.ticker,
+			timeframe: currentChart.timeframe, 
+			extendedHours: currentChart.extendedHours,
+			securityId: currentChart.securityId
 		};
-
-		inputQuery.set(updatedQuery);
+		console.log(updatedInstance);
+		// Call queryChart directly - no input system needed
+		queryChart(updatedInstance, true);
 		
 		visible = false;
 		dispatch('confirm', { timestamp });
@@ -364,6 +361,7 @@
 						placeholder="YYYY-MM-DD"
 						bind:value={selectedDate}
 						on:input={handleDateInput}
+						on:keydown={handleDateKeydown}
 					/>
 				</div>
 				<div class="input-group">
@@ -375,6 +373,7 @@
 						maxlength="5"
 						bind:value={selectedTime}
 						on:input={handleTimeInput}
+						on:keydown={handleTimeKeydown}
 					/>
 				</div>
 			</div>
