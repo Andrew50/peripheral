@@ -58,6 +58,9 @@
 
 	import { requestChatOpen } from '$lib/features/chat/interface'; // Import the store
 
+	// Import the standalone calendar component
+	import Calendar from '$lib/components/calendar/calendar.svelte';
+
 	//type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
 	type Menu = 'none' | 'watchlist' | 'alerts'  | 'news';
 
@@ -125,6 +128,9 @@
 	// Add left sidebar state variables next to the other state variables
 	let leftMenuWidth = 550; // <-- Set initial width to 300
 	let leftResizing = false;
+
+	// Calendar state
+	let calendarVisible = false;
 
 	// Apply color scheme reactively based on the store
 	$: if ($settings.colorScheme && browser) {
@@ -460,6 +466,12 @@
 		}
 	}
 
+	function handleCalendar() {
+		calendarVisible = true;
+	}
+
+
+
 	function handlePause() {
 		if ($streamInfo.replayActive && !$streamInfo.replayPaused) {
 			pauseReplay();
@@ -790,7 +802,7 @@
 		}, 0);
 	}
 </script>
-
+<!-- svelte-ignore a11y-no-noninteractive-element-interactions-->
 <div
 	class="page"
 	role="application"
@@ -805,6 +817,10 @@
 	<Input />
 	<RightClick />
 	<StrategiesPopup />
+	<Calendar 
+		bind:visible={calendarVisible} 
+		initialTimestamp={$streamInfo.timestamp}
+	/>
 	<!--<Algo />-->
 	<!-- Main area wrapper -->
 	<div class="app-container">
@@ -976,6 +992,17 @@
 		</div>
 
 		<div class="bottom-bar-right">
+			<!-- Calendar button for timestamp selection -->
+			<button
+				class="toggle-button calendar-button"
+				on:click={handleCalendar}
+				title="Go to Date"
+			>
+				<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V8H19V19ZM7 10H12V15H7V10Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+				</svg>
+			</button>
+
 			<!-- Combined replay button -->
 			<button
 				class="toggle-button replay-button { !$streamInfo.replayActive || $streamInfo.replayPaused ? 'play' : 'pause' }"
@@ -1458,7 +1485,8 @@
 		color: var(--f1);
 	}
 
-	/* Replay button styles */
+	/* Calendar and Replay button styles */
+	.calendar-button,
 	.replay-button {
 		padding: 0.3rem 0.8rem; /* Adjust padding slightly for text */
 		min-width: auto; /* Remove fixed min-width */
@@ -1469,6 +1497,7 @@
 		gap: 0.4rem; /* Add gap between icon and text */
 	}
 
+	.calendar-button svg,
 	.replay-button svg {
 		width: 16px; /* Adjust icon size */
 		height: 16px;
@@ -1496,11 +1525,13 @@
 		/* color: var(--error-color); */
 	}
 
+	.calendar-button:hover,
 	.replay-button:hover {
 		background-color: var(--ui-bg-hover);
 		border-color: var(--ui-border-hover);
 	}
 
+	.calendar-button:active,
 	.replay-button:active {
 		background-color: var(--ui-bg-active);
 		transform: translateY(1px);
