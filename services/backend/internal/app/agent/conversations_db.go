@@ -18,7 +18,6 @@ type ConversationSummary struct {
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 	MessageCount     int       `json:"message_count"`
-	TotalTokenCount  int       `json:"total_token_count"`
 	LastMessageQuery string    `json:"last_message_query,omitempty"`
 }
 
@@ -102,7 +101,6 @@ func GetUserConversations(conn *data.Conn, userID int, _ json.RawMessage) (inter
 			&conv.CreatedAt,
 			&conv.UpdatedAt,
 			&conv.MessageCount,
-			&conv.TotalTokenCount,
 			&lastMessageQuery,
 		)
 		if err != nil {
