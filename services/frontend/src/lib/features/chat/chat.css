@@ -903,6 +903,15 @@
 		}
 	}
 
+	/* Message runtime display */
+	.message-runtime {
+		font-size: 0.8rem;
+		color: var(--text-secondary, #aaa);
+		margin-top: 0.25rem;
+		margin-bottom: 0.25rem;
+		opacity: 0.8;
+	}
+
 	/* Message editing state */
 	.message.editing {
 		max-width: 100% !important;
