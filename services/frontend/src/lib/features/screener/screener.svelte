@@ -6,7 +6,7 @@
 	import { UTCTimestampToESTString } from '$lib/utils/helpers/timestamp';
 	import { queueRequest } from '$lib/utils/helpers/backend';
 	import { strategies } from '$lib/utils/stores/stores';
-	import { queryInstanceInput } from '$lib/components/input.svelte';
+	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import type { Writable } from 'svelte/store';
 	import type { Instance } from '$lib/utils/types/types';
 
