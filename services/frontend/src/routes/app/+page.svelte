@@ -4,7 +4,7 @@
 	import Alerts from '$lib/features/alerts/alert.svelte';
 	import RightClick from '$lib/components/rightClick.svelte';
 	import StrategiesPopup from '$lib/components/strategiesPopup.svelte';
-	import Input from '$lib/components/input.svelte';
+	import Input from '$lib/components/input/input.svelte';
 	//import Similar from '$lib/features/similar/similar.svelte';
 	//import Study from '$lib/features/study.svelte';
 	import Watchlist from '$lib/features/watchlist/watchlist.svelte';
@@ -31,7 +31,7 @@
 		changeSpeed,
 		nextDay
 	} from '$lib/utils/stream/interface';
-	import { queryInstanceInput } from '$lib/components/input.svelte';
+	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { browser } from '$app/environment';
 	import { onMount, onDestroy } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
@@ -57,6 +57,9 @@
 	import Query from '$lib/features/chat/chat.svelte';
 
 	import { requestChatOpen } from '$lib/features/chat/interface'; // Import the store
+
+	// Import the standalone calendar component
+	import Calendar from '$lib/components/calendar/calendar.svelte';
 
 	//type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
 	type Menu = 'none' | 'watchlist' | 'alerts'  | 'news';
@@ -125,6 +128,9 @@
 	// Add left sidebar state variables next to the other state variables
 	let leftMenuWidth = 550; // <-- Set initial width to 300
 	let leftResizing = false;
+
+	// Calendar state
+	let calendarVisible = false;
 
 	// Apply color scheme reactively based on the store
 	$: if ($settings.colorScheme && browser) {
@@ -460,6 +466,12 @@
 		}
 	}
 
+	function handleCalendar() {
+		calendarVisible = true;
+	}
+
+
+
 	function handlePause() {
 		if ($streamInfo.replayActive && !$streamInfo.replayPaused) {
 			pauseReplay();
@@ -790,7 +802,7 @@
 		}, 0);
 	}
 </script>
-
+<!-- svelte-ignore a11y-no-noninteractive-element-interactions-->
 <div
 	class="page"
 	role="application"
@@ -805,6 +817,10 @@
 	<Input />
 	<RightClick />
 	<StrategiesPopup />
+	<Calendar 
+		bind:visible={calendarVisible} 
+		initialTimestamp={$streamInfo.timestamp}
+	/>
 	<!--<Algo />-->
 	<!-- Main area wrapper -->
 	<div class="app-container">
@@ -939,7 +955,9 @@
 				on:click={toggleLeftPane}
 				title="AI Query"
 			>
-				<img src="query.png" alt="AI Query" class="menu-icon" />
+				<svg class="chat-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path d="M8 12H8.01M12 12H12.01M16 12H16.01M21 12C21 16.418 16.97 20 12 20C10.89 20 9.84 19.8 8.87 19.42L3 21L4.58 15.13C4.2 14.16 4 13.11 4 12C4 7.582 8.03 4 12 4C16.97 4 21 7.582 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+				</svg>
 			</button>
 			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'strategies') ? 'active' : ''}"
@@ -974,6 +992,17 @@
 		</div>
 
 		<div class="bottom-bar-right">
+			<!-- Calendar button for timestamp selection -->
+			<button
+				class="toggle-button calendar-button"
+				on:click={handleCalendar}
+				title="Go to Date"
+			>
+				<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V8H19V19ZM7 10H12V15H7V10Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+				</svg>
+			</button>
+
 			<!-- Combined replay button -->
 			<button
 				class="toggle-button replay-button { !$streamInfo.replayActive || $streamInfo.replayPaused ? 'play' : 'pause' }"
@@ -1068,12 +1097,6 @@
 		</div>
 	{/if}
 </div>
-
-<!--/+page.svelte-->
-
-<!--/+page.svelte-->
-
-<!--/+page.svelte-->
 
 <style>
 	.page {
@@ -1453,25 +1476,17 @@
 
 	/* Query feature button styling */
 	.query-feature {
-		background-color: rgba(0, 123, 255, 0.2);
-		border: 1px solid rgba(0, 123, 255, 0.5) !important;
-		position: relative;
+		/* Remove special styling - use default button styles */
 	}
 
-	.query-feature:not(.active):hover {
-		background-color: rgba(0, 123, 255, 0.4);
+	.chat-icon {
+		width: 20px;
+		height: 20px;
+		color: var(--f1);
 	}
 
-	.query-feature.active {
-		background-color: rgba(0, 123, 255, 0.6);
-		border-color: rgba(0, 123, 255, 0.9) !important;
-	}
-
-	.query-feature .menu-icon {
-		filter: drop-shadow(0 0 2px rgba(0, 123, 255, 0.8));
-	}
-
-	/* Replay button styles */
+	/* Calendar and Replay button styles */
+	.calendar-button,
 	.replay-button {
 		padding: 0.3rem 0.8rem; /* Adjust padding slightly for text */
 		min-width: auto; /* Remove fixed min-width */
@@ -1482,6 +1497,7 @@
 		gap: 0.4rem; /* Add gap between icon and text */
 	}
 
+	.calendar-button svg,
 	.replay-button svg {
 		width: 16px; /* Adjust icon size */
 		height: 16px;
@@ -1509,11 +1525,13 @@
 		/* color: var(--error-color); */
 	}
 
+	.calendar-button:hover,
 	.replay-button:hover {
 		background-color: var(--ui-bg-hover);
 		border-color: var(--ui-border-hover);
 	}
 
+	.calendar-button:active,
 	.replay-button:active {
 		background-color: var(--ui-bg-active);
 		transform: translateY(1px);

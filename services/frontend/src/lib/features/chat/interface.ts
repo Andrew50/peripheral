@@ -89,6 +89,8 @@ export type QueryResponse = {
 	suggestions?: string[];
 	conversation_id?: string;
 	message_id?: string;
+	timestamp?: string | Date;
+	completed_at?: string | Date;
 };
 
 // Conversation history type

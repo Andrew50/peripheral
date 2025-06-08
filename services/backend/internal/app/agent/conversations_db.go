@@ -18,7 +18,6 @@ type ConversationSummary struct {
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 	MessageCount     int       `json:"message_count"`
-	TotalTokenCount  int       `json:"total_token_count"`
 	LastMessageQuery string    `json:"last_message_query,omitempty"`
 }
 
@@ -39,6 +38,13 @@ type DBConversationMessage struct {
 	Status           string                   `json:"status"`
 	TokenCount       int                      `json:"token_count"`
 	MessageOrder     int                      `json:"message_order"`
+}
+
+// MessageCompletionData represents the data returned when completing a message
+type MessageCompletionData struct {
+	MessageID   string     `json:"message_id"`
+	CreatedAt   time.Time  `json:"created_at"`
+	CompletedAt *time.Time `json:"completed_at"`
 }
 
 // CreateConversation creates a new conversation in the database
@@ -73,7 +79,6 @@ func GetUserConversations(conn *data.Conn, userID int, _ json.RawMessage) (inter
 			c.created_at,
 			c.updated_at,
 			c.message_count,
-			c.total_token_count,
 			(
 				SELECT cm.query 
 				FROM conversation_messages cm 
@@ -102,7 +107,6 @@ func GetUserConversations(conn *data.Conn, userID int, _ json.RawMessage) (inter
 			&conv.CreatedAt,
 			&conv.UpdatedAt,
 			&conv.MessageCount,
-			&conv.TotalTokenCount,
 			&lastMessageQuery,
 		)
 		if err != nil {
@@ -500,34 +504,24 @@ func UpdatePendingMessageToCompleted(ctx context.Context, conn *data.Conn, userI
 }
 
 // UpdatePendingMessageToCompletedInConversation updates a pending message to completed status in a specific conversation
-func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult, suggestedQueries []string, tokenCount int) (string, error) {
-	// First get the message ID before updating
-	var messageID string
-	getMessageIDQuery := `
-		SELECT message_id 
-		FROM conversation_messages 
-		WHERE conversation_id = $1 AND query = $2 AND status = 'pending'`
-
-	err := conn.DB.QueryRow(ctx, getMessageIDQuery, conversationID, query).Scan(&messageID)
-	if err != nil {
-		return "", fmt.Errorf("failed to get message ID: %w", err)
-	}
-
-	// Update the database
-	querySQL := `
-		UPDATE conversation_messages 
-		SET content_chunks = $1, function_calls = $2, tool_results = $3, 
-			suggested_queries = $4, token_count = $5, completed_at = $6, status = $7
-		WHERE conversation_id = $8 AND query = $9 AND status = 'pending'`
-
+func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult, suggestedQueries []string, tokenCount int) (*MessageCompletionData, error) {
 	// Marshal JSON fields
 	contentChunksJSON, _ := json.Marshal(contentChunks)
 	functionCallsJSON, _ := json.Marshal(functionCalls)
 	toolResultsJSON, _ := json.Marshal(toolResults)
 	suggestedQueriesJSON, _ := json.Marshal(suggestedQueries)
 
+	// Update the database and get the timestamps in a single operation
 	now := time.Now()
-	result, err := conn.DB.Exec(ctx, querySQL,
+	querySQL := `
+		UPDATE conversation_messages 
+		SET content_chunks = $1, function_calls = $2, tool_results = $3, 
+			suggested_queries = $4, token_count = $5, completed_at = $6, status = $7
+		WHERE conversation_id = $8 AND query = $9 AND status = 'pending'
+		RETURNING message_id, created_at, completed_at`
+
+	var messageData MessageCompletionData
+	err := conn.DB.QueryRow(ctx, querySQL,
 		contentChunksJSON,
 		functionCallsJSON,
 		toolResultsJSON,
@@ -537,15 +531,13 @@ func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *da
 		"completed",
 		conversationID,
 		query,
-	)
+	).Scan(&messageData.MessageID, &messageData.CreatedAt, &messageData.CompletedAt)
 
 	if err != nil {
-		return "", fmt.Errorf("failed to update pending message: %w", err)
-	}
-
-	rowsAffected := result.RowsAffected()
-	if rowsAffected == 0 {
-		return "", fmt.Errorf("no pending message found with query: %s in conversation: %s", query, conversationID)
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("no pending message found with query: %s in conversation: %s", query, conversationID)
+		}
+		return nil, fmt.Errorf("failed to update pending message: %w", err)
 	}
 
 	// Invalidate cache for this conversation since the message was updated
@@ -553,7 +545,7 @@ func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *da
 		fmt.Printf("Warning: failed to invalidate conversation cache after completing message: %v\n", err)
 	}
 
-	return messageID, nil
+	return &messageData, nil
 }
 
 // DeletePendingMessageInConversation deletes a pending message when a request is cancelled or fails

@@ -9,7 +9,6 @@ type ConversationData struct {
 	ConversationID string        `json:"conversation_id,omitempty"` // Active conversation ID
 	Title          string        `json:"title,omitempty"`           // Conversation title
 	Messages       []ChatMessage `json:"messages"`
-	TokenCount     int           `json:"token_count"`
 	Timestamp      time.Time     `json:"timestamp"`
 }
 

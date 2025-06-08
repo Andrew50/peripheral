@@ -15,7 +15,6 @@ require (
 	github.com/polygon-io/client-go v1.16.5
 	github.com/pplcc/plotext v0.0.0-20180221170324-68ab3c6e05c3
 	github.com/shopspring/decimal v1.2.0
-	github.com/sirupsen/logrus v1.9.3
 	go.opentelemetry.io/otel v1.36.0
 	go.opentelemetry.io/otel/trace v1.36.0
 	go.uber.org/zap v1.17.0

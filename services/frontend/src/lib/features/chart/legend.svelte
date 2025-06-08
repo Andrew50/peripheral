@@ -4,7 +4,7 @@
 	import { queryChart } from './interface';
 	import { writable } from 'svelte/store';
 	export let instance: Instance;
-	import { queryInstanceInput } from '$lib/components/input.svelte';
+	import { queryInstanceInput, inputQuery } from '$lib/components/input/input.svelte';
 	import { settings } from '$lib/utils/stores/stores';
 	import { UTCTimestampToESTString } from '$lib/utils/helpers/timestamp';
 	import { onMount, onDestroy } from 'svelte';
@@ -51,13 +51,7 @@
 		}
 	}
 
-	function handleTimestampClick(event: MouseEvent | TouchEvent) {
-		event.preventDefault();
-		event.stopPropagation(); // Prevent legend collapse toggle
-		queryInstanceInput([], ['timestamp'], instance).then((v: Instance) => {
-			if (v) queryChart(v, true);
-		});
-	}
+
 
 	function handleSessionClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
@@ -164,10 +158,19 @@
 
 	// Function to handle clicking the "..." timeframe button
 	function handleCustomTimeframeClick() {
-		// No selector to hide
-		queryInstanceInput([], ['timeframe'], instance).then((v: Instance) => {
+		// Start with empty input but force timeframe type
+		queryInstanceInput(['timeframe'], ['timeframe'], instance).then((v: Instance) => {
 			if (v) queryChart(v, true);
 		});
+		
+		// Force the input type to be timeframe after a brief delay
+		setTimeout(() => {
+			inputQuery.update((q) => ({
+				...q,
+				inputType: 'timeframe',
+				inputString: ''
+			}));
+		}, 25);
 	}
 
 	// Watch for content changes that might affect size
@@ -259,13 +262,6 @@
 
 			{#if !isOverflowing}
 				<button
-					class="timestamp metadata-button"
-					on:click={handleTimestampClick}
-					aria-label="Change timestamp"
-				>
-					{UTCTimestampToESTString(instance?.timestamp ?? 0)}
-				</button>
-				<button
 					class="session-type metadata-button"
 					on:click={handleSessionClick}
 					aria-label="Toggle session type"
@@ -353,25 +349,27 @@
 		position: absolute;
 		top: 10px;
 		left: 10px;
-		background-color: rgba(255, 255, 255, 0.1);
-		border: 1px solid var(--ui-border);
-		padding: 8px;
-		border-radius: 4px;
+		background: rgba(0, 0, 0, 0.5);
+		border: 1px solid rgba(255, 255, 255, 0.3);
+		padding: 12px;
+		border-radius: 8px;
 		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-		color: var(--text-primary);
-		z-index: 900;
+		color: #ffffff;
+		z-index: 1100;
 		max-width: calc(100% - 20px);
 		width: fit-content;
 		min-width: min-content;
 		backdrop-filter: var(--backdrop-blur);
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 		user-select: none;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
 	/* Update hover styles to not affect width/layout */
 	.legend:hover {
-		background-color: rgba(255, 255, 255, 0.1);
-		border-color: var(--ui-border);
+		background: rgba(0, 0, 0, 0.6);
+		border-color: rgba(255, 255, 255, 0.4);
+		box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
 	}
 
 	/* Make compact styles more specific to override hover */
@@ -395,7 +393,6 @@
 	}
 
 	/* Hide elements in compact mode even on hover */
-	.legend.compact:hover .timestamp,
 	.legend.compact:hover .session-type {
 		display: none;
 	}
@@ -406,7 +403,7 @@
 		gap: 8px;
 		margin-bottom: 8px;
 		padding-bottom: 8px;
-		border-bottom: 1px solid var(--ui-border);
+		border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 		min-width: 0;
 		flex-wrap: wrap;
 	}
@@ -415,15 +412,17 @@
 		font-size: 14px;
 		line-height: 20px;
 		font-weight: 600;
-		color: var(--text-primary);
+		color: #ffffff;
 		white-space: nowrap;
-		padding: 4px 10px;
-		background: var(--ui-bg-element);
-		border-radius: 4px;
-		border: 1px solid var(--ui-border);
+		padding: 6px 12px;
+		background: rgba(255, 255, 255, 0.1);
+		border-radius: 6px;
+		border: 1px solid rgba(255, 255, 255, 0.2);
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		transition: all 0.2s ease;
 	}
 
 	.metadata {
@@ -435,23 +434,19 @@
 		min-width: 0;
 	}
 
-	.timeframe,
-	.timestamp,
 	.session-type {
 		font-size: 13px;
 		line-height: 18px;
-		color: var(--text-secondary);
-		padding: 4px 8px;
-		background: var(--ui-bg-element);
-		border-radius: 4px;
+		color: rgba(255, 255, 255, 0.9);
+		padding: 6px 10px;
+		background: rgba(255, 255, 255, 0.08);
+		border-radius: 6px;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		border: 1px solid var(--ui-border);
-	}
-
-	.timestamp {
-		font-family: monospace;
+		border: 1px solid rgba(255, 255, 255, 0.15);
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		transition: all 0.2s ease;
 	}
 
 	.price-grid {
@@ -459,7 +454,7 @@
 		flex-direction: column;
 		margin-bottom: 8px;
 		padding-bottom: 8px;
-		border-bottom: 1px solid var(--ui-border);
+		border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 	}
 
 	.price-row {
@@ -489,10 +484,11 @@
 	.label {
 		font-size: 12px;
 		line-height: 16px;
-		color: var(--text-secondary);
+		color: rgba(255, 255, 255, 0.7);
 		font-weight: 500;
 		min-width: 35px;
 		flex-shrink: 0;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
 	.value {
@@ -505,6 +501,8 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		flex: 1;
+		color: #ffffff;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
 	/* Ensure legend stays within chart bounds */
@@ -560,7 +558,7 @@
 
 	.divider {
 		height: 1px;
-		background-color: var(--ui-border);
+		background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
 		width: 100%;
 		margin: 2px 0;
 	}
@@ -589,32 +587,34 @@
 		font-family: inherit; /* Inherit font from legend */
 		font-size: 13px;
 		line-height: 18px;
-		color: var(--text-secondary);
-		padding: 4px 8px;
-		background: var(--ui-bg-element);
-		border-radius: 4px;
+		color: rgba(255, 255, 255, 0.9);
+		padding: 6px 10px;
+		background: rgba(255, 255, 255, 0.08);
+		border-radius: 6px;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		border: 1px solid var(--ui-border);
+		border: 1px solid rgba(255, 255, 255, 0.15);
 		cursor: pointer;
-		transition: background-color 0.2s ease, border-color 0.2s ease;
+		transition: all 0.2s ease;
 		text-align: left; /* Ensure text alignment */
 		display: inline-flex; /* For alignment with potential icons */
 		align-items: center; /* Align text/icons vertically */
 		gap: 4px; /* Gap for icons if added */
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
 	/* Remove default button appearance */
 	.metadata-button:focus {
 		outline: none; /* Remove default focus outline */
-		box-shadow: 0 0 0 2px var(--accent-color); /* Add custom focus ring */
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4); /* Add custom focus ring */
 	}
 
 	.metadata-button:hover {
-		background-color: var(--ui-bg-element-hover);
-		border-color: var(--ui-border-hover);
-		color: var(--text-primary); /* Slightly brighten text on hover */
+		background: rgba(255, 255, 255, 0.15);
+		border-color: rgba(255, 255, 255, 0.3);
+		color: #ffffff; /* Brighten text on hover */
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 	}
 
 	/* Specific style adjustments for symbol button */
@@ -622,41 +622,37 @@
 		font-size: 14px;
 		line-height: 20px;
 		font-weight: 600;
-		color: var(--text-primary);
-		padding: 4px 10px; /* Keep original padding */
+		color: #ffffff;
+		padding: 6px 12px; /* Keep original padding */
 		gap: 4px; /* Ensure gap for icon */
 	}
 
 	/* Adjust original span styles to target buttons */
-	.timestamp.metadata-button,
 	.session-type.metadata-button {
 		/* Styles previously applied to .timeframe, .timestamp, .session-type spans now applied via .metadata-button base class */
-	}
-
-	.timestamp.metadata-button {
-		font-family: monospace;
 	}
 
 	/* Styles for preset timeframe buttons */
 	.timeframe-preset-button {
 		min-width: 30px; /* Ensure buttons have some width */
 		text-align: center;
-		padding: 4px 6px; /* Adjust padding */
+		padding: 6px 8px; /* Adjust padding */
 		display: inline-flex;
 		justify-content: center;
 		align-items: center;
 	}
 
 	.timeframe-preset-button.active {
-		background-color: var(--accent-color-translucent);
-		border-color: var(--accent-color);
-		color: var(--accent-color);
-		font-weight: 500;
+		background: rgba(255, 255, 255, 0.2);
+		border-color: rgba(255, 255, 255, 0.5);
+		color: #ffffff;
+		font-weight: 600;
+		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
 	}
 
 	/* Styles for the custom timeframe '...' button */
 	.timeframe-custom-button {
-		padding: 4px 6px;
+		padding: 6px 8px;
 		min-width: 30px; /* Give it similar min-width */
 		text-align: center;
 		/* Add flex properties for robust centering */
@@ -667,9 +663,10 @@
 
 	/* Apply active styles also to the custom button when it's showing a custom value */
 	.timeframe-custom-button.active {
-		background-color: var(--accent-color-translucent);
-		border-color: var(--accent-color);
-		color: var(--accent-color);
-		font-weight: 500;
+		background: rgba(255, 255, 255, 0.2);
+		border-color: rgba(255, 255, 255, 0.5);
+		color: #ffffff;
+		font-weight: 600;
+		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
 	}
 </style>

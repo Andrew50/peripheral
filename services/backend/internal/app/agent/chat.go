@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -45,11 +46,12 @@ type Citation struct {
 type QueryResponse struct {
 	Type           string         `json:"type"` //"mixed_content", "function_calls", "simple_text"
 	ContentChunks  []ContentChunk `json:"content_chunks,omitempty"`
-	Text           string         `json:"text,omitempty"`
 	Citations      []Citation     `json:"citations,omitempty"`
 	Suggestions    []string       `json:"suggestions,omitempty"`
 	ConversationID string         `json:"conversation_id,omitempty"`
 	MessageID      string         `json:"message_id"`
+	Timestamp      time.Time      `json:"timestamp"`
+	CompletedAt    *time.Time     `json:"completed_at,omitempty"`
 }
 
 // GetChatRequest is the main context-aware chat request handler
@@ -133,8 +135,8 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			// For DirectAnswer, combine all results for storage
 			allResults := append(activeResults, discardedResults...)
 
-			// Update pending message to completed and get assistant message ID
-			_, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, v.Suggestions, totalRequestTokenCount)
+			// Update pending message to completed and get message data with timestamps
+			messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, v.Suggestions, totalRequestTokenCount)
 			if err != nil {
 				return nil, fmt.Errorf("error updating pending message to completed: %w", err)
 			}
@@ -145,6 +147,8 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				Suggestions:    v.Suggestions, // Include suggestions from direct answer
 				ConversationID: conversationID,
 				MessageID:      messageID,
+				Timestamp:      messageData.CreatedAt,
+				CompletedAt:    messageData.CompletedAt,
 			}, nil
 		case Plan:
 			// Handle result discarding if specified in the plan
@@ -232,17 +236,20 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				// For final response, combine all results for storage
 				allResults := append(activeResults, discardedResults...)
 
-				// Update pending message to completed and get assistant message ID
-				_, err = UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalRequestTokenCount)
+				// Update pending message to completed and get message data with timestamps
+				messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalRequestTokenCount)
 				if err != nil {
 					return nil, fmt.Errorf("error updating pending message to completed: %w", err)
 				}
+
 				return QueryResponse{
 					Type:           "mixed_content",
 					ContentChunks:  processedChunks,
 					Suggestions:    finalResponse.Suggestions, // Include suggestions from final response
 					ConversationID: conversationID,
 					MessageID:      messageID,
+					Timestamp:      messageData.CreatedAt,
+					CompletedAt:    messageData.CompletedAt,
 				}, nil
 			}
 		}

@@ -1,7 +1,7 @@
 <script lang="ts">
 	/* ───── Imports ─────────────────────────────────────────────────────────── */
 	import List from '$lib/components/list.svelte';
-	import { queryInstanceInput } from '$lib/components/input.svelte';
+	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { writable, type Writable } from 'svelte/store';
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { activeAlerts, inactiveAlerts, alertLogs } from '$lib/utils/stores/stores';
