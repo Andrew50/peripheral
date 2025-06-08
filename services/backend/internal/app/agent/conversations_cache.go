@@ -15,7 +15,6 @@ type ActiveConversationCache struct {
 	ConversationID string        `json:"conversation_id"`
 	Title          string        `json:"title"`
 	Messages       []ChatMessage `json:"messages"`
-	TokenCount     int           `json:"token_count"`
 	MessageCount   int           `json:"message_count"`
 	LastAccessed   time.Time     `json:"last_accessed"`
 	UpdatedAt      time.Time     `json:"updated_at"`
@@ -130,9 +129,8 @@ func GetActiveConversationWithCache(ctx context.Context, conn *data.Conn, userID
 	if err != nil || activeConversationID == "" {
 		// No active conversation
 		return &ConversationData{
-			Messages:   []ChatMessage{},
-			TokenCount: 0,
-			Timestamp:  time.Now(),
+			Messages:  []ChatMessage{},
+			Timestamp: time.Now(),
 		}, nil
 	}
 
@@ -165,7 +163,6 @@ func GetActiveConversationWithCache(ctx context.Context, conn *data.Conn, userID
 	cachedConv := &ActiveConversationCache{
 		ConversationID: activeConversationID,
 		Messages:       conversationData.Messages,
-		TokenCount:     conversationData.TokenCount,
 		MessageCount:   len(conversationData.Messages),
 		UpdatedAt:      conversationData.Timestamp,
 		LastAccessed:   time.Now(),
@@ -229,7 +226,6 @@ func SaveMessageToActiveConversationWithCache(ctx context.Context, conn *data.Co
 	if err == nil && cachedConv != nil {
 		// Add message to cache
 		cachedConv.Messages = append(cachedConv.Messages, message)
-		cachedConv.TokenCount += message.TokenCount
 		cachedConv.MessageCount = len(cachedConv.Messages)
 		cachedConv.UpdatedAt = time.Now()
 
@@ -318,7 +314,6 @@ func SwitchActiveConversationWithCache(ctx context.Context, conn *data.Conn, use
 	cachedConv := &ActiveConversationCache{
 		ConversationID: conversationID,
 		Messages:       conversationData.Messages,
-		TokenCount:     conversationData.TokenCount,
 		MessageCount:   len(conversationData.Messages),
 		UpdatedAt:      conversationData.Timestamp,
 		LastAccessed:   time.Now(),
