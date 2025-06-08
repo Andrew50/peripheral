@@ -79,7 +79,6 @@ func GetUserConversations(conn *data.Conn, userID int, _ json.RawMessage) (inter
 			c.created_at,
 			c.updated_at,
 			c.message_count,
-			c.total_token_count,
 			(
 				SELECT cm.query 
 				FROM conversation_messages cm 
