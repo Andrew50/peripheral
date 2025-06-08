@@ -601,25 +601,27 @@
 					);
 				}
 
-				const now = new Date();
+				// Use timestamps from backend response if available, otherwise use current time
+				const messageTimestamp = typedResponse.timestamp ? new Date(typedResponse.timestamp) : new Date();
+				const messageCompletedAt = typedResponse.completed_at ? new Date(typedResponse.completed_at) : new Date();
 
 				const assistantMessage: Message = {
 					message_id: typedResponse.message_id  + '_response' || '',
 					content: typedResponse.text || "Error processing request.",
 					sender: 'assistant',
-					timestamp: now,
+					timestamp: messageTimestamp,
 					responseType: typedResponse.type,
 					contentChunks: typedResponse.content_chunks,
 					suggestedQueries: typedResponse.suggestions || [],
 					status: 'completed',
-					completedAt: now
+					completedAt: messageCompletedAt
 				};
 
 				messagesStore.update(current => [...current, assistantMessage]);
 				
 				// Update last seen timestamp since we just saw this response
 				const lastSeenKey = 'chat_last_seen_timestamp';
-				localStorage.setItem(lastSeenKey, now.toISOString());
+				localStorage.setItem(lastSeenKey, messageCompletedAt.toISOString());
 				
 				// If we didn't have a conversation ID before, we should have one now
 				// Load conversation history to get the new conversation ID
