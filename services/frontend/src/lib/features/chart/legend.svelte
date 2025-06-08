@@ -4,7 +4,7 @@
 	import { queryChart } from './interface';
 	import { writable } from 'svelte/store';
 	export let instance: Instance;
-	import { queryInstanceInput } from '$lib/components/input/input.svelte';
+	import { queryInstanceInput, inputQuery } from '$lib/components/input/input.svelte';
 	import { settings } from '$lib/utils/stores/stores';
 	import { UTCTimestampToESTString } from '$lib/utils/helpers/timestamp';
 	import { onMount, onDestroy } from 'svelte';
@@ -51,13 +51,7 @@
 		}
 	}
 
-	function handleTimestampClick(event: MouseEvent | TouchEvent) {
-		event.preventDefault();
-		event.stopPropagation(); // Prevent legend collapse toggle
-		queryInstanceInput([], ['timestamp'], instance).then((v: Instance) => {
-			if (v) queryChart(v, true);
-		});
-	}
+
 
 	function handleSessionClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
@@ -164,10 +158,19 @@
 
 	// Function to handle clicking the "..." timeframe button
 	function handleCustomTimeframeClick() {
-		// No selector to hide
-		queryInstanceInput([], ['timeframe'], instance).then((v: Instance) => {
+		// Start with empty input but force timeframe type
+		queryInstanceInput(['timeframe'], ['timeframe'], instance).then((v: Instance) => {
 			if (v) queryChart(v, true);
 		});
+		
+		// Force the input type to be timeframe after a brief delay
+		setTimeout(() => {
+			inputQuery.update((q) => ({
+				...q,
+				inputType: 'timeframe',
+				inputString: ''
+			}));
+		}, 25);
 	}
 
 	// Watch for content changes that might affect size
@@ -258,13 +261,6 @@
 			</button>
 
 			{#if !isOverflowing}
-				<button
-					class="timestamp metadata-button"
-					on:click={handleTimestampClick}
-					aria-label="Change timestamp"
-				>
-					{UTCTimestampToESTString(instance?.timestamp ?? 0)}
-				</button>
 				<button
 					class="session-type metadata-button"
 					on:click={handleSessionClick}
@@ -397,7 +393,6 @@
 	}
 
 	/* Hide elements in compact mode even on hover */
-	.legend.compact:hover .timestamp,
 	.legend.compact:hover .session-type {
 		display: none;
 	}
@@ -439,7 +434,6 @@
 		min-width: 0;
 	}
 
-	.timestamp,
 	.session-type {
 		font-size: 13px;
 		line-height: 18px;
@@ -453,10 +447,6 @@
 		border: 1px solid rgba(255, 255, 255, 0.15);
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 		transition: all 0.2s ease;
-	}
-
-	.timestamp {
-		font-family: monospace;
 	}
 
 	.price-grid {
@@ -638,13 +628,8 @@
 	}
 
 	/* Adjust original span styles to target buttons */
-	.timestamp.metadata-button,
 	.session-type.metadata-button {
 		/* Styles previously applied to .timeframe, .timestamp, .session-type spans now applied via .metadata-button base class */
-	}
-
-	.timestamp.metadata-button {
-		font-family: monospace;
 	}
 
 	/* Styles for preset timeframe buttons */
