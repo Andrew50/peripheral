@@ -674,29 +674,7 @@
 							</div>
 						{/if}
 					</div>
-				{:else if $inputQuery.inputType === 'timestamp'}
-					<div class="span-container">
-						<div class="span-row">
-							<span class="label">Timestamp</span>
-							<input
-								type="datetime-local"
-								on:change={(e) => {
-									// Use type casting in a different way that works better with Svelte compiler
-									const target = e.target;
-									const inputValue = target && 'value' in target ? String(target.value) : '';
-									const date = new Date(inputValue);
-									inputQuery.update((q) => ({
-										...q,
-										instance: {
-											...q.instance,
-											timestamp: !isNaN(date.getTime()) ? date.getTime() : q.instance.timestamp
-										},
-										inputValid: !isNaN(date.getTime())
-									}));
-								}}
-							/>
-						</div>
-					</div>
+
 
 				{:else if $inputQuery.inputType === 'extendedHours'}
 					<div class="span-container extended-hours-container">
