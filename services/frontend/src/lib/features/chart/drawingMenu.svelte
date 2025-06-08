@@ -58,8 +58,7 @@
 			color: color,
 			lineWidth: lineWidth,
 			lineStyle: 0, // Solid line
-			axisLabelVisible: true,
-			title: `Price: ${price}`
+			axisLabelVisible: true
 		});
 		get(drawingMenuProps).horizontalLines.push({
 			id,
@@ -158,8 +157,7 @@
 		$drawingMenuProps.selectedLine.applyOptions({
 			price,
 			color,
-			lineWidth,
-			title: `Price: ${price}`
+			lineWidth
 		});
 
 		// Update the stored properties in horizontalLines array
