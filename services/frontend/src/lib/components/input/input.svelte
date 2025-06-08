@@ -28,6 +28,7 @@
 	let filterOptions = [];
 
 	let activePromiseReject: ((reason?: any) => void) | null = null;
+	let isDocumentListenerActive = false; // Add guard for document listener
 	privateRequest<[]>('getSecurityClassifications', {}).then((v: []) => {
 		filterOptions = v;
 	});
@@ -119,7 +120,6 @@
 				isLoadingSecurities = false;
 			});
 	}
-
 
 	// Modified queryInstanceInput: if called while another query is active,
 	// cancel the previous query (rejecting its promise) and reset the state.
@@ -447,6 +447,24 @@
 		handleKeyDown(event);
 	};
 
+	// Add helper function to safely manage document event listener
+	function addDocumentListener() {
+		if (!isDocumentListenerActive && browser) {
+			document.body.removeEventListener('mousedown', handleOutsideClick); // Remove any existing
+			document.body.addEventListener('mousedown', handleOutsideClick);
+			document.body.setAttribute('data-input-click-listener', 'true');
+			isDocumentListenerActive = true;
+		}
+	}
+
+	function removeDocumentListener() {
+		if (isDocumentListenerActive && browser) {
+			document.body.removeEventListener('mousedown', handleOutsideClick);
+			document.body.removeAttribute('data-input-click-listener');
+			isDocumentListenerActive = false;
+		}
+	}
+
 	onMount(() => {
 		if (browser) {
 			prevFocusedElement = document.activeElement as HTMLElement;
@@ -472,11 +490,7 @@
 						}
 
 						// Add a click handler to the document to detect clicks outside the popup
-						if (browser) {
-							document.body.removeEventListener('mousedown', handleOutsideClick);
-							document.body.addEventListener('mousedown', handleOutsideClick);
-							document.body.setAttribute('data-input-click-listener', 'true');
-						}
+						addDocumentListener();
 					});
 					
 					// Use update() to mark that the UI is now active.
@@ -490,10 +504,7 @@
 					}
 
 					// Remove document click handler when component is inactive
-					if (browser) {
-						document.body.removeEventListener('mousedown', handleOutsideClick);
-						document.body.removeAttribute('data-input-click-listener');
-					}
+					removeDocumentListener();
 
 					// Restore focus and then update to inactive.
 					if (prevFocusedElement && browser) {
@@ -515,10 +526,7 @@
 					}
 
 					// Remove document click handler
-					if (browser) {
-						document.body.removeEventListener('mousedown', handleOutsideClick);
-						document.body.removeAttribute('data-input-click-listener');
-					}
+					removeDocumentListener();
 
 					// On cancellation we should also clear the inputString
 					inputQuery.update((state) => ({
@@ -560,8 +568,7 @@
 		if (browser) {
 			try {
 				// Remove document click handler if it exists
-				document.body.removeEventListener('mousedown', handleOutsideClick);
-				document.body.removeAttribute('data-input-click-listener');
+				removeDocumentListener();
 
 				unsubscribe();
 			} catch (error) {
