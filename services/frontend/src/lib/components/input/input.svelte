@@ -28,6 +28,7 @@
 	let filterOptions = [];
 
 	let activePromiseReject: ((reason?: any) => void) | null = null;
+	let isDocumentListenerActive = false; // Add guard for document listener
 	privateRequest<[]>('getSecurityClassifications', {}).then((v: []) => {
 		filterOptions = v;
 	});
@@ -119,7 +120,6 @@
 				isLoadingSecurities = false;
 			});
 	}
-
 
 	// Modified queryInstanceInput: if called while another query is active,
 	// cancel the previous query (rejecting its promise) and reset the state.
@@ -447,6 +447,24 @@
 		handleKeyDown(event);
 	};
 
+	// Add helper function to safely manage document event listener
+	function addDocumentListener() {
+		if (!isDocumentListenerActive && browser) {
+			document.body.removeEventListener('mousedown', handleOutsideClick); // Remove any existing
+			document.body.addEventListener('mousedown', handleOutsideClick);
+			document.body.setAttribute('data-input-click-listener', 'true');
+			isDocumentListenerActive = true;
+		}
+	}
+
+	function removeDocumentListener() {
+		if (isDocumentListenerActive && browser) {
+			document.body.removeEventListener('mousedown', handleOutsideClick);
+			document.body.removeAttribute('data-input-click-listener');
+			isDocumentListenerActive = false;
+		}
+	}
+
 	onMount(() => {
 		if (browser) {
 			prevFocusedElement = document.activeElement as HTMLElement;
@@ -472,11 +490,7 @@
 						}
 
 						// Add a click handler to the document to detect clicks outside the popup
-						if (browser) {
-							document.body.removeEventListener('mousedown', handleOutsideClick);
-							document.body.addEventListener('mousedown', handleOutsideClick);
-							document.body.setAttribute('data-input-click-listener', 'true');
-						}
+						addDocumentListener();
 					});
 					
 					// Use update() to mark that the UI is now active.
@@ -490,10 +504,7 @@
 					}
 
 					// Remove document click handler when component is inactive
-					if (browser) {
-						document.body.removeEventListener('mousedown', handleOutsideClick);
-						document.body.removeAttribute('data-input-click-listener');
-					}
+					removeDocumentListener();
 
 					// Restore focus and then update to inactive.
 					if (prevFocusedElement && browser) {
@@ -515,10 +526,7 @@
 					}
 
 					// Remove document click handler
-					if (browser) {
-						document.body.removeEventListener('mousedown', handleOutsideClick);
-						document.body.removeAttribute('data-input-click-listener');
-					}
+					removeDocumentListener();
 
 					// On cancellation we should also clear the inputString
 					inputQuery.update((state) => ({
@@ -560,8 +568,7 @@
 		if (browser) {
 			try {
 				// Remove document click handler if it exists
-				document.body.removeEventListener('mousedown', handleOutsideClick);
-				document.body.removeAttribute('data-input-click-listener');
+				removeDocumentListener();
 
 				unsubscribe();
 			} catch (error) {
@@ -613,73 +620,11 @@
 				<div class="timeframe-header-container">
 					<div class="timeframe-title">Change Interval</div>
 				</div>
-			{:else if $inputQuery.inputType === ''}
-				<div class="span-container">
-						{#if Array.isArray($inputQuery.possibleKeys)}
-							{#each $inputQuery.possibleKeys as key}
-								{#if key === 'extendedHours'}
-									<!-- Render the specific row for extendedHours -->
-									<div class="span-row extended-hours-row">
-										<span class="label">Market Hours <span class="hint"><kbd>Tab</kbd> to toggle</span></span>
-										<div class="hours-buttons">
-											<button
-												class="toggle-button {!$inputQuery.instance.extendedHours ? 'active' : ''}"
-												on:click={() => {
-													inputQuery.update((q) => ({
-														...q,
-														instance: { ...q.instance, extendedHours: false }
-													}));
-												}}
-											>
-												Regular
-											</button>
-											<button
-												class="toggle-button {$inputQuery.instance.extendedHours ? 'active' : ''}"
-												on:click={() => {
-													inputQuery.update((q) => ({
-														...q,
-														instance: { ...q.instance, extendedHours: true }
-													}));
-												}}
-											>
-												Extended
-											</button>
-										</div>
-									</div>
-								{:else}
-									<!-- Render standard row for other keys -->
-									<button type="button" 
-										class="span-row"
-										on:click={() => {
-											// Set the input type and let auto-detection handle it
-											inputQuery.update((v) => ({
-												...v,
-												inputType: key,
-												inputValid: true
-											}));
-										}}
-									>
-										<span
-											class={Array.isArray($inputQuery.requiredKeys) &&
-											$inputQuery.requiredKeys.includes(key) &&
-											!$inputQuery.instance[key]
-												? 'red'
-												: ''}
-										>
-											{capitalize(key)}
-										</span>
-										<span class="value">
-											{displayValue($inputQuery, key)}
-										</span>
-									</button>
-								{/if}
-							{/each}
-						{/if}
-					</div>
+
 				{:else if $inputQuery.inputType === 'ticker'}
 					<div class="table-container">
 						<div class="search-header">
-							<span class="search-title">Search</span>
+							<span class="search-title">Symbol Search</span>
 						</div>
 						<div class="search-divider"></div>
 						{#if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
@@ -729,29 +674,7 @@
 							</div>
 						{/if}
 					</div>
-				{:else if $inputQuery.inputType === 'timestamp'}
-					<div class="span-container">
-						<div class="span-row">
-							<span class="label">Timestamp</span>
-							<input
-								type="datetime-local"
-								on:change={(e) => {
-									// Use type casting in a different way that works better with Svelte compiler
-									const target = e.target;
-									const inputValue = target && 'value' in target ? String(target.value) : '';
-									const date = new Date(inputValue);
-									inputQuery.update((q) => ({
-										...q,
-										instance: {
-											...q.instance,
-											timestamp: !isNaN(date.getTime()) ? date.getTime() : q.instance.timestamp
-										},
-										inputValid: !isNaN(date.getTime())
-									}));
-								}}
-							/>
-						</div>
-					</div>
+
 
 				{:else if $inputQuery.inputType === 'extendedHours'}
 					<div class="span-container extended-hours-container">
@@ -823,8 +746,7 @@
 
 <style>
 	#input-window.popup-container {
-		width: 90vw;
-		max-width: 600px;
+		width: min(600px, 90vw);
 		height: auto;
 		max-height: 70vh;
 		background: transparent;
@@ -835,26 +757,25 @@
 		overflow: visible;
 		box-shadow: none;
 		position: fixed !important;
-		bottom: 50px !important;
+		bottom: max(5vh, 60px) !important;
 		left: 50% !important;
 		top: auto !important;
 		transform: translateX(-50%) !important;
 		z-index: 99999 !important;
-		gap: 8px;
+		gap: 0.5rem;
 	}
 
 	#input-window.timeframe-popup {
 		top: 50% !important;
 		bottom: auto !important;
 		transform: translate(-50%, -50%) !important;
-		max-width: 280px;
-		width: auto;
-		min-width: 240px;
+		width: min(280px, 90vw);
+		min-width: 200px;
 	}
 
 	.timeframe-popup .content-container,
 	.timeframe-popup .search-bar {
-		width: 240px;
+		width: 100%;
 		margin-left: auto;
 		margin-right: auto;
 		transform-origin: center;
@@ -863,36 +784,36 @@
 	.search-bar {
 		display: flex;
 		align-items: center;
-		height: 56px;
+		height: 3rem;
 		background: rgba(0, 0, 0, 0.4);
 		border: 1px solid rgba(255, 255, 255, 0.3);
-		border-radius: 28px;
-		padding: 0 4px;
+		border-radius: 1.5rem;
+		padding: 0 0.25rem;
 		position: relative;
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 		backdrop-filter: var(--backdrop-blur);
 	}
 
 	.timeframe-popup .search-bar {
-		border-radius: 0 0 12px 12px;
-		height: 56px;
+		border-radius: 0 0 0.75rem 0.75rem;
+		height: 3.5rem;
 		margin-top: 0;
 	}
 
 	.search-icon {
-		padding: 12px 4px 12px 20px;
+		padding: 0.75rem 0.25rem 0.75rem 1rem;
 		display: flex;
 		align-items: center;
 		color: #ffffff;
 		position: absolute;
-		left: 8px;
+		left: 0.5rem;
 		z-index: 1;
 		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
 	}
 
 	.search-icon svg {
-		width: 18px;
-		height: 18px;
+		width: 1.125rem;
+		height: 1.125rem;
 		opacity: 1;
 	}
 
@@ -900,11 +821,11 @@
 		flex: 1;
 		background: transparent;
 		border: none;
-		border-radius: 24px;
-		padding: 12px 16px 12px 48px;
+		border-radius: 1.5rem;
+		padding: 0.75rem 1rem 0.75rem 2.75rem;
 		color: #ffffff;
-		font-size: 16px;
-		margin: 8px;
+		font-size: 1rem;
+		margin: 0.5rem;
 		font-weight: 500;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
@@ -914,9 +835,9 @@
 	}
 
 	.timeframe-popup .search-bar input {
-		padding: 12px 16px;
+		padding: 0.75rem 1rem;
 		text-align: center;
-		font-size: 18px;
+		font-size: 1.125rem;
 		font-weight: 600;
 	}
 
@@ -940,17 +861,14 @@
 		box-shadow: 0 0 8px rgba(255, 68, 68, 0.3);
 	}
 
-	.search-bar input.error::placeholder {
-		color: rgba(255, 255, 255, 0.7);
-	}
-
 	.content-container {
 		background: rgba(0, 0, 0, 0.5);
 		border: 1px solid rgba(255, 255, 255, 0.3);
-		border-radius: 12px;
+		border-radius: 0.75rem;
 		overflow-y: auto;
-		padding: 8px;
-		height: 240px;
+		padding: 0.5rem;
+		height: auto;
+		max-height: 15rem;
 		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 		backdrop-filter: var(--backdrop-blur);
 		scrollbar-width: thin;
@@ -959,12 +877,12 @@
 
 	.timeframe-popup .content-container {
 		height: auto;
-		min-height: 60px;
+		min-height: 3.75rem;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: 16px;
-		border-radius: 12px 12px 0 0;
+		padding: 1rem;
+		border-radius: 0.75rem 0.75rem 0 0;
 		margin-bottom: 0;
 	}
 
@@ -973,27 +891,27 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 8px;
+		gap: 0.5rem;
 	}
 
 	.timeframe-popup .timeframe-title {
 		color: #ffffff;
-		font-size: 20px;
+		font-size: 1.25rem;
 		font-weight: 600;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
 	.timeframe-preview-below {
 		text-align: center;
-		margin-top: 8px;
-		width: 240px;
+		margin-top: 0.5rem;
+		width: 100%;
 		margin-left: auto;
 		margin-right: auto;
 	}
 
 	.preview-text-below {
 		color: rgba(255, 255, 255, 0.8);
-		font-size: 12px;
+		font-size: 0.75rem;
 		font-weight: 400;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
@@ -1009,11 +927,11 @@
 	.securities-list-flex {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: 0.25rem;
 	}
 
 	.securities-scrollable {
-		max-height: 180px;
+		max-height: 13rem;
 		overflow-y: auto;
 		scrollbar-width: thin;
 		scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
@@ -1022,13 +940,13 @@
 	.security-item-flex {
 		display: flex;
 		align-items: center;
-		padding: 4px 6px;
+		padding: 0.5rem 0.75rem;
 		cursor: pointer;
-		border-radius: 6px;
+		border-radius: 0.375rem;
 		border: 1px solid transparent;
 		transition: background-color 0.15s ease, border-color 0.15s ease;
-		gap: 8px;
-		min-height: 36px;
+		gap: 1rem;
+		min-height: 2.75rem;
 	}
 
 	.security-item-flex.highlighted {
@@ -1037,13 +955,14 @@
 	}
 
 	.security-icon-flex {
-		width: 32px;
-		height: 20px;
+		width: 1.5rem;
+		height: 1.5rem;
 		flex-shrink: 0;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		overflow: hidden;
+		border-radius: 50%;
 	}
 
 	.security-icon-flex img {
@@ -1056,16 +975,16 @@
 		flex: 1;
 		display: flex;
 		align-items: baseline;
-		gap: 8px;
+		gap: 0.75rem;
 		overflow: hidden;
-		font-size: 12px;
+		font-size: 1rem;
 		white-space: nowrap;
 	}
 
 	.ticker-flex {
 		font-weight: 600;
 		color: #ffffff;
-		flex-basis: 50px;
+		flex-basis: 5rem;
 		flex-shrink: 0;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
@@ -1075,7 +994,7 @@
 		flex-grow: 1;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		min-width: 100px;
+		min-width: 0;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
@@ -1083,23 +1002,23 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		height: 200px;
+		height: 8rem;
 		color: #ffffff;
-		font-size: 14px;
+		font-size: 0.875rem;
 		text-align: center;
 		font-weight: 500;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
 	.search-header {
-		padding: 8px 12px 4px 12px;
+		padding: 0.5rem 0.75rem 0.25rem 0.75rem;
 		display: flex;
 		align-items: center;
 	}
 
 	.search-title {
 		color: #ffffff;
-		font-size: 14px;
+		font-size: 0.875rem;
 		font-weight: 600;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		opacity: 0.9;
@@ -1108,10 +1027,8 @@
 	.search-divider {
 		height: 1px;
 		background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-		margin: 0 8px 8px 8px;
+		margin: 0 0.5rem 0.5rem 0.5rem;
 	}
-
-
 
 	.box-expand,
 	.search-bar-expand {
@@ -1148,6 +1065,26 @@
 		to {
 			transform: scaleX(1);
 			opacity: 1;
+		}
+	}
+
+	@media (max-width: 768px) {
+		#input-window.popup-container {
+			width: min(500px, 95vw);
+		}
+		
+		.security-item-flex {
+			padding: 0.5rem 0.625rem;
+			gap: 0.75rem;
+		}
+		
+		.security-icon-flex {
+			width: 1.25rem;
+			height: 1.25rem;
+		}
+		
+		.ticker-flex {
+			flex-basis: 4rem;
 		}
 	}
 </style>
