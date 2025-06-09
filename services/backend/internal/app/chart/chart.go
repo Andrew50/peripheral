@@ -608,7 +608,7 @@ func requestIncompleteBar(
 			conn, ticker,
 			1, "minute",
 			dailyEnd, minuteEnd,
-			false,
+			extendedHours,
 			easternLocation,
 		)
 	}()
@@ -618,7 +618,7 @@ func requestIncompleteBar(
 			conn, ticker,
 			1, "second",
 			minuteEnd, secondEnd,
-			false,
+			extendedHours,
 			easternLocation,
 		)
 	}()
@@ -806,7 +806,7 @@ func fetchAggData(
 	multiplier int,
 	timespan string,
 	startMs, endMs int64,
-	filterRegularOnly bool,
+	extendedHours bool,
 	easternLocation *time.Location,
 ) ([]models.Agg, error) {
 
@@ -816,7 +816,7 @@ func fetchAggData(
 	start := models.Millis(time.Unix(0, startMs*int64(time.Millisecond)).UTC())
 	end := models.Millis(time.Unix(0, endMs*int64(time.Millisecond)).UTC())
 
-	it, err := polygon.GetAggsData(conn.Polygon, ticker, multiplier, timespan, start, end, 10000, "asc", !filterRegularOnly)
+	it, err := polygon.GetAggsData(conn.Polygon, ticker, multiplier, timespan, start, end, 10000, "asc", !extendedHours)
 	if err != nil {
 		return nil, err
 	}
@@ -826,7 +826,7 @@ func fetchAggData(
 		agg := it.Item()
 		ts := time.Time(agg.Timestamp).In(easternLocation)
 
-		if filterRegularOnly {
+		if !extendedHours {
 			if !utils.IsTimestampRegularHours(ts) {
 				continue
 			}
