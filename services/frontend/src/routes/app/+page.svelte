@@ -5,6 +5,7 @@
 	import RightClick from '$lib/components/rightClick.svelte';
 	import StrategiesPopup from '$lib/components/strategiesPopup.svelte';
 	import Input from '$lib/components/input/input.svelte';
+	import ExtendedHoursToggle from '$lib/components/extendedHoursToggle/extendedHoursToggle.svelte';
 	//import Similar from '$lib/features/similar/similar.svelte';
 	//import Study from '$lib/features/study.svelte';
 	import Watchlist from '$lib/features/watchlist/watchlist.svelte';
@@ -60,6 +61,9 @@
 
 	// Import the standalone calendar component
 	import Calendar from '$lib/components/calendar/calendar.svelte';
+
+	// Import extended hours toggle store
+	import { extendedHoursToggleVisible, hideExtendedHoursToggle, activeChartInstance } from '$lib/features/chart/interface';
 
 	//type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
 	type Menu = 'none' | 'watchlist' | 'alerts'  | 'news';
@@ -805,6 +809,7 @@
 	role="application"
 	tabindex="-1"
 	on:keydown={(e) => {
+		
 		if (e.key === 'Escape') {
 			minimizeBottomWindow();
 		}
@@ -817,6 +822,12 @@
 	<Calendar 
 		bind:visible={calendarVisible} 
 		initialTimestamp={$streamInfo.timestamp}
+	/>
+	<ExtendedHoursToggle 
+		instance={$activeChartInstance || {}}
+		visible={$extendedHoursToggleVisible}
+		on:change={() => hideExtendedHoursToggle()}
+		on:close={() => hideExtendedHoursToggle()}
 	/>
 	<!--<Algo />-->
 	<!-- Main area wrapper -->

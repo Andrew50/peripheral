@@ -3,6 +3,7 @@
 	import Legend from './legend.svelte';
 	import Shift from './shift.svelte';
 	import DrawingMenu from './drawingMenu.svelte';
+
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { type DrawingMenuProps, addHorizontalLine, drawingMenuProps } from './drawingMenu.svelte';
 	import type { Instance as CoreInstance, TradeData, QuoteData } from '$lib/utils/types/types';
@@ -10,7 +11,8 @@
 		setActiveChart,
 		chartQueryDispatcher,
 		chartEventDispatcher,
-		queryChart
+		queryChart,
+		showExtendedHoursToggle
 	} from './interface';
 	import { streamInfo, settings, activeAlerts } from '$lib/utils/stores/stores';
 	import type { ShiftOverlay, ChartEventDispatch, BarData, ChartQueryDispatch } from './interface';
@@ -1468,9 +1470,16 @@
 				return;
 			}
 
+			// Handle Tab key to show extended hours toggle
+			if (event.key === 'Tab') {
+				event.preventDefault();
+				event.stopPropagation();
+				showExtendedHoursToggle();
+				return;
+			}
+
 			// Handle non-Alt key combinations
 			if (
-				event.key === 'Tab' ||
 				(!event.ctrlKey && !event.metaKey && /^[a-zA-Z0-9]$/.test(event.key.toLowerCase()))
 			) {
 				// Prevent default and stop propagation immediately
@@ -1478,9 +1487,7 @@
 				event.stopPropagation();
 
 				// Add the keypress to our buffer
-				if (event.key !== 'Tab') {
-					keyBuffer.push(event.key);
-				}
+				keyBuffer.push(event.key);
 
 				// If this is the first key, start the input process
 				if (!isInputActive) {
@@ -2003,6 +2010,8 @@
 		return 0; // Default value if undefined
 	}
 
+
+
 	// Function to add SEC filing to chat context
 	function addFilingToChat(filingEvent: EventMarker['events'][number]) {
 		if (!selectedEvent || !filingEvent) return;
@@ -2308,4 +2317,6 @@
 			transform: translate(-50%, calc(-100% - 15px)); /* End in final position */
 		}
 	}
+
+
 </style>
