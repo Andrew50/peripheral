@@ -665,9 +665,8 @@
 							</div>
 						{/if}
 					</div>
-
-
-		</div>
+				{/if}
+			</div>
 
 		<div class="search-bar search-bar-expand {$inputQuery.inputType === 'timeframe' && !$inputQuery.inputValid && $inputQuery.inputString ? 'error' : ''}">
 			<div class="search-icon">
