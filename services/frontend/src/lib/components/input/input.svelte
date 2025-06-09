@@ -49,14 +49,25 @@
 		const iQ = get(inputQuery);
 		let inputType = iQ.inputType;
 
-		// Always auto-classify input type
-		if (inputString !== '') {
+		// Only auto-classify input type if not already set (e.g., from forced type)
+		if (inputString !== '' && !inputType) {
 			// Use our sync detection function for consistency
 			inputType = detectInputTypeSync(inputString, iQ.possibleKeys);
 
 			// If we detect a ticker, but the input is lowercase, convert to uppercase
 			if (inputType === 'ticker' && inputString !== inputString.toUpperCase()) {
 				// Update the input string with uppercase version
+				setTimeout(() => {
+					inputQuery.update((q) => ({
+						...q,
+						inputString: inputString.toUpperCase()
+					}));
+				}, 0);
+			}
+		} else if (inputString !== '' && inputType) {
+			// If we have a forced input type and input string, handle special cases
+			if (inputType === 'ticker' && inputString !== inputString.toUpperCase()) {
+				// Convert ticker input to uppercase
 				setTimeout(() => {
 					inputQuery.update((q) => ({
 						...q,
@@ -126,7 +137,8 @@
 	export async function queryInstanceInput(
 		requiredKeys: InstanceAttributes[] | 'any',
 		optionalKeys: InstanceAttributes[] | 'any',
-		instance: Instance = {}
+		instance: Instance = {},
+		forcedInputType?: string
 	): Promise<Instance> {
 		// If an input query is already active, force its cancellation.
 		if (get(inputQuery).status !== 'inactive') {
@@ -177,32 +189,52 @@
 			possibleKeys,
 			instance,
 			inputString: initialInputString, // Use the initial input string if provided
+			inputType: forcedInputType || '', // Set forced input type if provided
 			status: 'initializing'
 		}));
 
-		// If we have an initial input string, determine its type immediately
+		// If we have an initial input string, determine its type immediately (unless forced)
 		if (initialInputString) {
 			await tick(); // ensure UI is ready
 			// Use setTimeout to ensure this runs after all other synchronous code
 			setTimeout(() => {
-				// First, forcibly detect the input type without waiting
-				const initialType = detectInputTypeSync(initialInputString, possibleKeys);
+				let initialType: string;
+				
+				// Only auto-detect type if no forced input type is provided
+				if (!forcedInputType) {
+					// First, forcibly detect the input type without waiting
+					initialType = detectInputTypeSync(initialInputString, possibleKeys);
 
-				// Update the store synchronously with the detected type
-				inputQuery.update((q) => ({
-					...q,
-					inputType: initialType,
-					// Mark as loading if it's likely a ticker
-					securities: initialType === 'ticker' ? [] : q.securities
-				}));
+					// Update the store synchronously with the detected type
+					inputQuery.update((q) => ({
+						...q,
+						inputType: initialType,
+						// Mark as loading if it's likely a ticker
+						securities: initialType === 'ticker' ? [] : q.securities
+					}));
 
-				// If it looks like a ticker, explicitly set loading state
-				if (initialType === 'ticker') {
-					isLoadingSecurities = true;
+					// If it looks like a ticker, explicitly set loading state
+					if (initialType === 'ticker') {
+						isLoadingSecurities = true;
+					}
+
+					// Then run the full determination with validation
+					determineInputType(initialInputString);
+				} else {
+					// If we have a forced input type, use it and validate accordingly
+					initialType = forcedInputType;
+					const currentState = get(inputQuery);
+					if (forcedInputType === 'ticker') {
+						isLoadingSecurities = true;
+						inputQuery.update((q) => ({
+							...q,
+							securities: []
+						}));
+					}
+					
+					// Run validation with the forced type
+					determineInputType(initialInputString);
 				}
-
-				// Then run the full determination with validation
-				determineInputType(initialInputString);
 
 				// For tickers, ensure we make multiple validation attempts
 				if (initialType === 'ticker' || /^[A-Za-z]+$/.test(initialInputString)) {
@@ -226,10 +258,20 @@
 								}
 							}, 1000); // Increased to 1000ms for better network reliability
 						}
-					}, 250); // Increased for better timing
-				}
-			}, 0);
-		}
+									}, 250); // Increased for better timing
+			}
+		}, 0);
+	} else if (forcedInputType) {
+		// If no initial input string but we have a forced input type, set it up
+		await tick();
+		setTimeout(() => {
+			inputQuery.update((q) => ({
+				...q,
+				inputType: forcedInputType,
+				securities: forcedInputType === 'ticker' ? [] : q.securities
+			}));
+		}, 0);
+	}
 
 		// Wait for next tick to ensure UI updates
 		await tick();
@@ -252,7 +294,9 @@
 
 			function cleanup() {
 				unsubscribe();
-				activePromiseReject = null;
+				if (activePromiseReject === reject) {
+					activePromiseReject = null;
+				}
 				// Trigger a shutdown to reset state.
 				inputQuery.update((v: InputQuery) => ({ ...v, status: 'shutdown' }));
 			}
