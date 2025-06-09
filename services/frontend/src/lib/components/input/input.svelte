@@ -419,14 +419,7 @@
 				scrollToHighlighted();
 			}
 			return;
-		} else if (event.key === 'Tab') {
-			event.preventDefault();
-			inputQuery.update((q) => ({
-				...q,
-				instance: { ...q.instance, extendedHours: !q.instance.extendedHours }
-			}));
-			return;
-		}
+		} 
 		
 	}
 
@@ -583,9 +576,7 @@
 		} else if (key in q.instance) {
 			if (key === 'timestamp') {
 				return UTCTimestampToESTString(q.instance.timestamp ?? 0);
-			} else if (key === 'extendedHours') {
-				return q.instance.extendedHours ? 'True' : 'False';
-			} else {
+			}  else {
 				return String(q.instance[key as keyof Instance]);
 			}
 		}
@@ -676,37 +667,6 @@
 					</div>
 
 
-				{:else if $inputQuery.inputType === 'extendedHours'}
-					<div class="span-container extended-hours-container">
-						<div class="span-row extended-hours-row">
-							<span class="label">Market Hours <span class="hint"><kbd>Tab</kbd> to toggle</span></span>
-							<div class="hours-buttons">
-								<button
-									class="toggle-button {!$inputQuery.instance.extendedHours ? 'active' : ''}"
-									on:click={() => {
-										inputQuery.update((q) => ({
-											...q,
-											instance: { ...q.instance, extendedHours: false }
-										}));
-									}}
-								>
-									Regular
-								</button>
-								<button
-									class="toggle-button {$inputQuery.instance.extendedHours ? 'active' : ''}"
-									on:click={() => {
-										inputQuery.update((q) => ({
-											...q,
-											instance: { ...q.instance, extendedHours: true }
-										}));
-									}}
-								>
-									Extended
-								</button>
-							</div>
-						</div>
-					</div>
-				{/if}
 		</div>
 
 		<div class="search-bar search-bar-expand {$inputQuery.inputType === 'timeframe' && !$inputQuery.inputValid && $inputQuery.inputString ? 'error' : ''}">
