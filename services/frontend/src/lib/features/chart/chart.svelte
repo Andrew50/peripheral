@@ -557,7 +557,7 @@
 					}
 					try {
 						const barsWithEvents = response.bars; // Use the original response with events
-						if (barsWithEvents && barsWithEvents.length > 0) {
+						if (barsWithEvents.length > 0 && barsWithEvents) {
 
 							const allEventsRaw: Array<{timestamp: number, type: string, value: string}> = [];
 							barsWithEvents.forEach(bar => {
