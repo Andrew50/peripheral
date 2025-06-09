@@ -36,8 +36,13 @@
 	function handleTickerClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
 		event.stopPropagation(); // Prevent legend collapse toggle
-		queryInstanceInput([], ['ticker'], instance).then((v: Instance) => {
+		queryInstanceInput([], ['ticker'], instance, 'ticker').then((v: Instance) => {
 			if (v) queryChart(v, true);
+		}).catch((error) => {
+			// Handle cancellation silently
+			if (error.message !== 'User cancelled input') {
+				console.error('Error in ticker input:', error);
+			}
 		});
 	}
 
@@ -45,8 +50,13 @@
 		if (event.key === 'Enter' || event.key === ' ') {
 			event.preventDefault();
 			event.stopPropagation(); // Prevent legend collapse toggle
-			queryInstanceInput('any', ['ticker'], instance).then((v: Instance) => {
+			queryInstanceInput('any', ['ticker'], instance, 'ticker').then((v: Instance) => {
 				if (v) queryChart(v, true);
+			}).catch((error) => {
+				// Handle cancellation silently
+				if (error.message !== 'User cancelled input') {
+					console.error('Error in ticker input:', error);
+				}
 			});
 		}
 	}
@@ -159,18 +169,14 @@
 	// Function to handle clicking the "..." timeframe button
 	function handleCustomTimeframeClick() {
 		// Start with empty input but force timeframe type
-		queryInstanceInput(['timeframe'], ['timeframe'], instance).then((v: Instance) => {
+		queryInstanceInput(['timeframe'], ['timeframe'], instance, 'timeframe').then((v: Instance) => {
 			if (v) queryChart(v, true);
+		}).catch((error) => {
+			// Handle cancellation silently
+			if (error.message !== 'User cancelled input') {
+				console.error('Error in timeframe input:', error);
+			}
 		});
-		
-		// Force the input type to be timeframe after a brief delay
-		setTimeout(() => {
-			inputQuery.update((q) => ({
-				...q,
-				inputType: 'timeframe',
-				inputString: ''
-			}));
-		}, 25);
 	}
 
 	// Watch for content changes that might affect size
