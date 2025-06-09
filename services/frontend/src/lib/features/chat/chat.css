@@ -906,10 +906,9 @@
 	/* Message runtime display */
 	.message-runtime {
 		font-size: 0.8rem;
-		color: var(--text-secondary, #aaa);
+		color: var(--text-secondary, #ffffff);
 		margin-top: 0.25rem;
 		margin-bottom: 0.25rem;
-		opacity: 0.8;
 	}
 
 	/* Message editing state */

@@ -300,8 +300,6 @@
 			}
 		} else if (iQ.inputType === 'timeframe') {
 			iQ.instance.timeframe = iQ.inputString;
-		} else if (iQ.inputType === 'timestamp') {
-			iQ.instance.timestamp = ESTStringToUTCTimestamp(iQ.inputString);
 		}
 
 		// Always clear the input string when a field is entered successfully
@@ -421,14 +419,7 @@
 				scrollToHighlighted();
 			}
 			return;
-		} else if (event.key === 'Tab') {
-			event.preventDefault();
-			inputQuery.update((q) => ({
-				...q,
-				instance: { ...q.instance, extendedHours: !q.instance.extendedHours }
-			}));
-			return;
-		}
+		} 
 		
 	}
 
@@ -579,20 +570,18 @@
 			if (unsubscribe) unsubscribe();
 		}
 	});
-	function displayValue(q: InputQuery, key: string): string {
+	/*function displayValue(q: InputQuery, key: string): string {
 		if (key === q.inputType) {
 			return q.inputString;
 		} else if (key in q.instance) {
 			if (key === 'timestamp') {
 				return UTCTimestampToESTString(q.instance.timestamp ?? 0);
-			} else if (key === 'extendedHours') {
-				return q.instance.extendedHours ? 'True' : 'False';
-			} else {
+			}  else {
 				return String(q.instance[key as keyof Instance]);
 			}
 		}
 		return '';
-	}
+	} */
 
 	// Scroll highlighted item into view
 	function scrollToHighlighted() {
@@ -668,46 +657,16 @@
 									</div>
 								{/each}
 							</div>
-						{:else if $inputQuery.inputString && $inputQuery.inputString.length > 0 && loadedSecurityResultRequest !== -1 && loadedSecurityResultRequest === currentSecurityResultRequest}
-							<div class="no-results">
-								<span>No matching securities found</span>
+						{:else if $inputQuery.inputString && $inputQuery.inputString.length > 0 && !isLoadingSecurities && loadedSecurityResultRequest !== -1 && loadedSecurityResultRequest === currentSecurityResultRequest}
+							<div class="search-results-container">
+								<div class="no-results">
+									<span>No matching securities found</span>
+								</div>
 							</div>
 						{/if}
 					</div>
-
-
-				{:else if $inputQuery.inputType === 'extendedHours'}
-					<div class="span-container extended-hours-container">
-						<div class="span-row extended-hours-row">
-							<span class="label">Market Hours <span class="hint"><kbd>Tab</kbd> to toggle</span></span>
-							<div class="hours-buttons">
-								<button
-									class="toggle-button {!$inputQuery.instance.extendedHours ? 'active' : ''}"
-									on:click={() => {
-										inputQuery.update((q) => ({
-											...q,
-											instance: { ...q.instance, extendedHours: false }
-										}));
-									}}
-								>
-									Regular
-								</button>
-								<button
-									class="toggle-button {$inputQuery.instance.extendedHours ? 'active' : ''}"
-									on:click={() => {
-										inputQuery.update((q) => ({
-											...q,
-											instance: { ...q.instance, extendedHours: true }
-										}));
-									}}
-								>
-									Extended
-								</button>
-							</div>
-						</div>
-					</div>
 				{/if}
-		</div>
+			</div>
 
 		<div class="search-bar search-bar-expand {$inputQuery.inputType === 'timeframe' && !$inputQuery.inputValid && $inputQuery.inputString ? 'error' : ''}">
 			<div class="search-icon">
@@ -867,8 +826,7 @@
 		border-radius: 0.75rem;
 		overflow-y: auto;
 		padding: 0.5rem;
-		height: auto;
-		max-height: 15rem;
+		height: 15rem;
 		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 		backdrop-filter: var(--backdrop-blur);
 		scrollbar-width: thin;
@@ -931,7 +889,7 @@
 	}
 
 	.securities-scrollable {
-		max-height: 13rem;
+		height: 13rem;
 		overflow-y: auto;
 		scrollbar-width: thin;
 		scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
@@ -998,11 +956,14 @@
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
-	.no-results {
+	.search-results-container {
+		height: 13rem;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		height: 8rem;
+	}
+
+	.no-results {
 		color: #ffffff;
 		font-size: 0.875rem;
 		text-align: center;

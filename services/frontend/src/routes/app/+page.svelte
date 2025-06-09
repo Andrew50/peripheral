@@ -5,6 +5,7 @@
 	import RightClick from '$lib/components/rightClick.svelte';
 	import StrategiesPopup from '$lib/components/strategiesPopup.svelte';
 	import Input from '$lib/components/input/input.svelte';
+	import ExtendedHoursToggle from '$lib/components/extendedHoursToggle/extendedHoursToggle.svelte';
 	//import Similar from '$lib/features/similar/similar.svelte';
 	//import Study from '$lib/features/study.svelte';
 	import Watchlist from '$lib/features/watchlist/watchlist.svelte';
@@ -60,6 +61,9 @@
 
 	// Import the standalone calendar component
 	import Calendar from '$lib/components/calendar/calendar.svelte';
+
+	// Import extended hours toggle store
+	import { extendedHoursToggleVisible, hideExtendedHoursToggle, activeChartInstance } from '$lib/features/chart/interface';
 
 	//type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
 	type Menu = 'none' | 'watchlist' | 'alerts'  | 'news';
@@ -158,17 +162,48 @@
 	function updateChartWidth() {
 		if (browser) {
 			const rightSidebarWidth = $menuWidth;
-			const maxRightSidebarWidth = Math.min(800, window.innerWidth - 60);
-			const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 60);
+			const maxRightSidebarWidth = Math.min(600, window.innerWidth - 45); // Restored to 600px
+			const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
 
 			// Only reduce chart width if sidebar widths are within bounds
 			if (rightSidebarWidth <= maxRightSidebarWidth && leftMenuWidth <= maxLeftSidebarWidth) {
-				chartWidth = window.innerWidth - rightSidebarWidth - leftMenuWidth - 60;
+				chartWidth = window.innerWidth - rightSidebarWidth - leftMenuWidth - 45;
 			}
 		}
 	}
 
-	let keydownHandler: (event: KeyboardEvent) => void;
+	// Define the keydown handler with a stable reference outside of onMount
+	const keydownHandler = (event: KeyboardEvent) => {
+		// Check if input window is active - don't handle keyboard events when input is active
+		const inputWindow = document.getElementById('input-window');
+		const hiddenInput = document.getElementById('hidden-input');
+
+		// Don't interfere with the input component's keyboard events
+		//if (inputWindow || hiddenInput === document.activeElement) {
+		if (hiddenInput === document.activeElement) {
+			return;
+		}
+
+		// Only handle events when no element is focused or body is focused
+		if (!document.activeElement || document.activeElement === document.body) {
+			const chartContainer = document.getElementById(`chart_container-0`); // Assuming first chart has ID 0
+
+			if (chartContainer) {
+				// Focus the chart container
+				chartContainer.focus();
+
+				// Get the native event handlers from the chart container
+				const nativeHandlers = (chartContainer as any)._svelte?.events?.keydown;
+
+				if (nativeHandlers) {
+					// Call each handler directly with the original event
+					nativeHandlers.forEach((handler: Function) => {
+						handler.call(chartContainer, event);
+					});
+				}
+			}
+		}
+	};
 
 	onMount(() => {
 		// Load profile data FIRST, before doing anything else
@@ -211,41 +246,7 @@
 			updateChartWidth();
 			window.addEventListener('resize', updateChartWidth);
 
-			// Define the keydown handler
-			keydownHandler = (event: KeyboardEvent) => {
-				// Check if input window is active - don't handle keyboard events when input is active
-				const inputWindow = document.getElementById('input-window');
-				const hiddenInput = document.getElementById('hidden-input');
-
-				// Don't interfere with the input component's keyboard events
-				//if (inputWindow || hiddenInput === document.activeElement) {
-				if (hiddenInput === document.activeElement) {
-					return;
-				}
-
-				// Only handle events when no element is focused or body is focused
-				if (!document.activeElement || document.activeElement === document.body) {
-					const chartContainer = document.getElementById(`chart_container-0`); // Assuming first chart has ID 0
-
-					if (chartContainer) {
-						// Focus the chart container
-						chartContainer.focus();
-
-						// Get the native event handlers from the chart container
-						const nativeHandlers = (chartContainer as any)._svelte?.events?.keydown;
-
-						if (nativeHandlers) {
-							// Call each handler directly with the original event
-							nativeHandlers.forEach((handler: Function) => {
-								handler.call(chartContainer, event);
-							});
-						}
-					}
-				}
-			};
-
-			// Add global keyboard event listener
-			document.removeEventListener('keydown', keydownHandler); // Remove any existing listener first
+			// Add global keyboard event listener with stable function reference
 			document.addEventListener('keydown', keydownHandler);
 		}
 		privateRequest<string>('verifyAuth', {}).catch(() => {
@@ -298,7 +299,7 @@
 		// Clean up all activity listeners
 		if (browser && document) {
 			window.removeEventListener('resize', updateChartWidth);
-			// Remove global keyboard event listener using the stored handler
+			// Remove global keyboard event listener using the stable function reference
 			document.removeEventListener('keydown', keydownHandler);
 			stopSidebarResize();
 			stopLeftResize();
@@ -320,7 +321,7 @@
 		} else {
 			// Open new menu
 			lastSidebarMenu = null;
-			menuWidth.set(300); // Or whatever your default width is
+			menuWidth.set(180); // Reduced from 225 to 180 (smaller sidebar)
 			changeMenu(menuName);
 		}
 
@@ -334,8 +335,8 @@
 
 	// Sidebar resizing
 	let resizing = false;
-	let minWidth = 200;
-	let maxWidth = 600;
+	let minWidth = 120; // Reduced from 150 to 120 (smaller minimum)
+	let maxWidth = 600; // Restored to 600px maximum
 
 	function startResize(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
@@ -358,8 +359,8 @@
 		}
 
 		// Calculate width from right edge of window, excluding the sidebar buttons width
-		let newWidth = window.innerWidth - clientX - 60; // 60px is the width of sidebar buttons
-		const maxSidebarWidth = Math.min(800, window.innerWidth - 60);
+		let newWidth = window.innerWidth - clientX - 45; // 45px is the width of sidebar buttons
+		const maxSidebarWidth = Math.min(600, window.innerWidth - 45); // Restored to 600px max
 
 		// Store state before closing
 		if (newWidth < minWidth && lastSidebarMenu !== null) {
@@ -758,7 +759,7 @@
 
 		// Calculate width from left edge of window
 		let newWidth = clientX;
-		const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 60);
+		const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
 
 		// Manage resize
 		if (newWidth < minWidth) {
@@ -808,6 +809,7 @@
 	role="application"
 	tabindex="-1"
 	on:keydown={(e) => {
+		
 		if (e.key === 'Escape') {
 			minimizeBottomWindow();
 		}
@@ -820,6 +822,12 @@
 	<Calendar 
 		bind:visible={calendarVisible} 
 		initialTimestamp={$streamInfo.timestamp}
+	/>
+	<ExtendedHoursToggle 
+		instance={$activeChartInstance || {}}
+		visible={$extendedHoursToggleVisible}
+		on:change={() => hideExtendedHoursToggle()}
+		on:close={() => hideExtendedHoursToggle()}
 	/>
 	<!--<Algo />-->
 	<!-- Main area wrapper -->
@@ -1004,7 +1012,7 @@
 			</button>
 
 			<!-- Combined replay button -->
-			<button
+			<!---- <button
 				class="toggle-button replay-button { !$streamInfo.replayActive || $streamInfo.replayPaused ? 'play' : 'pause' }"
 				on:click={() => {
 					if (!$streamInfo.replayActive) {
@@ -1028,13 +1036,13 @@
 
 			{#if $streamInfo.replayActive}
 				<button class="toggle-button replay-button stop" on:click={handleStop} title="Stop Replay">
-					<svg viewBox="0 0 24 24"><path d="M18,18H6V6H18V18Z" /></svg> <!-- Stop Icon -->
+					<svg viewBox="0 0 24 24"><path d="M18,18H6V6H18V18Z" /></svg> 
 				</button>
 				<button class="toggle-button replay-button reset" on:click={handleReset} title="Reset Replay">
-					<svg viewBox="0 0 24 24"><path d="M12,5V1L7,6L12,11V8C15.31,8 18,10.69 18,14C18,17.31 15.31,20 12,20C8.69,20 6,17.31 6,14H4C4,18.42 7.58,22 12,22C16.42,22 20,18.42 20,14C20,9.58 16.42,6 12,6V5Z" /></svg> <!-- Reset Icon (e.g., refresh) -->
+					<svg viewBox="0 0 24 24"><path d="M12,5V1L7,6L12,11V8C15.31,8 18,10.69 18,14C18,17.31 15.31,20 12,20C8.69,20 6,17.31 6,14H4C4,18.42 7.58,22 12,22C16.42,22 20,18.42 20,14C20,9.58 16.42,6 12,6V5Z" /></svg> 
 				</button>
 				<button class="toggle-button replay-button next-day" on:click={handleNextDay} title="Next Day">
-					<svg viewBox="0 0 24 24"><path d="M14,19.14V4.86L11,7.86L9.59,6.45L15.14,0.89L20.7,6.45L19.29,7.86L16,4.86V19.14H14M5,19.14V4.86H3V19.14H5Z" /></svg> <!-- Next Day Icon (e.g., skip next track) -->
+					<svg viewBox="0 0 24 24"><path d="M14,19.14V4.86L11,7.86L9.59,6.45L15.14,0.89L20.7,6.45L19.29,7.86L16,4.86V19.14H14M5,19.14V4.86H3V19.14H5Z" /></svg>
 				</button>
 
 				<label class="speed-label">
@@ -1050,7 +1058,6 @@
 				</label>
 			{/if}
 
-			<!-- Current timestamp -->
 			<span class="value">
 				{#if $streamInfo.timestamp !== undefined}
 					{formatTimestamp($streamInfo.timestamp)}
@@ -1058,7 +1065,7 @@
 					Loading Time...
 				{/if}
 			</span>
-
+			-->
 			<button class="profile-button" on:click={toggleSettings} aria-label="Toggle Settings">
 				<!-- Add key to force re-render when the profile changes -->
 				{#key profileIconKey}
@@ -1117,7 +1124,7 @@
 		height: 100%;
 		min-height: 0;
 		position: relative;
-		margin-right: 60px;
+		margin-right: 45px;
 	}
 
 	.main-content {
@@ -1159,7 +1166,7 @@
 		position: relative;
 		flex-shrink: 0;
 		border-left: 1px solid var(--ui-border);
-		max-width: min(800px, calc(100vw - 60px)); /* Reduce max width to 500px */
+		max-width: min(600px, calc(100vw - 45px)); /* 600px max sidebar with 45px button bar */
 	}
 
 	.sidebar-buttons {
@@ -1167,14 +1174,14 @@
 		top: 0;
 		right: 0;
 		height: 100vh;
-		width: 60px;
+		width: 45px;
 		display: flex;
 		flex-direction: column;
 		background-color: var(--c2);
 		z-index: 2;
 		flex-shrink: 0;
 		border-right: 1px solid var(--ui-border);
-		max-width: min(800px, calc(100vw - 60px));
+		max-width: min(600px, calc(100vw - 45px)); /* 600px max with 45px button bar */
 	}
 
 	.resize-handle {
@@ -1199,7 +1206,7 @@
 	}
 
 	.side-btn {
-		flex: 0 0 60px;
+		flex: 0 0 45px;
 	}
 
 	.menu-icon {
