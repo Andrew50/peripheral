@@ -229,8 +229,8 @@
 			on:keydown={handleTickerKeydown}
 			aria-label="Change ticker"
 		>
-			<svg class="search-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
-				<path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L21.5,20L20,21.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z" />
+			<svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none">
+				<path d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 			</svg>
 			{instance?.ticker || 'NaN'}
 		</button>
