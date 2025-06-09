@@ -300,8 +300,6 @@
 			}
 		} else if (iQ.inputType === 'timeframe') {
 			iQ.instance.timeframe = iQ.inputString;
-		} else if (iQ.inputType === 'timestamp') {
-			iQ.instance.timestamp = ESTStringToUTCTimestamp(iQ.inputString);
 		}
 
 		// Always clear the input string when a field is entered successfully
@@ -579,7 +577,7 @@
 			if (unsubscribe) unsubscribe();
 		}
 	});
-	function displayValue(q: InputQuery, key: string): string {
+	/*function displayValue(q: InputQuery, key: string): string {
 		if (key === q.inputType) {
 			return q.inputString;
 		} else if (key in q.instance) {
@@ -592,7 +590,7 @@
 			}
 		}
 		return '';
-	}
+	} */
 
 	// Scroll highlighted item into view
 	function scrollToHighlighted() {
