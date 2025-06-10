@@ -43,7 +43,7 @@ func SimpleUpdateSecurities(conn *data.Conn) error {
 
 	endDate := time.Now()
 	fmt.Printf("RUNNING SIMPLE UPDATE SECURITIES from %s to %s\n", startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
-
+	startDate = time.Date(2025, 6, 3, 0, 0, 0, 0, time.UTC)
 	// Loop through each date from startDate to endDate
 	for currentDate := startDate; !currentDate.After(endDate); currentDate = currentDate.AddDate(0, 0, 1) {
 		if currentDate.Weekday() == time.Saturday || currentDate.Weekday() == time.Sunday {
@@ -94,7 +94,22 @@ func SimpleUpdateSecurities(conn *data.Conn) error {
 		`, stringArgs(tickers)...); err != nil {
 			return fmt.Errorf("reactivate tickers for %s: %w", targetDateStr, err)
 		}
-
+		ipos, err := polygon.GetPolygonIPOs(conn.Polygon, targetDateStr)
+		if err != nil {
+			fmt.Printf("Warning: failed to fetch polygon IPOs for %s: %v\n", targetDateStr, err)
+		} else {
+			// 4) INSERT new IPO tickers with mindate = current date
+			for _, ipo := range ipos {
+				if _, err := conn.DB.Exec(ctx, `
+					INSERT INTO securities (ticker, mindate, figi) 
+					VALUES ($1, $2, $3)
+				`, ipo, currentDate, ""); err != nil {
+					fmt.Printf("Warning: failed to insert IPO ticker %s for %s: %v\n", ipo, targetDateStr, err)
+				} else {
+					fmt.Printf("Inserted IPO ticker: %s with mindate: %s\n", ipo, targetDateStr)
+				}
+			}
+		}
 		fmt.Printf("Completed processing for %s (%d tickers)\n", targetDateStr, len(tickers))
 	}
 
