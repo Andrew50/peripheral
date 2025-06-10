@@ -344,7 +344,6 @@ func GetTickerMenuDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) (inte
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ticker details: %v", err)
 	}
-	fmt.Println("results", results)
 	// Create a map to store the results and handle NULL values
 	response := map[string]interface{}{
 		"ticker":                         results.Ticker,
