@@ -4,10 +4,11 @@ import (
 	"context"
 	"time"
 
+	"backend/internal/data"
+
 	polygon "github.com/polygon-io/client-go/rest"
 	"github.com/polygon-io/client-go/rest/iter"
 	"github.com/polygon-io/client-go/rest/models"
-    "backend/internal/data"
 )
 
 // GetMarketStatus performs operations related to GetMarketStatus functionality.
@@ -102,4 +103,15 @@ func GetTickerDetailsMarketCapShareOut(client *polygon.Client, ticker string, da
 		return 0, 0, err
 	}
 	return tickerDetails.MarketCap, tickerDetails.ShareClassSharesOutstanding, nil
+}
+
+func GetPolygonIPOs(client *polygon.Client, dateString string) ([]string, error) {
+	params := models.ListIPOsParams{}.
+		WithListingDate(models.EQ, dateString)
+	iter := client.VX.ListIPOs(context.Background(), params)
+	tickerList := []string{}
+	for iter.Next() {
+		tickerList = append(tickerList, iter.Item().Ticker)
+	}
+	return tickerList, nil
 }

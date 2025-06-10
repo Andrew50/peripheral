@@ -331,8 +331,10 @@
 	}
 
 	function extendedHours(timestamp: number): boolean {
-		const date = new Date(timestamp);
-		const minutes = date.getHours() * 60 + date.getMinutes();
+		// Convert timestamp to Eastern Time
+		const estTimestampSeconds = UTCSecondstoESTSeconds((timestamp / 1000) as UTCTimestamp);
+		const date = new Date(estTimestampSeconds * 1000);
+		const minutes = date.getUTCHours() * 60 + date.getUTCMinutes();
 		return minutes < 570 || minutes >= 960; // 9:30 AM - 4:00 PM EST
 	}
 
@@ -393,12 +395,13 @@
 			includeSECFilings: get(settings).showFilings
 		})
 			.then((response) => {
-                                const barDataList = response.bars;
-                                if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
-                                        isLoadingChartData = false;
-                                        queuedLoad = null;
-                                        return;
-                                }
+				console.log('backendLoadChartData response', response);
+				const barDataList = response.bars;
+				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
+						isLoadingChartData = false;
+						queuedLoad = null;
+						return;
+				}
 				let newCandleData = barDataList.map((bar) => ({
 					time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
 					open: bar.open,
@@ -554,7 +557,7 @@
 					}
 					try {
 						const barsWithEvents = response.bars; // Use the original response with events
-						if (barsWithEvents && barsWithEvents.length > 0) {
+						if (barsWithEvents.length > 0 && barsWithEvents) {
 
 							const allEventsRaw: Array<{timestamp: number, type: string, value: string}> = [];
 							barsWithEvents.forEach(bar => {
@@ -1024,11 +1027,10 @@
 		const isExtendedHoursTrade = extendedHours(trade.timestamp);
 		if (
 			isExtendedHoursTrade &&
-			(!currentChartInstance.extendedHours || /^[dwm]/.test(currentChartInstance.timeframe || ''))
+			(!currentChartInstance.extendedHours || /\d[dwm]/.test(currentChartInstance.timeframe))
 		) {
 			return;
 		}
-
 		const dolvol = get(settings).dolvol;
 		const allCandleDataLive = chartCandleSeries.data();
 		const mostRecentBarRaw = allCandleDataLive.at(-1);
