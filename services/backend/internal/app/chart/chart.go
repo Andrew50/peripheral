@@ -199,6 +199,33 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	}
 	rows.Close() // Close rows immediately after reading
 
+	// Filter out security records that are more than a year before the most recent min date
+	// This is especially useful for backward requests to avoid fetching very old data
+	if args.Direction == "backward" && len(securityRecords) > 1 {
+		// Find the most recent minDate among all records
+		var mostRecentMinDate *time.Time
+		for _, record := range securityRecords {
+			if record.minDateFromSQL != nil {
+				if mostRecentMinDate == nil || record.minDateFromSQL.After(*mostRecentMinDate) {
+					mostRecentMinDate = record.minDateFromSQL
+				}
+			}
+		}
+
+		// Filter out records where maxDate is more than 1 year before the most recent minDate
+		if mostRecentMinDate != nil {
+			oneYearBeforeMostRecent := mostRecentMinDate.AddDate(-1, 0, 0)
+			var filteredRecords []securityRecord
+			for _, record := range securityRecords {
+				// Keep record if maxDate is NULL (current/ongoing) or if maxDate is within the year threshold
+				if record.maxDateFromSQL == nil || !record.maxDateFromSQL.Before(oneYearBeforeMostRecent) {
+					filteredRecords = append(filteredRecords, record)
+				}
+			}
+			securityRecords = filteredRecords
+		}
+	}
+
 	// Preallocate capacity for bar data. We'll at most fetch up to args.Bars + small overhead
 	barDataList := make([]GetChartDataResults, 0, args.Bars+10)
 	numBarsRemaining := args.Bars
