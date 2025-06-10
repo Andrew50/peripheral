@@ -3,6 +3,7 @@
 	import Legend from './legend.svelte';
 	import Shift from './shift.svelte';
 	import DrawingMenu from './drawingMenu.svelte';
+	import WhyMoving from '$lib/components/whyMoving.svelte';
 
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { type DrawingMenuProps, addHorizontalLine, drawingMenuProps } from './drawingMenu.svelte';
@@ -220,6 +221,10 @@
 	let isViewingLiveData = true; // Assume true initially
 	let lastQuoteData: QuoteData | null = null;
 
+	// Why Moving popup state (declare early to avoid TDZ)
+	let whyMovingTicker: string = '';
+	let whyMovingTrigger: number = 0;
+	
 	let arrowSeries: any = null; // Initialize as null
 	let eventSeries: ISeriesApi<'Custom', Time, EventMarker>;
 	let eventMarkerView: EventMarkersPaneView;
@@ -395,7 +400,6 @@
 			includeSECFilings: get(settings).showFilings
 		})
 			.then((response) => {
-				console.log('backendLoadChartData response', response);
 				const barDataList = response.bars;
 				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
 						isLoadingChartData = false;
@@ -712,6 +716,11 @@
 					// Hide chart switching overlay when loading completes
 					if (inst.requestType === 'loadNewTicker') {
 						isChartSwitching = false;
+					}
+					// Trigger Why Moving popup only for new ticker loads
+					if (inst.requestType === 'loadNewTicker') {
+						whyMovingTicker = inst.ticker ?? '';
+						whyMovingTrigger = Date.now();
 					}
 				};
 				if (
@@ -2058,6 +2067,9 @@
 		<div class="chart-switching-overlay"></div>
 	{/if}
 </div>
+
+<!-- Why Moving Popup -->
+<WhyMoving ticker={whyMovingTicker} trigger={whyMovingTrigger} />
 
 <!-- Replace the filing info overlay with a more generic event info overlay -->
 {#if selectedEvent}
