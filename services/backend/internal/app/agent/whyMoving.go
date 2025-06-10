@@ -89,13 +89,12 @@ func RunWhyMoving(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error)
 
 		// Return only existing reasons if all tickers were found
 		return existingResponse.ExistingReasons, nil
-	} else {
-		movingReasons, err := generateWhyMoving(conn, args.Tickers)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate why moving: %w", err)
-		}
-		return movingReasons, nil
 	}
+	movingReasons, err := generateWhyMoving(conn, args.Tickers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate why moving: %w", err)
+	}
+	return movingReasons, nil
 }
 
 type LLMWhyMovingResult struct {
