@@ -192,7 +192,7 @@ func EditMessage(conn *data.Conn, userID int, args json.RawMessage) (interface{}
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(context.Background())
+	defer func() { _ = tx.Rollback(context.Background()) }()
 
 	// Validate user owns the conversation
 	if err = VerifyConversationOwnership(conn, req.ConversationID, userID); err != nil {
