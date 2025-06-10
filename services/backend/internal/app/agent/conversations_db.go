@@ -258,7 +258,7 @@ func SaveConversationMessage(ctx context.Context, conn *data.Conn, conversationI
 	if err != nil {
 		return "", fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// First verify the user owns this conversation
 	if err = VerifyConversationOwnership(conn, conversationID, userID); err != nil {
