@@ -320,7 +320,9 @@ func GetTickerMenuDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) (inte
 			SELECT MAX(maxDate) 
 			FROM securities 
 			WHERE securityId = $1
-		))`
+		))
+		ORDER BY maxDate IS NULL DESC, maxDate DESC NULLS FIRST
+		LIMIT 1`
 
 	var results GetTickerMenuDetailsResults
 	err := conn.DB.QueryRow(context.Background(), query, args.SecurityID).Scan(
@@ -342,7 +344,7 @@ func GetTickerMenuDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) (inte
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ticker details: %v", err)
 	}
-
+	fmt.Println("results", results)
 	// Create a map to store the results and handle NULL values
 	response := map[string]interface{}{
 		"ticker":                         results.Ticker,
