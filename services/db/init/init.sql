@@ -346,23 +346,18 @@ CREATE TRIGGER trigger_update_conversation_stats
 -- Why Is It Moving table for tracking stock movement explanations
 CREATE TABLE why_is_it_moving (
     id SERIAL PRIMARY KEY,
-    securityid INTEGER NOT NULL REFERENCES securities(securityid) ON DELETE CASCADE,
+    securityid int, 
     ticker VARCHAR(10) NOT NULL,
-    date DATE NOT NULL, -- When the movement occurred (business date)
     content TEXT NOT NULL,
     source VARCHAR(100), -- Optional: track the source of the information
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
     
-    -- Ensure one entry per security per movement date
-    UNIQUE (securityid, created_at)
 );
 
 -- Create indexes for efficient querying
-CREATE INDEX IF NOT EXISTS idx_why_is_it_moving_securityid ON why_is_it_moving(securityid);
 CREATE INDEX IF NOT EXISTS idx_why_is_it_moving_ticker ON why_is_it_moving(ticker);
-CREATE INDEX IF NOT EXISTS idx_why_is_it_moving_date ON why_is_it_moving(date DESC);
 CREATE INDEX IF NOT EXISTS idx_why_is_it_moving_created_at ON why_is_it_moving(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_why_is_it_moving_security_date ON why_is_it_moving(securityid, date DESC);
+CREATE INDEX IF NOT EXISTS idx_why_is_it_moving_ticker_date ON why_is_it_moving(ticker, created_at DESC);
 
 COPY securities(securityid, ticker, figi, minDate, maxDate)
 FROM '/docker-entrypoint-initdb.d/securities.csv' DELIMITER ',' CSV HEADER;
