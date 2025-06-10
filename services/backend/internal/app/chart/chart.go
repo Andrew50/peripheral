@@ -211,7 +211,7 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 				}
 			}
 		}
-
+		// THIS IS JUST A TEMP THING UNTIL WE FIX SECURITY TABLE
 		// Filter out records where maxDate is more than 1 year before the most recent minDate
 		if mostRecentMinDate != nil {
 			oneYearBeforeMostRecent := mostRecentMinDate.AddDate(-1, 0, 0)
