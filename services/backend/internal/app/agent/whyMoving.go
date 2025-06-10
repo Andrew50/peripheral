@@ -15,7 +15,7 @@ type GetWhyMovingArgs struct {
 	Tickers []string `json:"tickers"`
 }
 
-func GetWhyMoving(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+func GetWhyMoving(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetWhyMovingArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, err
