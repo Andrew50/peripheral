@@ -6,23 +6,17 @@ BEGIN;
 -- Create why_is_it_moving table to store movement explanations for securities
 CREATE TABLE IF NOT EXISTS why_is_it_moving (
     id SERIAL PRIMARY KEY,
-    securityid INTEGER NOT NULL REFERENCES securities(securityid) ON DELETE CASCADE,
+    securityid int,
     ticker VARCHAR(10) NOT NULL,
-    date DATE NOT NULL, -- When the movement occurred (business date)
     content TEXT NOT NULL,
     source VARCHAR(100), -- Optional: track the source of the information
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    
-    -- Ensure one entry per security per movement date
-    UNIQUE (securityid, created_at)
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Create indexes for efficient querying
-CREATE INDEX IF NOT EXISTS idx_why_is_it_moving_securityid ON why_is_it_moving(securityid);
 CREATE INDEX IF NOT EXISTS idx_why_is_it_moving_ticker ON why_is_it_moving(ticker);
-CREATE INDEX IF NOT EXISTS idx_why_is_it_moving_date ON why_is_it_moving(date DESC);
 CREATE INDEX IF NOT EXISTS idx_why_is_it_moving_created_at ON why_is_it_moving(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_why_is_it_moving_security_date ON why_is_it_moving(securityid, date DESC);
+CREATE INDEX IF NOT EXISTS idx_why_is_it_moving_ticker_date ON why_is_it_moving(ticker, created_at DESC);
 
 -- Update schema version
 INSERT INTO schema_versions (version, description)
