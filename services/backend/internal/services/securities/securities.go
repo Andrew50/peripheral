@@ -43,7 +43,6 @@ func SimpleUpdateSecurities(conn *data.Conn) error {
 
 	endDate := time.Now()
 	fmt.Printf("RUNNING SIMPLE UPDATE SECURITIES from %s to %s\n", startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
-	startDate = time.Date(2025, 6, 3, 0, 0, 0, 0, time.UTC)
 	// Loop through each date from startDate to endDate
 	for currentDate := startDate; !currentDate.After(endDate); currentDate = currentDate.AddDate(0, 0, 1) {
 		if currentDate.Weekday() == time.Saturday || currentDate.Weekday() == time.Sunday {
