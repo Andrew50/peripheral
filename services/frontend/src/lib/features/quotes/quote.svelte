@@ -255,12 +255,13 @@
 		<!-- Market Data Section -->
 		<div class="quote-market-data">
 			<L1 {instance} />
+			<!--
 			<button class="time-sales-button" on:click|stopPropagation={toggleTimeAndSales}>
 				{showTimeAndSales ? 'Hide Time & Sales' : 'Show Time & Sales'}
 			</button>
 			{#if showTimeAndSales}
 				<TimeAndSales {instance} />
-			{/if}
+			{/if} -->
 		</div>
 
 		<!-- Details Section -->

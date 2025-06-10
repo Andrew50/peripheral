@@ -67,6 +67,8 @@ func SetActiveConversationCache(ctx context.Context, conn *data.Conn, userID int
 	if len(conversation.Messages) > maxCachedMessages {
 		// Keep the most recent messages
 		conversation.Messages = conversation.Messages[len(conversation.Messages)-maxCachedMessages:]
+		// Update message count to reflect actual cached messages
+		conversation.MessageCount = len(conversation.Messages)
 	}
 
 	cacheKey := fmt.Sprintf(activeConversationDataKey, userID)
@@ -169,6 +171,12 @@ func GetActiveConversationWithCache(ctx context.Context, conn *data.Conn, userID
 		Title:          title,
 	}
 
+	// Ensure MessageCount is consistent with actual cached messages
+	if len(cachedConv.Messages) > maxCachedMessages {
+		cachedConv.Messages = cachedConv.Messages[len(cachedConv.Messages)-maxCachedMessages:]
+		cachedConv.MessageCount = len(cachedConv.Messages)
+	}
+
 	// Store in cache (best effort - don't fail if caching fails)
 	if err := SetActiveConversationCache(ctx, conn, userID, cachedConv); err != nil {
 		// Log but don't fail the request
@@ -215,29 +223,15 @@ func SaveMessageToActiveConversationWithCache(ctx context.Context, conn *data.Co
 		}
 	}
 
+	// Invalidate cache BEFORE saving to database to prevent stale data
+	if err := InvalidateActiveConversationCache(ctx, conn, userID); err != nil {
+		fmt.Printf("Warning: failed to invalidate active conversation cache: %v\n", err)
+	}
+
 	// Save to database
 	_, err = SaveConversationMessage(ctx, conn, activeConversationID, userID, message)
 	if err != nil {
 		return fmt.Errorf("failed to save message to database: %w", err)
-	}
-
-	// Update cache - get current cached conversation
-	cachedConv, err := GetActiveConversationFromCache(ctx, conn, userID)
-	if err == nil && cachedConv != nil {
-		// Add message to cache
-		cachedConv.Messages = append(cachedConv.Messages, message)
-		cachedConv.MessageCount = len(cachedConv.Messages)
-		cachedConv.UpdatedAt = time.Now()
-
-		// Update cache
-		if err := SetActiveConversationCache(ctx, conn, userID, cachedConv); err != nil {
-			fmt.Printf("Warning: failed to update cached conversation: %v\n", err)
-		}
-	} else {
-		// Cache miss or error - invalidate to force reload next time
-		if err := InvalidateActiveConversationCache(ctx, conn, userID); err != nil {
-			fmt.Printf("Warning: failed to invalidate active conversation cache: %v\n", err)
-		}
 	}
 
 	return nil
@@ -318,6 +312,12 @@ func SwitchActiveConversationWithCache(ctx context.Context, conn *data.Conn, use
 		UpdatedAt:      conversationData.Timestamp,
 		LastAccessed:   time.Now(),
 		Title:          title,
+	}
+
+	// Ensure MessageCount is consistent with actual cached messages
+	if len(cachedConv.Messages) > maxCachedMessages {
+		cachedConv.Messages = cachedConv.Messages[len(cachedConv.Messages)-maxCachedMessages:]
+		cachedConv.MessageCount = len(cachedConv.Messages)
 	}
 
 	// Store in cache (best effort)
