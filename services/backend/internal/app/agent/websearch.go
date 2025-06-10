@@ -26,7 +26,7 @@ type WebSearchResult struct {
 	Citations  []string `json:"citations,omitempty"`
 }
 
-// RunWebSearch performs a web search using the Tavily API.
+// RunWebSearch performs a web search using the Gemini API
 func RunWebSearch(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args WebSearchArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
