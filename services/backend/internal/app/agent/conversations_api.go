@@ -187,55 +187,97 @@ func EditMessage(conn *data.Conn, userID int, args json.RawMessage) (interface{}
 		return nil, fmt.Errorf("new_query is required")
 	}
 
-	// Validate user owns the conversation
-	var ownerID int
-	err := conn.DB.QueryRow(context.Background(), "SELECT user_id FROM conversations WHERE conversation_id = $1", req.ConversationID).Scan(&ownerID)
+	// Start transaction for atomic edit operation
+	tx, err := conn.DB.Begin(context.Background())
 	if err != nil {
-		return nil, fmt.Errorf("conversation not found: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	if ownerID != userID {
-		return nil, fmt.Errorf("unauthorized access to conversation")
+	defer func() { _ = tx.Rollback(context.Background()) }()
+
+	// Validate user owns the conversation
+	if err = VerifyConversationOwnership(conn, req.ConversationID, userID); err != nil {
+		return nil, err
 	}
 
 	// Find the message to edit
-	messageOrder, _, err := FindMessageToEdit(context.Background(), conn, req.ConversationID, req.MessageID)
+	var messageOrder int
+	var foundQuery string
+	querySQL := `SELECT message_order, query FROM conversation_messages WHERE conversation_id = $1 AND message_id = $2 AND archived = FALSE`
+	err = tx.QueryRow(context.Background(), querySQL, req.ConversationID, req.MessageID).Scan(&messageOrder, &foundQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find message to edit: %w", err)
 	}
 
 	// Validate the message can be edited
-	if err := ValidateMessageForEdit(context.Background(), conn, req.ConversationID, messageOrder); err != nil {
-		return nil, fmt.Errorf("message cannot be edited: %w", err)
+	var status string
+	validateSQL := `SELECT status FROM conversation_messages WHERE conversation_id = $1 AND message_order = $2 AND archived = FALSE`
+	err = tx.QueryRow(context.Background(), validateSQL, req.ConversationID, messageOrder).Scan(&status)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate message: %w", err)
+	}
+	if status == "pending" {
+		return nil, fmt.Errorf("cannot edit a message that is currently being processed")
 	}
 
 	// Archive all messages after this one (preserve them for logging)
-	err = PruneMessagesAfterOrder(context.Background(), conn, req.ConversationID, messageOrder)
+	archiveSQL := `UPDATE conversation_messages SET archived = TRUE WHERE conversation_id = $1 AND message_order >= $2 AND archived = FALSE`
+	_, err = tx.Exec(context.Background(), archiveSQL, req.ConversationID, messageOrder)
 	if err != nil {
 		return nil, fmt.Errorf("failed to archive messages: %w", err)
 	}
 
 	// Update the message content - set status to completed since we're not regenerating here
-	err = UpdateMessageContentAndStatus(context.Background(), conn, req.ConversationID, messageOrder, req.NewQuery, "completed")
+	updateSQL := `
+		UPDATE conversation_messages 
+		SET query = $1, status = $2, completed_at = NULL, response_text = '', 
+		    content_chunks = '[]', function_calls = '[]', tool_results = '[]', 
+		    suggested_queries = '[]', citations = '[]', token_count = 0
+		WHERE conversation_id = $3 AND message_order = $4`
+	_, err = tx.Exec(context.Background(), updateSQL, req.NewQuery, "completed", req.ConversationID, messageOrder)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update message: %w", err)
 	}
 
 	// Update conversation metadata
-	err = UpdateConversationAfterEdit(context.Background(), conn, req.ConversationID)
+	metadataSQL := `
+		UPDATE conversations 
+		SET message_count = (
+			SELECT COUNT(*) FROM conversation_messages 
+			WHERE conversation_id = $1 AND archived = FALSE
+		),
+		total_token_count = (
+			SELECT COALESCE(SUM(token_count), 0) FROM conversation_messages 
+			WHERE conversation_id = $1 AND archived = FALSE
+		),
+		updated_at = $2
+		WHERE conversation_id = $1`
+	_, err = tx.Exec(context.Background(), metadataSQL, req.ConversationID, time.Now())
 	if err != nil {
-		log.Printf("Warning: failed to update conversation metadata: %v", err)
+		return nil, fmt.Errorf("failed to update conversation metadata: %w", err)
 	}
 
-	// Get the context items from the original message for regeneration
-	contextItems, err := GetMessageContextItems(context.Background(), conn, req.ConversationID, messageOrder)
-	if err != nil {
-		log.Printf("Warning: failed to get context items: %v", err)
+	// Get the context items from the original message for regeneration (before commit)
+	contextItemsSQL := `SELECT context_items FROM conversation_messages WHERE conversation_id = $1 AND message_order = $2 AND archived = FALSE`
+	var contextItemsJSON []byte
+	err = tx.QueryRow(context.Background(), contextItemsSQL, req.ConversationID, messageOrder).Scan(&contextItemsJSON)
+	var contextItems []map[string]interface{}
+	if err == nil && len(contextItemsJSON) > 0 {
+		if unmarshalErr := json.Unmarshal(contextItemsJSON, &contextItems); unmarshalErr != nil {
+			log.Printf("Warning: failed to parse context items: %v", unmarshalErr)
+			contextItems = []map[string]interface{}{} // Default to empty context
+		}
+	} else {
 		contextItems = []map[string]interface{}{} // Default to empty context
 	}
 
-	// Invalidate cache for this conversation after all DB operations are complete
+	// Invalidate cache BEFORE committing transaction to prevent stale data
 	if err := InvalidateConversationCache(context.Background(), conn, userID, req.ConversationID); err != nil {
 		log.Printf("Warning: failed to invalidate conversation cache: %v", err)
+	}
+
+	// Commit the transaction
+	if err = tx.Commit(context.Background()); err != nil {
+		return nil, fmt.Errorf("failed to commit edit transaction: %w", err)
 	}
 
 	// Return success response with context items for frontend to use in regeneration
