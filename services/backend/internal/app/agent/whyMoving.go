@@ -367,6 +367,8 @@ func insertWhyMovingResults(conn *data.Conn, results []WhyMovingResult) error {
 	query := `
 		INSERT INTO why_is_it_moving (ticker, content, created_at)
 		VALUES ($1, $2, $3)
+		ON CONFLICT (ticker, created_at) DO UPDATE SET
+		content = EXCLUDED.content
 	`
 
 	for _, result := range results {
