@@ -513,7 +513,7 @@
 	}
 	
 	.message-content :global(a:hover) {
-		text-decoration: underline;
+		cursor: pointer;
 	}
 	
 	.message-content :global(img) {
