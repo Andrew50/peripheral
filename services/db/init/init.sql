@@ -56,6 +56,7 @@ CREATE TABLE securities (
     unique (securityid, maxDate)
 );
 CREATE INDEX trgm_idx_securities_ticker ON securities USING gin (ticker gin_trgm_ops);
+CREATE INDEX trgm_idx_securities_name ON securities USING gin (name gin_trgm_ops);
 create index idxTickerDateRange on securities (ticker, minDate, maxDate);
 CREATE TABLE watchlists (
     watchlistId serial primary key,
