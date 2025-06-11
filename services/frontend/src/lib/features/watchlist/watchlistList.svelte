@@ -541,10 +541,11 @@
 
 	th,
 	td {
-		padding: 8px;
+		padding: 8px 6px;
 		text-align: left;
 		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 		background: transparent;
+		font-size: 13px;
 	}
 
 	th {
@@ -699,35 +700,35 @@
 	}
 
 	.ticker-icon {
-		width: 24px;
-		height: 24px;
+		width: 22px;
+		height: 22px;
 		border-radius: 50%; /* Make icons circular */
 		object-fit: cover; /* Ensure icon covers the area nicely */
 		background-color: var(--ui-bg-element); /* BG for unloaded images */
-		vertical-align: middle; /* Align with text */
-		margin-right: 5px; /* Space between icon and text */
+		margin-right: 4px; /* Space between icon and text */
+		vertical-align: middle;
 	}
 
 	.default-ticker-icon {
 		display: inline-flex; /* Use inline-flex for alignment */
 		align-items: center;
 		justify-content: center;
-		width: 24px;
-		height: 24px;
+		width: 22px;
+		height: 22px;
 		border-radius: 50%;
 		background-color: var(--ui-border); /* Use border color for background */
 		color: var(--text-primary); /* Use primary text color */
-		font-size: 12px;
+		font-size: 10px;
 		font-weight: 500;
 		user-select: none; /* Prevent text selection */
-		vertical-align: middle; /* Align with text */
-		margin-right: 5px; /* Space between icon and text */
+		margin-right: 4px; /* Space between icon and text */
+		vertical-align: middle;
 	}
 
 	.ticker-name {
-		flex-grow: 1; /* Allow ticker name to take remaining space */
 		overflow: hidden; /* Prevent long names from breaking layout */
 		white-space: nowrap;
+		vertical-align: middle;
 	}
 
 	/* Style for different trade types */
