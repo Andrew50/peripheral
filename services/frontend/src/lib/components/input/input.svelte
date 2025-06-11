@@ -40,7 +40,8 @@
 		inputType: '',
 		requiredKeys: 'any',
 		possibleKeys: [],
-		instance: {}
+		instance: {},
+		customTitle: undefined
 	};
 	export const inputQuery: Writable<InputQuery> = writable({ ...inactiveInputQuery });
 
@@ -138,7 +139,8 @@
 		requiredKeys: InstanceAttributes[] | 'any',
 		optionalKeys: InstanceAttributes[] | 'any',
 		instance: Instance = {},
-		forcedInputType?: string
+		forcedInputType?: string,
+		customTitle?: string
 	): Promise<Instance> {
 		// If an input query is already active, force its cancellation.
 		if (get(inputQuery).status !== 'inactive') {
@@ -190,6 +192,7 @@
 			instance,
 			inputString: initialInputString, // Use the initial input string if provided
 			inputType: forcedInputType || '', // Set forced input type if provided
+			customTitle: customTitle, // Set custom title if provided
 			status: 'initializing'
 		}));
 
@@ -657,7 +660,7 @@
 				{:else if $inputQuery.inputType === 'ticker'}
 					<div class="table-container">
 						<div class="search-header">
-							<span class="search-title">Symbol Search</span>
+							<span class="search-title">{$inputQuery.customTitle || 'Symbol Search'}</span>
 						</div>
 						<div class="search-divider"></div>
 						{#if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
