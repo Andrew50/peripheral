@@ -648,7 +648,7 @@
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 {#if $inputQuery.status === 'active' || $inputQuery.status === 'initializing'}
 	<div class="popup-container {$inputQuery.inputType === 'timeframe' ? 'timeframe-popup' : ''}" id="input-window" tabindex="-1" on:click|stopPropagation>
-		<div class="content-container box-expand">
+		<div class="content-container glass glass--rounded glass--responsive box-expand">
 			{#if $inputQuery.inputType === 'timeframe'}
 				<div class="timeframe-header-container">
 					<div class="timeframe-title">Change Interval</div>
@@ -712,7 +712,7 @@
 				{/if}
 			</div>
 
-		<div class="search-bar search-bar-expand {$inputQuery.inputType === 'timeframe' && !$inputQuery.inputValid && $inputQuery.inputString ? 'error' : ''}">
+		<div class="search-bar glass glass--pill glass--responsive search-bar-expand {$inputQuery.inputType === 'timeframe' && !$inputQuery.inputValid && $inputQuery.inputString ? 'error' : ''}">
 			<div class="search-icon">
 				<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 					<path d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -785,19 +785,16 @@
 	}
 
 	.search-bar {
+		/* Glass effect now provided by global .glass classes */
 		display: flex;
 		align-items: center;
 		height: 3rem;
-		background: rgba(0, 0, 0, 0.4);
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		border-radius: 1.5rem;
 		padding: 0 0.25rem;
 		position: relative;
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-		backdrop-filter: var(--backdrop-blur);
 	}
 
 	.timeframe-popup .search-bar {
+		--glass-radius: 0 0 12px 12px;
 		border-radius: 0 0 0.75rem 0.75rem;
 		height: 3.5rem;
 		margin-top: 0;
@@ -845,8 +842,8 @@
 	}
 
 	.timeframe-popup .search-bar:focus-within {
-		border-color: #4a80f0;
-		box-shadow: 0 0 0 2px rgba(74, 128, 240, 0.2), 0 8px 32px rgba(0, 0, 0, 0.5);
+		--glass-border: #4a80f0;
+		--glass-shadow: 0 0 0 2px rgba(74, 128, 240, 0.2), 0 8px 32px rgba(0, 0, 0, 0.5);
 	}
 
 	.search-bar input:focus {
@@ -860,24 +857,21 @@
 	}
 
 	.timeframe-popup .search-bar.error {
-		border: 1px solid #ff4444 !important;
-		box-shadow: 0 0 8px rgba(255, 68, 68, 0.3);
+		--glass-border: #ff4444;
+		--glass-shadow: 0 0 8px rgba(255, 68, 68, 0.3);
 	}
 
 	.content-container {
-		background: rgba(0, 0, 0, 0.5);
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		border-radius: 0.75rem;
+		/* Glass effect now provided by global .glass classes */
 		overflow-y: auto;
 		padding: 0.5rem;
 		height: 15rem;
-		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-		backdrop-filter: var(--backdrop-blur);
 		scrollbar-width: thin;
 		scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
 	}
 
 	.timeframe-popup .content-container {
+		--glass-radius: 12px 12px 0 0;
 		height: auto;
 		min-height: 3.75rem;
 		display: flex;
