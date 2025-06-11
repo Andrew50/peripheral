@@ -67,8 +67,8 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: 1rem;
-		border-bottom: 1px solid var(--ui-border, #444);
-		background: #2a2a2a;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+		background: rgba(255, 255, 255, 0.08);
 	}
 
 	.dropdown-header h4 {
@@ -79,22 +79,22 @@
 	}
 
 	.new-conversation-btn {
+		/* Glass effect now provided by global .glass classes */
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		padding: 0.3rem 0.6rem;
-		background: var(--accent-color, #3a8bf7);
+		gap: 0.35rem;
+		padding: 0.25rem 0.5rem;
 		color: white;
-		border: none;
-		border-radius: 0.25rem;
-		font-size: 0.75rem;
+		font-size: 0.7rem;
 		font-weight: 500;
 		cursor: pointer;
-		transition: all 0.2s;
+		transition: all 0.2s ease;
+		outline: none;
 	}
 
 	.new-conversation-btn:hover {
-		background: var(--accent-color-hover, #2c7ae0);
+		--glass-bg: rgba(255, 255, 255, 0.15);
+		--glass-border: rgba(255, 255, 255, 0.3);
 		transform: translateY(-1px);
 	}
 
@@ -118,8 +118,8 @@
 	}
 
 	.conversation-item.active {
-		background: var(--accent-color-faded, rgba(58, 139, 247, 0.1));
-		border-left: 3px solid var(--accent-color, #3a8bf7);
+		background: rgba(255, 255, 255, 0.1);
+		border-left: 3px solid rgba(255, 255, 255, 0.6);
 	}
 
 	.conversation-info {
@@ -247,23 +247,24 @@
 	}
 
 	.clear-button {
+		/* Glass effect now provided by global .glass classes */
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		padding: 0.3rem 0.6rem;
-		background: transparent;
+		gap: 0.35rem;
+		padding: 0.25rem 0.5rem;
 		color: var(--text-secondary, #aaa);
-		border: 1px solid transparent;
-		border-radius: 0.25rem;
-		font-size: 0.75rem;
+		font-size: 0.7rem;
+		font-weight: 500;
 		cursor: pointer;
-		transition: all 0.2s;
+		transition: all 0.2s ease;
+		outline: none;
 	}
 
 	.clear-button:hover:not(:disabled) {
-		background: var(--ui-bg-hover, rgba(255, 255, 255, 0.1));
+		--glass-bg: rgba(255, 255, 255, 0.1);
+		--glass-border: rgba(255, 255, 255, 0.2);
 		color: var(--text-primary, #fff);
-		border-color: var(--ui-border, #444);
+		transform: translateY(-1px);
 	}
 
 	.clear-button:disabled {

@@ -1161,7 +1161,7 @@
 					<div class="conversation-dropdown glass glass--rounded glass--responsive">
 						<div class="dropdown-header">
 							<h4>Conversations</h4>
-							<button class="new-conversation-btn" on:click={createNewConversation}>
+							<button class="new-conversation-btn glass glass--small glass--responsive" on:click={createNewConversation}>
 								<svg viewBox="0 0 24 24" width="16" height="16">
 									<path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor" />
 								</svg>
@@ -1236,7 +1236,7 @@
 		
 		<div class="header-right">
 			{#if $messagesStore.length > 0}
-				<button class="clear-button" on:click={clearConversation} disabled={isLoading}>
+				<button class="clear-button glass glass--small glass--responsive" on:click={clearConversation} disabled={isLoading}>
 					<svg viewBox="0 0 24 24" width="16" height="16">
 						<path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor" />
 					</svg>
