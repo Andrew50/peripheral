@@ -1,5 +1,4 @@
 <script lang="ts">
-	import List from '$lib/components/list.svelte';
 	import type { Writable } from 'svelte/store';
 	import { writable, get } from 'svelte/store';
 	import type { Instance, Watchlist } from '$lib/utils/types/types';
@@ -8,7 +7,7 @@
 	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { flagWatchlistId, watchlists, flagWatchlist } from '$lib/utils/stores/stores';
 	import '$lib/styles/global.css';
-
+	import WatchlistList from './watchlistList.svelte';
 	// Extended Instance type to include watchlistItemId
 	interface WatchlistItem extends Instance {
 		watchlistItemId?: number;
@@ -418,7 +417,7 @@
 
 	<!-- Wrap List component for scrolling -->
 	<div class="list-scroll-container">
-		<List
+		<WatchlistList
 			parentDelete={deleteItem}
 			columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Ext']}
 			list={activeList}
