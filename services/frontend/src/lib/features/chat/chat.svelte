@@ -1285,10 +1285,10 @@
 									}}
 								></textarea>
 								<div class="edit-actions">
-									<button class="edit-cancel-btn" on:click={cancelEditing}>
+									<button class="edit-cancel-btn glass glass--small glass--responsive" on:click={cancelEditing}>
 										Cancel
 									</button>
-									<button class="edit-save-btn" on:click={saveMessageEdit}>
+									<button class="edit-save-btn glass glass--small glass--responsive" on:click={saveMessageEdit}>
 										Send
 									</button>
 								</div>
@@ -1339,7 +1339,7 @@
 													{@const currentSort = tableSortStates[tableKey] || { columnIndex: null, direction: null }}
 
 													{#if tableData}
-														<div class="chunk-table-wrapper">
+														<div class="chunk-table-wrapper glass glass--rounded glass--responsive">
 															{#if tableData.caption}
 																<div class="table-caption">
 																	{@html parseMarkdown(tableData.caption)}
@@ -1385,7 +1385,7 @@
 																</table>
 															</div>
 															{#if isLongTable}
-																<button class="table-toggle-btn" on:click={() => toggleTableExpansion(tableKey)}>
+																<button class="table-toggle-btn glass glass--small glass--responsive" on:click={() => toggleTableExpansion(tableKey)}>
 																	{isExpanded ? 'Show less' : `Show more (${tableData.rows.length} rows)`}
 																</button>
 															{/if}
@@ -1406,7 +1406,7 @@
 							{#if message.sender === 'assistant'}
 								<div class="message-actions">
 									<button 
-										class="copy-btn {copiedMessageId === message.message_id ? 'copied' : ''}" 
+										class="copy-btn glass glass--small glass--responsive {copiedMessageId === message.message_id ? 'copied' : ''}" 
 										on:click={() => copyMessageToClipboard(message)}
 									>
 										{#if copiedMessageId === message.message_id}
@@ -1424,10 +1424,10 @@
 							{#if message.suggestedQueries && message.suggestedQueries.length > 0}
 								<div class="suggested-queries">
 									{#each message.suggestedQueries as query}
-										<button 
-											class="suggested-query-btn" 
-											on:click={() => handleSuggestedQueryClick(query)}
-										>
+																		<button 
+									class="suggested-query-btn glass glass--rounded glass--responsive" 
+									on:click={() => handleSuggestedQueryClick(query)}
+								>
 											{query}
 										</button>
 									{/each}
@@ -1440,7 +1440,7 @@
 					{#if message.sender === 'user' && editingMessageId !== message.message_id}
 						<div class="message-actions">
 							<button 
-								class="copy-btn {copiedMessageId === message.message_id ? 'copied' : ''}" 
+								class="copy-btn glass glass--small glass--responsive {copiedMessageId === message.message_id ? 'copied' : ''}" 
 								on:click={() => copyMessageToClipboard(message)}
 							>
 								{#if copiedMessageId === message.message_id}
@@ -1453,7 +1453,7 @@
 									</svg>
 								{/if}
 							</button>
-							<button class="edit-btn" on:click={() => startEditing(message)}>
+							<button class="edit-btn glass glass--small glass--responsive" on:click={() => startEditing(message)}>
 								<svg viewBox="0 0 24 24" width="14" height="14">
 									<path d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z" fill="currentColor" />
 								</svg>
