@@ -6,6 +6,7 @@ import { base_url } from '$lib/utils/helpers/backend';
 import { browser } from '$app/environment';
 import { handleAlert } from './alert';
 import type { AlertData } from '$lib/utils/types/types';
+import { enqueueTick } from './streamHub';
 
 // Define the type for function status updates from backend (simplified)
 export type FunctionStatusUpdate = {
@@ -108,11 +109,35 @@ function connect() {
 			} else if (channelName === 'timestamp') {
 				handleTimestampUpdate(data.timestamp);
 			} else {
+				// Also feed data to the new streamHub system
+				if (channelName.includes('-slow-regular') && data.price !== undefined) {
+					const securityId = parseInt(channelName.split('-')[0]);
+					if (!isNaN(securityId)) {
+						enqueueTick({
+							securityid: securityId,
+							price: data.price,
+							data: data
+						});
+					}
+				}
+				
+				// Handle close data for the hub
+				if (channelName.includes('-close-regular') && data.price !== undefined) {
+					const securityId = parseInt(channelName.split('-')[0]);
+					if (!isNaN(securityId)) {
+						enqueueTick({
+							securityid: securityId,
+							prevClose: data.price,
+							data: data
+						});
+					}
+				}
 				latestValue.set(channelName, data);
 				const callbacks = activeChannels.get(channelName);
 				if (callbacks) {
 					callbacks.forEach((callback) => callback(data));
 				}
+
 			}
 		}
 	});
