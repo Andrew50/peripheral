@@ -3,18 +3,23 @@
 	import { writable, get } from 'svelte/store';
 	import type { Writable } from 'svelte/store';
 	import type { Instance } from '$lib/utils/types/types';
-	import StreamCell from '$lib/utils/stream/streamCell.svelte';
 	import { queryChart } from '$lib/features/chart/interface';
 	import { flagWatchlist } from '$lib/utils/stores/stores';
 	import { flagSecurity } from '$lib/utils/stores/flag';
 	import { newAlert } from '$lib/features/alerts/interface';
 	import { queueRequest, privateRequest } from '$lib/utils/helpers/backend';
+	import StreamCellV2 from '$lib/utils/stream/streamCellV2.svelte';
+	import { getColumnStore } from '$lib/utils/stream/streamHub';
 
 	type StreamCellType = 'price' | 'change' | 'change %' | 'change % extended' | 'market cap';
 
 	// Define WatchlistItem to match what's used in watchlist.svelte
 	interface WatchlistItem extends Instance {
 		watchlistItemId?: number;
+		change?: number;
+		'change%'?: number;
+		'change%extended'?: number;
+		[key: string]: any; // Allow dynamic property access for sorting
 	}
 
 	// Response shape from getIcons API
@@ -27,7 +32,6 @@
 	export let list: Writable<WatchlistItem[]> = writable([]);
 	export let columns: Array<string>;
 	export let parentDelete = (v: WatchlistItem) => {};
-	export let formatters: { [key: string]: (value: any) => string } = {};
 	export let displayNames: { [key: string]: string } = {};
 	export let rowClass: (item: WatchlistItem) => string = () => '';
 	export const defaultSortColumn: string | null = null;
@@ -161,35 +165,6 @@
 			}, 300);
 		}, 50);
 	}
-
-	// Function to get data key from column name
-	// NOTE: This function expects the *original* column key (`column`), not the formatted one.
-	function getDataKey(column: string): string {
-		// This function should continue to work with the original column names
-		// For example, if a column is 'change_percent', it should use 'change_percent' here.
-		// The formatting change is only for the display in the header.
-		// However, your original code already normalized keys like 'Chg %' -> 'change%'
-		// so we keep that logic if it was intended. Let's stick to the original normalization logic.
-
-		const normalizedCol = column
-			.replace(/ /g, '')
-			.replace(/^[A-Z]/, (letter) => letter.toLowerCase());
-
-		switch (normalizedCol) {
-			case 'chg':
-				return 'change';
-			case 'chg%':
-				return 'change%';
-			case 'ext':
-				return 'change%extended';
-			// Add other specific key mappings if necessary based on your *original* column names
-			default:
-				// Return the original column name if no specific mapping exists
-				// Or keep the existing normalization if that's correct for your data keys
-				return column.includes('_') ? column : normalizedCol; // Prioritize original if underscore exists
-		}
-	}
-
 	// Function to sort the list based on current sort column and direction
 	// NOTE: This function relies on the *original* `sortColumn` value.
 	function sortList() {
@@ -197,36 +172,62 @@
 
 		list.update((items: WatchlistItem[]) => {
 			const sorted = [...items].sort((a, b) => {
+				// Helper function to get value from StreamHub store
+				const getStreamValue = (item: WatchlistItem, columnType: string) => {
+					if (!item.securityId) return 0;
+					const store = getColumnStore(Number(item.securityId), columnType as any);
+					const storeValue = get(store);
+					return storeValue;
+				};
+
 				// Handle special column cases first based on the *original* column name directly
 				// Keep these checks using the original column keys passed to handleSort
 				if (sortColumn === 'Price') {
-					const priceA = typeof a.price === 'number' ? a.price : 0;
-					const priceB = typeof b.price === 'number' ? b.price : 0;
+					const priceDataA = getStreamValue(a, 'price');
+					const priceDataB = getStreamValue(b, 'price');
+					const priceA = typeof priceDataA?.price === 'number' ? priceDataA.price : 0;
+					const priceB = typeof priceDataB?.price === 'number' ? priceDataB.price : 0;
 					return sortDirection === 'asc' ? priceA - priceB : priceB - priceA;
 				}
 				if (sortColumn === 'Chg') {
-					const changeA = typeof a.change === 'number' ? a.change : 0;
-					const changeB = typeof b.change === 'number' ? b.change : 0;
+					const changeDataA = getStreamValue(a, 'change');
+					const changeDataB = getStreamValue(b, 'change');
+					const changeA = typeof changeDataA?.change === 'number' ? changeDataA.change : 0;
+					const changeB = typeof changeDataB?.change === 'number' ? changeDataB.change : 0;
 					return sortDirection === 'asc' ? changeA - changeB : changeB - changeA;
 				}
 				if (sortColumn === 'Chg%') {
-					const pctA = typeof a['change%'] === 'number' ? a['change%'] : 0;
-					const pctB = typeof b['change%'] === 'number' ? b['change%'] : 0;
+					const pctDataA = getStreamValue(a, 'changePct');
+					const pctDataB = getStreamValue(b, 'changePct');
+					const pctA = typeof pctDataA?.pct === 'number' ? pctDataA.pct : 0;
+					const pctB = typeof pctDataB?.pct === 'number' ? pctDataB.pct : 0;
 					return sortDirection === 'asc' ? pctA - pctB : pctB - pctA;
 				}
 				if (sortColumn === 'Ext') {
-					const extA = typeof a['change%extended'] === 'number' ? a['change%extended'] : 0;
-					const extB = typeof b['change%extended'] === 'number' ? b['change%extended'] : 0;
+					const extDataA = getStreamValue(a, 'chgExt');
+					const extDataB = getStreamValue(b, 'chgExt');
+					const extA = typeof extDataA?.chgExt === 'number' ? extDataA.chgExt : 0;
+					const extB = typeof extDataB?.chgExt === 'number' ? extDataB.chgExt : 0;
 					return sortDirection === 'asc' ? extA - extB : extB - extA;
 				}
 
-				// For other columns, use the *original* sortColumn as the data key directly
-				// Or use getDataKey if that transformation is required for your data structure
-				const dataKey = sortColumn as string; // Type assertion since we already checked sortColumn is not null
-				// const dataKey = getDataKey(sortColumn); // Use this if you need the transformation from getDataKey
+				// For other columns, handle ticker specially then fall back to generic logic
+				if (sortColumn === 'Ticker') {
+					const tickerA = String(a.ticker ?? '').toLowerCase();
+					const tickerB = String(b.ticker ?? '').toLowerCase();
+					return sortDirection === 'asc' ? tickerA.localeCompare(tickerB) : tickerB.localeCompare(tickerA);
+				}
 
+				// For other columns, use the *original* sortColumn as the data key directly
+				if (!sortColumn) return 0;
+				const dataKey = sortColumn;
 				let valueA = a[dataKey];
 				let valueB = b[dataKey];
+
+				// If both values are numbers, sort numerically
+				if (typeof valueA === 'number' && typeof valueB === 'number') {
+					return sortDirection === 'asc' ? valueA - valueB : valueB - valueA;
+				}
 
 				// For strings or other types, convert to string and compare
 				const strA = String(valueA ?? '').toLowerCase();
@@ -354,32 +355,6 @@
 
 
 
-	// NOTE: This function expects the *original* column key (`column`)
-	function formatValue(value: WatchlistItem, column: string): string {
-		let dataKey = column; // Default to using the original column name as the key
-
-		// Apply specific transformations based on the original column name if needed
-		switch (column) {
-			case 'Chg':
-				dataKey = 'change';
-				break;
-			case 'Chg%':
-				dataKey = 'change%';
-				break;
-			case 'Ext':
-				dataKey = 'change%extended';
-				break;
-		}
-
-		const rawValue = value[dataKey];
-
-		// Apply custom formatters using the *original* column name as the key
-		if (formatters[column]) {
-			return formatters[column](rawValue);
-		}
-		return rawValue?.toString() ?? 'N/A';
-	}
-
 
 	// Whenever the Ticker column is active and there are rows, refresh icons (using cache)
 	// Use original column name 'Ticker'
@@ -502,7 +477,7 @@
 									</td>
 								{:else if ['Price', 'Chg', 'Chg%', 'Ext'].includes(col)} 
 									<td class="default-td">
-										<StreamCell
+										<StreamCellV2
 											on:contextmenu={(event) => {
 												event.preventDefault();
 												event.stopPropagation();
