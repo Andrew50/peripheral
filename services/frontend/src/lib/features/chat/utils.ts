@@ -36,11 +36,11 @@ export function parseMarkdown(content: string): string {
 			}
 		);
 
-		// Add target="_blank" and rel="noopener noreferrer" to all standard links
+		// Add target="_blank" and rel="noopener noreferrer" to all standard links, plus white color styling and hover events
 		// Ensure this doesn't interfere with the buttons (it shouldn't as buttons aren't <a> tags)
 		const withExternalLinks = contentWithTickerButtons.replace(
 			/<a\s+(?:[^>]*?\s+)?href="([^"]*)"(?:\s+[^>]*?)?>/g,
-			'<a href="$1" target="_blank" rel="noopener noreferrer">'
+			'<a href="$1" target="_blank" rel="noopener noreferrer" style="color: white !important; text-decoration: none; transition: all 0.2s ease;" onmouseenter="this.style.color=\'#3b82f6\'; this.style.backgroundColor=\'rgba(59, 130, 246, 0.1)\'; this.style.borderRadius=\'4px\';" onmouseleave="this.style.color=\'white\'; this.style.backgroundColor=\'transparent\'; this.style.borderRadius=\'0\';">'
 		);
 
 		return withExternalLinks;
