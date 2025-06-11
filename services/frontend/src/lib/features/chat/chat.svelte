@@ -1158,7 +1158,7 @@
 				</button>
 				
 				{#if showConversationDropdown}
-					<div class="conversation-dropdown">
+					<div class="conversation-dropdown glass glass--rounded glass--responsive">
 						<div class="dropdown-header">
 							<h4>Conversations</h4>
 							<button class="new-conversation-btn" on:click={createNewConversation}>
@@ -1262,7 +1262,7 @@
 					<div
 						class="message {message.sender} {message.responseType === 'error'
 							? 'error'
-							: ''} {message.isNewResponse ? 'new-response' : ''} {editingMessageId === message.message_id ? 'editing' : ''}"
+							: ''} {message.isNewResponse ? 'new-response' : ''} {editingMessageId === message.message_id ? 'editing' : ''} {message.sender === 'user' ? 'glass glass--pill glass--responsive' : ''}"
 					>
 						{#if message.isLoading}
 							<!-- Always display status text when loading, as we set an initial one -->
@@ -1470,13 +1470,13 @@
 		  <div class="chip-row">
 		    {#each initialSuggestions as q, i}
 		      {#if i < 3 || showAllInitialSuggestions}
-		      <button class="chip suggestion-chip" on:click={() => handleSuggestedQueryClick(q)}>
+		      					<button class="chip suggestion-chip glass glass--pill glass--responsive" on:click={() => handleSuggestedQueryClick(q)}>
 		        <kbd>{i + 1}</kbd> {q}
 		      </button>
 		      {/if}
 		    {/each}
 		    {#if initialSuggestions.length > 3 && !showAllInitialSuggestions}
-		      <button class="chip suggestion-chip more" on:click={() => showAllInitialSuggestions = true}>⋯ More</button>
+		      <button class="chip suggestion-chip glass glass--pill glass--responsive more" on:click={() => showAllInitialSuggestions = true}>⋯ More</button>
 		    {/if}
 		  </div>
 		{/if}
@@ -1490,7 +1490,7 @@
 						{@const isFiling = 'filingType' in item}
 						<button
 							type="button"
-							class="chip"
+							class="chip glass glass--pill glass--responsive"
 							on:click={() => {
 								if (isFiling) {
 									removeFilingFromChat(item);
@@ -1511,7 +1511,7 @@
 				</div>
 			{/if}
 
-			<div class="input-field-container">
+			<div class="input-field-container glass glass--rounded glass--responsive">
 				<textarea
 					class="chat-input"
 					placeholder="Ask anything..."
