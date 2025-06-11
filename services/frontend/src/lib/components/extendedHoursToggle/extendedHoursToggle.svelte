@@ -129,7 +129,7 @@
 	{#if visible}
 		<div class="extended-hours-overlay" class:closing={isClosing} on:click={handleOverlayClick} on:keydown={handleKeyDown} role="dialog" aria-label="Extended Hours Toggle" tabindex="-1">
 			<div bind:this={toggleContainer} class="extended-hours-toggle" on:click|stopPropagation>
-				<div class="segmented-control">
+				<div class="segmented-control glass glass--rounded glass--responsive">
 					<div class="sliding-indicator" class:extended={instance?.extendedHours}></div>
 					<button 
 						bind:this={regularButton}
@@ -214,14 +214,10 @@
 	}
 
 	.segmented-control {
+		/* Glass effect now provided by global .glass classes */
 		position: relative;
 		display: flex;
-		background: rgba(0, 0, 0, 0.8);
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		border-radius: 12px;
 		padding: 4px;
-		backdrop-filter: var(--backdrop-blur);
-		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
 		width: 200px;
 		height: 40px;
 	}
