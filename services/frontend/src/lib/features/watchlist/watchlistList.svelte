@@ -531,7 +531,8 @@
 
 	table {
 		width: 100%;
-		border-collapse: collapse;
+		border-collapse: separate;
+		border-spacing: 0 2px;
 		margin: 0;
 		padding: 0;
 		color: var(--text-primary);
@@ -541,11 +542,30 @@
 
 	th,
 	td {
-		padding: 8px 6px;
+		padding: 8px 12px;
 		text-align: left;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 		background: transparent;
 		font-size: 13px;
+	}
+
+	/* Header cells keep original styling */
+	th {
+		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+	}
+
+	/* Body cells only get rounded styling */
+	tbody td {
+		border: none;
+	}
+
+	tbody td:first-child {
+		border-top-left-radius: 6px;
+		border-bottom-left-radius: 6px;
+	}
+
+	tbody td:last-child {
+		border-top-right-radius: 6px;
+		border-bottom-right-radius: 6px;
 	}
 
 	th {
@@ -561,6 +581,12 @@
 		cursor: pointer;
 		user-select: none;
 		position: relative;
+		transition: color 0.2s ease;
+	}
+
+	.sortable:hover {
+		color: #4a9eff;
+		border-bottom: 1px solid #4a9eff;
 	}
 
 	.th-content {
@@ -605,46 +631,21 @@
 		color: var(--ui-accent);
 	}
 
-	th.sortable:hover {
-		background-color: var(--ui-bg-hover);
-	}
+
 
 	tr {
 		transition: background-color 0.2s;
 	}
 
-	tr:hover {
-		background-color: rgba(255, 255, 255, 0.08);
-	}
+
 
 
 	.table-container {
 		width: 100%;
 		overflow: hidden;
 		max-width: 100%;
-		padding-bottom: 2px;
-		padding-right: 8px;
-	}
-
-	td:last-child {
-		position: sticky;
-		right: 8px;
-		width: 24px;
-		max-width: 24px;
 		padding: 0;
-		text-align: center;
-		background-color: transparent;
-		vertical-align: middle;
-	}
-
-	th:last-child {
-		position: sticky;
-		right: 8px;
-		width: 24px;
-		max-width: 24px;
-		padding: 0;
-		transition: opacity 0.2s ease;
-		background-color: transparent;
+		margin: 0;
 	}
 
 	.delete-button {
@@ -656,9 +657,7 @@
 		opacity: 1;
 	}
 
-	tr:hover td {
-		background-color: rgba(255, 255, 255, 0.08);
-	}
+
 
 	.loading,
 	.error,
@@ -805,19 +804,22 @@
 	/* Table rows with subtle glass effect */
 	tbody tr {
 		background: rgba(255, 255, 255, 0.02);
-		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 		transition: all 0.2s ease;
+		border-radius: 6px;
+		margin: 1px 0;
 	}
 
 	tbody tr:hover {
 		background: rgba(255, 255, 255, 0.08);
 		backdrop-filter: blur(4px);
+		border-radius: 6px;
 	}
 
 	/* Selected row enhancement */
 	tbody tr.selected {
 		background: rgba(255, 255, 255, 0.12);
 		border: 1px solid rgba(255, 255, 255, 0.3);
+		border-radius: 6px;
 	}
 
 	/* Table cells with enhanced readability */
