@@ -207,17 +207,29 @@ func GetSecuritiesFromTicker(conn *data.Conn, _ int, rawArgs json.RawMessage) (i
 			maxDate,
 			CASE 
 				WHEN UPPER(ticker) = UPPER($1) THEN 1
-				WHEN UPPER(ticker) LIKE UPPER($1) || '%' THEN 2
-				WHEN UPPER(ticker) LIKE '%' || UPPER($1) || '%' THEN 3
-				ELSE 4
+				WHEN UPPER(name) = UPPER($1) THEN 2
+				WHEN UPPER(ticker) LIKE UPPER($1) || '%' THEN 3
+				WHEN UPPER(name) LIKE UPPER($1) || '%' THEN 4
+				WHEN UPPER(ticker) LIKE '%' || UPPER($1) || '%' THEN 5
+				WHEN UPPER(name) LIKE '%' || UPPER($1) || '%' THEN 6
+				WHEN similarity(UPPER(ticker), UPPER($1)) > 0.3 THEN 7
+				WHEN similarity(UPPER(name), UPPER($1)) > 0.3 THEN 8
+				ELSE 9
 			END as match_type,
-			similarity(UPPER(ticker), UPPER($1)) as sim_score
+			GREATEST(
+				similarity(UPPER(ticker), UPPER($1)),
+				COALESCE(similarity(UPPER(name), UPPER($1)), 0)
+			) as sim_score
 		FROM securities s
 		WHERE maxDate IS NULL AND (
 			UPPER(ticker) = UPPER($1) OR
 			UPPER(ticker) LIKE UPPER($1) || '%' OR 
 			UPPER(ticker) LIKE '%' || UPPER($1) || '%' OR
-			similarity(UPPER(ticker), UPPER($1)) > 0.3
+			similarity(UPPER(ticker), UPPER($1)) > 0.3 OR
+			UPPER(name) = UPPER($1) OR
+			UPPER(name) LIKE UPPER($1) || '%' OR 
+			UPPER(name) LIKE '%' || UPPER($1) || '%' OR
+			similarity(UPPER(name), UPPER($1)) > 0.3
 		)
 		ORDER BY ticker, maxDate DESC NULLS FIRST
 	)
