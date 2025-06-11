@@ -331,13 +331,13 @@
 	<!-- Controls container first -->
 	<div class="controls-container">
 		{#if Array.isArray($watchlists)}
-			<div class="watchlist-selector">
-				<select
-					class="default-select"
-					id="watchlists"
-					value={currentWatchlistId?.toString()}
-					on:change={handleWatchlistChange}
-				>
+				<div class="watchlist-selector glass glass--rounded glass--medium">
+		<select
+			class="default-select"
+			id="watchlists"
+			value={currentWatchlistId?.toString()}
+			on:change={handleWatchlistChange}
+		>
 					<optgroup label="My Watchlists">
 						{#each $watchlists as watchlist}
 							<option value={watchlist.watchlistId.toString()}>
@@ -355,20 +355,19 @@
 					</optgroup>
 				</select>
 				{#if !showWatchlistInput}
-					<button class="utility-button" title="Add Symbol" on:click={addInstance}>+</button>
+					<button class="utility-button glass glass--small glass--light" title="Add Symbol" on:click={addInstance}>+</button>
 					<button
-						class="utility-button new-watchlist-button"
+						class="utility-button new-watchlist-button glass glass--small glass--light"
 						title="New Watchlist"
 						on:click={() => selectWatchlist('new')}
 					>
 						<span>+</span>
-						<span class="list-icon">📋</span>
 					</button>
 				{/if}
 			</div>
 
 			{#if showWatchlistInput}
-				<div class="new-watchlist-container">
+				<div class="new-watchlist-container glass glass--rounded glass--medium">
 					<input
 						class="input"
 						bind:this={newNameInput}
@@ -383,8 +382,8 @@
 						placeholder="New Watchlist Name"
 					/>
 					<div class="new-watchlist-buttons">
-						<button class="utility-button" on:click={newWatchlist}>✓</button>
-						<button class="utility-button" on:click={closeNewWatchlistWindow}>✕</button>
+						<button class="utility-button glass glass--small glass--light" on:click={newWatchlist}>✓</button>
+						<button class="utility-button glass glass--small glass--light" on:click={closeNewWatchlistWindow}>✕</button>
 					</div>
 				</div>
 			{/if}
@@ -392,11 +391,11 @@
 	</div>
 
 	<!-- Shortcut buttons between controls and list -->
-	<div class="shortcut-container">
+	<div class="shortcut-container glass glass--rounded glass--light">
 		{#if Array.isArray($watchlists)}
 			{#each $watchlists as watchlist}
 				<button
-					class="shortcut-button {currentWatchlistId === watchlist.watchlistId ? 'active' : ''}"
+					class="shortcut-button glass glass--small glass--light {currentWatchlistId === watchlist.watchlistId ? 'active' : ''}"
 					on:click={() => selectWatchlist(String(watchlist.watchlistId))}
 					title={watchlist.watchlistName}
 				>
@@ -416,7 +415,7 @@
 	</div>
 
 	<!-- Wrap List component for scrolling -->
-	<div class="list-scroll-container">
+	<div class="list-scroll-container glass glass--rounded glass--medium">
 		<WatchlistList
 			parentDelete={deleteItem}
 			columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Ext']}
@@ -431,11 +430,6 @@
 		align-items: center;
 		gap: 12px;
 		padding: 12px;
-		background: rgba(0, 0, 0, 0.4);
-		border-radius: 12px;
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		backdrop-filter: var(--backdrop-blur);
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 	}
 
 	.watchlist-selector select {
@@ -462,10 +456,7 @@
 	}
 
 	.watchlist-selector .utility-button {
-		background: rgba(0, 0, 0, 0.3);
 		color: #ffffff;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		border-radius: 8px;
 		width: 36px;
 		height: 36px;
 		display: flex;
@@ -502,11 +493,6 @@
 	.new-watchlist-container {
 		margin-top: 12px;
 		padding: 16px;
-		background: rgba(0, 0, 0, 0.5);
-		border-radius: 12px;
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		backdrop-filter: var(--backdrop-blur);
-		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 		animation: slideDown 0.2s ease-out;
 	}
 
@@ -554,9 +540,6 @@
 
 	.new-watchlist-buttons .utility-button {
 		padding: 8px 16px;
-		border-radius: 8px;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		background: rgba(0, 0, 0, 0.3);
 		color: #ffffff;
 		font-size: 14px;
 		font-weight: 600;
@@ -580,18 +563,10 @@
 		gap: 8px;
 		padding: 16px;
 		flex-wrap: wrap;
-		background: rgba(0, 0, 0, 0.3);
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		border-radius: 12px;
-		backdrop-filter: var(--backdrop-blur);
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 	}
 
 	.shortcut-button {
 		padding: 8px 12px;
-		border-radius: 8px;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		background: rgba(0, 0, 0, 0.3);
 		color: #ffffff;
 		font-size: 14px;
 		font-weight: 600;
@@ -674,11 +649,6 @@
 		flex-grow: 1; /* Take remaining vertical space */
 		overflow-y: auto; /* Allow vertical scrolling */
 		min-height: 0; /* Necessary for flex-grow in some cases */
-		background: rgba(0, 0, 0, 0.4);
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		border-radius: 12px;
-		backdrop-filter: var(--backdrop-blur);
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 		padding: 8px;
 	}
 
