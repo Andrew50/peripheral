@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"backend/internal/app/helpers"
 	"backend/internal/data"
 	"context"
 	"encoding/json"
@@ -21,7 +22,15 @@ func GetWhyMoving(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{},
 		return nil, err
 	}
 	fmt.Println("GetWhyMoving", args.Tickers)
-	results, err := generateWhyMoving(conn, args.Tickers)
+	runWhyMovingArgs := WhyMovingArgs{
+		Tickers:  args.Tickers,
+		Priority: false,
+	}
+	runWhyMovingArgsBytes, err := json.Marshal(runWhyMovingArgs)
+	if err != nil {
+		return nil, err
+	}
+	results, err := RunWhyMoving(conn, json.RawMessage(runWhyMovingArgsBytes))
 	if err != nil {
 		return nil, err
 	}
@@ -38,28 +47,6 @@ type WhyMovingResult struct {
 	Ticker    string    `json:"ticker"`
 	Content   string    `json:"content"`
 	CreatedAt time.Time `json:"created_at"`
-}
-
-func whyIsItMovingSchema() *genai.Schema {
-	return &genai.Schema{
-		Type: genai.TypeArray,
-		Items: &genai.Schema{
-			Type:     genai.TypeObject,
-			Required: []string{"ticker", "content"},
-			Properties: map[string]*genai.Schema{
-				"ticker": {
-					Type:        genai.TypeString,
-					Description: "The stock ticker symbol",
-				},
-				"content": {
-					Type:        genai.TypeString,
-					Description: "The explanation of why the stock is moving",
-				},
-			},
-		},
-		Title:       "WhyIsItMovingArray",
-		Description: "An array of WhyIsItMoving responses for multiple tickers",
-	}
 }
 
 func RunWhyMoving(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
@@ -95,6 +82,28 @@ func RunWhyMoving(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error)
 		return nil, fmt.Errorf("failed to generate why moving: %w", err)
 	}
 	return movingReasons, nil
+}
+
+func whyIsItMovingSchema() *genai.Schema {
+	return &genai.Schema{
+		Type: genai.TypeArray,
+		Items: &genai.Schema{
+			Type:     genai.TypeObject,
+			Required: []string{"ticker", "content"},
+			Properties: map[string]*genai.Schema{
+				"ticker": {
+					Type:        genai.TypeString,
+					Description: "The stock ticker symbol",
+				},
+				"content": {
+					Type:        genai.TypeString,
+					Description: "The explanation of why the stock is moving",
+				},
+			},
+		},
+		Title:       "WhyIsItMovingArray",
+		Description: "An array of WhyIsItMoving responses for multiple tickers",
+	}
 }
 
 type LLMWhyMovingResult struct {
@@ -364,14 +373,25 @@ func insertWhyMovingResults(conn *data.Conn, results []WhyMovingResult) error {
 	}
 
 	query := `
-		INSERT INTO why_is_it_moving (ticker, content, created_at)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (ticker, created_at) DO UPDATE SET
-		content = EXCLUDED.content
+		INSERT INTO why_is_it_moving (securityid, ticker, content, created_at)
+		VALUES ($1, $2, $3, $4)
 	`
 
 	for _, result := range results {
-		_, err := conn.DB.Exec(context.Background(), query, result.Ticker, result.Content, result.CreatedAt)
+		// Create the correct args structure for GetCurrentSecurityID
+		args := helpers.GetCurrentSecurityIDArgs{
+			Ticker: result.Ticker,
+		}
+		argsBytes, err := json.Marshal(args)
+		if err != nil {
+			return fmt.Errorf("failed to marshal security ID args for ticker %s: %w", result.Ticker, err)
+		}
+
+		securityID, err := helpers.GetCurrentSecurityID(conn, 0, json.RawMessage(argsBytes))
+		if err != nil {
+			return fmt.Errorf("failed to get security id for ticker %s: %w", result.Ticker, err)
+		}
+		_, err = conn.DB.Exec(context.Background(), query, securityID, result.Ticker, result.Content, result.CreatedAt)
 		if err != nil {
 			return fmt.Errorf("failed to insert result for ticker %s: %w", result.Ticker, err)
 		}
