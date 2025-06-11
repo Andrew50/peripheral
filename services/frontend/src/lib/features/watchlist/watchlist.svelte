@@ -106,7 +106,7 @@
 
 	function addInstance() {
 		const inst = { ticker: ''};
-		queryInstanceInput(['ticker'], ['ticker'], inst).then((i: WatchlistItem) => {
+		queryInstanceInput(['ticker'], ['ticker'], inst, 'ticker', 'Add Symbol to Watchlist').then((i: WatchlistItem) => {
 			const aList = get(activeList);
 			const empty = !Array.isArray(aList);
 			if (empty || !aList.find((l: WatchlistItem) => l.ticker === i.ticker)) {

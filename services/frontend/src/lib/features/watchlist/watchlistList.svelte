@@ -550,7 +550,7 @@
 
 	/* Header cells keep original styling */
 	th {
-		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+		border-bottom: none;
 	}
 
 	/* Body cells only get rounded styling */
