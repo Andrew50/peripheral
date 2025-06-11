@@ -356,13 +356,13 @@
 				</select>
 				{#if !showWatchlistInput}
 					<button class="utility-button glass glass--small glass--light" title="Add Symbol" on:click={addInstance}>+</button>
-					<button
+					<!--<button
 						class="utility-button new-watchlist-button glass glass--small glass--light"
 						title="New Watchlist"
 						on:click={() => selectWatchlist('new')}
 					>
 						<span>+</span>
-					</button>
+					</button>-->
 				{/if}
 			</div>
 
@@ -439,10 +439,17 @@
 		color: #ffffff;
 		border: 1px solid rgba(255, 255, 255, 0.2);
 		border-radius: 8px;
-		padding: 8px 12px;
+		padding: 8px 32px 8px 12px;
 		font-size: 14px;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		transition: all 0.2s ease;
+		appearance: none;
+		-webkit-appearance: none;
+		-moz-appearance: none;
+		background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+		background-repeat: no-repeat;
+		background-position: right 8px center;
+		background-size: 16px;
 	}
 
 	.watchlist-selector select:hover {
@@ -654,23 +661,23 @@
 
 	/* Custom scrollbar for WebKit browsers */
 	.list-scroll-container::-webkit-scrollbar {
-		width: 8px; /* Width of the scrollbar */
+		width: 6px; /* Width of the scrollbar */
 	}
 
 	.list-scroll-container::-webkit-scrollbar-track {
-		background: rgba(0, 0, 0, 0.2); /* Transparent background */
-		border-radius: 4px;
+		background: transparent; /* Transparent background */
+		border-radius: 3px;
 	}
 
 	.list-scroll-container::-webkit-scrollbar-thumb {
-		background-color: rgba(255, 255, 255, 0.3); /* Semi-transparent white */
-		border-radius: 4px;
-		border: 2px solid transparent; /* Creates padding around thumb */
+		background-color: rgba(255, 255, 255, 0.2); /* Semi-transparent white */
+		border-radius: 3px;
+		border: 1px solid transparent; /* Creates padding around thumb */
 		background-clip: content-box;
 	}
 
 	.list-scroll-container::-webkit-scrollbar-thumb:hover {
-		background-color: rgba(255, 255, 255, 0.5); /* Slightly more opaque on hover */
+		background-color: rgba(255, 255, 255, 0.4); /* Slightly more opaque on hover */
 	}
 
 	/* Shortcut flag icon styling */
