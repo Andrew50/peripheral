@@ -208,7 +208,7 @@
 			{#if $rightClickQuery.source === 'chart'}
 				<div class="separator"></div>
 				<button class="wide-button" on:click={() => newPriceAlert($rightClickQuery.instance)}
-					>Add Alert {$rightClickQuery.instance.price?.toFixed(2)}</button
+					>Set Alert on {$rightClickQuery.instance.ticker} at {$rightClickQuery.instance.price?.toFixed(2)}</button
 				>
 				<button
 					class="wide-button"
@@ -216,7 +216,7 @@
 						addHorizontalLine(
 							Number($rightClickQuery.instance.price || 0),
 							Number($rightClickQuery.instance.securityId || 0)
-						)}>Add Horizontal Line {$rightClickQuery.instance.price?.toFixed(2)}</button
+						)}>Add Horizontal Line at {$rightClickQuery.instance.price?.toFixed(2)}</button
 				>
 			{/if}
 		</div>
@@ -225,7 +225,7 @@
 			<!--<button class="wide-button" on:click={() => newStudy(get(rightClickQuery).instance)}>
 				Add to Study
 			</button>-->
-			<button class="wide-button" on:click={(event) => sSample(event)}> Add to Sample </button>
+			<!--<button class="wide-button" on:click={(event) => sSample(event)}> Add to Sample </button>-->
 			<!--<button
 				class="wide-button"
 				on:click={(event) => querySimilarInstances($rightClickQuery.instance)}
