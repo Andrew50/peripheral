@@ -113,7 +113,7 @@
 
 {#if visible}
 	<div class="wm-overlay" transition:fade={{duration:150}}>
-		<div class="wm-box" transition:fly={{ y: position==='top'? -15 : 15, duration:200 }}>
+		<div class="wm-box glass glass--pill glass--responsive" transition:fly={{ y: position==='top'? -15 : 15, duration:200 }}>
 			<div class="wm-content">
 				{content}
 			</div>
@@ -139,45 +139,38 @@
 		padding-top: 20px; /* Positioned much higher */
 		z-index: 1002;
 	}
-	.wm-box {
-		pointer-events: auto;
-		max-width: min(85vw, 550px);
-		background: rgba(0, 0, 0, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		border-radius: 1rem;
-		backdrop-filter: var(--backdrop-blur);
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-		color: #fff;
-		font-size: 0.85rem;
-		overflow: hidden;
-	}
 	.wm-content {
-		padding: 0.75rem;
-		line-height: 1.4;
+		padding: 0.5rem 0.75rem;
+		line-height: 1.3;
 		white-space: pre-wrap;
-		color: rgba(255, 255, 255, 0.95);
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-		font-weight: 400;
-		font-size: 0.8rem;
+		color: rgba(255, 255, 255, 0.98);
+		text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+		font-weight: 500;
+		font-size: 0.75rem;
+		position: relative;
+		z-index: 1;
 	}
 	
 	.wm-progress-container {
 		height: 3px;
-		background: rgba(255, 255, 255, 0.1);
+		background: rgba(255, 255, 255, 0.03);
 		overflow: hidden;
 		position: relative;
+		z-index: 1;
 	}
 	
 	.wm-progress-bar {
-		height: 100%;
-		background: linear-gradient(90deg, 
-			var(--accent-color, #3a8bf7) 0%, 
-			rgba(58, 139, 247, 0.8) 50%, 
-			var(--accent-color, #3a8bf7) 100%
-		);
-		transition: width 0.1s linear;
-		border-radius: 0 2px 2px 0;
-		box-shadow: 0 0 6px rgba(58, 139, 247, 0.3);
+		height:100%;
+		border-radius:var(--glass-radius);  /* same corners as parent */
+		/* subtle inner bevel so it looks like liquid inside glass */
+		box-shadow:
+			inset 0 0 8px rgba(255,255,255,.40),
+			inset 0 1px 0 rgba(255,255,255,.60);
+
+		/* shimmer animation */
+		background-size:200% 100%;
+		animation: shimmer 2.4s linear infinite;
+		transition: width .12s linear;       /* keeps your existing width anim */
 	}
 	
 	/* Responsive design */
@@ -187,13 +180,16 @@
 		}
 		.wm-box {
 			margin: 0 15px;
-			border-radius: 0.75rem;
-			max-width: min(90vw, 450px);
+			border-radius: 0.6rem;
+			max-width: min(90vw, 480px);
 		}
 		.wm-content {
-			padding: 0.625rem;
-			font-size: 0.75rem;
+			padding: 0.4rem 0.6rem;
+			font-size: 0.7rem;
+			line-height: 1.25;
 		}
 	}
+
+
 </style>
 
