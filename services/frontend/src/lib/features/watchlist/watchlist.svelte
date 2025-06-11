@@ -105,7 +105,7 @@
 	});
 
 	function addInstance() {
-		const inst = { ticker: '', timestamp: 0 };
+		const inst = { ticker: ''};
 		queryInstanceInput(['ticker'], ['ticker'], inst).then((i: WatchlistItem) => {
 			const aList = get(activeList);
 			const empty = !Array.isArray(aList);
