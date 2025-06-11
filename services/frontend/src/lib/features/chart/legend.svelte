@@ -216,7 +216,7 @@
 <div
 	bind:this={legendElement}
 	tabindex="-1"
-	class="legend {isCollapsed ? 'collapsed' : ''} {isOverflowing ? 'compact' : ''}"
+	class="legend glass glass--rounded glass--responsive {isCollapsed ? 'collapsed' : ''} {isOverflowing ? 'compact' : ''}"
 >
 	<div class="header">
 		{#if instance?.icon}
@@ -352,30 +352,26 @@
 
 <style>
 	.legend {
+		/* Glass effect now provided by global .glass classes */
 		position: absolute;
 		top: 10px;
 		left: 10px;
-		background: rgba(0, 0, 0, 0.5);
-		border: 1px solid rgba(255, 255, 255, 0.3);
 		padding: 12px;
-		border-radius: 8px;
 		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 		color: #ffffff;
 		z-index: 1100;
 		max-width: calc(100% - 20px);
 		width: fit-content;
 		min-width: min-content;
-		backdrop-filter: var(--backdrop-blur);
-		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 		user-select: none;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
-	/* Update hover styles to not affect width/layout */
+	/* Enhanced hover effect for glass legend */
 	.legend:hover {
-		background: rgba(0, 0, 0, 0.6);
-		border-color: rgba(255, 255, 255, 0.4);
-		box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+		--glass-bg: rgba(30, 30, 30, 0.55);
+		--glass-border: rgba(255, 255, 255, 0.18);
+		--glass-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
 	}
 
 	/* Make compact styles more specific to override hover */

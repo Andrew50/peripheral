@@ -1158,10 +1158,10 @@
 				</button>
 				
 				{#if showConversationDropdown}
-					<div class="conversation-dropdown">
+					<div class="conversation-dropdown glass glass--rounded glass--responsive">
 						<div class="dropdown-header">
 							<h4>Conversations</h4>
-							<button class="new-conversation-btn" on:click={createNewConversation}>
+							<button class="new-conversation-btn glass glass--small glass--responsive" on:click={createNewConversation}>
 								<svg viewBox="0 0 24 24" width="16" height="16">
 									<path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor" />
 								</svg>
@@ -1236,7 +1236,7 @@
 		
 		<div class="header-right">
 			{#if $messagesStore.length > 0}
-				<button class="clear-button" on:click={clearConversation} disabled={isLoading}>
+				<button class="clear-button glass glass--small glass--responsive" on:click={clearConversation} disabled={isLoading}>
 					<svg viewBox="0 0 24 24" width="16" height="16">
 						<path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor" />
 					</svg>
@@ -1262,7 +1262,7 @@
 					<div
 						class="message {message.sender} {message.responseType === 'error'
 							? 'error'
-							: ''} {message.isNewResponse ? 'new-response' : ''} {editingMessageId === message.message_id ? 'editing' : ''}"
+							: ''} {message.isNewResponse ? 'new-response' : ''} {editingMessageId === message.message_id ? 'editing' : ''} {message.sender === 'user' ? 'glass glass--pill glass--responsive' : ''}"
 					>
 						{#if message.isLoading}
 							<!-- Always display status text when loading, as we set an initial one -->
@@ -1285,10 +1285,10 @@
 									}}
 								></textarea>
 								<div class="edit-actions">
-									<button class="edit-cancel-btn" on:click={cancelEditing}>
+									<button class="edit-cancel-btn glass glass--small glass--responsive" on:click={cancelEditing}>
 										Cancel
 									</button>
-									<button class="edit-save-btn" on:click={saveMessageEdit}>
+									<button class="edit-save-btn glass glass--small glass--responsive" on:click={saveMessageEdit}>
 										Send
 									</button>
 								</div>
@@ -1339,7 +1339,7 @@
 													{@const currentSort = tableSortStates[tableKey] || { columnIndex: null, direction: null }}
 
 													{#if tableData}
-														<div class="chunk-table-wrapper">
+														<div class="chunk-table-wrapper glass glass--rounded glass--responsive">
 															{#if tableData.caption}
 																<div class="table-caption">
 																	{@html parseMarkdown(tableData.caption)}
@@ -1385,7 +1385,7 @@
 																</table>
 															</div>
 															{#if isLongTable}
-																<button class="table-toggle-btn" on:click={() => toggleTableExpansion(tableKey)}>
+																<button class="table-toggle-btn glass glass--small glass--responsive" on:click={() => toggleTableExpansion(tableKey)}>
 																	{isExpanded ? 'Show less' : `Show more (${tableData.rows.length} rows)`}
 																</button>
 															{/if}
@@ -1406,7 +1406,7 @@
 							{#if message.sender === 'assistant'}
 								<div class="message-actions">
 									<button 
-										class="copy-btn {copiedMessageId === message.message_id ? 'copied' : ''}" 
+										class="copy-btn glass glass--small glass--responsive {copiedMessageId === message.message_id ? 'copied' : ''}" 
 										on:click={() => copyMessageToClipboard(message)}
 									>
 										{#if copiedMessageId === message.message_id}
@@ -1424,10 +1424,10 @@
 							{#if message.suggestedQueries && message.suggestedQueries.length > 0}
 								<div class="suggested-queries">
 									{#each message.suggestedQueries as query}
-										<button 
-											class="suggested-query-btn" 
-											on:click={() => handleSuggestedQueryClick(query)}
-										>
+																		<button 
+									class="suggested-query-btn glass glass--rounded glass--responsive" 
+									on:click={() => handleSuggestedQueryClick(query)}
+								>
 											{query}
 										</button>
 									{/each}
@@ -1440,7 +1440,7 @@
 					{#if message.sender === 'user' && editingMessageId !== message.message_id}
 						<div class="message-actions">
 							<button 
-								class="copy-btn {copiedMessageId === message.message_id ? 'copied' : ''}" 
+								class="copy-btn glass glass--small glass--responsive {copiedMessageId === message.message_id ? 'copied' : ''}" 
 								on:click={() => copyMessageToClipboard(message)}
 							>
 								{#if copiedMessageId === message.message_id}
@@ -1453,7 +1453,7 @@
 									</svg>
 								{/if}
 							</button>
-							<button class="edit-btn" on:click={() => startEditing(message)}>
+							<button class="edit-btn glass glass--small glass--responsive" on:click={() => startEditing(message)}>
 								<svg viewBox="0 0 24 24" width="14" height="14">
 									<path d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z" fill="currentColor" />
 								</svg>
@@ -1470,13 +1470,13 @@
 		  <div class="chip-row">
 		    {#each initialSuggestions as q, i}
 		      {#if i < 3 || showAllInitialSuggestions}
-		      <button class="chip suggestion-chip" on:click={() => handleSuggestedQueryClick(q)}>
+		      					<button class="chip suggestion-chip glass glass--pill glass--responsive" on:click={() => handleSuggestedQueryClick(q)}>
 		        <kbd>{i + 1}</kbd> {q}
 		      </button>
 		      {/if}
 		    {/each}
 		    {#if initialSuggestions.length > 3 && !showAllInitialSuggestions}
-		      <button class="chip suggestion-chip more" on:click={() => showAllInitialSuggestions = true}>⋯ More</button>
+		      <button class="chip suggestion-chip glass glass--pill glass--responsive more" on:click={() => showAllInitialSuggestions = true}>⋯ More</button>
 		    {/if}
 		  </div>
 		{/if}
@@ -1490,7 +1490,7 @@
 						{@const isFiling = 'filingType' in item}
 						<button
 							type="button"
-							class="chip"
+							class="chip glass glass--pill glass--responsive"
 							on:click={() => {
 								if (isFiling) {
 									removeFilingFromChat(item);
@@ -1511,7 +1511,7 @@
 				</div>
 			{/if}
 
-			<div class="input-field-container">
+			<div class="input-field-container glass glass--rounded glass--responsive">
 				<textarea
 					class="chat-input"
 					placeholder="Ask anything..."
