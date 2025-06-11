@@ -189,7 +189,7 @@
 {#if ['initializing', 'active'].includes($rightClickQuery.status)}
 	<div
 		bind:this={rightClickMenu}
-		class="popup-container responsive-shadow responsive-border"
+		class="popup-container glass glass--rounded glass--responsive"
 		style="top: {$rightClickQuery.y}px; left: {$rightClickQuery.x}px;"
 	>
 		<div class="header content-padding">
@@ -208,7 +208,7 @@
 			{#if $rightClickQuery.source === 'chart'}
 				<div class="separator"></div>
 				<button class="wide-button" on:click={() => newPriceAlert($rightClickQuery.instance)}
-					>Add Alert {$rightClickQuery.instance.price?.toFixed(2)}</button
+					>Set Alert on {$rightClickQuery.instance.ticker} at {$rightClickQuery.instance.price?.toFixed(2)}</button
 				>
 				<button
 					class="wide-button"
@@ -216,7 +216,7 @@
 						addHorizontalLine(
 							Number($rightClickQuery.instance.price || 0),
 							Number($rightClickQuery.instance.securityId || 0)
-						)}>Add Horizontal Line {$rightClickQuery.instance.price?.toFixed(2)}</button
+						)}>Add Horizontal Line at {$rightClickQuery.instance.price?.toFixed(2)}</button
 				>
 			{/if}
 		</div>
@@ -225,7 +225,7 @@
 			<!--<button class="wide-button" on:click={() => newStudy(get(rightClickQuery).instance)}>
 				Add to Study
 			</button>-->
-			<button class="wide-button" on:click={(event) => sSample(event)}> Add to Sample </button>
+			<!--<button class="wide-button" on:click={(event) => sSample(event)}> Add to Sample </button>-->
 			<!--<button
 				class="wide-button"
 				on:click={(event) => querySimilarInstances($rightClickQuery.instance)}
@@ -265,13 +265,9 @@
 <style>
 	.popup-container {
 		width: clamp(180px, 30vw, 220px);
-		background: var(--ui-bg-primary);
-		border: 1px solid var(--ui-border);
-		border-radius: clamp(6px, 0.8vw, 8px);
+		/* Glass effect now provided by global .glass classes */
 		display: flex;
 		flex-direction: column;
-		overflow: hidden;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 		position: fixed;
 		z-index: 1000;
 		padding: clamp(2px, 0.5vw, 4px);
