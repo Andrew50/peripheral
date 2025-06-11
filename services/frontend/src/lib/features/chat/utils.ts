@@ -32,7 +32,7 @@ export function parseMarkdown(content: string): string {
 			(match, ticker, timestampMs) => {
 				const formattedDate = formatChipDate(parseInt(timestampMs, 10));
 				const buttonText = `${ticker}${formattedDate}`;
-				return `<button class="ticker-button" data-ticker="${ticker}" data-timestamp-ms="${timestampMs}">${buttonText}</button>`;
+				return `<button class="ticker-button glass glass--small glass--responsive" data-ticker="${ticker}" data-timestamp-ms="${timestampMs}">${buttonText}</button>`;
 			}
 		);
 
