@@ -10,6 +10,7 @@
 	import { queueRequest, privateRequest } from '$lib/utils/helpers/backend';
 	import StreamCellV2 from '$lib/utils/stream/streamCellV2.svelte';
 	import { getColumnStore } from '$lib/utils/stream/streamHub';
+	import '$lib/styles/glass.css';
 
 	type StreamCellType = 'price' | 'change' | 'change %' | 'change % extended' | 'market cap';
 
@@ -403,14 +404,14 @@
 
 <div class="table-container">
 	{#if isLoading}
-		<div class="loading">Loading...</div>
+		<div class="loading glass glass--small glass--light">Loading...</div>
 	{:else if loadError}
-		<div class="error">
+		<div class="error glass glass--small glass--medium">
 			<p>Failed to load data: {loadError}</p>
-			<button on:click={() => window.location.reload()}>Retry</button>
+			<button class="glass glass--small glass--light" on:click={() => window.location.reload()}>Retry</button>
 		</div>
 	{:else}
-		<table class="default-table" class:sorting={isSorting}>
+		<table class="default-table glass glass--rounded glass--medium" class:sorting={isSorting}>
 			<thead>
 				<tr class="default-tr">
 					<th class="default-th"></th> {#each columns as col} 
@@ -520,25 +521,33 @@
 		overflow-x: auto;
 	}
 
+	.table-container {
+		width: 100%;
+		overflow: hidden;
+		max-width: 100%;
+		padding: 0;
+		margin: 0;
+	}
+
 	table {
 		width: 100%;
 		border-collapse: collapse;
 		margin: 0;
 		padding: 0;
 		color: var(--text-primary);
-		background: var(--ui-bg-primary);
 		table-layout: fixed;
+		background: transparent;
 	}
 
 	th,
 	td {
 		padding: 8px;
 		text-align: left;
-		border-bottom: 1px solid var(--ui-border);
+		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+		background: transparent;
 	}
 
 	th {
-		background-color: var(--ui-bg-element);
 		font-weight: bold;
 		color: var(--text-secondary);
 		position: sticky;
@@ -604,7 +613,7 @@
 	}
 
 	tr:hover {
-		background-color: var(--ui-bg-hover);
+		background-color: rgba(255, 255, 255, 0.08);
 	}
 
 
@@ -623,7 +632,7 @@
 		max-width: 24px;
 		padding: 0;
 		text-align: center;
-		background-color: var(--ui-bg-primary);
+		background-color: transparent;
 		vertical-align: middle;
 	}
 
@@ -634,6 +643,7 @@
 		max-width: 24px;
 		padding: 0;
 		transition: opacity 0.2s ease;
+		background-color: transparent;
 	}
 
 	.delete-button {
@@ -646,19 +656,33 @@
 	}
 
 	tr:hover td {
-		background-color: var(--ui-bg-hover);
+		background-color: rgba(255, 255, 255, 0.08);
 	}
 
 	.loading,
 	.error,
 	.no-results {
-		padding: 10px;
+		padding: 20px;
 		text-align: center;
 		color: var(--text-secondary);
+		margin: 16px;
+		border-radius: 8px;
 	}
 
-	.error {
-		color: var(--negative);
+	.error button {
+		margin-top: 12px;
+		padding: 8px 16px;
+		border: none;
+		border-radius: 6px;
+		cursor: pointer;
+		color: #ffffff;
+		font-weight: 500;
+		transition: all 0.2s ease;
+	}
+
+	.error button:hover {
+		transform: translateY(-1px);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 	}
 
 	.positive {
@@ -729,7 +753,7 @@
 		position: sticky;
 		right: 0px; /* Stick to the very edge */
 		z-index: 1; /* Above non-sticky cells */
-		background-color: inherit; /* Inherit row/header background */
+		background-color: transparent; /* Transparent for glass effect */
 		width: 30px; /* Minimal width for button */
 		max-width: 30px;
 		padding: 0;
@@ -738,7 +762,7 @@
 	}
     th:last-child {
         z-index: 3; /* Above tbody cells and sort overlay */
-        background-color: var(--ui-bg-element); /* Ensure header BG */
+        background-color: transparent; /* Transparent for glass effect */
      }
 
 	.delete-button {
@@ -766,6 +790,38 @@
 	/* Adjust background for sticky columns on hover/select */
     /* Assuming .selected class is used for row selection */
     tr:hover th:last-child, tr:hover td:last-child {
-        background-color: var(--ui-bg-hover);
+        background-color: rgba(255, 255, 255, 0.08);
     }
+
+
+
+	/* Table header with glass effect */
+	thead tr {
+		background: rgba(0, 0, 0, 0.3);
+		backdrop-filter: blur(8px);
+	}
+
+	/* Table rows with subtle glass effect */
+	tbody tr {
+		background: rgba(255, 255, 255, 0.02);
+		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+		transition: all 0.2s ease;
+	}
+
+	tbody tr:hover {
+		background: rgba(255, 255, 255, 0.08);
+		backdrop-filter: blur(4px);
+	}
+
+	/* Selected row enhancement */
+	tbody tr.selected {
+		background: rgba(255, 255, 255, 0.12);
+		border: 1px solid rgba(255, 255, 255, 0.3);
+	}
+
+	/* Table cells with enhanced readability */
+	td, th {
+		backdrop-filter: inherit;
+	}
 </style>
+
