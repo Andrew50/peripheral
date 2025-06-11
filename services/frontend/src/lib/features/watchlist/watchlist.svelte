@@ -560,8 +560,8 @@
 
 	.shortcut-container {
 		display: flex;
-		gap: 8px;
-		padding: 16px;
+		gap: 6px;
+		padding: 12px;
 		flex-wrap: wrap;
 	}
 
@@ -596,12 +596,12 @@
 	.feature-container {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: 8px;
 		height: 100%;
 		background: transparent;
 		border-radius: 0;
 		overflow: visible;
-		padding: 16px;
+		padding: 12px;
 	}
 
 	.controls-container {
@@ -649,7 +649,7 @@
 		flex-grow: 1; /* Take remaining vertical space */
 		overflow-y: auto; /* Allow vertical scrolling */
 		min-height: 0; /* Necessary for flex-grow in some cases */
-		padding: 8px;
+		padding: 4px;
 	}
 
 	/* Custom scrollbar for WebKit browsers */
