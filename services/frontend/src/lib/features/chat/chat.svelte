@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick, onDestroy } from 'svelte';
-	import { privateRequest } from '$lib/utils/helpers/backend';
+	import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 	import { marked } from 'marked'; // Import the markdown parser
 	import { queryChart } from '$lib/features/chart/interface'; // Import queryChart
 	import type { Instance } from '$lib/utils/types/types';
@@ -23,6 +23,10 @@
 	import { generateSharedConversationLink } from './chatHelpers';
 
 	import type { ConversationSummary } from './interface';
+
+	// Props for public viewing mode
+	export let isPublicViewing: boolean;
+	export let sharedConversationId: string = '';
 
 
 	// Conversation management state
@@ -124,6 +128,8 @@
 
 	// Conversation management functions
 	async function loadConversations() {
+		if (isPublicViewing) return; // Don't load conversations in public viewing mode
+		
 		try {
 			loadingConversations = true;
 			const response = await privateRequest<ConversationSummary[]>('getUserConversations', {});
@@ -253,8 +259,18 @@
 	async function loadConversationHistory(shouldAutoScroll: boolean = true) {
 		try {
 			isLoading = true;
-			const response = await privateRequest('getUserConversation', {});
-
+			let response;
+			console.log("isPublicViewing", isPublicViewing)
+			console.log("sharedConversationId", sharedConversationId)
+			if (isPublicViewing && sharedConversationId) {
+				// For public viewing, use publicRequest to get shared conversation
+				response = await publicRequest('getPublicConversation', {
+					conversation_id: sharedConversationId
+				});
+			} else {
+				// For authenticated users, use privateRequest 
+				response = await privateRequest('getUserConversation', {});
+			}
 			// Check if we have a valid conversation history
 			const conversation = response as ConversationData;
 			if (conversation && conversation.messages && conversation.messages.length > 0) {
@@ -387,6 +403,7 @@
 	async function checkForUpdates() {
 		if (isLoading) return; // Don't check if we're already loading
 		if (document.hidden) return; // Don't poll when tab is not visible
+		if (isPublicViewing) return; // Don't poll for public shared conversations
 		
 		try {
 			const response = await privateRequest('getUserConversation', {});
@@ -442,14 +459,16 @@
 	}
 
 	onMount(() => {
-		if (queryInput) {
+		if (queryInput && !isPublicViewing) {
 			setTimeout(() => queryInput.focus(), 100);
 		}
 		loadConversationHistory();
-		loadConversations(); // Load conversations on mount
+		loadConversations(); // Load conversations on mount (will be skipped for public viewing)
 
-		// Set up periodic polling for updates (every 10 seconds)
-		pollInterval = setInterval(checkForUpdates, 10000);
+		// Set up periodic polling for updates (every 10 seconds) - only for authenticated users
+		if (!isPublicViewing) {
+			pollInterval = setInterval(checkForUpdates, 10000);
+		}
 
 		// Resume polling when tab becomes visible and check for updates immediately
 		const handleVisibilityChange = () => {
@@ -596,8 +615,10 @@
 				// Update conversation ID if this was a new chat
 				if (typedResponse.conversation_id && !currentConversationId) {
 					currentConversationId = typedResponse.conversation_id;
-					// Load conversations to get the title
-					await loadConversations();
+					// Load conversations to get the title (only for authenticated users)
+					if (!isPublicViewing) {
+						await loadConversations();
+					}
 				}
 
 				// Update the temporary user message with the real backend message ID
@@ -1136,25 +1157,32 @@
 </script>
 
 <div class="chat-container">
-	<ConversationHeader 
-		bind:conversationDropdown
-		{showConversationDropdown}
-		{conversations}
-		{currentConversationId}
-		{currentConversationTitle}
-		{loadingConversations}
-		{conversationToDelete}
-		{messagesStore}
-		{isLoading}
-		{toggleConversationDropdown}
-		{createNewConversation}
-		{switchToConversation}
-		{deleteConversation}
-		{confirmDeleteConversation}
-		{cancelDeleteConversation}
-		{handleShareConversation}
-		{clearConversation}
-	/>
+	{#if !isPublicViewing}
+		<ConversationHeader 
+			bind:conversationDropdown
+			{showConversationDropdown}
+			{conversations}
+			{currentConversationId}
+			{currentConversationTitle}
+			{loadingConversations}
+			{conversationToDelete}
+			{messagesStore}
+			{isLoading}
+			{toggleConversationDropdown}
+			{createNewConversation}
+			{switchToConversation}
+			{deleteConversation}
+			{confirmDeleteConversation}
+			{cancelDeleteConversation}
+			{handleShareConversation}
+			{clearConversation}
+		/>
+	{:else}
+		<!-- Simple header for public viewing -->
+		<div class="public-conversation-header">
+			<h3>{currentConversationTitle || 'Shared Conversation'}</h3>
+		</div>
+	{/if}
 
 	<div class="chat-messages" bind:this={messagesContainer}>
 		{#if $messagesStore.length === 0}
@@ -1375,21 +1403,22 @@
 		{/if}
 	</div>
 
-	<div class="chat-input-wrapper">
-		{#if $showChips && topChips.length}
-		  <div class="chip-row">
-		    {#each initialSuggestions as q, i}
-		      {#if i < 3 || showAllInitialSuggestions}
-		      					<button class="chip suggestion-chip glass glass--pill glass--responsive" on:click={() => handleSuggestedQueryClick(q)}>
-		        <kbd>{i + 1}</kbd> {q}
-		      </button>
-		      {/if}
-		    {/each}
-		    {#if initialSuggestions.length > 3 && !showAllInitialSuggestions}
-		      <button class="chip suggestion-chip glass glass--pill glass--responsive more" on:click={() => showAllInitialSuggestions = true}>⋯ More</button>
-		    {/if}
-		  </div>
-		{/if}
+	{#if !isPublicViewing}
+		<div class="chat-input-wrapper">
+			{#if $showChips && topChips.length}
+			  <div class="chip-row">
+			    {#each initialSuggestions as q, i}
+			      {#if i < 3 || showAllInitialSuggestions}
+			      					<button class="chip suggestion-chip glass glass--pill glass--responsive" on:click={() => handleSuggestedQueryClick(q)}>
+			        <kbd>{i + 1}</kbd> {q}
+			      </button>
+			      {/if}
+			    {/each}
+			    {#if initialSuggestions.length > 3 && !showAllInitialSuggestions}
+			      <button class="chip suggestion-chip glass glass--pill glass--responsive more" on:click={() => showAllInitialSuggestions = true}>⋯ More</button>
+			    {/if}
+			  </div>
+			{/if}
 
 		<div class="input-area-wrapper">
 			{#if $contextItems.length > 0}
@@ -1467,7 +1496,13 @@
 				</button>
 			</div>
 		</div>
-	</div>
+		</div>
+	{:else}
+		<!-- Public viewing message -->
+		<div class="public-viewing-notice">
+			<p>You are viewing a shared conversation. <a href="/app">Sign in</a> to start your own chat.</p>
+		</div>
+	{/if}
 
 	<!-- Share Modal -->
 	{#if showShareModal}
