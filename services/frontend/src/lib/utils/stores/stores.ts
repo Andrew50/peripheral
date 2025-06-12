@@ -46,7 +46,7 @@ export const isPublicViewing = writable(false);
 
 // Add constants for menu width
 export const MIN_MENU_WIDTH = 200;
-const DEFAULT_MENU_WIDTH = 300;
+const DEFAULT_MENU_WIDTH = 450;
 
 export interface StreamInfo {
     replayActive: boolean;
