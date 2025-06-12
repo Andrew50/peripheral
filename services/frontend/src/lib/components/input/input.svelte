@@ -22,6 +22,7 @@
 	 */
 
 	import { allKeys, type InstanceAttributes, type InputQuery } from '$lib/components/input/utils/inputTypes';
+	import { isPublicViewing } from '$lib/utils/stores/stores';
 	let currentSecurityResultRequest = 0;
 	let loadedSecurityResultRequest = -1;
 	let isLoadingSecurities = false;
@@ -29,9 +30,16 @@
 
 	let activePromiseReject: ((reason?: any) => void) | null = null;
 	let isDocumentListenerActive = false; // Add guard for document listener
-	privateRequest<[]>('getSecurityClassifications', {}).then((v: []) => {
-		filterOptions = v;
-	});
+	
+	// Only load security classifications if not in public viewing mode
+	if (browser && !get(isPublicViewing)) {
+		privateRequest<[]>('getSecurityClassifications', {}).then((v: []) => {
+			filterOptions = v;
+		}).catch((error) => {
+			console.warn('Failed to load security classifications:', error);
+			filterOptions = [];
+		});
+	}
 
 	const inactiveInputQuery: InputQuery = {
 		status: 'inactive',
@@ -575,7 +583,7 @@
 			}
 		});
 
-		if (browser) {
+		if (browser && !get(isPublicViewing)) {
 			type SecurityClassifications = {
 				sectors: string[];
 				industries: string[];
@@ -585,7 +593,11 @@
 					sectors = classifications.sectors;
 					industries = classifications.industries;
 				}
-			);
+			).catch((error) => {
+				console.warn('Failed to load security classifications in onMount:', error);
+				sectors = [];
+				industries = [];
+			});
 		}
 	});
 

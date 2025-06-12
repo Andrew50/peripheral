@@ -302,13 +302,34 @@ func GetPublicConversation(conn *data.Conn, args json.RawMessage) (interface{}, 
 	if err := json.Unmarshal(args, &req); err != nil {
 		return nil, fmt.Errorf("error parsing request: %w", err)
 	}
+	fmt.Println("Getting public conversation for conversationID:", req.ConversationID)
 	var isPublic bool
 	var userID int
-	err := conn.DB.QueryRow(context.Background(), "SELECT is_public, user_id FROM conversations WHERE conversation_id = $1", req.ConversationID).Scan(&isPublic, &userID)
+	var title string
+	err := conn.DB.QueryRow(context.Background(), "SELECT is_public, user_id, title FROM conversations WHERE conversation_id = $1", req.ConversationID).Scan(&isPublic, &userID, &title)
 	if err != nil || !isPublic {
 		return nil, fmt.Errorf("conversation not found")
 	}
-	return GetConversationMessages(context.Background(), conn, req.ConversationID, userID)
+	fmt.Println("Getting conversation messages for userID:", userID)
+
+	// Get the raw messages
+	messagesInterface, err := GetConversationMessages(context.Background(), conn, req.ConversationID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Type assert to get the actual messages
+	messages, ok := messagesInterface.([]DBConversationMessage)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type returned from GetConversationMessages")
+	}
+
+	// Convert to the format expected by the frontend
+	conversationData := convertDBMessagesToConversationData(messages)
+	conversationData.ConversationID = req.ConversationID
+	conversationData.Title = title
+
+	return conversationData, nil
 }
 
 type SetConversationVisibilityRequest struct {
