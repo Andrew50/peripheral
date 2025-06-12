@@ -318,7 +318,6 @@
 
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
-	import { ESTStringToUTCTimestamp, UTCTimestampToESTString } from '$lib/utils/helpers/timestamp';
 	let prevFocusedElement: HTMLElement | null = null;
 	let highlightedIndex = -1;
 	
