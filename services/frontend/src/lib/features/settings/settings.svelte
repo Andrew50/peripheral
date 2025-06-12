@@ -11,7 +11,6 @@
 
 	let errorMessage: string = '';
 	let tempSettings: Settings = { ...get(settings) }; // Create a local copy to work with
-	// DEPRECATED: Removed screensaver from active tabs
 	let activeTab: 'chart' | 'format' | 'account' | 'appearance' = 'chart';
 	let watchlists: Array<{ watchlistId: string; watchlistName: string }> = [];
 	let customTickers = ''; // For managing comma-separated list of tickers
