@@ -224,7 +224,11 @@ CREATE TABLE IF NOT EXISTS conversations (
     
     -- Track total conversation stats
     total_token_count INTEGER DEFAULT 0,
-    message_count INTEGER DEFAULT 0
+    message_count INTEGER DEFAULT 0,
+    -- Conversation Sharing
+    is_public BOOLEAN NOT NULL DEFAULT FALSE,
+    view_count INTEGER DEFAULT 0,
+    last_viewed_at TIMESTAMP WITH TIME ZONE,
 );
 
 -- Conversation messages table

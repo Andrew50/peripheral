@@ -28,10 +28,11 @@ import (
 )
 
 var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, error){
-	"signup":         Signup,
-	"login":          Login,
-	"googleLogin":    GoogleLogin,
-	"googleCallback": GoogleCallback,
+	"signup":                Signup,
+	"login":                 Login,
+	"googleLogin":           GoogleLogin,
+	"googleCallback":        GoogleCallback,
+	"getPublicConversation": agent.GetPublicConversation,
 }
 
 // Wrapper functions to adapt existing functions to the old signature for HTTP handlers
@@ -127,12 +128,13 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"getQuery":                   wrapContextFunc(agent.GetChatRequest),
 
 	// Multiple conversations management
-	"getUserConversations": agent.GetUserConversations,
-	"switchConversation":   agent.SwitchConversation,
-	"deleteConversation":   agent.DeleteConversation,
-	"cancelPendingMessage": agent.CancelPendingMessage,
-	"editMessage":          agent.EditMessage,
-	"getWhyMoving":         agent.GetWhyMoving,
+	"getUserConversations":      agent.GetUserConversations,
+	"switchConversation":        agent.SwitchConversation,
+	"deleteConversation":        agent.DeleteConversation,
+	"cancelPendingMessage":      agent.CancelPendingMessage,
+	"editMessage":               agent.EditMessage,
+	"getWhyMoving":              agent.GetWhyMoving,
+	"setConversationVisibility": agent.SetConversationVisibility,
 }
 
 // Private functions that support context cancellation
