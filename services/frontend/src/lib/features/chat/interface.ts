@@ -131,3 +131,11 @@ export type Message = {
 export type SuggestedQueriesResponse = {
 	suggestions: string[];
 };
+// Conversation management types
+export type ConversationSummary = {
+	conversation_id: string;
+	title: string;
+	created_at: string;
+	updated_at: string;
+	last_message_query?: string;
+};

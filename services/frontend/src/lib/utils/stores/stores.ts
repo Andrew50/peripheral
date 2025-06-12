@@ -42,6 +42,7 @@ export const streamInfo = writable<StreamInfo>({
 export const systemClockOffset = 0;
 export const dispatchMenuChange = writable('');
 export const algos: Writable<Algo[]> = writable([]);
+export const isPublicViewing = writable(false);
 
 // Add constants for menu width
 export const MIN_MENU_WIDTH = 200;
@@ -92,60 +93,87 @@ export const defaultSettings: Settings = {
 };
 export const settings: Writable<Settings> = writable(defaultSettings);
 export function initStores() {
-    privateRequest<Settings>('getSettings', {}).then((s: Settings) => {
-        settings.set({ ...defaultSettings, ...s });
-    });
-    privateRequest<Strategy[]>('getStrategies', {}).then((v: Strategy[]) => {
-        if (!v) {
-            strategies.set([]);
-            return;
-        }
-        v = v.map((v: Strategy) => {
-            return {
-                ...v,
-                activeScreen: true
-            };
-        });
-        strategies.set(v);
-    });
+    initStoresWithAuth();
+}
 
-    // Add alert initialization
-    privateRequest<Alert[]>('getAlerts', {}).then((v: Alert[]) => {
-        if (v === undefined || v === null) {
-            inactiveAlerts.set([]);
-            activeAlerts.set([]);
-            return;
-        }
-        const inactive = v.filter((alert: Alert) => alert.active === false);
-        inactiveAlerts.set(inactive);
-        const active = v.filter((alert: Alert) => alert.active === true);
-        activeAlerts.set(active);
-    });
-
-    privateRequest<AlertLog[]>('getAlertLogs', {}).then((v: AlertLog[]) => {
-        alertLogs.set(v || []);
-    });
-
-    privateRequest<Watchlist[]>('getWatchlists', {}).then((list: Watchlist[]) => {
-        watchlists.set(list || []);
-        const flagWatch = list?.find((v: Watchlist) => v.watchlistName === 'flag');
-        if (flagWatch === undefined) {
-            privateRequest<number>('newWatchlist', { watchlistName: 'flag' }).then((newId: number) => {
-                flagWatchlistId = newId;
-                watchlists.update(currentList => {
-                    const newList = currentList || [];
-                    return [{ watchlistId: newId, watchlistName: 'flag' }, ...newList];
-                });
-            }).catch(err => {
-                 console.error("Error creating flag watchlist:", err);
+function initStoresWithAuth() {
+    // Check if we're in public viewing mode first
+    try {
+        import('svelte/store').then(({ get }) => {
+            if (get(isPublicViewing)) {
+                // In public viewing mode, just set defaults
+                settings.set(defaultSettings);
+                strategies.set([]);
+                activeAlerts.set([]);
+                inactiveAlerts.set([]);
+                alertLogs.set([]);
+                watchlists.set([]);
+                return;
+            }
+            
+            // Normal initialization for authenticated users - move all private requests here
+            privateRequest<Settings>('getSettings', {}).then((s: Settings) => {
+                settings.set({ ...defaultSettings, ...s });
+            }).catch((error) => {
+                console.warn('Failed to load settings:', error);
+                settings.set(defaultSettings);
             });
-        } else {
-            flagWatchlistId = flagWatch.watchlistId;
-        }
-    }).catch(err => {
-        console.error("Error fetching watchlists:", err);
-        watchlists.set([]);
-    });
+            
+            privateRequest<Strategy[]>('getStrategies', {}).then((v: Strategy[]) => {
+                if (!v) {
+                    strategies.set([]);
+                    return;
+                }
+                v = v.map((v: Strategy) => {
+                    return {
+                        ...v,
+                        activeScreen: true
+                    };
+                });
+                strategies.set(v);
+            });
+
+            // Add alert initialization
+            privateRequest<Alert[]>('getAlerts', {}).then((v: Alert[]) => {
+                if (v === undefined || v === null) {
+                    inactiveAlerts.set([]);
+                    activeAlerts.set([]);
+                    return;
+                }
+                const inactive = v.filter((alert: Alert) => alert.active === false);
+                inactiveAlerts.set(inactive);
+                const active = v.filter((alert: Alert) => alert.active === true);
+                activeAlerts.set(active);
+            });
+
+            privateRequest<AlertLog[]>('getAlertLogs', {}).then((v: AlertLog[]) => {
+                alertLogs.set(v || []);
+            });
+
+            privateRequest<Watchlist[]>('getWatchlists', {}).then((list: Watchlist[]) => {
+                watchlists.set(list || []);
+                const flagWatch = list?.find((v: Watchlist) => v.watchlistName === 'flag');
+                if (flagWatch === undefined) {
+                    privateRequest<number>('newWatchlist', { watchlistName: 'flag' }).then((newId: number) => {
+                        flagWatchlistId = newId;
+                        watchlists.update(currentList => {
+                            const newList = currentList || [];
+                            return [{ watchlistId: newId, watchlistName: 'flag' }, ...newList];
+                        });
+                    }).catch(err => {
+                         console.error("Error creating flag watchlist:", err);
+                    });
+                } else {
+                    flagWatchlistId = flagWatch.watchlistId;
+                }
+            }).catch(err => {
+                console.error("Error fetching watchlists:", err);
+                watchlists.set([]);
+            });
+        });
+    } catch (error) {
+        console.warn('Failed to check public viewing mode, proceeding with auth initialization');
+    }
     function updateTime() {
         streamInfo.update((v: StreamInfo) => {
             if (v.replayActive && !v.replayPaused) {

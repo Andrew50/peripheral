@@ -287,3 +287,73 @@ func EditMessage(conn *data.Conn, userID int, args json.RawMessage) (interface{}
 		"context_items":   contextItems,
 	}, nil
 }
+
+// GetUserConversation gets the active conversation
+func GetUserConversation(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
+	return GetActiveConversationWithCache(context.Background(), conn, userID)
+}
+
+type GetPublicConversationRequest struct {
+	ConversationID string `json:"conversation_id"`
+}
+
+func GetPublicConversation(conn *data.Conn, args json.RawMessage) (interface{}, error) {
+	var req GetPublicConversationRequest
+	if err := json.Unmarshal(args, &req); err != nil {
+		return nil, fmt.Errorf("error parsing request: %w", err)
+	}
+	fmt.Println("Getting public conversation for conversationID:", req.ConversationID)
+	var isPublic bool
+	var userID int
+	var title string
+	err := conn.DB.QueryRow(context.Background(), "SELECT is_public, user_id, title FROM conversations WHERE conversation_id = $1", req.ConversationID).Scan(&isPublic, &userID, &title)
+	if err != nil || !isPublic {
+		return nil, fmt.Errorf("conversation not found")
+	}
+	fmt.Println("Getting conversation messages for userID:", userID)
+
+	// Get the raw messages
+	messagesInterface, err := GetConversationMessages(context.Background(), conn, req.ConversationID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Type assert to get the actual messages
+	messages, ok := messagesInterface.([]DBConversationMessage)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type returned from GetConversationMessages")
+	}
+
+	// Convert to the format expected by the frontend
+	conversationData := convertDBMessagesToConversationData(messages)
+	conversationData.ConversationID = req.ConversationID
+	conversationData.Title = title
+
+	return conversationData, nil
+}
+
+type SetConversationVisibilityRequest struct {
+	ConversationID string `json:"conversation_id"`
+	IsPublic       bool   `json:"is_public"`
+}
+
+func SetConversationVisibility(conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
+	var req SetConversationVisibilityRequest
+	if err := json.Unmarshal(args, &req); err != nil {
+		return nil, fmt.Errorf("error parsing request: %w", err)
+	}
+
+	if req.ConversationID == "" {
+		return nil, fmt.Errorf("conversation_id is required")
+	}
+	if err := VerifyConversationOwnership(conn, req.ConversationID, userID); err != nil {
+		return nil, fmt.Errorf("no permission to edit this conversation")
+	}
+	_, err := conn.DB.Exec(context.Background(), "UPDATE conversations SET is_public = $1 WHERE conversation_id = $2", req.IsPublic, req.ConversationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update conversation: %w", err)
+	}
+	return map[string]interface{}{
+		"success": true,
+	}, nil
+}

@@ -56,6 +56,7 @@ CREATE TABLE securities (
     unique (securityid, maxDate)
 );
 CREATE INDEX trgm_idx_securities_ticker ON securities USING gin (ticker gin_trgm_ops);
+CREATE INDEX trgm_idx_securities_name ON securities USING gin (name gin_trgm_ops);
 create index idxTickerDateRange on securities (ticker, minDate, maxDate);
 CREATE TABLE watchlists (
     watchlistId serial primary key,
@@ -223,7 +224,11 @@ CREATE TABLE IF NOT EXISTS conversations (
     
     -- Track total conversation stats
     total_token_count INTEGER DEFAULT 0,
-    message_count INTEGER DEFAULT 0
+    message_count INTEGER DEFAULT 0,
+    -- Conversation Sharing
+    is_public BOOLEAN NOT NULL DEFAULT FALSE,
+    view_count INTEGER DEFAULT 0,
+    last_viewed_at TIMESTAMP WITH TIME ZONE,
 );
 
 -- Conversation messages table
