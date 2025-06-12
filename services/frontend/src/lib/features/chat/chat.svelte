@@ -5,7 +5,7 @@
 	import { queryChart } from '$lib/features/chart/interface'; // Import queryChart
 	import type { Instance } from '$lib/utils/types/types';
 	import { browser } from '$app/environment'; // Import browser
-	import { derived, writable } from 'svelte/store';
+	import { derived, writable, get } from 'svelte/store';
 	import {
 		inputValue,
 		contextItems,
@@ -21,13 +21,11 @@
 	import { functionStatusStore, type FunctionStatusUpdate } from '$lib/utils/stream/socket'; // <-- Import the status store and FunctionStatusUpdate type
 	import './chat.css'; // Import the CSS file
 	import { generateSharedConversationLink } from './chatHelpers';
-
+	import { showAuthModal } from '$lib/stores/authModal';
 	import type { ConversationSummary } from './interface';
 
-	// Props for public viewing mode
-	export let isPublicViewing: boolean;
 	export let sharedConversationId: string = '';
-
+	export let isPublicViewing: boolean;
 
 	// Conversation management state
 	let conversations: ConversationSummary[] = [];
@@ -104,7 +102,6 @@
 	let shareLoading = false;
 	let shareCopied = false;
 	let shareCopyTimeout: ReturnType<typeof setTimeout> | null = null;
-
 
 	// Function to fetch initial suggestions based on active chart
 	async function fetchInitialSuggestions() {
@@ -530,6 +527,10 @@
 
 	// Function to handle clicking on a suggested query
 	function handleSuggestedQueryClick(query: string) {
+		if(get(isPublicViewing)) {
+			showAuthModal('conversations', 'signup');
+			return;
+		}
 		inputValue.set(query)
 		handleSubmit();
 	}

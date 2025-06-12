@@ -50,24 +50,6 @@ var (
 			Function:      wrapWithContext(helpers.GetCurrentSecurityID),
 			StatusMessage: "Looking up {ticker}...",
 		},
-		"getSecuritiesFromTicker": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getSecuritiesFromTicker",
-				Description: "Get a list of the closest 10 security ticker symbols to an input string.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "string input to retrieve the list based on.",
-						},
-					},
-					Required: []string{"ticker"},
-				},
-			},
-			Function:      wrapWithContext(helpers.GetSecuritiesFromTicker),
-			StatusMessage: "Searching for matching tickers...",
-		},
 		"getStockDetails": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStockDetails",

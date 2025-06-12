@@ -187,7 +187,7 @@ type GetSecurityFromTickerResults struct {
 }
 
 // GetSecuritiesFromTicker performs operations related to GetSecuritiesFromTicker functionality.
-func GetSecuritiesFromTicker(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
+func GetSecuritiesFromTicker(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetSecurityFromTickerArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("getAnnotations invalid args: %v", err)
