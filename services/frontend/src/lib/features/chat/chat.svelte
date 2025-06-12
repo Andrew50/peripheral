@@ -16,7 +16,7 @@
 		pendingChatQuery,
 	} from './interface'
 	import type { Message, ConversationData, QueryResponse, TableData, ContentChunk } from './interface';
-	import { parseMarkdown, formatChipDate, formatRuntime, cleanHtmlContent } from './utils';
+	import { parseMarkdown, formatChipDate, formatRuntime, cleanHtmlContent, handleTickerButtonClick } from './utils';
 	import { activeChartInstance } from '$lib/features/chart/interface';
 	import { functionStatusStore, type FunctionStatusUpdate } from '$lib/utils/stream/socket'; // <-- Import the status store and FunctionStatusUpdate type
 	import './chat.css'; // Import the CSS file
@@ -777,63 +777,6 @@
 		return null;
 	}
 
-	// Function to handle clicks on ticker buttons
-	async function handleTickerButtonClick(event: MouseEvent) {
-		const target = event.target as HTMLButtonElement; // Assert as Button Element
-		if (target && target.classList.contains('ticker-button')) {
-			const ticker = target.dataset.ticker;
-			const timestampMsStr = target.dataset.timestampMs; // Get the timestamp string
-
-			if (ticker && timestampMsStr) {
-				const timestampMs = parseInt(timestampMsStr, 10); // Parse the timestamp
-
-				if (isNaN(timestampMs)) {
-					console.error('Invalid timestampMs on ticker button');
-					return; // Don't proceed if timestamp is invalid
-				}
-
-				try {
-					target.disabled = true;
-
-					// Call the new backend function to get the securityId
-					// Define expected response shape
-					type SecurityIdResponse = { securityId?: number };
-					console.log('ticker', ticker);
-					console.log('timestampMs', timestampMs);
-					const response = await privateRequest<SecurityIdResponse>('getSecurityIDFromTickerTimestamp', {
-						ticker: ticker,
-						timestampMs: timestampMs // Pass timestamp as number
-					});
-
-					// Safely access the securityId
-					const securityId = response?.securityId;
-
-					if (securityId && !isNaN(securityId)) {
-						// If securityId is valid, query the chart
-						queryChart({
-							ticker: ticker,
-							securityId: securityId,
-							timestamp: timestampMs // Pass timestamp as number (milliseconds)
-						} as Instance);
-					} else {
-						console.error('Failed to retrieve a valid securityId from backend:', response);
-						// Handle error visually if needed (e.g., show error message)
-						target.textContent = 'Error'; // Revert button text or indicate error
-						await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-					}
-
-				} catch (error) {
-					console.error('Error fetching securityId:', error);
-					await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-				} finally {
-					target.disabled = false;
-				}
-
-			} else {
-				console.error('Missing data attributes on ticker button');
-			}
-		}
-	}
 
 	// Function to toggle table expansion state
 	function toggleTableExpansion(tableKey: string) {
