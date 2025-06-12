@@ -264,11 +264,6 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 	}
 }
 
-// GetUserConversation gets the active conversation
-func GetUserConversation(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
-	return GetActiveConversationWithCache(context.Background(), conn, userID)
-}
-
 // processContentChunksForTables iterates through chunks and generates tables for "backtest_table" type.
 func processContentChunksForTables(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
 	processedChunks := make([]ContentChunk, 0, len(inputChunks))
