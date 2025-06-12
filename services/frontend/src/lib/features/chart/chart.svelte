@@ -56,7 +56,11 @@
 	import { EventMarkersPaneView, type EventMarker } from './eventMarkers';
 	import { adjustEventsToTradingDays, handleScreenshot } from './chartHelpers';
 	import { SessionHighlighting, createDefaultSessionHighlighter } from './sessionShade';
-	import { type FilingContext, addFilingToChatContext, openChatAndQuery } from '$lib/features/chat/interface';
+	import {
+		type FilingContext,
+		addFilingToChatContext,
+		openChatAndQuery
+	} from '$lib/features/chat/interface';
 
 	interface EventValue {
 		type?: string;
@@ -196,7 +200,12 @@
 
 	// Type guards moved to a higher scope
 	const isCandlestick = (data: any): data is CandlestickData<Time> =>
-		data && typeof data === 'object' && 'open' in data && 'high' in data && 'low' in data && 'close' in data;
+		data &&
+		typeof data === 'object' &&
+		'open' in data &&
+		'high' in data &&
+		'low' in data &&
+		'close' in data;
 	const isHistogram = (data: any): data is HistogramData<Time> =>
 		data && typeof data === 'object' && 'value' in data;
 
@@ -292,7 +301,7 @@
 		const lastCandleIndex = allCandles.length - 1;
 
 		let volumeForLastCandle = 0;
-		const lastVolumeEntry = allVolumes.find(v => v.time === lastCandle.time);
+		const lastVolumeEntry = allVolumes.find((v) => v.time === lastCandle.time);
 		if (lastVolumeEntry) {
 			volumeForLastCandle = lastVolumeEntry.value;
 		} else if (allVolumes.length > 0) {
@@ -391,12 +400,12 @@
 			includeSECFilings: get(settings).showFilings
 		})
 			.then((response) => {
-                                const barDataList = response.bars;
-                                if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
-                                        isLoadingChartData = false;
-                                        queuedLoad = null;
-                                        return;
-                                }
+				const barDataList = response.bars;
+				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
+					isLoadingChartData = false;
+					queuedLoad = null;
+					return;
+				}
 				let newCandleData = barDataList.map((bar) => ({
 					time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
 					open: bar.open,
@@ -485,7 +494,11 @@
 						chartCandleSeries.setData(newCandleData);
 						chartVolumeSeries.setData(newVolumeData);
 
-						if (visibleRange && typeof visibleRange.from === 'number' && typeof visibleRange.to === 'number') {
+						if (
+							visibleRange &&
+							typeof visibleRange.from === 'number' &&
+							typeof visibleRange.to === 'number'
+						) {
 							chart.timeScale().setVisibleRange({
 								from: visibleRange.from,
 								to: visibleRange.to
@@ -544,18 +557,15 @@
 							}));
 							// Sort markers by timestamp (time) in ascending order
 							markers.sort((a, b) => a.time - b.time);
-							
 
 							arrowSeries.setData(markers);
-							
 						}
 					}
 					try {
 						const barsWithEvents = response.bars; // Use the original response with events
 						if (barsWithEvents && barsWithEvents.length > 0) {
-
-							const allEventsRaw: Array<{timestamp: number, type: string, value: string}> = [];
-							barsWithEvents.forEach(bar => {
+							const allEventsRaw: Array<{ timestamp: number; type: string; value: string }> = [];
+							barsWithEvents.forEach((bar) => {
 								if (bar.events && bar.events.length > 0) {
 									allEventsRaw.push(...bar.events);
 								}
@@ -608,7 +618,8 @@
 													value: valueObj.ratio
 												});
 											} else if (event.type === 'dividend') {
-												const amount = typeof valueObj.amount === 'string' ? valueObj.amount : '0.00';
+												const amount =
+													typeof valueObj.amount === 'string' ? valueObj.amount : '0.00';
 												eventsByTime.get(barTime)?.push({
 													type: 'dividend',
 													title: `Dividend: $${amount}`,
@@ -631,14 +642,17 @@
 								});
 
 								// Get existing events ONLY if loading additional data
-								const existingEventData = (inst.requestType === 'loadAdditionalData')
-									? eventSeries.data() as EventMarker[]
-									: [];
+								const existingEventData =
+									inst.requestType === 'loadAdditionalData'
+										? (eventSeries.data() as EventMarker[])
+										: [];
 
 								// Combine using a Map to handle potential overlaps/updates
 								const combinedEventsMap = new Map<number, EventMarker>();
-								existingEventData.forEach(event => combinedEventsMap.set(event.time as number, event));
-								newEventData.forEach(event => combinedEventsMap.set(event.time as number, event)); // New events overwrite existing at the same time
+								existingEventData.forEach((event) =>
+									combinedEventsMap.set(event.time as number, event)
+								);
+								newEventData.forEach((event) => combinedEventsMap.set(event.time as number, event)); // New events overwrite existing at the same time
 
 								let finalEventData = Array.from(combinedEventsMap.values());
 
@@ -647,14 +661,15 @@
 
 								// Adjust events to trading days using the combined candle data
 								// Ensure newCandleData exists and is an array before spreading
-								const candleDataForAdjustment = Array.isArray(newCandleData) ? [...newCandleData] : [];
+								const candleDataForAdjustment = Array.isArray(newCandleData)
+									? [...newCandleData]
+									: [];
 								finalEventData = adjustEventsToTradingDays(finalEventData, candleDataForAdjustment);
 
 								// Set the final data
 								eventSeries.setData(finalEventData);
-
 							}
-						} 
+						}
 					} catch (error) {
 						console.warn('Failed to process chart events from bars:', error);
 						// Avoid clearing events on error during additional load
@@ -663,8 +678,6 @@
 						}
 					}
 					queuedLoad = null;
-
-
 
 					// Fix the SMA data type issues
 					const smaResults = calculateMultipleSMAs(newCandleData, [10, 20]);
@@ -703,7 +716,7 @@
 						releaseQuote = addStream(inst, 'quote', updateLatestQuote) as () => void;
 					}
 					isLoadingChartData = false; // Ensure this runs after data is loaded
-					
+
 					// Hide chart switching overlay when loading completes
 					if (inst.requestType === 'loadNewTicker') {
 						isChartSwitching = false;
@@ -738,7 +751,7 @@
 				console.error(error);
 
 				isLoadingChartData = false; // Ensure this runs after data is loaded
-				
+
 				// Hide overlay on error
 				if (inst.requestType === 'loadNewTicker') {
 					isChartSwitching = false;
@@ -862,7 +875,7 @@
 		if (chartContainer) {
 			chartContainer.focus();
 		}
-		
+
 		if (determineClickedLine(event)) {
 			('determineClickedLine');
 			mouseDownStartX = event.clientX;
@@ -908,7 +921,7 @@
 		}
 
 		setActiveChart(chartId, currentChartInstance);
-		
+
 		if (shiftDown || get(shiftOverlay).isActive) {
 			shiftOverlay.update((v: ShiftOverlay): ShiftOverlay => {
 				v.isActive = !v.isActive;
@@ -922,13 +935,13 @@
 							touch: false
 						}
 					});
-					
+
 					// Get chart container position for relative coordinates
 					const chartContainer = document.getElementById(`chart_container-${chartId}`);
 					const rect = chartContainer?.getBoundingClientRect();
 					const offsetX = rect ? rect.left : 0;
 					const offsetY = rect ? rect.top : 0;
-					
+
 					v.startX = event.clientX - offsetX;
 					v.startY = event.clientY - offsetY;
 					v.width = 0;
@@ -964,10 +977,10 @@
 			const rect = chartContainer?.getBoundingClientRect();
 			const offsetX = rect ? rect.left : 0;
 			const offsetY = rect ? rect.top : 0;
-			
+
 			const relativeX = event.clientX - offsetX;
 			const relativeY = event.clientY - offsetY;
-			
+
 			const overlay = {
 				...v,
 				width: Math.abs(relativeX - v.startX),
@@ -992,7 +1005,7 @@
 						touch: true
 					}
 				});
-				
+
 				return {
 					...v,
 					isActive: false,
@@ -1037,7 +1050,10 @@
 		let legendIsDisplayingCurrentLastCandle = false;
 		const currentLegendData = get(hoveredCandleData);
 		// Check if legend is showing the current last bar's data by comparing time and close price (as a heuristic)
-		if (currentLegendData.close === mostRecentBar.close && latestCrosshairPositionTime === mostRecentBar.time) {
+		if (
+			currentLegendData.close === mostRecentBar.close &&
+			latestCrosshairPositionTime === mostRecentBar.time
+		) {
 			legendIsDisplayingCurrentLastCandle = true;
 		}
 
@@ -1056,7 +1072,7 @@
 			if (!pendingVolumeUpdate) {
 				const lastVolumeRaw = chartVolumeSeries.data().at(-1);
 				if (lastVolumeRaw && isHistogram(lastVolumeRaw)) {
-					pendingVolumeUpdate = { ...lastVolumeRaw as HistogramData<Time> }; // Create a mutable copy
+					pendingVolumeUpdate = { ...(lastVolumeRaw as HistogramData<Time>) }; // Create a mutable copy
 				}
 			}
 
@@ -1126,7 +1142,9 @@
 			if (legendIsDisplayingCurrentLastCandle) {
 				_refreshLegendWithLatestCandleData();
 				// Crucially, update latestCrosshairPositionTime to the NEW latest bar's time
-				const currentCandles = chartCandleSeries.data().filter(isCandlestick) as CandlestickData<Time>[];
+				const currentCandles = chartCandleSeries
+					.data()
+					.filter(isCandlestick) as CandlestickData<Time>[];
 				if (currentCandles.length > 0) {
 					latestCrosshairPositionTime = currentCandles[currentCandles.length - 1].time as number;
 				}
@@ -1148,7 +1166,9 @@
 				if (!barData) return;
 
 				// Find and update the matching (previous) bar
-				const allCandleDataForUpdate = chartCandleSeries.data().filter(isCandlestick) as CandlestickData<Time>[];
+				const allCandleDataForUpdate = chartCandleSeries
+					.data()
+					.filter(isCandlestick) as CandlestickData<Time>[];
 				const barIndex = allCandleDataForUpdate.findIndex(
 					(candle) => candle.time === UTCSecondstoESTSeconds(barData.time)
 				);
@@ -1175,9 +1195,12 @@
 					if (legendIsDisplayingCurrentLastCandle) {
 						_refreshLegendWithLatestCandleData();
 						// Ensure latestCrosshairPositionTime still points to the current latest bar
-						const currentCandles = chartCandleSeries.data().filter(isCandlestick) as CandlestickData<Time>[];
+						const currentCandles = chartCandleSeries
+							.data()
+							.filter(isCandlestick) as CandlestickData<Time>[];
 						if (currentCandles.length > 0) {
-							latestCrosshairPositionTime = currentCandles[currentCandles.length - 1].time as number;
+							latestCrosshairPositionTime = currentCandles[currentCandles.length - 1]
+								.time as number;
 						}
 					}
 				}
@@ -1225,12 +1248,12 @@
 		pendingBarUpdate = null;
 		pendingVolumeUpdate = null;
 		lastUpdateTime = 0;
-		
+
 		// Show overlay for new ticker changes
 		if (newReq.requestType === 'loadNewTicker') {
 			isChartSwitching = true;
 		}
-		
+
 		const securityId =
 			typeof newReq.securityId === 'string'
 				? parseInt(newReq.securityId, 10)
@@ -1325,11 +1348,10 @@
 			chartCandleSeries.attachPrimitive(sessionHighlighting);
 		}
 		backendLoadChartData(updatedReq);
-
-		
 	}
 
-	onMount(() => { // Keep onMount synchronous
+	onMount(() => {
+		// Keep onMount synchronous
 		const chartOptions = {
 			autoSize: true,
 			crosshair: {
@@ -1352,7 +1374,7 @@
 			},
 			timeScale: {
 				timeVisible: true,
-				shiftVisibleRangeOnNewBar: false, 
+				shiftVisibleRangeOnNewBar: false,
 				borderColor: 'black'
 			},
 			rightPriceScale: {
@@ -1391,20 +1413,20 @@
 				shiftDown = false;
 			}
 		});
-		
+
 		// Add global shift key listeners for more robust detection
 		const handleGlobalKeyDown = (event: KeyboardEvent) => {
 			if (event.key === 'Shift') {
 				shiftDown = true;
 			}
 		};
-		
+
 		const handleGlobalKeyUp = (event: KeyboardEvent) => {
 			if (event.key === 'Shift') {
 				shiftDown = false;
 			}
 		};
-		
+
 		document.addEventListener('keydown', handleGlobalKeyDown);
 		document.addEventListener('keyup', handleGlobalKeyUp);
 		chartContainer.addEventListener('mousedown', handleMouseDown);
@@ -1573,7 +1595,9 @@
 			priceFormat: { type: 'volume' },
 			priceScaleId: ''
 		});
-		chartVolumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 }, visible: false });
+		chartVolumeSeries
+			.priceScale()
+			.applyOptions({ scaleMargins: { top: 0.8, bottom: 0 }, visible: false });
 		chartCandleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.2 } });
 		const smaOptions: DeepPartial<LineStyleOptions & SeriesOptionsCommon> = {
 			lineWidth: 1,
@@ -1617,7 +1641,12 @@
 		chart.subscribeCrosshairMove((param) => {
 			// Type guard for CandlestickData (local to this callback)
 			const isCandlestickLocal = (data: any): data is CandlestickData<Time> =>
-				data && typeof data === 'object' && 'open' in data && 'high' in data && 'low' in data && 'close' in data;
+				data &&
+				typeof data === 'object' &&
+				'open' in data &&
+				'high' in data &&
+				'low' in data &&
+				'close' in data;
 			// Type guard for HistogramData (local to this callback)
 			const isHistogramLocal = (data: any): data is HistogramData<Time> =>
 				data && typeof data === 'object' && 'value' in data;
@@ -1631,10 +1660,13 @@
 			}
 
 			// Filter out whitespace to get only actual chart data points
-			const allCandles = candleSeriesActualData.filter(isCandlestickLocal) as CandlestickData<Time>[];
+			const allCandles = candleSeriesActualData.filter(
+				isCandlestickLocal
+			) as CandlestickData<Time>[];
 			const allVolumes = volumeSeriesActualData.filter(isHistogramLocal) as HistogramData<Time>[];
 
-			if (!allCandles.length) { // If, after filtering, there are no valid candles
+			if (!allCandles.length) {
+				// If, after filtering, there are no valid candles
 				hoveredCandleData.set(defaultHoveredCandleData);
 				return;
 			}
@@ -1646,7 +1678,8 @@
 			const lastCandleInSeries = allCandles[allCandles.length - 1];
 			const lastCandleIndex = allCandles.length - 1;
 
-			const hoveredCandleFromParam = param && param.seriesData ? param.seriesData.get(chartCandleSeries) : undefined;
+			const hoveredCandleFromParam =
+				param && param.seriesData ? param.seriesData.get(chartCandleSeries) : undefined;
 			const logicalIdx = param?.logical; // The logical index of the bar under the crosshair
 
 			// Decision logic for which bar's data to display
@@ -1657,7 +1690,9 @@
 			} else if (param && param.time !== undefined && isCandlestickLocal(hoveredCandleFromParam)) {
 				// Case 2: Crosshair is over a valid candle data point, and not logically to the right.
 				// Ensure this hovered candle is one of our 'allCandles'.
-				const potentialBarIndex = allCandles.findIndex(c => c.time === hoveredCandleFromParam.time);
+				const potentialBarIndex = allCandles.findIndex(
+					(c) => c.time === hoveredCandleFromParam.time
+				);
 				if (potentialBarIndex !== -1) {
 					barToUse = hoveredCandleFromParam;
 					indexOfBarInAllCandles = potentialBarIndex;
@@ -1674,25 +1709,30 @@
 
 			// Get volume for the barToUse
 			// Try to get volume from param if it matches the barToUse's time (most direct)
-			const correspondingVolumeFromParam = param && param.seriesData ? param.seriesData.get(chartVolumeSeries) : undefined;
-			if (isHistogramLocal(correspondingVolumeFromParam) && correspondingVolumeFromParam.time === barToUse.time) {
+			const correspondingVolumeFromParam =
+				param && param.seriesData ? param.seriesData.get(chartVolumeSeries) : undefined;
+			if (
+				isHistogramLocal(correspondingVolumeFromParam) &&
+				correspondingVolumeFromParam.time === barToUse.time
+			) {
 				volumeForBar = correspondingVolumeFromParam.value;
 			} else {
 				// Fallback: find volume by time from allVolumes array
-				const volumeMatch = allVolumes.find(v => v.time === barToUse.time);
+				const volumeMatch = allVolumes.find((v) => v.time === barToUse.time);
 				if (volumeMatch) {
 					volumeForBar = volumeMatch.value;
 				} else if (barToUse.time === lastCandleInSeries.time && allVolumes.length > 0) {
 					// If it's the last candle and no direct time match for volume,
 					// try taking the absolute last volume entry as a weaker fallback.
-					volumeForBar = allVolumes[allVolumes.length -1].value;
+					volumeForBar = allVolumes[allVolumes.length - 1].value;
 				}
 				// if no volume found, volumeForBar remains 0 (initialized value)
 			}
 
 			// Calculations (ADR, CHG) based on barToUse and indexOfBarInAllCandles
 			let barsForADR;
-			if (indexOfBarInAllCandles >= 19) { // Need 20 bars for ADR (current + 19 previous)
+			if (indexOfBarInAllCandles >= 19) {
+				// Need 20 bars for ADR (current + 19 previous)
 				barsForADR = allCandles.slice(indexOfBarInAllCandles - 19, indexOfBarInAllCandles + 1);
 			} else {
 				barsForADR = allCandles.slice(0, indexOfBarInAllCandles + 1);
@@ -1720,7 +1760,7 @@
 			});
 
 			latestCrosshairPositionTime = barToUse.time as number;
-			latestCrosshairPositionY = (param && param.point) ? param.point.y : 0;
+			latestCrosshairPositionY = param && param.point ? param.point.y : 0;
 
 			/*
 			// Original RVOL calculation logic was here, would need adaptation
@@ -1770,7 +1810,10 @@
 					});
 				}
 			}
-			if ((chartCandleSeries.data().length - logicalRange.to) / barsOnScreen < bufferInScreenSizes) {
+			if (
+				(chartCandleSeries.data().length - logicalRange.to) / barsOnScreen <
+				bufferInScreenSizes
+			) {
 				// forward load
 				if (chartLatestDataReached) {
 					return;
@@ -1929,12 +1972,7 @@
 	});
 
 	// Handle event marker clicks
-	function handleEventClick(
-		events: EventMarker['events'],
-		x: number,
-		y: number,
-		time: number
-	) {
+	function handleEventClick(events: EventMarker['events'], x: number, y: number, time: number) {
 		// Check if clicking on the same event that's already selected
 		if (
 			selectedEvent &&
@@ -2030,18 +2068,25 @@
 			filingType: filingEvent.title,
 			link: filingEvent.url // Use the non-optional URL
 		};
-		
-		// Call the function from chat interface
-		openChatAndQuery(filingContext, `Summarize the attached filing and any relevant exhibits: ${filingEvent.title}`);
-	}
 
+		// Call the function from chat interface
+		openChatAndQuery(
+			filingContext,
+			`Summarize the attached filing and any relevant exhibits: ${filingEvent.title}`
+		);
+	}
 </script>
 
-<div class="chart" id="chart_container-{chartId}" style="width: {width}px; position: relative;" tabindex="-1">
+<div
+	class="chart"
+	id="chart_container-{chartId}"
+	style="width: {width}px; position: relative;"
+	tabindex="-1"
+>
 	<Legend instance={currentChartInstance} {hoveredCandleData} {width} />
 	<Shift {shiftOverlay} />
 	<DrawingMenu {drawingMenuProps} />
-	
+
 	<!-- Chart switching overlay -->
 	{#if isChartSwitching}
 		<div class="chart-switching-overlay"></div>
@@ -2201,7 +2246,7 @@
 		transition: background 0.2s;
 	}
 	.event-row:hover {
-		background: rgba(255,255,255,0.05);
+		background: rgba(255, 255, 255, 0.05);
 	}
 	.event-type {
 		font-size: 0.95rem;
@@ -2227,7 +2272,9 @@
 		font-size: 0.85rem;
 		font-weight: 600;
 		text-decoration: none;
-		transition: background-color 0.2s ease, color 0.2s ease;
+		transition:
+			background-color 0.2s ease,
+			color 0.2s ease;
 	}
 	.btn-primary {
 		background-color: var(--accent-color, #3a8bf7);
@@ -2252,7 +2299,7 @@
 		border: 1px solid var(--ui-border, #444);
 	}
 	.btn-tertiary:hover {
-		background-color: rgba(255,255,255,0.1);
+		background-color: rgba(255, 255, 255, 0.1);
 		color: #fff;
 	}
 	.filing-row {
@@ -2279,7 +2326,7 @@
 		font-size: 0.7rem;
 		height: 1.3rem;
 	}
-	
+
 	.chart-switching-overlay {
 		position: absolute;
 		top: 0;
@@ -2292,7 +2339,7 @@
 		animation: fadeInOverlay 0.2s ease-out forwards;
 		pointer-events: none; /* Allow clicks to pass through */
 	}
-	
+
 	@keyframes fadeInOverlay {
 		from {
 			opacity: 0;
@@ -2301,7 +2348,7 @@
 			opacity: 1;
 		}
 	}
-	
+
 	@keyframes fadeInDown {
 		from {
 			opacity: 0;
