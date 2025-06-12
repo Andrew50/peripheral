@@ -174,8 +174,6 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			}
 
 			switch v.Stage {
-			case StagePlanMore:
-
 			case StageExecute:
 				// Create an executor to handle function calls
 				logger, _ := zap.NewProduction()
