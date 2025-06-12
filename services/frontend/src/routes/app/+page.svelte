@@ -55,7 +55,7 @@
 	import type { Instance } from '$lib/utils/types/types';
 
 	// Add import near the top with other imports
-	import Screensaver from '$lib/features/screensaver/screensaver.svelte';
+	// import Screensaver from '$lib/features/screensaver/screensaver.svelte';
 
 	// Add new import for Query component
 	import Query from '$lib/features/chat/chat.svelte';
@@ -131,10 +131,11 @@
 	const MIN_TICKER_HEIGHT = 100;
 	const MAX_TICKER_HEIGHT = 600;
 
+	// DEPRECATED: Screensaver functionality
 	// Add state variables after other state declarations
-	let screensaverActive = false;
-	let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
-	const INACTIVITY_TIMEOUT = 5 * 1000; // 5 seconds in milliseconds
+	// let screensaverActive = false;
+	// let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+	// const INACTIVITY_TIMEOUT = 5 * 1000; // 5 seconds in milliseconds
 
 	// Add left sidebar state variables next to the other state variables
 	let leftMenuWidth = 550; // <-- Set initial width to 300
@@ -161,6 +162,10 @@
 	// Import and call connect after isPublicViewing is set
 	import { connect } from '$lib/utils/stream/socket';
 	connect();
+
+	// DEPRECATED: Screensaver import
+	// Add import near the top with other imports
+	// import Screensaver from '$lib/features/screensaver/screensaver.svelte';
 
 	// Apply color scheme reactively based on the store
 	$: if ($settings.colorScheme && browser) {
@@ -300,25 +305,6 @@
 		// Force refresh of the profile icon
 		profileIconKey++;
 
-		// Setup activity listeners
-		if (browser) {
-			// Use more specific events that indicate user activity
-			const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
-
-			// Remove any existing listeners first to avoid duplicates
-			activityEvents.forEach((event) => {
-				document.removeEventListener(event, resetInactivityTimer);
-			});
-
-			// Add the listeners
-			activityEvents.forEach((event) => {
-				document.addEventListener(event, resetInactivityTimer);
-			});
-
-			// Initialize the timer
-			resetInactivityTimer();
-		}
-
 		// Clean up subscription on component destroy
 		return () => {
 			unsubscribe();
@@ -326,9 +312,10 @@
 	});
 
 	onDestroy(() => {
-		if (inactivityTimer) {
-			clearTimeout(inactivityTimer);
-		}
+		// DEPRECATED: Screensaver inactivity timer cleanup
+		// if (inactivityTimer) {
+		// 	clearTimeout(inactivityTimer);
+		// }
 
 		// Clean up all activity listeners
 		if (browser && document) {
@@ -338,11 +325,12 @@
 			stopSidebarResize();
 			stopLeftResize();
 
+			// DEPRECATED: Clean up screensaver activity listeners
 			// Clean up all activity listeners
-			const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
-			activityEvents.forEach((event) => {
-				document.removeEventListener(event, resetInactivityTimer);
-			});
+			// const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
+			// activityEvents.forEach((event) => {
+			// 	document.removeEventListener(event, resetInactivityTimer);
+			// });
 		}
 	});
 
@@ -715,26 +703,27 @@
 		document.removeEventListener('touchend', stopSidebarResize);
 	}
 
+	// DEPRECATED: Screensaver functions
 	// Add function after other function declarations
-	function resetInactivityTimer() {
-		if (inactivityTimer) {
-			clearTimeout(inactivityTimer);
-		}
-		if (!screensaverActive) {
-			inactivityTimer = setTimeout(() => {
-				// Only activate screensaver, don't hide the chart
-				screensaverActive = true;
-			}, INACTIVITY_TIMEOUT);
-		}
-	}
+	// function resetInactivityTimer() {
+	// 	if (inactivityTimer) {
+	// 		clearTimeout(inactivityTimer);
+	// 	}
+	// 	if (!screensaverActive) {
+	// 		inactivityTimer = setTimeout(() => {
+	// 			// Only activate screensaver, don't hide the chart
+	// 			screensaverActive = true;
+	// 		}, INACTIVITY_TIMEOUT);
+	// 	}
+	// }
 
-	function toggleScreensaver() {
-		screensaverActive = !screensaverActive;
-		// If turning off screensaver, reset the inactivity timer
-		if (!screensaverActive) {
-			resetInactivityTimer();
-		}
-	}
+	// function toggleScreensaver() {
+	// 	screensaverActive = !screensaverActive;
+	// 	// If turning off screensaver, reset the inactivity timer
+	// 	if (!screensaverActive) {
+	// 		resetInactivityTimer();
+	// 	}
+	// }
 
 	// Add reactive statements to update the profile icon when data changes
 	$: if (profilePic || username) {
@@ -902,9 +891,10 @@
 				<!-- Chart area -->
 				<div class="chart-wrapper">
 					<ChartContainer width={chartWidth} />
-					{#if screensaverActive}
+					<!-- DEPRECATED: Screensaver functionality -->
+					<!-- {#if screensaverActive}
 						<Screensaver on:exit={() => (screensaverActive = false)} />
-					{/if}
+					{/if} -->
 				</div>
 
 				<!-- Bottom windows container -->

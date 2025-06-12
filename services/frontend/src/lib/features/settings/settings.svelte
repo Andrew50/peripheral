@@ -11,7 +11,8 @@
 
 	let errorMessage: string = '';
 	let tempSettings: Settings = { ...get(settings) }; // Create a local copy to work with
-	let activeTab: 'chart' | 'format' | 'account' | 'screensaver' | 'appearance' = 'chart';
+	// DEPRECATED: Removed screensaver from active tabs
+	let activeTab: 'chart' | 'format' | 'account' | 'appearance' = 'chart';
 	let watchlists: Array<{ watchlistId: string; watchlistName: string }> = [];
 	let customTickers = ''; // For managing comma-separated list of tickers
 
@@ -33,21 +34,22 @@
 		return username === 'Guest';
 	};
 
+	// DEPRECATED: Screensaver settings initialization
 	// Initialize timeframes as a comma-separated string for editing
-	let timeframesString = tempSettings.screensaverTimeframes?.join(',') || '1w,1d,1h,1';
+	// let timeframesString = tempSettings.screensaverTimeframes?.join(',') || '1w,1d,1h,1';
 
 	onMount(() => {
-		// Load watchlists for the screensaver settings
-		privateRequest<Array<{ watchlistId: string; watchlistName: string }>>('getWatchlists', {}).then(
-			(response) => {
-				watchlists = response || [];
-			}
-		);
+		// DEPRECATED: Load watchlists for the screensaver settings
+		// privateRequest<Array<{ watchlistId: string; watchlistName: string }>>('getWatchlists', {}).then(
+		// 	(response) => {
+		// 		watchlists = response || [];
+		// 	}
+		// );
 
-		// Initialize custom tickers string if available
-		if (tempSettings.screensaverTickers && tempSettings.screensaverTickers.length > 0) {
-			customTickers = tempSettings.screensaverTickers.join(',');
-		}
+		// DEPRECATED: Initialize custom tickers string if available
+		// if (tempSettings.screensaverTickers && tempSettings.screensaverTickers.length > 0) {
+		// 	customTickers = tempSettings.screensaverTickers.join(',');
+		// }
 
 		// Apply the current color scheme on mount using the store value
 		// if ($settings.colorScheme && browser) {
@@ -59,21 +61,22 @@
 	});
 
 	function updateLayout() {
+		// DEPRECATED: Screensaver timeframes and tickers update
 		// Update timeframes array from the comma-separated string
-		if (timeframesString) {
-			tempSettings.screensaverTimeframes = timeframesString
-				.split(',')
-				.map((tf) => tf.trim())
-				.filter((tf) => tf.length > 0);
-		}
+		// if (timeframesString) {
+		// 	tempSettings.screensaverTimeframes = timeframesString
+		// 		.split(',')
+		// 		.map((tf) => tf.trim())
+		// 		.filter((tf) => tf.length > 0);
+		// }
 
 		// Update custom tickers if user-defined is selected
-		if (tempSettings.screensaverDataSource === 'user-defined' && customTickers) {
-			tempSettings.screensaverTickers = customTickers
-				.split(',')
-				.map((ticker) => ticker.trim().toUpperCase())
-				.filter((ticker) => ticker.length > 0);
-		}
+		// if (tempSettings.screensaverDataSource === 'user-defined' && customTickers) {
+		// 	tempSettings.screensaverTickers = customTickers
+		// 		.split(',')
+		// 		.map((ticker) => ticker.trim().toUpperCase())
+		// 		.filter((ticker) => ticker.length > 0);
+		// }
 
 		if (tempSettings.chartRows > 0 && tempSettings.chartColumns > 0) {
 			privateRequest<void>('setSettings', { settings: tempSettings }).then(() => {
@@ -283,12 +286,13 @@
 			>
 				Format
 			</button>
-			<button
+			<!-- DEPRECATED: Screensaver tab -->
+			<!-- <button
 				class="tab-button {activeTab === 'screensaver' ? 'active' : ''}"
 				on:click={() => (activeTab = 'screensaver')}
 			>
 				Screensaver
-			</button>
+			</button> -->
 			<button
 				class="tab-button {activeTab === 'appearance' ? 'active' : ''}"
 				on:click={() => (activeTab = 'appearance')}
@@ -369,7 +373,8 @@
 							</div>
 						</div>
 
-						<div class="setting-item">
+						<!-- DEPRECATED: Screensaver enable/disable setting -->
+						<!-- <div class="setting-item">
 							<label for="enableScreensaver">Enable Screensaver</label>
 							<div class="toggle-container">
 								<select
@@ -381,7 +386,7 @@
 									<option value={false}>No</option>
 								</select>
 							</div>
-						</div>
+						</div> -->
 					</div>
 				</div>
 
@@ -417,7 +422,8 @@
 						</div>
 					</div>
 				</div>
-			{:else if activeTab === 'screensaver'}
+			<!-- DEPRECATED: Screensaver settings section -->
+			<!-- {:else if activeTab === 'screensaver'}
 				<div class="settings-section">
 					<h3>Screensaver Settings</h3>
 
@@ -523,7 +529,7 @@
 							idle periods.
 						{/if}
 					</div>
-				</div>
+				</div> -->
 			{:else if activeTab === 'appearance'}
 				<div class="settings-section">
 					<h3>Color Scheme</h3>

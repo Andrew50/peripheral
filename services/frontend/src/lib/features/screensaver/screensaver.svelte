@@ -1,3 +1,9 @@
+<!-- 
+DEPRECATED: This screensaver component has been deprecated and is no longer in use.
+All screensaver functionality has been commented out in the frontend.
+-->
+
+<!--
 <script lang="ts">
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import type { Instance } from '$lib/utils/types/types';
@@ -215,7 +221,6 @@
 </script>
 
 {#if active}
-	<!-- Fullscreen overlay to capture clicks anywhere -->
 	<div
 		class="screensaver-container"
 		on:click={handleClick}
@@ -244,7 +249,6 @@
 		z-index: 1000;
 		pointer-events: auto;
 		cursor: pointer;
-		/* Make the container transparent so it doesn't block the chart */
 		background-color: transparent;
 	}
 
@@ -320,3 +324,4 @@
 		}
 	}
 </style>
+-->
