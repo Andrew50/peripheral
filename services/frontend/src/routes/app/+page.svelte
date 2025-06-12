@@ -918,8 +918,8 @@
 								<Alerts />
 							<!--{:else if $activeMenu === 'study'}
 								<Study />-->
-							{:else if $activeMenu === 'news'}
-								<News />
+							<!--{:else if $activeMenu === 'news'}
+								<News />-->
 							{/if}
 						</div>
 
