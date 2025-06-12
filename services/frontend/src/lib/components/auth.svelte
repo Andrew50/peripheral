@@ -7,6 +7,9 @@
 	import Header from '$lib/components/header.svelte';
 	import { goto } from '$app/navigation';
 	import { writable } from 'svelte/store';
+	import { createEventDispatcher } from 'svelte';
+
+	const dispatch = createEventDispatcher();
 
 	export let loginMenu: boolean = false;
 	let email = '';
@@ -71,6 +74,10 @@
 				sessionStorage.setItem('profilePic', r.profilePic);
 				sessionStorage.setItem('username', r.username);
 			}
+			
+			// Dispatch success event for modal usage
+			dispatch('authSuccess', { type: 'login', user: r });
+			
 			goto('/app');
 		} catch (error) {
 			let displayError = 'Login failed. Please try again.';
@@ -99,7 +106,7 @@
 				sessionStorage.removeItem('userId');
 			}
 
-			await publicRequest('signup', { email: email, username: username, password: password })
+			await publicRequest('signup', { email: email, username: username, password: password });
 			await signIn(email, password);
 		} catch (error) {
             console.log(error)

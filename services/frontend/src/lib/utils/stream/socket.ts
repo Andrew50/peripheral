@@ -1,5 +1,5 @@
 // socket.ts
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import { streamInfo, handleTimestampUpdate } from '$lib/utils/stores/stores';
 import type { StreamInfo, TradeData, QuoteData, CloseData } from '$lib/utils/types/types';
 import { base_url } from '$lib/utils/helpers/backend';
@@ -53,10 +53,12 @@ const maxReconnectAttempts: number = 5;
 let shouldReconnect: boolean = true;
 
 export const latestValue = new Map<string, StreamData>(); 
-connect();
+import { isPublicViewing } from '$lib/utils/stores/stores';
 
-function connect() {
+export function connect() {
 	if (!browser) return;
+	if( get(isPublicViewing))return;
+	
 	try {
 		const token = sessionStorage.getItem('authToken');
 		const socketUrl = base_url + '/ws' + '?token=' + token;

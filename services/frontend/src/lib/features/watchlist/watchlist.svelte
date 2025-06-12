@@ -5,9 +5,10 @@
 	import { onMount, tick } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { queryInstanceInput } from '$lib/components/input/input.svelte';
-	import { flagWatchlistId, watchlists, flagWatchlist } from '$lib/utils/stores/stores';
+	import { flagWatchlistId, watchlists, flagWatchlist, isPublicViewing } from '$lib/utils/stores/stores';
 	import '$lib/styles/global.css';
 	import WatchlistList from './watchlistList.svelte';
+	import { showAuthModal } from '$lib/stores/authModal';
 	// Extended Instance type to include watchlistItemId
 	interface WatchlistItem extends Instance {
 		watchlistItemId?: number;
@@ -105,6 +106,11 @@
 	});
 
 	function addInstance() {
+		if (get(isPublicViewing)) {
+			showAuthModal('watchlists', 'signup');
+			return;
+		}
+
 		const inst = { ticker: ''};
 		queryInstanceInput(['ticker'], ['ticker'], inst, 'ticker', 'Add Symbol to Watchlist').then((i: WatchlistItem) => {
 			const aList = get(activeList);
