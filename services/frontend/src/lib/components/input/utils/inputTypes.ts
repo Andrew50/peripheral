@@ -20,4 +20,5 @@ export interface InputQuery {
     requiredKeys: InstanceAttributes[] | 'any';
     possibleKeys: InstanceAttributes[];
     securities?: Instance[];
+    customTitle?: string;
 }

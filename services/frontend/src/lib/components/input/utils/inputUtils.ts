@@ -1,4 +1,4 @@
-import { privateRequest } from '$lib/utils/helpers/backend';
+import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 import { allKeys, type InstanceAttributes } from './inputTypes';
 export { capitalize, formatTimeframe, detectInputTypeSync };
 import { type Instance } from '$lib/utils/types/types';
@@ -82,7 +82,7 @@ let isLoadingSecurities = false;
 				// Add a small delay to avoid too many rapid requests during typing
 				await new Promise((resolve) => setTimeout(resolve, 10));
 
-				const securities = await privateRequest<Instance[]>('getSecuritiesFromTicker', {
+				const securities = await publicRequest<Instance[]>('getSecuritiesFromTicker', {
 					ticker: inputString
 				});
 

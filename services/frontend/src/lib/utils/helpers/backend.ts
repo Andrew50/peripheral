@@ -126,8 +126,9 @@ export async function privateRequest<T>(
     });
 
     if (response.status === 401) {
-        goto('/login');
-        throw new Error('Authentication failed');
+        // For public viewing mode, silently handle 401 errors
+        console.warn('Authentication required for:', func);
+        throw new Error('Authentication required');
     } else if (response.ok) {
         const result = (await response.json()) as T;
         
@@ -148,6 +149,9 @@ export async function privateRequest<T>(
         console.error('payload: ', payload, 'error: ', errorMessage);
         return Promise.reject(errorMessage);
     }
+    
+    // This should never be reached, but TypeScript requires a return
+    throw new Error('Unexpected end of function');
 }
 
 export async function queueRequest<T>(
