@@ -22,6 +22,7 @@
 	 */
 
 	import { allKeys, type InstanceAttributes, type InputQuery } from '$lib/components/input/utils/inputTypes';
+	import { isPublicViewing } from '$lib/utils/stores/stores';
 	let currentSecurityResultRequest = 0;
 	let loadedSecurityResultRequest = -1;
 	let isLoadingSecurities = false;
@@ -29,9 +30,16 @@
 
 	let activePromiseReject: ((reason?: any) => void) | null = null;
 	let isDocumentListenerActive = false; // Add guard for document listener
-	privateRequest<[]>('getSecurityClassifications', {}).then((v: []) => {
-		filterOptions = v;
-	});
+	
+	// Only load security classifications if not in public viewing mode
+	if (browser && !get(isPublicViewing)) {
+		privateRequest<[]>('getSecurityClassifications', {}).then((v: []) => {
+			filterOptions = v;
+		}).catch((error) => {
+			console.warn('Failed to load security classifications:', error);
+			filterOptions = [];
+		});
+	}
 
 	const inactiveInputQuery: InputQuery = {
 		status: 'inactive',
@@ -40,7 +48,8 @@
 		inputType: '',
 		requiredKeys: 'any',
 		possibleKeys: [],
-		instance: {}
+		instance: {},
+		customTitle: undefined
 	};
 	export const inputQuery: Writable<InputQuery> = writable({ ...inactiveInputQuery });
 
@@ -138,7 +147,8 @@
 		requiredKeys: InstanceAttributes[] | 'any',
 		optionalKeys: InstanceAttributes[] | 'any',
 		instance: Instance = {},
-		forcedInputType?: string
+		forcedInputType?: string,
+		customTitle?: string
 	): Promise<Instance> {
 		// If an input query is already active, force its cancellation.
 		if (get(inputQuery).status !== 'inactive') {
@@ -190,6 +200,7 @@
 			instance,
 			inputString: initialInputString, // Use the initial input string if provided
 			inputType: forcedInputType || '', // Set forced input type if provided
+			customTitle: customTitle, // Set custom title if provided
 			status: 'initializing'
 		}));
 
@@ -307,7 +318,6 @@
 
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
-	import { ESTStringToUTCTimestamp, UTCTimestampToESTString } from '$lib/utils/helpers/timestamp';
 	let prevFocusedElement: HTMLElement | null = null;
 	let highlightedIndex = -1;
 	
@@ -572,7 +582,7 @@
 			}
 		});
 
-		if (browser) {
+		if (browser && !get(isPublicViewing)) {
 			type SecurityClassifications = {
 				sectors: string[];
 				industries: string[];
@@ -582,7 +592,11 @@
 					sectors = classifications.sectors;
 					industries = classifications.industries;
 				}
-			);
+			).catch((error) => {
+				console.warn('Failed to load security classifications in onMount:', error);
+				sectors = [];
+				industries = [];
+			});
 		}
 	});
 
@@ -657,7 +671,7 @@
 				{:else if $inputQuery.inputType === 'ticker'}
 					<div class="table-container">
 						<div class="search-header">
-							<span class="search-title">Symbol Search</span>
+							<span class="search-title">{$inputQuery.customTitle || 'Symbol Search'}</span>
 						</div>
 						<div class="search-divider"></div>
 						{#if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}

@@ -37,13 +37,16 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
+	import { get } from 'svelte/store';
 	import {
 		initStores,
 		streamInfo,
 		formatTimestamp,
 		dispatchMenuChange,
 		menuWidth,
-		settings
+		settings,
+		isPublicViewing as isPublicViewingStore
 	} from '$lib/utils/stores/stores';
 	import { writable, type Writable } from 'svelte/store';
 	import { colorSchemes, applyColorScheme } from '$lib/styles/colorSchemes';
@@ -61,6 +64,10 @@
 
 	// Import the standalone calendar component
 	import Calendar from '$lib/components/calendar/calendar.svelte';
+
+	// Import auth modal
+	import AuthModal from '$lib/components/authModal.svelte';
+	import { authModalStore, hideAuthModal } from '$lib/stores/authModal';
 
 	// Import extended hours toggle store
 	import { extendedHoursToggleVisible, hideExtendedHoursToggle, activeChartInstance } from '$lib/features/chart/interface';
@@ -135,6 +142,25 @@
 
 	// Calendar state
 	let calendarVisible = false;
+
+	// Public viewing mode state - initialize from URL parameters synchronously
+	let isPublicViewing = false;
+	let sharedConversationId = '';
+	
+	// Check for shared conversation parameter immediately (before component mounts)
+	if (browser && $page?.url?.searchParams) {
+		const shareParam = $page.url.searchParams.get('share');
+		if (shareParam) {
+			isPublicViewing = true;
+			sharedConversationId = shareParam;
+			// Update the global store so other components know we're in public viewing mode
+			isPublicViewingStore.set(true);
+		}
+	}
+
+	// Import and call connect after isPublicViewing is set
+	import { connect } from '$lib/utils/stream/socket';
+	connect();
 
 	// Apply color scheme reactively based on the store
 	$: if ($settings.colorScheme && browser) {
@@ -249,9 +275,17 @@
 			// Add global keyboard event listener with stable function reference
 			document.addEventListener('keydown', keydownHandler);
 		}
-		privateRequest<string>('verifyAuth', {}).catch(() => {
-			goto('/login');
-		});
+
+		// Handle authentication based on public viewing mode (already determined above)
+		if (!isPublicViewing) {
+			// Normal auth flow for regular users
+			privateRequest<string>('verifyAuth', {}).catch(() => {
+				goto('/login');
+			});
+		} else {
+			console.log('Public viewing mode for conversation:', sharedConversationId);
+		}
+
 		initStores();
 
 		dispatchMenuChange.subscribe((menuName: string) => {
@@ -829,6 +863,16 @@
 		on:change={() => hideExtendedHoursToggle()}
 		on:close={() => hideExtendedHoursToggle()}
 	/>
+	<AuthModal 
+		visible={$authModalStore.visible}
+		defaultMode={$authModalStore.mode}
+		requiredFeature={$authModalStore.requiredFeature}
+		on:success={() => {
+			hideAuthModal();
+			// Optional: refresh page or update auth state
+		}}
+		on:close={hideAuthModal}
+	/>
 	<!--<Algo />-->
 	<!-- Main area wrapper -->
 	<div class="app-container">
@@ -838,7 +882,7 @@
 				<div class="left-sidebar" style="width: {leftMenuWidth}px;">
 					<div class="sidebar-content">
 						<div class="main-sidebar-content">
-							<Query />
+							<Query {isPublicViewing} {sharedConversationId} />
 						</div>
 					</div>
 					<div
@@ -918,8 +962,8 @@
 								<Alerts />
 							<!--{:else if $activeMenu === 'study'}
 								<Study />-->
-							{:else if $activeMenu === 'news'}
-								<News />
+							<!--{:else if $activeMenu === 'news'}
+								<News />-->
 							{/if}
 						</div>
 

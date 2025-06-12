@@ -68,10 +68,8 @@
 
 	async function fetchWhyMoving(tkr: string) {
 		if (!tkr) return;
-        console.log('fetchWhyMoving', tkr);
 		try {
 			const res = await privateRequest<any[]>('getWhyMoving', { tickers: [tkr] });
-            console.log('whyMoving', res);
 			if (!Array.isArray(res) || res.length === 0) return;
 			const item = res[0];
 			if (!item?.content) return;
