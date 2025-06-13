@@ -80,6 +80,7 @@ Your goal is to provide accurate information and execute tasks efficiently, pote
     *   `rounds`: An array of 'round' objects. Each round object MUST contain:
         *   `parallel` (boolean): Set to `true` if the calls within this round can be executed in parallel, `false` if they must be executed sequentially.
         *   `calls`: An array of function call objects (`name`, `args`). This represents the plan for the *current turn only*.
+    
     *   `discard_results` (optional): An array of result IDs (integers) to discard from context in future planning iterations. Use this to remove execution results that are no longer needed to avoid context bloat. Guidelines for discarding:
         *   **Discard intermediate results** once you have the final information you need (e.g., discard search results after finding the specific data you were looking for)
         *   **Keep results that will be referenced** in your final response to the user
