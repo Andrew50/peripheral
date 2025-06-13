@@ -158,10 +158,19 @@ func contentChunkSchema() *genai.Schema {
 const planningModel = "gemini-2.5-flash-preview-05-20"
 const finalResponseModel = "gemini-2.5-flash-preview-05-20"
 
-func RunPlanner(ctx context.Context, conn *data.Conn, prompt string) (interface{}, error) {
-	systemPrompt, err := getSystemInstruction("defaultSystemPrompt")
-	if err != nil {
-		return nil, fmt.Errorf("error getting system instruction: %w", err)
+func RunPlanner(ctx context.Context, conn *data.Conn, prompt string, initialRound bool) (interface{}, error) {
+	var systemPrompt string
+	var err error
+	if initialRound {
+		systemPrompt, err = getSystemInstruction("defaultSystemPrompt")
+		if err != nil {
+			return nil, fmt.Errorf("error getting system instruction: %w", err)
+		}
+	} else {
+		systemPrompt, err = getSystemInstruction("IntermediateSystemPrompt")
+		if err != nil {
+			return nil, fmt.Errorf("error getting system instruction: %w", err)
+		}
 	}
 	plan, err := _geminiGeneratePlan(ctx, conn, systemPrompt, prompt)
 	if err != nil {

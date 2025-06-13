@@ -8,7 +8,7 @@ export async function generateSharedConversationLink(conversationId: string): Pr
 		});
 		
 		if (response.success) {
-			return `${window.location.origin}/app?share=${conversationId}`;
+			return `${window.location.origin}/share/${conversationId}`;
 		}
 		return null;
 	} catch (error) {
