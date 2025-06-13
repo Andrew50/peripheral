@@ -382,6 +382,9 @@ func GetPublicConversation(conn *data.Conn, rawArgs json.RawMessage) (interface{
 	var userID int
 	var title string
 	isPublic, userID, title, err := checkIfConversationIsPublic(conn, args.ConversationID)
+	if err != nil {
+		return nil, fmt.Errorf("issue checking if convo is public: %w", err)
+	}
 	if !isPublic {
 		return nil, fmt.Errorf("no access to conversation")
 	}
