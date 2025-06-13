@@ -34,6 +34,7 @@ var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, erro
 	"googleCallback":          GoogleCallback,
 	"getPublicConversation":   agent.GetPublicConversation,
 	"getSecuritiesFromTicker": helpers.GetSecuritiesFromTicker,
+	"getConversationSnippet":  agent.GetConversationSnippet,
 }
 
 // Wrapper functions to adapt existing functions to the old signature for HTTP handlers
