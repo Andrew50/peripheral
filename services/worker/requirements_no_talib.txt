@@ -14,8 +14,9 @@ scikit-learn>=1.0.0
 matplotlib>=3.5.0
 seaborn>=0.11.0
 
-# Technical analysis libraries
+# Technical analysis libraries (alternative to TA-Lib)
 ta>=0.10.0
+pandas-ta>=0.3.14b0
 
 # Additional utilities
 python-dateutil>=2.8.0
@@ -34,10 +35,8 @@ tensorflow>=2.13.0
 torch>=2.0.0
 xgboost>=1.7.0
 
-# Financial libraries - using alternatives and specific versions
-# TA-Lib==0.4.28  # Original version that may have build issues
-# Use alternative: install from conda-forge or use pre-built wheels
-TA-Lib>=0.4.25
+# Financial libraries - using alternatives to TA-Lib
+# TA-Lib - commented out due to build issues
 yfinance>=0.2.0
 zipline-reloaded>=3.0.0
 pyfolio-reloaded>=0.9.5
@@ -52,13 +51,11 @@ pymc>=5.6.0
 # Data visualization
 plotly>=5.15.0
 
-# Data processing (performance optimized) - using alternatives to vaex
+# Data processing (performance optimized)
 pyarrow>=12.0.0
 h5py>=3.9.0
 fastparquet>=2023.10.0
-# vaex>=4.16.0  # Commented out due to build issues - use polars/dask instead
 dask[dataframe]>=2023.12.0
-# Alternative: vaex-core can be replaced with polars for similar functionality
 
 # Time series
 tsfresh>=0.20.0
@@ -85,4 +82,4 @@ line-profiler>=4.1.0
 
 # Development tools
 black>=23.0.0
-flake8>=6.0.0
+flake8>=6.0.0 
