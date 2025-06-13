@@ -1,6 +1,5 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { publicRequest } from '$lib/utils/helpers/backend';
 import satori from 'satori';
 import { Resvg } from '@resvg/resvg-js';
 import { fileURLToPath } from 'url';
@@ -10,6 +9,16 @@ const WIDTH = 1200;
 const HEIGHT = 630;
 const CACHE_DIR = '/tmp/og'; // Use /tmp instead of /var/www for development
 
+
+export async function HEAD({ params }) {
+    // Reuse the same meta lookup you do for GET
+    const { headers } = await GET({ params });
+    // SvelteKit lets you return only headers for HEAD
+    return new Response(null, {
+      status: 200,
+      headers
+    });
+  }
 export async function GET({ params }: { params: { id: string } }) {
   try {
 
@@ -21,7 +30,8 @@ export async function GET({ params }: { params: { id: string } }) {
       return new Response(cached, {
         headers: { 
           'Content-Type': 'image/png', 
-          'Cache-Control': 'public, max-age=31536000, immutable' 
+          'Cache-Control': 'public, max-age=31536000, immutable',
+          'Content-Length': cached.length.toString()
         }
       });
     } catch { 
@@ -133,7 +143,12 @@ export async function GET({ params }: { params: { id: string } }) {
     return new Response(png, {
       headers: { 
         'Content-Type': 'image/png', 
-        'Cache-Control': 'public, max-age=31536000, immutable' 
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Content-Length': png.length.toString(),
+        'Last-Modified': new Date().toUTCString(),
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type'
       }
     });
 
