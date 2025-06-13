@@ -1,17 +1,19 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { publicRequest } from '$lib/utils/helpers/backend';
+import satori from 'satori';
+import { Resvg } from '@resvg/resvg-js';
+import { fileURLToPath } from 'url';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WIDTH = 1200;
 const HEIGHT = 630;
 const CACHE_DIR = '/tmp/og'; // Use /tmp instead of /var/www for development
 
 export async function GET({ params }: { params: { id: string } }) {
   try {
-    // Dynamic imports for server-side modules
-    const satori = (await import('satori')).default;
-    const { Resvg } = await import('@resvg/resvg-js');
 
+  
     // ---------- 1) Try disk-cache  -----------------
     const filePath = path.join(CACHE_DIR, `${params.id}.png`);
     try {
@@ -47,7 +49,7 @@ export async function GET({ params }: { params: { id: string } }) {
             background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%)',
             color: 'white',
             padding: '60px',
-            fontFamily: 'Inter, system-ui, sans-serif',
+            fontFamily: 'Roboto',
             position: 'relative'
           },
           children: [
@@ -111,15 +113,9 @@ export async function GET({ params }: { params: { id: string } }) {
         height: HEIGHT,
         fonts: [
           {
-            name: 'Inter',
-            data: await getInterFont(),
+            name: 'Roboto',
+            data: await fetch('https://cdn.jsdelivr.net/fontsource/fonts/roboto@latest/latin-400-normal.ttf').then(res => res.arrayBuffer()),
             weight: 400,
-            style: 'normal',
-          },
-          {
-            name: 'Inter',
-            data: await getInterFont(),
-            weight: 700,
             style: 'normal',
           }
         ]
@@ -145,7 +141,7 @@ export async function GET({ params }: { params: { id: string } }) {
     console.error('Error generating OG image:', error);
     
     // Return the actual error for debugging
-    return new Response(`Image generation failed: ${error.message || error}`, {
+    return new Response(`Image generation failed: ${error instanceof Error ? error.message : String(error)}`, {
       status: 500,
       headers: { 'Content-Type': 'text/plain' }
     });
@@ -158,11 +154,24 @@ async function getChatSnippet(conversationId: string): Promise<{ q: string; a: s
       title: string;
       first_response: string;
     }
-
-    const result = await publicRequest<ConversationSnippetResponse>('getConversationSnippet', {
-      conversation_id: conversationId
+    // For server-side requests in Docker, use the backend service name
+    const backendUrl = process.env.BACKEND_URL || "http://backend:5058";
+    
+    const response = await fetch(`${backendUrl}/public`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        func: 'getConversationSnippet',
+        args: { conversation_id: conversationId }
+      })
     });
 
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+    }
+
+    const result = await response.json() as ConversationSnippetResponse;
+    console.log(result);
     return {
       q: result.title || 'Atlantis Chat',
       a: result.first_response || 'The new best way to trade'
@@ -173,8 +182,4 @@ async function getChatSnippet(conversationId: string): Promise<{ q: string; a: s
   }
 }
 
-async function getInterFont(): Promise<ArrayBuffer> {
-  // For development, we'll use a fallback. In production, you'd want to load the actual Inter font
-  // This is a minimal font that works with Satori
-  return new ArrayBuffer(0);
-}
+
