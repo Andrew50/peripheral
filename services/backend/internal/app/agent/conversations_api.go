@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"regexp"
+	"strings"
 	"time"
 )
 
@@ -293,27 +295,102 @@ func GetUserConversation(conn *data.Conn, userID int, _ json.RawMessage) (interf
 	return GetActiveConversationWithCache(context.Background(), conn, userID)
 }
 
+func checkIfConversationIsPublic(conn *data.Conn, conversationID string) (bool, int, string, error) {
+	var isPublic bool
+	var userID int
+	var title string
+
+	err := conn.DB.QueryRow(context.Background(), "SELECT is_public, user_id, title FROM conversations WHERE conversation_id = $1", conversationID).Scan(&isPublic, &userID, &title)
+	if err != nil {
+		return false, 0, "", err
+	}
+	return isPublic, userID, title, nil
+}
+func checkIfConversationIsPublicAndGrabPreview(conn *data.Conn, conversationID string) (bool, int, string, string, error) {
+	var isPublic bool
+	var userID int
+	var firstUserMessage string
+	var firstAssistantMessage string
+
+	isPublic, userID, _, err := checkIfConversationIsPublic(conn, conversationID)
+	// If not public, don't fetch messages
+	if err != nil || !isPublic {
+		return false, 0, "", "", err
+	}
+
+	// Get the first user message (query)
+	err = conn.DB.QueryRow(context.Background(),
+		"SELECT query FROM conversation_messages WHERE conversation_id = $1 AND archived = FALSE ORDER BY created_at ASC LIMIT 1",
+		conversationID).Scan(&firstUserMessage)
+	if err != nil && err.Error() != "no rows in result set" {
+		return false, 0, "", "", err
+	}
+
+	// Get the first assistant message content_chunks
+	var contentChunksJSON []byte
+	err = conn.DB.QueryRow(context.Background(),
+		"SELECT COALESCE(content_chunks, '[]') FROM conversation_messages WHERE conversation_id = $1 AND content_chunks IS NOT NULL AND archived = FALSE ORDER BY created_at ASC LIMIT 1",
+		conversationID).Scan(&contentChunksJSON)
+	if err != nil && err.Error() != "no rows in result set" {
+		return false, 0, "", "", err
+	}
+
+	// Extract text from content_chunks
+	if len(contentChunksJSON) > 0 {
+		var contentChunks []ContentChunk
+		if err := json.Unmarshal(contentChunksJSON, &contentChunks); err == nil {
+			// Extract text from the first few text chunks
+			var textParts []string
+			for i, chunk := range contentChunks {
+				if i >= 3 { // Limit to first 3 chunks
+					break
+				}
+				if chunk.Type == "text" {
+					if text, ok := chunk.Content.(string); ok {
+						// Remove HTML tags and clean up the text
+						cleanText := stripHTMLTags(text)
+						if len(cleanText) > 0 {
+							textParts = append(textParts, cleanText)
+						}
+					}
+				}
+			}
+			if len(textParts) > 0 {
+				firstAssistantMessage = strings.Join(textParts, " ")
+				// Limit total length for OG preview
+				if len(firstAssistantMessage) > 500 {
+					firstAssistantMessage = firstAssistantMessage[:500] + "..."
+				}
+			}
+		}
+	}
+
+	return isPublic, userID, firstUserMessage, firstAssistantMessage, nil
+}
+
 type GetPublicConversationRequest struct {
 	ConversationID string `json:"conversation_id"`
 }
 
-func GetPublicConversation(conn *data.Conn, args json.RawMessage) (interface{}, error) {
-	var req GetPublicConversationRequest
-	if err := json.Unmarshal(args, &req); err != nil {
+func GetPublicConversation(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetPublicConversationRequest
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error parsing request: %w", err)
 	}
-	fmt.Println("Getting public conversation for conversationID:", req.ConversationID)
+	fmt.Println("Getting public conversation for conversationID:", args.ConversationID)
 	var isPublic bool
 	var userID int
 	var title string
-	err := conn.DB.QueryRow(context.Background(), "SELECT is_public, user_id, title FROM conversations WHERE conversation_id = $1", req.ConversationID).Scan(&isPublic, &userID, &title)
-	if err != nil || !isPublic {
-		return nil, fmt.Errorf("conversation not found")
+	isPublic, userID, title, err := checkIfConversationIsPublic(conn, args.ConversationID)
+	if err != nil {
+		return nil, fmt.Errorf("issue checking if convo is public: %w", err)
 	}
-	fmt.Println("Getting conversation messages for userID:", userID)
+	if !isPublic {
+		return nil, fmt.Errorf("no access to conversation")
+	}
 
 	// Get the raw messages
-	messagesInterface, err := GetConversationMessages(context.Background(), conn, req.ConversationID, userID)
+	messagesInterface, err := GetConversationMessages(context.Background(), conn, args.ConversationID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +403,7 @@ func GetPublicConversation(conn *data.Conn, args json.RawMessage) (interface{}, 
 
 	// Convert to the format expected by the frontend
 	conversationData := convertDBMessagesToConversationData(messages)
-	conversationData.ConversationID = req.ConversationID
+	conversationData.ConversationID = args.ConversationID
 	conversationData.Title = title
 
 	return conversationData, nil
@@ -356,4 +433,55 @@ func SetConversationVisibility(conn *data.Conn, userID int, args json.RawMessage
 	return map[string]interface{}{
 		"success": true,
 	}, nil
+}
+
+type GetConversationSnippetArgs struct {
+	ConversationID string `json:"conversation_id"`
+}
+
+type ConversationSnippetResponse struct {
+	Title         string `json:"title"`
+	FirstResponse string `json:"first_response"`
+}
+
+func GetConversationSnippet(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetConversationSnippetArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("error parsing request: %w", err)
+	}
+
+	if args.ConversationID == "" {
+		return nil, fmt.Errorf("conversation_id is required")
+	}
+
+	// Use the updated function to get conversation preview data
+	isPublic, _, title, firstResponse, err := checkIfConversationIsPublicAndGrabPreview(conn, args.ConversationID)
+	if !isPublic {
+		return nil, fmt.Errorf("conversation not public")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("error fetching conversation: %w", err)
+	}
+
+	return ConversationSnippetResponse{
+		Title:         title,
+		FirstResponse: firstResponse,
+	}, nil
+}
+
+// stripHTMLTags removes HTML tags and ticker formatting from text content
+func stripHTMLTags(text string) string {
+	// Remove HTML tags
+	re := regexp.MustCompile(`<[^>]*>`)
+	cleaned := re.ReplaceAllString(text, "")
+
+	// Remove ticker formatting $$$TICKER-TIMESTAMP$$$ and replace with just TICKER
+	tickerRe := regexp.MustCompile(`\$\$\$([A-Z]+)-\d+\$\$\$`)
+	cleaned = tickerRe.ReplaceAllString(cleaned, "$1")
+
+	// Clean up extra whitespace
+	cleaned = strings.TrimSpace(cleaned)
+	cleaned = regexp.MustCompile(`\s+`).ReplaceAllString(cleaned, " ")
+
+	return cleaned
 }
