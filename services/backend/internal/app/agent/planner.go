@@ -34,6 +34,7 @@ type Round struct {
 type Plan struct {
 	Stage          Stage       `json:"stage"`
 	Rounds         []Round     `json:"rounds,omitempty"`
+	Thoughts       string      `json:"thoughts,omitempty"`
 	DiscardResults []int64     `json:"discard_results,omitempty"`
 	TokenCounts    TokenCounts `json:"token_counts,omitempty"`
 }
@@ -222,6 +223,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	if candidate.Content != nil {
 		for _, part := range candidate.Content.Parts {
 			if part.Thought {
+				fmt.Println("Thought: ", part.Text)
 				continue
 			}
 			if part.Text != "" {
@@ -275,24 +277,6 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 			TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
 		}
 		return plan, nil
-	}
-
-	// If direct parsing fails, try to extract JSON from markdown code blocks first
-
-	// Look for ```json ... ``` blocks
-	jsonCodeBlockStart := strings.Index(resultText, "```json")
-	if jsonCodeBlockStart != -1 {
-		jsonCodeBlockStart += len("```json")
-		// Skip any whitespace after ```json
-		for jsonCodeBlockStart < len(resultText) && (resultText[jsonCodeBlockStart] == '\n' || resultText[jsonCodeBlockStart] == '\r' || resultText[jsonCodeBlockStart] == ' ' || resultText[jsonCodeBlockStart] == '\t') {
-			jsonCodeBlockStart++
-		}
-
-		jsonCodeBlockEnd := strings.Index(resultText[jsonCodeBlockStart:], "```")
-		if jsonCodeBlockEnd != -1 {
-			jsonBlock = resultText[jsonCodeBlockStart : jsonCodeBlockStart+jsonCodeBlockEnd]
-			jsonBlock = strings.TrimSpace(jsonBlock)
-		}
 	}
 
 	// If no markdown code block found, try to extract JSON block using { } method
