@@ -61,8 +61,6 @@
 	<meta property="article:author" content="Atlantis" />
 	<meta name="theme-color" content="#0a0a0a" />
 	
-	<!-- Canonical URL -->
-	<link rel="canonical" href={data.meta.shareUrl} />
 </svelte:head>
 
 
