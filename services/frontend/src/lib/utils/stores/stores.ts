@@ -111,7 +111,7 @@ function initStoresWithAuth() {
                 watchlists.set([]);
                 return;
             }
-            
+
             // Normal initialization for authenticated users - move all private requests here
             privateRequest<Settings>('getSettings', {}).then((s: Settings) => {
                 settings.set({ ...defaultSettings, ...s });
@@ -119,7 +119,7 @@ function initStoresWithAuth() {
                 console.warn('Failed to load settings:', error);
                 settings.set(defaultSettings);
             });
-            
+
             privateRequest<Strategy[]>('getStrategies', {}).then((v: Strategy[]) => {
                 if (!v) {
                     strategies.set([]);
@@ -162,7 +162,7 @@ function initStoresWithAuth() {
                             return [{ watchlistId: newId, watchlistName: 'flag' }, ...newList];
                         });
                     }).catch(err => {
-                         console.error("Error creating flag watchlist:", err);
+                        console.error("Error creating flag watchlist:", err);
                     });
                 } else {
                     flagWatchlistId = flagWatch.watchlistId;
@@ -191,7 +191,7 @@ function initStoresWithAuth() {
     setInterval(updateTime, 250);
 }
 
-export type Menu = 'none' | 'watchlist' | 'alerts' | 'study' ;
+export type Menu = 'none' | 'watchlist' | 'alerts' | 'news';
 
 export const activeMenu = writable<Menu>('none');
 

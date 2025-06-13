@@ -16,6 +16,18 @@ extract_version() {
   [[ $file =~ ^([0-9]+) ]] && printf '%d' "${BASH_REMATCH[1]}"
 }
 
+# extract description from first comment line
+extract_description() {
+  local file="$1"
+  local desc
+  desc=$(head -1 "$file" 2>/dev/null | sed 's/^--[[:space:]]*//' || echo "")
+  if [[ $desc =~ ^Description:[[:space:]]*(.*) ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+  else
+    printf 'Migration %s' "$(basename "$file")"
+  fi
+}
+
 PSQL() { PGPASSWORD=$POSTGRES_PASSWORD psql -qAt -U postgres -d "$DB_NAME" "$@"; }
 
 # ───────────────────────  sanity checks  ──────────────────────
@@ -26,13 +38,7 @@ if [[ $TABLE_EXISTS != "t" ]]; then
   exit 1
 fi
 
-CURRENT_VERSION=$(PSQL -c "SELECT COALESCE(MAX(version), NULL) FROM schema_versions;")
-
-if [[ -z $CURRENT_VERSION ]]; then
-  error_log "schema_versions table is empty – it must contain at least one row."
-  exit 1
-fi
-
+CURRENT_VERSION=$(PSQL -c "SELECT COALESCE(MAX(version), 0) FROM schema_versions;")
 log "Current schema version: $CURRENT_VERSION"
 
 # ──────────────────────  collect migrations  ──────────────────
@@ -49,13 +55,20 @@ if [[ ${#MIGRATION_FILES[@]} -eq 0 ]]; then
 fi
 
 # ──────────────────────  apply migrations  ────────────────────
-# …(unchanged header and helpers)…
-
 for FILE in "${MIGRATION_FILES[@]}"; do
   VERSION=$(extract_version "$FILE") || continue
+  [[ -n $VERSION ]] || continue  # skip files without numeric prefix
   (( VERSION > CURRENT_VERSION )) || continue
 
+  DESCRIPTION=$(extract_description "$FILE")
   log "Applying migration $VERSION from $(basename "$FILE")"
+
+  # Check if this version already exists
+  EXISTING=$(PSQL -c "SELECT COUNT(*) FROM schema_versions WHERE version = $VERSION;")
+  if [[ $EXISTING -gt 0 ]]; then
+    log "Migration $VERSION already applied, skipping."
+    continue
+  fi
 
   # -- run the file and capture full output -----------------------------
   if OUTPUT=$(PSQL -v ON_ERROR_STOP=1 -f "$FILE" 2>&1); then
@@ -69,7 +82,6 @@ for FILE in "${MIGRATION_FILES[@]}"; do
       exit 1
   fi
 done
-
 
 log "All pending migrations executed."
 PSQL -c "SELECT version, applied_at, description FROM schema_versions ORDER BY version;"
