@@ -222,8 +222,6 @@ func BuildFinalResponsePromptWithConversationID(conn *data.Conn, userID int, con
 	return sb.String(), nil
 }
 
-var defaultSystemPromptTokenCount int
-
 func getDefaultSystemPromptTokenCount(conn *data.Conn) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {

@@ -54,6 +54,8 @@ type QueryResponse struct {
 	CompletedAt    *time.Time     `json:"completed_at,omitempty"`
 }
 
+var defaultSystemPromptTokenCount int = 0
+
 // GetChatRequest is the main context-aware chat request handler
 func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
 	// Check if context is already cancelled
