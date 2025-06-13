@@ -39,6 +39,17 @@ export interface ChartEventDispatch {
 
 export const activeChartInstance = writable<Instance | null>(null);
 
+// Extended Hours Toggle Store
+export const extendedHoursToggleVisible = writable<boolean>(false);
+
+export function showExtendedHoursToggle() {
+	extendedHoursToggleVisible.set(true);
+}
+
+export function hideExtendedHoursToggle() {
+	extendedHoursToggleVisible.set(false);
+}
+
 export function setActiveChart(chartId: ChartId, currentChartInstance: Instance) {
 	selectedChartId = chartId;
 	const updatedInstance = {

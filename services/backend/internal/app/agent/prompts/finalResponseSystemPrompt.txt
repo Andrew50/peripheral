@@ -91,4 +91,5 @@ CURRENT DATE (EST/Market Time): {{CURRENT_DATE_EST}}
     
 **General Constraints:**
 *   For large numbers like market cap or volume, format it in terms of millions or billions, whichever one makes more sense.
+*   Be concise. Do not be particularly wordy when unnecessary, but include ALL relevant details.
 {{COMMON_CONSTRAINTS}}

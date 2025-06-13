@@ -3,6 +3,8 @@
 	import Legend from './legend.svelte';
 	import Shift from './shift.svelte';
 	import DrawingMenu from './drawingMenu.svelte';
+	import WhyMoving from '$lib/components/whyMoving.svelte';
+
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { type DrawingMenuProps, addHorizontalLine, drawingMenuProps } from './drawingMenu.svelte';
 	import type { Instance as CoreInstance, TradeData, QuoteData } from '$lib/utils/types/types';
@@ -10,7 +12,8 @@
 		setActiveChart,
 		chartQueryDispatcher,
 		chartEventDispatcher,
-		queryChart
+		queryChart,
+		showExtendedHoursToggle
 	} from './interface';
 	import { streamInfo, settings, activeAlerts } from '$lib/utils/stores/stores';
 	import type { ShiftOverlay, ChartEventDispatch, BarData, ChartQueryDispatch } from './interface';
@@ -227,6 +230,10 @@
 	let isViewingLiveData = true; // Assume true initially
 	let lastQuoteData: QuoteData | null = null;
 
+	// Why Moving popup state (declare early to avoid TDZ)
+	let whyMovingTicker: string = '';
+	let whyMovingTrigger: number = 0;
+
 	let arrowSeries: any = null; // Initialize as null
 	let eventSeries: ISeriesApi<'Custom', Time, EventMarker>;
 	let eventMarkerView: EventMarkersPaneView;
@@ -338,8 +345,10 @@
 	}
 
 	function extendedHours(timestamp: number): boolean {
-		const date = new Date(timestamp);
-		const minutes = date.getHours() * 60 + date.getMinutes();
+		// Convert timestamp to Eastern Time
+		const estTimestampSeconds = UTCSecondstoESTSeconds((timestamp / 1000) as UTCTimestamp);
+		const date = new Date(estTimestampSeconds * 1000);
+		const minutes = date.getUTCHours() * 60 + date.getUTCMinutes();
 		return minutes < 570 || minutes >= 960; // 9:30 AM - 4:00 PM EST
 	}
 
@@ -563,7 +572,7 @@
 					}
 					try {
 						const barsWithEvents = response.bars; // Use the original response with events
-						if (barsWithEvents && barsWithEvents.length > 0) {
+						if (barsWithEvents.length > 0 && barsWithEvents) {
 							const allEventsRaw: Array<{ timestamp: number; type: string; value: string }> = [];
 							barsWithEvents.forEach((bar) => {
 								if (bar.events && bar.events.length > 0) {
@@ -720,6 +729,11 @@
 					// Hide chart switching overlay when loading completes
 					if (inst.requestType === 'loadNewTicker') {
 						isChartSwitching = false;
+					}
+					// Trigger Why Moving popup only for new ticker loads
+					if (inst.requestType === 'loadNewTicker') {
+						whyMovingTicker = inst.ticker ?? '';
+						whyMovingTrigger = Date.now();
 					}
 				};
 				if (
@@ -1035,11 +1049,10 @@
 		const isExtendedHoursTrade = extendedHours(trade.timestamp);
 		if (
 			isExtendedHoursTrade &&
-			(!currentChartInstance.extendedHours || /^[dwm]/.test(currentChartInstance.timeframe || ''))
+			(!currentChartInstance.extendedHours || /\d[dwm]/.test(currentChartInstance.timeframe))
 		) {
 			return;
 		}
-
 		const dolvol = get(settings).dolvol;
 		const allCandleDataLive = chartCandleSeries.data();
 		const mostRecentBarRaw = allCandleDataLive.at(-1);
@@ -1490,19 +1503,22 @@
 				return;
 			}
 
+			// Handle Tab key to show extended hours toggle
+			if (event.key === 'Tab') {
+				event.preventDefault();
+				event.stopPropagation();
+				showExtendedHoursToggle();
+				return;
+			}
+
 			// Handle non-Alt key combinations
-			if (
-				event.key === 'Tab' ||
-				(!event.ctrlKey && !event.metaKey && /^[a-zA-Z0-9]$/.test(event.key.toLowerCase()))
-			) {
+			if (!event.ctrlKey && !event.metaKey && /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
 				// Prevent default and stop propagation immediately
 				event.preventDefault();
 				event.stopPropagation();
 
 				// Add the keypress to our buffer
-				if (event.key !== 'Tab') {
-					keyBuffer.push(event.key);
-				}
+				keyBuffer.push(event.key);
 
 				// If this is the first key, start the input process
 				if (!isInputActive) {
@@ -2093,6 +2109,9 @@
 	{/if}
 </div>
 
+<!-- Why Moving Popup -->
+<WhyMoving ticker={whyMovingTicker} trigger={whyMovingTrigger} />
+
 <!-- Replace the filing info overlay with a more generic event info overlay -->
 {#if selectedEvent}
 	<div
@@ -2103,16 +2122,12 @@
 	>
 		<div class="event-header">
 			{#if selectedEvent.events[0]?.type === 'sec_filing'}
-				<div class="event-icon" style="color: #9C27B0;">📄</div>
 				<div class="event-title">SEC Filings</div>
 			{:else if selectedEvent.events[0]?.type === 'split'}
-				<div class="event-icon" style="color: #FFD700;">📊</div>
 				<div class="event-title">Stock Splits</div>
 			{:else if selectedEvent.events[0]?.type === 'dividend'}
-				<div class="event-icon" style="color: #2196F3;">💰</div>
 				<div class="event-title">Dividends</div>
 			{:else}
-				<div class="event-icon">📅</div>
 				<div class="event-title">Events</div>
 			{/if}
 			<button class="close-button" on:click={closeEventPopup}>×</button>

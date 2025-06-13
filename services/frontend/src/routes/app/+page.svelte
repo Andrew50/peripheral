@@ -5,6 +5,7 @@
 	import RightClick from '$lib/components/rightClick.svelte';
 	import StrategiesPopup from '$lib/components/strategiesPopup.svelte';
 	import Input from '$lib/components/input/input.svelte';
+	import ExtendedHoursToggle from '$lib/components/extendedHoursToggle/extendedHoursToggle.svelte';
 	//import Similar from '$lib/features/similar/similar.svelte';
 	//import Study from '$lib/features/study.svelte';
 	import Watchlist from '$lib/features/watchlist/watchlist.svelte';
@@ -36,13 +37,16 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
+	import { get } from 'svelte/store';
 	import {
 		initStores,
 		streamInfo,
 		formatTimestamp,
 		dispatchMenuChange,
 		menuWidth,
-		settings
+		settings,
+		isPublicViewing as isPublicViewingStore
 	} from '$lib/utils/stores/stores';
 	import { writable, type Writable } from 'svelte/store';
 	import { colorSchemes, applyColorScheme } from '$lib/styles/colorSchemes';
@@ -51,7 +55,7 @@
 	import type { Instance } from '$lib/utils/types/types';
 
 	// Add import near the top with other imports
-	import Screensaver from '$lib/features/screensaver/screensaver.svelte';
+	// import Screensaver from '$lib/features/screensaver/screensaver.svelte';
 
 	// Add new import for Query component
 	import Query from '$lib/features/chat/chat.svelte';
@@ -60,6 +64,17 @@
 
 	// Import the standalone calendar component
 	import Calendar from '$lib/components/calendar/calendar.svelte';
+
+	// Import auth modal
+	import AuthModal from '$lib/components/authModal.svelte';
+	import { authModalStore, hideAuthModal } from '$lib/stores/authModal';
+
+	// Import extended hours toggle store
+	import {
+		extendedHoursToggleVisible,
+		hideExtendedHoursToggle,
+		activeChartInstance
+	} from '$lib/features/chart/interface';
 
 	//type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
 	type Menu = 'none' | 'watchlist' | 'alerts' | 'news';
@@ -120,10 +135,11 @@
 	const MIN_TICKER_HEIGHT = 100;
 	const MAX_TICKER_HEIGHT = 600;
 
+	// DEPRECATED: Screensaver functionality
 	// Add state variables after other state declarations
-	let screensaverActive = false;
-	let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
-	const INACTIVITY_TIMEOUT = 5 * 1000; // 5 seconds in milliseconds
+	// let screensaverActive = false;
+	// let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+	// const INACTIVITY_TIMEOUT = 5 * 1000; // 5 seconds in milliseconds
 
 	// Add left sidebar state variables next to the other state variables
 	let leftMenuWidth = 550; // <-- Set initial width to 300
@@ -131,6 +147,29 @@
 
 	// Calendar state
 	let calendarVisible = false;
+
+	// Public viewing mode state - initialize from URL parameters synchronously
+	let isPublicViewing = false;
+	let sharedConversationId = '';
+
+	// Check for shared conversation parameter immediately (before component mounts)
+	if (browser && $page?.url?.searchParams) {
+		const shareParam = $page.url.searchParams.get('share');
+		if (shareParam) {
+			isPublicViewing = true;
+			sharedConversationId = shareParam;
+			// Update the global store so other components know we're in public viewing mode
+			isPublicViewingStore.set(true);
+		}
+	}
+
+	// Import and call connect after isPublicViewing is set
+	import { connect } from '$lib/utils/stream/socket';
+	connect();
+
+	// DEPRECATED: Screensaver import
+	// Add import near the top with other imports
+	// import Screensaver from '$lib/features/screensaver/screensaver.svelte';
 
 	// Apply color scheme reactively based on the store
 	$: if ($settings.colorScheme && browser) {
@@ -158,17 +197,48 @@
 	function updateChartWidth() {
 		if (browser) {
 			const rightSidebarWidth = $menuWidth;
-			const maxRightSidebarWidth = Math.min(800, window.innerWidth - 60);
-			const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 60);
+			const maxRightSidebarWidth = Math.min(600, window.innerWidth - 45); // Restored to 600px
+			const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
 
 			// Only reduce chart width if sidebar widths are within bounds
 			if (rightSidebarWidth <= maxRightSidebarWidth && leftMenuWidth <= maxLeftSidebarWidth) {
-				chartWidth = window.innerWidth - rightSidebarWidth - leftMenuWidth - 60;
+				chartWidth = window.innerWidth - rightSidebarWidth - leftMenuWidth - 45;
 			}
 		}
 	}
 
-	let keydownHandler: (event: KeyboardEvent) => void;
+	// Define the keydown handler with a stable reference outside of onMount
+	const keydownHandler = (event: KeyboardEvent) => {
+		// Check if input window is active - don't handle keyboard events when input is active
+		const inputWindow = document.getElementById('input-window');
+		const hiddenInput = document.getElementById('hidden-input');
+
+		// Don't interfere with the input component's keyboard events
+		//if (inputWindow || hiddenInput === document.activeElement) {
+		if (hiddenInput === document.activeElement) {
+			return;
+		}
+
+		// Only handle events when no element is focused or body is focused
+		if (!document.activeElement || document.activeElement === document.body) {
+			const chartContainer = document.getElementById(`chart_container-0`); // Assuming first chart has ID 0
+
+			if (chartContainer) {
+				// Focus the chart container
+				chartContainer.focus();
+
+				// Get the native event handlers from the chart container
+				const nativeHandlers = (chartContainer as any)._svelte?.events?.keydown;
+
+				if (nativeHandlers) {
+					// Call each handler directly with the original event
+					nativeHandlers.forEach((handler: Function) => {
+						handler.call(chartContainer, event);
+					});
+				}
+			}
+		}
+	};
 
 	onMount(() => {
 		// Load profile data FIRST, before doing anything else
@@ -211,46 +281,20 @@
 			updateChartWidth();
 			window.addEventListener('resize', updateChartWidth);
 
-			// Define the keydown handler
-			keydownHandler = (event: KeyboardEvent) => {
-				// Check if input window is active - don't handle keyboard events when input is active
-				const inputWindow = document.getElementById('input-window');
-				const hiddenInput = document.getElementById('hidden-input');
-
-				// Don't interfere with the input component's keyboard events
-				//if (inputWindow || hiddenInput === document.activeElement) {
-				if (hiddenInput === document.activeElement) {
-					return;
-				}
-
-				// Only handle events when no element is focused or body is focused
-				if (!document.activeElement || document.activeElement === document.body) {
-					const chartContainer = document.getElementById(`chart_container-0`); // Assuming first chart has ID 0
-
-					if (chartContainer) {
-						// Focus the chart container
-						chartContainer.focus();
-
-						// Get the native event handlers from the chart container
-						const nativeHandlers = (chartContainer as any)._svelte?.events?.keydown;
-
-						if (nativeHandlers) {
-							// Call each handler directly with the original event
-							nativeHandlers.forEach((handler: Function) => {
-								handler.call(chartContainer, event);
-							});
-						}
-					}
-				}
-			};
-
-			// Add global keyboard event listener
-			document.removeEventListener('keydown', keydownHandler); // Remove any existing listener first
+			// Add global keyboard event listener with stable function reference
 			document.addEventListener('keydown', keydownHandler);
 		}
-		privateRequest<string>('verifyAuth', {}).catch(() => {
-			goto('/login');
-		});
+
+		// Handle authentication based on public viewing mode (already determined above)
+		if (!isPublicViewing) {
+			// Normal auth flow for regular users
+			privateRequest<string>('verifyAuth', {}).catch(() => {
+				goto('/login');
+			});
+		} else {
+			console.log('Public viewing mode for conversation:', sharedConversationId);
+		}
+
 		initStores();
 
 		dispatchMenuChange.subscribe((menuName: string) => {
@@ -265,25 +309,6 @@
 		// Force refresh of the profile icon
 		profileIconKey++;
 
-		// Setup activity listeners
-		if (browser) {
-			// Use more specific events that indicate user activity
-			const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
-
-			// Remove any existing listeners first to avoid duplicates
-			activityEvents.forEach((event) => {
-				document.removeEventListener(event, resetInactivityTimer);
-			});
-
-			// Add the listeners
-			activityEvents.forEach((event) => {
-				document.addEventListener(event, resetInactivityTimer);
-			});
-
-			// Initialize the timer
-			resetInactivityTimer();
-		}
-
 		// Clean up subscription on component destroy
 		return () => {
 			unsubscribe();
@@ -291,23 +316,25 @@
 	});
 
 	onDestroy(() => {
-		if (inactivityTimer) {
-			clearTimeout(inactivityTimer);
-		}
+		// DEPRECATED: Screensaver inactivity timer cleanup
+		// if (inactivityTimer) {
+		// 	clearTimeout(inactivityTimer);
+		// }
 
 		// Clean up all activity listeners
 		if (browser && document) {
 			window.removeEventListener('resize', updateChartWidth);
-			// Remove global keyboard event listener using the stored handler
+			// Remove global keyboard event listener using the stable function reference
 			document.removeEventListener('keydown', keydownHandler);
 			stopSidebarResize();
 			stopLeftResize();
 
+			// DEPRECATED: Clean up screensaver activity listeners
 			// Clean up all activity listeners
-			const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
-			activityEvents.forEach((event) => {
-				document.removeEventListener(event, resetInactivityTimer);
-			});
+			// const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
+			// activityEvents.forEach((event) => {
+			// 	document.removeEventListener(event, resetInactivityTimer);
+			// });
 		}
 	});
 
@@ -320,7 +347,7 @@
 		} else {
 			// Open new menu
 			lastSidebarMenu = null;
-			menuWidth.set(300); // Or whatever your default width is
+			menuWidth.set(180); // Reduced from 225 to 180 (smaller sidebar)
 			changeMenu(menuName);
 		}
 
@@ -334,8 +361,8 @@
 
 	// Sidebar resizing
 	let resizing = false;
-	let minWidth = 200;
-	let maxWidth = 600;
+	let minWidth = 120; // Reduced from 150 to 120 (smaller minimum)
+	let maxWidth = 600; // Restored to 600px maximum
 
 	function startResize(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
@@ -358,8 +385,8 @@
 		}
 
 		// Calculate width from right edge of window, excluding the sidebar buttons width
-		let newWidth = window.innerWidth - clientX - 60; // 60px is the width of sidebar buttons
-		const maxSidebarWidth = Math.min(800, window.innerWidth - 60);
+		let newWidth = window.innerWidth - clientX - 45; // 45px is the width of sidebar buttons
+		const maxSidebarWidth = Math.min(600, window.innerWidth - 45); // Restored to 600px max
 
 		// Store state before closing
 		if (newWidth < minWidth && lastSidebarMenu !== null) {
@@ -678,26 +705,27 @@
 		document.removeEventListener('touchend', stopSidebarResize);
 	}
 
+	// DEPRECATED: Screensaver functions
 	// Add function after other function declarations
-	function resetInactivityTimer() {
-		if (inactivityTimer) {
-			clearTimeout(inactivityTimer);
-		}
-		if (!screensaverActive) {
-			inactivityTimer = setTimeout(() => {
-				// Only activate screensaver, don't hide the chart
-				screensaverActive = true;
-			}, INACTIVITY_TIMEOUT);
-		}
-	}
+	// function resetInactivityTimer() {
+	// 	if (inactivityTimer) {
+	// 		clearTimeout(inactivityTimer);
+	// 	}
+	// 	if (!screensaverActive) {
+	// 		inactivityTimer = setTimeout(() => {
+	// 			// Only activate screensaver, don't hide the chart
+	// 			screensaverActive = true;
+	// 		}, INACTIVITY_TIMEOUT);
+	// 	}
+	// }
 
-	function toggleScreensaver() {
-		screensaverActive = !screensaverActive;
-		// If turning off screensaver, reset the inactivity timer
-		if (!screensaverActive) {
-			resetInactivityTimer();
-		}
-	}
+	// function toggleScreensaver() {
+	// 	screensaverActive = !screensaverActive;
+	// 	// If turning off screensaver, reset the inactivity timer
+	// 	if (!screensaverActive) {
+	// 		resetInactivityTimer();
+	// 	}
+	// }
 
 	// Add reactive statements to update the profile icon when data changes
 	$: if (profilePic || username) {
@@ -756,7 +784,7 @@
 
 		// Calculate width from left edge of window
 		let newWidth = clientX;
-		const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 60);
+		const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
 
 		// Manage resize
 		if (newWidth < minWidth) {
@@ -817,6 +845,23 @@
 	<RightClick />
 	<StrategiesPopup />
 	<Calendar bind:visible={calendarVisible} initialTimestamp={$streamInfo.timestamp} />
+	<Calendar bind:visible={calendarVisible} initialTimestamp={$streamInfo.timestamp} />
+	<ExtendedHoursToggle
+		instance={$activeChartInstance || {}}
+		visible={$extendedHoursToggleVisible}
+		on:change={() => hideExtendedHoursToggle()}
+		on:close={() => hideExtendedHoursToggle()}
+	/>
+	<AuthModal
+		visible={$authModalStore.visible}
+		defaultMode={$authModalStore.mode}
+		requiredFeature={$authModalStore.requiredFeature}
+		on:success={() => {
+			hideAuthModal();
+			// Optional: refresh page or update auth state
+		}}
+		on:close={hideAuthModal}
+	/>
 	<!--<Algo />-->
 	<!-- Main area wrapper -->
 	<div class="app-container">
@@ -826,7 +871,7 @@
 				<div class="left-sidebar" style="width: {leftMenuWidth}px;">
 					<div class="sidebar-content">
 						<div class="main-sidebar-content">
-							<Query />
+							<Query {isPublicViewing} {sharedConversationId} />
 						</div>
 					</div>
 					<div
@@ -846,9 +891,10 @@
 				<!-- Chart area -->
 				<div class="chart-wrapper">
 					<ChartContainer width={chartWidth} />
-					{#if screensaverActive}
+					<!-- DEPRECATED: Screensaver functionality -->
+					<!-- {#if screensaverActive}
 						<Screensaver on:exit={() => (screensaverActive = false)} />
-					{/if}
+					{/if} -->
 				</div>
 
 				<!-- Bottom windows container -->
@@ -902,8 +948,8 @@
 								<Alerts />
 								<!--{:else if $activeMenu === 'study'}
 								<Study />-->
-							{:else if $activeMenu === 'news'}
-								<News />
+								<!--{:else if $activeMenu === 'news'}
+								<News />-->
 							{/if}
 						</div>
 
@@ -1064,7 +1110,6 @@
 				</label>
 			{/if}
 
-			<!-- Current timestamp -->
 			<span class="value">
 				{#if $streamInfo.timestamp !== undefined}
 					{formatTimestamp($streamInfo.timestamp)}
@@ -1072,7 +1117,7 @@
 					Loading Time...
 				{/if}
 			</span>
-
+			-->
 			<button class="profile-button" on:click={toggleSettings} aria-label="Toggle Settings">
 				<!-- Add key to force re-render when the profile changes -->
 				{#key profileIconKey}
@@ -1131,7 +1176,7 @@
 		height: 100%;
 		min-height: 0;
 		position: relative;
-		margin-right: 60px;
+		margin-right: 45px;
 	}
 
 	.main-content {
@@ -1173,7 +1218,7 @@
 		position: relative;
 		flex-shrink: 0;
 		border-left: 1px solid var(--ui-border);
-		max-width: min(800px, calc(100vw - 60px)); /* Reduce max width to 500px */
+		max-width: min(600px, calc(100vw - 45px)); /* 600px max sidebar with 45px button bar */
 	}
 
 	.sidebar-buttons {
@@ -1181,14 +1226,14 @@
 		top: 0;
 		right: 0;
 		height: 100vh;
-		width: 60px;
+		width: 45px;
 		display: flex;
 		flex-direction: column;
 		background-color: var(--c2);
 		z-index: 2;
 		flex-shrink: 0;
 		border-right: 1px solid var(--ui-border);
-		max-width: min(800px, calc(100vw - 60px));
+		max-width: min(600px, calc(100vw - 45px)); /* 600px max with 45px button bar */
 	}
 
 	.resize-handle {
@@ -1213,7 +1258,7 @@
 	}
 
 	.side-btn {
-		flex: 0 0 60px;
+		flex: 0 0 45px;
 	}
 
 	.menu-icon {

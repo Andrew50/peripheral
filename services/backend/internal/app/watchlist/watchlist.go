@@ -111,9 +111,16 @@ func GetWatchlistItems(conn *data.Conn, userID int, rawArgs json.RawMessage) (in
 	}
 
 	rows, err := conn.DB.Query(context.Background(),
-		`SELECT w.securityId, s.ticker, w.watchlistItemId from watchlistItems as w
-		JOIN securities as s ON s.securityId = w.securityId
-		WHERE w.watchlistId = $1`, args.WatchlistID)
+		`SELECT securityId, ticker, watchlistItemId, maxDate
+		FROM (
+			SELECT w.securityId, s.ticker, w.watchlistItemId, s.maxDate,
+				   ROW_NUMBER() OVER (PARTITION BY w.securityId ORDER BY COALESCE(s.maxDate, CURRENT_TIMESTAMP) DESC, w.watchlistItemId DESC) as rn
+			FROM watchlistItems as w
+			JOIN securities as s ON s.securityId = w.securityId
+			WHERE w.watchlistId = $1
+		) ranked
+		WHERE rn = 1
+		ORDER BY COALESCE(maxDate, CURRENT_TIMESTAMP) DESC, watchlistItemId ASC`, args.WatchlistID)
 	if err != nil {
 		return nil, fmt.Errorf("sovn %v", err)
 	}
@@ -121,7 +128,8 @@ func GetWatchlistItems(conn *data.Conn, userID int, rawArgs json.RawMessage) (in
 	var entries []GetWatchlistEntriesResult
 	for rows.Next() {
 		var entry GetWatchlistEntriesResult
-		err = rows.Scan(&entry.SecurityID, &entry.Ticker, &entry.WatchlistItemID)
+		var maxDate interface{} // temporary variable to scan maxDate (for ordering only)
+		err = rows.Scan(&entry.SecurityID, &entry.Ticker, &entry.WatchlistItemID, &maxDate)
 		if err != nil {
 			return nil, fmt.Errorf("fi0w %v", err)
 		}
