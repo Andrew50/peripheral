@@ -22,6 +22,7 @@
 	 */
 
 	import { allKeys, type InstanceAttributes, type InputQuery } from '$lib/components/input/utils/inputTypes';
+	import { isPublicViewing } from '$lib/utils/stores/stores';
 	let currentSecurityResultRequest = 0;
 	let loadedSecurityResultRequest = -1;
 	let isLoadingSecurities = false;
@@ -29,9 +30,16 @@
 
 	let activePromiseReject: ((reason?: any) => void) | null = null;
 	let isDocumentListenerActive = false; // Add guard for document listener
-	privateRequest<[]>('getSecurityClassifications', {}).then((v: []) => {
-		filterOptions = v;
-	});
+	
+	// Only load security classifications if not in public viewing mode
+	if (browser && !get(isPublicViewing)) {
+		privateRequest<[]>('getSecurityClassifications', {}).then((v: []) => {
+			filterOptions = v;
+		}).catch((error) => {
+			console.warn('Failed to load security classifications:', error);
+			filterOptions = [];
+		});
+	}
 
 	const inactiveInputQuery: InputQuery = {
 		status: 'inactive',
@@ -40,7 +48,8 @@
 		inputType: '',
 		requiredKeys: 'any',
 		possibleKeys: [],
-		instance: {}
+		instance: {},
+		customTitle: undefined
 	};
 	export const inputQuery: Writable<InputQuery> = writable({ ...inactiveInputQuery });
 
@@ -49,14 +58,25 @@
 		const iQ = get(inputQuery);
 		let inputType = iQ.inputType;
 
-		// Always auto-classify input type
-		if (inputString !== '') {
+		// Only auto-classify input type if not already set (e.g., from forced type)
+		if (inputString !== '' && !inputType) {
 			// Use our sync detection function for consistency
 			inputType = detectInputTypeSync(inputString, iQ.possibleKeys);
 
 			// If we detect a ticker, but the input is lowercase, convert to uppercase
 			if (inputType === 'ticker' && inputString !== inputString.toUpperCase()) {
 				// Update the input string with uppercase version
+				setTimeout(() => {
+					inputQuery.update((q) => ({
+						...q,
+						inputString: inputString.toUpperCase()
+					}));
+				}, 0);
+			}
+		} else if (inputString !== '' && inputType) {
+			// If we have a forced input type and input string, handle special cases
+			if (inputType === 'ticker' && inputString !== inputString.toUpperCase()) {
+				// Convert ticker input to uppercase
 				setTimeout(() => {
 					inputQuery.update((q) => ({
 						...q,
@@ -126,7 +146,9 @@
 	export async function queryInstanceInput(
 		requiredKeys: InstanceAttributes[] | 'any',
 		optionalKeys: InstanceAttributes[] | 'any',
-		instance: Instance = {}
+		instance: Instance = {},
+		forcedInputType?: string,
+		customTitle?: string
 	): Promise<Instance> {
 		// If an input query is already active, force its cancellation.
 		if (get(inputQuery).status !== 'inactive') {
@@ -177,32 +199,53 @@
 			possibleKeys,
 			instance,
 			inputString: initialInputString, // Use the initial input string if provided
+			inputType: forcedInputType || '', // Set forced input type if provided
+			customTitle: customTitle, // Set custom title if provided
 			status: 'initializing'
 		}));
 
-		// If we have an initial input string, determine its type immediately
+		// If we have an initial input string, determine its type immediately (unless forced)
 		if (initialInputString) {
 			await tick(); // ensure UI is ready
 			// Use setTimeout to ensure this runs after all other synchronous code
 			setTimeout(() => {
-				// First, forcibly detect the input type without waiting
-				const initialType = detectInputTypeSync(initialInputString, possibleKeys);
+				let initialType: string;
+				
+				// Only auto-detect type if no forced input type is provided
+				if (!forcedInputType) {
+					// First, forcibly detect the input type without waiting
+					initialType = detectInputTypeSync(initialInputString, possibleKeys);
 
-				// Update the store synchronously with the detected type
-				inputQuery.update((q) => ({
-					...q,
-					inputType: initialType,
-					// Mark as loading if it's likely a ticker
-					securities: initialType === 'ticker' ? [] : q.securities
-				}));
+					// Update the store synchronously with the detected type
+					inputQuery.update((q) => ({
+						...q,
+						inputType: initialType,
+						// Mark as loading if it's likely a ticker
+						securities: initialType === 'ticker' ? [] : q.securities
+					}));
 
-				// If it looks like a ticker, explicitly set loading state
-				if (initialType === 'ticker') {
-					isLoadingSecurities = true;
+					// If it looks like a ticker, explicitly set loading state
+					if (initialType === 'ticker') {
+						isLoadingSecurities = true;
+					}
+
+					// Then run the full determination with validation
+					determineInputType(initialInputString);
+				} else {
+					// If we have a forced input type, use it and validate accordingly
+					initialType = forcedInputType;
+					const currentState = get(inputQuery);
+					if (forcedInputType === 'ticker') {
+						isLoadingSecurities = true;
+						inputQuery.update((q) => ({
+							...q,
+							securities: []
+						}));
+					}
+					
+					// Run validation with the forced type
+					determineInputType(initialInputString);
 				}
-
-				// Then run the full determination with validation
-				determineInputType(initialInputString);
 
 				// For tickers, ensure we make multiple validation attempts
 				if (initialType === 'ticker' || /^[A-Za-z]+$/.test(initialInputString)) {
@@ -226,10 +269,20 @@
 								}
 							}, 1000); // Increased to 1000ms for better network reliability
 						}
-					}, 250); // Increased for better timing
-				}
-			}, 0);
-		}
+									}, 250); // Increased for better timing
+			}
+		}, 0);
+	} else if (forcedInputType) {
+		// If no initial input string but we have a forced input type, set it up
+		await tick();
+		setTimeout(() => {
+			inputQuery.update((q) => ({
+				...q,
+				inputType: forcedInputType,
+				securities: forcedInputType === 'ticker' ? [] : q.securities
+			}));
+		}, 0);
+	}
 
 		// Wait for next tick to ensure UI updates
 		await tick();
@@ -252,7 +305,9 @@
 
 			function cleanup() {
 				unsubscribe();
-				activePromiseReject = null;
+				if (activePromiseReject === reject) {
+					activePromiseReject = null;
+				}
 				// Trigger a shutdown to reset state.
 				inputQuery.update((v: InputQuery) => ({ ...v, status: 'shutdown' }));
 			}
@@ -263,7 +318,6 @@
 
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
-	import { ESTStringToUTCTimestamp, UTCTimestampToESTString } from '$lib/utils/helpers/timestamp';
 	let prevFocusedElement: HTMLElement | null = null;
 	let highlightedIndex = -1;
 	
@@ -300,8 +354,6 @@
 			}
 		} else if (iQ.inputType === 'timeframe') {
 			iQ.instance.timeframe = iQ.inputString;
-		} else if (iQ.inputType === 'timestamp') {
-			iQ.instance.timestamp = ESTStringToUTCTimestamp(iQ.inputString);
 		}
 
 		// Always clear the input string when a field is entered successfully
@@ -421,14 +473,7 @@
 				scrollToHighlighted();
 			}
 			return;
-		} else if (event.key === 'Tab') {
-			event.preventDefault();
-			inputQuery.update((q) => ({
-				...q,
-				instance: { ...q.instance, extendedHours: !q.instance.extendedHours }
-			}));
-			return;
-		}
+		} 
 		
 	}
 
@@ -537,7 +582,7 @@
 			}
 		});
 
-		if (browser) {
+		if (browser && !get(isPublicViewing)) {
 			type SecurityClassifications = {
 				sectors: string[];
 				industries: string[];
@@ -547,7 +592,11 @@
 					sectors = classifications.sectors;
 					industries = classifications.industries;
 				}
-			);
+			).catch((error) => {
+				console.warn('Failed to load security classifications in onMount:', error);
+				sectors = [];
+				industries = [];
+			});
 		}
 	});
 
@@ -579,20 +628,18 @@
 			if (unsubscribe) unsubscribe();
 		}
 	});
-	function displayValue(q: InputQuery, key: string): string {
+	/*function displayValue(q: InputQuery, key: string): string {
 		if (key === q.inputType) {
 			return q.inputString;
 		} else if (key in q.instance) {
 			if (key === 'timestamp') {
 				return UTCTimestampToESTString(q.instance.timestamp ?? 0);
-			} else if (key === 'extendedHours') {
-				return q.instance.extendedHours ? 'True' : 'False';
-			} else {
+			}  else {
 				return String(q.instance[key as keyof Instance]);
 			}
 		}
 		return '';
-	}
+	} */
 
 	// Scroll highlighted item into view
 	function scrollToHighlighted() {
@@ -615,7 +662,7 @@
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 {#if $inputQuery.status === 'active' || $inputQuery.status === 'initializing'}
 	<div class="popup-container {$inputQuery.inputType === 'timeframe' ? 'timeframe-popup' : ''}" id="input-window" tabindex="-1" on:click|stopPropagation>
-		<div class="content-container box-expand">
+		<div class="content-container glass glass--rounded glass--responsive box-expand">
 			{#if $inputQuery.inputType === 'timeframe'}
 				<div class="timeframe-header-container">
 					<div class="timeframe-title">Change Interval</div>
@@ -624,7 +671,7 @@
 				{:else if $inputQuery.inputType === 'ticker'}
 					<div class="table-container">
 						<div class="search-header">
-							<span class="search-title">Symbol Search</span>
+							<span class="search-title">{$inputQuery.customTitle || 'Symbol Search'}</span>
 						</div>
 						<div class="search-divider"></div>
 						{#if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
@@ -668,48 +715,18 @@
 									</div>
 								{/each}
 							</div>
-						{:else if $inputQuery.inputString && $inputQuery.inputString.length > 0 && loadedSecurityResultRequest !== -1 && loadedSecurityResultRequest === currentSecurityResultRequest}
-							<div class="no-results">
-								<span>No matching securities found</span>
+						{:else if $inputQuery.inputString && $inputQuery.inputString.length > 0 && !isLoadingSecurities && loadedSecurityResultRequest !== -1 && loadedSecurityResultRequest === currentSecurityResultRequest}
+							<div class="search-results-container">
+								<div class="no-results">
+									<span>No matching securities found</span>
+								</div>
 							</div>
 						{/if}
 					</div>
-
-
-				{:else if $inputQuery.inputType === 'extendedHours'}
-					<div class="span-container extended-hours-container">
-						<div class="span-row extended-hours-row">
-							<span class="label">Market Hours <span class="hint"><kbd>Tab</kbd> to toggle</span></span>
-							<div class="hours-buttons">
-								<button
-									class="toggle-button {!$inputQuery.instance.extendedHours ? 'active' : ''}"
-									on:click={() => {
-										inputQuery.update((q) => ({
-											...q,
-											instance: { ...q.instance, extendedHours: false }
-										}));
-									}}
-								>
-									Regular
-								</button>
-								<button
-									class="toggle-button {$inputQuery.instance.extendedHours ? 'active' : ''}"
-									on:click={() => {
-										inputQuery.update((q) => ({
-											...q,
-											instance: { ...q.instance, extendedHours: true }
-										}));
-									}}
-								>
-									Extended
-								</button>
-							</div>
-						</div>
-					</div>
 				{/if}
-		</div>
+			</div>
 
-		<div class="search-bar search-bar-expand {$inputQuery.inputType === 'timeframe' && !$inputQuery.inputValid && $inputQuery.inputString ? 'error' : ''}">
+		<div class="search-bar glass glass--pill glass--responsive search-bar-expand {$inputQuery.inputType === 'timeframe' && !$inputQuery.inputValid && $inputQuery.inputString ? 'error' : ''}">
 			<div class="search-icon">
 				<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 					<path d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -782,19 +799,16 @@
 	}
 
 	.search-bar {
+		/* Glass effect now provided by global .glass classes */
 		display: flex;
 		align-items: center;
 		height: 3rem;
-		background: rgba(0, 0, 0, 0.4);
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		border-radius: 1.5rem;
 		padding: 0 0.25rem;
 		position: relative;
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-		backdrop-filter: var(--backdrop-blur);
 	}
 
 	.timeframe-popup .search-bar {
+		--glass-radius: 0 0 12px 12px;
 		border-radius: 0 0 0.75rem 0.75rem;
 		height: 3.5rem;
 		margin-top: 0;
@@ -842,8 +856,8 @@
 	}
 
 	.timeframe-popup .search-bar:focus-within {
-		border-color: #4a80f0;
-		box-shadow: 0 0 0 2px rgba(74, 128, 240, 0.2), 0 8px 32px rgba(0, 0, 0, 0.5);
+		--glass-border: #4a80f0;
+		--glass-shadow: 0 0 0 2px rgba(74, 128, 240, 0.2), 0 8px 32px rgba(0, 0, 0, 0.5);
 	}
 
 	.search-bar input:focus {
@@ -857,25 +871,21 @@
 	}
 
 	.timeframe-popup .search-bar.error {
-		border: 1px solid #ff4444 !important;
-		box-shadow: 0 0 8px rgba(255, 68, 68, 0.3);
+		--glass-border: #ff4444;
+		--glass-shadow: 0 0 8px rgba(255, 68, 68, 0.3);
 	}
 
 	.content-container {
-		background: rgba(0, 0, 0, 0.5);
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		border-radius: 0.75rem;
+		/* Glass effect now provided by global .glass classes */
 		overflow-y: auto;
 		padding: 0.5rem;
-		height: auto;
-		max-height: 15rem;
-		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-		backdrop-filter: var(--backdrop-blur);
+		height: 15rem;
 		scrollbar-width: thin;
 		scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
 	}
 
 	.timeframe-popup .content-container {
+		--glass-radius: 12px 12px 0 0;
 		height: auto;
 		min-height: 3.75rem;
 		display: flex;
@@ -931,7 +941,7 @@
 	}
 
 	.securities-scrollable {
-		max-height: 13rem;
+		height: 13rem;
 		overflow-y: auto;
 		scrollbar-width: thin;
 		scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
@@ -998,11 +1008,14 @@
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
-	.no-results {
+	.search-results-container {
+		height: 13rem;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		height: 8rem;
+	}
+
+	.no-results {
 		color: #ffffff;
 		font-size: 0.875rem;
 		text-align: center;
