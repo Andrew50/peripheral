@@ -104,8 +104,9 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-
+		var firstRound bool
 		if planningPrompt == "" {
+			firstRound = true
 			var err error
 			planningPrompt, err = BuildPlanningPromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext)
 			if err != nil {
@@ -116,7 +117,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				return nil, err
 			}
 		}
-		result, err := RunPlanner(ctx, conn, planningPrompt)
+		result, err := RunPlanner(ctx, conn, planningPrompt, firstRound)
 		if err != nil {
 			// Mark as error instead of deleting for debugging
 			if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Planner error: %v", err)); markErr != nil {
@@ -252,6 +253,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			}
 		}
 		maxTurns--
+		firstRound = false
 		if maxTurns <= 0 {
 			// Mark as error instead of deleting for debugging
 			if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, "Model took too many turns to run"); markErr != nil {
