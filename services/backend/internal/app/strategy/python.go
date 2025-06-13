@@ -33,22 +33,22 @@ type PythonStrategy struct {
 
 // PythonExecution represents an execution instance of a Python strategy
 type PythonExecution struct {
-	ID                int                    `json:"id"`
-	PythonStrategyID  int                    `json:"pythonStrategyId"`
-	ExecutionID       uuid.UUID              `json:"executionId"`
-	UserID            int                    `json:"userId"`
-	Status            string                 `json:"status"` // "pending", "running", "completed", "failed", "timeout", "cancelled"
-	StartedAt         *time.Time             `json:"startedAt,omitempty"`
-	CompletedAt       *time.Time             `json:"completedAt,omitempty"`
-	ExecutionTimeMS   *int                   `json:"executionTimeMs,omitempty"`
-	MemoryUsedMB      *int                   `json:"memoryUsedMb,omitempty"`
-	CPUUsedPercent    *float64               `json:"cpuUsedPercent,omitempty"`
-	InputData         map[string]interface{} `json:"inputData,omitempty"`
-	OutputData        map[string]interface{} `json:"outputData,omitempty"`
-	ErrorMessage      *string                `json:"errorMessage,omitempty"`
-	Logs              *string                `json:"logs,omitempty"`
-	WorkerNode        *string                `json:"workerNode,omitempty"`
-	CreatedAt         time.Time              `json:"createdAt"`
+	ID               int                    `json:"id"`
+	PythonStrategyID int                    `json:"pythonStrategyId"`
+	ExecutionID      uuid.UUID              `json:"executionId"`
+	UserID           int                    `json:"userId"`
+	Status           string                 `json:"status"` // "pending", "running", "completed", "failed", "timeout", "cancelled"
+	StartedAt        *time.Time             `json:"startedAt,omitempty"`
+	CompletedAt      *time.Time             `json:"completedAt,omitempty"`
+	ExecutionTimeMS  *int                   `json:"executionTimeMs,omitempty"`
+	MemoryUsedMB     *int                   `json:"memoryUsedMb,omitempty"`
+	CPUUsedPercent   *float64               `json:"cpuUsedPercent,omitempty"`
+	InputData        map[string]interface{} `json:"inputData,omitempty"`
+	OutputData       map[string]interface{} `json:"outputData,omitempty"`
+	ErrorMessage     *string                `json:"errorMessage,omitempty"`
+	Logs             *string                `json:"logs,omitempty"`
+	WorkerNode       *string                `json:"workerNode,omitempty"`
+	CreatedAt        time.Time              `json:"createdAt"`
 }
 
 // PythonEnvironment represents a Python execution environment
@@ -323,11 +323,10 @@ func ExecutePythonStrategy(conn *data.Conn, userID int, rawArgs json.RawMessage)
 		// TODO: Queue the execution for async processing
 		// For now, return the execution record
 		return execution, nil
-	} else {
-		// TODO: Execute synchronously
-		// For now, just return the execution record
-		return execution, nil
 	}
+	// TODO: Execute synchronously
+	// For now, just return the execution record
+	return execution, nil
 }
 
 // GetPythonExecutions retrieves Python strategy executions
@@ -419,7 +418,7 @@ func GetPythonExecutions(conn *data.Conn, userID int, rawArgs json.RawMessage) (
 }
 
 // GetPythonEnvironments retrieves available Python environments
-func GetPythonEnvironments(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+func GetPythonEnvironments(conn *data.Conn, _ int, _ json.RawMessage) (interface{}, error) {
 	query := `
 		SELECT id, name, description, base_image, python_version, libraries,
 			   environment_variables, is_default, is_active, created_at, updated_at
