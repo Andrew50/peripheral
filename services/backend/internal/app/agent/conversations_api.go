@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"regexp"
+	"strings"
 	"time"
 )
 
@@ -324,12 +326,43 @@ func checkIfConversationIsPublicAndGrabPreview(conn *data.Conn, conversationId s
 		return false, 0, "", "", err
 	}
 
-	// Get the first assistant message (response_text)
+	// Get the first assistant message content_chunks
+	var contentChunksJSON []byte
 	err = conn.DB.QueryRow(context.Background(),
-		"SELECT COALESCE(response_text, '') FROM conversation_messages WHERE conversation_id = $1 AND response_text IS NOT NULL AND response_text != '' AND archived = FALSE ORDER BY created_at ASC LIMIT 1",
-		conversationId).Scan(&firstAssistantMessage)
+		"SELECT COALESCE(content_chunks, '[]') FROM conversation_messages WHERE conversation_id = $1 AND content_chunks IS NOT NULL AND archived = FALSE ORDER BY created_at ASC LIMIT 1",
+		conversationId).Scan(&contentChunksJSON)
 	if err != nil && err.Error() != "no rows in result set" {
 		return false, 0, "", "", err
+	}
+
+	// Extract text from content_chunks
+	if len(contentChunksJSON) > 0 {
+		var contentChunks []ContentChunk
+		if err := json.Unmarshal(contentChunksJSON, &contentChunks); err == nil {
+			// Extract text from the first few text chunks
+			var textParts []string
+			for i, chunk := range contentChunks {
+				if i >= 3 { // Limit to first 3 chunks
+					break
+				}
+				if chunk.Type == "text" {
+					if text, ok := chunk.Content.(string); ok {
+						// Remove HTML tags and clean up the text
+						cleanText := stripHTMLTags(text)
+						if len(cleanText) > 0 {
+							textParts = append(textParts, cleanText)
+						}
+					}
+				}
+			}
+			if len(textParts) > 0 {
+				firstAssistantMessage = strings.Join(textParts, " ")
+				// Limit total length for OG preview
+				if len(firstAssistantMessage) > 500 {
+					firstAssistantMessage = firstAssistantMessage[:500] + "..."
+				}
+			}
+		}
 	}
 
 	return isPublic, userID, firstUserMessage, firstAssistantMessage, nil
@@ -431,4 +464,21 @@ func GetConversationSnippet(conn *data.Conn, rawArgs json.RawMessage) (interface
 		Title:         title,
 		FirstResponse: firstResponse,
 	}, nil
+}
+
+// stripHTMLTags removes HTML tags and ticker formatting from text content
+func stripHTMLTags(text string) string {
+	// Remove HTML tags
+	re := regexp.MustCompile(`<[^>]*>`)
+	cleaned := re.ReplaceAllString(text, "")
+
+	// Remove ticker formatting $$$TICKER-TIMESTAMP$$$ and replace with just TICKER
+	tickerRe := regexp.MustCompile(`\$\$\$([A-Z]+)-\d+\$\$\$`)
+	cleaned = tickerRe.ReplaceAllString(cleaned, "$1")
+
+	// Clean up extra whitespace
+	cleaned = strings.TrimSpace(cleaned)
+	cleaned = regexp.MustCompile(`\s+`).ReplaceAllString(cleaned, " ")
+
+	return cleaned
 }
