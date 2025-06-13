@@ -108,6 +108,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      cache:
+        condition: service_started
     networks:
       - compose_network
     restart: unless-stopped
@@ -118,6 +120,15 @@ services:
       - DB_PASSWORD=devpassword
       - DB_HOST=db
       - POSTGRES_DB=postgres
+      - REDIS_HOST=cache
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          memory: 1g
+          cpus: '1.0'
 
 volumes:
   db:
