@@ -10,6 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+
 	"google.golang.org/genai"
 )
 
@@ -542,8 +545,9 @@ func generateStrategyName(prompt string) string {
 		nameWords = words[:4]
 	}
 
+	caser := cases.Title(language.English)
 	for i, word := range nameWords {
-		nameWords[i] = strings.Title(strings.ToLower(word))
+		nameWords[i] = caser.String(word)
 	}
 
 	return strings.Join(nameWords, " ") + " Strategy"
