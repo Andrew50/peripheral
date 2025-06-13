@@ -108,13 +108,11 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"get_daily_trade_stats":  account.GetDailyTradeStats,
 
 	// --- strategy / back-testing ---------------------------------------------
-	"run_backtest":                   wrapContextFunc(strategy.RunBacktest),
-	"getStrategies":                  strategy.GetStrategies,
-	"newStrategy":                    strategy.NewStrategy,
-	"setStrategy":                    strategy.SetStrategy,
-	"deleteStrategy":                 strategy.DeleteStrategy,
-	"getStrategyFromNaturalLanguage": strategy.CreateStrategyFromNaturalLanguage,
-	"getStrategySpec":                strategy.GetStrategySpec,
+	"run_backtest":             wrapContextFunc(strategy.RunBacktest),
+	"getStrategies":            strategy.GetStrategies,
+	"createStrategyFromPrompt": strategy.CreateStrategyFromPrompt,
+	"setAlert":                 strategy.SetAlert,
+	"deleteStrategy":           strategy.DeleteStrategy,
 
 	// --- misc / auth helpers --------------------------------------------------
 	"verifyAuth": func(*data.Conn, int, json.RawMessage) (interface{}, error) {
