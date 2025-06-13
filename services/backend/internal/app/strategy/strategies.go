@@ -1,10 +1,8 @@
 package strategy
 
 import (
-	"backend/internal/app/chart"
 	"backend/internal/data"
 	"context"
-	"database/sql"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -12,180 +10,305 @@ import (
 	"strings"
 	"time"
 
-	"bytes"
-	"encoding/base64"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 
-	"github.com/pplcc/plotext/custplotter"
-	"gonum.org/v1/plot"
 	"google.golang.org/genai"
 )
 
 //go:embed prompts/*
 var fs embed.FS // 2️⃣ compiled into the binary
 
-// AnalyzeInstanceFeaturesArgs contains parameters for analyzing features of a specific security instance
-type AnalyzeInstanceFeaturesArgs struct {
-	SecurityID int    `json:"securityId"`
-	Timestamp  int64  `json:"timestamp"` // Unix ms of reference bar (0 ⇒ "now")
-	Timeframe  string `json:"timeframe"` // e.g. "15m", "h", "d"
-	Bars       int    `json:"bars"`      // # of candles to pull **backward** from timestamp
+// Strategy represents a simplified strategy with natural language description and generated Python code
+type Strategy struct {
+	StrategyID    int    `json:"strategyId"`
+	UserID        int    `json:"userId"`
+	Name          string `json:"name"`
+	Description   string `json:"description"` // Human-readable description
+	Prompt        string `json:"prompt"`      // Original user prompt
+	PythonCode    string `json:"pythonCode"`  // Generated Python classifier
+	Score         int    `json:"score,omitempty"`
+	Version       string `json:"version,omitempty"`
+	CreatedAt     string `json:"createdAt,omitempty"`
+	IsAlertActive bool   `json:"isAlertActive,omitempty"`
 }
 
-// AnalyzeInstanceFeatures analyzes chart data for a specific security and returns Gemini's analysis
-func AnalyzeInstanceFeatures(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+// CreateStrategyFromPromptArgs contains the user's natural language prompt
+type CreateStrategyFromPromptArgs struct {
+	Prompt string `json:"prompt"`
+}
 
-	/* 1. Parse args */
-	var args AnalyzeInstanceFeaturesArgs
+// Data accessor functions that will be available in the generated Python code
+// Designed for maximum performance with PyPy and native data structures
+const dataAccessorFunctions = `
+# Pre-defined data accessor functions available in your classifier
+# 
+# ███ HIGH-PERFORMANCE TRADING SYSTEM ███
+# Designed for ultra-low latency and high-throughput trading
+# 
+# PERFORMANCE OPTIMIZATIONS:
+# • NO PANDAS - Uses native Python lists/dicts for maximum speed
+# • PyPy Compatible - All code optimized for PyPy JIT compilation  
+# • NumPy Vectorization - Mathematical operations use NumPy for speed
+# • Zero-Copy Operations - Minimal memory allocations
+# • Type Hints - Full type annotations for JIT optimization
+# • List Comprehensions - Faster than loops in PyPy
+# • Native Data Structures - Direct list/dict access (no DataFrame overhead)
+#
+# EXPECTED PERFORMANCE:
+# • 10-100x faster than pandas-based systems
+# • Sub-millisecond strategy execution
+# • Handles thousands of symbols simultaneously
+# • Real-time market data processing
+#
+# DEPLOYMENT RECOMMENDATION:
+# Use PyPy 3.10+ for maximum performance gains
+
+import numpy as np
+from typing import List, Dict, Tuple, Union, Optional
+
+# ==================== RAW DATA RETRIEVAL ONLY ====================
+# Note: You must implement your own technical indicators using the raw data below
+
+def get_price_data(symbol: str, timeframe: str = '1d', days: int = 30, 
+                  extended_hours: bool = False, start_time: str = None, end_time: str = None) -> Dict:
+    """
+    Get raw OHLCV price data for a symbol
+    
+    Args:
+        symbol: Stock ticker symbol
+        timeframe: '1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w', '1M'
+        days: Number of days of historical data
+        extended_hours: Include pre/after market data (for intraday only)
+        start_time: Time filter start (e.g., '09:30:00')
+        end_time: Time filter end (e.g., '16:00:00')
+    
+    Returns: Dict with 'timestamps': List[int], 'open': List[float], 'high': List[float], 
+             'low': List[float], 'close': List[float], 'volume': List[int], 
+             'extended_hours': List[bool]
+    """
+    pass  # Implemented by backend
+
+def get_historical_data(symbol: str, timeframe: str = '1d', periods: int = 100, offset: int = 0) -> Dict:
+    """
+    Get historical raw price data with lag support
+    
+    Args:
+        symbol: Stock ticker symbol
+        timeframe: Data frequency
+        periods: Number of periods to retrieve
+        offset: Number of periods to lag (0 = current, 1 = previous period, etc.)
+    
+    Returns: Dict with raw OHLCV data as lists
+    """
+    pass  # Implemented by backend
+
+def get_security_info(symbol: str) -> Dict:
+    """
+    Get basic security metadata
+    
+    Returns: Dict with securityid, ticker, name, sector, industry, market, 
+             primary_exchange, locale, active, cik, composite_figi, share_class_figi
+    """
+    pass  # Implemented by backend
+
+def get_multiple_symbols_data(symbols: List[str], timeframe: str = '1d', days: int = 30) -> Dict[str, Dict]:
+    """
+    Get raw price data for multiple symbols efficiently
+    
+    Args:
+        symbols: List of ticker symbols
+        timeframe: Data frequency
+        days: Number of days of data
+    
+    Returns: Dict mapping symbol -> raw data dict (same format as get_price_data)
+    """
+    pass  # Implemented by backend
+
+# ==================== RAW FUNDAMENTAL DATA ====================
+
+def get_fundamental_data(symbol: str, metrics: Optional[List[str]] = None) -> Dict:
+    """
+    Get raw fundamental data for a symbol
+    
+    Args:
+        metrics: List of specific metrics to retrieve, or None for all available
+                Available: 'market_cap', 'shares_outstanding', 'eps', 'revenue', 'dividend',
+                          'book_value', 'debt', 'cash', 'free_cash_flow', 'gross_profit',
+                          'operating_income', 'net_income', 'total_assets', 'total_liabilities'
+    
+    Returns: Dict with raw fundamental metrics as key-value pairs
+    """
+    pass  # Implemented by backend
+
+def get_earnings_data(symbol: str, quarters: int = 8) -> Dict:
+    """
+    Get raw historical earnings data
+    
+    Returns: Dict with eps_actual: List[float], eps_estimate: List[float], 
+             revenue_actual: List[float], revenue_estimate: List[float],
+             report_dates: List[str], surprise_percent: List[float]
+    """
+    pass  # Implemented by backend
+
+def get_financial_statements(symbol: str, statement_type: str = 'income', periods: int = 4) -> Dict:
+    """
+    Get raw financial statement data
+    
+    Args:
+        statement_type: 'income', 'balance', 'cash_flow'
+        periods: Number of periods (quarters) to retrieve
+    
+    Returns: Dict with 'periods': List[str], 'line_items': Dict[str, List[float]]
+    """
+    pass  # Implemented by backend
+
+# ==================== RAW MARKET DATA ====================
+
+def get_sector_data(sector: str = None, days: int = 5) -> Dict:
+    """
+    Get raw sector performance data
+    
+    Args:
+        sector: Specific sector name, or None for all sectors
+        days: Number of days of data
+    
+    Returns: Dict with sector symbols and their raw price data
+    """
+    pass  # Implemented by backend
+
+def get_market_indices(indices: List[str] = None, days: int = 30) -> Dict[str, Dict]:
+    """
+    Get raw market index data
+    
+    Args:
+        indices: List of index symbols ['SPY', 'QQQ', 'IWM', 'VIX'] or None for all
+        days: Number of days of data
+    
+    Returns: Dict mapping index -> raw OHLCV data
+    """
+    pass  # Implemented by backend
+
+def get_economic_calendar(days_ahead: int = 30) -> List[Dict]:
+    """
+    Get upcoming economic events
+    
+    Returns: List of dicts with event_date, event_name, importance, previous, forecast, actual
+    """
+    pass  # Implemented by backend
+
+# ==================== RAW VOLUME & FLOW DATA ====================
+
+def get_volume_data(symbol: str, days: int = 30) -> Dict:
+    """
+    Get raw volume data with timestamps
+    
+    Returns: Dict with 'timestamps': List[int], 'volume': List[int], 
+             'dollar_volume': List[float], 'trade_count': List[int]
+    """
+    pass  # Implemented by backend
+
+def get_options_chain(symbol: str, expiration: str = None) -> Dict:
+    """
+    Get raw options chain data
+    
+    Args:
+        expiration: Specific expiration date (YYYY-MM-DD), or None for next expiration
+    
+    Returns: Dict with calls: List[Dict], puts: List[Dict], each containing
+             strike, bid, ask, volume, open_interest, implied_volatility
+    """
+    pass  # Implemented by backend
+
+# ==================== RAW SENTIMENT & NEWS DATA ====================
+
+def get_news_sentiment(symbol: str = None, days: int = 7) -> List[Dict]:
+    """
+    Get raw news articles with sentiment scores
+    
+    Args:
+        symbol: Specific symbol or None for market news
+        days: Number of days of news data
+    
+    Returns: List of dicts with timestamp, headline, sentiment_score, source, url
+    """
+    pass  # Implemented by backend
+
+def get_social_mentions(symbol: str, days: int = 7) -> Dict:
+    """
+    Get raw social media mention data
+    
+    Returns: Dict with 'timestamps': List[int], 'mention_count': List[int],
+             'sentiment_scores': List[float], 'platforms': List[str]
+    """
+    pass  # Implemented by backend
+
+# ==================== RAW INSIDER & INSTITUTIONAL DATA ====================
+
+def get_insider_trades(symbol: str, days: int = 90) -> List[Dict]:
+    """
+    Get raw insider trading transactions
+    
+    Returns: List of dicts with date, insider_name, title, transaction_type,
+             shares, price, value, shares_owned_after
+    """
+    pass  # Implemented by backend
+
+def get_institutional_holdings(symbol: str, quarters: int = 4) -> List[Dict]:
+    """
+    Get raw institutional ownership data
+    
+    Returns: List of dicts with quarter, institution_name, shares_held,
+             market_value, percent_ownership, change_in_shares
+    """
+    pass  # Implemented by backend
+
+def get_short_data(symbol: str) -> Dict:
+    """
+    Get raw short interest data
+    
+    Returns: Dict with short_interest, short_ratio, days_to_cover,
+             short_percent_float, previous_short_interest
+    """
+    pass  # Implemented by backend
+
+# ==================== SCREENING & FILTERING ====================
+
+def scan_universe(filters: Dict = None, sort_by: str = None, limit: int = 100) -> Dict:
+    """
+    Screen stocks based on raw criteria
+    
+    Args:
+        filters: dict with screening criteria
+                Keys: 'market_cap_min', 'market_cap_max', 'price_min', 'price_max',
+                      'volume_min', 'sector', 'industry', 'country', 'exchange'
+        sort_by: Field to sort results by ('market_cap', 'volume', 'price')
+        limit: Maximum number of results
+    
+    Returns: Dict with 'symbols': List[str], 'data': List[Dict] with basic info
+    """
+    pass  # Implemented by backend
+
+def get_universe_symbols(universe: str = 'sp500') -> List[str]:
+    """
+    Get list of symbols from predefined universes
+    
+    Args:
+        universe: 'sp500', 'nasdaq100', 'russell2000', 'all_stocks'
+    
+    Returns: List of ticker symbols
+    """
+    pass  # Implemented by backend
+`
+
+func CreateStrategyFromPrompt(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	var args CreateStrategyFromPromptArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-	if args.Bars <= 0 {
-		args.Bars = 50 // sensible default
-	}
-
-	/* 2. Pull chart data (uses existing GetChartData) */
-	chartReq := chart.GetChartDataArgs{
-		SecurityID:    args.SecurityID,
-		Timeframe:     args.Timeframe,
-		Timestamp:     args.Timestamp,
-		Direction:     "backward",
-		Bars:          args.Bars,
-		ExtendedHours: false,
-		IsReplay:      false,
-	}
-	reqBytes, _ := json.Marshal(chartReq)
-
-	rawResp, err := chart.GetChartData(conn, userID, reqBytes)
-	if err != nil {
-		return nil, fmt.Errorf("error fetching chart data: %v", err)
-	}
-	resp, ok := rawResp.(chart.GetChartDataResponse)
-	if !ok {
-		return nil, fmt.Errorf("unexpected GetChartData response type")
-	}
-	if len(resp.Bars) == 0 {
-		return nil, fmt.Errorf("no bars returned for that window")
-	}
-
-	/* 3. Render a quick candlestick PNG (go‑chart v2 expects parallel slices) */
-	// ─── Step 3: build and render the chart ─────────────────────────────────────
-	var bars custplotter.TOHLCVs
-	for _, b := range resp.Bars {
-		// the candlestick plotter expects Unix seconds for the X value
-		bars = append(bars, struct {
-			T, O, H, L, C, V float64
-		}{
-			T: float64(b.Timestamp) / 1e3, // resp.Bars is milliseconds
-			O: b.Open,
-			H: b.High,
-			L: b.Low,
-			C: b.Close,
-			V: b.Volume,
-		})
-	}
-
-	// create the plot
-	p := plot.New()
-	//if err != nil { return nil, fmt.Errorf("plot init: %w", err) }
-
-	p.HideY() // optional cosmetics
-	p.X.Tick.Marker = plot.TimeTicks{Format: "01‑02\n15:04"}
-
-	// add candlesticks
-	candles, err := custplotter.NewCandlesticks(bars)
-	if err != nil {
-		return nil, fmt.Errorf("candles: %w", err)
-	}
-	p.Add(candles)
-
-	// render to an in‑memory PNG
-	var png bytes.Buffer
-	wt, err := p.WriterTo(600, 300, "png") // width, height, format
-	if err != nil {
-		return nil, fmt.Errorf("writer: %w", err)
-	}
-	if _, err = wt.WriteTo(&png); err != nil {
-		return nil, fmt.Errorf("render: %w", err)
-	}
-	pngB64 := base64.StdEncoding.EncodeToString(png.Bytes())
-
-	barsJSON, _ := json.Marshal(resp.Bars)
-
-	sysPrompt, err := getSystemInstruction("analyzeInstance")
-	if err != nil {
-		return nil, fmt.Errorf("error fetching system prompt: %v", err)
-	}
-
-	cfg := &genai.GenerateContentConfig{
-		SystemInstruction: &genai.Content{
-			Parts: []*genai.Part{{Text: sysPrompt}},
-		},
-	}
-
-	// User‑side content parts
-	userContent := &genai.Content{
-		Parts: []*genai.Part{
-			{Text: "BARS_JSON:\n" + string(barsJSON)},
-			{Text: "CHART_PNG_BASE64:\n" + pngB64},
-		},
-	}
-
-	apiKey, err := conn.GetGeminiKey()
-	if err != nil {
-		return nil, fmt.Errorf("error getting Gemini key: %v", err)
-	}
-	client, err := genai.NewClient(context.Background(), &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-
-	if err != nil {
-		return nil, fmt.Errorf("error creating Gemini client: %v", err)
-	}
-
-	result, err := client.Models.GenerateContent(
-		context.Background(),
-		"gemini-2.0-flash-thinking-exp-01-21",
-		[]*genai.Content{userContent}, // expects []*genai.Content
-		cfg,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("gemini call failed: %v", err)
-	}
-
-	analysis := ""
-	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
-		for _, p := range result.Candidates[0].Content.Parts {
-			if p.Text != "" {
-				analysis = p.Text
-				break
-			}
-		}
-	}
-
-	return map[string]interface{}{
-		"analysis": analysis, // Gemini’s narrative
-		//	"bars":     json.RawMessage(barsJSON),
-		//	"chart":    pngB64,           // base‑64 PNG for client preview
-	}, nil
-}
-
-type CreateStrategyFromNaturalLanguageArgs struct {
-	Query      string `json:"query"`
-	StrategyID int    `json:"strategyId,omitempty"`
-}
-
-func CreateStrategyFromNaturalLanguage(conn *data.Conn, userID int, rawArgs json.RawMessage) (any, error) {
-	var args CreateStrategyFromNaturalLanguageArgs
-	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		return nil, fmt.Errorf("invalid args: %v", err)
-	}
-
-	////fmt.Printf("INFO: Starting CreateStrategyFromNaturalLanguage for user %d with query: %q\n", userID, args.Query)
 
 	apikey, err := conn.GetGeminiKey()
 	if err != nil {
-		////fmt.Printf("ERROR: Error getting Gemini key for user %d: %v\n", userID, err)
 		return nil, fmt.Errorf("error getting gemini key: %v", err)
 	}
 
@@ -197,185 +320,89 @@ func CreateStrategyFromNaturalLanguage(conn *data.Conn, userID int, rawArgs json
 		return nil, fmt.Errorf("error creating gemini client: %v", err)
 	}
 
-	systemInstruction, err := getSystemInstruction("spec")
+	systemInstruction, err := getSystemInstruction("classifier")
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %v", err)
 	}
-	thinkingBudget := int32(2000)
+
 	config := &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{
 			Parts: []*genai.Part{
 				{Text: systemInstruction},
 			},
 		},
-		ThinkingConfig: &genai.ThinkingConfig{
-			IncludeThoughts: true,
-			ThinkingBudget:  &thinkingBudget,
-		},
 	}
 
-	maxRetries := 3
-	var lastErr error
-	// genai.Text returns []*genai.Content, we need the first element for the initial message
-	initialContent := genai.Text(args.Query) // genai.Text returns one value: []*genai.Content
-	if len(initialContent) == 0 || initialContent[0] == nil {
-		// Handle the case where genai.Text might return an empty slice or nil content, though unlikely for a simple query.
-		return nil, fmt.Errorf("failed to create initial content from query")
-	}
-	conversationHistory := []*genai.Content{initialContent[0]} // Start with the user's query
+	// Create the prompt with data accessor functions
+	fullPrompt := fmt.Sprintf(`%s
 
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		////fmt.Printf("Attempt %d/%d to generate and validate strategy spec...\n", attempt+1, maxRetries)
+User Request: %s
 
-		// Generate content using the current conversation history
-		result, err := client.Models.GenerateContent(context.Background(), "gemini-2.5-flash-preview-05-20", conversationHistory, config)
-		if err != nil {
-			lastErr = fmt.Errorf("error generating content (attempt %d): %w", attempt+1, err)
-			////fmt.Printf("WARN: Attempt %d/%d for user %d: Gemini content generation failed: %v\n", attempt+1, maxRetries, userID, err)
-			// Append error as user message for context? Maybe too noisy. Let's just retry.
-			continue // Retry the API call
-		}
+Please generate a Python classifier function that uses the above data accessor functions to identify the pattern the user is requesting. The function should be named 'classify_symbol(symbol)' and return a boolean indicating if the symbol matches the criteria.`, dataAccessorFunctions, args.Prompt)
 
-		responseText := ""
-		if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
-			// Append assistant's response to history for the next turn
-			conversationHistory = append(conversationHistory, result.Candidates[0].Content)
-			for _, part := range result.Candidates[0].Content.Parts {
-				if part.Thought {
-					continue
-				}
-				if part.Text != "" {
-					responseText = part.Text
-					break
-				}
-			}
-		} else {
-			lastErr = fmt.Errorf("gemini returned no response candidates (attempt %d)", attempt+1)
-			////fmt.Printf("WARN: Attempt %d/%d for user %d: Gemini returned no response candidates.\n", attempt+1, maxRetries, userID)
-			// Append error message as user turn
-			errorMsg := fmt.Sprintf("Attempt %d failed: Gemini returned no response. Please try again.", attempt+1)
-			// Parts expects []*genai.Part, and we need to create a Part directly
-			conversationHistory = append(conversationHistory, &genai.Content{Role: "user", Parts: []*genai.Part{{Text: errorMsg}}})
-			continue
-		}
-
-		////fmt.Printf("DEBUG: Attempt %d/%d for user %d: Raw Gemini response: %s\n", attempt+1, maxRetries, userID, responseText)
-
-		// Extract JSON block
-		jsonBlock := ""
-		// Try extracting from ```json ... ``` block first
-		jsonCodeBlockStart := strings.Index(responseText, "```json")
-		if jsonCodeBlockStart != -1 {
-			jsonCodeBlockStart += len("```json") // Move past the marker
-			jsonCodeBlockEnd := strings.Index(responseText[jsonCodeBlockStart:], "```")
-			if jsonCodeBlockEnd != -1 {
-				// Found the closing ```
-				jsonBlock = responseText[jsonCodeBlockStart : jsonCodeBlockStart+jsonCodeBlockEnd]
-				////fmt.Printf("DEBUG: Attempt %d/%d for user %d: Extracted JSON from code block.\n", attempt+1, maxRetries, userID)
-			}
-		}
-
-		// If not found in code block, fall back to searching for first { and last }
-		if jsonBlock == "" {
-			////fmt.Printf("DEBUG: Attempt %d/%d for user %d: JSON code block not found, falling back to {} search.\n", attempt+1, maxRetries, userID)
-			jsonStartIdx := strings.Index(responseText, "{")
-			jsonEndIdx := strings.LastIndex(responseText, "}")
-			if jsonStartIdx != -1 && jsonEndIdx != -1 && jsonEndIdx > jsonStartIdx {
-				jsonBlock = responseText[jsonStartIdx : jsonEndIdx+1]
-			}
-		}
-
-		if jsonBlock == "" {
-			lastErr = fmt.Errorf("no valid JSON block found in Gemini response (attempt %d): %s", attempt+1, responseText)
-			////fmt.Printf("WARN: Attempt %d/%d for user %d: No valid JSON block found in Gemini response.\n", attempt+1, maxRetries, userID)
-			// Append error message as user turn
-			errorMsg := fmt.Sprintf("Attempt %d failed: Could not find a JSON block (neither in ```json ... ``` nor between '{' and '}') in the response. Please ensure the response contains a single, valid JSON object. The response received was:\n%s", attempt+1, responseText)
-			// Parts expects []*genai.Part, and we need to create a Part directly
-			conversationHistory = append(conversationHistory, &genai.Content{Role: "user", Parts: []*genai.Part{{Text: errorMsg}}})
-			continue
-		}
-
-		// Log the raw JSON block returned by Gemini
-		////fmt.Printf("DEBUG: Attempt %d/%d for user %d: Extracted JSON block: \n%s\n", attempt+1, maxRetries, userID, jsonBlock)
-
-		jsonBlock = strings.TrimSpace(jsonBlock)
-		// Use the new helper function to unmarshal and validate the entire JSON block
-		name, spec, err := UnmarshalAndValidateNewStrategyInput([]byte(jsonBlock))
-		if err != nil {
-			lastErr = fmt.Errorf("failed to unmarshal or validate Gemini JSON response (attempt %d): %w", attempt+1, err)
-			////fmt.Printf("WARN: Attempt %d/%d for user %d: Failed to unmarshal/validate JSON: %v\n", attempt+1, maxRetries, userID, err)
-			// Format error message for the next prompt
-			errorMsg := fmt.Sprintf("Attempt %d failed: Could not parse or validate the JSON structure. Ensure the response is a single JSON object with 'name' (string) and 'spec' (object) fields, and that the spec is valid. Error: %v\nReceived JSON:\n%s\nPlease fix the JSON based on the error and the original query.", attempt+1, err, jsonBlock)
-			// Parts expects []*genai.Part, and we need to create a Part directly
-			conversationHistory = append(conversationHistory, &genai.Content{Role: "user", Parts: []*genai.Part{{Text: errorMsg}}})
-			continue
-		}
-
-		////fmt.Printf("INFO: Attempt %d/%d for user %d: Successfully validated name '%s' and spec.\n", attempt+1, maxRetries, userID, name)
-
-		// --- Compile the validated spec to SQL ---
-		_, compileErr := CompileSpecToSQL(spec)
-		if compileErr != nil {
-			// Log the error but proceed with saving the strategy for now.
-			// The user might want to fix the spec manually later.
-			////fmt.Printf("ERROR: User %d: Failed to compile validated spec for strategy '%s' to SQL: %v\n", userID, name, compileErr)
-			// Optionally, you could add this error info back into the conversation history
-			// if you wanted Gemini to potentially fix the spec based on compilation failure.
-			return nil, compileErr
-		}
-		// --- End SQL Compilation ---
-
-		// If validation succeeds, create the strategy using the validated name and spec
-		strategyID, err := _newStrategy(conn, userID, name, spec)
-		if err != nil {
-			// This is an internal error, not Gemini's fault, so return directly
-			////fmt.Printf("ie20hifi0: %v\n", err)
-			return nil, fmt.Errorf("error saving validated strategy: %w", err)
-		}
-
-		// Return the successful result
-		return map[string]interface{}{
-			"strategyId": strategyID,
-			"name":       name,
-			//"spec":       spec, // Return the validated spec object
-		}, nil
+	content := genai.Text(fullPrompt)
+	if len(content) == 0 {
+		return nil, fmt.Errorf("failed to create content from prompt")
 	}
 
-	// If loop finishes without success
-	////fmt.Printf("ERROR: User %d: Failed to create valid strategy from query %q after %d attempts. Last error: %v\n", userID, args.Query, maxRetries, lastErr)
-	return nil, fmt.Errorf("failed to create valid strategy after %d attempts: %w", maxRetries, lastErr)
-}
-
-type GetStrategySpecArgs struct {
-	StrategyID int `json:"strategyId"`
-}
-
-func GetStrategySpec(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
-	var args GetStrategySpecArgs
-	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		return nil, fmt.Errorf("invalid args: %v", err)
-	}
-	return _getStrategySpec(conn, args.StrategyID, userID)
-}
-
-func _getStrategySpec(conn *data.Conn, strategyID int, userID int) (json.RawMessage, error) {
-	var strategyCriteria json.RawMessage
-	////fmt.Println(userID)
-	err := conn.DB.QueryRow(context.Background(), `
-    SELECT spec
-    FROM strategies WHERE strategyId = $1 and userId = $2`, strategyID, userID).Scan(&strategyCriteria)
+	result, err := client.Models.GenerateContent(context.Background(), "gemini-2.5-flash-preview-05-20", content, config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error generating content: %w", err)
 	}
 
-	return strategyCriteria, nil
+	responseText := ""
+	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
+		for _, part := range result.Candidates[0].Content.Parts {
+			if !part.Thought && part.Text != "" {
+				responseText = part.Text
+				break
+			}
+		}
+	}
+
+	if responseText == "" {
+		return nil, fmt.Errorf("gemini returned no response")
+	}
+
+	// Extract Python code and description
+	pythonCode := extractPythonCode(responseText)
+	description := extractDescription(responseText)
+
+	if pythonCode == "" {
+		return nil, fmt.Errorf("no Python code generated")
+	}
+
+	// Generate a name from the prompt
+	name := generateStrategyName(args.Prompt)
+
+	// Save to database
+	strategyID, err := saveStrategy(conn, userID, name, description, args.Prompt, pythonCode)
+	if err != nil {
+		return nil, fmt.Errorf("error saving strategy: %w", err)
+	}
+
+	return Strategy{
+		StrategyID:    strategyID,
+		UserID:        userID,
+		Name:          name,
+		Description:   description,
+		Prompt:        args.Prompt,
+		PythonCode:    pythonCode,
+		Score:         0,
+		Version:       "1.0",
+		CreatedAt:     time.Now().Format(time.RFC3339),
+		IsAlertActive: false,
+	}, nil
 }
 
-// GetStrategies performs operations related to GetStrategies functionality.
 func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(), `
-    SELECT strategyId, name
-    FROM strategies WHERE userId = $1`, userID)
+		SELECT strategyId, name, description, prompt, pythonCode, 
+		       COALESCE(score, 0) as score,
+		       COALESCE(version, '1.0') as version,
+		       COALESCE(createdAt, NOW()) as createdAt,
+		       COALESCE(isAlertActive, false) as isAlertActive
+		FROM strategies WHERE userId = $1 ORDER BY createdAt DESC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -384,95 +411,62 @@ func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{},
 	var strategies []Strategy
 	for rows.Next() {
 		var strategy Strategy
+		var createdAt time.Time
 
-		if err := rows.Scan(&strategy.StrategyID, &strategy.Name); err != nil {
+		if err := rows.Scan(
+			&strategy.StrategyID,
+			&strategy.Name,
+			&strategy.Description,
+			&strategy.Prompt,
+			&strategy.PythonCode,
+			&strategy.Score,
+			&strategy.Version,
+			&createdAt,
+			&strategy.IsAlertActive,
+		); err != nil {
 			return nil, fmt.Errorf("error scanning strategy: %v", err)
 		}
 
-		// Get the score from the studies table (if available)
-		var score sql.NullInt32
-		err := conn.DB.QueryRow(context.Background(), `
-			SELECT COUNT(*) FROM studies 
-			WHERE userId = $1 AND strategyId = $2 AND completed = true`,
-			userID, strategy.StrategyID).Scan(&score)
-
-		if err == nil && score.Valid {
-			strategy.Score = int(score.Int32)
-		}
-
+		strategy.UserID = userID
+		strategy.CreatedAt = createdAt.Format(time.RFC3339)
 		strategies = append(strategies, strategy)
 	}
 
 	return strategies, nil
 }
 
-// No longer needed:
-// type NewStrategyArgs struct { ... }
-
-// _newStrategy saves a validated strategy spec to the database.
-// It now takes userID, name, and the validated Spec object directly.
-func _newStrategy(conn *data.Conn, userID int, name string, spec Spec) (int, error) {
-	if name == "" {
-		return -1, fmt.Errorf("strategy name cannot be empty")
-	}
-	// userID is assumed to be validated by the caller function's context
-
-	// Convert the validated spec object back to JSON for database storage
-	specJSON, err := json.Marshal(spec)
-	if err != nil {
-		// This should ideally not happen if the spec was correctly validated/constructed
-		return -1, fmt.Errorf("internal error marshaling validated spec: %w", err)
-	}
-
-	var strategyID int
-	// Ensure the userID from the function argument is used
-	err = conn.DB.QueryRow(context.Background(), `
-		INSERT INTO strategies (name, spec, userId)
-		VALUES ($1, $2, $3) RETURNING strategyId`,
-		name, specJSON, userID, // Use the passed userID
-	).Scan(&strategyID)
-
-	if err != nil {
-		// Consider checking for specific DB errors (e.g., unique constraint violation) if needed
-		return -1, fmt.Errorf("error inserting strategy into database: %w", err)
-	}
-	////fmt.Printf("Successfully created strategy with ID: %d for user %d\n", strategyID, userID)
-	return strategyID, nil
+type SetAlertArgs struct {
+	StrategyID int  `json:"strategyId"`
+	Active     bool `json:"active"`
 }
 
-// NewStrategy performs operations related to NewStrategy functionality.
-// It expects a JSON object with "name" and "spec" fields.
-func NewStrategy(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
-	// Use the new helper function to unmarshal and validate the input
-	name, spec, err := UnmarshalAndValidateNewStrategyInput(rawArgs)
-	if err != nil {
-		// Error message from helper is already descriptive
-		return nil, fmt.Errorf("invalid new strategy input: %w", err)
+func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	var args SetAlertArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
-	// Call _newStrategy with validated data
-	strategyID, err := _newStrategy(conn, userID, name, spec)
+	_, err := conn.DB.Exec(context.Background(), `
+		UPDATE strategies 
+		SET isAlertActive = $1 
+		WHERE strategyId = $2 AND userId = $3`,
+		args.Active, args.StrategyID, userID)
+
 	if err != nil {
-		return nil, err // _newStrategy already formats the error
+		return nil, fmt.Errorf("error updating alert status: %v", err)
 	}
 
-	// Return the created strategy details using the main Strategy struct
-	return Strategy{
-		StrategyID: strategyID,
-		UserID:     userID, // Reflect the correct user ID
-		Name:       name,
-		Spec:       spec, // Return the validated spec
-		Score:      0,    // New strategy has no score yet
-		// Other fields like CreationTimestamp, AlertActive etc., would be set by DB defaults or other logic
+	return map[string]interface{}{
+		"success":     true,
+		"strategyId":  args.StrategyID,
+		"alertActive": args.Active,
 	}, nil
 }
 
-// DeleteStrategyArgs represents a structure for handling DeleteStrategyArgs data.
 type DeleteStrategyArgs struct {
 	StrategyID int `json:"strategyId"`
 }
 
-// DeleteStrategy performs operations related to DeleteStrategy functionality.
 func DeleteStrategy(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteStrategyArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -487,83 +481,93 @@ func DeleteStrategy(conn *data.Conn, userID int, rawArgs json.RawMessage) (inter
 		return nil, fmt.Errorf("error deleting strategy: %v", err)
 	}
 
-	// Check if any rows were affected
 	rowsAffected := result.RowsAffected()
 	if rowsAffected == 0 {
 		return nil, fmt.Errorf("strategy not found or you don't have permission to delete it")
 	}
 
-	return nil, nil
+	return map[string]interface{}{"success": true}, nil
 }
 
-// SetStrategyArgs represents a structure for handling SetStrategyArgs data.
-// Note: We'll parse into the main Strategy struct for consistency.
-// type SetStrategyArgs struct {
-// 	StrategyID int          `json:"strategyId"`
-// 	Name       string       `json:"name"`
-// 	Spec   Spec `json:"spec"`
-// }
-
-// _setStrategy updates an existing strategy in the database after validation.
-func _setStrategy(conn *data.Conn, userID int, strategyID int, name string, spec Spec) error {
-	if name == "" {
-		return fmt.Errorf("strategy name cannot be empty")
+// Helper functions
+func extractPythonCode(response string) string {
+	// Look for Python code blocks
+	start := strings.Index(response, "```python")
+	if start == -1 {
+		start = strings.Index(response, "```")
 	}
-	if strategyID <= 0 {
-		return fmt.Errorf("invalid strategy ID")
+	if start == -1 {
+		return ""
 	}
 
-	// Convert the validated spec object back to JSON for database storage
-	specJSON, err := json.Marshal(spec)
-	if err != nil {
-		return fmt.Errorf("internal error marshaling validated spec: %w", err)
+	start = strings.Index(response[start:], "\n") + start + 1
+	end := strings.Index(response[start:], "```")
+	if end == -1 {
+		return ""
 	}
 
-	// Update the strategy, ensuring the userID matches for authorization
-	cmdTag, err := conn.DB.Exec(context.Background(), `
-		UPDATE strategies
-		SET name = $1, spec = $2
-		WHERE strategyId = $3 AND userId = $4`,
-		name, specJSON, strategyID, userID) // Use userID from context
-
-	if err != nil {
-		return fmt.Errorf("error updating strategy in database: %w", err)
-	}
-	if cmdTag.RowsAffected() != 1 {
-		// This means either the strategyID didn't exist or it didn't belong to the user
-		return fmt.Errorf("strategy not found or permission denied")
-	}
-	////fmt.Printf("Successfully updated strategy ID: %d for user %d\n", strategyID, userID)
-	return nil
+	return strings.TrimSpace(response[start : start+end])
 }
 
-// SetStrategy performs operations related to SetStrategy functionality.
-// It expects a JSON object containing the strategyID, new Name, and new Spec.
-func SetStrategy(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
-	// Use the new helper function to unmarshal and validate the input
-	strategyID, name, spec, err := UnmarshalAndValidateSetStrategyInput(rawArgs)
-	if err != nil {
-		// Error message from helper is already descriptive
-		return nil, fmt.Errorf("invalid set strategy input: %w", err)
+func extractDescription(response string) string {
+	// Extract description from the response (before code block or after)
+	lines := strings.Split(response, "\n")
+	var description []string
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "```") {
+			continue
+		}
+		if strings.Contains(line, "def classify_symbol") {
+			break
+		}
+		description = append(description, line)
 	}
 
-	// Call _setStrategy with validated data and userID from context
-	err = _setStrategy(conn, userID, strategyID, name, spec)
-	if err != nil {
-		return nil, err // _setStrategy already formats the error
+	result := strings.Join(description, " ")
+	if len(result) > 500 {
+		result = result[:500] + "..."
 	}
 
-	// Return the updated strategy details using the main Strategy struct
-	return Strategy{
-		StrategyID: strategyID,
-		UserID:     userID, // Reflect the correct user ID
-		Name:       name,
-		Spec:       spec, // Return the validated spec
-		// Score is not updated here, would need separate logic/query if needed
-	}, nil
+	return result
 }
 
-// getSystemInstruction returns the processed prompt named <name>.txt
+func generateStrategyName(prompt string) string {
+	words := strings.Fields(prompt)
+	if len(words) == 0 {
+		return "Custom Strategy"
+	}
+
+	// Take first few words and capitalize
+	nameWords := words
+	if len(words) > 4 {
+		nameWords = words[:4]
+	}
+
+	caser := cases.Title(language.English)
+	for i, word := range nameWords {
+		nameWords[i] = caser.String(word)
+	}
+
+	return strings.Join(nameWords, " ") + " Strategy"
+}
+
+func saveStrategy(conn *data.Conn, userID int, name, description, prompt, pythonCode string) (int, error) {
+	var strategyID int
+	err := conn.DB.QueryRow(context.Background(), `
+		INSERT INTO strategies (name, description, prompt, pythonCode, userId, createdAt, version, score, isAlertActive)
+		VALUES ($1, $2, $3, $4, $5, NOW(), '1.0', 0, false) 
+		RETURNING strategyId`,
+		name, description, prompt, pythonCode, userID).Scan(&strategyID)
+
+	if err != nil {
+		return -1, fmt.Errorf("error inserting strategy into database: %w", err)
+	}
+
+	return strategyID, nil
+}
+
 func getSystemInstruction(name string) (string, error) {
 	raw, err := fs.ReadFile("prompts/" + name + ".txt")
 	if err != nil {
