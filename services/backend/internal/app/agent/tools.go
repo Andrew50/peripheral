@@ -610,7 +610,7 @@ var (
 					Required: []string{"query", "strategyId"},
 				},
 			},
-			Function:      wrapWithContext(strategy.CreateStrategyFromNaturalLanguage),
+			Function:      wrapWithContext(strategy.CreateStrategyFromPrompt),
 			StatusMessage: "Building strategy...",
 		},
 		"calculateBacktestStatistic": {

@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional
 import psutil
 import redis
 from src.execution_engine import PythonExecutionEngine
-from src.security_validator import SecurityValidator
+from src.security_validator import SecurityValidator, SecurityError
 from src.data_provider import DataProvider
 
 # Configure logging
@@ -132,30 +132,34 @@ class PythonWorker:
             
             logger.info(f"Job {execution_id} completed successfully in {execution_time_ms}ms")
             
-        except asyncio.TimeoutError:
-            await self._update_execution_status(execution_id, 'timeout', {
-                'error_message': f"Execution timed out after {timeout_seconds} seconds",
-                'completed_at': datetime.utcnow().isoformat()
-            })
-            logger.warning(f"Job {execution_id} timed out")
-            
         except SecurityError as e:
+            logger.error(f"Security violation in job {execution_id}: {e}")
             await self._update_execution_status(execution_id, 'failed', {
                 'error_message': f"Security violation: {str(e)}",
                 'completed_at': datetime.utcnow().isoformat()
             })
-            logger.warning(f"Job {execution_id} failed security check: {e}")
             
-        except Exception as e:
-            error_message = f"{type(e).__name__}: {str(e)}"
-            traceback_str = traceback.format_exc()
-            
-            await self._update_execution_status(execution_id, 'failed', {
-                'error_message': error_message,
-                'logs': traceback_str,
+        except asyncio.TimeoutError:
+            logger.error(f"Job {execution_id} timed out")
+            await self._update_execution_status(execution_id, 'timeout', {
+                'error_message': 'Execution timed out',
                 'completed_at': datetime.utcnow().isoformat()
             })
+            
+        except MemoryError as e:
+            logger.error(f"Job {execution_id} exceeded memory limit: {e}")
+            await self._update_execution_status(execution_id, 'failed', {
+                'error_message': f"Memory limit exceeded: {str(e)}",
+                'completed_at': datetime.utcnow().isoformat()
+            })
+            
+        except Exception as e:
             logger.error(f"Job {execution_id} failed: {e}")
+            await self._update_execution_status(execution_id, 'failed', {
+                'error_message': str(e),
+                'error_traceback': traceback.format_exc(),
+                'completed_at': datetime.utcnow().isoformat()
+            })
     
     async def _execute_with_limits(
         self,
@@ -208,52 +212,33 @@ class PythonWorker:
             raise
     
     async def _update_execution_status(
-        self,
-        execution_id: str,
-        status: str,
-        data: Dict[str, Any]
+        self, 
+        execution_id: str, 
+        status: str, 
+        additional_data: Dict[str, Any] = None
     ):
-        """Update execution status in Redis for backend to pick up"""
-        update_data = {
-            'execution_id': execution_id,
-            'status': status,
-            'worker_node': self.worker_id,
-            **data
-        }
-        
-        # Publish update to Redis
-        self.redis_client.publish('python_execution_updates', json.dumps(update_data))
-        
-        # Also store in hash for polling
-        self.redis_client.hset(f'execution:{execution_id}', mapping=update_data)
-        self.redis_client.expire(f'execution:{execution_id}', 3600)  # 1 hour TTL
-
-
-class SecurityError(Exception):
-    """Raised when code contains prohibited operations"""
-    pass
+        """Update execution status in database via Redis"""
+        try:
+            update_data = {
+                'execution_id': execution_id,
+                'status': status,
+                'worker_id': self.worker_id,
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            
+            if additional_data:
+                update_data.update(additional_data)
+            
+            # Publish update for backend to process
+            self.redis_client.publish('python_execution_updates', json.dumps(update_data))
+            
+        except Exception as e:
+            logger.error(f"Failed to update execution status: {e}")
 
 
 class MemoryError(Exception):
     """Raised when memory limit is exceeded"""
     pass
-
-
-@contextmanager
-def capture_output():
-    """Capture stdout and stderr"""
-    old_stdout = sys.stdout
-    old_stderr = sys.stderr
-    stdout_capture = StringIO()
-    stderr_capture = StringIO()
-    
-    try:
-        sys.stdout = stdout_capture
-        sys.stderr = stderr_capture
-        yield stdout_capture, stderr_capture
-    finally:
-        sys.stdout = old_stdout
-        sys.stderr = old_stderr
 
 
 async def main():
@@ -262,5 +247,5 @@ async def main():
     await worker.run()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())

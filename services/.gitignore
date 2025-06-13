@@ -21,3 +21,5 @@ services/prod/config/redis-secret.yaml
 services/prod/config/db-secret.yaml
 services/prod/config/cloudflare-secret.yaml
 services/prod/config/polygon-secret.yaml
+
+services/worker/venv/

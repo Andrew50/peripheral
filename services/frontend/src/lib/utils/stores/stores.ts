@@ -137,7 +137,7 @@ export function initStores() {
                     return [{ watchlistId: newId, watchlistName: 'flag' }, ...newList];
                 });
             }).catch(err => {
-                 console.error("Error creating flag watchlist:", err);
+                console.error("Error creating flag watchlist:", err);
             });
         } else {
             flagWatchlistId = flagWatch.watchlistId;
@@ -162,7 +162,7 @@ export function initStores() {
     setInterval(updateTime, 250);
 }
 
-export type Menu = 'none' | 'watchlist' | 'alerts' | 'study' ;
+export type Menu = 'none' | 'watchlist' | 'alerts' | 'news';
 
 export const activeMenu = writable<Menu>('none');
 
