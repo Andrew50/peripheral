@@ -50,24 +50,6 @@ var (
 			Function:      wrapWithContext(helpers.GetCurrentSecurityID),
 			StatusMessage: "Looking up {ticker}...",
 		},
-		"getSecuritiesFromTicker": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getSecuritiesFromTicker",
-				Description: "Get a list of the closest 10 security ticker symbols to an input string.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "string input to retrieve the list based on.",
-						},
-					},
-					Required: []string{"ticker"},
-				},
-			},
-			Function:      wrapWithContext(helpers.GetSecuritiesFromTicker),
-			StatusMessage: "Searching for matching tickers...",
-		},
 		"getStockDetails": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStockDetails",
@@ -217,24 +199,7 @@ var (
 			Function:      wrapWithContext(helpers.GetPrevClose),
 			StatusMessage: "Getting previous closing price...",
 		},*/ // We can get prev close using daily snapshot
-		"getLastPrice": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getLastPrice",
-				Description: "Retrieves the last price for a specified security ticker symbol.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "The ticker symbol to get the last price for.",
-						},
-					},
-					Required: []string{"ticker"},
-				},
-			},
-			Function:      wrapWithContext(helpers.GetLastPrice),
-			StatusMessage: "Getting current price of {ticker}...",
-		},
+
 		"setHorizontalLine": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "setHorizontalLine",
@@ -496,7 +461,7 @@ var (
 		"getDailySnapshot": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getDailySnapshot",
-				Description: "Get the current price, change, volume, OHLC, previous close for a specified stock.",
+				Description: "Get the current (regular or extended hours) price, change, volume, OHLC, previous close for a specified stock.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -511,7 +476,25 @@ var (
 			Function:      wrapWithContext(helpers.GetTickerDailySnapshot),
 			StatusMessage: "Getting market data...",
 		},
-		"getAllTickerSnapshots": {
+		"getLastPrice": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getLastPrice",
+				Description: "Retrieves the last price (regular or extended hours)for a specified security ticker symbol.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"ticker": {
+							Type:        genai.TypeString,
+							Description: "The ticker symbol to get the last price for.",
+						},
+					},
+					Required: []string{"ticker"},
+				},
+			},
+			Function:      wrapWithContext(helpers.GetLastPrice),
+			StatusMessage: "Getting current price of {ticker}...",
+		},
+		/*"getAllTickerSnapshots": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getAllTickerSnapshots",
 				Description: "Get a list of the current bid, ask, price, change, percent change, volume, vwap price, and daily open, high, low and close for all securities.",
@@ -523,7 +506,7 @@ var (
 			},
 			Function:      wrapWithContext(helpers.GetAllTickerSnapshots),
 			StatusMessage: "Scanning market data...",
-		},
+		}, */
 		"getOHLCVData": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getOHLCVData",

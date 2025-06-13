@@ -1,14 +1,14 @@
 <script lang="ts">
-	import List from '$lib/components/list.svelte';
 	import type { Writable } from 'svelte/store';
 	import { writable, get } from 'svelte/store';
 	import type { Instance, Watchlist } from '$lib/utils/types/types';
 	import { onMount, tick } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { queryInstanceInput } from '$lib/components/input/input.svelte';
-	import { flagWatchlistId, watchlists, flagWatchlist } from '$lib/utils/stores/stores';
+	import { flagWatchlistId, watchlists, flagWatchlist, isPublicViewing } from '$lib/utils/stores/stores';
 	import '$lib/styles/global.css';
-
+	import WatchlistList from './watchlistList.svelte';
+	import { showAuthModal } from '$lib/stores/authModal';
 	// Extended Instance type to include watchlistItemId
 	interface WatchlistItem extends Instance {
 		watchlistItemId?: number;
@@ -106,8 +106,13 @@
 	});
 
 	function addInstance() {
-		const inst = { ticker: '', timestamp: 0 };
-		queryInstanceInput(['ticker'], ['ticker', 'timestamp'], inst).then((i: WatchlistItem) => {
+		if (get(isPublicViewing)) {
+			showAuthModal('watchlists', 'signup');
+			return;
+		}
+
+		const inst = { ticker: ''};
+		queryInstanceInput(['ticker'], ['ticker'], inst, 'ticker', 'Add Symbol to Watchlist').then((i: WatchlistItem) => {
 			const aList = get(activeList);
 			const empty = !Array.isArray(aList);
 			if (empty || !aList.find((l: WatchlistItem) => l.ticker === i.ticker)) {
@@ -332,13 +337,13 @@
 	<!-- Controls container first -->
 	<div class="controls-container">
 		{#if Array.isArray($watchlists)}
-			<div class="watchlist-selector">
-				<select
-					class="default-select"
-					id="watchlists"
-					value={currentWatchlistId?.toString()}
-					on:change={handleWatchlistChange}
-				>
+				<div class="watchlist-selector glass glass--rounded glass--medium">
+		<select
+			class="default-select"
+			id="watchlists"
+			value={currentWatchlistId?.toString()}
+			on:change={handleWatchlistChange}
+		>
 					<optgroup label="My Watchlists">
 						{#each $watchlists as watchlist}
 							<option value={watchlist.watchlistId.toString()}>
@@ -356,20 +361,19 @@
 					</optgroup>
 				</select>
 				{#if !showWatchlistInput}
-					<button class="utility-button" title="Add Symbol" on:click={addInstance}>+</button>
-					<button
-						class="utility-button new-watchlist-button"
+					<button class="utility-button glass glass--small glass--light" title="Add Symbol" on:click={addInstance}>+</button>
+					<!--<button
+						class="utility-button new-watchlist-button glass glass--small glass--light"
 						title="New Watchlist"
 						on:click={() => selectWatchlist('new')}
 					>
 						<span>+</span>
-						<span class="list-icon">📋</span>
-					</button>
+					</button>-->
 				{/if}
 			</div>
 
 			{#if showWatchlistInput}
-				<div class="new-watchlist-container">
+				<div class="new-watchlist-container glass glass--rounded glass--medium">
 					<input
 						class="input"
 						bind:this={newNameInput}
@@ -384,8 +388,8 @@
 						placeholder="New Watchlist Name"
 					/>
 					<div class="new-watchlist-buttons">
-						<button class="utility-button" on:click={newWatchlist}>✓</button>
-						<button class="utility-button" on:click={closeNewWatchlistWindow}>✕</button>
+						<button class="utility-button glass glass--small glass--light" on:click={newWatchlist}>✓</button>
+						<button class="utility-button glass glass--small glass--light" on:click={closeNewWatchlistWindow}>✕</button>
 					</div>
 				</div>
 			{/if}
@@ -393,11 +397,11 @@
 	</div>
 
 	<!-- Shortcut buttons between controls and list -->
-	<div class="shortcut-container">
+	<div class="shortcut-container glass glass--rounded glass--light">
 		{#if Array.isArray($watchlists)}
 			{#each $watchlists as watchlist}
 				<button
-					class="shortcut-button {currentWatchlistId === watchlist.watchlistId ? 'active' : ''}"
+					class="shortcut-button glass glass--small glass--light {currentWatchlistId === watchlist.watchlistId ? 'active' : ''}"
 					on:click={() => selectWatchlist(String(watchlist.watchlistId))}
 					title={watchlist.watchlistName}
 				>
@@ -417,8 +421,8 @@
 	</div>
 
 	<!-- Wrap List component for scrolling -->
-	<div class="list-scroll-container">
-		<List
+	<div class="list-scroll-container glass glass--rounded glass--medium">
+		<WatchlistList
 			parentDelete={deleteItem}
 			columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Ext']}
 			list={activeList}
@@ -432,11 +436,6 @@
 		align-items: center;
 		gap: 12px;
 		padding: 12px;
-		background: rgba(0, 0, 0, 0.4);
-		border-radius: 12px;
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		backdrop-filter: var(--backdrop-blur);
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 	}
 
 	.watchlist-selector select {
@@ -446,10 +445,17 @@
 		color: #ffffff;
 		border: 1px solid rgba(255, 255, 255, 0.2);
 		border-radius: 8px;
-		padding: 8px 12px;
+		padding: 8px 32px 8px 12px;
 		font-size: 14px;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		transition: all 0.2s ease;
+		appearance: none;
+		-webkit-appearance: none;
+		-moz-appearance: none;
+		background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+		background-repeat: no-repeat;
+		background-position: right 8px center;
+		background-size: 16px;
 	}
 
 	.watchlist-selector select:hover {
@@ -463,10 +469,7 @@
 	}
 
 	.watchlist-selector .utility-button {
-		background: rgba(0, 0, 0, 0.3);
 		color: #ffffff;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		border-radius: 8px;
 		width: 36px;
 		height: 36px;
 		display: flex;
@@ -503,11 +506,6 @@
 	.new-watchlist-container {
 		margin-top: 12px;
 		padding: 16px;
-		background: rgba(0, 0, 0, 0.5);
-		border-radius: 12px;
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		backdrop-filter: var(--backdrop-blur);
-		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 		animation: slideDown 0.2s ease-out;
 	}
 
@@ -555,9 +553,6 @@
 
 	.new-watchlist-buttons .utility-button {
 		padding: 8px 16px;
-		border-radius: 8px;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		background: rgba(0, 0, 0, 0.3);
 		color: #ffffff;
 		font-size: 14px;
 		font-weight: 600;
@@ -578,21 +573,13 @@
 
 	.shortcut-container {
 		display: flex;
-		gap: 8px;
-		padding: 16px;
+		gap: 6px;
+		padding: 12px;
 		flex-wrap: wrap;
-		background: rgba(0, 0, 0, 0.3);
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		border-radius: 12px;
-		backdrop-filter: var(--backdrop-blur);
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 	}
 
 	.shortcut-button {
 		padding: 8px 12px;
-		border-radius: 8px;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		background: rgba(0, 0, 0, 0.3);
 		color: #ffffff;
 		font-size: 14px;
 		font-weight: 600;
@@ -622,12 +609,12 @@
 	.feature-container {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: 8px;
 		height: 100%;
 		background: transparent;
 		border-radius: 0;
 		overflow: visible;
-		padding: 16px;
+		padding: 12px;
 	}
 
 	.controls-container {
@@ -675,33 +662,28 @@
 		flex-grow: 1; /* Take remaining vertical space */
 		overflow-y: auto; /* Allow vertical scrolling */
 		min-height: 0; /* Necessary for flex-grow in some cases */
-		background: rgba(0, 0, 0, 0.4);
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		border-radius: 12px;
-		backdrop-filter: var(--backdrop-blur);
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-		padding: 8px;
+		padding: 4px;
 	}
 
 	/* Custom scrollbar for WebKit browsers */
 	.list-scroll-container::-webkit-scrollbar {
-		width: 8px; /* Width of the scrollbar */
+		width: 6px; /* Width of the scrollbar */
 	}
 
 	.list-scroll-container::-webkit-scrollbar-track {
-		background: rgba(0, 0, 0, 0.2); /* Transparent background */
-		border-radius: 4px;
+		background: transparent; /* Transparent background */
+		border-radius: 3px;
 	}
 
 	.list-scroll-container::-webkit-scrollbar-thumb {
-		background-color: rgba(255, 255, 255, 0.3); /* Semi-transparent white */
-		border-radius: 4px;
-		border: 2px solid transparent; /* Creates padding around thumb */
+		background-color: rgba(255, 255, 255, 0.2); /* Semi-transparent white */
+		border-radius: 3px;
+		border: 1px solid transparent; /* Creates padding around thumb */
 		background-clip: content-box;
 	}
 
 	.list-scroll-container::-webkit-scrollbar-thumb:hover {
-		background-color: rgba(255, 255, 255, 0.5); /* Slightly more opaque on hover */
+		background-color: rgba(255, 255, 255, 0.4); /* Slightly more opaque on hover */
 	}
 
 	/* Shortcut flag icon styling */

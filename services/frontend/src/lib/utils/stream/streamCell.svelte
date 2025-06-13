@@ -1,7 +1,6 @@
 <!-- streamCell.svelte -->
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { cubicOut } from 'svelte/easing';
 	import { writable } from 'svelte/store';
 	import { addStream } from '$lib/utils/stream/interface';
 	import type { TradeData, Instance, CloseData } from '$lib/utils/types/types';

@@ -36,8 +36,13 @@
 	function handleTickerClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
 		event.stopPropagation(); // Prevent legend collapse toggle
-		queryInstanceInput([], ['ticker'], instance).then((v: Instance) => {
+		queryInstanceInput([], ['ticker'], instance, 'ticker').then((v: Instance) => {
 			if (v) queryChart(v, true);
+		}).catch((error) => {
+			// Handle cancellation silently
+			if (error.message !== 'User cancelled input') {
+				console.error('Error in ticker input:', error);
+			}
 		});
 	}
 
@@ -45,8 +50,13 @@
 		if (event.key === 'Enter' || event.key === ' ') {
 			event.preventDefault();
 			event.stopPropagation(); // Prevent legend collapse toggle
-			queryInstanceInput('any', ['ticker'], instance).then((v: Instance) => {
+			queryInstanceInput('any', ['ticker'], instance, 'ticker').then((v: Instance) => {
 				if (v) queryChart(v, true);
+			}).catch((error) => {
+				// Handle cancellation silently
+				if (error.message !== 'User cancelled input') {
+					console.error('Error in ticker input:', error);
+				}
 			});
 		}
 	}
@@ -159,18 +169,14 @@
 	// Function to handle clicking the "..." timeframe button
 	function handleCustomTimeframeClick() {
 		// Start with empty input but force timeframe type
-		queryInstanceInput(['timeframe'], ['timeframe'], instance).then((v: Instance) => {
+		queryInstanceInput(['timeframe'], ['timeframe'], instance, 'timeframe').then((v: Instance) => {
 			if (v) queryChart(v, true);
+		}).catch((error) => {
+			// Handle cancellation silently
+			if (error.message !== 'User cancelled input') {
+				console.error('Error in timeframe input:', error);
+			}
 		});
-		
-		// Force the input type to be timeframe after a brief delay
-		setTimeout(() => {
-			inputQuery.update((q) => ({
-				...q,
-				inputType: 'timeframe',
-				inputString: ''
-			}));
-		}, 25);
 	}
 
 	// Watch for content changes that might affect size
@@ -210,7 +216,7 @@
 <div
 	bind:this={legendElement}
 	tabindex="-1"
-	class="legend {isCollapsed ? 'collapsed' : ''} {isOverflowing ? 'compact' : ''}"
+	class="legend glass glass--rounded glass--responsive {isCollapsed ? 'collapsed' : ''} {isOverflowing ? 'compact' : ''}"
 >
 	<div class="header">
 		{#if instance?.icon}
@@ -229,8 +235,8 @@
 			on:keydown={handleTickerKeydown}
 			aria-label="Change ticker"
 		>
-			<svg class="search-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
-				<path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L21.5,20L20,21.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z" />
+			<svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none">
+				<path d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 			</svg>
 			{instance?.ticker || 'NaN'}
 		</button>
@@ -346,30 +352,26 @@
 
 <style>
 	.legend {
+		/* Glass effect now provided by global .glass classes */
 		position: absolute;
 		top: 10px;
 		left: 10px;
-		background: rgba(0, 0, 0, 0.5);
-		border: 1px solid rgba(255, 255, 255, 0.3);
 		padding: 12px;
-		border-radius: 8px;
 		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 		color: #ffffff;
 		z-index: 1100;
 		max-width: calc(100% - 20px);
 		width: fit-content;
 		min-width: min-content;
-		backdrop-filter: var(--backdrop-blur);
-		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 		user-select: none;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
-	/* Update hover styles to not affect width/layout */
+	/* Enhanced hover effect for glass legend */
 	.legend:hover {
-		background: rgba(0, 0, 0, 0.6);
-		border-color: rgba(255, 255, 255, 0.4);
-		box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+		--glass-bg: rgba(30, 30, 30, 0.55);
+		--glass-border: rgba(255, 255, 255, 0.18);
+		--glass-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
 	}
 
 	/* Make compact styles more specific to override hover */

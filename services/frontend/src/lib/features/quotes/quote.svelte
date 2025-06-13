@@ -201,7 +201,7 @@
 >
 	<div class="content">
 		<!-- Header Section -->
-		<div class="quote-header">
+		<div class="quote-header glass glass--rounded glass--medium">
 			{#if ($instance?.logo || currentDetails?.logo) && !logoLoadError}
 				<div class="logo-container">
 					<img
@@ -233,38 +233,39 @@
 		</div>
 
 		<!-- Key Metrics Section -->
-		<div class="quote-key-metrics">
-			<div class="metric-item">
+		<div class="quote-key-metrics glass glass--rounded glass--medium">
+			<div class="metric-item glass glass--small glass--light">
 				<span class="label">Price</span>
 				<StreamCell instance={$instance} type="price" />
 			</div>
-			<div class="metric-item">
+			<div class="metric-item glass glass--small glass--light">
 				<span class="label">Change %</span>
 				<StreamCell instance={$instance} type="change %" />
 			</div>
-			<div class="metric-item">
+			<div class="metric-item glass glass--small glass--light">
 				<span class="label">Change</span>
 				<StreamCell instance={$instance} type="change" />
 			</div>
-			<div class="metric-item">
+			<div class="metric-item glass glass--small glass--light">
 				<span class="label">Ext %</span>
 				<StreamCell instance={$instance} type="change % extended" />
 			</div>
 		</div>
 
 		<!-- Market Data Section -->
-		<div class="quote-market-data">
+		<div class="quote-market-data glass glass--rounded glass--medium">
 			<L1 {instance} />
+			<!--
 			<button class="time-sales-button" on:click|stopPropagation={toggleTimeAndSales}>
 				{showTimeAndSales ? 'Hide Time & Sales' : 'Show Time & Sales'}
 			</button>
 			{#if showTimeAndSales}
 				<TimeAndSales {instance} />
-			{/if}
+			{/if} -->
 		</div>
 
 		<!-- Details Section -->
-		<div class="quote-details">
+		<div class="quote-details glass glass--rounded glass--medium">
 			<div class="detail-item">
 				<span class="label">Market Cap:</span>
 				<span class="value">
@@ -309,8 +310,8 @@
 		</div>
 
 		<!-- Countdown Section -->
-		<div class="countdown-section">
-				<div class="countdown-container">
+		<div class="countdown-section glass glass--rounded glass--medium">
+				<div class="countdown-container glass glass--small glass--light">
 					<span class="countdown-label">Next Bar Close:</span>
 					<span class="countdown-value">{$countdown}</span>
 				</div>
@@ -318,7 +319,7 @@
 
 		<!-- Description Section -->
 		{#if $activeChartInstance?.description}
-			<div class="description">
+			<div class="description glass glass--rounded glass--medium">
 				<span class="label">Description:</span>
 				<p class="value description-text">{$activeChartInstance?.description}</p>
 			</div>
@@ -371,9 +372,6 @@
 		gap: 10px;
 		margin-bottom: 16px;
 		padding: 12px;
-		background: var(--ui-bg-secondary);
-		border-radius: 6px;
-		border: 1px solid var(--ui-border);
 	}
 
 	.logo-container {
@@ -512,14 +510,12 @@
 		grid-template-columns: repeat(auto-fit, minmax(75px, 1fr));
 		gap: 8px;
 		margin-bottom: 16px;
+		padding: 12px;
 	}
 
 	.metric-item {
-		background: var(--ui-bg-secondary);
 		padding: 8px 6px;
-		border-radius: 4px;
 		text-align: center;
-		border: 1px solid var(--ui-border);
 	}
 
 	.metric-item .label {
@@ -542,9 +538,6 @@
 	.quote-market-data {
 		margin-bottom: 16px;
 		padding: 12px;
-		background: var(--ui-bg-secondary);
-		border-radius: 6px;
-		border: 1px solid var(--ui-border);
 	}
 
 	.time-sales-button {
@@ -575,9 +568,6 @@
 		gap: 8px 12px;
 		margin-bottom: 16px;
 		padding: 12px;
-		background: var(--ui-bg-secondary);
-		border-radius: 6px;
-		border: 1px solid var(--ui-border);
 	}
 
 	.detail-item {
@@ -605,9 +595,6 @@
 	.countdown-section {
 		margin-top: 12px;
 		padding: 12px;
-		background: var(--ui-bg-secondary);
-		border-radius: 6px;
-		border: 1px solid var(--ui-border);
 	}
 
 	.countdown-container {
@@ -615,9 +602,6 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 8px 12px;
-		background: var(--ui-bg-primary);
-		border-radius: 4px;
-		border: 1px solid var(--ui-border);
 	}
 
 	.countdown-label {
@@ -644,9 +628,6 @@
 	.description {
 		margin-top: 16px;
 		padding: 12px;
-		background: var(--ui-bg-secondary);
-		border-radius: 6px;
-		border: 1px solid var(--ui-border);
 	}
 
 	.description .label {

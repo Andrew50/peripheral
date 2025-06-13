@@ -187,7 +187,7 @@ type GetSecurityFromTickerResults struct {
 }
 
 // GetSecuritiesFromTicker performs operations related to GetSecuritiesFromTicker functionality.
-func GetSecuritiesFromTicker(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
+func GetSecuritiesFromTicker(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetSecurityFromTickerArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("getAnnotations invalid args: %v", err)
@@ -207,17 +207,29 @@ func GetSecuritiesFromTicker(conn *data.Conn, _ int, rawArgs json.RawMessage) (i
 			maxDate,
 			CASE 
 				WHEN UPPER(ticker) = UPPER($1) THEN 1
-				WHEN UPPER(ticker) LIKE UPPER($1) || '%' THEN 2
-				WHEN UPPER(ticker) LIKE '%' || UPPER($1) || '%' THEN 3
-				ELSE 4
+				WHEN UPPER(name) = UPPER($1) THEN 2
+				WHEN UPPER(ticker) LIKE UPPER($1) || '%' THEN 3
+				WHEN UPPER(name) LIKE UPPER($1) || '%' THEN 4
+				WHEN UPPER(ticker) LIKE '%' || UPPER($1) || '%' THEN 5
+				WHEN UPPER(name) LIKE '%' || UPPER($1) || '%' THEN 6
+				WHEN similarity(UPPER(ticker), UPPER($1)) > 0.3 THEN 7
+				WHEN similarity(UPPER(name), UPPER($1)) > 0.3 THEN 8
+				ELSE 9
 			END as match_type,
-			similarity(UPPER(ticker), UPPER($1)) as sim_score
+			GREATEST(
+				similarity(UPPER(ticker), UPPER($1)),
+				COALESCE(similarity(UPPER(name), UPPER($1)), 0)
+			) as sim_score
 		FROM securities s
 		WHERE maxDate IS NULL AND (
 			UPPER(ticker) = UPPER($1) OR
 			UPPER(ticker) LIKE UPPER($1) || '%' OR 
 			UPPER(ticker) LIKE '%' || UPPER($1) || '%' OR
-			similarity(UPPER(ticker), UPPER($1)) > 0.3
+			similarity(UPPER(ticker), UPPER($1)) > 0.3 OR
+			UPPER(name) = UPPER($1) OR
+			UPPER(name) LIKE UPPER($1) || '%' OR 
+			UPPER(name) LIKE '%' || UPPER($1) || '%' OR
+			similarity(UPPER(name), UPPER($1)) > 0.3
 		)
 		ORDER BY ticker, maxDate DESC NULLS FIRST
 	)
@@ -320,7 +332,9 @@ func GetTickerMenuDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) (inte
 			SELECT MAX(maxDate) 
 			FROM securities 
 			WHERE securityId = $1
-		))`
+		))
+		ORDER BY maxDate IS NULL DESC, maxDate DESC NULLS FIRST
+		LIMIT 1`
 
 	var results GetTickerMenuDetailsResults
 	err := conn.DB.QueryRow(context.Background(), query, args.SecurityID).Scan(
@@ -342,7 +356,6 @@ func GetTickerMenuDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) (inte
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ticker details: %v", err)
 	}
-
 	// Create a map to store the results and handle NULL values
 	response := map[string]interface{}{
 		"ticker":                         results.Ticker,

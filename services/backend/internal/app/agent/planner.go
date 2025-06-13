@@ -6,10 +6,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"google.golang.org/genai"
 )
+
+// Pre-compile regex pattern for ticker formatting cleanup
+var tickerFormattingRegex = regexp.MustCompile(`\$\$\$([A-Z0-9]+)-\d+\$\$\$`)
 
 type DirectAnswer struct {
 	ContentChunks []ContentChunk `json:"content_chunks"`
@@ -154,10 +158,19 @@ func contentChunkSchema() *genai.Schema {
 const planningModel = "gemini-2.5-flash-preview-05-20"
 const finalResponseModel = "gemini-2.5-flash-preview-05-20"
 
-func RunPlanner(ctx context.Context, conn *data.Conn, prompt string) (interface{}, error) {
-	systemPrompt, err := getSystemInstruction("defaultSystemPrompt")
-	if err != nil {
-		return nil, fmt.Errorf("error getting system instruction: %w", err)
+func RunPlanner(ctx context.Context, conn *data.Conn, prompt string, initialRound bool) (interface{}, error) {
+	var systemPrompt string
+	var err error
+	if initialRound {
+		systemPrompt, err = getSystemInstruction("defaultSystemPrompt")
+		if err != nil {
+			return nil, fmt.Errorf("error getting system instruction: %w", err)
+		}
+	} else {
+		systemPrompt, err = getSystemInstruction("IntermediateSystemPrompt")
+		if err != nil {
+			return nil, fmt.Errorf("error getting system instruction: %w", err)
+		}
 	}
 	plan, err := _geminiGeneratePlan(ctx, conn, systemPrompt, prompt)
 	if err != nil {
@@ -241,6 +254,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 			}
 		}
 		if hasValidContent {
+			directAns.Suggestions = cleanTickerFormattingFromSuggestions(directAns.Suggestions)
 			directAns.TokenCounts = TokenCounts{
 				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
 				OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
@@ -322,6 +336,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 				}
 			}
 			if hasValidContent {
+				directAns.Suggestions = cleanTickerFormattingFromSuggestions(directAns.Suggestions)
 				directAns.TokenCounts = TokenCounts{
 					InputTokenCount:    result.UsageMetadata.PromptTokenCount,
 					OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
@@ -416,6 +431,7 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 
 	// First try direct unmarshaling
 	if err := json.Unmarshal([]byte(resultText), &finalResponse); err == nil && len(finalResponse.ContentChunks) > 0 {
+		finalResponse.Suggestions = cleanTickerFormattingFromSuggestions(finalResponse.Suggestions)
 		finalResponse.TokenCounts = TokenCounts{
 			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
 			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
@@ -475,6 +491,7 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 	// Try parsing the extracted JSON block
 	if jsonBlock != "" {
 		if err := json.Unmarshal([]byte(jsonBlock), &finalResponse); err == nil && len(finalResponse.ContentChunks) > 0 {
+			finalResponse.Suggestions = cleanTickerFormattingFromSuggestions(finalResponse.Suggestions)
 			finalResponse.TokenCounts = TokenCounts{
 				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
 				OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
@@ -490,6 +507,16 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 		ContentChunks: []ContentChunk{{Type: "text", Content: resultText}},
 		TokenCounts:   TokenCounts{},
 	}, nil
+}
+
+// cleanTickerFormattingFromSuggestions removes the $$$TICKER-TIMESTAMP$$$ formatting from suggestions
+// and replaces it with just the ticker symbol
+func cleanTickerFormattingFromSuggestions(suggestions []string) []string {
+	cleaned := make([]string, len(suggestions))
+	for i, suggestion := range suggestions {
+		cleaned[i] = tickerFormattingRegex.ReplaceAllString(suggestion, "$1")
+	}
+	return cleaned
 }
 
 // </planner.go>
