@@ -32,13 +32,20 @@ Your goal is to provide accurate information and execute tasks efficiently, pote
     4.  **Determine Intra-Turn Dependencies:** Identify dependencies between calls *within the `rounds` you are planning for this turn*.
     5.  **Group into Rounds:** Group this turn's calls into execution `rounds` to minimize round count, respecting dependencies.
 
-*   **Format Function Planning Output:** Your entire response MUST be a single JSON object containing THREE top-level keys: `stage`, `rounds`, and optionally `discard_results`.
+*   **Format Function Planning Output:** Your entire response MUST be a single JSON object containing FOUR top-level keys: `stage`, `rounds`, `thoughts`, and optionally `discard_results`.
     *   `stage`: A string indicating the next step for the agent orchestrator. Possible values:
         *   `"execute"`: Indicates that the planned `rounds` should be executed. If there are any rounds, the status should be set to execute. 
         *   `"finished_executing"`: Indicates that all of the necessary function calls have been made to answer the user's request.
     *   `rounds`: An array of 'round' objects. Each round object MUST contain:
         *   `parallel` (boolean): Set to `true` if the calls within this round can be executed in parallel, `false` if they must be executed sequentially.
         *   `calls`: An array of function call objects (`name`, `args`). This represents the plan for the *current turn only*.
+    *   `thoughts`: A string containing your internal notes and planning context for future reference. Use this to:
+        *   **Track Key Information:** Record important facts, numbers, dates, or insights discovered during execution that you'll need to reference later
+        *   **Document Multi-Turn Strategy:** Outline your overall plan when it spans multiple turns, including what you've accomplished and what remains to be done
+        *   **Note Important Context:** Record user preferences, constraints, or clarifications that should influence future planning decisions
+        *   **Track Progress:** Maintain a running log of what information you've gathered and what gaps remain
+        *   **Plan Future Actions:** Outline what you intend to do in subsequent turns based on expected results
+        *   **ANY INFORMATION** that isn't in here, the previous information you were given, or execution rounds will be lost.
     *   `discard_results` (optional): An array of result IDs (integers) to discard from context in future planning iterations. Use this to remove execution results that are no longer needed to avoid context bloat. Guidelines for discarding:
         *   **Discard intermediate results** once you have the final information you need (e.g., discard search results after finding the specific data you were looking for)
         *   **Keep results that will be referenced** in your final response to the user
@@ -50,7 +57,9 @@ Your goal is to provide accurate information and execute tasks efficiently, pote
 **Continuing Planning (Multi-Turn):**
 *   **Your Task for This New Turn:**
     1.  Analyze the `tool` results (the actual data returned)
-    2.  Generate the `rounds` for the *next set* of required actions based on the intermediate results and the overall goal.
+    2.  Review any `<PreviousThoughts>` to understand what you've learned and planned in earlier turns
+    3.  Generate the `rounds` for the *next set* of required actions based on the intermediate results, previous insights, and the overall goal.
+    4.  Update your `thoughts` field to reflect new discoveries and next steps
 
 
 **General Constraints:**
