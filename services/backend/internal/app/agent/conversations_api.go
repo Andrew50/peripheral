@@ -293,27 +293,68 @@ func GetUserConversation(conn *data.Conn, userID int, _ json.RawMessage) (interf
 	return GetActiveConversationWithCache(context.Background(), conn, userID)
 }
 
+func checkIfConversationIsPublic(conn *data.Conn, conversationID string) (bool, int, string, error) {
+	var isPublic bool
+	var userID int
+	var title string
+
+	err := conn.DB.QueryRow(context.Background(), "SELECT is_public, user_id, title FROM conversations WHERE conversation_id = $1", conversationID).Scan(&isPublic, &userID, &title)
+	if err != nil {
+		return false, 0, "", err
+	}
+	return isPublic, userID, title, nil
+}
+func checkIfConversationIsPublicAndGrabPreview(conn *data.Conn, conversationId string) (bool, int, string, string, error) {
+	var isPublic bool
+	var userID int
+	var firstUserMessage string
+	var firstAssistantMessage string
+
+	isPublic, userID, _, err := checkIfConversationIsPublic(conn, conversationId)
+	// If not public, don't fetch messages
+	if err != nil || !isPublic {
+		return false, 0, "", "", err
+	}
+
+	// Get the first user message (query)
+	err = conn.DB.QueryRow(context.Background(),
+		"SELECT query FROM conversation_messages WHERE conversation_id = $1 AND archived = FALSE ORDER BY created_at ASC LIMIT 1",
+		conversationId).Scan(&firstUserMessage)
+	if err != nil && err.Error() != "no rows in result set" {
+		return false, 0, "", "", err
+	}
+
+	// Get the first assistant message (response_text)
+	err = conn.DB.QueryRow(context.Background(),
+		"SELECT COALESCE(response_text, '') FROM conversation_messages WHERE conversation_id = $1 AND response_text IS NOT NULL AND response_text != '' AND archived = FALSE ORDER BY created_at ASC LIMIT 1",
+		conversationId).Scan(&firstAssistantMessage)
+	if err != nil && err.Error() != "no rows in result set" {
+		return false, 0, "", "", err
+	}
+
+	return isPublic, userID, firstUserMessage, firstAssistantMessage, nil
+}
+
 type GetPublicConversationRequest struct {
 	ConversationID string `json:"conversation_id"`
 }
 
-func GetPublicConversation(conn *data.Conn, args json.RawMessage) (interface{}, error) {
-	var req GetPublicConversationRequest
-	if err := json.Unmarshal(args, &req); err != nil {
+func GetPublicConversation(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetPublicConversationRequest
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error parsing request: %w", err)
 	}
-	fmt.Println("Getting public conversation for conversationID:", req.ConversationID)
+	fmt.Println("Getting public conversation for conversationID:", args.ConversationID)
 	var isPublic bool
 	var userID int
 	var title string
-	err := conn.DB.QueryRow(context.Background(), "SELECT is_public, user_id, title FROM conversations WHERE conversation_id = $1", req.ConversationID).Scan(&isPublic, &userID, &title)
-	if err != nil || !isPublic {
-		return nil, fmt.Errorf("conversation not found")
+	isPublic, userID, title, err := checkIfConversationIsPublic(conn, args.ConversationID)
+	if !isPublic {
+		return nil, fmt.Errorf("no access to conversation")
 	}
-	fmt.Println("Getting conversation messages for userID:", userID)
 
 	// Get the raw messages
-	messagesInterface, err := GetConversationMessages(context.Background(), conn, req.ConversationID, userID)
+	messagesInterface, err := GetConversationMessages(context.Background(), conn, args.ConversationID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +367,7 @@ func GetPublicConversation(conn *data.Conn, args json.RawMessage) (interface{}, 
 
 	// Convert to the format expected by the frontend
 	conversationData := convertDBMessagesToConversationData(messages)
-	conversationData.ConversationID = req.ConversationID
+	conversationData.ConversationID = args.ConversationID
 	conversationData.Title = title
 
 	return conversationData, nil
@@ -355,5 +396,39 @@ func SetConversationVisibility(conn *data.Conn, userID int, args json.RawMessage
 	}
 	return map[string]interface{}{
 		"success": true,
+	}, nil
+}
+
+type GetConversationSnippetArgs struct {
+	ConversationID string `json:"conversation_id"`
+}
+
+type ConversationSnippetResponse struct {
+	Title         string `json:"title"`
+	FirstResponse string `json:"first_response"`
+}
+
+func GetConversationSnippet(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetConversationSnippetArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("error parsing request: %w", err)
+	}
+
+	if args.ConversationID == "" {
+		return nil, fmt.Errorf("conversation_id is required")
+	}
+
+	// Use the updated function to get conversation preview data
+	isPublic, _, title, firstResponse, err := checkIfConversationIsPublicAndGrabPreview(conn, args.ConversationID)
+	if !isPublic {
+		return nil, fmt.Errorf("conversation not public")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("error fetching conversation: %w", err)
+	}
+
+	return ConversationSnippetResponse{
+		Title:         title,
+		FirstResponse: firstResponse,
 	}, nil
 }
