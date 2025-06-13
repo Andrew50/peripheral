@@ -17,6 +17,6 @@ type BacktestArgs struct {
 }
 
 // RunBacktest is disabled for the new prompt-based strategy system
-func RunBacktest(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (any, error) {
+func RunBacktest(_ context.Context, _ *data.Conn, _ int, _ json.RawMessage) (any, error) {
 	return nil, fmt.Errorf("backtest functionality is currently disabled for prompt-based strategies - coming soon")
 }
