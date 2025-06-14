@@ -45,9 +45,11 @@ func BuildPlanningPrompt(conn *data.Conn, userID int, query string, contextItems
 				}
 
 				conversationContext := _buildConversationContext(chatMessages)
-				sb.WriteString("<ConversationHistory>\n")
-				sb.WriteString(conversationContext)
-				sb.WriteString("\n</ConversationHistory>\n")
+				if conversationContext != "" {
+					sb.WriteString("<ConversationHistory>\n")
+					sb.WriteString(conversationContext)
+					sb.WriteString("\n</ConversationHistory>\n")
+				}
 			}
 		}
 	}
@@ -126,7 +128,9 @@ func _buildConversationContext(messages []ChatMessage) string {
 	if len(messages) > 10 {
 		startIdx = len(messages) - 10
 	}
-
+	if len(messages) == 0 {
+		return ""
+	}
 	for i := startIdx; i < len(messages); i++ {
 		// Skip pending messages to avoid empty Assistant responses
 		if messages[i].Status == "pending" {
