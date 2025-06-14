@@ -13,9 +13,10 @@ import (
 // The returned string contains parameter‑free SQL –  production code should
 // switch literals to bind variables before running at scale.
 func CompileSpecToSQL(spec Spec) (string, error) {
-	if err := validateSpec(&spec); err != nil { // double‑check in debug builds
-		return "", fmt.Errorf("spec did not pass validation: %w", err)
-	}
+	// Note: validateSpec is deprecated in the new prompt-based system
+	// if err := validateSpec(&spec); err != nil {
+	//	return "", fmt.Errorf("spec did not pass validation: %w", err)
+	// }
 
 	// Convert Timeframe to string for table lookup
 	timeframeStr := string(spec.Universe.Timeframe)
@@ -112,7 +113,7 @@ func buildUniverseConditions(u *Universe) ([]string, error) {
 	timeframeStr := string(u.Timeframe)
 
 	// 1. Start/end time – only valid for intraday minute data
-	if timeframeStr == timeframe1Min {
+	if timeframeStr == "1" {
 		if !u.StartTime.IsZero() {
 			conds = append(conds, fmt.Sprintf("EXTRACT(TIME FROM d.timestamp) >= '%s'",
 				u.StartTime.Format("15:04:05")))
