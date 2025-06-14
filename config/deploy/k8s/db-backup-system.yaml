@@ -1,0 +1,377 @@
+# Database Backup and Recovery System
+# Includes automated backups twice daily and health monitoring
+
+---
+# Persistent Volume Claim for Backups
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: db-backups-pvc
+  labels:
+    app: db-backup-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+
+---
+# Backup CronJob - Runs twice daily (6 AM and 6 PM)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: db-backup-cronjob
+  labels:
+    app: db-backup-system
+spec:
+  # Run at 6:00 AM and 6:00 PM every day
+  schedule: "0 6,18 * * *"
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 1800 # 30 minutes timeout
+      template:
+        metadata:
+          labels:
+            app: db-backup-job
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: ${DOCKER_USERNAME}/db:${DOCKER_TAG}
+              imagePullPolicy: Never
+              command: ["/app/backup-improved.sh"]
+              env:
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: db-secret
+                      key: DB_ROOT_PASSWORD
+                - name: POSTGRES_USER
+                  value: "postgres"
+                - name: POSTGRES_DB
+                  value: "postgres"
+                - name: DB_HOST
+                  value: "db"
+                - name: ENVIRONMENT
+                  value: "Development"
+                - name: TELEGRAM_BOT_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: telegram-secret
+                      key: bot-token
+                      optional: true
+                - name: TELEGRAM_CHAT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: telegram-secret
+                      key: chat-id
+                      optional: true
+              volumeMounts:
+                - name: backups-volume
+                  mountPath: /backups
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 1Gi
+          volumes:
+            - name: backups-volume
+              persistentVolumeClaim:
+                claimName: db-backups-pvc
+
+---
+# Health Monitor Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db-health-monitor
+  labels:
+    app: db-health-monitor
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # Only one monitor should run
+  selector:
+    matchLabels:
+      app: db-health-monitor
+  template:
+    metadata:
+      labels:
+        app: db-health-monitor
+    spec:
+      restartPolicy: Always
+      containers:
+        - name: health-monitor
+          image: ${DOCKER_USERNAME}/db:${DOCKER_TAG}
+          imagePullPolicy: Never
+          command: ["/app/health-monitor.sh"]
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_ROOT_PASSWORD
+            - name: POSTGRES_USER
+              value: "postgres"
+            - name: POSTGRES_DB
+              value: "postgres"
+            - name: DB_HOST
+              value: "db"
+            - name: HEALTH_CHECK_INTERVAL
+              value: "60"
+            - name: MAX_FAILURE_COUNT
+              value: "3"
+            - name: ENVIRONMENT
+              value: "Development"
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-secret
+                  key: bot-token
+                  optional: true
+            - name: TELEGRAM_CHAT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-secret
+                  key: chat-id
+                  optional: true
+          volumeMounts:
+            - name: backups-volume
+              mountPath: /backups
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "test -f /backups/health-monitor.log && test $(find /backups/health-monitor.log -mmin -5 | wc -l) -gt 0"
+            initialDelaySeconds: 120
+            periodSeconds: 300
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "test -f /backups/health-monitor.log"
+            initialDelaySeconds: 30
+            periodSeconds: 60
+      volumes:
+        - name: backups-volume
+          persistentVolumeClaim:
+            claimName: db-backups-pvc
+
+---
+# Service for health monitor (for potential web interface)
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-health-monitor
+  labels:
+    app: db-health-monitor
+spec:
+  selector:
+    app: db-health-monitor
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+  type: ClusterIP
+
+---
+# Backup Verification CronJob - Runs daily at 3 AM
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: db-backup-verification
+  labels:
+    app: db-backup-system
+spec:
+  # Run at 3:00 AM every day
+  schedule: "0 3 * * *"
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600 # 1 hour timeout
+      template:
+        metadata:
+          labels:
+            app: db-backup-verification
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: verify-backup
+              image: ${DOCKER_USERNAME}/db:${DOCKER_TAG}
+              imagePullPolicy: Never
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  echo "=== Backup Verification Started ===" | tee -a /backups/verification.log
+
+                  # Find the most recent backup
+                  LATEST_BACKUP=$(find /backups -name "backup_*.sql.gz" -type f -exec stat -c '%Y %n' {} \; | sort -nr | head -1 | cut -d' ' -f2-)
+
+                  if [ -n "$LATEST_BACKUP" ] && [ -f "$LATEST_BACKUP" ]; then
+                    echo "Verifying backup: $LATEST_BACKUP" | tee -a /backups/verification.log
+                    
+                    # Check file size
+                    BACKUP_SIZE=$(stat -c%s "$LATEST_BACKUP")
+                    echo "Backup size: $BACKUP_SIZE bytes" | tee -a /backups/verification.log
+                    
+                    if [ "$BACKUP_SIZE" -lt 1000 ]; then
+                      echo "ERROR: Backup file too small!" | tee -a /backups/verification.log
+                      exit 1
+                    fi
+                    
+                    # Test extraction
+                    if gunzip -t "$LATEST_BACKUP"; then
+                      echo "Backup compression integrity: OK" | tee -a /backups/verification.log
+                    else
+                      echo "ERROR: Backup compression corrupted!" | tee -a /backups/verification.log
+                      exit 1
+                    fi
+                    
+                    # Test SQL content
+                    if gunzip -c "$LATEST_BACKUP" | head -20 | grep -q "PostgreSQL database dump"; then
+                      echo "Backup content integrity: OK" | tee -a /backups/verification.log
+                    else
+                      echo "ERROR: Backup content invalid!" | tee -a /backups/verification.log
+                      exit 1
+                    fi
+                    
+                    echo "=== Backup Verification Successful ===" | tee -a /backups/verification.log
+                  else
+                    echo "ERROR: No backup files found!" | tee -a /backups/verification.log
+                    exit 1
+                  fi
+              volumeMounts:
+                - name: backups-volume
+                  mountPath: /backups
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 300m
+                  memory: 512Mi
+          volumes:
+            - name: backups-volume
+              persistentVolumeClaim:
+                claimName: db-backups-pvc
+
+---
+# ConfigMap for backup retention script
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-retention-config
+  labels:
+    app: db-backup-system
+data:
+  cleanup.sh: |
+    #!/bin/bash
+    echo "=== Backup Retention Cleanup Started ===" | tee -a /backups/retention.log
+
+    # Remove backups older than 30 days
+    DELETED_BACKUPS=$(find /backups -name "backup_*.sql.gz" -type f -mtime +30 -delete -print | wc -l)
+    find /backups -name "backup_*.manifest" -type f -mtime +30 -delete
+
+    # Remove old log files (keep last 7 days)
+    find /backups -name "*.log" -type f -mtime +7 -delete 2>/dev/null || true
+
+    # Remove old alert files (keep last 3 days)
+    find /backups -name "alert-*" -type f -mtime +3 -delete 2>/dev/null || true
+
+    echo "Deleted $DELETED_BACKUPS old backup files" | tee -a /backups/retention.log
+
+    # Show current backup statistics
+    BACKUP_COUNT=$(find /backups -name "backup_*.sql.gz" -type f | wc -l)
+    TOTAL_SIZE=$(find /backups -name "backup_*.sql.gz" -type f -exec stat -c%s {} \; | awk '{sum+=$1} END {print sum/1024/1024 " MB"}')
+
+    echo "Current statistics: $BACKUP_COUNT backups, $TOTAL_SIZE total" | tee -a /backups/retention.log
+    echo "=== Backup Retention Cleanup Completed ===" | tee -a /backups/retention.log
+
+---
+# Cleanup CronJob - Runs daily at 2 AM
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: db-backup-cleanup
+  labels:
+    app: db-backup-system
+spec:
+  # Run at 2:00 AM every day
+  schedule: "0 2 * * *"
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600 # 10 minutes timeout
+      template:
+        metadata:
+          labels:
+            app: db-backup-cleanup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: cleanup
+              image: busybox:latest
+              command: ["/bin/sh", "/scripts/cleanup.sh"]
+              volumeMounts:
+                - name: backups-volume
+                  mountPath: /backups
+                - name: cleanup-script
+                  mountPath: /scripts
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 100m
+                  memory: 128Mi
+          volumes:
+            - name: backups-volume
+              persistentVolumeClaim:
+                claimName: db-backups-pvc
+            - name: cleanup-script
+              configMap:
+                name: backup-retention-config
+                defaultMode: 0755
+
+---
+# Telegram Secret Template (create this manually)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: telegram-secret
+  labels:
+    app: db-backup-system
+type: Opaque
+data:
+  # Base64 encoded values - replace with your actual values:
+  # echo -n "YOUR_BOT_TOKEN" | base64
+  # echo -n "YOUR_CHAT_ID" | base64
+  bot-token: "" # Replace with your bot token (base64 encoded)
+  chat-id: "" # Replace with your chat ID (base64 encoded)
