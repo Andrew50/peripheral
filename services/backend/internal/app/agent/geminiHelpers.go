@@ -39,7 +39,6 @@ func getSystemInstruction(name string) (string, error) {
 		strconv.Itoa(estTime.Year()))
 	s = strings.ReplaceAll(s, "{{CURRENT_DATE_EST}}",
 		estTime.Format("01-02-2006"))
-	fmt.Println(s)
 	return s, nil
 }
 
