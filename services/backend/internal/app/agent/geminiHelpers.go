@@ -32,13 +32,14 @@ func getSystemInstruction(name string) (string, error) {
 
 	s := strings.ReplaceAll(string(raw), "{{COMMON_CONSTRAINTS}}", string(constraints))
 	s = strings.ReplaceAll(s, "{{CURRENT_TIME}}",
-		now.Format(rfc3339Seconds))
+		estTime.Format(rfc3339Seconds))
 	s = strings.ReplaceAll(s, "{{CURRENT_TIME_MILLISECONDS}}",
-		strconv.FormatInt(now.UnixMilli(), 10))
+		strconv.FormatInt(estTime.UnixMilli(), 10))
 	s = strings.ReplaceAll(s, "{{CURRENT_YEAR}}",
-		strconv.Itoa(now.Year()))
+		strconv.Itoa(estTime.Year()))
 	s = strings.ReplaceAll(s, "{{CURRENT_DATE_EST}}",
 		estTime.Format("01-02-2006"))
+	fmt.Println(s)
 	return s, nil
 }
 
