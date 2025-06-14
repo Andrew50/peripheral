@@ -630,7 +630,7 @@ var (
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"query": {Type: genai.TypeString, Description: "The query to search for."},
+						"query": {Type: genai.TypeString, Description: "The query to search. Be highly specific and detailed, asking for the specific information you need. "},
 					},
 					Required: []string{"query"},
 				},
