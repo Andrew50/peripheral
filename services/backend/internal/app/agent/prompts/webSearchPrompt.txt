@@ -9,7 +9,7 @@ If the query is asking about recent news, prioritize news that has come within t
 
 Do not include general statements such as "Analysts have varying forecasts for the stock, with a wide range between the maximum and minimum price estimates".
 
-**ALWAYS** prepend pricin g information with warnings that the given price is not up to date and instruct the model to get updated information. 
+**ALWAYS** prepend pricing information with warnings that the given price is not up to date and instruct the model to get updated information. 
 
 Give statements with specific, value-add information. 
 

@@ -54,6 +54,8 @@ type QueryResponse struct {
 	CompletedAt    *time.Time     `json:"completed_at,omitempty"`
 }
 
+var defaultSystemPromptTokenCount int
+
 // GetChatRequest is the main context-aware chat request handler
 func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
 	// Check if context is already cancelled
@@ -93,6 +95,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 	var executor *Executor
 	var activeResults []ExecuteResult
 	var discardedResults []ExecuteResult
+	var accumulatedThoughts []string
 	planningPrompt := ""
 	maxTurns := 15
 	totalRequestOutputTokenCount := 0
@@ -152,6 +155,11 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				CompletedAt:    messageData.CompletedAt,
 			}, nil
 		case Plan:
+			// Capture thoughts from this planning iteration
+			if v.Thoughts != "" {
+				accumulatedThoughts = append(accumulatedThoughts, v.Thoughts)
+			}
+
 			// Handle result discarding if specified in the plan
 			if len(v.DiscardResults) > 0 {
 				// Create a map for quick lookup of IDs to discard
@@ -179,7 +187,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				// Create an executor to handle function calls
 				logger, _ := zap.NewProduction()
 				if executor == nil {
-					executor = NewExecutor(conn, userID, 3, logger)
+					executor = NewExecutor(conn, userID, 5, logger)
 				}
 				for _, round := range v.Rounds {
 					// Execute all function calls in this round with context
@@ -195,7 +203,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				}
 				// Update query with active results for next planning iteration
 				// Only pass active results to avoid context bloat
-				planningPrompt, err = BuildPlanningPromptWithResultsAndConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, activeResults)
+				planningPrompt, err = BuildPlanningPromptWithResultsAndConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, activeResults, accumulatedThoughts)
 				if err != nil {
 					// Mark as error instead of deleting for debugging
 					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Failed to build prompt with results: %v", err)); markErr != nil {
