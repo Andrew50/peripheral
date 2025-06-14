@@ -20,8 +20,8 @@
 	import Strategies from '$lib/features/strategies/strategies.svelte';
 	import Settings from '$lib/features/settings/settings.svelte';
 	import News from '$lib/features/news/news.svelte';
-    import Deploy from '$lib/features/deploy/deploy.svelte'
-    import Backtest from '$lib/features/backtest/backtest.svelte'
+	import Deploy from '$lib/features/deploy/deploy.svelte';
+	import Backtest from '$lib/features/backtest/backtest.svelte';
 
 	// Replay logic
 	import {
@@ -70,15 +70,19 @@
 	import { authModalStore, hideAuthModal } from '$lib/stores/authModal';
 
 	// Import extended hours toggle store
-	import { extendedHoursToggleVisible, hideExtendedHoursToggle, activeChartInstance } from '$lib/features/chart/interface';
+	import {
+		extendedHoursToggleVisible,
+		hideExtendedHoursToggle,
+		activeChartInstance
+	} from '$lib/features/chart/interface';
 
 	//type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
-	type Menu = 'none' | 'watchlist' | 'alerts'  | 'news';
+	type Menu = 'none' | 'watchlist' | 'alerts' | 'news';
 
 	let lastSidebarMenu: Menu | null = null;
 	let sidebarWidth = 0;
 	//const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'news'];
-	const sidebarMenus: Menu[] = ['watchlist', 'alerts',  'news'];
+	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'news'];
 
 	// Initialize chartWidth with a default value
 	let chartWidth = 0;
@@ -90,10 +94,10 @@
 		//| 'options'
 		| 'strategies'
 		| 'settings'
-        | 'deploy'
-        | 'backtest'
+		| 'deploy'
+		| 'backtest'
 		//| 'news'
-		| 'query'
+		| 'query';
 	interface BottomWindow {
 		id: number;
 		type: BottomWindowType;
@@ -147,7 +151,7 @@
 	// Public viewing mode state - initialize from URL parameters synchronously
 	let isPublicViewing = false;
 	let sharedConversationId = '';
-	
+
 	// Check for shared conversation parameter immediately (before component mounts)
 	if (browser && $page?.url?.searchParams) {
 		const shareParam = $page.url.searchParams.get('share');
@@ -297,7 +301,7 @@
 			if (sidebarMenus.includes(menuName as Menu)) {
 				toggleMenu(menuName as Menu);
 			}
-        });
+		});
 
 		// Force profile display to update
 		currentProfileDisplay = calculateProfileDisplay();
@@ -492,8 +496,6 @@
 	function handleCalendar() {
 		calendarVisible = true;
 	}
-
-
 
 	function handlePause() {
 		if ($streamInfo.replayActive && !$streamInfo.replayPaused) {
@@ -826,13 +828,13 @@
 		}, 0);
 	}
 </script>
+
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions-->
 <div
 	class="page"
 	role="application"
 	tabindex="-1"
 	on:keydown={(e) => {
-		
 		if (e.key === 'Escape') {
 			minimizeBottomWindow();
 		}
@@ -842,17 +844,15 @@
 	<Input />
 	<RightClick />
 	<StrategiesPopup />
-	<Calendar 
-		bind:visible={calendarVisible} 
-		initialTimestamp={$streamInfo.timestamp}
-	/>
-	<ExtendedHoursToggle 
+	<Calendar bind:visible={calendarVisible} initialTimestamp={$streamInfo.timestamp} />
+	<Calendar bind:visible={calendarVisible} initialTimestamp={$streamInfo.timestamp} />
+	<ExtendedHoursToggle
 		instance={$activeChartInstance || {}}
 		visible={$extendedHoursToggleVisible}
 		on:change={() => hideExtendedHoursToggle()}
 		on:close={() => hideExtendedHoursToggle()}
 	/>
-	<AuthModal 
+	<AuthModal
 		visible={$authModalStore.visible}
 		defaultMode={$authModalStore.mode}
 		requiredFeature={$authModalStore.requiredFeature}
@@ -906,14 +906,10 @@
 									<Screener />
 								{:else if w.type === 'strategies'}
 									<Strategies />
-								<!-- {:else if w.type === 'account'}
+									<!-- {:else if w.type === 'account'}
 									<Account /> -->
 								{:else if w.type === 'settings'}
 									<Settings />
-								{:else if w.type === 'backtest'}
-                                <Backtest/>
-								{:else if w.type === 'deploy'}
-                                <Deploy/>
 								{/if}
 							</div>
 						</div>
@@ -950,9 +946,9 @@
 								<Watchlist />
 							{:else if $activeMenu === 'alerts'}
 								<Alerts />
-							<!--{:else if $activeMenu === 'study'}
+								<!--{:else if $activeMenu === 'study'}
 								<Study />-->
-							<!--{:else if $activeMenu === 'news'}
+								<!--{:else if $activeMenu === 'news'}
 								<News />-->
 							{/if}
 						</div>
@@ -998,7 +994,13 @@
 				title="AI Query"
 			>
 				<svg class="chat-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-					<path d="M8 12H8.01M12 12H12.01M16 12H16.01M21 12C21 16.418 16.97 20 12 20C10.89 20 9.84 19.8 8.87 19.42L3 21L4.58 15.13C4.2 14.16 4 13.11 4 12C4 7.582 8.03 4 12 4C16.97 4 21 7.582 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+					<path
+						d="M8 12H8.01M12 12H12.01M16 12H16.01M21 12C21 16.418 16.97 20 12 20C10.89 20 9.84 19.8 8.87 19.42L3 21L4.58 15.13C4.2 14.16 4 13.11 4 12C4 7.582 8.03 4 12 4C16.97 4 21 7.582 21 12Z"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
 				</svg>
 			</button>
 			<button
@@ -1008,21 +1010,10 @@
 				Strategies
 			</button>
 			<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'backtest') ? 'active' : ''}"
-				on:click={() => openBottomWindow('backtest')}
-			>
-				Backtest
-			</button>
-			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'screener') ? 'active' : ''}"
 				on:click={() => openBottomWindow('screener')}
 			>
 				Screener
-			</button>	<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'deploy') ? 'active' : ''}"
-				on:click={() => openBottomWindow('deploy')}
-			>
-				Deploy
 			</button>
 			<!-- <button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'account') ? 'active' : ''}"
@@ -1030,24 +1021,27 @@
 			>
 				Account
 			</button> -->
-
 		</div>
 
 		<div class="bottom-bar-right">
 			<!-- Calendar button for timestamp selection -->
-			<button
-				class="toggle-button calendar-button"
-				on:click={handleCalendar}
-				title="Go to Date"
-			>
+			<button class="toggle-button calendar-button" on:click={handleCalendar} title="Go to Date">
 				<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-					<path d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V8H19V19ZM7 10H12V15H7V10Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+					<path
+						d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V8H19V19ZM7 10H12V15H7V10Z"
+						stroke="currentColor"
+						stroke-width="1.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
 				</svg>
 			</button>
 
 			<!-- Combined replay button -->
-			<!---- <button
-				class="toggle-button replay-button { !$streamInfo.replayActive || $streamInfo.replayPaused ? 'play' : 'pause' }"
+			<button
+				class="toggle-button replay-button {!$streamInfo.replayActive || $streamInfo.replayPaused
+					? 'play'
+					: 'pause'}"
 				on:click={() => {
 					if (!$streamInfo.replayActive) {
 						handlePlay();
@@ -1057,26 +1051,50 @@
 						handlePause();
 					}
 				}}
-				title={$streamInfo.replayActive && !$streamInfo.replayPaused ? 'Pause Replay' : 'Start/Resume Replay'}
+				title={$streamInfo.replayActive && !$streamInfo.replayPaused
+					? 'Pause Replay'
+					: 'Start/Resume Replay'}
 			>
 				{#if !$streamInfo.replayActive}
-					<svg viewBox="0 0 24 24"><path d="M8,5.14V19.14L19,12.14L8,5.14Z" /></svg> <span>Replay</span>
+					<svg viewBox="0 0 24 24"><path d="M8,5.14V19.14L19,12.14L8,5.14Z" /></svg>
+					<span>Replay</span>
 				{:else if $streamInfo.replayPaused}
-					<svg viewBox="0 0 24 24"><path d="M8,5.14V19.14L19,12.14L8,5.14Z" /></svg> <span>Play</span>
+					<svg viewBox="0 0 24 24"><path d="M8,5.14V19.14L19,12.14L8,5.14Z" /></svg>
+					<span>Play</span>
 				{:else}
-					<svg viewBox="0 0 24 24"><path d="M14,19H18V5H14M6,19H10V5H6V19Z" /></svg> <span>Pause</span>
+					<svg viewBox="0 0 24 24"><path d="M14,19H18V5H14M6,19H10V5H6V19Z" /></svg>
+					<span>Pause</span>
 				{/if}
 			</button>
 
 			{#if $streamInfo.replayActive}
 				<button class="toggle-button replay-button stop" on:click={handleStop} title="Stop Replay">
-					<svg viewBox="0 0 24 24"><path d="M18,18H6V6H18V18Z" /></svg> 
+					<svg viewBox="0 0 24 24"><path d="M18,18H6V6H18V18Z" /></svg>
+					<!-- Stop Icon -->
 				</button>
-				<button class="toggle-button replay-button reset" on:click={handleReset} title="Reset Replay">
-					<svg viewBox="0 0 24 24"><path d="M12,5V1L7,6L12,11V8C15.31,8 18,10.69 18,14C18,17.31 15.31,20 12,20C8.69,20 6,17.31 6,14H4C4,18.42 7.58,22 12,22C16.42,22 20,18.42 20,14C20,9.58 16.42,6 12,6V5Z" /></svg> 
+				<button
+					class="toggle-button replay-button reset"
+					on:click={handleReset}
+					title="Reset Replay"
+				>
+					<svg viewBox="0 0 24 24"
+						><path
+							d="M12,5V1L7,6L12,11V8C15.31,8 18,10.69 18,14C18,17.31 15.31,20 12,20C8.69,20 6,17.31 6,14H4C4,18.42 7.58,22 12,22C16.42,22 20,18.42 20,14C20,9.58 16.42,6 12,6V5Z"
+						/></svg
+					>
+					<!-- Reset Icon (e.g., refresh) -->
 				</button>
-				<button class="toggle-button replay-button next-day" on:click={handleNextDay} title="Next Day">
-					<svg viewBox="0 0 24 24"><path d="M14,19.14V4.86L11,7.86L9.59,6.45L15.14,0.89L20.7,6.45L19.29,7.86L16,4.86V19.14H14M5,19.14V4.86H3V19.14H5Z" /></svg>
+				<button
+					class="toggle-button replay-button next-day"
+					on:click={handleNextDay}
+					title="Next Day"
+				>
+					<svg viewBox="0 0 24 24"
+						><path
+							d="M14,19.14V4.86L11,7.86L9.59,6.45L15.14,0.89L20.7,6.45L19.29,7.86L16,4.86V19.14H14M5,19.14V4.86H3V19.14H5Z"
+						/></svg
+					>
+					<!-- Next Day Icon (e.g., skip next track) -->
 				</button>
 
 				<label class="speed-label">
