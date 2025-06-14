@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sync"
 	"sync/atomic"
 
 	"go.opentelemetry.io/otel"
@@ -36,15 +37,17 @@ type Executor struct {
 	tracer          trace.Tracer
 	maxWorkers      int
 	limiter         chan struct{}
-	functionCounter int64 // Thread-safe counter for result IDs
+	functionCounter int64     // Thread-safe counter for result IDs
+	resultPool      sync.Pool // Pool for ExecuteResult slices
 }
 
 // NewExecutor creates a new Executor
 func NewExecutor(conn *data.Conn, userID int, maxWorkers int, lg *zap.Logger) *Executor {
 	if maxWorkers <= 0 {
-		maxWorkers = 3
+		maxWorkers = 5
 	}
-	return &Executor{
+
+	executor := &Executor{
 		conn:            conn,
 		userID:          userID,
 		tools:           Tools,
@@ -54,47 +57,139 @@ func NewExecutor(conn *data.Conn, userID int, maxWorkers int, lg *zap.Logger) *E
 		limiter:         make(chan struct{}, maxWorkers),
 		functionCounter: 0,
 	}
+
+	// Initialize result pool for memory optimization
+	executor.resultPool = sync.Pool{
+		New: func() interface{} {
+			// Pre-allocate slice with common batch size
+			return make([]ExecuteResult, 0, 10)
+		},
+	}
+
+	return executor
 }
 
 func (e *Executor) Execute(ctx context.Context, functionCalls []FunctionCall, parallel bool) ([]ExecuteResult, error) {
+	// Pre-allocate results slice with exact capacity
+	results := make([]ExecuteResult, len(functionCalls))
 
 	if !parallel || len(functionCalls) == 1 {
-		var result []ExecuteResult
-		for _, fc := range functionCalls {
-			res, _ := e.executeFunction(ctx, fc)
-			result = append(result, res)
+		// Sequential execution - direct slice assignment
+		for i, fc := range functionCalls {
+			results[i], _ = e.executeFunction(ctx, fc)
 		}
-		return result, nil
+		return results, nil
 	}
-	resCh := make(chan ExecuteResult, len(functionCalls))
+
+	// Parallel execution with optimized goroutine pool
 	g, ctx := errgroup.WithContext(ctx)
 	sem := make(chan struct{}, e.maxWorkers)
 
-	for _, fc := range functionCalls {
-		fc := fc
+	for i, fc := range functionCalls {
+		i, fc := i, fc // Capture loop variables
+		g.Go(func() error {
+			// Acquire semaphore
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			// Execute function and assign directly to pre-allocated slice
+			result, _ := e.executeFunction(ctx, fc)
+			results[i] = result
+
+			// Return error to errgroup (but don't fail the whole batch)
+			// Individual function errors are captured in ExecuteResult.Error
+			return nil
+		})
+	}
+
+	// Wait for all goroutines to complete
+	if err := g.Wait(); err != nil {
+		return results, err
+	}
+
+	return results, nil
+}
+
+// ExecuteOptimized provides enhanced execution with intelligent batching
+func (e *Executor) ExecuteOptimized(ctx context.Context, functionCalls []FunctionCall, parallel bool) ([]ExecuteResult, error) {
+	if len(functionCalls) == 0 {
+		return []ExecuteResult{}, nil
+	}
+
+	// Pre-allocate results slice with exact capacity
+	results := make([]ExecuteResult, len(functionCalls))
+
+	if !parallel || len(functionCalls) == 1 {
+		// Sequential execution - direct slice assignment
+		for i, fc := range functionCalls {
+			results[i], _ = e.executeFunction(ctx, fc)
+		}
+		return results, nil
+	}
+
+	// Intelligent batching: group similar functions together
+	batches := e.createOptimalBatches(functionCalls)
+
+	// Execute batches with optimal concurrency
+	return e.executeBatches(ctx, batches, results, functionCalls)
+}
+
+// createOptimalBatches groups related function calls for better performance
+func (e *Executor) createOptimalBatches(functionCalls []FunctionCall) [][]int {
+	// Group functions by type for potential optimizations
+	funcGroups := make(map[string][]int)
+
+	for i, fc := range functionCalls {
+		funcGroups[fc.Name] = append(funcGroups[fc.Name], i)
+	}
+
+	// Create batches, prioritizing similar functions
+	var batches [][]int
+	batchSize := e.maxWorkers
+
+	for _, indices := range funcGroups {
+		for len(indices) > 0 {
+			end := batchSize
+			if end > len(indices) {
+				end = len(indices)
+			}
+			batches = append(batches, indices[:end])
+			indices = indices[end:]
+		}
+	}
+
+	return batches
+}
+
+// executeBatches executes function call batches with optimal concurrency
+func (e *Executor) executeBatches(ctx context.Context, batches [][]int, results []ExecuteResult, functionCalls []FunctionCall) ([]ExecuteResult, error) {
+	for _, batch := range batches {
+		if err := e.executeBatch(ctx, batch, results, functionCalls); err != nil {
+			return results, err
+		}
+	}
+	return results, nil
+}
+
+// executeBatch executes a single batch of function calls
+func (e *Executor) executeBatch(ctx context.Context, indices []int, results []ExecuteResult, functionCalls []FunctionCall) error {
+	g, ctx := errgroup.WithContext(ctx)
+	sem := make(chan struct{}, len(indices)) // Use batch size for semaphore
+
+	for _, idx := range indices {
+		idx := idx // Capture loop variable
 		g.Go(func() error {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			result, err := e.executeFunction(ctx, fc)
-
-			select {
-			case resCh <- result:
-			case <-ctx.Done():
-			}
-			return err
+			// Execute function and assign directly to results slice
+			result, _ := e.executeFunction(ctx, functionCalls[idx])
+			results[idx] = result
+			return nil
 		})
 	}
-	go func() {
-		_ = g.Wait()
-		close(resCh)
-	}()
-	var results []ExecuteResult
-	for r := range resCh {
-		results = append(results, r)
-	}
-	return results, g.Wait()
 
+	return g.Wait()
 }
 
 func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (ExecuteResult, error) {
