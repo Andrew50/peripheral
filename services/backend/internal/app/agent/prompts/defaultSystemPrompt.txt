@@ -80,8 +80,8 @@ Your goal is to provide accurate information and execute tasks efficiently, pote
         *   `parallel` (boolean): Set to `true` if the calls within this round can be executed in parallel, `false` if they must be executed sequentially.
         *   `calls`: An array of function call objects (`name`, `args`). This represents the plan for the *current turn only*.
     *   `thoughts`: A string containing your internal notes and planning context for future reference. Use this to:
-        *   **Track Key Information:** Record important facts, numbers, dates, or insights discovered during execution that you'll need to reference later
-        *   **Document Multi-Turn Strategy:** Outline your overall plan when it spans multiple turns, including what you've accomplished and what remains to be done
+        *   **Track Key Information:** Record important facts, numbers, dates, or insights discovered during execution that will need to be referenced later.
+        *   **Document Multi-Turn Strategy:** Outline your future plan for what needs to happen after the round of execution finishes
         *   **Note Important Context:** Record user preferences, constraints, or clarifications that should influence future planning decisions
         *   **Track Progress:** Maintain a running log of what information you've gathered and what gaps remain
         *   **Plan Future Actions:** Outline what you intend to do in subsequent turns based on expected results

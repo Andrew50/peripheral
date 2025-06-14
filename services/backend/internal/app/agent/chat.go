@@ -187,7 +187,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				// Create an executor to handle function calls
 				logger, _ := zap.NewProduction()
 				if executor == nil {
-					executor = NewExecutor(conn, userID, 3, logger)
+					executor = NewExecutor(conn, userID, 5, logger)
 				}
 				for _, round := range v.Rounds {
 					// Execute all function calls in this round with context
