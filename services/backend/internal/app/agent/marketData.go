@@ -636,3 +636,144 @@ func RunIntradayAgent(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 		Analysis: sb.String(),
 	}, nil
 }
+
+type GetStockChangeArgs struct {
+	SecurityID    int    `json:"securityId"`
+	From          int64  `json:"from"`
+	To            int64  `json:"to"`
+	FromPoint     string `json:"fromPoint,omitempty"`
+	ToPoint       string `json:"toPoint,omitempty"`
+	SplitAdjusted *bool  `json:"splitAdjusted,omitempty"`
+}
+type GetStockChangeResponse struct {
+	StartPrice    float64 `json:"startPrice"`
+	EndPrice      float64 `json:"endPrice"`
+	Change        float64 `json:"change"`
+	ChangePercent float64 `json:"changePercent"`
+}
+
+func GetStockChange(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetStockChangeArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+	var fromDateString string
+	var toDateString string
+	// Validate fromPoint and toPoint values
+	if args.FromPoint != "" {
+		switch args.FromPoint {
+		case "open", "high", "low", "close":
+			fromDateString = time.Unix(args.From/1000, (args.From%1000)*1e6).UTC().Format("2006-01-02")
+		default:
+			return nil, fmt.Errorf("invalid fromPoint '%s': must be one of 'open', 'high', 'low', 'close'", args.FromPoint)
+		}
+	}
+
+	if args.ToPoint != "" {
+		switch args.ToPoint {
+		case "open", "high", "low", "close":
+			toDateString = time.Unix(args.To/1000, (args.To%1000)*1e6).UTC().Format("2006-01-02")
+		default:
+			return nil, fmt.Errorf("invalid toPoint '%s': must be one of 'open', 'high', 'low', 'close'", args.ToPoint)
+		}
+	}
+
+	// Default SplitAdjusted to true if not provided
+	splitAdjustedValue := true
+	if args.SplitAdjusted != nil {
+		splitAdjustedValue = *args.SplitAdjusted
+	}
+
+	var startPrice float64
+	var endPrice float64
+	ticker, err := postgres.GetTicker(conn, args.SecurityID, time.Unix(args.From/1000, (args.From%1000)*1e6).UTC())
+	if err != nil {
+		return nil, fmt.Errorf("error getting ticker: %v", err)
+	}
+	if args.FromPoint == "" {
+		fromTrade, err := polygon.GetTradeAtTimestamp(conn, args.SecurityID, time.Unix(args.From/1000, (args.From%1000)*1e6).UTC(), true)
+		if err != nil {
+			return nil, fmt.Errorf("error getting from trade at timestamp: %v, %v", args.From, err)
+		}
+		startPrice = fromTrade.Price
+	} else {
+		fromBar, err := polygon.GetDailyOHLCVForTicker(context.Background(), conn.Polygon, ticker, fromDateString, splitAdjustedValue)
+		if err != nil {
+			return nil, fmt.Errorf("error getting from trade at timestamp: %v, %v", args.From, err)
+		}
+		switch args.FromPoint {
+		case "open":
+			startPrice = fromBar.Open
+		case "high":
+			startPrice = fromBar.High
+		case "low":
+			startPrice = fromBar.Low
+		case "close":
+			startPrice = fromBar.Close
+		}
+	}
+
+	if args.ToPoint == "" {
+		toTrade, err := polygon.GetTradeAtTimestamp(conn, args.SecurityID, time.Unix(args.To/1000, (args.To%1000)*1e6).UTC(), true)
+		if err != nil {
+			return nil, fmt.Errorf("error getting to trade at timestamp: %v, %v", args.To, err)
+		}
+		endPrice = toTrade.Price
+	} else {
+		toBar, err := polygon.GetDailyOHLCVForTicker(context.Background(), conn.Polygon, ticker, toDateString, splitAdjustedValue)
+		if err != nil {
+			return nil, fmt.Errorf("error getting to trade at timestamp: %v, %v", args.To, err)
+		}
+		switch args.ToPoint {
+		case "open":
+			endPrice = toBar.Open
+		case "high":
+			endPrice = toBar.High
+		case "low":
+			endPrice = toBar.Low
+		case "close":
+			endPrice = toBar.Close
+		}
+	}
+	return GetStockChangeResponse{
+		StartPrice:    startPrice,
+		EndPrice:      endPrice,
+		Change:        endPrice - startPrice,
+		ChangePercent: ((endPrice - startPrice) / startPrice) * 100,
+	}, nil
+}
+
+type AgentGetStockPriceAtTimeArgs struct {
+	SecurityID    int   `json:"securityId"`
+	Timestamp     int64 `json:"timestamp"`
+	SplitAdjusted *bool `json:"splitAdjusted,omitempty"`
+}
+
+type AgentGetStockPriceAtTimeResponse struct {
+	Ticker     string  `json:"ticker"`
+	SecurityID int     `json:"securityId"`
+	Time       string  `json:"time"`
+	Price      float64 `json:"price"`
+}
+
+func AgentGetStockPriceAtTime(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
+	var args AgentGetStockPriceAtTimeArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+	timestamp := time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).UTC()
+	ticker, err := postgres.GetTicker(conn, args.SecurityID, timestamp)
+	if err != nil {
+		return nil, fmt.Errorf("error getting ticker: %v", err)
+	}
+	lastTrade, err := polygon.GetLastTrade(conn.Polygon, ticker, true)
+	if err != nil {
+		return nil, fmt.Errorf("error getting price at time: %v, %v", args.Timestamp, err)
+	}
+	return AgentGetStockPriceAtTimeResponse{
+		Ticker:     ticker,
+		SecurityID: args.SecurityID,
+		Time:       timestamp.Format("2006-01-02T15:04:05"),
+		Price:      lastTrade.Price,
+	}, nil
+}
