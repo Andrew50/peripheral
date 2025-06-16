@@ -408,7 +408,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 				Exchange:     latestTrade.Exchange,
 			}
 		} else {
-			fetchedTrade, err := polygon.GetTradeAtTimestamp(conn, securityID, queryTime)
+			fetchedTrade, err := polygon.GetTradeAtTimestamp(conn, securityID, queryTime, false)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get trade at timestamp: %v", err)
 			}
