@@ -7,12 +7,6 @@ redis>=4.0.0
 sqlalchemy>=1.4.0
 psycopg2-binary>=2.9.0
 
-# Machine learning and data science
-scikit-learn>=1.0.0
-
-# Optional but recommended for strategy development
-matplotlib>=3.5.0
-seaborn>=0.11.0
 
 # Technical analysis libraries
 ta>=0.10.0
@@ -28,11 +22,6 @@ pytest-asyncio>=0.18.0
 # Core scientific computing (performance optimized)
 numba>=0.58.0
 polars>=0.20.0
-
-# Machine learning
-tensorflow>=2.13.0
-torch>=2.0.0
-xgboost>=1.7.0
 
 # Financial libraries - using alternatives and specific versions
 # TA-Lib==0.4.28  # Original version that may have build issues
