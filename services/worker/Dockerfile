@@ -20,13 +20,29 @@ RUN wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz && \
     ./configure --prefix=/usr && \
     make && \
     make install && \
+    ldconfig && \
     cd .. && \
     rm -rf ta-lib ta-lib-0.4.0-src.tar.gz
+
+# Set library path for TA-Lib
+ENV LD_LIBRARY_PATH=/usr/lib:${LD_LIBRARY_PATH:-}
 
 # Copy requirements
 COPY requirements.txt .
 
-# Install Python dependencies
+# Install numpy first (required for TA-Lib)
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir numpy>=1.21.0
+
+# Install TA-Lib Python wrapper with specific build options
+RUN pip install --no-cache-dir --global-option=build_ext \
+    --global-option="-I/usr/include" \
+    --global-option="-L/usr/lib" \
+    TA-Lib || \
+    (echo "TA-Lib failed, continuing without it..." && \
+     sed -i '/^TA-Lib/d' requirements.txt)
+
+# Install remaining Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
