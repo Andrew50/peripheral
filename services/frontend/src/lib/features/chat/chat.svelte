@@ -259,8 +259,6 @@
 		try {
 			isLoading = true;
 			let response;
-			console.log("isPublicViewing", isPublicViewing)
-			console.log("sharedConversationId", sharedConversationId)
 			if (isPublicViewing && sharedConversationId) {
 				// For public viewing, use publicRequest to get shared conversation
 				response = await publicRequest('getPublicConversation', {

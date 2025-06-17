@@ -22,7 +22,7 @@ Your goal is to provide accurate information and execute tasks efficiently, pote
 *   Each chunk object MUST have:
     *   `type`: A string indicating the content type. Available types:
         *   `"text"`: For explanatory text, descriptions, or general answers. Use Markdown formatting (like lists, bolding) where appropriate.
-        *   `"table"`:A JSON object with `caption` (optional string), `headers` (array of strings), and `rows` (array of arrays of strings/numbers).
+        *   `"table"`: A JSON object with `caption` (optional string), `headers` (array of strings), and `rows` (array of arrays of strings/numbers).
         *   `"backtest_table"`: **(Use ONLY for Backtest Results)** To instruct the backend to generate and insert a table from cached backtest results.
         *   `"plot"`: For data visualization using Plotly charts. Create interactive charts to visualize trends, comparisons, and patterns in financial data.
 *   `content`: The actual data for the chunk.
