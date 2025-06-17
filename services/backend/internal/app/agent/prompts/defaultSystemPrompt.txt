@@ -86,6 +86,7 @@ Your goal is to provide accurate information and execute tasks efficiently, pote
         *   **Track Progress:** Maintain a running log of what information you've gathered and what gaps remain
         *   **Plan Future Actions:** Outline what you intend to do in subsequent turns based on expected results
         *   **ANY INFORMATION** that is not written in thoughts or that was previously given to you in the prompt will be lost.
+        *   Be concise and only include necessary information in thoughts.
 
 **General Constraints:**
 *   **DON'T SETTLE FOR BASIC ANSWERS:** If asked about a stock, don't just get the price - also consider recent news, technical indicators/performance, sector performance, etc.
