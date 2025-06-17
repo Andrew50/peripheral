@@ -23,8 +23,8 @@ type DirectAnswer struct {
 
 // ContentChunk represents a piece of content in the response sequence
 type ContentChunk struct {
-	Type    string      `json:"type"`    // "text" or "table" (or others later, e.g., "image")
-	Content interface{} `json:"content"` // string for "text", TableData for "table"
+	Type    string      `json:"type"`    // "text", "table", "backtest_table", "plot" (or others later, e.g., "image")
+	Content interface{} `json:"content"` // string for "text", TableData for "table", PlotData for "plot"
 }
 
 type Round struct {
@@ -150,9 +150,63 @@ func contentChunkSchema() *genai.Schema {
 		},
 	}
 
+	// plot chunk
+	plotSchema := &genai.Schema{
+		Type:     genai.TypeObject,
+		Required: []string{"type", "content"},
+		Properties: map[string]*genai.Schema{
+			"type": {Type: genai.TypeString, Enum: []string{"plot"}},
+			"content": {
+				Type:     genai.TypeObject,
+				Required: []string{"chart_type", "data"},
+				Properties: map[string]*genai.Schema{
+					"chart_type": {
+						Type: genai.TypeString,
+						Enum: []string{"line", "bar", "scatter", "histogram", "heatmap"},
+					},
+					"title": {Type: genai.TypeString},
+					"data": {
+						Type: genai.TypeArray,
+						Items: &genai.Schema{
+							Type: genai.TypeObject,
+							Properties: map[string]*genai.Schema{
+								"x":    {Type: genai.TypeArray, Items: scalar},
+								"y":    {Type: genai.TypeArray, Items: scalar},
+								"z":    {Type: genai.TypeArray, Items: scalar}, // for heatmaps
+								"name": {Type: genai.TypeString},
+								"type": {Type: genai.TypeString},
+							},
+						},
+					},
+					"layout": {
+						Type: genai.TypeObject,
+						Properties: map[string]*genai.Schema{
+							"xaxis": {
+								Type: genai.TypeObject,
+								Properties: map[string]*genai.Schema{
+									"title": {Type: genai.TypeString},
+									"type":  {Type: genai.TypeString},
+									"range": {Type: genai.TypeArray, Items: scalar},
+								},
+							},
+							"yaxis": {
+								Type: genai.TypeObject,
+								Properties: map[string]*genai.Schema{
+									"title": {Type: genai.TypeString},
+									"type":  {Type: genai.TypeString},
+									"range": {Type: genai.TypeArray, Items: scalar},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
 	// final union
 	return &genai.Schema{
-		AnyOf: []*genai.Schema{textSchema, tableSchema, backtestSchema},
+		AnyOf: []*genai.Schema{textSchema, tableSchema, backtestSchema, plotSchema},
 	}
 }
 

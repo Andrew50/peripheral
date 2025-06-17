@@ -86,24 +86,6 @@ var (
 			Function:      wrapWithContext(watchlist.GetWatchlists),
 			StatusMessage: "Fetching watchlists...",
 		},
-		"deleteWatchlist": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "deleteWatchlist",
-				Description: "Delete a watchlist.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"watchlistId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the watchlist to delete.",
-						},
-					},
-					Required: []string{"watchlistId"},
-				},
-			},
-			Function:      wrapWithContext(watchlist.DeleteWatchlist),
-			StatusMessage: "Deleting watchlist...",
-		},
 		"newWatchlist": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "newWatchlist",
