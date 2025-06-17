@@ -21,7 +21,6 @@ func GetWhyMoving(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{},
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, err
 	}
-	fmt.Println("GetWhyMoving", args.Tickers)
 	runWhyMovingArgs := WhyMovingArgs{
 		Tickers:  args.Tickers,
 		Priority: false,
@@ -34,7 +33,6 @@ func GetWhyMoving(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{},
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("GetWhyMoving results: %v\n", results)
 	return results, nil
 }
 
@@ -45,6 +43,7 @@ type WhyMovingArgs struct {
 
 type WhyMovingResult struct {
 	Ticker    string    `json:"ticker"`
+	IsContent bool      `json:"is_content"`
 	Content   string    `json:"content"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -68,20 +67,28 @@ func RunWhyMoving(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error)
 			if err != nil {
 				return nil, fmt.Errorf("failed to generate new reasons: %w", err)
 			}
-
-			// Combine existing and new reasons
-			allReasons := append(existingResponse.ExistingReasons, newReasons...)
-			return allReasons, nil
+			for _, reason := range newReasons {
+				if reason.IsContent {
+					existingResponse.ExistingReasons = append(existingResponse.ExistingReasons, reason)
+				}
+			}
+			return existingResponse.ExistingReasons, nil
 		}
 
 		// Return only existing reasons if all tickers were found
 		return existingResponse.ExistingReasons, nil
 	}
+	var results []WhyMovingResult
 	movingReasons, err := generateWhyMoving(conn, args.Tickers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate why moving: %w", err)
 	}
-	return movingReasons, nil
+	for _, reason := range movingReasons {
+		if reason.IsContent {
+			results = append(results, reason)
+		}
+	}
+	return results, nil
 }
 
 func whyIsItMovingSchema() *genai.Schema {
@@ -95,6 +102,10 @@ func whyIsItMovingSchema() *genai.Schema {
 					Type:        genai.TypeString,
 					Description: "The stock ticker symbol",
 				},
+				"isContent": {
+					Type:        genai.TypeBoolean,
+					Description: "Whether there is a reason in the last 24-48 hours why the stock is moving. If there is no reason, set this to false.",
+				},
 				"content": {
 					Type:        genai.TypeString,
 					Description: "The explanation of why the stock is moving",
@@ -107,8 +118,9 @@ func whyIsItMovingSchema() *genai.Schema {
 }
 
 type LLMWhyMovingResult struct {
-	Ticker  string `json:"ticker"`
-	Content string `json:"content"`
+	Ticker    string `json:"ticker"`
+	IsContent bool   `json:"isContent"`
+	Content   string `json:"content"`
 }
 
 func generateWhyMoving(conn *data.Conn, tickers []string) ([]WhyMovingResult, error) {
@@ -173,14 +185,17 @@ func generateWhyMoving(conn *data.Conn, tickers []string) ([]WhyMovingResult, er
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshalling llm results: %w", err)
 	}
-	results := make([]WhyMovingResult, len(llmResults))
+
+	var results []WhyMovingResult
 	now := time.Now()
-	for i, result := range llmResults {
-		results[i] = WhyMovingResult{
+	for _, result := range llmResults {
+		// Only include results where there is actual content
+		results = append(results, WhyMovingResult{
 			Ticker:    result.Ticker,
+			IsContent: result.IsContent,
 			Content:   result.Content,
 			CreatedAt: now,
-		}
+		})
 	}
 
 	// Insert into database in parallel (non-blocking)
@@ -316,10 +331,11 @@ func getExistingReasons(conn *data.Conn, tickers []string) (*ExistingReasonsResp
 	args[0] = time.Now().Add(-90 * time.Minute)
 
 	query := fmt.Sprintf(`
-		SELECT DISTINCT ON (ticker) ticker, content, created_at
+		SELECT DISTINCT ON (ticker) ticker, is_content, content, created_at
 		FROM why_is_it_moving 
 		WHERE created_at >= $1 
 		AND ticker IN (%s)
+		AND is_content = true
 		ORDER BY ticker, created_at DESC
 	`, strings.Join(placeholders, ","))
 
@@ -337,6 +353,7 @@ func getExistingReasons(conn *data.Conn, tickers []string) (*ExistingReasonsResp
 
 		err := rows.Scan(
 			&result.Ticker,
+			&result.IsContent,
 			&result.Content,
 			&result.CreatedAt,
 		)
@@ -373,8 +390,8 @@ func insertWhyMovingResults(conn *data.Conn, results []WhyMovingResult) error {
 	}
 
 	query := `
-		INSERT INTO why_is_it_moving (securityid, ticker, content, created_at)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO why_is_it_moving (securityid, ticker, is_content, content, created_at)
+		VALUES ($1, $2, $3, $4, $5)
 	`
 
 	for _, result := range results {
@@ -391,7 +408,7 @@ func insertWhyMovingResults(conn *data.Conn, results []WhyMovingResult) error {
 		if err != nil {
 			return fmt.Errorf("failed to get security id for ticker %s: %w", result.Ticker, err)
 		}
-		_, err = conn.DB.Exec(context.Background(), query, securityID, result.Ticker, result.Content, result.CreatedAt)
+		_, err = conn.DB.Exec(context.Background(), query, securityID, result.Ticker, result.IsContent, result.Content, result.CreatedAt)
 		if err != nil {
 			return fmt.Errorf("failed to insert result for ticker %s: %w", result.Ticker, err)
 		}
