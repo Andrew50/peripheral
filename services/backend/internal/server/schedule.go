@@ -536,6 +536,8 @@ func initAggregates(conn *data.Conn) error {
 }
 
 // startAlertLoop starts the alert loop if not already running
+// TODO: Currently commented out - see JobList for related commented job
+/*
 func startAlertLoop(conn *data.Conn) error {
 	alertsInitMutex.Lock()
 	defer alertsInitMutex.Unlock()
@@ -554,6 +556,7 @@ func startAlertLoop(conn *data.Conn) error {
 
 	return nil
 }
+*/
 
 // startPolygonWebSocket starts the Polygon WebSocket if not already running
 func startPolygonWebSocket(conn *data.Conn) error {
