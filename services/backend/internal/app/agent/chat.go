@@ -44,7 +44,6 @@ type Citation struct {
 
 // QueryResponse represents the response to a user query
 type QueryResponse struct {
-	Type           string         `json:"type"` //"mixed_content", "function_calls", "simple_text"
 	ContentChunks  []ContentChunk `json:"content_chunks,omitempty"`
 	Citations      []Citation     `json:"citations,omitempty"`
 	Suggestions    []string       `json:"suggestions,omitempty"`
@@ -146,7 +145,6 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			}
 
 			return QueryResponse{
-				Type:           "mixed_content",
 				ContentChunks:  processedChunks,
 				Suggestions:    v.Suggestions, // Include suggestions from direct answer
 				ConversationID: conversationID,
@@ -250,7 +248,6 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				}
 
 				return QueryResponse{
-					Type:           "mixed_content",
 					ContentChunks:  processedChunks,
 					Suggestions:    finalResponse.Suggestions, // Include suggestions from final response
 					ConversationID: conversationID,
