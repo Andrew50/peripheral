@@ -342,7 +342,8 @@ CREATE TABLE why_is_it_moving (
     content TEXT NOT NULL,
     source VARCHAR(100),
     -- Optional: track the source of the information
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_content BOOLEAN NOT NULL DEFAULT FALSE
 );
 -- Create indexes for efficient querying
 CREATE INDEX IF NOT EXISTS idx_why_is_it_moving_ticker ON why_is_it_moving(ticker);

@@ -530,9 +530,7 @@
 		margin-bottom: 1rem;
 	}
 	
-	.chunk-table-wrapper {
-		/* Glass effect now provided by global .glass classes */
-		padding: 0.75rem;
+	.chunk-table-container {
 		margin-bottom: 1rem;
 	}
 	
@@ -540,9 +538,6 @@
 		overflow-x: auto;
 	}
 
-	.chunk-table.expanded {
-		/* No height constraints when expanded */
-	}
 
 	.table-caption {
 		font-weight: bold;

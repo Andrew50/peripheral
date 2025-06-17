@@ -69,9 +69,7 @@ CURRENT DATE (EST/Market Time): {{CURRENT_DATE_EST}}
     *   **If the context refers to the latest available data or the present time (not a specific past date/event), use `0` for `TIMESTAMPINMS`. You should default to 0 for the TIMESTAMPINMS. **
     *   Example: `$$$AAPL-1678886400000$$$` (for a specific past date), `$$$TSLA-0$$$` (for the latest data).
     *   Do not put any paraenthesis or other formating around tickers than what is specified.
-    *   DO NOT USE THIS FORMATTING IN THE SUGGESTIONS. 
     *   NEVER use the company name in the ticker symbol formatting. 
-    *   **DO NOT** use the $$$TICKER-TIMESTAMP$$$ formatting for tickers in the suggestions. ONLY use the raw tickers like 'NVDA' rather than '$$$NVDA-0$$$'. 
 
     
 **General Constraints:**
