@@ -12,7 +12,7 @@ import (
 	"google.golang.org/genai"
 )
 
-var thinkingModel = "gemini-2.5-flash-preview-05-20"
+var thinkingModel = "gemini-2.5-flash"
 
 // buildContextPrompt formats incoming chart/filing context for the model
 func buildContextPrompt(contextItems []map[string]interface{}) string {
@@ -251,7 +251,7 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 	// Use GenerateContent with []*genai.Content input
 	result, err := client.Models.GenerateContent(
 		ctx,
-		"gemini-2.5-flash-preview-05-20",
+		"gemini-2.5-flash",
 		[]*genai.Content{userContent},
 		cfg,
 	)
