@@ -201,7 +201,7 @@ func BuildFinalResponsePrompt(conn *data.Conn, userID int, query string, context
 }
 
 // BuildFinalResponsePromptWithConversationID builds a final response prompt for a specific conversation ID
-func BuildFinalResponsePromptWithConversationID(conn *data.Conn, userID int, conversationID string, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, allResults []ExecuteResult) (string, error) {
+func BuildFinalResponsePromptWithConversationID(conn *data.Conn, userID int, conversationID string, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, allResults []ExecuteResult, thoughts []string) (string, error) {
 	// Start with the basic planning prompt
 	sb := strings.Builder{}
 	planningPrompt, err := BuildPlanningPromptWithConversationID(conn, userID, conversationID, query, contextItems, activeChartContext)
@@ -210,6 +210,14 @@ func BuildFinalResponsePromptWithConversationID(conn *data.Conn, userID int, con
 	}
 	sb.WriteString(planningPrompt)
 
+	// Add previous thoughts if any
+	if len(thoughts) > 0 {
+		sb.WriteString("\n<PreviousThoughts>\n")
+		for i, thought := range thoughts {
+			sb.WriteString(fmt.Sprintf("Turn %d: %s\n", i+1, thought))
+		}
+		sb.WriteString("</PreviousThoughts>\n")
+	}
 	// Add execution results
 	if len(allResults) > 0 {
 		sb.WriteString("\n<ExecRes>\n")
