@@ -312,7 +312,7 @@ func BuildPlanningPromptWithConversationID(conn *data.Conn, userID int, conversa
 		ticker, _ := activeChartContext["ticker"].(string)
 		secID := fmt.Sprint(activeChartContext["securityId"])
 		tsStr := fmt.Sprint(activeChartContext["timestamp"])
-		sb.WriteString(fmt.Sprintf("Instance - Ticker: %s, SecurityId: %s, TimestampMs: %s", ticker, secID, tsStr))
+		sb.WriteString(fmt.Sprintf("Ticker: %s, SecurityId: %s, TimestampMs: %s", ticker, secID, tsStr))
 		sb.WriteString("\n</UserActiveChart>\n")
 	}
 	sb.WriteString("<UserQuery>\n")
