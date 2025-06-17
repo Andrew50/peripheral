@@ -735,11 +735,14 @@ func GetStockChange(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{
 			endPrice = toBar.Close
 		}
 	}
+	change := endPrice - startPrice
+	changePercent := (change / startPrice) * 100
+
 	return GetStockChangeResponse{
-		StartPrice:    startPrice,
-		EndPrice:      endPrice,
-		Change:        endPrice - startPrice,
-		ChangePercent: ((endPrice - startPrice) / startPrice) * 100,
+		StartPrice:    math.Round(startPrice*1000) / 1000,
+		EndPrice:      math.Round(endPrice*1000) / 1000,
+		Change:        math.Round(change*1000) / 1000,
+		ChangePercent: math.Round(changePercent*1000) / 1000,
 	}, nil
 }
 
@@ -766,7 +769,7 @@ func AgentGetStockPriceAtTime(conn *data.Conn, _ int, rawArgs json.RawMessage) (
 	if err != nil {
 		return nil, fmt.Errorf("error getting ticker: %v", err)
 	}
-	lastTrade, err := polygon.GetLastTrade(conn.Polygon, ticker, true)
+	lastTrade, err := polygon.GetTradeAtTimestamp(conn, args.SecurityID, timestamp, true)
 	if err != nil {
 		return nil, fmt.Errorf("error getting price at time: %v, %v", args.Timestamp, err)
 	}
@@ -774,6 +777,6 @@ func AgentGetStockPriceAtTime(conn *data.Conn, _ int, rawArgs json.RawMessage) (
 		Ticker:     ticker,
 		SecurityID: args.SecurityID,
 		Time:       timestamp.Format("2006-01-02T15:04:05"),
-		Price:      lastTrade.Price,
+		Price:      math.Round(lastTrade.Price*1000) / 1000,
 	}, nil
 }

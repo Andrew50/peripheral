@@ -496,7 +496,7 @@ var (
 		"getStockChange": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStockChange",
-				Description: "Get the change in price of a stock between two specific times.",
+				Description: "Returns the change in price of a stock between two specific times.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -530,7 +530,7 @@ var (
 		"getOHLCVData": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getOHLCVData",
-				Description: "Get OHLCV data for a stock",
+				Description: "Get OHLCV data for a stock. Only use this function if other market data tools are not sufficient.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
