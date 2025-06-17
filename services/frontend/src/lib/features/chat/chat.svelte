@@ -15,8 +15,9 @@
 		type FilingContext, // Import the new type
 		pendingChatQuery,
 	} from './interface'
-	import type { Message, ConversationData, QueryResponse, TableData, ContentChunk } from './interface';
+	import type { Message, ConversationData, QueryResponse, TableData, ContentChunk, PlotData } from './interface';
 	import { parseMarkdown, formatChipDate, formatRuntime, cleanHtmlContent, handleTickerButtonClick } from './utils';
+	import { isPlotData, getPlotData, plotDataToText, generatePlotKey } from './plotUtils';
 	import { activeChartInstance } from '$lib/features/chart/interface';
 	import { functionStatusStore, type FunctionStatusUpdate } from '$lib/utils/stream/socket'; // <-- Import the status store and FunctionStatusUpdate type
 	import './chat.css'; // Import the CSS file
@@ -37,6 +38,7 @@
 	let conversationToDelete = ''; // Add state to track which conversation is being deleted
 	
 	import ConversationHeader from './components/ConversationHeader.svelte';
+	import PlotChunk from './components/PlotChunk.svelte';
 	
 	// Share modal reference
 	let shareModalRef: HTMLDivElement;
@@ -968,6 +970,9 @@
 							}
 						}).join('\n');
 						return tableText;
+					} else if (chunk.type === 'plot' && isPlotData(chunk.content)) {
+						// For plots, create a text representation
+						return plotDataToText(chunk.content);
 					}
 					return '';
 				}).join('\n\n');
@@ -1352,6 +1357,19 @@
 													{/if}
 												{:else}
 													<div class="chunk-error">Invalid table data format</div>
+												{/if}
+											{:else if chunk.type === 'plot'}
+												{#if isPlotData(chunk.content)}
+													{@const plotData = getPlotData(chunk.content)}
+													{@const plotKey = generatePlotKey(message.message_id, index)}
+
+													{#if plotData}
+														<PlotChunk {plotData} {plotKey} />
+													{:else}
+														<div class="chunk-error">Invalid plot data structure</div>
+													{/if}
+												{:else}
+													<div class="chunk-error">Invalid plot data format</div>
 												{/if}
 											{/if}
 										{/each}
