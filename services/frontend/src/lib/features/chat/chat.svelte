@@ -527,7 +527,7 @@
 
 	// Function to handle clicking on a suggested query
 	function handleSuggestedQueryClick(query: string) {
-		if(get(isPublicViewing)) {
+		if(isPublicViewing) {
 			showAuthModal('conversations', 'signup');
 			return;
 		}

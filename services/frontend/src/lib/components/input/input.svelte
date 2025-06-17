@@ -331,8 +331,6 @@
 
 	async function enterInput(iQ: InputQuery, tickerIndex: number = 0): Promise<InputQuery> {
 		if (iQ.inputType === 'ticker') {
-			// Store the timestamp to preserve it
-			const ts = iQ.instance.timestamp;
 
 			// Wait for securities to load if needed
 			if (loadedSecurityResultRequest !== currentSecurityResultRequest) {
@@ -346,8 +344,6 @@
 			if (Array.isArray(iQ.securities) && iQ.securities.length > 0) {
 				// Apply the selected security to the instance
 				iQ.instance = { ...iQ.instance, ...iQ.securities[tickerIndex] };
-				// Restore timestamp if it was previously set
-				if (ts) iQ.instance.timestamp = ts;
 			} else {
 				// If no securities, at least set the ticker from input string
 				iQ.instance.ticker = iQ.inputString.toUpperCase();

@@ -7,26 +7,35 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"gopkg.in/telebot.v3"
 )
 
-const (
-	ChatID = -1002428678944
+var (
+	bot    *telebot.Bot
+	chatID int64
 )
-
-var bot *telebot.Bot
 
 // InitTelegramBot performs operations related to InitTelegramBot functionality.
 func InitTelegramBot() error {
 	botToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	if botToken == "" {
-		log.Println("Warning: TELEGRAM_BOT_TOKEN environment variable not set.")
-		// Depending on policy, you might return an error or allow the bot to fail initialization
-		// return errors.New("TELEGRAM_BOT_TOKEN not set")
+		log.Fatal("Error: TELEGRAM_BOT_TOKEN environment variable is required.")
 	}
+
+	// Read chat ID from environment variable
+	chatIDStr := os.Getenv("TELEGRAM_CHAT_ID")
+	if chatIDStr == "" {
+		log.Fatal("Error: TELEGRAM_CHAT_ID environment variable is required.")
+	}
+
 	var err error
+	chatID, err = strconv.ParseInt(chatIDStr, 10, 64)
+	if err != nil {
+		log.Fatalf("Error: Invalid TELEGRAM_CHAT_ID format: %v", err)
+	}
 
 	bot, err = telebot.NewBot(telebot.Settings{
 		Token:  botToken,
@@ -84,7 +93,7 @@ func dispatchAlert(conn *data.Conn, alert Alert) error {
 	////fmt.Println("dispatching alert", alert)
 	alertMessage := writeAlertMessage(alert)
 	timestamp := time.Now()
-	err := SendTelegramMessage(alertMessage, ChatID)
+	err := SendTelegramMessage(alertMessage, chatID)
 	if err != nil {
 		return err
 	}
