@@ -490,7 +490,7 @@ var (
 					Required: []string{"securityId", "timestamp"},
 				},
 			},
-			Function:      wrapWithContext(AgentGetStockPriceAtTime),
+			Function:      wrapWithContext(GetStockPriceAtTime),
 			StatusMessage: "Getting price at time...",
 		},
 		"getStockChange": {

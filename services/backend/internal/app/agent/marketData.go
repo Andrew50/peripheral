@@ -746,21 +746,21 @@ func GetStockChange(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{
 	}, nil
 }
 
-type AgentGetStockPriceAtTimeArgs struct {
+type GetStockPriceAtTimeArgs struct {
 	SecurityID    int   `json:"securityId"`
 	Timestamp     int64 `json:"timestamp"`
 	SplitAdjusted *bool `json:"splitAdjusted,omitempty"`
 }
 
-type AgentGetStockPriceAtTimeResponse struct {
+type GetStockPriceAtTimeResponse struct {
 	Ticker     string  `json:"ticker"`
 	SecurityID int     `json:"securityId"`
 	Time       string  `json:"time"`
 	Price      float64 `json:"price"`
 }
 
-func AgentGetStockPriceAtTime(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
-	var args AgentGetStockPriceAtTimeArgs
+func GetStockPriceAtTime(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetStockPriceAtTimeArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
@@ -773,7 +773,7 @@ func AgentGetStockPriceAtTime(conn *data.Conn, _ int, rawArgs json.RawMessage) (
 	if err != nil {
 		return nil, fmt.Errorf("error getting price at time: %v, %v", args.Timestamp, err)
 	}
-	return AgentGetStockPriceAtTimeResponse{
+	return GetStockPriceAtTimeResponse{
 		Ticker:     ticker,
 		SecurityID: args.SecurityID,
 		Time:       timestamp.Format("2006-01-02T15:04:05"),
