@@ -1,0 +1,31 @@
+[Unit]
+Description=Minikube Auto Start Service
+Documentation=https://minikube.sigs.k8s.io/docs/
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=aj
+Group=aj
+Environment=HOME=/home/aj
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=/home/aj
+
+# Stage environment
+ExecStart=/bin/bash -c 'if ! minikube status -p minikube-stage >/dev/null 2>&1; then minikube start -p minikube-stage --cpus=8 --memory=32768 --driver=docker; fi'
+
+# Production environment (if needed)
+# ExecStart=/bin/bash -c 'if ! minikube status -p minikube-prod >/dev/null 2>&1; then minikube start -p minikube-prod --cpus=16 --memory=65536 --driver=docker; fi'
+
+# Restart policy
+Restart=on-failure
+RestartSec=30
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target 
