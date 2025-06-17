@@ -48,9 +48,12 @@
 		"date-fns": "^3.6.0",
 		"html2canvas": "^1.4.1",
 		"lightweight-charts": "^4.2.0",
+		"lodash-es": "^4.17.21",
 		"luxon": "^3.5.0",
 		"marked": "^15.0.7",
+		"plotly.js-dist": "^2.34.0",
 		"quill": "^2.0.2",
-		"satori": "^0.15.2"
+		"satori": "^0.15.2",
+		"svelte-plotly.js": "^1.2.0"
 	}
 }
