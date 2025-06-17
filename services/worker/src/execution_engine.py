@@ -465,13 +465,15 @@ class PythonExecutionEngine:
             'save_result': save_result,
         }
     
-    def _extract_results(self, locals_dict: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract results from execution locals"""
+    def _extract_results(self, locals_dict: Dict[str, Any], globals_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract results from execution locals and globals"""
         
         # Get saved results from helper function
         results = {}
-        if hasattr(locals_dict.get('save_result'), 'results'):
-            results.update(locals_dict['save_result'].results)
+        # Check both locals and globals for save_result function
+        save_result_func = locals_dict.get('save_result') or globals_dict.get('save_result')
+        if save_result_func and hasattr(save_result_func, 'results'):
+            results.update(save_result_func.results)
         
         # Extract variables that don't start with underscore
         for key, value in locals_dict.items():
