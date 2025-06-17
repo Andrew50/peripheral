@@ -180,6 +180,7 @@ func generateWhyMoving(conn *data.Conn, tickers []string) ([]WhyMovingResult, er
 			}
 		}
 	}
+	fmt.Println("resultText: ", resultText)
 	var llmResults []LLMWhyMovingResult
 	err = json.Unmarshal([]byte(resultText), &llmResults)
 	if err != nil {
