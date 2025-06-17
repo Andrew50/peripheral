@@ -182,8 +182,22 @@ func contentChunkSchema() *genai.Schema {
 						Type: genai.TypeObject,
 						Properties: map[string]*genai.Schema{
 							"title": {Type: genai.TypeString},
-							"xaxis": {Type: genai.TypeObject},
-							"yaxis": {Type: genai.TypeObject},
+							"xaxis": {
+								Type: genai.TypeObject,
+								Properties: map[string]*genai.Schema{
+									"title": {Type: genai.TypeString},
+									"type":  {Type: genai.TypeString},
+									"range": {Type: genai.TypeArray, Items: scalar},
+								},
+							},
+							"yaxis": {
+								Type: genai.TypeObject,
+								Properties: map[string]*genai.Schema{
+									"title": {Type: genai.TypeString},
+									"type":  {Type: genai.TypeString},
+									"range": {Type: genai.TypeArray, Items: scalar},
+								},
+							},
 						},
 					},
 				},
