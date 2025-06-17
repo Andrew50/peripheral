@@ -2,7 +2,7 @@ name: Lint and Build Check
 on:
   pull_request:
     branches: [main, prod]
-  
+
   # Only trigger on direct pushes to ben/aj branches that are not associated with PRs
   push:
     branches: [ben, aj]
@@ -11,7 +11,7 @@ on:
     # Add condition to exclude PR-related pushes
     tags-ignore:
       - '**'  # Ignore tag pushes
-  
+
   # Add workflow_run trigger to run after branch-protection workflow
   workflow_run:
     workflows: ["Branch Protection Check"]
@@ -26,35 +26,31 @@ concurrency:
 jobs:
   # Add a check to determine if we should run the tests
   check-workflow-conditions:
-    # Use a lightweight container instead of full ubuntu
     runs-on: ubuntu-latest
-    # Use ubuntu runner directly instead of Alpine container for better Git support
-    # Add permissions for GitHub token
     permissions:
       actions: read
       contents: read
-      pull-requests: read  # Add permission to read PRs
+      pull-requests: read
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
       continue_on_error: ${{ steps.check.outputs.continue_on_error }}
       last_success_sha: ${{ steps.get-last-success.outputs.sha }}
+      has_backend_changes: ${{ steps.changed-paths.outputs.has_backend_changes }}
+      has_frontend_changes: ${{ steps.changed-paths.outputs.has_frontend_changes }}
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      
+
       - id: check
         env:
-          GH_TOKEN: ${{ github.token }}  # Add the GitHub token
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Check if this is a push on a branch that has an open PR
           if [[ "${{ github.event_name }}" == "push" ]]; then
-            # Get the current branch name
             BRANCH_NAME="${{ github.ref_name }}"
             echo "Current branch: $BRANCH_NAME"
             
-            # Check if there's an open PR from this branch to any target
-            # Use GitHub API to check for PRs more reliably
             PR_COUNT=$(gh api graphql -f query='
               query($owner:String!, $repo:String!, $headRef:String!) {
                 repository(owner:$owner, name:$repo) {
@@ -72,7 +68,6 @@ jobs:
             fi
           fi
           
-          # For pushes to ben or aj branches, run but don't fail on errors
           if [[ "${{ github.event_name }}" == "push" && ("${{ github.ref }}" == "refs/heads/ben" || "${{ github.ref }}" == "refs/heads/aj") ]]; then
             echo "Running for push to ben/aj branch - will not fail on errors"
             echo "should_run=true" >> $GITHUB_OUTPUT
@@ -80,7 +75,6 @@ jobs:
             exit 0
           fi
           
-          # For direct PRs to main, always run
           if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "main" ]]; then
             echo "Running for PR to main branch"
             echo "should_run=true" >> $GITHUB_OUTPUT
@@ -88,8 +82,7 @@ jobs:
             exit 0
           fi
           
-          # For PRs to prod or workflow runs targeting prod, skip the lint and build
-          if [[ ("${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "prod") || 
+          if [[ ("${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "prod") || \
                 ("${{ github.event_name }}" == "workflow_run" && "${{ github.event.workflow_run.head_branch }}" == "prod") ]]; then
             echo "Skipping lint and build for prod deployment"
             echo "should_run=false" >> $GITHUB_OUTPUT
@@ -97,7 +90,6 @@ jobs:
             exit 0
           fi
           
-          # For workflow_run events, only run if the previous workflow succeeded
           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
             if [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]]; then
               echo "Branch protection check passed, proceeding with tests"
@@ -111,31 +103,26 @@ jobs:
             exit 0
           fi
           
-          # Default case
           echo "Running tests by default"
           echo "should_run=true" >> $GITHUB_OUTPUT
           echo "continue_on_error=false" >> $GITHUB_OUTPUT
 
-      # Get the SHA of the last successful run
       - id: get-last-success
         if: steps.check.outputs.should_run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # Initialize SHA output
-          echo "sha=0000000000000000000000000000000000000000" >> $GITHUB_OUTPUT
+          echo "sha=0000000000000000000000000000000000000000" >> $GITHUB_OUTPUT # Default to initial commit
           
-          # For pull requests, we want to compare against the base branch
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "sha=${{ github.event.pull_request.base.sha }}" >> $GITHUB_OUTPUT
             exit 0
           fi
           
-          # Try to get the last successful run
           echo "Getting last successful workflow run SHA..."
-          # Use the workflow filename instead of the display name
-          WORKFLOW_FILENAME="lint-and-build.yml"
+          WORKFLOW_FILENAME="lint-and-build.yml" # Assuming this is the current workflow's filename
           BRANCH_NAME="${{ github.ref_name }}"
           
-          # Get the run ID of the last successful run of this workflow on this branch
           LAST_RUN_ID=$(gh api \
             -H "Accept: application/vnd.github+json" \
             "/repos/${{ github.repository }}/actions/workflows/$WORKFLOW_FILENAME/runs?branch=$BRANCH_NAME&status=success&per_page=1" \
@@ -143,8 +130,6 @@ jobs:
           
           if [ -n "$LAST_RUN_ID" ] && [ "$LAST_RUN_ID" != "null" ]; then
             echo "Found last successful run: $LAST_RUN_ID"
-            
-            # Get the SHA of the commit for that run
             LAST_SUCCESS_SHA=$(gh api \
               -H "Accept: application/vnd.github+json" \
               "/repos/${{ github.repository }}/actions/runs/$LAST_RUN_ID" \
@@ -154,359 +139,232 @@ jobs:
               echo "Last successful commit SHA: $LAST_SUCCESS_SHA"
               echo "sha=$LAST_SUCCESS_SHA" >> $GITHUB_OUTPUT
             else
-              echo "Using previous commit as fallback"
-              echo "sha=$(git rev-parse HEAD~1)" >> $GITHUB_OUTPUT
+              echo "Using previous commit as fallback (could not get SHA from last run)"
+              echo "sha=$(git rev-parse HEAD~1 || git rev-parse HEAD)" >> $GITHUB_OUTPUT # Fallback to HEAD if no HEAD~1
             fi
           else
             echo "No previous successful run found, using previous commit as fallback"
-            echo "sha=$(git rev-parse HEAD~1)" >> $GITHUB_OUTPUT
+            echo "sha=$(git rev-parse HEAD~1 || git rev-parse HEAD)" >> $GITHUB_OUTPUT # Fallback to HEAD if no HEAD~1
           fi
-        env:
-          GH_TOKEN: ${{ github.token }}
+
+      - name: Check for backend/frontend changes
+        id: changed-paths
+        if: steps.check.outputs.should_run == 'true'
+        run: |
+          BASE_SHA="${{ steps.get-last-success.outputs.sha }}"
+          # Ensure BASE_SHA is a valid commit, otherwise default to comparing against initial state (all changes)
+          if ! git cat-file -e $BASE_SHA 2>/dev/null; then
+            echo "Warning: BASE_SHA ($BASE_SHA) is not a valid commit. Diffing against initial commit."
+            # Get the initial commit of the current branch or the repository
+            INITIAL_COMMIT=$(git rev-list --max-parents=0 HEAD)
+            BASE_SHA=$INITIAL_COMMIT
+          fi
+          HEAD_SHA=$(git rev-parse HEAD)
+
+          echo "Comparing changes for backend/frontend between $BASE_SHA and $HEAD_SHA"
+
+          # Check backend
+          # Use git diff --name-only and then check if output is non-empty
+          BACKEND_CHANGES=$(git diff --name-only $BASE_SHA $HEAD_SHA -- 'services/backend/')
+          if [ -z "$BACKEND_CHANGES" ]; then
+            echo "No changes in backend."
+            echo "has_backend_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changes detected in backend."
+            echo "has_backend_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+          # Check frontend
+          FRONTEND_CHANGES=$(git diff --name-only $BASE_SHA $HEAD_SHA -- 'services/frontend/')
+          if [ -z "$FRONTEND_CHANGES" ]; then
+            echo "No changes in frontend."
+            echo "has_frontend_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changes detected in frontend."
+            echo "has_frontend_changes=true" >> $GITHUB_OUTPUT
+          fi
 
   lint-and-build-backend:
     needs: [check-workflow-conditions]
-    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' }}
-    # Use ubuntu runner directly instead of a container
+    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_backend_changes == 'true' }}
+    container:
+      image: billin19/ci-image:latest # Use custom Docker image
     runs-on: ubuntu-latest
-    # Set continue-on-error based on the branch condition
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
-    # Add permissions block for annotations
     permissions:
-      contents: read
+      contents: write
       checks: write
       pull-requests: read
+    env:
+      GOPATH: /go # Assuming standard GOPATH in container, or adjust as per your image
+      GO111MODULE: "on"
     steps:
       - uses: actions/checkout@v3
         with:
-          # For workflow_run events, we need to check out the PR that triggered the workflow
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
-          # Fetch base branch for delta analysis
           fetch-depth: 0
-      
-      # Set up Go instead of using a container
-      - name: Set up Go
-        uses: actions/setup-go@v4
+
+      - name: Mark the Git workspace as safe
+        run: git config --global --add safe.directory "${GITHUB_WORKSPACE:-$(pwd)}"
+
+      - name: Cache Go modules and build tools
+        uses: actions/cache@v4
         with:
-          go-version: '1.24'
-          cache: true
-          cache-dependency-path: services/backend/go.sum
-          
-      # Ensure Go cache directories exist
-      - name: Setup Go cache directories
+          path: |
+            ${{ env.GOPATH }}/pkg/mod
+            ~/.cache/go-build
+            ~/.cache/golangci-lint # Cache for golangci-lint
+            ${{ env.GOPATH }}/bin
+          key: ${{ runner.os }}-go-${{ hashFiles('services/backend/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Enforce go mod tidy & verify
+        working-directory: services/backend
         run: |
-          mkdir -p ~/.cache/go-build
-          mkdir -p ~/go/pkg/mod
-      
-      - name: Identify changed Go files
-        id: changed-files
-        run: |
-          # Use the last successful SHA from the check-workflow-conditions job
-          BASE_SHA="${{ needs.check-workflow-conditions.outputs.last_success_sha }}"
-          HEAD_SHA=$(git rev-parse HEAD)
-          
-          echo "Comparing changes between $BASE_SHA and $HEAD_SHA"
-          
-          # Check if backend directory has any changes
-          HAS_BACKEND_CHANGES=$(git diff --name-only $BASE_SHA $HEAD_SHA -- 'services/backend/' | wc -l)
-          
-          if [ "$HAS_BACKEND_CHANGES" -eq 0 ]; then
-            echo "No changes in backend directory - skipping backend checks"
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          # Find modified Go files
-          CHANGED_GO_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA -- 'services/backend/**/*.go' | xargs)
-          echo "Changed Go files: $CHANGED_GO_FILES"
-          
-          # Identify affected packages (directories)
-          if [ -n "$CHANGED_GO_FILES" ]; then
-            # Get all potentially affected package directories
-            ALL_AFFECTED_PACKAGES=$(echo "$CHANGED_GO_FILES" | xargs dirname | sort -u)
-            echo "All potentially affected packages: $ALL_AFFECTED_PACKAGES"
-            
-            # Filter out directories that don't exist anymore
-            EXISTING_PACKAGES=""
-            cd services/backend
-            for pkg in $ALL_AFFECTED_PACKAGES; do
-              # Convert from full path to relative path
-              pkg_rel=$(echo "$pkg" | sed 's/^services\/backend\///')
-              
-              # Check if the directory still exists
-              if [ -d "$pkg_rel" ]; then
-                echo "Directory exists: $pkg"
-                EXISTING_PACKAGES="$EXISTING_PACKAGES $pkg"
-              else
-                echo "Directory no longer exists (skipping): $pkg"
-              fi
-            done
-            cd - > /dev/null  # Return to previous directory
-            
-            # Store only existing packages as affected packages
-            AFFECTED_PACKAGES=$(echo "$EXISTING_PACKAGES" | xargs)
-            echo "Final affected packages (existing only): $AFFECTED_PACKAGES"
-            
-            # Store the paths for reference in other steps
-            echo "affected_packages=$AFFECTED_PACKAGES" >> $GITHUB_OUTPUT
-            echo "affected_files=$CHANGED_GO_FILES" >> $GITHUB_OUTPUT
-            echo "has_changes=true" >> $GITHUB_OUTPUT
+          go mod tidy
+          go mod verify
+          if ! git diff --quiet go.mod go.sum; then
+            echo "::error file=services/backend/go.mod,title=go.mod/go.sum outdated::'go mod tidy' resulted in changes. Please run 'go mod tidy' locally and commit the changes."
+            echo "Diff:"
+            git diff --color=always go.mod go.sum # Adding color and specifying files for clarity
+            exit 1
           else
-            echo "No Go files changed"
-            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "go.mod and go.sum are already tidy."
           fi
 
-      - name: Install dependencies
-        if: steps.changed-files.outputs.has_changes == 'true'
+      - name: Vet, Lint, Staticcheck, Gosec, Build
+        working-directory: services/backend
         run: |
-          cd services/backend
-          go mod download
-          go install honnef.co/go/tools/cmd/staticcheck@latest
+          echo "Cleaning Go caches..."
+          go clean -cache
+          go clean -modcache
+          echo "Re-tidying modules..."
+          go mod tidy
+          echo "Running go vet..."
+          go vet ./...
 
-      - name: Go Lint
-        if: steps.changed-files.outputs.has_changes == 'true'
+          echo "Running staticcheck..."
+          staticcheck -tags=all ./...
+
+          echo "Running gosec..." # Assuming gosec is in PATH in the container
+          gosec -quiet -tags=all ./...
+
+          echo "Running Go Build..."
+          go build -v -tags=all ./...
+        # continue-on-error for this combined step will be based on the job's continue-on-error
+
+      - name: Go Lint with golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
-          version: latest
+          version: latest # Or specify the version pre-baked in your container
           working-directory: services/backend
-          # Only include packages that exist
-          args: --timeout=3m --config=.golangci.yml --out-format=colored-line-number --max-issues-per-linter=10 --max-same-issues=5 --build-tags=all --path-prefix=services/backend --allow-parallel-runners --go=1.24
-          skip-cache: true
-          skip-pkg-cache: true
-          skip-build-cache: true
-          only-new-issues: true
+          args: --timeout=3m --config=.golangci.yml --out-format=colored-line-number --max-issues-per-linter=10 --max-same-issues=5 --build-tags=all --allow-parallel-runners --go=1.24 --path-prefix=services/backend
+          # skip-cache, skip-pkg-cache, skip-build-cache are removed to enable internal caching
+          only-new-issues: true # Keep this if desired
         env:
-          # Ensure Go modules are used
           GO111MODULE: "on"
-          # Add verbose output for debugging
-          VERBOSE: "true"
-        # Individual step can continue on error for ben/aj branches
-        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+        # continue-on-error for this specific action is handled by job's continue-on-error
 
-      - name: Go Staticcheck
-        if: steps.changed-files.outputs.has_changes == 'true'
+      - name: Unit tests with race detector
+        if: | # Only run for PRs to main, where continue_on_error is false
+          github.event_name == 'pull_request' &&
+          github.base_ref == 'main' &&
+          needs.check-workflow-conditions.outputs.continue_on_error == 'false'
+        working-directory: services/backend
+        env:
+          CGO_ENABLED: "1"
         run: |
-          cd services/backend
-          # Find existing directories to check
-          echo "Finding existing directories to check..."
-          
-          # Only check affected packages
-          AFFECTED_PACKAGES="${{ steps.changed-files.outputs.affected_packages }}"
-          
-          if [ -n "$AFFECTED_PACKAGES" ]; then
-            # Convert to relative paths for staticcheck
-            REL_PACKAGES=""
-            for pkg in $AFFECTED_PACKAGES; do
-              # Convert absolute path to relative path
-              pkg_rel=$(echo "$pkg" | sed 's/^services\/backend\//\.\//')
-              REL_PACKAGES="$REL_PACKAGES $pkg_rel"
-            done
-            
-            echo "Running staticcheck on affected packages: $REL_PACKAGES"
-            # First run to print all issues
-            staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016 $REL_PACKAGES || true
-            # Second run to actually fail the build only on critical issues
-            staticcheck -tags=all -checks=all,-ST1000,-ST1003,-ST1016,-SA4006,-SA5000,-SA6000 $REL_PACKAGES
-          else
-            echo "No affected packages found to check"
-          fi
-        # Individual step can continue on error for ben/aj branches
-        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+          echo "Running go test -race..."
+          go test -race -count=1 -tags=all ./...
 
-      - name: Go Build
-        if: steps.changed-files.outputs.has_changes == 'true'
+      - name: Create job summary for Backend
+        if: always() # Run even if previous steps failed, to provide a summary
+        shell: bash
         run: |
-          # Ensure we're in the right directory with the go.mod file
-          cd services/backend
-          # Set environment variable to force Go module mode
-          export GO111MODULE=on
-          
-          # Debug: Show current directory and repository structure
-          echo "Current directory: $(pwd)"
-          
-          # Only build affected packages
-          AFFECTED_PACKAGES="${{ steps.changed-files.outputs.affected_packages }}"
-          
-          if [ -n "$AFFECTED_PACKAGES" ]; then
-            echo "Building affected packages..."
-            
-            # First validate all packages can be resolved
-            echo "Validating packages can be resolved..."
-            VALID_PACKAGES=""
-            for pkg in $AFFECTED_PACKAGES; do
-              # Convert absolute path to relative module path
-              pkg_rel=$(echo "$pkg" | sed 's/^services\/backend\///')
-              
-              # Check if the directory exists and can be resolved as a Go package
-              if [ -d "$pkg_rel" ] && go list "./$pkg_rel" &> /dev/null; then
-                echo "Package is valid: $pkg_rel"
-                VALID_PACKAGES="$VALID_PACKAGES $pkg_rel"
-              else
-                echo "WARNING: Package $pkg_rel cannot be resolved - skipping build"
-              fi
-            done
-            
-            # Build each valid package individually to isolate failures
-            if [ -n "$VALID_PACKAGES" ]; then
-              # Use multiple workers for faster parallel builds but process each package separately
-              echo "Building packages with multiple workers..."
-              
-              # Fix: process each package separately rather than treating them as one argument
-              for pkg in $VALID_PACKAGES; do
-                echo "Building package: $pkg"
-                go build -v -tags=all "./$pkg" || {
-                  echo "ERROR: Package $pkg failed to build"
-                  exit 1
-                }
-              done
-            else
-              echo "No valid packages to build"
-            fi
-          else
-            echo "No packages to build"
-          fi
-        # Individual step can continue on error for ben/aj branches
-        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
-
-      # Add summary step to create job summary and record last successful state
-      - name: Create job summary
-        if: success() || needs.check-workflow-conditions.outputs.continue_on_error == 'true'
-        run: |
-          if [ "${{ steps.changed-files.outputs.has_changes }}" == "true" ]; then
+          if [[ "${{ job.status }}" == "success" || ("${{ job.status }}" == "failure" && "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" == "true") ]]; then
             echo "### Backend CI Results ✅" >> $GITHUB_STEP_SUMMARY
-            echo "✅ Successfully linted and built the following packages:" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "${{ steps.changed-files.outputs.affected_packages }}" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          else
+            echo "✅ Backend checks completed (see logs for details)." >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ job.status }}" == "skipped" ]]; then
             echo "### Backend CI Results ➡️" >> $GITHUB_STEP_SUMMARY
-            echo "➡️ No changes detected in backend directory since last successful run. Skipped checks." >> $GITHUB_STEP_SUMMARY
+            echo "➡️ Backend checks skipped as no changes were detected in 'services/backend/'." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Backend CI Results ❌" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Backend checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
           fi
 
   lint-and-build-frontend:
     needs: [check-workflow-conditions]
-    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' }}
-    # Use ubuntu runner directly instead of a container
+    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_frontend_changes == 'true' }}
+    container:
+      image: billin19/ci-image:latest # Use custom Docker image
     runs-on: ubuntu-latest
-    # Set continue-on-error based on the branch condition
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
-    outputs:
-      has_changes: ${{ steps.check-frontend-changes.outputs.has_changes }}
     steps:
       - uses: actions/checkout@v3
         with:
-          # For workflow_run events, we need to check out the PR that triggered the workflow
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
-          # Fetch base branch for delta analysis
           fetch-depth: 0
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - name: Cache npm packages
+        uses: actions/cache@v4
         with:
-          node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: services/frontend/package.json
-          
-      # Ensure npm cache directory exists
-      - name: Setup npm cache directory
-        run: |
-          mkdir -p ~/.npm
-      
-      - name: Check for frontend changes
-        id: check-frontend-changes
-        run: |
-          # Use the last successful SHA from the check-workflow-conditions job
-          BASE_SHA="${{ needs.check-workflow-conditions.outputs.last_success_sha }}"
-          HEAD_SHA=$(git rev-parse HEAD)
-          
-          echo "Comparing changes between $BASE_SHA and $HEAD_SHA"
-          
-          # Check if frontend directory has any changes
-          HAS_FRONTEND_CHANGES=$(git diff --name-only $BASE_SHA $HEAD_SHA -- 'services/frontend/' | wc -l)
-          
-          if [ "$HAS_FRONTEND_CHANGES" -eq 0 ]; then
-            echo "No changes in frontend directory - skipping frontend checks"
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          echo "has_changes=true" >> $GITHUB_OUTPUT
+          path: ~/.npm # Cache npm's global cache directory
+          key: ${{ runner.os }}-npm-cache-${{ hashFiles('services/frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-cache-
 
-      - name: Install dependencies
+      - name: Install frontend dependencies
+        working-directory: services/frontend
         run: |
-          cd services/frontend
+          # Using npm ci for reliable installs from package-lock.json
+          npm ci
           
-          # Use npm install instead of npm ci to allow for dependency updates
-          npm install
-          
-          # Install additional test dependencies
+          # Install additional test dependencies if not already in package.json as devDependencies
+          echo "Ensuring testing libraries are available..."
           npm install --save-dev jest@29 @types/jest ts-jest@29 svelte-jester@2 @testing-library/svelte @testing-library/jest-dom jsdom
-          
-          # Create Jest config if it doesn't exist
-          if [ ! -f jest.config.js ]; then
-            echo "Creating Jest configuration file..."
-            echo 'export default {' > jest.config.js
-            echo '  transform: {' >> jest.config.js
-            echo '    "^.+\\.svelte$": "svelte-jester",' >> jest.config.js
-            echo '    "^.+\\.ts$": "ts-jest",' >> jest.config.js
-            echo '    "^.+\\.js$": "ts-jest"' >> jest.config.js
-            echo '  },' >> jest.config.js
-            echo '  moduleFileExtensions: ["js", "ts", "svelte"],' >> jest.config.js
-            echo '  testEnvironment: "jsdom",' >> jest.config.js
-            echo '  setupFilesAfterEnv: ["@testing-library/jest-dom/extend-expect"],' >> jest.config.js
-            echo '  testMatch: ["**/*.test.ts", "**/*.test.js"],' >> jest.config.js
-            echo '  moduleNameMapper: {' >> jest.config.js
-            echo '    "^\\$lib/(.*)$": "<rootDir>/src/lib/$1"' >> jest.config.js
-            echo '  },' >> jest.config.js
-            echo '  extensionsToTreatAsEsm: [".ts", ".svelte"],' >> jest.config.js
-            echo '  globals: {' >> jest.config.js
-            echo '    "ts-jest": {' >> jest.config.js
-            echo '      useESM: true' >> jest.config.js
-            echo '    }' >> jest.config.js
-            echo '  }' >> jest.config.js
-            echo '};' >> jest.config.js
+
+          # Check if jest.config.cjs already exists - if so, use the existing one
+          if [ -f "jest.config.cjs" ]; then
+            echo "Using existing Jest configuration file (jest.config.cjs)..."
+          else
+            echo "Creating Jest configuration file (jest.config.cjs)..."
+            echo "/** @type {import('jest').Config} */" > jest.config.cjs
+            echo "module.exports = {" >> jest.config.cjs
+            echo "  preset: 'ts-jest'," >> jest.config.cjs
+            echo "  testEnvironment: 'jsdom'," >> jest.config.cjs
+            echo "  setupFilesAfterEnv: ['<rootDir>/jest.setup.cjs']," >> jest.config.cjs
+            echo "  transform: {" >> jest.config.cjs
+            echo "    '^.+\.svelte$': 'svelte-jester'," >> jest.config.cjs
+            echo "    '^.+\.(ts|js)$': 'ts-jest'" >> jest.config.cjs
+            echo "  }," >> jest.config.cjs
+            echo "  moduleNameMapper: {" >> jest.config.cjs
+            echo "    '^\$lib/(.*)$': '<rootDir>/src/lib/$1'" >> jest.config.cjs
+            echo "  }," >> jest.config.cjs
+            echo "  moduleFileExtensions: ['js', 'ts', 'svelte']" >> jest.config.cjs
+            echo "};" >> jest.config.cjs
           fi
 
-      - name: Create simplified Jest configuration
+      - name: Create simplified Jest configuration and setup
+        working-directory: services/frontend
         run: |
-          cd services/frontend
-          
-          # First, create a CommonJS version of the setup file for compatibility
-          if [ -f "jest.setup.js" ]; then
-            echo "Creating CommonJS version of jest.setup.js..."
-            # Create a backup of the original file
-            cp jest.setup.js jest.setup.js.original
-            
-            # Create a CommonJS version that works with both ESM and CJS
+          echo "Ensuring Jest setup (jest.setup.cjs)..."
+          # Check if jest.setup.cjs already exists - if so, use the existing one
+          if [ -f "jest.setup.cjs" ]; then
+            echo "Using existing Jest setup file (jest.setup.cjs)..."
+          elif [ -f "jest.setup.js" ]; then # Original exists, cjs doesn't
+            echo "Creating CommonJS version of jest.setup.js as jest.setup.cjs..."
+            cp jest.setup.js jest.setup.js.original # Backup original
             echo "// CommonJS version of the Jest setup file (auto-converted)" > jest.setup.cjs
-            echo "// Original file preserved as jest.setup.js" >> jest.setup.cjs
+            echo "// Original file preserved as jest.setup.js.original" >> jest.setup.cjs
             echo "require('@testing-library/jest-dom');" >> jest.setup.cjs
-          else
-            # Create a simple setup file if none exists
-            echo "// Jest setup file - CommonJS format" > jest.setup.cjs
-            echo "require('@testing-library/jest-dom');" >> jest.setup.cjs
+          else # Neither cjs nor js exists for setup
+             echo "// Jest setup file - CommonJS format" > jest.setup.cjs
+             echo "require('@testing-library/jest-dom');" >> jest.setup.cjs
           fi
-          
-          # Create a dual-mode Jest config that works with both CJS and ESM
-          echo "/** @type {import('jest').Config} */" > jest.config.cjs
-          echo "module.exports = {" >> jest.config.cjs
-          echo "  preset: 'ts-jest'," >> jest.config.cjs
-          echo "  testEnvironment: 'jsdom'," >> jest.config.cjs
-          echo "  setupFilesAfterEnv: ['<rootDir>/jest.setup.cjs']," >> jest.config.cjs
-          echo "  transform: {" >> jest.config.cjs
-          echo "    '^.+\\.svelte$': 'svelte-jester'," >> jest.config.cjs
-          echo "    '^.+\\.(ts|js)$': 'ts-jest'" >> jest.config.cjs
-          echo "  }," >> jest.config.cjs
-          echo "  moduleNameMapper: {" >> jest.config.cjs
-          echo "    '^\\$lib/(.*)$': '<rootDir>/src/lib/$1'" >> jest.config.cjs
-          echo "  }," >> jest.config.cjs
-          echo "  moduleFileExtensions: ['js', 'ts', 'svelte']" >> jest.config.cjs
-          echo "};" >> jest.config.cjs
           
           # Create minimal SvelteKit type structure if it doesn't exist
           mkdir -p .svelte-kit/types
-          
-          # Create minimal app.d.ts if it doesn't exist
           if [ ! -f "src/app.d.ts" ]; then
             mkdir -p src
             echo "// Minimal type definitions for testing" > src/app.d.ts
@@ -514,134 +372,31 @@ jobs:
             echo "export {};" >> src/app.d.ts
           fi
 
-      - name: Run tests
+      - name: Run SvelteKit sync
+        working-directory: services/frontend
         run: |
-          cd services/frontend
-          
-          # Ensure jest-environment-jsdom is installed
-          if ! grep -q "jest-environment-jsdom" package.json; then
-            npm install --save-dev jest-environment-jsdom
-          fi
-          
-          # Run tests with the simplified CommonJS configuration
-          echo "Running tests with simplified CommonJS configuration"
-          npx jest --config=jest.config.cjs
-        
-        # Individual step can continue on error for ben/aj branches
-        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
-        
-      # Add summary step to create job summary
-      - name: Create job summary
-        if: success() || needs.check-workflow-conditions.outputs.continue_on_error == 'true'
+          echo "Running SvelteKit sync to generate .svelte-kit directory and type definitions..."
+          npx svelte-kit sync
+
+      - name: Run frontend tests
+        working-directory: services/frontend
         run: |
-          if [ "${{ steps.check-frontend-changes.outputs.has_changes }}" == "true" ]; then
+          echo "Running frontend tests with npm/npx..."
+          # Assuming 'test' script in package.json runs jest, or run jest directly via npx
+          npx jest --config jest.config.cjs # Explicitly use the cjs config
+        # continue-on-error for this step is handled by job's continue-on-error
+
+      - name: Create job summary for Frontend
+        if: always()
+        shell: bash
+        run: |
+          if [[ "${{ job.status }}" == "success" || ("${{ job.status }}" == "failure" && "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" == "true") ]]; then
             echo "### Frontend CI Results ✅" >> $GITHUB_STEP_SUMMARY
-            if [ "${{ steps.changed-frontend-files.outputs.has_ts_changes }}" == "true" ]; then
-              echo "✅ Successfully linted and built the following files:" >> $GITHUB_STEP_SUMMARY
-              echo '```' >> $GITHUB_STEP_SUMMARY
-              echo "${{ steps.changed-frontend-files.outputs.changed_files }}" >> $GITHUB_STEP_SUMMARY
-              echo '```' >> $GITHUB_STEP_SUMMARY
-            else
-              echo "✅ Non-TS/JS/Svelte frontend files were changed and verified." >> $GITHUB_STEP_SUMMARY
-            fi
-          else
+            echo "✅ Frontend checks completed (see logs for details)." >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ job.status }}" == "skipped" ]]; then
             echo "### Frontend CI Results ➡️" >> $GITHUB_STEP_SUMMARY
-            echo "➡️ No changes detected in frontend directory since last successful run. Skipped checks." >> $GITHUB_STEP_SUMMARY
-          fi
-
-  # Add new job to run frontend tests
-  test-frontend:
-    needs: [check-workflow-conditions, lint-and-build-frontend]
-    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.lint-and-build-frontend.outputs.has_changes == 'true' }}
-    # Use ubuntu runner directly instead of a container
-    runs-on: ubuntu-latest
-    # Set continue-on-error based on the branch condition
-    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          # For workflow_run events, we need to check out the PR that triggered the workflow
-          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
-          fetch-depth: 0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: services/frontend/package.json
-
-      - name: Install dependencies
-        run: |
-          cd services/frontend
-          
-          # Use npm install instead of npm ci to allow for dependency updates
-          npm install
-          
-          # Install additional test dependencies
-          npm install --save-dev jest@29 @types/jest ts-jest@29 svelte-jester@2 @testing-library/svelte @testing-library/jest-dom jsdom jest-environment-jsdom
-
-      - name: Create simplified Jest configuration
-        run: |
-          cd services/frontend
-          
-          # First, create a CommonJS version of the setup file for compatibility
-          if [ -f "jest.setup.js" ]; then
-            echo "Creating CommonJS version of jest.setup.js..."
-            # Create a backup of the original file
-            cp jest.setup.js jest.setup.js.original
-            
-            # Create a CommonJS version that works with both ESM and CJS
-            echo "// CommonJS version of the Jest setup file (auto-converted)" > jest.setup.cjs
-            echo "// Original file preserved as jest.setup.js" >> jest.setup.cjs
-            echo "require('@testing-library/jest-dom');" >> jest.setup.cjs
+            echo "➡️ Frontend checks skipped as no changes were detected in 'services/frontend/'." >> $GITHUB_STEP_SUMMARY
           else
-            # Create a simple setup file if none exists
-            echo "// Jest setup file - CommonJS format" > jest.setup.cjs
-            echo "require('@testing-library/jest-dom');" >> jest.setup.cjs
+            echo "### Frontend CI Results ❌" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Frontend checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
           fi
-          
-          # Create a simplified Jest config file (using CJS format for maximum compatibility)
-          echo "/** @type {import('jest').Config} */" > jest.config.cjs
-          echo "module.exports = {" >> jest.config.cjs
-          echo "  preset: 'ts-jest'," >> jest.config.cjs
-          echo "  testEnvironment: 'jsdom'," >> jest.config.cjs
-          echo "  setupFilesAfterEnv: ['<rootDir>/jest.setup.cjs']," >> jest.config.cjs
-          echo "  transform: {" >> jest.config.cjs
-          echo "    '^.+\\.svelte$': 'svelte-jester'," >> jest.config.cjs
-          echo "    '^.+\\.(ts|js)$': 'ts-jest'" >> jest.config.cjs
-          echo "  }," >> jest.config.cjs
-          echo "  moduleNameMapper: {" >> jest.config.cjs
-          echo "    '^\\$lib/(.*)$': '<rootDir>/src/lib/$1'" >> jest.config.cjs
-          echo "  }," >> jest.config.cjs
-          echo "  moduleFileExtensions: ['js', 'ts', 'svelte']" >> jest.config.cjs
-          echo "};" >> jest.config.cjs
-          
-          # Create minimal SvelteKit type structure if it doesn't exist
-          mkdir -p .svelte-kit/types
-          
-          # Create minimal app.d.ts if it doesn't exist
-          if [ ! -f "src/app.d.ts" ]; then
-            mkdir -p src
-            echo "// Minimal type definitions for testing" > src/app.d.ts
-            echo "declare global { namespace App {} }" >> src/app.d.ts
-            echo "export {};" >> src/app.d.ts
-          fi
-
-      - name: Run tests
-        run: |
-          cd services/frontend
-          
-          # Run tests with the simplified CommonJS configuration
-          echo "Running tests with simplified CommonJS configuration"
-          npx jest --config=jest.config.cjs
-        
-        # Individual step can continue on error for ben/aj branches
-        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
-        
-      # Add summary step to create job summary
-      - name: Create job summary
-        if: success() || needs.check-workflow-conditions.outputs.continue_on_error == 'true'
-        run: |
-          echo "### Frontend Test Results ✅" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Ran frontend tests with simplified configuration" >> $GITHUB_STEP_SUMMARY 

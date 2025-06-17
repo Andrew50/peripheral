@@ -1,10 +1,10 @@
 package alerts
 
 import (
-    "backend/internal/data"
+	"backend/internal/data"
+	// "fmt" // No longer needed
 )
 
-
-func processNewsAlert(conn *data.Conn, alert Alert) error {
-    return nil
+func processNewsAlert(_ *data.Conn, _ Alert) error {
+	return nil
 }

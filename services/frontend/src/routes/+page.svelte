@@ -1,281 +1,421 @@
-<script>
-	import Header from '$lib/utils/modules/header.svelte';
-	import '$lib/core/global.css';
+<script lang="ts">
+	import Header from '$lib/components/header.svelte';
+	import '$lib/styles/global.css';
 	import { browser } from '$app/environment';
+	import { onMount } from 'svelte';
 
 	if (browser) {
 		document.title = 'Atlantis';
 	}
-</script>
 
-<main class="main-container">
-	<!-- Remove #if showHero block -->
-	<!-- {#if showHero} -->
-		<div class="hero-wrapper">
-			<Header />
-			<section class="hero-section">
-				<div class="hero-content content-padding">
-					<h1>Atlantis</h1>
-					<p class="tagline fluid-text">Comprehensive Market Analysis Suite</p>
-					<div class="cta-buttons responsive-flex">
-						<a href="/signup" class="cta-button primary responsive-shadow">Get Started</a>
-						<a href="/login" class="cta-button secondary responsive-border">Sign In</a>
-					</div>
-					<!-- Features grid will be moved to its own section -->
-				</div>
-			</section>
+	let email = '';
+	let isSubmitting = false;
+	let isSubmitted = false;
+	let errorMessage = '';
 
-			<section class="features-section">
-					<div class="features-grid responsive-grid">
-						<div class="feature-card responsive-shadow responsive-border">
-							<div class="feature-header">
-								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="feature-icon">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
-								</svg>
-								<h3>Advanced Charting</h3>
-							</div>
-							<p class="fluid-text">Real-time data & historical replay with custom indicators</p>
-						</div>
-						<div class="feature-card responsive-shadow responsive-border">
-							<div class="feature-header">
-								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="feature-icon">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M15.042 21.672 13.684 16.6m0 0-2.51 2.225.569-9.47 5.227 7.917-3.286-.672Zm-7.518-.267A8.25 8.25 0 1 1 20.25 10.5M8.288 14.212A5.25 5.25 0 1 1 17.25 10.5" />
-								</svg>
-								<h3>Pattern Recognition</h3>
-							</div>
-							<p class="fluid-text">Custom screening patterns with real-time market alerts</p>
-						</div>
-						<div class="feature-card responsive-shadow responsive-border">
-							<div class="feature-header">
-								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="feature-icon">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.125 1.125 0 0 1 0 2.25H5.625a1.125 1.125 0 0 1 0-2.25Z" />
-								</svg>
-								<h3>Trade Analysis</h3>
-							</div>
-							<p class="fluid-text">Comprehensive trade journaling and performance metrics</p>
-						</div>
-						<div class="feature-card responsive-shadow responsive-border">
-							<div class="feature-header">
-								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="feature-icon">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" />
-								</svg>
-								<h3>Market Data</h3>
-							</div>
-							<p class="fluid-text">Time & sales, level 2, and full US market coverage</p>
-						</div>
-					</div>
-			</section>
-		</div>
-	<!-- {/if} -->
-</main>
+	async function handleSubmit(e: Event) {
+		e.preventDefault();
+		isSubmitting = true;
+		errorMessage = '';
 
-<style>
-	:global(body) {
-		margin: 0;
-		padding: 0;
-		overflow-x: hidden; /* Prevent horizontal scroll */
-		/* Use background from theme variables */
-		background: var(--c2, #1a1c21); /* Fallback color */
-		/* Use primary font from theme */
-		font-family: var(--font-primary, 'Fira Sans', sans-serif); /* Fallback font */
-		min-height: 100vh;
-		width: 100vw;
-		color: var(--f1, #f9fafb); /* Default text color */
-	}
+		try {
+			const response = await fetch('/api/waitlist', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ email })
+			});
 
-	.main-container {
-		position: relative;
-		width: 100vw;
-		min-height: 100vh;
-		margin: 0;
-		padding: 0;
-		overflow-y: auto; /* Allow vertical scroll */
-		overflow-x: hidden;
-		display: flex;
-		flex-direction: column;
-	}
+			const data = await response.json();
 
-	.hero-wrapper {
-		display: flex;
-		flex-direction: column;
-		flex-grow: 1; /* Allow wrapper to take available space */
-	}
-
-	.hero-section {
-		display: flex;
-		flex-direction: column;
-		justify-content: center; /* Center content vertically */
-		align-items: center; /* Center content horizontally */
-		min-height: 80vh; /* Give hero ample space */
-		width: 100%;
-		padding: var(--space-xl, 4rem) 0; /* Use spacing variables */
-	}
-
-	/* Ensure header is positioned correctly */
-	:global(app-header) { /* Assuming Header component uses <app-header> tag or similar */
-		position: sticky;
-		top: 0;
-		z-index: 10;
-		background: var(--c2, #1a1c21); /* Give header a background */
-	}
-
-	.hero-content {
-		text-align: center;
-		max-width: 800px; /* Constrain width for readability */
-		padding-left: var(--space-md, 1.5rem); /* Use spacing variables */
-		padding-right: var(--space-md, 1.5rem);
-	}
-
-	h1 {
-		/* Use accent color from theme */
-		color: var(--c3, #3b82f6);
-		font-family: var(--font-primary, 'Fira Sans', sans-serif);
-		margin-bottom: var(--space-xs, 0.5rem);
-		text-transform: uppercase;
-		font-size: clamp(2.8rem, 6vw, 4.5rem);
-		font-weight: 600; /* Slightly bolder */
-	}
-
-    h2 {
-		/* Use secondary font color */
-        color: var(--f2, #9ca3af);
-        font-family: var(--font-primary, 'Fira Sans', sans-serif);
-        font-size: clamp(1.1rem, 2.8vw, 1.6rem);
-        font-weight: 400;
-        margin-top: 0; /* Reduced margin */
-        margin-bottom: var(--space-md, 1.5rem);
-        text-transform: uppercase;
-        letter-spacing: 0.15em; /* Wider spacing */
-    }
-
-
-	.tagline {
-		/* Use primary font color */
-		color: var(--f1, #f9fafb);
-		margin-bottom: var(--space-lg, 2.5rem);
-		font-weight: 300;
-		font-size: clamp(1.1rem, 2.5vw, 1.4rem);
-		max-width: 600px; /* Limit width for better readability */
-		margin-left: auto;
-		margin-right: auto;
-	}
-
-	.cta-buttons {
-		display: flex;
-		gap: var(--space-md, 1.5rem);
-		justify-content: center;
-		margin-bottom: var(--space-xl, 4rem); /* More space below buttons */
-	}
-
-	@media (max-width: 480px) {
-		.cta-buttons {
-			flex-direction: column;
-			align-items: center;
-			gap: var(--space-sm, 1rem);
+			if (response.ok) {
+				isSubmitted = true;
+				email = '';
+			} else if (response.status === 409) {
+				errorMessage = 'This email is already on the waitlist!';
+			} else {
+				errorMessage = data.error || 'Something went wrong. Please try again.';
+			}
+		} catch (error) {
+			errorMessage = 'Network error. Please check your connection and try again.';
+		} finally {
+			isSubmitting = false;
 		}
 	}
 
-	.cta-button {
-		font-weight: 500; /* Align with button.css */
-		text-decoration: none;
-		transition: all 0.2s ease; /* Align with button.css */
-		min-width: 160px; /* Fixed min-width */
-		padding: var(--space-sm, 0.75rem) var(--space-lg, 1.5rem);
-		border-radius: var(--radius-md, 6px); /* Use radius variables */
-		font-size: clamp(0.95rem, 2vw, 1.1rem);
-		border: 1px solid transparent; /* Base border */
-	}
+	onMount(() => {
+		// Add animation class after mount
+		if (browser) {
+			document.body.classList.add('loaded');
+		}
+	});
+</script>
 
-	.primary {
-		/* Use theme accent color */
-		background: var(--c3, #3b82f6);
-		color: white; /* Ensure contrast */
-		border-color: var(--c3, #3b82f6);
-		/* box-shadow: 0 4px 14px rgba(59, 130, 246, 0.2); Removed for cleaner look */
-	}
+<main class="main-container">
+	<div class="background-animation">
+		<!-- Static gradient background -->
+		<div class="static-gradient"></div>
+	</div>
 
-	.primary:hover {
-		/* Use theme hover color */
-		background: var(--c3-hover, #2563eb);
-		border-color: var(--c3-hover, #2563eb);
-		transform: translateY(-2px);
-		/* box-shadow: 0 6px 18px rgba(59, 130, 246, 0.25); */
-	}
+	<Header />
+	
+	<section class="waitlist-section">
+		<div class="content-wrapper">
+			<div class="badge">COMING SOON</div>
+			
+			<h1 class="title">
+				<span class="gradient-text">Atlantis</span>
+			</h1>
+			
+			<p class="subtitle">
+				The new best way to trade.<br />
+			</p>
 
-	.secondary {
-		background: transparent;
-		/* Use theme accent color for border/text */
-		color: var(--c3, #3b82f6);
-		border: 1px solid var(--c3, #3b82f6); /* Use 1px border */
-	}
+			{#if !isSubmitted}
+				<form class="waitlist-form" on:submit={handleSubmit}>
+					<div class="form-group">
+						<input
+							type="email"
+							bind:value={email}
+							placeholder="Enter your email"
+							required
+							class="email-input"
+							disabled={isSubmitting}
+						/>
+						<button 
+							type="submit" 
+							class="submit-button"
+							disabled={isSubmitting || !email}
+						>
+							{isSubmitting ? 'Joining...' : 'Join Waitlist'}
+						</button>
+					</div>
+					{#if errorMessage}
+						<p class="error-message">{errorMessage}</p>
+					{/if}
+				</form>
+			{:else}
+				<div class="success-message">
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="success-icon">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+					</svg>
+					<h3>You're on the list!</h3>
+					<p>We'll notify you when Atlantis is ready to launch.</p>
+				</div>
+			{/if}
 
-	.secondary:hover {
-		background: rgba(var(--c3-rgb, 59, 130, 246), 0.1); /* Use RGB version for opacity */
-		transform: translateY(-2px);
-		color: var(--c3-hover, #2563eb); /* Darken text slightly */
-		border-color: var(--c3-hover, #2563eb); /* Darken border slightly */
-	}
+		</div>
+	</section>
+</main>
 
-	.features-section {
-		padding: var(--space-xl, 4rem) var(--space-lg, 2.5rem); /* Generous padding */
-		background: var(--c1, #2d3139); /* Slightly different background for contrast */
-		width: 100%;
-	}
+<style>
+	@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-	.features-grid {
-		/* responsive-grid handles columns */
-		max-width: 1200px; /* Standard max width */
-		margin: 0 auto;
-		gap: var(--space-lg, 2.5rem); /* Larger gap */
-	}
-
-	.feature-card {
-		/* Use theme background/border */
-		background: var(--ui-bg-element, rgba(255, 255, 255, 0.03));
-		padding: var(--space-lg, 2.5rem);
-		border-radius: var(--radius-lg, 12px); /* Larger radius */
-		text-align: left;
-		transition: transform 0.3s ease, background-color 0.3s ease, border-color 0.3s ease;
-		border: 1px solid var(--ui-border, rgba(255, 255, 255, 0.1));
-		height: 100%;
-		/* box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); */ /* Removed shadow */
-	}
-
-	.feature-header {
+	/* Scoped styles - no global body modifications */
+	.main-container {
+		position: relative;
+		width: 100vw;
+		height: 100vh;
+		margin: 0;
+		padding: 0;
+		overflow: hidden;
 		display: flex;
+		flex-direction: column;
+		background: #0a0b0d;
+		font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		color: #f9fafb;
+	}
+
+	/* Prevent scrolling on the body when this page is loaded */
+	:global(body) {
+		overflow: hidden !important;
+		height: 100vh !important;
+	}
+
+	/* Background animation container */
+	.background-animation {
+		position: fixed;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		z-index: 0;
+		overflow: hidden;
+		background: #0a0b0d;
+	}
+
+	/* Static gradient background */
+	.static-gradient {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		background: 
+			radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.15) 0%, transparent 50%),
+			radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 50%),
+			radial-gradient(circle at 40% 60%, rgba(16, 185, 129, 0.08) 0%, transparent 50%),
+			linear-gradient(135deg, #0a0b0d 0%, #111827 50%, #0a0b0d 100%);
+		z-index: 0;
+		pointer-events: none;
+	}
+
+	/* Main content */
+	.waitlist-section {
+		position: relative;
+		z-index: 10;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
 		align-items: center;
-		margin-bottom: var(--space-md, 1.5rem);
-		gap: var(--space-md, 1.5rem);
+		min-height: calc(100vh - 80px); /* Account for header */
+		padding: 2rem;
 	}
 
-	.feature-icon {
-		font-size: clamp(1.8rem, 3.5vw, 2.2rem);
-		/* Color the icon using accent */
-		color: var(--c3, #3b82f6);
-		/* Add width and height for SVG */
-		width: clamp(32px, 5vw, 44px);
-		height: clamp(32px, 5vw, 44px);
+	.content-wrapper {
+		max-width: 600px;
+		width: 100%;
+		text-align: center;
+		animation: fadeInUp 1s ease-out;
+		background: rgba(10, 11, 13, 0.6);
+		backdrop-filter: blur(20px);
+		border-radius: 2rem;
+		padding: 3rem;
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
 	}
 
-	.feature-card h3 {
-		/* Use primary text color */
-		color: var(--f1, #f9fafb);
-		margin: 0;
+	@keyframes fadeInUp {
+		from {
+			opacity: 0;
+			transform: translateY(30px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	.badge {
+		display: inline-block;
+		padding: 0.375rem 1rem;
+		background: transparent;
+		border: 1px solid rgba(59, 130, 246, 0.2);
+		border-radius: 100px;
+		font-size: 0.75rem;
 		font-weight: 500;
-		font-size: clamp(1.1rem, 2.5vw, 1.3rem);
+		letter-spacing: 1.5px;
+		color: #60a5fa;
+		margin-bottom: 2rem;
+		text-transform: uppercase;
 	}
 
-	.feature-card p {
-		/* Use secondary text color */
-		color: var(--f2, #9ca3af);
-		line-height: 1.6; /* Slightly more line spacing */
+	.title {
+		font-size: clamp(3rem, 8vw, 5rem);
+		font-weight: 700;
+		margin: 0 0 1rem 0;
+		letter-spacing: -0.02em;
+		line-height: 1.1;
+	}
+
+	.gradient-text {
+		display: inline-block;
+		font-size: clamp(3rem, 8vw, 5rem) !important;
+		font-weight: 700 !important;
+		background: linear-gradient(135deg, #3b82f6 0%, #6366f1 25%, #8b5cf6 50%, #ec4899 75%, #3b82f6 100%);
+		background-size: 200% 200%;
+		-webkit-background-clip: text;
+		background-clip: text;
+		-webkit-text-fill-color: transparent;
+		animation: gradient-shift 8s ease infinite;
+	}
+
+	@keyframes gradient-shift {
+		0%, 100% {
+			background-position: 0% 50%;
+		}
+		25% {
+			background-position: 100% 50%;
+		}
+		50% {
+			background-position: 100% 100%;
+		}
+		75% {
+			background-position: 0% 100%;
+		}
+	}
+
+	.subtitle {
+		font-size: clamp(1.1rem, 3vw, 1.4rem);
+		color: #9ca3af;
+		margin-bottom: 3rem;
+		line-height: 1.6;
+		font-weight: 300;
+	}
+
+	/* Form styles */
+	.waitlist-form {
+		margin-bottom: 3rem;
+	}
+
+	.form-group {
+		display: flex;
+		gap: 0.75rem;
+		max-width: 450px;
+		margin: 0 auto;
+		flex-wrap: wrap;
+		justify-content: center;
+	}
+
+	.email-input {
+		flex: 1;
+		min-width: 250px;
+		padding: 0.875rem 1.25rem;
+		background: rgba(255, 255, 255, 0.03);
+		border: 1px solid rgba(255, 255, 255, 0.05);
+		border-radius: 0.5rem;
+		color: #fff;
+		font-size: 0.95rem;
+		transition: all 0.3s ease;
+		backdrop-filter: blur(5px);
+	}
+
+	.email-input::placeholder {
+		color: #6b7280;
+		font-weight: 300;
+	}
+
+	.email-input:focus {
+		outline: none;
+		border-color: rgba(59, 130, 246, 0.5);
+		background: rgba(255, 255, 255, 0.05);
+		box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3);
+	}
+
+	.email-input:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.submit-button {
+		padding: 0.875rem 2rem;
+		background: #3b82f6;
+		border: none;
+		border-radius: 0.5rem;
+		color: #fff;
+		font-size: 0.95rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.3s ease;
+		white-space: nowrap;
+		position: relative;
+		overflow: hidden;
+	}
+
+	.submit-button:before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: -100%;
+		width: 100%;
+		height: 100%;
+		background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+		transition: left 0.5s ease;
+	}
+
+	.submit-button:hover:not(:disabled):before {
+		left: 100%;
+	}
+
+	.submit-button:hover:not(:disabled) {
+		background: #2563eb;
+		transform: translateY(-1px);
+		box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+	}
+
+	.submit-button:disabled {
+		opacity: 0.7;
+		cursor: not-allowed;
+		transform: none;
+	}
+
+	/* Success message */
+	.success-message {
+		background: rgba(34, 197, 94, 0.1);
+		border: 1px solid rgba(34, 197, 94, 0.3);
+		border-radius: 1rem;
+		padding: 2rem;
+		backdrop-filter: blur(10px);
+		animation: fadeIn 0.5s ease-out;
+	}
+
+	.success-icon {
+		width: 3rem;
+		height: 3rem;
+		color: #22c55e;
+		margin-bottom: 1rem;
+	}
+
+	.success-message h3 {
+		color: #22c55e;
+		margin: 0 0 0.5rem 0;
+		font-size: 1.5rem;
+	}
+
+	.success-message p {
+		color: #9ca3af;
 		margin: 0;
-		font-size: clamp(0.9rem, 2vw, 1rem);
 	}
 
-	.feature-card:hover {
-		transform: translateY(-4px);
-		background: var(--ui-bg-hover, rgba(255, 255, 255, 0.05));
-		border-color: var(--c3, #3b82f6); /* Highlight border on hover */
+	@keyframes fadeIn {
+		from {
+			opacity: 0;
+			transform: scale(0.95);
+		}
+		to {
+			opacity: 1;
+			transform: scale(1);
+		}
+	}
+
+	/* Error message */
+	.error-message {
+		color: #ef4444;
+		margin-top: 1rem;
+		font-size: 0.875rem;
+	}
+
+
+
+	/* Mobile responsiveness */
+	@media (max-width: 640px) {
+		.waitlist-section {
+			padding: 1rem;
+		}
+
+		.form-group {
+			flex-direction: column;
+			gap: 1rem;
+		}
+
+		.email-input {
+			min-width: 100%;
+		}
+
+		.submit-button {
+			width: 100%;
+		}
+
+
+
+		.badge {
+			font-size: 0.75rem;
+			padding: 0.375rem 0.75rem;
+		}
+
+		.content-wrapper {
+			padding: 2rem;
+		}
 	}
 </style>

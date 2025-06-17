@@ -1,7 +1,7 @@
-import type { Instance } from '$lib/core/types';
+import type { Instance } from '$lib/utils/types/types';
 import { writable, get, type Writable } from 'svelte/store';
-import { streamInfo } from '$lib/core/stores';
-import { privateRequest } from '$lib/core/backend';
+import { streamInfo } from '$lib/utils/stores/stores';
+import { privateRequest } from '$lib/utils/helpers/backend';
 import type { UTCTimestamp } from 'lightweight-charts';
 
 export interface ShiftOverlay {
@@ -38,6 +38,17 @@ export interface ChartEventDispatch {
 }
 
 export const activeChartInstance = writable<Instance | null>(null);
+
+// Extended Hours Toggle Store
+export const extendedHoursToggleVisible = writable<boolean>(false);
+
+export function showExtendedHoursToggle() {
+	extendedHoursToggleVisible.set(true);
+}
+
+export function hideExtendedHoursToggle() {
+	extendedHoursToggleVisible.set(false);
+}
 
 export function setActiveChart(chartId: ChartId, currentChartInstance: Instance) {
 	selectedChartId = chartId;

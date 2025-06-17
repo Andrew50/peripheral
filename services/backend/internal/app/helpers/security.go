@@ -12,6 +12,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -24,7 +25,7 @@ type GetCurrentTickerArgs struct {
 }
 
 // GetCurrentTicker performs operations related to GetCurrentTicker functionality.
-func GetCurrentTicker(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetCurrentTicker(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetCurrentTickerArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("di1n0fni0: %v", err)
@@ -50,7 +51,7 @@ type GetMarketCapResults struct {
 }
 
 // GetMarketCap performs operations related to GetMarketCap functionality.
-func GetMarketCap(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetMarketCap(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetMarketCapArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("di1n0fni0: %v", err)
@@ -79,7 +80,7 @@ type PolygonBar struct {
 }
 
 // GetPrevClose performs operations related to GetPrevClose functionality.
-func GetPrevClose(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetPrevClose(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetPrevCloseArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("getPrevClose invalid args: %v", err)
@@ -111,8 +112,36 @@ func GetPrevClose(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		}
 
 		// Make a request to Polygon's API for that date and ticker
-		endpoint := fmt.Sprintf("https://api.polygon.io/v1/open-close/%s/%s?adjusted=true&apiKey=%s", ticker, date, conn.PolygonKey)
-		resp, err := http.Get(endpoint)
+		baseURL := "https://api.polygon.io/v1/open-close"
+
+		// Create URL with query parameters using url.Parse and url.Values
+		parsedURL, err := url.Parse(baseURL + "/" + ticker + "/" + date)
+		if err != nil {
+			return nil, fmt.Errorf("invalid URL: %v", err)
+		}
+
+		params := url.Values{}
+		params.Add("adjusted", "true")
+		params.Add("apiKey", conn.PolygonKey)
+		parsedURL.RawQuery = params.Encode()
+
+		// Validate the URL is for the correct domain
+		finalURL := parsedURL.String()
+		if !strings.HasPrefix(finalURL, "https://api.polygon.io/") {
+			return nil, fmt.Errorf("invalid API URL domain")
+		}
+
+		// Make the request with the safely constructed URL using http.Client
+		client := &http.Client{
+			Timeout: 30 * time.Second,
+		}
+
+		req, err := http.NewRequest("GET", finalURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %v", err)
+		}
+
+		resp, err := client.Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch Polygon snapshot: %v", err)
 		}
@@ -131,7 +160,7 @@ func GetPrevClose(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 
 		// If the close price is found, return it
 		if bar.Close != 0 {
-			fmt.Println(currentDay)
+			////fmt.Println(currentDay)
 			return bar.Close, nil
 		}
 
@@ -158,7 +187,7 @@ type GetSecurityFromTickerResults struct {
 }
 
 // GetSecuritiesFromTicker performs operations related to GetSecuritiesFromTicker functionality.
-func GetSecuritiesFromTicker(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetSecuritiesFromTicker(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetSecurityFromTickerArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("getAnnotations invalid args: %v", err)
@@ -178,27 +207,35 @@ func GetSecuritiesFromTicker(conn *data.Conn, userId int, rawArgs json.RawMessag
 			maxDate,
 			CASE 
 				WHEN UPPER(ticker) = UPPER($1) THEN 1
-				WHEN UPPER(ticker) LIKE UPPER($1) || '%' THEN 2
-				WHEN UPPER(ticker) LIKE '%' || UPPER($1) || '%' THEN 3
-				ELSE 4
+				WHEN UPPER(name) = UPPER($1) THEN 2
+				WHEN UPPER(ticker) LIKE UPPER($1) || '%' THEN 3
+				WHEN UPPER(name) LIKE UPPER($1) || '%' THEN 4
+				WHEN UPPER(ticker) LIKE '%' || UPPER($1) || '%' THEN 5
+				WHEN UPPER(name) LIKE '%' || UPPER($1) || '%' THEN 6
+				WHEN similarity(UPPER(ticker), UPPER($1)) > 0.3 THEN 7
+				WHEN similarity(UPPER(name), UPPER($1)) > 0.3 THEN 8
+				ELSE 9
 			END as match_type,
-			similarity(UPPER(ticker), UPPER($1)) as sim_score,
-			CASE 
-				WHEN maxDate IS NULL THEN 0
-				ELSE 1
-			END as is_delisted
+			GREATEST(
+				similarity(UPPER(ticker), UPPER($1)),
+				COALESCE(similarity(UPPER(name), UPPER($1)), 0)
+			) as sim_score
 		FROM securities s
-		WHERE (
+		WHERE maxDate IS NULL AND (
 			UPPER(ticker) = UPPER($1) OR
 			UPPER(ticker) LIKE UPPER($1) || '%' OR 
 			UPPER(ticker) LIKE '%' || UPPER($1) || '%' OR
-			similarity(UPPER(ticker), UPPER($1)) > 0.3
+			similarity(UPPER(ticker), UPPER($1)) > 0.3 OR
+			UPPER(name) = UPPER($1) OR
+			UPPER(name) LIKE UPPER($1) || '%' OR 
+			UPPER(name) LIKE '%' || UPPER($1) || '%' OR
+			similarity(UPPER(name), UPPER($1)) > 0.3
 		)
 		ORDER BY ticker, maxDate DESC NULLS FIRST
 	)
 	SELECT securityId, ticker, name, icon, maxDate
 	FROM ranked_results
-	ORDER BY match_type, is_delisted, sim_score DESC
+	ORDER BY match_type, sim_score DESC
 	LIMIT 10
 	`
 
@@ -257,7 +294,7 @@ type GetTickerMenuDetailsResults struct {
 }
 
 // GetTickerMenuDetails performs operations related to GetTickerMenuDetails functionality.
-func GetTickerMenuDetails(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetTickerMenuDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetTickerDetailsArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -295,7 +332,9 @@ func GetTickerMenuDetails(conn *data.Conn, userId int, rawArgs json.RawMessage) 
 			SELECT MAX(maxDate) 
 			FROM securities 
 			WHERE securityId = $1
-		))`
+		))
+		ORDER BY maxDate IS NULL DESC, maxDate DESC NULLS FIRST
+		LIMIT 1`
 
 	var results GetTickerMenuDetailsResults
 	err := conn.DB.QueryRow(context.Background(), query, args.SecurityID).Scan(
@@ -317,7 +356,6 @@ func GetTickerMenuDetails(conn *data.Conn, userId int, rawArgs json.RawMessage) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ticker details: %v", err)
 	}
-
 	// Create a map to store the results and handle NULL values
 	response := map[string]interface{}{
 		"ticker":                         results.Ticker,
@@ -372,7 +410,7 @@ type TickerDetailsResponse struct {
 }
 
 // GetTickerDetails performs operations related to GetTickerDetails functionality.
-func GetTickerDetails(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetTickerDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetTickerDetailsArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -391,7 +429,7 @@ func GetTickerDetails(conn *data.Conn, userId int, rawArgs json.RawMessage) (int
 	}
 	details, err := polygon.GetTickerDetails(conn.Polygon, ticker, "now")
 	if err != nil {
-		fmt.Printf("failed to get ticker details: %v\n", err)
+		////fmt.Printf("failed to get ticker details: %v\n", err)
 		return nil, nil
 		//return nil, fmt.Errorf("failed to get ticker details: %v", err)
 	}
@@ -472,13 +510,13 @@ func GetTickerDetails(conn *data.Conn, userId int, rawArgs json.RawMessage) (int
 	// Fetch both logo and icon with proper error handling
 	logoBase64, logoErr := fetchImage(details.Branding.LogoURL)
 	if logoErr != nil {
-		fmt.Printf("Warning: Failed to fetch logo: %v\n", logoErr)
+		////fmt.Printf("Warning: Failed to fetch logo: %v\n", logoErr)
 		logoBase64 = "" // Set to empty string on error
 	}
 
 	iconBase64, iconErr := fetchImage(details.Branding.IconURL)
 	if iconErr != nil {
-		fmt.Printf("Warning: Failed to fetch icon: %v\n", iconErr)
+		////fmt.Printf("Warning: Failed to fetch icon: %v\n", iconErr)
 		iconBase64 = "" // Set to empty string on error
 	}
 
@@ -508,7 +546,7 @@ type GetSecurityClassificationsResults struct {
 }
 
 // GetSecurityClassifications performs operations related to GetSecurityClassifications functionality.
-func GetSecurityClassifications(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetSecurityClassifications(conn *data.Conn, _ int, _ json.RawMessage) (interface{}, error) {
 	// Query to get unique sectors, excluding NULL values and empty strings
 	sectorQuery := `
 		SELECT DISTINCT sector 
@@ -584,7 +622,7 @@ type GetIconsResults struct {
 }
 
 // GetIcons performs operations related to GetIcons functionality.
-func GetIcons(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetIcons(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetIconsArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -671,7 +709,7 @@ type GetCurrentSecurityIDArgs struct {
 }
 
 // GetCurrentSecurityID performs operations related to GetSecurityID functionality.
-func GetCurrentSecurityID(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetCurrentSecurityID(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetCurrentSecurityIDArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -693,7 +731,7 @@ type GetSecurityIDFromTickerTimestampResults struct {
 	SecurityID int `json:"securityId"`
 }
 
-func GetSecurityIDFromTickerTimestamp(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetSecurityIDFromTickerTimestamp(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetSecurityIDFromTickerTimestampArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -731,7 +769,7 @@ type GetTickerDailySnapshotResults struct {
 	PreviousClose      float64 `json:"previousClose"`
 }
 
-func GetTickerDailySnapshot(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetTickerDailySnapshot(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetTickerDailySnapshotArgs
 
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -743,7 +781,7 @@ func GetTickerDailySnapshot(conn *data.Conn, userId int, rawArgs json.RawMessage
 		return nil, fmt.Errorf("error getting ticker: %v", err)
 	}
 
-	res, err := polygon.GetPolygonTickerSnapshot(conn.Polygon, ticker, context.Background())
+	res, err := polygon.GetPolygonTickerSnapshot(context.Background(), conn.Polygon, ticker)
 	if err != nil {
 		return nil, fmt.Errorf("error getting ticker snapshot: %v", err)
 	}
@@ -754,8 +792,8 @@ func GetTickerDailySnapshot(conn *data.Conn, userId int, rawArgs json.RawMessage
 	results.LastTradePrice = snapshot.LastTrade.Price
 	currPrice := snapshot.Day.Close
 	lastClose := snapshot.PrevDay.Close
-	results.TodayChange = currPrice - lastClose
-	results.TodayChangePercent = ((currPrice - lastClose) / lastClose) * 100
+	results.TodayChange = math.Round((currPrice-lastClose)*100) / 100
+	results.TodayChangePercent = math.Round(((currPrice-lastClose)/lastClose)*100*100) / 100
 	results.Timestamp = int64(time.Time(snapshot.Updated).Unix())
 	results.Volume = snapshot.Day.Volume
 	results.Vwap = snapshot.Day.VolumeWeightedAverage
@@ -765,7 +803,7 @@ func GetTickerDailySnapshot(conn *data.Conn, userId int, rawArgs json.RawMessage
 	results.TodayClose = snapshot.Day.Close
 	results.PreviousClose = lastClose
 	results.Ticker = ticker
-	fmt.Println(results)
+	////fmt.Println(results)
 	return results, nil
 }
 
@@ -773,8 +811,8 @@ type GetAllTickerSnapshotResults struct {
 	Tickers []GetTickerDailySnapshotResults `json:"tickers"`
 }
 
-func GetAllTickerSnapshots(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-	res, err := polygon.GetPolygonAllTickerSnapshots(conn.Polygon, context.Background())
+func GetAllTickerSnapshots(conn *data.Conn, _ int, _ json.RawMessage) (interface{}, error) {
+	res, err := polygon.GetPolygonAllTickerSnapshots(context.Background(), conn.Polygon)
 	if err != nil {
 		return nil, fmt.Errorf("error getting all ticker snapshots: %v", err)
 	}
@@ -810,7 +848,7 @@ type GetLastPriceArgs struct {
 	Ticker string `json:"ticker"`
 }
 
-func GetLastPrice(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetLastPrice(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetLastPriceArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)

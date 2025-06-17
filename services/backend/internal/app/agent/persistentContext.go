@@ -44,7 +44,7 @@ func savePersistentContext(ctx context.Context, conn *data.Conn, userID int, dat
 	for key, item := range data.Items {
 		// Remove items with specific expiration dates that have passed
 		if !item.ExpiresAt.IsZero() && item.ExpiresAt.Before(now) {
-			fmt.Printf("Pruning expired persistent context item '%s' for user %d\n", key, userID)
+			////fmt.Printf("Pruning expired persistent context item '%s' for user %d\n", key, userID)
 			continue // Skip expired item
 		}
 		validItems[key] = item
@@ -73,7 +73,7 @@ func savePersistentContext(ctx context.Context, conn *data.Conn, userID int, dat
 			prunedItems[item.Key] = item
 		}
 		data.Items = prunedItems
-		fmt.Printf("Pruned persistent context items for user %d to newest %d\n", userID, maxPersistentContextItems)
+		////fmt.Printf("Pruned persistent context items for user %d to newest %d\n", userID, maxPersistentContextItems)
 	}
 	// --- End Pruning Logic ---
 
@@ -81,18 +81,18 @@ func savePersistentContext(ctx context.Context, conn *data.Conn, userID int, dat
 
 	serializedData, err := json.Marshal(data)
 	if err != nil {
-		fmt.Printf("Failed to serialize persistent context for user %d: %v\n", userID, err)
+		////fmt.Printf("Failed to serialize persistent context for user %d: %v\n", userID, err)
 		return fmt.Errorf("failed to serialize persistent context: %w", err)
 	}
 
-	fmt.Printf("Saving %d persistent context items for user %d to cache key: %s\n", len(data.Items), userID, cacheKey)
+	////fmt.Printf("Saving %d persistent context items for user %d to cache key: %s\n", len(data.Items), userID, cacheKey)
 	err = conn.Cache.Set(ctx, cacheKey, serializedData, defaultPersistentContextExpiration).Err()
 	if err != nil {
-		fmt.Printf("Failed to save persistent context to Redis for user %d: %v\n", userID, err)
+		////fmt.Printf("Failed to save persistent context to Redis for user %d: %v\n", userID, err)
 		return fmt.Errorf("failed to save persistent context to cache: %w", err)
 	}
 
-	fmt.Printf("Successfully saved persistent context for user %d to Redis.\n", userID)
+	////fmt.Printf("Successfully saved persistent context for user %d to Redis.\n", userID)
 	return nil
 }
 
@@ -106,13 +106,13 @@ func getPersistentContext(ctx context.Context, conn *data.Conn, userID int) (*Pe
 			// Cache miss is not an error, just return an empty structure
 			return &PersistentContextData{Items: make(map[string]PersistentContextItem), Timestamp: time.Time{}}, nil
 		}
-		fmt.Printf("Error retrieving persistent context from Redis for user %d: %v\n", userID, err)
+		////fmt.Printf("Error retrieving persistent context from Redis for user %d: %v\n", userID, err)
 		return nil, fmt.Errorf("failed to retrieve persistent context from cache: %w", err)
 	}
 
 	var data PersistentContextData
 	if err := json.Unmarshal([]byte(cachedValue), &data); err != nil {
-		fmt.Printf("Failed to deserialize persistent context for user %d: %v\n", userID, err)
+		////fmt.Printf("Failed to deserialize persistent context for user %d: %v\n", userID, err)
 		// If deserialization fails, return an empty structure to avoid breaking flows
 		return &PersistentContextData{Items: make(map[string]PersistentContextItem), Timestamp: time.Time{}}, nil // Consider logging the error more prominently
 	}
@@ -129,7 +129,7 @@ func getPersistentContext(ctx context.Context, conn *data.Conn, userID int) (*Pe
 	needsResave := false
 	for key, item := range data.Items {
 		if !item.ExpiresAt.IsZero() && item.ExpiresAt.Before(now) {
-			fmt.Printf("Filtering expired persistent context item '%s' during retrieval for user %d\n", key, userID)
+			////fmt.Printf("Filtering expired persistent context item '%s' during retrieval for user %d\n", key, userID)
 			needsResave = true
 			continue
 		}
@@ -140,15 +140,16 @@ func getPersistentContext(ctx context.Context, conn *data.Conn, userID int) (*Pe
 	if needsResave {
 		data.Items = validItems
 		// Optional: Save the cleaned data back asynchronously
-		go func() {
+		//go func() {
 			bgCtx := context.Background()
 			if err := savePersistentContext(bgCtx, conn, userID, &data); err != nil {
-				fmt.Printf("Error saving persistent context after filtering expired items during get for user %d: %v\n", userID, err)
+                return nil, err
+				////fmt.Printf("Error saving persistent context after filtering expired items during get for user %d: %v\n", userID, err)
 			}
-		}()
+		//}()
 	}
 
-	fmt.Printf("Retrieved %d persistent context items from cache for user %d.\n", len(data.Items), userID)
+	////fmt.Printf("Retrieved %d persistent context items from cache for user %d.\n", len(data.Items), userID)
 	return &data, nil
 }
 
@@ -192,7 +193,7 @@ func AddOrUpdatePersistentContextItem(ctx context.Context, conn *data.Conn, user
 		return fmt.Errorf("failed to save persistent context after update for key '%s': %w", key, err)
 	}
 
-	fmt.Printf("Successfully added/updated persistent context item '%s' for user %d\n", key, userID)
+	////fmt.Printf("Successfully added/updated persistent context item '%s' for user %d\n", key, userID)
 	return nil
 }
 
@@ -211,16 +212,17 @@ func RemovePersistentContextItem(ctx context.Context, conn *data.Conn, userID in
 	// 2. Check if item exists and remove it
 	if _, exists := data.Items[key]; exists {
 		delete(data.Items, key)
-		fmt.Printf("Removed persistent context item '%s' for user %d\n", key, userID)
+		////fmt.Printf("Removed persistent context item '%s' for user %d\n", key, userID)
 
 		// 3. Save the updated context
 		if err := savePersistentContext(ctx, conn, userID, data); err != nil {
 			return fmt.Errorf("failed to save persistent context after removing key '%s': %w", key, err)
 		}
-	} else {
-		fmt.Printf("Persistent context item '%s' not found for removal for user %d\n", key, userID)
+	} 
+    //else {
+		////fmt.Printf("Persistent context item '%s' not found for removal for user %d\n", key, userID)
 		// Not an error if the item wasn't there
-	}
+	//}
 
 	return nil
 }

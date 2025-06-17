@@ -3,16 +3,16 @@ import type { SubscriptionRequest, StreamCallback } from './socket'
 
 import { DateTime } from 'luxon';
 import { eventChart } from '$lib/features/chart/interface';
-import { streamInfo } from '$lib/core/stores';
+import { streamInfo } from '$lib/utils/stores/stores';
 import { chartEventDispatcher } from '$lib/features/chart/interface';
 import {
 	getReferenceStartTimeForDateMilliseconds,
 	isOutsideMarketHours,
 	ESTSecondstoUTCMillis,
 	getRealTimeTime
-} from '$lib/core/timestamp';
-import type { ReplayInfo } from '$lib/core/stores';
-import { type Instance } from '$lib/core/types';
+} from '$lib/utils/helpers/timestamp';
+import type { ReplayInfo } from '$lib/utils/stores/stores';
+import { type Instance } from '$lib/utils/types/types';
 import { get } from 'svelte/store';
 import type { StreamData, ChannelType, TimeType } from './socket';
 import { latestValue } from './socket';

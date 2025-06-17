@@ -2,10 +2,8 @@ package socket
 
 import (
 	"backend/internal/data"
-	"fmt"
+	"log"
 	"os"
-
-	"github.com/gorilla/websocket"
 )
 
 // Subscribes the client WebSocket to the requested channel in "realtime" mode
@@ -14,7 +12,10 @@ func (c *Client) subscribeRealtime(conn *data.Conn, channelName string) {
 		return
 	}
 	channelsMutex.Lock()
-	os.Stdout.Sync()
+	if err := os.Stdout.Sync(); err != nil {
+		// Log the error but don't fail the subscription
+		log.Printf("Error syncing stdout: %v", err)
+	}
 	subscribers, exists := channelSubscribers[channelName]
 	if !exists {
 		subscribers = make(map[*Client]bool)
@@ -25,20 +26,19 @@ func (c *Client) subscribeRealtime(conn *data.Conn, channelName string) {
 	c.addSubscribedChannel(channelName)
 	incListeners(channelName)
 	go func() {
-		// EVENTUALLY: SHOULD USE A IN MEMORY CACHE INSTEAD OF REDIS
 		initialValue, fetchErr := getInitialStreamValue(conn, channelName, 0)
 		//fmt.Println("\n\ninitialValue", initialValue, string(initialValue))
 		if fetchErr != nil {
-			fmt.Println("Error fetching initial value from API:", fetchErr)
+			////fmt.Println("Error fetching initial value from API:", fetchErr)
 			return
 		}
 
-		// 4) Send to the client
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		err := c.ws.WriteMessage(websocket.TextMessage, initialValue)
-		if err != nil {
-			fmt.Println("WebSocket write error while sending initial value:", err)
+		// Send to the client via the send channel (thread-safe)
+		select {
+		case c.send <- initialValue:
+			// Successfully sent
+		default:
+			// Channel is full or closed, skip this message
 		}
 	}()
 }

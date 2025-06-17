@@ -1,11 +1,11 @@
 <script lang="ts">
 	/* ───── Imports ─────────────────────────────────────────────────────────── */
-	import List from '$lib/utils/modules/list.svelte';
-	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
+	import List from '$lib/components/list.svelte';
+	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { writable, type Writable } from 'svelte/store';
-	import { privateRequest } from '$lib/core/backend';
-	import { activeAlerts, inactiveAlerts, alertLogs } from '$lib/core/stores';
-	import type { Alert, AlertLog, Instance } from '$lib/core/types';
+	import { privateRequest } from '$lib/utils/helpers/backend';
+	import { activeAlerts, inactiveAlerts, alertLogs } from '$lib/utils/stores/stores';
+	import type { Alert, AlertLog, Instance } from '$lib/utils/types/types';
 	import { newPriceAlert } from './interface';
 
 	/* ───── Types ───────────────────────────────────────────────────────────── */

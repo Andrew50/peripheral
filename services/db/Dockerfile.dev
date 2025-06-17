@@ -1,30 +1,36 @@
 FROM timescale/timescaledb-ha:pg17
 USER root
-# Password will be provided via environment variables
 RUN apt-get update && apt-get install -y cron
-
-# Environment variables to control PostgreSQL initialization
 ENV PGDATA /var/lib/postgresql/data
-
-# Create an SQL init directory that will be processed after PostgreSQL initializes
 EXPOSE 5432
-COPY init/init.sql /docker-entrypoint-initdb.d/init.sql
-COPY init/securities.csv /docker-entrypoint-initdb.d/securities.csv
+
+# Copy initialization scripts
+COPY init/ /docker-entrypoint-initdb.d/
+
+# Copy PostgreSQL configuration
 COPY config/dev.conf /etc/postgresql/postgresql.conf
 
-# Create migrations directory and copy migrations
-RUN mkdir -p /migrations
+# Create directories for migrations and app scripts
+RUN mkdir -p /migrations /app
+
+# Copy migration files
 COPY migrations/*.sql /migrations/
 
-# Copy the migrations script
+# Copy all scripts
 COPY scripts/migrate.sh /app/migrate.sh
-RUN chmod +x /app/migrate.sh
-# Copy migration runner for development
-COPY scripts/migrate.sh /app/migrate.sh
-RUN chmod +x /app/migrate.sh
-# Create a startup script that runs both PostgreSQL and the watcher
 COPY scripts/start.sh /app/start.sh
-RUN chmod +x /app/start.sh
+COPY scripts/backup-improved.sh /app/backup-improved.sh
+COPY scripts/health-monitor.sh /app/health-monitor.sh
+COPY scripts/recovery-restore.sh /app/recovery-restore.sh
+COPY scripts/recovery-reset.sh /app/recovery-reset.sh
 
-# Start PostgreSQL using our custom entrypoint
+# Make all scripts executable
+RUN chmod +x /app/*.sh
+
+# Create backup directory
+RUN mkdir -p /backups
+
+# Set proper permissions
+RUN chown -R postgres:postgres /app /backups
+
 ENTRYPOINT ["/app/start.sh"]

@@ -1,6 +1,7 @@
 package chart
 
 import (
+	"backend/internal/app/filings"
 	"backend/internal/data"
 	"backend/internal/data/edgar"
 	"backend/internal/data/postgres"
@@ -20,25 +21,25 @@ type GetChartEventsArgs struct {
 	SecurityID        int   `json:"securityId"`
 	From              int64 `json:"from"` // UTC Milliseconds
 	To                int64 `json:"to"`   // UTC Milliseconds
-	IncludeSECFilings bool  `json:"includeSECFilings"`
+	IncludeSECFilings bool  `json:"includeSECFilings,omitempty"`
 }
 
-// ChartEvent represents a structure for handling ChartEvent data.
-type ChartEvent struct {
+// Event represents a structure for handling Event data.
+type Event struct {
+	ID        string `json:"id"`        // Unique ID for the event (e.g., filing_id, earnings_id)
 	Timestamp int64  `json:"timestamp"` // UTC Milliseconds
 	Type      string `json:"type"`
 	Value     string `json:"value"` // JSON string with event details
 }
 
 // GetChartEvents performs operations related to GetChartEvents functionality.
-func GetChartEvents(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetChartEvents(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetChartEventsArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-
 	// Fetch events using the modified helper function (ticker is determined within)
-	events, err := fetchChartEventsInRange(conn, userId, args.SecurityID, args.From, args.To, args.IncludeSECFilings, false)
+	events, err := fetchChartEventsInRange(conn, userID, args.SecurityID, args.From, args.To, args.IncludeSECFilings, false)
 	if err != nil {
 		// Propagate the error from the fetch function
 		return nil, err
@@ -50,9 +51,8 @@ func GetChartEvents(conn *data.Conn, userId int, rawArgs json.RawMessage) (inter
 // fetchChartEventsInRange fetches splits, dividends, and optionally SEC filings for a given securityID and time range,
 // handling potential ticker changes within the range.
 // fromMs and toMs should be UTC milliseconds.
-func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs, toMs int64, includeSECFilings bool, filterMinorFilings bool) ([]ChartEvent, error) {
-	// Create a context for database queries
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) // Increased timeout slightly
+func fetchChartEventsInRange(conn *data.Conn, userID int, securityID int, fromMs, toMs int64, includeSECFilings bool, filterMinorFilings bool) ([]Event, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	// 1. Query Security Records overlapping the time range
@@ -98,15 +98,15 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 	rows.Close() // Close explicitly after successful iteration
 
 	if len(records) == 0 {
-		fmt.Printf("Warning: No security records found for securityId %d overlapping range %d-%d\n", securityID, fromMs, toMs)
+		////fmt.Printf("Warning: No security records found for securityId %d overlapping range %d-%d\n", securityID, fromMs, toMs)
 		// Attempt to find *any* ticker for the security ID as a fallback for fetching events
 		// This might be needed if the time range falls entirely outside known min/max dates
 		fallbackTicker, fallbackErr := postgres.GetTicker(conn, securityID, fromTime) // Use 'fromTime' for fallback
 		if fallbackErr != nil {
-			fmt.Printf("Warning: Could not find fallback ticker for securityId %d: %v\n", securityID, fallbackErr)
-			return []ChartEvent{}, nil // Return empty if no records and no fallback
+			////fmt.Printf("Warning: Could not find fallback ticker for securityId %d: %v\n", securityID, fallbackErr)
+			return []Event{}, nil // Return empty if no records and no fallback
 		}
-		fmt.Printf("Using fallback ticker %s for securityId %d\n", fallbackTicker, securityID)
+		////fmt.Printf("Using fallback ticker %s for securityId %d\n", fallbackTicker, securityID)
 		tickersToFetch[fallbackTicker] = struct{}{}
 	}
 
@@ -115,7 +115,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 	var mutex sync.Mutex // Protect shared slices
 	var allSplits []models.Split
 	var allDividends []models.Dividend
-	var secFilings []edgar.EDGARFiling // Fetched separately
+	var secFilings []edgar.Filing // Fetched separately
 
 	var splitErr, dividendErr, secFilingErr error // Collect errors from goroutines
 
@@ -130,7 +130,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			options := edgar.EdgarFilingOptions{
+			options := filings.EdgarFilingOptions{
 				Start:      fromMs,
 				End:        toMs,
 				SecurityID: securityID,
@@ -143,10 +143,10 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 				return
 			}
 
-			res, err := edgar.GetStockEdgarFilings(conn, userId, optionsJSON)
+			res, err := filings.GetStockEdgarFilings(conn, userID, optionsJSON)
 			if err != nil {
 				// Log the error but don't make it fatal for the whole function
-				fmt.Printf("Warning: error fetching SEC filings for securityId %d: %v\n", securityID, err)
+				////fmt.Printf("Warning: error fetching SEC filings for securityId %d: %v\n", securityID, err)
 				mutex.Lock()
 				// Store the error if needed, but don't overwrite a critical marshalling error
 				if secFilingErr == nil {
@@ -156,7 +156,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 				return
 			}
 
-			filingsResult, ok := res.([]edgar.EDGARFiling)
+			filingsResult, ok := res.([]edgar.Filing)
 			if !ok {
 				mutex.Lock()
 				secFilingErr = fmt.Errorf("unexpected type returned from GetStockEdgarFilings: %T", res)
@@ -182,7 +182,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 			mutex.Lock()
 			if err != nil {
 				// Log error, potentially store it if we need ticker-specific errors
-				fmt.Printf("Warning: error fetching splits for ticker %s: %v\n", t, err)
+				////fmt.Printf("Warning: error fetching splits for ticker %s: %v\n", t, err)
 				if splitErr == nil { // Keep the first error encountered
 					splitErr = err
 				}
@@ -198,7 +198,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 			dividends, err := getStockDividends(conn, t) // Fetch all dividends for the ticker
 			mutex.Lock()
 			if err != nil {
-				fmt.Printf("Warning: error fetching dividends for ticker %s: %v\n", t, err)
+				////fmt.Printf("Warning: error fetching dividends for ticker %s: %v\n", t, err)
 				if dividendErr == nil {
 					dividendErr = err
 				}
@@ -214,20 +214,20 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 
 	// --- Error Handling (Post-Wait) ---
 	// Check for critical errors collected during fetch
-	if splitErr != nil {
-		fmt.Printf("Non-fatal error encountered during split fetching: %v\n", splitErr)
-		// Decide if this should be fatal - currently logged as warning
-	}
-	if dividendErr != nil {
-		fmt.Printf("Non-fatal error encountered during dividend fetching: %v\n", dividendErr)
-	}
-	if secFilingErr != nil {
-		fmt.Printf("Non-fatal error encountered during SEC filing fetching: %v\n", secFilingErr)
-	}
+	//if splitErr != nil {
+	////fmt.Printf("Non-fatal error encountered during split fetching: %v\n", splitErr)
+	// Decide if this should be fatal - currently logged as warning
+	//}
+	//if dividendErr != nil {
+	////fmt.Printf("Non-fatal error encountered during dividend fetching: %v\n", dividendErr)
+	//}
+	//if secFilingErr != nil {
+	////fmt.Printf("Non-fatal error encountered during SEC filing fetching: %v\n", secFilingErr)
+	//}
 
 	// 4. Filter and Format Events based on the original time range [fromMs, toMs]
-	var finalEvents []ChartEvent
-	var rawEvents []ChartEvent // Temporary slice to hold events before final filtering
+	var finalEvents []Event
+	var rawEvents []Event // Temporary slice to hold events before final filtering
 
 	// Process Splits
 	processedSplitKeys := make(map[string]struct{}) // Deduplicate splits by execution date + ratio
@@ -253,10 +253,11 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 			}
 			valueJSON, err := json.Marshal(valueMap)
 			if err != nil {
-				fmt.Printf("Warning: error creating split value JSON: %v\n", err)
+				////fmt.Printf("Warning: error creating split value JSON: %v\n", err)
 				continue // Skip this event
 			}
-			rawEvents = append(rawEvents, ChartEvent{
+			rawEvents = append(rawEvents, Event{
+				ID:        fmt.Sprintf("split_%d-%s", utcTimestamp, ratio),
 				Timestamp: utcTimestamp,
 				Type:      "split",
 				Value:     string(valueJSON),
@@ -270,7 +271,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 	for _, dividend := range allDividends {
 		exDate, err := time.Parse("2006-01-02", dividend.ExDividendDate)
 		if err != nil {
-			fmt.Printf("Warning: error parsing dividend ex-date %s: %v\n", dividend.ExDividendDate, err)
+			////fmt.Printf("Warning: error parsing dividend ex-date %s: %v\n", dividend.ExDividendDate, err)
 			continue
 		}
 		// Align to 4 AM ET on the Ex-Dividend Date
@@ -293,10 +294,11 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 			}
 			valueJSON, err := json.Marshal(valueMap)
 			if err != nil {
-				fmt.Printf("Warning: error creating dividend value JSON: %v\n", err)
+				////fmt.Printf("Warning: error creating dividend value JSON: %v\n", err)
 				continue // Skip this event
 			}
-			rawEvents = append(rawEvents, ChartEvent{
+			rawEvents = append(rawEvents, Event{
+				ID:        fmt.Sprintf("div_%s_%.2f", dividend.ExDividendDate, dividend.CashAmount),
 				Timestamp: utcTimestamp,
 				Type:      "dividend",
 				Value:     string(valueJSON),
@@ -334,7 +336,7 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 				}
 				valueJSON, err := json.Marshal(valueMap)
 				if err != nil {
-					fmt.Printf("Warning: error creating filing value JSON: %v\n", err)
+					////fmt.Printf("Warning: error creating filing value JSON: %v\n", err)
 					continue // Skip this event
 				}
 
@@ -346,13 +348,14 @@ func fetchChartEventsInRange(conn *data.Conn, userId int, securityID int, fromMs
 						if _, isMinor := minorFilingTypes[filingInfo.Type]; isMinor {
 							shouldFilter = true
 						}
-					} else {
-						fmt.Printf("Warning: could not unmarshal filing value for filtering: %v\n", err)
-					}
+					} // else {
+					////fmt.Printf("Warning: could not unmarshal filing value for filtering: %v\n", err)
+					//}
 				}
 
 				if !shouldFilter {
-					rawEvents = append(rawEvents, ChartEvent{
+					rawEvents = append(rawEvents, Event{
+						ID:        fmt.Sprintf("filing_%s", filing.URL),
 						Timestamp: utcTimestamp,
 						Type:      "sec_filing",
 						Value:     string(valueJSON),

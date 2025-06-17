@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { type Writable, writable } from 'svelte/store';
-	import type { QuoteData, Instance, TradeData } from '$lib/core/types';
+	import type { QuoteData, Instance, TradeData } from '$lib/utils/types/types';
 	import { addStream } from '$lib/utils/stream/interface';
-	import { derived } from 'svelte/store';
+	import '$lib/styles/glass.css';
 
 	export let instance: Writable<Instance>;
 	let store = writable<QuoteData>({
@@ -58,66 +58,41 @@
 		currentSecurityId = null;
 	});
 
-	// Format for compact display
-	$: bidDisplay = `${$store?.bidPrice?.toFixed(2) ?? '--'}×${$store?.bidSize ?? '--'}`;
-	$: askDisplay = `${$store?.askPrice?.toFixed(2) ?? '--'}×${$store?.askSize ?? '--'}`;
+
 </script>
 
-<div class="quote-container">
-	<div class="quote-row">
-		<!-- Bid section on the left -->
-		<div class="bid">
-			<div class="price">
-				<span class="value {bidPriceChange}">{$store?.bidPrice?.toFixed(2) ?? '--'}</span>
-			</div>
-			<div class="size">
-				<span class="value">x {$store?.bidSize ?? '--'}</span>
-			</div>
+<div class="quote-container glass glass--small glass--medium">
+	<!-- Bid section on the left -->
+	<div class="bid">
+		<div class="price">
+			<span class="value {bidPriceChange}">{$store?.bidPrice?.toFixed(2) ?? '--'}</span>
 		</div>
+		<div class="size">
+			<span class="value">x {$store?.bidSize ?? '--'}</span>
+		</div>
+	</div>
 
-		<!-- Ask section on the right -->
-		<div class="ask">
-			<div class="price">
-				<span class="value {askPriceChange}">{$store?.askPrice?.toFixed(2) ?? '--'}</span>
-			</div>
-			<div class="size">
-				<span class="value">x {$store?.askSize ?? '--'}</span>
-			</div>
+	<!-- Ask section on the right -->
+	<div class="ask">
+		<div class="price">
+			<span class="value {askPriceChange}">{$store?.askPrice?.toFixed(2) ?? '--'}</span>
+		</div>
+		<div class="size">
+			<span class="value">x {$store?.askSize ?? '--'}</span>
 		</div>
 	</div>
 </div>
 
 <style>
 	.quote-container {
-		font-family: var(
-			--font-primary,
-			-apple-system,
-			BlinkMacSystemFont,
-			Segoe UI,
-			Roboto,
-			Oxygen,
-			Ubuntu,
-			Cantarell,
-			Open Sans,
-			Helvetica Neue,
-			sans-serif
-		);
+		font-family: 'Inter', -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell, Open Sans, Helvetica Neue, sans-serif;
 		font-size: 14px;
 		color: var(--text-primary, white);
-		background-color: var(--ui-bg-secondary, rgba(30, 30, 30, 0.7));
 		width: 100%;
-		border: 1px solid var(--ui-border, #333);
 		margin: 0 auto;
-		border-radius: 8px;
-		padding: 2px;
-		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-	}
-
-	.quote-row {
+		padding: 10px;
 		display: flex;
 		justify-content: space-between;
-		padding: 10px;
-		margin-bottom: 2px;
 	}
 
 	.bid,

@@ -1,19 +1,18 @@
 package server
 
 import (
-	"backend/internal/services/alerts"
 	"backend/internal/data"
-    "backend/internal/services/securities"
-    "backend/internal/services/marketData"
-    "backend/internal/services/socket"
+	"backend/internal/services/alerts"
+	"backend/internal/services/marketdata"
+	"backend/internal/services/securities"
+	"backend/internal/services/socket"
 	"context"
 	"fmt"
 	"log"
 	"sort"
 	"sync"
 	"time"
-
-	"github.com/go-redis/redis/v8"
+	//"github.com/go-redis/redis/v8"
 )
 
 var useBS = true //alerts, securityUpdate, marketMetrics, sectorUpdate
@@ -83,13 +82,13 @@ func (s *JobScheduler) loadJobLastRunTimes() {
 			lastRun, err := time.Parse(time.RFC3339, lastRunStr)
 			if err == nil {
 				job.LastRun = lastRun
-				fmt.Printf("Loaded last run time for job %s: %s\n", job.Name, lastRun.Format(time.RFC3339))
-			} else {
-				fmt.Printf("Error parsing last run time for job %s: %v\n", job.Name, err)
+				////fmt.Printf("Loaded last run time for job %s: %s\n", job.Name, lastRun.Format(time.RFC3339))
 			}
-		} else if err != redis.Nil {
-			fmt.Printf("Error loading last run time for job %s: %v\n", job.Name, err)
 		}
+		//else if err != redis.Nil {
+		// Error loading last run time, other than not found
+		////fmt.Printf("Error loading last run time for job %s: %v\n", job.Name, err)
+		//}
 
 		// Get the last completion time from Redis
 		lastCompletionStr, err := s.Conn.Cache.Get(ctx, getJobLastCompletionKey(job.Name)).Result()
@@ -98,70 +97,66 @@ func (s *JobScheduler) loadJobLastRunTimes() {
 			lastCompletion, err := time.Parse(time.RFC3339, lastCompletionStr)
 			if err == nil {
 				job.LastCompletionTime = lastCompletion
-				fmt.Printf("Loaded last completion time for job %s: %s\n", job.Name, lastCompletion.Format(time.RFC3339))
-			} else {
-				fmt.Printf("Error parsing last completion time for job %s: %v\n", job.Name, err)
+				////fmt.Printf("Loaded last completion time for job %s: %s\n", job.Name, lastCompletion.Format(time.RFC3339))
 			}
-		} else if err != redis.Nil {
-			fmt.Printf("Error loading last completion time for job %s: %v\n", job.Name, err)
 		}
+		//else if err != redis.Nil {
+		// Error loading last completion time, other than not found
+		////fmt.Printf("Error loading last completion time for job %s: %v\n", job.Name, err)
+		//}
 	}
 }
 
 // saveJobLastRunTime saves a job's last run time to Redis
-func (s *JobScheduler) saveJobLastRunTime(job *Job) {
+func (s *JobScheduler) saveJobLastRunTime(job *Job) error {
 	ctx := context.Background()
 
 	// Store the last run time in Redis
 	lastRunStr := job.LastRun.Format(time.RFC3339)
 	err := s.Conn.Cache.Set(ctx, getJobLastRunKey(job.Name), lastRunStr, 0).Err()
-	if err != nil {
-		fmt.Printf("Error saving last run time for job %s: %v\n", job.Name, err)
-	}
+	return err
+	//if err != nil {
+
+	// Log error saving last run time
+	////fmt.Printf("Error saving last run time for job %s: %v\n", job.Name, err)
+	//}
 }
 
 // saveJobLastCompletionTime saves a job's last completion time to Redis
-func (s *JobScheduler) saveJobLastCompletionTime(job *Job) {
+func (s *JobScheduler) saveJobLastCompletionTime(job *Job) error {
 	ctx := context.Background()
 
 	// Store the last completion time in Redis
 	lastCompletionStr := job.LastCompletionTime.Format(time.RFC3339)
 	err := s.Conn.Cache.Set(ctx, getJobLastCompletionKey(job.Name), lastCompletionStr, 0).Err()
-	if err != nil {
-		fmt.Printf("Error saving last completion time for job %s: %v\n", job.Name, err)
-	}
+	return err
 }
 
 // Define job functions for security detail updates
 // These wrappers avoid redeclaring functions that exist in other files
 func securityDetailUpdateJob(conn *data.Conn) error {
 	// Call the actual function from securitiesTable.go
-	fmt.Println("Starting security details update - updating logos and icons...")
+	////fmt.Println("Starting security details update - updating logos and icons...")
 	return securities.UpdateSecurityDetails(conn, true)
 }
 
 func securityCikUpdateJob(conn *data.Conn) error {
 	// We call the function from securities.go
-	fmt.Println("Starting security CIK update - linking tickers to SEC identifiers...")
+	////fmt.Println("Starting security CIK update - linking tickers to SEC identifiers...")
 	return securities.UpdateSecurityCik(conn)
 }
 
 func simpleSecuritiesUpdateJob(conn *data.Conn) error {
 	// We call the function from securities.go
-	fmt.Println("Starting securities update - refreshing security data...")
+	////fmt.Println("Starting securities update - refreshing security data...")
 	return securities.SimpleUpdateSecurities(conn)
 }
 
 // Wrapper for UpdateSectors to match JobFunc signature
 func updateSectorsJob(conn *data.Conn) error {
-	fmt.Println("Starting sector update - fetching latest sector/industry data...")
-	_, err := securities.UpdateSectors(context.Background(), conn) // Discard the statBlock
-	if err != nil {
-		fmt.Printf("Sector update job failed: %v\n", err)
-	} else {
-		fmt.Println("Sector update job completed successfully.")
-	}
-	return err // Return the error, if any
+	////fmt.Println("Starting sector update - fetching latest sector/industry data...")
+	err := securities.UpdateSectors(context.Background(), conn) // Discard the statBlock
+	return err                                                  // Return the error, if any
 }
 
 // Define all jobs and their schedules
@@ -169,7 +164,7 @@ var (
 	JobList = []*Job{
 		{
 			Name:           "UpdateDailyOHLCV",
-			Function:       marketData.UpdateDailyOHLCV,
+			Function:       marketdata.UpdateDailyOHLCV,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
@@ -181,31 +176,18 @@ var (
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 		},
-		{
+		//TODO: FIX THIS SHIT
+		/*{
 			Name:           "StartAlertLoop",
 			Function:       startAlertLoop,
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 57}}, // Run before market open
 			RunOnInit:      true,
 			SkipOnWeekends: true,
-		},
+		},*/
 		{
 			Name:           "StartPolygonWebSocket",
 			Function:       startPolygonWebSocket,
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 58}}, // Run before market open
-			RunOnInit:      true,
-			SkipOnWeekends: true,
-		},
-		{
-			Name:           "StopServices",
-			Function:       stopServicesJob,
-			Schedule:       []TimeOfDay{{Hour: 20, Minute: 0}}, // Stop services at 8:00 PM
-			RunOnInit:      false,
-			SkipOnWeekends: true,
-		},
-		{
-			Name:           "UpdateSectors",
-			Function:       updateSectorsJob,                    // Use the new wrapper function
-			Schedule:       []TimeOfDay{{Hour: 20, Minute: 15}}, // Run at 8:15 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 		},
@@ -220,6 +202,20 @@ var (
 			Name:           "UpdateSecurityDetails",
 			Function:       securityDetailUpdateJob,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 0}}, // Run at 9:00 PM
+			RunOnInit:      true,
+			SkipOnWeekends: true,
+		},
+		{
+			Name:           "StopServices",
+			Function:       stopServicesJob,
+			Schedule:       []TimeOfDay{{Hour: 20, Minute: 0}}, // Stop services at 8:00 PM
+			RunOnInit:      false,
+			SkipOnWeekends: true,
+		},
+		{
+			Name:           "UpdateSectors",
+			Function:       updateSectorsJob,                    // Use the new wrapper function
+			Schedule:       []TimeOfDay{{Hour: 20, Minute: 15}}, // Run at 8:15 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 		},
@@ -262,48 +258,40 @@ func NewScheduler(conn *data.Conn) (*JobScheduler, error) {
 }
 
 // clearJobCache clears all job-related Redis cache entries
-func clearJobCache(conn *data.Conn) {
+func clearJobCache(conn *data.Conn) error {
 	ctx := context.Background()
 
 	// Get all keys with the job last run prefix
 	lastRunKeys, err := conn.Cache.Keys(ctx, jobLastRunKeyPrefix+"*").Result()
-	if err != nil {
-		fmt.Printf("Error getting job last run keys: %v\n", err)
-	} else {
+	if err == nil && len(lastRunKeys) > 0 {
 		// Delete all last run keys
-		if len(lastRunKeys) > 0 {
-			err = conn.Cache.Del(ctx, lastRunKeys...).Err()
-			if err != nil {
-				fmt.Printf("Error deleting job last run keys: %v\n", err)
-			} else {
-				fmt.Printf("Cleared %d job last run entries from Redis\n", len(lastRunKeys))
-			}
+		err = conn.Cache.Del(ctx, lastRunKeys...).Err()
+		if err != nil {
+			return err
 		}
 	}
 
 	// Get all keys with the job last completion prefix
 	lastCompletionKeys, err := conn.Cache.Keys(ctx, jobLastCompletionKeyPrefix+"*").Result()
 	if err != nil {
-		fmt.Printf("Error getting job last completion keys: %v\n", err)
-	} else {
+		return err
+		// Log error getting job last completion keys
+		////fmt.Printf("Error getting job last completion keys: %v\n", err)
+	} else if len(lastCompletionKeys) > 0 {
 		// Delete all last completion keys
-		if len(lastCompletionKeys) > 0 {
-			err = conn.Cache.Del(ctx, lastCompletionKeys...).Err()
-			if err != nil {
-				fmt.Printf("Error deleting job last completion keys: %v\n", err)
-			} else {
-				fmt.Printf("Cleared %d job last completion entries from Redis\n", len(lastCompletionKeys))
-			}
-		}
+		err = conn.Cache.Del(ctx, lastCompletionKeys...).Err()
+		return err
 	}
+	return nil
 
-	fmt.Println("Job cache cleared successfully")
 }
 
 // StartScheduler initializes and starts the job scheduler
 func StartScheduler(conn *data.Conn) chan struct{} {
 	// Clear job cache on server initialization
-	clearJobCache(conn)
+	if err := clearJobCache(conn); err != nil {
+		log.Printf("Error clearing job cache: %v", err)
+	}
 
 	scheduler, err := NewScheduler(conn)
 	if err != nil {
@@ -331,12 +319,11 @@ func (s *JobScheduler) Start() chan struct{} {
 	// Run jobs marked for initialization
 	s.runInitJobs()
 
-
 	// Start the Edgar Filings Service
-	fmt.Printf("\n\nStarting EdgarFilingsService\n\n")
-	marketData.StartEdgarFilingsService(s.Conn)
+	////fmt.Printf("\n\nStarting EdgarFilingsService\n\n")
+	marketdata.StartEdgarFilingsService(s.Conn)
 	go func() {
-		for filing := range marketData.NewFilingsChannel {
+		for filing := range marketdata.NewFilingsChannel {
 			socket.BroadcastGlobalSECFiling(filing)
 		}
 	}()
@@ -494,88 +481,57 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	job.ExecutionMutex.Unlock()
 
 	// Job execution variables
-	jobName := job.Name
-	startTime := time.Now()
-	isQueued := false
-	var taskID string
-	var err error
+	//jobName := job.Name
+	//startTime := time.Now()
+
+	// isQueued := false // Removed as it's no longer used after the `else if isQueued` block was removed.
+	//var taskID string
 
 	// Log job start
-	fmt.Printf("\n=== JOB START: %s ===\n", jobName)
-	fmt.Printf("Time: %s\n", now.Format("2006-01-02 15:04:05"))
+	////fmt.Printf("\n=== JOB START: %s ===\n", jobName)
+	////fmt.Printf("Time: %s\n", now.Format("2006-01-02 15:04:05"))
 
-    err = job.Function(s.Conn)
+	err := job.Function(s.Conn)
 
 	// Update job status
-	duration := time.Since(startTime).Round(time.Millisecond)
+	//duration := time.Since(startTime).Round(time.Millisecond)
 	job.ExecutionMutex.Lock()
 	job.IsRunning = false
 	job.LastRun = now
 	job.ExecutionMutex.Unlock()
-	s.saveJobLastRunTime(job)
+	if err := s.saveJobLastRunTime(job); err != nil {
+		log.Printf("Error saving job last run time for %s: %v", job.Name, err)
+	}
 
 	// Handle completion logging based on execution method and result
 	if err != nil {
+		return
 		// Job failed
-		fmt.Printf("\n=== JOB FAILED: %s ===\n", jobName)
-		fmt.Printf("Duration: %v\n", duration)
-		fmt.Printf("Error: %v\n", err)
-	} else if isQueued {
-		// Job was queued
-		fmt.Printf("\n=== JOB QUEUED: %s ===\n", jobName)
-		fmt.Printf("Duration: %v\n", duration)
-		fmt.Printf("Task ID: %s\n", taskID)
-
-	} else {
-		// Job completed directly
-		fmt.Printf("\n=== JOB COMPLETED: %s ===\n", jobName)
-		fmt.Printf("Duration: %v\n", duration)
-
-		// Update completion time
-		completionTime := time.Now()
-		job.ExecutionMutex.Lock()
-		job.LastCompletionTime = completionTime
-		job.ExecutionMutex.Unlock()
-		s.saveJobLastCompletionTime(job)
+		////fmt.Printf("\n=== JOB FAILED: %s ===\n", jobName)
+		////fmt.Printf("Duration: %v\n", duration)
+		////fmt.Printf("Error: %v\n", err)
 	}
+	// Job completed directly
+	////fmt.Printf("\n=== JOB COMPLETED: %s ===\n", jobName)
+	////fmt.Printf("Duration: %v\n", duration)
 
+	// Update completion time
+	completionTime := time.Now()
+	job.ExecutionMutex.Lock()
+	job.LastCompletionTime = completionTime
+	job.ExecutionMutex.Unlock()
+	if err := s.saveJobLastCompletionTime(job); err != nil {
+		log.Printf("Error saving job completion time for %s: %v", job.Name, err)
+	}
 }
-
-
 
 // initAggregates initializes the aggregates
 func initAggregates(conn *data.Conn) error {
 	if useBS {
 		socket.InitAggregatesAsync(conn)
-		fmt.Println("Aggregates initialized successfully")
-	} else {
-		fmt.Println("Skipping aggregates initialization (useBS is false)")
+		////fmt.Println("Aggregates initialized successfully")
+		////fmt.Println("Skipping aggregates initialization (useBS is false)")
 	}
-	return nil
-}
-
-// startAlertLoop starts the alert loop if not already running
-func startAlertLoop(conn *data.Conn) error {
-	if !useBS {
-		fmt.Println("Skipping alert loop (useBS is false)")
-		return nil
-	}
-
-	alertsInitMutex.Lock()
-	defer alertsInitMutex.Unlock()
-
-	if !alertsInitialized {
-		err := alerts.StartAlertLoop(conn)
-		if err != nil {
-			fmt.Println("Failed to start alert loop:", err)
-			return err
-		}
-		alertsInitialized = true
-		fmt.Println("Alert loop started successfully")
-	} else {
-		fmt.Println("Alert loop already running")
-	}
-
 	return nil
 }
 
@@ -587,14 +543,14 @@ func startPolygonWebSocket(conn *data.Conn) error {
 	if !polygonInitialized {
 		err := socket.StartPolygonWS(conn, useBS)
 		if err != nil {
-			log.Printf("Failed to start Polygon WebSocket: %v", err)
+			//log.Printf("Failed to start Polygon WebSocket: %v", err)
 			return err
 		}
 		polygonInitialized = true
-		fmt.Println("Polygon WebSocket started successfully")
-	} else {
-		fmt.Println("Polygon WebSocket already running")
+		////fmt.Println("Polygon WebSocket started successfully")
 	}
+	// Log that websocket is already running
+	////fmt.Println("Polygon WebSocket already running")
 
 	return nil
 }
@@ -607,7 +563,7 @@ func stopAlertLoop() {
 	if alertsInitialized {
 		alerts.StopAlertLoop()
 		alertsInitialized = false
-		fmt.Println("Alert loop stopped successfully")
+		////fmt.Println("Alert loop stopped successfully")
 	}
 }
 
@@ -617,18 +573,18 @@ func stopPolygonWebSocket() {
 	defer polygonInitMutex.Unlock()
 
 	if polygonInitialized {
-		if err := socket.StopPolygonWS(); err != nil {
-			log.Printf("Failed to stop Polygon WebSocket: %v", err)
-		} else {
-			polygonInitialized = false
-			fmt.Println("Polygon WebSocket stopped successfully")
-		}
+		// if err := socket.StopPolygonWS(); err != nil {
+		// 	//log.Printf("Failed to stop Polygon WebSocket: %v", err)
+		// }
+		_ = socket.StopPolygonWS() // Assign to blank identifier if error is intentionally ignored
+		polygonInitialized = false
+		////fmt.Println("Polygon WebSocket stopped successfully")
 	}
 }
 
 // stopServicesJob stops alert loop and polygon websocket as a scheduled job
-func stopServicesJob(conn *data.Conn) error {
-	fmt.Println("Stopping services for the night - alert loop and polygon websocket...")
+func stopServicesJob(_ *data.Conn) error {
+	////fmt.Println("Stopping services for the night - alert loop and polygon websocket...")
 	stopAlertLoop()
 	stopPolygonWebSocket()
 	return nil

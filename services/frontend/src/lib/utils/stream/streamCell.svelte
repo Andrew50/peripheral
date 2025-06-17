@@ -1,10 +1,9 @@
 <!-- streamCell.svelte -->
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { cubicOut } from 'svelte/easing';
 	import { writable } from 'svelte/store';
 	import { addStream } from '$lib/utils/stream/interface';
-	import type { TradeData, Instance, CloseData } from '$lib/core/types';
+	import type { TradeData, Instance, CloseData } from '$lib/utils/types/types';
 
 	export let instance: Instance;
 	export let type: 'price' | 'change' | 'change %' | 'change % extended' | 'market cap' = 'change';

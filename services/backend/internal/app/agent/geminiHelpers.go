@@ -1,11 +1,8 @@
 package agent
 
 import (
-	"backend/internal/data"
-	"context"
 	"embed"
 
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -22,14 +19,26 @@ func getSystemInstruction(name string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("reading prompt: %w", err)
 	}
+	constraints, err := fs.ReadFile("prompts/commonConstraints.txt")
+	if err != nil {
+		return "", fmt.Errorf("reading common constraints: %w", err)
+	}
 	const rfc3339Seconds = "2006-01-02T15:04:05Z07:00"
 	now := time.Now()
-	s := strings.ReplaceAll(string(raw), "{{CURRENT_TIME}}",
-		now.Format(rfc3339Seconds))
+
+	// Get current date in EST timezone
+	estLocation, _ := time.LoadLocation("America/New_York")
+	estTime := now.In(estLocation)
+
+	s := strings.ReplaceAll(string(raw), "{{COMMON_CONSTRAINTS}}", string(constraints))
+	s = strings.ReplaceAll(s, "{{CURRENT_TIME}}",
+		estTime.Format(rfc3339Seconds))
 	s = strings.ReplaceAll(s, "{{CURRENT_TIME_MILLISECONDS}}",
-		strconv.FormatInt(now.UnixMilli(), 10))
+		strconv.FormatInt(estTime.UnixMilli(), 10))
 	s = strings.ReplaceAll(s, "{{CURRENT_YEAR}}",
-		strconv.Itoa(now.Year()))
+		strconv.Itoa(estTime.Year()))
+	s = strings.ReplaceAll(s, "{{CURRENT_DATE_EST}}",
+		estTime.Format("01-02-2006"))
 	return s, nil
 }
 
@@ -39,7 +48,7 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 
 	// Start with the base prompt
 	toolsDescription.WriteString(basePrompt)
-	toolsDescription.WriteString("\n\nHere are the functions you can use:\n\n")
+	toolsDescription.WriteString("\n\nHere are the available tools. '?' indicates an optional parameter.\n")
 
 	// Sort tool names for consistent output
 	var toolNames []string
@@ -57,7 +66,7 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 
 		// Add parameters if they exist
 		if tool.FunctionDeclaration.Parameters != nil && len(tool.FunctionDeclaration.Parameters.Properties) > 0 {
-			toolsDescription.WriteString("  Parameters:\n")
+			toolsDescription.WriteString("  Params:\n")
 
 			// Get required parameters
 			required := make(map[string]bool)
@@ -68,54 +77,15 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 			// Add each parameter with its description
 			for paramName, paramSchema := range tool.FunctionDeclaration.Parameters.Properties {
 				isReq := ""
-				if required[paramName] {
-					isReq = " (REQUIRED)"
+				if !required[paramName] {
+					isReq = "?"
 				}
-				toolsDescription.WriteString(fmt.Sprintf("  - %s: %s%s\n", paramName, paramSchema.Description, isReq))
+				toolsDescription.WriteString(fmt.Sprintf("  - %s%s: %s\n", paramName, isReq, paramSchema.Description))
 			}
 		}
 
 		// Add spacing between functions
 		toolsDescription.WriteString("\n")
 	}
-
 	return toolsDescription.String()
-}
-
-// ClearConversationHistory deletes the conversation for a user
-func ClearConversationHistory(conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
-	ctx := context.Background()
-	conversationKey := fmt.Sprintf("user:%d:conversation", userID)
-	fmt.Printf("Attempting to delete conversation for key: %s\n", conversationKey)
-
-	// Delete the conversation history key from Redis
-	err := conn.Cache.Del(ctx, conversationKey).Err()
-	if err != nil {
-		fmt.Printf("Failed to delete conversation from Redis: %v\n", err)
-		// Don't return immediately, still try to delete persistent context
-	} else {
-		fmt.Printf("Successfully deleted conversation for key: %s\n", conversationKey)
-	}
-
-	// Also delete the persistent context key
-	persistentContextKey := fmt.Sprintf(persistentContextKeyFormat, userID) // Use constant from persistentContext.go
-	pErr := conn.Cache.Del(ctx, persistentContextKey).Err()
-	if pErr != nil {
-		fmt.Printf("Failed to delete persistent context from Redis: %v\n", pErr)
-		// If conversation deletion succeeded but this failed, maybe return a specific error?
-		// For now, just log it and return the original error if it exists, or this one if not.
-		if err == nil { // If conversation delete was ok, return this error
-			return nil, fmt.Errorf("failed to clear persistent context: %w", pErr)
-		}
-	} else {
-		fmt.Printf("Successfully deleted persistent context for key: %s\n", persistentContextKey)
-	}
-
-	// If the conversation deletion failed initially, return that error now
-	if err != nil {
-		return nil, fmt.Errorf("failed to clear conversation history: %w", err)
-	}
-
-	fmt.Printf("Successfully deleted conversation for key: %s\n", conversationKey)
-	return map[string]string{"message": "Conversation history cleared successfully"}, nil
 }

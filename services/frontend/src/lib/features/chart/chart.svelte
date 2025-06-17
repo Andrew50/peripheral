@@ -3,19 +3,22 @@
 	import Legend from './legend.svelte';
 	import Shift from './shift.svelte';
 	import DrawingMenu from './drawingMenu.svelte';
-	import { privateRequest } from '$lib/core/backend';
+	import WhyMoving from '$lib/components/whyMoving.svelte';
+
+	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { type DrawingMenuProps, addHorizontalLine, drawingMenuProps } from './drawingMenu.svelte';
-	import type { Instance as CoreInstance, TradeData, QuoteData } from '$lib/core/types';
+	import type { Instance as CoreInstance, TradeData, QuoteData } from '$lib/utils/types/types';
 	import {
 		setActiveChart,
 		chartQueryDispatcher,
 		chartEventDispatcher,
-		queryChart
+		queryChart,
+		showExtendedHoursToggle
 	} from './interface';
-	import { streamInfo, settings, activeAlerts } from '$lib/core/stores';
+	import { streamInfo, settings, activeAlerts } from '$lib/utils/stores/stores';
 	import type { ShiftOverlay, ChartEventDispatch, BarData, ChartQueryDispatch } from './interface';
-	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
-	import { queryInstanceRightClick } from '$lib/utils/popups/rightClick.svelte';
+	import { queryInstanceInput } from '$lib/components/input/input.svelte';
+	import { queryInstanceRightClick } from '$lib/components/rightClick.svelte';
 	import { createChart, ColorType, CrosshairMode } from 'lightweight-charts';
 	import type {
 		IChartApi,
@@ -43,20 +46,24 @@
 	} from './indicators';
 	import type { Writable } from 'svelte/store';
 	import { writable, get } from 'svelte/store';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import {
 		UTCSecondstoESTSeconds,
 		ESTSecondstoUTCSeconds,
 		ESTSecondstoUTCMillis,
 		getReferenceStartTimeForDateMilliseconds,
 		timeframeToSeconds
-	} from '$lib/core/timestamp';
+	} from '$lib/utils/helpers/timestamp';
 	import { addStream } from '$lib/utils/stream/interface';
 	import { ArrowMarkersPaneView, type ArrowMarker } from './arrowMarkers';
 	import { EventMarkersPaneView, type EventMarker } from './eventMarkers';
 	import { adjustEventsToTradingDays, handleScreenshot } from './chartHelpers';
 	import { SessionHighlighting, createDefaultSessionHighlighter } from './sessionShade';
-	import { type FilingContext, addFilingToChatContext, openChatAndQuery } from '$lib/features/chat/interface';
+	import {
+		type FilingContext,
+		addFilingToChatContext,
+		openChatAndQuery
+	} from '$lib/features/chat/interface';
 
 	interface EventValue {
 		type?: string;
@@ -196,7 +203,12 @@
 
 	// Type guards moved to a higher scope
 	const isCandlestick = (data: any): data is CandlestickData<Time> =>
-		data && typeof data === 'object' && 'open' in data && 'high' in data && 'low' in data && 'close' in data;
+		data &&
+		typeof data === 'object' &&
+		'open' in data &&
+		'high' in data &&
+		'low' in data &&
+		'close' in data;
 	const isHistogram = (data: any): data is HistogramData<Time> =>
 		data && typeof data === 'object' && 'value' in data;
 
@@ -210,9 +222,17 @@
 	// Add new property to track alert lines
 	let alertLines: AlertLine[] = [];
 
+	// Measurement tool price lines
+	let measurementStartLine: any = null;
+	let measurementCurrentLine: any = null;
+
 	// State for quote line visibility
 	let isViewingLiveData = true; // Assume true initially
 	let lastQuoteData: QuoteData | null = null;
+
+	// Why Moving popup state (declare early to avoid TDZ)
+	let whyMovingTicker: string = '';
+	let whyMovingTrigger: number = 0;
 
 	let arrowSeries: any = null; // Initialize as null
 	let eventSeries: ISeriesApi<'Custom', Time, EventMarker>;
@@ -239,6 +259,7 @@
 
 	let keyBuffer: string[] = []; // This is for catching key presses from the keyboard before the input system is active
 	let isInputActive = false; // Track if input window is active/initializing
+	let isChartSwitching = false; // Track chart switching overlay state
 	// Add type definitions at the top
 	interface Alert {
 		alertType: string;
@@ -287,7 +308,7 @@
 		const lastCandleIndex = allCandles.length - 1;
 
 		let volumeForLastCandle = 0;
-		const lastVolumeEntry = allVolumes.find(v => v.time === lastCandle.time);
+		const lastVolumeEntry = allVolumes.find((v) => v.time === lastCandle.time);
 		if (lastVolumeEntry) {
 			volumeForLastCandle = lastVolumeEntry.value;
 		} else if (allVolumes.length > 0) {
@@ -324,8 +345,10 @@
 	}
 
 	function extendedHours(timestamp: number): boolean {
-		const date = new Date(timestamp);
-		const minutes = date.getHours() * 60 + date.getMinutes();
+		// Convert timestamp to Eastern Time
+		const estTimestampSeconds = UTCSecondstoESTSeconds((timestamp / 1000) as UTCTimestamp);
+		const date = new Date(estTimestampSeconds * 1000);
+		const minutes = date.getUTCHours() * 60 + date.getUTCMinutes();
 		return minutes < 570 || minutes >= 960; // 9:30 AM - 4:00 PM EST
 	}
 
@@ -388,6 +411,8 @@
 			.then((response) => {
 				const barDataList = response.bars;
 				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
+					isLoadingChartData = false;
+					queuedLoad = null;
 					return;
 				}
 				let newCandleData = barDataList.map((bar) => ({
@@ -478,7 +503,11 @@
 						chartCandleSeries.setData(newCandleData);
 						chartVolumeSeries.setData(newVolumeData);
 
-						if (visibleRange && typeof visibleRange.from === 'number' && typeof visibleRange.to === 'number') {
+						if (
+							visibleRange &&
+							typeof visibleRange.from === 'number' &&
+							typeof visibleRange.to === 'number'
+						) {
 							chart.timeScale().setVisibleRange({
 								from: visibleRange.from,
 								to: visibleRange.to
@@ -537,18 +566,15 @@
 							}));
 							// Sort markers by timestamp (time) in ascending order
 							markers.sort((a, b) => a.time - b.time);
-							
 
 							arrowSeries.setData(markers);
-							
 						}
 					}
 					try {
 						const barsWithEvents = response.bars; // Use the original response with events
-						if (barsWithEvents && barsWithEvents.length > 0) {
-
-							const allEventsRaw: Array<{timestamp: number, type: string, value: string}> = [];
-							barsWithEvents.forEach(bar => {
+						if (barsWithEvents.length > 0 && barsWithEvents) {
+							const allEventsRaw: Array<{ timestamp: number; type: string; value: string }> = [];
+							barsWithEvents.forEach((bar) => {
 								if (bar.events && bar.events.length > 0) {
 									allEventsRaw.push(...bar.events);
 								}
@@ -601,7 +627,8 @@
 													value: valueObj.ratio
 												});
 											} else if (event.type === 'dividend') {
-												const amount = typeof valueObj.amount === 'string' ? valueObj.amount : '0.00';
+												const amount =
+													typeof valueObj.amount === 'string' ? valueObj.amount : '0.00';
 												eventsByTime.get(barTime)?.push({
 													type: 'dividend',
 													title: `Dividend: $${amount}`,
@@ -624,14 +651,17 @@
 								});
 
 								// Get existing events ONLY if loading additional data
-								const existingEventData = (inst.requestType === 'loadAdditionalData')
-									? eventSeries.data() as EventMarker[]
-									: [];
+								const existingEventData =
+									inst.requestType === 'loadAdditionalData'
+										? (eventSeries.data() as EventMarker[])
+										: [];
 
 								// Combine using a Map to handle potential overlaps/updates
 								const combinedEventsMap = new Map<number, EventMarker>();
-								existingEventData.forEach(event => combinedEventsMap.set(event.time as number, event));
-								newEventData.forEach(event => combinedEventsMap.set(event.time as number, event)); // New events overwrite existing at the same time
+								existingEventData.forEach((event) =>
+									combinedEventsMap.set(event.time as number, event)
+								);
+								newEventData.forEach((event) => combinedEventsMap.set(event.time as number, event)); // New events overwrite existing at the same time
 
 								let finalEventData = Array.from(combinedEventsMap.values());
 
@@ -640,14 +670,15 @@
 
 								// Adjust events to trading days using the combined candle data
 								// Ensure newCandleData exists and is an array before spreading
-								const candleDataForAdjustment = Array.isArray(newCandleData) ? [...newCandleData] : [];
+								const candleDataForAdjustment = Array.isArray(newCandleData)
+									? [...newCandleData]
+									: [];
 								finalEventData = adjustEventsToTradingDays(finalEventData, candleDataForAdjustment);
 
 								// Set the final data
 								eventSeries.setData(finalEventData);
-
 							}
-						} 
+						}
 					} catch (error) {
 						console.warn('Failed to process chart events from bars:', error);
 						// Avoid clearing events on error during additional load
@@ -656,8 +687,6 @@
 						}
 					}
 					queuedLoad = null;
-
-
 
 					// Fix the SMA data type issues
 					const smaResults = calculateMultipleSMAs(newCandleData, [10, 20]);
@@ -696,6 +725,16 @@
 						releaseQuote = addStream(inst, 'quote', updateLatestQuote) as () => void;
 					}
 					isLoadingChartData = false; // Ensure this runs after data is loaded
+
+					// Hide chart switching overlay when loading completes
+					if (inst.requestType === 'loadNewTicker') {
+						isChartSwitching = false;
+					}
+					// Trigger Why Moving popup only for new ticker loads
+					if (inst.requestType === 'loadNewTicker') {
+						whyMovingTicker = inst.ticker ?? '';
+						whyMovingTrigger = Date.now();
+					}
 				};
 				if (
 					inst.direction == 'backward' ||
@@ -726,6 +765,11 @@
 				console.error(error);
 
 				isLoadingChartData = false; // Ensure this runs after data is loaded
+
+				// Hide overlay on error
+				if (inst.requestType === 'loadNewTicker') {
+					isChartSwitching = false;
+				}
 			});
 	}
 	function updateLatestQuote(data: QuoteData) {
@@ -751,8 +795,7 @@
 
 		// Update the line position visually
 		$drawingMenuProps.selectedLine.applyOptions({
-			price: price,
-			title: `Price: ${price.toFixed(2)}`
+			price: price
 		});
 
 		// Update the stored price in horizontalLines array
@@ -841,6 +884,12 @@
 	}
 
 	function handleMouseDown(event: MouseEvent) {
+		// Ensure chart container has focus for keyboard events
+		const chartContainer = document.getElementById(`chart_container-${chartId}`);
+		if (chartContainer) {
+			chartContainer.focus();
+		}
+
 		if (determineClickedLine(event)) {
 			('determineClickedLine');
 			mouseDownStartX = event.clientX;
@@ -886,37 +935,73 @@
 		}
 
 		setActiveChart(chartId, currentChartInstance);
-		isPanning = true;
+
 		if (shiftDown || get(shiftOverlay).isActive) {
 			shiftOverlay.update((v: ShiftOverlay): ShiftOverlay => {
 				v.isActive = !v.isActive;
 				if (v.isActive) {
-					v.startX = event.clientX;
-					v.startY = event.clientY;
+					// Disable chart interactions while drawing
+					chart.applyOptions({
+						handleScroll: false,
+						handleScale: false,
+						kineticScroll: {
+							mouse: false,
+							touch: false
+						}
+					});
+
+					// Get chart container position for relative coordinates
+					const chartContainer = document.getElementById(`chart_container-${chartId}`);
+					const rect = chartContainer?.getBoundingClientRect();
+					const offsetX = rect ? rect.left : 0;
+					const offsetY = rect ? rect.top : 0;
+
+					v.startX = event.clientX - offsetX;
+					v.startY = event.clientY - offsetY;
 					v.width = 0;
 					v.height = 0;
 					v.x = v.startX;
 					v.y = v.startY;
-					v.startPrice = chartCandleSeries.coordinateToPrice(v.startY) || 0;
+					v.startPrice = chartCandleSeries.coordinateToPrice(event.clientY - offsetY) || 0;
 					document.addEventListener('mousemove', shiftOverlayTrack);
 					document.addEventListener('mouseup', handleShiftOverlayEnd);
 				} else {
+					// Re-enable chart interactions when drawing ends
+					chart.applyOptions({
+						handleScroll: true,
+						handleScale: true,
+						kineticScroll: {
+							mouse: true,
+							touch: true
+						}
+					});
 					document.removeEventListener('mousemove', shiftOverlayTrack);
 				}
 				return v;
 			});
+		} else {
+			isPanning = true;
 		}
 	}
 
 	function shiftOverlayTrack(event: MouseEvent): void {
 		shiftOverlay.update((v: ShiftOverlay): ShiftOverlay => {
+			// Get chart container position for relative coordinates
+			const chartContainer = document.getElementById(`chart_container-${chartId}`);
+			const rect = chartContainer?.getBoundingClientRect();
+			const offsetX = rect ? rect.left : 0;
+			const offsetY = rect ? rect.top : 0;
+
+			const relativeX = event.clientX - offsetX;
+			const relativeY = event.clientY - offsetY;
+
 			const overlay = {
 				...v,
-				width: Math.abs(event.clientX - v.startX),
-				height: Math.abs(event.clientY - v.startY),
-				x: Math.min(event.clientX, v.startX),
-				y: Math.min(event.clientY, v.startY),
-				currentPrice: chartCandleSeries.coordinateToPrice(event.clientY) || 0
+				width: Math.abs(relativeX - v.startX),
+				height: Math.abs(relativeY - v.startY),
+				x: Math.min(relativeX, v.startX),
+				y: Math.min(relativeY, v.startY),
+				currentPrice: chartCandleSeries.coordinateToPrice(relativeY) || 0
 			};
 			return overlay;
 		});
@@ -925,6 +1010,16 @@
 	function handleShiftOverlayEnd(event: MouseEvent) {
 		shiftOverlay.update((v: ShiftOverlay): ShiftOverlay => {
 			if (v.isActive) {
+				// Re-enable chart interactions when drawing ends
+				chart.applyOptions({
+					handleScroll: true,
+					handleScale: true,
+					kineticScroll: {
+						mouse: true,
+						touch: true
+					}
+				});
+
 				return {
 					...v,
 					isActive: false,
@@ -954,11 +1049,10 @@
 		const isExtendedHoursTrade = extendedHours(trade.timestamp);
 		if (
 			isExtendedHoursTrade &&
-			(!currentChartInstance.extendedHours || /^[dwm]/.test(currentChartInstance.timeframe || ''))
+			(!currentChartInstance.extendedHours || /\d[dwm]/.test(currentChartInstance.timeframe))
 		) {
 			return;
 		}
-
 		const dolvol = get(settings).dolvol;
 		const allCandleDataLive = chartCandleSeries.data();
 		const mostRecentBarRaw = allCandleDataLive.at(-1);
@@ -969,7 +1063,10 @@
 		let legendIsDisplayingCurrentLastCandle = false;
 		const currentLegendData = get(hoveredCandleData);
 		// Check if legend is showing the current last bar's data by comparing time and close price (as a heuristic)
-		if (currentLegendData.close === mostRecentBar.close && latestCrosshairPositionTime === mostRecentBar.time) {
+		if (
+			currentLegendData.close === mostRecentBar.close &&
+			latestCrosshairPositionTime === mostRecentBar.time
+		) {
 			legendIsDisplayingCurrentLastCandle = true;
 		}
 
@@ -988,7 +1085,7 @@
 			if (!pendingVolumeUpdate) {
 				const lastVolumeRaw = chartVolumeSeries.data().at(-1);
 				if (lastVolumeRaw && isHistogram(lastVolumeRaw)) {
-					pendingVolumeUpdate = { ...lastVolumeRaw as HistogramData<Time> }; // Create a mutable copy
+					pendingVolumeUpdate = { ...(lastVolumeRaw as HistogramData<Time>) }; // Create a mutable copy
 				}
 			}
 
@@ -1058,7 +1155,9 @@
 			if (legendIsDisplayingCurrentLastCandle) {
 				_refreshLegendWithLatestCandleData();
 				// Crucially, update latestCrosshairPositionTime to the NEW latest bar's time
-				const currentCandles = chartCandleSeries.data().filter(isCandlestick) as CandlestickData<Time>[];
+				const currentCandles = chartCandleSeries
+					.data()
+					.filter(isCandlestick) as CandlestickData<Time>[];
 				if (currentCandles.length > 0) {
 					latestCrosshairPositionTime = currentCandles[currentCandles.length - 1].time as number;
 				}
@@ -1080,7 +1179,9 @@
 				if (!barData) return;
 
 				// Find and update the matching (previous) bar
-				const allCandleDataForUpdate = chartCandleSeries.data().filter(isCandlestick) as CandlestickData<Time>[];
+				const allCandleDataForUpdate = chartCandleSeries
+					.data()
+					.filter(isCandlestick) as CandlestickData<Time>[];
 				const barIndex = allCandleDataForUpdate.findIndex(
 					(candle) => candle.time === UTCSecondstoESTSeconds(barData.time)
 				);
@@ -1107,9 +1208,12 @@
 					if (legendIsDisplayingCurrentLastCandle) {
 						_refreshLegendWithLatestCandleData();
 						// Ensure latestCrosshairPositionTime still points to the current latest bar
-						const currentCandles = chartCandleSeries.data().filter(isCandlestick) as CandlestickData<Time>[];
+						const currentCandles = chartCandleSeries
+							.data()
+							.filter(isCandlestick) as CandlestickData<Time>[];
 						if (currentCandles.length > 0) {
-							latestCrosshairPositionTime = currentCandles[currentCandles.length - 1].time as number;
+							latestCrosshairPositionTime = currentCandles[currentCandles.length - 1]
+								.time as number;
 						}
 					}
 				}
@@ -1157,7 +1261,12 @@
 		pendingBarUpdate = null;
 		pendingVolumeUpdate = null;
 		lastUpdateTime = 0;
-		
+
+		// Show overlay for new ticker changes
+		if (newReq.requestType === 'loadNewTicker') {
+			isChartSwitching = true;
+		}
+
 		const securityId =
 			typeof newReq.securityId === 'string'
 				? parseInt(newReq.securityId, 10)
@@ -1252,11 +1361,10 @@
 			chartCandleSeries.attachPrimitive(sessionHighlighting);
 		}
 		backendLoadChartData(updatedReq);
-
-		
 	}
 
-	onMount(() => { // Keep onMount synchronous
+	onMount(() => {
+		// Keep onMount synchronous
 		const chartOptions = {
 			autoSize: true,
 			crosshair: {
@@ -1279,7 +1387,7 @@
 			},
 			timeScale: {
 				timeVisible: true,
-				shiftVisibleRangeOnNewBar: false, 
+				shiftVisibleRangeOnNewBar: false,
 				borderColor: 'black'
 			},
 			rightPriceScale: {
@@ -1318,6 +1426,22 @@
 				shiftDown = false;
 			}
 		});
+
+		// Add global shift key listeners for more robust detection
+		const handleGlobalKeyDown = (event: KeyboardEvent) => {
+			if (event.key === 'Shift') {
+				shiftDown = true;
+			}
+		};
+
+		const handleGlobalKeyUp = (event: KeyboardEvent) => {
+			if (event.key === 'Shift') {
+				shiftDown = false;
+			}
+		};
+
+		document.addEventListener('keydown', handleGlobalKeyDown);
+		document.addEventListener('keyup', handleGlobalKeyUp);
 		chartContainer.addEventListener('mousedown', handleMouseDown);
 		chartContainer.addEventListener('mouseup', () => {
 			isPanning = false;
@@ -1379,19 +1503,22 @@
 				return;
 			}
 
+			// Handle Tab key to show extended hours toggle
+			if (event.key === 'Tab') {
+				event.preventDefault();
+				event.stopPropagation();
+				showExtendedHoursToggle();
+				return;
+			}
+
 			// Handle non-Alt key combinations
-			if (
-				event.key === 'Tab' ||
-				(!event.ctrlKey && !event.metaKey && /^[a-zA-Z0-9]$/.test(event.key.toLowerCase()))
-			) {
+			if (!event.ctrlKey && !event.metaKey && /^[a-zA-Z0-9]$/.test(event.key.toLowerCase())) {
 				// Prevent default and stop propagation immediately
 				event.preventDefault();
 				event.stopPropagation();
 
 				// Add the keypress to our buffer
-				if (event.key !== 'Tab') {
-					keyBuffer.push(event.key);
-				}
+				keyBuffer.push(event.key);
 
 				// If this is the first key, start the input process
 				if (!isInputActive) {
@@ -1484,7 +1611,9 @@
 			priceFormat: { type: 'volume' },
 			priceScaleId: ''
 		});
-		chartVolumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 }, visible: false });
+		chartVolumeSeries
+			.priceScale()
+			.applyOptions({ scaleMargins: { top: 0.8, bottom: 0 }, visible: false });
 		chartCandleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.2 } });
 		const smaOptions: DeepPartial<LineStyleOptions & SeriesOptionsCommon> = {
 			lineWidth: 1,
@@ -1528,7 +1657,12 @@
 		chart.subscribeCrosshairMove((param) => {
 			// Type guard for CandlestickData (local to this callback)
 			const isCandlestickLocal = (data: any): data is CandlestickData<Time> =>
-				data && typeof data === 'object' && 'open' in data && 'high' in data && 'low' in data && 'close' in data;
+				data &&
+				typeof data === 'object' &&
+				'open' in data &&
+				'high' in data &&
+				'low' in data &&
+				'close' in data;
 			// Type guard for HistogramData (local to this callback)
 			const isHistogramLocal = (data: any): data is HistogramData<Time> =>
 				data && typeof data === 'object' && 'value' in data;
@@ -1542,10 +1676,13 @@
 			}
 
 			// Filter out whitespace to get only actual chart data points
-			const allCandles = candleSeriesActualData.filter(isCandlestickLocal) as CandlestickData<Time>[];
+			const allCandles = candleSeriesActualData.filter(
+				isCandlestickLocal
+			) as CandlestickData<Time>[];
 			const allVolumes = volumeSeriesActualData.filter(isHistogramLocal) as HistogramData<Time>[];
 
-			if (!allCandles.length) { // If, after filtering, there are no valid candles
+			if (!allCandles.length) {
+				// If, after filtering, there are no valid candles
 				hoveredCandleData.set(defaultHoveredCandleData);
 				return;
 			}
@@ -1557,7 +1694,8 @@
 			const lastCandleInSeries = allCandles[allCandles.length - 1];
 			const lastCandleIndex = allCandles.length - 1;
 
-			const hoveredCandleFromParam = param && param.seriesData ? param.seriesData.get(chartCandleSeries) : undefined;
+			const hoveredCandleFromParam =
+				param && param.seriesData ? param.seriesData.get(chartCandleSeries) : undefined;
 			const logicalIdx = param?.logical; // The logical index of the bar under the crosshair
 
 			// Decision logic for which bar's data to display
@@ -1568,7 +1706,9 @@
 			} else if (param && param.time !== undefined && isCandlestickLocal(hoveredCandleFromParam)) {
 				// Case 2: Crosshair is over a valid candle data point, and not logically to the right.
 				// Ensure this hovered candle is one of our 'allCandles'.
-				const potentialBarIndex = allCandles.findIndex(c => c.time === hoveredCandleFromParam.time);
+				const potentialBarIndex = allCandles.findIndex(
+					(c) => c.time === hoveredCandleFromParam.time
+				);
 				if (potentialBarIndex !== -1) {
 					barToUse = hoveredCandleFromParam;
 					indexOfBarInAllCandles = potentialBarIndex;
@@ -1585,25 +1725,30 @@
 
 			// Get volume for the barToUse
 			// Try to get volume from param if it matches the barToUse's time (most direct)
-			const correspondingVolumeFromParam = param && param.seriesData ? param.seriesData.get(chartVolumeSeries) : undefined;
-			if (isHistogramLocal(correspondingVolumeFromParam) && correspondingVolumeFromParam.time === barToUse.time) {
+			const correspondingVolumeFromParam =
+				param && param.seriesData ? param.seriesData.get(chartVolumeSeries) : undefined;
+			if (
+				isHistogramLocal(correspondingVolumeFromParam) &&
+				correspondingVolumeFromParam.time === barToUse.time
+			) {
 				volumeForBar = correspondingVolumeFromParam.value;
 			} else {
 				// Fallback: find volume by time from allVolumes array
-				const volumeMatch = allVolumes.find(v => v.time === barToUse.time);
+				const volumeMatch = allVolumes.find((v) => v.time === barToUse.time);
 				if (volumeMatch) {
 					volumeForBar = volumeMatch.value;
 				} else if (barToUse.time === lastCandleInSeries.time && allVolumes.length > 0) {
 					// If it's the last candle and no direct time match for volume,
 					// try taking the absolute last volume entry as a weaker fallback.
-					volumeForBar = allVolumes[allVolumes.length -1].value;
+					volumeForBar = allVolumes[allVolumes.length - 1].value;
 				}
 				// if no volume found, volumeForBar remains 0 (initialized value)
 			}
 
 			// Calculations (ADR, CHG) based on barToUse and indexOfBarInAllCandles
 			let barsForADR;
-			if (indexOfBarInAllCandles >= 19) { // Need 20 bars for ADR (current + 19 previous)
+			if (indexOfBarInAllCandles >= 19) {
+				// Need 20 bars for ADR (current + 19 previous)
 				barsForADR = allCandles.slice(indexOfBarInAllCandles - 19, indexOfBarInAllCandles + 1);
 			} else {
 				barsForADR = allCandles.slice(0, indexOfBarInAllCandles + 1);
@@ -1631,7 +1776,7 @@
 			});
 
 			latestCrosshairPositionTime = barToUse.time as number;
-			latestCrosshairPositionY = (param && param.point) ? param.point.y : 0;
+			latestCrosshairPositionY = param && param.point ? param.point.y : 0;
 
 			/*
 			// Original RVOL calculation logic was here, would need adaptation
@@ -1681,7 +1826,10 @@
 					});
 				}
 			}
-			if ((chartCandleSeries.data().length - logicalRange.to) / barsOnScreen < bufferInScreenSizes) {
+			if (
+				(chartCandleSeries.data().length - logicalRange.to) / barsOnScreen <
+				bufferInScreenSizes
+			) {
 				// forward load
 				if (chartLatestDataReached) {
 					return;
@@ -1831,17 +1979,16 @@
 				chartVolumeSeries.update(pendingVolumeUpdate);
 			}
 
+			// Clean up global shift key listeners
+			document.removeEventListener('keydown', handleGlobalKeyDown);
+			document.removeEventListener('keyup', handleGlobalKeyUp);
+
 			// ... any other cleanup code ...
 		};
 	});
 
 	// Handle event marker clicks
-	function handleEventClick(
-		events: EventMarker['events'],
-		x: number,
-		y: number,
-		time: number
-	) {
+	function handleEventClick(events: EventMarker['events'], x: number, y: number, time: number) {
 		// Check if clicking on the same event that's already selected
 		if (
 			selectedEvent &&
@@ -1937,18 +2084,33 @@
 			filingType: filingEvent.title,
 			link: filingEvent.url // Use the non-optional URL
 		};
-		
-		// Call the function from chat interface
-		openChatAndQuery(filingContext, `Summarize the attached filing and any relevant exhibits: ${filingEvent.title}`);
-	}
 
+		// Call the function from chat interface
+		openChatAndQuery(
+			filingContext,
+			`Summarize the attached filing and any relevant exhibits: ${filingEvent.title}`
+		);
+	}
 </script>
 
-<div class="chart" id="chart_container-{chartId}" style="width: {width}px" tabindex="-1">
+<div
+	class="chart"
+	id="chart_container-{chartId}"
+	style="width: {width}px; position: relative;"
+	tabindex="-1"
+>
 	<Legend instance={currentChartInstance} {hoveredCandleData} {width} />
 	<Shift {shiftOverlay} />
 	<DrawingMenu {drawingMenuProps} />
+
+	<!-- Chart switching overlay -->
+	{#if isChartSwitching}
+		<div class="chart-switching-overlay"></div>
+	{/if}
 </div>
+
+<!-- Why Moving Popup -->
+<WhyMoving ticker={whyMovingTicker} trigger={whyMovingTrigger} />
 
 <!-- Replace the filing info overlay with a more generic event info overlay -->
 {#if selectedEvent}
@@ -1960,16 +2122,12 @@
 	>
 		<div class="event-header">
 			{#if selectedEvent.events[0]?.type === 'sec_filing'}
-				<div class="event-icon" style="color: #9C27B0;">📄</div>
 				<div class="event-title">SEC Filings</div>
 			{:else if selectedEvent.events[0]?.type === 'split'}
-				<div class="event-icon" style="color: #FFD700;">📊</div>
 				<div class="event-title">Stock Splits</div>
 			{:else if selectedEvent.events[0]?.type === 'dividend'}
-				<div class="event-icon" style="color: #2196F3;">💰</div>
 				<div class="event-title">Dividends</div>
 			{:else}
-				<div class="event-icon">📅</div>
 				<div class="event-title">Events</div>
 			{/if}
 			<button class="close-button" on:click={closeEventPopup}>×</button>
@@ -2038,10 +2196,10 @@
 <style>
 	.event-info {
 		position: absolute;
-		background: #252525;
+		background: rgba(37, 37, 37, 0.8);
 		border: none;
 		border-radius: 8px;
-		padding: 10px;
+		padding: 8px 10px 10px 10px;
 		z-index: 1000;
 		width: 220px;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
@@ -2075,9 +2233,9 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 8px;
-		padding-bottom: 10px;
+		padding-bottom: 8px;
 		border-bottom: 1px solid #444;
-		margin-bottom: 10px;
+		margin-bottom: 8px;
 		position: relative;
 	}
 	.close-button {
@@ -2103,17 +2261,12 @@
 		transition: background 0.2s;
 	}
 	.event-row:hover {
-		background: rgba(255,255,255,0.05);
+		background: rgba(255, 255, 255, 0.05);
 	}
 	.event-type {
 		font-size: 0.95rem;
 		color: #fff;
 		font-weight: 500;
-	}
-	.event-link {
-		color: #4caf50;
-		font-weight: 600;
-		font-size: 0.85rem;
 	}
 	.dividend-date {
 		font-size: 0.85rem;
@@ -2123,19 +2276,6 @@
 	.event-actions {
 		display: flex;
 		gap: 0.5rem;
-	}
-	.add-context-btn {
-		background: var(--ui-bg-element, #333);
-		border: 1px solid var(--ui-border, #444);
-		color: var(--text-secondary, #aaa);
-		padding: 0.3rem 0.6rem;
-		font-size: 0.8rem;
-		border-radius: 0.25rem;
-		cursor: pointer;
-		transition: all 0.2s ease;
-	}	.add-context-btn:hover {
-		border-color: var(--accent-color, #3a8bf7);
-		color: var(--text-primary, #fff);
 	}
 	/* Sleek button and filing styles */
 	.btn {
@@ -2147,10 +2287,9 @@
 		font-size: 0.85rem;
 		font-weight: 600;
 		text-decoration: none;
-		transition: background-color 0.2s ease, color 0.2s ease;
-	}
-	.btn svg {
-		margin-right: 0.25rem;
+		transition:
+			background-color 0.2s ease,
+			color 0.2s ease;
 	}
 	.btn-primary {
 		background-color: var(--accent-color, #3a8bf7);
@@ -2175,7 +2314,7 @@
 		border: 1px solid var(--ui-border, #444);
 	}
 	.btn-tertiary:hover {
-		background-color: rgba(255,255,255,0.1);
+		background-color: rgba(255, 255, 255, 0.1);
 		color: #fff;
 	}
 	.filing-row {
@@ -2201,5 +2340,38 @@
 		padding: 0.15rem 0.3rem;
 		font-size: 0.7rem;
 		height: 1.3rem;
+	}
+
+	.chart-switching-overlay {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.4);
+		z-index: 500; /* Above chart but below legend and UI elements */
+		opacity: 0;
+		animation: fadeInOverlay 0.2s ease-out forwards;
+		pointer-events: none; /* Allow clicks to pass through */
+	}
+
+	@keyframes fadeInOverlay {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
+
+	@keyframes fadeInDown {
+		from {
+			opacity: 0;
+			transform: translate(-50%, calc(-100% - 5px)); /* Start slightly lower than final */
+		}
+		to {
+			opacity: 1;
+			transform: translate(-50%, calc(-100% - 15px)); /* End in final position */
+		}
 	}
 </style>

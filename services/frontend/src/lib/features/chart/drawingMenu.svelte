@@ -58,8 +58,7 @@
 			color: color,
 			lineWidth: lineWidth,
 			lineStyle: 0, // Solid line
-			axisLabelVisible: true,
-			title: `Price: ${price}`
+			axisLabelVisible: true
 		});
 		get(drawingMenuProps).horizontalLines.push({
 			id,
@@ -84,9 +83,9 @@
 </script>
 
 <script lang="ts">
-	import '$lib/core/global.css';
+	import '$lib/styles/global.css';
 	import { onMount } from 'svelte';
-	import { privateRequest } from '$lib/core/backend';
+	import { privateRequest } from '$lib/utils/helpers/backend';
 	export let drawingMenuProps: Writable<DrawingMenuProps>;
 
 	let menuElement: HTMLDivElement;
@@ -158,8 +157,7 @@
 		$drawingMenuProps.selectedLine.applyOptions({
 			price,
 			color,
-			lineWidth,
-			title: `Price: ${price}`
+			lineWidth
 		});
 
 		// Update the stored properties in horizontalLines array
@@ -345,6 +343,7 @@
 	<div
 		bind:this={menuElement}
 		role="menu"
+		tabindex="0"
 		on:mousedown={handleClickOutside}
 		on:keydown={handleKeyDown}
 		class="drawing-menu"

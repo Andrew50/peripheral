@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
+	"time"
 )
 
 // GetScreensaversResults represents a structure for handling GetScreensaversResults data.
@@ -34,11 +37,32 @@ type GetInstancesByTickersArgs struct {
 
 // Fetch the snapshot from Polygon.io, attaching the API key
 func fetchPolygonSnapshot(endpoint string, apiKey string) ([]string, error) {
-	// Append the API key to the endpoint
-	fullEndpoint := fmt.Sprintf("%s?apiKey=%s", endpoint, apiKey)
+	// Safely construct the URL
+	parsedURL, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("invalid endpoint URL: %v", err)
+	}
+	query := parsedURL.Query()
+	query.Set("apiKey", apiKey)
+	parsedURL.RawQuery = query.Encode()
+	fullEndpointStr := parsedURL.String()
 
-	// Make the request to Polygon.io
-	resp, err := http.Get(fullEndpoint)
+	// Validate the URL is for an allowed domain (polygon.io)
+	if !strings.HasPrefix(fullEndpointStr, "https://api.polygon.io/") {
+		return nil, fmt.Errorf("invalid endpoint domain, only polygon.io is allowed")
+	}
+
+	// Make the request to Polygon.io with validated URL using http.Client
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	req, err := http.NewRequest("GET", fullEndpointStr, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Polygon snapshot: %v", err)
 	}
@@ -65,12 +89,11 @@ func fetchPolygonSnapshot(endpoint string, apiKey string) ([]string, error) {
 	return tickers, nil
 }
 
-// GetInstancesByTickers retrieves security instances for a list of tickers
-func GetInstancesByTickers(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+// GetInstancesByTickers retrieves screensaver instances by a list of tickers.
+func GetInstancesByTickers(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetInstancesByTickersArgs
-	err := json.Unmarshal(rawArgs, &args)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal arguments: %v", err)
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("error unmarshalling args: %w", err)
 	}
 
 	if len(args.Tickers) == 0 {
@@ -107,8 +130,8 @@ func GetInstancesByTickers(conn *data.Conn, userId int, rawArgs json.RawMessage)
 	return results, nil
 }
 
-// GetScreensavers performs operations related to GetScreensavers functionality.
-func GetScreensavers(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+// GetScreensavers retrieves snapshots of gaining and losing tickers.
+func GetScreensavers(conn *data.Conn, _ int, _ json.RawMessage) (interface{}, error) {
 	// Define Polygon.io endpoints for gainers and losers
 	gainersEndpoint := "https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/gainers"
 	losersEndpoint := "https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/losers"
@@ -122,7 +145,6 @@ func GetScreensavers(conn *data.Conn, userId int, rawArgs json.RawMessage) (inte
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch losers: %v", err)
 	}
-	fmt.Println(losers)
 
 	// Combine gainers and losers
 	tickers := append(gainers, losers...)
@@ -137,25 +159,25 @@ func GetScreensavers(conn *data.Conn, userId int, rawArgs json.RawMessage) (inte
 		FROM securities
 		WHERE ticker = ANY($1) AND maxDate IS NULL`
 
-	rows, err := conn.DB.Query(context.Background(), query, tickers)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute query: %v", err)
+	rowsDb, errDb := conn.DB.Query(context.Background(), query, tickers)
+	if errDb != nil {
+		return nil, fmt.Errorf("failed to execute query: %v", errDb)
 	}
-	defer rows.Close()
+	defer rowsDb.Close()
 
 	var results []GetScreensaversResults
-	for rows.Next() {
+	for rowsDb.Next() {
 		var result GetScreensaversResults
-		err := rows.Scan(&result.Ticker, &result.SecurityID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan row: %v", err)
+		errScan := rowsDb.Scan(&result.Ticker, &result.SecurityID)
+		if errScan != nil {
+			return nil, fmt.Errorf("failed to scan row: %v", errScan)
 		}
 		result.Timestamp = 0 // Set the timestamp to zero
 		results = append(results, result)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating over rows: %v", err)
+	if errRows := rowsDb.Err(); errRows != nil {
+		return nil, fmt.Errorf("error iterating over rows: %v", errRows)
 	}
 
 	return results, nil

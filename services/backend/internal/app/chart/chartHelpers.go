@@ -2,9 +2,9 @@ package chart
 
 import (
 	"fmt"
+	"strconv"
 	"time"
-    "unicode"
-    "strconv"
+	"unicode"
 
 	"github.com/polygon-io/client-go/rest/models"
 )
@@ -13,6 +13,7 @@ import (
 func MillisFromUTCTime(timeObj time.Time) (models.Millis, error) {
 	return models.Millis(timeObj), nil
 }
+
 // TimespanStringToDuration converts a timespan string to a time.Duration
 func TimespanStringToDuration(timespan string) time.Duration {
 	switch timespan {
@@ -101,6 +102,7 @@ func GetTimeframeInSeconds(multiplier int, timeframe string) int64 {
 
 	return 0
 }
+
 // GetTimeFrame performs operations related to GetTimeFrame functionality.
 func GetTimeFrame(timeframeString string) (int, string, string, int, error) {
 	// if no identifer is passed, it means that it should be minute data
@@ -138,7 +140,7 @@ func GetTimeFrame(timeframeString string) (int, string, string, int, error) {
 }
 
 // GetReferenceStartTimeForMonths performs operations related to GetReferenceStartTimeForMonths functionality.
-func GetReferenceStartTimeForMonths(timestamp int64, multiplier int, easternLocation *time.Location) int64 {
+func GetReferenceStartTimeForMonths(timestamp int64, _ int, easternLocation *time.Location) int64 {
 	utcTime := time.Unix(0, timestamp*int64(time.Millisecond)).UTC()
 	nyTime := utcTime.In(easternLocation)
 

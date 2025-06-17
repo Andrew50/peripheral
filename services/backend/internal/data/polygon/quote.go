@@ -6,7 +6,8 @@ import (
 	"backend/internal/data/utils"
 	"context"
 	"fmt"
-	"log"
+
+	//	"log"
 	"time"
 
 	polygon "github.com/polygon-io/client-go/rest"
@@ -22,39 +23,33 @@ import (
 //lint:ignore U1000 kept for future logging control
 type silentLogger struct{}
 
-// Printf implements the logger interface
-// nolint:unused
-//
-//lint:ignore U1000 kept for future logging control
-func (l *silentLogger) Printf(format string, v ...interface{}) {}
+// Printf is a no-op to satisfy the logger interface if needed elsewhere.
+func (l *silentLogger) Printf(_ string, _ ...interface{}) {}
 
-// configurePolygonClient creates a new Polygon client with silent logging
-// nolint:unused
-//
-//lint:ignore U1000 kept for future client configuration
-func configurePolygonClient(apiKey string) *polygon.Client {
-	// Create a new client with the API key
-	return polygon.New(apiKey)
-}
-
-// retryWithBackoff executes the given operation with exponential backoff and optional error logging
-func retryWithBackoff[T any](operation string, ticker string, maxRetries int, shouldLog bool, fn func() (T, error)) (T, error) {
-	var lastErr error
+// retryWithBackoff is a generic utility function to retry an operation with exponential backoff.
+// operation: name of the operation for logging.
+// ticker: ticker symbol, used for logging if shouldLog is true.
+// maxRetries: maximum number of retries.
+// shouldLog: if true, logs retry attempts.
+// fn: the function to execute, which returns a result of type T and an error.
+func retryWithBackoff[T any](operation string, _ string, maxRetries int, _ bool, fn func() (T, error)) (T, error) {
 	var result T
+	var err error
+	var lastLoggedError error // To avoid spamming the same error
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		// Execute the function directly without wrapping it
-		result, err := fn()
+		result, err = fn()
 
 		if err == nil {
 			return result, nil
 		}
-		lastErr = err
+		lastLoggedError = err
 
 		// Only log on the final attempt if logging is enabled
-		if shouldLog && attempt == maxRetries {
-			log.Printf("ERROR Failed to %s for %s after %d attempts: %v", operation, ticker, maxRetries, lastErr)
-		}
+		//if shouldLog && attempt == maxRetries {
+		//log.Printf("ERROR Failed to %s for %s after %d attempts: %v", operation, ticker, maxRetries, lastErr)
+		//}
 
 		if attempt < maxRetries {
 			backoffTime := time.Duration(attempt*2) * time.Second
@@ -62,7 +57,7 @@ func retryWithBackoff[T any](operation string, ticker string, maxRetries int, sh
 		}
 	}
 
-	return result, fmt.Errorf("failed to %s after %d attempts: %v", operation, maxRetries, lastErr)
+	return result, fmt.Errorf("failed to %s after %d attempts: %v", operation, maxRetries, lastLoggedError)
 }
 
 // GetAggsData performs operations related to GetAggsData functionality.
@@ -113,8 +108,8 @@ func GetAggsData(client *polygon.Client, ticker string, multiplier int, timefram
 }
 
 // GetTradeAtTimestamp performs operations related to GetTradeAtTimestamp functionality.
-func GetTradeAtTimestamp(conn *data.Conn, securityId int, timestamp time.Time) (models.Trade, error) {
-	ticker, err := postgres.GetTicker(conn, securityId, timestamp)
+func GetTradeAtTimestamp(conn *data.Conn, securityID int, timestamp time.Time) (models.Trade, error) {
+	ticker, err := postgres.GetTicker(conn, securityID, timestamp)
 	if err != nil {
 		return models.Trade{}, fmt.Errorf("sif20ih %v", err)
 	}
@@ -138,8 +133,8 @@ func GetTradeAtTimestamp(conn *data.Conn, securityId int, timestamp time.Time) (
 }
 
 // GetQuoteAtTimestamp performs operations related to GetQuoteAtTimestamp functionality.
-func GetQuoteAtTimestamp(conn *data.Conn, securityId int, timestamp time.Time) (models.Quote, error) {
-	ticker, err := postgres.GetTicker(conn, securityId, timestamp)
+func GetQuoteAtTimestamp(conn *data.Conn, securityID int, timestamp time.Time) (models.Quote, error) {
+	ticker, err := postgres.GetTicker(conn, securityID, timestamp)
 	if err != nil {
 		return models.Quote{}, fmt.Errorf("doi20 %v", err)
 	}
@@ -253,29 +248,29 @@ func GetLastTrade(client *polygon.Client, ticker string, atLeastFullLot bool) (G
 		}
 
 		return GetLastTradeResponse{}, fmt.Errorf("failed to get last trade after %d attempts: %v", maxRetries, lastErr)
-	} else {
-		params := models.ListTradesParams{
-			Ticker: ticker,
-		}.WithOrder(models.Desc).WithSort(models.Timestamp).WithLimit(1000)
-		iter := client.ListTrades(context.Background(), params)
-		for iter.Next() {
-			trade := iter.Item()
-			if trade.Size >= 100 {
-				return GetLastTradeResponse{
-					Ticker:     ticker,
-					Conditions: trade.Conditions,
-					Timestamp:  trade.ParticipantTimestamp,
-					Price:      trade.Price,
-					Size:       trade.Size,
-					Exchange:   trade.Exchange,
-					Tape:       trade.Tape,
-				}, nil
-			}
-		}
-
 	}
-
-	return GetLastTradeResponse{}, fmt.Errorf("failed to get last trade for %s", ticker)
+	paramsListTrades := models.ListTradesParams{
+		Ticker: ticker,
+	}.WithOrder(models.Desc).WithSort(models.Timestamp).WithLimit(1000)
+	iter := client.ListTrades(context.Background(), paramsListTrades)
+	for iter.Next() {
+		trade := iter.Item()
+		if trade.Size >= 100 {
+			return GetLastTradeResponse{
+				Ticker:     ticker,
+				Conditions: trade.Conditions,
+				Timestamp:  trade.ParticipantTimestamp,
+				Price:      trade.Price,
+				Size:       trade.Size,
+				Exchange:   trade.Exchange,
+				Tape:       trade.Tape,
+			}, nil
+		}
+	}
+	if iter.Err() != nil {
+		return GetLastTradeResponse{}, fmt.Errorf("error iterating trades for %s: %w", ticker, iter.Err())
+	}
+	return GetLastTradeResponse{}, fmt.Errorf("no trade with size >= 100 found in the last 1000 trades for %s", ticker)
 }
 
 // GetTrade performs operations related to GetTrade functionality.
@@ -436,7 +431,6 @@ func GetDailyOpen(client *polygon.Client, ticker string, referenceTime time.Time
 	if err := iter.Err(); err != nil {
 		return 0, fmt.Errorf("error iterating daily data: %v", err)
 	}
-
 	// If no data for today, try getting the first minute bar of the day
 	minuteIter, err := GetAggsData(client, ticker, 1, "minute", startMillis, endMillis, 1, "asc", true)
 	if err != nil {
@@ -455,8 +449,7 @@ func GetDailyOpen(client *polygon.Client, ticker string, referenceTime time.Time
 	return GetMostRecentRegularClose(client, ticker, startOfDay.Add(-time.Nanosecond))
 }
 
-func GetDailyOHLCV(client *polygon.Client, date string, ctx context.Context) (*models.GetGroupedDailyAggsResponse, error) {
-
+func GetAllStocksDailyOHLCV(ctx context.Context, client *polygon.Client, date string) (*models.GetGroupedDailyAggsResponse, error) {
 	on, err := time.Parse("2006-01-02", date)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing date: %v", err)
@@ -473,7 +466,7 @@ func GetDailyOHLCV(client *polygon.Client, date string, ctx context.Context) (*m
 	return res, nil
 }
 
-func GetPolygonTickerSnapshot(client *polygon.Client, ticker string, ctx context.Context) (*models.GetTickerSnapshotResponse, error) {
+func GetPolygonTickerSnapshot(ctx context.Context, client *polygon.Client, ticker string) (*models.GetTickerSnapshotResponse, error) {
 	params := models.GetTickerSnapshotParams{
 		Ticker:     ticker,
 		Locale:     "us",
@@ -485,7 +478,8 @@ func GetPolygonTickerSnapshot(client *polygon.Client, ticker string, ctx context
 	}
 	return res, nil
 }
-func GetPolygonAllTickerSnapshots(client *polygon.Client, ctx context.Context) (*models.GetAllTickersSnapshotResponse, error) {
+
+func GetPolygonAllTickerSnapshots(ctx context.Context, client *polygon.Client) (*models.GetAllTickersSnapshotResponse, error) {
 	params := models.GetAllTickersSnapshotParams{
 		Locale:     "us",
 		MarketType: "stocks",
@@ -497,4 +491,34 @@ func GetPolygonAllTickerSnapshots(client *polygon.Client, ctx context.Context) (
 	return res, nil
 }
 
-// /quote.go
+type GetDailyOHLCVForTickerResponse struct {
+	Open   float64 `json:"open"`
+	High   float64 `json:"high"`
+	Low    float64 `json:"low"`
+	Close  float64 `json:"close"`
+	Volume float64 `json:"volume"`
+	Date   string  `json:"date"`
+}
+
+func GetDailyOHLCVForTicker(ctx context.Context, client *polygon.Client, ticker string, date string, splitAdjusted bool) (GetDailyOHLCVForTickerResponse, error) {
+	on, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return GetDailyOHLCVForTickerResponse{}, fmt.Errorf("error parsing date: %v", err)
+	}
+	params := models.GetDailyOpenCloseAggParams{
+		Ticker: ticker,
+		Date:   models.Date(on),
+	}.WithAdjusted(splitAdjusted)
+	res, err := client.GetDailyOpenCloseAgg(ctx, params)
+	if err != nil {
+		return GetDailyOHLCVForTickerResponse{}, fmt.Errorf("error getting daily open close: %v", err)
+	}
+	return GetDailyOHLCVForTickerResponse{
+		Open:   res.Open,
+		High:   res.High,
+		Low:    res.Low,
+		Close:  res.Close,
+		Volume: res.Volume,
+		Date:   res.From,
+	}, nil
+}

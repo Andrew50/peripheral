@@ -26,7 +26,7 @@ func CalculateBacktestStatistic(conn *data.Conn, userID int, rawArgs json.RawMes
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args for CalculateBacktestStatistic: %v", err)
 	}
-	fmt.Printf("\n\n\nCalculating statistic for strategy %d, column %s, type %s\n", args.StrategyID, args.ColumnName, args.CalculationType)
+	////fmt.Printf("\n\n\nCalculating statistic for strategy %d, column %s, type %s\n", args.StrategyID, args.ColumnName, args.CalculationType)
 	ctx := context.Background()
 	cacheKey := fmt.Sprintf("user:%d:backtest:%d:results", userID, args.StrategyID)
 
@@ -63,17 +63,17 @@ func CalculateBacktestStatistic(conn *data.Conn, userID int, rawArgs json.RawMes
 
 	var values []float64
 	// Iterate through instances and extract values
-	for i, instanceInterface := range instances {
+	for _, instanceInterface := range instances {
 		instance, ok := instanceInterface.(map[string]interface{})
 		if !ok {
-			fmt.Printf("Warning: Instance %d for strategy %d is not a map, skipping.\n", i, args.StrategyID)
+			////fmt.Printf("Warning: Instance %d for strategy %d is not a map, skipping.\n", i, args.StrategyID)
 			continue
 		}
 
 		valueInterface, ok := instance[args.ColumnName]
 		if !ok {
 			// Column might legitimately not exist in some rows, skip silently or log optionally
-			// fmt.Printf("Warning: Column '%s' not found in instance %d for strategy %d.\n", args.ColumnName, i, args.StrategyID)
+			// ////fmt.Printf("Warning: Column '%s' not found in instance %d for strategy %d.\n", args.ColumnName, i, args.StrategyID)
 			continue
 		}
 
@@ -83,7 +83,7 @@ func CalculateBacktestStatistic(conn *data.Conn, userID int, rawArgs json.RawMes
 		// Attempt to convert value to float64
 		valueFloat, ok := value.(float64)
 		if !ok {
-			fmt.Printf("Warning: Value for column '%s' in instance %d for strategy %d is not a float64 (%T), skipping.\n", args.ColumnName, i, args.StrategyID, value)
+			////fmt.Printf("Warning: Value for column '%s' in instance %d for strategy %d is not a float64 (%T), skipping.\n", args.ColumnName, i, args.StrategyID, value)
 			continue
 		}
 		values = append(values, valueFloat)
@@ -169,11 +169,11 @@ func GenerateBacktestTableFromInstruction(ctx context.Context, conn *data.Conn, 
 	}
 
 	// --- Process Instructions ---
-	if len(instruction.Columns) == 0 {
-		// Even if no specific columns requested, we still need the mandatory instance column
-		// return nil, fmt.Errorf("no columns specified in table instruction")
-		fmt.Println("Warning: No specific columns requested in backtest_table instruction, defaulting to Instance column only.")
-	}
+	//	if len(instruction.Columns) == 0 {
+	// Even if no specific columns requested, we still need the mandatory instance column
+	// return nil, fmt.Errorf("no columns specified in table instruction")
+	////fmt.Println("Warning: No specific columns requested in backtest_table instruction, defaulting to Instance column only.")
+	//	}
 
 	var tableHeaders []string
 	var finalRows [][]interface{}
@@ -315,7 +315,7 @@ func processNumericValue(value any) any {
 			return f // Return the float64 if successful
 		}
 		// If AssignTo fails, fall through to map handling or return original
-		fmt.Printf("Warning: Failed to assign pgtype.Numeric to float64: %v\n", err)
+		////fmt.Printf("Warning: Failed to assign pgtype.Numeric to float64: %v\n", err)
 	}
 	// --- END ADDED SECTION ---
 

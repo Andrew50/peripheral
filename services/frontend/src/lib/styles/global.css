@@ -1,0 +1,52 @@
+/*global.css*/
+/*@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+:root {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    font-weight: 400;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: var(--c2);
+    color: var(--f1);
+    min-height: 100vh;
+    margin: 0;
+}
+
+html {
+    background-color: var(--c2);
+}*/
+
+@import './text.css';
+@import './table.css';
+@import './button.css';
+@import './span.css';
+@import './div.css';
+@import './misc.css';
+@import './colors.css';
+@import './input.css';
+@import './select.css';
+@import './glass.css';
+@import './responsive.css';
+
+/* Global responsive settings */
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+}

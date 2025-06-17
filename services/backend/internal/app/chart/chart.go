@@ -2,7 +2,7 @@ package chart
 
 import (
 	"backend/internal/data"
-    "backend/internal/data/utils"
+	"backend/internal/data/utils"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,9 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"backend/internal/data/polygon"
+
 	"github.com/polygon-io/client-go/rest/iter"
 	"github.com/polygon-io/client-go/rest/models"
-    "backend/internal/data/polygon"
 )
 
 // GetChartDataArgs represents a structure for handling GetChartDataArgs data.
@@ -30,13 +31,13 @@ type GetChartDataArgs struct {
 
 // GetChartDataResults represents a structure for handling GetChartDataResults data.
 type GetChartDataResults struct {
-	Timestamp float64      `json:"time"`
-	Open      float64      `json:"open"`
-	High      float64      `json:"high"`
-	Low       float64      `json:"low"`
-	Close     float64      `json:"close"`
-	Volume    float64      `json:"volume"`
-	Events    []ChartEvent `json:"events"`
+	Timestamp float64 `json:"time"`
+	Open      float64 `json:"open"`
+	High      float64 `json:"high"`
+	Low       float64 `json:"low"`
+	Close     float64 `json:"close"`
+	Volume    float64 `json:"volume"`
+	Events    []Event `json:"events"`
 }
 
 // GetChartDataResponse represents a structure for handling GetChartDataResponse data.
@@ -45,8 +46,7 @@ type GetChartDataResponse struct {
 	IsEarliestData bool                  `json:"isEarliestData"`
 }
 
-var debug = false // Flip to `true` to enable verbose debugging output
-// MaxDivisorOf30 performs operations related to MaxDivisorOf30 functionality.
+// MaxDivisorOf30 returns the largest integer k such that k divides n and k also divides 30.
 func MaxDivisorOf30(n int) int {
 	for k := n; k >= 1; k-- {
 		if 30%k == 0 && n%k == 0 {
@@ -57,28 +57,28 @@ func MaxDivisorOf30(n int) int {
 }
 
 // GetChartData performs operations related to GetChartData functionality.
-func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetChartDataArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-	if debug {
-		fmt.Printf("[DEBUG] GetChartData: SecurityID=%d, Timeframe=%s, Direction=%s\n",
-			args.SecurityID, args.Timeframe, args.Direction)
-	}
+	//	if debug {
+	////fmt.Printf("[DEBUG] GetChartData: SecurityID=%d, Timeframe=%s, Direction=%s\n", args.SecurityID, args.Timeframe, args.Direction)
+	//	}
 
 	multiplier, timespan, _, _, err := GetTimeFrame(args.Timeframe)
 	if err != nil {
 		return nil, fmt.Errorf("invalid timeframe: %v", err)
 	}
-	if debug {
-		fmt.Printf("[DEBUG] Parsed timeframe => multiplier=%d, timespan=%s\n", multiplier, timespan)
-	}
+	//if debug {
+	////fmt.Printf("[DEBUG] Parsed timeframe => multiplier=%d, timespan=%s\n", multiplier, timespan)
+	//}
 	// Determine if we must build a higher TF from a lower TF
 	var queryTimespan string
 	var queryMultiplier int
 	var queryBars int
 	var tickerForIncompleteAggregate string
+	var numBarsRequestedPolygon int
 	haveToAggregate := false
 
 	// Special logic for second/minute frames with 30-based constraints
@@ -130,21 +130,25 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 
 	switch {
 	case args.Timestamp == 0:
-		query = `SELECT ticker, minDate, maxDate 
+		query = `SELECT ticker, minDate, maxDate, false as has_earlier_data
                  FROM securities 
                  WHERE securityid = $1
                  ORDER BY minDate DESC NULLS FIRST`
 		queryParams = []interface{}{args.SecurityID}
 		polyResultOrder = "desc"
 	case args.Direction == "backward":
-		query = `SELECT ticker, minDate, maxDate
+		// Use a conservative buffer to account for potential gaps between input timestamp
+		// and actual bar data (market hours, holidays, etc.)
+		bufferTime := inputTimestamp.Add(-72 * time.Hour) // 24-hour buffer for safety
+		query = `SELECT ticker, minDate, maxDate,
+                        EXISTS(SELECT 1 FROM securities s2 WHERE s2.securityid = $1 AND s2.minDate < $2) as has_earlier_data
                  FROM securities 
-                 WHERE securityid = $1 AND (maxDate > $2 OR maxDate IS NULL)
+                 WHERE securityid = $1 AND (maxDate > $3 OR maxDate IS NULL)
                  ORDER BY minDate DESC NULLS FIRST LIMIT 1`
-		queryParams = []interface{}{args.SecurityID, inputTimestamp}
+		queryParams = []interface{}{args.SecurityID, bufferTime, inputTimestamp}
 		polyResultOrder = "desc"
 	case args.Direction == "forward":
-		query = `SELECT ticker, minDate, maxDate
+		query = `SELECT ticker, minDate, maxDate, false as has_earlier_data
                  FROM securities 
                  WHERE securityid = $1 AND (minDate < $2 OR minDate IS NULL)
                  ORDER BY minDate ASC NULLS LAST`
@@ -159,9 +163,9 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 
 	rows, err := conn.DB.Query(ctx, query, queryParams...)
 	if err != nil {
-		if debug {
-			fmt.Printf("[DEBUG] Database query failed: %v\n", err)
-		}
+		//if debug {
+		////fmt.Printf("[DEBUG] Database query failed: %v\n", err)
+		//}
 		if ctx.Err() == context.DeadlineExceeded {
 			return nil, fmt.Errorf("query timed out: %w", err)
 		}
@@ -174,16 +178,17 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		ticker         string
 		minDateFromSQL *time.Time
 		maxDateFromSQL *time.Time
+		hasEarlierData bool
 	}
 
 	// Read all security records into a slice to get the count first
 	var securityRecords []securityRecord
 	for rows.Next() {
 		var record securityRecord
-		if err := rows.Scan(&record.ticker, &record.minDateFromSQL, &record.maxDateFromSQL); err != nil {
-			if debug {
-				fmt.Printf("[DEBUG] Error scanning security record row: %v\n", err)
-			}
+		if err := rows.Scan(&record.ticker, &record.minDateFromSQL, &record.maxDateFromSQL, &record.hasEarlierData); err != nil {
+			//if debug {
+			////fmt.Printf("[DEBUG] Error scanning security record row: %v\n", err)
+			//}
 			return nil, fmt.Errorf("error scanning security data: %w", err)
 		}
 		securityRecords = append(securityRecords, record)
@@ -194,13 +199,46 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 	}
 	rows.Close() // Close rows immediately after reading
 
+	// Filter out security records that are more than a year before the most recent min date
+	// This is especially useful for backward requests to avoid fetching very old data
+	if args.Direction == "backward" && len(securityRecords) > 1 {
+		// Find the most recent minDate among all records
+		var mostRecentMinDate *time.Time
+		for _, record := range securityRecords {
+			if record.minDateFromSQL != nil {
+				if mostRecentMinDate == nil || record.minDateFromSQL.After(*mostRecentMinDate) {
+					mostRecentMinDate = record.minDateFromSQL
+				}
+			}
+		}
+		// THIS IS JUST A TEMP THING UNTIL WE FIX SECURITY TABLE
+		// Filter out records where maxDate is more than 1 year before the most recent minDate
+		if mostRecentMinDate != nil {
+			oneYearBeforeMostRecent := mostRecentMinDate.AddDate(-1, 0, 0)
+			var filteredRecords []securityRecord
+			for _, record := range securityRecords {
+				// Keep record if maxDate is NULL (current/ongoing) or if maxDate is within the year threshold
+				if record.maxDateFromSQL == nil || !record.maxDateFromSQL.Before(oneYearBeforeMostRecent) {
+					filteredRecords = append(filteredRecords, record)
+				}
+			}
+			securityRecords = filteredRecords
+		}
+	}
+
 	// Preallocate capacity for bar data. We'll at most fetch up to args.Bars + small overhead
 	barDataList := make([]GetChartDataResults, 0, args.Bars+10)
 	numBarsRemaining := args.Bars
 
-	if debug {
-		fmt.Printf("[DEBUG] Processing %d security record(s) from DB...\n", len(securityRecords))
+	// Track whether earlier data exists (from the first record, since they're ordered)
+	var isEarliestData bool
+	if len(securityRecords) > 0 && args.Direction == "backward" {
+		isEarliestData = !securityRecords[0].hasEarlierData
 	}
+
+	//if debug {
+	////fmt.Printf("[DEBUG] Processing %d security record(s) from DB...\n", len(securityRecords))
+	//}
 
 	// Now iterate over the fetched security records
 	for _, record := range securityRecords {
@@ -210,7 +248,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		maxDateFromSQL := record.maxDateFromSQL
 
 		tickerForIncompleteAggregate = ticker
-		fmt.Printf("\n [DEBUG]ticker: %s, minDateFromSQL: %v, maxDateFromSQL: %v\n", tickerForIncompleteAggregate, minDateFromSQL, maxDateFromSQL)
+		////fmt.Printf("\n [DEBUG]ticker: %s, minDateFromSQL: %v, maxDateFromSQL: %v\n", tickerForIncompleteAggregate, minDateFromSQL, maxDateFromSQL)
 		// Handle NULL maxDate
 		if maxDateFromSQL == nil {
 			now := time.Now()
@@ -252,31 +290,31 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 				continue
 			}
 		}
-		//fmt.Printf("\n\n%v, %v, %v, %v, %v, %v\n\n", ticker, timespan, multiplier, queryBars, queryStartTime, queryEndTime)
+		//////fmt.Printf("\n\n%v, %v, %v, %v, %v, %v\n\n", ticker, timespan, multiplier, queryBars, queryStartTime, queryEndTime)
 		date1, date2, err := GetRequestStartEndTime(
 			queryStartTime, queryEndTime, args.Direction, timespan, multiplier, queryBars,
 		)
 		if err != nil {
-			if debug {
-				fmt.Printf("[DEBUG] GetRequestStartEndTime failed: %v\n", err)
-			}
+			//if debug {
+			////fmt.Printf("[DEBUG] GetRequestStartEndTime failed: %v\n", err)
+			//}
 			return nil, fmt.Errorf("dkn0 %v", err)
 		}
 
-		if debug {
-			fmt.Printf("[DEBUG] Polygon request for %s: start=%v end=%v aggregator=%v\n",
-				ticker, date1, date2, haveToAggregate)
-		}
+		//if debug {
+		////fmt.Printf("[DEBUG] Polygon request for %s: start=%v end=%v aggregator=%v\n", ticker, date1, date2, haveToAggregate)
+		//}
 
 		// If we have to aggregate (e.g., second->minute, or minute->hour), do so
 		if haveToAggregate {
+			numBarsRequestedPolygon = int(math.Ceil(float64(queryBars*multiplier)/float64(queryMultiplier))) + 10 // 10 bars margin
 			it, err := polygon.GetAggsData(
 				conn.Polygon,
 				ticker,
 				queryMultiplier,
 				queryTimespan,
 				date1, date2,
-				50000,
+				numBarsRequestedPolygon,
 				// For intraday backward queries we typically want ascending data
 				// to handle reaggregation easily (original code used "asc" for aggregator).
 				"asc",
@@ -298,6 +336,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			}
 		} else {
 			// Otherwise, we can directly pull from Polygon at the desired timeframe
+			numBarsRequestedPolygon = queryBars + 10 // 10 bars margin
 			it, err := polygon.GetAggsData(
 				conn.Polygon,
 				ticker,
@@ -305,23 +344,20 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 				queryTimespan,
 				date1,
 				date2,
-				50000,
+				numBarsRequestedPolygon,
 				polyResultOrder,
 				!args.IsReplay,
 			)
 			if err != nil {
-				if debug {
-					fmt.Printf("[DEBUG] Polygon API error: %v\n", err)
-				}
+				//if debug {
+				////fmt.Printf("[DEBUG] Polygon API error: %v\n", err)
+				//}
 				return nil, fmt.Errorf("error fetching data from Polygon: %v", err)
 			}
 
 			for it.Next() {
 				item := it.Item()
 				if it.Err() != nil {
-					if debug {
-						fmt.Printf("[DEBUG] Iterator error: %v\n", it.Err())
-					}
 					return nil, fmt.Errorf("dkn0w")
 				}
 
@@ -354,39 +390,6 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 
 	// If we have some bars, reverse them if needed, then optionally fetch incomplete bar
 	if len(barDataList) > 0 {
-		// Check if we're actually at the earliest data by looking at the earliest timestamp
-		var isEarliestData bool
-		if args.Direction == "backward" {
-			earliestBar := barDataList[0]
-
-			// Create a separate context with a shorter timeout for this quick check
-			checkCtx, checkCancel := context.WithTimeout(context.Background(), 1*time.Second)
-			defer checkCancel()
-
-			// Add index hint and optimize query
-			row := conn.DB.QueryRow(checkCtx, `
-				SELECT EXISTS (
-					SELECT 1 FROM securities 
-					WHERE securityid = $1 
-					AND minDate < $2
-					LIMIT 1
-				)
-			`, args.SecurityID, time.Unix(int64(earliestBar.Timestamp), 0))
-
-			var exists bool
-			err := row.Scan(&exists)
-			if err != nil {
-				if checkCtx.Err() == context.DeadlineExceeded {
-					// If timeout occurs, assume there might be earlier data
-					fmt.Printf("[DEBUG] Timeout occurred while checking earliest data\n")
-					isEarliestData = false
-				} else {
-					return nil, fmt.Errorf("error checking earliest data: %w", err)
-				}
-			} else {
-				isEarliestData = !exists
-			}
-		}
 		// For aggregator logic or forward queries, we skip reversing.
 		if haveToAggregate || args.Direction == "forward" {
 			if args.Direction == "backward" {
@@ -398,7 +401,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 				}
 
 				if (args.Timestamp == 0 && marketStatus != "closed") || args.IsReplay {
-					fmt.Printf("\n\nrequesting incomplete bar\n\n")
+					////fmt.Printf("\n\nrequesting incomplete bar\n\n")
 					incompleteAgg, err := requestIncompleteBar(
 						conn,
 						tickerForIncompleteAggregate,
@@ -423,7 +426,7 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 				}
 			}
 			// Integrate events just before returning for the aggregate/forward case
-			integrateChartEvents(&barDataList, conn, userId, args.SecurityID, args.IncludeSECFilings, multiplier, timespan, args.ExtendedHours, easternLocation)
+			integrateChartEvents(&barDataList, conn, userID, args.SecurityID, args.IncludeSECFilings, multiplier, timespan, args.ExtendedHours, easternLocation)
 			return GetChartDataResponse{
 				Bars:           barDataList,
 				IsEarliestData: isEarliestData,
@@ -434,14 +437,14 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		reverse(barDataList)
 
 		// Possibly append incomplete bar
-		marketStatus, err :=polygon.GetMarketStatus(conn)
+		marketStatus, err := polygon.GetMarketStatus(conn)
 		if err != nil {
 			return nil, fmt.Errorf("issue with market status")
 		}
 		if (args.Timestamp == 0 && marketStatus != "closed") || args.IsReplay {
-			if debug {
-				fmt.Printf("\n\nrequesting incomplete bar\n\n")
-			}
+			//if debug {
+			////fmt.Printf("\n\nrequesting incomplete bar\n\n")
+			//}
 			incompleteAgg, err := requestIncompleteBar(
 				conn,
 				tickerForIncompleteAggregate,
@@ -452,9 +455,9 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 				args.IsReplay,
 				easternLocation,
 			)
-			if debug {
-				fmt.Printf("\n\nincompleteAgg: %v\n\n", incompleteAgg)
-			}
+			//if debug {
+			////fmt.Printf("\n\nincompleteAgg: %v\n\n", incompleteAgg)
+			//}
 			if err != nil {
 				return nil, fmt.Errorf("issue with incomplete aggregate: %v", err)
 			}
@@ -472,16 +475,16 @@ func GetChartData(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 			}
 		}
 		// Integrate events just before returning for the backward case
-		integrateChartEvents(&barDataList, conn, userId, args.SecurityID, args.IncludeSECFilings, multiplier, timespan, args.ExtendedHours, easternLocation)
+		integrateChartEvents(&barDataList, conn, userID, args.SecurityID, args.IncludeSECFilings, multiplier, timespan, args.ExtendedHours, easternLocation)
 		return GetChartDataResponse{
 			Bars:           barDataList,
 			IsEarliestData: isEarliestData,
 		}, nil
 	}
 
-	if debug {
-		fmt.Printf("[DEBUG] No data found. numBarsRemaining=%d\n", numBarsRemaining)
-	}
+	//if debug {
+	////fmt.Printf("[DEBUG] No data found. numBarsRemaining=%d\n", numBarsRemaining)
+	//}
 	return nil, fmt.Errorf("no data found")
 }
 
@@ -502,7 +505,7 @@ func requestIncompleteBar(
 	multiplier int,
 	timespan string,
 	extendedHours bool,
-	isReplay bool,
+	_ bool,
 	easternLocation *time.Location,
 ) (GetChartDataResults, error) {
 
@@ -622,8 +625,6 @@ func requestIncompleteBar(
 			conn, ticker,
 			1, "day",
 			timestampStart, dailyEnd,
-			isReplay,
-			// We do NOT filter extended hours for daily bars. They're daily lumps anyway.
 			false,
 			easternLocation,
 		)
@@ -634,8 +635,7 @@ func requestIncompleteBar(
 			conn, ticker,
 			1, "minute",
 			dailyEnd, minuteEnd,
-			isReplay,
-			!extendedHours, // pass a "filterRegularHours" argument (inverse of extended)
+			extendedHours,
 			easternLocation,
 		)
 	}()
@@ -645,8 +645,7 @@ func requestIncompleteBar(
 			conn, ticker,
 			1, "second",
 			minuteEnd, secondEnd,
-			isReplay,
-			!extendedHours,
+			extendedHours,
 			easternLocation,
 		)
 	}()
@@ -656,7 +655,7 @@ func requestIncompleteBar(
 			conn, ticker,
 			secondEnd, tradeEnd,
 			extendedHours,
-			isReplay,
+			false,
 			easternLocation,
 		)
 	}()
@@ -834,8 +833,7 @@ func fetchAggData(
 	multiplier int,
 	timespan string,
 	startMs, endMs int64,
-	isReplay bool,
-	filterRegularOnly bool,
+	extendedHours bool,
 	easternLocation *time.Location,
 ) ([]models.Agg, error) {
 
@@ -845,7 +843,7 @@ func fetchAggData(
 	start := models.Millis(time.Unix(0, startMs*int64(time.Millisecond)).UTC())
 	end := models.Millis(time.Unix(0, endMs*int64(time.Millisecond)).UTC())
 
-	it, err := polygon.GetAggsData(conn.Polygon, ticker, multiplier, timespan, start, end, 10000, "asc", !isReplay)
+	it, err := polygon.GetAggsData(conn.Polygon, ticker, multiplier, timespan, start, end, 10000, "asc", !extendedHours)
 	if err != nil {
 		return nil, err
 	}
@@ -855,7 +853,7 @@ func fetchAggData(
 		agg := it.Item()
 		ts := time.Time(agg.Timestamp).In(easternLocation)
 
-		if filterRegularOnly {
+		if !extendedHours {
 			if !utils.IsTimestampRegularHours(ts) {
 				continue
 			}
@@ -871,7 +869,7 @@ func fetchTrades(
 	ticker string,
 	startMs, endMs int64,
 	extendedHours bool,
-	isReplay bool,
+	_ bool,
 	easternLocation *time.Location,
 ) ([]models.Trade, error) {
 
@@ -1001,7 +999,7 @@ func alignTimestampToStartOfBar(eventMs int64, multiplier int, timespan string, 
 
 	// Ensure location is not nil, fallback to UTC if necessary to prevent panics
 	if loc == nil {
-		fmt.Println("Warning: Eastern location was nil in alignTimestampToStartOfBar, falling back to UTC.")
+		////fmt.Println("Warning: Eastern location was nil in alignTimestampToStartOfBar, falling back to UTC.")
 		loc = time.UTC
 	}
 
@@ -1012,18 +1010,18 @@ func alignTimestampToStartOfBar(eventMs int64, multiplier int, timespan string, 
 			// Event is before the calculated reference start for the day.
 			// This might happen for events near midnight or if reference logic has edge cases.
 			// Aligning to the reference start might be the most reasonable approach.
-			fmt.Printf("Warning: Event timestamp %d ms is before its reference start %d ms for %s %d. Aligning to reference start.\\n", eventMs, referenceStartMs, timespan, multiplier)
+			////fmt.Printf("Warning: Event timestamp %d ms is before its reference start %d ms for %s %d. Aligning to reference start.\\n", eventMs, referenceStartMs, timespan, multiplier)
 			return referenceStartMs / 1000
 		}
 
 		// Ensure timeframeSeconds is valid before calculating milliseconds or dividing
 		if timeframeSeconds <= 0 {
-			fmt.Printf("Warning: Invalid timeframeSeconds %d calculated for %s %d. Using 60s fallback for alignment.\\n", timeframeSeconds, timespan, multiplier)
+			////fmt.Printf("Warning: Invalid timeframeSeconds %d calculated for %s %d. Using 60s fallback for alignment.\\n", timeframeSeconds, timespan, multiplier)
 			timeframeSeconds = 60 // Fallback to 60 seconds
 		}
 		tfMillis := int64(timeframeSeconds) * 1000
 		if tfMillis <= 0 {
-			fmt.Printf("Warning: Invalid timeframeMillis %d. Using 60000ms fallback.\\n", tfMillis)
+			////fmt.Printf("Warning: Invalid timeframeMillis %d. Using 60000ms fallback.\\n", tfMillis)
 			tfMillis = 60000 // Prevent division by zero or negative values
 		}
 
@@ -1039,7 +1037,7 @@ func alignTimestampToStartOfBar(eventMs int64, multiplier int, timespan string, 
 		case "month":
 			barStartMs = GetReferenceStartTimeForMonths(eventMs, multiplier, loc)
 		default:
-			fmt.Printf("Warning: Unknown timespan '%s' in alignTimestampToStartOfBar. Falling back to UTC day alignment.\\n", timespan)
+			////fmt.Printf("Warning: Unknown timespan '%s' in alignTimestampToStartOfBar. Falling back to UTC day alignment.\\n", timespan)
 			// Fallback: align to UTC day start
 			t := time.UnixMilli(eventMs).UTC()
 			barStartMs = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC).UnixMilli()
@@ -1052,7 +1050,7 @@ func alignTimestampToStartOfBar(eventMs int64, multiplier int, timespan string, 
 func integrateChartEvents(
 	barDataList *[]GetChartDataResults, // Pointer to modify the slice
 	conn *data.Conn,
-	userId int,
+	userID int,
 	securityID int,
 	includeSECFilings bool,
 	multiplier int,
@@ -1081,7 +1079,7 @@ func integrateChartEvents(
 
 	// Check if sorting resulted in valid timestamps
 	if len(tempSortedBars) == 0 {
-		fmt.Println("Warning: No valid bars after sorting for event fetching.")
+		////fmt.Println("Warning: No valid bars after sorting for event fetching.")
 		return
 	}
 
@@ -1090,13 +1088,13 @@ func integrateChartEvents(
 
 	// Validate timestamps before proceeding
 	if math.IsNaN(minTsSec) || math.IsNaN(maxTsSec) || math.IsInf(minTsSec, 0) || math.IsInf(maxTsSec, 0) {
-		fmt.Printf("Warning: Invalid min/max timestamps after sorting: min=%f, max=%f. Cannot fetch events.\\n", minTsSec, maxTsSec)
+		////fmt.Printf("Warning: Invalid min/max timestamps after sorting: min=%f, max=%f. Cannot fetch events.\\n", minTsSec, maxTsSec)
 		return
 	}
 
 	chartTimeframeInSeconds := GetTimeframeInSeconds(multiplier, timespan)
 	if chartTimeframeInSeconds <= 0 {
-		fmt.Printf("Warning: Cannot fetch events due to invalid timeframeSeconds: %d for %s %d\\n", chartTimeframeInSeconds, timespan, multiplier)
+		////fmt.Printf("Warning: Cannot fetch events due to invalid timeframeSeconds: %d for %s %d\\n", chartTimeframeInSeconds, timespan, multiplier)
 		return
 	}
 
@@ -1106,10 +1104,10 @@ func integrateChartEvents(
 	toMs := int64((maxTsSec + float64(chartTimeframeInSeconds)) * 1000)
 
 	// 2. Fetch Events
-	chartEvents, err := fetchChartEventsInRange(conn, userId, securityID, fromMs, toMs, includeSECFilings, true)
+	chartEvents, err := fetchChartEventsInRange(conn, userID, securityID, fromMs, toMs, includeSECFilings, true)
 	if err != nil {
 		// Log the error but don't fail the whole chart request
-		fmt.Printf("Warning: Failed to fetch chart events for secId %d between %d and %d: %v. Returning bars without events.\\n", securityID, fromMs, toMs, err)
+		////fmt.Printf("Warning: Failed to fetch chart events for secId %d between %d and %d: %v. Returning bars without events.\\n", securityID, fromMs, toMs, err)
 		return // Continue without events
 	}
 
@@ -1118,7 +1116,7 @@ func integrateChartEvents(
 	}
 
 	// 3. Map Events to Bar Timestamps (using Unix seconds as key)
-	eventsByTimestamp := make(map[int64][]ChartEvent)
+	eventsByTimestamp := make(map[int64][]Event)
 	for _, event := range chartEvents {
 		// Align the event timestamp (UTC ms) to its corresponding bar's start time (Unix seconds)
 		barStartTimeSec := alignTimestampToStartOfBar(event.Timestamp, multiplier, timespan, extendedHours, easternLocation)
@@ -1133,7 +1131,7 @@ func integrateChartEvents(
 			// Ensure the Events slice is initialized before appending
 			if bars[i].Events == nil {
 				// Pre-allocate with approximate capacity if possible
-				bars[i].Events = make([]ChartEvent, 0, len(eventsToAdd))
+				bars[i].Events = make([]Event, 0, len(eventsToAdd))
 			}
 			bars[i].Events = append(bars[i].Events, eventsToAdd...)
 		}

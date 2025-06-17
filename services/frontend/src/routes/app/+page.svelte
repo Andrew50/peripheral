@@ -1,26 +1,27 @@
 <script lang="ts">
-	import '$lib/core/global.css';
+	import '$lib/styles/global.css';
 	import ChartContainer from '$lib/features/chart/chartContainer.svelte';
 	import Alerts from '$lib/features/alerts/alert.svelte';
-	import RightClick from '$lib/utils/popups/rightClick.svelte';
-	import StrategiesPopup from '$lib/utils/popups/strategiesPopup.svelte';
-	import Input from '$lib/utils/popups/input.svelte';
+	import RightClick from '$lib/components/rightClick.svelte';
+	import StrategiesPopup from '$lib/components/strategiesPopup.svelte';
+	import Input from '$lib/components/input/input.svelte';
+	import ExtendedHoursToggle from '$lib/components/extendedHoursToggle/extendedHoursToggle.svelte';
 	//import Similar from '$lib/features/similar/similar.svelte';
 	//import Study from '$lib/features/study.svelte';
-	import Watchlist from '$lib/features/watchlist.svelte';
+	import Watchlist from '$lib/features/watchlist/watchlist.svelte';
 	//import TickerInfo from '$lib/features/quotes/tickerInfo.svelte';
 	import Quote from '$lib/features/quotes/quote.svelte';
-	import Algo from '$lib/utils/popups/algo.svelte';
-	import { activeMenu, changeMenu } from '$lib/core/stores';
+	//import Algo from '$lib/components/algo.svelte';
+	import { activeMenu, changeMenu } from '$lib/utils/stores/stores';
 
 	// Windows that will be opened in draggable divs
-	import Screener from '$lib/features/screen.svelte';
-	import Account from '$lib/features/account.svelte';
+	import Screener from '$lib/features/screener/screener.svelte';
+	import Account from '$lib/features/account/account.svelte';
 	import Strategies from '$lib/features/strategies/strategies.svelte';
-	import Settings from '$lib/features/settings.svelte';
-	import News from '$lib/features/news.svelte';
-    import Deploy from '$lib/features/deploy.svelte'
-    import Backtest from '$lib/features/backtest.svelte'
+	import Settings from '$lib/features/settings/settings.svelte';
+	import News from '$lib/features/news/news.svelte';
+	import Deploy from '$lib/features/deploy/deploy.svelte';
+	import Backtest from '$lib/features/backtest/backtest.svelte';
 
 	// Replay logic
 	import {
@@ -31,40 +32,57 @@
 		changeSpeed,
 		nextDay
 	} from '$lib/utils/stream/interface';
-	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
+	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { browser } from '$app/environment';
 	import { onMount, onDestroy } from 'svelte';
-	import { privateRequest } from '$lib/core/backend';
+	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
+	import { get } from 'svelte/store';
 	import {
 		initStores,
 		streamInfo,
 		formatTimestamp,
 		dispatchMenuChange,
 		menuWidth,
-		settings
-	} from '$lib/core/stores';
+		settings,
+		isPublicViewing as isPublicViewingStore
+	} from '$lib/utils/stores/stores';
 	import { writable, type Writable } from 'svelte/store';
-	import { colorSchemes, applyColorScheme } from '$lib/core/styles/colorSchemes';
+	import { colorSchemes, applyColorScheme } from '$lib/styles/colorSchemes';
 
 	// Import Instance from types
-	import type { Instance } from '$lib/core/types';
+	import type { Instance } from '$lib/utils/types/types';
 
 	// Add import near the top with other imports
-	import Screensaver from '$lib/features/screensaver.svelte';
+	// import Screensaver from '$lib/features/screensaver/screensaver.svelte';
 
 	// Add new import for Query component
 	import Query from '$lib/features/chat/chat.svelte';
 
 	import { requestChatOpen } from '$lib/features/chat/interface'; // Import the store
 
+	// Import the standalone calendar component
+	import Calendar from '$lib/components/calendar/calendar.svelte';
+
+	// Import auth modal
+	import AuthModal from '$lib/components/authModal.svelte';
+	import { authModalStore, hideAuthModal } from '$lib/stores/authModal';
+
+	// Import extended hours toggle store
+	import {
+		extendedHoursToggleVisible,
+		hideExtendedHoursToggle,
+		activeChartInstance
+	} from '$lib/features/chart/interface';
+
 	//type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
-	type Menu = 'none' | 'watchlist' | 'alerts'  | 'news';
+	type Menu = 'none' | 'watchlist' | 'alerts' | 'news';
 
 	let lastSidebarMenu: Menu | null = null;
 	let sidebarWidth = 0;
 	//const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'news'];
-	const sidebarMenus: Menu[] = ['watchlist', 'alerts',  'news'];
+	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'news'];
 
 	// Initialize chartWidth with a default value
 	let chartWidth = 0;
@@ -76,10 +94,10 @@
 		//| 'options'
 		| 'strategies'
 		| 'settings'
-        | 'deploy'
-        | 'backtest'
+		| 'deploy'
+		| 'backtest'
 		//| 'news'
-		| 'query'
+		| 'query';
 	interface BottomWindow {
 		id: number;
 		type: BottomWindowType;
@@ -117,14 +135,41 @@
 	const MIN_TICKER_HEIGHT = 100;
 	const MAX_TICKER_HEIGHT = 600;
 
+	// DEPRECATED: Screensaver functionality
 	// Add state variables after other state declarations
-	let screensaverActive = false;
-	let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
-	const INACTIVITY_TIMEOUT = 5 * 1000; // 5 seconds in milliseconds
+	// let screensaverActive = false;
+	// let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+	// const INACTIVITY_TIMEOUT = 5 * 1000; // 5 seconds in milliseconds
 
 	// Add left sidebar state variables next to the other state variables
 	let leftMenuWidth = 550; // <-- Set initial width to 300
 	let leftResizing = false;
+
+	// Calendar state
+	let calendarVisible = false;
+
+	// Public viewing mode state - initialize from URL parameters synchronously
+	let isPublicViewing = false;
+	let sharedConversationId = '';
+
+	// Check for shared conversation parameter immediately (before component mounts)
+	if (browser && $page?.url?.searchParams) {
+		const shareParam = $page.url.searchParams.get('share');
+		if (shareParam) {
+			isPublicViewing = true;
+			sharedConversationId = shareParam;
+			// Update the global store so other components know we're in public viewing mode
+			isPublicViewingStore.set(true);
+		}
+	}
+
+	// Import and call connect after isPublicViewing is set
+	import { connect } from '$lib/utils/stream/socket';
+	connect();
+
+	// DEPRECATED: Screensaver import
+	// Add import near the top with other imports
+	// import Screensaver from '$lib/features/screensaver/screensaver.svelte';
 
 	// Apply color scheme reactively based on the store
 	$: if ($settings.colorScheme && browser) {
@@ -152,17 +197,48 @@
 	function updateChartWidth() {
 		if (browser) {
 			const rightSidebarWidth = $menuWidth;
-			const maxRightSidebarWidth = Math.min(800, window.innerWidth - 60);
-			const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 60);
+			const maxRightSidebarWidth = Math.min(600, window.innerWidth - 45); // Restored to 600px
+			const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
 
 			// Only reduce chart width if sidebar widths are within bounds
 			if (rightSidebarWidth <= maxRightSidebarWidth && leftMenuWidth <= maxLeftSidebarWidth) {
-				chartWidth = window.innerWidth - rightSidebarWidth - leftMenuWidth - 60;
+				chartWidth = window.innerWidth - rightSidebarWidth - leftMenuWidth - 45;
 			}
 		}
 	}
 
-	let keydownHandler: (event: KeyboardEvent) => void;
+	// Define the keydown handler with a stable reference outside of onMount
+	const keydownHandler = (event: KeyboardEvent) => {
+		// Check if input window is active - don't handle keyboard events when input is active
+		const inputWindow = document.getElementById('input-window');
+		const hiddenInput = document.getElementById('hidden-input');
+
+		// Don't interfere with the input component's keyboard events
+		//if (inputWindow || hiddenInput === document.activeElement) {
+		if (hiddenInput === document.activeElement) {
+			return;
+		}
+
+		// Only handle events when no element is focused or body is focused
+		if (!document.activeElement || document.activeElement === document.body) {
+			const chartContainer = document.getElementById(`chart_container-0`); // Assuming first chart has ID 0
+
+			if (chartContainer) {
+				// Focus the chart container
+				chartContainer.focus();
+
+				// Get the native event handlers from the chart container
+				const nativeHandlers = (chartContainer as any)._svelte?.events?.keydown;
+
+				if (nativeHandlers) {
+					// Call each handler directly with the original event
+					nativeHandlers.forEach((handler: Function) => {
+						handler.call(chartContainer, event);
+					});
+				}
+			}
+		}
+	};
 
 	onMount(() => {
 		// Load profile data FIRST, before doing anything else
@@ -205,78 +281,33 @@
 			updateChartWidth();
 			window.addEventListener('resize', updateChartWidth);
 
-			// Define the keydown handler
-			keydownHandler = (event: KeyboardEvent) => {
-				// Check if input window is active - don't handle keyboard events when input is active
-				const inputWindow = document.getElementById('input-window');
-				const hiddenInput = document.getElementById('hidden-input');
-
-				// Don't interfere with the input component's keyboard events
-				//if (inputWindow || hiddenInput === document.activeElement) {
-				if (hiddenInput === document.activeElement) {
-					return;
-				}
-
-				// Only handle events when no element is focused or body is focused
-				if (!document.activeElement || document.activeElement === document.body) {
-					const chartContainer = document.getElementById(`chart_container-0`); // Assuming first chart has ID 0
-
-					if (chartContainer) {
-						// Focus the chart container
-						chartContainer.focus();
-
-						// Get the native event handlers from the chart container
-						const nativeHandlers = (chartContainer as any)._svelte?.events?.keydown;
-
-						if (nativeHandlers) {
-							// Call each handler directly with the original event
-							nativeHandlers.forEach((handler: Function) => {
-								handler.call(chartContainer, event);
-							});
-						}
-					}
-				}
-			};
-
-			// Add global keyboard event listener
-			document.removeEventListener('keydown', keydownHandler); // Remove any existing listener first
+			// Add global keyboard event listener with stable function reference
 			document.addEventListener('keydown', keydownHandler);
 		}
-		privateRequest<string>('verifyAuth', {}).catch(() => {
-			goto('/login');
-		});
+
+		// Handle authentication based on public viewing mode (already determined above)
+		if (!isPublicViewing) {
+			// Normal auth flow for regular users
+			privateRequest<string>('verifyAuth', {}).catch(() => {
+				goto('/login');
+			});
+		} else {
+			console.log('Public viewing mode for conversation:', sharedConversationId);
+		}
+
 		initStores();
 
 		dispatchMenuChange.subscribe((menuName: string) => {
 			if (sidebarMenus.includes(menuName as Menu)) {
 				toggleMenu(menuName as Menu);
 			}
-        });
+		});
 
 		// Force profile display to update
 		currentProfileDisplay = calculateProfileDisplay();
 
 		// Force refresh of the profile icon
 		profileIconKey++;
-
-		// Setup activity listeners
-		if (browser) {
-			// Use more specific events that indicate user activity
-			const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
-
-			// Remove any existing listeners first to avoid duplicates
-			activityEvents.forEach((event) => {
-				document.removeEventListener(event, resetInactivityTimer);
-			});
-
-			// Add the listeners
-			activityEvents.forEach((event) => {
-				document.addEventListener(event, resetInactivityTimer);
-			});
-
-			// Initialize the timer
-			resetInactivityTimer();
-		}
 
 		// Clean up subscription on component destroy
 		return () => {
@@ -285,23 +316,25 @@
 	});
 
 	onDestroy(() => {
-		if (inactivityTimer) {
-			clearTimeout(inactivityTimer);
-		}
+		// DEPRECATED: Screensaver inactivity timer cleanup
+		// if (inactivityTimer) {
+		// 	clearTimeout(inactivityTimer);
+		// }
 
 		// Clean up all activity listeners
 		if (browser && document) {
 			window.removeEventListener('resize', updateChartWidth);
-			// Remove global keyboard event listener using the stored handler
+			// Remove global keyboard event listener using the stable function reference
 			document.removeEventListener('keydown', keydownHandler);
 			stopSidebarResize();
 			stopLeftResize();
 
+			// DEPRECATED: Clean up screensaver activity listeners
 			// Clean up all activity listeners
-			const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
-			activityEvents.forEach((event) => {
-				document.removeEventListener(event, resetInactivityTimer);
-			});
+			// const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
+			// activityEvents.forEach((event) => {
+			// 	document.removeEventListener(event, resetInactivityTimer);
+			// });
 		}
 	});
 
@@ -314,7 +347,7 @@
 		} else {
 			// Open new menu
 			lastSidebarMenu = null;
-			menuWidth.set(300); // Or whatever your default width is
+			menuWidth.set(180); // Reduced from 225 to 180 (smaller sidebar)
 			changeMenu(menuName);
 		}
 
@@ -328,8 +361,8 @@
 
 	// Sidebar resizing
 	let resizing = false;
-	let minWidth = 200;
-	let maxWidth = 600;
+	let minWidth = 120; // Reduced from 150 to 120 (smaller minimum)
+	let maxWidth = 600; // Restored to 600px maximum
 
 	function startResize(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
@@ -352,8 +385,8 @@
 		}
 
 		// Calculate width from right edge of window, excluding the sidebar buttons width
-		let newWidth = window.innerWidth - clientX - 60; // 60px is the width of sidebar buttons
-		const maxSidebarWidth = Math.min(800, window.innerWidth - 60);
+		let newWidth = window.innerWidth - clientX - 45; // 45px is the width of sidebar buttons
+		const maxSidebarWidth = Math.min(600, window.innerWidth - 45); // Restored to 600px max
 
 		// Store state before closing
 		if (newWidth < minWidth && lastSidebarMenu !== null) {
@@ -458,6 +491,10 @@
 				resumeReplay();
 			}
 		}
+	}
+
+	function handleCalendar() {
+		calendarVisible = true;
 	}
 
 	function handlePause() {
@@ -668,26 +705,27 @@
 		document.removeEventListener('touchend', stopSidebarResize);
 	}
 
+	// DEPRECATED: Screensaver functions
 	// Add function after other function declarations
-	function resetInactivityTimer() {
-		if (inactivityTimer) {
-			clearTimeout(inactivityTimer);
-		}
-		if (!screensaverActive) {
-			inactivityTimer = setTimeout(() => {
-				// Only activate screensaver, don't hide the chart
-				screensaverActive = true;
-			}, INACTIVITY_TIMEOUT);
-		}
-	}
+	// function resetInactivityTimer() {
+	// 	if (inactivityTimer) {
+	// 		clearTimeout(inactivityTimer);
+	// 	}
+	// 	if (!screensaverActive) {
+	// 		inactivityTimer = setTimeout(() => {
+	// 			// Only activate screensaver, don't hide the chart
+	// 			screensaverActive = true;
+	// 		}, INACTIVITY_TIMEOUT);
+	// 	}
+	// }
 
-	function toggleScreensaver() {
-		screensaverActive = !screensaverActive;
-		// If turning off screensaver, reset the inactivity timer
-		if (!screensaverActive) {
-			resetInactivityTimer();
-		}
-	}
+	// function toggleScreensaver() {
+	// 	screensaverActive = !screensaverActive;
+	// 	// If turning off screensaver, reset the inactivity timer
+	// 	if (!screensaverActive) {
+	// 		resetInactivityTimer();
+	// 	}
+	// }
 
 	// Add reactive statements to update the profile icon when data changes
 	$: if (profilePic || username) {
@@ -746,7 +784,7 @@
 
 		// Calculate width from left edge of window
 		let newWidth = clientX;
-		const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 60);
+		const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
 
 		// Manage resize
 		if (newWidth < minWidth) {
@@ -791,9 +829,11 @@
 	}
 </script>
 
+<!-- svelte-ignore a11y-no-noninteractive-element-interactions-->
 <div
 	class="page"
 	role="application"
+	tabindex="-1"
 	on:keydown={(e) => {
 		if (e.key === 'Escape') {
 			minimizeBottomWindow();
@@ -804,7 +844,25 @@
 	<Input />
 	<RightClick />
 	<StrategiesPopup />
-	<Algo />
+	<Calendar bind:visible={calendarVisible} initialTimestamp={$streamInfo.timestamp} />
+	<Calendar bind:visible={calendarVisible} initialTimestamp={$streamInfo.timestamp} />
+	<ExtendedHoursToggle
+		instance={$activeChartInstance || {}}
+		visible={$extendedHoursToggleVisible}
+		on:change={() => hideExtendedHoursToggle()}
+		on:close={() => hideExtendedHoursToggle()}
+	/>
+	<AuthModal
+		visible={$authModalStore.visible}
+		defaultMode={$authModalStore.mode}
+		requiredFeature={$authModalStore.requiredFeature}
+		on:success={() => {
+			hideAuthModal();
+			// Optional: refresh page or update auth state
+		}}
+		on:close={hideAuthModal}
+	/>
+	<!--<Algo />-->
 	<!-- Main area wrapper -->
 	<div class="app-container">
 		<div class="content-wrapper">
@@ -813,7 +871,7 @@
 				<div class="left-sidebar" style="width: {leftMenuWidth}px;">
 					<div class="sidebar-content">
 						<div class="main-sidebar-content">
-							<Query />
+							<Query {isPublicViewing} {sharedConversationId} />
 						</div>
 					</div>
 					<div
@@ -833,9 +891,10 @@
 				<!-- Chart area -->
 				<div class="chart-wrapper">
 					<ChartContainer width={chartWidth} />
-					{#if screensaverActive}
+					<!-- DEPRECATED: Screensaver functionality -->
+					<!-- {#if screensaverActive}
 						<Screensaver on:exit={() => (screensaverActive = false)} />
-					{/if}
+					{/if} -->
 				</div>
 
 				<!-- Bottom windows container -->
@@ -847,14 +906,10 @@
 									<Screener />
 								{:else if w.type === 'strategies'}
 									<Strategies />
-								{:else if w.type === 'account'}
-									<Account />
+									<!-- {:else if w.type === 'account'}
+									<Account /> -->
 								{:else if w.type === 'settings'}
 									<Settings />
-								{:else if w.type === 'backtest'}
-                                <Backtest/>
-								{:else if w.type === 'deploy'}
-                                <Deploy/>
 								{/if}
 							</div>
 						</div>
@@ -891,10 +946,10 @@
 								<Watchlist />
 							{:else if $activeMenu === 'alerts'}
 								<Alerts />
-							<!--{:else if $activeMenu === 'study'}
+								<!--{:else if $activeMenu === 'study'}
 								<Study />-->
-							{:else if $activeMenu === 'news'}
-								<News />
+								<!--{:else if $activeMenu === 'news'}
+								<News />-->
 							{/if}
 						</div>
 
@@ -938,7 +993,15 @@
 				on:click={toggleLeftPane}
 				title="AI Query"
 			>
-				<img src="query.png" alt="AI Query" class="menu-icon" />
+				<svg class="chat-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path
+						d="M8 12H8.01M12 12H12.01M16 12H16.01M21 12C21 16.418 16.97 20 12 20C10.89 20 9.84 19.8 8.87 19.42L3 21L4.58 15.13C4.2 14.16 4 13.11 4 12C4 7.582 8.03 4 12 4C16.97 4 21 7.582 21 12Z"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
+				</svg>
 			</button>
 			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'strategies') ? 'active' : ''}"
@@ -947,35 +1010,38 @@
 				Strategies
 			</button>
 			<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'backtest') ? 'active' : ''}"
-				on:click={() => openBottomWindow('backtest')}
-			>
-				Backtest
-			</button>
-			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'screener') ? 'active' : ''}"
 				on:click={() => openBottomWindow('screener')}
 			>
 				Screener
-			</button>	<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'deploy') ? 'active' : ''}"
-				on:click={() => openBottomWindow('deploy')}
-			>
-				Deploy
 			</button>
-			<button
+			<!-- <button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'account') ? 'active' : ''}"
 				on:click={() => openBottomWindow('account')}
 			>
 				Account
-			</button>
-
+			</button> -->
 		</div>
 
 		<div class="bottom-bar-right">
+			<!-- Calendar button for timestamp selection -->
+			<button class="toggle-button calendar-button" on:click={handleCalendar} title="Go to Date">
+				<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path
+						d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V8H19V19ZM7 10H12V15H7V10Z"
+						stroke="currentColor"
+						stroke-width="1.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
+				</svg>
+			</button>
+
 			<!-- Combined replay button -->
 			<button
-				class="toggle-button replay-button { !$streamInfo.replayActive || $streamInfo.replayPaused ? 'play' : 'pause' }"
+				class="toggle-button replay-button {!$streamInfo.replayActive || $streamInfo.replayPaused
+					? 'play'
+					: 'pause'}"
 				on:click={() => {
 					if (!$streamInfo.replayActive) {
 						handlePlay();
@@ -985,26 +1051,50 @@
 						handlePause();
 					}
 				}}
-				title={$streamInfo.replayActive && !$streamInfo.replayPaused ? 'Pause Replay' : 'Start/Resume Replay'}
+				title={$streamInfo.replayActive && !$streamInfo.replayPaused
+					? 'Pause Replay'
+					: 'Start/Resume Replay'}
 			>
 				{#if !$streamInfo.replayActive}
-					<svg viewBox="0 0 24 24"><path d="M8,5.14V19.14L19,12.14L8,5.14Z" /></svg> <span>Replay</span>
+					<svg viewBox="0 0 24 24"><path d="M8,5.14V19.14L19,12.14L8,5.14Z" /></svg>
+					<span>Replay</span>
 				{:else if $streamInfo.replayPaused}
-					<svg viewBox="0 0 24 24"><path d="M8,5.14V19.14L19,12.14L8,5.14Z" /></svg> <span>Play</span>
+					<svg viewBox="0 0 24 24"><path d="M8,5.14V19.14L19,12.14L8,5.14Z" /></svg>
+					<span>Play</span>
 				{:else}
-					<svg viewBox="0 0 24 24"><path d="M14,19H18V5H14M6,19H10V5H6V19Z" /></svg> <span>Pause</span>
+					<svg viewBox="0 0 24 24"><path d="M14,19H18V5H14M6,19H10V5H6V19Z" /></svg>
+					<span>Pause</span>
 				{/if}
 			</button>
 
 			{#if $streamInfo.replayActive}
 				<button class="toggle-button replay-button stop" on:click={handleStop} title="Stop Replay">
-					<svg viewBox="0 0 24 24"><path d="M18,18H6V6H18V18Z" /></svg> <!-- Stop Icon -->
+					<svg viewBox="0 0 24 24"><path d="M18,18H6V6H18V18Z" /></svg>
+					<!-- Stop Icon -->
 				</button>
-				<button class="toggle-button replay-button reset" on:click={handleReset} title="Reset Replay">
-					<svg viewBox="0 0 24 24"><path d="M12,5V1L7,6L12,11V8C15.31,8 18,10.69 18,14C18,17.31 15.31,20 12,20C8.69,20 6,17.31 6,14H4C4,18.42 7.58,22 12,22C16.42,22 20,18.42 20,14C20,9.58 16.42,6 12,6V5Z" /></svg> <!-- Reset Icon (e.g., refresh) -->
+				<button
+					class="toggle-button replay-button reset"
+					on:click={handleReset}
+					title="Reset Replay"
+				>
+					<svg viewBox="0 0 24 24"
+						><path
+							d="M12,5V1L7,6L12,11V8C15.31,8 18,10.69 18,14C18,17.31 15.31,20 12,20C8.69,20 6,17.31 6,14H4C4,18.42 7.58,22 12,22C16.42,22 20,18.42 20,14C20,9.58 16.42,6 12,6V5Z"
+						/></svg
+					>
+					<!-- Reset Icon (e.g., refresh) -->
 				</button>
-				<button class="toggle-button replay-button next-day" on:click={handleNextDay} title="Next Day">
-					<svg viewBox="0 0 24 24"><path d="M14,19.14V4.86L11,7.86L9.59,6.45L15.14,0.89L20.7,6.45L19.29,7.86L16,4.86V19.14H14M5,19.14V4.86H3V19.14H5Z" /></svg> <!-- Next Day Icon (e.g., skip next track) -->
+				<button
+					class="toggle-button replay-button next-day"
+					on:click={handleNextDay}
+					title="Next Day"
+				>
+					<svg viewBox="0 0 24 24"
+						><path
+							d="M14,19.14V4.86L11,7.86L9.59,6.45L15.14,0.89L20.7,6.45L19.29,7.86L16,4.86V19.14H14M5,19.14V4.86H3V19.14H5Z"
+						/></svg
+					>
+					<!-- Next Day Icon (e.g., skip next track) -->
 				</button>
 
 				<label class="speed-label">
@@ -1020,7 +1110,6 @@
 				</label>
 			{/if}
 
-			<!-- Current timestamp -->
 			<span class="value">
 				{#if $streamInfo.timestamp !== undefined}
 					{formatTimestamp($streamInfo.timestamp)}
@@ -1028,15 +1117,7 @@
 					Loading Time...
 				{/if}
 			</span>
-
-			<button
-				class="toggle-button {screensaverActive ? 'active' : ''}"
-				on:click={toggleScreensaver}
-				title="Screensaver"
-			>
-				<i class="fas fa-tv"></i>
-			</button>
-
+			-->
 			<button class="profile-button" on:click={toggleSettings} aria-label="Toggle Settings">
 				<!-- Add key to force re-render when the profile changes -->
 				{#key profileIconKey}
@@ -1076,12 +1157,6 @@
 	{/if}
 </div>
 
-<!--/+page.svelte-->
-
-<!--/+page.svelte-->
-
-<!--/+page.svelte-->
-
 <style>
 	.page {
 		width: 100vw;
@@ -1101,7 +1176,7 @@
 		height: 100%;
 		min-height: 0;
 		position: relative;
-		margin-right: 60px;
+		margin-right: 45px;
 	}
 
 	.main-content {
@@ -1143,7 +1218,7 @@
 		position: relative;
 		flex-shrink: 0;
 		border-left: 1px solid var(--ui-border);
-		max-width: min(800px, calc(100vw - 60px)); /* Reduce max width to 500px */
+		max-width: min(600px, calc(100vw - 45px)); /* 600px max sidebar with 45px button bar */
 	}
 
 	.sidebar-buttons {
@@ -1151,14 +1226,14 @@
 		top: 0;
 		right: 0;
 		height: 100vh;
-		width: 60px;
+		width: 45px;
 		display: flex;
 		flex-direction: column;
 		background-color: var(--c2);
 		z-index: 2;
 		flex-shrink: 0;
 		border-right: 1px solid var(--ui-border);
-		max-width: min(800px, calc(100vw - 60px));
+		max-width: min(600px, calc(100vw - 45px)); /* 600px max with 45px button bar */
 	}
 
 	.resize-handle {
@@ -1183,7 +1258,7 @@
 	}
 
 	.side-btn {
-		flex: 0 0 60px;
+		flex: 0 0 45px;
 	}
 
 	.menu-icon {
@@ -1460,25 +1535,17 @@
 
 	/* Query feature button styling */
 	.query-feature {
-		background-color: rgba(0, 123, 255, 0.2);
-		border: 1px solid rgba(0, 123, 255, 0.5) !important;
-		position: relative;
+		/* Remove special styling - use default button styles */
 	}
 
-	.query-feature:not(.active):hover {
-		background-color: rgba(0, 123, 255, 0.4);
+	.chat-icon {
+		width: 20px;
+		height: 20px;
+		color: var(--f1);
 	}
 
-	.query-feature.active {
-		background-color: rgba(0, 123, 255, 0.6);
-		border-color: rgba(0, 123, 255, 0.9) !important;
-	}
-
-	.query-feature .menu-icon {
-		filter: drop-shadow(0 0 2px rgba(0, 123, 255, 0.8));
-	}
-
-	/* Replay button styles */
+	/* Calendar and Replay button styles */
+	.calendar-button,
 	.replay-button {
 		padding: 0.3rem 0.8rem; /* Adjust padding slightly for text */
 		min-width: auto; /* Remove fixed min-width */
@@ -1489,6 +1556,7 @@
 		gap: 0.4rem; /* Add gap between icon and text */
 	}
 
+	.calendar-button svg,
 	.replay-button svg {
 		width: 16px; /* Adjust icon size */
 		height: 16px;
@@ -1516,11 +1584,13 @@
 		/* color: var(--error-color); */
 	}
 
+	.calendar-button:hover,
 	.replay-button:hover {
 		background-color: var(--ui-bg-hover);
 		border-color: var(--ui-border-hover);
 	}
 
+	.calendar-button:active,
 	.replay-button:active {
 		background-color: var(--ui-bg-active);
 		transform: translateY(1px);

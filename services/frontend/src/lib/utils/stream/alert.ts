@@ -1,5 +1,5 @@
-import type { Alert, AlertData, AlertLog } from '$lib/core/types';
-import { activeAlerts, inactiveAlerts, alertLogs, alertPopup } from '$lib/core/stores';
+import type { Alert, AlertData, AlertLog } from '$lib/utils/types/types';
+import { activeAlerts, inactiveAlerts, alertLogs, alertPopup } from '$lib/utils/stores/stores';
 import { get } from 'svelte/store';
 export function handleAlert(data: AlertData) {
 	alertPopup.set(data);

@@ -50,7 +50,7 @@ type xoauth2Auth struct {
 	token    string
 }
 
-func (a *xoauth2Auth) Start(server *smtp.ServerInfo) (string, []byte, error) {
+func (a *xoauth2Auth) Start(_ *smtp.ServerInfo) (string, []byte, error) {
 	auth := fmt.Sprintf("user=%s\001auth=Bearer %s\001\001", a.username, a.token)
 	return "XOAUTH2", []byte(auth), nil
 }
@@ -91,6 +91,7 @@ func SendEmail(to, subject, body string) error {
 	// Create SSL connection
 	conn, err := tls.Dial("tcp", smtpHost+":"+smtpPort, &tls.Config{
 		ServerName: smtpHost,
+		MinVersion: tls.VersionTLS12,
 	})
 	if err != nil {
 		return fmt.Errorf("TLS connection error: %v", err)

@@ -2,21 +2,21 @@
 	import L1 from './l1.svelte';
 	import TimeAndSales from './timeAndSales.svelte';
 	import { get, writable, type Writable } from 'svelte/store';
-	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
-	import type { Instance } from '$lib/core/types';
+	import { queryInstanceInput } from '$lib/components/input/input.svelte';
+	import type { Instance } from '$lib/utils/types/types';
 	import { activeChartInstance, queryChart } from '$lib/features/chart/interface';
 	import StreamCell from '$lib/utils/stream/streamCell.svelte';
-	import { streamInfo, formatTimestamp } from '$lib/core/stores';
+	import { streamInfo, formatTimestamp } from '$lib/utils/stores/stores';
 	import { onMount, onDestroy } from 'svelte';
-	import { privateRequest } from '$lib/core/backend';
+	import { privateRequest } from '$lib/utils/helpers/backend';
 	import {
 		UTCSecondstoESTSeconds,
 		ESTSecondstoUTCSeconds,
 		ESTSecondstoUTCMillis,
 		getReferenceStartTimeForDateMilliseconds,
 		timeframeToSeconds
-	} from '$lib/core/timestamp';
-	import { getExchangeName } from '$lib/core/exchanges';
+	} from '$lib/utils/helpers/timestamp';
+	import { getExchangeName } from '$lib/utils/helpers/exchanges';
 
 	let instance: Writable<Instance> = writable({});
 	let container: HTMLButtonElement;
@@ -201,7 +201,7 @@
 >
 	<div class="content">
 		<!-- Header Section -->
-		<div class="quote-header">
+		<div class="quote-header glass glass--rounded glass--medium">
 			{#if ($instance?.logo || currentDetails?.logo) && !logoLoadError}
 				<div class="logo-container">
 					<img
@@ -218,49 +218,54 @@
 					</div>
 				</div>
 			{/if}
-			<div class="ticker">{$instance.ticker || '--'}</div>
+			<div class="ticker-wrapper">
+				<div class="ticker">{$instance.ticker || '--'}</div>
+				{#if ($instance?.active === false || currentDetails?.active === false)}
+					<div class="warning-triangle-container">
+						<div class="warning-triangle"></div>
+						<div class="tooltip">Delisted</div>
+					</div>
+				{/if}
+			</div>
 			<div class="company-info">
 				<div class="name">{$instance?.name || currentDetails?.name || 'N/A'}</div>
 			</div>
 		</div>
 
 		<!-- Key Metrics Section -->
-		<div class="quote-key-metrics">
-			<div class="metric-item">
+		<div class="quote-key-metrics glass glass--rounded glass--medium">
+			<div class="metric-item glass glass--small glass--light">
 				<span class="label">Price</span>
 				<StreamCell instance={$instance} type="price" />
 			</div>
-			<div class="metric-item">
+			<div class="metric-item glass glass--small glass--light">
 				<span class="label">Change %</span>
 				<StreamCell instance={$instance} type="change %" />
 			</div>
-			<div class="metric-item">
+			<div class="metric-item glass glass--small glass--light">
 				<span class="label">Change</span>
 				<StreamCell instance={$instance} type="change" />
 			</div>
-			<div class="metric-item">
+			<div class="metric-item glass glass--small glass--light">
 				<span class="label">Ext %</span>
 				<StreamCell instance={$instance} type="change % extended" />
 			</div>
 		</div>
 
 		<!-- Market Data Section -->
-		<div class="quote-market-data">
+		<div class="quote-market-data glass glass--rounded glass--medium">
 			<L1 {instance} />
+			<!--
 			<button class="time-sales-button" on:click|stopPropagation={toggleTimeAndSales}>
 				{showTimeAndSales ? 'Hide Time & Sales' : 'Show Time & Sales'}
 			</button>
 			{#if showTimeAndSales}
 				<TimeAndSales {instance} />
-			{/if}
+			{/if} -->
 		</div>
 
 		<!-- Details Section -->
-		<div class="quote-details">
-			<div class="detail-item">
-				<span class="label">Active:</span>
-				<span class="value">{$instance?.active || currentDetails?.active || 'N/A'}</span>
-			</div>
+		<div class="quote-details glass glass--rounded glass--medium">
 			<div class="detail-item">
 				<span class="label">Market Cap:</span>
 				<span class="value">
@@ -305,8 +310,8 @@
 		</div>
 
 		<!-- Countdown Section -->
-		<div class="countdown-section">
-				<div class="countdown-container">
+		<div class="countdown-section glass glass--rounded glass--medium">
+				<div class="countdown-container glass glass--small glass--light">
 					<span class="countdown-label">Next Bar Close:</span>
 					<span class="countdown-value">{$countdown}</span>
 				</div>
@@ -314,7 +319,7 @@
 
 		<!-- Description Section -->
 		{#if $activeChartInstance?.description}
-			<div class="description">
+			<div class="description glass glass--rounded glass--medium">
 				<span class="label">Description:</span>
 				<p class="value description-text">{$activeChartInstance?.description}</p>
 			</div>
@@ -334,26 +339,26 @@
 		text-align: left;
 		border: none;
 		cursor: pointer;
-		display: flex; /* Changed to flex */
-		flex-direction: column; /* Stack content vertically */
+		display: flex;
+		flex-direction: column;
 	}
 
 	.content {
-		padding: 12px; /* Slightly reduced padding */
+		padding: 12px;
 		overflow-y: auto;
-		scrollbar-width: thin; /* Use thin scrollbar */
-		scrollbar-color: var(--ui-border) transparent; /* Style scrollbar */
+		scrollbar-width: thin;
+		scrollbar-color: var(--ui-border) transparent;
 		-ms-overflow-style: none;
-		flex-grow: 1; /* Allow content to fill available space */
+		flex-grow: 1;
 		color: var(--text-primary);
 	}
 
 	.content::-webkit-scrollbar {
-		width: 5px; /* Use thin scrollbar */
+		width: 4px;
 	}
 	.content::-webkit-scrollbar-thumb {
 		background-color: var(--ui-border);
-		border-radius: 3px;
+		border-radius: 2px;
 	}
 	.content::-webkit-scrollbar-track {
 		background: transparent;
@@ -365,9 +370,8 @@
 		align-items: center;
 		justify-content: flex-start;
 		gap: 10px;
-		margin-bottom: 15px;
-		padding-bottom: 10px;
-		border-bottom: 1px solid var(--ui-border);
+		margin-bottom: 16px;
+		padding: 12px;
 	}
 
 	.logo-container {
@@ -376,10 +380,10 @@
 		align-items: center;
 		justify-content: center;
 		background: white;
-		padding: 5px;
-		border-radius: 6px;
-		width: 40px;
-		height: 40px;
+		padding: 4px;
+		border-radius: 4px;
+		width: 32px;
+		height: 32px;
 	}
 
 	.company-logo {
@@ -392,6 +396,7 @@
 	.fallback-logo {
 		background: var(--ui-bg-secondary);
 		color: var(--text-primary);
+		border: 1px solid var(--ui-border);
 	}
 
 	.ticker-logo {
@@ -401,18 +406,85 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-size: 18px;
+		font-size: 14px;
 		font-weight: bold;
 		text-transform: uppercase;
+		background: var(--ui-bg-primary);
+		color: var(--text-primary);
+	}
+
+	.ticker-wrapper {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		flex-shrink: 0;
 	}
 
 	.ticker {
-		font-size: 1.6em;
+		font-size: 1.4em;
 		font-weight: 700;
 		color: var(--text-primary);
 		text-transform: uppercase;
 		line-height: 1.1;
-		flex-shrink: 0;
+	}
+
+	.warning-triangle-container {
+		position: relative;
+		display: flex;
+		align-items: center;
+	}
+
+	.warning-triangle {
+		width: 0;
+		height: 0;
+		border-left: 10px solid transparent;
+		border-right: 10px solid transparent;
+		border-bottom: 16px solid #ff4444;
+		cursor: pointer;
+		transition: transform 0.15s ease;
+		position: relative;
+	}
+
+	.warning-triangle::after {
+		content: '';
+		position: absolute;
+		top: 3px;
+		left: -7px;
+		width: 0;
+		height: 0;
+		border-left: 7px solid transparent;
+		border-right: 7px solid transparent;
+		border-bottom: 11px solid var(--ui-bg-primary);
+	}
+
+	.tooltip {
+		position: absolute;
+		bottom: 100%;
+		left: 50%;
+		transform: translateX(-50%);
+		background: var(--ui-bg-secondary);
+		color: var(--text-primary);
+		padding: 6px 8px;
+		border-radius: 4px;
+		font-size: 0.75em;
+		font-weight: 500;
+		white-space: nowrap;
+		border: 1px solid var(--ui-border);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+		opacity: 0;
+		visibility: hidden;
+		transition: opacity 0.2s ease, visibility 0.2s ease;
+		margin-bottom: 4px;
+		z-index: 1000;
+	}
+
+	.warning-triangle-container:hover .warning-triangle {
+		transform: scale(1.1);
+	}
+
+	.warning-triangle-container:hover .tooltip {
+		opacity: 1;
+		visibility: visible;
 	}
 
 	.company-info {
@@ -423,61 +495,61 @@
 	}
 
 	.name {
-		font-size: 0.95em;
+		font-size: 0.85em;
 		color: var(--text-secondary);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		line-height: 1.2;
+		font-weight: 500;
 	}
 
 	/* Key Metrics */
 	.quote-key-metrics {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-		gap: 10px;
-		margin-bottom: 15px;
+		grid-template-columns: repeat(auto-fit, minmax(75px, 1fr));
+		gap: 8px;
+		margin-bottom: 16px;
+		padding: 12px;
 	}
 
 	.metric-item {
-		background: var(--ui-bg-secondary);
-		padding: 8px;
-		border-radius: 4px;
+		padding: 8px 6px;
 		text-align: center;
-		border: 1px solid var(--ui-border);
 	}
 
 	.metric-item .label {
-		font-size: 0.75em;
+		font-size: 0.7em;
 		color: var(--text-secondary);
 		display: block;
 		margin-bottom: 4px;
 		text-transform: uppercase;
+		font-weight: 500;
 	}
 
 	.metric-item :global(.value) {
-		font-size: 1.1em;
-		font-weight: 500;
+		font-size: 0.95em;
+		font-weight: 600;
 		display: block;
+		line-height: 1.1;
 	}
 
 	/* Market Data */
 	.quote-market-data {
-		margin-bottom: 15px;
-		padding-top: 10px;
-		border-top: 1px solid var(--ui-border);
+		margin-bottom: 16px;
+		padding: 12px;
 	}
 
 	.time-sales-button {
-		background: var(--ui-bg-secondary);
+		background: var(--ui-bg-primary);
 		color: var(--text-primary);
 		border: 1px solid var(--ui-border);
-		border-radius: 6px;
+		border-radius: 4px;
 		padding: 6px 10px;
 		font-size: 0.8em;
 		cursor: pointer;
-		transition: all 0.2s ease;
-		margin: 10px 0;
+		transition: background-color 0.15s ease;
+		margin: 8px 0;
 		width: 100%;
 		font-weight: 500;
 		display: flex;
@@ -492,18 +564,17 @@
 	/* Details */
 	.quote-details {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-		gap: 8px 15px;
-		margin-bottom: 15px;
-		padding-top: 10px;
-		border-top: 1px solid var(--ui-border);
+		grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+		gap: 8px 12px;
+		margin-bottom: 16px;
+		padding: 12px;
 	}
 
 	.detail-item {
 		display: flex;
 		justify-content: space-between;
 		align-items: baseline;
-		font-size: 0.9em;
+		font-size: 0.8em;
 		padding: 4px 0;
 	}
 
@@ -511,6 +582,7 @@
 		color: var(--text-secondary);
 		margin-right: 8px;
 		white-space: nowrap;
+		font-weight: 500;
 	}
 
 	.detail-item .value {
@@ -521,57 +593,66 @@
 
 	/* Countdown */
 	.countdown-section {
-		margin-top: 10px;
-		padding-top: 10px;
-		border-top: 1px solid var(--ui-border);
+		margin-top: 12px;
+		padding: 12px;
 	}
 
 	.countdown-container {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 8px;
-		background: var(--ui-bg-secondary);
-		border-radius: 4px;
-		border: 1px solid var(--ui-border);
+		padding: 8px 12px;
 	}
 
 	.countdown-label {
 		color: var(--text-secondary);
-		font-size: 0.85em;
+		font-size: 0.75em;
 		font-weight: 500;
+		text-transform: uppercase;
 	}
 
 	.countdown-value {
 		font-family: var(--font-primary);
 		font-weight: 600;
-		font-size: 0.85em;
+		font-size: 0.8em;
 		color: var(--text-primary);
 		padding: 4px 8px;
-		background: var(--ui-bg-primary);
-		border-radius: 4px;
-		min-width: 70px;
+		background: var(--ui-bg-secondary);
+		border-radius: 3px;
+		min-width: 60px;
 		text-align: center;
+		border: 1px solid var(--ui-border);
 	}
 
 	/* Description */
 	.description {
-		margin-top: 15px;
-		padding-top: 10px;
-		border-top: 1px solid var(--ui-border);
+		margin-top: 16px;
+		padding: 12px;
 	}
 
 	.description .label {
 		display: block;
 		color: var(--text-secondary);
-		font-size: 0.9em;
-		margin-bottom: 5px;
+		font-size: 0.8em;
+		margin-bottom: 6px;
 		font-weight: 500;
+		text-transform: uppercase;
 	}
 
 	.description-text {
-		font-size: 0.85em;
-		line-height: 1.5;
+		font-size: 0.8em;
+		line-height: 1.4;
 		color: var(--text-secondary);
+	}
+
+	/* Responsive adjustments */
+	@media (max-width: 400px) {
+		.quote-key-metrics {
+			grid-template-columns: repeat(2, 1fr);
+		}
+		
+		.quote-details {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>

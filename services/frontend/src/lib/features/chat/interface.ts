@@ -1,4 +1,4 @@
-import { type Instance } from '$lib/core/types';
+import { type Instance } from '$lib/utils/types/types';
 import { writable, get, type Writable } from "svelte/store"
 
 // Define a type for SEC Filing context items
@@ -69,3 +69,73 @@ export function openChatAndQuery(context: FilingContext | Instance, query: strin
 	requestChatOpen.set(true); // Signal the page to open the chat
 }
 
+
+// Define the ContentChunk and TableData types to match the backend
+export type TableData = {
+	caption?: string;
+	headers: string[];
+	rows: any[][];
+};
+
+export type ContentChunk = {
+	type: 'text' | 'table';
+	content: string | TableData;
+};
+
+export type QueryResponse = {
+	type: 'text' | 'mixed_content';
+	text?: string;
+	content_chunks?: ContentChunk[];
+	suggestions?: string[];
+	conversation_id?: string;
+	message_id?: string;
+	timestamp?: string | Date;
+	completed_at?: string | Date;
+};
+
+// Conversation history type
+export type ConversationData = {
+	conversation_id?: string;       // Active conversation ID
+	title?: string;                 // Conversation title
+	messages: Array<{
+		message_id?: string;        // Backend message ID (UUID)
+		query: string;
+		content_chunks?: ContentChunk[];
+		response_text: string;
+		timestamp: string | Date;
+		context_items?: (Instance | FilingContext)[];
+		suggested_queries?: string[];
+		completed_at?: string | Date;
+		status?: string;
+	}>;
+	timestamp: string | Date;
+};
+
+// Message type for chat history
+export type Message = {
+	message_id: string;                     // Use backend message_id directly
+	content: string;
+	sender: 'user' | 'assistant' | 'system';
+	timestamp: Date;
+	contentChunks?: ContentChunk[];
+	responseType?: string;
+	isLoading?: boolean;
+	suggestedQueries?: string[];
+	contextItems?: (Instance | FilingContext)[];
+	status?: string;        // "pending", "completed", "error"
+	completedAt?: Date;     // When the response was completed
+	isNewResponse?: boolean; // Flag to indicate this is a new response since last seen
+};
+
+// Type for suggested queries response
+export type SuggestedQueriesResponse = {
+	suggestions: string[];
+};
+// Conversation management types
+export type ConversationSummary = {
+	conversation_id: string;
+	title: string;
+	created_at: string;
+	updated_at: string;
+	last_message_query?: string;
+};

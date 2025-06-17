@@ -1,12 +1,12 @@
 <script lang="ts">
 	export let hoveredCandleData;
-	import type { Instance } from '$lib/core/types';
+	import type { Instance } from '$lib/utils/types/types';
 	import { queryChart } from './interface';
 	import { writable } from 'svelte/store';
 	export let instance: Instance;
-	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
-	import { settings } from '$lib/core/stores';
-	import { UTCTimestampToESTString } from '$lib/core/timestamp';
+	import { queryInstanceInput, inputQuery } from '$lib/components/input/input.svelte';
+	import { settings } from '$lib/utils/stores/stores';
+	import { UTCTimestampToESTString } from '$lib/utils/helpers/timestamp';
 	import { onMount, onDestroy } from 'svelte';
 
 	// Add new props for chart dimensions
@@ -36,8 +36,13 @@
 	function handleTickerClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
 		event.stopPropagation(); // Prevent legend collapse toggle
-		queryInstanceInput([], ['ticker'], instance).then((v: Instance) => {
+		queryInstanceInput([], ['ticker'], instance, 'ticker').then((v: Instance) => {
 			if (v) queryChart(v, true);
+		}).catch((error) => {
+			// Handle cancellation silently
+			if (error.message !== 'User cancelled input') {
+				console.error('Error in ticker input:', error);
+			}
 		});
 	}
 
@@ -45,19 +50,18 @@
 		if (event.key === 'Enter' || event.key === ' ') {
 			event.preventDefault();
 			event.stopPropagation(); // Prevent legend collapse toggle
-			queryInstanceInput('any', ['ticker'], instance).then((v: Instance) => {
+			queryInstanceInput('any', ['ticker'], instance, 'ticker').then((v: Instance) => {
 				if (v) queryChart(v, true);
+			}).catch((error) => {
+				// Handle cancellation silently
+				if (error.message !== 'User cancelled input') {
+					console.error('Error in ticker input:', error);
+				}
 			});
 		}
 	}
 
-	function handleTimestampClick(event: MouseEvent | TouchEvent) {
-		event.preventDefault();
-		event.stopPropagation(); // Prevent legend collapse toggle
-		queryInstanceInput([], ['timestamp'], instance).then((v: Instance) => {
-			if (v) queryChart(v, true);
-		});
-	}
+
 
 	function handleSessionClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
@@ -164,9 +168,14 @@
 
 	// Function to handle clicking the "..." timeframe button
 	function handleCustomTimeframeClick() {
-		// No selector to hide
-		queryInstanceInput([], ['timeframe'], instance).then((v: Instance) => {
+		// Start with empty input but force timeframe type
+		queryInstanceInput(['timeframe'], ['timeframe'], instance, 'timeframe').then((v: Instance) => {
 			if (v) queryChart(v, true);
+		}).catch((error) => {
+			// Handle cancellation silently
+			if (error.message !== 'User cancelled input') {
+				console.error('Error in timeframe input:', error);
+			}
 		});
 	}
 
@@ -207,7 +216,7 @@
 <div
 	bind:this={legendElement}
 	tabindex="-1"
-	class="legend {isCollapsed ? 'collapsed' : ''} {isOverflowing ? 'compact' : ''}"
+	class="legend glass glass--rounded glass--responsive {isCollapsed ? 'collapsed' : ''} {isOverflowing ? 'compact' : ''}"
 >
 	<div class="header">
 		{#if instance?.icon}
@@ -226,8 +235,8 @@
 			on:keydown={handleTickerKeydown}
 			aria-label="Change ticker"
 		>
-			<svg class="search-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
-				<path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L21.5,20L20,21.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z" />
+			<svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none">
+				<path d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 			</svg>
 			{instance?.ticker || 'NaN'}
 		</button>
@@ -258,13 +267,6 @@
 			</button>
 
 			{#if !isOverflowing}
-				<button
-					class="timestamp metadata-button"
-					on:click={handleTimestampClick}
-					aria-label="Change timestamp"
-				>
-					{UTCTimestampToESTString(instance?.timestamp ?? 0)}
-				</button>
 				<button
 					class="session-type metadata-button"
 					on:click={handleSessionClick}
@@ -315,15 +317,22 @@
 					<span class="label">ADR</span>
 					<span class="value">{$hoveredCandleData.adr?.toFixed(2) ?? 'NA'}</span>
 				</div>
-				<div class="metric">
+				<!-- <div class="metric">
 					<span class="label">RVOL</span>
 					<span class="value">{$hoveredCandleData.rvol?.toFixed(2) ?? 'NA'}</span>
-				</div>
+				</div> -->
 			</div>
 		{/if}
 	{/if}
 
-	<div class="collapse-row" on:click|stopPropagation={toggleCollapse}>
+	<div 
+		class="collapse-row" 
+		on:click|stopPropagation={toggleCollapse}
+		role="button"
+		tabindex="0"
+		on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { toggleCollapse(); e.preventDefault(); } }}
+		aria-expanded={!isCollapsed}
+	>
 		<div class="divider"></div>
 		<button class="utility-button" aria-label="Toggle legend">
 			<svg
@@ -343,28 +352,26 @@
 
 <style>
 	.legend {
+		/* Glass effect now provided by global .glass classes */
 		position: absolute;
 		top: 10px;
 		left: 10px;
-		background-color: var(--ui-bg-primary);
-		border: 1px solid var(--ui-border);
-		padding: 8px;
-		border-radius: 4px;
+		padding: 12px;
 		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-		color: var(--text-primary);
-		z-index: 900;
+		color: #ffffff;
+		z-index: 1100;
 		max-width: calc(100% - 20px);
 		width: fit-content;
 		min-width: min-content;
-		backdrop-filter: var(--backdrop-blur);
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 		user-select: none;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
-	/* Update hover styles to not affect width/layout */
+	/* Enhanced hover effect for glass legend */
 	.legend:hover {
-		background-color: var(--ui-bg-primary);
-		border-color: var(--ui-border);
+		--glass-bg: rgba(30, 30, 30, 0.55);
+		--glass-border: rgba(255, 255, 255, 0.18);
+		--glass-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
 	}
 
 	/* Make compact styles more specific to override hover */
@@ -375,10 +382,6 @@
 	.legend.compact .metadata {
 		flex-wrap: nowrap;
 		max-width: 100px !important;
-	}
-
-	.legend.compact .timeframe {
-		max-width: 100% !important;
 	}
 
 	/* Ensure compact state is maintained even on hover */
@@ -392,7 +395,6 @@
 	}
 
 	/* Hide elements in compact mode even on hover */
-	.legend.compact:hover .timestamp,
 	.legend.compact:hover .session-type {
 		display: none;
 	}
@@ -403,7 +405,7 @@
 		gap: 8px;
 		margin-bottom: 8px;
 		padding-bottom: 8px;
-		border-bottom: 1px solid var(--ui-border);
+		border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 		min-width: 0;
 		flex-wrap: wrap;
 	}
@@ -412,15 +414,17 @@
 		font-size: 14px;
 		line-height: 20px;
 		font-weight: 600;
-		color: var(--text-primary);
+		color: #ffffff;
 		white-space: nowrap;
-		padding: 4px 10px;
-		background: var(--ui-bg-element);
-		border-radius: 4px;
-		border: 1px solid var(--ui-border);
+		padding: 6px 12px;
+		background: rgba(255, 255, 255, 0.1);
+		border-radius: 6px;
+		border: 1px solid rgba(255, 255, 255, 0.2);
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		transition: all 0.2s ease;
 	}
 
 	.metadata {
@@ -432,23 +436,19 @@
 		min-width: 0;
 	}
 
-	.timeframe,
-	.timestamp,
 	.session-type {
 		font-size: 13px;
 		line-height: 18px;
-		color: var(--text-secondary);
-		padding: 4px 8px;
-		background: var(--ui-bg-element);
-		border-radius: 4px;
+		color: rgba(255, 255, 255, 0.9);
+		padding: 6px 10px;
+		background: rgba(255, 255, 255, 0.08);
+		border-radius: 6px;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		border: 1px solid var(--ui-border);
-	}
-
-	.timestamp {
-		font-family: monospace;
+		border: 1px solid rgba(255, 255, 255, 0.15);
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		transition: all 0.2s ease;
 	}
 
 	.price-grid {
@@ -456,7 +456,7 @@
 		flex-direction: column;
 		margin-bottom: 8px;
 		padding-bottom: 8px;
-		border-bottom: 1px solid var(--ui-border);
+		border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 	}
 
 	.price-row {
@@ -486,10 +486,11 @@
 	.label {
 		font-size: 12px;
 		line-height: 16px;
-		color: var(--text-secondary);
+		color: rgba(255, 255, 255, 0.7);
 		font-weight: 500;
 		min-width: 35px;
 		flex-shrink: 0;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
 	.value {
@@ -502,6 +503,8 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		flex: 1;
+		color: #ffffff;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
 	/* Ensure legend stays within chart bounds */
@@ -557,7 +560,7 @@
 
 	.divider {
 		height: 1px;
-		background-color: var(--ui-border);
+		background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
 		width: 100%;
 		margin: 2px 0;
 	}
@@ -586,32 +589,34 @@
 		font-family: inherit; /* Inherit font from legend */
 		font-size: 13px;
 		line-height: 18px;
-		color: var(--text-secondary);
-		padding: 4px 8px;
-		background: var(--ui-bg-element);
-		border-radius: 4px;
+		color: rgba(255, 255, 255, 0.9);
+		padding: 6px 10px;
+		background: rgba(255, 255, 255, 0.08);
+		border-radius: 6px;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		border: 1px solid var(--ui-border);
+		border: 1px solid rgba(255, 255, 255, 0.15);
 		cursor: pointer;
-		transition: background-color 0.2s ease, border-color 0.2s ease;
+		transition: all 0.2s ease;
 		text-align: left; /* Ensure text alignment */
 		display: inline-flex; /* For alignment with potential icons */
 		align-items: center; /* Align text/icons vertically */
 		gap: 4px; /* Gap for icons if added */
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
 	/* Remove default button appearance */
 	.metadata-button:focus {
 		outline: none; /* Remove default focus outline */
-		box-shadow: 0 0 0 2px var(--accent-color); /* Add custom focus ring */
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4); /* Add custom focus ring */
 	}
 
 	.metadata-button:hover {
-		background-color: var(--ui-bg-element-hover);
-		border-color: var(--ui-border-hover);
-		color: var(--text-primary); /* Slightly brighten text on hover */
+		background: rgba(255, 255, 255, 0.15);
+		border-color: rgba(255, 255, 255, 0.3);
+		color: #ffffff; /* Brighten text on hover */
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 	}
 
 	/* Specific style adjustments for symbol button */
@@ -619,42 +624,37 @@
 		font-size: 14px;
 		line-height: 20px;
 		font-weight: 600;
-		color: var(--text-primary);
-		padding: 4px 10px; /* Keep original padding */
+		color: #ffffff;
+		padding: 6px 12px; /* Keep original padding */
 		gap: 4px; /* Ensure gap for icon */
 	}
 
 	/* Adjust original span styles to target buttons */
-	.timeframe.metadata-button,
-	.timestamp.metadata-button,
 	.session-type.metadata-button {
 		/* Styles previously applied to .timeframe, .timestamp, .session-type spans now applied via .metadata-button base class */
-	}
-
-	.timestamp.metadata-button {
-		font-family: monospace;
 	}
 
 	/* Styles for preset timeframe buttons */
 	.timeframe-preset-button {
 		min-width: 30px; /* Ensure buttons have some width */
 		text-align: center;
-		padding: 4px 6px; /* Adjust padding */
+		padding: 6px 8px; /* Adjust padding */
 		display: inline-flex;
 		justify-content: center;
 		align-items: center;
 	}
 
 	.timeframe-preset-button.active {
-		background-color: var(--accent-color-translucent);
-		border-color: var(--accent-color);
-		color: var(--accent-color);
-		font-weight: 500;
+		background: rgba(255, 255, 255, 0.2);
+		border-color: rgba(255, 255, 255, 0.5);
+		color: #ffffff;
+		font-weight: 600;
+		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
 	}
 
 	/* Styles for the custom timeframe '...' button */
 	.timeframe-custom-button {
-		padding: 4px 6px;
+		padding: 6px 8px;
 		min-width: 30px; /* Give it similar min-width */
 		text-align: center;
 		/* Add flex properties for robust centering */
@@ -665,9 +665,10 @@
 
 	/* Apply active styles also to the custom button when it's showing a custom value */
 	.timeframe-custom-button.active {
-		background-color: var(--accent-color-translucent);
-		border-color: var(--accent-color);
-		color: var(--accent-color);
-		font-weight: 500;
+		background: rgba(255, 255, 255, 0.2);
+		border-color: rgba(255, 255, 255, 0.5);
+		color: #ffffff;
+		font-weight: 600;
+		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
 	}
 </style>

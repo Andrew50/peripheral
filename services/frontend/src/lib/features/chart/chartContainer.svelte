@@ -1,9 +1,9 @@
 <script lang="ts">
 	import Chart from './chart.svelte';
-	import { settings } from '$lib/core/stores';
+	import { settings } from '$lib/utils/stores/stores';
 	import { onMount, tick } from 'svelte';
 	import { get } from 'svelte/store';
-	import { queryInstanceInput } from '$lib/utils/popups/input.svelte';
+	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { queryChart } from './interface';
 	export let width: number;
 

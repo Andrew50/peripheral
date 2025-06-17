@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onMount, tick, onDestroy } from 'svelte';
-	import { privateRequest } from '$lib/core/backend';
+	import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 	import { marked } from 'marked'; // Import the markdown parser
 	import { queryChart } from '$lib/features/chart/interface'; // Import queryChart
-	import type { Instance } from '$lib/core/types';
+	import type { Instance } from '$lib/utils/types/types';
 	import { browser } from '$app/environment'; // Import browser
-	import { derived, writable } from 'svelte/store';
+	import { derived, writable, get } from 'svelte/store';
 	import {
 		inputValue,
 		contextItems,
@@ -13,20 +13,36 @@
 		removeInstanceFromChat,
 		removeFilingFromChat,
 		type FilingContext, // Import the new type
-		pendingChatQuery // Import the new store
+		pendingChatQuery,
 	} from './interface'
+	import type { Message, ConversationData, QueryResponse, TableData, ContentChunk } from './interface';
+	import { parseMarkdown, formatChipDate, formatRuntime, cleanHtmlContent, handleTickerButtonClick } from './utils';
 	import { activeChartInstance } from '$lib/features/chart/interface';
 	import { functionStatusStore, type FunctionStatusUpdate } from '$lib/utils/stream/socket'; // <-- Import the status store and FunctionStatusUpdate type
+	import './chat.css'; // Import the CSS file
+	import { generateSharedConversationLink } from './chatHelpers';
+	import { showAuthModal } from '$lib/stores/authModal';
+	import type { ConversationSummary } from './interface';
 
-	// Set default options for the markdown parser (optional)
-	marked.setOptions({
-		breaks: true, // Adds support for GitHub-flavored markdown line breaks
-		gfm: true     // GitHub-flavored markdown
-	});
+	export let sharedConversationId: string = '';
+	export let isPublicViewing: boolean;
+
+	// Conversation management state
+	let conversations: ConversationSummary[] = [];
+	let currentConversationId = '';
+	let currentConversationTitle = 'Chat';
+	let showConversationDropdown = false;
+	let conversationDropdown: HTMLDivElement;
+	let loadingConversations = false;
+	let conversationToDelete = ''; // Add state to track which conversation is being deleted
+	
+	import ConversationHeader from './components/ConversationHeader.svelte';
+	
+	// Share modal reference
+	let shareModalRef: HTMLDivElement;
 
 	// Configure marked to make links open in a new tab
 	const renderer = new marked.Renderer();
-	
 	
 	marked.setOptions({
 		renderer,
@@ -34,111 +50,15 @@
 		gfm: true
 	});
 
-	// Function to parse markdown content and make links open in new tabs
-	function parseMarkdown(content: string): string {
-		try {
-			// Format ISO 8601 timestamps like 2025-04-08T21:36:28Z to a more readable format
-			const isoTimestampRegex = /\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z)\b/g;
-			let processedContent = content.replace(isoTimestampRegex, (match) => {
-				try {
-					const date = new Date(match);
-					if (!isNaN(date.getTime())) {
-						return date.toLocaleString();
-					}
-					return match;
-				} catch (e) {
-					return match;
-				}
-			});
 
-			// 3. Handle the Promise case by converting immediately to string after markdown parsing
-			const parsed = marked.parse(processedContent); // marked.parse will treat our buttons as HTML
-			const parsedString = typeof parsed === 'string' ? parsed : String(parsed);
-
-			// 4. Regex to find $$$TICKER-TIMESTAMPINMS$$$ patterns
-			// Captures TICKER (1), TIMESTAMPINMS (2)
-			// This runs *after* marked.parse and after simple tickers are converted.
-			const tickerRegex = /\$\$\$([A-Z]{1,5})-(\d+)\$\$\$/g;
-
-			const contentWithTickerButtons = parsedString.replace(
-				tickerRegex,
-				(match, ticker, timestampMs) => {
-					const formattedDate = formatChipDate(parseInt(timestampMs, 10));
-					const buttonText = `${ticker}${formattedDate}`;
-					return `<button class="ticker-button" data-ticker="${ticker}" data-timestamp-ms="${timestampMs}">${buttonText}</button>`;
-				}
-			);
-
-			// Add target="_blank" and rel="noopener noreferrer" to all standard links
-			// Ensure this doesn't interfere with the buttons (it shouldn't as buttons aren't <a> tags)
-			const withExternalLinks = contentWithTickerButtons.replace(
-				/<a\s+(?:[^>]*?\s+)?href="([^"]*)"(?:\s+[^>]*?)?>/g,
-				'<a href="$1" target="_blank" rel="noopener noreferrer">'
-			);
-
-			return withExternalLinks;
-		} catch (error) {
-			console.error('Error parsing markdown:', error);
-			return content; // Fallback to plain text if parsing fails
-		}
-	}
-	// Define the ContentChunk and TableData types to match the backend
-	type TableData = {
-		caption?: string;
-		headers: string[];
-		rows: any[][];
-	};
-
-	type ContentChunk = {
-		type: 'text' | 'table';
-		content: string | TableData;
-	};
-
-	type QueryResponse = {
-		response_type: 'text' | 'mixed_content';
-		text?: string;
-		content_chunks?: ContentChunk[];
-	};
-
-	// Conversation history type
-	type ConversationData = {
-		messages: Array<{
-			query: string;
-			content_chunks?: ContentChunk[];
-			response_text: string;
-			timestamp: string | Date;
-			expires_at?: string | Date;
-			context_items?: (Instance | FilingContext)[];
-		}>;
-		timestamp: string | Date;
-	};
-
-	// Message type for chat history
-	type Message = {
-		id: string;
-		content: string;
-		sender: 'user' | 'assistant' | 'system';
-		timestamp: Date;
-		expiresAt?: Date;
-		contentChunks?: ContentChunk[];
-		responseType?: string;
-		isLoading?: boolean;
-		suggestedQueries?: string[];
-		contextItems?: (Instance | FilingContext)[];
-	};
-
-	// Type for suggested queries response
-	type SuggestedQueriesResponse = {
-		suggestions: string[];
-	};
 
 	let queryInput: HTMLTextAreaElement;
 	let isLoading = false;
 	let messagesContainer: HTMLDivElement;
 	let initialSuggestions: string[] = [];
-
-	// Backtest mode state
-	let isBacktestMode = false;
+	let pollInterval: ReturnType<typeof setInterval> | null = null;
+	let pollAttempts = 0;
+	let maxPollAttempts = 3;
 
 	// State for table expansion
 	let tableExpansionStates: { [key: string]: boolean } = {};
@@ -163,8 +83,25 @@
 	// State for showing all initial suggestions
 	let showAllInitialSuggestions = false;
 
-	// Manage active chart context: subscribe to add new and remove old chart contexts
-	let previousChartInstance: Instance | null = null;
+	// Add abort controller for cancelling requests
+	let currentAbortController: AbortController | null = null;
+	let requestCancelled = false;
+	let currentProcessingQuery = ''; // Track the query currently being processed
+
+	// Message editing state
+	let editingMessageId = '';
+	let editingContent = '';
+
+	// Copy feedback state
+	let copiedMessageId = '';
+	let copyTimeout: ReturnType<typeof setTimeout> | null = null;
+
+	// Share modal state
+	let showShareModal = false;
+	let shareLink = '';
+	let shareLoading = false;
+	let shareCopied = false;
+	let shareCopyTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	// Function to fetch initial suggestions based on active chart
 	async function fetchInitialSuggestions() {
@@ -186,38 +123,264 @@
 		}
 	}
 
+	// Conversation management functions
+	async function loadConversations() {
+		if (isPublicViewing) return; // Don't load conversations in public viewing mode
+		
+		try {
+			loadingConversations = true;
+			const response = await privateRequest<ConversationSummary[]>('getUserConversations', {});
+			conversations = response || [];
+		} catch (error) {
+			console.error('Error loading conversations:', error);
+			conversations = [];
+		} finally {
+			loadingConversations = false;
+		}
+	}
+
+	async function createNewConversation() {
+		// Clear current conversation state - new conversation will be created when first message is sent
+		currentConversationId = '';
+		currentConversationTitle = 'New Chat';
+		
+		// Clear current chat and context items
+		messagesStore.set([]);
+		contextItems.set([]); // Clear context items when creating new conversation
+		
+		// Clear any pending query that might be set
+		pendingChatQuery.set(null);
+		
+		// Close dropdown
+		showConversationDropdown = false;
+		
+		// Focus on input
+		if (queryInput) {
+			setTimeout(() => queryInput.focus(), 100);
+		}
+		
+		// Clear initial suggestions and fetch new ones for empty chat
+		initialSuggestions = [];
+		fetchInitialSuggestions();
+	}
+
+	async function switchToConversation(conversationId: string, title: string) {
+		if (conversationId === currentConversationId) {
+			showConversationDropdown = false;
+			return;
+		}
+
+		try {
+			const response = await privateRequest('switchConversation', {
+				conversation_id: conversationId
+			});
+			
+			if (response) {
+				currentConversationId = conversationId;
+				currentConversationTitle = title;
+				
+				// Clear current messages and context items to prevent leakage
+				messagesStore.set([]);
+				contextItems.set([]); // Clear context items when switching conversations
+				
+				await loadConversationHistory();
+				
+				showConversationDropdown = false;
+			}
+		} catch (error) {
+			console.error('Error switching conversation:', error);
+		}
+	}
+
+	async function deleteConversation(conversationId: string, event: MouseEvent) {
+		event.stopPropagation(); // Prevent switching to the conversation
+		
+		// Instead of confirm dialog, set the conversation to delete mode
+		conversationToDelete = conversationId;
+	}
+
+	async function confirmDeleteConversation(conversationId: string) {
+		try {
+			await privateRequest('deleteConversation', {
+				conversation_id: conversationId
+			});
+			
+			// If we deleted the current conversation, start a new one
+			if (conversationId === currentConversationId) {
+				createNewConversation(); // This will clear the UI state
+			} else {
+				// Just refresh the conversation list
+				await loadConversations();
+			}
+		} catch (error) {
+			console.error('Error deleting conversation:', error);
+		} finally {
+			conversationToDelete = ''; // Clear delete mode
+		}
+	}
+
+	function cancelDeleteConversation() {
+		conversationToDelete = ''; // Clear delete mode
+	}
+
+	function toggleConversationDropdown() {
+		// Close share modal if it's open
+		if (showShareModal) {
+			closeShareModal();
+		}
+		
+		showConversationDropdown = !showConversationDropdown;
+		if (showConversationDropdown) {
+			loadConversations();
+		}
+	}
+
+	// Close dropdown when clicking outside
+	function handleClickOutside(event: MouseEvent) {
+		// Don't handle clicks on the share button itself
+		const target = event.target as HTMLElement;
+		if (target && target.closest('.share-btn')) {
+			return;
+		}
+		
+		if (showConversationDropdown && conversationDropdown && !conversationDropdown.contains(event.target as Node)) {
+			showConversationDropdown = false;
+		}
+		// Close share modal when clicking outside
+		if (showShareModal && shareModalRef && !shareModalRef.contains(event.target as Node)) {
+			closeShareModal();
+		}
+	}
+
 	// Load any existing conversation history from the server
-	async function loadConversationHistory() {
+	async function loadConversationHistory(shouldAutoScroll: boolean = true) {
 		try {
 			isLoading = true;
-			const response = await privateRequest('getUserConversation', {});
-
+			let response;
+			console.log("isPublicViewing", isPublicViewing)
+			console.log("sharedConversationId", sharedConversationId)
+			if (isPublicViewing && sharedConversationId) {
+				// For public viewing, use publicRequest to get shared conversation
+				response = await publicRequest('getPublicConversation', {
+					conversation_id: sharedConversationId
+				});
+			} else {
+				// For authenticated users, use privateRequest 
+				response = await privateRequest('getUserConversation', {});
+			}
 			// Check if we have a valid conversation history
 			const conversation = response as ConversationData;
 			if (conversation && conversation.messages && conversation.messages.length > 0) {
+				// Clear existing messages to avoid duplicates during polling updates
+				messagesStore.set([]);
+				
+				// Get the last seen timestamp from localStorage
+				const lastSeenKey = 'chat_last_seen_timestamp';
+				const lastSeenStr = localStorage.getItem(lastSeenKey);
+				const lastSeenTimestamp = lastSeenStr ? new Date(lastSeenStr) : null;
+				
+				// Track if we found any new responses
+				let hasNewResponses = false;
+				let latestCompletedTimestamp: Date | null = null;
+
 				// Process each message in the conversation history
 				conversation.messages.forEach((msg) => {
-					// Add user message
+					const msgTimestamp = new Date(msg.timestamp);
+					const msgCompletedAt = msg.completed_at ? new Date(msg.completed_at) : undefined;
+					const isCompleted = msg.status === 'completed';
+					const isPending = msg.status === 'pending';
+					
+					// Check if this is a new response (completed after last seen timestamp)
+					const isNewResponse = isCompleted && msgCompletedAt && lastSeenTimestamp && msgCompletedAt > lastSeenTimestamp ? true : undefined;
+					
+					if (isNewResponse) {
+						hasNewResponses = true;
+					}
+
+					// Track the latest completed timestamp
+					if (isCompleted && msgCompletedAt && (!latestCompletedTimestamp || msgCompletedAt > latestCompletedTimestamp)) {
+						latestCompletedTimestamp = msgCompletedAt;
+					}
+
+					// Only process messages that have backend message IDs
+					if (!msg.message_id) {
+						console.warn('Skipping message without backend message_id:', msg);
+						return;
+					}
+
+					// Now we know msg.message_id is defined (TypeScript will recognize this)
+					const messageId = msg.message_id;
 					messagesStore.update(current => [...current, {
-						id: generateId(),
+						message_id: messageId, // Use backend ID 
 						content: msg.query,
 						sender: 'user',
-						timestamp: new Date(msg.timestamp),
-						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
-						contextItems: msg.context_items || []
+						timestamp: msgTimestamp,
+						contextItems: msg.context_items || [],
+						status: msg.status,
+						completedAt: msgCompletedAt,
+						isNewResponse: isNewResponse
 					}]);
 
-					messagesStore.update(current => [...current, {
-						id: generateId(),
-						sender: 'assistant',
-						content: msg.response_text,
-						contentChunks: msg.content_chunks || [],
-						timestamp: new Date(msg.timestamp),
-						expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
-					}]);
+					// Only add assistant message if it's completed (has content)
+					if (isCompleted && (msg.content_chunks || msg.response_text)) {
+						// Assistant messages use a different ID pattern since they're not editable
+						const assistantMessageId = messageId + '_response';
+						messagesStore.update(current => [...current, {
+							message_id: assistantMessageId,
+							sender: 'assistant',
+							content: msg.response_text || '',
+							contentChunks: msg.content_chunks || [],
+							timestamp: msgTimestamp,
+							suggestedQueries: msg.suggested_queries || [],
+							status: msg.status,
+							completedAt: msgCompletedAt,
+							isNewResponse: isNewResponse
+						}]);
+					} else if (isPending) {
+						// Add a loading message for pending requests
+						const loadingMessageId = messageId + '_loading';
+						messagesStore.update(current => [...current, {
+							message_id: loadingMessageId,
+							sender: 'assistant',
+							content: '',
+							timestamp: msgTimestamp,
+							isLoading: true,
+							status: 'pending'
+						}]);
+					}
 				});
 
-				scrollToBottom();
+				// Update last seen timestamp if we have new responses
+				if (hasNewResponses && latestCompletedTimestamp) {
+					localStorage.setItem(lastSeenKey, (latestCompletedTimestamp as Date).toISOString());
+				} else if (!lastSeenTimestamp && latestCompletedTimestamp) {
+					// First time loading, set the timestamp
+					localStorage.setItem(lastSeenKey, (latestCompletedTimestamp as Date).toISOString());
+				}
+
+				// Update conversation details from backend response
+				if (conversation.conversation_id) {
+					currentConversationId = conversation.conversation_id;
+				}
+				if (conversation.title) {
+					currentConversationTitle = conversation.title;
+				}
+
+				// Only auto-scroll if explicitly requested (e.g., on initial load)
+				if (shouldAutoScroll) {
+					// Position at bottom after DOM is updated
+					await tick();
+					if (messagesContainer) {
+						messagesContainer.style.scrollBehavior = 'auto';
+						messagesContainer.scrollTop = messagesContainer.scrollHeight;
+						messagesContainer.style.scrollBehavior = 'smooth';
+					}
+				}
+			} else {
+				// No conversation history, clear messages and reset state
+				messagesStore.set([]);
+				currentConversationId = '';
+				currentConversationTitle = 'Chat';
 			}
 		} catch (error) {
 			console.error('Error loading conversation history:', error);
@@ -233,11 +396,93 @@
 		}
 	}
 
+	// Function to check for conversation updates (for polling)
+	async function checkForUpdates() {
+		if (isLoading) return; // Don't check if we're already loading
+		if (document.hidden) return; // Don't poll when tab is not visible
+		if (isPublicViewing) return; // Don't poll for public shared conversations
+		
+		try {
+			const response = await privateRequest('getUserConversation', {});
+			const conversation = response as ConversationData;
+			
+			if (conversation && conversation.messages && conversation.messages.length > 0) {
+				const lastSeenKey = 'chat_last_seen_timestamp';
+				const lastSeenStr = localStorage.getItem(lastSeenKey);
+				const lastSeenTimestamp = lastSeenStr ? new Date(lastSeenStr) : null;
+				
+				let hasUpdates = false;
+				
+				// Check if there are any new completed messages or status changes
+				for (const msg of conversation.messages) {
+					const msgCompletedAt = msg.completed_at ? new Date(msg.completed_at) : null;
+					const isCompleted = msg.status === 'completed';
+					
+					if (isCompleted && msgCompletedAt && lastSeenTimestamp && msgCompletedAt > lastSeenTimestamp) {
+						hasUpdates = true;
+						break;
+					}
+					
+					// Check if we have pending messages that might have been completed
+					const existingMessage = $messagesStore.find(m => m.content === msg.query && m.sender === 'user');
+					if (existingMessage && isCompleted && (!existingMessage.status || existingMessage.status === 'pending')) {
+						hasUpdates = true;
+						break;
+					}
+				}
+				
+				if (hasUpdates) {
+					// Incrementally update instead of full reload when possible
+					// Don't auto-scroll during polling updates to preserve user's reading position
+					await loadConversationHistory(false);
+				}
+			}
+			
+			// Reset poll attempts on success
+			pollAttempts = 0;
+		} catch (error) {
+			console.error('Error checking for updates:', error);
+			pollAttempts++;
+			
+			// Stop polling after max attempts to avoid spamming
+			if (pollAttempts >= maxPollAttempts) {
+				console.warn('Stopped polling due to repeated failures');
+				if (pollInterval) {
+					clearInterval(pollInterval);
+					pollInterval = null;
+				}
+			}
+		}
+	}
+
 	onMount(() => {
-		if (queryInput) {
+		if (queryInput && !isPublicViewing) {
 			setTimeout(() => queryInput.focus(), 100);
 		}
 		loadConversationHistory();
+		loadConversations(); // Load conversations on mount (will be skipped for public viewing)
+
+		// Set up periodic polling for updates (every 10 seconds) - only for authenticated users
+		if (!isPublicViewing) {
+			pollInterval = setInterval(checkForUpdates, 10000);
+		}
+
+		// Resume polling when tab becomes visible and check for updates immediately
+		const handleVisibilityChange = () => {
+			if (!document.hidden) {
+				// Reset poll attempts when tab becomes visible
+				pollAttempts = 0;
+				// Restart polling if it was stopped due to errors
+				if (!pollInterval) {
+					pollInterval = setInterval(checkForUpdates, 10000);
+				}
+				// Check for updates immediately when tab becomes visible
+				checkForUpdates();
+			}
+		};
+		
+		document.addEventListener('visibilitychange', handleVisibilityChange);
+		document.addEventListener('click', handleClickOutside); // Add click outside listener
 
 		// Add delegated event listener for ticker buttons
 		if (messagesContainer) {
@@ -246,18 +491,32 @@
 
 		// Cleanup listener on component destroy
 		return () => {
+			document.removeEventListener('visibilitychange', handleVisibilityChange);
+			document.removeEventListener('click', handleClickOutside); // Clean up click outside listener
 			if (messagesContainer) {
 				messagesContainer.removeEventListener('click', handleTickerButtonClick);
 			}
 		};
 	});
 
-	// Generate unique IDs for messages
-	function generateId(): string {
-		return Date.now().toString(36) + Math.random().toString(36).substring(2);
-	}
+	onDestroy(() => {
+		// Clean up polling interval
+		if (pollInterval) {
+			clearInterval(pollInterval);
+		}
+		
+		// Clean up copy timeout
+		if (copyTimeout) {
+			clearTimeout(copyTimeout);
+		}
 
-	// Scroll to bottom of chat
+		// Clean up share copy timeout
+		if (shareCopyTimeout) {
+			clearTimeout(shareCopyTimeout);
+		}
+	});
+
+	// Scroll to bottom of chat (for user-initiated actions)
 	function scrollToBottom() {
 		setTimeout(() => {
 			if (messagesContainer) {
@@ -266,121 +525,162 @@
 		}, 100);
 	}
 
-	// Function to fetch suggested queries
-	async function fetchSuggestedQueries() {
-		try {
-			const response = await privateRequest('getSuggestedQueries', {});
-			const queriesResponse = response as SuggestedQueriesResponse;
-			
-			if (queriesResponse && queriesResponse.suggestions && queriesResponse.suggestions.length > 0) {
-				// Find the last assistant message and add suggested queries to it
-				messagesStore.update(current => {
-					for (let i = current.length - 1; i >= 0; i--) {
-						if (current[i].sender === 'assistant' && !current[i].isLoading) {
-							current[i].suggestedQueries = queriesResponse.suggestions;
-							break;
-						}
-					}
-					return [...current]; // Return new array to trigger update
-				});
-			}
-		} catch (error) {
-			console.error('Error fetching suggested queries:', error);
-		}
-	}
-
 	// Function to handle clicking on a suggested query
 	function handleSuggestedQueryClick(query: string) {
+		if(isPublicViewing) {
+			showAuthModal('conversations', 'signup');
+			return;
+		}
 		inputValue.set(query)
 		handleSubmit();
 	}
 
-	// Function to toggle backtest mode
-	function toggleBacktestMode() {
-		isBacktestMode = !isBacktestMode;
-	}
-
 	async function handleSubmit() {
-		if (!$inputValue.trim()) return;
-
-		const userMessage: Message = {
-			id: generateId(),
-			content: $inputValue,
-			sender: 'user',
-			timestamp: new Date(),
-			contextItems: [...$contextItems]
-		};
-
-		messagesStore.update(current => [...current, userMessage]);
-
-		// Create loading message placeholder
-		const loadingMessage: Message = {
-			id: generateId(),
-			content: '', // Content is now handled by the store
-			sender: 'assistant',
-			timestamp: new Date(),
-			isLoading: true
-		};
-		messagesStore.update(current => [...current, loadingMessage]);
+		if (!$inputValue.trim() || isLoading) return;
 		
-		// <-- Set initial status immediately -->
-		functionStatusStore.set({
-			type: 'function_status',
-			userMessage: 'Processing request...'
-		});
+		isLoading = true;
+		let loadingMessage: Message | null = null;
+		let backendConversationId = ''; // Track the conversation ID from backend
+		
+		// Create new abort controller for this request
+		currentAbortController = new AbortController();
+		
+		try { 
+			// Note: Create a temporary user message for immediate UI feedback
+			// The backend will provide the actual message ID, but we need something for the UI
+			const userMessage: Message = {
+				message_id: 'temp_' + Date.now(), // Temporary ID for UI only
+				content: $inputValue,
+				sender: 'user',
+				timestamp: new Date(),
+				contextItems: [...$contextItems]
+			};
 
-		scrollToBottom();
+			messagesStore.update(current => [...current, userMessage]);
 
-		const queryText = $inputValue;
-		inputValue.set('');
-		// We already set an initial status, no need to clear here
-		await tick(); // Wait for DOM update
-		adjustTextareaHeight(); // Reset height after clearing input and waiting for tick
+			// Create loading message placeholder
+			loadingMessage = {
+				message_id: 'temp_loading_' + Date.now(),
+				content: '', // Content is now handled by the store
+				sender: 'assistant',
+				timestamp: new Date(),
+				isLoading: true
+			};
+			messagesStore.update(current => [...current, loadingMessage as Message]);
+			
+			// <-- Set initial status immediately -->
+			functionStatusStore.set({
+				type: 'function_status',
+				userMessage: 'Processing request...'
+			});
 
-		// Prepend if backtest mode is active
-		const finalQuery = isBacktestMode ? `[RUN BACKTEST] ${queryText}` : queryText;
-		const currentActiveChart = $activeChartInstance; // Get current active chart instance
-		privateRequest('getQuery', {
-			query: finalQuery,
-			context: $contextItems, // Send only manually added context items
-			activeChartContext: currentActiveChart // Send active chart separately
-		})
-			.then((response) => {
-				console.log('response', response);
+			// Scroll to show the user's message and loading state
+			scrollToBottom();
+
+			currentProcessingQuery = $inputValue; // Store the query before clearing input
+			inputValue.set('');
+			// We already set an initial status, no need to clear here
+			await tick(); // Wait for DOM update
+			adjustTextareaHeight(); // Reset height after clearing input and waiting for tick
+
+			// Remove backtest mode logic - use query directly without prepending
+			const finalQuery = currentProcessingQuery;
+			const currentActiveChart = $activeChartInstance; // Get current active chart instance
+			
+			try {
+				const response = await privateRequest('getQuery', {
+					query: finalQuery,
+					context: $contextItems, // Send only manually added context items
+					activeChartContext: currentActiveChart, // Send active chart separately
+					conversation_id: currentConversationId || '' // Send empty string for new chats
+				}, false, false, currentAbortController?.signal);
+
+				// Check if request was cancelled while awaiting
+				if (requestCancelled) {
+					functionStatusStore.set(null);
+					// Try to clean up pending message on backend
+					await cleanupPendingMessage(currentProcessingQuery);
+					return;
+				}
+
 				// Type assertion to handle the response type
 				const typedResponse = response as unknown as QueryResponse;
-				console.log('Response:', typedResponse);
+				// Store the conversation ID for potential cleanup
+				if (typedResponse.conversation_id) {
+					backendConversationId = typedResponse.conversation_id;
+				}
 
-				messagesStore.update(current => current.filter(m => m.id !== loadingMessage.id));
-				functionStatusStore.set(null); // Clear status store on success
+				// Clear status store on success
+				functionStatusStore.set(null);
 
-				const expiresAt = new Date();
-				expiresAt.setHours(expiresAt.getHours() + 24); 
+				// Update conversation ID if this was a new chat
+				if (typedResponse.conversation_id && !currentConversationId) {
+					currentConversationId = typedResponse.conversation_id;
+					// Load conversations to get the title (only for authenticated users)
+					if (!isPublicViewing) {
+						await loadConversations();
+					}
+				}
+
+				// Update the temporary user message with the real backend message ID
+				if (typedResponse.message_id) {
+					messagesStore.update(current => 
+						current.map(msg => 
+							msg.message_id === userMessage.message_id 
+								? { ...msg, message_id: typedResponse.message_id! }
+								: msg
+						)
+					);
+				}
+
+				// Use timestamps from backend response if available, otherwise use current time
+				const messageTimestamp = typedResponse.timestamp ? new Date(typedResponse.timestamp) : new Date();
+				const messageCompletedAt = typedResponse.completed_at ? new Date(typedResponse.completed_at) : new Date();
 
 				const assistantMessage: Message = {
-					id: generateId(),
+					message_id: typedResponse.message_id  + '_response' || '',
 					content: typedResponse.text || "Error processing request.",
 					sender: 'assistant',
-					timestamp: new Date(),
-					expiresAt: expiresAt,
-					responseType: typedResponse.response_type,
-					contentChunks: typedResponse.content_chunks
+					timestamp: messageTimestamp,
+					responseType: typedResponse.type,
+					contentChunks: typedResponse.content_chunks,
+					suggestedQueries: typedResponse.suggestions || [],
+					status: 'completed',
+					completedAt: messageCompletedAt
 				};
 
 				messagesStore.update(current => [...current, assistantMessage]);
-				// scrollToBottom(); // Removed this call
 				
-				fetchSuggestedQueries();
-			})
-			.catch((error) => {
+				// Update last seen timestamp since we just saw this response
+				const lastSeenKey = 'chat_last_seen_timestamp';
+				localStorage.setItem(lastSeenKey, messageCompletedAt.toISOString());
+				
+				// If we didn't have a conversation ID before, we should have one now
+				// Load conversation history to get the new conversation ID
+				if (!currentConversationId) {
+					await loadConversationHistory(false); // Don't scroll since we just added the message
+					await loadConversations(); // Refresh conversation list
+				}
+				
+			} catch (error: any) {
+				// Check if the request was cancelled (either by AbortController or by our cancellation response)
+				if (requestCancelled || (error.cancelled === true)) {
+					functionStatusStore.set(null);
+					// Try to clean up pending message on backend
+					await cleanupPendingMessage(currentProcessingQuery);
+					return;
+				}
+				
 				console.error('Error fetching response:', error);
 
-				// Remove loading message and add error message
-				messagesStore.update(current => current.filter(m => m.id !== loadingMessage.id));
-				functionStatusStore.set(null); // Clear status store on error
+				// Clear status store on error
+				functionStatusStore.set(null);
+
+				// Try to clean up pending message on backend for network errors
+				await cleanupPendingMessage(currentProcessingQuery);
 
 				const errorMessage: Message = {
-					id: generateId(),
+					message_id: 'temp_error_' + Date.now(),
 					content: `Error: ${error.message || 'Failed to get response'}`,
 					sender: 'assistant',
 					timestamp: new Date(),
@@ -388,8 +688,78 @@
 				};
 
 				messagesStore.update(current => [...current, errorMessage]);
-				// scrollToBottom(); // Removed this call
-			});
+			}
+		} catch (error: any) {
+			console.error('Error in handleSubmit:', error);
+			
+			// Clear status store on any error
+			functionStatusStore.set(null);
+			
+			// Try to clean up pending message on backend
+			await cleanupPendingMessage(currentProcessingQuery);
+			
+			// Add error message if we have a loading message
+			if (loadingMessage) {
+				const errorMessage: Message = {
+					message_id: 'temp_error_' + Date.now(),
+					content: `Error: ${error.message || 'An unexpected error occurred'}`,
+					sender: 'assistant',
+					timestamp: new Date(),
+					responseType: 'error'
+				};
+
+				messagesStore.update(current => [...current, errorMessage]);
+			}
+		} finally {
+			// Always clean up loading message and reset state
+			if (loadingMessage) {
+				messagesStore.update(current => current.filter(m => m.message_id !== loadingMessage!.message_id));
+			}
+			isLoading = false;
+			currentAbortController = null;
+			requestCancelled = false;
+			currentProcessingQuery = ''; // Clear the processing query
+		}
+	}
+
+	// Helper function to clean up pending messages on the backend
+	async function cleanupPendingMessage(query: string) {
+		try {
+			const conversationIdToUse = currentConversationId || '';
+			if (conversationIdToUse && query) {
+				await privateRequest('cancelPendingMessage', {
+					conversation_id: conversationIdToUse,
+					query: query
+				});
+			}
+		} catch (cleanupError) {
+			console.warn('Failed to cleanup pending message on backend:', cleanupError);
+			// Don't throw - this is a cleanup operation that shouldn't affect the main flow
+		}
+	}
+
+	// Function to cancel/pause the current request
+	async function handleCancelRequest() {
+		if (isLoading) {
+			requestCancelled = true;
+			functionStatusStore.set(null);
+			
+			// Abort the HTTP request - this will cancel the backend processing
+			if (currentAbortController) {
+				currentAbortController.abort();
+			}
+			
+			// Clean up pending message on backend using the tracked query
+			if (currentProcessingQuery) {
+				await cleanupPendingMessage(currentProcessingQuery);
+			}
+			
+			// Remove any loading messages
+			messagesStore.update(current => current.filter(m => !m.isLoading));
+			
+			isLoading = false;
+			currentAbortController = null;
+		}
 	}
 
 	// Function to adjust textarea height dynamically
@@ -401,68 +771,15 @@
 		queryInput.style.height = `${queryInput.scrollHeight}px`; // Set height to content height
 	}
 
-	function formatTimestamp(date: Date): string {
-		return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-	}
 
-	// Function to determine if a message is near expiration (less than 6 hours)
-	function isNearExpiration(message: Message): boolean {
-		if (!message.expiresAt) return false;
-		const now = new Date();
-		const sixHoursMs = 6 * 60 * 60 * 1000;
-		return message.expiresAt.getTime() - now.getTime() < sixHoursMs;
-	}
 
-	// Function to format expiration time
-	function formatExpiration(expiresAt: Date): string {
-		const now = new Date();
-		const diff = expiresAt.getTime() - now.getTime();
 
-		// Less than an hour
-		if (diff < 60 * 60 * 1000) {
-			const mins = Math.max(1, Math.floor(diff / (60 * 1000)));
-			return `Expires in ${mins} minute${mins !== 1 ? 's' : ''}`;
-		}
 
-		// Hours
-		if (diff < 24 * 60 * 60 * 1000) {
-			const hours = Math.floor(diff / (60 * 60 * 1000));
-			return `Expires in ${hours} hour${hours !== 1 ? 's' : ''}`;
-		}
-
-		// Days
-		const days = Math.floor(diff / (24 * 60 * 60 * 1000));
-		return `Expires in ${days} day${days !== 1 ? 's' : ''}`;
-	}
 
 	// Function to clear conversation history
 	async function clearConversation() {
-		try {
-			isLoading = true;
-			// Wait for backend confirmation before clearing locally and fetching suggestions
-			await privateRequest('clearConversationHistory', {});
-
-			// Clear local messages
-			messagesStore.set([]);
-
-			// Fetch initial suggestions now that history is cleared and confirmed
-			fetchInitialSuggestions(); // <-- Call the new helper function
-			
-		} catch (error) {
-			console.error('Error clearing conversation history:', error);
-			
-			// Show error message
-			const errorMessage: Message = {
-				id: generateId(),
-				content: `Error: Failed to clear conversation history`,
-				sender: 'assistant', // Or 'system'? Let's keep 'assistant' for consistency with other errors
-				timestamp: new Date(),
-				responseType: 'error'
-			};
-			messagesStore.set([errorMessage]); // Show error on empty background
-		} finally {
-			isLoading = false;
-		}
+		// Instead of clearing the current conversation, create a new one
+		createNewConversation();
 	}
 
 	// Function to safely access table data properties
@@ -470,7 +787,8 @@
 		return typeof content === 'object' && 
 			content !== null && 
 			Array.isArray(content.headers) && 
-			Array.isArray(content.rows);
+			Array.isArray(content.rows) &&
+			content.rows.every((row: any) => Array.isArray(row)); // Ensure each row is also an array
 	}
 	
 	// Function to get table data safely
@@ -481,63 +799,6 @@
 		return null;
 	}
 
-	// Function to handle clicks on ticker buttons
-	async function handleTickerButtonClick(event: MouseEvent) {
-		const target = event.target as HTMLButtonElement; // Assert as Button Element
-		if (target && target.classList.contains('ticker-button')) {
-			const ticker = target.dataset.ticker;
-			const timestampMsStr = target.dataset.timestampMs; // Get the timestamp string
-
-			if (ticker && timestampMsStr) {
-				const timestampMs = parseInt(timestampMsStr, 10); // Parse the timestamp
-
-				if (isNaN(timestampMs)) {
-					console.error('Invalid timestampMs on ticker button');
-					return; // Don't proceed if timestamp is invalid
-				}
-
-				try {
-					target.disabled = true;
-
-					// Call the new backend function to get the securityId
-					// Define expected response shape
-					type SecurityIdResponse = { securityId?: number };
-					console.log('ticker', ticker);
-					console.log('timestampMs', timestampMs);
-					const response = await privateRequest<SecurityIdResponse>('getSecurityIDFromTickerTimestamp', {
-						ticker: ticker,
-						timestampMs: timestampMs // Pass timestamp as number
-					});
-
-					// Safely access the securityId
-					const securityId = response?.securityId;
-
-					if (securityId && !isNaN(securityId)) {
-						// If securityId is valid, query the chart
-						queryChart({
-							ticker: ticker,
-							securityId: securityId,
-							timestamp: timestampMs // Pass timestamp as number (milliseconds)
-						} as Instance);
-					} else {
-						console.error('Failed to retrieve a valid securityId from backend:', response);
-						// Handle error visually if needed (e.g., show error message)
-						target.textContent = 'Error'; // Revert button text or indicate error
-						await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-					}
-
-				} catch (error) {
-					console.error('Error fetching securityId:', error);
-					await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-				} finally {
-					target.disabled = false;
-				}
-
-			} else {
-				console.error('Missing data attributes on ticker button');
-			}
-		}
-	}
 
 	// Function to toggle table expansion state
 	function toggleTableExpansion(tableKey: string) {
@@ -564,6 +825,10 @@
 
 		// Sort the rows
 		tableData.rows.sort((a, b) => {
+			// Skip sorting if rows are not arrays
+			if (!Array.isArray(a) || !Array.isArray(b)) {
+				return 0;
+			}
 			const valA = a[columnIndex];
 			const valB = b[columnIndex];
 
@@ -599,7 +864,7 @@
 		messagesStore.update(current => current.map(msg => {
 			if (msg.contentChunks) {
 				msg.contentChunks = msg.contentChunks.map((chunk, idx) => {
-					const currentTableKey = msg.id + '-' + idx;
+					const currentTableKey = msg.message_id + '-' + idx;
 					if (currentTableKey === tableKey && chunk.type === 'table' && isTableData(chunk.content)) {
 						// Return a new chunk object with the sorted rows
 						return {
@@ -617,22 +882,6 @@
 		}));
 	}
 
-	// Format timestamp for context chip (matches parseMarkdown format)
-	function formatChipDate(timestampMs?: number): string {
-		if (!timestampMs || timestampMs === 0) {
-			return '';
-		}
-		try {
-			const date = new Date(timestampMs);
-			const year = date.getFullYear();
-			const month = (date.getMonth() + 1).toString().padStart(2, '0');
-			const day = date.getDate().toString().padStart(2, '0');
-			return ` (${year}-${month}-${day})`; // Add leading space
-		} catch (e) {
-			console.error('Error formatting chip date:', e);
-			return '';
-		}
-	}
 
 	// Reactive block to handle pending query
 	$: if ($pendingChatQuery && browser && historyLoaded) {
@@ -658,20 +907,283 @@
 			handleSubmit();
 		});
 	}
+
+	// Message editing functions
+	function startEditing(message: Message) {
+		if (message.sender !== 'user') return; // Only allow editing user messages
+		editingMessageId = message.message_id;
+		editingContent = message.content;
+	}
+
+	function cancelEditing() {
+		editingMessageId = '';
+		editingContent = '';
+	}
+
+	// Function to copy message content to clipboard
+	async function copyMessageToClipboard(message: Message) {
+		try {
+			let textToCopy = '';
+			
+			if (message.contentChunks && message.contentChunks.length > 0) {
+				// For messages with content chunks, extract text from each chunk
+				textToCopy = message.contentChunks.map(chunk => {
+					if (chunk.type === 'text') {
+						const content = typeof chunk.content === 'string' ? chunk.content : String(chunk.content);
+						return cleanHtmlContent(content);
+					} else if (chunk.type === 'table' && isTableData(chunk.content)) {
+						// For tables, create a simple text representation
+						const tableData = chunk.content;
+						let tableText = '';
+						if (tableData.caption) {
+							const cleanCaption = cleanHtmlContent(tableData.caption);
+							tableText += cleanCaption + '\n\n';
+						}
+						// Add headers
+						tableText += tableData.headers.join('\t') + '\n';
+						// Add rows (also clean ticker formatting from table cells)
+						tableText += tableData.rows.map(row => {
+							if (Array.isArray(row)) {
+								return row.map(cell => cleanHtmlContent(String(cell))).join('\t');
+							} else {
+								return cleanHtmlContent(String(row));
+							}
+						}).join('\n');
+						return tableText;
+					}
+					return '';
+				}).join('\n\n');
+			} else {
+				// For simple text messages
+				textToCopy = cleanHtmlContent(message.content);
+			}
+			
+			await navigator.clipboard.writeText(textToCopy);
+			
+			// Show success feedback
+			copiedMessageId = message.message_id;
+			if (copyTimeout) {
+				clearTimeout(copyTimeout);
+			}
+			copyTimeout = setTimeout(() => {
+				copiedMessageId = '';
+				copyTimeout = null;
+			}, 1000); // Show success state for 2 seconds
+			
+		} catch (error) {
+			console.error('Failed to copy message to clipboard:', error);
+			// Fallback for older browsers
+			try {
+				const textArea = document.createElement('textarea');
+				const fallbackText = cleanHtmlContent(message.content);
+				textArea.value = fallbackText;
+				document.body.appendChild(textArea);
+				textArea.select();
+				document.execCommand('copy');
+				document.body.removeChild(textArea);
+				
+				// Show success feedback for fallback too
+				copiedMessageId = message.message_id;
+				if (copyTimeout) {
+					clearTimeout(copyTimeout);
+				}
+				copyTimeout = setTimeout(() => {
+					copiedMessageId = '';
+					copyTimeout = null;
+				}, 1000);
+			} catch (fallbackError) {
+				console.error('Fallback copy method also failed:', fallbackError);
+			}
+		}
+	}
+
+	async function saveMessageEdit() {
+		if (!editingMessageId || !editingContent.trim()) {
+			return;
+		}
+		
+		try {
+			// Find the message being edited
+			const editingMessage = $messagesStore.find(msg => msg.message_id === editingMessageId);
+			
+			if (!editingMessage) {
+				console.error('Message to edit not found');
+				return;
+			}
+
+			// Use the message ID directly (it should be the backend message ID)
+			const backendMessageId = editingMessage.message_id;
+			
+			if (!backendMessageId) {
+				console.error('No backend message ID found for editing');
+				return;
+			}
+
+			// Store the new content before clearing editing state
+			const newContent = editingContent.trim();
+
+			// Only proceed if the content actually changed
+			if (editingMessage.content === newContent) {
+				// No changes, just exit editing mode
+				editingMessageId = '';
+				editingContent = '';
+				return;
+			}
+
+			// Clear editing state early
+			editingMessageId = '';
+			editingContent = '';
+
+			// Call backend to edit the message using the backend message ID
+			const requestPayload = {
+				conversation_id: currentConversationId,
+				message_id: backendMessageId,
+				new_query: newContent
+			};
+
+			const response = await privateRequest('editMessage', requestPayload);
+
+			if (response && (response as any).success) {
+				console.log('Edit response received:', response);
+				
+				// Update conversation ID first before any other operations
+				if ((response as any).conversation_id) {
+					currentConversationId = (response as any).conversation_id;
+				}
+				
+				console.log('Current messages before reload:', $messagesStore.length);
+				
+				// Reload conversation history to reflect the archived state
+				await loadConversationHistory(false);
+				
+				console.log('Current messages after reload:', $messagesStore.length);
+				
+				// Wait a moment for the UI to fully update
+				await tick();
+
+				// Now automatically send the edited message as a new chat request
+				// Set the input value and context from the edit response
+				inputValue.set(newContent);
+				
+				// Always clear existing context and set only the ones from the edited message
+				contextItems.update(currentItems => {
+					// Set context items from the edit response, or empty array if none
+					return (response as any).context_items || [];
+				});
+
+				// Use tick to ensure input value is updated before submitting
+				await tick();
+				
+				console.log('About to submit edited message:', newContent);
+				
+				// Submit the message using existing logic
+				handleSubmit();
+			} else {
+				console.error('Backend edit failed or success=false');
+				// Reload conversation to get current state
+				await loadConversationHistory(false);
+			}
+		} catch (error) {
+			console.error('Error saving message edit:', error);
+			
+			// Clear editing state on error
+			editingMessageId = '';
+			editingContent = '';
+			
+			// Reload conversation to get current state
+			await loadConversationHistory(false);
+		}
+	}
+
+	// Share conversation functions
+	async function handleShareConversation() {
+		if (!currentConversationId) {
+			console.error('No active conversation to share');
+			return;
+		}
+
+		// Close conversation dropdown if it's open
+		if (showConversationDropdown) {
+			showConversationDropdown = false;
+		}
+
+		showShareModal = true;
+		shareLoading = true;
+		shareLink = '';
+		shareCopied = false;
+
+		try {
+			const link = await generateSharedConversationLink(currentConversationId);
+			if (link) {
+				shareLink = link;
+			} else {
+				console.error('Failed to generate share link');
+			}
+		} catch (error) {
+			console.error('Error generating share link:', error);
+		} finally {
+			shareLoading = false;
+		}
+	}
+
+	function closeShareModal() {
+		showShareModal = false;
+		shareLink = '';
+		shareLoading = false;
+		shareCopied = false;
+		if (shareCopyTimeout) {
+			clearTimeout(shareCopyTimeout);
+			shareCopyTimeout = null;
+		}
+	}
+
+	async function copyShareLink() {
+		if (!shareLink) return;
+		
+		try {
+			await navigator.clipboard.writeText(shareLink);
+			shareCopied = true;
+			
+			if (shareCopyTimeout) {
+				clearTimeout(shareCopyTimeout);
+			}
+			shareCopyTimeout = setTimeout(() => {
+				shareCopied = false;
+				shareCopyTimeout = null;
+			}, 2000);
+		} catch (error) {
+			console.error('Failed to copy share link:', error);
+		}
+	}
 </script>
 
 <div class="chat-container">
-	<div class="chat-header">
-		<h3>Chat</h3>
-		{#if $messagesStore.length > 0}
-			<button class="clear-button" on:click={clearConversation} disabled={isLoading}>
-				<svg viewBox="0 0 24 24" width="16" height="16">
-					<path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z" fill="currentColor" />
-				</svg>
-				Clear History
-			</button>
-		{/if}
-	</div>
+	{#if !isPublicViewing}
+		<ConversationHeader 
+			bind:conversationDropdown
+			{showConversationDropdown}
+			{conversations}
+			{currentConversationId}
+			{currentConversationTitle}
+			{loadingConversations}
+			{conversationToDelete}
+			{messagesStore}
+			{isLoading}
+			{toggleConversationDropdown}
+			{createNewConversation}
+			{switchToConversation}
+			{deleteConversation}
+			{confirmDeleteConversation}
+			{cancelDeleteConversation}
+			{handleShareConversation}
+			{clearConversation}
+		/>
+	{:else}
+		<!-- Simple header for public viewing -->
+		<div class="public-conversation-header">
+			<h3>{currentConversationTitle || 'Shared Conversation'}</h3>
+		</div>
+	{/if}
 
 	<div class="chat-messages" bind:this={messagesContainer}>
 		{#if $messagesStore.length === 0}
@@ -684,17 +1196,50 @@
 
 			</div>
 		{:else}
-			{#each $messagesStore as message (message.id)}
+			{#each $messagesStore as message (message.message_id)}
 				<div class="message-wrapper {message.sender}">
 					<div
 						class="message {message.sender} {message.responseType === 'error'
 							? 'error'
-							: ''} {isNearExpiration(message) ? 'expiring' : ''}"
+							: ''} {message.isNewResponse ? 'new-response' : ''} {editingMessageId === message.message_id ? 'editing' : ''} {message.sender === 'user' ? 'glass glass--pill glass--responsive' : ''}"
 					>
 						{#if message.isLoading}
 							<!-- Always display status text when loading, as we set an initial one -->
 							<p class="loading-status">{$functionStatusStore?.userMessage || 'Processing...'}</p> 
+						{:else if editingMessageId === message.message_id}
+							<!-- Editing interface - using CSS classes -->
+							<div class="edit-container">
+								<textarea
+									class="edit-textarea"
+									bind:value={editingContent}
+									placeholder="Edit your message..."
+									on:keydown={(e) => {
+										if (e.key === 'Enter' && e.ctrlKey) {
+											e.preventDefault();
+											saveMessageEdit();
+										} else if (e.key === 'Escape') {
+											e.preventDefault();
+											cancelEditing();
+										}
+									}}
+								></textarea>
+								<div class="edit-actions">
+									<button class="edit-cancel-btn glass glass--small glass--responsive" on:click={cancelEditing}>
+										Cancel
+									</button>
+									<button class="edit-save-btn glass glass--small glass--responsive" on:click={saveMessageEdit}>
+										Send
+									</button>
+								</div>
+							</div>
 						{:else}
+							<!-- Show new response indicator -->
+							{#if message.isNewResponse && message.sender === 'assistant'}
+								<div class="new-response-indicator">
+									<span class="new-badge">New</span>
+								</div>
+							{/if}
+							
 							<!-- Display context chips for user messages -->
 							{#if message.sender === 'user' && message.contextItems && message.contextItems.length > 0}
 								<div class="message-context-chips">
@@ -712,6 +1257,11 @@
 								</div>
 							{/if}
 							<div class="message-content">
+								{#if message.sender === 'assistant' && message.completedAt && message.timestamp}
+									<div class="message-runtime">
+										{formatRuntime(message.timestamp, message.completedAt)}
+									</div>
+								{/if}
 								{#if message.contentChunks && message.contentChunks.length > 0}
 									<div class="content-chunks">
 										{#each message.contentChunks as chunk, index}
@@ -722,13 +1272,13 @@
 											{:else if chunk.type === 'table'}
 												{#if isTableData(chunk.content)}
 													{@const tableData = getTableData(chunk.content)}
-													{@const tableKey = message.id + '-' + index}
+													{@const tableKey = message.message_id + '-' + index}
 													{@const isLongTable = tableData && tableData.rows.length > 5}
 													{@const isExpanded = tableExpansionStates[tableKey] === true}
 													{@const currentSort = tableSortStates[tableKey] || { columnIndex: null, direction: null }}
 
 													{#if tableData}
-														<div class="chunk-table-wrapper">
+														<div class="chunk-table-wrapper glass glass--rounded glass--responsive">
 															{#if tableData.caption}
 																<div class="table-caption">
 																	{@html parseMarkdown(tableData.caption)}
@@ -760,9 +1310,13 @@
 																		{#each tableData.rows as row, rowIndex}
 																			{#if rowIndex < 5 || isExpanded}
 																			<tr>
-																				{#each row as cell}
-																				<td>{@html parseMarkdown(typeof cell === 'string' ? cell : String(cell))}</td>
-																				{/each}
+																				{#if Array.isArray(row)}
+																					{#each row as cell}
+																					<td>{@html parseMarkdown(typeof cell === 'string' ? cell : String(cell))}</td>
+																					{/each}
+																				{:else}
+																					<td colspan="{tableData.headers.length}">Invalid row data: {typeof row === 'string' ? row : String(row)}</td>
+																				{/if}
 																			</tr>
 																			{/if}
 																		{/each}
@@ -770,7 +1324,7 @@
 																</table>
 															</div>
 															{#if isLongTable}
-																<button class="table-toggle-btn" on:click={() => toggleTableExpansion(tableKey)}>
+																<button class="table-toggle-btn glass glass--small glass--responsive" on:click={() => toggleTableExpansion(tableKey)}>
 																	{isExpanded ? 'Show less' : `Show more (${tableData.rows.length} rows)`}
 																</button>
 															{/if}
@@ -788,64 +1342,84 @@
 									<p>{@html parseMarkdown(message.content)}</p>
 								{/if}
 							</div>
-
+							{#if message.sender === 'assistant'}
+								<div class="message-actions">
+									<button 
+										class="copy-btn glass glass--small glass--responsive {copiedMessageId === message.message_id ? 'copied' : ''}" 
+										on:click={() => copyMessageToClipboard(message)}
+									>
+										{#if copiedMessageId === message.message_id}
+											<svg viewBox="0 0 24 24" width="14" height="14">
+												<path d="M9,20.42L2.79,14.21L5.62,11.38L9,14.77L18.88,4.88L21.71,7.71L9,20.42Z" fill="currentColor" />
+											</svg>
+										{:else}
+											<svg viewBox="0 0 24 24" width="14" height="14">
+												<path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" fill="currentColor" />
+											</svg>
+										{/if}
+									</button>
+								</div>
+							{/if}
 							{#if message.suggestedQueries && message.suggestedQueries.length > 0}
 								<div class="suggested-queries">
 									{#each message.suggestedQueries as query}
-										<button 
-											class="suggested-query-btn" 
-											on:click={() => handleSuggestedQueryClick(query)}
-										>
+																		<button 
+									class="suggested-query-btn glass glass--rounded glass--responsive" 
+									on:click={() => handleSuggestedQueryClick(query)}
+								>
 											{query}
 										</button>
 									{/each}
 								</div>
 							{/if}
-
-							<div class="message-footer">
-								<div class="message-timestamp">
-									{formatTimestamp(message.timestamp)}
-								</div>
-								{#if message.expiresAt}
-									<div class="message-expiration {isNearExpiration(message) ? 'expiring' : ''}">
-										{formatExpiration(message.expiresAt)}
-									</div>
-								{/if}
-							</div>
 						{/if}
 					</div>
+
+					<!-- Edit button for user messages - outside the message div -->
+					{#if message.sender === 'user' && editingMessageId !== message.message_id}
+						<div class="message-actions">
+							<button 
+								class="copy-btn glass glass--small glass--responsive {copiedMessageId === message.message_id ? 'copied' : ''}" 
+								on:click={() => copyMessageToClipboard(message)}
+							>
+								{#if copiedMessageId === message.message_id}
+									<svg viewBox="0 0 24 24" width="14" height="14">
+										<path d="M9,20.42L2.79,14.21L5.62,11.38L9,14.77L18.88,4.88L21.71,7.71L9,20.42Z" fill="currentColor" />
+									</svg>
+								{:else}
+									<svg viewBox="0 0 24 24" width="14" height="14">
+										<path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" fill="currentColor" />
+									</svg>
+								{/if}
+							</button>
+							<button class="edit-btn glass glass--small glass--responsive" on:click={() => startEditing(message)}>
+								<svg viewBox="0 0 24 24" width="14" height="14">
+									<path d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z" fill="currentColor" />
+								</svg>
+							</button>
+						</div>
+					{/if}
 				</div>
 			{/each}
 		{/if}
 	</div>
 
-	<div class="chat-input-wrapper">
-		<!-- Moved Initial Suggestions Here -->
-		{#if $showChips && topChips.length}
-		  <div class="chip-row">
-		    {#each initialSuggestions as q, i}
-		      {#if i < 3 || showAllInitialSuggestions}
-		      <button class="chip suggestion-chip" on:click={() => handleSuggestedQueryClick(q)}>
-		        <kbd>{i + 1}</kbd> {q}
-		      </button>
-		      {/if}
-		    {/each}
-		    {#if initialSuggestions.length > 3 && !showAllInitialSuggestions}
-		      <button class="chip suggestion-chip more" on:click={() => showAllInitialSuggestions = true}>⋯ More</button>
-		    {/if}
-		  </div>
-		{/if}
-
-		<div class="input-actions">
-			<button
-				class="action-toggle-button {isBacktestMode ? 'active' : ''}"
-				on:click={toggleBacktestMode}
-				aria-label="Toggle Backtest Mode"
-				title="Toggle Backtest Mode"
-			>
-				Backtest
-			</button>
-		</div>
+	{#if !isPublicViewing}
+		<div class="chat-input-wrapper">
+			{#if $showChips && topChips.length}
+			  <div class="chip-row">
+			    {#each initialSuggestions as q, i}
+			      {#if i < 3 || showAllInitialSuggestions}
+			      					<button class="chip suggestion-chip glass glass--pill glass--responsive" on:click={() => handleSuggestedQueryClick(q)}>
+			        <kbd>{i + 1}</kbd> {q}
+			      </button>
+			      {/if}
+			    {/each}
+			    {#if initialSuggestions.length > 3 && !showAllInitialSuggestions}
+			      <button class="chip suggestion-chip glass glass--pill glass--responsive more" on:click={() => showAllInitialSuggestions = true}>⋯ More</button>
+			    {/if}
+			  </div>
+			{/if}
 
 		<div class="input-area-wrapper">
 			{#if $contextItems.length > 0}
@@ -856,7 +1430,7 @@
 						{@const isFiling = 'filingType' in item}
 						<button
 							type="button"
-							class="chip"
+							class="chip glass glass--pill glass--responsive"
 							on:click={() => {
 								if (isFiling) {
 									removeFilingFromChat(item);
@@ -877,10 +1451,10 @@
 				</div>
 			{/if}
 
-			<div class="input-field-container">
+			<div class="input-field-container glass glass--rounded glass--responsive">
 				<textarea
 					class="chat-input"
-					placeholder="Ask about anything..."
+					placeholder="Ask anything..."
 					bind:value={$inputValue}
 					bind:this={queryInput}
 					rows="1"
@@ -906,760 +1480,88 @@
 					}}
 				></textarea>
 				<button
-					class="send-button"
-					on:click={handleSubmit}
-					aria-label="Send message"
-					disabled={!$inputValue.trim() || isLoading}
+					class="send-button {isLoading ? 'loading' : ''}"
+					on:click={isLoading ? handleCancelRequest : handleSubmit}
+					aria-label={isLoading ? "Cancel request" : "Send message"}
+					disabled={!isLoading && !$inputValue.trim()}
 				>
-					<svg viewBox="0 0 24 24" class="send-icon">
-						<path d="M2,21L23,12L2,3V10L17,12L2,14V21Z" />
-					</svg>
+					{#if isLoading}
+						<svg viewBox="0 0 24 24" class="send-icon pause-icon">
+							<path d="M6,6H18V18H6V6Z" />
+						</svg>
+					{:else}
+						<svg viewBox="0 0 18 18" class="send-icon">
+							<path d="M7.99992 14.9993V5.41334L4.70696 8.70631C4.31643 9.09683 3.68342 9.09683 3.29289 8.70631C2.90237 8.31578 2.90237 7.68277 3.29289 7.29225L8.29289 2.29225L8.36906 2.22389C8.76184 1.90354 9.34084 1.92613 9.70696 2.29225L14.707 7.29225L14.7753 7.36842C15.0957 7.76119 15.0731 8.34019 14.707 8.70631C14.3408 9.07242 13.7618 9.09502 13.3691 8.77467L13.2929 8.70631L9.99992 5.41334V14.9993C9.99992 15.5516 9.55221 15.9993 8.99992 15.9993C8.44764 15.9993 7.99993 15.5516 7.99992 14.9993Z" />
+						</svg>
+					{/if}
 				</button>
 			</div>
 		</div>
-	</div>
+		</div>
+	{:else}
+		<!-- Public viewing message -->
+		<div class="public-viewing-notice">
+			<p>You are viewing a shared conversation. <a href="/app">Sign in</a> to start your own chat.</p>
+		</div>
+	{/if}
+
+	<!-- Share Modal -->
+	{#if showShareModal}
+		<div class="share-modal-popup glass glass--rounded glass--responsive" bind:this={shareModalRef}>
+			<div class="share-modal-header">
+				<h4>Share Conversation</h4>
+				<button class="close-btn" on:click={closeShareModal} aria-label="Close">
+					<svg viewBox="0 0 24 24" width="16" height="16">
+						<path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" fill="currentColor" />
+					</svg>
+				</button>
+			</div>
+			
+			<div class="share-modal-content">
+				{#if shareLoading}
+					<div class="share-loading">
+						<p>Generating share link...</p>
+					</div>
+				{:else if shareLink}
+					<div class="share-link-container">
+						<p class="share-description">
+							Anyone with this link can view this conversation.
+						</p>
+						
+						<div class="share-link-field">
+							<input 
+								type="text" 
+								value={shareLink} 
+								readonly 
+								class="share-link-input"
+							/>
+							<button 
+								class="copy-link-btn glass glass--small glass--responsive {shareCopied ? 'copied' : ''}"
+								on:click={copyShareLink}
+							>
+								{#if shareCopied}
+									<svg viewBox="0 0 24 24" width="14" height="14">
+										<path d="M9,20.42L2.79,14.21L5.62,11.38L9,14.77L18.88,4.88L21.71,7.71L9,20.42Z" fill="currentColor" />
+									</svg>
+									Copied!
+								{:else}
+									<svg viewBox="0 0 24 24" width="14" height="14">
+										<path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" fill="currentColor" />
+									</svg>
+									Copy
+								{/if}
+							</button>
+						</div>
+					</div>
+				{:else}
+					<div class="share-error">
+						<p>Failed to generate share link. Please try again.</p>
+						<button class="retry-btn glass glass--small glass--responsive" on:click={handleShareConversation}>
+							Retry
+						</button>
+					</div>
+				{/if}
+			</div>
+		</div>
+	{/if	}
 </div>
-
-<style>
-	.chat-container {
-		display: flex;
-		flex-direction: column;
-		height: 100%;
-		overflow: hidden;
-	}
-
-	.chat-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 0.75rem 1.5rem;
-		border-bottom: 1px solid var(--ui-border); /* Use theme border */
-		background: var(--ui-bg-primary); /* Use theme background */
-	}
-
-	.chat-header h3 {
-		margin: 0;
-		font-size: 1rem;
-		font-weight: 500;
-		color: var(--text-primary, #fff);
-	}
-
-	.clear-button {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.3rem 0.6rem; /* Slightly smaller padding */
-		background: transparent; /* Remove background */
-		color: var(--text-secondary, #aaa); /* Use secondary text color */
-		border: 1px solid transparent; /* Transparent border */
-		border-radius: 0.25rem;
-		font-size: 0.75rem;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-
-	.clear-button:hover:not(:disabled) {
-		background: var(--ui-bg-hover, rgba(255, 255, 255, 0.1)); /* Subtle hover */
-		color: var(--text-primary, #fff); /* Primary text color on hover */
-		border-color: var(--ui-border, #444); /* Show border on hover */
-	}
-
-	.clear-button:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.clear-button svg {
-		width: 1rem;
-		height: 1rem;
-	}
-
-	.chat-messages {
-		flex: 1;
-		overflow-y: auto;
-		padding: clamp(0.75rem, 2vw, 1.5rem);
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-		scroll-behavior: smooth;
-	}
-
-	.empty-chat {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		height: 100%;
-		color: var(--text-secondary, #aaa);
-		gap: 1rem;
-		text-align: center;
-		padding: 2rem;
-	}
-
-	.empty-chat-icon {
-		opacity: 0.5;
-	}
-
-	.message-wrapper {
-		display: flex;
-		flex-direction: column;
-		width: 100%;
-	}
-
-	.message-wrapper.user {
-		align-items: flex-end;
-	}
-
-	.message-wrapper.assistant {
-		align-items: flex-start;
-		width: 100%;
-		border-bottom: 1px solid var(--ui-border, #333);
-		padding-bottom: 0.75rem;
-	}
-
-	.message {
-		max-width: 80%;
-		padding: 0.75rem 1rem;
-		border-radius: 1rem;
-		position: relative;
-		font-size: 0.875rem;
-	}
-
-	.message.user {
-		background: var(--accent-color, #3a8bf7);
-		color: white;
-		border-bottom-right-radius: 0.25rem;
-	}
-
-	.message.assistant {
-		background: transparent;
-		border: none;
-		color: var(--text-primary, #fff);
-		max-width: 100%;
-		width: 100%;
-		padding: 0.5rem 0;
-		border-radius: 0;
-	}
-
-	.message.error {
-		background: rgba(244, 67, 54, 0.15);
-		border-color: var(--error-color, #f44336);
-	}
-
-	.message-content {
-		margin-bottom: 0.5rem;
-	}
-
-	.message-content p {
-		margin: 0;
-		white-space: pre-wrap;
-		line-height: 1.5;
-		font-size: 0.875rem;
-	}
-
-	.message-footer {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-top: 0.5rem;
-		font-size: 0.65rem;
-		opacity: 0.7;
-	}
-
-	.message-expiration {
-		font-style: italic;
-	}
-
-	.message-expiration.expiring {
-		color: orange;
-		font-weight: 500;
-		opacity: 1;
-	}
-
-	.function-tools {
-		margin-top: 0.75rem;
-		margin-bottom: 0.5rem;
-	}
-
-	.function-tool {
-		background: var(--ui-bg-element-darker, #2a2a2a);
-		border-radius: 0.5rem;
-		overflow: hidden;
-		margin-bottom: 0.5rem;
-		border: 1px solid var(--ui-border, #444);
-	}
-
-	.function-tool.error {
-		border-color: var(--error-color, #f44336);
-	}
-
-	.function-tool.success {
-		border-color: var(--success-color, #4caf50);
-	}
-
-	.function-header {
-		display: flex;
-		align-items: center;
-		padding: 0.5rem 0.75rem;
-		background: rgba(0, 0, 0, 0.2);
-		gap: 0.5rem;
-	}
-
-	.function-name {
-		font-weight: 500;
-		font-size: 0.8rem;
-		color: var(--accent-color, #3a8bf7);
-	}
-
-	.function-error {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.75rem;
-		color: var(--error-color, #f44336);
-		font-size: 0.8rem;
-	}
-
-	.function-result-data {
-		padding: 0.75rem;
-		font-size: 0.75rem;
-		overflow-x: auto;
-	}
-
-	.function-result-data pre {
-		margin: 0;
-		font-family: monospace;
-		white-space: pre-wrap;
-	}
-
-	/* Suggested queries styling */
-	.suggested-queries {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-		margin: 0.75rem 0; /* Keep vertical margin */
-	}
-
-	/* Specific styling for initial suggestions above input */
-	.initial-suggestions-input-area {
-		width: 100%; /* Ensure container takes full width */
-		padding-bottom: 0.5rem; /* Space between suggestions and actions */
-		border-bottom: 1px solid var(--ui-border); /* Separator line */
-		margin-bottom: 0.5rem; /* Space below the separator */
-	}
-
-	/* Adjust margin for suggested queries only when they are in the input area */
-	.initial-suggestions-input-area .suggested-queries {
-		margin: 0; /* Remove margin when above input */
-		display: flex; /* Use flexbox */
-		flex-direction: column; /* Stack items vertically */
-		align-items: stretch; /* Make items stretch to fill width */
-		gap: 0.5rem; /* Keep gap between buttons */
-	}
-
-	/* Reset styles specifically for buttons in the initial suggestions area */
-	.initial-suggestions-input-area .suggested-query-btn {
-		padding: 0.4rem 1rem; /* Use standard button padding */
-		height: auto;         /* Reset height */
-		flex: none;           /* Reset flex property */
-		text-align: center;   /* Center text within the stretched button */
-	}
-
-	.suggested-query-btn {
-		/* Match the ticker button styles */
-		background: var(--ui-bg-element-darker, #2a2a2a);
-		border: 1px solid var(--ui-border, #444);
-		color: var(--text-primary, #fff);
-		padding: 0.25rem 0.8rem; /* Adjusted vertical padding */
-		border-radius: 0.25rem; /* Match border-radius */
-		font-size: 0.75rem; /* Match font-size */
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.2s ease;
-		max-width: 100%; /* Keep max-width */
-		line-height: 1.3; /* ADJUST line-height for wrapping */
-		text-decoration: none; /* Remove default button underline */
-		display: inline-block; /* Ensure proper alignment */
-		text-align: left; /* Align wrapped text to the left */
-	}
-
-	.suggested-query-btn:hover {
-		/* Match the ticker button hover styles */
-		background: var(--ui-bg-element, #333);
-		border-color: var(--ui-accent, #3a8bf7);
-		color: var(--text-primary, #fff);
-	}
-
-	.chat-input-wrapper {
-		display: flex;
-		flex-direction: column; /* Stack actions and input vertically */
-		padding: clamp(0.5rem, 1.5vw, 1rem) clamp(0.75rem, 2vw, 1.5rem);
-		background: var(--ui-bg-primary); /* Use theme background */
-		border-top: 1px solid var(--ui-border); /* Use theme border */
-		gap: 0.5rem; /* Gap between actions and input field */
-	}
-
-	.input-actions {
-		display: flex;
-		gap: 0.5rem;
-		align-items: center;
-	}
-
-	.action-toggle-button {
-		padding: 0.4rem 0.8rem;
-		font-size: 0.75rem;
-		border-radius: 1rem; /* More rounded */
-		border: 1px solid var(--ui-border, #444);
-		background: var(--ui-bg-element, #333);
-		color: var(--text-secondary, #aaa);
-		cursor: pointer;
-		transition: all 0.2s ease;
-		font-weight: 500;
-	}
-
-	.action-toggle-button:hover {
-		border-color: var(--text-secondary, #aaa);
-		color: var(--text-primary, #fff);
-	}
-
-	.action-toggle-button.active {
-		background: var(--accent-color, #3a8bf7);
-		border-color: var(--accent-color, #3a8bf7);
-		color: white;
-	}
-
-	.input-field-container {
-		position: relative; /* Needed for absolute positioning of send button */
-		display: flex; /* Keep input and send button together */
-		width: 100%;
-	}
-
-	.chat-input {
-		flex: 1;
-		padding: clamp(0.75rem, 1.5vw, 1rem);
-		font-size: clamp(0.875rem, 1vw, 1rem);
-		background: var(--ui-bg-element, #333);
-		border: 1px solid var(--ui-border, #444);
-		color: var(--text-primary, #fff);
-		border-radius: 0.25rem;
-		padding-right: clamp(3rem, 5vw, 3.5rem); /* Keep padding for the button */
-		resize: none; /* Disable manual resizing */
-		overflow-y: hidden; /* Hide scrollbar during resize and when content fits */
-		line-height: 1.4; /* Adjust line height for better readability in textarea */
-		height: auto; /* Allow height to adjust */
-		box-sizing: border-box; /* Include padding and border in element's total width and height */
-		font-family: inherit; /* Ensure font matches the rest of the UI */
-		max-height: 200px; /* Add a max height to prevent excessive growth */
-		/* overflow-y: auto; */ /* Remove this; scrollbar appears automatically if max-height exceeded and overflow is not hidden */
-	}
-
-	.send-button {
-		position: absolute;
-		right: 0.75rem;
-		bottom: 0.75rem; /* Adjusted for better vertical alignment */
-		background: transparent;
-		border: none;
-		cursor: pointer;
-		color: var(--text-secondary, #aaa);
-		width: clamp(2rem, 4vw, 2.25rem);
-		height: clamp(2rem, 4vw, 2.25rem);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		transition: color 0.2s;
-	}
-
-	.send-button:hover:not(:disabled) {
-		color: var(--text-primary, #fff);
-	}
-
-	.send-button:disabled {
-		cursor: not-allowed;
-		opacity: 0.6;
-	}
-
-	.send-icon {
-		width: clamp(1rem, 2vw, 1.25rem);
-		height: clamp(1rem, 2vw, 1.25rem);
-		fill: currentColor;
-	}
-
-	.typing-indicator {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		height: 1.5rem;
-		gap: 0.25rem;
-	}
-
-	.typing-indicator span {
-		width: 0.5rem;
-		height: 0.5rem;
-		background: var(--text-secondary, #aaa);
-		border-radius: 50%;
-		display: inline-block;
-		animation: bounce 1.5s infinite ease-in-out;
-	}
-
-	.typing-indicator span:nth-child(1) {
-		animation-delay: 0s;
-	}
-
-	.typing-indicator span:nth-child(2) {
-		animation-delay: 0.2s;
-	}
-
-	.typing-indicator span:nth-child(3) {
-		animation-delay: 0.4s;
-	}
-
-	@keyframes bounce {
-		0%,
-		80%,
-		100% {
-			transform: translateY(0);
-		}
-		40% {
-			transform: translateY(-0.5rem);
-		}
-	}
-
-	.message.expiring {
-		border-color: rgba(255, 165, 0, 0.7); /* Orange border for expiring messages */
-	}
-
-	/* Add styles for markdown elements */
-	.message-content :global(p) {
-		margin: 0 0 0.5rem 0;
-		font-size: 0.875rem;
-	}
-	
-	.message-content :global(p:last-child) {
-		margin-bottom: 0;
-	}
-	
-	.message-content :global(ul), .message-content :global(ol) {
-		margin: 0.5rem 0;
-		padding-left: 1.5rem;
-	}
-	
-	.message-content :global(blockquote) {
-		margin: 0.5rem 0;
-		padding-left: 0.75rem;
-		border-left: 3px solid var(--text-secondary, #aaa);
-		color: var(--text-secondary, #aaa);
-	}
-	
-	.message-content :global(a) {
-		color: var(--accent-color, #3a8bf7);
-		text-decoration: none;
-	}
-	
-	.message-content :global(a:hover) {
-		text-decoration: underline;
-	}
-	
-	.message-content :global(img) {
-		max-width: 100%;
-		border-radius: 0.25rem;
-	}
-
-	/* Add style for system messages */
-	.message.system {
-		background: var(--ui-bg-element, #333);
-		border: 1px dashed var(--ui-border, #444);
-		color: var(--text-secondary, #aaa);
-		font-style: italic;
-	}
-
-	/* Add styles for content chunks */
-	.content-chunks {
-		margin-top: 1rem;
-	}
-	
-	.chunk-text {
-		margin-bottom: 1rem;
-	}
-	
-	.chunk-table {
-		margin-bottom: 1rem;
-		overflow-x: auto;
-	}
-
-	.chunk-table.expanded {
-		/* No height constraints when expanded */
-	}
-
-	.table-caption {
-		font-weight: bold;
-		margin-bottom: 0.5rem;
-		font-size: 0.8rem;
-	}
-	
-	.content-chunks table {
-		width: 100%;
-		border-collapse: collapse;
-		margin-bottom: 1rem;
-		background: rgba(0, 0, 0, 0.2);
-		font-size: 0.8rem;
-	}
-	
-	.content-chunks th {
-		background: rgba(0, 0, 0, 0.3);
-		padding: 0.5rem;
-		text-align: left;
-		border: 1px solid var(--ui-border, #444);
-	}
-
-	.content-chunks th.sortable {
-		cursor: pointer;
-		position: relative; /* For positioning the indicator */
-		user-select: none; /* Prevent text selection on click */
-	}
-
-	.content-chunks th.sortable:hover {
-		background: rgba(255, 255, 255, 0.05); /* Subtle hover */
-	}
-
-	.content-chunks th .sort-indicator {
-		font-size: 0.7em; /* Smaller indicator */
-		margin-left: 0.4em;
-		display: inline-block;
-		opacity: 0.7;
-		/* Optional: absolute positioning */
-		/* position: absolute; */
-		/* right: 0.5rem; */
-		/* top: 50%; */
-		/* transform: translateY(-50%); */
-	}
-
-	.content-chunks th.sorted .sort-indicator {
-		opacity: 1; /* Make active indicator fully visible */
-	}
-	
-	.content-chunks td {
-		padding: 0.5rem;
-		border: 1px solid var(--ui-border, #444);
-	}
-	
-	.chunk-error {
-		background: rgba(244, 67, 54, 0.1);
-		color: var(--error-color, #f44336);
-		padding: 0.5rem;
-		border-radius: 0.25rem;
-		border: 1px solid var(--error-color, #f44336);
-		margin-bottom: 1rem;
-		font-size: 0.8rem;
-	}
-
-	/* Style for the ticker buttons */
-	.message-content :global(.ticker-button) {
-		background: var(--ui-bg-element-darker, #2a2a2a);
-		border: 1px solid var(--ui-border, #444);
-		color: var(--text-primary, #fff);
-		padding: 0.4rem 1rem;
-		border-radius: 0.25rem;
-		font-size: 0.75rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.2s ease;
-		margin: 0 0.2rem;
-		vertical-align: middle;
-		line-height: 1;
-		text-decoration: none;
-		display: inline-block;
-	}
-
-	.message-content :global(.ticker-button:hover) {
-		background: var(--ui-bg-element, #333);
-		border-color: var(--ui-accent, #3a8bf7);
-		color: var(--text-primary, #fff);
-	}
-
-	/* Custom Scrollbar Styles */
-	.chat-messages::-webkit-scrollbar {
-		width: 8px; /* Width of the scrollbar */
-	}
-
-	.chat-messages::-webkit-scrollbar-track {
-		background: var(--ui-bg-element, #333); /* Track color, matching element background */
-		border-radius: 4px;
-	}
-
-	.chat-messages::-webkit-scrollbar-thumb {
-		background-color: var(--ui-border-darker, #555); /* Thumb color */
-		border-radius: 4px;
-		border: 2px solid var(--ui-bg-element, #333); /* Creates padding around thumb */
-	}
-
-	.chat-messages::-webkit-scrollbar-thumb:hover {
-		background-color: var(--ui-accent, #3a8bf7); /* Thumb color on hover */
-	}
-
-	/* Firefox scrollbar styles */
-	.chat-messages {
-		scrollbar-width: thin; /* "auto" or "thin" */
-		scrollbar-color: var(--ui-border-darker, #555) var(--ui-bg-element, #333); /* thumb track */
-	}
-
-	.table-toggle-btn {
-		background: var(--ui-bg-element, #333);
-		border: 1px solid var(--ui-border, #444);
-		color: var(--text-secondary, #aaa);
-		padding: 0.3rem 0.8rem;
-		font-size: 0.7rem;
-		border-radius: 0.25rem;
-		cursor: pointer;
-		transition: all 0.2s ease;
-		margin-top: -0.5rem; /* Pull up slightly below table */
-		display: inline-block;
-	}
-
-	.table-toggle-btn:hover {
-		border-color: var(--accent-color, #3a8bf7);
-		color: var(--text-primary, #fff);
-	}
-
-	.context-chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-		margin-bottom: 0.5rem;
-	}
-
-	.chip {
-		background: var(--ui-bg-element, #333);
-		color: var(--text-primary, #fff);
-		border: 1px solid var(--ui-border, #444);
-		padding: 0.25rem 0.5rem;
-		border-radius: 0.25rem;
-		font-size: 0.75rem;
-		cursor: pointer;
-	}
-
-	.chip:hover {
-		background: var(--ui-bg-hover, rgba(255,255,255,0.05));
-	}
-
-	/* Styles for context chips within user messages */
-	.message-context-chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.4rem;
-		margin-bottom: 0.5rem; /* Space between chips and message text */
-	}
-
-	.message-context-chip {
-		background: rgba(255, 255, 255, 0.1); /* Slightly different background */
-		color: inherit; /* Inherit text color from message bubble */
-		border: 1px solid rgba(255, 255, 255, 0.2); /* Subtle border */
-		padding: 0.2rem 0.5rem; /* Slightly smaller padding */
-		border-radius: 0.25rem;
-		font-size: 0.7rem; /* Smaller font size */
-		cursor: default; /* Not interactive */
-	}
-
-	.initial-container {
-		text-align: center;
-		color: var(--text-secondary, #aaa);
-		display: flex;
-		flex-direction: column;
-		justify-content: center;
-		height: 100%;
-		flex: 1;
-		padding: 2rem;
-	}
-
-	.suggestions-header {
-		font-size: 0.9rem;
-		margin-bottom: 1rem;
-		font-weight: 500;
-		color: var(--text-primary, #fff);
-	}
-
-	/* Style for the capabilities text within the initial container */
-	.capabilities-text {
-		font-size: 0.8rem;
-		color: var(--text-secondary, #aaa);
-		margin-bottom: 1.5rem; /* Space before the 'Ask...' prompt */
-		line-height: 1.4;
-	}
-
-	.loading-status {
-		color: transparent;
-		font-size: 0.8rem;
-		padding: 0.5rem 0;
-		margin: 0;
-		text-align: left;
-		/* Apply gradient as background - Increased contrast */
-		background: linear-gradient(
-			90deg,
-			var(--text-secondary, #aaa),
-			rgba(255, 255, 255, 0.9), /* Brighter middle color */
-			var(--text-secondary, #aaa)
-		);
-		background-size: 200% auto;
-		background-clip: text;
-		-webkit-background-clip: text;
-		/* Animate the background position - Slightly faster animation */
-		animation: loading-text-highlight 2.5s infinite linear; /* Changed duration to 2s */
-	}
-
-	/* Update keyframes to animate background-position */
-	@keyframes loading-text-highlight {
-		0% {
-			background-position: 200% center;
-		}
-		100% {
-			background-position: -200% center;
-		}
-	}
-
-	/* Chip row styles */
-	.chat-input-wrapper > .chip-row {
-		display: flex;
-		gap: 0.5rem;
-		margin-bottom: 0.35rem;
-		animation: fadeIn 0.2s;
-		flex-wrap: wrap; /* Allow wrapping if needed */
-		width: 100%; /* Ensure it takes full available width */
-		min-width: 0; /* Help flexbox wrapping calculations */
-	}
-
-	/* Specific styles for suggestion chips to override general .chip */
-	.suggestion-chip {
-		font-size: 0.75rem;
-		padding: 0.3rem 0.75rem;
-		border-radius: 9999px; /* Pill shape */
-		background: var(--ui-bg-element);
-		border: 1px solid var(--ui-border);
-		color: var(--text-secondary); /* Subtler text */
-		transition: .15s ease;
-		cursor: pointer;
-	}
-
-	.suggestion-chip:hover {
-		border-color: var(--ui-accent);
-		background: var(--ui-bg-element-hover, #444);
-		color: var(--text-primary); /* Highlight text on hover */
-	}
-
-	.suggestion-chip kbd {
-		background: transparent;
-		font: inherit;
-		opacity: 0.6;
-		margin-right: 0.25rem;
-		font-size: 0.7rem; /* Slightly smaller */
-		border: 1px solid var(--ui-border-darker); /* Subtle border */
-		padding: 0.1rem 0.25rem;
-		border-radius: 0.2rem;
-		line-height: 1; /* Prevent extra height */
-		display: inline-block; /* Ensure proper layout */
-	}
-
-	@keyframes fadeIn {
-		from { opacity: 0; transform: translateY(-5px); }
-		to { opacity: 1; transform: translateY(0); }
-	}
-
-</style>

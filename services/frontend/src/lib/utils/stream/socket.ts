@@ -1,11 +1,12 @@
 // socket.ts
-import { writable } from 'svelte/store';
-import { streamInfo, handleTimestampUpdate } from '$lib/core/stores';
-import type { StreamInfo, TradeData, QuoteData, CloseData } from '$lib/core/types';
-import { base_url } from '$lib/core/backend';
+import { get, writable } from 'svelte/store';
+import { streamInfo, handleTimestampUpdate } from '$lib/utils/stores/stores';
+import type { StreamInfo, TradeData, QuoteData, CloseData } from '$lib/utils/types/types';
+import { base_url } from '$lib/utils/helpers/backend';
 import { browser } from '$app/environment';
 import { handleAlert } from './alert';
-import type { AlertData } from '$lib/core/types';
+import type { AlertData } from '$lib/utils/types/types';
+import { enqueueTick } from './streamHub';
 
 // Define the type for function status updates from backend (simplified)
 export type FunctionStatusUpdate = {
@@ -52,10 +53,12 @@ const maxReconnectAttempts: number = 5;
 let shouldReconnect: boolean = true;
 
 export const latestValue = new Map<string, StreamData>(); 
-connect();
+import { isPublicViewing } from '$lib/utils/stores/stores';
 
-function connect() {
+export function connect() {
 	if (!browser) return;
+	if( get(isPublicViewing))return;
+	
 	try {
 		const token = sessionStorage.getItem('authToken');
 		const socketUrl = base_url + '/ws' + '?token=' + token;
@@ -108,11 +111,35 @@ function connect() {
 			} else if (channelName === 'timestamp') {
 				handleTimestampUpdate(data.timestamp);
 			} else {
+				// Also feed data to the new streamHub system
+				if (channelName.includes('-slow-regular') && data.price !== undefined) {
+					const securityId = parseInt(channelName.split('-')[0]);
+					if (!isNaN(securityId)) {
+						enqueueTick({
+							securityid: securityId,
+							price: data.price,
+							data: data
+						});
+					}
+				}
+				
+				// Handle close data for the hub
+				if (channelName.includes('-close-regular') && data.price !== undefined) {
+					const securityId = parseInt(channelName.split('-')[0]);
+					if (!isNaN(securityId)) {
+						enqueueTick({
+							securityid: securityId,
+							prevClose: data.price,
+							data: data
+						});
+					}
+				}
 				latestValue.set(channelName, data);
 				const callbacks = activeChannels.get(channelName);
 				if (callbacks) {
 					callbacks.forEach((callback) => callback(data));
 				}
+
 			}
 		}
 	});

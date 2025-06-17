@@ -2,8 +2,9 @@ package helpers
 
 import (
 	"backend/internal/data"
+	"backend/internal/data/polygon"
 	"encoding/json"
-    "backend/internal/data/polygon"
+	"strings"
 )
 
 // Exchange represents a structure for handling Exchange data.
@@ -18,7 +19,12 @@ type Response struct {
 }
 
 // GetExchanges performs operations related to GetExchanges functionality.
-func GetExchanges(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
-    exchangeMap, err := polygon.GetExchanges(conn)
-	return exchangeMap, err
+func GetExchanges(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
+	// Check if rawArgs is empty or not a valid JSON object
+	if len(rawArgs) == 0 || !strings.HasPrefix(string(rawArgs), "{") {
+		// If no specific exchange type is requested, fetch all distinct exchanges
+		exchangeMap, err := polygon.GetExchanges(conn)
+		return exchangeMap, err
+	}
+	return nil, nil
 }

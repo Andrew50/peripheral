@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+
+	//	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -19,12 +21,14 @@ import (
 // Conn represents a structure for handling Conn data.
 type Conn struct {
 	//Cache *redis.Client
-	DB            *pgxpool.Pool
-	Polygon       *polygon.Client
-	Cache         *redis.Client
-	PolygonKey    string
-	GeminiPool    *GeminiKeyPool
-	PerplexityKey string
+	DB              *pgxpool.Pool
+	Polygon         *polygon.Client
+	Cache           *redis.Client
+	PolygonKey      string
+	GeminiPool      *GeminiKeyPool
+	PerplexityKey   string
+	XAPIKey         string
+	TwitterAPIioKey string
 }
 
 var conn *Conn
@@ -45,28 +49,28 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	// Get API keys from environment variables
 	polygonKey := getEnv("POLYGON_API_KEY", "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm")
 	perplexityKey := getEnv("PERPLEXITY_API_KEY", "")
-
-	var dbUrl string
-	var cacheUrl string
+	XAPIKey := getEnv("X_API_KEY", "")
+	twitterAPIioKey := getEnv("TWITTER_API_IO_KEY", "")
+	var dbURL string
+	var cacheURL string
 
 	// URL encode the password to handle special characters
 	encodedPassword := url.QueryEscape(dbPassword)
 
 	if inContainer {
-		dbUrl = fmt.Sprintf("postgres://%s:%s@%s:%s", dbUser, encodedPassword, dbHost, dbPort)
-		cacheUrl = fmt.Sprintf("%s:%s", redisHost, redisPort)
+		dbURL = fmt.Sprintf("postgres://%s:%s@%s:%s", dbUser, encodedPassword, dbHost, dbPort)
+		cacheURL = fmt.Sprintf("%s:%s", redisHost, redisPort)
 	} else {
-		dbUrl = fmt.Sprintf("postgres://%s:%s@localhost:%s", dbUser, encodedPassword, dbPort)
-		cacheUrl = fmt.Sprintf("localhost:%s", redisPort)
+		dbURL = fmt.Sprintf("postgres://%s:%s@localhost:%s", dbUser, encodedPassword, dbPort)
+		cacheURL = fmt.Sprintf("localhost:%s", redisPort)
 	}
 
 	var dbConn *pgxpool.Pool
 	var err error
 	for {
 		// Create a connection pool configuration
-		poolConfig, err := pgxpool.ParseConfig(dbUrl)
+		poolConfig, err := pgxpool.ParseConfig(dbURL)
 		if err != nil {
-			log.Printf("Unable to parse pool config: %v\n", err)
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -82,7 +86,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		// Create the connection pool with our custom configuration
 		dbConn, err = pgxpool.ConnectConfig(context.Background(), poolConfig)
 		if err != nil {
-			log.Printf("waiting for db %v\n", err)
+			//log.Printf("waiting for db %v\n", err)
 			time.Sleep(5 * time.Second)
 		} else {
 			break
@@ -93,7 +97,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	for {
 		// Use Redis password if provided
 		opts := &redis.Options{
-			Addr: cacheUrl,
+			Addr: cacheURL,
 			// Add connection pool settings
 			PoolSize:     20,               // Increased from 10
 			MinIdleConns: 10,               // Increased from 5
@@ -116,7 +120,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		err = cache.Ping(context.Background()).Err()
 		if err != nil {
 			//if strings.Contains(err.Error(), "the database system is starting up") {
-			log.Println("waiting for cache")
+			//log.Println("waiting for cache")
 			time.Sleep(5 * time.Second)
 		} else {
 			break
@@ -140,22 +144,31 @@ func InitConn(inContainer bool) (*Conn, func()) {
 
 	// Create Polygon client with custom HTTP client
 	polygonClient := polygon.NewWithClient(polygonKey, httpClient)
+	polygonClient.HTTP.SetDisableWarn(true)
+	polygonClient.HTTP.SetLogger(NoOp{})
 
 	// Initialize Gemini API key pool
 	geminiPool := initGeminiKeyPool()
 
 	conn = &Conn{
-		DB:            dbConn,
-		Cache:         cache,
-		Polygon:       polygonClient,
-		PolygonKey:    polygonKey,
-		GeminiPool:    geminiPool,
-		PerplexityKey: perplexityKey,
+		DB:              dbConn,
+		Cache:           cache,
+		Polygon:         polygonClient,
+		PolygonKey:      polygonKey,
+		GeminiPool:      geminiPool,
+		PerplexityKey:   perplexityKey,
+		XAPIKey:         XAPIKey,
+		TwitterAPIioKey: twitterAPIioKey,
 	}
 
 	cleanup := func() {
+		// Close the database connection
 		conn.DB.Close()
-		conn.Cache.Close()
+
+		// Close the Redis cache connection
+		if err := conn.Cache.Close(); err != nil {
+			log.Printf("Error closing Redis cache connection: %v", err)
+		}
 	}
 	return conn, cleanup
 }
@@ -345,3 +358,10 @@ func (c *Conn) TestRedisConnectivity(ctx context.Context, userID int) (bool, str
 
 	return true, "Redis connection test successful"
 }
+
+type NoOp struct{}
+
+func (NoOp) Printf(string, ...interface{}) {} // swallow logs
+func (NoOp) Errorf(string, ...interface{}) {} // Add Errorf
+func (NoOp) Warnf(string, ...interface{})  {} // Add Warnf
+func (NoOp) Debugf(string, ...interface{}) {} // Add Debugf

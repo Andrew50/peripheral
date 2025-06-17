@@ -47,7 +47,7 @@ type GetAlertLogsResult struct {
    ────────────────────────────────────────────────────────────────────────────────
 */
 
-func GetAlerts(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetAlerts(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(), `
 		SELECT a.alertId,
 		       'price' AS alertType,
@@ -60,7 +60,7 @@ func GetAlerts(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{
 		FROM alerts a
 		LEFT JOIN securities s USING (securityId)
 		WHERE a.userId = $1
-		ORDER BY a.alertId`, userId)
+		ORDER BY a.alertId`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("querying alerts: %w", err)
 	}
@@ -89,7 +89,7 @@ func GetAlerts(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{
    ────────────────────────────────────────────────────────────────────────────────
 */
 
-func GetAlertLogs(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func GetAlertLogs(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(), `
 		SELECT a.alertId,
 		       a.alertId AS alertLogId,
@@ -100,7 +100,7 @@ func GetAlertLogs(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfa
 		LEFT JOIN securities s USING (securityId)
 		WHERE a.userId = $1
 		  AND a.triggeredTimestamp IS NOT NULL
-		ORDER BY a.triggeredTimestamp DESC`, userId)
+		ORDER BY a.triggeredTimestamp DESC`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("querying fired alerts: %w", err)
 	}
@@ -135,7 +135,7 @@ type NewAlertArgs struct {
 	Ticker     *string  `json:"ticker,omitempty"`
 }
 
-func NewAlert(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func NewAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args NewAlertArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %w", err)
@@ -156,7 +156,7 @@ func NewAlert(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}
 		INSERT INTO alerts (userId, active, price, direction, securityId)
 		VALUES ($1, true, $2, $3, $4)
 		RETURNING alertId`,
-		userId, *args.Price, dir, *args.SecurityID).Scan(&alertID); err != nil {
+		userID, *args.Price, dir, *args.SecurityID).Scan(&alertID); err != nil {
 		return nil, fmt.Errorf("inserting alert: %w", err)
 	}
 
@@ -189,7 +189,7 @@ type DeleteAlertArgs struct {
 	AlertID int `json:"alertId"`
 }
 
-func DeleteAlert(conn *data.Conn, userId int, rawArgs json.RawMessage) (interface{}, error) {
+func DeleteAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteAlertArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %w", err)
@@ -197,7 +197,7 @@ func DeleteAlert(conn *data.Conn, userId int, rawArgs json.RawMessage) (interfac
 
 	tag, err := conn.DB.Exec(context.Background(),
 		`DELETE FROM alerts WHERE alertId = $1 AND userId = $2`,
-		args.AlertID, userId)
+		args.AlertID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("deleting alert: %w", err)
 	}

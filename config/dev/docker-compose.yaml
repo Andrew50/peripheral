@@ -4,6 +4,9 @@ services:
       context: ../../services/backend
       dockerfile: Dockerfile.dev
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "5058:5058"
     volumes:
@@ -17,11 +20,15 @@ services:
       - POSTGRES_DB=postgres
       - GEMINI_FREE_KEYS=${GEMINI_FREE_KEYS}
       - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS}
+      - POLYGON_API_KEY=${POLYGON_API_KEY}
+      - X_API_KEY=${X_API_KEY}
+      - TWITTER_API_IO_KEY=${TWITTER_API_IO_KEY}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - GOOGLE_REFRESH_TOKEN=${GOOGLE_REFRESH_TOKEN}
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=${SMTP_PORT}
+      #- GITHUB_TOKEN=${GITHUB_TOKEN}
     platform: ${PLATFORM:-linux/amd64}
   db:
     build:
@@ -55,11 +62,16 @@ services:
       context: ../../services/frontend
       dockerfile: Dockerfile.dev
     platform: ${PLATFORM:-linux/amd64}
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
       - ../../services/frontend:/app
+      - ../../services/frontend/node_modules:/app/node_modules
       - /app/node_modules
     environment:
       - WATCHPACK_POLLING=true #enable polling
+      - BACKEND_URL=http://backend:5058
     ports:
       - "5173:5173"
     restart: unless-stopped
@@ -71,6 +83,9 @@ services:
       context: ../../services/cache
       dockerfile: Dockerfile
     platform: ${PLATFORM:-linux/amd64}
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - 6379:6379
     networks:
@@ -81,6 +96,36 @@ services:
     command: redis-server --maxclients 1000 --tcp-keepalive 60 --timeout 300 --appendonly yes --maxmemory 800mb --maxmemory-policy allkeys-lru --io-threads 4
     restart: unless-stopped
     deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: '1.0'
+
+  worker:
+    build:
+      context: ../../services/worker
+      dockerfile: Dockerfile
+    platform: ${PLATFORM:-linux/amd64}
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_started
+    networks:
+      - compose_network
+    restart: unless-stopped
+    volumes:
+      - ../../services/worker:/app
+    environment:
+      - DB_USER=postgres
+      - DB_PASSWORD=devpassword
+      - DB_HOST=db
+      - POSTGRES_DB=postgres
+      - REDIS_HOST=cache
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+    deploy:
+      replicas: 3
       resources:
         limits:
           memory: 1g
