@@ -359,8 +359,14 @@
 				}
 
 				// Update conversation details from backend response
+				// Only update conversation ID if we don't already have one or if it matches
 				if (conversation.conversation_id) {
-					currentConversationId = conversation.conversation_id;
+					if (!currentConversationId || currentConversationId === conversation.conversation_id) {
+						currentConversationId = conversation.conversation_id;
+					} else {
+						// Conversation ID mismatch - log warning but don't switch
+						console.warn('Conversation ID mismatch detected, keeping current conversation');
+					}
 				}
 				if (conversation.title) {
 					currentConversationTitle = conversation.title;
@@ -407,6 +413,13 @@
 			const conversation = response as ConversationData;
 			
 			if (conversation && conversation.messages && conversation.messages.length > 0) {
+				// Validate that the polled conversation matches our current conversation
+				// If conversation IDs don't match, don't process updates to prevent switching to wrong conversation
+				if (currentConversationId && conversation.conversation_id && 
+					conversation.conversation_id !== currentConversationId) {
+					console.log('Polling returned different conversation ID, skipping update to prevent chat switching');
+					return;
+				}
 				const lastSeenKey = 'chat_last_seen_timestamp';
 				const lastSeenStr = localStorage.getItem(lastSeenKey);
 				const lastSeenTimestamp = lastSeenStr ? new Date(lastSeenStr) : null;
@@ -424,7 +437,8 @@
 					}
 					
 					// Check if we have pending messages that might have been completed
-					const existingMessage = $messagesStore.find(m => m.content === msg.query && m.sender === 'user');
+					// Use message_id for proper identification instead of content matching
+					const existingMessage = $messagesStore.find(m => m.message_id === msg.message_id && m.sender === 'user');
 					if (existingMessage && isCompleted && (!existingMessage.status || existingMessage.status === 'pending')) {
 						hasUpdates = true;
 						break;
@@ -619,6 +633,11 @@
 					// Load conversations to get the title (only for authenticated users)
 					if (!isPublicViewing) {
 						await loadConversations();
+						// Update the title immediately if we have one in the response
+						const newConversation = conversations.find(c => c.conversation_id === currentConversationId);
+						if (newConversation) {
+							currentConversationTitle = newConversation.title;
+						}
 					}
 				}
 
