@@ -83,7 +83,6 @@ export type ContentChunk = {
 };
 
 export type QueryResponse = {
-	type: 'text' | 'mixed_content';
 	text?: string;
 	content_chunks?: ContentChunk[];
 	suggestions?: string[];
@@ -118,7 +117,6 @@ export type Message = {
 	sender: 'user' | 'assistant' | 'system';
 	timestamp: Date;
 	contentChunks?: ContentChunk[];
-	responseType?: string;
 	isLoading?: boolean;
 	suggestedQueries?: string[];
 	contextItems?: (Instance | FilingContext)[];
