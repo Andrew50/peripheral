@@ -661,7 +661,6 @@
 					content: typedResponse.text || "Error processing request.",
 					sender: 'assistant',
 					timestamp: messageTimestamp,
-					responseType: typedResponse.type,
 					contentChunks: typedResponse.content_chunks,
 					suggestedQueries: typedResponse.suggestions || [],
 					status: 'completed',
@@ -703,7 +702,7 @@
 					content: `Error: ${error.message || 'Failed to get response'}`,
 					sender: 'assistant',
 					timestamp: new Date(),
-					responseType: 'error'
+					status: 'error'
 				};
 
 				messagesStore.update(current => [...current, errorMessage]);
@@ -724,7 +723,7 @@
 					content: `Error: ${error.message || 'An unexpected error occurred'}`,
 					sender: 'assistant',
 					timestamp: new Date(),
-					responseType: 'error'
+					status: 'error'
 				};
 
 				messagesStore.update(current => [...current, errorMessage]);
@@ -1218,7 +1217,7 @@
 			{#each $messagesStore as message (message.message_id)}
 				<div class="message-wrapper {message.sender}">
 					<div
-						class="message {message.sender} {message.responseType === 'error'
+						class="message {message.sender} {message.status === 'error' || message.content.includes('Error:')
 							? 'error'
 							: ''} {message.isNewResponse ? 'new-response' : ''} {editingMessageId === message.message_id ? 'editing' : ''} {message.sender === 'user' ? 'glass glass--pill glass--responsive' : ''}"
 					>
