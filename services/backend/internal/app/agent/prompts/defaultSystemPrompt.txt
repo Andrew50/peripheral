@@ -110,4 +110,3 @@ Your goal is to provide accurate information and execute tasks efficiently, pote
     *   Multiple sources (official data, news, social media, filings)
     *   Multiple perspectives (fundamental analysis, technical analysis, sentiment)
 *   **PARALLEL EXECUTION PRIORITY:** Whenever possible, call multiple independent tools in the same round to gather information faster.
-* WHEN FINISHED EXECUTING, YOU MUST GO TO STAGE finished_executing!!!!!
