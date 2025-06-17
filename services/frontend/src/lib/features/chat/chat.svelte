@@ -1299,7 +1299,7 @@
 													{@const currentSort = tableSortStates[tableKey] || { columnIndex: null, direction: null }}
 
 													{#if tableData}
-														<div class="chunk-table-wrapper glass glass--rounded glass--responsive">
+														<div class="chunk-table-container">
 															{#if tableData.caption}
 																<div class="table-caption">
 																	{@html parseMarkdown(tableData.caption)}
