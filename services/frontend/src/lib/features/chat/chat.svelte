@@ -16,7 +16,7 @@
 		pendingChatQuery,
 	} from './interface'
 	import type { Message, ConversationData, QueryResponse, TableData, ContentChunk, PlotData } from './interface';
-	import { parseMarkdown, formatChipDate, formatRuntime, cleanHtmlContent, handleTickerButtonClick } from './utils';
+	import { parseMarkdown, formatChipDate, formatRuntime, cleanHtmlContent, handleTickerButtonClick, cleanContentChunk, getContentChunkTextForCopy } from './utils';
 	import { isPlotData, getPlotData, plotDataToText, generatePlotKey } from './plotUtils';
 	import { activeChartInstance } from '$lib/features/chart/interface';
 	import { functionStatusStore, type FunctionStatusUpdate } from '$lib/utils/stream/socket'; // <-- Import the status store and FunctionStatusUpdate type
@@ -259,8 +259,6 @@
 		try {
 			isLoading = true;
 			let response;
-			console.log("isPublicViewing", isPublicViewing)
-			console.log("sharedConversationId", sharedConversationId)
 			if (isPublicViewing && sharedConversationId) {
 				// For public viewing, use publicRequest to get shared conversation
 				response = await publicRequest('getPublicConversation', {
@@ -945,37 +943,12 @@
 		try {
 			let textToCopy = '';
 			
-			if (message.contentChunks && message.contentChunks.length > 0) {
-				// For messages with content chunks, extract text from each chunk
-				textToCopy = message.contentChunks.map(chunk => {
-					if (chunk.type === 'text') {
-						const content = typeof chunk.content === 'string' ? chunk.content : String(chunk.content);
-						return cleanHtmlContent(content);
-					} else if (chunk.type === 'table' && isTableData(chunk.content)) {
-						// For tables, create a simple text representation
-						const tableData = chunk.content;
-						let tableText = '';
-						if (tableData.caption) {
-							const cleanCaption = cleanHtmlContent(tableData.caption);
-							tableText += cleanCaption + '\n\n';
-						}
-						// Add headers
-						tableText += tableData.headers.join('\t') + '\n';
-						// Add rows (also clean ticker formatting from table cells)
-						tableText += tableData.rows.map(row => {
-							if (Array.isArray(row)) {
-								return row.map(cell => cleanHtmlContent(String(cell))).join('\t');
-							} else {
-								return cleanHtmlContent(String(row));
-							}
-						}).join('\n');
-						return tableText;
-					} else if (chunk.type === 'plot' && isPlotData(chunk.content)) {
-						// For plots, create a text representation
-						return plotDataToText(chunk.content);
-					}
-					return '';
-				}).join('\n\n');
+							if (message.contentChunks && message.contentChunks.length > 0) {
+			// For messages with content chunks, extract text from each chunk
+			textToCopy = message.contentChunks
+				.map(chunk => getContentChunkTextForCopy(chunk, isTableData, plotDataToText))
+				.filter(text => text.length > 0)
+				.join('\n\n');
 			} else {
 				// For simple text messages
 				textToCopy = cleanHtmlContent(message.content);
@@ -1287,91 +1260,92 @@
 								{/if}
 								{#if message.contentChunks && message.contentChunks.length > 0}
 									<div class="content-chunks">
-										{#each message.contentChunks as chunk, index}
-											{#if chunk.type === 'text'}
-												<div class="chunk-text">
-													{@html parseMarkdown(typeof chunk.content === 'string' ? chunk.content : String(chunk.content))}
-												</div>
-											{:else if chunk.type === 'table'}
-												{#if isTableData(chunk.content)}
-													{@const tableData = getTableData(chunk.content)}
-													{@const tableKey = message.message_id + '-' + index}
-													{@const isLongTable = tableData && tableData.rows.length > 5}
-													{@const isExpanded = tableExpansionStates[tableKey] === true}
-													{@const currentSort = tableSortStates[tableKey] || { columnIndex: null, direction: null }}
+																										{#each message.contentChunks as chunk, index}
+									{#if chunk.type === 'text'}
+										<div class="chunk-text">
+											{@html parseMarkdown(typeof chunk.content === 'string' ? chunk.content : String(chunk.content))}
+										</div>
+									{:else if chunk.type === 'table'}
+										{#if isTableData(chunk.content)}
+											{@const tableData = getTableData(chunk.content)}
+											{@const tableKey = message.message_id + '-' + index}
+											{@const isLongTable = tableData && tableData.rows.length > 5}
+											{@const isExpanded = tableExpansionStates[tableKey] === true}
+											{@const currentSort = tableSortStates[tableKey] || { columnIndex: null, direction: null }}
 
-													{#if tableData}
-														<div class="chunk-table-wrapper glass glass--rounded glass--responsive">
-															{#if tableData.caption}
-																<div class="table-caption">
-																	{@html parseMarkdown(tableData.caption)}
-																</div>
-															{/if}
-															<div class="chunk-table {isExpanded ? 'expanded' : ''}">
-																<table>
-																	<thead>
-																		<tr>
-																			{#each tableData.headers as header, colIndex}
-																				<th
-																					on:click={() => sortTable(tableKey, colIndex, JSON.parse(JSON.stringify(tableData)))}
-																					class:sortable={true}
-																					class:sorted={currentSort.columnIndex === colIndex}
-																					class:asc={currentSort.columnIndex === colIndex && currentSort.direction === 'asc'}
-																					class:desc={currentSort.columnIndex === colIndex && currentSort.direction === 'desc'}
-																				>
-																					{header}
-																					{#if currentSort.columnIndex === colIndex}
-																						<span class="sort-indicator">
-																							{currentSort.direction === 'asc' ? '▲' : '▼'}
-																						</span>
-																					{/if}
-																				</th>
-																			{/each}
-																		</tr>
-																	</thead>
-																	<tbody>
-																		{#each tableData.rows as row, rowIndex}
-																			{#if rowIndex < 5 || isExpanded}
-																			<tr>
-																				{#if Array.isArray(row)}
-																					{#each row as cell}
-																					<td>{@html parseMarkdown(typeof cell === 'string' ? cell : String(cell))}</td>
-																					{/each}
-																				{:else}
-																					<td colspan="{tableData.headers.length}">Invalid row data: {typeof row === 'string' ? row : String(row)}</td>
-																				{/if}
-																			</tr>
-																			{/if}
-																		{/each}
-																	</tbody>
-																</table>
-															</div>
-															{#if isLongTable}
-																<button class="table-toggle-btn glass glass--small glass--responsive" on:click={() => toggleTableExpansion(tableKey)}>
-																	{isExpanded ? 'Show less' : `Show more (${tableData.rows.length} rows)`}
-																</button>
-															{/if}
+											{#if tableData}
+												<div class="chunk-table-container">
+													{#if tableData.caption}
+														<div class="table-caption">
+															{@html parseMarkdown(tableData.caption)}
 														</div>
-													{:else}
-														<div class="chunk-error">Invalid table data structure</div>
 													{/if}
-												{:else}
-													<div class="chunk-error">Invalid table data format</div>
-												{/if}
-											{:else if chunk.type === 'plot'}
-												{#if isPlotData(chunk.content)}
-													{@const plotData = getPlotData(chunk.content)}
-													{@const plotKey = generatePlotKey(message.message_id, index)}
-
-													{#if plotData}
-														<PlotChunk {plotData} {plotKey} />
-													{:else}
-														<div class="chunk-error">Invalid plot data structure</div>
+													<div class="chunk-table {isExpanded ? 'expanded' : ''}">
+														<table>
+															<thead>
+																<tr>
+																	{#each tableData.headers as header, colIndex}
+																		<th
+																			on:click={() => sortTable(tableKey, colIndex, JSON.parse(JSON.stringify(tableData)))}
+																			class:sortable={true}
+																			class:sorted={currentSort.columnIndex === colIndex}
+																			class:asc={currentSort.columnIndex === colIndex && currentSort.direction === 'asc'}
+																			class:desc={currentSort.columnIndex === colIndex && currentSort.direction === 'desc'}
+																		>
+																			{header}
+																			{#if currentSort.columnIndex === colIndex}
+																				<span class="sort-indicator">
+																					{currentSort.direction === 'asc' ? '▲' : '▼'}
+																				</span>
+																			{/if}
+																		</th>
+																	{/each}
+																</tr>
+															</thead>
+															<tbody>
+																{#each tableData.rows as row, rowIndex}
+																	{#if rowIndex < 5 || isExpanded}
+																	<tr>
+																		{#if Array.isArray(row)}
+																			{#each row as cell}
+																			<td>{@html parseMarkdown(typeof cell === 'string' ? cell : String(cell))}</td>
+																			{/each}
+																		{:else}
+																			<td colspan="{tableData.headers.length}">Invalid row data: {typeof row === 'string' ? row : String(row)}</td>
+																		{/if}
+																	</tr>
+																	{/if}
+																{/each}
+															</tbody>
+														</table>
+													</div>
+													{#if isLongTable}
+														<button class="table-toggle-btn glass glass--small glass--responsive" on:click={() => toggleTableExpansion(tableKey)}>
+															{isExpanded ? 'Show less' : `Show more (${tableData.rows.length} rows)`}
+														</button>
 													{/if}
-												{:else}
-													<div class="chunk-error">Invalid plot data format</div>
-												{/if}
+												</div>
+											{:else}
+												<div class="chunk-error">Invalid table data structure</div>
 											{/if}
+										{:else}
+											<div class="chunk-error">Invalid table data format</div>
+										{/if}
+									{:else if chunk.type === 'plot'}
+										{@const cleanedChunk = cleanContentChunk(chunk)}
+										{#if isPlotData(cleanedChunk.content)}
+											{@const plotData = getPlotData(cleanedChunk.content)}
+											{@const plotKey = generatePlotKey(message.message_id, index)}
+
+											{#if plotData}
+												<PlotChunk {plotData} {plotKey} />
+											{:else}
+												<div class="chunk-error">Invalid plot data structure</div>
+											{/if}
+										{:else}
+											<div class="chunk-error">Invalid plot data format</div>
+										{/if}
+									{/if}
 										{/each}
 									</div>
 								{:else}
