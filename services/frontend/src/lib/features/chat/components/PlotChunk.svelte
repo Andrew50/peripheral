@@ -7,8 +7,7 @@
 
 	// Default styling that matches the app theme
 	const defaultConfig = {
-		displayModeBar: true,
-		modeBarButtonsToRemove: ['pan2d', 'select2d', 'lasso2d', 'autoScale2d'] as any[],
+		displayModeBar: false,
 		displaylogo: false,
 		responsive: true
 	};
@@ -21,25 +20,36 @@
 		},
 		paper_bgcolor: 'rgba(15, 23, 42, 0.8)', // slate-900 with opacity
 		plot_bgcolor: 'rgba(30, 41, 59, 0.5)', // slate-800 with opacity
-		margin: { l: 60, r: 30, t: 50, b: 50 },
+		margin: { l: 25, r: 10, t: 20, b: 150, autoexpand: true },
+		autosize: true,
 		showlegend: true,
 		legend: {
 			font: { color: '#e2e8f0' },
-			bgcolor: 'rgba(15, 23, 42, 0.8)',
-			bordercolor: 'rgba(71, 85, 105, 0.5)',
-			borderwidth: 1
+			bgcolor: 'transparent',
+			borderwidth: 0,
+			orientation: 'h' as const,
+			x: 0.5,
+			xanchor: 'center' as const,
+			y: -0.75,
+			yanchor: 'top' as const
 		},
 		xaxis: {
 			gridcolor: 'rgba(71, 85, 105, 0.3)',
 			linecolor: 'rgba(71, 85, 105, 0.5)',
-			tickfont: { color: '#cbd5e1' }, // text-slate-300
-			titlefont: { color: '#e2e8f0' }
+			tickfont: { color: '#cbd5e1', size: 11 }, // text-slate-300
+			titlefont: { color: '#e2e8f0' },
+			automargin: true,
+			tickangle: -45,
+			title: {
+				standoff: 25
+			}
 		},
 		yaxis: {
 			gridcolor: 'rgba(71, 85, 105, 0.3)',
 			linecolor: 'rgba(71, 85, 105, 0.5)',
-			tickfont: { color: '#cbd5e1' },
-			titlefont: { color: '#e2e8f0' }
+			tickfont: { color: '#cbd5e1', size: 11 },
+			titlefont: { color: '#e2e8f0' },
+			automargin: true
 		}
 	};
 
@@ -111,7 +121,8 @@
 	$: layout = {
 		...defaultLayout,
 		...plotData.layout,
-		title: plotData.title || plotData.layout?.title || ''
+		// Don't set title in layout if we're showing it separately
+		title: plotData.title ? '' : (plotData.layout?.title || '')
 	};
 </script>
 
@@ -127,7 +138,8 @@
 			data={processedData} 
 			{layout} 
 			config={defaultConfig}
-			fillParent="width"
+			style="width:100%;height:100%;"
+			useResizeHandler
 			debounce={250}
 		/>
 	</div>
@@ -135,8 +147,10 @@
 
 <style>
 	.plot-chunk-wrapper {
-		margin: 1rem 0;
+		margin: 1rem -1rem;
 		overflow: hidden;
+		width: calc(100% + 2rem);
+		max-width: none;
 	}
 
 	.plot-title {
@@ -149,10 +163,14 @@
 	}
 
 	.plot-container {
-		min-height: 400px;
+		flex: 1 1 0;   /* or min-width:0; */
+		min-height: 500px;
+		height: 100%;
 		width: 100%;
-		padding: 0.5rem;
+		padding: .5rem;
+		overflow: hidden;
 	}
+
 
 	/* Responsive adjustments */
 	@media (max-width: 768px) {
