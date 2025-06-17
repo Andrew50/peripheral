@@ -138,7 +138,6 @@
 			data={processedData} 
 			{layout} 
 			config={defaultConfig}
-			style="width:100%;height:100%;"
 			useResizeHandler
 			debounce={250}
 		/>
@@ -202,4 +201,4 @@
 		background: rgba(71, 85, 105, 0.3) !important;
 		color: #e2e8f0 !important;
 	}
-</style>
+</style>	

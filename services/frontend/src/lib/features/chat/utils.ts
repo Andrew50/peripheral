@@ -3,6 +3,8 @@
 	import { marked } from "marked";
 	import { queryChart } from "$lib/features/chart/interface";
 
+	// Centralized ticker formatting regex pattern
+	const TICKER_FORMAT_REGEX = /\$\$\$([A-Z0-9]{1,5})-(\d+)\$\$\$/g;
 
 	// Function to parse markdown content and make links open in new tabs
 	export function parseMarkdown(content: string): string {
@@ -28,10 +30,8 @@
 			// 4. Regex to find $$$TICKER-TIMESTAMPINMS$$$ patterns
 			// Captures TICKER (1), TIMESTAMPINMS (2)
 			// This runs *after* marked.parse and after simple tickers are converted.
-			const tickerRegex = /\$\$\$([A-Z]{1,5})-(\d+)\$\$\$/g;
-
 			const contentWithTickerButtons = parsedString.replace(
-				tickerRegex,
+				TICKER_FORMAT_REGEX,
 				(match, ticker, timestampMs) => {
 					const formattedDate = formatChipDate(parseInt(timestampMs, 10));
 					const buttonText = `${ticker}${formattedDate}`;
@@ -87,8 +87,7 @@
 		
 		// First, handle the original $$$ ticker patterns before they're converted to buttons
 		// Pattern: $$$TICKER-TIMESTAMPINMS$$$
-		const dollarTickerRegex = /\$\$\$([A-Z]{1,5})-(\d+)\$\$\$/g;
-		let processedContent = htmlContent.replace(dollarTickerRegex, '$1');
+		let processedContent = htmlContent.replace(TICKER_FORMAT_REGEX, '$1');
 		
 		// Create a temporary DOM element to parse HTML
 		const tempDiv = document.createElement('div');
@@ -106,6 +105,83 @@
 		// Return the text content (automatically strips all HTML tags)
 		return tempDiv.textContent || '';
 	}
+	// Function to clean ticker formatting from strings
+	export function cleanTickerFormatting(text: string): string {
+		if (!text) return text;
+		
+		// Pattern: $$$TICKER-TIMESTAMPINMS$$$
+		return text.replace(TICKER_FORMAT_REGEX, '$1');
+	}
+	// Generic function to recursively clean ticker formatting from any data structure
+	function cleanDataRecursively(data: any): any {
+		if (!data) return data;
+		
+		if (typeof data === 'string') {
+			return cleanTickerFormatting(data);
+		}
+		
+		if (Array.isArray(data)) {
+			return data.map(item => cleanDataRecursively(item));
+		}
+		
+		if (typeof data === 'object' && data !== null) {
+			const cleaned: any = {};
+			for (const [key, value] of Object.entries(data)) {
+				cleaned[key] = cleanDataRecursively(value);
+			}
+			return cleaned;
+		}
+		
+		return data;
+	}
+
+	// Function to clean ticker formatting from plot data
+	export function cleanPlotData(plotData: any): any {
+		return cleanDataRecursively(plotData);
+	}
+
+	// Function to clean ticker formatting from content chunks (only plots)
+	export function cleanContentChunk(chunk: any): any {
+		if (!chunk || chunk.type !== 'plot') return chunk;
+		
+		return {
+			...chunk,
+			content: cleanPlotData(chunk.content)
+		};
+	}
+
+	// Helper function to create text content for copying from a content chunk
+	export function getContentChunkTextForCopy(chunk: any, isTableData: (content: any) => boolean, plotDataToText: (data: any) => string): string {
+		if (chunk.type === 'text') {
+			const content = typeof chunk.content === 'string' ? chunk.content : String(chunk.content);
+			return cleanHtmlContent(content);
+		} else if (chunk.type === 'table' && isTableData(chunk.content)) {
+			// For tables, create a simple text representation
+			const tableData = chunk.content;
+			let tableText = '';
+			if (tableData.caption) {
+				const cleanCaption = cleanHtmlContent(tableData.caption);
+				tableText += cleanCaption + '\n\n';
+			}
+			// Add headers
+			tableText += tableData.headers.join('\t') + '\n';
+			// Add rows
+			tableText += tableData.rows.map((row: any) => {
+				if (Array.isArray(row)) {
+					return row.map((cell: any) => cleanHtmlContent(String(cell))).join('\t');
+				} else {
+					return cleanHtmlContent(String(row));
+				}
+			}).join('\n');
+			return tableText;
+		} else if (chunk.type === 'plot') {
+			// For plots, clean ticker formatting and create a text representation
+			const cleanedChunk = cleanContentChunk(chunk);
+			return plotDataToText(cleanedChunk.content);
+		}
+		return '';
+	}
+
 	// Function to handle clicks on ticker buttons
 	export async function handleTickerButtonClick(event: MouseEvent) {
 		const target = event.target as HTMLButtonElement; // Assert as Button Element
