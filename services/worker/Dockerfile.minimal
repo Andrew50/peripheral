@@ -3,7 +3,7 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install minimal system dependencies (no TA-Lib)
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
@@ -13,8 +13,8 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt .
+# Copy minimal requirements (no TA-Lib)
+COPY requirements_minimal_working.txt ./requirements.txt
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
@@ -22,6 +22,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY src/ ./src/
 COPY worker.py .
+COPY test_simple.py .
+COPY demo_strategy.py .
 
 # Create directories for data and results
 RUN mkdir -p /app/data /app/results /app/logs
@@ -40,4 +42,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import sys; sys.exit(0)"
 
 # Default command
-CMD ["python", "worker.py"]
+CMD ["python", "worker.py"] 
