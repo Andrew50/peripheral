@@ -78,7 +78,7 @@ export type TableData = {
 };
 
 export type ContentChunk = {
-	type: 'text' | 'table';
+	type: 'text' | 'table' | 'plot';
 	content: string | TableData;
 };
 
