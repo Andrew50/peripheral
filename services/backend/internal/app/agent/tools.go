@@ -630,7 +630,7 @@ var (
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"query": {Type: genai.TypeString, Description: "The query to search for."},
+						"query": {Type: genai.TypeString, Description: "The query to search. Be highly specific and detailed, asking for the specific information you need. "},
 					},
 					Required: []string{"query"},
 				},
@@ -645,7 +645,7 @@ var (
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"prompt":   {Type: genai.TypeString, Description: "The query to search for. Be specific and detailed. Do NOT leave this field as an empty string."},
+						"prompt":   {Type: genai.TypeString, Description: "The query to search for. Be HIGHLY specific and detailed, asking for the specific information you need."},
 						"handles":  {Type: genai.TypeArray, Description: "A list of Twitter handles. If omitted, the search will search the entirety of Twitter."},
 						"fromDate": {Type: genai.TypeString, Description: "The date YYYY-MM-DD to start searching from."},
 						"toDate":   {Type: genai.TypeString, Description: "The date YYYY-MM-DD to stop searching at."},

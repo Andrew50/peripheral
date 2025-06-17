@@ -28,7 +28,7 @@ spec:
             - containerPort: 5058
           readinessProbe:
             httpGet:
-              path: /healthz      # add a trivial handler that just returns 200
+              path: /healthz # add a trivial handler that just returns 200
               port: 5058
             initialDelaySeconds: 3
             periodSeconds: 5
@@ -70,8 +70,8 @@ spec:
                   key: REDIS_PASSWORD
             # Add Polygon API key
             - name: GEMINI_FREE_KEYS
-              valueFrom: 
-                secretKeyRef: 
+              valueFrom:
+                secretKeyRef:
                   name: gemini-secret
                   key: GEMINI_FREE_KEYS
             - name: POLYGON_API_KEY
@@ -99,6 +99,17 @@ spec:
             # Add Google redirect URL
             - name: GOOGLE_REDIRECT_URL
               value: ${GOOGLE_REDIRECT_URL}
+            # Add Telegram credentials for alerts
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-secret
+                  key: bot-token
+            - name: TELEGRAM_CHAT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-secret
+                  key: chat-id
           resources:
             requests:
               cpu: "1000m"
