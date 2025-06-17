@@ -15,7 +15,7 @@ import (
 	//"github.com/go-redis/redis/v8"
 )
 
-var useBS = true //alerts, securityUpdate, marketMetrics, sectorUpdate
+var useBS = false //alerts, securityUpdate, marketMetrics, sectorUpdate
 
 var (
 	polygonInitialized bool
@@ -528,8 +528,10 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 // initAggregates initializes the aggregates
 func initAggregates(conn *data.Conn) error {
 	if useBS {
+		// Use synchronous initialization during startup to avoid race conditions
 		socket.InitAggregatesAsync(conn)
-		////fmt.Println("Aggregates initialized successfully")
+		////fmt.Println("Aggregates initialization started")
+	} else {
 		////fmt.Println("Skipping aggregates initialization (useBS is false)")
 	}
 	return nil
