@@ -15,7 +15,7 @@ import (
 	"google.golang.org/genai"
 )
 
-const geminiWebSearchModel = "gemini-2.5-flash-preview-05-20"
+const geminiWebSearchModel = "gemini-2.5-flash"
 const grokModel = "grok-3-mini-latest"
 
 type WebSearchArgs struct {

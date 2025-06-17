@@ -345,7 +345,7 @@ Please generate a Python classifier function that uses the above data accessor f
 		return nil, fmt.Errorf("failed to create content from prompt")
 	}
 
-	result, err := client.Models.GenerateContent(context.Background(), "gemini-2.5-flash-preview-05-20", content, config)
+	result, err := client.Models.GenerateContent(context.Background(), "gemini-2.5-flash", content, config)
 	if err != nil {
 		return nil, fmt.Errorf("error generating content: %w", err)
 	}

@@ -210,8 +210,8 @@ func contentChunkSchema() *genai.Schema {
 	}
 }
 
-const planningModel = "gemini-2.5-flash-preview-05-20"
-const finalResponseModel = "gemini-2.5-flash-preview-05-20"
+const planningModel = "gemini-2.5-flash"
+const finalResponseModel = "gemini-2.5-flash"
 
 func RunPlanner(ctx context.Context, conn *data.Conn, prompt string, initialRound bool) (interface{}, error) {
 	var systemPrompt string
