@@ -29,7 +29,7 @@ func buildContextPrompt(contextItems []map[string]interface{}) string {
 			ticker, _ := item["ticker"].(string)
 			secID := fmt.Sprint(item["securityId"])
 			tsStr := fmt.Sprint(item["timestamp"])
-			sb.WriteString(fmt.Sprintf("Instance - Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secID, tsStr))
+			sb.WriteString(fmt.Sprintf("Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secID, tsStr))
 		}
 	}
 	return sb.String()
