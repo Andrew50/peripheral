@@ -5,10 +5,11 @@ No user input required - runs automatically
 """
 
 import json
-import redis
 import time
 import uuid
 from datetime import datetime
+
+import redis
 
 
 def test_worker_pipeline():
